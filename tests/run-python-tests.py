@@ -16,6 +16,10 @@ def main() -> int:
         str(repo_root / "tests"),
         pattern="test_python_*.py",
     )
+    if suite.countTestCases() == 0:
+        print("No Python tests were discovered.", file=sys.stderr)
+        return 1
+
     result = unittest.TextTestRunner(verbosity=2).run(suite)
     return 0 if result.wasSuccessful() else 1
 

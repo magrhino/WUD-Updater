@@ -95,9 +95,36 @@ class LoadConfigTests(unittest.TestCase):
         with self.assertRaisesRegex(ConfigError, "must be set together"):
             load_config({"OUT_UID": "1000"}, home="/home/wud")
 
-    def test_numeric_values_are_validated(self) -> None:
-        with self.assertRaisesRegex(ConfigError, "WUD_MAX_WAIT"):
-            load_config({"WUD_MAX_WAIT": "slow"}, home="/home/wud")
+        with self.assertRaisesRegex(ConfigError, "must be set together"):
+            load_config({"OUT_GID": "1000"}, home="/home/wud")
+
+    def test_non_negative_second_values_are_validated(self) -> None:
+        invalid_cases = (
+            ({"WUD_MAX_WAIT": "slow"}, "WUD_MAX_WAIT.*integer"),
+            ({"WUD_MAX_WAIT": "-1"}, "WUD_MAX_WAIT.*zero or greater"),
+            ({"WUD_LOCK_TIMEOUT": "slow"}, "WUD_LOCK_TIMEOUT.*integer"),
+            ({"WUD_LOCK_TIMEOUT": "-1"}, "WUD_LOCK_TIMEOUT.*zero or greater"),
+        )
+
+        for env, error in invalid_cases:
+            with self.subTest(env=env):
+                with self.assertRaisesRegex(ConfigError, error):
+                    load_config(env, home="/home/wud")
+
+    def test_owner_ids_are_validated(self) -> None:
+        invalid_cases = (
+            ({"OUT_UID": "user", "OUT_GID": "1000"}, "OUT_UID must be numeric"),
+            ({"OUT_UID": "-1", "OUT_GID": "1000"}, "OUT_UID.*zero or greater"),
+            ({"OUT_UID": "1000", "OUT_GID": "group"}, "OUT_GID/OUT_GUID must be numeric"),
+            ({"OUT_UID": "1000", "OUT_GID": "-1"}, "OUT_GID/OUT_GUID.*zero or greater"),
+            ({"OUT_UID": "1000", "OUT_GUID": "group"}, "OUT_GID/OUT_GUID must be numeric"),
+            ({"OUT_UID": "1000", "OUT_GUID": "-1"}, "OUT_GID/OUT_GUID.*zero or greater"),
+        )
+
+        for env, error in invalid_cases:
+            with self.subTest(env=env):
+                with self.assertRaisesRegex(ConfigError, error):
+                    load_config(env, home="/home/wud")
 
     def test_update_mode_is_validated(self) -> None:
         with self.assertRaisesRegex(ConfigError, "WUD_UPDATE_MODE"):
