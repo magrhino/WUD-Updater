@@ -61,7 +61,12 @@ Configure WUD to call:
 
 ## Configuration
 
-`updates` reads optional overrides from the environment or from `$HOME/.config/wud-updater/env`.
+`updates` reads optional overrides from the environment or from `$HOME/.config/wud-updater/env`. Start from `template.env` if you want a host-local config file:
+
+```bash
+mkdir -p "$HOME/.config/wud-updater"
+cp template.env "$HOME/.config/wud-updater/env"
+```
 
 Common values:
 

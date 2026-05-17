@@ -3,7 +3,7 @@
 set -Eeuo pipefail
 
 ### --- CONFIG ---
-DOCKER_BASE_DEFAULT="/mnt/nvme-pool/rhino/docker"
+DOCKER_BASE_DEFAULT="$HOME/docker"
 MODE_DEFAULT="stop"     # pause | stop | live
 MAX_WAIT_DEFAULT=180
 ### --- END CONFIG ---
