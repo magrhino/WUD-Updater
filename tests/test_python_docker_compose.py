@@ -1,0 +1,304 @@
+from __future__ import annotations
+
+import os
+import re
+import tempfile
+import unittest
+from pathlib import Path
+
+from wud_updater.command import CommandRunner, display_command
+from wud_updater.compose import ComposeCli, ServiceImage
+from wud_updater.docker_cli import ContainerImage, DockerCli
+
+
+class CommandHelperTests(unittest.TestCase):
+    def test_display_command_shell_quotes_arguments(self) -> None:
+        self.assertEqual(
+            display_command(["docker", "compose", "-f", "compose file.yml", "pull"]),
+            "docker compose -f 'compose file.yml' pull",
+        )
+
+
+class FakeDockerCase(unittest.TestCase):
+    def setUp(self) -> None:
+        self.tmp = tempfile.TemporaryDirectory(prefix="wud-python-docker.")
+        self.root = Path(self.tmp.name)
+        self.repo_root = Path(__file__).resolve().parents[1]
+        self.base = self.root / "base"
+        self.fake_root = self.root / "fake"
+        for path in (
+            self.base,
+            self.fake_root / "images",
+            self.fake_root / "stacks",
+            self.fake_root / "containers",
+        ):
+            path.mkdir(parents=True, exist_ok=True)
+        (self.fake_root / "containers.tsv").write_text("", encoding="utf-8")
+        (self.fake_root / "calls.log").write_text("", encoding="utf-8")
+
+        self.env = os.environ.copy()
+        self.env["FAKE_DOCKER_ROOT"] = str(self.fake_root)
+        self.env["PATH"] = f"{self.repo_root / 'tests' / 'fakes'}:{self.env['PATH']}"
+        self.runner = CommandRunner(env=self.env)
+        self.docker = DockerCli(runner=self.runner)
+        self.compose = ComposeCli(runner=self.runner)
+
+    def tearDown(self) -> None:
+        self.tmp.cleanup()
+
+    def call_commands(self) -> list[str]:
+        lines = (self.fake_root / "calls.log").read_text(encoding="utf-8").splitlines()
+        return [line.partition("\t")[2] for line in lines if line]
+
+    def clear_calls(self) -> None:
+        (self.fake_root / "calls.log").write_text("", encoding="utf-8")
+
+    def make_stack(
+        self,
+        stack_id: str,
+        services: list[tuple[str, str, str | None]],
+        *,
+        parent: Path | None = None,
+    ) -> Path:
+        directory = (parent or self.base) / stack_id
+        directory.mkdir(parents=True, exist_ok=True)
+        (directory / ".fake-docker-id").write_text(f"{stack_id}\n", encoding="utf-8")
+
+        lines = ["services:\n"]
+        cids: list[str] = []
+        stack_state = self.fake_root / "stacks" / stack_id
+        stack_state.mkdir(parents=True, exist_ok=True)
+        for service, image, cid in services:
+            lines.extend([f"  {service}:\n", f"    image: {image}\n"])
+            if cid is not None:
+                cids.append(cid)
+                (stack_state / f"cids-{service}.txt").write_text(
+                    f"{cid}\n",
+                    encoding="utf-8",
+                )
+                (self.fake_root / "containers" / f"{cid}.summary").write_text(
+                    f"/{cid}|running|healthy|0|0\n",
+                    encoding="utf-8",
+                )
+        (directory / "docker-compose.yml").write_text("".join(lines), encoding="utf-8")
+        (stack_state / "cids.txt").write_text(
+            "".join(f"{cid}\n" for cid in cids),
+            encoding="utf-8",
+        )
+        return directory
+
+    def set_image_state(self, image: str, image_id: str, digest: str = "") -> None:
+        safe = _safe_name(image)
+        (self.fake_root / "images" / f"{safe}.id").write_text(
+            f"{image_id}\n",
+            encoding="utf-8",
+        )
+        digest_text = f"{image}@{digest}\n" if digest else ""
+        (self.fake_root / "images" / f"{safe}.digests").write_text(
+            digest_text,
+            encoding="utf-8",
+        )
+
+    def set_image_after_pull(self, image: str, image_id: str, digest: str = "") -> None:
+        safe = _safe_name(image)
+        (self.fake_root / "images" / f"{safe}.after_id").write_text(
+            f"{image_id}\n",
+            encoding="utf-8",
+        )
+        digest_text = f"{image}@{digest}\n" if digest else ""
+        (self.fake_root / "images" / f"{safe}.after_digests").write_text(
+            digest_text,
+            encoding="utf-8",
+        )
+
+
+class DockerCliTests(FakeDockerCase):
+    def test_ps_image_inspect_and_inspect_use_shell_formats(self) -> None:
+        (self.fake_root / "containers.tsv").write_text(
+            "web\trepo/web:latest\n",
+            encoding="utf-8",
+        )
+        self.set_image_state("repo/web:latest", "sha256:image-id", "sha256:digest")
+        (self.fake_root / "containers" / "cid-web.summary").write_text(
+            "/web|running|healthy|0|0\n",
+            encoding="utf-8",
+        )
+
+        self.assertEqual(
+            self.docker.container_images(),
+            [ContainerImage(name="web", image="repo/web:latest")],
+        )
+        self.assertEqual(self.docker.image_id("repo/web:latest"), "sha256:image-id")
+        self.assertEqual(
+            self.docker.image_digest("repo/web:latest"),
+            "repo/web:latest@sha256:digest",
+        )
+        self.assertTrue(
+            self.docker.image_has_digest("repo/web:latest", "sha256:digest")
+        )
+        self.assertEqual(
+            self.docker.try_inspect("cid-web", "{{.Name}}|{{.State.Status}}"),
+            ["/web|running|healthy|0|0"],
+        )
+
+        self.assertIn("ps --format {{.Names}}\t{{.Image}}", self.call_commands())
+        self.assertIn("image inspect repo/web:latest", self.call_commands())
+        self.assertIn("inspect cid-web", self.call_commands())
+
+
+class ComposeCliTests(FakeDockerCase):
+    def test_discover_stacks_reads_images_services_and_service_image_map(self) -> None:
+        stack = self.make_stack(
+            "stack",
+            [
+                ("app", "repo/app:latest", "cid-app"),
+                ("db", "repo/db:latest", "cid-db"),
+            ],
+        )
+        self.make_stack(
+            "ignored",
+            [("app", "repo/ignored:latest", "cid-ignored")],
+            parent=self.base / "old",
+        )
+        deep = self.base / "a" / "b" / "c"
+        deep.mkdir(parents=True, exist_ok=True)
+        (deep / "docker-compose.yml").write_text(
+            "services:\n  app:\n    image: repo/deep:latest\n",
+            encoding="utf-8",
+        )
+
+        stacks = self.compose.discover_stacks(self.base)
+
+        self.assertEqual(len(stacks), 1)
+        self.assertEqual(stacks[0].index, 1)
+        self.assertEqual(stacks[0].directory, stack)
+        self.assertEqual(stacks[0].file, "docker-compose.yml")
+        self.assertEqual(stacks[0].name, "stack")
+        self.assertEqual(stacks[0].images, ("repo/app:latest", "repo/db:latest"))
+        self.assertEqual(
+            stacks[0].service_images,
+            (
+                ServiceImage(service="app", image="repo/app:latest"),
+                ServiceImage(service="db", image="repo/db:latest"),
+            ),
+        )
+
+    def test_ps_quiet_scopes_to_services_when_provided(self) -> None:
+        stack = self.make_stack(
+            "stack",
+            [
+                ("app", "repo/app:latest", "cid-app"),
+                ("db", "repo/db:latest", "cid-db"),
+            ],
+        )
+
+        self.assertEqual(
+            self.compose.ps_quiet(stack, "docker-compose.yml", ["app"]),
+            ["cid-app"],
+        )
+        self.assertEqual(
+            self.compose.ps_quiet(stack, "docker-compose.yml"),
+            ["cid-app", "cid-db"],
+        )
+
+    def test_pull_and_recreate_service_scoped_order_matches_shell(self) -> None:
+        stack = self.make_stack(
+            "stack",
+            [
+                ("app", "repo/app:latest", "cid-app"),
+                ("db", "repo/db:latest", "cid-db"),
+            ],
+        )
+        self.set_image_after_pull("repo/app:latest", "new-app", "sha256:new-app")
+
+        self.compose.pull_and_recreate(
+            stack,
+            "docker-compose.yml",
+            mode="stop",
+            services=["app"],
+            use_native_wait=False,
+        )
+
+        self.assertEqual(
+            self.call_commands(),
+            [
+                "compose -f docker-compose.yml pull app",
+                "compose -f docker-compose.yml stop app",
+                "compose -f docker-compose.yml up -d --remove-orphans app",
+            ],
+        )
+
+    def test_pull_and_recreate_stack_level_uses_down_before_up(self) -> None:
+        stack = self.make_stack("stack", [("app", "repo/app:latest", "cid-app")])
+        self.set_image_after_pull("repo/app:latest", "new-app", "sha256:new-app")
+
+        self.compose.pull_and_recreate(
+            stack,
+            "docker-compose.yml",
+            mode="stop",
+            use_native_wait=False,
+        )
+
+        self.assertEqual(
+            self.call_commands(),
+            [
+                "compose -f docker-compose.yml pull ",
+                "compose -f docker-compose.yml down ",
+                "compose -f docker-compose.yml up -d --remove-orphans",
+            ],
+        )
+
+    def test_pull_and_recreate_pause_mode_does_not_use_native_wait(self) -> None:
+        stack = self.make_stack("stack", [("app", "repo/app:latest", "cid-app")])
+        self.set_image_after_pull("repo/app:latest", "new-app", "sha256:new-app")
+
+        self.compose.pull_and_recreate(
+            stack,
+            "docker-compose.yml",
+            mode="pause",
+            services=["app"],
+            use_native_wait=True,
+        )
+
+        self.assertEqual(
+            self.call_commands(),
+            [
+                "compose -f docker-compose.yml pull app",
+                "compose -f docker-compose.yml pause app",
+                "compose -f docker-compose.yml up -d --remove-orphans app",
+                "compose -f docker-compose.yml unpause app",
+            ],
+        )
+
+    def test_up_wait_detection_and_wait_args_match_shell_order(self) -> None:
+        stack = self.make_stack("stack", [("app", "repo/app:latest", "cid-app")])
+        self.assertFalse(self.compose.up_wait_supported(stack, "docker-compose.yml"))
+
+        wait_env = dict(self.env)
+        wait_env["FAKE_COMPOSE_UP_WAIT"] = "1"
+        wait_compose = ComposeCli(runner=CommandRunner(env=wait_env))
+        self.assertTrue(wait_compose.up_wait_supported(stack, "docker-compose.yml"))
+        self.clear_calls()
+
+        wait_compose.up(
+            stack,
+            "docker-compose.yml",
+            ["app"],
+            wait=True,
+            wait_timeout=7,
+        )
+
+        self.assertEqual(
+            self.call_commands(),
+            [
+                "compose -f docker-compose.yml up -d --remove-orphans --wait --wait-timeout 7 app"
+            ],
+        )
+
+
+def _safe_name(value: str) -> str:
+    return re.sub(r"[^A-Za-z0-9._-]", "_", value)
+
+
+if __name__ == "__main__":
+    unittest.main()

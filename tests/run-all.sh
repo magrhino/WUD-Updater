@@ -88,7 +88,10 @@ run shellcheck \
 run "$python_bin" -m py_compile \
   src/wud_updater/__init__.py \
   src/wud_updater/cli.py \
+  src/wud_updater/command.py \
+  src/wud_updater/compose.py \
   src/wud_updater/config.py \
+  src/wud_updater/docker_cli.py \
   src/wud_updater/file_ops.py \
   src/wud_updater/images.py \
   src/wud_updater/line_specs.py \
@@ -97,6 +100,7 @@ run "$python_bin" -m py_compile \
   tests/run-python-tests.py \
   tests/test_python_cli.py \
   tests/test_python_config.py \
+  tests/test_python_docker_compose.py \
   tests/test_python_wud_file_ops.py \
   tests/test_python_wud_parsing.py
 
