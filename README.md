@@ -15,6 +15,9 @@ Small shell helpers for applying Docker image updates reported by What's Up Dock
 bin/
   updates
   docker-update-from-wud
+src/wud_updater/
+  cli.py
+  config.py
 wud/
   on-update.sh
   append-updates.sh
@@ -26,7 +29,10 @@ Dockerfile
 entrypoint.sh
 docker-compose.example.yml
 install.sh
+pyproject.toml
 ```
+
+The Python package is a placeholder for a future refactor. The existing shell commands in `bin/` remain authoritative; the `wud-updater` console script only reports that the Python implementation is not wired yet.
 
 ## Install
 

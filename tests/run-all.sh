@@ -9,6 +9,20 @@ run(){
   "$@"
 }
 
+python_bin="${PYTHON_BIN:-}"
+if [ -z "$python_bin" ]; then
+  if command -v python3.14 >/dev/null 2>&1; then
+    python_bin="python3.14"
+  elif command -v python3 >/dev/null 2>&1; then
+    python_bin="python3"
+  else
+    cat >&2 <<'EOF'
+python3.14 or python3 is required to run the Python package tests.
+EOF
+    exit 127
+  fi
+fi
+
 if ! command -v shellcheck >/dev/null 2>&1; then
   cat >&2 <<'EOF'
 shellcheck is required to run the full test suite.
@@ -60,6 +74,15 @@ run shellcheck \
   tests/test-install.sh \
   tests/test-updates-wrapper.sh \
   tests/fakes/docker
+
+run "$python_bin" -m py_compile \
+  src/wud_updater/__init__.py \
+  src/wud_updater/cli.py \
+  src/wud_updater/config.py \
+  tests/run-python-tests.py \
+  tests/test_python_config.py
+
+run "$python_bin" tests/run-python-tests.py
 
 for test_script in tests/test-*.sh; do
   run "$test_script"
