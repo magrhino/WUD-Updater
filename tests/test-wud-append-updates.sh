@@ -226,6 +226,48 @@ test_lock_timeout_leaves_file_unchanged(){
   teardown_case
 }
 
+test_sort_failure_leaves_file_unchanged(){
+  setup_case
+  mkdir -p "$(dirname "$OUT_FILE")" "$TEST_TMP/bin"
+  printf 'repo/old:latest\n' > "$OUT_FILE"
+  cat > "$TEST_TMP/bin/sort" <<'FAKE_SORT'
+#!/usr/bin/env bash
+printf 'fake sort failed\n' >&2
+exit 42
+FAKE_SORT
+  chmod +x "$TEST_TMP/bin/sort"
+
+  run_script PATH="$TEST_TMP/bin:$PATH" update_available=true image_name=repo/app image_tag_value=latest
+
+  assert_status 1
+  assert_file_equals 'repo/old:latest'
+  grep -q "Failed to sort update entries for $OUT_FILE" "$TEST_TMP/output.log" || fail "missing sort failure error"
+  [[ ! -d "$OUT_FILE.lock" ]] || fail "lock directory was left behind"
+  assert_no_temp_files
+  teardown_case
+}
+
+test_replace_failure_leaves_file_unchanged(){
+  setup_case
+  mkdir -p "$(dirname "$OUT_FILE")" "$TEST_TMP/bin"
+  printf 'repo/old:latest\n' > "$OUT_FILE"
+  cat > "$TEST_TMP/bin/mv" <<'FAKE_MV'
+#!/usr/bin/env bash
+printf 'fake mv failed\n' >&2
+exit 42
+FAKE_MV
+  chmod +x "$TEST_TMP/bin/mv"
+
+  run_script PATH="$TEST_TMP/bin:$PATH" update_available=true image_name=repo/app image_tag_value=latest
+
+  assert_status 1
+  assert_file_equals 'repo/old:latest'
+  grep -q "Failed to replace $OUT_FILE" "$TEST_TMP/output.log" || fail "missing replace failure error"
+  [[ ! -d "$OUT_FILE.lock" ]] || fail "lock directory was left behind"
+  assert_no_temp_files
+  teardown_case
+}
+
 run_test(){
   local name="$1"
   printf 'running %s\n' "$name"
@@ -248,6 +290,8 @@ main(){
   run_test test_owner_config_requires_uid_and_group_before_replace
   run_test test_lock_removed_after_success
   run_test test_lock_timeout_leaves_file_unchanged
+  run_test test_sort_failure_leaves_file_unchanged
+  run_test test_replace_failure_leaves_file_unchanged
 }
 
 trap teardown_case EXIT
