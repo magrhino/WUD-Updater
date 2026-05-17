@@ -1,0 +1,14 @@
+services:
+  wud-updater:
+    build: .
+    image: magrhino/wud-updater:local
+    environment:
+      DOCKER_BASE: /host/docker
+      WUD_OUT_FILE: /out/images.todo
+      OUT_UID: "1000"
+      OUT_GID: "1000"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /srv/docker:/host/docker
+      - /srv/docker/wud/out:/out
+    command: ["updates", "--dry-run"]
