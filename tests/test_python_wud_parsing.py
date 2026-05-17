@@ -8,6 +8,7 @@ from wud_updater.images import (
     drop_registry,
     image_matches_resolved_target,
     image_with_tag,
+    image_repo_ref,
     normalize_digest,
     strip_digest,
     tag_value_valid,
@@ -68,6 +69,25 @@ class ImageHelperTests(unittest.TestCase):
         self.assertEqual(normalize_digest("abc"), "sha256:abc")
         self.assertEqual(normalize_digest("repo/app@sha256:abc"), "sha256:abc")
 
+    def test_image_reference_rewrite_preserves_registry_and_drops_digest(self) -> None:
+        self.assertEqual(
+            image_repo_ref("registry.example.com/team/app:1.0@sha256:abc"),
+            "registry.example.com/team/app",
+        )
+        self.assertEqual(
+            image_with_tag("registry.example.com/team/app:1.0@sha256:abc", "2.0"),
+            "registry.example.com/team/app:2.0",
+        )
+
+    def test_digest_and_registry_are_ignored_when_matching_tagged_target(self) -> None:
+        self.assertTrue(
+            image_matches_resolved_target(
+                "docker.io/library/nginx:1.25@sha256:old",
+                "library/nginx:1.25@sha256:new",
+                allow_repo=False,
+            )
+        )
+
     def test_tag_value_validity(self) -> None:
         self.assertTrue(tag_value_valid("v1.2_3-alpha"))
         self.assertTrue(tag_value_valid("a" * 128))
@@ -104,6 +124,10 @@ class LineSpecTests(unittest.TestCase):
         with self.assertRaisesRegex(LineSpecError, "references line 4"):
             parse_line_spec("4", 3, "--only-lines")
 
+    def test_line_spec_rejects_ranges_past_file_length(self) -> None:
+        with self.assertRaisesRegex(LineSpecError, "references line 5"):
+            parse_line_spec("2-5", 3, "--remove-lines-before-run")
+
 
 class WudFileParsingTests(unittest.TestCase):
     def test_comments_blank_lines_and_original_line_numbers(self) -> None:
@@ -133,6 +157,19 @@ class WudFileParsingTests(unittest.TestCase):
             [(1, "repo/app:latest"), (2, "repo/app:latest")],
         )
 
+    def test_final_line_without_newline_is_parsed(self) -> None:
+        parsed = parse_wud_text("repo/app:latest")
+
+        self.assertEqual(len(parsed.lines), 1)
+        self.assertEqual(parsed.targets[0].first, "repo/app:latest")
+
+    def test_crlf_line_endings_match_shell_trimming(self) -> None:
+        parsed = parse_wud_text("repo/app:latest\r\n# comment\r\n")
+
+        self.assertEqual(parsed.lines[0].raw, "repo/app:latest\r")
+        self.assertEqual(parsed.targets[0].first, "repo/app:latest")
+        self.assertFalse(parsed.lines[1].actionable)
+
     def test_selected_lines_filter_targets_without_renumbering(self) -> None:
         parsed = parse_wud_text("repo/a:latest\n# comment\nrepo/b:latest\n", selected_lines=[3])
 
@@ -158,6 +195,21 @@ class WudFileParsingTests(unittest.TestCase):
         self.assertEqual(target.desired_tag, "2.0")
         self.assertEqual(image_with_tag(target.first, target.desired_tag), "repo/app:2.0")
         self.assertEqual(parsed.warnings, ())
+
+    def test_last_desired_tag_token_wins(self) -> None:
+        parsed = parse_wud_text("repo/app:1.0 tag=2.0 note=ignored tag=3.0\n")
+
+        self.assertEqual(parsed.targets[0].desired_tag, "3.0")
+        self.assertEqual(parsed.warnings, ())
+
+    def test_later_invalid_desired_tag_overrides_earlier_valid_tag(self) -> None:
+        parsed = parse_wud_text("repo/app:1.0 tag=2.0 tag=bad:value\n")
+
+        self.assertEqual(parsed.targets[0].desired_tag, "")
+        self.assertEqual(
+            parsed.warnings,
+            ("Ignoring invalid tag value on WUD line 1: bad:value",),
+        )
 
     def test_invalid_tag_values_are_warned_and_ignored(self) -> None:
         parsed = parse_wud_text("repo/app:1.0 tag=bad:value\nrepo/app tag=2.0\n")
