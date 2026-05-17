@@ -40,6 +40,9 @@ jobs:
               ;;
           esac
 
+      - name: Install Python dev dependencies
+        run: python3 -m pip install -e '.[dev]'
+
       - name: Run tests
         run: tests/run-all.sh
 

@@ -22,7 +22,7 @@ Repo-local routing/context only for WUD-Updater. Global instructions control def
 | `wud/tag-manager.sh`, `wud/lsio-release-embed.sh`, `wud/release-notes-to-discord.sh`, `wud/upstreams.txt` | Discord/GitHub release-note helpers and LinuxServer.io upstream mapping. | The called helper; for `wud/lsio-release-embed.sh`, inspect args, router, and relevant provider section first; read `wud/upstreams.txt` when mapping is involved. | Keep webhook/token values environment-driven and redacted in logs. Preserve `curl`/`jq` based GitHub and Discord behavior. | Network calls unless validating release-note behavior. |
 | `install.sh` | Idempotent installer that chmods scripts and creates host symlinks for CLI commands and WUD scripts. | `install.sh`, then README install section. | Preserve refusal to replace non-symlink targets and existing env overrides. | Changing default target layout unless the task asks for installer behavior changes. |
 | `Dockerfile`, `entrypoint.sh`, `docker-compose.example.yml`, `.dockerignore` | Container packaging for running the existing shell helpers with Docker CLI access. | `README.md`, `entrypoint.sh`, `bin/updates`, `bin/docker-update-from-wud`. | Keep the default command non-mutating, preserve shell-script dispatch, and keep Docker socket and host stack mounts explicit in examples. | Porting updater logic into the image language runtime or replacing WUD's separate `/wud` mount. |
-| `tests/` | Local test runner, focused shell tests, Python config tests, and fake command implementations. | `tests/run-all.sh`, then the focused test for the behavior being changed. | Keep tests temp-dir based and fake external commands; never call real Docker mutations; keep Python tests dependency-free unless a dependency is already required. | Adding dependencies or broad fixtures when a small shell fake or unittest is enough. |
+| `tests/` | Local test runner, focused shell tests, Python config tests, and fake command implementations. | `tests/run-all.sh`, then the focused test for the behavior being changed. | Keep tests temp-dir based and fake external commands; never call real Docker mutations; keep Python dev dependencies explicit in `pyproject.toml`. | Adding dependencies or broad fixtures when a small shell fake or unittest is enough. |
 | `.github/workflows/test.yml` | GitHub Actions workflow that runs the local test entrypoint on Linux and macOS. | `tests/run-all.sh`, workflow file. | Keep CI and local validation aligned through `tests/run-all.sh`. | OS-specific CI behavior not covered by local tests unless needed. |
 | `README.md` | User-facing overview, install, WUD mount, usage, and config notes. | Scripts being described. | Keep concise, accurate, and free of secrets or machine-specific paths. | Operational assumptions not present in code. |
 | `CHANGELOG.md` | Release-time record of notable versioned changes. | `CHANGELOG.md`, recent commits since the previous tag, and changed user-facing docs. | Author versioned `## [vX.Y.Z] — YYYY-MM-DD` sections only during explicit release prep. | Ordinary feature, docs, or maintenance work outside release prep. |
@@ -55,7 +55,7 @@ Use the shell already used by the target script.
 | Purpose | Command |
 |---|---|
 | install | `./install.sh` |
-| lint | `shellcheck install.sh bin/updates bin/docker-update-from-wud wud/*.sh` |
+| lint | `ruff check .` and `shellcheck install.sh bin/updates bin/docker-update-from-wud wud/*.sh` |
 | Bash syntax check | `bash -n install.sh bin/updates bin/docker-update-from-wud wud/tag-manager.sh wud/lsio-release-embed.sh wud/release-notes-to-discord.sh` |
 | POSIX syntax check | `sh -n wud/on-update.sh wud/append-updates.sh` |
 | updater dry run | `bin/docker-update-from-wud --base "$DOCKER_BASE" --file "$WUD_OUT_FILE" --dry-run` |
@@ -70,6 +70,8 @@ Use the shell already used by the target script.
 | container build test | `tests/container-build.sh` |
 | container compose config check | `docker compose -f docker-compose.example.yml config` |
 | container image build | `docker build -t wud-updater:local .` |
+| Python dev dependency install | `python3 -m pip install -e '.[dev]'` |
+| Python lint | `ruff check .` |
 | Python syntax check | `python3 -m py_compile src/wud_updater/*.py tests/run-python-tests.py tests/test_python_*.py` |
 | Python tests | `python3 tests/run-python-tests.py` |
 | typecheck | Not configured; shell scripts only. |
@@ -86,7 +88,7 @@ Use the shell already used by the target script.
 - Host wrapper change: run `tests/test-updates-wrapper.sh`; fake `sudo` and configured updater commands rather than invoking real system mutation.
 - Container packaging change: run `bash -n entrypoint.sh`, ShellCheck through `tests/run-all.sh`, `tests/test-entrypoint.sh`, and `tests/container-build.sh` when Docker is available. The container build test validates Compose config, builds the image, and smoke-runs the default non-mutating command.
 - Release-note behavior change: syntax-check the touched scripts, run ShellCheck, run `tests/test-release-notes-to-discord.sh` when Discord payload or release-note behavior changes, and avoid live Discord/GitHub calls unless explicitly requested or needed.
-- Python skeleton/config change: run Python syntax check, `tests/run-python-tests.py`, and `tests/run-all.sh` when practical. Keep the shell commands authoritative until the refactor explicitly ports behavior.
+- Python skeleton/config change: run `ruff check .`, Python syntax check, `tests/run-python-tests.py`, and `tests/run-all.sh` when practical. Keep the shell commands authoritative until the refactor explicitly ports behavior.
 - Cross-cutting behavior change: run `tests/run-all.sh` when practical before finishing.
 - Docs-only change: no tests required unless examples or commands were changed enough to need syntax validation.
 - Unknown command: inspect scripts/docs, then prefer extending `tests/run-all.sh` or a focused `tests/test-*.sh` instead of inventing a separate harness.

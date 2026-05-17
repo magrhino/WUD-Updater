@@ -54,6 +54,22 @@ wud-updater update-from-wud --dry-run
 
 `wud-updater updates` is still a placeholder and refuses mutating runs. Continue using `updates` and `docker-update-from-wud` from `bin/` for normal host operations.
 
+## Development
+
+Install the Python development dependencies before running the full local suite:
+
+```bash
+python3 -m pip install -e '.[dev]'
+```
+
+Run the full validation entrypoint:
+
+```bash
+tests/run-all.sh
+```
+
+The suite runs Ruff, shell syntax checks, ShellCheck, Python syntax checks, Python unit tests, and the focused shell behavior tests.
+
 ## Install
 
 Clone the repo, then run:
