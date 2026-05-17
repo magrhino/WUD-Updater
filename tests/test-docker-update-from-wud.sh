@@ -306,6 +306,29 @@ HOOK
   teardown_case
 }
 
+test_cleanup_does_not_resurrect_replaced_unselected_line(){
+  setup_case
+  printf 'repo/app:one\nrepo/app:two\n' > "$WUD_FILE"
+  make_single_service_stack two "$BASE/two" docker-compose.yml repo/app:two cid-two
+  set_image_state repo/app:two old-two sha256:old-two
+  set_image_after_pull repo/app:two new-two sha256:new-two
+  cat > "$FAKE_ROOT/post-pull-hook" <<'HOOK'
+#!/usr/bin/env bash
+set -Eeuo pipefail
+tmp="${HOOK_WUD_FILE:?}.hook"
+awk '$1 != "repo/app:one" {print}' "$HOOK_WUD_FILE" > "$tmp"
+printf 'repo/app:one sha256=new\n' >> "$tmp"
+mv "$tmp" "$HOOK_WUD_FILE"
+HOOK
+  chmod +x "$FAKE_ROOT/post-pull-hook"
+
+  run_script HOOK_WUD_FILE="$WUD_FILE" --yes --only-lines 2
+
+  assert_status 0
+  assert_file_equals "$WUD_FILE" 'repo/app:one sha256=new'
+  teardown_case
+}
+
 test_parent_wud_lock_is_reused_and_released(){
   setup_case
   local marker="$TEST_TMP/lock-release-marker"
@@ -603,6 +626,7 @@ main(){
   run_test test_only_lines_keeps_unselected_duplicate_raw_line
   run_test test_remove_lines_before_run_removes_requested_lines_before_pull
   run_test test_cleanup_preserves_appended_duplicate_after_pre_run_removal
+  run_test test_cleanup_does_not_resurrect_replaced_unselected_line
   run_test test_parent_wud_lock_is_reused_and_released
   run_test test_invalid_line_spec_fails_before_docker_calls
   run_test test_one_line_two_stacks_one_fails_keeps_line

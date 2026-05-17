@@ -32,6 +32,9 @@ if [[ -n "${FAKE_COLUMN_LOCK_LOG:-}" ]]; then
   fi
 fi
 cat
+if [[ -n "${FAKE_COLUMN_HOOK:-}" ]]; then
+  "$FAKE_COLUMN_HOOK"
+fi
 FAKE_COLUMN
   chmod +x "$FAKE_BIN/column"
 
@@ -197,14 +200,14 @@ test_interactive_all_preserves_default_updater_args(){
   teardown_case
 }
 
-test_interactive_display_holds_wud_lock(){
+test_interactive_display_uses_snapshot_without_holding_wud_lock(){
   setup_case
   printf 'repo/app:latest\n' > "$WUD_FILE"
 
   run_updates_with_input 'n\n' FAKE_COLUMN_LOCK_LOG="$TEST_TMP/column-lock.log" --base "$TEST_TMP/docker"
 
   assert_status 0
-  grep -qx 'present' "$TEST_TMP/column-lock.log" || fail "pending updates were not displayed under the WUD lock"
+  grep -qx 'missing' "$TEST_TMP/column-lock.log" || fail "pending updates were displayed while holding the WUD lock"
   [[ ! -d "$WUD_FILE.lock" ]] || fail "WUD lock was not released after skip"
   teardown_case
 }
@@ -272,6 +275,27 @@ test_interactive_remove_unselected_passes_remove_lines(){
   teardown_case
 }
 
+test_interactive_select_aborts_when_snapshot_lines_change(){
+  setup_case
+  {
+    printf 'repo/app:one\n'
+    printf 'repo/app:two\n'
+  } > "$WUD_FILE"
+  cat > "$TEST_TMP/change-wud-file" <<HOOK
+#!/usr/bin/env bash
+printf 'repo/app:changed\nrepo/app:two\n' > "$WUD_FILE"
+HOOK
+  chmod +x "$TEST_TMP/change-wud-file"
+
+  run_updates_with_input 's\n1\nn\n' FAKE_COLUMN_HOOK="$TEST_TMP/change-wud-file" --base "$TEST_TMP/docker"
+
+  assert_status 1
+  grep -q 'WUD file changed while selecting updates; please rerun updates.' "$TEST_TMP/output.log" || fail "missing changed-file validation message"
+  [[ ! -e "$TEST_TMP/sudo.log" ]] || fail "sudo was invoked after selected line changed"
+  [[ ! -d "$WUD_FILE.lock" ]] || fail "WUD lock was not released after validation failure"
+  teardown_case
+}
+
 run_test(){
   local name="$1"
   printf 'running %s\n' "$name"
@@ -285,11 +309,12 @@ main(){
   run_test test_yes_passes_owner_config_through_sudo_env
   run_test test_yes_passes_lock_timeout_through_sudo_env
   run_test test_interactive_all_preserves_default_updater_args
-  run_test test_interactive_display_holds_wud_lock
+  run_test test_interactive_display_uses_snapshot_without_holding_wud_lock
   run_test test_interactive_holds_wud_lock_for_updater_handoff
   run_test test_interactive_select_passes_original_line_numbers
   run_test test_interactive_exclude_passes_complement_line_numbers
   run_test test_interactive_remove_unselected_passes_remove_lines
+  run_test test_interactive_select_aborts_when_snapshot_lines_change
 }
 
 trap teardown_case EXIT
