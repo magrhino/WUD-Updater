@@ -307,7 +307,7 @@ HOOK
 test_cleanup_preserves_wud_file_owner_and_mode(){
   setup_case
   printf 'repo/app:latest\n' > "$WUD_FILE"
-  chmod 600 "$WUD_FILE"
+  chmod 660 "$WUD_FILE"
   local expected_owner expected_mode
   expected_owner="$(stat_owner_group "$WUD_FILE")"
   expected_mode="$(stat_mode "$WUD_FILE")"

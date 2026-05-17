@@ -8,6 +8,9 @@ LOCK_DIR="${OUT_FILE}.lock"
 LOCK_HELD=0
 TMP=""
 SORTED_TMP=""
+OUT_UID="${OUT_UID:-}"
+OUT_GID="${OUT_GID:-}"
+OUT_GUID="${OUT_GUID:-}"
 rc=0
 
 # shellcheck disable=SC2329
@@ -41,6 +44,101 @@ acquire_lock() {
   done
 
   LOCK_HELD=1
+}
+
+stat_mode() {
+  if stat -c '%a' "$1" >/dev/null 2>&1; then
+    stat -c '%a' "$1"
+  else
+    stat -f '%Lp' "$1"
+  fi
+}
+
+stat_uid() {
+  if stat -c '%u' "$1" >/dev/null 2>&1; then
+    stat -c '%u' "$1"
+  else
+    stat -f '%u' "$1"
+  fi
+}
+
+stat_gid() {
+  if stat -c '%g' "$1" >/dev/null 2>&1; then
+    stat -c '%g' "$1"
+  else
+    stat -f '%g' "$1"
+  fi
+}
+
+validate_owner_config() {
+  if [ -z "$OUT_GID" ] && [ -n "$OUT_GUID" ]; then
+    OUT_GID="$OUT_GUID"
+  fi
+
+  if [ -n "$OUT_UID" ] || [ -n "$OUT_GID" ]; then
+    if [ -z "$OUT_UID" ] || [ -z "$OUT_GID" ]; then
+      echo "OUT_UID and OUT_GID/OUT_GUID must be set together" >&2
+      return 1
+    fi
+    case "$OUT_UID" in
+      *[!0-9]*)
+        echo "OUT_UID must be numeric" >&2
+        return 1
+        ;;
+    esac
+    case "$OUT_GID" in
+      *[!0-9]*)
+        echo "OUT_GID/OUT_GUID must be numeric" >&2
+        return 1
+        ;;
+    esac
+  fi
+}
+
+desired_metadata() {
+  if [ -e "$OUT_FILE" ]; then
+    FILE_MODE="$(stat_mode "$OUT_FILE")" || return 1
+    FILE_UID="$(stat_uid "$OUT_FILE")" || return 1
+    FILE_GID="$(stat_gid "$OUT_FILE")" || return 1
+  else
+    FILE_MODE="660"
+    FILE_UID="$(id -u)"
+    FILE_GID="$(id -g)"
+    if [ "$FILE_UID" = "0" ]; then
+      FILE_UID="1000"
+      FILE_GID="1000"
+    fi
+  fi
+
+  if [ -n "$OUT_UID" ]; then
+    FILE_UID="$OUT_UID"
+    FILE_GID="$OUT_GID"
+  fi
+}
+
+apply_metadata() {
+  file="$1"
+  actual_uid="$(stat_uid "$file")" || return 1
+  actual_gid="$(stat_gid "$file")" || return 1
+
+  if [ "$actual_uid" != "$FILE_UID" ] || [ "$actual_gid" != "$FILE_GID" ]; then
+    if ! chown "${FILE_UID}:${FILE_GID}" "$file"; then
+      echo "Failed to set owner ${FILE_UID}:${FILE_GID} on $file" >&2
+      return 1
+    fi
+  fi
+  if ! chmod "$FILE_MODE" "$file"; then
+    echo "Failed to set mode $FILE_MODE on $file" >&2
+    return 1
+  fi
+
+  actual_uid="$(stat_uid "$file")" || return 1
+  actual_gid="$(stat_gid "$file")" || return 1
+  actual_mode="$(stat_mode "$file")" || return 1
+  if [ "$actual_uid" != "$FILE_UID" ] || [ "$actual_gid" != "$FILE_GID" ] || [ "$actual_mode" != "$FILE_MODE" ]; then
+    echo "Metadata verification failed for $file: wanted ${FILE_MODE} ${FILE_UID}:${FILE_GID}, got ${actual_mode} ${actual_uid}:${actual_gid}" >&2
+    return 1
+  fi
 }
 
 normalize_sha256() {
@@ -84,23 +182,29 @@ if [ "${update_available:-}" = "true" ]; then
 
   umask 077
   acquire_lock || exit $?
-  touch "$OUT_FILE"
+  validate_owner_config || exit $?
+  desired_metadata || {
+    echo "Failed to read desired metadata for $OUT_FILE" >&2
+    exit 1
+  }
   TMP="$(mktemp "${OUT_DIR}/.${OUT_BASE}.left.XXXXXX")"
   SORTED_TMP="$(mktemp "${OUT_DIR}/.${OUT_BASE}.sorted.XXXXXX")"
 
   # Remove existing lines for this image, with or without a digest suffix.
-  awk -v image="$IMAGE" 'NF == 0 || $1 != image' "$OUT_FILE" > "$TMP"
+  if [ -e "$OUT_FILE" ]; then
+    awk -v image="$IMAGE" 'NF == 0 || $1 != image' "$OUT_FILE" > "$TMP"
+  else
+    : > "$TMP"
+  fi
 
   # Append the updated line
   echo "$LINE" >> "$TMP"
 
   # Sort and deduplicate (optional if images are already unique)
   sort -u "$TMP" > "$SORTED_TMP"
+  apply_metadata "$SORTED_TMP" || exit $?
   mv "$SORTED_TMP" "$OUT_FILE"
   SORTED_TMP=""
-
-  # Set ownership
-  chown 1000:1000 "$OUT_FILE" 2>/dev/null || true
 fi
 
 exit 0
