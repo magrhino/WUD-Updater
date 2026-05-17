@@ -28,6 +28,7 @@ fi
 lock_timeout="${WUD_LOCK_TIMEOUT:-}"
 auto_run=0
 dry_run=0
+allow_tag_updates=0
 selected_line_spec=""
 remove_line_spec=""
 todo_entries=""
@@ -39,7 +40,7 @@ updater_rc=0
 
 usage() {
   cat <<EOF
-Usage: updates [-y|--yes] [--dry-run] [--base PATH] [--file PATH] [--mode pause|stop|live] [--max-wait SECONDS]
+Usage: updates [-y|--yes] [--dry-run] [--allow-tag-updates] [--base PATH] [--file PATH] [--mode pause|stop|live] [--max-wait SECONDS]
 
 Shows Docker updates from WUD, TrueNAS update status, and active TrueNAS alerts.
 When Docker updates are pending, prompts before running docker-update-from-wud.
@@ -55,6 +56,10 @@ while [ "$#" -gt 0 ]; do
       ;;
     --dry-run)
       dry_run=1
+      shift
+      ;;
+    --allow-tag-updates)
+      allow_tag_updates=1
       shift
       ;;
     --base)
@@ -420,6 +425,7 @@ run_updater() {
   updater_args=(--base "$docker_base" --file "$wud_file" --mode "$update_mode" --max-wait "$max_wait")
   [ -n "$selected_line_spec" ] && updater_args+=(--only-lines "$selected_line_spec")
   [ -n "$remove_line_spec" ] && updater_args+=(--remove-lines-before-run "$remove_line_spec")
+  [ "$allow_tag_updates" -eq 1 ] && updater_args+=(--allow-tag-updates)
   updater_args+=(--yes)
 
   if [ -n "$out_uid" ] || [ -n "$out_gid" ]; then

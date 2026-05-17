@@ -141,6 +141,26 @@ apply_metadata() {
   fi
 }
 
+tag_from_remote() {
+  tag="$1"
+  [ -n "$tag" ] || return 1
+
+  tag="${tag%%@sha256:*}"
+  case "$tag" in
+    *:*)
+      tag="${tag##*:}"
+      ;;
+  esac
+
+  case "$tag" in
+    ''|*[!A-Za-z0-9_.-]*|[!A-Za-z0-9_]*)
+      return 1
+      ;;
+  esac
+
+  printf '%s' "$tag"
+}
+
 # Only act when there is an update (true)
 if [ "${update_available:-}" = "true" ]; then
   OUT_DIR="$(dirname "$OUT_FILE")"
@@ -153,6 +173,13 @@ if [ "${update_available:-}" = "true" ]; then
   [ -n "$IMAGE" ] || exit 0
 
   LINE="${IMAGE}"
+  if [ "${update_kind_kind:-}" = "tag" ]; then
+    REMOTE_TAG_SOURCE="${update_kind_remote_value:-}"
+    [ -n "$REMOTE_TAG_SOURCE" ] || REMOTE_TAG_SOURCE="${result_tag:-}"
+    if REMOTE_TAG="$(tag_from_remote "$REMOTE_TAG_SOURCE")"; then
+      LINE="${IMAGE} tag=${REMOTE_TAG}"
+    fi
+  fi
 
   umask 077
   acquire_lock || exit $?

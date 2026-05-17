@@ -20,6 +20,7 @@ MODE="$MODE_DEFAULT"
 MAX_WAIT="$MAX_WAIT_DEFAULT"
 DRY_RUN=false
 ASSUME_YES=false
+ALLOW_TAG_UPDATES=false
 NO_COLOR=false
 WUD_FILE_SET=false
 LOG_DIR_SET=false
@@ -37,7 +38,7 @@ ts(){ date +%Y-%m-%dT%H:%M:%S; }
 
 usage(){
   cat <<EOF
-Usage: $0 [--base PATH] [--file PATH] [--log-dir PATH] [--mode pause|stop|live] [--max-wait SECONDS] [--dry-run] [--yes] [--no-color] [--only-lines SPEC] [--remove-lines-before-run SPEC]
+Usage: $0 [--base PATH] [--file PATH] [--log-dir PATH] [--mode pause|stop|live] [--max-wait SECONDS] [--dry-run] [--yes] [--allow-tag-updates] [--no-color] [--only-lines SPEC] [--remove-lines-before-run SPEC]
 
 Environment:
   OUT_UID and OUT_GID set the owner for logs and rewritten WUD files.
@@ -265,6 +266,38 @@ repo_key(){
   fi
 }
 
+image_repo_ref(){
+  local image prefix last
+  image="$(strip_digest "$1")"
+  prefix="${image%/*}"
+  last="${image##*/}"
+  if [[ "$last" == *:* ]]; then
+    last="${last%:*}"
+  fi
+  if [[ "$image" == */* ]]; then
+    printf '%s/%s' "$prefix" "$last"
+  else
+    printf '%s' "$last"
+  fi
+}
+
+image_with_tag(){
+  local image="$1" tag="$2"
+  printf '%s:%s' "$(image_repo_ref "$image")" "$tag"
+}
+
+tag_value_valid(){
+  local tag="$1"
+  [[ "$tag" =~ ^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$ ]]
+}
+
+safe_log_component(){
+  local value="$1"
+  value="$(printf '%s' "$value" | sed 's/[^A-Za-z0-9._-]/_/g')"
+  [[ -n "$value" ]] || value="tag"
+  printf '%s' "$value"
+}
+
 sanitize_stream(){
   perl -pe 's/\r/\n/g; s/\e\[[0-9;?]*[ -\/]*[@-~]//g; s/\x08//g; s/\^D//g; s/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]//g'
 }
@@ -481,7 +514,7 @@ prepare_log_file(){
 }
 
 parse_wud_file(){
-  local line_no actionable raw trimmed first digest has_tag allow_repo key repo
+  local line_no actionable raw trimmed first rest token digest desired_tag has_tag allow_repo key repo
   : > "$WORK_DIR/targets.tsv"
   while IFS=$'\t' read -r line_no actionable raw; do
     [[ "$actionable" == "true" ]] || continue
@@ -489,11 +522,29 @@ parse_wud_file(){
     line_selected "$line_no" || continue
     first="${trimmed%%[[:space:]]*}"
     [[ -z "$first" ]] && continue
+    rest="${trimmed#"$first"}"
     digest=""
     if [[ "$first" == *@sha256:* ]]; then
       digest="${first#*@}"
     fi
     digest="$(normalize_digest "$digest")"
+    desired_tag=""
+    for token in $rest; do
+      case "$token" in
+        tag=*)
+          desired_tag="${token#tag=}"
+          ;;
+      esac
+    done
+    if [[ -n "$desired_tag" ]]; then
+      if ! tag_value_valid "$desired_tag"; then
+        yellow "Ignoring invalid tag value on WUD line $line_no: $desired_tag"
+        desired_tag=""
+      elif ! image_has_tag "$first"; then
+        yellow "Ignoring tag update without a tagged source image on WUD line $line_no: $first"
+        desired_tag=""
+      fi
+    fi
     has_tag=false
     allow_repo=false
     if image_has_tag "$first"; then
@@ -503,7 +554,7 @@ parse_wud_file(){
     fi
     key="$(image_key "$first")"
     repo="$(repo_key "$first")"
-    printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$line_no" "$raw" "$first" "$key" "$repo" "$has_tag" "$allow_repo" "$digest" >> "$WORK_DIR/targets.tsv"
+    printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$line_no" "$raw" "$first" "$key" "$repo" "$has_tag" "$allow_repo" "$digest" "$desired_tag" >> "$WORK_DIR/targets.tsv"
   done < "$WORK_DIR/line-map.tsv"
 }
 
@@ -612,9 +663,24 @@ services_for_stack_image(){
 }
 
 build_matches(){
-  local line_no raw target _target_key _target_repo has_tag allow_repo digest resolved idx dir file name image service service_matched
+  local row line_no raw target _target_key _target_repo has_tag allow_repo digest desired_tag resolved idx dir file name image service service_matched
   : > "$WORK_DIR/matches.tsv"
-  while IFS=$'\t' read -r line_no raw target _target_key _target_repo has_tag allow_repo digest; do
+  : > "$WORK_DIR/skipped-tag-targets.tsv"
+  while IFS= read -r row; do
+    line_no="$(printf '%s\n' "$row" | cut -f1)"
+    raw="$(printf '%s\n' "$row" | cut -f2)"
+    target="$(printf '%s\n' "$row" | cut -f3)"
+    _target_key="$(printf '%s\n' "$row" | cut -f4)"
+    _target_repo="$(printf '%s\n' "$row" | cut -f5)"
+    has_tag="$(printf '%s\n' "$row" | cut -f6)"
+    allow_repo="$(printf '%s\n' "$row" | cut -f7)"
+    digest="$(printf '%s\n' "$row" | cut -f8)"
+    desired_tag="$(printf '%s\n' "$row" | cut -f9)"
+    if [[ -n "$desired_tag" && "$ALLOW_TAG_UPDATES" != "true" ]]; then
+      printf '%s\t%s\t%s\t%s\n' "$line_no" "$target" "$desired_tag" "$raw" >> "$WORK_DIR/skipped-tag-targets.tsv"
+      continue
+    fi
+
     resolved="$(resolve_target_image "$target")"
     if [[ "$resolved" != "$target" ]]; then
       allow_repo=true
@@ -634,11 +700,11 @@ build_matches(){
         while IFS= read -r service; do
           [[ -z "$service" ]] && continue
           service_matched=true
-          printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$idx" "$line_no" "$raw" "$target" "$resolved" "$digest" "$image" "$service" >> "$WORK_DIR/matches.tsv"
+          printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$idx" "$line_no" "$raw" "$target" "$resolved" "$digest" "$image" "$service" "$desired_tag" >> "$WORK_DIR/matches.tsv"
         done < <(services_for_stack_image "$idx" "$image")
 
         if [[ "$service_matched" != "true" ]]; then
-          printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$idx" "$line_no" "$raw" "$target" "$resolved" "$digest" "$image" "" >> "$WORK_DIR/matches.tsv"
+          printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$idx" "$line_no" "$raw" "$target" "$resolved" "$digest" "$image" "" "$desired_tag" >> "$WORK_DIR/matches.tsv"
         fi
       done < "$WORK_DIR/stack-${idx}.images"
     done < "$WORK_DIR/stacks.tsv"
@@ -652,7 +718,7 @@ stack_field(){
 }
 
 print_plan(){
-  local idx dir name line_no raw target resolved services_file services_label
+  local idx dir name line_no raw target resolved desired_tag desired_image services_file services_label
   say "Stacks to update:"
   cut -f1 "$WORK_DIR/matches.tsv" | sort -n -u > "$WORK_DIR/to-update.txt"
   while IFS= read -r idx; do
@@ -667,15 +733,29 @@ print_plan(){
     else
       say "      services: stack-level fallback"
     fi
-    awk -v idx="$idx" 'BEGIN{FS="\t"} $1 == idx {print $2 "\t" $4 "\t" $5}' "$WORK_DIR/matches.tsv" | sort -n -u |
-      while IFS=$'\t' read -r line_no target resolved; do
-        if [[ "$target" == "$resolved" ]]; then
+    awk -v idx="$idx" 'BEGIN{FS="\t"} $1 == idx {print $2 "\t" $4 "\t" $5 "\t" $9}' "$WORK_DIR/matches.tsv" | sort -n -u |
+      while IFS=$'\t' read -r line_no target resolved desired_tag; do
+        if [[ -n "$desired_tag" ]]; then
+          desired_image="$(image_with_tag "$resolved" "$desired_tag")"
+          say "      line $line_no: $resolved -> $desired_image (tag update)"
+        elif [[ "$target" == "$resolved" ]]; then
           say "      line $line_no: $target"
         else
           say "      line $line_no: $target -> $resolved"
         fi
       done
   done < "$WORK_DIR/to-update.txt"
+}
+
+print_skipped_tag_updates(){
+  local line_no target desired_tag raw desired_image
+  [[ -s "$WORK_DIR/skipped-tag-targets.tsv" ]] || return 0
+  yellow "Tag update entries require --allow-tag-updates and were left pending:"
+  while IFS=$'\t' read -r line_no target desired_tag raw; do
+    [[ -z "$line_no" ]] && continue
+    desired_image="$(image_with_tag "$target" "$desired_tag")"
+    say "  line $line_no: $target -> $desired_image"
+  done < "$WORK_DIR/skipped-tag-targets.tsv"
 }
 
 confirm_before_mutation(){
@@ -1155,8 +1235,218 @@ run_compose_up(){
   run_compose_with_services "$dir" "$file" "$services_file" up -d --remove-orphans
 }
 
+preserve_path_metadata(){
+  local src="$1" dst="$2"
+  perl -e '
+    use strict;
+    use warnings;
+    my ($src, $dst) = @ARGV;
+    my @src_st = stat($src) or die "stat($src): $!\n";
+    my @dst_st = stat($dst) or die "stat($dst): $!\n";
+    if ($dst_st[4] != $src_st[4] || $dst_st[5] != $src_st[5]) {
+      chown($src_st[4], $src_st[5], $dst) or die "chown($dst): $!\n";
+    }
+    chmod($src_st[2] & 07777, $dst) or die "chmod($dst): $!\n";
+  ' "$src" "$dst"
+}
+
+refresh_stack_images(){
+  local idx="$1" dir="$2" file="$3" name="$4"
+  local images_file="$WORK_DIR/stack-${idx}.images" errfile="$WORK_DIR/stack-${idx}.refresh.err"
+  if (cd "$dir" && docker compose -f "$file" config --images > "$images_file" 2> "$errfile"); then
+    sort -u "$images_file" -o "$images_file"
+    rm -f "$errfile"
+    return 0
+  fi
+  red "[$name] Could not refresh compose images after tag rewrite."
+  while IFS= read -r line; do
+    plain_log ERROR "[$name] $line"
+  done < "$errfile"
+  rm -f "$errfile"
+  return 1
+}
+
+write_stack_tag_updates(){
+  local idx="$1" output="$2"
+  local old_image desired_tag new_image
+  awk -v idx="$idx" 'BEGIN{FS="\t"} $1 == idx && $9 != "" {print $7 "\t" $9}' "$WORK_DIR/matches.tsv" | sort -u |
+    while IFS=$'\t' read -r old_image desired_tag; do
+      [[ -z "$old_image" || -z "$desired_tag" ]] && continue
+      new_image="$(image_with_tag "$old_image" "$desired_tag")"
+      printf '%s\t%s\t%s\n' "$old_image" "$desired_tag" "$new_image"
+    done > "$output"
+}
+
+apply_compose_tag_updates(){
+  local dir="$1" file="$2" updates_file="$3" applied_file="$4"
+  local compose_path="$dir/$file" tmp
+  tmp="$(mktemp "${dir}/.${file}.tag.XXXXXX")"
+  : > "$applied_file"
+  if ! perl -e '
+    use strict;
+    use warnings;
+    my ($updates_file, $compose_path, $tmp_path, $applied_file) = @ARGV;
+    open my $updates, "<", $updates_file or die "open($updates_file): $!\n";
+    my %new_for;
+    my %tag_for;
+    while (my $line = <$updates>) {
+      chomp $line;
+      my ($old, $tag, $new) = split /\t/, $line, 3;
+      next unless defined $old && defined $tag && defined $new && length $old && length $tag && length $new;
+      $new_for{$old} = $new;
+      $tag_for{$old} = $tag;
+    }
+    close $updates;
+
+    open my $in, "<", $compose_path or die "open($compose_path): $!\n";
+    open my $out, ">", $tmp_path or die "open($tmp_path): $!\n";
+    my %count;
+    while (my $line = <$in>) {
+      if ($line =~ /^([ \t]*image:[ \t]*)(["'\'']?)([^"'\''\s#]+)\2([ \t]*(?:#.*)?)(\n?)$/) {
+        my ($prefix, $quote, $value, $suffix, $newline) = ($1, $2, $3, $4, $5);
+        if (exists $new_for{$value}) {
+          print {$out} $prefix . $quote . $new_for{$value} . $quote . $suffix . $newline;
+          $count{$value}++;
+          next;
+        }
+      }
+      print {$out} $line;
+    }
+    close $in;
+    close $out;
+
+    open my $applied, ">", $applied_file or die "open($applied_file): $!\n";
+    my $missing = 0;
+    for my $old (sort keys %new_for) {
+      my $n = $count{$old} || 0;
+      print {$applied} join("\t", $old, $tag_for{$old}, $new_for{$old}, $n), "\n";
+      $missing = 1 if $n < 1;
+    }
+    close $applied;
+    exit($missing ? 2 : 0);
+  ' "$updates_file" "$compose_path" "$tmp" "$applied_file"; then
+    rm -f "$tmp"
+    return 1
+  fi
+  if ! preserve_path_metadata "$compose_path" "$tmp"; then
+    rm -f "$tmp"
+    return 1
+  fi
+  if ! mv "$tmp" "$compose_path"; then
+    rm -f "$tmp"
+    return 1
+  fi
+}
+
+capture_compose_cids(){
+  local dir="$1" file="$2" services_file="$3" output="$4"
+  read_compose_cids "$dir" "$file" "$output" "$services_file"
+}
+
+append_cid_details_to_file(){
+  local output="$1" cids_file="$2" cid summary name status health restarts exit_code health_output
+  if [[ ! -f "$cids_file" ]] || ! file_has_nonblank_line "$cids_file"; then
+    printf 'health: docker compose ps -q returned no containers\n' >> "$output"
+    return 0
+  fi
+  while IFS= read -r cid; do
+    [[ -z "$cid" ]] && continue
+    summary="$(cid_summary "$cid")"
+    if [[ -z "$summary" ]]; then
+      printf 'health: container=%s inspect returned no state\n' "$cid" >> "$output"
+      continue
+    fi
+    IFS='|' read -r name status health restarts exit_code <<EOF
+$summary
+EOF
+    name="${name#/}"
+    printf 'health: container=%s status=%s health=%s restarts=%s exit_code=%s\n' "$name" "$status" "$health" "$restarts" "$exit_code" >> "$output"
+    health_output="$WORK_DIR/incident-health-${cid}.txt"
+    docker inspect -f '{{if .State.Health}}{{range .State.Health.Log}}{{println .Output}}{{end}}{{end}}' "$cid" 2>/dev/null |
+      sanitize_stream | awk 'NF' | tail -n 20 > "$health_output" || true
+    if [[ -s "$health_output" ]]; then
+      while IFS= read -r line; do
+        printf 'health_output[%s]: %s\n' "$name" "$line" >> "$output"
+      done < "$health_output"
+    fi
+  done < "$cids_file"
+}
+
+write_tag_incident_log(){
+  local idx="$1" dir="$2" file="$3" name="$4" services_file="$5" applied_file="$6" reason="$7" rollback_result="$8" failure_health_file="$9"
+  local first_tag safe_tag incident services_label old_image desired_tag new_image replacements
+  first_tag="$(awk 'BEGIN{FS="\t"} NF {print $2; exit}' "$applied_file" 2>/dev/null || true)"
+  safe_tag="$(safe_log_component "$first_tag")"
+  incident="${dir}/error-${safe_tag}-$(date +%Y-%m-%dT%H-%M-%S).logs"
+  services_label="$(service_file_label "$services_file")"
+  {
+    printf 'WUD-Updater tag update incident\n'
+    printf 'timestamp=%s\n' "$(ts)"
+    printf 'stack=%s\n' "$name"
+    printf 'compose_file=%s\n' "$file"
+    printf 'services=%s\n' "${services_label:-stack-level}"
+    printf 'reason=%s\n' "$reason"
+    printf 'rollback=%s\n' "$rollback_result"
+    printf 'central_log=%s\n' "$LOG_FILE"
+    printf '\ntag_updates:\n'
+    while IFS=$'\t' read -r old_image desired_tag new_image replacements; do
+      [[ -z "$old_image" ]] && continue
+      printf '  %s -> %s (tag=%s replacements=%s)\n' "$old_image" "$new_image" "$desired_tag" "$replacements"
+    done < "$applied_file"
+    printf '\nfailure_health:\n'
+  } > "$incident"
+  if [[ -s "$failure_health_file" ]]; then
+    cat "$failure_health_file" >> "$incident"
+  else
+    printf 'health: no failure health details captured\n' >> "$incident"
+  fi
+  if [[ "$rollback_result" != "restored-and-healthy" ]]; then
+    printf '\nmanual_review_required=yes\n' >> "$incident"
+  else
+    printf '\nmanual_review_required=no\n' >> "$incident"
+  fi
+  yellow "[$name] Wrote tag update incident log: $incident"
+}
+
+rollback_tag_update(){
+  local idx="$1" dir="$2" file="$3" name="$4" backup="$5" services_file="$6"
+  [[ -f "$backup" ]] || return 1
+  if ! cp -p "$backup" "$dir/$file"; then
+    return 1
+  fi
+  if ! run_compose_up "$dir" "$file" "$name" "$services_file"; then
+    return 1
+  fi
+  if [[ "$UP_WAIT_HANDLED" == "true" ]]; then
+    return 0
+  fi
+  wait_for_health "$dir" "$file" "$MAX_WAIT" "$name" "$services_file"
+}
+
+handle_tag_update_failure(){
+  local idx="$1" reason="$2" dir="$3" file="$4" name="$5" backup="$6" services_file="$7" applied_file="$8"
+  local failure_cids_file failure_health_file rollback_result
+  failure_cids_file="$WORK_DIR/stack-${idx}.failure-cids"
+  failure_health_file="$WORK_DIR/stack-${idx}.failure-health"
+  capture_compose_cids "$dir" "$file" "$services_file" "$failure_cids_file"
+  : > "$failure_health_file"
+  append_cid_details_to_file "$failure_health_file" "$failure_cids_file"
+  yellow "[$name] Restoring compose file after failed tag update."
+  if rollback_tag_update "$idx" "$dir" "$file" "$name" "$backup" "$services_file"; then
+    rollback_result="restored-and-healthy"
+    yellow "[$name] Rolled back to previous tag; leaving WUD entry pending for manual review."
+  else
+    rollback_result="rollback-failed-manual-review-required"
+    red "[$name] Rollback failed; manual review required."
+  fi
+  write_tag_incident_log "$idx" "$dir" "$file" "$name" "$services_file" "$applied_file" "$reason" "$rollback_result" "$failure_health_file"
+  record_stack_status "$idx" "failure" "$reason"
+  return 1
+}
+
 update_stack(){
   local idx="$1" dir file name images_file before after changes services_file services_label image old_id new_id old_digest new_digest update_needed=false down_failed=false service_scoped=false
+  local tag_updates_file tag_applied_file compose_backup tag_updates_applied=false old_tag_image desired_tag new_tag_image replacements
   dir="$(stack_field "$idx" 2)"
   file="$(stack_field "$idx" 3)"
   name="$(stack_field "$idx" 4)"
@@ -1165,6 +1455,9 @@ update_stack(){
   after="$WORK_DIR/stack-${idx}.after"
   changes="$WORK_DIR/stack-${idx}.changes"
   services_file="$WORK_DIR/stack-${idx}.update-services"
+  tag_updates_file="$WORK_DIR/stack-${idx}.tag-updates"
+  tag_applied_file="$WORK_DIR/stack-${idx}.tag-applied"
+  compose_backup="$WORK_DIR/stack-${idx}.compose.backup"
 
   say "[$name] Checking for updates (mode=$MODE)"
   if collect_update_services "$idx" "$services_file"; then
@@ -1176,19 +1469,53 @@ update_stack(){
   fi
   write_image_state "$images_file" "$before"
 
+  write_stack_tag_updates "$idx" "$tag_updates_file"
+  if [[ -s "$tag_updates_file" ]]; then
+    say "[$name] Applying compose tag update(s)"
+    if ! cp -p "$dir/$file" "$compose_backup"; then
+      record_stack_status "$idx" "failure" "compose-backup-failed"
+      return 1
+    fi
+    if ! apply_compose_tag_updates "$dir" "$file" "$tag_updates_file" "$tag_applied_file"; then
+      red "[$name] Could not rewrite compose image tag(s); leaving WUD entry pending for manual review."
+      record_stack_status "$idx" "failure" "compose-tag-rewrite-failed"
+      return 1
+    fi
+    while IFS=$'\t' read -r old_tag_image desired_tag new_tag_image replacements; do
+      [[ -z "$old_tag_image" ]] && continue
+      say "[$name] Compose tag updated: $old_tag_image -> $new_tag_image"
+    done < "$tag_applied_file"
+    tag_updates_applied=true
+    if ! refresh_stack_images "$idx" "$dir" "$file" "$name"; then
+      handle_tag_update_failure "$idx" "compose-refresh-failed" "$dir" "$file" "$name" "$compose_backup" "$services_file" "$tag_applied_file"
+      return 1
+    fi
+  fi
+
   if ! run_compose_with_services "$dir" "$file" "$services_file" pull; then
+    if [[ "$tag_updates_applied" == "true" ]]; then
+      handle_tag_update_failure "$idx" "pull-failed" "$dir" "$file" "$name" "$compose_backup" "$services_file" "$tag_applied_file"
+      return 1
+    fi
     record_stack_status "$idx" "failure" "pull-failed"
     return 1
   fi
 
   write_image_state "$images_file" "$after"
   if ! verify_expected_digests "$idx" "$name" "$images_file"; then
+    if [[ "$tag_updates_applied" == "true" ]]; then
+      handle_tag_update_failure "$idx" "expected-digest-not-reached" "$dir" "$file" "$name" "$compose_backup" "$services_file" "$tag_applied_file"
+      return 1
+    fi
     record_stack_status "$idx" "failure" "expected-digest-not-reached"
     return 1
   fi
 
   updated_images "$before" "$after" "$changes"
 
+  if [[ "$tag_updates_applied" == "true" ]]; then
+    update_needed=true
+  fi
   if [[ -s "$changes" ]]; then
     update_needed=true
     while IFS=$'\t' read -r image old_id new_id old_digest new_digest; do
@@ -1233,6 +1560,10 @@ update_stack(){
     say "[$name] Bringing stack up"
   fi
   if ! run_compose_up "$dir" "$file" "$name" "$services_file"; then
+    if [[ "$tag_updates_applied" == "true" ]]; then
+      handle_tag_update_failure "$idx" "up-or-health-failed" "$dir" "$file" "$name" "$compose_backup" "$services_file" "$tag_applied_file"
+      return 1
+    fi
     record_stack_status "$idx" "failure" "up-or-health-failed"
     return 1
   fi
@@ -1240,6 +1571,10 @@ update_stack(){
   if [[ "$MODE" == "pause" ]]; then
     yellow "[$name] Unpausing before health check"
     if ! run_compose_with_services "$dir" "$file" "$services_file" unpause; then
+      if [[ "$tag_updates_applied" == "true" ]]; then
+        handle_tag_update_failure "$idx" "unpause-failed" "$dir" "$file" "$name" "$compose_backup" "$services_file" "$tag_applied_file"
+        return 1
+      fi
       record_stack_status "$idx" "failure" "unpause-failed"
       return 1
     fi
@@ -1248,6 +1583,10 @@ update_stack(){
   if [[ "$UP_WAIT_HANDLED" == "true" ]]; then
     green "[$name] Healthy"
     if [[ "$down_failed" == "true" ]]; then
+      if [[ "$tag_updates_applied" == "true" ]]; then
+        handle_tag_update_failure "$idx" "down-failed" "$dir" "$file" "$name" "$compose_backup" "$services_file" "$tag_applied_file"
+        return 1
+      fi
       record_stack_status "$idx" "failure" "down-failed"
       return 1
     fi
@@ -1258,6 +1597,10 @@ update_stack(){
   if wait_for_health "$dir" "$file" "$MAX_WAIT" "$name" "$services_file"; then
     green "[$name] Healthy"
     if [[ "$down_failed" == "true" ]]; then
+      if [[ "$tag_updates_applied" == "true" ]]; then
+        handle_tag_update_failure "$idx" "down-failed" "$dir" "$file" "$name" "$compose_backup" "$services_file" "$tag_applied_file"
+        return 1
+      fi
       record_stack_status "$idx" "failure" "down-failed"
       return 1
     fi
@@ -1265,6 +1608,10 @@ update_stack(){
     return 0
   fi
 
+  if [[ "$tag_updates_applied" == "true" ]]; then
+    handle_tag_update_failure "$idx" "health-failed" "$dir" "$file" "$name" "$compose_backup" "$services_file" "$tag_applied_file"
+    return 1
+  fi
   record_stack_status "$idx" "failure" "health-failed"
   return 1
 }
@@ -1279,6 +1626,7 @@ while [[ $# -gt 0 ]]; do
     --max-wait) MAX_WAIT="${2:-}"; shift 2;;
     --dry-run) DRY_RUN=true; shift;;
     --yes|--no-confirm) ASSUME_YES=true; shift;;
+    --allow-tag-updates) ALLOW_TAG_UPDATES=true; shift;;
     --no-color) NO_COLOR=true; shift;;
     --only-lines) ONLY_LINES_SPEC="${2:-}"; shift 2;;
     --remove-lines-before-run) REMOVE_LINES_BEFORE_RUN_SPEC="${2:-}"; shift 2;;
@@ -1305,6 +1653,7 @@ need_cmd sed
 need_cmd perl
 need_cmd find
 need_cmd grep
+need_cmd cut
 need_cmd mktemp
 need_cmd script
 
@@ -1322,6 +1671,7 @@ say "Log file: $LOG_FILE"
 say "Mode    : $MODE"
 say "Dry-run : $DRY_RUN"
 say "Confirm : $ASSUME_YES"
+say "TagEdit : $ALLOW_TAG_UPDATES"
 say "MaxWait : ${MAX_WAIT}s"
 if [[ -n "$ONLY_LINES_SPEC" ]]; then
   say "Only    : $ONLY_LINES_SPEC"
@@ -1349,12 +1699,14 @@ if [[ ! -s "$WORK_DIR/targets.tsv" ]]; then
 fi
 
 say "Targets:"
-awk 'BEGIN{FS="\t"} {suffix=($8 != "" ? " sha256=" $8 : ""); print "  line " $1 ": " $3 suffix}' "$WORK_DIR/targets.tsv" |
+awk 'BEGIN{FS="\t"} {suffix=($8 != "" ? " sha256=" $8 : ""); suffix=suffix ($9 != "" ? " tag=" $9 : ""); print "  line " $1 ": " $3 suffix}' "$WORK_DIR/targets.tsv" |
   while IFS= read -r line; do say "$line"; done
 
 load_container_images
 discover_stacks
 build_matches
+
+print_skipped_tag_updates
 
 if [[ ! -s "$WORK_DIR/matches.tsv" ]]; then
   say "No stacks matched the list; nothing to do."

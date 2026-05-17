@@ -86,6 +86,34 @@ test_image_tag_ignores_result_digest(){
   teardown_case
 }
 
+test_tag_update_writes_proposed_tag(){
+  setup_case
+  run_script update_available=true image_name=linuxserver/qbittorrent image_tag_value=5.1.4 update_kind_kind=tag update_kind_remote_value=5.2.0
+  assert_file_equals 'linuxserver/qbittorrent:5.1.4 tag=5.2.0'
+  teardown_case
+}
+
+test_tag_update_accepts_image_remote_value(){
+  setup_case
+  run_script update_available=true image_name=repo/app image_tag_value=1.0 update_kind_kind=tag update_kind_remote_value=repo/app:2.0
+  assert_file_equals 'repo/app:1.0 tag=2.0'
+  teardown_case
+}
+
+test_tag_update_accepts_single_component_image_remote_value(){
+  setup_case
+  run_script update_available=true image_name=nginx image_tag_value=1.0 update_kind_kind=tag update_kind_remote_value=nginx:2.0
+  assert_file_equals 'nginx:1.0 tag=2.0'
+  teardown_case
+}
+
+test_tag_update_uses_result_tag_fallback(){
+  setup_case
+  run_script update_available=true image_name=repo/app image_tag_value=1.0 update_kind_kind=tag result_tag=2.0
+  assert_file_equals 'repo/app:1.0 tag=2.0'
+  teardown_case
+}
+
 test_container_name_fallback(){
   setup_case
   run_script update_available=true name=container-app
@@ -97,6 +125,16 @@ test_digest_update_kind_fallback(){
   setup_case
   run_script update_available=true image_name=repo/app image_tag_value=latest update_kind_kind=digest update_kind_remote_value="repo/app@sha256:$(hex_digest)"
   assert_file_equals "repo/app:latest"
+  teardown_case
+}
+
+test_tag_dedupe_replaces_existing_image_line(){
+  setup_case
+  mkdir -p "$(dirname "$OUT_FILE")"
+  printf 'repo/app:1.0 tag=1.1\nrepo/other:latest\n' > "$OUT_FILE"
+  run_script update_available=true image_name=repo/app image_tag_value=1.0 update_kind_kind=tag update_kind_remote_value=1.2
+  assert_file_equals "repo/app:1.0 tag=1.2
+repo/other:latest"
   teardown_case
 }
 
@@ -278,8 +316,13 @@ run_test(){
 main(){
   run_test test_update_gate_does_not_create_file
   run_test test_image_tag_ignores_result_digest
+  run_test test_tag_update_writes_proposed_tag
+  run_test test_tag_update_accepts_image_remote_value
+  run_test test_tag_update_accepts_single_component_image_remote_value
+  run_test test_tag_update_uses_result_tag_fallback
   run_test test_container_name_fallback
   run_test test_digest_update_kind_fallback
+  run_test test_tag_dedupe_replaces_existing_image_line
   run_test test_invalid_digest_is_omitted
   run_test test_dedupe_replaces_existing_image_line
   run_test test_existing_file_mode_and_owner_are_preserved

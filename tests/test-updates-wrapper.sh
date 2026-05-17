@@ -188,6 +188,18 @@ test_yes_passes_lock_timeout_through_sudo_env(){
   teardown_case
 }
 
+test_yes_passes_allow_tag_updates_flag(){
+  setup_case
+  printf 'repo/app:1.0 tag=2.0\n' > "$WUD_FILE"
+
+  run_updates --yes --allow-tag-updates --base "$TEST_TMP/docker"
+
+  assert_status 0
+  grep -q -- "$TEST_TMP/updater --base $TEST_TMP/docker --file $WUD_FILE --mode stop --max-wait 180 --allow-tag-updates --yes" "$TEST_TMP/sudo.log" || fail "sudo did not receive allow-tag-updates flag"
+  grep -q -- "--allow-tag-updates --yes" "$TEST_TMP/updater.log" || fail "updater did not receive allow-tag-updates flag"
+  teardown_case
+}
+
 test_interactive_all_preserves_default_updater_args(){
   setup_case
   printf 'repo/app:latest\n' > "$WUD_FILE"
@@ -320,6 +332,7 @@ main(){
   run_test test_yes_invokes_configured_updater_through_sudo
   run_test test_yes_passes_owner_config_through_sudo_env
   run_test test_yes_passes_lock_timeout_through_sudo_env
+  run_test test_yes_passes_allow_tag_updates_flag
   run_test test_interactive_all_preserves_default_updater_args
   run_test test_interactive_display_uses_snapshot_without_holding_wud_lock
   run_test test_interactive_display_hides_legacy_sha_suffix

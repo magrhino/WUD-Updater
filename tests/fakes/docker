@@ -37,9 +37,53 @@ image_digests(){
   [[ -f "$file" ]] && cat "$file"
 }
 
+compose_service_images_from_file(){
+  local file="$1" service="${2:-}" output
+  [[ -f "$file" ]] || return 1
+  output="$(awk -v wanted="$service" '
+    /^  [A-Za-z0-9_.-]+:/ {
+      svc = $1
+      sub(/:$/, "", svc)
+      next
+    }
+    /^[[:space:]]+image:[[:space:]]*/ {
+      value = $0
+      sub(/^[[:space:]]*image:[[:space:]]*/, "", value)
+      sub(/[[:space:]]+#.*/, "", value)
+      sub(/^[[:space:]]+/, "", value)
+      sub(/[[:space:]]+$/, "", value)
+      quote = substr(value, 1, 1)
+      if ((quote == "\"" || quote == "\047") && substr(value, length(value), 1) == quote) {
+        value = substr(value, 2, length(value) - 2)
+      }
+      if (value != "" && (wanted == "" || svc == wanted)) {
+        print value
+      }
+    }
+  ' "$file")"
+  [[ -n "$output" ]] || return 1
+  printf '%s\n' "$output"
+}
+
+compose_services_from_file(){
+  local file="$1" output
+  [[ -f "$file" ]] || return 1
+  output="$(awk '
+    /^  [A-Za-z0-9_.-]+:/ {
+      svc = $1
+      sub(/:$/, "", svc)
+      print svc
+    }
+  ' "$file")"
+  [[ -n "$output" ]] || return 1
+  printf '%s\n' "$output"
+}
+
 service_images(){
-  local id="$1" service="${2:-}"
-  if [[ -n "$service" && -f "$ROOT/stacks/$id/service-images.tsv" ]]; then
+  local id="$1" service="${2:-}" file="${3:-}"
+  if [[ -n "$file" ]] && compose_service_images_from_file "$file" "$service"; then
+    return 0
+  elif [[ -n "$service" && -f "$ROOT/stacks/$id/service-images.tsv" ]]; then
     awk -v service="$service" 'BEGIN{FS="\t"} $1 == service {print $2}' "$ROOT/stacks/$id/service-images.tsv"
   elif [[ -f "$ROOT/stacks/$id/images.txt" ]]; then
     cat "$ROOT/stacks/$id/images.txt"
@@ -69,8 +113,8 @@ apply_image_after_pull(){
 }
 
 apply_pull_state(){
-  local id="$1"
-  shift || true
+  local id="$1" file="$2"
+  shift 2 || true
   local services=() arg service image
   for arg in "$@"; do
     [[ "$arg" == -* ]] && continue
@@ -82,13 +126,13 @@ apply_pull_state(){
       while IFS= read -r image; do
         [[ -z "$image" ]] && continue
         apply_image_after_pull "$image"
-      done < <(service_images "$id" "$service")
+      done < <(service_images "$id" "$service" "$file")
     done
   else
     while IFS= read -r image; do
       [[ -z "$image" ]] && continue
       apply_image_after_pull "$image"
-    done < <(service_images "$id")
+    done < <(service_images "$id" "" "$file")
   fi
 }
 
@@ -97,6 +141,14 @@ run_post_pull_hook(){
   shift || true
   if [[ -x "$ROOT/post-pull-hook" ]]; then
     "$ROOT/post-pull-hook" "$id" "$@"
+  fi
+}
+
+run_post_up_hook(){
+  local id="$1"
+  shift || true
+  if [[ -x "$ROOT/post-up-hook" ]]; then
+    "$ROOT/post-up-hook" "$id" "$@"
   fi
 }
 
@@ -123,13 +175,15 @@ compose_cmd(){
       case "${1:-}" in
         --images)
           if [[ -n "${2:-}" ]]; then
-            service_images "$id" "$2"
+            service_images "$id" "$2" "$file"
           else
-            service_images "$id"
+            service_images "$id" "" "$file"
           fi
           ;;
         --services)
-          if [[ -f "$ROOT/stacks/$id/services.txt" ]]; then
+          if compose_services_from_file "$file"; then
+            :
+          elif [[ -f "$ROOT/stacks/$id/services.txt" ]]; then
             cat "$ROOT/stacks/$id/services.txt"
           elif [[ -f "$ROOT/stacks/$id/service-images.tsv" ]]; then
             awk 'BEGIN{FS="\t"} {print $1}' "$ROOT/stacks/$id/service-images.tsv" | sort -u
@@ -144,7 +198,7 @@ compose_cmd(){
       ;;
     pull)
       [[ -f "$ROOT/stacks/$id/pull_fail" ]] && return 17
-      apply_pull_state "$id" "$@"
+      apply_pull_state "$id" "$file" "$@"
       run_post_pull_hook "$id" "$@"
       return 0
       ;;
@@ -166,6 +220,7 @@ compose_cmd(){
         return 0
       fi
       [[ -f "$ROOT/stacks/$id/up_fail" ]] && return 19
+      run_post_up_hook "$id" "$file" "$@"
       return 0
       ;;
     pause|unpause)
