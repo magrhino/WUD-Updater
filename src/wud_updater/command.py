@@ -66,23 +66,26 @@ class CommandRunner:
 
         argv = normalize_args(args)
         cwd_path = Path(cwd) if cwd is not None else None
-        completed = subprocess.run(
-            argv,
-            cwd=str(cwd_path) if cwd_path is not None else None,
-            env=self._merged_env(env),
-            stdin=subprocess.DEVNULL,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-            check=False,
-        )
-        result = CommandResult(
-            args=argv,
-            cwd=cwd_path,
-            returncode=completed.returncode,
-            stdout=completed.stdout,
-            stderr=completed.stderr,
-        )
+        try:
+            completed = subprocess.run(
+                argv,
+                cwd=str(cwd_path) if cwd_path is not None else None,
+                env=self._merged_env(env),
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                check=False,
+            )
+            result = CommandResult(
+                args=argv,
+                cwd=cwd_path,
+                returncode=completed.returncode,
+                stdout=completed.stdout,
+                stderr=completed.stderr,
+            )
+        except OSError as exc:
+            result = _result_from_os_error(argv, cwd_path, exc)
         if check and not result.ok:
             raise CommandError(result)
         return result
@@ -111,18 +114,21 @@ class CommandRunner:
 
         argv = normalize_args(args)
         cwd_path = Path(cwd) if cwd is not None else None
-        completed = subprocess.run(
-            argv,
-            cwd=str(cwd_path) if cwd_path is not None else None,
-            env=self._merged_env(env),
-            stdin=subprocess.DEVNULL,
-            check=False,
-        )
-        result = CommandResult(
-            args=argv,
-            cwd=cwd_path,
-            returncode=completed.returncode,
-        )
+        try:
+            completed = subprocess.run(
+                argv,
+                cwd=str(cwd_path) if cwd_path is not None else None,
+                env=self._merged_env(env),
+                stdin=subprocess.DEVNULL,
+                check=False,
+            )
+            result = CommandResult(
+                args=argv,
+                cwd=cwd_path,
+                returncode=completed.returncode,
+            )
+        except OSError as exc:
+            result = _result_from_os_error(argv, cwd_path, exc)
         if check and not result.ok:
             raise CommandError(result)
         return result
@@ -162,3 +168,24 @@ def normalize_args(args: Sequence[CommandArg]) -> tuple[str, ...]:
 
 def display_command(args: Sequence[CommandArg]) -> str:
     return shlex.join(normalize_args(args))
+
+
+def _result_from_os_error(
+    args: tuple[str, ...],
+    cwd: Path | None,
+    exc: OSError,
+) -> CommandResult:
+    return CommandResult(
+        args=args,
+        cwd=cwd,
+        returncode=_os_error_returncode(exc),
+        stderr=str(exc),
+    )
+
+
+def _os_error_returncode(exc: OSError) -> int:
+    if isinstance(exc, FileNotFoundError):
+        return 127
+    if isinstance(exc, PermissionError):
+        return 126
+    return exc.errno or 1
