@@ -24,6 +24,13 @@ setup_case(){
 
   cat > "$FAKE_BIN/column" <<'FAKE_COLUMN'
 #!/usr/bin/env bash
+if [[ -n "${FAKE_COLUMN_LOCK_LOG:-}" ]]; then
+  if [[ -d "${FAKE_WUD_FILE:?FAKE_WUD_FILE is required}.lock" ]]; then
+    printf 'present\n' >> "$FAKE_COLUMN_LOCK_LOG"
+  else
+    printf 'missing\n' >> "$FAKE_COLUMN_LOCK_LOG"
+  fi
+fi
 cat
 FAKE_COLUMN
   chmod +x "$FAKE_BIN/column"
@@ -37,8 +44,31 @@ FAKE_SUDO
 
   cat > "$TEST_TMP/updater" <<'FAKE_UPDATER'
 #!/usr/bin/env bash
-printf 'OUT_UID=%s OUT_GID=%s OUT_GUID=%s WUD_LOCK_TIMEOUT=%s\n' "${OUT_UID:-}" "${OUT_GID:-}" "${OUT_GUID:-}" "${WUD_LOCK_TIMEOUT:-}" >> "${FAKE_UPDATER_LOG:?FAKE_UPDATER_LOG is required}"
-printf '%s\n' "$*" >> "${FAKE_UPDATER_LOG:?FAKE_UPDATER_LOG is required}"
+args=("$@")
+wud_file=""
+while (($#)); do
+  case "$1" in
+    --file)
+      wud_file="${2:-}"
+      shift 2
+      ;;
+    *)
+      shift
+      ;;
+  esac
+done
+printf 'OUT_UID=%s OUT_GID=%s OUT_GUID=%s WUD_LOCK_TIMEOUT=%s WUD_LOCK_HELD_BY_PARENT=%s\n' "${OUT_UID:-}" "${OUT_GID:-}" "${OUT_GUID:-}" "${WUD_LOCK_TIMEOUT:-}" "${WUD_LOCK_HELD_BY_PARENT:-}" >> "${FAKE_UPDATER_LOG:?FAKE_UPDATER_LOG is required}"
+if [[ "${FAKE_UPDATER_ASSERT_LOCK:-}" = "1" ]]; then
+  if [[ "${WUD_LOCK_HELD_BY_PARENT:-}" != "1" ]]; then
+    printf 'missing WUD_LOCK_HELD_BY_PARENT\n' >> "$FAKE_UPDATER_LOG"
+    exit 21
+  fi
+  if [[ -z "$wud_file" || ! -d "${wud_file}.lock" ]]; then
+    printf 'missing WUD file lock\n' >> "$FAKE_UPDATER_LOG"
+    exit 22
+  fi
+fi
+printf '%s\n' "${args[*]}" >> "${FAKE_UPDATER_LOG:?FAKE_UPDATER_LOG is required}"
 exit 0
 FAKE_UPDATER
   chmod +x "$TEST_TMP/updater"
@@ -62,12 +92,41 @@ run_updates(){
       WUD_UPDATER="$TEST_TMP/updater" \
       FAKE_SUDO_LOG="$TEST_TMP/sudo.log" \
       FAKE_UPDATER_LOG="$TEST_TMP/updater.log" \
+      FAKE_WUD_FILE="$WUD_FILE" \
       env "${env_args[@]}" "$SCRIPT" --file "$WUD_FILE" "$@" > "$TEST_TMP/output.log" 2>&1 || LAST_STATUS=$?
   else
     PATH="$FAKE_BIN:$PATH" \
       WUD_UPDATER="$TEST_TMP/updater" \
       FAKE_SUDO_LOG="$TEST_TMP/sudo.log" \
       FAKE_UPDATER_LOG="$TEST_TMP/updater.log" \
+      FAKE_WUD_FILE="$WUD_FILE" \
+      "$SCRIPT" --file "$WUD_FILE" "$@" > "$TEST_TMP/output.log" 2>&1 || LAST_STATUS=$?
+  fi
+}
+
+run_updates_with_input(){
+  local input="$1"
+  shift
+  local env_args=()
+  while [[ "$#" -gt 0 && "$1" == *=* ]]; do
+    env_args+=("$1")
+    shift
+  done
+
+  LAST_STATUS=0
+  if ((${#env_args[@]})); then
+    printf '%b' "$input" | PATH="$FAKE_BIN:$PATH" \
+      WUD_UPDATER="$TEST_TMP/updater" \
+      FAKE_SUDO_LOG="$TEST_TMP/sudo.log" \
+      FAKE_UPDATER_LOG="$TEST_TMP/updater.log" \
+      FAKE_WUD_FILE="$WUD_FILE" \
+      env "${env_args[@]}" "$SCRIPT" --file "$WUD_FILE" "$@" > "$TEST_TMP/output.log" 2>&1 || LAST_STATUS=$?
+  else
+    printf '%b' "$input" | PATH="$FAKE_BIN:$PATH" \
+      WUD_UPDATER="$TEST_TMP/updater" \
+      FAKE_SUDO_LOG="$TEST_TMP/sudo.log" \
+      FAKE_UPDATER_LOG="$TEST_TMP/updater.log" \
+      FAKE_WUD_FILE="$WUD_FILE" \
       "$SCRIPT" --file "$WUD_FILE" "$@" > "$TEST_TMP/output.log" 2>&1 || LAST_STATUS=$?
   fi
 }
@@ -126,6 +185,93 @@ test_yes_passes_lock_timeout_through_sudo_env(){
   teardown_case
 }
 
+test_interactive_all_preserves_default_updater_args(){
+  setup_case
+  printf 'repo/app:latest\n' > "$WUD_FILE"
+
+  run_updates_with_input 'a\n' --base "$TEST_TMP/docker"
+
+  assert_status 0
+  grep -q -- "$TEST_TMP/updater --base $TEST_TMP/docker --file $WUD_FILE --mode stop --max-wait 180 --yes" "$TEST_TMP/sudo.log" || fail "sudo did not receive default all-selection updater command"
+  grep -q -- "--base $TEST_TMP/docker --file $WUD_FILE --mode stop --max-wait 180 --yes" "$TEST_TMP/updater.log" || fail "updater did not receive default all-selection arguments"
+  teardown_case
+}
+
+test_interactive_display_holds_wud_lock(){
+  setup_case
+  printf 'repo/app:latest\n' > "$WUD_FILE"
+
+  run_updates_with_input 'n\n' FAKE_COLUMN_LOCK_LOG="$TEST_TMP/column-lock.log" --base "$TEST_TMP/docker"
+
+  assert_status 0
+  grep -qx 'present' "$TEST_TMP/column-lock.log" || fail "pending updates were not displayed under the WUD lock"
+  [[ ! -d "$WUD_FILE.lock" ]] || fail "WUD lock was not released after skip"
+  teardown_case
+}
+
+test_interactive_holds_wud_lock_for_updater_handoff(){
+  setup_case
+  printf 'repo/app:latest\n' > "$WUD_FILE"
+
+  run_updates_with_input 's\n1\nn\n' FAKE_UPDATER_ASSERT_LOCK=1 --base "$TEST_TMP/docker"
+
+  assert_status 0
+  grep -q -- "WUD_LOCK_HELD_BY_PARENT=1" "$TEST_TMP/updater.log" || fail "updater did not receive parent lock marker"
+  [[ ! -d "$WUD_FILE.lock" ]] || fail "WUD lock was not released after updater handoff"
+  teardown_case
+}
+
+test_interactive_select_passes_original_line_numbers(){
+  setup_case
+  {
+    printf '# comment\n'
+    printf 'repo/app:one\n'
+    printf '\n'
+    printf 'repo/app:two\n'
+    printf 'repo/app:three\n'
+  } > "$WUD_FILE"
+
+  run_updates_with_input 's\n1,3\nn\n' --base "$TEST_TMP/docker"
+
+  assert_status 0
+  grep -q -- "--only-lines 2,5 --yes" "$TEST_TMP/sudo.log" || fail "sudo did not receive selected original line numbers"
+  grep -q -- "--only-lines 2,5" "$TEST_TMP/updater.log" || fail "updater did not receive selected original line numbers"
+  teardown_case
+}
+
+test_interactive_exclude_passes_complement_line_numbers(){
+  setup_case
+  {
+    printf 'repo/app:one\n'
+    printf '# comment\n'
+    printf 'repo/app:two\n'
+    printf 'repo/app:three\n'
+  } > "$WUD_FILE"
+
+  run_updates_with_input 'x\n2\nn\n' --base "$TEST_TMP/docker"
+
+  assert_status 0
+  grep -q -- "--only-lines 1,4 --yes" "$TEST_TMP/sudo.log" || fail "sudo did not receive complement line numbers"
+  grep -q -- "--only-lines 1,4" "$TEST_TMP/updater.log" || fail "updater did not receive complement line numbers"
+  teardown_case
+}
+
+test_interactive_remove_unselected_passes_remove_lines(){
+  setup_case
+  {
+    printf 'repo/app:one\n'
+    printf 'repo/app:two\n'
+    printf 'repo/app:three\n'
+  } > "$WUD_FILE"
+
+  run_updates_with_input 's\n2\ny\n' --base "$TEST_TMP/docker"
+
+  assert_status 0
+  grep -q -- "--only-lines 2 --remove-lines-before-run 1,3 --yes" "$TEST_TMP/sudo.log" || fail "sudo did not receive remove-lines arguments"
+  grep -q -- "--remove-lines-before-run 1,3" "$TEST_TMP/updater.log" || fail "updater did not receive remove-lines arguments"
+  teardown_case
+}
+
 run_test(){
   local name="$1"
   printf 'running %s\n' "$name"
@@ -138,6 +284,12 @@ main(){
   run_test test_yes_invokes_configured_updater_through_sudo
   run_test test_yes_passes_owner_config_through_sudo_env
   run_test test_yes_passes_lock_timeout_through_sudo_env
+  run_test test_interactive_all_preserves_default_updater_args
+  run_test test_interactive_display_holds_wud_lock
+  run_test test_interactive_holds_wud_lock_for_updater_handoff
+  run_test test_interactive_select_passes_original_line_numbers
+  run_test test_interactive_exclude_passes_complement_line_numbers
+  run_test test_interactive_remove_unselected_passes_remove_lines
 }
 
 trap teardown_case EXIT

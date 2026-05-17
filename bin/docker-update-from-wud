@@ -15,6 +15,8 @@ OUT_UID="${OUT_UID:-}"
 OUT_GID="${OUT_GID:-}"
 OUT_GUID="${OUT_GUID:-}"
 WUD_LOCK_TIMEOUT="${WUD_LOCK_TIMEOUT:-30}"
+WUD_LOCK_HELD_BY_PARENT="${WUD_LOCK_HELD_BY_PARENT:-}"
+WUD_LOCK_RELEASE_MARKER="${WUD_LOCK_RELEASE_MARKER:-}"
 MODE="$MODE_DEFAULT"
 MAX_WAIT="$MAX_WAIT_DEFAULT"
 DRY_RUN=false
@@ -22,6 +24,8 @@ ASSUME_YES=false
 NO_COLOR=false
 WUD_FILE_SET=false
 LOG_DIR_SET=false
+ONLY_LINES_SPEC=""
+REMOVE_LINES_BEFORE_RUN_SPEC=""
 LOG_FILE=""
 WORK_DIR=""
 WUD_LOCK_DIR=""
@@ -34,7 +38,7 @@ ts(){ date +%Y-%m-%dT%H:%M:%S; }
 
 usage(){
   cat <<EOF
-Usage: $0 [--base PATH] [--file PATH] [--log-dir PATH] [--mode pause|stop|live] [--max-wait SECONDS] [--dry-run] [--yes] [--no-color]
+Usage: $0 [--base PATH] [--file PATH] [--log-dir PATH] [--mode pause|stop|live] [--max-wait SECONDS] [--dry-run] [--yes] [--no-color] [--only-lines SPEC] [--remove-lines-before-run SPEC]
 
 Environment:
   OUT_UID and OUT_GID set the owner for logs and rewritten WUD files.
@@ -91,8 +95,31 @@ release_wud_lock(){
   fi
 }
 
+parent_wud_lock_held(){
+  [[ "${WUD_LOCK_HELD_BY_PARENT:-}" == "1" ]]
+}
+
+expect_parent_wud_lock(){
+  parent_wud_lock_held || return 0
+  WUD_LOCK_DIR="${WUD_FILE}.lock"
+  [[ -d "$WUD_LOCK_DIR" ]] || die "Expected WUD file lock to be held: $WUD_LOCK_DIR"
+}
+
+release_parent_wud_lock(){
+  parent_wud_lock_held || return 0
+  [[ -n "${WUD_FILE:-}" ]] || return 0
+  WUD_LOCK_DIR="${WUD_FILE}.lock"
+  if rmdir "$WUD_LOCK_DIR" 2>/dev/null; then
+    if [[ -n "$WUD_LOCK_RELEASE_MARKER" ]]; then
+      printf 'released\n' > "$WUD_LOCK_RELEASE_MARKER" 2>/dev/null || true
+    fi
+  fi
+  WUD_LOCK_HELD_BY_PARENT=""
+}
+
 cleanup(){
   release_wud_lock
+  release_parent_wud_lock
   [[ -n "${WORK_DIR:-}" && -d "$WORK_DIR" ]] && rm -rf "$WORK_DIR"
 }
 trap cleanup EXIT
@@ -101,6 +128,10 @@ acquire_wud_lock(){
   local waited=0
   [[ "$WUD_LOCK_TIMEOUT" =~ ^[0-9]+$ ]] || die "WUD_LOCK_TIMEOUT must be an integer number of seconds"
   WUD_LOCK_DIR="${WUD_FILE}.lock"
+  if parent_wud_lock_held; then
+    expect_parent_wud_lock
+    return 0
+  fi
 
   while ! mkdir "$WUD_LOCK_DIR" 2>/dev/null; do
     if (( waited >= WUD_LOCK_TIMEOUT )); then
@@ -118,6 +149,73 @@ trim(){
   value="${value#"${value%%[![:space:]]*}"}"
   value="${value%"${value##*[![:space:]]}"}"
   printf '%s' "$value"
+}
+
+line_spec_to_file(){
+  local spec="$1" outfile="$2" label="$3" max_lines="$4"
+  local cleaned part start_raw end_raw start end n result_tmp
+  local parts=()
+
+  : > "$outfile"
+  [[ -n "$spec" ]] || return 0
+
+  cleaned="${spec//[[:space:]]/}"
+  [[ -n "$cleaned" ]] || die "$label must not be empty"
+
+  IFS=',' read -r -a parts <<< "$cleaned"
+  for part in "${parts[@]}"; do
+    [[ -n "$part" ]] || die "Invalid $label value: $spec"
+    if [[ "$part" =~ ^([0-9]+)-([0-9]+)$ ]]; then
+      start_raw="${BASH_REMATCH[1]}"
+      end_raw="${BASH_REMATCH[2]}"
+      start=$((10#$start_raw))
+      end=$((10#$end_raw))
+      (( start >= 1 )) || die "$label line numbers must be 1 or greater: $spec"
+      (( end >= start )) || die "$label ranges must ascend: $spec"
+      (( end <= max_lines )) || die "$label references line $end, but WUD file has $max_lines line(s)"
+      for ((n=start; n<=end; n++)); do
+        printf '%s\n' "$n" >> "$outfile"
+      done
+    elif [[ "$part" =~ ^[0-9]+$ ]]; then
+      n=$((10#$part))
+      (( n >= 1 )) || die "$label line numbers must be 1 or greater: $spec"
+      (( n <= max_lines )) || die "$label references line $n, but WUD file has $max_lines line(s)"
+      printf '%s\n' "$n" >> "$outfile"
+    else
+      die "Invalid $label value: $spec"
+    fi
+  done
+
+  result_tmp="${outfile}.sorted"
+  sort -n -u "$outfile" > "$result_tmp"
+  mv "$result_tmp" "$outfile"
+}
+
+prepare_line_specs(){
+  local max_lines
+  max_lines="$(awk 'END {print NR + 0}' "$WORK_DIR/line-map.tsv")"
+  line_spec_to_file "$ONLY_LINES_SPEC" "$WORK_DIR/only-lines.txt" "--only-lines" "$max_lines"
+  line_spec_to_file "$REMOVE_LINES_BEFORE_RUN_SPEC" "$WORK_DIR/remove-lines-before-run.txt" "--remove-lines-before-run" "$max_lines"
+}
+
+line_selected(){
+  local line_no="$1"
+  [[ ! -s "$WORK_DIR/only-lines.txt" ]] && return 0
+  grep -qx -- "$line_no" "$WORK_DIR/only-lines.txt"
+}
+
+build_wud_line_map(){
+  local line_no=0 raw trimmed actionable
+  : > "$WORK_DIR/line-map.tsv"
+  while IFS= read -r raw || [[ -n "$raw" ]]; do
+    line_no=$((line_no + 1))
+    trimmed="$(trim "$raw")"
+    actionable=true
+    if [[ -z "$trimmed" || "$trimmed" == \#* ]]; then
+      actionable=false
+    fi
+    printf '%s\t%s\t%s\n' "$line_no" "$actionable" "$raw" >> "$WORK_DIR/line-map.tsv"
+  done < "$WUD_FILE"
 }
 
 strip_digest(){
@@ -388,13 +486,12 @@ prepare_log_file(){
 }
 
 parse_wud_file(){
-  local line_no=0 raw trimmed first digest has_tag allow_repo key repo
+  local line_no actionable raw trimmed first digest has_tag allow_repo key repo
   : > "$WORK_DIR/targets.tsv"
-  while IFS= read -r raw || [[ -n "$raw" ]]; do
-    line_no=$((line_no + 1))
+  while IFS=$'\t' read -r line_no actionable raw; do
+    [[ "$actionable" == "true" ]] || continue
     trimmed="$(trim "$raw")"
-    [[ -z "$trimmed" ]] && continue
-    [[ "$trimmed" == \#* ]] && continue
+    line_selected "$line_no" || continue
     first="${trimmed%%[[:space:]]*}"
     [[ -z "$first" ]] && continue
     digest=""
@@ -415,7 +512,7 @@ parse_wud_file(){
     key="$(image_key "$first")"
     repo="$(repo_key "$first")"
     printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$line_no" "$raw" "$first" "$key" "$repo" "$has_tag" "$allow_repo" "$digest" >> "$WORK_DIR/targets.tsv"
-  done < "$WUD_FILE"
+  done < "$WORK_DIR/line-map.tsv"
 }
 
 load_container_images(){
@@ -861,11 +958,11 @@ build_line_status(){
 }
 
 cleanup_wud_file(){
-  local tmp wud_dir success_raw_lines
-  success_raw_lines="$WORK_DIR/success-raw-lines.txt"
-  awk 'BEGIN{FS="\t"} NR==FNR {if ($2 == "success") success[$1]=1; next} ($1 in success) {print $2}' \
-    "$WORK_DIR/line_status.tsv" "$WORK_DIR/targets.tsv" > "$success_raw_lines"
-  if [[ ! -s "$success_raw_lines" ]]; then
+  local tmp wud_dir success_lines remove_lines
+  success_lines="$WORK_DIR/success-lines.txt"
+  remove_lines="$WORK_DIR/remove-lines-before-run.txt"
+  awk 'BEGIN{FS="\t"} $2 == "success" {print $1}' "$WORK_DIR/line_status.tsv" | sort -n -u > "$success_lines"
+  if [[ ! -s "$success_lines" ]]; then
     yellow "No successful WUD entries to clean up."
     return 0
   fi
@@ -873,7 +970,46 @@ cleanup_wud_file(){
   wud_dir="$(dirname "$WUD_FILE")"
   acquire_wud_lock
   tmp="$(mktemp "${wud_dir}/.wud-left.XXXXXX")"
-  if ! awk 'NR==FNR {drop[$0]=1; next} !($0 in drop)' "$success_raw_lines" "$WUD_FILE" > "$tmp"; then
+  if ! awk -v success_file="$success_lines" \
+    -v remove_file="$remove_lines" \
+    -v line_map="$WORK_DIR/line-map.tsv" '
+      FILENAME == success_file {drop[$1]=1; next}
+      FILENAME == remove_file {removed[$1]=1; drop[$1]=1; next}
+      FILENAME == line_map {
+        line_no = $1
+        raw = $0
+        sub(/^[^\t]*\t[^\t]*\t/, "", raw)
+        if (!(line_no in removed)) {
+          original_live_count[raw]++
+        }
+        if (!(line_no in drop)) {
+          preserved[++preserved_count] = raw
+        }
+        next
+      }
+      {
+        current[++current_count] = $0
+        current_raw_count[$0]++
+      }
+      END {
+        for (i = 1; i <= preserved_count; i++) {
+          print preserved[i]
+        }
+        for (raw in current_raw_count) {
+          extra_count[raw] = current_raw_count[raw] - original_live_count[raw]
+          if (extra_count[raw] < 0) {
+            extra_count[raw] = 0
+          }
+        }
+        for (i = 1; i <= current_count; i++) {
+          raw = current[i]
+          if (extra_seen[raw] < extra_count[raw]) {
+            print raw
+            extra_seen[raw]++
+          }
+        }
+      }
+    ' "$success_lines" "$remove_lines" "$WORK_DIR/line-map.tsv" "$WUD_FILE" > "$tmp"; then
     rm -f "$tmp"
     die "Failed to rewrite WUD file: $WUD_FILE"
   fi
@@ -887,6 +1023,66 @@ cleanup_wud_file(){
   fi
   release_wud_lock
   green "Cleaned successfully processed entries from $WUD_FILE"
+}
+
+remove_wud_lines_before_run(){
+  local tmp wud_dir remove_lines
+  remove_lines="$WORK_DIR/remove-lines-before-run.txt"
+  [[ -s "$remove_lines" ]] || return 0
+
+  wud_dir="$(dirname "$WUD_FILE")"
+  acquire_wud_lock
+  tmp="$(mktemp "${wud_dir}/.wud-left.XXXXXX")"
+  if ! awk -v remove_file="$remove_lines" \
+    -v line_map="$WORK_DIR/line-map.tsv" '
+      FILENAME == remove_file {drop[$1]=1; next}
+      FILENAME == line_map {
+        line_no = $1
+        raw = $0
+        sub(/^[^\t]*\t[^\t]*\t/, "", raw)
+        original_count[raw]++
+        if (!(line_no in drop)) {
+          preserved[++preserved_count] = raw
+        }
+        next
+      }
+      {
+        current[++current_count] = $0
+        current_raw_count[$0]++
+      }
+      END {
+        for (i = 1; i <= preserved_count; i++) {
+          print preserved[i]
+        }
+        for (raw in current_raw_count) {
+          extra_count[raw] = current_raw_count[raw] - original_count[raw]
+          if (extra_count[raw] < 0) {
+            extra_count[raw] = 0
+          }
+        }
+        for (i = 1; i <= current_count; i++) {
+          raw = current[i]
+          if (extra_seen[raw] < extra_count[raw]) {
+            print raw
+            extra_seen[raw]++
+          }
+        }
+      }
+    ' "$remove_lines" "$WORK_DIR/line-map.tsv" "$WUD_FILE" > "$tmp"; then
+    rm -f "$tmp"
+    die "Failed to rewrite WUD file: $WUD_FILE"
+  fi
+  if ! preserve_file_metadata "$WUD_FILE" "$tmp"; then
+    rm -f "$tmp"
+    die "Failed to preserve metadata for WUD file: $WUD_FILE"
+  fi
+  if ! mv "$tmp" "$WUD_FILE"; then
+    rm -f "$tmp"
+    die "Failed to replace WUD file: $WUD_FILE"
+  fi
+  apply_configured_owner "$WUD_FILE" || die "Failed to set owner for WUD file: $WUD_FILE"
+  release_wud_lock
+  green "Removed skipped WUD entries before update."
 }
 
 updated_images(){
@@ -1112,6 +1308,8 @@ while [[ $# -gt 0 ]]; do
     --dry-run) DRY_RUN=true; shift;;
     --yes|--no-confirm) ASSUME_YES=true; shift;;
     --no-color) NO_COLOR=true; shift;;
+    --only-lines) ONLY_LINES_SPEC="${2:-}"; shift 2;;
+    --remove-lines-before-run) REMOVE_LINES_BEFORE_RUN_SPEC="${2:-}"; shift 2;;
     -h|--help) usage; exit 0;;
     *) die "Unknown argument: $1";;
   esac
@@ -1153,6 +1351,12 @@ say "Mode    : $MODE"
 say "Dry-run : $DRY_RUN"
 say "Confirm : $ASSUME_YES"
 say "MaxWait : ${MAX_WAIT}s"
+if [[ -n "$ONLY_LINES_SPEC" ]]; then
+  say "Only    : $ONLY_LINES_SPEC"
+fi
+if [[ -n "$REMOVE_LINES_BEFORE_RUN_SPEC" ]]; then
+  say "Remove  : $REMOVE_LINES_BEFORE_RUN_SPEC"
+fi
 if [[ -n "$OUT_UID" ]]; then
   say "Owner   : ${OUT_UID}:${OUT_GID}"
 fi
@@ -1160,7 +1364,13 @@ say "PTY     : $SCRIPT_STYLE script"
 
 [[ -f "$WUD_FILE" ]] || die "List file not found: $WUD_FILE"
 
+expect_parent_wud_lock
+build_wud_line_map
+prepare_line_specs
 parse_wud_file
+if [[ -z "$REMOVE_LINES_BEFORE_RUN_SPEC" || "$DRY_RUN" == "true" ]]; then
+  release_parent_wud_lock
+fi
 if [[ ! -s "$WORK_DIR/targets.tsv" ]]; then
   say "Nothing to do; list is empty."
   exit 0
@@ -1187,6 +1397,8 @@ if [[ "$DRY_RUN" == "true" ]]; then
 fi
 
 confirm_before_mutation
+remove_wud_lines_before_run
+release_parent_wud_lock
 
 while IFS= read -r idx; do
   [[ -z "$idx" ]] && continue

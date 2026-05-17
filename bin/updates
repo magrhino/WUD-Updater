@@ -28,6 +28,15 @@ fi
 lock_timeout="${WUD_LOCK_TIMEOUT:-}"
 auto_run=0
 dry_run=0
+selected_line_spec=""
+remove_line_spec=""
+todo_entries=""
+todo_file_lines=()
+wud_lock_dir=""
+wud_lock_held=0
+wud_lock_via_sudo=0
+wud_lock_release_marker=""
+updater_rc=0
 
 usage() {
   cat <<EOF
@@ -35,6 +44,7 @@ Usage: updates [-y|--yes] [--dry-run] [--base PATH] [--file PATH] [--mode pause|
 
 Shows Docker updates from WUD, TrueNAS update status, and active TrueNAS alerts.
 When Docker updates are pending, prompts before running docker-update-from-wud.
+Interactive runs can update all, select entries, exclude entries, or skip.
 EOF
 }
 
@@ -81,21 +91,297 @@ if [ "$wud_file_explicit" -eq 0 ]; then
   wud_file="$docker_base/wud/out/images.todo"
 fi
 
+wud_lock_timeout_seconds() {
+  local timeout="${lock_timeout:-30}"
+  if [[ ! "$timeout" =~ ^[0-9]+$ ]]; then
+    echo "WUD_LOCK_TIMEOUT must be an integer number of seconds" >&2
+    return 1
+  fi
+  printf '%s' "$timeout"
+}
+
+release_wud_lock() {
+  if [ -n "$wud_lock_release_marker" ] && grep -qx 'released' "$wud_lock_release_marker" 2>/dev/null; then
+    wud_lock_held=0
+    rm -f "$wud_lock_release_marker"
+    wud_lock_release_marker=""
+  fi
+  [ "$wud_lock_held" -eq 1 ] || return 0
+  if [ "$wud_lock_via_sudo" -eq 1 ]; then
+    sudo rmdir "$wud_lock_dir" 2>/dev/null || true
+  else
+    rmdir "$wud_lock_dir" 2>/dev/null || true
+  fi
+  wud_lock_held=0
+  if [ -n "$wud_lock_release_marker" ]; then
+    rm -f "$wud_lock_release_marker"
+    wud_lock_release_marker=""
+  fi
+}
+
+cleanup() {
+  release_wud_lock
+}
+trap cleanup EXIT
+
+acquire_wud_lock() {
+  local timeout waited=0 lock_parent
+  timeout="$(wud_lock_timeout_seconds)" || exit $?
+  wud_lock_dir="${wud_file}.lock"
+  lock_parent="$(dirname "$wud_lock_dir")"
+  wud_lock_via_sudo=0
+  if [ ! -w "$lock_parent" ]; then
+    wud_lock_via_sudo=1
+  fi
+
+  while true; do
+    if [ "$wud_lock_via_sudo" -eq 1 ]; then
+      if [ ! -e "$wud_lock_dir" ] && sudo mkdir "$wud_lock_dir" 2>/dev/null; then
+        wud_lock_held=1
+        return 0
+      fi
+    elif mkdir "$wud_lock_dir" 2>/dev/null; then
+      wud_lock_held=1
+      return 0
+    elif [ ! -e "$wud_lock_dir" ] && sudo mkdir "$wud_lock_dir" 2>/dev/null; then
+      wud_lock_via_sudo=1
+      wud_lock_held=1
+      return 0
+    fi
+
+    if [ "$waited" -ge "$timeout" ]; then
+      echo "Timed out waiting for WUD file lock: $wud_lock_dir" >&2
+      exit 1
+    fi
+    sleep 1
+    waited=$((waited + 1))
+  done
+}
+
+read_todo_entries() {
+  awk '
+    {
+      trimmed = $0
+      sub(/^[[:space:]]+/, "", trimmed)
+      if (trimmed != "" && trimmed !~ /^#/) {
+        print NR "\t" $0
+      }
+    }
+  ' "$wud_file"
+}
+
+load_todo_arrays() {
+  local line_no line
+  todo_file_lines=()
+  [ -n "$todo_entries" ] || return 0
+
+  while IFS=$'\t' read -r line_no line; do
+    [ -n "$line_no" ] || continue
+    todo_file_lines+=("$line_no")
+  done <<< "$todo_entries"
+}
+
+display_todo_entries() {
+  local display_no=0 line_no line
+  while IFS=$'\t' read -r line_no line; do
+    [ -n "$line_no" ] || continue
+    display_no=$((display_no + 1))
+    printf '%s\t%s\n' "$display_no" "$line"
+  done <<< "$todo_entries" | column -t
+}
+
+csv_contains() {
+  local csv="$1" needle="$2" item
+  local items=()
+  [ -n "$csv" ] || return 1
+  IFS=',' read -r -a items <<< "$csv"
+  for item in "${items[@]}"; do
+    [ "$item" = "$needle" ] && return 0
+  done
+  return 1
+}
+
+csv_append_unique() {
+  local csv="$1" value="$2"
+  if csv_contains "$csv" "$value"; then
+    printf '%s' "$csv"
+  elif [ -n "$csv" ]; then
+    printf '%s,%s' "$csv" "$value"
+  else
+    printf '%s' "$value"
+  fi
+}
+
+csv_count() {
+  local csv="$1" item count=0
+  local items=()
+  [ -n "$csv" ] || {
+    printf '0'
+    return 0
+  }
+  IFS=',' read -r -a items <<< "$csv"
+  for item in "${items[@]}"; do
+    [ -n "$item" ] && count=$((count + 1))
+  done
+  printf '%s' "$count"
+}
+
+parse_display_spec() {
+  local spec="$1" max="$2" cleaned part start_raw end_raw start end n result=""
+  local parts=()
+
+  cleaned="${spec//[[:space:]]/}"
+  [ -n "$cleaned" ] || return 1
+
+  IFS=',' read -r -a parts <<< "$cleaned"
+  for part in "${parts[@]}"; do
+    [ -n "$part" ] || return 1
+    if [[ "$part" =~ ^([0-9]+)-([0-9]+)$ ]]; then
+      start_raw="${BASH_REMATCH[1]}"
+      end_raw="${BASH_REMATCH[2]}"
+      start=$((10#$start_raw))
+      end=$((10#$end_raw))
+      [ "$start" -ge 1 ] || return 1
+      [ "$end" -ge "$start" ] || return 1
+      [ "$end" -le "$max" ] || return 1
+      for ((n=start; n<=end; n++)); do
+        result="$(csv_append_unique "$result" "$n")"
+      done
+    elif [[ "$part" =~ ^[0-9]+$ ]]; then
+      n=$((10#$part))
+      [ "$n" -ge 1 ] || return 1
+      [ "$n" -le "$max" ] || return 1
+      result="$(csv_append_unique "$result" "$n")"
+    else
+      return 1
+    fi
+  done
+
+  [ -n "$result" ] || return 1
+  printf '%s\n' "$result"
+}
+
+complement_display_csv() {
+  local selected_csv="$1" max="$2" n result=""
+  for ((n=1; n<=max; n++)); do
+    if ! csv_contains "$selected_csv" "$n"; then
+      result="$(csv_append_unique "$result" "$n")"
+    fi
+  done
+  printf '%s' "$result"
+}
+
+display_csv_to_file_line_csv() {
+  local display_csv="$1" display idx result=""
+  local displays=()
+  [ -n "$display_csv" ] || return 0
+
+  IFS=',' read -r -a displays <<< "$display_csv"
+  for display in "${displays[@]}"; do
+    idx=$((display - 1))
+    result="$(csv_append_unique "$result" "${todo_file_lines[$idx]}")"
+  done
+  printf '%s' "$result"
+}
+
+choose_update_lines() {
+  local todo_count choice range_reply selected_display unselected_display remove_reply
+  todo_count="${#todo_file_lines[@]}"
+  selected_line_spec=""
+  remove_line_spec=""
+
+  while true; do
+    read -r -p "Run Docker updates? [a=all, s=select, x=exclude, n=skip] " choice || choice=""
+    case "$choice" in
+      ""|n|N|no|NO)
+        echo "⏸️  Skipped running updates."
+        return 1
+        ;;
+      a|A|all|ALL|y|Y|yes|YES)
+        return 0
+        ;;
+      s|S|select|SELECT)
+        while true; do
+          read -r -p "Enter update numbers/ranges to select: " range_reply || range_reply=""
+          if [ -z "${range_reply//[[:space:]]/}" ]; then
+            echo "⏸️  No selection; skipped running updates."
+            return 1
+          fi
+          if selected_display="$(parse_display_spec "$range_reply" "$todo_count")"; then
+            break
+          fi
+          echo "Invalid selection. Use numbers/ranges like 1,3-5."
+        done
+        unselected_display="$(complement_display_csv "$selected_display" "$todo_count")"
+        break
+        ;;
+      x|X|exclude|EXCLUDE)
+        while true; do
+          read -r -p "Enter update numbers/ranges to exclude: " range_reply || range_reply=""
+          if [ -z "${range_reply//[[:space:]]/}" ]; then
+            echo "⏸️  No selection; skipped running updates."
+            return 1
+          fi
+          if unselected_display="$(parse_display_spec "$range_reply" "$todo_count")"; then
+            break
+          fi
+          echo "Invalid selection. Use numbers/ranges like 1,3-5."
+        done
+        selected_display="$(complement_display_csv "$unselected_display" "$todo_count")"
+        break
+        ;;
+      *)
+        echo "Invalid choice. Enter a, s, x, or n."
+        ;;
+    esac
+  done
+
+  if [ -z "$selected_display" ]; then
+    echo "⏸️  No updates selected; skipped running updates."
+    return 1
+  fi
+
+  selected_line_spec="$(display_csv_to_file_line_csv "$selected_display")"
+  echo "Selected $(csv_count "$selected_display") of $todo_count pending update(s)."
+
+  if [ -n "$unselected_display" ]; then
+    read -r -p "Remove unselected entries from the WUD file before running? (y/N) " remove_reply || remove_reply=""
+    case "$remove_reply" in
+      [yY]|[yY][eE][sS])
+        remove_line_spec="$(display_csv_to_file_line_csv "$unselected_display")"
+        ;;
+    esac
+  fi
+
+  return 0
+}
+
 run_updater() {
   local rc
   local updater_env=()
+  local updater_args=()
+
+  updater_args=(--base "$docker_base" --file "$wud_file" --mode "$update_mode" --max-wait "$max_wait")
+  [ -n "$selected_line_spec" ] && updater_args+=(--only-lines "$selected_line_spec")
+  [ -n "$remove_line_spec" ] && updater_args+=(--remove-lines-before-run "$remove_line_spec")
+  updater_args+=(--yes)
+
   if [ -n "$out_uid" ] || [ -n "$out_gid" ]; then
     [ -n "$out_uid" ] && updater_env+=("OUT_UID=$out_uid")
     [ -n "$out_gid" ] && updater_env+=("OUT_GID=$out_gid")
   fi
   [ -n "$lock_timeout" ] && updater_env+=("WUD_LOCK_TIMEOUT=$lock_timeout")
+  if [ "$wud_lock_held" -eq 1 ]; then
+    wud_lock_release_marker="$(mktemp "${TMPDIR:-/tmp}/wud-lock-release.XXXXXX")" || return 1
+    updater_env+=("WUD_LOCK_HELD_BY_PARENT=1" "WUD_LOCK_RELEASE_MARKER=$wud_lock_release_marker")
+  fi
 
   if ((${#updater_env[@]})); then
-    echo "🚀 Running Docker updates via: sudo env ${updater_env[*]} \"$updater\" --base \"$docker_base\" --file \"$wud_file\" --mode \"$update_mode\" --max-wait \"$max_wait\" --yes"
-    sudo env "${updater_env[@]}" "$updater" --base "$docker_base" --file "$wud_file" --mode "$update_mode" --max-wait "$max_wait" --yes
+    echo "🚀 Running Docker updates via: sudo env ${updater_env[*]} \"$updater\" ${updater_args[*]}"
+    sudo env "${updater_env[@]}" "$updater" "${updater_args[@]}"
   else
-    echo "🚀 Running Docker updates via: sudo \"$updater\" --base \"$docker_base\" --file \"$wud_file\" --mode \"$update_mode\" --max-wait \"$max_wait\" --yes"
-    sudo "$updater" --base "$docker_base" --file "$wud_file" --mode "$update_mode" --max-wait "$max_wait" --yes
+    echo "🚀 Running Docker updates via: sudo \"$updater\" ${updater_args[*]}"
+    sudo "$updater" "${updater_args[@]}"
   fi
   rc=$?
   echo
@@ -108,17 +394,29 @@ run_updater() {
 }
 
 echo "=== 📦 Docker Updates ==="
-todo_lines=""
 if [ -e "$wud_file" ] && [ -s "$wud_file" ]; then
+  acquire_wud_lock
   if [ -r "$wud_file" ]; then
-    todo_lines="$(grep -vE '^\s*(#|$)' "$wud_file" || true)"
+    todo_entries="$(read_todo_entries || true)"
   else
-    todo_lines="$(sudo grep -vE '^\s*(#|$)' "$wud_file" || true)"
+    todo_entries="$(sudo awk '
+      {
+        trimmed = $0
+        sub(/^[[:space:]]+/, "", trimmed)
+        if (trimmed != "" && trimmed !~ /^#/) {
+          print NR "\t" $0
+        }
+      }
+    ' "$wud_file" || true)"
   fi
 fi
+load_todo_arrays
+if [ -z "$todo_entries" ] || [ "$dry_run" -eq 1 ] || [ "$auto_run" -eq 1 ]; then
+  release_wud_lock
+fi
 
-if [ -n "$todo_lines" ]; then
-  printf '%s\n' "$todo_lines" | nl -ba | column -t
+if [ -n "$todo_entries" ]; then
+  display_todo_entries
 else
   echo "✅ No pending Docker updates!"
 fi
@@ -149,7 +447,7 @@ else
   echo "ℹ️  midclt or jq not available; skipping alert check."
 fi
 
-if [ -z "$todo_lines" ]; then
+if [ -z "$todo_entries" ]; then
   exit 0
 fi
 
@@ -173,10 +471,12 @@ fi
 echo
 if [ "$auto_run" -eq 1 ]; then
   run_updater
+  exit $?
 else
-  read -r -p "Run Docker updates now? (y/N) " reply
-  case "$reply" in
-    [yY][eE][sS]|[yY]) run_updater ;;
-    *) echo "⏸️  Skipped running updates." ;;
-  esac
+  if choose_update_lines; then
+    run_updater
+    updater_rc=$?
+    release_wud_lock
+    exit "$updater_rc"
+  fi
 fi
