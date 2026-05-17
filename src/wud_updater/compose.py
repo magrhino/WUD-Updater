@@ -214,18 +214,26 @@ class ComposeCli:
     ) -> None:
         """Run the shell updater's pull/stop-or-down/up command sequence."""
 
+        if mode not in {"pause", "stop", "live"}:
+            raise ValueError("mode must be pause, stop, or live")
+
         service_args = tuple(_service_args(services))
         self.pull(directory, file, service_args)
 
+        pre_up_error: CommandError | None = None
         if mode == "pause":
-            self.pause(directory, file, service_args)
+            try:
+                self.pause(directory, file, service_args)
+            except CommandError as exc:
+                pre_up_error = exc
         elif mode == "stop":
-            if service_args:
-                self.stop(directory, file, service_args)
-            else:
-                self.down(directory, file)
-        elif mode != "live":
-            raise ValueError("mode must be pause, stop, or live")
+            try:
+                if service_args:
+                    self.stop(directory, file, service_args)
+                else:
+                    self.down(directory, file)
+            except CommandError as exc:
+                pre_up_error = exc
 
         if mode == "pause":
             wait = False
@@ -243,6 +251,8 @@ class ComposeCli:
 
         if mode == "pause":
             self.unpause(directory, file, service_args)
+        if pre_up_error is not None:
+            raise pre_up_error
 
     def run_with_services(
         self,
@@ -268,13 +278,21 @@ class ComposeDiscoveryError(RuntimeError):
 def _compose_files_under(docker_base: str | Path) -> list[Path]:
     base = Path(docker_base)
     files: list[Path] = []
-    for path in base.rglob("*"):
-        if not path.is_file() or path.name not in COMPOSE_FILENAMES:
+    pending = [base]
+    while pending:
+        directory = pending.pop()
+        try:
+            entries = list(directory.iterdir())
+        except OSError:
             continue
-        relative = path.relative_to(base)
-        if len(relative.parts) > 3 or "old" in relative.parts[:-1]:
-            continue
-        files.append(path)
+        for path in entries:
+            relative = path.relative_to(base)
+            if path.is_file() and path.name in COMPOSE_FILENAMES:
+                files.append(path)
+            if len(relative.parts) >= 3 or path.name == "old" or path.is_symlink():
+                continue
+            if path.is_dir():
+                pending.append(path)
     return sorted(files)
 
 
