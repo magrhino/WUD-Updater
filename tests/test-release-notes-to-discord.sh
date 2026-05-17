@@ -59,9 +59,13 @@ while [[ "$#" -gt 0 ]]; do
 done
 
 if [[ "$url" == "https://api.github.com/repos/acme/app/releases/latest" ]]; then
-  cat <<'JSON'
-{"tag_name":"2.0","html_url":"https://github.com/acme/app/releases/tag/2.0","body":"## Changes\n- Fixed deployment notes"}
-JSON
+  tag="${FAKE_RELEASE_TAG:-2.0}"
+  body="${FAKE_RELEASE_BODY:-}"
+  if [[ -z "$body" ]]; then
+    body=$'## Changes\n- Fixed deployment notes'
+  fi
+  jq -n --arg tag "$tag" --arg body "$body" \
+    '{tag_name:$tag, html_url:("https://github.com/acme/app/releases/tag/" + $tag), body:$body}'
   exit 0
 fi
 
@@ -91,6 +95,23 @@ test_payload_builds_current_to_new_field(){
   teardown_case
 }
 
+test_semver_major_bump_marks_breaking(){
+  setup_case
+  write_fakes
+  local payload_file="$TEST_TMP/payload.json"
+
+  PATH="$TEST_TMP/bin:$PATH" \
+    DISCORD_RELEASES_WEBHOOK="https://discord.test/webhook" \
+    FAKE_WEBHOOK_PAYLOAD="$payload_file" \
+    FAKE_RELEASE_TAG="2.0.0" \
+    FAKE_RELEASE_BODY=$'## Changes\n- Routine maintenance' \
+    "$SCRIPT" "ghcr.io/acme/app:1.9.9" "app" "1.9.9" > "$TEST_TMP/output.log" 2>&1 || fail "release note script failed"
+
+  [[ -s "$payload_file" ]] || fail "webhook payload was not captured"
+  jq -e '.embeds[0].fields[0].value == "yes"' "$payload_file" >/dev/null || fail "major bump was not marked breaking"
+  teardown_case
+}
+
 run_test(){
   local name="$1"
   printf 'running %s\n' "$name"
@@ -100,6 +121,7 @@ run_test(){
 
 main(){
   run_test test_payload_builds_current_to_new_field
+  run_test test_semver_major_bump_marks_breaking
 }
 
 trap teardown_case EXIT

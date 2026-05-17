@@ -51,9 +51,12 @@ BREAKING="no"
 grep -Eiq '(breaking|⚠|migration|incompatible|manual step|major change|requires [^ ]+ \d|deprecated[^.]*remov|remove[ds] feature)' <<<"$BODY" && BREAKING="yes"
 
 # Optional: semver major bump vs current tag if provided
-if [[ -n "$CURRENT_TAG" && "$CURRENT_TAG" =~ ^v?([0-9]+)\.([0-9]+)\.([0-9]+) && "$TAG" =~ ^v?([0-9]+)\.([0-9]+)\.([0-9]+) ]]; then
-  cur_major="${BASH_REMATCH[1]}"; new_major="$(sed -E 's/^v?([0-9]+).*/\1/' <<<"$TAG")"
-  if (( new_major > cur_major )); then BREAKING="yes"; fi
+if [[ -n "$CURRENT_TAG" && "$CURRENT_TAG" =~ ^v?([0-9]+)\.([0-9]+)\.([0-9]+) ]]; then
+  cur_major="${BASH_REMATCH[1]}"
+  if [[ "$TAG" =~ ^v?([0-9]+)\.([0-9]+)\.([0-9]+) ]]; then
+    new_major="${BASH_REMATCH[1]}"
+    if (( new_major > cur_major )); then BREAKING="yes"; fi
+  fi
 fi
 
 # Trim notes for Discord (keep first ~20 lines)

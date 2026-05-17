@@ -192,18 +192,33 @@ if [ "${update_available:-}" = "true" ]; then
 
   # Remove existing lines for this image, with or without a digest suffix.
   if [ -e "$OUT_FILE" ]; then
-    awk -v image="$IMAGE" 'NF == 0 || $1 != image' "$OUT_FILE" > "$TMP"
+    if ! awk -v image="$IMAGE" 'NF == 0 || $1 != image' "$OUT_FILE" > "$TMP"; then
+      echo "Failed to filter existing entries in $OUT_FILE" >&2
+      exit 1
+    fi
   else
-    : > "$TMP"
+    if ! : > "$TMP"; then
+      echo "Failed to initialize temporary file for $OUT_FILE" >&2
+      exit 1
+    fi
   fi
 
   # Append the updated line
-  echo "$LINE" >> "$TMP"
+  if ! printf '%s\n' "$LINE" >> "$TMP"; then
+    echo "Failed to append update entry for $IMAGE" >&2
+    exit 1
+  fi
 
   # Sort and deduplicate (optional if images are already unique)
-  sort -u "$TMP" > "$SORTED_TMP"
+  if ! sort -u "$TMP" > "$SORTED_TMP"; then
+    echo "Failed to sort update entries for $OUT_FILE" >&2
+    exit 1
+  fi
   apply_metadata "$SORTED_TMP" || exit $?
-  mv "$SORTED_TMP" "$OUT_FILE"
+  if ! mv "$SORTED_TMP" "$OUT_FILE"; then
+    echo "Failed to replace $OUT_FILE" >&2
+    exit 1
+  fi
   SORTED_TMP=""
 fi
 
