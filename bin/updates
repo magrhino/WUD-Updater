@@ -284,6 +284,65 @@ display_csv_to_file_line_csv() {
   printf '%s' "$result"
 }
 
+write_line_spec_numbers() {
+  local spec="$1" output="$2" item
+  local items=()
+  [ -n "$spec" ] || return 0
+
+  IFS=',' read -r -a items <<< "$spec"
+  for item in "${items[@]}"; do
+    [ -n "$item" ] && printf '%s\n' "$item"
+  done >> "$output"
+}
+
+selected_lines_match_snapshot() {
+  local wanted expected current line_no line
+  wanted="$(mktemp "${TMPDIR:-/tmp}/wud-selected-lines.XXXXXX")" || return 1
+  expected="$(mktemp "${TMPDIR:-/tmp}/wud-expected-lines.XXXXXX")" || {
+    rm -f "$wanted"
+    return 1
+  }
+  current="$(mktemp "${TMPDIR:-/tmp}/wud-current-lines.XXXXXX")" || {
+    rm -f "$wanted" "$expected"
+    return 1
+  }
+
+  write_line_spec_numbers "$selected_line_spec" "$wanted"
+  write_line_spec_numbers "$remove_line_spec" "$wanted"
+  sort -n -u "$wanted" -o "$wanted"
+
+  while IFS=$'\t' read -r line_no line; do
+    [ -n "$line_no" ] || continue
+    if grep -qx -- "$line_no" "$wanted"; then
+      printf '%s\t%s\n' "$line_no" "$line" >> "$expected"
+    fi
+  done <<< "$todo_entries"
+
+  if [ -r "$wud_file" ]; then
+    awk 'NR == FNR {wanted[$1]=1; next} FNR in wanted {print FNR "\t" $0}' "$wanted" "$wud_file" > "$current"
+  else
+    sudo awk 'NR == FNR {wanted[$1]=1; next} FNR in wanted {print FNR "\t" $0}' "$wanted" "$wud_file" | cat > "$current"
+  fi
+
+  if ! cmp -s "$expected" "$current"; then
+    rm -f "$wanted" "$expected" "$current"
+    echo "WUD file changed while selecting updates; please rerun updates." >&2
+    return 1
+  fi
+
+  rm -f "$wanted" "$expected" "$current"
+  return 0
+}
+
+lock_updater_handoff() {
+  [ -n "$selected_line_spec$remove_line_spec" ] || return 0
+  acquire_wud_lock
+  if ! selected_lines_match_snapshot; then
+    release_wud_lock
+    return 1
+  fi
+}
+
 choose_update_lines() {
   local todo_count choice range_reply selected_display unselected_display remove_reply
   todo_count="${#todo_file_lines[@]}"
@@ -411,9 +470,7 @@ if [ -e "$wud_file" ] && [ -s "$wud_file" ]; then
   fi
 fi
 load_todo_arrays
-if [ -z "$todo_entries" ] || [ "$dry_run" -eq 1 ] || [ "$auto_run" -eq 1 ]; then
-  release_wud_lock
-fi
+release_wud_lock
 
 if [ -n "$todo_entries" ]; then
   display_todo_entries
@@ -474,6 +531,7 @@ if [ "$auto_run" -eq 1 ]; then
   exit $?
 else
   if choose_update_lines; then
+    lock_updater_handoff || exit $?
     run_updater
     updater_rc=$?
     release_wud_lock

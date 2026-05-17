@@ -958,9 +958,8 @@ build_line_status(){
 }
 
 cleanup_wud_file(){
-  local tmp wud_dir success_lines remove_lines
+  local tmp wud_dir success_lines
   success_lines="$WORK_DIR/success-lines.txt"
-  remove_lines="$WORK_DIR/remove-lines-before-run.txt"
   awk 'BEGIN{FS="\t"} $2 == "success" {print $1}' "$WORK_DIR/line_status.tsv" | sort -n -u > "$success_lines"
   if [[ ! -s "$success_lines" ]]; then
     yellow "No successful WUD entries to clean up."
@@ -971,45 +970,26 @@ cleanup_wud_file(){
   acquire_wud_lock
   tmp="$(mktemp "${wud_dir}/.wud-left.XXXXXX")"
   if ! awk -v success_file="$success_lines" \
-    -v remove_file="$remove_lines" \
     -v line_map="$WORK_DIR/line-map.tsv" '
       FILENAME == success_file {drop[$1]=1; next}
-      FILENAME == remove_file {removed[$1]=1; drop[$1]=1; next}
       FILENAME == line_map {
         line_no = $1
         raw = $0
         sub(/^[^\t]*\t[^\t]*\t/, "", raw)
-        if (!(line_no in removed)) {
-          original_live_count[raw]++
-        }
-        if (!(line_no in drop)) {
-          preserved[++preserved_count] = raw
+        if (line_no in drop) {
+          drop_count[raw]++
         }
         next
       }
       {
-        current[++current_count] = $0
-        current_raw_count[$0]++
+        raw = $0
+        if (dropped[raw] < drop_count[raw]) {
+          dropped[raw]++
+          next
+        }
+        print raw
       }
-      END {
-        for (i = 1; i <= preserved_count; i++) {
-          print preserved[i]
-        }
-        for (raw in current_raw_count) {
-          extra_count[raw] = current_raw_count[raw] - original_live_count[raw]
-          if (extra_count[raw] < 0) {
-            extra_count[raw] = 0
-          }
-        }
-        for (i = 1; i <= current_count; i++) {
-          raw = current[i]
-          if (extra_seen[raw] < extra_count[raw]) {
-            print raw
-            extra_seen[raw]++
-          }
-        }
-      }
-    ' "$success_lines" "$remove_lines" "$WORK_DIR/line-map.tsv" "$WUD_FILE" > "$tmp"; then
+    ' "$success_lines" "$WORK_DIR/line-map.tsv" "$WUD_FILE" > "$tmp"; then
     rm -f "$tmp"
     die "Failed to rewrite WUD file: $WUD_FILE"
   fi
