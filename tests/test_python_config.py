@@ -45,6 +45,28 @@ class LoadConfigTests(unittest.TestCase):
         self.assertEqual(config.out_uid, 1000)
         self.assertEqual(config.out_gid, 1001)
 
+    def test_empty_environment_values_use_defaults(self) -> None:
+        config = load_config(
+            {
+                "HOME": "",
+                "DOCKER_BASE": "",
+                "WUD_OUT_FILE": "",
+                "WUD_UPDATE_MODE": "",
+                "WUD_MAX_WAIT": "",
+                "WUD_LOCK_TIMEOUT": "",
+            },
+            home="/home/wud",
+        )
+
+        self.assertEqual(config.docker_base, Path("/home/wud/docker"))
+        self.assertEqual(
+            config.wud_out_file,
+            Path("/home/wud/docker/wud/out/images.todo"),
+        )
+        self.assertEqual(config.update_mode, "stop")
+        self.assertEqual(config.max_wait, 180)
+        self.assertEqual(config.lock_timeout, 30)
+
     def test_out_guid_alias_is_used_when_out_gid_is_absent(self) -> None:
         config = load_config(
             {

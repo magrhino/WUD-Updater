@@ -7,7 +7,7 @@ name = "wud-updater"
 version = "0.0.0"
 description = "Python package skeleton for the future WUD updater refactor."
 readme = "README.md"
-requires-python = ">=3.14"
+requires-python = ">=3.10"
 dependencies = []
 
 [project.scripts]
