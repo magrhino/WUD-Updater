@@ -70,7 +70,11 @@ DOCKER_BASE="$HOME/docker"
 WUD_OUT_FILE="$DOCKER_BASE/wud/out/images.todo"
 WUD_UPDATE_MODE="stop"
 WUD_MAX_WAIT="180"
+OUT_UID="1000"
+OUT_GID="1000"
 ```
+
+`OUT_UID` and `OUT_GID` are optional. When set, `docker-update-from-wud` leaves rewritten WUD todo files and updater logs owned by that UID/GID, which is useful when running Docker commands through `sudo`. `OUT_GUID` is accepted as an alias for `OUT_GID`.
 
 For release-note notifications, provide webhook and GitHub token values through the WUD container environment or another host-local secret store. Do not put secrets in this repository.
 

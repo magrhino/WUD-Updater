@@ -37,6 +37,7 @@ FAKE_SUDO
 
   cat > "$TEST_TMP/updater" <<'FAKE_UPDATER'
 #!/usr/bin/env bash
+printf 'OUT_UID=%s OUT_GID=%s OUT_GUID=%s\n' "${OUT_UID:-}" "${OUT_GID:-}" "${OUT_GUID:-}" >> "${FAKE_UPDATER_LOG:?FAKE_UPDATER_LOG is required}"
 printf '%s\n' "$*" >> "${FAKE_UPDATER_LOG:?FAKE_UPDATER_LOG is required}"
 exit 0
 FAKE_UPDATER
@@ -49,12 +50,26 @@ teardown_case(){
 }
 
 run_updates(){
+  local env_args=()
+  while [[ "$#" -gt 0 && "$1" == *=* ]]; do
+    env_args+=("$1")
+    shift
+  done
+
   LAST_STATUS=0
-  PATH="$FAKE_BIN:$PATH" \
-    WUD_UPDATER="$TEST_TMP/updater" \
-    FAKE_SUDO_LOG="$TEST_TMP/sudo.log" \
-    FAKE_UPDATER_LOG="$TEST_TMP/updater.log" \
-    "$SCRIPT" --file "$WUD_FILE" "$@" > "$TEST_TMP/output.log" 2>&1 || LAST_STATUS=$?
+  if ((${#env_args[@]})); then
+    PATH="$FAKE_BIN:$PATH" \
+      WUD_UPDATER="$TEST_TMP/updater" \
+      FAKE_SUDO_LOG="$TEST_TMP/sudo.log" \
+      FAKE_UPDATER_LOG="$TEST_TMP/updater.log" \
+      env "${env_args[@]}" "$SCRIPT" --file "$WUD_FILE" "$@" > "$TEST_TMP/output.log" 2>&1 || LAST_STATUS=$?
+  else
+    PATH="$FAKE_BIN:$PATH" \
+      WUD_UPDATER="$TEST_TMP/updater" \
+      FAKE_SUDO_LOG="$TEST_TMP/sudo.log" \
+      FAKE_UPDATER_LOG="$TEST_TMP/updater.log" \
+      "$SCRIPT" --file "$WUD_FILE" "$@" > "$TEST_TMP/output.log" 2>&1 || LAST_STATUS=$?
+  fi
 }
 
 assert_status(){
@@ -87,6 +102,18 @@ test_yes_invokes_configured_updater_through_sudo(){
   teardown_case
 }
 
+test_yes_passes_owner_config_through_sudo_env(){
+  setup_case
+  printf 'repo/app:latest\n' > "$WUD_FILE"
+
+  run_updates OUT_UID=1000 OUT_GUID=1000 --yes --base "$TEST_TMP/docker"
+
+  assert_status 0
+  grep -q -- "env OUT_UID=1000 OUT_GID=1000 $TEST_TMP/updater --base $TEST_TMP/docker --file $WUD_FILE --mode stop --max-wait 180 --yes" "$TEST_TMP/sudo.log" || fail "sudo did not receive expected owner env"
+  grep -q -- "OUT_UID=1000 OUT_GID=1000 OUT_GUID=" "$TEST_TMP/updater.log" || fail "updater did not receive owner env"
+  teardown_case
+}
+
 run_test(){
   local name="$1"
   printf 'running %s\n' "$name"
@@ -97,6 +124,7 @@ run_test(){
 main(){
   run_test test_dry_run_does_not_invoke_updater
   run_test test_yes_invokes_configured_updater_through_sudo
+  run_test test_yes_passes_owner_config_through_sudo_env
 }
 
 trap teardown_case EXIT

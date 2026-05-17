@@ -102,10 +102,22 @@ set_image_after_pull(){
 }
 
 run_script(){
+  local env_args=()
+  while [[ "$#" -gt 0 && "$1" == *=* ]]; do
+    env_args+=("$1")
+    shift
+  done
+
   LAST_STATUS=0
-  PATH="$FAKE_BIN:$PATH" FAKE_DOCKER_ROOT="$FAKE_ROOT" \
-    "$SCRIPT" --base "$BASE" --file "$WUD_FILE" --log-dir "$LOG_DIR" --max-wait 0 --no-color "$@" \
-    > "$TEST_TMP/output.log" 2>&1 || LAST_STATUS=$?
+  if ((${#env_args[@]})); then
+    PATH="$FAKE_BIN:$PATH" FAKE_DOCKER_ROOT="$FAKE_ROOT" \
+      env "${env_args[@]}" "$SCRIPT" --base "$BASE" --file "$WUD_FILE" --log-dir "$LOG_DIR" --max-wait 0 --no-color "$@" \
+      > "$TEST_TMP/output.log" 2>&1 || LAST_STATUS=$?
+  else
+    PATH="$FAKE_BIN:$PATH" FAKE_DOCKER_ROOT="$FAKE_ROOT" \
+      "$SCRIPT" --base "$BASE" --file "$WUD_FILE" --log-dir "$LOG_DIR" --max-wait 0 --no-color "$@" \
+      > "$TEST_TMP/output.log" 2>&1 || LAST_STATUS=$?
+  fi
 }
 
 assert_status(){
@@ -134,6 +146,28 @@ assert_calls_not_contain(){
 line_number(){
   local pattern="$1"
   grep -nE "$pattern" "$FAKE_ROOT/calls.log" | head -n 1 | cut -d: -f1
+}
+
+stat_owner_group(){
+  local file="$1"
+  if stat -c '%u:%g' "$file" >/dev/null 2>&1; then
+    stat -c '%u:%g' "$file"
+  else
+    stat -f '%u:%g' "$file"
+  fi
+}
+
+stat_mode(){
+  local file="$1"
+  if stat -c '%a' "$file" >/dev/null 2>&1; then
+    stat -c '%a' "$file"
+  else
+    stat -f '%Lp' "$file"
+  fi
+}
+
+latest_log_file(){
+  find "$LOG_DIR" -type f -name 'update-from-wud-v2-*.log' -print | sort | tail -n 1
 }
 
 test_dry_run_no_mutation(){
@@ -216,6 +250,60 @@ test_expected_sha_match_allows_cleanup(){
 
   assert_status 0
   assert_file_equals "$WUD_FILE" ''
+  teardown_case
+}
+
+test_cleanup_preserves_wud_file_owner_and_mode(){
+  setup_case
+  printf 'repo/app:latest\n' > "$WUD_FILE"
+  chmod 600 "$WUD_FILE"
+  local expected_owner expected_mode
+  expected_owner="$(stat_owner_group "$WUD_FILE")"
+  expected_mode="$(stat_mode "$WUD_FILE")"
+  make_single_service_stack app "$BASE/app" docker-compose.yml repo/app:latest
+  set_image_state repo/app:latest old sha256:old
+  set_image_after_pull repo/app:latest new sha256:new
+
+  run_script --yes
+
+  assert_status 0
+  assert_file_equals "$WUD_FILE" ''
+  [[ "$(stat_owner_group "$WUD_FILE")" == "$expected_owner" ]] || fail "WUD file owner was not preserved"
+  [[ "$(stat_mode "$WUD_FILE")" == "$expected_mode" ]] || fail "WUD file mode was not preserved"
+  teardown_case
+}
+
+test_out_owner_config_accepts_out_guid_for_logs_and_cleanup(){
+  setup_case
+  local uid gid log_file
+  uid="$(id -u)"
+  gid="$(id -g)"
+  printf 'repo/app:latest\n' > "$WUD_FILE"
+  make_single_service_stack app "$BASE/app" docker-compose.yml repo/app:latest
+  set_image_state repo/app:latest old sha256:old
+  set_image_after_pull repo/app:latest new sha256:new
+
+  run_script OUT_UID="$uid" OUT_GUID="$gid" --yes
+
+  assert_status 0
+  assert_file_equals "$WUD_FILE" ''
+  log_file="$(latest_log_file)"
+  [[ -n "$log_file" && -f "$log_file" ]] || fail "expected updater log file"
+  [[ "$(stat_owner_group "$WUD_FILE")" == "$uid:$gid" ]] || fail "WUD file owner did not match OUT_UID:OUT_GUID"
+  [[ "$(stat_owner_group "$LOG_DIR")" == "$uid:$gid" ]] || fail "log directory owner did not match OUT_UID:OUT_GUID"
+  [[ "$(stat_owner_group "$log_file")" == "$uid:$gid" ]] || fail "log file owner did not match OUT_UID:OUT_GUID"
+  grep -q "Owner   : $uid:$gid" "$TEST_TMP/output.log" || fail "owner config was not reported"
+  teardown_case
+}
+
+test_out_owner_config_requires_uid_and_group(){
+  setup_case
+  printf 'repo/app:latest\n' > "$WUD_FILE"
+
+  run_script OUT_UID="$(id -u)" --dry-run
+
+  assert_status 1
+  grep -q "OUT_UID and OUT_GID/OUT_GUID must be set together" "$TEST_TMP/output.log" || fail "missing owner config validation error"
   teardown_case
 }
 
@@ -358,6 +446,9 @@ main(){
   run_test test_one_line_two_stacks_one_fails_keeps_line
   run_test test_expected_sha_mismatch_prevents_cleanup
   run_test test_expected_sha_match_allows_cleanup
+  run_test test_cleanup_preserves_wud_file_owner_and_mode
+  run_test test_out_owner_config_accepts_out_guid_for_logs_and_cleanup
+  run_test test_out_owner_config_requires_uid_and_group
   run_test test_stack_level_digest_cleanup_handles_no_service_map
   run_test test_empty_health_ps_fails
   run_test test_comments_and_blank_lines_preserved
