@@ -114,9 +114,13 @@ release_parent_wud_lock(){
 }
 
 cleanup(){
+  local status=$?
   release_wud_lock
   release_parent_wud_lock
-  [[ -n "${WORK_DIR:-}" && -d "$WORK_DIR" ]] && rm -rf "$WORK_DIR"
+  if [[ -n "${WORK_DIR:-}" && -d "$WORK_DIR" ]]; then
+    rm -rf "$WORK_DIR"
+  fi
+  return "$status"
 }
 trap cleanup EXIT
 
