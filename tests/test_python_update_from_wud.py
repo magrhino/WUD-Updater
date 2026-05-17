@@ -194,6 +194,70 @@ class PythonUpdateFromWudTests(unittest.TestCase):
         )
         self.assertNotRegex(self.calls(), r"compose -f .* up -d")
 
+    def test_tag_update_requires_explicit_flag(self) -> None:
+        self.wud_file.write_text("repo/app:1.0 tag=2.0\n", encoding="utf-8")
+        stack_dir = self.make_stack("app", [("app", "repo/app:1.0", "cid-app")])
+        self.set_image_state("repo/app:1.0", "old", "sha256:old")
+        self.set_image_after_pull("repo/app:2.0", "new", "sha256:new")
+
+        result = self.run_python("--yes")
+
+        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+        self.assertEqual(
+            self.wud_file.read_text(encoding="utf-8"),
+            "repo/app:1.0 tag=2.0\n",
+        )
+        self.assertIn("require --allow-tag-updates", result.stdout)
+        self.assertIn(
+            "image: repo/app:1.0",
+            (stack_dir / "docker-compose.yml").read_text(encoding="utf-8"),
+        )
+        self.assertNotRegex(self.calls(), r"compose -f .* pull")
+        self.assertNotRegex(self.calls(), r"compose -f .* up -d")
+
+    def test_tag_update_dry_run_does_not_rewrite_compose(self) -> None:
+        self.wud_file.write_text("repo/app:1.0 tag=2.0\n", encoding="utf-8")
+        stack_dir = self.make_stack("app", [("app", "repo/app:1.0", "cid-app")])
+        self.set_image_state("repo/app:1.0", "old", "sha256:old")
+        self.set_image_after_pull("repo/app:2.0", "new", "sha256:new")
+
+        result = self.run_python("--dry-run", "--allow-tag-updates")
+
+        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+        self.assertEqual(
+            self.wud_file.read_text(encoding="utf-8"),
+            "repo/app:1.0 tag=2.0\n",
+        )
+        self.assertIn("repo/app:1.0 -> repo/app:2.0 (tag update)", result.stdout)
+        self.assertIn(
+            "image: repo/app:1.0",
+            (stack_dir / "docker-compose.yml").read_text(encoding="utf-8"),
+        )
+        self.assertNotRegex(self.calls(), r"compose -f .* pull")
+        self.assertNotRegex(self.calls(), r"compose -f .* up -d")
+
+    def test_allowed_tag_update_rewrites_compose_and_cleans_line(self) -> None:
+        self.wud_file.write_text("repo/app:1.0 tag=2.0\n", encoding="utf-8")
+        stack_dir = self.make_stack("app", [("app", "repo/app:1.0", "cid-app")])
+        compose_file = stack_dir / "docker-compose.yml"
+        compose_file.chmod(0o640)
+        before_stat = compose_file.stat()
+        self.set_image_state("repo/app:1.0", "old", "sha256:old")
+        self.set_image_after_pull("repo/app:2.0", "new", "sha256:new")
+
+        result = self.run_python("--yes", "--allow-tag-updates")
+
+        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+        self.assertEqual(self.wud_file.read_text(encoding="utf-8"), "")
+        self.assertIn("image: repo/app:2.0", compose_file.read_text(encoding="utf-8"))
+        after_stat = compose_file.stat()
+        self.assertEqual(after_stat.st_mode & 0o7777, before_stat.st_mode & 0o7777)
+        self.assertEqual(after_stat.st_uid, before_stat.st_uid)
+        self.assertEqual(after_stat.st_gid, before_stat.st_gid)
+        calls = self.calls()
+        self.assertRegex(calls, r"compose -f docker-compose.yml pull app")
+        self.assertRegex(calls, r"compose -f docker-compose.yml up -d .* app")
+
     def test_tag_backup_failure_restores_line_without_traceback(self) -> None:
         self.wud_file.write_text("repo/app:1.0 tag=2.0\n", encoding="utf-8")
         self.make_stack("app", [("app", "repo/app:1.0", "cid-app")])
