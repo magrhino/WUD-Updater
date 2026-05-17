@@ -16,7 +16,6 @@ OUT_GID="${OUT_GID:-}"
 OUT_GUID="${OUT_GUID:-}"
 WUD_LOCK_TIMEOUT="${WUD_LOCK_TIMEOUT:-30}"
 WUD_LOCK_HELD_BY_PARENT="${WUD_LOCK_HELD_BY_PARENT:-}"
-WUD_LOCK_RELEASE_MARKER="${WUD_LOCK_RELEASE_MARKER:-}"
 MODE="$MODE_DEFAULT"
 MAX_WAIT="$MAX_WAIT_DEFAULT"
 DRY_RUN=false
@@ -109,11 +108,7 @@ release_parent_wud_lock(){
   parent_wud_lock_held || return 0
   [[ -n "${WUD_FILE:-}" ]] || return 0
   WUD_LOCK_DIR="${WUD_FILE}.lock"
-  if rmdir "$WUD_LOCK_DIR" 2>/dev/null; then
-    if [[ -n "$WUD_LOCK_RELEASE_MARKER" ]]; then
-      printf 'released\n' > "$WUD_LOCK_RELEASE_MARKER" 2>/dev/null || true
-    fi
-  fi
+  rmdir "$WUD_LOCK_DIR" 2>/dev/null || true
   WUD_LOCK_HELD_BY_PARENT=""
 }
 
@@ -495,10 +490,7 @@ parse_wud_file(){
     first="${trimmed%%[[:space:]]*}"
     [[ -z "$first" ]] && continue
     digest=""
-    if [[ "$trimmed" == *sha256=* ]]; then
-      digest="${trimmed#*sha256=}"
-      digest="${digest%%[[:space:]]*}"
-    elif [[ "$first" == *@sha256:* ]]; then
+    if [[ "$first" == *@sha256:* ]]; then
       digest="${first#*@}"
     fi
     digest="$(normalize_digest "$digest")"

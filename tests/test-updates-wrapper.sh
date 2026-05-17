@@ -212,6 +212,18 @@ test_interactive_display_uses_snapshot_without_holding_wud_lock(){
   teardown_case
 }
 
+test_interactive_display_hides_legacy_sha_suffix(){
+  setup_case
+  printf 'repo/app:latest sha256=sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n' > "$WUD_FILE"
+
+  run_updates_with_input 'n\n' --base "$TEST_TMP/docker"
+
+  assert_status 0
+  grep -q 'repo/app:latest' "$TEST_TMP/output.log" || fail "pending update was not displayed"
+  ! grep -q 'sha256=' "$TEST_TMP/output.log" || fail "legacy sha suffix was displayed"
+  teardown_case
+}
+
 test_interactive_holds_wud_lock_for_updater_handoff(){
   setup_case
   printf 'repo/app:latest\n' > "$WUD_FILE"
@@ -310,6 +322,7 @@ main(){
   run_test test_yes_passes_lock_timeout_through_sudo_env
   run_test test_interactive_all_preserves_default_updater_args
   run_test test_interactive_display_uses_snapshot_without_holding_wud_lock
+  run_test test_interactive_display_hides_legacy_sha_suffix
   run_test test_interactive_holds_wud_lock_for_updater_handoff
   run_test test_interactive_select_passes_original_line_numbers
   run_test test_interactive_exclude_passes_complement_line_numbers

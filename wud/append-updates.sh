@@ -141,20 +141,6 @@ apply_metadata() {
   fi
 }
 
-normalize_sha256() {
-  digest="$1"
-  [ -n "$digest" ] || return 1
-
-  case "$digest" in
-    *@sha256:*) digest="${digest##*@}" ;;
-    sha256:*) ;;
-    *) digest="sha256:${digest}" ;;
-  esac
-
-  printf '%s' "$digest" | grep -Eq '^sha256:[0-9a-fA-F]{64}$' || return 1
-  printf '%s' "$digest"
-}
-
 # Only act when there is an update (true)
 if [ "${update_available:-}" = "true" ]; then
   OUT_DIR="$(dirname "$OUT_FILE")"
@@ -166,19 +152,7 @@ if [ "${update_available:-}" = "true" ]; then
   [ -n "$IMAGE" ] || IMAGE="${name:-}"
   [ -n "$IMAGE" ] || exit 0
 
-  SHA256=""
-  if [ -n "${result_digest:-}" ]; then
-    SHA256="$(normalize_sha256 "$result_digest" || true)"
-  fi
-  if [ -z "$SHA256" ] && [ "${update_kind_kind:-}" = "digest" ]; then
-    SHA256="$(normalize_sha256 "${update_kind_remote_value:-}" || true)"
-  fi
-
-  # Include a digest only when WUD provides a real registry digest.
   LINE="${IMAGE}"
-  if [ -n "$SHA256" ]; then
-    LINE="${LINE} sha256=${SHA256}"
-  fi
 
   umask 077
   acquire_lock || exit $?
