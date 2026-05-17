@@ -7,7 +7,7 @@ import unittest
 from pathlib import Path
 
 from wud_updater.command import CommandError, CommandRunner, display_command
-from wud_updater.compose import ComposeCli, ServiceImage
+from wud_updater.compose import ComposeCli, ComposeDiscoveryError, ServiceImage
 from wud_updater.docker_cli import ContainerImage, DockerCli
 
 
@@ -113,6 +113,17 @@ class FakeDockerCase(unittest.TestCase):
 
 
 class DockerCliTests(FakeDockerCase):
+    def test_try_methods_treat_missing_docker_executable_as_unavailable(self) -> None:
+        docker = DockerCli(
+            runner=self.runner,
+            executable=str(self.root / "missing-docker"),
+        )
+
+        self.assertEqual(docker.try_container_images(), [])
+        self.assertEqual(docker.image_id("repo/web:latest"), "")
+        self.assertEqual(docker.image_repo_digests("repo/web:latest"), [])
+        self.assertEqual(docker.try_inspect("cid-web", "{{.Name}}"), [])
+
     def test_ps_image_inspect_and_inspect_use_shell_formats(self) -> None:
         (self.fake_root / "containers.tsv").write_text(
             "web\trepo/web:latest\n",
@@ -147,6 +158,16 @@ class DockerCliTests(FakeDockerCase):
 
 
 class ComposeCliTests(FakeDockerCase):
+    def test_discover_stacks_skips_missing_docker_executable(self) -> None:
+        self.make_stack("stack", [("app", "repo/app:latest", "cid-app")])
+        compose = ComposeCli(
+            runner=self.runner,
+            docker_executable=str(self.root / "missing-docker"),
+        )
+
+        with self.assertRaisesRegex(ComposeDiscoveryError, "No compose stacks found"):
+            compose.discover_stacks(self.base)
+
     def test_discover_stacks_reads_images_services_and_service_image_map(self) -> None:
         stack = self.make_stack(
             "stack",
