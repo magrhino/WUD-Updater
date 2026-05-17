@@ -1,0 +1,103 @@
+"""Docker CLI subprocess layer for the future Python updater."""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+
+from .command import CommandError, CommandRunner
+
+
+DEFAULT_CONTAINER_FORMAT = "{{.Names}}\t{{.Image}}"
+IMAGE_ID_FORMAT = "{{.Id}}"
+IMAGE_DIGESTS_FORMAT = "{{range .RepoDigests}}{{println .}}{{end}}"
+
+
+@dataclass(frozen=True)
+class ContainerImage:
+    name: str
+    image: str
+
+
+class DockerCli:
+    """Thin Docker command wrapper matching the shell updater's call shapes."""
+
+    def __init__(
+        self,
+        *,
+        runner: CommandRunner | None = None,
+        executable: str = "docker",
+    ) -> None:
+        self.runner = runner or CommandRunner()
+        self.executable = executable
+
+    def ps_format(self, fmt: str = DEFAULT_CONTAINER_FORMAT) -> list[str]:
+        return self.runner.capture_lines(
+            [self.executable, "ps", "--format", fmt],
+            check=True,
+        )
+
+    def container_images(self) -> list[ContainerImage]:
+        containers: list[ContainerImage] = []
+        for line in self.ps_format(DEFAULT_CONTAINER_FORMAT):
+            name, sep, image = line.partition("\t")
+            if sep and name and image:
+                containers.append(ContainerImage(name=name, image=image))
+        return containers
+
+    def try_container_images(self) -> list[ContainerImage]:
+        """Return running container images, or an empty list if Docker fails."""
+
+        try:
+            return self.container_images()
+        except CommandError:
+            return []
+
+    def image_inspect(self, image: str, fmt: str) -> list[str]:
+        return self.runner.capture_lines(
+            [self.executable, "image", "inspect", "--format", fmt, image],
+            check=True,
+        )
+
+    def image_id(self, image: str) -> str:
+        try:
+            return _first_nonblank(self.image_inspect(image, IMAGE_ID_FORMAT))
+        except CommandError:
+            return ""
+
+    def image_repo_digests(self, image: str) -> list[str]:
+        try:
+            return _nonblank_lines(self.image_inspect(image, IMAGE_DIGESTS_FORMAT))
+        except CommandError:
+            return []
+
+    def image_digest(self, image: str) -> str:
+        return _first_nonblank(self.image_repo_digests(image))
+
+    def image_has_digest(self, image: str, expected: str) -> bool:
+        for digest in self.image_repo_digests(image):
+            if digest.rsplit("@", 1)[-1] == expected:
+                return True
+        return False
+
+    def inspect(self, target: str, fmt: str) -> list[str]:
+        return self.runner.capture_lines(
+            [self.executable, "inspect", "-f", fmt, target],
+            check=True,
+        )
+
+    def try_inspect(self, target: str, fmt: str) -> list[str]:
+        try:
+            return self.inspect(target, fmt)
+        except CommandError:
+            return []
+
+
+def _nonblank_lines(lines: list[str]) -> list[str]:
+    return [line for line in lines if line]
+
+
+def _first_nonblank(lines: list[str]) -> str:
+    for line in lines:
+        if line:
+            return line
+    return ""

@@ -42,3 +42,22 @@ jobs:
 
       - name: Run tests
         run: tests/run-all.sh
+
+  image-build:
+    name: image-build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Build image
+        run: docker build -t wud-updater:test .
+
+      - name: Smoke test image commands
+        run: |
+          set -euo pipefail
+          docker run --rm wud-updater:test updates --help
+          docker run --rm wud-updater:test docker-update-from-wud --help
+          docker run --rm wud-updater:test bash -n /app/bin/updates /app/bin/docker-update-from-wud
+          docker run --rm wud-updater:test sh -n /app/wud/on-update.sh /app/wud/append-updates.sh
