@@ -496,7 +496,7 @@ run_lsio() {
     if [[ "$_code" =~ ^2[0-9][0-9]$ ]]; then
       printf "Sent embed to Discord.\n" || true
     else
-      printf 'Discord webhook error %s: %s\n' "$_code" "${_resp%$'\n'$_code}" >&2
+      printf 'Discord webhook error %s: %s\n' "$_code" "${_resp%$'\n'"$_code"}" >&2
       return 1
     fi
   else
