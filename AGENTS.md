@@ -64,6 +64,7 @@ Use the shell already used by the target script.
 | installer tests | `tests/test-install.sh` |
 | host wrapper tests | `tests/test-updates-wrapper.sh` |
 | container entrypoint tests | `tests/test-entrypoint.sh` |
+| container build test | `tests/container-build.sh` |
 | container compose config check | `docker compose -f docker-compose.example.yml config` |
 | container image build | `docker build -t wud-updater:local .` |
 | typecheck | Not configured; shell scripts only. |
@@ -78,7 +79,7 @@ Use the shell already used by the target script.
 - WUD append behavior change: run `tests/test-wud-append-updates.sh`; use a temporary `WUD_OUT_FILE` and representative WUD env vars.
 - Installer change: run `tests/test-install.sh`; tests should use temp env overrides for `BIN_DIR`, `DOCKER_BASE`, `WUD_SCRIPTS_LINK`, and `WUD_OUT_DIR`.
 - Host wrapper change: run `tests/test-updates-wrapper.sh`; fake `sudo` and configured updater commands rather than invoking real system mutation.
-- Container packaging change: run `bash -n entrypoint.sh`, ShellCheck through `tests/run-all.sh`, `tests/test-entrypoint.sh`, and `docker compose -f docker-compose.example.yml config` if Docker Compose is available. Build the image when practical, noting that it requires network access to Docker's Debian apt repository.
+- Container packaging change: run `bash -n entrypoint.sh`, ShellCheck through `tests/run-all.sh`, `tests/test-entrypoint.sh`, and `tests/container-build.sh` when Docker is available. The container build test validates Compose config, builds the image, and smoke-runs the default non-mutating command.
 - Release-note behavior change: syntax-check the touched scripts, run ShellCheck, run `tests/test-release-notes-to-discord.sh` when Discord payload or release-note behavior changes, and avoid live Discord/GitHub calls unless explicitly requested or needed.
 - Cross-cutting behavior change: run `tests/run-all.sh` when practical before finishing.
 - Docs-only change: no tests required unless examples or commands were changed enough to need syntax validation.

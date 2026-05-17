@@ -42,3 +42,14 @@ jobs:
 
       - name: Run tests
         run: tests/run-all.sh
+
+  container:
+    name: container build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Run container build test
+        run: tests/container-build.sh
