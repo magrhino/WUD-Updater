@@ -224,8 +224,8 @@ class ComposeCli:
         if mode == "pause":
             try:
                 self.pause(directory, file, service_args)
-            except CommandError as exc:
-                pre_up_error = exc
+            except CommandError:
+                pass
         elif mode == "stop":
             try:
                 if service_args:
@@ -287,9 +287,11 @@ def _compose_files_under(docker_base: str | Path) -> list[Path]:
             continue
         for path in entries:
             relative = path.relative_to(base)
+            if path.is_symlink():
+                continue
             if path.is_file() and path.name in COMPOSE_FILENAMES:
                 files.append(path)
-            if len(relative.parts) >= 3 or path.name == "old" or path.is_symlink():
+            if len(relative.parts) >= 3 or path.name == "old":
                 continue
             if path.is_dir():
                 pending.append(path)
