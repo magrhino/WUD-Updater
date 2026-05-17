@@ -437,9 +437,9 @@ services_for_stack_image(){
 }
 
 build_matches(){
-  local line_no raw target target_key target_repo has_tag allow_repo digest resolved idx dir file name image service service_matched
+  local line_no raw target _target_key _target_repo has_tag allow_repo digest resolved idx dir file name image service service_matched
   : > "$WORK_DIR/matches.tsv"
-  while IFS=$'\t' read -r line_no raw target target_key target_repo has_tag allow_repo digest; do
+  while IFS=$'\t' read -r line_no raw target _target_key _target_repo has_tag allow_repo digest; do
     resolved="$(resolve_target_image "$target")"
     if [[ "$resolved" != "$target" ]]; then
       allow_repo=true
@@ -586,7 +586,11 @@ read_compose_cids(){
       services+=("$service")
     done < "$services_file"
   fi
-  (cd "$dir" && docker compose -f "$file" ps -q "${services[@]}" > "$outfile" 2>/dev/null) || : > "$outfile"
+  if ((${#services[@]})); then
+    (cd "$dir" && docker compose -f "$file" ps -q "${services[@]}" > "$outfile" 2>/dev/null) || : > "$outfile"
+  else
+    (cd "$dir" && docker compose -f "$file" ps -q > "$outfile" 2>/dev/null) || : > "$outfile"
+  fi
 }
 
 file_has_nonblank_line(){
@@ -856,7 +860,11 @@ run_compose_with_services(){
       services+=("$service")
     done < "$services_file"
   fi
-  (cd "$dir" && run_in_pty docker compose -f "$file" "$@" "${services[@]}")
+  if ((${#services[@]})); then
+    (cd "$dir" && run_in_pty docker compose -f "$file" "$@" "${services[@]}")
+  else
+    (cd "$dir" && run_in_pty docker compose -f "$file" "$@")
+  fi
 }
 
 run_compose_up(){

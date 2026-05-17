@@ -1,0 +1,251 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+ROOT="${FAKE_DOCKER_ROOT:?FAKE_DOCKER_ROOT is required}"
+mkdir -p "$ROOT"
+
+safe_name(){
+  printf '%s' "$1" | sed 's/[^A-Za-z0-9._-]/_/g'
+}
+
+log_call(){
+  printf '%s\t%s\n' "$(pwd)" "$*" >> "$ROOT/calls.log"
+}
+
+stack_id(){
+  if [[ -f .fake-docker-id ]]; then
+    cat .fake-docker-id
+  else
+    safe_name "$(pwd)"
+  fi
+}
+
+image_file(){
+  local image="$1" suffix="$2"
+  printf '%s/images/%s.%s' "$ROOT" "$(safe_name "$image")" "$suffix"
+}
+
+image_id(){
+  local image="$1" file
+  file="$(image_file "$image" id)"
+  [[ -f "$file" ]] && cat "$file"
+}
+
+image_digests(){
+  local image="$1" file
+  file="$(image_file "$image" digests)"
+  [[ -f "$file" ]] && cat "$file"
+}
+
+service_images(){
+  local id="$1" service="${2:-}"
+  if [[ -n "$service" && -f "$ROOT/stacks/$id/service-images.tsv" ]]; then
+    awk -v service="$service" 'BEGIN{FS="\t"} $1 == service {print $2}' "$ROOT/stacks/$id/service-images.tsv"
+  elif [[ -f "$ROOT/stacks/$id/images.txt" ]]; then
+    cat "$ROOT/stacks/$id/images.txt"
+  fi
+}
+
+service_cids(){
+  local id="$1" service="${2:-}" file
+  if [[ -n "$service" ]]; then
+    file="$ROOT/stacks/$id/cids-$service.txt"
+    [[ -f "$file" ]] && cat "$file"
+  else
+    file="$ROOT/stacks/$id/cids.txt"
+    [[ -f "$file" ]] && cat "$file"
+  fi
+}
+
+apply_image_after_pull(){
+  local image="$1" safe src dst
+  safe="$(safe_name "$image")"
+  src="$ROOT/images/$safe.after_id"
+  dst="$ROOT/images/$safe.id"
+  [[ -f "$src" ]] && cp "$src" "$dst"
+  src="$ROOT/images/$safe.after_digests"
+  dst="$ROOT/images/$safe.digests"
+  [[ -f "$src" ]] && cp "$src" "$dst"
+}
+
+apply_pull_state(){
+  local id="$1"
+  shift || true
+  local services=() arg service image
+  for arg in "$@"; do
+    [[ "$arg" == -* ]] && continue
+    services+=("$arg")
+  done
+
+  if ((${#services[@]})); then
+    for service in "${services[@]}"; do
+      while IFS= read -r image; do
+        [[ -z "$image" ]] && continue
+        apply_image_after_pull "$image"
+      done < <(service_images "$id" "$service")
+    done
+  else
+    while IFS= read -r image; do
+      [[ -z "$image" ]] && continue
+      apply_image_after_pull "$image"
+    done < <(service_images "$id")
+  fi
+}
+
+compose_cmd(){
+  local file="" id cmd
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      -f)
+        file="${2:-}"
+        shift 2
+        ;;
+      *)
+        break
+        ;;
+    esac
+  done
+  cmd="${1:-}"
+  shift || true
+  id="$(stack_id)"
+  log_call "compose -f $file $cmd $*"
+
+  case "$cmd" in
+    config)
+      case "${1:-}" in
+        --images)
+          if [[ -n "${2:-}" ]]; then
+            service_images "$id" "$2"
+          else
+            service_images "$id"
+          fi
+          ;;
+        --services)
+          if [[ -f "$ROOT/stacks/$id/services.txt" ]]; then
+            cat "$ROOT/stacks/$id/services.txt"
+          elif [[ -f "$ROOT/stacks/$id/service-images.tsv" ]]; then
+            awk 'BEGIN{FS="\t"} {print $1}' "$ROOT/stacks/$id/service-images.tsv" | sort -u
+          else
+            return 1
+          fi
+          ;;
+        *)
+          return 1
+          ;;
+      esac
+      ;;
+    pull)
+      [[ -f "$ROOT/stacks/$id/pull_fail" ]] && return 17
+      apply_pull_state "$id" "$@"
+      return 0
+      ;;
+    stop)
+      [[ -f "$ROOT/stacks/$id/stop_fail" ]] && return 18
+      return 0
+      ;;
+    down)
+      [[ -f "$ROOT/stacks/$id/down_fail" ]] && return 18
+      return 0
+      ;;
+    up)
+      if [[ "${1:-}" == "--help" ]]; then
+        if [[ "${FAKE_COMPOSE_UP_WAIT:-0}" == "1" ]]; then
+          printf 'Usage: docker compose up [OPTIONS]\n      --wait\n      --wait-timeout int\n'
+        else
+          printf 'Usage: docker compose up [OPTIONS]\n'
+        fi
+        return 0
+      fi
+      [[ -f "$ROOT/stacks/$id/up_fail" ]] && return 19
+      return 0
+      ;;
+    pause|unpause)
+      return 0
+      ;;
+    ps)
+      if [[ "${1:-}" == "-q" ]]; then
+        shift
+        if (($#)); then
+          local service
+          for service in "$@"; do
+            service_cids "$id" "$service"
+          done
+        else
+          service_cids "$id"
+        fi
+      else
+        return 1
+      fi
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+inspect_cmd(){
+  local format="" target
+  if [[ "${1:-}" == "-f" || "${1:-}" == "--format" ]]; then
+    format="${2:-}"
+    shift 2
+  fi
+  target="${1:-}"
+  log_call "inspect $target"
+
+  if [[ "$format" == *'.State.Health.Log'* ]]; then
+    [[ -f "$ROOT/containers/$target.healthlog" ]] && cat "$ROOT/containers/$target.healthlog"
+    return 0
+  fi
+
+  if [[ -f "$ROOT/containers/$target.summary" ]]; then
+    cat "$ROOT/containers/$target.summary"
+    return 0
+  fi
+
+  return 1
+}
+
+image_cmd(){
+  local subcmd="${1:-}"
+  shift || true
+  [[ "$subcmd" == "inspect" ]] || return 1
+
+  local format="" image
+  if [[ "${1:-}" == "--format" ]]; then
+    format="${2:-}"
+    shift 2
+  fi
+  image="${1:-}"
+  log_call "image inspect $image"
+
+  if [[ "$format" == *'.Id'* ]]; then
+    image_id "$image"
+  elif [[ "$format" == *'RepoDigests'* ]]; then
+    image_digests "$image"
+  else
+    return 1
+  fi
+}
+
+ps_cmd(){
+  log_call "ps $*"
+  if [[ "${1:-}" == "--format" ]]; then
+    [[ -f "$ROOT/containers.tsv" ]] && cat "$ROOT/containers.tsv"
+  else
+    return 1
+  fi
+}
+
+main(){
+  local cmd="${1:-}"
+  shift || true
+  case "$cmd" in
+    compose) compose_cmd "$@" ;;
+    image) image_cmd "$@" ;;
+    inspect) inspect_cmd "$@" ;;
+    ps) ps_cmd "$@" ;;
+    *) return 1 ;;
+  esac
+}
+
+main "$@"
