@@ -321,8 +321,20 @@ class UpdateFromWudRunner:
         if tag_updates:
             self.log.info(f"[{stack.name}] Applying compose tag update(s)")
             compose_path = stack.directory / stack.file
-            compose_backup = _backup_compose(compose_path)
-            applied_tags = apply_compose_tag_updates(compose_path, tag_updates)
+            try:
+                compose_backup = _backup_compose(compose_path)
+            except OSError as exc:
+                self.log.error(
+                    f"[{stack.name}] Could not back up compose file before tag update: {exc}"
+                )
+                return StackStatus("failure", "compose-backup-failed")
+            try:
+                applied_tags = apply_compose_tag_updates(compose_path, tag_updates)
+            except OSError as exc:
+                self.log.error(
+                    f"[{stack.name}] Could not rewrite compose image tag(s): {exc}"
+                )
+                return StackStatus("failure", "compose-tag-rewrite-failed")
             if not applied_tags:
                 self.log.error(
                     f"[{stack.name}] Could not rewrite compose image tag(s); leaving WUD entry pending for manual review."

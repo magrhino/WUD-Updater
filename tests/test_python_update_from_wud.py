@@ -6,7 +6,13 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from contextlib import redirect_stderr, redirect_stdout
+from io import StringIO
 from pathlib import Path
+from unittest import mock
+
+from wud_updater.command import CommandRunner
+from wud_updater.updater import UpdaterOptions, UpdateFromWudRunner
 
 
 class PythonUpdateFromWudTests(unittest.TestCase):
@@ -187,6 +193,46 @@ class PythonUpdateFromWudTests(unittest.TestCase):
             "repo/app@sha256:good\n",
         )
         self.assertNotRegex(self.calls(), r"compose -f .* up -d")
+
+    def test_tag_backup_failure_restores_line_without_traceback(self) -> None:
+        self.wud_file.write_text("repo/app:1.0 tag=2.0\n", encoding="utf-8")
+        self.make_stack("app", [("app", "repo/app:1.0", "cid-app")])
+        self.set_image_state("repo/app:1.0", "old", "sha256:old")
+
+        options = UpdaterOptions(
+            docker_base=self.base,
+            wud_file=self.wud_file,
+            log_dir=self.log_dir,
+            max_wait=0,
+            assume_yes=True,
+            allow_tag_updates=True,
+            no_color=True,
+        )
+        runner = UpdateFromWudRunner(
+            options,
+            environ=self.env,
+            command_runner=CommandRunner(env=self.env),
+        )
+        stdout = StringIO()
+        stderr = StringIO()
+
+        with (
+            mock.patch(
+                "wud_updater.updater._backup_compose",
+                side_effect=OSError("backup denied"),
+            ),
+            redirect_stdout(stdout),
+            redirect_stderr(stderr),
+        ):
+            status = runner.run()
+
+        self.assertEqual(status, 1, stderr.getvalue() + stdout.getvalue())
+        self.assertEqual(
+            self.wud_file.read_text(encoding="utf-8"),
+            "repo/app:1.0 tag=2.0\n",
+        )
+        self.assertIn("Could not back up compose file", stderr.getvalue())
+        self.assertNotIn("Traceback", stderr.getvalue())
 
     def test_tag_update_failure_rolls_back_and_writes_incident_log(self) -> None:
         self.wud_file.write_text("repo/app:1.0 tag=2.0\n", encoding="utf-8")
