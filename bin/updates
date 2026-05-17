@@ -1,0 +1,163 @@
+#!/usr/bin/env bash
+set -uo pipefail
+
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
+repo_dir="$(cd "$script_dir/.." && pwd -P)"
+config_file="${WUD_UPDATER_CONFIG:-$HOME/.config/wud-updater/env}"
+
+if [ -r "$config_file" ]; then
+  # shellcheck source=/dev/null
+  . "$config_file"
+fi
+
+docker_base="${DOCKER_BASE:-$HOME/docker}"
+wud_file="${WUD_OUT_FILE:-}"
+wud_file_explicit=0
+if [ -n "$wud_file" ]; then
+  wud_file_explicit=1
+fi
+updater="${WUD_UPDATER:-$repo_dir/bin/docker-update-from-wud}"
+update_mode="${WUD_UPDATE_MODE:-stop}"
+max_wait="${WUD_MAX_WAIT:-180}"
+auto_run=0
+dry_run=0
+
+usage() {
+  cat <<EOF
+Usage: updates [-y|--yes] [--dry-run] [--base PATH] [--file PATH] [--mode pause|stop|live] [--max-wait SECONDS]
+
+Shows Docker updates from WUD, TrueNAS update status, and active TrueNAS alerts.
+When Docker updates are pending, prompts before running docker-update-from-wud.
+EOF
+}
+
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    -y|--yes)
+      auto_run=1
+      shift
+      ;;
+    --dry-run)
+      dry_run=1
+      shift
+      ;;
+    --base)
+      docker_base="${2:-}"
+      shift 2
+      ;;
+    --file)
+      wud_file="${2:-}"
+      wud_file_explicit=1
+      shift 2
+      ;;
+    --mode)
+      update_mode="${2:-}"
+      shift 2
+      ;;
+    --max-wait)
+      max_wait="${2:-}"
+      shift 2
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    *)
+      echo "Unknown argument: $1" >&2
+      usage >&2
+      exit 2
+      ;;
+  esac
+done
+
+if [ "$wud_file_explicit" -eq 0 ]; then
+  wud_file="$docker_base/wud/out/images.todo"
+fi
+
+run_updater() {
+  local rc
+  echo "🚀 Running Docker updates via: sudo \"$updater\" --base \"$docker_base\" --file \"$wud_file\" --mode \"$update_mode\" --max-wait \"$max_wait\" --yes"
+  sudo "$updater" --base "$docker_base" --file "$wud_file" --mode "$update_mode" --max-wait "$max_wait" --yes
+  rc=$?
+  echo
+  if [ "$rc" -eq 0 ]; then
+    echo "✅ Update script completed (exit $rc)."
+  else
+    echo "❌ Update script failed (exit $rc)."
+  fi
+  return "$rc"
+}
+
+echo "=== 📦 Docker Updates ==="
+todo_lines=""
+if [ -e "$wud_file" ] && [ -s "$wud_file" ]; then
+  if [ -r "$wud_file" ]; then
+    todo_lines="$(grep -vE '^\s*(#|$)' "$wud_file" || true)"
+  else
+    todo_lines="$(sudo grep -vE '^\s*(#|$)' "$wud_file" || true)"
+  fi
+fi
+
+if [ -n "$todo_lines" ]; then
+  printf '%s\n' "$todo_lines" | nl -ba | column -t
+else
+  echo "✅ No pending Docker updates!"
+fi
+
+echo
+echo "=== 🖥️ TrueNAS System Update ==="
+if command -v midclt >/dev/null 2>&1 && command -v jq >/dev/null 2>&1; then
+  sys_update="$(midclt call update.check_available 2>/dev/null | jq -r '.status' 2>/dev/null || true)"
+  case "$sys_update" in
+    UNAVAILABLE) echo "✅ System up to date" ;;
+    AVAILABLE) echo "⚠️  System update available!" ;;
+    *) echo "❓ Unknown status: ${sys_update:-<no response>}" ;;
+  esac
+else
+  echo "ℹ️  midclt or jq not available; skipping system update check."
+fi
+
+echo
+echo "=== 🚨 TrueNAS Alerts ==="
+if command -v midclt >/dev/null 2>&1 && command -v jq >/dev/null 2>&1; then
+  alerts="$(midclt call alert.list 2>/dev/null | jq -r '.[] | select(.dismissed==false) | .formatted' 2>/dev/null || true)"
+  if [ -n "$alerts" ]; then
+    echo "$alerts" | nl -ba
+  else
+    echo "✅ No active alerts"
+  fi
+else
+  echo "ℹ️  midclt or jq not available; skipping alert check."
+fi
+
+if [ -z "$todo_lines" ]; then
+  exit 0
+fi
+
+if [ ! -x "$updater" ]; then
+  echo
+  if [ -f "$updater" ]; then
+    echo "ℹ️  Updater script found but not executable: $updater"
+    echo "    Make it executable with: chmod +x \"$updater\""
+  else
+    echo "ℹ️  Updater script not found: $updater"
+  fi
+  exit 0
+fi
+
+if [ "$dry_run" -eq 1 ]; then
+  echo
+  echo "👀 Dry-run mode: not running updates."
+  exit 0
+fi
+
+echo
+if [ "$auto_run" -eq 1 ]; then
+  run_updater
+else
+  read -r -p "Run Docker updates now? (y/N) " reply
+  case "$reply" in
+    [yY][eE][sS]|[yY]) run_updater ;;
+    *) echo "⏸️  Skipped running updates." ;;
+  esac
+fi
