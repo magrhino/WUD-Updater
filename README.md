@@ -1,6 +1,7 @@
 # WUD-Updater
 
-Host-side update helper and WUD container scripts for a TrueNAS Docker host.
+Updating Docker images using WUD's notification system, with host-side update
+helpers and container scripts for a TrueNAS Docker host.
 
 ## Layout
 
