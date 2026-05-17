@@ -393,6 +393,94 @@ test_legacy_sha_suffix_does_not_block_cleanup(){
   teardown_case
 }
 
+test_tag_update_requires_explicit_flag(){
+  setup_case
+  printf 'repo/app:1.0 tag=2.0\n' > "$WUD_FILE"
+  make_single_service_stack app "$BASE/app" docker-compose.yml repo/app:1.0
+  set_image_state repo/app:1.0 old sha256:old
+  set_image_after_pull repo/app:2.0 new sha256:new
+
+  run_script --yes
+
+  assert_status 0
+  assert_file_equals "$WUD_FILE" 'repo/app:1.0 tag=2.0'
+  grep -q -- 'require --allow-tag-updates' "$TEST_TMP/output.log" || fail "missing tag opt-in message"
+  grep -q -- 'image: repo/app:1.0' "$BASE/app/docker-compose.yml" || fail "compose file was rewritten without tag opt-in"
+  assert_calls_not_contain 'compose -f .* pull'
+  assert_calls_not_contain 'compose -f .* up -d'
+  teardown_case
+}
+
+test_tag_update_dry_run_does_not_rewrite_compose(){
+  setup_case
+  printf 'repo/app:1.0 tag=2.0\n' > "$WUD_FILE"
+  make_single_service_stack app "$BASE/app" docker-compose.yml repo/app:1.0
+  set_image_state repo/app:1.0 old sha256:old
+  set_image_after_pull repo/app:2.0 new sha256:new
+
+  run_script --dry-run --allow-tag-updates
+
+  assert_status 0
+  assert_file_equals "$WUD_FILE" 'repo/app:1.0 tag=2.0'
+  grep -q -- 'repo/app:1.0 -> repo/app:2.0 (tag update)' "$TEST_TMP/output.log" || fail "dry-run did not show tag update plan"
+  grep -q -- 'image: repo/app:1.0' "$BASE/app/docker-compose.yml" || fail "dry-run rewrote compose file"
+  assert_calls_not_contain 'compose -f .* pull'
+  assert_calls_not_contain 'compose -f .* up -d'
+  teardown_case
+}
+
+test_allowed_tag_update_rewrites_compose_and_cleans_line(){
+  setup_case
+  printf 'repo/app:1.0 tag=2.0\n' > "$WUD_FILE"
+  make_single_service_stack app "$BASE/app" docker-compose.yml repo/app:1.0
+  set_image_state repo/app:1.0 old sha256:old
+  set_image_after_pull repo/app:2.0 new sha256:new
+
+  run_script --yes --allow-tag-updates
+
+  assert_status 0
+  assert_file_equals "$WUD_FILE" ''
+  grep -q -- 'image: repo/app:2.0' "$BASE/app/docker-compose.yml" || fail "compose file did not contain new tag"
+  assert_calls_contain 'compose -f docker-compose.yml pull app'
+  assert_calls_contain 'compose -f docker-compose.yml up -d .* app'
+  teardown_case
+}
+
+test_unhealthy_tag_update_rolls_back_and_writes_incident_log(){
+  setup_case
+  printf 'repo/app:1.0 tag=2.0\n' > "$WUD_FILE"
+  make_single_service_stack app "$BASE/app" docker-compose.yml repo/app:1.0 cid-app
+  set_image_state repo/app:1.0 old sha256:old
+  set_image_after_pull repo/app:2.0 new sha256:new
+  printf 'new tag failed health check\n' > "$FAKE_ROOT/containers/cid-app.healthlog"
+  cat > "$FAKE_ROOT/post-up-hook" <<'HOOK'
+#!/usr/bin/env bash
+set -Eeuo pipefail
+compose_file="${2:?compose file is required}"
+if grep -q 'repo/app:2.0' "$compose_file"; then
+  printf '/cid-app|running|unhealthy|1|0\n' > "${FAKE_DOCKER_ROOT:?}/containers/cid-app.summary"
+else
+  printf '/cid-app|running|healthy|0|0\n' > "${FAKE_DOCKER_ROOT:?}/containers/cid-app.summary"
+fi
+HOOK
+  chmod +x "$FAKE_ROOT/post-up-hook"
+
+  run_script --yes --allow-tag-updates
+
+  assert_status 1
+  assert_file_equals "$WUD_FILE" 'repo/app:1.0 tag=2.0'
+  grep -q -- 'image: repo/app:1.0' "$BASE/app/docker-compose.yml" || fail "compose file was not rolled back"
+  local incident
+  incident="$(find "$BASE/app" -type f -name 'error-2.0-*.logs' -print | sort | tail -n 1)"
+  [[ -n "$incident" && -f "$incident" ]] || fail "expected tag incident log"
+  grep -q -- 'reason=health-failed' "$incident" || fail "incident log missing failure reason"
+  grep -q -- 'repo/app:1.0 -> repo/app:2.0' "$incident" || fail "incident log missing attempted tag"
+  grep -q -- 'health=unhealthy' "$incident" || fail "incident log missing unhealthy status"
+  grep -q -- 'new tag failed health check' "$incident" || fail "incident log missing health output"
+  grep -q -- 'manual_review_required=no' "$incident" || fail "incident log should report successful rollback"
+  teardown_case
+}
+
 test_pinned_digest_mismatch_prevents_cleanup(){
   setup_case
   printf 'repo/app@sha256:good\n' > "$WUD_FILE"
@@ -643,6 +731,10 @@ main(){
   run_test test_invalid_line_spec_fails_before_docker_calls
   run_test test_one_line_two_stacks_one_fails_keeps_line
   run_test test_legacy_sha_suffix_does_not_block_cleanup
+  run_test test_tag_update_requires_explicit_flag
+  run_test test_tag_update_dry_run_does_not_rewrite_compose
+  run_test test_allowed_tag_update_rewrites_compose_and_cleans_line
+  run_test test_unhealthy_tag_update_rolls_back_and_writes_incident_log
   run_test test_pinned_digest_mismatch_prevents_cleanup
   run_test test_pinned_digest_match_allows_cleanup
   run_test test_cleanup_removes_successful_raw_line_not_current_line_number

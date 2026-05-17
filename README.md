@@ -41,9 +41,12 @@ Make sure the install bin directory is on your `PATH`, then run:
 updates
 updates --dry-run
 updates --yes
+updates --yes --allow-tag-updates
 ```
 
 When pending Docker updates exist, `updates` prompts for `a` to run all entries, `s` to select numbered entries, `x` to exclude numbered entries, or `n` to skip. Selection prompts accept comma-separated numbers and ranges such as `1,3-5`. Unselected entries stay pending unless you choose to remove them before running the selected updates.
+
+Digest updates preserve the existing compose image tag and only pull/recreate matching services. Tag updates are recorded as `image:old tag=new`; they stay pending unless you pass `--allow-tag-updates`, which rewrites simple literal `image:` entries, validates health, and rolls back the compose file if the new tag fails.
 
 ## WUD Mounts
 
@@ -94,7 +97,7 @@ For release-note notifications, provide webhook and GitHub token values through 
 
 - Bash for host-side scripts.
 - Docker with the Compose plugin on the host.
-- Standard shell tools used by the updater: `awk`, `sort`, `sed`, `perl`, `find`, `grep`, `script`, and `mktemp`.
+- Standard shell tools used by the updater: `awk`, `sort`, `sed`, `perl`, `find`, `grep`, `cut`, `script`, and `mktemp`.
 - `jq` and `midclt` are optional for TrueNAS status checks in `updates`.
 - `curl` and `jq` are required for release-note helper scripts.
 
