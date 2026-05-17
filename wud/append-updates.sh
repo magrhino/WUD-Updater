@@ -13,7 +13,7 @@ OUT_GID="${OUT_GID:-}"
 OUT_GUID="${OUT_GUID:-}"
 rc=0
 
-# shellcheck disable=SC2329
+# shellcheck disable=SC2317,SC2329
 cleanup() {
   [ -n "$TMP" ] && rm -f "$TMP"
   [ -n "$SORTED_TMP" ] && rm -f "$SORTED_TMP"
