@@ -43,6 +43,8 @@ updates --dry-run
 updates --yes
 ```
 
+When pending Docker updates exist, `updates` prompts for `a` to run all entries, `s` to select numbered entries, `x` to exclude numbered entries, or `n` to skip. Selection prompts accept comma-separated numbers and ranges such as `1,3-5`. Unselected entries stay pending unless you choose to remove them before running the selected updates.
+
 ## WUD Mounts
 
 Mount the installed WUD scripts and output directory into the WUD container:

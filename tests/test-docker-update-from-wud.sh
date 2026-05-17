@@ -236,6 +236,110 @@ test_confirm_required_blocks_mutation(){
   teardown_case
 }
 
+test_only_lines_updates_subset_and_keeps_unselected(){
+  setup_case
+  printf 'repo/app:one\nrepo/app:two\n' > "$WUD_FILE"
+  make_single_service_stack one "$BASE/one" docker-compose.yml repo/app:one cid-one
+  make_single_service_stack two "$BASE/two" docker-compose.yml repo/app:two cid-two
+  set_image_state repo/app:one old-one sha256:old-one
+  set_image_after_pull repo/app:one new-one sha256:new-one
+  set_image_state repo/app:two old-two sha256:old-two
+  set_image_after_pull repo/app:two new-two sha256:new-two
+
+  run_script --yes --only-lines 2
+
+  assert_status 0
+  assert_file_equals "$WUD_FILE" 'repo/app:one'
+  teardown_case
+}
+
+test_only_lines_keeps_unselected_duplicate_raw_line(){
+  setup_case
+  printf 'repo/app:latest\nrepo/app:latest\n' > "$WUD_FILE"
+  make_single_service_stack app "$BASE/app" docker-compose.yml repo/app:latest
+  set_image_state repo/app:latest old sha256:old
+  set_image_after_pull repo/app:latest new sha256:new
+
+  run_script --yes --only-lines 1
+
+  assert_status 0
+  assert_file_equals "$WUD_FILE" 'repo/app:latest'
+  teardown_case
+}
+
+test_remove_lines_before_run_removes_requested_lines_before_pull(){
+  setup_case
+  printf 'repo/app:one\nrepo/app:two\nrepo/app:three\n' > "$WUD_FILE"
+  make_single_service_stack two "$BASE/two" docker-compose.yml repo/app:two cid-two
+  set_image_state repo/app:two old-two sha256:old-two
+  set_image_after_pull repo/app:two new-two sha256:new-two
+  cat > "$FAKE_ROOT/post-pull-hook" <<'HOOK'
+#!/usr/bin/env bash
+cat "${HOOK_WUD_FILE:?}" > "${FAKE_DOCKER_ROOT:?}/wud-during-pull.txt"
+HOOK
+  chmod +x "$FAKE_ROOT/post-pull-hook"
+
+  run_script HOOK_WUD_FILE="$WUD_FILE" --yes --only-lines 2 --remove-lines-before-run 1,3
+
+  assert_status 0
+  assert_file_equals "$FAKE_ROOT/wud-during-pull.txt" 'repo/app:two'
+  assert_file_equals "$WUD_FILE" ''
+  teardown_case
+}
+
+test_cleanup_preserves_appended_duplicate_after_pre_run_removal(){
+  setup_case
+  printf 'repo/app:one\nrepo/app:two\nrepo/app:three\n' > "$WUD_FILE"
+  make_single_service_stack two "$BASE/two" docker-compose.yml repo/app:two cid-two
+  set_image_state repo/app:two old-two sha256:old-two
+  set_image_after_pull repo/app:two new-two sha256:new-two
+  cat > "$FAKE_ROOT/post-pull-hook" <<'HOOK'
+#!/usr/bin/env bash
+printf 'repo/app:two\n' >> "${HOOK_WUD_FILE:?}"
+HOOK
+  chmod +x "$FAKE_ROOT/post-pull-hook"
+
+  run_script HOOK_WUD_FILE="$WUD_FILE" --yes --only-lines 2 --remove-lines-before-run 1,3
+
+  assert_status 0
+  assert_file_equals "$WUD_FILE" 'repo/app:two'
+  teardown_case
+}
+
+test_parent_wud_lock_is_reused_and_released(){
+  setup_case
+  local marker="$TEST_TMP/lock-release-marker"
+  printf 'repo/app:one\nrepo/app:two\nrepo/app:three\n' > "$WUD_FILE"
+  make_single_service_stack two "$BASE/two" docker-compose.yml repo/app:two cid-two
+  set_image_state repo/app:two old-two sha256:old-two
+  set_image_after_pull repo/app:two new-two sha256:new-two
+  mkdir "$WUD_FILE.lock"
+  : > "$marker"
+
+  run_script WUD_LOCK_HELD_BY_PARENT=1 WUD_LOCK_RELEASE_MARKER="$marker" WUD_LOCK_TIMEOUT=0 --yes --only-lines 2 --remove-lines-before-run 1,3
+
+  assert_status 0
+  assert_file_equals "$WUD_FILE" ''
+  assert_file_equals "$marker" 'released'
+  [[ ! -d "$WUD_FILE.lock" ]] || fail "parent WUD lock was not released"
+  teardown_case
+}
+
+test_invalid_line_spec_fails_before_docker_calls(){
+  setup_case
+  printf 'repo/app:latest\n' > "$WUD_FILE"
+  make_single_service_stack app "$BASE/app" docker-compose.yml repo/app:latest
+  set_image_state repo/app:latest old sha256:old
+  set_image_after_pull repo/app:latest new sha256:new
+
+  run_script --yes --only-lines 0
+
+  assert_status 1
+  assert_file_equals "$WUD_FILE" 'repo/app:latest'
+  [[ ! -s "$FAKE_ROOT/calls.log" ]] || fail "docker was called for invalid line spec"
+  teardown_case
+}
+
 test_one_line_two_stacks_one_fails_keeps_line(){
   setup_case
   printf 'repo/app\n' > "$WUD_FILE"
@@ -495,6 +599,12 @@ main(){
   run_test test_dry_run_no_mutation
   run_test test_default_base_uses_home_docker
   run_test test_confirm_required_blocks_mutation
+  run_test test_only_lines_updates_subset_and_keeps_unselected
+  run_test test_only_lines_keeps_unselected_duplicate_raw_line
+  run_test test_remove_lines_before_run_removes_requested_lines_before_pull
+  run_test test_cleanup_preserves_appended_duplicate_after_pre_run_removal
+  run_test test_parent_wud_lock_is_reused_and_released
+  run_test test_invalid_line_spec_fails_before_docker_calls
   run_test test_one_line_two_stacks_one_fails_keeps_line
   run_test test_expected_sha_mismatch_prevents_cleanup
   run_test test_expected_sha_match_allows_cleanup
