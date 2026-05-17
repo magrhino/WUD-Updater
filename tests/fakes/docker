@@ -223,7 +223,12 @@ compose_cmd(){
       run_post_up_hook "$id" "$file" "$@"
       return 0
       ;;
-    pause|unpause)
+    pause)
+      [[ -f "$ROOT/stacks/$id/pause_fail" ]] && return 20
+      return 0
+      ;;
+    unpause)
+      [[ -f "$ROOT/stacks/$id/unpause_fail" ]] && return 21
       return 0
       ;;
     ps)

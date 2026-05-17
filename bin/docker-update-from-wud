@@ -2,6 +2,16 @@
 # docker-update-from-wud-v2.sh
 set -Eeuo pipefail
 
+if [[ "${WUD_UPDATER_PYTHON:-}" == "1" ]]; then
+  REPO_ROOT_FOR_PYTHON="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
+  if [[ -n "${PYTHONPATH:-}" ]]; then
+    export PYTHONPATH="${REPO_ROOT_FOR_PYTHON}/src:${PYTHONPATH}"
+  else
+    export PYTHONPATH="${REPO_ROOT_FOR_PYTHON}/src"
+  fi
+  exec "${PYTHON_BIN:-python3}" -m wud_updater.cli update-from-wud "$@"
+fi
+
 ### --- CONFIG ---
 DOCKER_BASE_DEFAULT="$HOME/docker"
 MODE_DEFAULT="stop"     # pause | stop | live
@@ -114,9 +124,13 @@ release_parent_wud_lock(){
 }
 
 cleanup(){
+  local status=$?
   release_wud_lock
   release_parent_wud_lock
-  [[ -n "${WORK_DIR:-}" && -d "$WORK_DIR" ]] && rm -rf "$WORK_DIR"
+  if [[ -n "${WORK_DIR:-}" && -d "$WORK_DIR" ]]; then
+    rm -rf "$WORK_DIR"
+  fi
+  return "$status"
 }
 trap cleanup EXIT
 
@@ -1029,39 +1043,46 @@ build_line_status(){
     done
 }
 
-cleanup_wud_file(){
-  local tmp wud_dir success_lines
-  success_lines="$WORK_DIR/success-lines.txt"
-  awk 'BEGIN{FS="\t"} $2 == "success" {print $1}' "$WORK_DIR/line_status.tsv" | sort -n -u > "$success_lines"
-  if [[ ! -s "$success_lines" ]]; then
-    yellow "No successful WUD entries to clean up."
+restore_failed_wud_lines(){
+  local tmp wud_dir failed_lines
+  failed_lines="$WORK_DIR/failed-lines.txt"
+  awk 'BEGIN{FS="\t"} $2 == "failure" {print $1}' "$WORK_DIR/line_status.tsv" | sort -n -u > "$failed_lines"
+  if [[ ! -s "$failed_lines" ]]; then
+    green "Successful WUD entries were removed before update."
     return 0
   fi
 
   wud_dir="$(dirname "$WUD_FILE")"
   acquire_wud_lock
   tmp="$(mktemp "${wud_dir}/.wud-left.XXXXXX")"
-  if ! awk -v success_file="$success_lines" \
+  if ! awk -v failed_file="$failed_lines" \
     -v line_map="$WORK_DIR/line-map.tsv" '
-      FILENAME == success_file {drop[$1]=1; next}
+      FILENAME == failed_file {restore[$1]=1; next}
       FILENAME == line_map {
         line_no = $1
         raw = $0
         sub(/^[^\t]*\t[^\t]*\t/, "", raw)
-        if (line_no in drop) {
-          drop_count[raw]++
+        if (line_no in restore) {
+          needed[raw]++
+          restore_raw[++restore_count] = raw
         }
         next
       }
       {
         raw = $0
-        if (dropped[raw] < drop_count[raw]) {
-          dropped[raw]++
-          next
-        }
+        current_count[raw]++
         print raw
       }
-    ' "$success_lines" "$WORK_DIR/line-map.tsv" "$WUD_FILE" > "$tmp"; then
+      END {
+        for (i = 1; i <= restore_count; i++) {
+          raw = restore_raw[i]
+          if (current_count[raw] + restored_count[raw] < needed[raw]) {
+            print raw
+            restored_count[raw]++
+          }
+        }
+      }
+    ' "$failed_lines" "$WORK_DIR/line-map.tsv" "$WUD_FILE" > "$tmp"; then
     rm -f "$tmp"
     die "Failed to rewrite WUD file: $WUD_FILE"
   fi
@@ -1074,12 +1095,26 @@ cleanup_wud_file(){
     die "Failed to replace WUD file: $WUD_FILE"
   fi
   release_wud_lock
-  green "Cleaned successfully processed entries from $WUD_FILE"
+  yellow "Restored failed WUD entries in $WUD_FILE"
+}
+
+prepare_wud_lines_before_run_removal(){
+  local remove_lines="$WORK_DIR/remove-lines-before-run.txt"
+  local in_flight_lines="$WORK_DIR/in-flight-lines.txt"
+  : > "$in_flight_lines"
+
+  if [[ -s "$WORK_DIR/matches.tsv" ]]; then
+    awk 'BEGIN{FS="\t"} {print $2}' "$WORK_DIR/matches.tsv" >> "$in_flight_lines"
+  fi
+  if [[ -s "$remove_lines" ]]; then
+    awk 'NF {print $1}' "$remove_lines" >> "$in_flight_lines"
+  fi
+  sort -n -u "$in_flight_lines" -o "$in_flight_lines"
 }
 
 remove_wud_lines_before_run(){
   local tmp wud_dir remove_lines
-  remove_lines="$WORK_DIR/remove-lines-before-run.txt"
+  remove_lines="$WORK_DIR/in-flight-lines.txt"
   [[ -s "$remove_lines" ]] || return 0
 
   wud_dir="$(dirname "$WUD_FILE")"
@@ -1134,7 +1169,7 @@ remove_wud_lines_before_run(){
   fi
   apply_configured_owner "$WUD_FILE" || die "Failed to set owner for WUD file: $WUD_FILE"
   release_wud_lock
-  green "Removed skipped WUD entries before update."
+  green "Removed in-flight WUD entries before update."
 }
 
 updated_images(){
@@ -1721,6 +1756,7 @@ if [[ "$DRY_RUN" == "true" ]]; then
 fi
 
 confirm_before_mutation
+prepare_wud_lines_before_run_removal
 remove_wud_lines_before_run
 release_parent_wud_lock
 
@@ -1730,7 +1766,7 @@ while IFS= read -r idx; do
 done < "$WORK_DIR/to-update.txt"
 
 build_line_status
-cleanup_wud_file
+restore_failed_wud_lines
 
 if (( FAIL_COUNT > 0 )); then
   red "Completed with ${FAIL_COUNT} failure(s). See log: $LOG_FILE"
