@@ -1,0 +1,1103 @@
+#!/usr/bin/env bash
+# docker-update-from-wud-v2.sh
+set -Eeuo pipefail
+
+### --- CONFIG ---
+DOCKER_BASE_DEFAULT="/mnt/nvme-pool/rhino/docker"
+MODE_DEFAULT="stop"     # pause | stop | live
+MAX_WAIT_DEFAULT=180
+### --- END CONFIG ---
+
+DOCKER_BASE="$DOCKER_BASE_DEFAULT"
+WUD_FILE=""
+LOG_DIR=""
+MODE="$MODE_DEFAULT"
+MAX_WAIT="$MAX_WAIT_DEFAULT"
+DRY_RUN=false
+ASSUME_YES=false
+NO_COLOR=false
+WUD_FILE_SET=false
+LOG_DIR_SET=false
+LOG_FILE=""
+WORK_DIR=""
+SCRIPT_STYLE=""
+FAIL_COUNT=0
+UP_WAIT_HANDLED=false
+
+ts(){ date +%Y-%m-%dT%H:%M:%S; }
+
+usage(){
+  cat <<EOF
+Usage: $0 [--base PATH] [--file PATH] [--log-dir PATH] [--mode pause|stop|live] [--max-wait SECONDS] [--dry-run] [--yes] [--no-color]
+
+Safe examples:
+  Dry-run plan only:
+    $0 --dry-run
+  Confirmed stop-mode update:
+    $0 --mode stop --yes
+  Live-mode update:
+    $0 --mode live --yes
+  Custom base, WUD file, and log directory:
+    $0 --base /srv/docker --file /srv/docker/wud/out/images.todo --log-dir /srv/docker/logs --dry-run
+EOF
+}
+
+plain_log(){
+  local level="$1"; shift
+  if [[ -n "${LOG_FILE:-}" ]]; then
+    printf '[%s] [%s] %s\n' "$(ts)" "$level" "$*" >> "$LOG_FILE"
+  fi
+}
+
+term_log(){
+  local color="$1" level="$2"; shift 2
+  if [[ "$NO_COLOR" != "true" && -t 1 ]]; then
+    printf '\033[%sm[%s]\033[0m %s\n' "$color" "$(ts)" "$*"
+  else
+    printf '[%s] %s\n' "$(ts)" "$*"
+  fi
+  plain_log "$level" "$*"
+}
+
+say(){ term_log "1;36" INFO "$*"; }
+green(){ term_log "1;32" INFO "$*"; }
+yellow(){ term_log "1;33" WARN "$*"; }
+red(){ term_log "1;31" ERROR "$*"; }
+
+die(){
+  red "$*"
+  exit 1
+}
+
+need_cmd(){
+  command -v "$1" >/dev/null 2>&1 || die "Missing required command: $1"
+}
+
+cleanup(){
+  [[ -n "${WORK_DIR:-}" && -d "$WORK_DIR" ]] && rm -rf "$WORK_DIR"
+}
+trap cleanup EXIT
+
+trim(){
+  local value="$1"
+  value="${value#"${value%%[![:space:]]*}"}"
+  value="${value%"${value##*[![:space:]]}"}"
+  printf '%s' "$value"
+}
+
+strip_digest(){
+  local image="$1"
+  printf '%s' "${image%%@sha256:*}"
+}
+
+normalize_digest(){
+  local digest="$1"
+  [[ -z "$digest" ]] && return 0
+  digest="${digest#*@}"
+  if [[ "$digest" == sha256:* ]]; then
+    printf '%s' "$digest"
+  else
+    printf 'sha256:%s' "$digest"
+  fi
+}
+
+drop_registry(){
+  local image left rest
+  image="$(strip_digest "$1")"
+  left="${image%%/*}"
+  rest="${image#*/}"
+  if [[ "$image" == "$rest" ]]; then
+    printf '%s' "$image"
+  elif [[ "$left" == *.* || "$left" == *:* || "$left" == "localhost" ]]; then
+    printf '%s' "$rest"
+  else
+    printf '%s' "$image"
+  fi
+}
+
+image_has_tag(){
+  local image last
+  image="$(strip_digest "$1")"
+  last="${image##*/}"
+  [[ "$last" == *:* ]]
+}
+
+image_key(){
+  drop_registry "$1"
+}
+
+repo_key(){
+  local key last
+  key="$(image_key "$1")"
+  last="${key##*/}"
+  if [[ "$last" == *:* ]]; then
+    printf '%s' "${key%:*}"
+  else
+    printf '%s' "$key"
+  fi
+}
+
+sanitize_stream(){
+  perl -pe 's/\r/\n/g; s/\e\[[0-9;?]*[ -\/]*[@-~]//g; s/\x08//g; s/\^D//g; s/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]//g'
+}
+
+log_sanitized_excerpt(){
+  local file="$1" lines="${2:-80}" excerpt
+  [[ -f "$file" ]] || return 0
+  excerpt="$WORK_DIR/pty-excerpt.txt"
+  sanitize_stream < "$file" | awk 'NF' | tail -n "$lines" > "$excerpt" || true
+  [[ -s "$excerpt" ]] || return 0
+  plain_log ERROR "----- sanitized command output excerpt -----"
+  while IFS= read -r line; do
+    plain_log ERROR "$line"
+  done < "$excerpt"
+  plain_log ERROR "----- end command output excerpt -----"
+}
+
+quote_arg(){
+  local arg="$1"
+  printf "'%s'" "$(printf '%s' "$arg" | sed "s/'/'\\\\''/g")"
+}
+
+quote_command(){
+  local out="" arg
+  for arg in "$@"; do
+    if [[ -n "$out" ]]; then
+      out="$out $(quote_arg "$arg")"
+    else
+      out="$(quote_arg "$arg")"
+    fi
+  done
+  printf '%s' "$out"
+}
+
+display_command(){
+  local out="" arg
+  for arg in "$@"; do
+    if [[ "$arg" == *[[:space:]\']* ]]; then
+      arg="$(quote_arg "$arg")"
+    fi
+    if [[ -n "$out" ]]; then
+      out="$out $arg"
+    else
+      out="$arg"
+    fi
+  done
+  printf '%s' "$out"
+}
+
+detect_script_style(){
+  if script -qec true /dev/null >/dev/null 2>&1; then
+    SCRIPT_STYLE="util-linux"
+  else
+    SCRIPT_STYLE="bsd"
+  fi
+}
+
+run_in_pty(){
+  local capture cmd status display start end elapsed
+  capture="$(mktemp "${TMPDIR:-/tmp}/wud-pty.XXXXXX")"
+  cmd="$(quote_command "$@")"
+  display="$(display_command "$@")"
+  say "Running: $display"
+  start="$(date +%s)"
+
+  set +e
+  if [[ "$SCRIPT_STYLE" == "util-linux" ]]; then
+    script -qec "$cmd" "$capture" < /dev/null
+  else
+    script -q "$capture" /bin/bash -c "$cmd" < /dev/null
+  fi
+  status=$?
+  set -e
+  end="$(date +%s)"
+  elapsed=$((end - start))
+
+  if (( status == 0 )); then
+    plain_log INFO "Command succeeded in ${elapsed}s: $display"
+  else
+    red "Command failed after ${elapsed}s (${status}): $display"
+    log_sanitized_excerpt "$capture" 80
+  fi
+  rm -f "$capture"
+  return "$status"
+}
+
+capture_lines(){
+  local outfile="$1"; shift
+  local errfile status
+  errfile="$WORK_DIR/cmd.err"
+  set +e
+  "$@" > "$outfile" 2> "$errfile"
+  status=$?
+  set -e
+  if (( status != 0 )); then
+    yellow "Command failed (${status}): $(display_command "$@")"
+    if [[ -s "$errfile" ]]; then
+      while IFS= read -r line; do
+        plain_log WARN "$line"
+      done < "$errfile"
+    fi
+  fi
+  rm -f "$errfile"
+  return "$status"
+}
+
+image_id(){
+  docker image inspect --format '{{.Id}}' "$1" 2>/dev/null || true
+}
+
+image_digest(){
+  docker image inspect --format '{{range .RepoDigests}}{{println .}}{{end}}' "$1" 2>/dev/null | awk 'NR==1{print; exit}' || true
+}
+
+image_has_digest(){
+  local image="$1" expected="$2" digest
+  while IFS= read -r digest; do
+    digest="${digest##*@}"
+    if [[ "$digest" == "$expected" ]]; then
+      return 0
+    fi
+  done < <(docker image inspect --format '{{range .RepoDigests}}{{println .}}{{end}}' "$image" 2>/dev/null || true)
+  return 1
+}
+
+log_image_digests(){
+  local name="$1" image="$2" digest found=false
+  while IFS= read -r digest; do
+    [[ -z "$digest" ]] && continue
+    found=true
+    plain_log ERROR "[$name] Digest seen for $image: $digest"
+  done < <(docker image inspect --format '{{range .RepoDigests}}{{println .}}{{end}}' "$image" 2>/dev/null || true)
+  if [[ "$found" != "true" ]]; then
+    plain_log ERROR "[$name] No RepoDigests reported for $image"
+  fi
+}
+
+write_image_state(){
+  local images_file="$1" state_file="$2" image id digest
+  : > "$state_file"
+  while IFS= read -r image; do
+    [[ -z "$image" ]] && continue
+    id="$(image_id "$image")"
+    digest="$(image_digest "$image")"
+    printf '%s\t%s\t%s\n' "$image" "$id" "$digest" >> "$state_file"
+  done < "$images_file"
+}
+
+state_field(){
+  local state_file="$1" image="$2" field="$3"
+  awk -v image="$image" -v field="$field" 'BEGIN{FS="\t"} $1 == image {print $field; exit}' "$state_file"
+}
+
+preserve_file_permissions(){
+  local src="$1" dst="$2"
+  perl -e '
+    use strict;
+    use warnings;
+    my ($src, $dst) = @ARGV;
+    my @st = stat($src) or die "stat($src): $!\n";
+    chmod($st[2] & 07777, $dst) or die "chmod($dst): $!\n";
+  ' "$src" "$dst"
+}
+
+parse_wud_file(){
+  local line_no=0 raw trimmed first digest has_tag allow_repo key repo
+  : > "$WORK_DIR/targets.tsv"
+  while IFS= read -r raw || [[ -n "$raw" ]]; do
+    line_no=$((line_no + 1))
+    trimmed="$(trim "$raw")"
+    [[ -z "$trimmed" ]] && continue
+    [[ "$trimmed" == \#* ]] && continue
+    first="${trimmed%%[[:space:]]*}"
+    [[ -z "$first" ]] && continue
+    digest=""
+    if [[ "$trimmed" == *sha256=* ]]; then
+      digest="${trimmed#*sha256=}"
+      digest="${digest%%[[:space:]]*}"
+    elif [[ "$first" == *@sha256:* ]]; then
+      digest="${first#*@}"
+    fi
+    digest="$(normalize_digest "$digest")"
+    has_tag=false
+    allow_repo=false
+    if image_has_tag "$first"; then
+      has_tag=true
+    else
+      allow_repo=true
+    fi
+    key="$(image_key "$first")"
+    repo="$(repo_key "$first")"
+    printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$line_no" "$raw" "$first" "$key" "$repo" "$has_tag" "$allow_repo" "$digest" >> "$WORK_DIR/targets.tsv"
+  done < "$WUD_FILE"
+}
+
+load_container_images(){
+  local outfile="$WORK_DIR/containers.tsv"
+  : > "$outfile"
+  if ! docker ps --format '{{.Names}}	{{.Image}}' > "$outfile" 2> "$WORK_DIR/docker-ps.err"; then
+    yellow "Could not read running containers; container-name targets will be ignored."
+    while IFS= read -r line; do
+      plain_log WARN "$line"
+    done < "$WORK_DIR/docker-ps.err"
+    : > "$outfile"
+  fi
+  rm -f "$WORK_DIR/docker-ps.err"
+}
+
+resolve_target_image(){
+  local target="$1" image
+  image="$(awk -v target="$target" 'BEGIN{FS="\t"} $1 == target {print $2; exit}' "$WORK_DIR/containers.tsv")"
+  if [[ -n "$image" ]]; then
+    printf '%s' "$image"
+  else
+    printf '%s' "$target"
+  fi
+}
+
+write_stack_service_images(){
+  local idx="$1" dir="$2" file="$3" name="$4"
+  local services_file map_file service service_no=0 service_images errfile failed=false image
+  services_file="$WORK_DIR/stack-${idx}.services"
+  map_file="$WORK_DIR/stack-${idx}.service-images"
+  errfile="$WORK_DIR/stack-${idx}.services.err"
+  : > "$services_file"
+  : > "$map_file"
+
+  if ! (cd "$dir" && docker compose -f "$file" config --services > "$services_file" 2> "$errfile"); then
+    yellow "[$name] Could not read compose services; service-scoped updates disabled for this stack."
+    while IFS= read -r image; do
+      plain_log WARN "[$name] $image"
+    done < "$errfile"
+    rm -f "$errfile"
+    return 1
+  fi
+  rm -f "$errfile"
+
+  while IFS= read -r service; do
+    [[ -z "$service" ]] && continue
+    service_no=$((service_no + 1))
+    service_images="$WORK_DIR/stack-${idx}.service-${service_no}.images"
+    errfile="$WORK_DIR/stack-${idx}.service-${service_no}.err"
+    if (cd "$dir" && docker compose -f "$file" config --images "$service" > "$service_images" 2> "$errfile"); then
+      while IFS= read -r image; do
+        [[ -z "$image" ]] && continue
+        printf '%s\t%s\n' "$service" "$image" >> "$map_file"
+      done < "$service_images"
+    else
+      failed=true
+      plain_log WARN "[$name] Could not read images for compose service: $service"
+      while IFS= read -r image; do
+        plain_log WARN "[$name] $image"
+      done < "$errfile"
+    fi
+    rm -f "$errfile"
+  done < "$services_file"
+
+  sort -u "$map_file" -o "$map_file"
+  [[ "$failed" != "true" && -s "$map_file" ]]
+}
+
+discover_stacks(){
+  local files_file="$WORK_DIR/compose-files.txt" file dir base name idx=0 images_file errfile
+  : > "$WORK_DIR/stacks.tsv"
+  find "$DOCKER_BASE" -maxdepth 3 -type f \
+    \( -name 'docker-compose.yml' -o -name 'docker-compose.yaml' -o -name 'compose.yml' -o -name 'compose.yaml' \) \
+    ! -path '*/old/*' -print 2>/dev/null | sort > "$files_file"
+
+  while IFS= read -r file; do
+    [[ -z "$file" ]] && continue
+    idx=$((idx + 1))
+    dir="$(dirname "$file")"
+    base="$(basename "$file")"
+    name="$(basename "$dir")"
+    images_file="$WORK_DIR/stack-${idx}.images"
+    errfile="$WORK_DIR/stack-${idx}.config.err"
+    if (cd "$dir" && docker compose -f "$base" config --images > "$images_file" 2> "$errfile"); then
+      sort -u "$images_file" -o "$images_file"
+      write_stack_service_images "$idx" "$dir" "$base" "$name" || true
+      printf '%s\t%s\t%s\t%s\n' "$idx" "$dir" "$base" "$name" >> "$WORK_DIR/stacks.tsv"
+    else
+      yellow "Skipping stack with invalid compose config: $dir"
+      while IFS= read -r line; do
+        plain_log WARN "$line"
+      done < "$errfile"
+    fi
+    rm -f "$errfile"
+  done < "$files_file"
+
+  [[ -s "$WORK_DIR/stacks.tsv" ]] || die "No compose stacks found under $DOCKER_BASE outside ./old."
+}
+
+services_for_stack_image(){
+  local idx="$1" image="$2"
+  local map_file="$WORK_DIR/stack-${idx}.service-images"
+  [[ -s "$map_file" ]] || return 0
+  awk -v image="$image" 'BEGIN{FS="\t"} $2 == image {print $1}' "$map_file" | sort -u
+}
+
+build_matches(){
+  local line_no raw target target_key target_repo has_tag allow_repo digest resolved idx dir file name image service service_matched
+  : > "$WORK_DIR/matches.tsv"
+  while IFS=$'\t' read -r line_no raw target target_key target_repo has_tag allow_repo digest; do
+    resolved="$(resolve_target_image "$target")"
+    if [[ "$resolved" != "$target" ]]; then
+      allow_repo=true
+    fi
+    if ! image_has_tag "$resolved"; then
+      allow_repo=true
+    fi
+
+    while IFS=$'\t' read -r idx dir file name; do
+      while IFS= read -r image; do
+        [[ -z "$image" ]] && continue
+        service_matched=false
+        if ! image_matches_resolved_target "$image" "$resolved" "$allow_repo"; then
+          continue
+        fi
+
+        while IFS= read -r service; do
+          [[ -z "$service" ]] && continue
+          service_matched=true
+          printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$idx" "$line_no" "$raw" "$target" "$resolved" "$digest" "$image" "$service" >> "$WORK_DIR/matches.tsv"
+        done < <(services_for_stack_image "$idx" "$image")
+
+        if [[ "$service_matched" != "true" ]]; then
+          printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$idx" "$line_no" "$raw" "$target" "$resolved" "$digest" "$image" "" >> "$WORK_DIR/matches.tsv"
+        fi
+      done < "$WORK_DIR/stack-${idx}.images"
+    done < "$WORK_DIR/stacks.tsv"
+  done < "$WORK_DIR/targets.tsv"
+  sort -u "$WORK_DIR/matches.tsv" -o "$WORK_DIR/matches.tsv"
+}
+
+stack_field(){
+  local idx="$1" field="$2"
+  awk -v idx="$idx" -v field="$field" 'BEGIN{FS="\t"} $1 == idx {print $field; exit}' "$WORK_DIR/stacks.tsv"
+}
+
+print_plan(){
+  local idx dir name line_no raw target resolved services_file services_label
+  say "Stacks to update:"
+  cut -f1 "$WORK_DIR/matches.tsv" | sort -n -u > "$WORK_DIR/to-update.txt"
+  while IFS= read -r idx; do
+    [[ -z "$idx" ]] && continue
+    dir="$(stack_field "$idx" 2)"
+    name="$(stack_field "$idx" 4)"
+    say "  - $name ($dir)"
+    services_file="$WORK_DIR/stack-${idx}.plan-services"
+    if collect_update_services "$idx" "$services_file"; then
+      services_label="$(service_file_label "$services_file")"
+      say "      services: $services_label"
+    else
+      say "      services: stack-level fallback"
+    fi
+    awk -v idx="$idx" 'BEGIN{FS="\t"} $1 == idx {print $2 "\t" $4 "\t" $5}' "$WORK_DIR/matches.tsv" | sort -n -u |
+      while IFS=$'\t' read -r line_no target resolved; do
+        if [[ "$target" == "$resolved" ]]; then
+          say "      line $line_no: $target"
+        else
+          say "      line $line_no: $target -> $resolved"
+        fi
+      done
+  done < "$WORK_DIR/to-update.txt"
+}
+
+confirm_before_mutation(){
+  local answer
+  if [[ "$ASSUME_YES" == "true" ]]; then
+    return 0
+  fi
+  if [[ ! -t 0 ]]; then
+    die "Refusing to mutate without --yes because stdin is not a TTY."
+  fi
+  printf 'Proceed with docker compose pull/restart and WUD cleanup? [y/N] '
+  IFS= read -r answer
+  case "$answer" in
+    y|Y|yes|YES) return 0 ;;
+    *) die "Aborted before mutation." ;;
+  esac
+}
+
+cid_summary(){
+  local cid="$1"
+  docker inspect -f '{{.Name}}|{{.State.Status}}|{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}|{{.RestartCount}}|{{.State.ExitCode}}' "$cid" 2>/dev/null || true
+}
+
+cid_is_ok(){
+  local summary="$1" name status health restarts exit_code
+  IFS='|' read -r name status health restarts exit_code <<EOF
+$summary
+EOF
+  if [[ "$health" != "none" ]]; then
+    [[ "$health" == "healthy" ]]
+  else
+    [[ "$status" == "running" ]]
+  fi
+}
+
+health_snapshot(){
+  local cid summary name status health restarts exit_code item out=""
+  for cid in "$@"; do
+    summary="$(cid_summary "$cid")"
+    [[ -z "$summary" ]] && continue
+    IFS='|' read -r name status health restarts exit_code <<EOF
+$summary
+EOF
+    name="${name#/}"
+    item="$name(status=$status,health=$health,restarts=$restarts,exit=$exit_code)"
+    if [[ -n "$out" ]]; then
+      out="$out; $item"
+    else
+      out="$item"
+    fi
+  done
+  printf '%s' "$out"
+}
+
+log_health_details(){
+  local cid summary name status health restarts exit_code output_file
+  for cid in "$@"; do
+    summary="$(cid_summary "$cid")"
+    [[ -z "$summary" ]] && continue
+    cid_is_ok "$summary" && continue
+    IFS='|' read -r name status health restarts exit_code <<EOF
+$summary
+EOF
+    name="${name#/}"
+    plain_log ERROR "Health blocker: container=$name status=$status health=$health restarts=$restarts exit_code=$exit_code"
+    output_file="$WORK_DIR/health-${cid}.txt"
+    docker inspect -f '{{if .State.Health}}{{range .State.Health.Log}}{{println .Output}}{{end}}{{end}}' "$cid" 2>/dev/null |
+      sanitize_stream | awk 'NF' | tail -n 20 > "$output_file" || true
+    if [[ -s "$output_file" ]]; then
+      while IFS= read -r line; do
+        plain_log ERROR "Health output [$name]: $line"
+      done < "$output_file"
+    fi
+  done
+}
+
+read_compose_cids(){
+  local dir="$1" file="$2" outfile="$3" services_file="${4:-}"
+  local services=() service
+  if [[ -n "$services_file" && -s "$services_file" ]]; then
+    while IFS= read -r service; do
+      [[ -z "$service" ]] && continue
+      services+=("$service")
+    done < "$services_file"
+  fi
+  (cd "$dir" && docker compose -f "$file" ps -q "${services[@]}" > "$outfile" 2>/dev/null) || : > "$outfile"
+}
+
+file_has_nonblank_line(){
+  local file="$1"
+  awk 'NF {found=1} END {exit found ? 0 : 1}' "$file"
+}
+
+log_health_details_from_file(){
+  local cids_file="$1" cid
+  local cids=()
+  while IFS= read -r cid; do
+    [[ -z "$cid" ]] && continue
+    cids+=("$cid")
+  done < "$cids_file"
+  ((${#cids[@]})) || return 0
+  log_health_details "${cids[@]}"
+}
+
+health_snapshot_from_file(){
+  local cids_file="$1" cid
+  local cids=()
+  while IFS= read -r cid; do
+    [[ -z "$cid" ]] && continue
+    cids+=("$cid")
+  done < "$cids_file"
+  if ((${#cids[@]})); then
+    health_snapshot "${cids[@]}"
+  else
+    printf 'no containers returned by docker compose ps -q'
+  fi
+}
+
+wait_for_health(){
+  local dir="$1" file="$2" timeout="$3" name="$4" services_file="${5:-}"
+  local start now elapsed next_report ok cid summary snapshot
+  local cids_file="$WORK_DIR/health-cids.txt"
+  start="$(date +%s)"
+  next_report=$((start + 30))
+  if (( timeout > 0 )); then
+    sleep 2
+  fi
+
+  while :; do
+    read_compose_cids "$dir" "$file" "$cids_file" "$services_file"
+    now="$(date +%s)"
+    elapsed=$((now - start))
+    ok=true
+
+    if ! file_has_nonblank_line "$cids_file"; then
+      ok=false
+    fi
+
+    while IFS= read -r cid; do
+      [[ -z "$cid" ]] && continue
+      summary="$(cid_summary "$cid")"
+      if [[ -z "$summary" ]] || ! cid_is_ok "$summary"; then
+        ok=false
+      fi
+    done < "$cids_file"
+
+    if [[ "$ok" == "true" ]]; then
+      plain_log INFO "[$name] Health wait succeeded in ${elapsed}s"
+      return 0
+    fi
+
+    if (( elapsed >= timeout )); then
+      red "[$name] Failed health gate after ${elapsed}s"
+      if ! file_has_nonblank_line "$cids_file"; then
+        plain_log ERROR "[$name] Health blocker: docker compose ps -q returned no containers"
+      fi
+      log_health_details_from_file "$cids_file"
+      return 1
+    fi
+
+    if (( now >= next_report )); then
+      snapshot="$(health_snapshot_from_file "$cids_file")"
+      yellow "[$name] Waiting for health (${elapsed}/${timeout}s): $snapshot"
+      next_report=$((now + 30))
+    fi
+
+    sleep 2
+  done
+}
+
+record_stack_status(){
+  local idx="$1" status="$2" reason="$3" name
+  name="$(stack_field "$idx" 4)"
+  printf '%s\t%s\t%s\t%s\n' "$idx" "$name" "$status" "$reason" >> "$WORK_DIR/stack_status.tsv"
+  if [[ "$status" != "success" ]]; then
+    FAIL_COUNT=$((FAIL_COUNT + 1))
+  fi
+}
+
+current_stack_status(){
+  local idx="$1"
+  awk -v idx="$idx" 'BEGIN{FS="\t"} $1 == idx {print $3; exit}' "$WORK_DIR/stack_status.tsv"
+}
+
+image_matches_resolved_target(){
+  local image="$1" resolved="$2" allow_repo="$3"
+  local resolved_key resolved_repo simage_key simage_repo
+  resolved_key="$(image_key "$resolved")"
+  resolved_repo="$(repo_key "$resolved")"
+  simage_key="$(image_key "$image")"
+  simage_repo="$(repo_key "$image")"
+
+  if image_has_tag "$resolved" && [[ "$simage_key" == "$resolved_key" ]]; then
+    return 0
+  fi
+  if [[ "$allow_repo" == "true" && "$simage_repo" == "$resolved_repo" ]]; then
+    return 0
+  fi
+  return 1
+}
+
+verify_expected_digests(){
+  local idx="$1" name="$2" images_file="$3"
+  local requirements line_no target resolved expected image allow_repo matched digest_ok ok=true
+  requirements="$WORK_DIR/stack-${idx}.digest-requirements"
+  awk -v idx="$idx" 'BEGIN{FS="\t"} $1 == idx && $6 != "" {print $2 "\t" $4 "\t" $5 "\t" $6}' "$WORK_DIR/matches.tsv" | sort -n -u > "$requirements"
+  [[ -s "$requirements" ]] || return 0
+
+  while IFS=$'\t' read -r line_no target resolved expected; do
+    [[ -z "$line_no" ]] && continue
+    allow_repo=false
+    if [[ "$resolved" != "$target" ]] || ! image_has_tag "$resolved"; then
+      allow_repo=true
+    fi
+    matched=false
+    digest_ok=false
+
+    while IFS= read -r image; do
+      [[ -z "$image" ]] && continue
+      if image_matches_resolved_target "$image" "$resolved" "$allow_repo"; then
+        matched=true
+        if image_has_digest "$image" "$expected"; then
+          digest_ok=true
+          break
+        fi
+      fi
+    done < "$images_file"
+
+    if [[ "$digest_ok" != "true" ]]; then
+      ok=false
+      red "[$name] Expected digest not reached for line $line_no ($target): wanted $expected"
+      if [[ "$matched" != "true" ]]; then
+        plain_log ERROR "[$name] No compose image matched line $line_no while checking expected digest"
+      else
+        while IFS= read -r image; do
+          [[ -z "$image" ]] && continue
+          if image_matches_resolved_target "$image" "$resolved" "$allow_repo"; then
+            log_image_digests "$name" "$image"
+          fi
+        done < "$images_file"
+      fi
+    fi
+  done < "$requirements"
+
+  [[ "$ok" == "true" ]]
+}
+
+build_line_status(){
+  local line_no idx status reason stack_state idxs_file
+  : > "$WORK_DIR/line_status.tsv"
+  cut -f2 "$WORK_DIR/matches.tsv" | sort -n -u |
+    while IFS= read -r line_no; do
+      [[ -z "$line_no" ]] && continue
+      status="success"
+      reason="all-matched-stacks-succeeded"
+      idxs_file="$WORK_DIR/line-${line_no}.stack-idxs"
+      awk -v line_no="$line_no" 'BEGIN{FS="\t"} $2 == line_no {print $1}' "$WORK_DIR/matches.tsv" | sort -n -u > "$idxs_file"
+      while IFS= read -r idx; do
+        [[ -z "$idx" ]] && continue
+        stack_state="$(current_stack_status "$idx")"
+        if [[ "$stack_state" != "success" ]]; then
+          status="failure"
+          reason="one-or-more-matched-stacks-failed"
+        fi
+      done < "$idxs_file"
+      printf '%s\t%s\t%s\n' "$line_no" "$status" "$reason" >> "$WORK_DIR/line_status.tsv"
+    done
+}
+
+cleanup_wud_file(){
+  local tmp wud_dir
+  awk 'BEGIN{FS="\t"} $2 == "success" {print $1}' "$WORK_DIR/line_status.tsv" | sort -n -u > "$WORK_DIR/success-lines.sorted"
+  if [[ ! -s "$WORK_DIR/success-lines.sorted" ]]; then
+    yellow "No successful WUD entries to clean up."
+    return 0
+  fi
+
+  wud_dir="$(dirname "$WUD_FILE")"
+  tmp="$(mktemp "${wud_dir}/.wud-left.XXXXXX")"
+  if ! awk 'NR==FNR {drop[$1]=1; next} !(FNR in drop)' "$WORK_DIR/success-lines.sorted" "$WUD_FILE" > "$tmp"; then
+    rm -f "$tmp"
+    die "Failed to rewrite WUD file: $WUD_FILE"
+  fi
+  if ! preserve_file_permissions "$WUD_FILE" "$tmp"; then
+    rm -f "$tmp"
+    die "Failed to preserve permissions for WUD file: $WUD_FILE"
+  fi
+  if ! mv "$tmp" "$WUD_FILE"; then
+    rm -f "$tmp"
+    die "Failed to replace WUD file: $WUD_FILE"
+  fi
+  green "Cleaned successfully processed entries from $WUD_FILE"
+}
+
+updated_images(){
+  local before="$1" after="$2" output="$3"
+  local image old_id new_id old_digest new_digest
+  : > "$output"
+  while IFS=$'\t' read -r image old_id old_digest; do
+    [[ -z "$image" ]] && continue
+    new_id="$(state_field "$after" "$image" 2)"
+    new_digest="$(state_field "$after" "$image" 3)"
+    if [[ -n "$new_id" && "$old_id" != "$new_id" ]]; then
+      printf '%s\t%s\t%s\t%s\t%s\n' "$image" "$old_id" "$new_id" "$old_digest" "$new_digest" >> "$output"
+    fi
+  done < "$before"
+}
+
+compose_up_wait_supported(){
+  local dir="$1" file="$2" help_file
+  help_file="$WORK_DIR/compose-up-help.txt"
+  if (cd "$dir" && docker compose -f "$file" up --help > "$help_file" 2>/dev/null) &&
+    grep -Eq -- '(^|[[:space:]])--wait([=,[:space:]]|$)' "$help_file" &&
+    grep -q -- '--wait-timeout' "$help_file"; then
+    return 0
+  fi
+  return 1
+}
+
+service_file_label(){
+  local services_file="$1" service out=""
+  [[ -s "$services_file" ]] || return 0
+  while IFS= read -r service; do
+    [[ -z "$service" ]] && continue
+    if [[ -n "$out" ]]; then
+      out="$out $service"
+    else
+      out="$service"
+    fi
+  done < "$services_file"
+  printf '%s' "$out"
+}
+
+collect_update_services(){
+  local idx="$1" output="$2"
+  : > "$output"
+  awk -v idx="$idx" 'BEGIN{FS="\t"} $1 == idx && $8 != "" {print $8}' "$WORK_DIR/matches.tsv" | sort -u > "$output"
+  [[ -s "$output" ]] || return 1
+  if awk -v idx="$idx" 'BEGIN{FS="\t"; missing=0} $1 == idx && $8 == "" {missing=1} END{exit missing ? 0 : 1}' "$WORK_DIR/matches.tsv"; then
+    : > "$output"
+    return 1
+  fi
+  return 0
+}
+
+run_compose_with_services(){
+  local dir="$1" file="$2" services_file="$3"
+  local services=() service
+  shift 3
+  if [[ -n "$services_file" && -s "$services_file" ]]; then
+    while IFS= read -r service; do
+      [[ -z "$service" ]] && continue
+      services+=("$service")
+    done < "$services_file"
+  fi
+  (cd "$dir" && run_in_pty docker compose -f "$file" "$@" "${services[@]}")
+}
+
+run_compose_up(){
+  local dir="$1" file="$2" name="$3" services_file="${4:-}"
+  local start end elapsed cids_file
+  UP_WAIT_HANDLED=false
+
+  if [[ "$MODE" != "pause" ]] && compose_up_wait_supported "$dir" "$file"; then
+    say "[$name] docker compose up --wait is supported; using native wait"
+    start="$(date +%s)"
+    if run_compose_with_services "$dir" "$file" "$services_file" up -d --remove-orphans --wait --wait-timeout "$MAX_WAIT"; then
+      end="$(date +%s)"
+      elapsed=$((end - start))
+      plain_log INFO "[$name] Health wait via docker compose up --wait succeeded in ${elapsed}s"
+      UP_WAIT_HANDLED=true
+      return 0
+    fi
+    end="$(date +%s)"
+    elapsed=$((end - start))
+    red "[$name] docker compose up --wait failed after ${elapsed}s"
+    cids_file="$WORK_DIR/health-cids-${name}.txt"
+    read_compose_cids "$dir" "$file" "$cids_file" "$services_file"
+    if ! file_has_nonblank_line "$cids_file"; then
+      plain_log ERROR "[$name] Health blocker: docker compose ps -q returned no containers"
+    fi
+    log_health_details_from_file "$cids_file"
+    return 1
+  fi
+
+  run_compose_with_services "$dir" "$file" "$services_file" up -d --remove-orphans
+}
+
+update_stack(){
+  local idx="$1" dir file name images_file before after changes services_file services_label image old_id new_id old_digest new_digest update_needed=false down_failed=false service_scoped=false
+  dir="$(stack_field "$idx" 2)"
+  file="$(stack_field "$idx" 3)"
+  name="$(stack_field "$idx" 4)"
+  images_file="$WORK_DIR/stack-${idx}.images"
+  before="$WORK_DIR/stack-${idx}.before"
+  after="$WORK_DIR/stack-${idx}.after"
+  changes="$WORK_DIR/stack-${idx}.changes"
+  services_file="$WORK_DIR/stack-${idx}.update-services"
+
+  say "[$name] Checking for updates (mode=$MODE)"
+  if collect_update_services "$idx" "$services_file"; then
+    service_scoped=true
+    services_label="$(service_file_label "$services_file")"
+    say "[$name] Matched compose service(s): $services_label"
+  else
+    yellow "[$name] Could not map every matched image to a compose service; using stack-level pull/recreate"
+  fi
+  write_image_state "$images_file" "$before"
+
+  if ! run_compose_with_services "$dir" "$file" "$services_file" pull; then
+    record_stack_status "$idx" "failure" "pull-failed"
+    return 1
+  fi
+
+  write_image_state "$images_file" "$after"
+  if ! verify_expected_digests "$idx" "$name" "$images_file"; then
+    record_stack_status "$idx" "failure" "expected-digest-not-reached"
+    return 1
+  fi
+
+  updated_images "$before" "$after" "$changes"
+
+  if [[ -s "$changes" ]]; then
+    update_needed=true
+    while IFS=$'\t' read -r image old_id new_id old_digest new_digest; do
+      if [[ -n "$new_digest" ]]; then
+        say "[$name] Image updated: $image -> $new_digest"
+      else
+        say "[$name] Image updated: $image -> $new_id"
+      fi
+    done < "$changes"
+  fi
+
+  if [[ "$update_needed" != "true" ]]; then
+    green "[$name] All images up to date, skipping restart"
+    record_stack_status "$idx" "success" "already-current"
+    return 0
+  fi
+
+  if [[ "$MODE" == "pause" ]]; then
+    yellow "[$name] Mode pause is deprecated; pausing before recreate and unpausing before health check"
+    if ! run_compose_with_services "$dir" "$file" "$services_file" pause; then
+      yellow "[$name] Pause failed; continuing with live recreate"
+    fi
+  elif [[ "$MODE" == "stop" ]]; then
+    if [[ "$service_scoped" == "true" ]]; then
+      yellow "[$name] Stopping affected service(s): $services_label"
+      if ! run_compose_with_services "$dir" "$file" "$services_file" stop; then
+        down_failed=true
+        yellow "[$name] Stop failed; attempting up for recovery, but this stack will not be marked successful"
+      fi
+    else
+      yellow "[$name] Bringing down stack"
+      if ! run_compose_with_services "$dir" "$file" "$services_file" down; then
+        down_failed=true
+        yellow "[$name] Down failed; attempting up for recovery, but this stack will not be marked successful"
+      fi
+    fi
+  fi
+
+  if [[ "$service_scoped" == "true" ]]; then
+    say "[$name] Bringing affected service(s) up: $services_label"
+  else
+    say "[$name] Bringing stack up"
+  fi
+  if ! run_compose_up "$dir" "$file" "$name" "$services_file"; then
+    record_stack_status "$idx" "failure" "up-or-health-failed"
+    return 1
+  fi
+
+  if [[ "$MODE" == "pause" ]]; then
+    yellow "[$name] Unpausing before health check"
+    if ! run_compose_with_services "$dir" "$file" "$services_file" unpause; then
+      record_stack_status "$idx" "failure" "unpause-failed"
+      return 1
+    fi
+  fi
+
+  if [[ "$UP_WAIT_HANDLED" == "true" ]]; then
+    green "[$name] Healthy"
+    if [[ "$down_failed" == "true" ]]; then
+      record_stack_status "$idx" "failure" "down-failed"
+      return 1
+    fi
+    record_stack_status "$idx" "success" "updated"
+    return 0
+  fi
+
+  if wait_for_health "$dir" "$file" "$MAX_WAIT" "$name" "$services_file"; then
+    green "[$name] Healthy"
+    if [[ "$down_failed" == "true" ]]; then
+      record_stack_status "$idx" "failure" "down-failed"
+      return 1
+    fi
+    record_stack_status "$idx" "success" "updated"
+    return 0
+  fi
+
+  record_stack_status "$idx" "failure" "health-failed"
+  return 1
+}
+
+# --- args ---
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --base) DOCKER_BASE="${2:-}"; shift 2;;
+    --file) WUD_FILE="${2:-}"; WUD_FILE_SET=true; shift 2;;
+    --log-dir) LOG_DIR="${2:-}"; LOG_DIR_SET=true; shift 2;;
+    --mode) MODE="${2:-}"; shift 2;;
+    --max-wait) MAX_WAIT="${2:-}"; shift 2;;
+    --dry-run) DRY_RUN=true; shift;;
+    --yes|--no-confirm) ASSUME_YES=true; shift;;
+    --no-color) NO_COLOR=true; shift;;
+    -h|--help) usage; exit 0;;
+    *) die "Unknown argument: $1";;
+  esac
+done
+
+case "$MODE" in pause|stop|live) ;; *) die "--mode must be pause|stop|live";; esac
+[[ "$MAX_WAIT" =~ ^[0-9]+$ ]] || die "--max-wait must be an integer number of seconds"
+
+if [[ "$WUD_FILE_SET" == "false" ]]; then
+  WUD_FILE="${DOCKER_BASE}/wud/out/images.todo"
+fi
+if [[ "$LOG_DIR_SET" == "false" ]]; then
+  LOG_DIR="${DOCKER_BASE}/logs"
+fi
+
+need_cmd docker
+need_cmd awk
+need_cmd sort
+need_cmd sed
+need_cmd perl
+need_cmd find
+need_cmd grep
+need_cmd script
+need_cmd mktemp
+
+mkdir -p "$LOG_DIR"
+LOG_FILE="${LOG_DIR}/update-from-wud-v2-$(date +%Y-%m-%dT%H-%M-%S).log"
+WORK_DIR="$(mktemp -d "${TMPDIR:-/tmp}/wud-update.XXXXXX")"
+: > "$WORK_DIR/stack_status.tsv"
+: > "$WORK_DIR/line_status.tsv"
+
+detect_script_style
+
+say "docker-update-from-wud-v2"
+say "Base    : $DOCKER_BASE"
+say "WUD file: $WUD_FILE"
+say "Log file: $LOG_FILE"
+say "Mode    : $MODE"
+say "Dry-run : $DRY_RUN"
+say "Confirm : $ASSUME_YES"
+say "MaxWait : ${MAX_WAIT}s"
+say "PTY     : $SCRIPT_STYLE script"
+
+[[ -f "$WUD_FILE" ]] || die "List file not found: $WUD_FILE"
+
+parse_wud_file
+if [[ ! -s "$WORK_DIR/targets.tsv" ]]; then
+  say "Nothing to do; list is empty."
+  exit 0
+fi
+
+say "Targets:"
+awk 'BEGIN{FS="\t"} {suffix=($8 != "" ? " sha256=" $8 : ""); print "  line " $1 ": " $3 suffix}' "$WORK_DIR/targets.tsv" |
+  while IFS= read -r line; do say "$line"; done
+
+load_container_images
+discover_stacks
+build_matches
+
+if [[ ! -s "$WORK_DIR/matches.tsv" ]]; then
+  say "No stacks matched the list; nothing to do."
+  exit 0
+fi
+
+print_plan
+
+if [[ "$DRY_RUN" == "true" ]]; then
+  green "Dry-run only; no pull, restart, health wait, or cleanup performed."
+  exit 0
+fi
+
+confirm_before_mutation
+
+while IFS= read -r idx; do
+  [[ -z "$idx" ]] && continue
+  update_stack "$idx" || true
+done < "$WORK_DIR/to-update.txt"
+
+build_line_status
+cleanup_wud_file
+
+if (( FAIL_COUNT > 0 )); then
+  red "Completed with ${FAIL_COUNT} failure(s). See log: $LOG_FILE"
+  exit 1
+fi
+
+green "Done. See log: $LOG_FILE"

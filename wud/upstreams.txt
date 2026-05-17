@@ -1,0 +1,14 @@
+# /wud/upstreams.txt
+# Format: linuxserver/docker-<image>: <Owner>/<Repo>
+# Last updated: 2025-10-21
+
+linuxserver/docker-jellyfin: jellyfin/jellyfin
+linuxserver/docker-calibre: kovidgoyal/calibre
+linuxserver/docker-bazarr: morpheus65535/bazarr
+linuxserver/docker-prowlarr: Prowlarr/Prowlarr
+linuxserver/docker-sonarr: Sonarr/Sonarr
+linuxserver/docker-radarr: Radarr/Radarr
+linuxserver/docker-qbittorrent: qbittorrent/qBittorrent
+linuxserver/docker-speedtest-tracker: alexjustesen/Speedtest-Tracker
+linuxserver/docker-thelounge: thelounge/thelounge
+linuxserver/docker-fail2ban: fail2ban/fail2ban
