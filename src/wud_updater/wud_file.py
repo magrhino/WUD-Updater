@@ -194,6 +194,57 @@ def cleanup_successful_lines(
     return True
 
 
+def restore_failed_lines(
+    path: str | Path,
+    parsed: ParsedWudFile,
+    failed_lines: Iterable[int],
+    *,
+    lock: DirectoryLock | None = None,
+    lock_timeout: int | str = 30,
+    owner: OwnerConfig | None = None,
+    encoding: str = "utf-8",
+) -> bool:
+    """Append failed original WUD entries when pre-run removal took them out."""
+
+    failed = set(failed_lines)
+    if not failed:
+        return False
+
+    needed_order: list[str] = []
+    needed_count: dict[str, int] = {}
+    for line in parsed.lines:
+        if line.line_no in failed:
+            needed_order.append(line.raw)
+            needed_count[line.raw] = needed_count.get(line.raw, 0) + 1
+
+    if not needed_order:
+        return False
+
+    def transform(current_lines: list[str]) -> list[str]:
+        current_count: dict[str, int] = {}
+        for raw in current_lines:
+            current_count[raw] = current_count.get(raw, 0) + 1
+
+        restored_count: dict[str, int] = {}
+        result = list(current_lines)
+        for raw in needed_order:
+            restored = restored_count.get(raw, 0)
+            if current_count.get(raw, 0) + restored < needed_count[raw]:
+                result.append(raw)
+                restored_count[raw] = restored + 1
+        return result
+
+    _rewrite_wud_file(
+        path,
+        transform,
+        lock=lock,
+        lock_timeout=lock_timeout,
+        owner=owner,
+        encoding=encoding,
+    )
+    return True
+
+
 def _split_shell_lines(text: str) -> list[str]:
     if text == "":
         return []

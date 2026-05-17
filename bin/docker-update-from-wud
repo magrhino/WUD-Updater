@@ -2,6 +2,16 @@
 # docker-update-from-wud-v2.sh
 set -Eeuo pipefail
 
+if [[ "${WUD_UPDATER_PYTHON:-}" == "1" ]]; then
+  REPO_ROOT_FOR_PYTHON="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
+  if [[ -n "${PYTHONPATH:-}" ]]; then
+    export PYTHONPATH="${REPO_ROOT_FOR_PYTHON}/src:${PYTHONPATH}"
+  else
+    export PYTHONPATH="${REPO_ROOT_FOR_PYTHON}/src"
+  fi
+  exec "${PYTHON_BIN:-python3}" -m wud_updater.cli update-from-wud "$@"
+fi
+
 ### --- CONFIG ---
 DOCKER_BASE_DEFAULT="$HOME/docker"
 MODE_DEFAULT="stop"     # pause | stop | live
