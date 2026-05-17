@@ -120,6 +120,16 @@ run_script(){
   fi
 }
 
+run_script_with_home_defaults(){
+  local home_dir="$1"
+  shift
+
+  LAST_STATUS=0
+  PATH="$FAKE_BIN:$PATH" HOME="$home_dir" FAKE_DOCKER_ROOT="$FAKE_ROOT" \
+    "$SCRIPT" --log-dir "$LOG_DIR" --max-wait 0 --no-color "$@" \
+    > "$TEST_TMP/output.log" 2>&1 || LAST_STATUS=$?
+}
+
 assert_status(){
   local expected="$1"
   [[ "$LAST_STATUS" == "$expected" ]] || fail "expected status $expected, got $LAST_STATUS"
@@ -185,6 +195,26 @@ test_dry_run_no_mutation(){
   assert_calls_not_contain 'compose -f .* stop'
   assert_calls_not_contain 'compose -f .* down'
   assert_calls_not_contain 'compose -f .* up -d'
+  teardown_case
+}
+
+test_default_base_uses_home_docker(){
+  setup_case
+  local home_dir="$TEST_TMP/home"
+  BASE="$home_dir/docker"
+  WUD_FILE="$BASE/wud/out/images.todo"
+  mkdir -p "$BASE/wud/out" "$LOG_DIR"
+  printf 'repo/app:latest\n' > "$WUD_FILE"
+  make_single_service_stack app "$BASE/app" docker-compose.yml repo/app:latest
+  set_image_state repo/app:latest old sha256:old
+  set_image_after_pull repo/app:latest new sha256:new
+
+  run_script_with_home_defaults "$home_dir" --dry-run
+
+  assert_status 0
+  grep -q "Base    : $BASE" "$TEST_TMP/output.log" || fail "default base did not use HOME/docker"
+  grep -q "WUD file: $WUD_FILE" "$TEST_TMP/output.log" || fail "default WUD file did not use HOME/docker"
+  assert_calls_not_contain 'compose -f .* pull'
   teardown_case
 }
 
@@ -463,6 +493,7 @@ run_test(){
 
 main(){
   run_test test_dry_run_no_mutation
+  run_test test_default_base_uses_home_docker
   run_test test_confirm_required_blocks_mutation
   run_test test_one_line_two_stacks_one_fails_keeps_line
   run_test test_expected_sha_mismatch_prevents_cleanup

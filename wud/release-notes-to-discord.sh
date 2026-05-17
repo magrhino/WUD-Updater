@@ -92,7 +92,7 @@ PAYLOAD="$(jq -n \
     fields: [
       {name:"Breaking", value:$breaking, inline:true},
       {name:"Image", value:$image, inline:true},
-      {name:"Current→New", value:(($cur|length)>0 and ($tag|length)>0) ? ($cur + " → " + $tag) : ($tag), inline:true},
+      {name:"Current→New", value:(if (($cur|length)>0 and ($tag|length)>0) then ($cur + " → " + $tag) else ($tag) end), inline:true},
       {name:"Source", value:$src, inline:false}
     ],
     footer: { text: $footer }

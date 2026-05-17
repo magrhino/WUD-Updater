@@ -28,6 +28,7 @@ run bash -n \
   wud/release-notes-to-discord.sh \
   tests/run-all.sh \
   tests/test-docker-update-from-wud.sh \
+  tests/test-release-notes-to-discord.sh \
   tests/test-wud-append-updates.sh \
   tests/test-install.sh \
   tests/test-updates-wrapper.sh \
@@ -48,6 +49,7 @@ run shellcheck \
   wud/release-notes-to-discord.sh \
   tests/run-all.sh \
   tests/test-docker-update-from-wud.sh \
+  tests/test-release-notes-to-discord.sh \
   tests/test-wud-append-updates.sh \
   tests/test-install.sh \
   tests/test-updates-wrapper.sh \
