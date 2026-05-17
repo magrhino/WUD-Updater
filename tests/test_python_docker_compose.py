@@ -6,7 +6,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from wud_updater.command import CommandRunner, display_command
+from wud_updater.command import CommandError, CommandRunner, display_command
 from wud_updater.compose import ComposeCli, ServiceImage
 from wud_updater.docker_cli import ContainerImage, DockerCli
 
@@ -238,6 +238,43 @@ class ComposeCliTests(FakeDockerCase):
             mode="stop",
             use_native_wait=False,
         )
+
+        self.assertEqual(
+            self.call_commands(),
+            [
+                "compose -f docker-compose.yml pull ",
+                "compose -f docker-compose.yml down ",
+                "compose -f docker-compose.yml up -d --remove-orphans",
+            ],
+        )
+
+    def test_pull_and_recreate_rejects_invalid_mode_before_pull(self) -> None:
+        stack = self.make_stack("stack", [("app", "repo/app:latest", "cid-app")])
+
+        with self.assertRaisesRegex(ValueError, "mode must be pause, stop, or live"):
+            self.compose.pull_and_recreate(
+                stack,
+                "docker-compose.yml",
+                mode="invalid",
+            )
+
+        self.assertEqual(self.call_commands(), [])
+
+    def test_pull_and_recreate_attempts_up_after_down_failure(self) -> None:
+        stack = self.make_stack("stack", [("app", "repo/app:latest", "cid-app")])
+        self.set_image_after_pull("repo/app:latest", "new-app", "sha256:new-app")
+        (self.fake_root / "stacks" / "stack" / "down_fail").write_text(
+            "1",
+            encoding="utf-8",
+        )
+
+        with self.assertRaises(CommandError):
+            self.compose.pull_and_recreate(
+                stack,
+                "docker-compose.yml",
+                mode="stop",
+                use_native_wait=False,
+            )
 
         self.assertEqual(
             self.call_commands(),
