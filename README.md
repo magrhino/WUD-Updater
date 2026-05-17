@@ -1,17 +1,23 @@
 # WUD-Updater
 
-Updating Docker images using WUD's notification system, with host-side update
-helpers and container scripts for a TrueNAS Docker host.
+Small shell helpers for applying Docker image updates reported by What's Up Docker (WUD), with optional TrueNAS status checks and Discord release-note notifications.
+
+## What It Does
+
+- WUD calls `/wud/on-update.sh` when an image update is available.
+- The WUD-side scripts append pending image targets to `/out/images.todo`.
+- The host command `updates` shows pending Docker updates, TrueNAS update status, and active alerts.
+- When approved, `docker-update-from-wud` pulls matching Docker Compose services or stacks, recreates them, waits for health, and removes successfully processed lines from the WUD file.
 
 ## Layout
 
 ```text
 bin/
-  docker-update-from-wud
   updates
+  docker-update-from-wud
 wud/
-  append-updates.sh
   on-update.sh
+  append-updates.sh
   tag-manager.sh
   lsio-release-embed.sh
   release-notes-to-discord.sh
@@ -19,38 +25,27 @@ wud/
 install.sh
 ```
 
-`bin/updates` is the command to call from your shell. It displays pending WUD
-Docker updates, TrueNAS system update status, and active TrueNAS alerts. When
-Docker updates are pending it prompts before running `bin/docker-update-from-wud`.
+## Install
 
-`wud/` is the container-facing script directory. Mount it into WUD at `/wud`.
-
-## Install On TrueNAS
-
-Clone the repository to a persistent host path:
+Clone the repo, then run:
 
 ```bash
-git clone git@github.com:magrhino/WUD-Updater.git ~/src/WUD-Updater
-~/src/WUD-Updater/install.sh
+./install.sh
 ```
 
-Make sure `~/bin` is on your `PATH`:
+The installer creates symlinks for `updates` and `docker-update-from-wud`, makes scripts executable, and links the `wud/` directory for the WUD container. It refuses to replace existing non-symlink targets.
 
-```bash
-export PATH="$HOME/bin:$PATH"
-```
-
-Then your shell can call:
+Make sure the install bin directory is on your `PATH`, then run:
 
 ```bash
 updates
 updates --dry-run
-updates -y
+updates --yes
 ```
 
-## WUD Compose Mounts
+## WUD Mounts
 
-Use the symlink created by `install.sh`:
+Mount the installed WUD scripts and output directory into the WUD container:
 
 ```yaml
 volumes:
@@ -58,17 +53,17 @@ volumes:
   - ${HOME}/docker/wud/out:/out
 ```
 
-The scripts inside the WUD container continue to use `/wud/...` and `/out/...`.
-
-## Optional Host Config
-
-You can override defaults with environment variables or with:
+Configure WUD to call:
 
 ```text
-~/.config/wud-updater/env
+/wud/on-update.sh
 ```
 
-Supported values:
+## Configuration
+
+`updates` reads optional overrides from the environment or from `$HOME/.config/wud-updater/env`.
+
+Common values:
 
 ```bash
 DOCKER_BASE="$HOME/docker"
@@ -77,13 +72,22 @@ WUD_UPDATE_MODE="stop"
 WUD_MAX_WAIT="180"
 ```
 
-Secrets such as Discord webhooks and GitHub tokens should stay out of this repo.
-Pass them through your compose environment or another host-local secret store.
+For release-note notifications, provide webhook and GitHub token values through the WUD container environment or another host-local secret store. Do not put secrets in this repository.
 
-## Updating
+## Requirements
+
+- Bash for host-side scripts.
+- Docker with the Compose plugin on the host.
+- Standard shell tools used by the updater: `awk`, `sort`, `sed`, `perl`, `find`, `grep`, `script`, and `mktemp`.
+- `jq` and `midclt` are optional for TrueNAS status checks in `updates`.
+- `curl` and `jq` are required for release-note helper scripts.
+
+## Maintenance
+
+Update the checkout, rerun the installer, and restart the WUD container so it sees the latest mounted scripts:
 
 ```bash
-git -C ~/src/WUD-Updater pull --ff-only
-~/src/WUD-Updater/install.sh
-docker compose -f ~/docker/wud/docker-compose.yml restart
+git pull --ff-only
+./install.sh
+docker compose -f "$HOME/docker/wud/docker-compose.yml" restart
 ```
