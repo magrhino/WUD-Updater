@@ -17,7 +17,16 @@ bin/
   docker-update-from-wud
 src/wud_updater/
   cli.py
+  command.py
+  compose.py
   config.py
+  docker_cli.py
+  file_ops.py
+  images.py
+  line_specs.py
+  locks.py
+  updater.py
+  wud_file.py
 wud/
   on-update.sh
   append-updates.sh
@@ -30,9 +39,20 @@ entrypoint.sh
 docker-compose.example.yml
 install.sh
 pyproject.toml
+CHANGELOG.md
 ```
 
-The Python package is a placeholder for a future refactor. The existing shell commands in `bin/` remain authoritative; the `wud-updater` console script only reports that the Python implementation is not wired yet.
+## Python Refactor Status
+
+The existing shell commands in `bin/` remain the production entrypoints. The Python package is an in-progress refactor with a tested, opt-in updater path:
+
+```bash
+wud-updater update-from-wud --dry-run
+```
+
+`wud-updater update-from-wud` accepts the familiar updater flags such as `--base`, `--file`, `--mode`, `--dry-run`, `--yes`, `--allow-tag-updates`, `--only-lines`, and `--remove-lines-before-run`. It is intended for parity testing and staged migration work until the refactor is explicitly promoted.
+
+`wud-updater updates` is still a placeholder and refuses mutating runs. Continue using `updates` and `docker-update-from-wud` from `bin/` for normal host operations.
 
 ## Install
 
