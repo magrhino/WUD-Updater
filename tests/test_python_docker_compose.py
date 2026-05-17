@@ -166,6 +166,17 @@ class ComposeCliTests(FakeDockerCase):
             "services:\n  app:\n    image: repo/deep:latest\n",
             encoding="utf-8",
         )
+        outside = self.root / "outside"
+        outside.mkdir()
+        (outside / "docker-compose.yml").write_text(
+            "services:\n  app:\n    image: repo/symlinked:latest\n",
+            encoding="utf-8",
+        )
+        symlinked = self.base / "symlinked"
+        symlinked.mkdir()
+        (symlinked / "docker-compose.yml").symlink_to(
+            outside / "docker-compose.yml"
+        )
 
         stacks = self.compose.discover_stacks(self.base)
 
@@ -288,6 +299,32 @@ class ComposeCliTests(FakeDockerCase):
     def test_pull_and_recreate_pause_mode_does_not_use_native_wait(self) -> None:
         stack = self.make_stack("stack", [("app", "repo/app:latest", "cid-app")])
         self.set_image_after_pull("repo/app:latest", "new-app", "sha256:new-app")
+
+        self.compose.pull_and_recreate(
+            stack,
+            "docker-compose.yml",
+            mode="pause",
+            services=["app"],
+            use_native_wait=True,
+        )
+
+        self.assertEqual(
+            self.call_commands(),
+            [
+                "compose -f docker-compose.yml pull app",
+                "compose -f docker-compose.yml pause app",
+                "compose -f docker-compose.yml up -d --remove-orphans app",
+                "compose -f docker-compose.yml unpause app",
+            ],
+        )
+
+    def test_pull_and_recreate_pause_failure_continues_like_shell(self) -> None:
+        stack = self.make_stack("stack", [("app", "repo/app:latest", "cid-app")])
+        self.set_image_after_pull("repo/app:latest", "new-app", "sha256:new-app")
+        (self.fake_root / "stacks" / "stack" / "pause_fail").write_text(
+            "1",
+            encoding="utf-8",
+        )
 
         self.compose.pull_and_recreate(
             stack,
