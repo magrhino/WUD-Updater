@@ -35,7 +35,6 @@ todo_file_lines=()
 wud_lock_dir=""
 wud_lock_held=0
 wud_lock_via_sudo=0
-wud_lock_release_marker=""
 updater_rc=0
 
 usage() {
@@ -101,22 +100,17 @@ wud_lock_timeout_seconds() {
 }
 
 release_wud_lock() {
-  if [ -n "$wud_lock_release_marker" ] && grep -qx 'released' "$wud_lock_release_marker" 2>/dev/null; then
-    wud_lock_held=0
-    rm -f "$wud_lock_release_marker"
-    wud_lock_release_marker=""
-  fi
   [ "$wud_lock_held" -eq 1 ] || return 0
+  if [ ! -d "$wud_lock_dir" ]; then
+    wud_lock_held=0
+    return 0
+  fi
   if [ "$wud_lock_via_sudo" -eq 1 ]; then
     sudo rmdir "$wud_lock_dir" 2>/dev/null || true
   else
     rmdir "$wud_lock_dir" 2>/dev/null || true
   fi
   wud_lock_held=0
-  if [ -n "$wud_lock_release_marker" ]; then
-    rm -f "$wud_lock_release_marker"
-    wud_lock_release_marker=""
-  fi
 }
 
 cleanup() {
@@ -186,6 +180,9 @@ display_todo_entries() {
   while IFS=$'\t' read -r line_no line; do
     [ -n "$line_no" ] || continue
     display_no=$((display_no + 1))
+    if [[ "$line" =~ ^(.*[^[:space:]])[[:space:]]+sha256=[^[:space:]]+$ ]]; then
+      line="${BASH_REMATCH[1]}"
+    fi
     printf '%s\t%s\n' "$display_no" "$line"
   done <<< "$todo_entries" | column -t
 }
@@ -431,8 +428,7 @@ run_updater() {
   fi
   [ -n "$lock_timeout" ] && updater_env+=("WUD_LOCK_TIMEOUT=$lock_timeout")
   if [ "$wud_lock_held" -eq 1 ]; then
-    wud_lock_release_marker="$(mktemp "${TMPDIR:-/tmp}/wud-lock-release.XXXXXX")" || return 1
-    updater_env+=("WUD_LOCK_HELD_BY_PARENT=1" "WUD_LOCK_RELEASE_MARKER=$wud_lock_release_marker")
+    updater_env+=("WUD_LOCK_HELD_BY_PARENT=1")
   fi
 
   if ((${#updater_env[@]})); then

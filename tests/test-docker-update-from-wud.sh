@@ -331,19 +331,16 @@ HOOK
 
 test_parent_wud_lock_is_reused_and_released(){
   setup_case
-  local marker="$TEST_TMP/lock-release-marker"
   printf 'repo/app:one\nrepo/app:two\nrepo/app:three\n' > "$WUD_FILE"
   make_single_service_stack two "$BASE/two" docker-compose.yml repo/app:two cid-two
   set_image_state repo/app:two old-two sha256:old-two
   set_image_after_pull repo/app:two new-two sha256:new-two
   mkdir "$WUD_FILE.lock"
-  : > "$marker"
 
-  run_script WUD_LOCK_HELD_BY_PARENT=1 WUD_LOCK_RELEASE_MARKER="$marker" WUD_LOCK_TIMEOUT=0 --yes --only-lines 2 --remove-lines-before-run 1,3
+  run_script WUD_LOCK_HELD_BY_PARENT=1 WUD_LOCK_TIMEOUT=0 --yes --only-lines 2 --remove-lines-before-run 1,3
 
   assert_status 0
   assert_file_equals "$WUD_FILE" ''
-  assert_file_equals "$marker" 'released'
   [[ ! -d "$WUD_FILE.lock" ]] || fail "parent WUD lock was not released"
   teardown_case
 }
@@ -381,7 +378,7 @@ test_one_line_two_stacks_one_fails_keeps_line(){
   teardown_case
 }
 
-test_expected_sha_mismatch_prevents_cleanup(){
+test_legacy_sha_suffix_does_not_block_cleanup(){
   setup_case
   printf 'repo/app:latest sha256=good\n' > "$WUD_FILE"
   make_single_service_stack app "$BASE/app" docker-compose.yml repo/app:latest
@@ -390,13 +387,28 @@ test_expected_sha_mismatch_prevents_cleanup(){
 
   run_script --yes
 
+  assert_status 0
+  assert_file_equals "$WUD_FILE" ''
+  assert_calls_contain 'compose -f docker-compose.yml up -d .* app'
+  teardown_case
+}
+
+test_pinned_digest_mismatch_prevents_cleanup(){
+  setup_case
+  printf 'repo/app@sha256:good\n' > "$WUD_FILE"
+  make_single_service_stack app "$BASE/app" docker-compose.yml repo/app:latest
+  set_image_state repo/app:latest old sha256:old
+  set_image_after_pull repo/app:latest new sha256:bad
+
+  run_script --yes
+
   assert_status 1
-  assert_file_equals "$WUD_FILE" 'repo/app:latest sha256=good'
+  assert_file_equals "$WUD_FILE" 'repo/app@sha256:good'
   assert_calls_not_contain 'compose -f .* up -d'
   teardown_case
 }
 
-test_expected_sha_match_allows_cleanup(){
+test_pinned_digest_match_allows_cleanup(){
   setup_case
   printf 'repo/app@sha256:good\n' > "$WUD_FILE"
   make_single_service_stack app "$BASE/app" docker-compose.yml repo/app:latest
@@ -630,8 +642,9 @@ main(){
   run_test test_parent_wud_lock_is_reused_and_released
   run_test test_invalid_line_spec_fails_before_docker_calls
   run_test test_one_line_two_stacks_one_fails_keeps_line
-  run_test test_expected_sha_mismatch_prevents_cleanup
-  run_test test_expected_sha_match_allows_cleanup
+  run_test test_legacy_sha_suffix_does_not_block_cleanup
+  run_test test_pinned_digest_mismatch_prevents_cleanup
+  run_test test_pinned_digest_match_allows_cleanup
   run_test test_cleanup_removes_successful_raw_line_not_current_line_number
   run_test test_cleanup_preserves_wud_file_owner_and_mode
   run_test test_out_owner_config_accepts_out_guid_for_logs_and_cleanup

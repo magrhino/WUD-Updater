@@ -79,10 +79,10 @@ test_update_gate_does_not_create_file(){
   teardown_case
 }
 
-test_image_tag_and_result_digest_are_written(){
+test_image_tag_ignores_result_digest(){
   setup_case
   run_script update_available=true image_name=repo/app image_tag_value=1.2 result_digest="$(hex_digest)"
-  assert_file_equals "repo/app:1.2 sha256=sha256:$(hex_digest)"
+  assert_file_equals "repo/app:1.2"
   teardown_case
 }
 
@@ -96,7 +96,7 @@ test_container_name_fallback(){
 test_digest_update_kind_fallback(){
   setup_case
   run_script update_available=true image_name=repo/app image_tag_value=latest update_kind_kind=digest update_kind_remote_value="repo/app@sha256:$(hex_digest)"
-  assert_file_equals "repo/app:latest sha256=sha256:$(hex_digest)"
+  assert_file_equals "repo/app:latest"
   teardown_case
 }
 
@@ -112,7 +112,7 @@ test_dedupe_replaces_existing_image_line(){
   mkdir -p "$(dirname "$OUT_FILE")"
   printf 'repo/other:latest\nrepo/app:latest sha256=sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\n' > "$OUT_FILE"
   run_script update_available=true image_name=repo/app image_tag_value=latest result_digest="$(hex_digest)"
-  assert_file_equals "repo/app:latest sha256=sha256:$(hex_digest)
+  assert_file_equals "repo/app:latest
 repo/other:latest"
   teardown_case
 }
@@ -277,7 +277,7 @@ run_test(){
 
 main(){
   run_test test_update_gate_does_not_create_file
-  run_test test_image_tag_and_result_digest_are_written
+  run_test test_image_tag_ignores_result_digest
   run_test test_container_name_fallback
   run_test test_digest_update_kind_fallback
   run_test test_invalid_digest_is_omitted
