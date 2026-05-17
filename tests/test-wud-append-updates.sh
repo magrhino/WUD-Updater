@@ -50,6 +50,24 @@ assert_no_temp_files(){
   [[ -z "$(find "$TEST_TMP" -maxdepth 1 -name '.images.todo.*' -print)" ]] || fail "unique temp file was left behind"
 }
 
+stat_owner_group(){
+  local file="$1"
+  if stat -c '%u:%g' "$file" >/dev/null 2>&1; then
+    stat -c '%u:%g' "$file"
+  else
+    stat -f '%u:%g' "$file"
+  fi
+}
+
+stat_mode(){
+  local file="$1"
+  if stat -c '%a' "$file" >/dev/null 2>&1; then
+    stat -c '%a' "$file"
+  else
+    stat -f '%Lp' "$file"
+  fi
+}
+
 hex_digest(){
   printf 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
 }
@@ -99,6 +117,90 @@ repo/other:latest"
   teardown_case
 }
 
+test_existing_file_mode_and_owner_are_preserved(){
+  setup_case
+  mkdir -p "$(dirname "$OUT_FILE")"
+  printf 'repo/old:latest\n' > "$OUT_FILE"
+  chmod 660 "$OUT_FILE"
+  local expected_owner expected_mode
+  expected_owner="$(stat_owner_group "$OUT_FILE")"
+  expected_mode="$(stat_mode "$OUT_FILE")"
+
+  run_script update_available=true image_name=repo/app image_tag_value=latest
+
+  assert_status 0
+  assert_file_equals "repo/app:latest
+repo/old:latest"
+  [[ "$(stat_owner_group "$OUT_FILE")" == "$expected_owner" ]] || fail "owner was not preserved"
+  [[ "$(stat_mode "$OUT_FILE")" == "$expected_mode" ]] || fail "mode was not preserved"
+  teardown_case
+}
+
+test_existing_broader_mode_is_preserved(){
+  setup_case
+  mkdir -p "$(dirname "$OUT_FILE")"
+  printf 'repo/old:latest\n' > "$OUT_FILE"
+  chmod 664 "$OUT_FILE"
+
+  run_script update_available=true image_name=repo/app image_tag_value=latest
+
+  assert_status 0
+  [[ "$(stat_mode "$OUT_FILE")" == "664" ]] || fail "broader existing mode was not preserved"
+  teardown_case
+}
+
+test_new_file_defaults_to_group_writable_mode(){
+  setup_case
+  run_script update_available=true image_name=repo/app image_tag_value=latest
+
+  assert_status 0
+  assert_file_equals 'repo/app:latest'
+  [[ "$(stat_mode "$OUT_FILE")" == "660" ]] || fail "new file was not created with 660 mode"
+  teardown_case
+}
+
+test_owner_config_is_applied_to_rewritten_file(){
+  setup_case
+  local uid gid
+  uid="$(id -u)"
+  gid="$(id -g)"
+
+  run_script OUT_UID="$uid" OUT_GID="$gid" update_available=true image_name=repo/app image_tag_value=latest
+
+  assert_status 0
+  assert_file_equals 'repo/app:latest'
+  [[ "$(stat_owner_group "$OUT_FILE")" == "$uid:$gid" ]] || fail "owner config was not applied"
+  [[ "$(stat_mode "$OUT_FILE")" == "660" ]] || fail "owner-configured new file did not use 660 mode"
+  teardown_case
+}
+
+test_out_guid_alias_is_applied_to_rewritten_file(){
+  setup_case
+  local uid gid
+  uid="$(id -u)"
+  gid="$(id -g)"
+
+  run_script OUT_UID="$uid" OUT_GUID="$gid" update_available=true image_name=repo/app image_tag_value=latest
+
+  assert_status 0
+  [[ "$(stat_owner_group "$OUT_FILE")" == "$uid:$gid" ]] || fail "OUT_GUID alias was not applied"
+  teardown_case
+}
+
+test_owner_config_requires_uid_and_group_before_replace(){
+  setup_case
+  mkdir -p "$(dirname "$OUT_FILE")"
+  printf 'repo/old:latest\n' > "$OUT_FILE"
+
+  run_script OUT_UID="$(id -u)" update_available=true image_name=repo/app image_tag_value=latest
+
+  assert_status 1
+  assert_file_equals 'repo/old:latest'
+  grep -q "OUT_UID and OUT_GID/OUT_GUID must be set together" "$TEST_TMP/output.log" || fail "missing owner config validation error"
+  assert_no_temp_files
+  teardown_case
+}
+
 test_lock_removed_after_success(){
   setup_case
   run_script update_available=true image_name=repo/app image_tag_value=latest
@@ -138,6 +240,12 @@ main(){
   run_test test_digest_update_kind_fallback
   run_test test_invalid_digest_is_omitted
   run_test test_dedupe_replaces_existing_image_line
+  run_test test_existing_file_mode_and_owner_are_preserved
+  run_test test_existing_broader_mode_is_preserved
+  run_test test_new_file_defaults_to_group_writable_mode
+  run_test test_owner_config_is_applied_to_rewritten_file
+  run_test test_out_guid_alias_is_applied_to_rewritten_file
+  run_test test_owner_config_requires_uid_and_group_before_replace
   run_test test_lock_removed_after_success
   run_test test_lock_timeout_leaves_file_unchanged
 }

@@ -80,7 +80,9 @@ OUT_UID="1000"
 OUT_GID="1000"
 ```
 
-`OUT_UID` and `OUT_GID` are optional. When set, `docker-update-from-wud` leaves rewritten WUD todo files and updater logs owned by that UID/GID, which is useful when running Docker commands through `sudo`. `OUT_GUID` is accepted as an alias for `OUT_GID`.
+`OUT_UID` and `OUT_GID` are optional. When host-side updates run through `sudo`, set them to the WUD container user and group, usually `1000:1000`, so rewritten todo files and updater logs remain writable outside the root process. `OUT_GUID` is accepted as an alias for `OUT_GID`.
+
+The WUD todo file should be owned by the WUD user/group and group-writable. WUD-side appends preserve an existing file's owner and mode; when creating the todo file for the first time, they default to mode `0660`.
 
 `WUD_LOCK_TIMEOUT` controls how long WUD-side appends and host-side cleanup wait for the shared todo-file lock. The default is `30` seconds; if a stale `${WUD_OUT_FILE}.lock` directory remains, remove it manually after confirming no update script is running.
 
