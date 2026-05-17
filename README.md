@@ -22,6 +22,9 @@ wud/
   lsio-release-embed.sh
   release-notes-to-discord.sh
   upstreams.txt
+Dockerfile
+entrypoint.sh
+docker-compose.example.yml
 install.sh
 ```
 
@@ -47,6 +50,50 @@ updates --yes --allow-tag-updates
 When pending Docker updates exist, `updates` prompts for `a` to run all entries, `s` to select numbered entries, `x` to exclude numbered entries, or `n` to skip. Selection prompts accept comma-separated numbers and ranges such as `1,3-5`. Unselected entries stay pending unless you choose to remove them before running the selected updates.
 
 Digest updates preserve the existing compose image tag and only pull/recreate matching services. Tag updates are recorded as `image:old tag=new`; they stay pending unless you pass `--allow-tag-updates`, which rewrites simple literal `image:` entries, validates health, and rolls back the compose file if the new tag fails.
+
+## Docker Image Usage
+
+Build the deployable helper image:
+
+```bash
+docker build -t wud-updater:local .
+```
+
+The image uses `python:3.14-slim-bookworm`, installs the Docker CLI with the Compose plugin, copies `bin/` and `wud/` into `/app`, and starts through `tini`. Its default command is non-mutating:
+
+```bash
+docker compose -f docker-compose.example.yml run --rm wud-updater
+```
+
+That runs:
+
+```bash
+updates --dry-run
+```
+
+To apply all pending entries through the same wrapper behavior:
+
+```bash
+docker compose -f docker-compose.example.yml run --rm wud-updater updates --yes
+```
+
+To call the updater directly from the container:
+
+```bash
+docker compose -f docker-compose.example.yml run --rm wud-updater docker-update-from-wud --yes
+```
+
+For tag updates, keep the explicit opt-in:
+
+```bash
+docker compose -f docker-compose.example.yml run --rm wud-updater docker-update-from-wud --yes --allow-tag-updates
+```
+
+The example compose file mounts the Docker socket, the host Docker stack directory at `/host/docker`, and the WUD output directory at `/out`, with `DOCKER_BASE=/host/docker` and `WUD_OUT_FILE=/out/images.todo`.
+
+Mounting `/var/run/docker.sock` gives the container root-equivalent control over the host Docker daemon. Only run trusted images with that socket, and keep the stack and output mounts scoped to the directories the updater needs.
+
+The WUD callback scripts remain shell scripts and should still be mounted into the existing WUD container separately. The helper image includes `/app/wud` for packaging and debugging; it does not replace WUD's `/wud` script mount.
 
 ## WUD Mounts
 
@@ -97,7 +144,7 @@ For release-note notifications, provide webhook and GitHub token values through 
 
 - Bash for host-side scripts.
 - Docker with the Compose plugin on the host.
-- Standard shell tools used by the updater: `awk`, `sort`, `sed`, `perl`, `find`, `grep`, `cut`, `script`, and `mktemp`.
+- Standard shell tools used by the updater: `awk`, `sort`, `sed`, `perl`, `find`, `grep`, `cut`, `column`, `script`, and `mktemp`.
 - `jq` and `midclt` are optional for TrueNAS status checks in `updates`.
 - `curl` and `jq` are required for release-note helper scripts.
 

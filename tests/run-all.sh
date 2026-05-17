@@ -20,6 +20,7 @@ EOF
 fi
 
 run bash -n \
+  entrypoint.sh \
   install.sh \
   bin/updates \
   bin/docker-update-from-wud \
@@ -28,6 +29,7 @@ run bash -n \
   wud/release-notes-to-discord.sh \
   tests/run-all.sh \
   tests/test-docker-update-from-wud.sh \
+  tests/test-entrypoint.sh \
   tests/test-release-notes-to-discord.sh \
   tests/test-wud-append-updates.sh \
   tests/test-install.sh \
@@ -39,6 +41,7 @@ run sh -n \
   wud/append-updates.sh
 
 run shellcheck \
+  entrypoint.sh \
   install.sh \
   bin/updates \
   bin/docker-update-from-wud \
@@ -49,6 +52,7 @@ run shellcheck \
   wud/release-notes-to-discord.sh \
   tests/run-all.sh \
   tests/test-docker-update-from-wud.sh \
+  tests/test-entrypoint.sh \
   tests/test-release-notes-to-discord.sh \
   tests/test-wud-append-updates.sh \
   tests/test-install.sh \
