@@ -25,6 +25,7 @@ out_guid="${OUT_GUID:-}"
 if [ -z "$out_gid" ] && [ -n "$out_guid" ]; then
   out_gid="$out_guid"
 fi
+lock_timeout="${WUD_LOCK_TIMEOUT:-}"
 auto_run=0
 dry_run=0
 
@@ -82,15 +83,16 @@ fi
 
 run_updater() {
   local rc
-  local owner_env=()
+  local updater_env=()
   if [ -n "$out_uid" ] || [ -n "$out_gid" ]; then
-    [ -n "$out_uid" ] && owner_env+=("OUT_UID=$out_uid")
-    [ -n "$out_gid" ] && owner_env+=("OUT_GID=$out_gid")
+    [ -n "$out_uid" ] && updater_env+=("OUT_UID=$out_uid")
+    [ -n "$out_gid" ] && updater_env+=("OUT_GID=$out_gid")
   fi
+  [ -n "$lock_timeout" ] && updater_env+=("WUD_LOCK_TIMEOUT=$lock_timeout")
 
-  if ((${#owner_env[@]})); then
-    echo "🚀 Running Docker updates via: sudo env ${owner_env[*]} \"$updater\" --base \"$docker_base\" --file \"$wud_file\" --mode \"$update_mode\" --max-wait \"$max_wait\" --yes"
-    sudo env "${owner_env[@]}" "$updater" --base "$docker_base" --file "$wud_file" --mode "$update_mode" --max-wait "$max_wait" --yes
+  if ((${#updater_env[@]})); then
+    echo "🚀 Running Docker updates via: sudo env ${updater_env[*]} \"$updater\" --base \"$docker_base\" --file \"$wud_file\" --mode \"$update_mode\" --max-wait \"$max_wait\" --yes"
+    sudo env "${updater_env[@]}" "$updater" --base "$docker_base" --file "$wud_file" --mode "$update_mode" --max-wait "$max_wait" --yes
   else
     echo "🚀 Running Docker updates via: sudo \"$updater\" --base \"$docker_base\" --file \"$wud_file\" --mode \"$update_mode\" --max-wait \"$max_wait\" --yes"
     sudo "$updater" --base "$docker_base" --file "$wud_file" --mode "$update_mode" --max-wait "$max_wait" --yes

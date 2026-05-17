@@ -14,6 +14,7 @@ LOG_DIR=""
 OUT_UID="${OUT_UID:-}"
 OUT_GID="${OUT_GID:-}"
 OUT_GUID="${OUT_GUID:-}"
+WUD_LOCK_TIMEOUT="${WUD_LOCK_TIMEOUT:-30}"
 MODE="$MODE_DEFAULT"
 MAX_WAIT="$MAX_WAIT_DEFAULT"
 DRY_RUN=false
@@ -23,6 +24,8 @@ WUD_FILE_SET=false
 LOG_DIR_SET=false
 LOG_FILE=""
 WORK_DIR=""
+WUD_LOCK_DIR=""
+WUD_LOCK_HELD=false
 SCRIPT_STYLE=""
 FAIL_COUNT=0
 UP_WAIT_HANDLED=false
@@ -36,6 +39,7 @@ Usage: $0 [--base PATH] [--file PATH] [--log-dir PATH] [--mode pause|stop|live] 
 Environment:
   OUT_UID and OUT_GID set the owner for logs and rewritten WUD files.
   OUT_GUID is accepted as an alias for OUT_GID.
+  WUD_LOCK_TIMEOUT controls WUD todo file lock wait time in seconds.
 
 Safe examples:
   Dry-run plan only:
@@ -80,10 +84,34 @@ need_cmd(){
   command -v "$1" >/dev/null 2>&1 || die "Missing required command: $1"
 }
 
+release_wud_lock(){
+  if [[ "$WUD_LOCK_HELD" == "true" ]]; then
+    rmdir "$WUD_LOCK_DIR" 2>/dev/null || true
+    WUD_LOCK_HELD=false
+  fi
+}
+
 cleanup(){
+  release_wud_lock
   [[ -n "${WORK_DIR:-}" && -d "$WORK_DIR" ]] && rm -rf "$WORK_DIR"
 }
 trap cleanup EXIT
+
+acquire_wud_lock(){
+  local waited=0
+  [[ "$WUD_LOCK_TIMEOUT" =~ ^[0-9]+$ ]] || die "WUD_LOCK_TIMEOUT must be an integer number of seconds"
+  WUD_LOCK_DIR="${WUD_FILE}.lock"
+
+  while ! mkdir "$WUD_LOCK_DIR" 2>/dev/null; do
+    if (( waited >= WUD_LOCK_TIMEOUT )); then
+      die "Timed out waiting for WUD file lock: $WUD_LOCK_DIR"
+    fi
+    sleep 1
+    waited=$((waited + 1))
+  done
+
+  WUD_LOCK_HELD=true
+}
 
 trim(){
   local value="$1"
@@ -833,16 +861,19 @@ build_line_status(){
 }
 
 cleanup_wud_file(){
-  local tmp wud_dir
-  awk 'BEGIN{FS="\t"} $2 == "success" {print $1}' "$WORK_DIR/line_status.tsv" | sort -n -u > "$WORK_DIR/success-lines.sorted"
-  if [[ ! -s "$WORK_DIR/success-lines.sorted" ]]; then
+  local tmp wud_dir success_raw_lines
+  success_raw_lines="$WORK_DIR/success-raw-lines.txt"
+  awk 'BEGIN{FS="\t"} NR==FNR {if ($2 == "success") success[$1]=1; next} ($1 in success) {print $2}' \
+    "$WORK_DIR/line_status.tsv" "$WORK_DIR/targets.tsv" > "$success_raw_lines"
+  if [[ ! -s "$success_raw_lines" ]]; then
     yellow "No successful WUD entries to clean up."
     return 0
   fi
 
   wud_dir="$(dirname "$WUD_FILE")"
+  acquire_wud_lock
   tmp="$(mktemp "${wud_dir}/.wud-left.XXXXXX")"
-  if ! awk 'NR==FNR {drop[$1]=1; next} !(FNR in drop)' "$WORK_DIR/success-lines.sorted" "$WUD_FILE" > "$tmp"; then
+  if ! awk 'NR==FNR {drop[$0]=1; next} !($0 in drop)' "$success_raw_lines" "$WUD_FILE" > "$tmp"; then
     rm -f "$tmp"
     die "Failed to rewrite WUD file: $WUD_FILE"
   fi
@@ -854,6 +885,7 @@ cleanup_wud_file(){
     rm -f "$tmp"
     die "Failed to replace WUD file: $WUD_FILE"
   fi
+  release_wud_lock
   green "Cleaned successfully processed entries from $WUD_FILE"
 }
 

@@ -253,6 +253,27 @@ test_expected_sha_match_allows_cleanup(){
   teardown_case
 }
 
+test_cleanup_removes_successful_raw_line_not_current_line_number(){
+  setup_case
+  printf 'repo/b:latest\n' > "$WUD_FILE"
+  make_single_service_stack app "$BASE/app" docker-compose.yml repo/b:latest
+  set_image_state repo/b:latest old sha256:old
+  set_image_after_pull repo/b:latest new sha256:new
+  cat > "$FAKE_ROOT/post-pull-hook" <<'HOOK'
+#!/usr/bin/env bash
+set -Eeuo pipefail
+env WUD_OUT_FILE="${HOOK_WUD_FILE:?}" update_available=true image_name=repo/a image_tag_value=latest sh "${HOOK_APPEND_SCRIPT:?}"
+HOOK
+  chmod +x "$FAKE_ROOT/post-pull-hook"
+
+  run_script HOOK_WUD_FILE="$WUD_FILE" HOOK_APPEND_SCRIPT="$REPO_ROOT/wud/append-updates.sh" --yes
+
+  assert_status 0
+  assert_file_equals "$WUD_FILE" 'repo/a:latest'
+  [[ ! -d "$WUD_FILE.lock" ]] || fail "WUD lock directory was left behind"
+  teardown_case
+}
+
 test_cleanup_preserves_wud_file_owner_and_mode(){
   setup_case
   printf 'repo/app:latest\n' > "$WUD_FILE"
@@ -446,6 +467,7 @@ main(){
   run_test test_one_line_two_stacks_one_fails_keeps_line
   run_test test_expected_sha_mismatch_prevents_cleanup
   run_test test_expected_sha_match_allows_cleanup
+  run_test test_cleanup_removes_successful_raw_line_not_current_line_number
   run_test test_cleanup_preserves_wud_file_owner_and_mode
   run_test test_out_owner_config_accepts_out_guid_for_logs_and_cleanup
   run_test test_out_owner_config_requires_uid_and_group

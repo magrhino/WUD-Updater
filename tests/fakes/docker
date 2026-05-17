@@ -92,6 +92,14 @@ apply_pull_state(){
   fi
 }
 
+run_post_pull_hook(){
+  local id="$1"
+  shift || true
+  if [[ -x "$ROOT/post-pull-hook" ]]; then
+    "$ROOT/post-pull-hook" "$id" "$@"
+  fi
+}
+
 compose_cmd(){
   local file="" id cmd
   while [[ $# -gt 0 ]]; do
@@ -137,6 +145,7 @@ compose_cmd(){
     pull)
       [[ -f "$ROOT/stacks/$id/pull_fail" ]] && return 17
       apply_pull_state "$id" "$@"
+      run_post_pull_hook "$id" "$@"
       return 0
       ;;
     stop)
