@@ -37,7 +37,7 @@ FAKE_SUDO
 
   cat > "$TEST_TMP/updater" <<'FAKE_UPDATER'
 #!/usr/bin/env bash
-printf 'OUT_UID=%s OUT_GID=%s OUT_GUID=%s\n' "${OUT_UID:-}" "${OUT_GID:-}" "${OUT_GUID:-}" >> "${FAKE_UPDATER_LOG:?FAKE_UPDATER_LOG is required}"
+printf 'OUT_UID=%s OUT_GID=%s OUT_GUID=%s WUD_LOCK_TIMEOUT=%s\n' "${OUT_UID:-}" "${OUT_GID:-}" "${OUT_GUID:-}" "${WUD_LOCK_TIMEOUT:-}" >> "${FAKE_UPDATER_LOG:?FAKE_UPDATER_LOG is required}"
 printf '%s\n' "$*" >> "${FAKE_UPDATER_LOG:?FAKE_UPDATER_LOG is required}"
 exit 0
 FAKE_UPDATER
@@ -114,6 +114,18 @@ test_yes_passes_owner_config_through_sudo_env(){
   teardown_case
 }
 
+test_yes_passes_lock_timeout_through_sudo_env(){
+  setup_case
+  printf 'repo/app:latest\n' > "$WUD_FILE"
+
+  run_updates WUD_LOCK_TIMEOUT=0 --yes --base "$TEST_TMP/docker"
+
+  assert_status 0
+  grep -q -- "env WUD_LOCK_TIMEOUT=0 $TEST_TMP/updater --base $TEST_TMP/docker --file $WUD_FILE --mode stop --max-wait 180 --yes" "$TEST_TMP/sudo.log" || fail "sudo did not receive expected lock timeout env"
+  grep -q -- "WUD_LOCK_TIMEOUT=0" "$TEST_TMP/updater.log" || fail "updater did not receive lock timeout env"
+  teardown_case
+}
+
 run_test(){
   local name="$1"
   printf 'running %s\n' "$name"
@@ -125,6 +137,7 @@ main(){
   run_test test_dry_run_does_not_invoke_updater
   run_test test_yes_invokes_configured_updater_through_sudo
   run_test test_yes_passes_owner_config_through_sudo_env
+  run_test test_yes_passes_lock_timeout_through_sudo_env
 }
 
 trap teardown_case EXIT
