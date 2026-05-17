@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 import re
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from pathlib import Path
 
+from wud_updater.file_ops import OwnerConfig, atomic_rewrite
 from wud_updater.images import (
     image_has_tag,
     image_key,
@@ -15,6 +16,7 @@ from wud_updater.images import (
     tag_value_valid,
     trim,
 )
+from wud_updater.locks import DirectoryLock
 
 
 _SHELL_SPACE_RE = re.compile(r"[ \t\n\r\v\f]")
@@ -94,6 +96,104 @@ def parse_wud_file(
         return parse_wud_text(file.read(), selected_lines=selected_lines)
 
 
+def remove_lines_before_run(
+    path: str | Path,
+    parsed: ParsedWudFile,
+    remove_lines: Iterable[int],
+    *,
+    lock: DirectoryLock | None = None,
+    lock_timeout: int | str = 30,
+    owner: OwnerConfig | None = None,
+    encoding: str = "utf-8",
+) -> bool:
+    """Remove requested original lines while preserving concurrently appended extras."""
+
+    remove = set(remove_lines)
+    if not remove:
+        return False
+
+    def transform(current_lines: list[str]) -> list[str]:
+        original_count: dict[str, int] = {}
+        preserved: list[str] = []
+        for line in parsed.lines:
+            original_count[line.raw] = original_count.get(line.raw, 0) + 1
+            if line.line_no not in remove:
+                preserved.append(line.raw)
+
+        current_count: dict[str, int] = {}
+        for raw in current_lines:
+            current_count[raw] = current_count.get(raw, 0) + 1
+
+        extra_count: dict[str, int] = {}
+        for raw, count in current_count.items():
+            extra_count[raw] = max(count - original_count.get(raw, 0), 0)
+
+        extra_seen: dict[str, int] = {}
+        result = list(preserved)
+        for raw in current_lines:
+            seen = extra_seen.get(raw, 0)
+            if seen < extra_count.get(raw, 0):
+                result.append(raw)
+                extra_seen[raw] = seen + 1
+        return result
+
+    _rewrite_wud_file(
+        path,
+        transform,
+        lock=lock,
+        lock_timeout=lock_timeout,
+        owner=owner,
+        encoding=encoding,
+    )
+    return True
+
+
+def cleanup_successful_lines(
+    path: str | Path,
+    parsed: ParsedWudFile,
+    successful_lines: Iterable[int],
+    *,
+    lock: DirectoryLock | None = None,
+    lock_timeout: int | str = 30,
+    owner: OwnerConfig | None = None,
+    encoding: str = "utf-8",
+) -> bool:
+    """Remove successfully processed raw WUD entries from the current file."""
+
+    successful = set(successful_lines)
+    if not successful:
+        return False
+
+    drop_count: dict[str, int] = {}
+    for line in parsed.lines:
+        if line.line_no in successful:
+            drop_count[line.raw] = drop_count.get(line.raw, 0) + 1
+
+    if not drop_count:
+        return False
+
+    def transform(current_lines: list[str]) -> list[str]:
+        dropped: dict[str, int] = {}
+        result: list[str] = []
+        for raw in current_lines:
+            seen = dropped.get(raw, 0)
+            if seen < drop_count.get(raw, 0):
+                dropped[raw] = seen + 1
+                continue
+            result.append(raw)
+        return result
+
+    _rewrite_wud_file(
+        path,
+        transform,
+        lock=lock,
+        lock_timeout=lock_timeout,
+        owner=owner,
+        encoding=encoding,
+    )
+    return True
+
+
 def _split_shell_lines(text: str) -> list[str]:
     if text == "":
         return []
@@ -101,6 +201,42 @@ def _split_shell_lines(text: str) -> list[str]:
     if text.endswith("\n"):
         lines.pop()
     return lines
+
+
+def _join_shell_lines(lines: Iterable[str]) -> str:
+    raw_lines = list(lines)
+    if not raw_lines:
+        return ""
+    return "\n".join(raw_lines) + "\n"
+
+
+def _rewrite_wud_file(
+    path: str | Path,
+    transform: Callable[[list[str]], list[str]],
+    *,
+    lock: DirectoryLock | None,
+    lock_timeout: int | str,
+    owner: OwnerConfig | None,
+    encoding: str,
+) -> None:
+    target = Path(path)
+    active_lock = lock or DirectoryLock(target, timeout_seconds=lock_timeout)
+    release_after = lock is None or (not active_lock.parent_held and not active_lock.held)
+
+    active_lock.acquire()
+    try:
+        with target.open("r", encoding=encoding, newline="") as file:
+            current_lines = _split_shell_lines(file.read())
+        atomic_rewrite(
+            target,
+            _join_shell_lines(transform(current_lines)),
+            metadata_source=target,
+            owner=owner,
+            encoding=encoding,
+        )
+    finally:
+        if release_after:
+            active_lock.release()
 
 
 def _parse_target(
