@@ -180,6 +180,17 @@ latest_log_file(){
   find "$LOG_DIR" -type f -name 'update-from-wud-v2-*.log' -print | sort | tail -n 1
 }
 
+test_help_exits_successfully(){
+  setup_case
+
+  run_script --help
+
+  assert_status 0
+  grep -q '^Usage:' "$TEST_TMP/output.log" || fail "help output did not include usage"
+  assert_calls_not_contain '.'
+  teardown_case
+}
+
 test_dry_run_no_mutation(){
   setup_case
   printf 'repo/app:latest\n' > "$WUD_FILE"
@@ -719,6 +730,7 @@ run_test(){
 }
 
 main(){
+  run_test test_help_exits_successfully
   run_test test_dry_run_no_mutation
   run_test test_default_base_uses_home_docker
   run_test test_confirm_required_blocks_mutation
