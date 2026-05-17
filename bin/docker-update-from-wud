@@ -11,6 +11,9 @@ MAX_WAIT_DEFAULT=180
 DOCKER_BASE="$DOCKER_BASE_DEFAULT"
 WUD_FILE=""
 LOG_DIR=""
+OUT_UID="${OUT_UID:-}"
+OUT_GID="${OUT_GID:-}"
+OUT_GUID="${OUT_GUID:-}"
 MODE="$MODE_DEFAULT"
 MAX_WAIT="$MAX_WAIT_DEFAULT"
 DRY_RUN=false
@@ -29,6 +32,10 @@ ts(){ date +%Y-%m-%dT%H:%M:%S; }
 usage(){
   cat <<EOF
 Usage: $0 [--base PATH] [--file PATH] [--log-dir PATH] [--mode pause|stop|live] [--max-wait SECONDS] [--dry-run] [--yes] [--no-color]
+
+Environment:
+  OUT_UID and OUT_GID set the owner for logs and rewritten WUD files.
+  OUT_GUID is accepted as an alias for OUT_GID.
 
 Safe examples:
   Dry-run plan only:
@@ -290,15 +297,66 @@ state_field(){
   awk -v image="$image" -v field="$field" 'BEGIN{FS="\t"} $1 == image {print $field; exit}' "$state_file"
 }
 
-preserve_file_permissions(){
+validate_owner_config(){
+  if [[ -z "$OUT_GID" && -n "$OUT_GUID" ]]; then
+    OUT_GID="$OUT_GUID"
+  fi
+
+  if [[ -n "$OUT_UID" || -n "$OUT_GID" ]]; then
+    [[ -n "$OUT_UID" && -n "$OUT_GID" ]] || die "OUT_UID and OUT_GID/OUT_GUID must be set together"
+    [[ "$OUT_UID" =~ ^[0-9]+$ ]] || die "OUT_UID must be numeric"
+    [[ "$OUT_GID" =~ ^[0-9]+$ ]] || die "OUT_GID/OUT_GUID must be numeric"
+  fi
+}
+
+apply_configured_owner(){
+  local path="$1"
+  [[ -n "$OUT_UID" && -n "$OUT_GID" ]] || return 0
+  perl -e '
+    use strict;
+    use warnings;
+    my ($path, $uid, $gid) = @ARGV;
+    die "OUT_UID must be numeric\n" unless $uid =~ /^\d+$/;
+    die "OUT_GID/OUT_GUID must be numeric\n" unless $gid =~ /^\d+$/;
+    my @st = stat($path) or die "stat($path): $!\n";
+    if ($st[4] != $uid || $st[5] != $gid) {
+      chown($uid, $gid, $path) or die "chown($path): $!\n";
+    }
+  ' "$path" "$OUT_UID" "$OUT_GID"
+}
+
+preserve_file_metadata(){
   local src="$1" dst="$2"
   perl -e '
     use strict;
     use warnings;
-    my ($src, $dst) = @ARGV;
-    my @st = stat($src) or die "stat($src): $!\n";
-    chmod($st[2] & 07777, $dst) or die "chmod($dst): $!\n";
-  ' "$src" "$dst"
+    my ($src, $dst, $out_uid, $out_gid) = @ARGV;
+    my @src_st = stat($src) or die "stat($src): $!\n";
+    my @dst_st = stat($dst) or die "stat($dst): $!\n";
+
+    my $uid = $src_st[4];
+    my $gid = $src_st[5];
+    if ($out_uid ne "" || $out_gid ne "") {
+      die "OUT_UID and OUT_GID/OUT_GUID must be set together\n" if $out_uid eq "" || $out_gid eq "";
+      die "OUT_UID must be numeric\n" unless $out_uid =~ /^\d+$/;
+      die "OUT_GID/OUT_GUID must be numeric\n" unless $out_gid =~ /^\d+$/;
+      $uid = $out_uid;
+      $gid = $out_gid;
+    }
+
+    if ($dst_st[4] != $uid || $dst_st[5] != $gid) {
+      chown($uid, $gid, $dst) or die "chown($dst): $!\n";
+    }
+    chmod($src_st[2] & 07777, $dst) or die "chmod($dst): $!\n";
+  ' "$src" "$dst" "$OUT_UID" "$OUT_GID"
+}
+
+prepare_log_file(){
+  mkdir -p "$LOG_DIR"
+  apply_configured_owner "$LOG_DIR" || die "Failed to set owner for log directory: $LOG_DIR"
+  LOG_FILE="${LOG_DIR}/update-from-wud-v2-$(date +%Y-%m-%dT%H-%M-%S).log"
+  : > "$LOG_FILE"
+  apply_configured_owner "$LOG_FILE" || die "Failed to set owner for log file: $LOG_FILE"
 }
 
 parse_wud_file(){
@@ -788,9 +846,9 @@ cleanup_wud_file(){
     rm -f "$tmp"
     die "Failed to rewrite WUD file: $WUD_FILE"
   fi
-  if ! preserve_file_permissions "$WUD_FILE" "$tmp"; then
+  if ! preserve_file_metadata "$WUD_FILE" "$tmp"; then
     rm -f "$tmp"
-    die "Failed to preserve permissions for WUD file: $WUD_FILE"
+    die "Failed to preserve metadata for WUD file: $WUD_FILE"
   fi
   if ! mv "$tmp" "$WUD_FILE"; then
     rm -f "$tmp"
@@ -1029,6 +1087,7 @@ done
 
 case "$MODE" in pause|stop|live) ;; *) die "--mode must be pause|stop|live";; esac
 [[ "$MAX_WAIT" =~ ^[0-9]+$ ]] || die "--max-wait must be an integer number of seconds"
+validate_owner_config
 
 if [[ "$WUD_FILE_SET" == "false" ]]; then
   WUD_FILE="${DOCKER_BASE}/wud/out/images.todo"
@@ -1044,11 +1103,10 @@ need_cmd sed
 need_cmd perl
 need_cmd find
 need_cmd grep
-need_cmd script
 need_cmd mktemp
+need_cmd script
 
-mkdir -p "$LOG_DIR"
-LOG_FILE="${LOG_DIR}/update-from-wud-v2-$(date +%Y-%m-%dT%H-%M-%S).log"
+prepare_log_file
 WORK_DIR="$(mktemp -d "${TMPDIR:-/tmp}/wud-update.XXXXXX")"
 : > "$WORK_DIR/stack_status.tsv"
 : > "$WORK_DIR/line_status.tsv"
@@ -1063,6 +1121,9 @@ say "Mode    : $MODE"
 say "Dry-run : $DRY_RUN"
 say "Confirm : $ASSUME_YES"
 say "MaxWait : ${MAX_WAIT}s"
+if [[ -n "$OUT_UID" ]]; then
+  say "Owner   : ${OUT_UID}:${OUT_GID}"
+fi
 say "PTY     : $SCRIPT_STYLE script"
 
 [[ -f "$WUD_FILE" ]] || die "List file not found: $WUD_FILE"

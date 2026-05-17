@@ -19,6 +19,12 @@ fi
 updater="${WUD_UPDATER:-$repo_dir/bin/docker-update-from-wud}"
 update_mode="${WUD_UPDATE_MODE:-stop}"
 max_wait="${WUD_MAX_WAIT:-180}"
+out_uid="${OUT_UID:-}"
+out_gid="${OUT_GID:-}"
+out_guid="${OUT_GUID:-}"
+if [ -z "$out_gid" ] && [ -n "$out_guid" ]; then
+  out_gid="$out_guid"
+fi
 auto_run=0
 dry_run=0
 
@@ -76,8 +82,19 @@ fi
 
 run_updater() {
   local rc
-  echo "🚀 Running Docker updates via: sudo \"$updater\" --base \"$docker_base\" --file \"$wud_file\" --mode \"$update_mode\" --max-wait \"$max_wait\" --yes"
-  sudo "$updater" --base "$docker_base" --file "$wud_file" --mode "$update_mode" --max-wait "$max_wait" --yes
+  local owner_env=()
+  if [ -n "$out_uid" ] || [ -n "$out_gid" ]; then
+    [ -n "$out_uid" ] && owner_env+=("OUT_UID=$out_uid")
+    [ -n "$out_gid" ] && owner_env+=("OUT_GID=$out_gid")
+  fi
+
+  if ((${#owner_env[@]})); then
+    echo "🚀 Running Docker updates via: sudo env ${owner_env[*]} \"$updater\" --base \"$docker_base\" --file \"$wud_file\" --mode \"$update_mode\" --max-wait \"$max_wait\" --yes"
+    sudo env "${owner_env[@]}" "$updater" --base "$docker_base" --file "$wud_file" --mode "$update_mode" --max-wait "$max_wait" --yes
+  else
+    echo "🚀 Running Docker updates via: sudo \"$updater\" --base \"$docker_base\" --file \"$wud_file\" --mode \"$update_mode\" --max-wait \"$max_wait\" --yes"
+    sudo "$updater" --base "$docker_base" --file "$wud_file" --mode "$update_mode" --max-wait "$max_wait" --yes
+  fi
   rc=$?
   echo
   if [ "$rc" -eq 0 ]; then
