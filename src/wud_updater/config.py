@@ -54,6 +54,10 @@ def _parse_optional_numeric_id(name: str, value: str | None) -> int | None:
     return parsed
 
 
+def _env_or_default(env: Mapping[str, str], name: str, default: str) -> str:
+    return env.get(name) or default
+
+
 def load_config(
     environ: Mapping[str, str] | None = None,
     *,
@@ -66,15 +70,21 @@ def load_config(
     """
 
     env = os.environ if environ is None else environ
-    home_dir = Path(home if home is not None else env.get("HOME", str(Path.home())))
+    home_dir = Path(
+        home if home is not None else _env_or_default(env, "HOME", str(Path.home()))
+    )
 
-    docker_base = Path(env.get("DOCKER_BASE", str(home_dir / "docker")))
+    docker_base = Path(_env_or_default(env, "DOCKER_BASE", str(home_dir / "docker")))
     wud_out_file = Path(
-        env.get("WUD_OUT_FILE", str(docker_base / "wud" / "out" / "images.todo"))
+        _env_or_default(
+            env,
+            "WUD_OUT_FILE",
+            str(docker_base / "wud" / "out" / "images.todo"),
+        )
     )
     log_dir = docker_base / "logs"
 
-    update_mode = env.get("WUD_UPDATE_MODE", DEFAULT_UPDATE_MODE)
+    update_mode = _env_or_default(env, "WUD_UPDATE_MODE", DEFAULT_UPDATE_MODE)
     if update_mode not in VALID_UPDATE_MODES:
         raise ConfigError("WUD_UPDATE_MODE must be pause, stop, or live")
 

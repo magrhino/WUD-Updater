@@ -13,15 +13,25 @@ python_bin="${PYTHON_BIN:-}"
 if [ -z "$python_bin" ]; then
   if command -v python3.14 >/dev/null 2>&1; then
     python_bin="python3.14"
+  elif command -v python3.13 >/dev/null 2>&1; then
+    python_bin="python3.13"
+  elif command -v python3.12 >/dev/null 2>&1; then
+    python_bin="python3.12"
+  elif command -v python3.11 >/dev/null 2>&1; then
+    python_bin="python3.11"
+  elif command -v python3.10 >/dev/null 2>&1; then
+    python_bin="python3.10"
   elif command -v python3 >/dev/null 2>&1; then
     python_bin="python3"
   else
     cat >&2 <<'EOF'
-python3.14 or python3 is required to run the Python package tests.
+Python 3.10 or newer is required to run the Python package tests.
 EOF
     exit 127
   fi
 fi
+
+run "$python_bin" -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 10) else "Python 3.10 or newer is required")'
 
 if ! command -v shellcheck >/dev/null 2>&1; then
   cat >&2 <<'EOF'
