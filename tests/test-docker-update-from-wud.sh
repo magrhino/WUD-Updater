@@ -293,12 +293,12 @@ HOOK
   run_script HOOK_WUD_FILE="$WUD_FILE" --yes --only-lines 2 --remove-lines-before-run 1,3
 
   assert_status 0
-  assert_file_equals "$FAKE_ROOT/wud-during-pull.txt" 'repo/app:two'
+  assert_file_equals "$FAKE_ROOT/wud-during-pull.txt" ''
   assert_file_equals "$WUD_FILE" ''
   teardown_case
 }
 
-test_cleanup_preserves_appended_duplicate_after_pre_run_removal(){
+test_same_image_wud_callback_survives_successful_update(){
   setup_case
   printf 'repo/app:one\nrepo/app:two\nrepo/app:three\n' > "$WUD_FILE"
   make_single_service_stack two "$BASE/two" docker-compose.yml repo/app:two cid-two
@@ -306,11 +306,11 @@ test_cleanup_preserves_appended_duplicate_after_pre_run_removal(){
   set_image_after_pull repo/app:two new-two sha256:new-two
   cat > "$FAKE_ROOT/post-pull-hook" <<'HOOK'
 #!/usr/bin/env bash
-printf 'repo/app:two\n' >> "${HOOK_WUD_FILE:?}"
+env WUD_OUT_FILE="${HOOK_WUD_FILE:?}" WUD_LOCK_TIMEOUT=0 update_available=true image_name=repo/app image_tag_value=two sh "${HOOK_APPEND_SCRIPT:?}"
 HOOK
   chmod +x "$FAKE_ROOT/post-pull-hook"
 
-  run_script HOOK_WUD_FILE="$WUD_FILE" --yes --only-lines 2 --remove-lines-before-run 1,3
+  run_script HOOK_WUD_FILE="$WUD_FILE" HOOK_APPEND_SCRIPT="$REPO_ROOT/wud/append-updates.sh" --yes --only-lines 2 --remove-lines-before-run 1,3
 
   assert_status 0
   assert_file_equals "$WUD_FILE" 'repo/app:two'
@@ -737,7 +737,7 @@ main(){
   run_test test_only_lines_updates_subset_and_keeps_unselected
   run_test test_only_lines_keeps_unselected_duplicate_raw_line
   run_test test_remove_lines_before_run_removes_requested_lines_before_pull
-  run_test test_cleanup_preserves_appended_duplicate_after_pre_run_removal
+  run_test test_same_image_wud_callback_survives_successful_update
   run_test test_cleanup_does_not_resurrect_replaced_unselected_line
   run_test test_parent_wud_lock_is_reused_and_released
   run_test test_invalid_line_spec_fails_before_docker_calls
