@@ -96,11 +96,13 @@ run "$python_bin" -m py_compile \
   src/wud_updater/images.py \
   src/wud_updater/line_specs.py \
   src/wud_updater/locks.py \
+  src/wud_updater/updater.py \
   src/wud_updater/wud_file.py \
   tests/run-python-tests.py \
   tests/test_python_cli.py \
   tests/test_python_config.py \
   tests/test_python_docker_compose.py \
+  tests/test_python_update_from_wud.py \
   tests/test_python_wud_file_ops.py \
   tests/test_python_wud_parsing.py
 
