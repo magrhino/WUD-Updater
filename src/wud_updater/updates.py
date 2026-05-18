@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import re
 import shutil
@@ -17,6 +18,7 @@ from pathlib import Path
 DEFAULT_UPDATE_MODE = "stop"
 DEFAULT_MAX_WAIT = "180"
 DEFAULT_LOCK_TIMEOUT = "30"
+DEFAULT_TRUENAS_STATUS_TIMEOUT = "5"
 _SECONDS_RE = re.compile(r"^[0-9]+$")
 _DISPLAY_RANGE_RE = re.compile(r"^([0-9]+)-([0-9]+)$")
 _DISPLAY_NUMBER_RE = re.compile(r"^[0-9]+$")
@@ -56,6 +58,18 @@ class UpdatesOptions:
     out_gid: str = ""
     lock_timeout: str = ""
     use_sudo: bool = True
+    truenas_api_uri: str = ""
+    truenas_api_key_file: str = ""
+    truenas_api_username: str = ""
+    truenas_api_insecure: bool = False
+    truenas_status_timeout: str = DEFAULT_TRUENAS_STATUS_TIMEOUT
+
+
+@dataclass(frozen=True)
+class TrueNasCallResult:
+    ok: bool
+    data: object | None = None
+    reason: str = ""
 
 
 @dataclass
@@ -268,35 +282,37 @@ class UpdatesRunner:
 
     def _print_system_update_status(self) -> None:
         print("=== 🖥️ TrueNAS System Update ===")
-        if not _has_command("midclt", self.environ) or not _has_command("jq", self.environ):
-            print("ℹ️  midclt or jq not available; skipping system update check.")
+        result = _midclt_json("update.status", self.options, self.environ)
+        if not result.ok:
+            _print_truenas_unreachable("system update check", result.reason)
             return
 
-        sys_update = _midclt_jq(
-            ["midclt", "call", "update.check_available"],
-            ["jq", "-r", ".status"],
-            self.environ,
-        )
-        if sys_update == "UNAVAILABLE":
+        status = _truenas_update_status(result.data)
+        if status == "UNAVAILABLE":
             print("✅ System up to date")
-        elif sys_update == "AVAILABLE":
-            print("⚠️  System update available!")
+        elif status == "AVAILABLE":
+            version = _truenas_update_version(result.data)
+            suffix = f" ({version})" if version else ""
+            print(f"⚠️  System update available!{suffix}")
+        elif status == "ERROR":
+            reason = _truenas_update_error_reason(result.data) or "<no response>"
+            print(f"❓ TrueNAS update status error: {reason}")
         else:
-            print(f"❓ Unknown status: {sys_update or '<no response>'}")
+            print(f"❓ Unknown status: {status or '<no response>'}")
 
     def _print_alert_status(self) -> None:
         print("=== 🚨 TrueNAS Alerts ===")
-        if not _has_command("midclt", self.environ) or not _has_command("jq", self.environ):
-            print("ℹ️  midclt or jq not available; skipping alert check.")
+        result = _midclt_json("alert.list", self.options, self.environ)
+        if not result.ok:
+            _print_truenas_unreachable("alert check", result.reason)
             return
 
-        alerts = _midclt_jq(
-            ["midclt", "call", "alert.list"],
-            ["jq", "-r", ".[] | select(.dismissed==false) | .formatted"],
-            self.environ,
-        )
+        alerts = _truenas_active_alerts(result.data)
+        if alerts is None:
+            _print_truenas_unreachable("alert check", "invalid alert response")
+            return
         if alerts:
-            _print_numbered_lines(alerts, self.environ)
+            _print_numbered_lines("\n".join(alerts), self.environ)
         else:
             print("✅ No active alerts")
 
@@ -561,6 +577,13 @@ def options_from_namespace(
             environ.get("WUD_UPDATER_USE_SUDO"),
             no_updater_sudo=bool(getattr(args, "no_updater_sudo", False)),
         ),
+        truenas_api_uri=environ.get("TRUENAS_API_URI") or "",
+        truenas_api_key_file=environ.get("TRUENAS_API_KEY_FILE") or "",
+        truenas_api_username=environ.get("TRUENAS_API_USERNAME") or "",
+        truenas_api_insecure=_is_enabled(environ.get("TRUENAS_API_INSECURE")),
+        truenas_status_timeout=(
+            environ.get("TRUENAS_STATUS_TIMEOUT") or DEFAULT_TRUENAS_STATUS_TIMEOUT
+        ),
     )
 
 
@@ -733,8 +756,12 @@ def _prompt(prompt: str) -> str:
 
 
 def _parse_lock_timeout(value: str) -> int:
+    return _parse_seconds(value, "WUD_LOCK_TIMEOUT")
+
+
+def _parse_seconds(value: str, label: str) -> int:
     if _SECONDS_RE.fullmatch(str(value)) is None:
-        raise UpdatesError("WUD_LOCK_TIMEOUT must be an integer number of seconds")
+        raise UpdatesError(f"{label} must be an integer number of seconds")
     return int(str(value), 10)
 
 
@@ -766,33 +793,146 @@ def _has_command(command: str, environ: Mapping[str, str]) -> bool:
     return shutil.which(command, path=environ.get("PATH")) is not None
 
 
-def _midclt_jq(
-    midclt_args: Sequence[str],
-    jq_args: Sequence[str],
+def _is_enabled(value: str | None) -> bool:
+    if value is None:
+        return False
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _midclt_json(
+    method: str,
+    options: UpdatesOptions,
     environ: Mapping[str, str],
-) -> str:
+) -> TrueNasCallResult:
+    if not _has_command("midclt", environ):
+        return TrueNasCallResult(ok=False, reason="midclt not available")
     try:
-        midclt = subprocess.run(
-            midclt_args,
+        timeout = _parse_seconds(
+            options.truenas_status_timeout or DEFAULT_TRUENAS_STATUS_TIMEOUT,
+            "TRUENAS_STATUS_TIMEOUT",
+        )
+    except UpdatesError as exc:
+        return TrueNasCallResult(ok=False, reason=str(exc))
+
+    command = _midclt_command(method, options)
+    try:
+        result = subprocess.run(
+            command,
             env=dict(environ),
             stdin=subprocess.DEVNULL,
             stdout=subprocess.PIPE,
-            stderr=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
             text=True,
+            timeout=timeout,
             check=False,
         )
-        jq = subprocess.run(
-            jq_args,
-            input=midclt.stdout,
-            env=dict(environ),
-            stdout=subprocess.PIPE,
-            stderr=subprocess.DEVNULL,
-            text=True,
-            check=False,
+    except subprocess.TimeoutExpired:
+        return TrueNasCallResult(ok=False, reason="midclt timed out")
+    except OSError as exc:
+        return TrueNasCallResult(
+            ok=False,
+            reason=f"midclt failed: {_format_os_error(exc)}",
         )
-    except OSError:
+
+    if result.returncode != 0:
+        return TrueNasCallResult(
+            ok=False,
+            reason=f"midclt exited {result.returncode}",
+        )
+
+    stdout = result.stdout.strip()
+    if stdout == "":
+        return TrueNasCallResult(ok=False, reason="empty midclt response")
+
+    try:
+        data = json.loads(stdout)
+    except json.JSONDecodeError:
+        return TrueNasCallResult(ok=False, reason="invalid JSON response")
+
+    return TrueNasCallResult(ok=True, data=data)
+
+
+def _midclt_command(method: str, options: UpdatesOptions) -> list[str]:
+    command = ["midclt"]
+    if options.truenas_api_uri:
+        command.extend(["--uri", options.truenas_api_uri])
+    if options.truenas_api_username:
+        command.extend(["-U", options.truenas_api_username])
+    if options.truenas_api_key_file:
+        command.extend(["-K", options.truenas_api_key_file])
+    if options.truenas_api_insecure:
+        command.append("--insecure")
+    command.extend(["call", method])
+    return command
+
+
+def _print_truenas_unreachable(check: str, reason: str = "") -> None:
+    suffix = f" ({reason})" if reason else ""
+    print(f"ℹ️  TrueNAS not reachable; skipping {check}.{suffix}")
+
+
+def _truenas_update_status(data: object | None) -> str:
+    if not isinstance(data, dict):
         return ""
-    return jq.stdout.strip()
+
+    legacy_status = data.get("status")
+    if isinstance(legacy_status, str):
+        return legacy_status
+
+    code = data.get("code")
+    if code == "ERROR":
+        return "ERROR"
+    if code != "NORMAL":
+        return str(code or "")
+
+    status = data.get("status")
+    if not isinstance(status, dict):
+        return ""
+    new_version = status.get("new_version")
+    if isinstance(new_version, dict) and new_version:
+        return "AVAILABLE"
+    if new_version is None:
+        return "UNAVAILABLE"
+    return ""
+
+
+def _truenas_update_version(data: object | None) -> str:
+    if not isinstance(data, dict):
+        return ""
+    status = data.get("status")
+    if not isinstance(status, dict):
+        return ""
+    new_version = status.get("new_version")
+    if not isinstance(new_version, dict):
+        return ""
+    version = new_version.get("version")
+    return version if isinstance(version, str) else ""
+
+
+def _truenas_update_error_reason(data: object | None) -> str:
+    if not isinstance(data, dict):
+        return ""
+    error = data.get("error")
+    if not isinstance(error, dict):
+        return ""
+    reason = error.get("reason")
+    return reason if isinstance(reason, str) else ""
+
+
+def _truenas_active_alerts(data: object | None) -> list[str] | None:
+    if not isinstance(data, list):
+        return None
+
+    alerts: list[str] = []
+    for item in data:
+        if not isinstance(item, dict):
+            continue
+        if item.get("dismissed") is True:
+            continue
+        formatted = item.get("formatted")
+        if isinstance(formatted, str) and formatted:
+            alerts.append(formatted)
+    return alerts
 
 
 def _print_numbered_lines(value: str, environ: Mapping[str, str]) -> None:

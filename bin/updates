@@ -149,6 +149,15 @@ cleanup() {
 }
 trap cleanup EXIT
 
+print_truenas_unreachable() {
+  local check="$1" reason="${2:-}"
+  if [ -n "$reason" ]; then
+    echo "ℹ️  TrueNAS not reachable; skipping $check. ($reason)"
+  else
+    echo "ℹ️  TrueNAS not reachable; skipping $check."
+  fi
+}
+
 acquire_wud_lock() {
   local timeout waited=0 lock_parent
   timeout="$(wud_lock_timeout_seconds)" || exit $?
@@ -509,27 +518,45 @@ fi
 echo
 echo "=== 🖥️ TrueNAS System Update ==="
 if command -v midclt >/dev/null 2>&1 && command -v jq >/dev/null 2>&1; then
-  sys_update="$(midclt call update.check_available 2>/dev/null | jq -r '.status' 2>/dev/null || true)"
-  case "$sys_update" in
-    UNAVAILABLE) echo "✅ System up to date" ;;
-    AVAILABLE) echo "⚠️  System update available!" ;;
-    *) echo "❓ Unknown status: ${sys_update:-<no response>}" ;;
-  esac
+  sys_json="$(midclt call update.check_available 2>/dev/null)" || sys_json=""
+  if [ -z "$sys_json" ]; then
+    print_truenas_unreachable "system update check" "empty midclt response"
+  else
+    sys_update="$(printf '%s\n' "$sys_json" | jq -r '.status' 2>/dev/null)" || sys_update=""
+    if [ -z "$sys_update" ] || [ "$sys_update" = "null" ]; then
+      print_truenas_unreachable "system update check" "invalid JSON response"
+    else
+      case "$sys_update" in
+        UNAVAILABLE) echo "✅ System up to date" ;;
+        AVAILABLE) echo "⚠️  System update available!" ;;
+        *) echo "❓ Unknown status: ${sys_update:-<no response>}" ;;
+      esac
+    fi
+  fi
 else
-  echo "ℹ️  midclt or jq not available; skipping system update check."
+  print_truenas_unreachable "system update check" "midclt or jq not available"
 fi
 
 echo
 echo "=== 🚨 TrueNAS Alerts ==="
 if command -v midclt >/dev/null 2>&1 && command -v jq >/dev/null 2>&1; then
-  alerts="$(midclt call alert.list 2>/dev/null | jq -r '.[] | select(.dismissed==false) | .formatted' 2>/dev/null || true)"
-  if [ -n "$alerts" ]; then
-    echo "$alerts" | nl -ba
+  alerts_json="$(midclt call alert.list 2>/dev/null)" || alerts_json=""
+  if [ -z "$alerts_json" ]; then
+    print_truenas_unreachable "alert check" "empty midclt response"
   else
-    echo "✅ No active alerts"
+    alerts="$(printf '%s\n' "$alerts_json" | jq -r '.[] | select(.dismissed==false) | .formatted' 2>/dev/null)" || alerts=""
+    if [ -z "$alerts" ]; then
+      if printf '%s\n' "$alerts_json" | jq -e 'type == "array"' >/dev/null 2>&1; then
+        echo "✅ No active alerts"
+      else
+        print_truenas_unreachable "alert check" "invalid JSON response"
+      fi
+    else
+      echo "$alerts" | nl -ba
+    fi
   fi
 else
-  echo "ℹ️  midclt or jq not available; skipping alert check."
+  print_truenas_unreachable "alert check" "midclt or jq not available"
 fi
 
 if [ -z "$todo_entries" ]; then
