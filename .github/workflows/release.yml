@@ -1,0 +1,149 @@
+name: release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: write
+  packages: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: magrhino/wud-updater
+
+jobs:
+  validate-tag:
+    name: validate tag
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      version: ${{ steps.tag.outputs.version }}
+      minor: ${{ steps.tag.outputs.minor }}
+
+    steps:
+      - name: Validate release tag
+        id: tag
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          tag="$GITHUB_REF_NAME"
+          if [[ ! "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            printf 'Release tags must match vX.Y.Z, got: %s\n' "$tag" >&2
+            exit 1
+          fi
+
+          version="${tag#v}"
+          minor="${version%.*}"
+          {
+            printf 'version=%s\n' "$version"
+            printf 'minor=%s\n' "$minor"
+          } >> "$GITHUB_OUTPUT"
+
+  test:
+    name: linux tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs:
+      - validate-tag
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install ShellCheck
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! command -v shellcheck >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y shellcheck
+          fi
+
+      - name: Install Python dev dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m venv .venv
+          . .venv/bin/activate
+          python -m pip install -e '.[dev]'
+          echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
+
+      - name: Run tests
+        run: tests/run-all.sh
+
+  publish-image:
+    name: publish image
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs:
+      - validate-tag
+      - test
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Log in to GHCR
+        shell: bash
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          printf '%s\n' "$GHCR_TOKEN" | docker login "$REGISTRY" -u "$GITHUB_ACTOR" --password-stdin
+
+      - name: Build image
+        shell: bash
+        env:
+          VERSION: ${{ needs.validate-tag.outputs.version }}
+          MINOR_VERSION: ${{ needs.validate-tag.outputs.minor }}
+        run: |
+          set -euo pipefail
+
+          image="$REGISTRY/$IMAGE_NAME"
+          docker build --platform linux/amd64 \
+            --label "org.opencontainers.image.source=https://github.com/$GITHUB_REPOSITORY" \
+            --label "org.opencontainers.image.revision=$GITHUB_SHA" \
+            --label "org.opencontainers.image.version=$GITHUB_REF_NAME" \
+            -t "$image:$GITHUB_REF_NAME" \
+            -t "$image:$VERSION" \
+            -t "$image:$MINOR_VERSION" \
+            -t "$image:latest" \
+            .
+
+      - name: Push image
+        shell: bash
+        env:
+          VERSION: ${{ needs.validate-tag.outputs.version }}
+          MINOR_VERSION: ${{ needs.validate-tag.outputs.minor }}
+        run: |
+          set -euo pipefail
+
+          image="$REGISTRY/$IMAGE_NAME"
+          docker push "$image:$GITHUB_REF_NAME"
+          docker push "$image:$VERSION"
+          docker push "$image:$MINOR_VERSION"
+          docker push "$image:latest"
+
+      - name: Create GitHub release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            printf 'Release already exists for %s\n' "$GITHUB_REF_NAME"
+            exit 0
+          fi
+
+          gh release create "$GITHUB_REF_NAME" \
+            --verify-tag \
+            --generate-notes \
+            --title "$GITHUB_REF_NAME"

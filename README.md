@@ -72,6 +72,25 @@ tests/run-all.sh
 
 The suite runs Ruff, shell syntax checks, ShellCheck, Python syntax checks, Python unit tests, and the focused shell behavior tests.
 
+## CI and Releases
+
+CI runs on pull requests targeting `main` and pushes to `main`. The default path is intentionally Linux-only to keep private repository Actions usage predictable.
+
+Optional checks are available when broader coverage is useful:
+
+- Add the `ci:macos` pull request label, or manually dispatch CI with `run_macos=true`, to run the macOS test job.
+- Add the `ci:docker` pull request label, manually dispatch CI with `run_docker=true`, or change image-impacting files to run the Docker build smoke test.
+- Workflow linting runs automatically when files under `.github/workflows/` change, and can also be run from manual CI dispatch.
+
+Create a stable release by pushing a `vX.Y.Z` tag:
+
+```bash
+git tag v1.2.3
+git push origin v1.2.3
+```
+
+Release tags run the Linux validation suite, build the Docker image for Linux amd64, publish it to `ghcr.io/magrhino/wud-updater`, and create a GitHub Release with generated notes. Image tags are published as `vX.Y.Z`, `X.Y.Z`, `X.Y`, and `latest`.
+
 ## Install
 
 Clone the repo, then run:

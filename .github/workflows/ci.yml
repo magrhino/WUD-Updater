@@ -1,0 +1,195 @@
+name: ci
+
+on:
+  pull_request:
+    branches:
+      - main
+    types:
+      - opened
+      - synchronize
+      - reopened
+      - ready_for_review
+      - labeled
+      - unlabeled
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      run_macos:
+        description: Run the optional macOS validation job.
+        required: false
+        default: false
+        type: boolean
+      run_docker:
+        description: Run the optional Docker image build job.
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  changes:
+    name: changes
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      docker: ${{ steps.filter.outputs.docker }}
+      workflows: ${{ steps.filter.outputs.workflows }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Detect relevant path changes
+        id: filter
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BEFORE_SHA: ${{ github.event.before }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+
+          files=()
+          if [[ "$EVENT_NAME" == "pull_request" ]]; then
+            mapfile -t files < <(git diff --name-only "$BASE_SHA" "$HEAD_SHA")
+          elif [[ "$EVENT_NAME" == "push" ]]; then
+            if [[ -n "$BEFORE_SHA" && ! "$BEFORE_SHA" =~ ^0+$ ]]; then
+              mapfile -t files < <(git diff --name-only "$BEFORE_SHA" "$HEAD_SHA")
+            else
+              mapfile -t files < <(git diff-tree --no-commit-id --name-only -r "$HEAD_SHA")
+            fi
+          fi
+
+          docker=false
+          workflows=false
+          for file in "${files[@]}"; do
+            case "$file" in
+              Dockerfile|.dockerignore|entrypoint.sh|docker-compose.example.yml|bin/*|wud/*|tests/container-build.sh|tests/test-entrypoint.sh)
+                docker=true
+                ;;
+              .github/workflows/*)
+                workflows=true
+                ;;
+            esac
+          done
+
+          {
+            printf 'docker=%s\n' "$docker"
+            printf 'workflows=%s\n' "$workflows"
+          } >> "$GITHUB_OUTPUT"
+
+  linux-tests:
+    name: linux tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install ShellCheck
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! command -v shellcheck >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y shellcheck
+          fi
+
+      - name: Install Python dev dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m venv .venv
+          . .venv/bin/activate
+          python -m pip install -e '.[dev]'
+          echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
+
+      - name: Run tests
+        run: tests/run-all.sh
+
+  macos-tests:
+    name: macos tests
+    runs-on: macos-latest
+    timeout-minutes: 20
+    if: >-
+      ${{
+        (github.event_name == 'workflow_dispatch' && inputs.run_macos) ||
+        (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'ci:macos'))
+      }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install ShellCheck
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! command -v shellcheck >/dev/null 2>&1; then
+            brew install shellcheck
+          fi
+
+      - name: Install Python dev dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m venv .venv
+          . .venv/bin/activate
+          python -m pip install -e '.[dev]'
+          echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
+
+      - name: Run tests
+        run: tests/run-all.sh
+
+  docker-build:
+    name: docker build
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    needs:
+      - changes
+    if: >-
+      ${{
+        (github.event_name == 'workflow_dispatch' && inputs.run_docker) ||
+        (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'ci:docker')) ||
+        needs.changes.outputs.docker == 'true'
+      }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Run container build test
+        run: tests/container-build.sh
+
+  actionlint:
+    name: actionlint
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs:
+      - changes
+    if: >-
+      ${{
+        github.event_name == 'workflow_dispatch' ||
+        needs.changes.outputs.workflows == 'true'
+      }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Check workflow files
+        uses: docker://rhysd/actionlint:1.7.12
+        with:
+          args: -color
