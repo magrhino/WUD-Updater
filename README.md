@@ -53,7 +53,7 @@ WUD_UPDATER_PYTHON=1 updates --dry-run
 
 `wud-updater update-from-wud` accepts the familiar updater flags such as `--base`, `--file`, `--mode`, `--dry-run`, `--yes`, `--allow-tag-updates`, `--only-lines`, and `--remove-lines-before-run`. It is intended for parity testing and staged migration work until the refactor is explicitly promoted.
 
-`wud-updater updates` ports the host wrapper behavior, including WUD display, TrueNAS checks, interactive selection, and updater handoff. `bin/updates` only uses this Python path when `WUD_UPDATER_PYTHON=1` is set; otherwise it continues to run the Bash implementation.
+`wud-updater updates` ports the host wrapper behavior, including WUD display, TrueNAS checks, interactive selection, and updater handoff. `bin/updates` only uses this Python path when `WUD_UPDATER_PYTHON=1` is set in the environment or host config; otherwise it continues to run the Bash implementation.
 
 For the Python wrapper path only, `WUD_UPDATER_USE_SUDO=0` or `--no-updater-sudo` disables sudo file fallbacks and runs the configured updater directly. Use this when `images.todo` is owned so the wrapper user can read it and create `${WUD_OUT_FILE}.lock`, and when any privileged work is isolated inside the configured updater launcher.
 
@@ -197,6 +197,7 @@ WUD_LOCK_TIMEOUT="30"
 OUT_UID="1000"
 OUT_GID="1000"
 # Python updates path only:
+# WUD_UPDATER_PYTHON="1"
 # WUD_UPDATER_USE_SUDO="0"
 ```
 
@@ -206,7 +207,7 @@ The WUD todo file should be owned by the WUD user/group and group-writable. WUD-
 
 `WUD_LOCK_TIMEOUT` controls how long WUD-side appends and host-side cleanup wait for the shared todo-file lock. The default is `30` seconds; if a stale `${WUD_OUT_FILE}.lock` directory remains, remove it manually after confirming no update script is running.
 
-With `WUD_UPDATER_PYTHON=1` and `WUD_UPDATER_USE_SUDO=0`, `updates` does not use `sudo` to read the WUD file, create/remove the lock directory, or invoke `WUD_UPDATER`. Point `WUD_UPDATER` at an executable launcher if the only privileged step should be starting the updater container:
+With `WUD_UPDATER_PYTHON=1` and `WUD_UPDATER_USE_SUDO=0`, `updates` does not use `sudo` to read the WUD file, create/remove the lock directory, or invoke `WUD_UPDATER`. These values can live in the host config file. Point `WUD_UPDATER` at an executable launcher if the only privileged step should be starting the updater container:
 
 ```bash
 #!/usr/bin/env bash
