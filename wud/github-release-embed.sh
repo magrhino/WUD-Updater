@@ -622,7 +622,7 @@ run_github() {
     timestamp: (if $date != "" then ($date + "T00:00:00Z") else null end)
   }')"
 
-  payload="$(jq -n --argjson e "$embed" '{username:"GitHub Release Notes", embeds:[ $e ] }')"
+  payload="$(jq -n --argjson e "$embed" '{username:"GitHub Release Notes", allowed_mentions:{parse:[]}, embeds:[ $e ] }')"
   send_or_print_payload "$payload"
 }
 
@@ -746,7 +746,7 @@ run_lsio() {
     timestamp: (if $date != "" then ($date + "T00:00:00Z") else null end)
   }')"
 
-  payload="$(jq -n --argjson e "$embed" '{username:"GitHub Release Notes", embeds:[ $e ] }')"
+  payload="$(jq -n --argjson e "$embed" '{username:"GitHub Release Notes", allowed_mentions:{parse:[]}, embeds:[ $e ] }')"
   send_or_print_payload "$payload"
 }
 

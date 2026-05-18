@@ -23,7 +23,7 @@ if [[ -z "$SRC" || "$SRC" != *"github.com"* ]]; then
   TITLE="Update available: ${IMAGE}"
   DESC="No GitHub source label found. Unable to fetch release notes."
   curl -sS -H "Content-Type: application/json" -d "$(jq -n --arg t "$TITLE" --arg d "$DESC" \
-    '{embeds:[{title:$t,description:$d}] }')" "$WEBHOOK" >/dev/null
+    '{allowed_mentions:{parse:[]},embeds:[{title:$t,description:$d}] }')" "$WEBHOOK" >/dev/null
   exit 0
 fi
 
