@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""No-dependency Python test runner for the package skeleton."""
+"""No-dependency Python test runner for the package."""
 
 from __future__ import annotations
 

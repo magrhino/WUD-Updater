@@ -1,4 +1,4 @@
-"""Subprocess helpers for the future Python updater."""
+"""Subprocess helpers for the Python updater."""
 
 from __future__ import annotations
 
@@ -143,10 +143,9 @@ class CommandRunner:
     ) -> CommandResult:
         """Run a mutating command.
 
-        The production shell currently allocates a PTY through ``script`` for
-        interactive Docker output. The Python layer keeps this method boundary
-        so the future updater can add real PTY handling without changing the
-        Docker/Compose call sites.
+        The legacy shell allocates a PTY through ``script`` for interactive
+        Docker output. The Python layer keeps this method boundary so real PTY
+        handling can be added without changing the Docker/Compose call sites.
         """
 
         return self.run(args, cwd=cwd, env=env, check=check)

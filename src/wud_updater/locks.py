@@ -1,7 +1,7 @@
 """Directory-based WUD file locks.
 
-The production shell scripts use ``mkdir path.lock`` as the lock primitive.
-These helpers intentionally mirror that behavior for the future Python port.
+The shell scripts use ``mkdir path.lock`` as the lock primitive.
+These helpers intentionally mirror that behavior for Python and Bash parity.
 """
 
 from __future__ import annotations

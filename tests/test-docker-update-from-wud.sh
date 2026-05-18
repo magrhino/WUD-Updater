@@ -191,6 +191,35 @@ test_help_exits_successfully(){
   teardown_case
 }
 
+test_default_dispatch_uses_python_backend(){
+  setup_case
+  printf 'repo/app:latest\n' > "$WUD_FILE"
+  make_single_service_stack app "$BASE/app" docker-compose.yml repo/app:latest
+  set_image_state repo/app:latest old sha256:old
+  set_image_after_pull repo/app:latest new sha256:new
+
+  run_script WUD_UPDATER_LEGACY_BASH= --dry-run
+
+  assert_status 0
+  grep -q 'PTY     : python subprocess' "$TEST_TMP/output.log" || fail "default dispatcher did not use Python backend"
+  teardown_case
+}
+
+test_legacy_env_dispatch_uses_bash_backend(){
+  setup_case
+  printf 'repo/app:latest\n' > "$WUD_FILE"
+  make_single_service_stack app "$BASE/app" docker-compose.yml repo/app:latest
+  set_image_state repo/app:latest old sha256:old
+  set_image_after_pull repo/app:latest new sha256:new
+
+  run_script WUD_UPDATER_LEGACY_BASH=1 --dry-run
+
+  assert_status 0
+  grep -Eq 'PTY     : .* script' "$TEST_TMP/output.log" || fail "legacy dispatcher did not use Bash backend"
+  ! grep -q 'PTY     : python subprocess' "$TEST_TMP/output.log" || fail "legacy dispatcher used Python backend"
+  teardown_case
+}
+
 test_dry_run_no_mutation(){
   setup_case
   printf 'repo/app:latest\n' > "$WUD_FILE"
@@ -731,6 +760,8 @@ run_test(){
 
 main(){
   run_test test_help_exits_successfully
+  run_test test_default_dispatch_uses_python_backend
+  run_test test_legacy_env_dispatch_uses_bash_backend
   run_test test_dry_run_no_mutation
   run_test test_default_base_uses_home_docker
   run_test test_confirm_required_blocks_mutation

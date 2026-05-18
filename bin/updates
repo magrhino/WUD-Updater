@@ -454,6 +454,9 @@ run_updater() {
     [ -n "$out_gid" ] && updater_env+=("OUT_GID=$out_gid")
   fi
   [ -n "$lock_timeout" ] && updater_env+=("WUD_LOCK_TIMEOUT=$lock_timeout")
+  if [ "${WUD_UPDATER_LEGACY_BASH:-}" = "1" ]; then
+    updater_env+=("WUD_UPDATER_LEGACY_BASH=1")
+  fi
   if [ "$wud_lock_held" -eq 1 ]; then
     updater_env+=("WUD_LOCK_HELD_BY_PARENT=1")
   fi

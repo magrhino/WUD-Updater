@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "wud-updater"
 version = "0.1.0"
-description = "Python package skeleton for the future WUD updater refactor."
+description = "Python package for WUD updater commands."
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = []
