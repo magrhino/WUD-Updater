@@ -48,7 +48,7 @@ need_cmd docker
 
 run docker version
 run docker compose version
-run_quiet docker compose -f docker-compose.example.yml config
+run_quiet docker compose -f docs/examples/docker-compose.example.yml config
 run docker build -t "$IMAGE" .
 run docker run --rm "$IMAGE"
 run docker run --rm -e WUD_UPDATER_PYTHON=1 "$IMAGE"
@@ -58,5 +58,3 @@ run docker run --rm -v "$SYNC_TMP:/managed-wud" "$IMAGE" sync-wud-scripts
 [[ -x "$SYNC_TMP/append-updates.sh" ]]
 [[ -f "$SYNC_TMP/upstreams.txt" ]]
 run docker run --rm "$IMAGE" docker-update-from-wud --help
-run docker run --rm -e WUD_UPDATER_LEGACY_BASH=1 "$IMAGE" docker-update-from-wud --help
-run docker run --rm "$IMAGE" docker-update-from-wud-legacy --help

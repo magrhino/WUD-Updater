@@ -72,19 +72,16 @@ All notable changes to WUD-Updater are documented here. Format loosely follows
 
 ### Added
 
-- Added Ruff to the development validation path and documented the virtual-environment setup for local checks.
-- Added actionlint CI for pull requests targeting `main`.
-- Added an opt-in Python-backed `updates` wrapper path with parity coverage for update status, alerts, dry runs, and updater dispatch.
-- Added no-sudo support for configured updater commands in the Python wrapper path.
+- Added deployment, development, container script sync, release-note notification, and WUD update flow docs under `docs/`.
 
 ### Changed
 
-- Changed `docker-update-from-wud` to use the Python updater by default while keeping the legacy Bash updater available through `docker-update-from-wud-legacy` and `WUD_UPDATER_LEGACY_BASH=1`.
+- Moved detailed deployment, development, and workflow guidance from the root README into `docs/`.
+- Archived the legacy Bash updater path and moved the Docker Compose example under `docs/examples/`.
 
 ### Fixed
 
-- Fixed macOS CI dependency installation by installing Python development dependencies inside a local virtual environment.
-- Preserved the default shell-backed `updates` behavior unless the Python wrapper path is explicitly enabled.
+- Hardened entrypoint WUD script sync so mounted script destinations must be safe directories before image scripts are copied.
 
 Release entries are authored when a release is cut. Ordinary feature and docs
 work should update the relevant user-facing docs in the same change, but leave
@@ -101,5 +98,3 @@ Release sections use this shape:
 
 ### Fixed
 ```
-
-No release sections have been published yet.
