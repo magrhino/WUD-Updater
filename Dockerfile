@@ -38,6 +38,7 @@ RUN set -eux; \
 WORKDIR /app
 
 COPY bin/ /app/bin/
+COPY src/ /app/src/
 COPY wud/ /app/wud/
 COPY entrypoint.sh /app/entrypoint.sh
 
