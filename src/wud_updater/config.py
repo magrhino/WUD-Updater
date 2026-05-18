@@ -11,6 +11,7 @@ from pathlib import Path
 DEFAULT_UPDATE_MODE = "stop"
 DEFAULT_MAX_WAIT = 180
 DEFAULT_LOCK_TIMEOUT = 30
+DEFAULT_LOG_DIR = "./logs"
 VALID_UPDATE_MODES = frozenset({"pause", "stop", "live"})
 
 
@@ -81,7 +82,7 @@ def load_config(
             str(docker_base / "wud" / "out" / "images.todo"),
         )
     )
-    log_dir = docker_base / "logs"
+    log_dir = Path(_env_or_default(env, "WUD_LOG_DIR", DEFAULT_LOG_DIR))
 
     update_mode = _env_or_default(env, "WUD_UPDATE_MODE", DEFAULT_UPDATE_MODE)
     if update_mode not in VALID_UPDATE_MODES:
