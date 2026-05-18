@@ -175,7 +175,7 @@ volumes:
   wud-out:
 ```
 
-The script destination is managed by the image: sync removes stale files in `WUD_SCRIPTS_DIR`, copies the packaged `/app/wud` tree, and marks shell scripts executable. Start or recreate `wud-updater` once before relying on `/wud/on-update.sh` in a fresh empty volume. You can also run the sync directly:
+The script destination is managed by the image: sync only cleans an empty directory or a directory already marked with `.wud-updater-managed`, copies the packaged `/app/wud` tree, and marks shell scripts executable. Start or recreate `wud-updater` once before relying on `/wud/on-update.sh` in a fresh empty volume. You can also run the sync directly:
 
 ```bash
 docker compose -f docker-compose.example.yml run --rm wud-updater sync-wud-scripts

@@ -18,7 +18,7 @@ fail(){
 setup_case(){
   TEST_TMP="$(mktemp -d "${TMPDIR:-/tmp}/wud-entrypoint-test.XXXXXX")"
   APP_DIR="$TEST_TMP/app"
-  mkdir -p "$APP_DIR/bin" "$APP_DIR/wud/nested"
+  mkdir -p "$APP_DIR/bin" "$APP_DIR/wud/nested" "$TEST_TMP/docker" "$TEST_TMP/out"
 
   cat > "$APP_DIR/bin/updates" <<'FAKE_UPDATES'
 #!/usr/bin/env bash
@@ -71,7 +71,7 @@ run_entrypoint(){
   LAST_STATUS=0
   WUD_APP_DIR="$APP_DIR" \
     DOCKER_BASE="$TEST_TMP/docker" \
-    WUD_OUT_FILE="$TEST_TMP/images.todo" \
+    WUD_OUT_FILE="$TEST_TMP/out/images.todo" \
     WUD_SCRIPTS_DIR="${WUD_SCRIPTS_DIR-$TEST_TMP/managed-wud}" \
     WUD_SYNC_SCRIPTS="${WUD_SYNC_SCRIPTS:-}" \
     "$SCRIPT" "$@" > "$TEST_TMP/output.log" 2>&1 || LAST_STATUS=$?
@@ -90,10 +90,19 @@ assert_output(){
 
 assert_synced_scripts(){
   local dst="${WUD_SCRIPTS_DIR:-$TEST_TMP/managed-wud}"
+  [[ -f "$dst/.wud-updater-managed" ]] || fail "expected synced marker file"
   [[ -x "$dst/on-update.sh" ]] || fail "expected executable synced on-update.sh"
   [[ -x "$dst/append-updates.sh" ]] || fail "expected executable synced append-updates.sh"
   [[ -f "$dst/upstreams.txt" ]] || fail "expected synced upstreams.txt"
   [[ -f "$dst/nested/example.txt" ]] || fail "expected synced nested file"
+}
+
+assert_refuses_sync_dir(){
+  local dir="$1"
+
+  WUD_SCRIPTS_DIR="$dir" run_entrypoint sync-wud-scripts
+  assert_status 1
+  grep -q 'Refusing unsafe WUD_SCRIPTS_DIR' "$TEST_TMP/output.log" || fail "missing unsafe destination message for $dir"
 }
 
 test_default_runs_updates_dry_run(){
@@ -124,7 +133,7 @@ test_updater_dispatch_injects_missing_paths(){
   setup_case
   run_entrypoint docker-update-from-wud --yes
   assert_status 0
-  assert_output "docker-update-from-wud [--base] [$TEST_TMP/docker] [--file] [$TEST_TMP/images.todo] [--yes]"
+  assert_output "docker-update-from-wud [--base] [$TEST_TMP/docker] [--file] [$TEST_TMP/out/images.todo] [--yes]"
   teardown_case
 }
 
@@ -140,7 +149,7 @@ test_legacy_updater_dispatch_injects_missing_paths(){
   setup_case
   run_entrypoint docker-update-from-wud-legacy --yes
   assert_status 0
-  assert_output "docker-update-from-wud-legacy [--base] [$TEST_TMP/docker] [--file] [$TEST_TMP/images.todo] [--yes]"
+  assert_output "docker-update-from-wud-legacy [--base] [$TEST_TMP/docker] [--file] [$TEST_TMP/out/images.todo] [--yes]"
   teardown_case
 }
 
@@ -174,6 +183,7 @@ updates [--yes]"
 test_sync_removes_stale_files(){
   setup_case
   mkdir -p "$TEST_TMP/managed-wud"
+  printf 'managed\n' > "$TEST_TMP/managed-wud/.wud-updater-managed"
   printf 'stale\n' > "$TEST_TMP/managed-wud/stale.txt"
   run_entrypoint sync-wud-scripts
   assert_status 0
@@ -182,11 +192,15 @@ test_sync_removes_stale_files(){
   teardown_case
 }
 
-test_sync_refuses_unsafe_destination(){
+test_sync_refuses_non_empty_unmanaged_destination(){
   setup_case
-  WUD_SCRIPTS_DIR="$APP_DIR/wud" run_entrypoint sync-wud-scripts
+  mkdir -p "$TEST_TMP/unmanaged"
+  printf 'keep\n' > "$TEST_TMP/unmanaged/existing.txt"
+  WUD_SCRIPTS_DIR="$TEST_TMP/unmanaged" run_entrypoint sync-wud-scripts
   assert_status 1
-  grep -q 'Refusing unsafe WUD_SCRIPTS_DIR' "$TEST_TMP/output.log" || fail "missing unsafe destination message"
+  grep -q 'Refusing to sync into non-empty unmanaged WUD_SCRIPTS_DIR' "$TEST_TMP/output.log" || fail "missing unmanaged destination message"
+  [[ -f "$TEST_TMP/unmanaged/existing.txt" ]] || fail "unmanaged file was removed"
+  [[ ! -e "$TEST_TMP/unmanaged/on-update.sh" ]] || fail "scripts were copied to unmanaged directory"
   teardown_case
 }
 
@@ -195,6 +209,28 @@ test_sync_refuses_empty_destination(){
   WUD_SCRIPTS_DIR="" run_entrypoint sync-wud-scripts
   assert_status 1
   grep -q 'Refusing unsafe WUD_SCRIPTS_DIR: <empty>' "$TEST_TMP/output.log" || fail "missing empty destination message"
+  teardown_case
+}
+
+test_sync_refuses_reserved_destinations(){
+  setup_case
+  mkdir -p "$APP_DIR/subdir" "$TEST_TMP/docker/subdir" "$TEST_TMP/out/subdir" "$TEST_TMP/managed-wud"
+  assert_refuses_sync_dir /
+  assert_refuses_sync_dir "$APP_DIR"
+  assert_refuses_sync_dir "$APP_DIR/subdir"
+  assert_refuses_sync_dir "$TEST_TMP/docker"
+  assert_refuses_sync_dir "$TEST_TMP/docker/subdir"
+  assert_refuses_sync_dir "$TEST_TMP/out"
+  assert_refuses_sync_dir "$TEST_TMP/out/subdir"
+  assert_refuses_sync_dir "$APP_DIR/../out"
+  assert_refuses_sync_dir "$TEST_TMP/managed-wud/../out"
+  teardown_case
+}
+
+test_sync_refuses_symlinked_reserved_destination(){
+  setup_case
+  ln -s "$TEST_TMP/out" "$TEST_TMP/out-link"
+  assert_refuses_sync_dir "$TEST_TMP/out-link"
   teardown_case
 }
 
@@ -216,8 +252,10 @@ main(){
   run_test test_sync_command_copies_scripts_and_exits
   run_test test_startup_sync_runs_before_command
   run_test test_sync_removes_stale_files
-  run_test test_sync_refuses_unsafe_destination
+  run_test test_sync_refuses_non_empty_unmanaged_destination
   run_test test_sync_refuses_empty_destination
+  run_test test_sync_refuses_reserved_destinations
+  run_test test_sync_refuses_symlinked_reserved_destination
 }
 
 trap teardown_case EXIT
