@@ -56,10 +56,12 @@ wud-updater update-from-wud --dry-run
 
 ## Development
 
-Install the Python development dependencies before running the full local suite:
+Install the Python development dependencies in a virtual environment before running the full local suite:
 
 ```bash
-python3 -m pip install -e '.[dev]'
+python3 -m venv .venv
+. .venv/bin/activate
+python -m pip install -e '.[dev]'
 ```
 
 Run the full validation entrypoint:

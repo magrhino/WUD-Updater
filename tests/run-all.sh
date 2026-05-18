@@ -46,8 +46,10 @@ fi
 if ! command -v ruff >/dev/null 2>&1; then
   cat >&2 <<EOF
 ruff is required to run the full test suite.
-Install the Python development dependencies, for example:
-  $python_bin -m pip install -e '.[dev]'
+Install the Python development dependencies in a virtual environment, for example:
+  $python_bin -m venv .venv
+  . .venv/bin/activate
+  python -m pip install -e '.[dev]'
 EOF
   exit 127
 fi
