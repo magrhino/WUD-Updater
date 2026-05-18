@@ -16,6 +16,7 @@ class LoadConfigTests(unittest.TestCase):
             Path("/home/wud/docker/wud/out/images.todo"),
         )
         self.assertEqual(config.log_dir, Path("logs"))
+        self.assertEqual(config.db_path, Path("logs/wud-updater.sqlite"))
         self.assertEqual(config.update_mode, "stop")
         self.assertEqual(config.max_wait, 180)
         self.assertEqual(config.lock_timeout, 30)
@@ -28,6 +29,7 @@ class LoadConfigTests(unittest.TestCase):
                 "DOCKER_BASE": "/srv/docker",
                 "WUD_OUT_FILE": "/srv/wud/images.todo",
                 "WUD_LOG_DIR": "/srv/logs",
+                "WUD_DB_PATH": "/srv/state/wud.sqlite",
                 "WUD_UPDATE_MODE": "live",
                 "WUD_MAX_WAIT": "7",
                 "WUD_LOCK_TIMEOUT": "2",
@@ -40,6 +42,7 @@ class LoadConfigTests(unittest.TestCase):
         self.assertEqual(config.docker_base, Path("/srv/docker"))
         self.assertEqual(config.wud_out_file, Path("/srv/wud/images.todo"))
         self.assertEqual(config.log_dir, Path("/srv/logs"))
+        self.assertEqual(config.db_path, Path("/srv/state/wud.sqlite"))
         self.assertEqual(config.update_mode, "live")
         self.assertEqual(config.max_wait, 7)
         self.assertEqual(config.lock_timeout, 2)
@@ -53,6 +56,7 @@ class LoadConfigTests(unittest.TestCase):
                 "DOCKER_BASE": "",
                 "WUD_OUT_FILE": "",
                 "WUD_LOG_DIR": "",
+                "WUD_DB_PATH": "",
                 "WUD_UPDATE_MODE": "",
                 "WUD_MAX_WAIT": "",
                 "WUD_LOCK_TIMEOUT": "",
@@ -66,9 +70,15 @@ class LoadConfigTests(unittest.TestCase):
             Path("/home/wud/docker/wud/out/images.todo"),
         )
         self.assertEqual(config.log_dir, Path("logs"))
+        self.assertEqual(config.db_path, Path("logs/wud-updater.sqlite"))
         self.assertEqual(config.update_mode, "stop")
         self.assertEqual(config.max_wait, 180)
         self.assertEqual(config.lock_timeout, 30)
+
+    def test_db_path_defaults_under_configured_log_dir(self) -> None:
+        config = load_config({"WUD_LOG_DIR": "/srv/logs"}, home="/home/wud")
+
+        self.assertEqual(config.db_path, Path("/srv/logs/wud-updater.sqlite"))
 
     def test_out_guid_alias_is_used_when_out_gid_is_absent(self) -> None:
         config = load_config(
