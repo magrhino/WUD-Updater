@@ -4,6 +4,22 @@ All notable changes to WUD-Updater are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com) and versions follow
 [Semantic Versioning](https://semver.org).
 
+## [0.4.1](https://github.com/magrhino/WUD-Updater/compare/v0.4.0...v0.4.1) (2026-05-18)
+
+
+### Bug Fixes
+
+* **logs:** move default updater logs out of docker root ([3d42e94](https://github.com/magrhino/WUD-Updater/commit/3d42e941830fdefa833c090413372cc8de1570bd))
+* **logs:** move default updater logs out of docker root ([9aeff64](https://github.com/magrhino/WUD-Updater/commit/9aeff64cd43f01eec92e44d91ae0d2b7d0818bec))
+
+
+### Documentation
+
+* **changelog:** note updater log directory change ([1d7de0f](https://github.com/magrhino/WUD-Updater/commit/1d7de0ffec29c6c38f277415d9f6c6df9e9794cd))
+* **docker:** add hardened socket proxy compose example ([147c75a](https://github.com/magrhino/WUD-Updater/commit/147c75afd48fb72daddbc6113db20186bd4c4575))
+* **docker:** use published image in compose example ([cdc66ff](https://github.com/magrhino/WUD-Updater/commit/cdc66ff281623a9061b0fd08c29a5dec7282df54))
+* Move temlpate.env and document ([1ac0bf3](https://github.com/magrhino/WUD-Updater/commit/1ac0bf311938e8c72d66b1e4e4dacbf4eaac3740))
+
 ## [0.4.0](https://github.com/magrhino/WUD-Updater/compare/v0.3.0...v0.4.0) (2026-05-18)
 
 
