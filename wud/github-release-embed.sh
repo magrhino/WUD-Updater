@@ -439,7 +439,7 @@ extract_intro_until_h3() {
 
 semver_first() {
   tr -d '\r' \
-    | tr -cs '0-9A-Za-z._- ' '\n' \
+    | tr -cs '0-9A-Za-z._ -' '\n' \
     | grep -m1 -E '^[vV]?[0-9]+(\.[0-9]+){1,3}([._-][0-9A-Za-z]+)?$' \
     || true
 }
