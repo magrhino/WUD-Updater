@@ -70,7 +70,7 @@ Use the shell already used by the target script.
 | container build test | `tests/container-build.sh` |
 | container compose config check | `docker compose -f docker-compose.example.yml config` |
 | container image build | `docker build -t wud-updater:local .` |
-| Python dev dependency install | `python3 -m pip install -e '.[dev]'` |
+| Python dev dependency install | `python3 -m venv .venv`, `. .venv/bin/activate`, then `python -m pip install -e '.[dev]'` |
 | Python lint | `ruff check .` |
 | Python syntax check | `python3 -m py_compile src/wud_updater/*.py tests/run-python-tests.py tests/test_python_*.py` |
 | Python tests | `python3 tests/run-python-tests.py` |

@@ -41,7 +41,13 @@ jobs:
           esac
 
       - name: Install Python dev dependencies
-        run: python3 -m pip install -e '.[dev]'
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m venv .venv
+          . .venv/bin/activate
+          python -m pip install -e '.[dev]'
+          echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
 
       - name: Run tests
         run: tests/run-all.sh
