@@ -4,6 +4,18 @@ All notable changes to WUD-Updater are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com) and versions follow
 [Semantic Versioning](https://semver.org).
 
+## [0.4.2](https://github.com/magrhino/WUD-Updater/compare/v0.4.1...v0.4.2) (2026-05-18)
+
+
+### Bug Fixes
+
+* **wud:** harden discord webhook payloads ([58029cc](https://github.com/magrhino/WUD-Updater/commit/58029cc454eb21739bb636db14cfa4a3c8cf3ddd))
+
+
+### Documentation
+
+* **github:** add contributor templates ([#15](https://github.com/magrhino/WUD-Updater/issues/15)) ([3349713](https://github.com/magrhino/WUD-Updater/commit/3349713e818450d6ab9e93b35600a5a02a6ff60c))
+
 ## [0.4.1](https://github.com/magrhino/WUD-Updater/compare/v0.4.0...v0.4.1) (2026-05-18)
 
 
