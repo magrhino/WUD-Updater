@@ -159,8 +159,20 @@ test_yes_invokes_configured_updater_through_sudo(){
   run_updates --yes --base "$TEST_TMP/docker" --mode live --max-wait 7
 
   assert_status 0
-  grep -q -- "$TEST_TMP/updater --base $TEST_TMP/docker --file $WUD_FILE --mode live --max-wait 7 --yes" "$TEST_TMP/sudo.log" || fail "sudo did not receive expected updater command"
-  grep -q -- "--base $TEST_TMP/docker --file $WUD_FILE --mode live --max-wait 7 --yes" "$TEST_TMP/updater.log" || fail "updater did not receive expected arguments"
+  grep -q -- "$TEST_TMP/updater --base $TEST_TMP/docker --file $WUD_FILE --log-dir ./logs --mode live --max-wait 7 --yes" "$TEST_TMP/sudo.log" || fail "sudo did not receive expected updater command"
+  grep -q -- "--base $TEST_TMP/docker --file $WUD_FILE --log-dir ./logs --mode live --max-wait 7 --yes" "$TEST_TMP/updater.log" || fail "updater did not receive expected arguments"
+  teardown_case
+}
+
+test_log_dir_cli_overrides_environment(){
+  setup_case
+  printf 'repo/app:latest\n' > "$WUD_FILE"
+
+  run_updates WUD_LOG_DIR="$TEST_TMP/env-logs" --yes --base "$TEST_TMP/docker" --log-dir "$TEST_TMP/cli-logs"
+
+  assert_status 0
+  grep -q -- "--log-dir $TEST_TMP/cli-logs" "$TEST_TMP/updater.log" || fail "updater did not receive CLI log dir"
+  ! grep -q -- "$TEST_TMP/env-logs" "$TEST_TMP/updater.log" || fail "environment log dir overrode CLI log dir"
   teardown_case
 }
 
@@ -171,7 +183,7 @@ test_yes_passes_owner_config_through_sudo_env(){
   run_updates OUT_UID=1000 OUT_GUID=1000 --yes --base "$TEST_TMP/docker"
 
   assert_status 0
-  grep -q -- "env OUT_UID=1000 OUT_GID=1000 $TEST_TMP/updater --base $TEST_TMP/docker --file $WUD_FILE --mode stop --max-wait 180 --yes" "$TEST_TMP/sudo.log" || fail "sudo did not receive expected owner env"
+  grep -q -- "env OUT_UID=1000 OUT_GID=1000 $TEST_TMP/updater --base $TEST_TMP/docker --file $WUD_FILE --log-dir ./logs --mode stop --max-wait 180 --yes" "$TEST_TMP/sudo.log" || fail "sudo did not receive expected owner env"
   grep -q -- "OUT_UID=1000 OUT_GID=1000 OUT_GUID=" "$TEST_TMP/updater.log" || fail "updater did not receive owner env"
   teardown_case
 }
@@ -183,7 +195,7 @@ test_yes_passes_lock_timeout_through_sudo_env(){
   run_updates WUD_LOCK_TIMEOUT=0 --yes --base "$TEST_TMP/docker"
 
   assert_status 0
-  grep -q -- "env WUD_LOCK_TIMEOUT=0 $TEST_TMP/updater --base $TEST_TMP/docker --file $WUD_FILE --mode stop --max-wait 180 --yes" "$TEST_TMP/sudo.log" || fail "sudo did not receive expected lock timeout env"
+  grep -q -- "env WUD_LOCK_TIMEOUT=0 $TEST_TMP/updater --base $TEST_TMP/docker --file $WUD_FILE --log-dir ./logs --mode stop --max-wait 180 --yes" "$TEST_TMP/sudo.log" || fail "sudo did not receive expected lock timeout env"
   grep -q -- "WUD_LOCK_TIMEOUT=0" "$TEST_TMP/updater.log" || fail "updater did not receive lock timeout env"
   teardown_case
 }
@@ -195,7 +207,7 @@ test_yes_passes_allow_tag_updates_flag(){
   run_updates --yes --allow-tag-updates --base "$TEST_TMP/docker"
 
   assert_status 0
-  grep -q -- "$TEST_TMP/updater --base $TEST_TMP/docker --file $WUD_FILE --mode stop --max-wait 180 --allow-tag-updates --yes" "$TEST_TMP/sudo.log" || fail "sudo did not receive allow-tag-updates flag"
+  grep -q -- "$TEST_TMP/updater --base $TEST_TMP/docker --file $WUD_FILE --log-dir ./logs --mode stop --max-wait 180 --allow-tag-updates --yes" "$TEST_TMP/sudo.log" || fail "sudo did not receive allow-tag-updates flag"
   grep -q -- "--allow-tag-updates --yes" "$TEST_TMP/updater.log" || fail "updater did not receive allow-tag-updates flag"
   teardown_case
 }
@@ -207,8 +219,8 @@ test_interactive_all_preserves_default_updater_args(){
   run_updates_with_input 'a\n' --base "$TEST_TMP/docker"
 
   assert_status 0
-  grep -q -- "$TEST_TMP/updater --base $TEST_TMP/docker --file $WUD_FILE --mode stop --max-wait 180 --yes" "$TEST_TMP/sudo.log" || fail "sudo did not receive default all-selection updater command"
-  grep -q -- "--base $TEST_TMP/docker --file $WUD_FILE --mode stop --max-wait 180 --yes" "$TEST_TMP/updater.log" || fail "updater did not receive default all-selection arguments"
+  grep -q -- "$TEST_TMP/updater --base $TEST_TMP/docker --file $WUD_FILE --log-dir ./logs --mode stop --max-wait 180 --yes" "$TEST_TMP/sudo.log" || fail "sudo did not receive default all-selection updater command"
+  grep -q -- "--base $TEST_TMP/docker --file $WUD_FILE --log-dir ./logs --mode stop --max-wait 180 --yes" "$TEST_TMP/updater.log" || fail "updater did not receive default all-selection arguments"
   teardown_case
 }
 
@@ -330,6 +342,7 @@ run_test(){
 main(){
   run_test test_dry_run_does_not_invoke_updater
   run_test test_yes_invokes_configured_updater_through_sudo
+  run_test test_log_dir_cli_overrides_environment
   run_test test_yes_passes_owner_config_through_sudo_env
   run_test test_yes_passes_lock_timeout_through_sudo_env
   run_test test_yes_passes_allow_tag_updates_flag

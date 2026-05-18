@@ -123,7 +123,7 @@ test_updater_dispatch_injects_missing_paths(){
   setup_case
   run_entrypoint docker-update-from-wud --yes
   assert_status 0
-  assert_output "docker-update-from-wud [--base] [$TEST_TMP/docker] [--file] [$TEST_TMP/out/images.todo] [--yes]"
+  assert_output "docker-update-from-wud [--base] [$TEST_TMP/docker] [--file] [$TEST_TMP/out/images.todo] [--log-dir] [/logs] [--yes]"
   teardown_case
 }
 
@@ -131,7 +131,15 @@ test_updater_dispatch_preserves_explicit_paths(){
   setup_case
   run_entrypoint docker-update-from-wud --dry-run --base /custom/docker --file /custom/images.todo
   assert_status 0
-  assert_output 'docker-update-from-wud [--dry-run] [--base] [/custom/docker] [--file] [/custom/images.todo]'
+  assert_output 'docker-update-from-wud [--log-dir] [/logs] [--dry-run] [--base] [/custom/docker] [--file] [/custom/images.todo]'
+  teardown_case
+}
+
+test_updater_dispatch_preserves_explicit_log_dir(){
+  setup_case
+  WUD_LOG_DIR=/env/logs run_entrypoint docker-update-from-wud --dry-run --log-dir /custom/logs
+  assert_status 0
+  assert_output "docker-update-from-wud [--base] [$TEST_TMP/docker] [--file] [$TEST_TMP/out/images.todo] [--dry-run] [--log-dir] [/custom/logs]"
   teardown_case
 }
 
@@ -229,6 +237,7 @@ main(){
   run_test test_updates_dispatch_passes_arguments
   run_test test_updater_dispatch_injects_missing_paths
   run_test test_updater_dispatch_preserves_explicit_paths
+  run_test test_updater_dispatch_preserves_explicit_log_dir
   run_test test_debug_command_executes_directly
   run_test test_sync_command_copies_scripts_and_exits
   run_test test_startup_sync_runs_before_command

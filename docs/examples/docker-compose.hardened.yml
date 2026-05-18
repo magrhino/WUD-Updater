@@ -82,6 +82,7 @@ services:
       DOCKER_HOST: tcp://socket-proxy-wud-updater:2375
       DOCKER_BASE: /host/docker
       WUD_OUT_FILE: /out/images.todo
+      WUD_LOG_DIR: /logs
       WUD_SYNC_SCRIPTS: "1"
       WUD_SCRIPTS_DIR: /managed-wud
       # The Python wrapper avoids sudo inside the read-only helper container.
@@ -92,9 +93,10 @@ services:
       OUT_GID: "1000"
     volumes:
       # Keep this path aligned with DOCKER_BASE. It is writable because the
-      # updater writes logs under DOCKER_BASE/logs and may rewrite Compose
-      # image tags when --allow-tag-updates is used.
+      # updater may rewrite Compose image tags when --allow-tag-updates is used.
       - /srv/docker:/host/docker
+      # Updater logs are kept outside the Docker stack root.
+      - ./logs:/logs
       # Startup sync copies this repo's WUD callback scripts here for WUD.
       - wud-scripts:/managed-wud
       - wud-out:/out
