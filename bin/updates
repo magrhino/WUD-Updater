@@ -3,6 +3,16 @@ set -uo pipefail
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 repo_dir="$(cd "$script_dir/.." && pwd -P)"
+
+if [[ "${WUD_UPDATER_PYTHON:-}" == "1" ]]; then
+  if [[ -n "${PYTHONPATH:-}" ]]; then
+    export PYTHONPATH="${repo_dir}/src:${PYTHONPATH}"
+  else
+    export PYTHONPATH="${repo_dir}/src"
+  fi
+  exec "${PYTHON_BIN:-python3}" -m wud_updater.cli updates "$@"
+fi
+
 config_file="${WUD_UPDATER_CONFIG:-$HOME/.config/wud-updater/env}"
 
 if [ -r "$config_file" ]; then

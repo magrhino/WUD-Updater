@@ -1,12 +1,14 @@
 from __future__ import annotations
 
+import os
 import unittest
 import tempfile
 from contextlib import redirect_stderr, redirect_stdout
 from io import StringIO
 from pathlib import Path
+from unittest import mock
 
-from wud_updater.cli import NOT_WIRED_MESSAGE, main
+from wud_updater.cli import main
 
 
 class CliTests(unittest.TestCase):
@@ -64,20 +66,44 @@ class CliTests(unittest.TestCase):
         self.assertIn("--max-wait must be an integer number of seconds", stderr)
 
     def test_updates_dry_run_exits_successfully_without_mutation(self) -> None:
-        status, _stdout, stderr = self._run_main(
-            ["updates", "--dry-run", "--mode", "pause"]
-        )
+        with tempfile.TemporaryDirectory(prefix="wud-python-cli.") as tmpdir:
+            env = {
+                "HOME": tmpdir,
+                "WUD_UPDATER_CONFIG": str(Path(tmpdir) / "missing-env"),
+                "PATH": os.environ.get("PATH", ""),
+            }
+            with mock.patch.dict(os.environ, env, clear=True):
+                status, stdout, stderr = self._run_main(
+                    [
+                        "updates",
+                        "--dry-run",
+                        "--mode",
+                        "pause",
+                        "--file",
+                        str(Path(tmpdir) / "missing.todo"),
+                    ]
+                )
 
         self.assertEqual(status, 0)
-        self.assertIn(NOT_WIRED_MESSAGE, stderr)
-        self.assertIn("bin/updates", stderr)
-        self.assertIn("No changes were made.", stderr)
+        self.assertIn("=== 📦 Docker Updates ===", stdout)
+        self.assertIn("✅ No pending Docker updates!", stdout)
+        self.assertEqual(stderr, "")
 
-    def test_updates_non_dry_run_refuses_mutating_path(self) -> None:
-        status, _stdout, stderr = self._run_main(["updates", "--yes"])
+    def test_updates_yes_without_pending_entries_exits_successfully(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="wud-python-cli.") as tmpdir:
+            env = {
+                "HOME": tmpdir,
+                "WUD_UPDATER_CONFIG": str(Path(tmpdir) / "missing-env"),
+                "PATH": os.environ.get("PATH", ""),
+            }
+            with mock.patch.dict(os.environ, env, clear=True):
+                status, stdout, stderr = self._run_main(
+                    ["updates", "--yes", "--file", str(Path(tmpdir) / "empty.todo")]
+                )
 
-        self.assertEqual(status, 1)
-        self.assertIn("Refusing to continue", stderr)
+        self.assertEqual(status, 0)
+        self.assertIn("✅ No pending Docker updates!", stdout)
+        self.assertEqual(stderr, "")
 
     def test_missing_subcommand_is_rejected_by_parser(self) -> None:
         stderr = StringIO()
