@@ -10,10 +10,13 @@ All notable changes to WUD-Updater are documented here. Format loosely follows
 
 - Added Ruff to the development validation path and documented the virtual-environment setup for local checks.
 - Added actionlint CI for pull requests targeting `main`.
+- Added an opt-in Python-backed `updates` wrapper path with parity coverage for update status, alerts, dry runs, and updater dispatch.
+- Added no-sudo support for configured updater commands in the Python wrapper path.
 
 ### Fixed
 
 - Fixed macOS CI dependency installation by installing Python development dependencies inside a local virtual environment.
+- Preserved the default shell-backed `updates` behavior unless the Python wrapper path is explicitly enabled.
 
 Release entries are authored when a release is cut. Ordinary feature and docs
 work should update the relevant user-facing docs in the same change, but leave
