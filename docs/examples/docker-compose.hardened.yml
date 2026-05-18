@@ -1,0 +1,124 @@
+services:
+  socket-proxy-wud-updater:
+    image: lscr.io/linuxserver/socket-proxy:latest
+    restart: unless-stopped
+    networks:
+      - wud-updater-socket
+    environment:
+      # This is the only service with the raw host socket. WUD and
+      # WUD-Updater talk to this internal proxy instead of mounting
+      # /var/run/docker.sock directly.
+      CONTAINERS: "1"
+      IMAGES: "1"
+      NETWORKS: "1"
+      VOLUMES: "1"
+      EVENTS: "1"
+      INFO: "1"
+      PING: "1"
+      VERSION: "1"
+      # Required for docker compose pull/stop/up and image pulls. Keep the
+      # helper command on --dry-run until you are ready for these mutations.
+      POST: "1"
+      AUTH: "0"
+      BUILD: "0"
+      COMMIT: "0"
+      CONFIGS: "0"
+      DISTRIBUTION: "0"
+      EXEC: "0"
+      NODES: "0"
+      PLUGINS: "0"
+      SECRETS: "0"
+      SERVICES: "0"
+      SESSION: "0"
+      SWARM: "0"
+      SYSTEM: "0"
+      TASKS: "0"
+      LOG_LEVEL: info
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    read_only: true
+    tmpfs:
+      - /run
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+
+  wud:
+    image: getwud/wud:latest
+    restart: unless-stopped
+    networks:
+      - wud-updater-egress
+      - wud-updater-socket
+    depends_on:
+      - socket-proxy-wud-updater
+    environment:
+      # WUD watches Docker through the proxy and writes pending updates to
+      # /out/images.todo through the mounted callback scripts.
+      WUD_WATCHER_LOCAL_HOST: socket-proxy-wud-updater
+      WUD_WATCHER_LOCAL_PORT: "2375"
+      WUD_WATCHER_LOCAL_WATCHEVENTS: "true"
+    volumes:
+      - wud-scripts:/wud:ro
+      - wud-out:/out
+      - wud-store:/store
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+
+  wud-updater:
+    image: ghcr.io/magrhino/wud-updater:latest
+    restart: unless-stopped
+    networks:
+      - wud-updater-socket
+    depends_on:
+      - socket-proxy-wud-updater
+    environment:
+      # The Docker CLI and Compose plugin use the same constrained proxy.
+      DOCKER_HOST: tcp://socket-proxy-wud-updater:2375
+      DOCKER_BASE: /host/docker
+      WUD_OUT_FILE: /out/images.todo
+      WUD_SYNC_SCRIPTS: "1"
+      WUD_SCRIPTS_DIR: /managed-wud
+      # The Python wrapper avoids sudo inside the read-only helper container.
+      WUD_UPDATER_PYTHON: "1"
+      WUD_UPDATER_USE_SUDO: "0"
+      HOME: /tmp
+      OUT_UID: "1000"
+      OUT_GID: "1000"
+    volumes:
+      # Keep this path aligned with DOCKER_BASE. It is writable because the
+      # updater writes logs under DOCKER_BASE/logs and may rewrite Compose
+      # image tags when --allow-tag-updates is used.
+      - /srv/docker:/host/docker
+      # Startup sync copies this repo's WUD callback scripts here for WUD.
+      - wud-scripts:/managed-wud
+      - wud-out:/out
+    command: ["updates", "--dry-run"]
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    cap_add:
+      # The helper runs without sudo, but still needs to write logs, preserve
+      # todo-file ownership, and optionally rewrite bind-mounted Compose files.
+      - CHOWN
+      - DAC_OVERRIDE
+      - FOWNER
+    security_opt:
+      - no-new-privileges:true
+
+networks:
+  wud-updater-egress:
+  wud-updater-socket:
+    internal: true
+
+volumes:
+  wud-scripts:
+  wud-out:
+  wud-store:

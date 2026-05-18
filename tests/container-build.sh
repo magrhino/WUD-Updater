@@ -5,6 +5,7 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
 cd "$REPO_ROOT"
 
 COMPOSE_EXAMPLE="docs/examples/docker-compose.example.yml"
+COMPOSE_HARDENED="docs/examples/docker-compose.hardened.yml"
 COMPOSE_BUILD="docs/examples/docker-compose.build.yml"
 cleanup_image=0
 SYNC_TMP=""
@@ -51,6 +52,7 @@ need_cmd docker
 run docker version
 run docker compose version
 run_quiet docker compose -f "$COMPOSE_EXAMPLE" config
+run_quiet docker compose -f "$COMPOSE_HARDENED" config
 run_quiet docker compose -f "$COMPOSE_BUILD" config
 run docker build -t "$IMAGE" .
 run docker run --rm "$IMAGE"

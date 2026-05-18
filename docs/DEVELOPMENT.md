@@ -42,6 +42,7 @@ Container checks require Docker:
 
 ```bash
 docker compose -f docs/examples/docker-compose.example.yml config
+docker compose -f docs/examples/docker-compose.hardened.yml config
 docker compose -f docs/examples/docker-compose.build.yml config
 tests/container-build.sh
 ```

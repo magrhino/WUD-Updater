@@ -95,6 +95,12 @@ The example mounts:
 Set `DOCKER_BASE` to the path that contains the Compose projects as seen inside
 the helper container. Set `WUD_OUT_FILE` to the todo file shared with WUD.
 
+For a socket-proxy deployment, use
+[`docs/examples/docker-compose.hardened.yml`](examples/docker-compose.hardened.yml).
+That variant mounts `/var/run/docker.sock` only into a LinuxServer.io socket
+proxy sidecar, points WUD and the helper at `tcp://socket-proxy-wud-updater:2375`,
+and keeps the proxy on an internal Docker network.
+
 For local image development and smoke tests, use
 [`docs/examples/docker-compose.build.yml`](examples/docker-compose.build.yml).
 That file keeps the repository-local `build` stanza separate from the
@@ -154,6 +160,10 @@ fresh empty script volume. You can also run the sync directly:
 ```bash
 docker compose -f docs/examples/docker-compose.example.yml run --rm wud-updater sync-wud-scripts
 ```
+
+Use the same `sync-wud-scripts` command with
+`docs/examples/docker-compose.hardened.yml` when bootstrapping the hardened
+socket-proxy example.
 
 ## Host Install
 
@@ -238,6 +248,9 @@ secrets in this repository.
 Mounting `/var/run/docker.sock` gives the helper root-equivalent control over
 the host Docker daemon. Only run trusted images with that socket, and keep the
 stack, script, and output mounts scoped to the directories the updater needs.
+The hardened compose example reduces direct socket exposure by putting the raw
+socket behind a sidecar proxy, but `POST=1` is still required for Docker Compose
+pull/recreate operations.
 
 Secrets such as Discord webhooks and GitHub tokens must come from environment
 variables or host-local secret stores. The scripts redact webhook values in
