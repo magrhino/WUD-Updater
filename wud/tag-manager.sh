@@ -6,6 +6,9 @@ set -Eeuo pipefail
 # - Never let a logging printf abort the script (|| :)
 trap '' PIPE
 # ---------- config ----------
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
+# shellcheck source=wud/http.sh
+source "${SCRIPT_DIR}/http.sh"
 RELEASE_EMBED="${RELEASE_EMBED:-/wud/github-release-embed.sh}"
 UPSTREAM_MAP="${UPSTREAM_MAP:-/wud/upstreams.txt}"   # lines: linuxserver/docker-xyz: Owner/Repo
 LOG_DIR="${LOG_DIR:-/out}"
@@ -43,7 +46,7 @@ send_discord() {
   [[ -n "$url" ]] || return 0
   local payload
   payload="$(jq -n --arg content "$msg" '{content:$content, allowed_mentions:{parse:[]}}')"
-  curl -fsSL -H 'Content-Type: application/json' -X POST -d "$payload" "$url"
+  http_post_discord_json "$url" "$payload"
 }
 
 lookup_upstream() {

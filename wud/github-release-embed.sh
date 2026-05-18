@@ -2,6 +2,10 @@
 set -Eeuo pipefail
 trap '' PIPE
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
+# shellcheck source=wud/http.sh
+source "${SCRIPT_DIR}/http.sh"
+
 # =========================================
 # Config / Defaults
 # =========================================
@@ -190,15 +194,15 @@ DISCORD_COLOR="$(norm_color "$COLOR_HEX")"
 # GitHub API helpers
 # =========================================
 GITHUB_TOKEN="${GITHUB_TOKEN:-}"
-CURL_HEADERS=(-fsSL -H "Accept: application/vnd.github+json" -H "User-Agent: github-release-embed/1.0")
-[[ -n "$GITHUB_TOKEN" ]] && CURL_HEADERS+=(-H "Authorization: Bearer ${GITHUB_TOKEN}")
+GITHUB_HEADERS=(-H "Accept: application/vnd.github+json" -H "User-Agent: github-release-embed/1.0")
+[[ -n "$GITHUB_TOKEN" ]] && GITHUB_HEADERS+=(-H "Authorization: Bearer ${GITHUB_TOKEN}")
 
 api_get() {
   local url="$1" tmp
 
   dbg "GET $url"
   tmp="$(mktemp)"
-  if ! curl "${CURL_HEADERS[@]}" -sSf --retry 3 --retry-delay 1 --max-time 20 -o "$tmp" "$url"; then
+  if ! http_get_to_file "$tmp" "$url" "${GITHUB_HEADERS[@]}"; then
     if [[ -s "$tmp" ]]; then
       { >&2 printf "[%s] [ERROR] curl body (first 200 bytes): %s\n" "$(ts)" "$(head -c 200 "$tmp" | tr '\n' ' ')" || true; }
     fi
@@ -214,7 +218,7 @@ resolve_latest_redirect() {
 
   url="https://github.com/${owner}/${repo}/releases/latest"
   dbg "HEAD/GET (follow) $url"
-  effective="$(curl -fsSL -o /dev/null -w '%{url_effective}' -H "User-Agent: github-release-embed/1.0" "$url" || true)"
+  effective="$(http_effective_url "$url" -H "User-Agent: github-release-embed/1.0" || true)"
   [[ -n "$effective" ]] || {
     printf ''
     return 0
@@ -502,25 +506,20 @@ build_description() {
 }
 
 send_or_print_payload() {
-  local payload="$1" response code
+  local payload="$1"
 
   if [[ -z "$WEBHOOK" ]]; then
     printf "%s\n" "$payload" || true
     return 0
   fi
 
-  response="$(curl -sS -H "Content-Type: application/json" -d "$payload" -w '\n%{http_code}' "$WEBHOOK")" || {
-    err "Discord webhook request failed to send"
+  if ! http_post_discord_json "$WEBHOOK" "$payload"; then
+    err "${HTTP_DISCORD_ERROR:-Discord webhook request failed to send}"
     return 1
-  }
-  code="${response##*$'\n'}"
-  if [[ "$code" =~ ^2[0-9][0-9]$ ]]; then
-    printf "Sent embed to Discord.\n" || true
-    return 0
   fi
 
-  err "Discord webhook error $code"
-  return 1
+  printf "Sent embed to Discord.\n" || true
+  return 0
 }
 
 build_context_line_generic() {
