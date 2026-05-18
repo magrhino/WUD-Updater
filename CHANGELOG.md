@@ -4,6 +4,13 @@ All notable changes to WUD-Updater are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com) and versions follow
 [Semantic Versioning](https://semver.org).
 
+## [0.3.0](https://github.com/magrhino/WUD-Updater/compare/v0.2.0...v0.3.0) (2026-05-18)
+
+
+### Features
+
+* **container:** add WUD script startup sync ([95a9a96](https://github.com/magrhino/WUD-Updater/commit/95a9a96259786fddfe8ecad8d7c59d0e7b51f70b))
+
 ## [0.2.0](https://github.com/magrhino/WUD-Updater/compare/v0.1.0...v0.2.0) (2026-05-18)
 
 
@@ -65,23 +72,16 @@ All notable changes to WUD-Updater are documented here. Format loosely follows
 
 ### Added
 
-- Added WUD script startup sync for container deployments, including docs for the mounted `/wud` workflow.
-- Added Ruff to the development validation path and documented the virtual-environment setup for local checks.
-- Added actionlint CI for pull requests targeting `main`.
-- Added an opt-in Python-backed `updates` wrapper path with parity coverage for update status, alerts, dry runs, and updater dispatch.
-- Added no-sudo support for configured updater commands in the Python wrapper path.
+- Added deployment, development, container script sync, release-note notification, and WUD update flow docs under `docs/`.
 
 ### Changed
 
 - Moved detailed deployment, development, and workflow guidance from the root README into `docs/`.
 - Archived the legacy Bash updater path and moved the Docker Compose example under `docs/examples/`.
-- Changed `docker-update-from-wud` to use the Python updater by default while keeping the legacy Bash updater available through `docker-update-from-wud-legacy` and `WUD_UPDATER_LEGACY_BASH=1`.
 
 ### Fixed
 
 - Hardened entrypoint WUD script sync so mounted script destinations must be safe directories before image scripts are copied.
-- Fixed macOS CI dependency installation by installing Python development dependencies inside a local virtual environment.
-- Preserved the default shell-backed `updates` behavior unless the Python wrapper path is explicitly enabled.
 
 Release entries are authored when a release is cut. Ordinary feature and docs
 work should update the relevant user-facing docs in the same change, but leave
@@ -98,5 +98,3 @@ Release sections use this shape:
 
 ### Fixed
 ```
-
-No release sections have been published yet.
