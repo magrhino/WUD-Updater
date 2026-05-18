@@ -60,13 +60,15 @@ run bash -n \
   bin/updates \
   bin/docker-update-from-wud \
   wud/tag-manager.sh \
-  wud/lsio-release-embed.sh \
+  wud/github-release-embed.sh \
   wud/release-notes-to-discord.sh \
   tests/run-all.sh \
   tests/test-docker-update-from-wud.sh \
   tests/container-build.sh \
   tests/test-entrypoint.sh \
+  tests/test-github-release-embed.sh \
   tests/test-release-notes-to-discord.sh \
+  tests/test-tag-manager.sh \
   tests/test-wud-append-updates.sh \
   tests/test-install.sh \
   tests/test-updates-wrapper.sh \
@@ -84,13 +86,15 @@ run shellcheck \
   wud/on-update.sh \
   wud/append-updates.sh \
   wud/tag-manager.sh \
-  wud/lsio-release-embed.sh \
+  wud/github-release-embed.sh \
   wud/release-notes-to-discord.sh \
   tests/run-all.sh \
   tests/test-docker-update-from-wud.sh \
   tests/container-build.sh \
   tests/test-entrypoint.sh \
+  tests/test-github-release-embed.sh \
   tests/test-release-notes-to-discord.sh \
+  tests/test-tag-manager.sh \
   tests/test-wud-append-updates.sh \
   tests/test-install.sh \
   tests/test-updates-wrapper.sh \
