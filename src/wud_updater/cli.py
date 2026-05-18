@@ -81,7 +81,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     update_from_wud = subcommands.add_parser(
         "update-from-wud",
-        help="run the opt-in Python docker-update-from-wud implementation",
+        help="run the Python docker-update-from-wud implementation",
     )
     _add_update_from_wud_options(update_from_wud)
     update_from_wud.set_defaults(handler=_run_update_from_wud)

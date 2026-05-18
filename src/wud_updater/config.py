@@ -1,4 +1,4 @@
-"""Defaults and environment parsing for the future Python updater."""
+"""Defaults and environment parsing for the Python updater."""
 
 from __future__ import annotations
 
@@ -66,7 +66,6 @@ def load_config(
     """Parse updater defaults from environment variables.
 
     This intentionally does not read config files or command-line arguments.
-    The existing shell scripts remain the production entrypoints.
     """
 
     env = os.environ if environ is None else environ

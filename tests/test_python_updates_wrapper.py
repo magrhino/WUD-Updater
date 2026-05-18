@@ -103,6 +103,27 @@ class PythonUpdatesWrapperTests(unittest.TestCase):
         self.assertIn("OUT_UID=1000 OUT_GID=1001", updater_log)
         self.assertIn("--allow-tag-updates --yes", updater_log)
 
+    def test_yes_passes_legacy_bash_flag_through_sudo_env(self) -> None:
+        self.wud_file.write_text("repo/app:latest\n", encoding="utf-8")
+
+        result = self.run_updates(
+            "--yes",
+            "--base",
+            str(self.root / "docker"),
+            env_overrides={"WUD_UPDATER_LEGACY_BASH": "1"},
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+        sudo_log = self.sudo_log.read_text(encoding="utf-8")
+        updater_log = self.updater_log.read_text(encoding="utf-8")
+        self.assertIn(
+            "env WUD_UPDATER_LEGACY_BASH=1 "
+            f"{self.updater} --base {self.root / 'docker'} --file {self.wud_file} "
+            "--mode stop --max-wait 180 --yes",
+            sudo_log,
+        )
+        self.assertIn("WUD_UPDATER_LEGACY_BASH=1", updater_log)
+
     def test_no_updater_sudo_flag_invokes_updater_directly(self) -> None:
         self.wud_file.write_text("repo/app:latest\n", encoding="utf-8")
 
@@ -392,7 +413,7 @@ while (($#)); do
       ;;
   esac
 done
-printf 'OUT_UID=%s OUT_GID=%s WUD_LOCK_TIMEOUT=%s WUD_LOCK_HELD_BY_PARENT=%s\\n' "${OUT_UID:-}" "${OUT_GID:-}" "${WUD_LOCK_TIMEOUT:-}" "${WUD_LOCK_HELD_BY_PARENT:-}" >> "${FAKE_UPDATER_LOG:?FAKE_UPDATER_LOG is required}"
+printf 'OUT_UID=%s OUT_GID=%s WUD_LOCK_TIMEOUT=%s WUD_LOCK_HELD_BY_PARENT=%s WUD_UPDATER_LEGACY_BASH=%s\\n' "${OUT_UID:-}" "${OUT_GID:-}" "${WUD_LOCK_TIMEOUT:-}" "${WUD_LOCK_HELD_BY_PARENT:-}" "${WUD_UPDATER_LEGACY_BASH:-}" >> "${FAKE_UPDATER_LOG:?FAKE_UPDATER_LOG is required}"
 if [[ "${FAKE_UPDATER_ASSERT_LOCK:-}" = "1" ]]; then
   if [[ "${WUD_LOCK_HELD_BY_PARENT:-}" != "1" ]]; then
     printf 'missing WUD_LOCK_HELD_BY_PARENT\\n' >> "$FAKE_UPDATER_LOG"
