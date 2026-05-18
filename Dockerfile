@@ -3,6 +3,7 @@ FROM python:3.14-slim-bookworm
 ENV DEBIAN_FRONTEND=noninteractive \
     DOCKER_BASE=/host/docker \
     WUD_OUT_FILE=/out/images.todo \
+    WUD_LOG_DIR=/logs \
     WUD_UPDATER=/app/bin/docker-update-from-wud \
     PATH=/app/bin:$PATH
 
@@ -43,7 +44,7 @@ COPY wud/ /app/wud/
 COPY entrypoint.sh /app/entrypoint.sh
 
 RUN chmod +x /app/entrypoint.sh /app/bin/updates /app/bin/docker-update-from-wud /app/wud/*.sh \
-    && mkdir -p /host/docker /out
+    && mkdir -p /host/docker /out /logs
 
 ENTRYPOINT ["/usr/bin/tini", "--", "/app/entrypoint.sh"]
 CMD ["updates", "--dry-run"]

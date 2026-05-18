@@ -97,7 +97,7 @@ class PythonUpdatesWrapperTests(unittest.TestCase):
         self.assertIn(
             "env OUT_UID=1000 OUT_GID=1001 WUD_LOCK_TIMEOUT=0 "
             f"{self.updater} --base {self.root / 'docker'} --file {self.wud_file} "
-            "--mode stop --max-wait 180 --allow-tag-updates --yes",
+            "--log-dir ./logs --mode stop --max-wait 180 --allow-tag-updates --yes",
             sudo_log,
         )
         self.assertIn("OUT_UID=1000 OUT_GID=1001", updater_log)
@@ -122,8 +122,32 @@ class PythonUpdatesWrapperTests(unittest.TestCase):
         self.assertFalse(self.sudo_log.exists())
         updater_log = self.updater_log.read_text(encoding="utf-8")
         self.assertIn("OUT_UID=1000 OUT_GID=1001 WUD_LOCK_TIMEOUT=0", updater_log)
-        self.assertIn(f"--base {self.root / 'docker'} --file {self.wud_file}", updater_log)
+        self.assertIn(
+            f"--base {self.root / 'docker'} --file {self.wud_file} --log-dir ./logs",
+            updater_log,
+        )
         self.assertIn("Running Docker updates via: env OUT_UID=1000", result.stdout)
+
+    def test_log_dir_cli_overrides_environment(self) -> None:
+        self.wud_file.write_text("repo/app:latest\n", encoding="utf-8")
+        cli_log_dir = self.root / "cli-logs"
+
+        result = self.run_updates(
+            "--yes",
+            "--no-updater-sudo",
+            "--log-dir",
+            str(cli_log_dir),
+            env_overrides={
+                "WUD_LOG_DIR": str(self.root / "env-logs"),
+                "WUD_UPDATER_USE_SUDO": "0",
+            },
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+        self.assertFalse(self.sudo_log.exists())
+        updater_log = self.updater_log.read_text(encoding="utf-8")
+        self.assertIn(f"--log-dir {cli_log_dir}", updater_log)
+        self.assertNotIn("env-logs", updater_log)
 
     def test_no_updater_sudo_env_invokes_updater_directly(self) -> None:
         self.wud_file.write_text("repo/app:latest\n", encoding="utf-8")
@@ -243,7 +267,7 @@ class PythonUpdatesWrapperTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
         self.assertIn(
             f"{self.updater} --base {docker_base} --file {config_wud_file} "
-            "--mode live --max-wait 7 --yes",
+            "--log-dir ./logs --mode live --max-wait 7 --yes",
             self.sudo_log.read_text(encoding="utf-8"),
         )
 

@@ -4,6 +4,7 @@ set -Eeuo pipefail
 app_dir="${WUD_APP_DIR:-/app}"
 docker_base="${DOCKER_BASE:-/host/docker}"
 wud_out_file="${WUD_OUT_FILE:-/out/images.todo}"
+wud_log_dir="${WUD_LOG_DIR:-/logs}"
 wud_scripts_dir="${WUD_SCRIPTS_DIR-/managed-wud}"
 wud_scripts_marker=".wud-updater-managed"
 
@@ -175,16 +176,11 @@ case "$1" in
     ;;
   docker-update-from-wud)
     shift
-    if has_arg --base "$@"; then
-      if has_arg --file "$@"; then
-        exec "$app_dir/bin/docker-update-from-wud" "$@"
-      fi
-      exec "$app_dir/bin/docker-update-from-wud" --file "$wud_out_file" "$@"
-    fi
-    if has_arg --file "$@"; then
-      exec "$app_dir/bin/docker-update-from-wud" --base "$docker_base" "$@"
-    fi
-    exec "$app_dir/bin/docker-update-from-wud" --base "$docker_base" --file "$wud_out_file" "$@"
+    updater_args=()
+    has_arg --base "$@" || updater_args+=(--base "$docker_base")
+    has_arg --file "$@" || updater_args+=(--file "$wud_out_file")
+    has_arg --log-dir "$@" || updater_args+=(--log-dir "$wud_log_dir")
+    exec "$app_dir/bin/docker-update-from-wud" "${updater_args[@]}" "$@"
     ;;
   *)
     exec "$@"

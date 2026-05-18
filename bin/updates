@@ -37,6 +37,7 @@ wud_file_explicit=0
 if [ -n "$wud_file" ]; then
   wud_file_explicit=1
 fi
+log_dir="${WUD_LOG_DIR:-./logs}"
 updater="${WUD_UPDATER:-$repo_dir/bin/docker-update-from-wud}"
 update_mode="${WUD_UPDATE_MODE:-stop}"
 max_wait="${WUD_MAX_WAIT:-180}"
@@ -61,7 +62,7 @@ updater_rc=0
 
 usage() {
   cat <<EOF
-Usage: updates [-y|--yes] [--dry-run] [--allow-tag-updates] [--base PATH] [--file PATH] [--mode pause|stop|live] [--max-wait SECONDS]
+Usage: updates [-y|--yes] [--dry-run] [--allow-tag-updates] [--base PATH] [--file PATH] [--log-dir PATH] [--mode pause|stop|live] [--max-wait SECONDS]
 
 Shows Docker updates from WUD, TrueNAS update status, and active TrueNAS alerts.
 When Docker updates are pending, prompts before running docker-update-from-wud.
@@ -90,6 +91,10 @@ while [ "$#" -gt 0 ]; do
     --file)
       wud_file="${2:-}"
       wud_file_explicit=1
+      shift 2
+      ;;
+    --log-dir)
+      log_dir="${2:-}"
       shift 2
       ;;
     --mode)
@@ -443,7 +448,7 @@ run_updater() {
   local updater_env=()
   local updater_args=()
 
-  updater_args=(--base "$docker_base" --file "$wud_file" --mode "$update_mode" --max-wait "$max_wait")
+  updater_args=(--base "$docker_base" --file "$wud_file" --log-dir "$log_dir" --mode "$update_mode" --max-wait "$max_wait")
   [ -n "$selected_line_spec" ] && updater_args+=(--only-lines "$selected_line_spec")
   [ -n "$remove_line_spec" ] && updater_args+=(--remove-lines-before-run "$remove_line_spec")
   [ "$allow_tag_updates" -eq 1 ] && updater_args+=(--allow-tag-updates)

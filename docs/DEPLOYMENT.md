@@ -40,8 +40,10 @@ docker run --rm \
   -v /var/run/docker.sock:/var/run/docker.sock \
   -v /srv/docker:/host/docker \
   -v wud-out:/out \
+  -v "$PWD/logs":/logs \
   -e DOCKER_BASE=/host/docker \
   -e WUD_OUT_FILE=/out/images.todo \
+  -e WUD_LOG_DIR=/logs \
   ghcr.io/magrhino/wud-updater:latest
 ```
 
@@ -89,11 +91,13 @@ The example mounts:
 |---|---|
 | `/var/run/docker.sock:/var/run/docker.sock` | Lets the helper inspect, pull, and recreate host Docker workloads. |
 | `/srv/docker:/host/docker` | Makes host Compose stacks visible inside the helper. |
+| `./logs:/logs` | Stores updater logs outside the Docker stack root. |
 | `wud-scripts:/managed-wud` | Managed volume that receives packaged WUD scripts. |
 | `wud-out:/out` | Shared WUD todo-file output volume. |
 
 Set `DOCKER_BASE` to the path that contains the Compose projects as seen inside
-the helper container. Set `WUD_OUT_FILE` to the todo file shared with WUD.
+the helper container. Set `WUD_OUT_FILE` to the todo file shared with WUD. Set
+`WUD_LOG_DIR` to the mounted log directory used by the updater.
 
 For a socket-proxy deployment, use
 [`docs/examples/docker-compose.hardened.yml`](examples/docker-compose.hardened.yml).
@@ -123,11 +127,13 @@ services:
     environment:
       DOCKER_BASE: /host/docker
       WUD_OUT_FILE: /out/images.todo
+      WUD_LOG_DIR: /logs
       WUD_SYNC_SCRIPTS: "1"
       WUD_SCRIPTS_DIR: /managed-wud
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - /srv/docker:/host/docker
+      - ./logs:/logs
       - wud-scripts:/managed-wud
       - wud-out:/out
 
@@ -215,6 +221,7 @@ Common host values:
 ```bash
 DOCKER_BASE="$HOME/docker"
 WUD_OUT_FILE="$DOCKER_BASE/wud/out/images.todo"
+WUD_LOG_DIR="./logs"
 WUD_UPDATE_MODE="stop"
 WUD_MAX_WAIT="180"
 WUD_LOCK_TIMEOUT="30"
@@ -226,6 +233,7 @@ OUT_GID="1000"
 |---|---|---|
 | `DOCKER_BASE` | Host: `$HOME/docker`; container: `/host/docker` | Compose project search root. |
 | `WUD_OUT_FILE` | Host: `$DOCKER_BASE/wud/out/images.todo`; container: `/out/images.todo` | Shared pending-update file. |
+| `WUD_LOG_DIR` | Host: `./logs`; container: `/logs` | Updater log directory. Set to `$DOCKER_BASE/logs` to keep the previous layout. |
 | `WUD_UPDATE_MODE` | `stop` | Update mode for matched Compose services or stacks: `pause`, `stop`, or `live`. |
 | `WUD_MAX_WAIT` | `180` | Seconds to wait for health after recreation. |
 | `WUD_LOCK_TIMEOUT` | `30` | Seconds to wait for the shared todo-file lock. |

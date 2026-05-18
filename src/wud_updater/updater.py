@@ -801,7 +801,9 @@ def options_from_namespace(args: object, *, environ: Mapping[str, str] | None = 
     wud_file_label = str(
         getattr(args, "file", None) or f"{docker_base_label}/wud/out/images.todo"
     )
-    log_dir_label = str(getattr(args, "log_dir", None) or f"{docker_base_label}/logs")
+    log_dir_label = str(
+        getattr(args, "log_dir", None) or env.get("WUD_LOG_DIR") or "./logs"
+    )
     docker_base = Path(docker_base_label)
     wud_file = Path(wud_file_label)
     log_dir = Path(log_dir_label)
