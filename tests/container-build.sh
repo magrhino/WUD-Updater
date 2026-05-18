@@ -5,6 +5,7 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
 cd "$REPO_ROOT"
 
 cleanup_image=0
+SYNC_TMP=""
 if [[ -n "${WUD_UPDATER_TEST_IMAGE:-}" ]]; then
   IMAGE="$WUD_UPDATER_TEST_IMAGE"
 else
@@ -15,6 +16,9 @@ fi
 cleanup(){
   if [[ "$cleanup_image" -eq 1 ]]; then
     docker image rm "$IMAGE" >/dev/null 2>&1 || true
+  fi
+  if [[ -n "$SYNC_TMP" && -d "$SYNC_TMP" ]]; then
+    rm -rf "$SYNC_TMP"
   fi
 }
 trap cleanup EXIT
@@ -48,6 +52,11 @@ run_quiet docker compose -f docker-compose.example.yml config
 run docker build -t "$IMAGE" .
 run docker run --rm "$IMAGE"
 run docker run --rm -e WUD_UPDATER_PYTHON=1 "$IMAGE"
+SYNC_TMP="$(mktemp -d "${TMPDIR:-/tmp}/wud-script-sync-test.XXXXXX")"
+run docker run --rm -v "$SYNC_TMP:/managed-wud" "$IMAGE" sync-wud-scripts
+[[ -x "$SYNC_TMP/on-update.sh" ]]
+[[ -x "$SYNC_TMP/append-updates.sh" ]]
+[[ -f "$SYNC_TMP/upstreams.txt" ]]
 run docker run --rm "$IMAGE" docker-update-from-wud --help
 run docker run --rm -e WUD_UPDATER_LEGACY_BASH=1 "$IMAGE" docker-update-from-wud --help
 run docker run --rm "$IMAGE" docker-update-from-wud-legacy --help
