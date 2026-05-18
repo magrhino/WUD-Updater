@@ -1,0 +1,61 @@
+name: Feature Request
+description: Suggest a new feature or improvement
+labels: ["enhancement", "needs-triage"]
+body:
+  - type: checkboxes
+    id: existing
+    attributes:
+      label: Pre-flight
+      options:
+        - label: I searched existing issues and this isn't a duplicate
+          required: true
+        - label: I checked the README and docs, and this isn't already supported
+          required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What pain point does this address? What workflow is currently broken, risky, or missing?
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed solution
+      description: How should WUD-Updater solve this?
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Host updater
+        - WUD callback scripts
+        - Release notes or Discord notifications
+        - Installer
+        - Container packaging
+        - Documentation
+        - CI or release automation
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: What other approaches did you consider? Why is the proposed solution better?
+    validations:
+      required: false
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Screenshots, links to similar features in other tools, redacted config examples, or related WUD/Docker behavior.
+    validations:
+      required: false

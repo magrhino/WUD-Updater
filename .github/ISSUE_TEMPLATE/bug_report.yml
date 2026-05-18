@@ -1,0 +1,91 @@
+name: Bug Report
+description: Something isn't working as expected
+labels: ["bug", "needs-triage"]
+body:
+  - type: checkboxes
+    id: existing
+    attributes:
+      label: Pre-flight
+      options:
+        - label: I searched existing issues and this isn't a duplicate
+          required: true
+        - label: I'm running the latest release, image tag, or commit available to me
+          required: true
+
+  - type: textarea
+    id: current
+    attributes:
+      label: Current behavior
+      description: What happens now?
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: What should happen instead?
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Minimal steps to trigger the bug.
+      placeholder: |
+        1. Configure WUD-Updater with ...
+        2. Run ...
+        3. See ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs and command output
+      description: |
+        Paste the relevant output from WUD, `updates --dry-run`, `docker-update-from-wud --dry-run`, or the failing command.
+        Redact secrets such as Discord webhooks, GitHub tokens, private URLs, and host-specific paths.
+      render: text
+    validations:
+      required: true
+
+  - type: dropdown
+    id: deploy
+    attributes:
+      label: Deployment method
+      options:
+        - Host install
+        - Docker Compose image
+        - Docker Compose local build
+        - Source checkout
+        - Other
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: WUD-Updater version
+      placeholder: "v0.1.0, ghcr.io image tag, or git commit"
+    validations:
+      required: true
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment details
+      description: OS, architecture, shell, Docker version, Docker Compose version, WUD version, TrueNAS version, and anything else relevant.
+      placeholder: "TrueNAS SCALE 24.10, Docker 27.x, Docker Compose v2.x, WUD 7.x"
+    validations:
+      required: false
+
+  - type: textarea
+    id: config
+    attributes:
+      label: Relevant configuration
+      description: Paste the relevant redacted config, compose service, WUD trigger variables, or pending update file lines.
+      render: text
+    validations:
+      required: false
