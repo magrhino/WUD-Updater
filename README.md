@@ -101,30 +101,7 @@ git push origin v1.2.3
 
 Manual release tags run the Linux validation suite, build the Docker image for Linux amd64, publish it to `ghcr.io/magrhino/wud-updater`, and create a GitHub Release with generated notes. Release Please-created releases publish the same image tags without rerunning the CI validation that already passed before the release PR. Image tags are published as `vX.Y.Z`, `X.Y.Z`, `X.Y`, and `latest`.
 
-## Install
-
-Clone the repo, then run:
-
-```bash
-./install.sh
-```
-
-The installer creates symlinks for `updates`, `docker-update-from-wud`, and `docker-update-from-wud-legacy`, makes scripts executable, and links the `wud/` directory for the WUD container. It refuses to replace existing non-symlink targets.
-
-Make sure the install bin directory is on your `PATH`, then run:
-
-```bash
-updates
-updates --dry-run
-updates --yes
-updates --yes --allow-tag-updates
-```
-
-When pending Docker updates exist, `updates` prompts for `a` to run all entries, `s` to select numbered entries, `x` to exclude numbered entries, or `n` to skip. Selection prompts accept comma-separated numbers and ranges such as `1,3-5`. Unselected entries stay pending unless you choose to remove them before running the selected updates.
-
-Digest updates preserve the existing compose image tag and only pull/recreate matching services. Tag updates are recorded as `image:old tag=new`; they stay pending unless you pass `--allow-tag-updates`, which rewrites simple literal `image:` entries, validates health, and rolls back the compose file if the new tag fails.
-
-## Docker Image Usage
+## Container-First Deployment
 
 Build the deployable helper image:
 
@@ -132,7 +109,79 @@ Build the deployable helper image:
 docker build -t wud-updater:local .
 ```
 
-The image uses `python:3.14-slim-bookworm`, installs the Docker CLI with the Compose plugin, copies `bin/` and `wud/` into `/app`, and starts through `tini`. Its default command is non-mutating:
+The image uses `python:3.14-slim-bookworm`, installs the Docker CLI with the Compose plugin, copies `bin/` and `wud/` into `/app`, and starts through `tini`. Set `WUD_SYNC_SCRIPTS=1` to make the updater container sync packaged WUD scripts from `/app/wud` into a managed shared volume before it runs its normal command. The destination defaults to `/managed-wud`; set `WUD_SCRIPTS_DIR` to override it.
+
+The included compose example shows a complete container-first stack:
+
+```yaml
+services:
+  wud:
+    image: getwud/wud:latest
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - wud-scripts:/wud:ro
+      - wud-out:/out
+    # Configure your WUD trigger to call:
+    #   /wud/on-update.sh
+
+  wud-updater:
+    build: .
+    image: magrhino/wud-updater:local
+    environment:
+      DOCKER_BASE: /host/docker
+      WUD_OUT_FILE: /out/images.todo
+      WUD_SYNC_SCRIPTS: "1"
+      WUD_SCRIPTS_DIR: /managed-wud
+      OUT_UID: "1000"
+      OUT_GID: "1000"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /srv/docker:/host/docker
+      - wud-scripts:/managed-wud
+      - wud-out:/out
+    command: ["updates", "--dry-run"]
+
+volumes:
+  wud-scripts:
+  wud-out:
+```
+
+For an existing WUD compose file, add the shared script volume to WUD and mount the same volume into `wud-updater`:
+
+```yaml
+services:
+  wud:
+    volumes:
+      - wud-scripts:/wud:ro
+      - wud-out:/out
+    # Configure your WUD trigger to call:
+    #   /wud/on-update.sh
+
+  wud-updater:
+    image: ghcr.io/magrhino/wud-updater:latest
+    environment:
+      DOCKER_BASE: /host/docker
+      WUD_OUT_FILE: /out/images.todo
+      WUD_SYNC_SCRIPTS: "1"
+      WUD_SCRIPTS_DIR: /managed-wud
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /srv/docker:/host/docker
+      - wud-scripts:/managed-wud
+      - wud-out:/out
+
+volumes:
+  wud-scripts:
+  wud-out:
+```
+
+The script destination is managed by the image: sync only cleans an empty directory or a directory already marked with `.wud-updater-managed`, copies the packaged `/app/wud` tree, and marks shell scripts executable. Start or recreate `wud-updater` once before relying on `/wud/on-update.sh` in a fresh empty volume. You can also run the sync directly:
+
+```bash
+docker compose -f docker-compose.example.yml run --rm wud-updater sync-wud-scripts
+```
+
+The updater's default command is non-mutating:
 
 ```bash
 docker compose -f docker-compose.example.yml run --rm wud-updater
@@ -162,13 +211,32 @@ For tag updates, keep the explicit opt-in:
 docker compose -f docker-compose.example.yml run --rm wud-updater docker-update-from-wud --yes --allow-tag-updates
 ```
 
-The example compose file mounts the Docker socket, the host Docker stack directory at `/host/docker`, and the WUD output directory at `/out`, with `DOCKER_BASE=/host/docker` and `WUD_OUT_FILE=/out/images.todo`.
+The example compose file mounts the Docker socket, the host Docker stack directory at `/host/docker`, a managed WUD script volume at `/managed-wud`, and the shared WUD output volume at `/out`, with `DOCKER_BASE=/host/docker` and `WUD_OUT_FILE=/out/images.todo`.
 
-Mounting `/var/run/docker.sock` gives the container root-equivalent control over the host Docker daemon. Only run trusted images with that socket, and keep the stack and output mounts scoped to the directories the updater needs.
+Mounting `/var/run/docker.sock` gives the container root-equivalent control over the host Docker daemon. Only run trusted images with that socket, and keep the stack, script, and output mounts scoped to the directories the updater needs.
 
-The WUD callback scripts remain shell scripts and should still be mounted into the existing WUD container separately. The helper image includes `/app/wud` for packaging and debugging; it does not replace WUD's `/wud` script mount.
+## Host Install
 
-## WUD Mounts
+Use the host installer when you want local shell commands and host-managed WUD script mounts instead of the container-first shared volume:
+
+```bash
+./install.sh
+```
+
+The installer creates symlinks for `updates`, `docker-update-from-wud`, and `docker-update-from-wud-legacy`, makes scripts executable, and links the `wud/` directory for the WUD container. It refuses to replace existing non-symlink targets.
+
+Make sure the install bin directory is on your `PATH`, then run:
+
+```bash
+updates
+updates --dry-run
+updates --yes
+updates --yes --allow-tag-updates
+```
+
+When pending Docker updates exist, `updates` prompts for `a` to run all entries, `s` to select numbered entries, `x` to exclude numbered entries, or `n` to skip. Selection prompts accept comma-separated numbers and ranges such as `1,3-5`. Unselected entries stay pending unless you choose to remove them before running the selected updates.
+
+Digest updates preserve the existing compose image tag and only pull/recreate matching services. Tag updates are recorded as `image:old tag=new`; they stay pending unless you pass `--allow-tag-updates`, which rewrites simple literal `image:` entries, validates health, and rolls back the compose file if the new tag fails.
 
 Mount the installed WUD scripts and output directory into the WUD container:
 
@@ -239,7 +307,14 @@ For release-note notifications, provide webhook and GitHub token values through 
 
 ## Maintenance
 
-Update the checkout, rerun the installer, and restart the WUD container so it sees the latest mounted scripts:
+For container-first deployments, pull the new image and recreate `wud-updater` so startup sync refreshes the managed WUD script volume:
+
+```bash
+docker compose pull wud-updater
+docker compose up -d --force-recreate wud-updater
+```
+
+For host installs, update the checkout, rerun the installer, and restart the WUD container so it sees the latest mounted scripts:
 
 ```bash
 git pull --ff-only

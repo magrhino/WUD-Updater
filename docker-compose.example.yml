@@ -1,14 +1,30 @@
 services:
+  wud:
+    image: getwud/wud:latest
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - wud-scripts:/wud:ro
+      - wud-out:/out
+    # Configure your WUD trigger to call:
+    #   /wud/on-update.sh
+
   wud-updater:
     build: .
     image: magrhino/wud-updater:local
     environment:
       DOCKER_BASE: /host/docker
       WUD_OUT_FILE: /out/images.todo
+      WUD_SYNC_SCRIPTS: "1"
+      WUD_SCRIPTS_DIR: /managed-wud
       OUT_UID: "1000"
       OUT_GID: "1000"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - /srv/docker:/host/docker
-      - /srv/docker/wud/out:/out
+      - wud-scripts:/managed-wud
+      - wud-out:/out
     command: ["updates", "--dry-run"]
+
+volumes:
+  wud-scripts:
+  wud-out:
