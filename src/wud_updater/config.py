@@ -24,6 +24,7 @@ class UpdaterConfig:
     docker_base: Path
     wud_out_file: Path
     log_dir: Path
+    db_path: Path
     update_mode: str
     max_wait: int
     lock_timeout: int
@@ -83,6 +84,13 @@ def load_config(
         )
     )
     log_dir = Path(_env_or_default(env, "WUD_LOG_DIR", DEFAULT_LOG_DIR))
+    db_path = Path(
+        _env_or_default(
+            env,
+            "WUD_DB_PATH",
+            str(log_dir / "wud-updater.sqlite"),
+        )
+    )
 
     update_mode = _env_or_default(env, "WUD_UPDATE_MODE", DEFAULT_UPDATE_MODE)
     if update_mode not in VALID_UPDATE_MODES:
@@ -109,6 +117,7 @@ def load_config(
         docker_base=docker_base,
         wud_out_file=wud_out_file,
         log_dir=log_dir,
+        db_path=db_path,
         update_mode=update_mode,
         max_wait=max_wait,
         lock_timeout=lock_timeout,
