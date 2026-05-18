@@ -81,6 +81,11 @@ assert_arg_present(){
   grep -Fx -- "$value" "$TEST_TMP/embed.args" >/dev/null || fail "missing embed arg: $value"
 }
 
+assert_arg_absent(){
+  local value="$1"
+  ! grep -Fx -- "$value" "$TEST_TMP/embed.args" >/dev/null || fail "unexpected embed arg: $value"
+}
+
 test_lsio_image_routes_through_mapping(){
   setup_case
 
@@ -88,7 +93,7 @@ test_lsio_image_routes_through_mapping(){
     image_name=linuxserver/radarr \
     image_registry_url=https://index.docker.io/v1/ \
     update_kind_kind=tag \
-    update_kind_remote_value=5.1.0 \
+    update_kind_remote_value=5.1.0-ls1 \
     DISCORD_WEBHOOK=https://discord.test/webhook \
     run_manager
 
@@ -98,8 +103,8 @@ test_lsio_image_routes_through_mapping(){
   assert_arg_present "linuxserver/docker-radarr"
   assert_arg_present "--upstream"
   assert_arg_present "Radarr/Radarr"
-  assert_arg_present "--tag"
-  assert_arg_present "5.1.0"
+  assert_arg_absent "--tag"
+  assert_arg_absent "5.1.0-ls1"
   assert_arg_present "--webhook"
   assert_arg_present "https://discord.test/webhook"
   teardown_case
