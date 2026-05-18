@@ -24,6 +24,7 @@ Repo-local routing/context only for WUD-Updater. Global instructions control def
 | `Dockerfile`, `entrypoint.sh`, `docker-compose.example.yml`, `.dockerignore` | Container packaging for running the existing shell helpers with Docker CLI access. | `README.md`, `entrypoint.sh`, `bin/updates`, `bin/docker-update-from-wud`. | Keep the default command non-mutating, preserve shell-script dispatch, and keep Docker socket and host stack mounts explicit in examples. | Porting updater logic into the image language runtime or replacing WUD's separate `/wud` mount. |
 | `tests/` | Local test runner, focused shell tests, Python config tests, and fake command implementations. | `tests/run-all.sh`, then the focused test for the behavior being changed. | Keep tests temp-dir based and fake external commands; never call real Docker mutations; keep Python dev dependencies explicit in `pyproject.toml`. | Adding dependencies or broad fixtures when a small shell fake or unittest is enough. |
 | `.github/workflows/ci.yml` | Cost-conscious CI for PRs to `main`, pushes to `main`, optional macOS/Docker checks, and workflow linting. | `tests/run-all.sh`, `tests/container-build.sh`, workflow file. | Keep default CI Linux-only; keep macOS gated by `ci:macos` or manual dispatch; keep Docker gated by `ci:docker`, manual dispatch, or image-impacting path changes. | Scheduled workflows, broad matrices, caches, artifacts, or always-on macOS/Docker jobs unless explicitly requested. |
+| `.github/workflows/release-please.yml`, `release-please-config.json`, `.release-please-manifest.json` | Release Please automation that opens release PRs, bumps Python version files and changelog entries, and creates `vX.Y.Z` GitHub releases/tags. | Release Please config and manifest, `.github/workflows/release.yml`, `pyproject.toml`, `src/wud_updater/__init__.py`, `CHANGELOG.md`. | Keep tag names compatible with `vX.Y.Z`; use the configured Release Please token secret so release-created tags trigger publishing workflows. | Manual manifest edits after bootstrap unless repairing release automation state. |
 | `.github/workflows/release.yml` | Tag-driven release workflow that validates, builds the Docker image, publishes GHCR tags, and creates a GitHub Release. | `README.md` release notes, `Dockerfile`, `tests/run-all.sh`, workflow file. | Keep releases limited to stable `vX.Y.Z` tags and single-platform Linux amd64 image publishing unless requested otherwise. | Extra registries, prerelease tag handling, multi-arch builds, or package publishing outside GHCR unless requested. |
 | `README.md` | User-facing overview, install, WUD mount, usage, and config notes. | Scripts being described. | Keep concise, accurate, and free of secrets or machine-specific paths. | Operational assumptions not present in code. |
 | `CHANGELOG.md` | Release-time record of notable versioned changes. | `CHANGELOG.md`, recent commits since the previous tag, and changed user-facing docs. | Author versioned `## [vX.Y.Z] — YYYY-MM-DD` sections only during explicit release prep. | Ordinary feature, docs, or maintenance work outside release prep. |
@@ -35,6 +36,7 @@ Repo-local routing/context only for WUD-Updater. Global instructions control def
 - Host CLI/updater behavior: inspect the relevant `bin/` entrypoint, direct helper functions, and README usage examples.
 - WUD callback behavior: inspect `wud/on-update.sh`, `wud/append-updates.sh`, WUD env assumptions, and `bin/docker-update-from-wud` parser compatibility.
 - Release notes, Discord, or GitHub behavior: inspect `wud/tag-manager.sh`, `wud/lsio-release-embed.sh`, `wud/release-notes-to-discord.sh`, and `wud/upstreams.txt`.
+- Release automation behavior: inspect Release Please config/manifest, `.github/workflows/release-please.yml`, `.github/workflows/release.yml`, and version/changelog files.
 - Install behavior: inspect `install.sh`, `.gitignore` if generated paths change, and README install/mount sections.
 - Container packaging behavior: inspect `Dockerfile`, `entrypoint.sh`, `docker-compose.example.yml`, README Docker usage, and the entrypoint test.
 - Config or docs behavior: inspect the exact changed file plus the script that consumes or demonstrates it.
@@ -62,6 +64,7 @@ Use the shell already used by the target script.
 | updater dry run | `bin/docker-update-from-wud --base "$DOCKER_BASE" --file "$WUD_OUT_FILE" --dry-run` |
 | host status dry run | `bin/updates --dry-run` |
 | GitHub Actions lint | `actionlint` |
+| Release Please config JSON check | `python3 -m json.tool release-please-config.json` and `python3 -m json.tool .release-please-manifest.json` |
 | full local test suite | `tests/run-all.sh` |
 | updater behavior tests | `tests/test-docker-update-from-wud.sh` |
 | WUD append tests | `tests/test-wud-append-updates.sh` |
@@ -92,6 +95,7 @@ Use the shell already used by the target script.
 - Release-note behavior change: syntax-check the touched scripts, run ShellCheck, run `tests/test-release-notes-to-discord.sh` when Discord payload or release-note behavior changes, and avoid live Discord/GitHub calls unless explicitly requested or needed.
 - Python skeleton/config change: run `ruff check .`, Python syntax check, `tests/run-python-tests.py`, and `tests/run-all.sh` when practical. Keep the shell commands authoritative until the refactor explicitly ports behavior.
 - GitHub Actions workflow change: run `actionlint` when available; if not installed, inspect the touched workflow YAML and report that local actionlint was not available. For release workflow changes, also inspect tag, permission, and GHCR image-tag behavior.
+- Release Please config change: validate `release-please-config.json` and `.release-please-manifest.json` as JSON, run `actionlint` when workflow files change, and verify tag naming stays compatible with `.github/workflows/release.yml`.
 - Cross-cutting behavior change: run `tests/run-all.sh` when practical before finishing.
 - Docs-only change: no tests required unless examples or commands were changed enough to need syntax validation.
 - Unknown command: inspect scripts/docs, then prefer extending `tests/run-all.sh` or a focused `tests/test-*.sh` instead of inventing a separate harness.
@@ -109,6 +113,7 @@ Use the shell already used by the target script.
 - `install.sh`: Host setup helper that creates symlinks and executable bits without replacing existing non-symlink targets.
 - `tests/`: Shell-based local and CI validation using temp directories and fake external commands.
 - `.github/workflows/ci.yml`: Runs default Linux CI plus opt-in macOS, Docker build, and workflow lint checks.
+- `.github/workflows/release-please.yml`: Runs Release Please on `main` to maintain release PRs and create release tags.
 - `.github/workflows/release.yml`: Publishes GHCR Docker images and creates GitHub Releases from stable `vX.Y.Z` tags.
 - `README.md`: Concise user guide for install, mounts, usage, and local config.
 - `CHANGELOG.md`: Tracks notable changes at release time using versioned sections.
