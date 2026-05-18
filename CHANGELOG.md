@@ -58,6 +58,10 @@ All notable changes to WUD-Updater are documented here. Format loosely follows
 - Added an opt-in Python-backed `updates` wrapper path with parity coverage for update status, alerts, dry runs, and updater dispatch.
 - Added no-sudo support for configured updater commands in the Python wrapper path.
 
+### Changed
+
+- Changed `docker-update-from-wud` to use the Python updater by default while keeping the legacy Bash updater available through `docker-update-from-wud-legacy` and `WUD_UPDATER_LEGACY_BASH=1`.
+
 ### Fixed
 
 - Fixed macOS CI dependency installation by installing Python development dependencies inside a local virtual environment.
