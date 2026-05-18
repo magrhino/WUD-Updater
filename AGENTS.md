@@ -21,7 +21,7 @@ Repo-local routing/context only for WUD-Updater. Global instructions control def
 | `wud/on-update.sh`, `wud/append-updates.sh` | WUD notification callback and line-oriented update-list writer. | Both files plus WUD env variable usage. | Keep POSIX `sh` compatibility and container defaults for `/wud` and `/out`. | Host-specific paths, secrets, or behavior that belongs in `bin/`. |
 | `wud/tag-manager.sh`, `wud/lsio-release-embed.sh`, `wud/release-notes-to-discord.sh`, `wud/upstreams.txt` | Discord/GitHub release-note helpers and LinuxServer.io upstream mapping. | The called helper; for `wud/lsio-release-embed.sh`, inspect args, router, and relevant provider section first; read `wud/upstreams.txt` when mapping is involved. | Keep webhook/token values environment-driven and redacted in logs. Preserve `curl`/`jq` based GitHub and Discord behavior. | Network calls unless validating release-note behavior. |
 | `install.sh` | Idempotent installer that chmods scripts and creates host symlinks for CLI commands and WUD scripts. | `install.sh`, then README install section. | Preserve refusal to replace non-symlink targets and existing env overrides. | Changing default target layout unless the task asks for installer behavior changes. |
-| `Dockerfile`, `entrypoint.sh`, `docs/examples/docker-compose.example.yml`, `.dockerignore` | Container packaging for running the updater helpers with Docker CLI access. | `README.md`, `docs/DEPLOYMENT.md`, `entrypoint.sh`, `bin/updates`, `bin/docker-update-from-wud`. | Keep the default command non-mutating, preserve command dispatch, and keep Docker socket and host stack mounts explicit in examples. | Replacing WUD's separate `/wud` script mount. |
+| `Dockerfile`, `entrypoint.sh`, `docs/examples/docker-compose.example.yml`, `docs/examples/docker-compose.build.yml`, `.dockerignore` | Container packaging for running the updater helpers with Docker CLI access. | `README.md`, `docs/DEPLOYMENT.md`, `entrypoint.sh`, `bin/updates`, `bin/docker-update-from-wud`. | Keep the default command non-mutating, preserve command dispatch, and keep Docker socket and host stack mounts explicit in examples. | Replacing WUD's separate `/wud` script mount. |
 | `tests/` | Local test runner, focused shell tests, Python config tests, and fake command implementations. | `tests/run-all.sh`, then the focused test for the behavior being changed. | Keep tests temp-dir based and fake external commands; never call real Docker mutations; keep Python dev dependencies explicit in `pyproject.toml`. | Adding dependencies or broad fixtures when a small shell fake or unittest is enough. |
 | `.github/workflows/ci.yml` | Cost-conscious CI for PRs to `main`, pushes to `main`, optional macOS/Docker checks, and workflow linting. | `tests/run-all.sh`, `tests/container-build.sh`, workflow file. | Keep default CI Linux-only; keep macOS gated by `ci:macos` or manual dispatch; keep Docker gated by `ci:docker`, manual dispatch, or image-impacting path changes. | Scheduled workflows, broad matrices, caches, artifacts, or always-on macOS/Docker jobs unless explicitly requested. |
 | `.github/workflows/release-please.yml`, `release-please-config.json`, `.release-please-manifest.json` | Release Please automation that opens release PRs, bumps Python version files and changelog entries, and creates `vX.Y.Z` GitHub releases/tags. | Release Please config and manifest, `.github/workflows/release.yml`, `pyproject.toml`, `src/wud_updater/__init__.py`, `CHANGELOG.md`. | Keep tag names compatible with `vX.Y.Z`; use the configured Release Please token secret so release-created tags trigger publishing workflows. | Manual manifest edits after bootstrap unless repairing release automation state. |
@@ -38,7 +38,7 @@ Repo-local routing/context only for WUD-Updater. Global instructions control def
 - Release notes, Discord, or GitHub behavior: inspect `wud/tag-manager.sh`, `wud/lsio-release-embed.sh`, `wud/release-notes-to-discord.sh`, and `wud/upstreams.txt`.
 - Release automation behavior: inspect Release Please config/manifest, `.github/workflows/release-please.yml`, `.github/workflows/release.yml`, and version/changelog files.
 - Install behavior: inspect `install.sh`, `.gitignore` if generated paths change, and README install/mount sections.
-- Container packaging behavior: inspect `Dockerfile`, `entrypoint.sh`, `docs/examples/docker-compose.example.yml`, README Docker usage, deployment docs, and the entrypoint test.
+- Container packaging behavior: inspect `Dockerfile`, `entrypoint.sh`, the relevant `docs/examples/docker-compose*.yml` file, README Docker usage, deployment docs, and the entrypoint test.
 - Config or docs behavior: inspect the exact changed file plus the script that consumes or demonstrates it.
 - Changelog maintenance: leave `CHANGELOG.md` alone during ordinary feature and docs work; update it only when explicitly preparing a release.
 - Test-only work: inspect the target behavior and nearest script style; avoid production edits unless needed.
@@ -73,7 +73,8 @@ Use the shell already used by the target script.
 | host wrapper tests | `tests/test-updates-wrapper.sh` |
 | container entrypoint tests | `tests/test-entrypoint.sh` |
 | container build test | `tests/container-build.sh` |
-| container compose config check | `docker compose -f docs/examples/docker-compose.example.yml config` |
+| deployment compose config check | `docker compose -f docs/examples/docker-compose.example.yml config` |
+| local build compose config check | `docker compose -f docs/examples/docker-compose.build.yml config` |
 | container image build | `docker build -t wud-updater:local .` |
 | Python dev dependency install | `python3 -m venv .venv`, `. .venv/bin/activate`, then `python -m pip install -e '.[dev]'` |
 | Python lint | `ruff check .` |
@@ -117,7 +118,7 @@ Use the shell already used by the target script.
 - `.github/workflows/release.yml`: Publishes GHCR Docker images and creates GitHub Releases from stable `vX.Y.Z` tags.
 - `README.md`: Concise user guide for install, mounts, usage, and local config.
 - `CHANGELOG.md`: Tracks notable changes at release time using versioned sections.
-- `Dockerfile`, `entrypoint.sh`, `docs/examples/docker-compose.example.yml`: Optional container packaging that runs the existing shell helpers against mounted host Docker resources.
+- `Dockerfile`, `entrypoint.sh`, `docs/examples/docker-compose.example.yml`, `docs/examples/docker-compose.build.yml`: Optional container packaging that runs the existing shell helpers against mounted host Docker resources.
 
 ## Generated/Low-Value Paths
 

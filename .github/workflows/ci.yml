@@ -90,7 +90,7 @@ jobs:
           workflows=false
           for file in "${files[@]}"; do
             case "$file" in
-              Dockerfile|.dockerignore|entrypoint.sh|docker-compose.example.yml|bin/*|wud/*|tests/container-build.sh|tests/test-entrypoint.sh)
+              Dockerfile|.dockerignore|entrypoint.sh|docs/examples/docker-compose*.yml|bin/*|wud/*|tests/container-build.sh|tests/test-entrypoint.sh)
                 docker=true
                 ;;
               .github/workflows/*)

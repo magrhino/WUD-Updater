@@ -42,8 +42,12 @@ Container checks require Docker:
 
 ```bash
 docker compose -f docs/examples/docker-compose.example.yml config
+docker compose -f docs/examples/docker-compose.build.yml config
 tests/container-build.sh
 ```
+
+The deployment compose example uses the published GHCR image. The build compose
+artifact keeps the repository-local image build path used by smoke tests.
 
 ## CI
 

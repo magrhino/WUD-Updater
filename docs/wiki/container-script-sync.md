@@ -60,3 +60,6 @@ docker compose -f docs/examples/docker-compose.example.yml run --rm wud-updater 
 Run this once before relying on `/wud/on-update.sh` in a fresh empty script
 volume. During upgrades, recreating `wud-updater` with `WUD_SYNC_SCRIPTS=1`
 refreshes the scripts automatically.
+
+For local image development, use
+`docs/examples/docker-compose.build.yml` instead of the deployment example.

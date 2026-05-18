@@ -59,7 +59,7 @@ docker run --rm \
 
 The repository example is at
 [`docs/examples/docker-compose.example.yml`](examples/docker-compose.example.yml).
-Run it from the repository root:
+It uses the published GHCR image by default. Run it from the repository root:
 
 ```bash
 docker compose -f docs/examples/docker-compose.example.yml run --rm wud-updater
@@ -94,6 +94,11 @@ The example mounts:
 
 Set `DOCKER_BASE` to the path that contains the Compose projects as seen inside
 the helper container. Set `WUD_OUT_FILE` to the todo file shared with WUD.
+
+For local image development and smoke tests, use
+[`docs/examples/docker-compose.build.yml`](examples/docker-compose.build.yml).
+That file keeps the repository-local `build` stanza separate from the
+deployment example.
 
 For an existing WUD Compose file, mount the same script and output volumes into
 both services:
@@ -252,12 +257,12 @@ docker compose pull wud-updater
 docker compose up -d --force-recreate wud-updater
 ```
 
-For the repository example, rebuild the local image and recreate the helper
-with the moved compose path:
+For local image development, rebuild with the development compose artifact and
+recreate the helper:
 
 ```bash
-docker compose -f docs/examples/docker-compose.example.yml build wud-updater
-docker compose -f docs/examples/docker-compose.example.yml up -d --force-recreate wud-updater
+docker compose -f docs/examples/docker-compose.build.yml build wud-updater
+docker compose -f docs/examples/docker-compose.build.yml up -d --force-recreate wud-updater
 ```
 
 For host installs, update the checkout, rerun the installer, and restart the WUD
