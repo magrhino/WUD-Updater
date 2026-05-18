@@ -5,9 +5,8 @@ set -Eeuo pipefail
 # - Ignore SIGPIPE (reader closed): don't die mid-run
 # - Never let a logging printf abort the script (|| :)
 trap '' PIPE
-#EXPORT GITHUB_TOKEN = ${GITHUB_TOKEN}
 # ---------- config ----------
-LSIO_EMBED="${LSIO_EMBED:-/wud/lsio-release-embed.sh}"
+RELEASE_EMBED="${RELEASE_EMBED:-/wud/github-release-embed.sh}"
 UPSTREAM_MAP="${UPSTREAM_MAP:-/wud/upstreams.txt}"   # lines: linuxserver/docker-xyz: Owner/Repo
 LOG_DIR="${LOG_DIR:-/out}"
 LOG_FILE="${LOG_DIR}/tag-manager.$(date +%Y%m%d).log"
@@ -131,7 +130,7 @@ run_logged() {
 dump_env_subset
 
 # basic guards
-[[ -x "$LSIO_EMBED" ]] || die "lsio-release-embed.sh not found or not executable at $LSIO_EMBED"
+[[ -x "$RELEASE_EMBED" ]] || die "github-release-embed.sh not found or not executable at $RELEASE_EMBED"
 [[ "${update_available:-false}" == "true" ]] || { log "No update_available=true; exiting."; exit 0; }
 
 # inputs from WUD
@@ -161,7 +160,7 @@ if [[ "$image_name" == linuxserver/* ]]; then
     exit 0
   fi
 
-  args=( "$LSIO_EMBED"  --lsio "$lsio_repo" --upstream "$upstream_repo" --debug )
+  args=( "$RELEASE_EMBED" --provider lsio --lsio "$lsio_repo" --upstream "$upstream_repo" --debug )
   # Use precise tag if WUD supplied one
   if [[ "$update_kind_kind" == "tag" && -n "$update_kind_remote_value" ]]; then
     args+=( --tag "$update_kind_remote_value" )
@@ -175,7 +174,7 @@ if [[ "$image_name" == linuxserver/* ]]; then
 elif [[ "$image_registry_url" == *ghcr.io* ]]; then
   # -------- Generic GHCR mode --------
   upstream="$image_name"   # owner/repo
-  args=( "$LSIO_EMBED" --provider generic --upstream "$upstream" --debug)
+  args=( "$RELEASE_EMBED" --provider github --repo "$upstream" --debug)
   if [[ "$update_kind_kind" == "tag" && -n "$update_kind_remote_value" ]]; then
     args+=( --tag "$update_kind_remote_value" )
   elif [[ -n "$result_tag" ]]; then

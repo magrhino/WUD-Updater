@@ -19,7 +19,7 @@ Repo-local routing/context only for WUD-Updater. Global instructions control def
 | `bin/docker-update-from-wud` | Symlink-safe dispatcher for the default Python updater. | `README.md`, `src/wud_updater/cli.py`, `src/wud_updater/updater.py`, and dispatcher tests. | Keep argument pass-through exact; preserve `PYTHON_BIN` and `PYTHONPATH` behavior. | Adding updater logic here instead of in Python. |
 | `pyproject.toml`, `src/wud_updater/` | Default Python updater package plus the opt-in Python `updates` wrapper. | `pyproject.toml`, `src/wud_updater/cli.py`, relevant Python module, and relevant Python tests. | Keep `wud-updater updates` opt-in until promoted separately. | Moving WUD callback scripts out of shell. |
 | `wud/on-update.sh`, `wud/append-updates.sh` | WUD notification callback and line-oriented update-list writer. | Both files plus WUD env variable usage. | Keep POSIX `sh` compatibility and container defaults for `/wud` and `/out`. | Host-specific paths, secrets, or behavior that belongs in `bin/`. |
-| `wud/tag-manager.sh`, `wud/lsio-release-embed.sh`, `wud/release-notes-to-discord.sh`, `wud/upstreams.txt` | Discord/GitHub release-note helpers and LinuxServer.io upstream mapping. | The called helper; for `wud/lsio-release-embed.sh`, inspect args, router, and relevant provider section first; read `wud/upstreams.txt` when mapping is involved. | Keep webhook/token values environment-driven and redacted in logs. Preserve `curl`/`jq` based GitHub and Discord behavior. | Network calls unless validating release-note behavior. |
+| `wud/tag-manager.sh`, `wud/github-release-embed.sh`, `wud/release-notes-to-discord.sh`, `wud/upstreams.txt` | Discord/GitHub release-note helpers and LinuxServer.io upstream mapping. | The called helper; for `wud/github-release-embed.sh`, inspect args, router, and relevant provider section first; read `wud/upstreams.txt` when mapping is involved. | Keep webhook/token values environment-driven and redacted in logs. Preserve `curl`/`jq` based GitHub and Discord behavior. | Network calls unless validating release-note behavior. |
 | `install.sh` | Idempotent installer that chmods scripts and creates host symlinks for CLI commands and WUD scripts. | `install.sh`, then README install section. | Preserve refusal to replace non-symlink targets and existing env overrides. | Changing default target layout unless the task asks for installer behavior changes. |
 | `Dockerfile`, `entrypoint.sh`, `docs/examples/docker-compose.example.yml`, `docs/examples/docker-compose.hardened.yml`, `docs/examples/docker-compose.build.yml`, `.dockerignore` | Container packaging for running the updater helpers with Docker CLI access. | `README.md`, `docs/DEPLOYMENT.md`, `entrypoint.sh`, `bin/updates`, `bin/docker-update-from-wud`. | Keep the default command non-mutating, preserve command dispatch, and keep Docker socket or socket-proxy access and host stack mounts explicit in examples. | Replacing WUD's separate `/wud` script mount. |
 | `tests/` | Local test runner, focused shell tests, Python config tests, and fake command implementations. | `tests/run-all.sh`, then the focused test for the behavior being changed. | Keep tests temp-dir based and fake external commands; never call real Docker mutations; keep Python dev dependencies explicit in `pyproject.toml`. | Adding dependencies or broad fixtures when a small shell fake or unittest is enough. |
@@ -35,7 +35,7 @@ Repo-local routing/context only for WUD-Updater. Global instructions control def
 
 - Host CLI/updater behavior: inspect the relevant `bin/` entrypoint, direct helper functions, and README usage examples.
 - WUD callback behavior: inspect `wud/on-update.sh`, `wud/append-updates.sh`, WUD env assumptions, and Python parser compatibility.
-- Release notes, Discord, or GitHub behavior: inspect `wud/tag-manager.sh`, `wud/lsio-release-embed.sh`, `wud/release-notes-to-discord.sh`, and `wud/upstreams.txt`.
+- Release notes, Discord, or GitHub behavior: inspect `wud/tag-manager.sh`, `wud/github-release-embed.sh`, `wud/release-notes-to-discord.sh`, and `wud/upstreams.txt`.
 - Release automation behavior: inspect Release Please config/manifest, `.github/workflows/release-please.yml`, `.github/workflows/release.yml`, and version/changelog files.
 - Install behavior: inspect `install.sh`, `.gitignore` if generated paths change, and README install/mount sections.
 - Container packaging behavior: inspect `Dockerfile`, `entrypoint.sh`, the relevant `docs/examples/docker-compose*.yml` file, README Docker usage, deployment docs, and the entrypoint test.
@@ -59,7 +59,7 @@ Use the shell already used by the target script.
 |---|---|
 | install | `./install.sh` |
 | lint | `ruff check .` and `shellcheck install.sh bin/updates bin/docker-update-from-wud wud/*.sh` |
-| Bash syntax check | `bash -n install.sh bin/updates bin/docker-update-from-wud wud/tag-manager.sh wud/lsio-release-embed.sh wud/release-notes-to-discord.sh` |
+| Bash syntax check | `bash -n install.sh bin/updates bin/docker-update-from-wud wud/tag-manager.sh wud/github-release-embed.sh wud/release-notes-to-discord.sh` |
 | POSIX syntax check | `sh -n wud/on-update.sh wud/append-updates.sh` |
 | updater dry run | `bin/docker-update-from-wud --base "$DOCKER_BASE" --file "$WUD_OUT_FILE" --dry-run` |
 | host status dry run | `bin/updates --dry-run` |
@@ -68,7 +68,9 @@ Use the shell already used by the target script.
 | full local test suite | `tests/run-all.sh` |
 | updater behavior tests | `tests/test-docker-update-from-wud.sh` |
 | WUD append tests | `tests/test-wud-append-updates.sh` |
+| GitHub release-note embed tests | `tests/test-github-release-embed.sh` |
 | release-note payload tests | `tests/test-release-notes-to-discord.sh` |
+| release-note router tests | `tests/test-tag-manager.sh` |
 | installer tests | `tests/test-install.sh` |
 | host wrapper tests | `tests/test-updates-wrapper.sh` |
 | container entrypoint tests | `tests/test-entrypoint.sh` |
@@ -94,7 +96,7 @@ Use the shell already used by the target script.
 - Installer change: run `tests/test-install.sh`; tests should use temp env overrides for `BIN_DIR`, `DOCKER_BASE`, `WUD_SCRIPTS_LINK`, and `WUD_OUT_DIR`.
 - Host wrapper change: run `tests/test-updates-wrapper.sh`; fake `sudo` and configured updater commands rather than invoking real system mutation.
 - Container packaging change: run `bash -n entrypoint.sh`, ShellCheck through `tests/run-all.sh`, `tests/test-entrypoint.sh`, and `tests/container-build.sh` when Docker is available. The container build test validates Compose config, builds the image, and smoke-runs the default non-mutating command.
-- Release-note behavior change: syntax-check the touched scripts, run ShellCheck, run `tests/test-release-notes-to-discord.sh` when Discord payload or release-note behavior changes, and avoid live Discord/GitHub calls unless explicitly requested or needed.
+- Release-note behavior change: syntax-check the touched scripts, run ShellCheck, run `tests/test-github-release-embed.sh`, `tests/test-release-notes-to-discord.sh`, and `tests/test-tag-manager.sh` when Discord payload or release-note routing changes, and avoid live Discord/GitHub calls unless explicitly requested or needed.
 - Python updater/config change: run `ruff check .`, Python syntax check, `tests/run-python-tests.py`, and `tests/run-all.sh` when practical.
 - GitHub Actions workflow change: run `actionlint` when available; if not installed, inspect the touched workflow YAML and report that local actionlint was not available. For release workflow changes, also inspect tag, permission, and GHCR image-tag behavior.
 - Release Please config change: validate `release-please-config.json` and `.release-please-manifest.json` as JSON, run `actionlint` when workflow files change, and verify tag naming stays compatible with `.github/workflows/release.yml`.
