@@ -9,7 +9,7 @@ services:
     #   /wud/on-update.sh
 
   wud-updater:
-    build: .
+    build: ../..
     image: magrhino/wud-updater:local
     environment:
       DOCKER_BASE: /host/docker

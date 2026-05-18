@@ -53,7 +53,6 @@ test_install_creates_expected_links(){
   assert_status 0
   assert_symlink_to "$TEST_TMP/bin/updates" "$REPO_ROOT/bin/updates"
   assert_symlink_to "$TEST_TMP/bin/docker-update-from-wud" "$REPO_ROOT/bin/docker-update-from-wud"
-  assert_symlink_to "$TEST_TMP/bin/docker-update-from-wud-legacy" "$REPO_ROOT/bin/docker-update-from-wud-legacy"
   assert_symlink_to "$TEST_TMP/docker/wud/scripts" "$REPO_ROOT/wud"
   [[ -d "$TEST_TMP/docker/wud/out" ]] || fail "expected WUD output directory"
   teardown_case

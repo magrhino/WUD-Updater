@@ -15,10 +15,6 @@ done
 script_dir="$(cd -P "$(dirname "$source_path")" && pwd -P)"
 repo_dir="$(cd "$script_dir/.." && pwd -P)"
 
-if [[ "${WUD_UPDATER_LEGACY_BASH:-}" == "1" ]]; then
-  exec "$repo_dir/bin/docker-update-from-wud-legacy" "$@"
-fi
-
 if [[ -n "${PYTHONPATH:-}" ]]; then
   export PYTHONPATH="${repo_dir}/src:${PYTHONPATH}"
 else

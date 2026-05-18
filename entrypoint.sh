@@ -173,19 +173,18 @@ case "$1" in
     shift
     exec "$app_dir/bin/updates" "$@"
     ;;
-  docker-update-from-wud|docker-update-from-wud-legacy)
-    updater_cmd="$1"
+  docker-update-from-wud)
     shift
     if has_arg --base "$@"; then
       if has_arg --file "$@"; then
-        exec "$app_dir/bin/$updater_cmd" "$@"
+        exec "$app_dir/bin/docker-update-from-wud" "$@"
       fi
-      exec "$app_dir/bin/$updater_cmd" --file "$wud_out_file" "$@"
+      exec "$app_dir/bin/docker-update-from-wud" --file "$wud_out_file" "$@"
     fi
     if has_arg --file "$@"; then
-      exec "$app_dir/bin/$updater_cmd" --base "$docker_base" "$@"
+      exec "$app_dir/bin/docker-update-from-wud" --base "$docker_base" "$@"
     fi
-    exec "$app_dir/bin/$updater_cmd" --base "$docker_base" --file "$wud_out_file" "$@"
+    exec "$app_dir/bin/docker-update-from-wud" --base "$docker_base" --file "$wud_out_file" "$@"
     ;;
   *)
     exec "$@"
