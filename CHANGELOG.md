@@ -4,6 +4,23 @@ All notable changes to WUD-Updater are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com) and versions follow
 [Semantic Versioning](https://semver.org).
 
+## [0.5.0](https://github.com/magrhino/WUD-Updater/compare/v0.4.3...v0.5.0) (2026-05-18)
+
+
+### Features
+
+* **db:** Add SQLite persistence validation for the updater ([#20](https://github.com/magrhino/WUD-Updater/issues/20)) ([0400154](https://github.com/magrhino/WUD-Updater/commit/04001546d32316e2a69c3f7a45c1aa3af0e31f94))
+
+
+### Bug Fixes
+
+* **updates:** handle unreachable TrueNAS and interrupted prompts ([d0d2946](https://github.com/magrhino/WUD-Updater/commit/d0d294671f89bbf87f9b63320edfa6dce28f3918))
+
+
+### Documentation
+
+* **truenas:** align api client example with secret-file auth ([2ed9c56](https://github.com/magrhino/WUD-Updater/commit/2ed9c5698fe8c20ab20fdc690999db21d30c1eec))
+
 ## [0.4.3](https://github.com/magrhino/WUD-Updater/compare/v0.4.2...v0.4.3) (2026-05-18)
 
 
