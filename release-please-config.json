@@ -7,7 +7,7 @@
       "include-component-in-tag": false,
       "include-v-in-tag": true,
       "initial-version": "1.0.0",
-      "pull-request-title-pattern": "chore: release ${version}"
+      "pull-request-title-pattern": "chore: release ${version} [skip ci]"
     }
   }
 }
