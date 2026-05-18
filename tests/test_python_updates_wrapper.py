@@ -100,6 +100,54 @@ class PythonUpdatesWrapperTests(unittest.TestCase):
         self.assertIn("OUT_UID=1000 OUT_GID=1001", updater_log)
         self.assertIn("--allow-tag-updates --yes", updater_log)
 
+    def test_no_updater_sudo_flag_invokes_updater_directly(self) -> None:
+        self.wud_file.write_text("repo/app:latest\n", encoding="utf-8")
+
+        result = self.run_updates(
+            "--yes",
+            "--no-updater-sudo",
+            "--base",
+            str(self.root / "docker"),
+            env_overrides={
+                "OUT_UID": "1000",
+                "OUT_GID": "1001",
+                "WUD_LOCK_TIMEOUT": "0",
+            },
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+        self.assertFalse(self.sudo_log.exists())
+        updater_log = self.updater_log.read_text(encoding="utf-8")
+        self.assertIn("OUT_UID=1000 OUT_GID=1001 WUD_LOCK_TIMEOUT=0", updater_log)
+        self.assertIn(f"--base {self.root / 'docker'} --file {self.wud_file}", updater_log)
+        self.assertIn("Running Docker updates via: env OUT_UID=1000", result.stdout)
+
+    def test_no_updater_sudo_env_invokes_updater_directly(self) -> None:
+        self.wud_file.write_text("repo/app:latest\n", encoding="utf-8")
+
+        result = self.run_updates(
+            "--yes",
+            env_overrides={"WUD_UPDATER_USE_SUDO": "0"},
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+        self.assertFalse(self.sudo_log.exists())
+        self.assertIn("--yes", self.updater_log.read_text(encoding="utf-8"))
+
+    def test_no_updater_sudo_fails_when_wud_file_is_unreadable(self) -> None:
+        self.wud_file.write_text("repo/app:latest\n", encoding="utf-8")
+        self.wud_file.chmod(0)
+
+        try:
+            result = self.run_updates("--dry-run", "--no-updater-sudo")
+        finally:
+            self.wud_file.chmod(0o600)
+
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("Cannot read WUD file without sudo", result.stderr)
+        self.assertFalse(self.sudo_log.exists())
+        self.assertFalse(self.updater_log.exists())
+
     def test_interactive_select_remove_passes_original_line_numbers(self) -> None:
         self.wud_file.write_text(
             "# comment\nrepo/app:one\n\nrepo/app:two\nrepo/app:three\n",

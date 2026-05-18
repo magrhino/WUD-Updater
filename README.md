@@ -55,6 +55,8 @@ WUD_UPDATER_PYTHON=1 updates --dry-run
 
 `wud-updater updates` ports the host wrapper behavior, including WUD display, TrueNAS checks, interactive selection, and updater handoff. `bin/updates` only uses this Python path when `WUD_UPDATER_PYTHON=1` is set; otherwise it continues to run the Bash implementation.
 
+For the Python wrapper path only, `WUD_UPDATER_USE_SUDO=0` or `--no-updater-sudo` disables sudo file fallbacks and runs the configured updater directly. Use this when `images.todo` is owned so the wrapper user can read it and create `${WUD_OUT_FILE}.lock`, and when any privileged work is isolated inside the configured updater launcher.
+
 ## Development
 
 Install the Python development dependencies in a virtual environment before running the full local suite:
@@ -194,6 +196,8 @@ WUD_MAX_WAIT="180"
 WUD_LOCK_TIMEOUT="30"
 OUT_UID="1000"
 OUT_GID="1000"
+# Python updates path only:
+# WUD_UPDATER_USE_SUDO="0"
 ```
 
 `OUT_UID` and `OUT_GID` are optional. When host-side updates run through `sudo`, set them to the WUD container user and group, usually `1000:1000`, so rewritten todo files and updater logs remain writable outside the root process. `OUT_GUID` is accepted as an alias for `OUT_GID`.
@@ -201,6 +205,15 @@ OUT_GID="1000"
 The WUD todo file should be owned by the WUD user/group and group-writable. WUD-side appends preserve an existing file's owner and mode; when creating the todo file for the first time, they default to mode `0660`.
 
 `WUD_LOCK_TIMEOUT` controls how long WUD-side appends and host-side cleanup wait for the shared todo-file lock. The default is `30` seconds; if a stale `${WUD_OUT_FILE}.lock` directory remains, remove it manually after confirming no update script is running.
+
+With `WUD_UPDATER_PYTHON=1` and `WUD_UPDATER_USE_SUDO=0`, `updates` does not use `sudo` to read the WUD file, create/remove the lock directory, or invoke `WUD_UPDATER`. Point `WUD_UPDATER` at an executable launcher if the only privileged step should be starting the updater container:
+
+```bash
+#!/usr/bin/env bash
+exec sudo docker compose -f /srv/docker/wud-updater/docker-compose.yml run --rm wud-updater docker-update-from-wud "$@"
+```
+
+Make sure the host paths passed as `DOCKER_BASE` and `WUD_OUT_FILE` are also valid inside that updater container, or translate them in the launcher before calling `docker-update-from-wud`.
 
 For release-note notifications, provide webhook and GitHub token values through the WUD container environment or another host-local secret store. Do not put secrets in this repository.
 

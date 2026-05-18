@@ -43,6 +43,15 @@ def _add_update_from_wud_options(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--remove-lines-before-run", metavar="SPEC")
 
 
+def _add_updates_options(parser: argparse.ArgumentParser) -> None:
+    _add_common_options(parser)
+    parser.add_argument(
+        "--no-updater-sudo",
+        action="store_true",
+        help="run the configured updater directly and disable sudo file fallbacks",
+    )
+
+
 def _run_update_from_wud(args: argparse.Namespace) -> int:
     try:
         options = options_from_namespace(args)
@@ -81,7 +90,7 @@ def build_parser() -> argparse.ArgumentParser:
         "updates",
         help="show WUD updates and optionally run the updater",
     )
-    _add_common_options(updates)
+    _add_updates_options(updates)
     updates.set_defaults(handler=_run_updates)
 
     return parser

@@ -54,6 +54,7 @@ class UpdatesOptions:
     out_uid: str = ""
     out_gid: str = ""
     lock_timeout: str = ""
+    use_sudo: bool = True
 
 
 @dataclass
@@ -61,6 +62,7 @@ class UpdatesFileLock:
     path: str
     timeout_seconds: str
     environ: Mapping[str, str]
+    use_sudo: bool = True
     sleep: Callable[[float], None] = time.sleep
     lock_dir: Path = field(init=False)
     held: bool = field(default=False, init=False)
@@ -73,7 +75,12 @@ class UpdatesFileLock:
         timeout = _parse_lock_timeout(self.timeout_seconds or DEFAULT_LOCK_TIMEOUT)
         waited = 0
         lock_parent = self.lock_dir.parent
-        self.via_sudo = not os.access(lock_parent, os.W_OK)
+        self.via_sudo = self.use_sudo and not os.access(lock_parent, os.W_OK)
+        if not self.use_sudo and not os.access(lock_parent, os.W_OK):
+            raise UpdatesError(
+                "Cannot create WUD file lock without sudo: "
+                f"{self.lock_dir} (parent is not writable: {lock_parent})"
+            )
 
         while True:
             if self.via_sudo:
@@ -85,11 +92,18 @@ class UpdatesFileLock:
                     os.mkdir(self.lock_dir)
                     self.held = True
                     return
-                except OSError:
-                    if not self.lock_dir.exists() and self._sudo_mkdir():
+                except OSError as exc:
+                    if self.lock_dir.exists():
+                        pass
+                    elif self.use_sudo and self._sudo_mkdir():
                         self.via_sudo = True
                         self.held = True
                         return
+                    else:
+                        raise UpdatesError(
+                            "Cannot create WUD file lock without sudo: "
+                            f"{self.lock_dir}: {_format_os_error(exc)}"
+                        ) from exc
 
             if waited >= timeout:
                 raise UpdatesError(
@@ -143,6 +157,7 @@ class UpdatesRunner:
             options.wud_file,
             options.lock_timeout or DEFAULT_LOCK_TIMEOUT,
             self.environ,
+            use_sudo=options.use_sudo,
         )
 
     def run(self) -> int:
@@ -206,11 +221,30 @@ class UpdatesRunner:
     def _snapshot_todo_entries(self) -> list[TodoEntry]:
         wud_file = Path(self.options.wud_file)
         try:
-            has_entries = wud_file.exists() and wud_file.stat().st_size > 0
-        except OSError:
-            has_entries = False
-        if not has_entries:
+            file_stat = wud_file.stat()
+        except FileNotFoundError:
             return []
+        except OSError as exc:
+            if not self.options.use_sudo:
+                raise UpdatesError(
+                    "Cannot stat WUD file without sudo: "
+                    f"{wud_file}: {_format_os_error(exc)}"
+                ) from exc
+        else:
+            if file_stat.st_size <= 0:
+                return []
+
+        if not self.options.use_sudo and not os.access(wud_file, os.R_OK):
+            raise UpdatesError(
+                "Cannot read WUD file without sudo: "
+                f"{wud_file} (file is not readable)"
+            )
+
+        if not self.options.use_sudo and not os.access(wud_file.parent, os.W_OK):
+            raise UpdatesError(
+                "Cannot create WUD file lock without sudo: "
+                f"{wud_file}.lock (parent is not writable: {wud_file.parent})"
+            )
 
         self.lock.acquire()
         try:
@@ -222,7 +256,12 @@ class UpdatesRunner:
         wud_file = Path(self.options.wud_file)
         try:
             text = wud_file.read_text(encoding="utf-8")
-        except OSError:
+        except OSError as exc:
+            if not self.options.use_sudo:
+                raise UpdatesError(
+                    "Cannot read WUD file without sudo: "
+                    f"{wud_file}: {_format_os_error(exc)}"
+                ) from exc
             return _read_todo_entries_with_sudo(self.options.wud_file, self.environ)
         return _parse_todo_entries(text)
 
@@ -401,22 +440,44 @@ class UpdatesRunner:
         if self.lock.held:
             updater_env.append("WUD_LOCK_HELD_BY_PARENT=1")
 
-        if updater_env:
+        updater_environ = dict(self.environ)
+        for assignment in updater_env:
+            key, value = assignment.split("=", 1)
+            updater_environ[key] = value
+
+        if self.options.use_sudo and updater_env:
             print(
                 "🚀 Running Docker updates via: sudo env "
                 f"{' '.join(updater_env)} \"{self.options.updater}\" "
                 f"{' '.join(updater_args)}"
             )
             command = ["sudo", "env", *updater_env, self.options.updater, *updater_args]
-        else:
+            command_env = self.environ
+        elif self.options.use_sudo:
             print(
                 "🚀 Running Docker updates via: sudo "
                 f"\"{self.options.updater}\" {' '.join(updater_args)}"
             )
             command = ["sudo", self.options.updater, *updater_args]
+            command_env = self.environ
+        elif updater_env:
+            print(
+                "🚀 Running Docker updates via: env "
+                f"{' '.join(updater_env)} \"{self.options.updater}\" "
+                f"{' '.join(updater_args)}"
+            )
+            command = [self.options.updater, *updater_args]
+            command_env = updater_environ
+        else:
+            print(
+                "🚀 Running Docker updates via: "
+                f"\"{self.options.updater}\" {' '.join(updater_args)}"
+            )
+            command = [self.options.updater, *updater_args]
+            command_env = updater_environ
 
         try:
-            result = subprocess.run(command, env=self.environ, check=False)
+            result = subprocess.run(command, env=command_env, check=False)
             returncode = result.returncode
         except OSError as exc:
             print(exc, file=sys.stderr)
@@ -437,7 +498,11 @@ def run_updates_from_namespace(
     environ: Mapping[str, str] | None = None,
 ) -> int:
     env = load_configured_environ(environ)
-    options = options_from_namespace(args, repo_root=repo_root, environ=env)
+    try:
+        options = options_from_namespace(args, repo_root=repo_root, environ=env)
+    except UpdatesError as exc:
+        print(exc, file=sys.stderr)
+        return 1
     return UpdatesRunner(options, environ=env).run()
 
 
@@ -484,6 +549,10 @@ def options_from_namespace(
         out_uid=environ.get("OUT_UID") or "",
         out_gid=out_gid,
         lock_timeout=environ.get("WUD_LOCK_TIMEOUT") or "",
+        use_sudo=_resolve_use_sudo(
+            environ.get("WUD_UPDATER_USE_SUDO"),
+            no_updater_sudo=bool(getattr(args, "no_updater_sudo", False)),
+        ),
     )
 
 
@@ -544,15 +613,25 @@ def _read_todo_entries_with_sudo(
         "{ trimmed = $0; sub(/^[[:space:]]+/, \"\", trimmed); "
         'if (trimmed != "" && trimmed !~ /^#/) { print NR "\\t" $0 } }'
     )
-    result = subprocess.run(
-        ["sudo", "awk", awk_script, wud_file],
-        env=dict(environ),
-        stdin=subprocess.DEVNULL,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.DEVNULL,
-        text=True,
-        check=False,
-    )
+    try:
+        result = subprocess.run(
+            ["sudo", "awk", awk_script, wud_file],
+            env=dict(environ),
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            check=False,
+        )
+    except OSError as exc:
+        raise UpdatesError(
+            f"Unable to read WUD file with sudo: {wud_file}: {_format_os_error(exc)}"
+        ) from exc
+    if result.returncode != 0:
+        detail = result.stderr.strip()
+        suffix = f": {detail}" if detail else ""
+        raise UpdatesError(f"Unable to read WUD file with sudo: {wud_file}{suffix}")
+
     entries: list[TodoEntry] = []
     for line in result.stdout.splitlines():
         line_no, sep, raw = line.partition("\t")
@@ -649,6 +728,30 @@ def _parse_lock_timeout(value: str) -> int:
     if _SECONDS_RE.fullmatch(str(value)) is None:
         raise UpdatesError("WUD_LOCK_TIMEOUT must be an integer number of seconds")
     return int(str(value), 10)
+
+
+def _resolve_use_sudo(
+    value: str | None,
+    *,
+    no_updater_sudo: bool,
+) -> bool:
+    if no_updater_sudo:
+        return False
+    if value is None or value == "":
+        return True
+
+    normalized = value.strip().lower()
+    if normalized in {"1", "true", "yes", "on"}:
+        return True
+    if normalized in {"0", "false", "no", "off"}:
+        return False
+    raise UpdatesError(
+        "WUD_UPDATER_USE_SUDO must be one of 1, 0, true, false, yes, no, on, or off"
+    )
+
+
+def _format_os_error(exc: OSError) -> str:
+    return exc.strerror or str(exc)
 
 
 def _has_command(command: str, environ: Mapping[str, str]) -> bool:
