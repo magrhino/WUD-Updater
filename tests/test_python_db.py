@@ -6,6 +6,7 @@ import unittest
 from pathlib import Path
 
 from wud_updater.db import (
+    DatabaseError,
     SCHEMA_VERSION,
     active_snooze,
     connect_db,
@@ -72,6 +73,94 @@ class DatabaseTests(unittest.TestCase):
             version = conn.execute("PRAGMA user_version").fetchone()[0]
 
         self.assertEqual(version, SCHEMA_VERSION)
+
+    def test_init_db_accepts_matching_version_zero_table(self) -> None:
+        with sqlite3.connect(":memory:") as conn:
+            conn.execute(
+                """
+                CREATE TABLE update_runs (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    started_at TEXT NOT NULL,
+                    finished_at TEXT,
+                    status TEXT NOT NULL,
+                    dry_run INTEGER NOT NULL DEFAULT 0,
+                    mode TEXT NOT NULL DEFAULT '',
+                    wud_file TEXT NOT NULL DEFAULT '',
+                    log_file TEXT NOT NULL DEFAULT '',
+                    metadata_json TEXT NOT NULL DEFAULT '{}'
+                )
+                """
+            )
+
+            init_db(conn)
+            version = conn.execute("PRAGMA user_version").fetchone()[0]
+
+        self.assertEqual(version, SCHEMA_VERSION)
+
+    def test_init_db_rejects_existing_table_with_missing_columns(self) -> None:
+        with sqlite3.connect(":memory:") as conn:
+            conn.execute(
+                """
+                CREATE TABLE update_runs (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    started_at TEXT NOT NULL
+                )
+                """
+            )
+
+            with self.assertRaisesRegex(
+                DatabaseError,
+                "Unexpected columns for table update_runs",
+            ):
+                init_db(conn)
+            version = conn.execute("PRAGMA user_version").fetchone()[0]
+            created_table = conn.execute(
+                """
+                SELECT name
+                FROM sqlite_master
+                WHERE type = 'table'
+                  AND name = 'update_events'
+                """
+            ).fetchone()
+
+        self.assertEqual(version, 0)
+        self.assertIsNone(created_table)
+
+    def test_init_db_rejects_existing_table_with_wrong_column_definition(
+        self,
+    ) -> None:
+        with sqlite3.connect(":memory:") as conn:
+            conn.execute(
+                """
+                CREATE TABLE snoozes (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    service_key TEXT NOT NULL,
+                    snoozed_until INTEGER NOT NULL,
+                    reason TEXT NOT NULL DEFAULT '',
+                    created_at TEXT NOT NULL,
+                    metadata_json TEXT NOT NULL DEFAULT '{}'
+                )
+                """
+            )
+
+            with self.assertRaisesRegex(
+                DatabaseError,
+                "Unexpected column definition for table snoozes",
+            ):
+                init_db(conn)
+            version = conn.execute("PRAGMA user_version").fetchone()[0]
+
+        self.assertEqual(version, 0)
+
+    def test_init_db_rejects_current_version_with_missing_schema(self) -> None:
+        with sqlite3.connect(":memory:") as conn:
+            conn.execute("PRAGMA user_version = 1")
+
+            with self.assertRaisesRegex(
+                DatabaseError,
+                "Missing expected table: update_runs",
+            ):
+                init_db(conn)
 
     def test_insert_update_run(self) -> None:
         with sqlite3.connect(":memory:") as conn:

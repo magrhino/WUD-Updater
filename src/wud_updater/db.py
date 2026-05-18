@@ -9,6 +9,62 @@ from pathlib import Path
 
 SCHEMA_VERSION = 1
 
+ColumnSchema = tuple[str, str, int, str | None, int]
+
+EXPECTED_SCHEMA: dict[str, tuple[ColumnSchema, ...]] = {
+    "update_runs": (
+        ("id", "INTEGER", 0, None, 1),
+        ("started_at", "TEXT", 1, None, 0),
+        ("finished_at", "TEXT", 0, None, 0),
+        ("status", "TEXT", 1, None, 0),
+        ("dry_run", "INTEGER", 1, "0", 0),
+        ("mode", "TEXT", 1, "''", 0),
+        ("wud_file", "TEXT", 1, "''", 0),
+        ("log_file", "TEXT", 1, "''", 0),
+        ("metadata_json", "TEXT", 1, "'{}'", 0),
+    ),
+    "update_events": (
+        ("id", "INTEGER", 0, None, 1),
+        ("run_id", "INTEGER", 1, None, 0),
+        ("created_at", "TEXT", 1, None, 0),
+        ("service_name", "TEXT", 1, None, 0),
+        ("stack_name", "TEXT", 1, "''", 0),
+        ("image", "TEXT", 1, None, 0),
+        ("target_image", "TEXT", 1, "''", 0),
+        ("old_image_id", "TEXT", 1, "''", 0),
+        ("new_image_id", "TEXT", 1, "''", 0),
+        ("old_digest", "TEXT", 1, "''", 0),
+        ("new_digest", "TEXT", 1, "''", 0),
+        ("status", "TEXT", 1, None, 0),
+        ("metadata_json", "TEXT", 1, "'{}'", 0),
+    ),
+    "snoozes": (
+        ("id", "INTEGER", 0, None, 1),
+        ("service_key", "TEXT", 1, None, 0),
+        ("snoozed_until", "TEXT", 1, None, 0),
+        ("reason", "TEXT", 1, "''", 0),
+        ("created_at", "TEXT", 1, None, 0),
+        ("metadata_json", "TEXT", 1, "'{}'", 0),
+    ),
+    "service_policy": (
+        ("service_key", "TEXT", 0, None, 1),
+        ("update_mode", "TEXT", 1, "''", 0),
+        ("auto_update", "INTEGER", 1, "1", 0),
+        ("snooze_default_seconds", "INTEGER", 0, None, 0),
+        ("created_at", "TEXT", 1, None, 0),
+        ("updated_at", "TEXT", 1, None, 0),
+        ("metadata_json", "TEXT", 1, "'{}'", 0),
+    ),
+    "known_images": (
+        ("service_key", "TEXT", 0, None, 1),
+        ("image", "TEXT", 1, None, 0),
+        ("image_id", "TEXT", 1, "''", 0),
+        ("digest", "TEXT", 1, "''", 0),
+        ("updated_at", "TEXT", 1, None, 0),
+        ("metadata_json", "TEXT", 1, "'{}'", 0),
+    ),
+}
+
 
 class DatabaseError(RuntimeError):
     """Raised when the SQLite schema cannot be initialized safely."""
@@ -34,10 +90,12 @@ def init_db(conn: sqlite3.Connection) -> None:
 
     version = _user_version(conn)
     if version == SCHEMA_VERSION:
+        _validate_schema(conn)
         return
     if version != 0:
         raise DatabaseError(f"Unsupported database schema version: {version}")
 
+    _validate_existing_schema_objects(conn)
     with conn:
         conn.executescript(
             """
@@ -102,9 +160,10 @@ def init_db(conn: sqlite3.Connection) -> None:
                 ON update_events (run_id);
             CREATE INDEX IF NOT EXISTS idx_snoozes_service_key_until
                 ON snoozes (service_key, snoozed_until);
-            PRAGMA user_version = 1;
             """
         )
+        _validate_schema(conn)
+        conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
 
 
 def insert_update_run(
@@ -268,3 +327,87 @@ def _user_version(conn: sqlite3.Connection) -> int:
     cursor = conn.execute("PRAGMA user_version")
     row = cursor.fetchone()
     return int(row[0])
+
+
+def _validate_existing_schema_objects(conn: sqlite3.Connection) -> None:
+    for table_name, expected_columns in EXPECTED_SCHEMA.items():
+        object_type = _sqlite_object_type(conn, table_name)
+        if object_type is None:
+            continue
+        if object_type != "table":
+            raise DatabaseError(
+                f"Expected {table_name} to be a table, found {object_type}"
+            )
+        _validate_table_columns(conn, table_name, expected_columns)
+
+
+def _validate_schema(conn: sqlite3.Connection) -> None:
+    for table_name, expected_columns in EXPECTED_SCHEMA.items():
+        object_type = _sqlite_object_type(conn, table_name)
+        if object_type is None:
+            raise DatabaseError(f"Missing expected table: {table_name}")
+        if object_type != "table":
+            raise DatabaseError(
+                f"Expected {table_name} to be a table, found {object_type}"
+            )
+        _validate_table_columns(conn, table_name, expected_columns)
+
+
+def _validate_table_columns(
+    conn: sqlite3.Connection,
+    table_name: str,
+    expected_columns: tuple[ColumnSchema, ...],
+) -> None:
+    actual_columns = _table_columns(conn, table_name)
+    actual_names = tuple(column[0] for column in actual_columns)
+    expected_names = tuple(column[0] for column in expected_columns)
+    if actual_names != expected_names:
+        raise DatabaseError(
+            f"Unexpected columns for table {table_name}: "
+            f"expected {_format_column_names(expected_names)}, "
+            f"found {_format_column_names(actual_names)}"
+        )
+    if actual_columns != expected_columns:
+        raise DatabaseError(f"Unexpected column definition for table {table_name}")
+
+
+def _table_columns(
+    conn: sqlite3.Connection,
+    table_name: str,
+) -> tuple[ColumnSchema, ...]:
+    cursor = conn.execute(f"PRAGMA table_info({_quote_identifier(table_name)})")
+    return tuple(
+        (
+            str(row[1]),
+            str(row[2]).upper(),
+            int(row[3]),
+            None if row[4] is None else str(row[4]),
+            int(row[5]),
+        )
+        for row in cursor.fetchall()
+    )
+
+
+def _sqlite_object_type(conn: sqlite3.Connection, name: str) -> str | None:
+    row = conn.execute(
+        """
+        SELECT type
+        FROM sqlite_master
+        WHERE name = ?
+        LIMIT 1
+        """,
+        (name,),
+    ).fetchone()
+    if row is None:
+        return None
+    return str(row[0])
+
+
+def _quote_identifier(value: str) -> str:
+    return '"' + value.replace('"', '""') + '"'
+
+
+def _format_column_names(names: tuple[str, ...]) -> str:
+    if not names:
+        return "<none>"
+    return ", ".join(names)
