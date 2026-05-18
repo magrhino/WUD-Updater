@@ -29,6 +29,11 @@ write_fakes(){
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
+if [[ -n "${FAKE_CURL_ARGS_LOG:-}" ]]; then
+  printf '%q ' "$@" >> "$FAKE_CURL_ARGS_LOG"
+  printf '\n' >> "$FAKE_CURL_ARGS_LOG"
+fi
+
 out_file=""
 write_out=""
 payload=""
@@ -48,7 +53,7 @@ while [[ $# -gt 0 ]]; do
       payload="$2"
       shift 2
       ;;
-    -H|-X|--retry|--retry-delay|--max-time)
+    -H|-X|--retry|--retry-delay|--connect-timeout|--max-time)
       shift 2
       ;;
     -*)
@@ -153,12 +158,23 @@ FAKE_CURL
 run_payload(){
   local output_file="$1"
   shift
-  PATH="$TEST_TMP/bin:$PATH" "$SCRIPT" "$@" > "$output_file" 2> "$TEST_TMP/output.log" || fail "github-release-embed failed"
+  PATH="$TEST_TMP/bin:$PATH" \
+    FAKE_CURL_ARGS_LOG="$TEST_TMP/curl.args" \
+    "$SCRIPT" "$@" > "$output_file" 2> "$TEST_TMP/output.log" || fail "github-release-embed failed"
 }
 
 assert_mentions_disabled(){
   local payload_file="$1"
   jq -e '.allowed_mentions.parse == []' "$payload_file" >/dev/null || fail "allowed_mentions was not disabled"
+}
+
+assert_curl_policy_for_url(){
+  local url="$1" line
+  line="$(grep -F -- "$url" "$TEST_TMP/curl.args" | head -n 1 || true)"
+  [[ -n "$line" ]] || fail "no curl call captured for $url"
+  [[ "$line" == *"--retry 3"* ]] || fail "curl call for $url did not set retry policy"
+  [[ "$line" == *"--connect-timeout 5"* ]] || fail "curl call for $url did not set connect timeout"
+  [[ "$line" == *"--max-time 20"* ]] || fail "curl call for $url did not set max time"
 }
 
 test_generic_latest_payload_is_neutral(){
@@ -167,6 +183,7 @@ test_generic_latest_payload_is_neutral(){
 
   run_payload "$payload_file" --repo acme/app
 
+  assert_curl_policy_for_url "https://api.github.com/repos/acme/app/releases/latest"
   assert_mentions_disabled "$payload_file"
   jq -e '.username == "GitHub Release Notes"' "$payload_file" >/dev/null || fail "username was not neutral"
   jq -e '.embeds[0].title == "Release v2.0.0 for acme/app"' "$payload_file" >/dev/null || fail "generic title was wrong"
@@ -228,9 +245,12 @@ test_lsio_missing_upstream_release_falls_back_to_project(){
 test_webhook_failures_are_nonzero_and_redacted(){
   setup_case
 
-  if PATH="$TEST_TMP/bin:$PATH" "$SCRIPT" --repo acme/app --webhook "https://discord.test/fail/secret-token" > "$TEST_TMP/output.log" 2>&1; then
+  if PATH="$TEST_TMP/bin:$PATH" \
+    FAKE_CURL_ARGS_LOG="$TEST_TMP/curl.args" \
+    "$SCRIPT" --repo acme/app --webhook "https://discord.test/fail/secret-token" > "$TEST_TMP/output.log" 2>&1; then
     fail "webhook failure returned success"
   fi
+  assert_curl_policy_for_url "https://discord.test/fail/secret-token"
   grep -q 'Discord webhook error 500' "$TEST_TMP/output.log" || fail "webhook failure message missing"
   ! grep -q 'secret-token' "$TEST_TMP/output.log" || fail "webhook secret leaked"
   teardown_case

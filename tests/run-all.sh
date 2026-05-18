@@ -60,6 +60,7 @@ run bash -n \
   bin/updates \
   bin/docker-update-from-wud \
   wud/tag-manager.sh \
+  wud/http.sh \
   wud/github-release-embed.sh \
   wud/release-notes-to-discord.sh \
   tests/run-all.sh \
@@ -86,6 +87,7 @@ run shellcheck \
   wud/on-update.sh \
   wud/append-updates.sh \
   wud/tag-manager.sh \
+  wud/http.sh \
   wud/github-release-embed.sh \
   wud/release-notes-to-discord.sh \
   tests/run-all.sh \

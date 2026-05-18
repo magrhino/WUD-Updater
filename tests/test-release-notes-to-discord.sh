@@ -39,6 +39,11 @@ FAKE_DOCKER
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
+if [[ -n "${FAKE_CURL_ARGS_LOG:-}" ]]; then
+  printf '%q ' "$@" >> "$FAKE_CURL_ARGS_LOG"
+  printf '\n' >> "$FAKE_CURL_ARGS_LOG"
+fi
+
 out_file=""
 write_out=""
 payload=""
@@ -58,7 +63,7 @@ while [[ "$#" -gt 0 ]]; do
       payload="$2"
       shift 2
       ;;
-    -H|-X|--retry|--retry-delay|--max-time)
+    -H|-X|--retry|--retry-delay|--connect-timeout|--max-time)
       shift 2
       ;;
     -*)
@@ -100,6 +105,12 @@ if [[ "$url" == "https://discord.test/webhook" ]]; then
   fi
   exit 0
 fi
+if [[ "$url" == https://discord.test/fail/* ]]; then
+  if [[ "$write_out" == *"%{http_code}"* ]]; then
+    printf '\n500'
+  fi
+  exit 0
+fi
 
 case "$url" in
   https://api.github.com/repos/acme/app/releases/latest)
@@ -120,12 +131,23 @@ FAKE_CURL
 
 run_notes(){
   local image="$1" current="$2" payload_file="$3"
+  local webhook="${DISCORD_RELEASES_WEBHOOK:-https://discord.test/webhook}"
 
   PATH="$TEST_TMP/bin:$PATH" \
-    DISCORD_RELEASES_WEBHOOK="https://discord.test/webhook" \
+    DISCORD_RELEASES_WEBHOOK="$webhook" \
     FAKE_WEBHOOK_PAYLOAD="$payload_file" \
+    FAKE_CURL_ARGS_LOG="$TEST_TMP/curl.args" \
     FAKE_IMAGE_SOURCE="${FAKE_IMAGE_SOURCE:-}" \
     "$SCRIPT" "$image" "container" "$current" > "$TEST_TMP/output.log" 2>&1 || fail "release note script failed"
+}
+
+assert_curl_policy_for_url(){
+  local url="$1" line
+  line="$(grep -F -- "$url" "$TEST_TMP/curl.args" | head -n 1 || true)"
+  [[ -n "$line" ]] || fail "no curl call captured for $url"
+  [[ "$line" == *"--retry 3"* ]] || fail "curl call for $url did not set retry policy"
+  [[ "$line" == *"--connect-timeout 5"* ]] || fail "curl call for $url did not set connect timeout"
+  [[ "$line" == *"--max-time 20"* ]] || fail "curl call for $url did not set max time"
 }
 
 test_oci_source_uses_github_release_engine(){
@@ -135,6 +157,7 @@ test_oci_source_uses_github_release_engine(){
   FAKE_IMAGE_SOURCE="https://github.com/acme/app" run_notes "ghcr.io/acme/app:1.0.0" "1.0.0" "$payload_file"
 
   [[ -s "$payload_file" ]] || fail "webhook payload was not captured"
+  assert_curl_policy_for_url "https://discord.test/webhook"
   jq -e '.allowed_mentions.parse == []' "$payload_file" >/dev/null || fail "allowed_mentions was not disabled"
   jq -e '.username == "GitHub Release Notes"' "$payload_file" >/dev/null || fail "release engine username missing"
   jq -e '.embeds[0].fields[] | select(.name == "Container" and .value == "container")' "$payload_file" >/dev/null || fail "container field was not preserved"
@@ -162,9 +185,28 @@ test_missing_source_posts_minimal_notice(){
   FAKE_IMAGE_SOURCE="" run_notes "docker.io/library/redis:latest" "latest" "$payload_file"
 
   [[ -s "$payload_file" ]] || fail "webhook payload was not captured"
+  assert_curl_policy_for_url "https://discord.test/webhook"
   jq -e '.allowed_mentions.parse == []' "$payload_file" >/dev/null || fail "minimal notice did not disable mentions"
   jq -e '.embeds[0].title == "Update available: docker.io/library/redis:latest"' "$payload_file" >/dev/null || fail "minimal notice title was wrong"
   jq -e '.embeds[0].description == "No GitHub source label found. Unable to fetch release notes."' "$payload_file" >/dev/null || fail "minimal notice description was wrong"
+  teardown_case
+}
+
+test_missing_source_webhook_failure_is_nonzero_and_redacted(){
+  setup_case
+  local payload_file="$TEST_TMP/payload.json"
+
+  if PATH="$TEST_TMP/bin:$PATH" \
+    DISCORD_RELEASES_WEBHOOK="https://discord.test/fail/secret-token" \
+    FAKE_WEBHOOK_PAYLOAD="$payload_file" \
+    FAKE_CURL_ARGS_LOG="$TEST_TMP/curl.args" \
+    FAKE_IMAGE_SOURCE="" \
+    "$SCRIPT" "docker.io/library/redis:latest" "container" "latest" > "$TEST_TMP/output.log" 2>&1; then
+    fail "minimal notice webhook failure returned success"
+  fi
+  assert_curl_policy_for_url "https://discord.test/fail/secret-token"
+  grep -q 'Discord webhook error 500' "$TEST_TMP/output.log" || fail "webhook failure message missing"
+  ! grep -q 'secret-token' "$TEST_TMP/output.log" || fail "webhook secret leaked"
   teardown_case
 }
 
@@ -179,6 +221,7 @@ main(){
   run_test test_oci_source_uses_github_release_engine
   run_test test_linuxserver_image_falls_back_to_docker_repo
   run_test test_missing_source_posts_minimal_notice
+  run_test test_missing_source_webhook_failure_is_nonzero_and_redacted
 }
 
 trap teardown_case EXIT

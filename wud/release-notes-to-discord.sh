@@ -7,6 +7,8 @@ CURRENT_TAG="${3:-}"
 WEBHOOK="${DISCORD_RELEASES_WEBHOOK:?set DISCORD_RELEASES_WEBHOOK env}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 RELEASE_EMBED="${SCRIPT_DIR}/github-release-embed.sh"
+# shellcheck source=wud/http.sh
+source "${SCRIPT_DIR}/http.sh"
 
 /usr/bin/which jq >/dev/null 2>&1 || { echo "jq required in host env"; exit 1; }
 [[ -x "$RELEASE_EMBED" ]] || { echo "github-release-embed.sh not found or not executable at $RELEASE_EMBED"; exit 1; }
@@ -22,8 +24,12 @@ fi
 if [[ -z "$SRC" || "$SRC" != *"github.com"* ]]; then
   TITLE="Update available: ${IMAGE}"
   DESC="No GitHub source label found. Unable to fetch release notes."
-  curl -sS -H "Content-Type: application/json" -d "$(jq -n --arg t "$TITLE" --arg d "$DESC" \
-    '{allowed_mentions:{parse:[]},embeds:[{title:$t,description:$d}] }')" "$WEBHOOK" >/dev/null
+  payload="$(jq -n --arg t "$TITLE" --arg d "$DESC" \
+    '{allowed_mentions:{parse:[]},embeds:[{title:$t,description:$d}] }')"
+  if ! http_post_discord_json "$WEBHOOK" "$payload"; then
+    echo "${HTTP_DISCORD_ERROR:-Discord webhook request failed to send}" >&2
+    exit 1
+  fi
   exit 0
 fi
 
