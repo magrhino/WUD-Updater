@@ -4,6 +4,14 @@ All notable changes to WUD-Updater are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com) and versions follow
 [Semantic Versioning](https://semver.org).
 
+## [0.4.3](https://github.com/magrhino/WUD-Updater/compare/v0.4.2...v0.4.3) (2026-05-18)
+
+
+### Bug Fixes
+
+* **logs:** create generated logs exclusively ([ac405fc](https://github.com/magrhino/WUD-Updater/commit/ac405fc8b19d4014c3809a01c1e966ba63d88269))
+* **wud:** standardize release-note curl handling ([77c098c](https://github.com/magrhino/WUD-Updater/commit/77c098c3b93042f9cecd94c64bf2caf2f3b535e5))
+
 ## [0.4.2](https://github.com/magrhino/WUD-Updater/compare/v0.4.1...v0.4.2) (2026-05-18)
 
 
