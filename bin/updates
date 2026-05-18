@@ -1,13 +1,34 @@
 #!/usr/bin/env bash
 set -uo pipefail
 
-script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
+source_path="${BASH_SOURCE[0]}"
+while [ -L "$source_path" ]; do
+  source_dir="$(cd -P "$(dirname "$source_path")" && pwd -P)"
+  link_target="$(readlink "$source_path")"
+  if [[ "$link_target" == /* ]]; then
+    source_path="$link_target"
+  else
+    source_path="$source_dir/$link_target"
+  fi
+done
+
+script_dir="$(cd -P "$(dirname "$source_path")" && pwd -P)"
 repo_dir="$(cd "$script_dir/.." && pwd -P)"
+
 config_file="${WUD_UPDATER_CONFIG:-$HOME/.config/wud-updater/env}"
 
 if [ -r "$config_file" ]; then
   # shellcheck source=/dev/null
   . "$config_file"
+fi
+
+if [[ "${WUD_UPDATER_PYTHON:-}" == "1" ]]; then
+  if [[ -n "${PYTHONPATH:-}" ]]; then
+    export PYTHONPATH="${repo_dir}/src:${PYTHONPATH}"
+  else
+    export PYTHONPATH="${repo_dir}/src"
+  fi
+  exec "${PYTHON_BIN:-python3}" -m wud_updater.cli updates "$@"
 fi
 
 docker_base="${DOCKER_BASE:-$HOME/docker}"

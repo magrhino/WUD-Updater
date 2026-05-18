@@ -5,11 +5,10 @@ from __future__ import annotations
 import argparse
 import sys
 from collections.abc import Sequence
+from pathlib import Path
 
 from .updater import UpdaterError, options_from_namespace, run_update_from_wud
-
-
-NOT_WIRED_MESSAGE = "Python implementation not wired yet."
+from .updates import run_updates_from_namespace
 
 
 class WudArgumentParser(argparse.ArgumentParser):
@@ -44,14 +43,13 @@ def _add_update_from_wud_options(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--remove-lines-before-run", metavar="SPEC")
 
 
-def _placeholder_exit(command: str, shell_command: str, mutating_path: bool) -> int:
-    print(f"wud-updater {command}: {NOT_WIRED_MESSAGE}", file=sys.stderr)
-    print(f"Use the existing shell command instead: {shell_command}", file=sys.stderr)
-    if mutating_path:
-        print("Refusing to continue because this path may mutate Docker state.", file=sys.stderr)
-        return 1
-    print("No changes were made.", file=sys.stderr)
-    return 0
+def _add_updates_options(parser: argparse.ArgumentParser) -> None:
+    _add_common_options(parser)
+    parser.add_argument(
+        "--no-updater-sudo",
+        action="store_true",
+        help="run the configured updater directly and disable sudo file fallbacks",
+    )
 
 
 def _run_update_from_wud(args: argparse.Namespace) -> int:
@@ -64,10 +62,9 @@ def _run_update_from_wud(args: argparse.Namespace) -> int:
 
 
 def _run_updates(args: argparse.Namespace) -> int:
-    return _placeholder_exit(
-        "updates",
-        "bin/updates",
-        mutating_path=not args.dry_run,
+    return run_updates_from_namespace(
+        args,
+        repo_root=Path(__file__).resolve().parents[2],
     )
 
 
@@ -91,9 +88,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     updates = subcommands.add_parser(
         "updates",
-        help="placeholder for updates",
+        help="show WUD updates and optionally run the updater",
     )
-    _add_common_options(updates)
+    _add_updates_options(updates)
     updates.set_defaults(handler=_run_updates)
 
     return parser

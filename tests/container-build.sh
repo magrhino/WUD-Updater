@@ -47,3 +47,4 @@ run docker compose version
 run_quiet docker compose -f docker-compose.example.yml config
 run docker build -t "$IMAGE" .
 run docker run --rm "$IMAGE"
+run docker run --rm -e WUD_UPDATER_PYTHON=1 "$IMAGE"
