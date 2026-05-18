@@ -85,6 +85,7 @@ All notable changes to WUD-Updater are documented here. Format loosely follows
 
 - Moved detailed deployment, development, and workflow guidance from the root README into `docs/`.
 - Archived the legacy Bash updater path and moved the Docker Compose example under `docs/examples/`.
+- Moved updater logs to a configurable `WUD_LOG_DIR`, defaulting to `./logs` on hosts and `/logs` in the container.
 
 ### Fixed
 
