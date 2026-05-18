@@ -1,5 +1,7 @@
 FROM python:3.14-slim-bookworm
 
+ARG TRUENAS_API_CLIENT_REF=""
+
 ENV DEBIAN_FRONTEND=noninteractive \
     DOCKER_BASE=/host/docker \
     WUD_OUT_FILE=/out/images.todo \
@@ -34,6 +36,11 @@ RUN set -eux; \
     apt-get install -y --no-install-recommends \
       docker-ce-cli \
       docker-compose-plugin; \
+    if [ -n "$TRUENAS_API_CLIENT_REF" ]; then \
+      apt-get install -y --no-install-recommends git; \
+      python -m pip install --no-cache-dir "git+https://github.com/truenas/api_client.git@${TRUENAS_API_CLIENT_REF}"; \
+      apt-get purge -y --auto-remove git; \
+    fi; \
     rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app

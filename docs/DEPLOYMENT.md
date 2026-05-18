@@ -105,6 +105,24 @@ That variant mounts `/var/run/docker.sock` only into a LinuxServer.io socket
 proxy sidecar, points WUD and the helper at `tcp://socket-proxy-wud-updater:2375`,
 and keeps the proxy on an internal Docker network.
 
+For containerized TrueNAS status checks, use
+[`docs/examples/docker-compose.truenas.yml`](examples/docker-compose.truenas.yml).
+That variant builds the helper image with the official TrueNAS API client so
+the Python `updates` wrapper can call a remote `midclt` over WebSocket. Set
+`TRUENAS_API_CLIENT_REF` to the API client tag that matches your TrueNAS
+release, for example `TS-25.10.3`, and set `TRUENAS_API_URI` to a reachable
+`ws://` or `wss://` API endpoint.
+
+Store the API key in the Compose secret file shown in the example, not in the
+Compose environment. Create a least-privilege TrueNAS API key that can only
+`CALL` `update.status` and `alert.list`. If the helper prints `TrueNAS not
+reachable`, check that the URI routes from inside the container, the API client
+tag matches the TrueNAS release, the key file is mounted, and TLS verification
+trusts the TrueNAS certificate. `TRUENAS_API_INSECURE=1` disables certificate
+verification and should only be used temporarily while bootstrapping trusted TLS.
+Use `network_mode: host` only as a last resort because it weakens container
+network isolation.
+
 For local image development and smoke tests, use
 [`docs/examples/docker-compose.build.yml`](examples/docker-compose.build.yml).
 That file keeps the repository-local `build` stanza separate from the
@@ -246,6 +264,11 @@ OUT_GID="1000"
 | `WUD_SYNC_SCRIPTS` | unset | Set to `1` in the helper container to sync packaged WUD scripts before normal commands. |
 | `WUD_SCRIPTS_DIR` | `/managed-wud` | Managed script sync destination. |
 | `WUD_APP_DIR` | `/app` | Application root inside the helper container. |
+| `TRUENAS_API_URI` | unset | Optional remote TrueNAS API URI for the Python `updates` wrapper, for example `wss://truenas.example.local/api/current`. |
+| `TRUENAS_API_KEY_FILE` | unset | Optional file path containing a TrueNAS API key for remote `midclt`; prefer a Compose secret mount. |
+| `TRUENAS_API_USERNAME` | unset | Optional username for TrueNAS API client versions that require it with API keys. |
+| `TRUENAS_API_INSECURE` | unset | Set to `1` only to disable TLS verification temporarily for self-signed or untrusted certificates. |
+| `TRUENAS_STATUS_TIMEOUT` | `5` | Seconds to wait for each TrueNAS status or alert API call before skipping it. |
 
 For release-note notifications, provide webhook and GitHub token values through
 the WUD container environment or another host-local secret store. Do not put
@@ -263,6 +286,11 @@ pull/recreate operations.
 Secrets such as Discord webhooks and GitHub tokens must come from environment
 variables or host-local secret stores. The scripts redact webhook values in
 logs where they print helper commands.
+
+TrueNAS API keys should be scoped to the smallest read-only allowlist required
+for status checks. Do not place API key contents directly in Compose files,
+environment variables, docs, logs, or command lines. Prefer a secret file mount
+and `TRUENAS_API_KEY_FILE`.
 
 `--dry-run` does not pull images, recreate containers, remove WUD lines, or
 otherwise mutate host state. Mutating Docker operations require interactive

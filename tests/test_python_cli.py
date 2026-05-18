@@ -134,6 +134,18 @@ class CliTests(unittest.TestCase):
         self.assertIn("✅ No pending Docker updates!", stdout)
         self.assertEqual(stderr, "")
 
+    def test_keyboard_interrupt_returns_130_without_traceback(self) -> None:
+        with mock.patch(
+            "wud_updater.cli._run_updates",
+            side_effect=KeyboardInterrupt,
+        ):
+            status, stdout, stderr = self._run_main(["updates", "--dry-run"])
+
+        self.assertEqual(status, 130)
+        self.assertEqual(stdout, "")
+        self.assertIn("Interrupted.", stderr)
+        self.assertNotIn("Traceback", stderr)
+
     def test_missing_subcommand_is_rejected_by_parser(self) -> None:
         stderr = StringIO()
         with redirect_stderr(stderr), self.assertRaises(SystemExit) as raised:

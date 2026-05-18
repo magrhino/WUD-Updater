@@ -271,12 +271,128 @@ class PythonUpdatesWrapperTests(unittest.TestCase):
             self.sudo_log.read_text(encoding="utf-8"),
         )
 
-    def test_truenas_checks_use_midclt_and_jq_when_available(self) -> None:
+    def test_truenas_checks_use_midclt_when_available(self) -> None:
         result = self.run_updates("--dry-run")
 
         self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
         self.assertIn("⚠️  System update available!", result.stdout)
+        self.assertIn("25.10.1", result.stdout)
         self.assertIn("Pool needs attention", result.stdout)
+
+    def test_truenas_checks_report_unreachable_when_midclt_missing(self) -> None:
+        result = self.run_updates(
+            "--dry-run",
+            env_overrides={"PATH": os.environ.get("PATH", "")},
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+        self.assertIn(
+            "TrueNAS not reachable; skipping system update check.",
+            result.stdout,
+        )
+        self.assertIn("TrueNAS not reachable; skipping alert check.", result.stdout)
+
+    def test_truenas_remote_midclt_uses_configured_uri_and_key_file(self) -> None:
+        key_file = self.root / "truenas-api-key"
+        key_file.write_text("super-secret-api-key\n", encoding="utf-8")
+        midclt_log = self.root / "midclt.log"
+
+        result = self.run_updates(
+            "--dry-run",
+            env_overrides={
+                "FAKE_MIDCLT_LOG": str(midclt_log),
+                "TRUENAS_API_URI": "wss://truenas.example.local/api/current",
+                "TRUENAS_API_KEY_FILE": str(key_file),
+                "TRUENAS_API_USERNAME": "admin",
+                "TRUENAS_API_INSECURE": "1",
+            },
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+        midclt_calls = midclt_log.read_text(encoding="utf-8")
+        self.assertIn(
+            "--uri wss://truenas.example.local/api/current "
+            f"-U admin -K {key_file} --insecure call update.status",
+            midclt_calls,
+        )
+        self.assertIn(
+            "--uri wss://truenas.example.local/api/current "
+            f"-U admin -K {key_file} --insecure call alert.list",
+            midclt_calls,
+        )
+        self.assertNotIn("super-secret-api-key", result.stdout)
+        self.assertNotIn("super-secret-api-key", result.stderr)
+        self.assertNotIn("super-secret-api-key", midclt_calls)
+
+    def test_truenas_update_status_up_to_date(self) -> None:
+        result = self.run_updates(
+            "--dry-run",
+            env_overrides={"FAKE_TRUENAS_UPDATE_STATUS": "unavailable"},
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+        self.assertIn("✅ System up to date", result.stdout)
+
+    def test_truenas_update_status_error_is_reported_without_failing(self) -> None:
+        result = self.run_updates(
+            "--dry-run",
+            env_overrides={"FAKE_TRUENAS_UPDATE_STATUS": "error"},
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+        self.assertIn("TrueNAS update status error: update train failed", result.stdout)
+
+    def test_truenas_alert_status_no_active_alerts(self) -> None:
+        result = self.run_updates(
+            "--dry-run",
+            env_overrides={"FAKE_TRUENAS_ALERT_STATUS": "none"},
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+        self.assertIn("✅ No active alerts", result.stdout)
+
+    def test_truenas_invalid_json_is_reported_without_failing(self) -> None:
+        result = self.run_updates(
+            "--dry-run",
+            env_overrides={"FAKE_MIDCLT_RESPONSE": "invalid"},
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+        self.assertIn("TrueNAS not reachable; skipping system update check.", result.stdout)
+        self.assertIn("invalid JSON response", result.stdout)
+
+    def test_truenas_midclt_failure_is_reported_without_failing(self) -> None:
+        result = self.run_updates(
+            "--dry-run",
+            env_overrides={"FAKE_MIDCLT_RETURN": "2"},
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+        self.assertIn("TrueNAS not reachable; skipping system update check.", result.stdout)
+        self.assertIn("midclt exited 2", result.stdout)
+
+    def test_truenas_empty_response_is_reported_without_failing(self) -> None:
+        result = self.run_updates(
+            "--dry-run",
+            env_overrides={"FAKE_MIDCLT_RESPONSE": "empty"},
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+        self.assertIn("TrueNAS not reachable; skipping system update check.", result.stdout)
+        self.assertIn("empty midclt response", result.stdout)
+
+    def test_truenas_timeout_is_reported_without_failing(self) -> None:
+        result = self.run_updates(
+            "--dry-run",
+            env_overrides={
+                "FAKE_MIDCLT_RESPONSE": "timeout",
+                "TRUENAS_STATUS_TIMEOUT": "0",
+            },
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+        self.assertIn("TrueNAS not reachable; skipping system update check.", result.stdout)
+        self.assertIn("midclt timed out", result.stdout)
 
     def test_bin_updates_opt_in_dispatches_python_wrapper(self) -> None:
         self.wud_file.write_text("repo/app:latest\n", encoding="utf-8")
@@ -379,12 +495,45 @@ printf '%s\\n' "$*" >> "${FAKE_SUDO_LOG:?FAKE_SUDO_LOG is required}"
         self._write_executable(
             self.fake_bin / "midclt",
             """#!/usr/bin/env bash
+if [[ -n "${FAKE_MIDCLT_LOG:-}" ]]; then
+  printf '%s\\n' "$*" >> "$FAKE_MIDCLT_LOG"
+fi
+if [[ "${FAKE_MIDCLT_RETURN:-0}" != "0" ]]; then
+  exit "$FAKE_MIDCLT_RETURN"
+fi
+if [[ "${FAKE_MIDCLT_RESPONSE:-}" == "empty" ]]; then
+  exit 0
+fi
+if [[ "${FAKE_MIDCLT_RESPONSE:-}" == "invalid" ]]; then
+  printf 'not json\\n'
+  exit 0
+fi
+if [[ "${FAKE_MIDCLT_RESPONSE:-}" == "timeout" ]]; then
+  sleep 1
+fi
 case "$*" in
-  "call update.check_available")
-    printf '{"status":"AVAILABLE"}\\n'
+  *"call update.status")
+    case "${FAKE_TRUENAS_UPDATE_STATUS:-available}" in
+      unavailable)
+        printf '{"code":"NORMAL","status":{"new_version":null},"error":null}\\n'
+        ;;
+      error)
+        printf '{"code":"ERROR","status":null,"error":{"reason":"update train failed"}}\\n'
+        ;;
+      *)
+        printf '{"code":"NORMAL","status":{"new_version":{"version":"25.10.1"}},"error":null}\\n'
+        ;;
+    esac
     ;;
-  "call alert.list")
-    printf '[{"dismissed":false,"formatted":"Pool needs attention"}]\\n'
+  *"call alert.list")
+    case "${FAKE_TRUENAS_ALERT_STATUS:-active}" in
+      none)
+        printf '[]\\n'
+        ;;
+      *)
+        printf '[{"dismissed":false,"formatted":"Pool needs attention"},{"dismissed":true,"formatted":"Dismissed alert"}]\\n'
+        ;;
+    esac
     ;;
 esac
 """,
