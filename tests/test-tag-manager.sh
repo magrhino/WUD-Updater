@@ -143,6 +143,8 @@ test_missing_lsio_mapping_alerts_admin_and_skips_embed(){
   [[ ! -e "$TEST_TMP/embed.args" ]] || fail "embed was called despite missing mapping"
   grep -q 'https://discord.test/admin' "$TEST_TMP/admin.payload" || fail "admin webhook was not called"
   grep -q 'Missing upstream mapping' "$TEST_TMP/admin.payload" || fail "missing mapping alert text was wrong"
+  tail -n +2 "$TEST_TMP/admin.payload" | jq -e '.allowed_mentions.parse == []' >/dev/null || fail "admin webhook mentions were not disabled"
+  tail -n +2 "$TEST_TMP/admin.payload" | jq -e '(.content | contains("Missing upstream mapping")) and (.content | contains("\n"))' >/dev/null || fail "multiline admin content was not valid JSON"
   teardown_case
 }
 
