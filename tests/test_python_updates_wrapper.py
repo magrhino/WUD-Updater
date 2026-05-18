@@ -304,9 +304,11 @@ class PythonUpdatesWrapperTests(unittest.TestCase):
         )
         self.assertIn(f"-v wud-out:{self.root}", docker_calls)
         self.assertIn(
-            "-v /var/run/middleware:/var/run/middleware:ro",
+            "--mount type=bind,src=/var/run/middleware,"
+            "dst=/var/run/middleware,readonly",
             docker_calls,
         )
+        self.assertNotIn("-v /var/run/middleware:/var/run/middleware:ro", docker_calls)
         self.assertIn("wud-updater:test truenas-status-export", docker_calls)
         self.assertNotIn("--volumes-from", docker_calls)
         self.assertNotIn("--uri", docker_calls)

@@ -957,8 +957,12 @@ def _run_truenas_status_helper(
         f"TRUENAS_STATUS_TIMEOUT={options.truenas_status_timeout}",
         "-v",
         f"{mount.source}:{mount.destination}",
-        "-v",
-        f"{TRUENAS_MIDDLEWARE_MOUNT}:{TRUENAS_MIDDLEWARE_MOUNT}:ro",
+        "--mount",
+        (
+            "type=bind,"
+            f"src={TRUENAS_MIDDLEWARE_MOUNT},"
+            f"dst={TRUENAS_MIDDLEWARE_MOUNT},readonly"
+        ),
         image,
         "truenas-status-export",
     ]

@@ -114,7 +114,7 @@ TrueNAS release, then set `TRUENAS_STATUS_CHECK=1` to opt in.
 
 When enabled, the Python `updates` wrapper uses Docker to inspect its own
 container, starts the same image with `--network none`, mounts only the WUD
-output mount plus `/var/run/middleware:/var/run/middleware:ro`, writes
+output mount plus a read-only `/var/run/middleware` bind mount, writes
 `truenas-status.json` beside `images.todo`, and exits. If the helper prints
 `TrueNAS not reachable`, check that Docker can start sibling containers, the
 client tag matches the TrueNAS release, the WUD output mount is writable, and
