@@ -9,6 +9,7 @@ All notable changes to WUD-Updater are documented here. Format loosely follows
 ### Added
 
 - Added Ruff to the development validation path and documented the virtual-environment setup for local checks.
+- Added actionlint CI for pull requests targeting `main`.
 
 ### Fixed
 
