@@ -15,7 +15,7 @@ class LoadConfigTests(unittest.TestCase):
             config.wud_out_file,
             Path("/home/wud/docker/wud/out/images.todo"),
         )
-        self.assertEqual(config.log_dir, Path("/home/wud/docker/logs"))
+        self.assertEqual(config.log_dir, Path("logs"))
         self.assertEqual(config.update_mode, "stop")
         self.assertEqual(config.max_wait, 180)
         self.assertEqual(config.lock_timeout, 30)
@@ -27,6 +27,7 @@ class LoadConfigTests(unittest.TestCase):
             {
                 "DOCKER_BASE": "/srv/docker",
                 "WUD_OUT_FILE": "/srv/wud/images.todo",
+                "WUD_LOG_DIR": "/srv/logs",
                 "WUD_UPDATE_MODE": "live",
                 "WUD_MAX_WAIT": "7",
                 "WUD_LOCK_TIMEOUT": "2",
@@ -38,7 +39,7 @@ class LoadConfigTests(unittest.TestCase):
 
         self.assertEqual(config.docker_base, Path("/srv/docker"))
         self.assertEqual(config.wud_out_file, Path("/srv/wud/images.todo"))
-        self.assertEqual(config.log_dir, Path("/srv/docker/logs"))
+        self.assertEqual(config.log_dir, Path("/srv/logs"))
         self.assertEqual(config.update_mode, "live")
         self.assertEqual(config.max_wait, 7)
         self.assertEqual(config.lock_timeout, 2)
@@ -51,6 +52,7 @@ class LoadConfigTests(unittest.TestCase):
                 "HOME": "",
                 "DOCKER_BASE": "",
                 "WUD_OUT_FILE": "",
+                "WUD_LOG_DIR": "",
                 "WUD_UPDATE_MODE": "",
                 "WUD_MAX_WAIT": "",
                 "WUD_LOCK_TIMEOUT": "",
@@ -63,6 +65,7 @@ class LoadConfigTests(unittest.TestCase):
             config.wud_out_file,
             Path("/home/wud/docker/wud/out/images.todo"),
         )
+        self.assertEqual(config.log_dir, Path("logs"))
         self.assertEqual(config.update_mode, "stop")
         self.assertEqual(config.max_wait, 180)
         self.assertEqual(config.lock_timeout, 30)

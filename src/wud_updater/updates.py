@@ -45,6 +45,7 @@ class TodoEntry:
 class UpdatesOptions:
     docker_base: str
     wud_file: str
+    log_dir: str
     updater: str
     update_mode: str
     max_wait: str
@@ -416,6 +417,8 @@ class UpdatesRunner:
             self.options.docker_base,
             "--file",
             self.options.wud_file,
+            "--log-dir",
+            self.options.log_dir,
             "--mode",
             self.options.update_mode,
             "--max-wait",
@@ -526,6 +529,10 @@ def options_from_namespace(
     else:
         wud_file = f"{docker_base}/wud/out/images.todo"
 
+    log_dir = _arg_or_default(
+        getattr(args, "log_dir", None),
+        environ.get("WUD_LOG_DIR") or "./logs",
+    )
     update_mode = _arg_or_default(
         getattr(args, "mode", None),
         environ.get("WUD_UPDATE_MODE") or DEFAULT_UPDATE_MODE,
@@ -539,6 +546,7 @@ def options_from_namespace(
     return UpdatesOptions(
         docker_base=docker_base,
         wud_file=wud_file,
+        log_dir=log_dir,
         updater=environ.get("WUD_UPDATER")
         or str(Path(repo_root) / "bin" / "docker-update-from-wud"),
         update_mode=update_mode,

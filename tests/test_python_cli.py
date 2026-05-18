@@ -65,6 +65,35 @@ class CliTests(unittest.TestCase):
         self.assertEqual(status, 1)
         self.assertIn("--max-wait must be an integer number of seconds", stderr)
 
+    def test_update_from_wud_uses_environment_log_dir(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="wud-python-cli.") as tmpdir:
+            root = Path(tmpdir)
+            base = root / "base"
+            wud_file = root / "images.todo"
+            log_dir = root / "env-logs"
+            base.mkdir()
+            wud_file.write_text("", encoding="utf-8")
+
+            with mock.patch.dict(os.environ, {"WUD_LOG_DIR": str(log_dir)}):
+                status, stdout, stderr = self._run_main(
+                    [
+                        "update-from-wud",
+                        "--dry-run",
+                        "--base",
+                        str(base),
+                        "--file",
+                        str(wud_file),
+                        "--max-wait",
+                        "0",
+                        "--yes",
+                        "--no-color",
+                    ]
+                )
+
+        self.assertEqual(status, 0)
+        self.assertIn(f"Log file: {log_dir}", stdout)
+        self.assertEqual(stderr, "")
+
     def test_updates_dry_run_exits_successfully_without_mutation(self) -> None:
         with tempfile.TemporaryDirectory(prefix="wud-python-cli.") as tmpdir:
             env = {
