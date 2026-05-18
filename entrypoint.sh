@@ -174,6 +174,15 @@ case "$1" in
     shift
     exec "$app_dir/bin/updates" "$@"
     ;;
+  truenas-status-export)
+    shift
+    if [[ -n "${PYTHONPATH:-}" ]]; then
+      export PYTHONPATH="$app_dir/src:$PYTHONPATH"
+    else
+      export PYTHONPATH="$app_dir/src"
+    fi
+    exec "${PYTHON_BIN:-python3}" -m wud_updater.cli truenas-status-export "$@"
+    ;;
   docker-update-from-wud)
     shift
     updater_args=()

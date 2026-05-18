@@ -40,6 +40,16 @@ printf '\n'
 FAKE_UPDATER
   chmod +x "$APP_DIR/bin/docker-update-from-wud"
 
+  cat > "$TEST_TMP/python" <<'FAKE_PYTHON'
+#!/usr/bin/env bash
+printf 'python'
+for arg in "$@"; do
+  printf ' [%s]' "$arg"
+done
+printf '\n'
+FAKE_PYTHON
+  chmod +x "$TEST_TMP/python"
+
   cat > "$APP_DIR/wud/on-update.sh" <<'FAKE_WUD_SCRIPT'
 #!/bin/sh
 echo on-update
@@ -68,6 +78,7 @@ run_entrypoint(){
     WUD_OUT_FILE="$TEST_TMP/out/images.todo" \
     WUD_SCRIPTS_DIR="${WUD_SCRIPTS_DIR-$TEST_TMP/managed-wud}" \
     WUD_SYNC_SCRIPTS="${WUD_SYNC_SCRIPTS:-}" \
+    PYTHON_BIN="${PYTHON_BIN:-}" \
     "$SCRIPT" "$@" > "$TEST_TMP/output.log" 2>&1 || LAST_STATUS=$?
 }
 
@@ -121,6 +132,14 @@ test_updates_dispatch_passes_arguments(){
   run_entrypoint updates --yes --allow-tag-updates
   assert_status 0
   assert_output 'updates [--yes] [--allow-tag-updates]'
+  teardown_case
+}
+
+test_truenas_status_export_dispatches_python_cli(){
+  setup_case
+  PYTHON_BIN="$TEST_TMP/python" run_entrypoint truenas-status-export
+  assert_status 0
+  assert_output 'python [-m] [wud_updater.cli] [truenas-status-export]'
   teardown_case
 }
 
@@ -240,6 +259,7 @@ main(){
   run_test test_default_runs_updates_dry_run
   run_test test_leading_flag_runs_updates
   run_test test_updates_dispatch_passes_arguments
+  run_test test_truenas_status_export_dispatches_python_cli
   run_test test_updater_dispatch_injects_missing_paths
   run_test test_updater_dispatch_preserves_explicit_paths
   run_test test_updater_dispatch_preserves_explicit_log_dir

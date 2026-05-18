@@ -37,7 +37,8 @@ WUD or WUD-Updater, start from
 
 For containerized TrueNAS status checks, start from
 `docs/examples/docker-compose.truenas.yml`. It builds a version-matched
-TrueNAS API client and keeps the API key in a mounted secret file.
+TrueNAS client and uses an opt-in short-lived helper container for local status
+checks without storing a TrueNAS API key.
 
 ### Host Install
 
@@ -81,5 +82,5 @@ wud-updater update-from-wud --dry-run
 | Complete documentation index | [docs/README.md](docs/README.md) |
 | Docker Compose example | [docs/examples/docker-compose.example.yml](docs/examples/docker-compose.example.yml) |
 | Hardened Docker Compose example | [docs/examples/docker-compose.hardened.yml](docs/examples/docker-compose.hardened.yml) |
-| TrueNAS API Docker Compose example | [docs/examples/docker-compose.truenas.yml](docs/examples/docker-compose.truenas.yml) |
+| TrueNAS status Docker Compose example | [docs/examples/docker-compose.truenas.yml](docs/examples/docker-compose.truenas.yml) |
 | Release notes | [CHANGELOG.md](CHANGELOG.md) |

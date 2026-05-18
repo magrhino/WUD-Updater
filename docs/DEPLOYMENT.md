@@ -107,23 +107,19 @@ and keeps the proxy on an internal Docker network.
 
 For containerized TrueNAS status checks, use
 [`docs/examples/docker-compose.truenas.yml`](examples/docker-compose.truenas.yml).
-That variant builds the helper image with the official TrueNAS API client so
-the Python `updates` wrapper can call a remote `midclt` over WebSocket. Set
+That variant builds the helper image with the official TrueNAS API client so a
+short-lived sibling container can run local `midclt` calls. Set
 `TRUENAS_API_CLIENT_REF` to an API client tag that is compatible with your
-TrueNAS release and supports the authentication options you configure. The
-example defaults to `TS-26.0.0-BETA.1` because `TRUENAS_API_KEY_FILE` and
-`TRUENAS_API_INSECURE` require the 26.0+ `midclt` client features. Set
-`TRUENAS_API_URI` to a reachable `ws://` or `wss://` API endpoint.
+TrueNAS release, then set `TRUENAS_STATUS_CHECK=1` to opt in.
 
-Store the API key in the Compose secret file shown in the example, not in the
-Compose environment. Create a least-privilege TrueNAS API key that can only
-`CALL` `update.status` and `alert.list`. If the helper prints `TrueNAS not
-reachable`, check that the URI routes from inside the container, the API client
-tag matches the TrueNAS release, the key file is mounted, and TLS verification
-trusts the TrueNAS certificate. `TRUENAS_API_INSECURE=1` disables certificate
-verification and should only be used temporarily while bootstrapping trusted TLS.
-Use `network_mode: host` only as a last resort because it weakens container
-network isolation.
+When enabled, the Python `updates` wrapper uses Docker to inspect its own
+container, starts the same image with `--network none`, mounts only the WUD
+output mount plus `/var/run/middleware:/var/run/middleware:ro`, writes
+`truenas-status.json` beside `images.todo`, and exits. If the helper prints
+`TrueNAS not reachable`, check that Docker can start sibling containers, the
+client tag matches the TrueNAS release, the WUD output mount is writable, and
+the TrueNAS middleware socket exists at `/var/run/middleware` on the Docker
+host.
 
 For local image development and smoke tests, use
 [`docs/examples/docker-compose.build.yml`](examples/docker-compose.build.yml).
@@ -266,10 +262,7 @@ OUT_GID="1000"
 | `WUD_SYNC_SCRIPTS` | unset | Set to `1` in the helper container to sync packaged WUD scripts before normal commands. |
 | `WUD_SCRIPTS_DIR` | `/managed-wud` | Managed script sync destination. |
 | `WUD_APP_DIR` | `/app` | Application root inside the helper container. |
-| `TRUENAS_API_URI` | unset | Optional remote TrueNAS API URI for the Python `updates` wrapper, for example `wss://truenas.example.local/api/current`. |
-| `TRUENAS_API_KEY_FILE` | unset | Optional file path containing a TrueNAS API key for remote `midclt`; prefer a Compose secret mount. |
-| `TRUENAS_API_USERNAME` | unset | Optional username for TrueNAS API client versions that require it with API keys. |
-| `TRUENAS_API_INSECURE` | unset | Set to `1` only to disable TLS verification temporarily for self-signed or untrusted certificates. |
+| `TRUENAS_STATUS_CHECK` | unset | For the Python/container `updates` wrapper, set to `1` to run the short-lived local `midclt` status helper. |
 | `TRUENAS_STATUS_TIMEOUT` | `5` | Seconds to wait for each TrueNAS status or alert API call before skipping it. |
 
 For release-note notifications, provide webhook and GitHub token values through
@@ -289,10 +282,10 @@ Secrets such as Discord webhooks and GitHub tokens must come from environment
 variables or host-local secret stores. The scripts redact webhook values in
 logs where they print helper commands.
 
-TrueNAS API keys should be scoped to the smallest read-only allowlist required
-for status checks. Do not place API key contents directly in Compose files,
-environment variables, docs, logs, or command lines. Prefer a secret file mount
-and `TRUENAS_API_KEY_FILE`.
+The TrueNAS status helper does not use a TrueNAS API key. It relies on Docker
+access to start a short-lived container with the local middleware socket
+mounted, so treat `TRUENAS_STATUS_CHECK=1` as trusted-host access similar to
+other Docker socket workflows.
 
 `--dry-run` does not pull images, recreate containers, remove WUD lines, or
 otherwise mutate host state. Mutating Docker operations require interactive

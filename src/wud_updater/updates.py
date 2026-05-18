@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import posixpath
 import re
 import shutil
 import subprocess
@@ -19,6 +20,8 @@ DEFAULT_UPDATE_MODE = "stop"
 DEFAULT_MAX_WAIT = "180"
 DEFAULT_LOCK_TIMEOUT = "30"
 DEFAULT_TRUENAS_STATUS_TIMEOUT = "5"
+TRUENAS_STATUS_FILE_NAME = "truenas-status.json"
+TRUENAS_MIDDLEWARE_MOUNT = "/var/run/middleware"
 _SECONDS_RE = re.compile(r"^[0-9]+$")
 _DISPLAY_RANGE_RE = re.compile(r"^([0-9]+)-([0-9]+)$")
 _DISPLAY_NUMBER_RE = re.compile(r"^[0-9]+$")
@@ -58,10 +61,7 @@ class UpdatesOptions:
     out_gid: str = ""
     lock_timeout: str = ""
     use_sudo: bool = True
-    truenas_api_uri: str = ""
-    truenas_api_key_file: str = ""
-    truenas_api_username: str = ""
-    truenas_api_insecure: bool = False
+    truenas_status_check: bool = False
     truenas_status_timeout: str = DEFAULT_TRUENAS_STATUS_TIMEOUT
 
 
@@ -70,6 +70,18 @@ class TrueNasCallResult:
     ok: bool
     data: object | None = None
     reason: str = ""
+
+
+@dataclass(frozen=True)
+class TrueNasStatusSnapshot:
+    update: TrueNasCallResult
+    alerts: TrueNasCallResult
+
+
+@dataclass(frozen=True)
+class DockerMount:
+    source: str
+    destination: str
 
 
 @dataclass
@@ -193,10 +205,12 @@ class UpdatesRunner:
         else:
             print("✅ No pending Docker updates!")
 
-        print()
-        self._print_system_update_status()
-        print()
-        self._print_alert_status()
+        if self.options.truenas_status_check:
+            snapshot = _refresh_truenas_status(self.options, self.environ)
+            print()
+            self._print_system_update_status(snapshot.update)
+            print()
+            self._print_alert_status(snapshot.alerts)
 
         if not self.todo_entries:
             return 0
@@ -280,9 +294,8 @@ class UpdatesRunner:
             return _read_todo_entries_with_sudo(self.options.wud_file, self.environ)
         return _parse_todo_entries(text)
 
-    def _print_system_update_status(self) -> None:
+    def _print_system_update_status(self, result: TrueNasCallResult) -> None:
         print("=== 🖥️ TrueNAS System Update ===")
-        result = _midclt_json("update.status", self.options, self.environ)
         if not result.ok:
             _print_truenas_unreachable("system update check", result.reason)
             return
@@ -300,9 +313,8 @@ class UpdatesRunner:
         else:
             print(f"❓ Unknown status: {status or '<no response>'}")
 
-    def _print_alert_status(self) -> None:
+    def _print_alert_status(self, result: TrueNasCallResult) -> None:
         print("=== 🚨 TrueNAS Alerts ===")
-        result = _midclt_json("alert.list", self.options, self.environ)
         if not result.ok:
             _print_truenas_unreachable("alert check", result.reason)
             return
@@ -525,6 +537,27 @@ def run_updates_from_namespace(
     return UpdatesRunner(options, environ=env).run()
 
 
+def run_truenas_status_export_from_namespace(
+    _args: argparse.Namespace,
+    *,
+    environ: Mapping[str, str] | None = None,
+) -> int:
+    env = dict(os.environ if environ is None else environ)
+    wud_file = env.get("WUD_OUT_FILE") or "/out/images.todo"
+    timeout = env.get("TRUENAS_STATUS_TIMEOUT") or DEFAULT_TRUENAS_STATUS_TIMEOUT
+
+    snapshot = TrueNasStatusSnapshot(
+        update=_midclt_json("update.status", timeout, env),
+        alerts=_midclt_json("alert.list", timeout, env),
+    )
+    try:
+        _write_truenas_status_file(wud_file, snapshot)
+    except UpdatesError as exc:
+        print(exc, file=sys.stderr)
+        return 1
+    return 0
+
+
 def options_from_namespace(
     args: argparse.Namespace,
     *,
@@ -577,10 +610,11 @@ def options_from_namespace(
             environ.get("WUD_UPDATER_USE_SUDO"),
             no_updater_sudo=bool(getattr(args, "no_updater_sudo", False)),
         ),
-        truenas_api_uri=environ.get("TRUENAS_API_URI") or "",
-        truenas_api_key_file=environ.get("TRUENAS_API_KEY_FILE") or "",
-        truenas_api_username=environ.get("TRUENAS_API_USERNAME") or "",
-        truenas_api_insecure=_is_enabled(environ.get("TRUENAS_API_INSECURE")),
+        truenas_status_check=_resolve_bool_env(
+            environ.get("TRUENAS_STATUS_CHECK"),
+            "TRUENAS_STATUS_CHECK",
+            default=False,
+        ),
         truenas_status_timeout=(
             environ.get("TRUENAS_STATUS_TIMEOUT") or DEFAULT_TRUENAS_STATUS_TIMEOUT
         ),
@@ -785,6 +819,20 @@ def _resolve_use_sudo(
     )
 
 
+def _resolve_bool_env(value: str | None, label: str, *, default: bool) -> bool:
+    if value is None or value == "":
+        return default
+
+    normalized = value.strip().lower()
+    if normalized in {"1", "true", "yes", "on"}:
+        return True
+    if normalized in {"0", "false", "no", "off"}:
+        return False
+    raise UpdatesError(
+        f"{label} must be one of 1, 0, true, false, yes, no, on, or off"
+    )
+
+
 def _format_os_error(exc: OSError) -> str:
     return exc.strerror or str(exc)
 
@@ -793,28 +841,345 @@ def _has_command(command: str, environ: Mapping[str, str]) -> bool:
     return shutil.which(command, path=environ.get("PATH")) is not None
 
 
-def _is_enabled(value: str | None) -> bool:
-    if value is None:
-        return False
-    return value.strip().lower() in {"1", "true", "yes", "on"}
+def _refresh_truenas_status(
+    options: UpdatesOptions,
+    environ: Mapping[str, str],
+) -> TrueNasStatusSnapshot:
+    status_file = _truenas_status_file(options.wud_file)
+    try:
+        status_file.unlink()
+    except FileNotFoundError:
+        pass
+    except OSError as exc:
+        return _truenas_unavailable_snapshot(
+            f"cannot clear status file: {_format_os_error(exc)}"
+        )
+
+    result = _run_truenas_status_helper(options, environ)
+    if not result.ok:
+        return _truenas_unavailable_snapshot(result.reason)
+    return _read_truenas_status_file(status_file)
+
+
+def _run_truenas_status_helper(
+    options: UpdatesOptions,
+    environ: Mapping[str, str],
+) -> TrueNasCallResult:
+    if not _has_command("docker", environ):
+        return TrueNasCallResult(ok=False, reason="docker not available")
+
+    hostname = environ.get("HOSTNAME") or ""
+    if hostname == "":
+        return TrueNasCallResult(ok=False, reason="HOSTNAME not available")
+
+    try:
+        helper_timeout = _truenas_helper_timeout_seconds(
+            options.truenas_status_timeout or DEFAULT_TRUENAS_STATUS_TIMEOUT
+        )
+    except UpdatesError as exc:
+        return TrueNasCallResult(ok=False, reason=str(exc))
+
+    inspect_command = ["docker", "container", "inspect", hostname]
+    try:
+        inspect_result = subprocess.run(
+            inspect_command,
+            env=dict(environ),
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            timeout=helper_timeout,
+            check=False,
+        )
+    except subprocess.TimeoutExpired:
+        return TrueNasCallResult(ok=False, reason="docker inspect timed out")
+    except OSError as exc:
+        return TrueNasCallResult(
+            ok=False,
+            reason=f"docker inspect failed: {_format_os_error(exc)}",
+        )
+
+    if inspect_result.returncode != 0:
+        return TrueNasCallResult(
+            ok=False,
+            reason=_subprocess_failure_reason("docker inspect", inspect_result),
+        )
+
+    try:
+        inspect_data = json.loads(inspect_result.stdout)
+    except json.JSONDecodeError:
+        return TrueNasCallResult(
+            ok=False,
+            reason="docker inspect returned invalid JSON",
+        )
+    container = _first_inspected_container(inspect_data)
+    if container is None:
+        return TrueNasCallResult(
+            ok=False,
+            reason="docker inspect returned no container",
+        )
+
+    image = _inspected_container_image(container)
+    if image == "":
+        return TrueNasCallResult(
+            ok=False,
+            reason="docker inspect returned no image",
+        )
+
+    output_dir = _container_dir(options.wud_file)
+    mount = _find_container_mount(container, output_dir)
+    if mount is None:
+        return TrueNasCallResult(
+            ok=False,
+            reason=f"no Docker mount contains {output_dir}",
+        )
+
+    run_command = [
+        "docker",
+        "run",
+        "--rm",
+        "--pull",
+        "never",
+        "--network",
+        "none",
+        "--read-only",
+        "--cap-drop",
+        "ALL",
+        "--security-opt",
+        "no-new-privileges",
+        "-e",
+        f"WUD_OUT_FILE={options.wud_file}",
+        "-e",
+        "TRUENAS_STATUS_CHECK=0",
+        "-e",
+        "WUD_SYNC_SCRIPTS=0",
+        "-e",
+        f"TRUENAS_STATUS_TIMEOUT={options.truenas_status_timeout}",
+        "-v",
+        f"{mount.source}:{mount.destination}",
+        "-v",
+        f"{TRUENAS_MIDDLEWARE_MOUNT}:{TRUENAS_MIDDLEWARE_MOUNT}:ro",
+        image,
+        "truenas-status-export",
+    ]
+    try:
+        run_result = subprocess.run(
+            run_command,
+            env=dict(environ),
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            timeout=helper_timeout,
+            check=False,
+        )
+    except subprocess.TimeoutExpired:
+        return TrueNasCallResult(ok=False, reason="docker run timed out")
+    except OSError as exc:
+        return TrueNasCallResult(
+            ok=False,
+            reason=f"docker run failed: {_format_os_error(exc)}",
+        )
+
+    if run_result.returncode != 0:
+        return TrueNasCallResult(
+            ok=False,
+            reason=_subprocess_failure_reason("docker run", run_result),
+        )
+    return TrueNasCallResult(ok=True)
+
+
+def _truenas_helper_timeout_seconds(value: str) -> int:
+    call_timeout = _parse_seconds(value, "TRUENAS_STATUS_TIMEOUT")
+    return max(5, call_timeout * 2 + 5)
+
+
+def _subprocess_failure_reason(
+    label: str,
+    result: subprocess.CompletedProcess[str],
+) -> str:
+    reason = f"{label} exited {result.returncode}"
+    detail = (result.stderr.strip() or result.stdout.strip()).splitlines()
+    if detail:
+        reason = f"{reason}: {detail[0][:200]}"
+    return reason
+
+
+def _first_inspected_container(data: object) -> dict[str, object] | None:
+    if not isinstance(data, list) or not data:
+        return None
+    first = data[0]
+    return first if isinstance(first, dict) else None
+
+
+def _inspected_container_image(container: Mapping[str, object]) -> str:
+    image = container.get("Image")
+    if isinstance(image, str) and image:
+        return image
+    config = container.get("Config")
+    if isinstance(config, dict):
+        image = config.get("Image")
+        if isinstance(image, str) and image:
+            return image
+    return ""
+
+
+def _find_container_mount(
+    container: Mapping[str, object],
+    target_path: str,
+) -> DockerMount | None:
+    mounts = container.get("Mounts")
+    if not isinstance(mounts, list):
+        return None
+
+    target = _normalize_container_path(target_path)
+    best: DockerMount | None = None
+    for item in mounts:
+        if not isinstance(item, dict):
+            continue
+        destination = item.get("Destination")
+        if not isinstance(destination, str) or destination == "":
+            continue
+        destination = _normalize_container_path(destination)
+        if not _posix_path_is_or_under(target, destination):
+            continue
+        source = _mount_source(item)
+        if source == "":
+            continue
+        if best is None or len(destination) > len(best.destination):
+            best = DockerMount(source=source, destination=destination)
+    return best
+
+
+def _mount_source(mount: Mapping[str, object]) -> str:
+    mount_type = mount.get("Type")
+    name = mount.get("Name")
+    if mount_type == "volume" and isinstance(name, str) and name:
+        return name
+    source = mount.get("Source")
+    return source if isinstance(source, str) else ""
+
+
+def _container_dir(path: str) -> str:
+    parent = posixpath.dirname(_normalize_container_path(path))
+    return parent or "/"
+
+
+def _normalize_container_path(path: str) -> str:
+    normalized = path if path.startswith("/") else f"/{path}"
+    return posixpath.normpath(normalized)
+
+
+def _posix_path_is_or_under(path: str, parent: str) -> bool:
+    parent = parent.rstrip("/") or "/"
+    if parent == "/":
+        return path.startswith("/")
+    return path == parent or path.startswith(f"{parent}/")
+
+
+def _truenas_status_file(wud_file: str) -> Path:
+    return Path(wud_file).parent / TRUENAS_STATUS_FILE_NAME
+
+
+def _truenas_unavailable_snapshot(reason: str) -> TrueNasStatusSnapshot:
+    return TrueNasStatusSnapshot(
+        update=TrueNasCallResult(ok=False, reason=reason),
+        alerts=TrueNasCallResult(ok=False, reason=reason),
+    )
+
+
+def _read_truenas_status_file(status_file: Path) -> TrueNasStatusSnapshot:
+    try:
+        text = status_file.read_text(encoding="utf-8")
+    except OSError as exc:
+        return _truenas_unavailable_snapshot(
+            f"cannot read status file: {_format_os_error(exc)}"
+        )
+
+    try:
+        payload = json.loads(text)
+    except json.JSONDecodeError:
+        return _truenas_unavailable_snapshot("invalid JSON response")
+
+    if not isinstance(payload, dict):
+        return _truenas_unavailable_snapshot("invalid status response")
+
+    return TrueNasStatusSnapshot(
+        update=_truenas_result_from_payload(payload.get("update")),
+        alerts=_truenas_result_from_payload(payload.get("alerts")),
+    )
+
+
+def _truenas_result_from_payload(value: object) -> TrueNasCallResult:
+    if not isinstance(value, dict):
+        return TrueNasCallResult(ok=False, reason="invalid status response")
+    ok = value.get("ok")
+    if ok is True:
+        return TrueNasCallResult(ok=True, data=value.get("data"))
+    if ok is False:
+        reason = value.get("reason")
+        return TrueNasCallResult(
+            ok=False,
+            reason=reason if isinstance(reason, str) and reason else "unknown error",
+        )
+    return TrueNasCallResult(ok=False, reason="invalid status response")
+
+
+def _write_truenas_status_file(
+    wud_file: str,
+    snapshot: TrueNasStatusSnapshot,
+) -> None:
+    status_file = _truenas_status_file(wud_file)
+    payload = {
+        "update": _truenas_result_to_payload(snapshot.update),
+        "alerts": _truenas_result_to_payload(snapshot.alerts),
+    }
+    tmp_file = status_file.with_name(f".{status_file.name}.tmp.{os.getpid()}")
+    try:
+        status_file.parent.mkdir(parents=True, exist_ok=True)
+        tmp_file.write_text(
+            json.dumps(payload, sort_keys=True, separators=(",", ":")) + "\n",
+            encoding="utf-8",
+        )
+        os.replace(tmp_file, status_file)
+    except OSError as exc:
+        raise UpdatesError(
+            "Unable to write TrueNAS status file: "
+            f"{status_file}: {_format_os_error(exc)}"
+        ) from exc
+    finally:
+        try:
+            tmp_file.unlink()
+        except FileNotFoundError:
+            pass
+        except OSError:
+            pass
+
+
+def _truenas_result_to_payload(result: TrueNasCallResult) -> dict[str, object]:
+    return {
+        "ok": result.ok,
+        "data": result.data,
+        "reason": result.reason,
+    }
 
 
 def _midclt_json(
     method: str,
-    options: UpdatesOptions,
+    status_timeout: str,
     environ: Mapping[str, str],
 ) -> TrueNasCallResult:
     if not _has_command("midclt", environ):
         return TrueNasCallResult(ok=False, reason="midclt not available")
     try:
         timeout = _parse_seconds(
-            options.truenas_status_timeout or DEFAULT_TRUENAS_STATUS_TIMEOUT,
+            status_timeout or DEFAULT_TRUENAS_STATUS_TIMEOUT,
             "TRUENAS_STATUS_TIMEOUT",
         )
     except UpdatesError as exc:
         return TrueNasCallResult(ok=False, reason=str(exc))
 
-    command = _midclt_command(method, options)
+    command = _midclt_command(method)
     try:
         result = subprocess.run(
             command,
@@ -852,18 +1217,8 @@ def _midclt_json(
     return TrueNasCallResult(ok=True, data=data)
 
 
-def _midclt_command(method: str, options: UpdatesOptions) -> list[str]:
-    command = ["midclt"]
-    if options.truenas_api_uri:
-        command.extend(["--uri", options.truenas_api_uri])
-    if options.truenas_api_username:
-        command.extend(["-U", options.truenas_api_username])
-    if options.truenas_api_key_file:
-        command.extend(["-K", options.truenas_api_key_file])
-    if options.truenas_api_insecure:
-        command.append("--insecure")
-    command.extend(["call", method])
-    return command
+def _midclt_command(method: str) -> list[str]:
+    return ["midclt", "call", method]
 
 
 def _print_truenas_unreachable(check: str, reason: str = "") -> None:

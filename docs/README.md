@@ -12,7 +12,7 @@ short; detailed setup and behavior notes live here.
 | Development, CI, and release automation | [DEVELOPMENT.md](DEVELOPMENT.md) |
 | Docker Compose example | [examples/docker-compose.example.yml](examples/docker-compose.example.yml) |
 | Hardened Docker Compose example | [examples/docker-compose.hardened.yml](examples/docker-compose.hardened.yml) |
-| TrueNAS API Docker Compose example | [examples/docker-compose.truenas.yml](examples/docker-compose.truenas.yml) |
+| TrueNAS status Docker Compose example | [examples/docker-compose.truenas.yml](examples/docker-compose.truenas.yml) |
 | Local Docker Compose build artifact | [examples/docker-compose.build.yml](examples/docker-compose.build.yml) |
 | Environment template | [examples/template.env](examples/template.env) |
 | Changelog | [../CHANGELOG.md](../CHANGELOG.md) |

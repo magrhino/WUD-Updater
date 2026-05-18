@@ -12,11 +12,10 @@ services:
     build:
       context: ../..
       args:
-        # This example uses secret-file and --insecure support from the 26.0+
-        # API client. Pick a client tag compatible with your TrueNAS release. See:
+        # Pick a client tag compatible with your TrueNAS release. See:
         #   https://github.com/truenas/api_client#version-compatibility--features
         TRUENAS_API_CLIENT_REF: ${TRUENAS_API_CLIENT_REF:-TS-26.0.0-BETA.1}
-    image: magrhino/wud-updater:truenas-api
+    image: magrhino/wud-updater:truenas-status
     environment:
       DOCKER_BASE: /host/docker
       WUD_OUT_FILE: /out/images.todo
@@ -27,26 +26,10 @@ services:
       WUD_UPDATER_USE_SUDO: "0"
       OUT_UID: "1000"
       OUT_GID: "1000"
-      # Prefer a trusted TLS endpoint and a LAN/FQDN address that the container
-      # can route to. host.docker.internal uses the host gateway configured
-      # below; replace it with your TrueNAS hostname or IP when needed.
-      TRUENAS_API_URI: ${TRUENAS_API_URI:-wss://host.docker.internal/api/current}
-      # Store the key in a host-local file that is not committed to Git. Create
-      # a least-privilege API key that can only CALL update.status and alert.list.
-      TRUENAS_API_KEY_FILE: /run/secrets/truenas_api_key
-      # Some TrueNAS API client versions require a username with API keys.
-      # TRUENAS_API_USERNAME: admin
-      # WARNING: setting TRUENAS_API_INSECURE=1 disables TLS certificate
-      # verification and increases man-in-the-middle risk. Use only while
-      # bootstrapping a lab or until a trusted certificate is available.
-      # TRUENAS_API_INSECURE: "1"
+      # Uses Docker to start a short-lived helper container that mounts the
+      # local TrueNAS middleware socket and writes sanitized status JSON to /out.
+      TRUENAS_STATUS_CHECK: "1"
       TRUENAS_STATUS_TIMEOUT: "5"
-    extra_hosts:
-      # Docker routes this name to the host gateway. If your TrueNAS API is not
-      # reachable through that address, use a LAN/FQDN TRUENAS_API_URI instead.
-      - "host.docker.internal:host-gateway"
-    secrets:
-      - truenas_api_key
     volumes:
       # WARNING: the Docker socket gives root-equivalent control over the host.
       # Prefer the hardened socket-proxy example when you do not need this raw
@@ -57,14 +40,6 @@ services:
       - wud-scripts:/managed-wud
       - wud-out:/out
     command: ["updates", "--dry-run"]
-    # Last resort only: host networking makes the TrueNAS API easier to reach
-    # but weakens network isolation and can expose more host network surface.
-    # Prefer TRUENAS_API_URI with host.docker.internal, a LAN IP, or DNS name.
-    # network_mode: host
-
-secrets:
-  truenas_api_key:
-    file: ./secrets/truenas-api-key
 
 volumes:
   wud-scripts:

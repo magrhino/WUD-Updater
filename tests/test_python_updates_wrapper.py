@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import subprocess
 import sys
@@ -271,18 +272,54 @@ class PythonUpdatesWrapperTests(unittest.TestCase):
             self.sudo_log.read_text(encoding="utf-8"),
         )
 
-    def test_truenas_checks_use_midclt_when_available(self) -> None:
+    def test_truenas_checks_skip_when_not_enabled(self) -> None:
         result = self.run_updates("--dry-run")
+
+        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+        self.assertNotIn("TrueNAS System Update", result.stdout)
+        self.assertNotIn("TrueNAS Alerts", result.stdout)
+
+    def test_truenas_check_runs_helper_container_and_prints_status(self) -> None:
+        docker_log = self.root / "docker.log"
+
+        result = self.run_updates(
+            "--dry-run",
+            env_overrides={
+                "TRUENAS_STATUS_CHECK": "1",
+                "HOSTNAME": "wud-updater-1",
+                "FAKE_DOCKER_LOG": str(docker_log),
+            },
+        )
 
         self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
         self.assertIn("⚠️  System update available!", result.stdout)
         self.assertIn("25.10.1", result.stdout)
         self.assertIn("Pool needs attention", result.stdout)
+        docker_calls = docker_log.read_text(encoding="utf-8")
+        self.assertIn("container inspect wud-updater-1", docker_calls)
+        self.assertIn(
+            "run --rm --pull never --network none --read-only --cap-drop ALL "
+            "--security-opt no-new-privileges",
+            docker_calls,
+        )
+        self.assertIn(f"-v wud-out:{self.root}", docker_calls)
+        self.assertIn(
+            "-v /var/run/middleware:/var/run/middleware:ro",
+            docker_calls,
+        )
+        self.assertIn("wud-updater:test truenas-status-export", docker_calls)
+        self.assertNotIn("--volumes-from", docker_calls)
+        self.assertNotIn("--uri", docker_calls)
+        self.assertNotIn("-K", docker_calls)
 
-    def test_truenas_checks_report_unreachable_when_midclt_missing(self) -> None:
+    def test_truenas_helper_failure_reports_unreachable_without_failing(self) -> None:
         result = self.run_updates(
             "--dry-run",
-            env_overrides={"PATH": os.environ.get("PATH", "")},
+            env_overrides={
+                "TRUENAS_STATUS_CHECK": "1",
+                "HOSTNAME": "wud-updater-1",
+                "FAKE_DOCKER_RUN_RETURN": "2",
+            },
         )
 
         self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
@@ -290,16 +327,36 @@ class PythonUpdatesWrapperTests(unittest.TestCase):
             "TrueNAS not reachable; skipping system update check.",
             result.stdout,
         )
+        self.assertIn("docker run exited 2", result.stdout)
         self.assertIn("TrueNAS not reachable; skipping alert check.", result.stdout)
 
-    def test_truenas_remote_midclt_uses_configured_uri_and_key_file(self) -> None:
+    def test_truenas_malformed_helper_status_reports_unreachable(self) -> None:
+        result = self.run_updates(
+            "--dry-run",
+            env_overrides={
+                "TRUENAS_STATUS_CHECK": "1",
+                "HOSTNAME": "wud-updater-1",
+                "FAKE_DOCKER_STATUS_RESPONSE": "invalid",
+            },
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+        self.assertIn(
+            "TrueNAS not reachable; skipping system update check.",
+            result.stdout,
+        )
+        self.assertIn("invalid JSON response", result.stdout)
+
+    def test_truenas_status_export_uses_local_midclt_without_api_flags(self) -> None:
         key_file = self.root / "truenas-api-key"
         key_file.write_text("super-secret-api-key\n", encoding="utf-8")
         midclt_log = self.root / "midclt.log"
 
         result = self.run_updates(
-            "--dry-run",
+            command=[sys.executable, "-m", "wud_updater.cli", "truenas-status-export"],
+            include_file=False,
             env_overrides={
+                "WUD_OUT_FILE": str(self.wud_file),
                 "FAKE_MIDCLT_LOG": str(midclt_log),
                 "TRUENAS_API_URI": "wss://truenas.example.local/api/current",
                 "TRUENAS_API_KEY_FILE": str(key_file),
@@ -310,24 +367,28 @@ class PythonUpdatesWrapperTests(unittest.TestCase):
 
         self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
         midclt_calls = midclt_log.read_text(encoding="utf-8")
-        self.assertIn(
-            "--uri wss://truenas.example.local/api/current "
-            f"-U admin -K {key_file} --insecure call update.status",
-            midclt_calls,
-        )
-        self.assertIn(
-            "--uri wss://truenas.example.local/api/current "
-            f"-U admin -K {key_file} --insecure call alert.list",
-            midclt_calls,
-        )
+        self.assertIn("call update.status", midclt_calls)
+        self.assertIn("call alert.list", midclt_calls)
+        self.assertNotIn("--uri", midclt_calls)
+        self.assertNotIn("-K", midclt_calls)
+        self.assertNotIn(str(key_file), midclt_calls)
         self.assertNotIn("super-secret-api-key", result.stdout)
         self.assertNotIn("super-secret-api-key", result.stderr)
         self.assertNotIn("super-secret-api-key", midclt_calls)
+        status_payload = json.loads(
+            (self.root / "truenas-status.json").read_text(encoding="utf-8")
+        )
+        self.assertTrue(status_payload["update"]["ok"])
+        self.assertTrue(status_payload["alerts"]["ok"])
 
     def test_truenas_update_status_up_to_date(self) -> None:
         result = self.run_updates(
             "--dry-run",
-            env_overrides={"FAKE_TRUENAS_UPDATE_STATUS": "unavailable"},
+            env_overrides={
+                "TRUENAS_STATUS_CHECK": "1",
+                "HOSTNAME": "wud-updater-1",
+                "FAKE_TRUENAS_UPDATE_STATUS": "unavailable",
+            },
         )
 
         self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
@@ -336,7 +397,11 @@ class PythonUpdatesWrapperTests(unittest.TestCase):
     def test_truenas_update_status_error_is_reported_without_failing(self) -> None:
         result = self.run_updates(
             "--dry-run",
-            env_overrides={"FAKE_TRUENAS_UPDATE_STATUS": "error"},
+            env_overrides={
+                "TRUENAS_STATUS_CHECK": "1",
+                "HOSTNAME": "wud-updater-1",
+                "FAKE_TRUENAS_UPDATE_STATUS": "error",
+            },
         )
 
         self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
@@ -345,54 +410,32 @@ class PythonUpdatesWrapperTests(unittest.TestCase):
     def test_truenas_alert_status_no_active_alerts(self) -> None:
         result = self.run_updates(
             "--dry-run",
-            env_overrides={"FAKE_TRUENAS_ALERT_STATUS": "none"},
+            env_overrides={
+                "TRUENAS_STATUS_CHECK": "1",
+                "HOSTNAME": "wud-updater-1",
+                "FAKE_TRUENAS_ALERT_STATUS": "none",
+            },
         )
 
         self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
         self.assertIn("✅ No active alerts", result.stdout)
 
-    def test_truenas_invalid_json_is_reported_without_failing(self) -> None:
+    def test_truenas_status_export_records_midclt_failure(self) -> None:
         result = self.run_updates(
-            "--dry-run",
-            env_overrides={"FAKE_MIDCLT_RESPONSE": "invalid"},
-        )
-
-        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
-        self.assertIn("TrueNAS not reachable; skipping system update check.", result.stdout)
-        self.assertIn("invalid JSON response", result.stdout)
-
-    def test_truenas_midclt_failure_is_reported_without_failing(self) -> None:
-        result = self.run_updates(
-            "--dry-run",
-            env_overrides={"FAKE_MIDCLT_RETURN": "2"},
-        )
-
-        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
-        self.assertIn("TrueNAS not reachable; skipping system update check.", result.stdout)
-        self.assertIn("midclt exited 2", result.stdout)
-
-    def test_truenas_empty_response_is_reported_without_failing(self) -> None:
-        result = self.run_updates(
-            "--dry-run",
-            env_overrides={"FAKE_MIDCLT_RESPONSE": "empty"},
-        )
-
-        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
-        self.assertIn("TrueNAS not reachable; skipping system update check.", result.stdout)
-        self.assertIn("empty midclt response", result.stdout)
-
-    def test_truenas_timeout_is_reported_without_failing(self) -> None:
-        result = self.run_updates(
-            "--dry-run",
+            command=[sys.executable, "-m", "wud_updater.cli", "truenas-status-export"],
+            include_file=False,
             env_overrides={
-                "FAKE_MIDCLT_RESPONSE": "timeout",
-                "TRUENAS_STATUS_TIMEOUT": "0",
+                "WUD_OUT_FILE": str(self.wud_file),
+                "FAKE_MIDCLT_RETURN": "2",
             },
         )
 
         self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
-        self.assertIn("TrueNAS not reachable; skipping system update check.", result.stdout)
-        self.assertIn("midclt timed out", result.stdout)
+        status_payload = json.loads(
+            (self.root / "truenas-status.json").read_text(encoding="utf-8")
+        )
+        self.assertFalse(status_payload["update"]["ok"])
+        self.assertEqual(status_payload["update"]["reason"], "midclt exited 2")
 
     def test_bin_updates_opt_in_dispatches_python_wrapper(self) -> None:
         self.wud_file.write_text("repo/app:latest\n", encoding="utf-8")
@@ -490,6 +533,52 @@ fi
             """#!/usr/bin/env bash
 printf '%s\\n' "$*" >> "${FAKE_SUDO_LOG:?FAKE_SUDO_LOG is required}"
 "$@"
+""",
+        )
+        self._write_executable(
+            self.fake_bin / "docker",
+            """#!/usr/bin/env bash
+if [[ -n "${FAKE_DOCKER_LOG:-}" ]]; then
+  printf '%s\\n' "$*" >> "$FAKE_DOCKER_LOG"
+fi
+if [[ "$1 $2" == "container inspect" ]]; then
+  out_dir="$(dirname "${FAKE_WUD_FILE:?FAKE_WUD_FILE is required}")"
+  printf '[{"Config":{"Image":"wud-updater:test"},"Mounts":[{"Type":"volume","Name":"wud-out","Destination":"%s"}]}]\\n' "$out_dir"
+  exit 0
+fi
+if [[ "$1" == "run" ]]; then
+  if [[ "${FAKE_DOCKER_RUN_RETURN:-0}" != "0" ]]; then
+    exit "$FAKE_DOCKER_RUN_RETURN"
+  fi
+  out_dir="$(dirname "${FAKE_WUD_FILE:?FAKE_WUD_FILE is required}")"
+  status_file="$out_dir/truenas-status.json"
+  if [[ "${FAKE_DOCKER_STATUS_RESPONSE:-}" == "invalid" ]]; then
+    printf 'not json\\n' > "$status_file"
+    exit 0
+  fi
+  case "${FAKE_TRUENAS_UPDATE_STATUS:-available}" in
+    unavailable)
+      update_data='{"code":"NORMAL","status":{"new_version":null},"error":null}'
+      ;;
+    error)
+      update_data='{"code":"ERROR","status":null,"error":{"reason":"update train failed"}}'
+      ;;
+    *)
+      update_data='{"code":"NORMAL","status":{"new_version":{"version":"25.10.1"}},"error":null}'
+      ;;
+  esac
+  case "${FAKE_TRUENAS_ALERT_STATUS:-active}" in
+    none)
+      alert_data='[]'
+      ;;
+    *)
+      alert_data='[{"dismissed":false,"formatted":"Pool needs attention"},{"dismissed":true,"formatted":"Dismissed alert"}]'
+      ;;
+  esac
+  printf '{"update":{"ok":true,"data":%s,"reason":""},"alerts":{"ok":true,"data":%s,"reason":""}}\\n' "$update_data" "$alert_data" > "$status_file"
+  exit 0
+fi
+exit 1
 """,
         )
         self._write_executable(
