@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import errno
 import os
 import re
 import shutil
@@ -42,6 +43,7 @@ _IMAGE_LINE_RE = re.compile(
 )
 _SAFE_COMPONENT_RE = re.compile(r"[^A-Za-z0-9._-]")
 _CONTROL_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
+_EXCLUSIVE_CREATE_ATTEMPTS = 100
 
 
 class UpdaterError(RuntimeError):
@@ -578,27 +580,41 @@ class UpdateFromWudRunner:
         first_tag = applied_tags[0].desired_tag if applied_tags else "tag"
         incident = stack.directory / f"error-{safe_component(first_tag)}-{file_timestamp()}.logs"
         services_label = " ".join(services or ()) or "stack-level"
-        with incident.open("w", encoding="utf-8") as file:
-            file.write("WUD-Updater tag update incident\n")
-            file.write(f"timestamp={timestamp()}\n")
-            file.write(f"stack={stack.name}\n")
-            file.write(f"compose_file={stack.file}\n")
-            file.write(f"services={services_label}\n")
-            file.write(f"reason={reason}\n")
-            file.write(f"rollback={rollback_result}\n")
-            file.write(f"central_log={self.log_file}\n")
-            file.write("\ntag_updates:\n")
-            for applied in applied_tags:
-                file.write(
-                    f"  {applied.old_image} -> {applied.new_image} "
-                    f"(tag={applied.desired_tag} replacements={applied.replacements})\n"
-                )
-            file.write("\nfailure_health:\n")
-            file.write(failure_health if failure_health else "health: no failure health details captured\n")
-            file.write(
-                "\nmanual_review_required="
-                + ("no\n" if rollback_result == "restored-and-healthy" else "yes\n")
+        content = [
+            "WUD-Updater tag update incident\n",
+            f"timestamp={timestamp()}\n",
+            f"stack={stack.name}\n",
+            f"compose_file={stack.file}\n",
+            f"services={services_label}\n",
+            f"reason={reason}\n",
+            f"rollback={rollback_result}\n",
+            f"central_log={self.log_file}\n",
+            "\ntag_updates:\n",
+        ]
+        for applied in applied_tags:
+            content.append(
+                f"  {applied.old_image} -> {applied.new_image} "
+                f"(tag={applied.desired_tag} replacements={applied.replacements})\n"
             )
+        content.append("\nfailure_health:\n")
+        content.append(
+            failure_health
+            if failure_health
+            else "health: no failure health details captured\n"
+        )
+        content.append(
+            "\nmanual_review_required="
+            + ("no\n" if rollback_result == "restored-and-healthy" else "yes\n")
+        )
+        try:
+            incident = _create_unique_text_file_exclusive(
+                incident,
+                "".join(content),
+            )
+        except OSError as exc:
+            raise UpdaterError(
+                f"[{stack.name}] Could not create tag update incident log: {exc}"
+            ) from exc
         self.log.warn(f"[{stack.name}] Wrote tag update incident log: {incident}")
 
     def _capture_health_details(
@@ -830,9 +846,59 @@ def prepare_log_file(log_dir: Path, owner: OwnerConfig) -> Path:
     log_dir.mkdir(parents=True, exist_ok=True)
     apply_configured_owner(log_dir, owner)
     log_file = log_dir / f"update-from-wud-v2-{file_timestamp()}.log"
-    log_file.write_text("", encoding="utf-8")
-    apply_configured_owner(log_file, owner)
-    return log_file
+    try:
+        return _create_unique_text_file_exclusive(log_file, "", owner=owner)
+    except OSError as exc:
+        raise UpdaterError(f"Could not create updater log file: {exc}") from exc
+
+
+def _create_unique_text_file_exclusive(
+    path: Path,
+    content: str,
+    *,
+    owner: OwnerConfig | None = None,
+    encoding: str = "utf-8",
+) -> Path:
+    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
+    flags |= getattr(os, "O_NOFOLLOW", 0)
+    owner = owner or OwnerConfig()
+
+    for attempt in range(_EXCLUSIVE_CREATE_ATTEMPTS):
+        candidate = _collision_path(path, attempt)
+        fd = -1
+        try:
+            fd = os.open(candidate, flags, 0o666)
+            if owner.configured:
+                if owner.uid is None or owner.gid is None:
+                    raise OwnerConfigError(
+                        "OUT_UID and OUT_GID/OUT_GUID must be set together"
+                    )
+                os.fchown(fd, owner.uid, owner.gid)
+            with os.fdopen(fd, "w", encoding=encoding, newline="") as file:
+                fd = -1
+                file.write(content)
+            return candidate
+        except FileExistsError:
+            continue
+        except OSError as exc:
+            if exc.errno == errno.ELOOP:
+                continue
+            raise
+        finally:
+            if fd != -1:
+                os.close(fd)
+
+    raise FileExistsError(
+        errno.EEXIST,
+        f"could not create a unique file after {_EXCLUSIVE_CREATE_ATTEMPTS} attempts",
+        str(path),
+    )
+
+
+def _collision_path(path: Path, attempt: int) -> Path:
+    if attempt == 0:
+        return path
+    return path.with_name(f"{path.stem}-{attempt}{path.suffix}")
 
 
 def parse_seconds(value: str | None, label: str) -> int:

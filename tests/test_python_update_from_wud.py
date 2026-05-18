@@ -12,7 +12,8 @@ from pathlib import Path
 from unittest import mock
 
 from wud_updater.command import CommandRunner
-from wud_updater.updater import UpdaterOptions, UpdateFromWudRunner
+from wud_updater.file_ops import OwnerConfig
+from wud_updater.updater import UpdaterOptions, UpdateFromWudRunner, prepare_log_file
 
 
 class PythonUpdateFromWudTests(unittest.TestCase):
@@ -297,6 +298,22 @@ class PythonUpdateFromWudTests(unittest.TestCase):
         self.assertIn("Could not back up compose file", stderr.getvalue())
         self.assertNotIn("Traceback", stderr.getvalue())
 
+    def test_log_file_creation_does_not_follow_existing_symlink(self) -> None:
+        target = self.root / "symlink-target.log"
+        target.write_text("keep\n", encoding="utf-8")
+        (self.log_dir / "update-from-wud-v2-fixed.log").symlink_to(target)
+        owner = OwnerConfig.from_values(str(os.getuid()), str(os.getgid()))
+
+        with mock.patch("wud_updater.updater.file_timestamp", return_value="fixed"):
+            log_file = prepare_log_file(self.log_dir, owner)
+
+        self.assertEqual(log_file.name, "update-from-wud-v2-fixed-1.log")
+        self.assertEqual(target.read_text(encoding="utf-8"), "keep\n")
+        self.assertFalse(log_file.is_symlink())
+        self.assertEqual(log_file.read_text(encoding="utf-8"), "")
+        after_stat = log_file.stat()
+        self.assertEqual((after_stat.st_uid, after_stat.st_gid), (os.getuid(), os.getgid()))
+
     def test_tag_update_failure_rolls_back_and_writes_incident_log(self) -> None:
         self.wud_file.write_text("repo/app:1.0 tag=2.0\n", encoding="utf-8")
         stack_dir = self.make_stack("app", [("app", "repo/app:1.0", "cid-app")])
@@ -339,6 +356,64 @@ class PythonUpdateFromWudTests(unittest.TestCase):
         self.assertIn("health=unhealthy", incident)
         self.assertIn("new tag failed health check", incident)
         self.assertIn("manual_review_required=no", incident)
+
+    def test_tag_incident_creation_does_not_follow_existing_symlink(self) -> None:
+        self.wud_file.write_text("repo/app:1.0 tag=2.0\n", encoding="utf-8")
+        stack_dir = self.make_stack("app", [("app", "repo/app:1.0", "cid-app")])
+        self.set_image_state("repo/app:1.0", "old", "sha256:old")
+        self.set_image_after_pull("repo/app:2.0", "new", "sha256:new")
+        (self.fake_root / "containers" / "cid-app.healthlog").write_text(
+            "new tag failed health check\n",
+            encoding="utf-8",
+        )
+        hook = self.fake_root / "post-up-hook"
+        hook.write_text(
+            "#!/usr/bin/env bash\n"
+            "set -Eeuo pipefail\n"
+            "compose_file=\"${2:?compose file is required}\"\n"
+            "if grep -q 'repo/app:2.0' \"$compose_file\"; then\n"
+            "  printf '/cid-app|running|unhealthy|1|0\\n' > \"${FAKE_DOCKER_ROOT:?}/containers/cid-app.summary\"\n"
+            "else\n"
+            "  printf '/cid-app|running|healthy|0|0\\n' > \"${FAKE_DOCKER_ROOT:?}/containers/cid-app.summary\"\n"
+            "fi\n",
+            encoding="utf-8",
+        )
+        hook.chmod(0o755)
+        target = self.root / "incident-target.logs"
+        target.write_text("keep\n", encoding="utf-8")
+        (stack_dir / "error-2.0-fixed.logs").symlink_to(target)
+        options = UpdaterOptions(
+            docker_base=self.base,
+            wud_file=self.wud_file,
+            log_dir=self.log_dir,
+            max_wait=0,
+            assume_yes=True,
+            allow_tag_updates=True,
+            no_color=True,
+        )
+        runner = UpdateFromWudRunner(
+            options,
+            environ=self.env,
+            command_runner=CommandRunner(env=self.env),
+        )
+        stdout = StringIO()
+        stderr = StringIO()
+
+        with (
+            mock.patch("wud_updater.updater.file_timestamp", return_value="fixed"),
+            redirect_stdout(stdout),
+            redirect_stderr(stderr),
+        ):
+            status = runner.run()
+
+        self.assertEqual(status, 1, stderr.getvalue() + stdout.getvalue())
+        self.assertEqual(target.read_text(encoding="utf-8"), "keep\n")
+        incident = stack_dir / "error-2.0-fixed-1.logs"
+        self.assertFalse(incident.is_symlink())
+        content = incident.read_text(encoding="utf-8")
+        self.assertIn("reason=health-failed", content)
+        self.assertIn("repo/app:1.0 -> repo/app:2.0", content)
+        self.assertIn("manual_review_required=no", content)
 
 
 def safe_name(value: str) -> str:
