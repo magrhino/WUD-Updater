@@ -20,4 +20,10 @@ Release sections use this shape:
 ### Fixed
 ```
 
+## Unreleased
+
+### Added
+
+- Added actionlint CI for pull requests targeting `main`.
+
 No release sections have been published yet.

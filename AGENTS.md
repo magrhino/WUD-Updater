@@ -23,6 +23,7 @@ Repo-local routing/context only for WUD-Updater. Global instructions control def
 | `install.sh` | Idempotent installer that chmods scripts and creates host symlinks for CLI commands and WUD scripts. | `install.sh`, then README install section. | Preserve refusal to replace non-symlink targets and existing env overrides. | Changing default target layout unless the task asks for installer behavior changes. |
 | `Dockerfile`, `entrypoint.sh`, `docker-compose.example.yml`, `.dockerignore` | Container packaging for running the existing shell helpers with Docker CLI access. | `README.md`, `entrypoint.sh`, `bin/updates`, `bin/docker-update-from-wud`. | Keep the default command non-mutating, preserve shell-script dispatch, and keep Docker socket and host stack mounts explicit in examples. | Porting updater logic into the image language runtime or replacing WUD's separate `/wud` mount. |
 | `tests/` | Local test runner, focused shell tests, Python config tests, and fake command implementations. | `tests/run-all.sh`, then the focused test for the behavior being changed. | Keep tests temp-dir based and fake external commands; never call real Docker mutations; keep Python tests dependency-free unless a dependency is already required. | Adding dependencies or broad fixtures when a small shell fake or unittest is enough. |
+| `.github/workflows/actionlint.yml` | GitHub Actions workflow that lints workflows on PRs targeting `main`. | Workflow file, then actionlint docs only if changing install/run behavior. | Keep trigger scoped to PRs against `main` unless the task asks for broader coverage. | Adding unrelated linters or broad workflow rewrites. |
 | `.github/workflows/test.yml` | GitHub Actions workflow that runs the local test entrypoint on Linux and macOS. | `tests/run-all.sh`, workflow file. | Keep CI and local validation aligned through `tests/run-all.sh`. | OS-specific CI behavior not covered by local tests unless needed. |
 | `README.md` | User-facing overview, install, WUD mount, usage, and config notes. | Scripts being described. | Keep concise, accurate, and free of secrets or machine-specific paths. | Operational assumptions not present in code. |
 | `CHANGELOG.md` | Release-time record of notable versioned changes. | `CHANGELOG.md`, recent commits since the previous tag, and changed user-facing docs. | Author versioned `## [vX.Y.Z] — YYYY-MM-DD` sections only during explicit release prep. | Ordinary feature, docs, or maintenance work outside release prep. |
@@ -60,6 +61,7 @@ Use the shell already used by the target script.
 | POSIX syntax check | `sh -n wud/on-update.sh wud/append-updates.sh` |
 | updater dry run | `bin/docker-update-from-wud --base "$DOCKER_BASE" --file "$WUD_OUT_FILE" --dry-run` |
 | host status dry run | `bin/updates --dry-run` |
+| GitHub Actions lint | `actionlint` |
 | full local test suite | `tests/run-all.sh` |
 | updater behavior tests | `tests/test-docker-update-from-wud.sh` |
 | WUD append tests | `tests/test-wud-append-updates.sh` |
@@ -86,6 +88,7 @@ Use the shell already used by the target script.
 - Host wrapper change: run `tests/test-updates-wrapper.sh`; fake `sudo` and configured updater commands rather than invoking real system mutation.
 - Container packaging change: run `bash -n entrypoint.sh`, ShellCheck through `tests/run-all.sh`, `tests/test-entrypoint.sh`, and `tests/container-build.sh` when Docker is available. The container build test validates Compose config, builds the image, and smoke-runs the default non-mutating command.
 - Release-note behavior change: syntax-check the touched scripts, run ShellCheck, run `tests/test-release-notes-to-discord.sh` when Discord payload or release-note behavior changes, and avoid live Discord/GitHub calls unless explicitly requested or needed.
+- GitHub Actions workflow change: run `actionlint` when available; if not installed, inspect the touched workflow YAML and report that local actionlint was not available.
 - Python skeleton/config change: run Python syntax check, `tests/run-python-tests.py`, and `tests/run-all.sh` when practical. Keep the shell commands authoritative until the refactor explicitly ports behavior.
 - Cross-cutting behavior change: run `tests/run-all.sh` when practical before finishing.
 - Docs-only change: no tests required unless examples or commands were changed enough to need syntax validation.
@@ -103,6 +106,7 @@ Use the shell already used by the target script.
 - `wud/`: Container-mounted callback scripts for collecting WUD updates and optionally posting GitHub release notes to Discord.
 - `install.sh`: Host setup helper that creates symlinks and executable bits without replacing existing non-symlink targets.
 - `tests/`: Shell-based local and CI validation using temp directories and fake external commands.
+- `.github/workflows/actionlint.yml`: Lints GitHub Actions workflows on PRs targeting `main`.
 - `.github/workflows/test.yml`: Runs the local suite on Ubuntu and macOS.
 - `README.md`: Concise user guide for install, mounts, usage, and local config.
 - `CHANGELOG.md`: Tracks notable changes at release time using versioned sections.
