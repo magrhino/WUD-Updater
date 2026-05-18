@@ -4,6 +4,18 @@ All notable changes to WUD-Updater are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com) and versions follow
 [Semantic Versioning](https://semver.org).
 
+## [0.2.0](https://github.com/magrhino/WUD-Updater/compare/v0.1.0...v0.2.0) (2026-05-18)
+
+
+### Features
+
+* **updater:** make Python updater default ([2ef6d95](https://github.com/magrhino/WUD-Updater/commit/2ef6d95e29f269429421bc270eb914ade0b98c1a))
+
+
+### Documentation
+
+* **changelog:** add Python updater default entry ([eeb85ba](https://github.com/magrhino/WUD-Updater/commit/eeb85ba9eb7c594f5efba56ea45fa4c0a7b4658a))
+
 ## 0.1.0 (2026-05-18)
 
 
