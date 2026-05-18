@@ -12,10 +12,10 @@ services:
     build:
       context: ../..
       args:
-        # Match this tag to your TrueNAS release. The default is an example,
-        # not a universal recommendation. See:
+        # This example uses secret-file and --insecure support from the 26.0+
+        # API client. Pick a client tag compatible with your TrueNAS release. See:
         #   https://github.com/truenas/api_client#version-compatibility--features
-        TRUENAS_API_CLIENT_REF: ${TRUENAS_API_CLIENT_REF:-TS-25.10.3}
+        TRUENAS_API_CLIENT_REF: ${TRUENAS_API_CLIENT_REF:-TS-26.0.0-BETA.1}
     image: magrhino/wud-updater:truenas-api
     environment:
       DOCKER_BASE: /host/docker

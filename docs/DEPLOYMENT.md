@@ -109,9 +109,11 @@ For containerized TrueNAS status checks, use
 [`docs/examples/docker-compose.truenas.yml`](examples/docker-compose.truenas.yml).
 That variant builds the helper image with the official TrueNAS API client so
 the Python `updates` wrapper can call a remote `midclt` over WebSocket. Set
-`TRUENAS_API_CLIENT_REF` to the API client tag that matches your TrueNAS
-release, for example `TS-25.10.3`, and set `TRUENAS_API_URI` to a reachable
-`ws://` or `wss://` API endpoint.
+`TRUENAS_API_CLIENT_REF` to an API client tag that is compatible with your
+TrueNAS release and supports the authentication options you configure. The
+example defaults to `TS-26.0.0-BETA.1` because `TRUENAS_API_KEY_FILE` and
+`TRUENAS_API_INSECURE` require the 26.0+ `midclt` client features. Set
+`TRUENAS_API_URI` to a reachable `ws://` or `wss://` API endpoint.
 
 Store the API key in the Compose secret file shown in the example, not in the
 Compose environment. Create a least-privilege TrueNAS API key that can only
