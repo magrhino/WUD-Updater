@@ -4,13 +4,16 @@ on:
   push:
     tags:
       - "v*.*.*"
+  release:
+    types:
+      - published
 
 permissions:
   contents: write
   packages: write
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.event.release.tag_name || github.ref }}
   cancel-in-progress: false
 
 env:
@@ -23,6 +26,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     outputs:
+      tag: ${{ steps.tag.outputs.tag }}
       version: ${{ steps.tag.outputs.version }}
       minor: ${{ steps.tag.outputs.minor }}
 
@@ -30,10 +34,12 @@ jobs:
       - name: Validate release tag
         id: tag
         shell: bash
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name || github.ref_name }}
         run: |
           set -euo pipefail
 
-          tag="$GITHUB_REF_NAME"
+          tag="$RELEASE_TAG"
           if [[ ! "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
             printf 'Release tags must match vX.Y.Z, got: %s\n' "$tag" >&2
             exit 1
@@ -42,6 +48,7 @@ jobs:
           version="${tag#v}"
           minor="${version%.*}"
           {
+            printf 'tag=%s\n' "$tag"
             printf 'version=%s\n' "$version"
             printf 'minor=%s\n' "$minor"
           } >> "$GITHUB_OUTPUT"
@@ -52,10 +59,13 @@ jobs:
     timeout-minutes: 20
     needs:
       - validate-tag
+    if: ${{ github.event_name != 'release' }}
 
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.validate-tag.outputs.tag }}
 
       - name: Install ShellCheck
         shell: bash
@@ -85,10 +95,18 @@ jobs:
     needs:
       - validate-tag
       - test
+    if: >-
+      ${{
+        always() &&
+        needs.validate-tag.result == 'success' &&
+        (needs.test.result == 'success' || needs.test.result == 'skipped')
+      }}
 
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.validate-tag.outputs.tag }}
 
       - name: Log in to GHCR
         shell: bash
@@ -101,6 +119,7 @@ jobs:
       - name: Build image
         shell: bash
         env:
+          RELEASE_TAG: ${{ needs.validate-tag.outputs.tag }}
           VERSION: ${{ needs.validate-tag.outputs.version }}
           MINOR_VERSION: ${{ needs.validate-tag.outputs.minor }}
         run: |
@@ -110,8 +129,8 @@ jobs:
           docker build --platform linux/amd64 \
             --label "org.opencontainers.image.source=https://github.com/$GITHUB_REPOSITORY" \
             --label "org.opencontainers.image.revision=$GITHUB_SHA" \
-            --label "org.opencontainers.image.version=$GITHUB_REF_NAME" \
-            -t "$image:$GITHUB_REF_NAME" \
+            --label "org.opencontainers.image.version=$RELEASE_TAG" \
+            -t "$image:$RELEASE_TAG" \
             -t "$image:$VERSION" \
             -t "$image:$MINOR_VERSION" \
             -t "$image:latest" \
@@ -120,13 +139,14 @@ jobs:
       - name: Push image
         shell: bash
         env:
+          RELEASE_TAG: ${{ needs.validate-tag.outputs.tag }}
           VERSION: ${{ needs.validate-tag.outputs.version }}
           MINOR_VERSION: ${{ needs.validate-tag.outputs.minor }}
         run: |
           set -euo pipefail
 
           image="$REGISTRY/$IMAGE_NAME"
-          docker push "$image:$GITHUB_REF_NAME"
+          docker push "$image:$RELEASE_TAG"
           docker push "$image:$VERSION"
           docker push "$image:$MINOR_VERSION"
           docker push "$image:latest"
@@ -135,15 +155,16 @@ jobs:
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ needs.validate-tag.outputs.tag }}
         run: |
           set -euo pipefail
 
-          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
-            printf 'Release already exists for %s\n' "$GITHUB_REF_NAME"
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            printf 'Release already exists for %s\n' "$RELEASE_TAG"
             exit 0
           fi
 
-          gh release create "$GITHUB_REF_NAME" \
+          gh release create "$RELEASE_TAG" \
             --verify-tag \
             --generate-notes \
-            --title "$GITHUB_REF_NAME"
+            --title "$RELEASE_TAG"

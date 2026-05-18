@@ -39,6 +39,21 @@ jobs:
     name: changes
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    if: >-
+      ${{
+        github.event_name == 'workflow_dispatch' ||
+        !(
+          (github.event_name == 'pull_request' && contains(github.event.pull_request.title, '[skip ci]')) ||
+          (github.event_name == 'push' && (
+            startsWith(github.event.head_commit.message, 'docs:') ||
+            startsWith(github.event.head_commit.message, 'docs(') ||
+            startsWith(github.event.head_commit.message, 'docs!:') ||
+            startsWith(github.event.head_commit.message, 'chore:') ||
+            startsWith(github.event.head_commit.message, 'chore(') ||
+            startsWith(github.event.head_commit.message, 'chore!:')
+          ))
+        )
+      }}
     outputs:
       docker: ${{ steps.filter.outputs.docker }}
       workflows: ${{ steps.filter.outputs.workflows }}
@@ -93,6 +108,21 @@ jobs:
     name: linux tests
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    if: >-
+      ${{
+        github.event_name == 'workflow_dispatch' ||
+        !(
+          (github.event_name == 'pull_request' && contains(github.event.pull_request.title, '[skip ci]')) ||
+          (github.event_name == 'push' && (
+            startsWith(github.event.head_commit.message, 'docs:') ||
+            startsWith(github.event.head_commit.message, 'docs(') ||
+            startsWith(github.event.head_commit.message, 'docs!:') ||
+            startsWith(github.event.head_commit.message, 'chore:') ||
+            startsWith(github.event.head_commit.message, 'chore(') ||
+            startsWith(github.event.head_commit.message, 'chore!:')
+          ))
+        )
+      }}
 
     steps:
       - name: Check out repository
@@ -125,8 +155,21 @@ jobs:
     timeout-minutes: 20
     if: >-
       ${{
-        (github.event_name == 'workflow_dispatch' && inputs.run_macos) ||
-        (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'ci:macos'))
+        !(
+          (github.event_name == 'pull_request' && contains(github.event.pull_request.title, '[skip ci]')) ||
+          (github.event_name == 'push' && (
+            startsWith(github.event.head_commit.message, 'docs:') ||
+            startsWith(github.event.head_commit.message, 'docs(') ||
+            startsWith(github.event.head_commit.message, 'docs!:') ||
+            startsWith(github.event.head_commit.message, 'chore:') ||
+            startsWith(github.event.head_commit.message, 'chore(') ||
+            startsWith(github.event.head_commit.message, 'chore!:')
+          ))
+        ) &&
+        (
+          (github.event_name == 'workflow_dispatch' && inputs.run_macos) ||
+          (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'ci:macos'))
+        )
       }}
 
     steps:
@@ -161,9 +204,22 @@ jobs:
       - changes
     if: >-
       ${{
-        (github.event_name == 'workflow_dispatch' && inputs.run_docker) ||
-        (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'ci:docker')) ||
-        needs.changes.outputs.docker == 'true'
+        !(
+          (github.event_name == 'pull_request' && contains(github.event.pull_request.title, '[skip ci]')) ||
+          (github.event_name == 'push' && (
+            startsWith(github.event.head_commit.message, 'docs:') ||
+            startsWith(github.event.head_commit.message, 'docs(') ||
+            startsWith(github.event.head_commit.message, 'docs!:') ||
+            startsWith(github.event.head_commit.message, 'chore:') ||
+            startsWith(github.event.head_commit.message, 'chore(') ||
+            startsWith(github.event.head_commit.message, 'chore!:')
+          ))
+        ) &&
+        (
+          (github.event_name == 'workflow_dispatch' && inputs.run_docker) ||
+          (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'ci:docker')) ||
+          needs.changes.outputs.docker == 'true'
+        )
       }}
 
     steps:
@@ -181,8 +237,21 @@ jobs:
       - changes
     if: >-
       ${{
-        github.event_name == 'workflow_dispatch' ||
-        needs.changes.outputs.workflows == 'true'
+        !(
+          (github.event_name == 'pull_request' && contains(github.event.pull_request.title, '[skip ci]')) ||
+          (github.event_name == 'push' && (
+            startsWith(github.event.head_commit.message, 'docs:') ||
+            startsWith(github.event.head_commit.message, 'docs(') ||
+            startsWith(github.event.head_commit.message, 'docs!:') ||
+            startsWith(github.event.head_commit.message, 'chore:') ||
+            startsWith(github.event.head_commit.message, 'chore(') ||
+            startsWith(github.event.head_commit.message, 'chore!:')
+          ))
+        ) &&
+        (
+          github.event_name == 'workflow_dispatch' ||
+          needs.changes.outputs.workflows == 'true'
+        )
       }}
 
     steps:

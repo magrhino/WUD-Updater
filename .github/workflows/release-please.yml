@@ -4,6 +4,11 @@ on:
   push:
     branches:
       - main
+  pull_request_target:
+    branches:
+      - main
+    types:
+      - closed
   workflow_dispatch:
 
 permissions:
@@ -20,6 +25,31 @@ jobs:
     name: release please
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    if: >-
+      ${{
+        github.event_name == 'workflow_dispatch' ||
+        (
+          github.event_name == 'pull_request_target' &&
+          github.event.pull_request.merged == true &&
+          contains(github.event.pull_request.labels.*.name, 'autorelease: pending')
+        ) ||
+        (
+          github.event_name == 'push' &&
+          !(
+            startsWith(github.event.head_commit.message, 'docs:') ||
+            startsWith(github.event.head_commit.message, 'docs(') ||
+            startsWith(github.event.head_commit.message, 'docs!:') ||
+            (
+              (
+                startsWith(github.event.head_commit.message, 'chore:') ||
+                startsWith(github.event.head_commit.message, 'chore(') ||
+                startsWith(github.event.head_commit.message, 'chore!:')
+              ) &&
+              !startsWith(github.event.head_commit.message, 'chore: release ')
+            )
+          )
+        )
+      }}
 
     steps:
       - name: Run Release Please

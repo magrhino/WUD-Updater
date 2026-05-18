@@ -84,7 +84,7 @@ The suite runs Ruff, shell syntax checks, ShellCheck, Python syntax checks, Pyth
 
 ## CI and Releases
 
-CI runs on pull requests targeting `main` and pushes to `main`. The default path is intentionally Linux-only to keep private repository Actions usage predictable.
+CI runs on pull requests targeting `main` and pushes to `main`. The default path is intentionally Linux-only to keep private repository Actions usage predictable. Pull requests with `[skip ci]` in the title skip CI jobs, and direct `docs:` or `chore:` commits to `main` skip CI and Release Please jobs. Merged Release Please PRs can still run the release automation needed to tag the release.
 
 Optional checks are available when broader coverage is useful:
 
@@ -99,7 +99,7 @@ git tag v1.2.3
 git push origin v1.2.3
 ```
 
-Release tags run the Linux validation suite, build the Docker image for Linux amd64, publish it to `ghcr.io/magrhino/wud-updater`, and create a GitHub Release with generated notes. Image tags are published as `vX.Y.Z`, `X.Y.Z`, `X.Y`, and `latest`.
+Manual release tags run the Linux validation suite, build the Docker image for Linux amd64, publish it to `ghcr.io/magrhino/wud-updater`, and create a GitHub Release with generated notes. Release Please-created releases publish the same image tags without rerunning the CI validation that already passed before the release PR. Image tags are published as `vX.Y.Z`, `X.Y.Z`, `X.Y`, and `latest`.
 
 ## Install
 
