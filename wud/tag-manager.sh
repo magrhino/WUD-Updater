@@ -41,9 +41,8 @@ dump_env_subset() {
 send_discord() {
   local url="$1" msg="$2"
   [[ -n "$url" ]] || return 0
-  # escape quotes
-  local esc; esc=$(printf '%s' "$msg" | sed 's/"/\\"/g')
-  local payload; payload=$(printf '{"content":"%s"}' "$esc")
+  local payload
+  payload="$(jq -n --arg content "$msg" '{content:$content, allowed_mentions:{parse:[]}}')"
   curl -fsSL -H 'Content-Type: application/json' -X POST -d "$payload" "$url"
 }
 

@@ -156,12 +156,18 @@ run_payload(){
   PATH="$TEST_TMP/bin:$PATH" "$SCRIPT" "$@" > "$output_file" 2> "$TEST_TMP/output.log" || fail "github-release-embed failed"
 }
 
+assert_mentions_disabled(){
+  local payload_file="$1"
+  jq -e '.allowed_mentions.parse == []' "$payload_file" >/dev/null || fail "allowed_mentions was not disabled"
+}
+
 test_generic_latest_payload_is_neutral(){
   setup_case
   local payload_file="$TEST_TMP/payload.json"
 
   run_payload "$payload_file" --repo acme/app
 
+  assert_mentions_disabled "$payload_file"
   jq -e '.username == "GitHub Release Notes"' "$payload_file" >/dev/null || fail "username was not neutral"
   jq -e '.embeds[0].title == "Release v2.0.0 for acme/app"' "$payload_file" >/dev/null || fail "generic title was wrong"
   jq -e '.embeds[0].footer.text == "Built from GitHub Release"' "$payload_file" >/dev/null || fail "generic footer was wrong"
@@ -187,6 +193,7 @@ test_generic_missing_release_falls_back_to_project(){
 
   run_payload "$payload_file" --repo acme/noreleases --tag 9.9.9
 
+  assert_mentions_disabled "$payload_file"
   jq -e '.embeds[0].url == "https://github.com/acme/noreleases"' "$payload_file" >/dev/null || fail "fallback URL was wrong"
   jq -e '.embeds[0].fields[] | select(.name == "Links" and (.value | contains("GitHub project")))' "$payload_file" >/dev/null || fail "fallback link was missing"
   teardown_case
@@ -198,6 +205,7 @@ test_lsio_release_adds_upstream_and_linuxserver_fields(){
 
   run_payload "$payload_file" --provider lsio --lsio linuxserver/docker-radarr --upstream Radarr/Radarr
 
+  assert_mentions_disabled "$payload_file"
   jq -e '.embeds[0].fields[] | select(.name == "LSIO Tag" and .value == "`5.1.0-ls1`")' "$payload_file" >/dev/null || fail "LSIO tag field missing"
   jq -e '.embeds[0].fields[] | select(.name == "Upstream Version" and .value == "`v5.1.0`")' "$payload_file" >/dev/null || fail "upstream version field missing"
   jq -e '.embeds[0].fields[] | select(.name == "LinuxServer Changes" and (.value | contains("Alpine 3.20") and contains("Add package")))' "$payload_file" >/dev/null || fail "LinuxServer changes field missing"
@@ -211,6 +219,7 @@ test_lsio_missing_upstream_release_falls_back_to_project(){
 
   run_payload "$payload_file" --provider lsio --lsio linuxserver/docker-missing --upstream NoRelease/App
 
+  assert_mentions_disabled "$payload_file"
   jq -e '.embeds[0].url == "https://github.com/NoRelease/App"' "$payload_file" >/dev/null || fail "LSIO fallback URL was wrong"
   jq -e '.embeds[0].fields[] | select(.name == "Upstream Version" and .value == "`N/A`")' "$payload_file" >/dev/null || fail "LSIO fallback upstream version was wrong"
   teardown_case

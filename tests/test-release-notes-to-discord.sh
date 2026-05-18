@@ -135,6 +135,7 @@ test_oci_source_uses_github_release_engine(){
   FAKE_IMAGE_SOURCE="https://github.com/acme/app" run_notes "ghcr.io/acme/app:1.0.0" "1.0.0" "$payload_file"
 
   [[ -s "$payload_file" ]] || fail "webhook payload was not captured"
+  jq -e '.allowed_mentions.parse == []' "$payload_file" >/dev/null || fail "allowed_mentions was not disabled"
   jq -e '.username == "GitHub Release Notes"' "$payload_file" >/dev/null || fail "release engine username missing"
   jq -e '.embeds[0].fields[] | select(.name == "Container" and .value == "container")' "$payload_file" >/dev/null || fail "container field was not preserved"
   jq -e '.embeds[0].fields[] | select(.name == "Version" and .value == "1.0.0 -> v2.0.0")' "$payload_file" >/dev/null || fail "current to new field was not rendered"
@@ -149,6 +150,7 @@ test_linuxserver_image_falls_back_to_docker_repo(){
   FAKE_IMAGE_SOURCE="" run_notes "linuxserver/radarr:latest" "latest" "$payload_file"
 
   [[ -s "$payload_file" ]] || fail "webhook payload was not captured"
+  jq -e '.allowed_mentions.parse == []' "$payload_file" >/dev/null || fail "LinuxServer fallback did not disable mentions"
   jq -e '.embeds[0].fields[] | select(.name == "Repository" and .value == "linuxserver/docker-radarr")' "$payload_file" >/dev/null || fail "LinuxServer source fallback was not used"
   teardown_case
 }
@@ -160,6 +162,7 @@ test_missing_source_posts_minimal_notice(){
   FAKE_IMAGE_SOURCE="" run_notes "docker.io/library/redis:latest" "latest" "$payload_file"
 
   [[ -s "$payload_file" ]] || fail "webhook payload was not captured"
+  jq -e '.allowed_mentions.parse == []' "$payload_file" >/dev/null || fail "minimal notice did not disable mentions"
   jq -e '.embeds[0].title == "Update available: docker.io/library/redis:latest"' "$payload_file" >/dev/null || fail "minimal notice title was wrong"
   jq -e '.embeds[0].description == "No GitHub source label found. Unable to fetch release notes."' "$payload_file" >/dev/null || fail "minimal notice description was wrong"
   teardown_case
