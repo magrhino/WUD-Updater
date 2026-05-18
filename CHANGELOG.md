@@ -4,6 +4,13 @@ All notable changes to WUD-Updater are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com) and versions follow
 [Semantic Versioning](https://semver.org).
 
+## [0.4.0](https://github.com/magrhino/WUD-Updater/compare/v0.3.0...v0.4.0) (2026-05-18)
+
+
+### Features
+
+* **python:** Archive Bash updater and sync WUD scripts ([#11](https://github.com/magrhino/WUD-Updater/issues/11)) ([240d096](https://github.com/magrhino/WUD-Updater/commit/240d09603310b79a3471f3432fd0a7f3e8fe5cfc))
+
 ## [0.3.0](https://github.com/magrhino/WUD-Updater/compare/v0.2.0...v0.3.0) (2026-05-18)
 
 
