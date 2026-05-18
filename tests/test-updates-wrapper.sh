@@ -60,7 +60,7 @@ while (($#)); do
       ;;
   esac
 done
-printf 'OUT_UID=%s OUT_GID=%s OUT_GUID=%s WUD_LOCK_TIMEOUT=%s WUD_LOCK_HELD_BY_PARENT=%s\n' "${OUT_UID:-}" "${OUT_GID:-}" "${OUT_GUID:-}" "${WUD_LOCK_TIMEOUT:-}" "${WUD_LOCK_HELD_BY_PARENT:-}" >> "${FAKE_UPDATER_LOG:?FAKE_UPDATER_LOG is required}"
+printf 'OUT_UID=%s OUT_GID=%s OUT_GUID=%s WUD_LOCK_TIMEOUT=%s WUD_LOCK_HELD_BY_PARENT=%s WUD_UPDATER_LEGACY_BASH=%s\n' "${OUT_UID:-}" "${OUT_GID:-}" "${OUT_GUID:-}" "${WUD_LOCK_TIMEOUT:-}" "${WUD_LOCK_HELD_BY_PARENT:-}" "${WUD_UPDATER_LEGACY_BASH:-}" >> "${FAKE_UPDATER_LOG:?FAKE_UPDATER_LOG is required}"
 if [[ "${FAKE_UPDATER_ASSERT_LOCK:-}" = "1" ]]; then
   if [[ "${WUD_LOCK_HELD_BY_PARENT:-}" != "1" ]]; then
     printf 'missing WUD_LOCK_HELD_BY_PARENT\n' >> "$FAKE_UPDATER_LOG"
@@ -185,6 +185,18 @@ test_yes_passes_lock_timeout_through_sudo_env(){
   assert_status 0
   grep -q -- "env WUD_LOCK_TIMEOUT=0 $TEST_TMP/updater --base $TEST_TMP/docker --file $WUD_FILE --mode stop --max-wait 180 --yes" "$TEST_TMP/sudo.log" || fail "sudo did not receive expected lock timeout env"
   grep -q -- "WUD_LOCK_TIMEOUT=0" "$TEST_TMP/updater.log" || fail "updater did not receive lock timeout env"
+  teardown_case
+}
+
+test_yes_passes_legacy_bash_flag_through_sudo_env(){
+  setup_case
+  printf 'repo/app:latest\n' > "$WUD_FILE"
+
+  run_updates WUD_UPDATER_LEGACY_BASH=1 --yes --base "$TEST_TMP/docker"
+
+  assert_status 0
+  grep -q -- "env WUD_UPDATER_LEGACY_BASH=1 $TEST_TMP/updater --base $TEST_TMP/docker --file $WUD_FILE --mode stop --max-wait 180 --yes" "$TEST_TMP/sudo.log" || fail "sudo did not receive legacy bash env"
+  grep -q -- "WUD_UPDATER_LEGACY_BASH=1" "$TEST_TMP/updater.log" || fail "updater did not receive legacy bash env"
   teardown_case
 }
 
@@ -332,6 +344,7 @@ main(){
   run_test test_yes_invokes_configured_updater_through_sudo
   run_test test_yes_passes_owner_config_through_sudo_env
   run_test test_yes_passes_lock_timeout_through_sudo_env
+  run_test test_yes_passes_legacy_bash_flag_through_sudo_env
   run_test test_yes_passes_allow_tag_updates_flag
   run_test test_interactive_all_preserves_default_updater_args
   run_test test_interactive_display_uses_snapshot_without_holding_wud_lock

@@ -39,6 +39,16 @@ done
 printf '\n'
 FAKE_UPDATER
   chmod +x "$APP_DIR/bin/docker-update-from-wud"
+
+  cat > "$APP_DIR/bin/docker-update-from-wud-legacy" <<'FAKE_LEGACY_UPDATER'
+#!/usr/bin/env bash
+printf 'docker-update-from-wud-legacy'
+for arg in "$@"; do
+  printf ' [%s]' "$arg"
+done
+printf '\n'
+FAKE_LEGACY_UPDATER
+  chmod +x "$APP_DIR/bin/docker-update-from-wud-legacy"
 }
 
 teardown_case(){
@@ -105,6 +115,14 @@ test_updater_dispatch_preserves_explicit_paths(){
   teardown_case
 }
 
+test_legacy_updater_dispatch_injects_missing_paths(){
+  setup_case
+  run_entrypoint docker-update-from-wud-legacy --yes
+  assert_status 0
+  assert_output "docker-update-from-wud-legacy [--base] [$TEST_TMP/docker] [--file] [$TEST_TMP/images.todo] [--yes]"
+  teardown_case
+}
+
 test_debug_command_executes_directly(){
   setup_case
   run_entrypoint /bin/sh -c "printf 'debug [%s]\n' \"\$1\"" shell arg
@@ -126,6 +144,7 @@ main(){
   run_test test_updates_dispatch_passes_arguments
   run_test test_updater_dispatch_injects_missing_paths
   run_test test_updater_dispatch_preserves_explicit_paths
+  run_test test_legacy_updater_dispatch_injects_missing_paths
   run_test test_debug_command_executes_directly
 }
 

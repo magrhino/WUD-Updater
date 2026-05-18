@@ -1,4 +1,4 @@
-"""Docker Compose subprocess layer for the future Python updater."""
+"""Docker Compose subprocess layer for the Python updater."""
 
 from __future__ import annotations
 

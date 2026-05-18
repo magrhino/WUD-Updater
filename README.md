@@ -1,6 +1,6 @@
 # WUD-Updater
 
-Small shell helpers for applying Docker image updates reported by What's Up Docker (WUD), with optional TrueNAS status checks and Discord release-note notifications.
+Small helper commands for applying Docker image updates reported by What's Up Docker (WUD), with optional TrueNAS status checks and Discord release-note notifications.
 
 ## What It Does
 
@@ -15,6 +15,7 @@ Small shell helpers for applying Docker image updates reported by What's Up Dock
 bin/
   updates
   docker-update-from-wud
+  docker-update-from-wud-legacy
 src/wud_updater/
   cli.py
   command.py
@@ -42,18 +43,24 @@ pyproject.toml
 CHANGELOG.md
 ```
 
-## Python Refactor Status
+## Migration Notes
 
-The existing shell commands in `bin/` remain the production entrypoints by default. The Python package is an in-progress refactor with tested, opt-in updater paths:
+`docker-update-from-wud` now runs the Python updater by default:
 
 ```bash
-wud-updater update-from-wud --dry-run
-WUD_UPDATER_PYTHON=1 updates --dry-run
+docker-update-from-wud --dry-run
 ```
 
-`wud-updater update-from-wud` accepts the familiar updater flags such as `--base`, `--file`, `--mode`, `--dry-run`, `--yes`, `--allow-tag-updates`, `--only-lines`, and `--remove-lines-before-run`. It is intended for parity testing and staged migration work until the refactor is explicitly promoted.
+The Python updater accepts the familiar flags such as `--base`, `--file`, `--mode`, `--dry-run`, `--yes`, `--allow-tag-updates`, `--only-lines`, and `--remove-lines-before-run`. It keeps the existing confirmation, dry-run, digest, health-gate, and WUD cleanup behavior.
 
-`wud-updater updates` ports the host wrapper behavior, including WUD display, TrueNAS checks, interactive selection, and updater handoff. `bin/updates` only uses this Python path when `WUD_UPDATER_PYTHON=1` is set in the environment or host config; otherwise it continues to run the Bash implementation.
+The legacy Bash updater remains available for at least one release:
+
+```bash
+docker-update-from-wud-legacy --dry-run
+WUD_UPDATER_LEGACY_BASH=1 docker-update-from-wud --dry-run
+```
+
+`wud-updater updates` ports the host wrapper behavior, including WUD display, TrueNAS checks, interactive selection, and updater handoff. `bin/updates` still uses the Bash wrapper by default; set `WUD_UPDATER_PYTHON=1` in the environment or host config to use the Python wrapper.
 
 For the Python wrapper path only, `WUD_UPDATER_USE_SUDO=0` or `--no-updater-sudo` disables sudo file fallbacks and runs the configured updater directly. Use this when `images.todo` is owned so the wrapper user can read it and create `${WUD_OUT_FILE}.lock`, and when any privileged work is isolated inside the configured updater launcher.
 
@@ -73,7 +80,7 @@ Run the full validation entrypoint:
 tests/run-all.sh
 ```
 
-The suite runs Ruff, shell syntax checks, ShellCheck, Python syntax checks, Python unit tests, and the focused shell behavior tests.
+The suite runs Ruff, shell syntax checks, ShellCheck, Python syntax checks, Python unit tests, and the updater behavior tests against both the Python default and legacy Bash fallback.
 
 ## CI and Releases
 
@@ -102,7 +109,7 @@ Clone the repo, then run:
 ./install.sh
 ```
 
-The installer creates symlinks for `updates` and `docker-update-from-wud`, makes scripts executable, and links the `wud/` directory for the WUD container. It refuses to replace existing non-symlink targets.
+The installer creates symlinks for `updates`, `docker-update-from-wud`, and `docker-update-from-wud-legacy`, makes scripts executable, and links the `wud/` directory for the WUD container. It refuses to replace existing non-symlink targets.
 
 Make sure the install bin directory is on your `PATH`, then run:
 
@@ -196,7 +203,8 @@ WUD_MAX_WAIT="180"
 WUD_LOCK_TIMEOUT="30"
 OUT_UID="1000"
 OUT_GID="1000"
-# Python updates path only:
+# Optional migration/fallback knobs:
+# WUD_UPDATER_LEGACY_BASH="1"
 # WUD_UPDATER_PYTHON="1"
 # WUD_UPDATER_USE_SUDO="0"
 ```
@@ -206,6 +214,8 @@ OUT_GID="1000"
 The WUD todo file should be owned by the WUD user/group and group-writable. WUD-side appends preserve an existing file's owner and mode; when creating the todo file for the first time, they default to mode `0660`.
 
 `WUD_LOCK_TIMEOUT` controls how long WUD-side appends and host-side cleanup wait for the shared todo-file lock. The default is `30` seconds; if a stale `${WUD_OUT_FILE}.lock` directory remains, remove it manually after confirming no update script is running.
+
+Set `WUD_UPDATER_LEGACY_BASH=1` to force `docker-update-from-wud` back to the legacy Bash implementation while the fallback is available.
 
 With `WUD_UPDATER_PYTHON=1` and `WUD_UPDATER_USE_SUDO=0`, `updates` does not use `sudo` to read the WUD file, create/remove the lock directory, or invoke `WUD_UPDATER`. These values can live in the host config file. Point `WUD_UPDATER` at an executable launcher if the only privileged step should be starting the updater container:
 
@@ -220,9 +230,10 @@ For release-note notifications, provide webhook and GitHub token values through 
 
 ## Requirements
 
-- Bash for host-side scripts.
+- Python 3.10 or newer for the default updater.
+- Bash for host-side wrapper scripts, the legacy updater, and WUD callback scripts.
 - Docker with the Compose plugin on the host.
-- Standard shell tools used by the updater: `awk`, `sort`, `sed`, `perl`, `find`, `grep`, `cut`, `column`, `script`, and `mktemp`.
+- Standard shell tools used by wrapper, legacy, and callback scripts: `awk`, `sort`, `sed`, `perl`, `find`, `grep`, `cut`, `column`, `script`, and `mktemp`.
 - `jq` and `midclt` are optional for TrueNAS status checks in `updates`.
 - `curl` and `jq` are required for release-note helper scripts.
 

@@ -58,7 +58,6 @@ class PythonUpdateFromWudTests(unittest.TestCase):
         ]
         env = dict(self.env)
         if wrapper:
-            env["WUD_UPDATER_PYTHON"] = "1"
             env["PYTHON_BIN"] = sys.executable
             command = [str(self.repo_root / "bin" / "docker-update-from-wud"), *common]
         else:
@@ -141,7 +140,7 @@ class PythonUpdateFromWudTests(unittest.TestCase):
     def calls(self) -> str:
         return (self.fake_root / "calls.log").read_text(encoding="utf-8")
 
-    def test_wrapper_opt_in_dry_run_plans_without_mutation(self) -> None:
+    def test_wrapper_default_dry_run_plans_without_mutation(self) -> None:
         self.wud_file.write_text("repo/app:latest\n", encoding="utf-8")
         self.make_stack("app", [("app", "repo/app:latest", "cid-app")])
         self.set_image_state("repo/app:latest", "old", "sha256:old")
