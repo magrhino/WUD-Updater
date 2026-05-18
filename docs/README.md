@@ -11,6 +11,7 @@ short; detailed setup and behavior notes live here.
 | Deployment reference | [DEPLOYMENT.md](DEPLOYMENT.md) |
 | Development, CI, and release automation | [DEVELOPMENT.md](DEVELOPMENT.md) |
 | Docker Compose example | [examples/docker-compose.example.yml](examples/docker-compose.example.yml) |
+| Local Docker Compose build artifact | [examples/docker-compose.build.yml](examples/docker-compose.build.yml) |
 | Environment template | [../template.env](../template.env) |
 | Changelog | [../CHANGELOG.md](../CHANGELOG.md) |
 
