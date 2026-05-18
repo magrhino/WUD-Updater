@@ -31,6 +31,10 @@ Apply all pending entries through the wrapper:
 docker compose -f docs/examples/docker-compose.example.yml run --rm wud-updater updates --yes
 ```
 
+For a socket-proxy deployment that avoids mounting the raw Docker socket into
+WUD or WUD-Updater, start from
+`docs/examples/docker-compose.hardened.yml`.
+
 ### Host Install
 
 Install local commands and host-managed WUD script mounts:
@@ -72,4 +76,5 @@ wud-updater update-from-wud --dry-run
 | Deployment, configuration, maintenance, and security notes | [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) |
 | Complete documentation index | [docs/README.md](docs/README.md) |
 | Docker Compose example | [docs/examples/docker-compose.example.yml](docs/examples/docker-compose.example.yml) |
+| Hardened Docker Compose example | [docs/examples/docker-compose.hardened.yml](docs/examples/docker-compose.hardened.yml) |
 | Release notes | [CHANGELOG.md](CHANGELOG.md) |
