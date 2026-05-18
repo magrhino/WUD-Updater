@@ -1,0 +1,109 @@
+"""Command line interface for WUD-Updater Python entrypoints."""
+
+from __future__ import annotations
+
+import argparse
+import sys
+from collections.abc import Sequence
+
+from .updater import UpdaterError, options_from_namespace, run_update_from_wud
+
+
+NOT_WIRED_MESSAGE = "Python implementation not wired yet."
+
+
+class WudArgumentParser(argparse.ArgumentParser):
+    def format_help(self) -> str:
+        return _capitalized_usage(super().format_help())
+
+    def format_usage(self) -> str:
+        return _capitalized_usage(super().format_usage())
+
+
+def _capitalized_usage(value: str) -> str:
+    if value.startswith("usage:"):
+        return "Usage:" + value[len("usage:") :]
+    return value
+
+
+def _add_common_options(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--base", metavar="PATH")
+    parser.add_argument("--file", metavar="PATH")
+    parser.add_argument("--mode", choices=("pause", "stop", "live"))
+    parser.add_argument("--max-wait", metavar="SECONDS")
+    parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument("-y", "--yes", "--no-confirm", action="store_true")
+    parser.add_argument("--allow-tag-updates", action="store_true")
+
+
+def _add_update_from_wud_options(parser: argparse.ArgumentParser) -> None:
+    _add_common_options(parser)
+    parser.add_argument("--log-dir", metavar="PATH")
+    parser.add_argument("--no-color", action="store_true")
+    parser.add_argument("--only-lines", metavar="SPEC")
+    parser.add_argument("--remove-lines-before-run", metavar="SPEC")
+
+
+def _placeholder_exit(command: str, shell_command: str, mutating_path: bool) -> int:
+    print(f"wud-updater {command}: {NOT_WIRED_MESSAGE}", file=sys.stderr)
+    print(f"Use the existing shell command instead: {shell_command}", file=sys.stderr)
+    if mutating_path:
+        print("Refusing to continue because this path may mutate Docker state.", file=sys.stderr)
+        return 1
+    print("No changes were made.", file=sys.stderr)
+    return 0
+
+
+def _run_update_from_wud(args: argparse.Namespace) -> int:
+    try:
+        options = options_from_namespace(args)
+    except UpdaterError as exc:
+        print(exc, file=sys.stderr)
+        return 1
+    return run_update_from_wud(options)
+
+
+def _run_updates(args: argparse.Namespace) -> int:
+    return _placeholder_exit(
+        "updates",
+        "bin/updates",
+        mutating_path=not args.dry_run,
+    )
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = WudArgumentParser(
+        prog="wud-updater",
+        description="WUD updater command line tools.",
+    )
+    subcommands = parser.add_subparsers(
+        dest="command",
+        required=True,
+        parser_class=WudArgumentParser,
+    )
+
+    update_from_wud = subcommands.add_parser(
+        "update-from-wud",
+        help="run the opt-in Python docker-update-from-wud implementation",
+    )
+    _add_update_from_wud_options(update_from_wud)
+    update_from_wud.set_defaults(handler=_run_update_from_wud)
+
+    updates = subcommands.add_parser(
+        "updates",
+        help="placeholder for updates",
+    )
+    _add_common_options(updates)
+    updates.set_defaults(handler=_run_updates)
+
+    return parser
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    parser = build_parser()
+    args = parser.parse_args(argv)
+    return args.handler(args)
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
