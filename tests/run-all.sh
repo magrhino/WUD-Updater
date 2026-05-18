@@ -59,7 +59,6 @@ run bash -n \
   install.sh \
   bin/updates \
   bin/docker-update-from-wud \
-  bin/docker-update-from-wud-legacy \
   wud/tag-manager.sh \
   wud/lsio-release-embed.sh \
   wud/release-notes-to-discord.sh \
@@ -82,7 +81,6 @@ run shellcheck \
   install.sh \
   bin/updates \
   bin/docker-update-from-wud \
-  bin/docker-update-from-wud-legacy \
   wud/on-update.sh \
   wud/append-updates.sh \
   wud/tag-manager.sh \
@@ -128,5 +126,3 @@ run "$python_bin" tests/run-python-tests.py
 for test_script in tests/test-*.sh; do
   run "$test_script"
 done
-
-run env WUD_UPDATER_LEGACY_BASH=1 tests/test-docker-update-from-wud.sh

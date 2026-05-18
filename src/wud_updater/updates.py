@@ -437,8 +437,6 @@ class UpdatesRunner:
                 updater_env.append(f"OUT_GID={self.options.out_gid}")
         if self.options.lock_timeout:
             updater_env.append(f"WUD_LOCK_TIMEOUT={self.options.lock_timeout}")
-        if self.environ.get("WUD_UPDATER_LEGACY_BASH") == "1":
-            updater_env.append("WUD_UPDATER_LEGACY_BASH=1")
         if self.lock.held:
             updater_env.append("WUD_LOCK_HELD_BY_PARENT=1")
 

@@ -42,7 +42,7 @@ COPY src/ /app/src/
 COPY wud/ /app/wud/
 COPY entrypoint.sh /app/entrypoint.sh
 
-RUN chmod +x /app/entrypoint.sh /app/bin/updates /app/bin/docker-update-from-wud /app/bin/docker-update-from-wud-legacy /app/wud/*.sh \
+RUN chmod +x /app/entrypoint.sh /app/bin/updates /app/bin/docker-update-from-wud /app/wud/*.sh \
     && mkdir -p /host/docker /out
 
 ENTRYPOINT ["/usr/bin/tini", "--", "/app/entrypoint.sh"]

@@ -198,25 +198,10 @@ test_default_dispatch_uses_python_backend(){
   set_image_state repo/app:latest old sha256:old
   set_image_after_pull repo/app:latest new sha256:new
 
-  run_script WUD_UPDATER_LEGACY_BASH= --dry-run
+  run_script --dry-run
 
   assert_status 0
   grep -q 'PTY     : python subprocess' "$TEST_TMP/output.log" || fail "default dispatcher did not use Python backend"
-  teardown_case
-}
-
-test_legacy_env_dispatch_uses_bash_backend(){
-  setup_case
-  printf 'repo/app:latest\n' > "$WUD_FILE"
-  make_single_service_stack app "$BASE/app" docker-compose.yml repo/app:latest
-  set_image_state repo/app:latest old sha256:old
-  set_image_after_pull repo/app:latest new sha256:new
-
-  run_script WUD_UPDATER_LEGACY_BASH=1 --dry-run
-
-  assert_status 0
-  grep -Eq 'PTY     : .* script' "$TEST_TMP/output.log" || fail "legacy dispatcher did not use Bash backend"
-  ! grep -q 'PTY     : python subprocess' "$TEST_TMP/output.log" || fail "legacy dispatcher used Python backend"
   teardown_case
 }
 
@@ -418,7 +403,7 @@ test_one_line_two_stacks_one_fails_keeps_line(){
   teardown_case
 }
 
-test_legacy_sha_suffix_does_not_block_cleanup(){
+test_sha_suffix_does_not_block_cleanup(){
   setup_case
   printf 'repo/app:latest sha256=good\n' > "$WUD_FILE"
   make_single_service_stack app "$BASE/app" docker-compose.yml repo/app:latest
@@ -761,7 +746,6 @@ run_test(){
 main(){
   run_test test_help_exits_successfully
   run_test test_default_dispatch_uses_python_backend
-  run_test test_legacy_env_dispatch_uses_bash_backend
   run_test test_dry_run_no_mutation
   run_test test_default_base_uses_home_docker
   run_test test_confirm_required_blocks_mutation
@@ -773,7 +757,7 @@ main(){
   run_test test_parent_wud_lock_is_reused_and_released
   run_test test_invalid_line_spec_fails_before_docker_calls
   run_test test_one_line_two_stacks_one_fails_keeps_line
-  run_test test_legacy_sha_suffix_does_not_block_cleanup
+  run_test test_sha_suffix_does_not_block_cleanup
   run_test test_tag_update_requires_explicit_flag
   run_test test_tag_update_dry_run_does_not_rewrite_compose
   run_test test_allowed_tag_update_rewrites_compose_and_cleans_line
