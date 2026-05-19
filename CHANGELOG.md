@@ -4,6 +4,13 @@ All notable changes to WUD-Updater are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com) and versions follow
 [Semantic Versioning](https://semver.org).
 
+## [0.9.0](https://github.com/magrhino/WUD-Updater/compare/v0.8.0...v0.9.0) (2026-05-19)
+
+
+### Features
+
+* **updater:** Add tag override validation for WUD updates ([#28](https://github.com/magrhino/WUD-Updater/issues/28)) ([feb84c5](https://github.com/magrhino/WUD-Updater/commit/feb84c54ee39d55853ca9dc2c881ec737f241680))
+
 ## [0.8.0](https://github.com/magrhino/WUD-Updater/compare/v0.7.0...v0.8.0) (2026-05-19)
 
 
