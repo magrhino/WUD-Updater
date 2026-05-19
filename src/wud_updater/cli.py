@@ -8,7 +8,10 @@ from collections.abc import Sequence
 from pathlib import Path
 
 from .updater import UpdaterError, options_from_namespace, run_update_from_wud
-from .updates import run_updates_from_namespace
+from .updates import (
+    run_truenas_status_export_from_namespace,
+    run_updates_from_namespace,
+)
 
 
 class WudArgumentParser(argparse.ArgumentParser):
@@ -69,6 +72,10 @@ def _run_updates(args: argparse.Namespace) -> int:
     )
 
 
+def _run_truenas_status_export(args: argparse.Namespace) -> int:
+    return run_truenas_status_export_from_namespace(args)
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = WudArgumentParser(
         prog="wud-updater",
@@ -93,6 +100,12 @@ def build_parser() -> argparse.ArgumentParser:
     )
     _add_updates_options(updates)
     updates.set_defaults(handler=_run_updates)
+
+    truenas_status_export = subcommands.add_parser(
+        "truenas-status-export",
+        help=argparse.SUPPRESS,
+    )
+    truenas_status_export.set_defaults(handler=_run_truenas_status_export)
 
     return parser
 
