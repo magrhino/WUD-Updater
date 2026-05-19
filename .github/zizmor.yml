@@ -1,0 +1,8 @@
+rules:
+  dangerous-triggers:
+    ignore:
+      - release-please.yml:3
+  unpinned-uses:
+    config:
+      policies:
+        "*": ref-pin

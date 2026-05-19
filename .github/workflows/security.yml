@@ -1,0 +1,137 @@
+name: security
+
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+  schedule:
+    - cron: "37 8 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  dependency-review:
+    name: dependency review
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    if: >-
+      ${{
+        github.event_name == 'pull_request' &&
+        github.event.repository.private == false
+      }}
+    permissions:
+      contents: read
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Check dependency changes
+        uses: actions/dependency-review-action@v5
+        with:
+          fail-on-severity: high
+          license-check: false
+
+  codeql:
+    name: codeql
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    if: ${{ github.event.repository.private == false }}
+    permissions:
+      contents: read
+      security-events: write
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v4
+        with:
+          languages: python
+          queries: security-extended
+
+      - name: Analyze with CodeQL
+        uses: github/codeql-action/analyze@v4
+
+  workflow-security:
+    name: workflow security
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      actions: read
+      contents: read
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Run zizmor
+        uses: zizmorcore/zizmor-action@v0.5.6
+        with:
+          inputs: .github/workflows
+          config: .github/zizmor.yml
+          advanced-security: false
+          annotations: true
+          min-severity: high
+          min-confidence: medium
+
+  scorecard:
+    name: scorecard
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    if: >-
+      ${{
+        github.event_name != 'pull_request' &&
+        github.event.repository.private == false
+      }}
+    permissions:
+      checks: read
+      contents: read
+      id-token: write
+      issues: read
+      pull-requests: read
+      security-events: write
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Run Scorecard
+        uses: ossf/scorecard-action@v2.4.3
+        with:
+          repo_token: ${{ github.token }}
+          results_file: scorecard-results.sarif
+          results_format: sarif
+          publish_results: false
+
+      - name: Upload Scorecard SARIF
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: scorecard-results.sarif
+          category: openssf-scorecard
+
+      - name: Upload Scorecard artifact
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: scorecard-results
+          path: scorecard-results.sarif
+          retention-days: 7

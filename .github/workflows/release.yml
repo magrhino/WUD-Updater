@@ -9,8 +9,7 @@ on:
       - published
 
 permissions:
-  contents: write
-  packages: write
+  contents: read
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.release.tag_name || github.ref }}
@@ -66,6 +65,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           ref: ${{ needs.validate-tag.outputs.tag }}
+          persist-credentials: false
 
       - name: Install ShellCheck
         shell: bash
@@ -92,6 +92,9 @@ jobs:
     name: publish image
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    permissions:
+      contents: write
+      packages: write
     needs:
       - validate-tag
       - test
@@ -107,6 +110,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           ref: ${{ needs.validate-tag.outputs.tag }}
+          persist-credentials: false
 
       - name: Log in to GHCR
         shell: bash
