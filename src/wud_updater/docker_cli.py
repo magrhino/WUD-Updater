@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from .command import CommandError, CommandRunner
+from .command import CommandError, CommandResult, CommandRunner
 
 
 DEFAULT_CONTAINER_FORMAT = "{{.Names}}\t{{.Image}}"
@@ -78,6 +78,12 @@ class DockerCli:
             if digest.rsplit("@", 1)[-1] == expected:
                 return True
         return False
+
+    def manifest_inspect(self, image: str) -> CommandResult:
+        return self.runner.capture(
+            [self.executable, "manifest", "inspect", image],
+            check=True,
+        )
 
     def inspect(self, target: str, fmt: str) -> list[str]:
         return self.runner.capture_lines(

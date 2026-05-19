@@ -29,6 +29,7 @@ class PythonUpdateFromWudTests(unittest.TestCase):
             self.base,
             self.log_dir,
             self.fake_root / "images",
+            self.fake_root / "manifests",
             self.fake_root / "stacks",
             self.fake_root / "containers",
         ):
@@ -135,6 +136,17 @@ class PythonUpdateFromWudTests(unittest.TestCase):
         )
         (self.fake_root / "images" / f"{safe}.after_digests").write_text(
             f"{image}@{digest}\n" if digest else "",
+            encoding="utf-8",
+        )
+
+    def set_manifest_failure(self, image: str, stderr: str) -> None:
+        safe = safe_name(image)
+        (self.fake_root / "manifests" / f"{safe}.fail").write_text(
+            "",
+            encoding="utf-8",
+        )
+        (self.fake_root / "manifests" / f"{safe}.stderr").write_text(
+            stderr,
             encoding="utf-8",
         )
 
@@ -325,6 +337,127 @@ class PythonUpdateFromWudTests(unittest.TestCase):
         calls = self.calls()
         self.assertRegex(calls, r"compose -f docker-compose.yml pull app")
         self.assertRegex(calls, r"compose -f docker-compose.yml up -d .* app")
+
+    def test_tag_override_requires_allow_tag_updates(self) -> None:
+        self.wud_file.write_text("repo/app:1.0 tag=2.0\n", encoding="utf-8")
+        stack_dir = self.make_stack("app", [("app", "repo/app:1.0", "cid-app")])
+
+        result = self.run_python("--yes", "--tag-override", "1=3.0")
+
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("--tag-override requires --allow-tag-updates", result.stderr)
+        self.assertIn(
+            "image: repo/app:1.0",
+            (stack_dir / "docker-compose.yml").read_text(encoding="utf-8"),
+        )
+        self.assertEqual(self.calls(), "")
+
+    def test_tag_override_rejects_invalid_tag(self) -> None:
+        self.wud_file.write_text("repo/app:1.0 tag=2.0\n", encoding="utf-8")
+
+        result = self.run_python(
+            "--yes",
+            "--allow-tag-updates",
+            "--tag-override",
+            "1=bad:value",
+        )
+
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("--tag-override line 1 has invalid tag", result.stderr)
+
+    def test_tag_override_dry_run_validates_manifest_without_mutation(self) -> None:
+        self.wud_file.write_text("repo/app:1.0 tag=2.0\n", encoding="utf-8")
+        stack_dir = self.make_stack("app", [("app", "repo/app:1.0", "cid-app")])
+        self.set_image_state("repo/app:1.0", "old", "sha256:old")
+
+        result = self.run_python(
+            "--dry-run",
+            "--allow-tag-updates",
+            "--tag-override",
+            "1=3.0",
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+        self.assertEqual(
+            self.wud_file.read_text(encoding="utf-8"),
+            "repo/app:1.0 tag=2.0\n",
+        )
+        self.assertIn("Tag override: line 1 uses tag 3.0 instead of 2.0", result.stdout)
+        self.assertIn(
+            "Validated remote tag: repo/app:1.0 -> repo/app:3.0",
+            result.stdout,
+        )
+        self.assertIn(
+            "image: repo/app:1.0",
+            (stack_dir / "docker-compose.yml").read_text(encoding="utf-8"),
+        )
+        calls = self.calls()
+        self.assertIn("manifest inspect repo/app:3.0", calls)
+        self.assertNotRegex(calls, r"compose -f .* pull")
+
+    def test_manifest_validation_failure_leaves_line_and_compose(self) -> None:
+        self.wud_file.write_text("repo/app:1.0 tag=2.0\n", encoding="utf-8")
+        stack_dir = self.make_stack("app", [("app", "repo/app:1.0", "cid-app")])
+        self.set_image_state("repo/app:1.0", "old", "sha256:old")
+        self.set_manifest_failure("repo/app:2.0", "manifest unknown\n")
+
+        result = self.run_python("--yes", "--allow-tag-updates")
+
+        self.assertEqual(result.returncode, 1)
+        self.assertEqual(
+            self.wud_file.read_text(encoding="utf-8"),
+            "repo/app:1.0 tag=2.0\n",
+        )
+        self.assertIn(
+            "image: repo/app:1.0",
+            (stack_dir / "docker-compose.yml").read_text(encoding="utf-8"),
+        )
+        self.assertIn("Invalid or unavailable remote tag", result.stderr)
+        self.assertIn("manifest unknown", result.stderr)
+        calls = self.calls()
+        self.assertIn("manifest inspect repo/app:2.0", calls)
+        self.assertNotRegex(calls, r"compose -f .* pull")
+
+    def test_tag_override_live_success_rewrites_to_override(self) -> None:
+        self.wud_file.write_text("repo/app:1.0 tag=wrong\n", encoding="utf-8")
+        stack_dir = self.make_stack("app", [("app", "repo/app:1.0", "cid-app")])
+        self.set_image_state("repo/app:1.0", "old", "sha256:old")
+        self.set_image_after_pull("repo/app:3.0", "new", "sha256:new")
+
+        result = self.run_python(
+            "--yes",
+            "--allow-tag-updates",
+            "--tag-override",
+            "1=3.0",
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+        self.assertEqual(self.wud_file.read_text(encoding="utf-8"), "")
+        self.assertIn(
+            "image: repo/app:3.0",
+            (stack_dir / "docker-compose.yml").read_text(encoding="utf-8"),
+        )
+        calls = self.calls()
+        self.assertIn("manifest inspect repo/app:3.0", calls)
+        self.assertRegex(calls, r"compose -f docker-compose.yml pull app")
+
+    def test_tag_update_with_digest_checks_rewritten_tag(self) -> None:
+        self.wud_file.write_text(
+            "repo/app:1.0@sha256:good tag=2.0\n",
+            encoding="utf-8",
+        )
+        stack_dir = self.make_stack("app", [("app", "repo/app:1.0", "cid-app")])
+        self.set_image_state("repo/app:1.0", "old", "sha256:old")
+        self.set_image_after_pull("repo/app:2.0", "new", "sha256:good")
+
+        result = self.run_python("--yes", "--allow-tag-updates")
+
+        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+        self.assertEqual(self.wud_file.read_text(encoding="utf-8"), "")
+        self.assertIn(
+            "image: repo/app:2.0",
+            (stack_dir / "docker-compose.yml").read_text(encoding="utf-8"),
+        )
 
     def test_tag_backup_failure_restores_line_without_traceback(self) -> None:
         self.wud_file.write_text("repo/app:1.0 tag=2.0\n", encoding="utf-8")

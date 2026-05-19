@@ -192,6 +192,91 @@ class PythonUpdatesWrapperTests(unittest.TestCase):
         sudo_log = self.sudo_log.read_text(encoding="utf-8")
         self.assertIn("--only-lines 2,5 --remove-lines-before-run 4 --yes", sudo_log)
 
+    def test_interactive_tag_override_passes_original_line_number(self) -> None:
+        self.wud_file.write_text("repo/app:1.0 tag=wrong\n", encoding="utf-8")
+
+        result = self.run_updates(
+            "--base",
+            str(self.root / "docker"),
+            input_text="s\n1\ny\n3.0\n",
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+        sudo_log = self.sudo_log.read_text(encoding="utf-8")
+        self.assertIn(
+            "--only-lines 1 --allow-tag-updates --tag-override 1=3.0 --yes",
+            sudo_log,
+        )
+        self.assertIn("Selected tag update(s):", result.stdout)
+
+    def test_interactive_tag_override_empty_keeps_wud_tag(self) -> None:
+        self.wud_file.write_text("repo/app:1.0 tag=2.0\n", encoding="utf-8")
+
+        result = self.run_updates(
+            "--base",
+            str(self.root / "docker"),
+            input_text="s\n1\ny\n\n",
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+        sudo_log = self.sudo_log.read_text(encoding="utf-8")
+        self.assertIn("--only-lines 1 --allow-tag-updates --yes", sudo_log)
+        self.assertNotIn("--tag-override", sudo_log)
+
+    def test_interactive_declined_tag_updates_do_not_enable_allow_flag(self) -> None:
+        self.wud_file.write_text("repo/app:1.0 tag=2.0\n", encoding="utf-8")
+
+        result = self.run_updates(
+            "--base",
+            str(self.root / "docker"),
+            input_text="s\n1\nn\n",
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+        sudo_log = self.sudo_log.read_text(encoding="utf-8")
+        self.assertIn("--only-lines 1 --yes", sudo_log)
+        self.assertNotIn("--allow-tag-updates", sudo_log)
+        self.assertNotIn("--tag-override", sudo_log)
+
+    def test_interactive_untagged_tag_token_does_not_prompt(self) -> None:
+        self.wud_file.write_text("repo/app tag=2.0\n", encoding="utf-8")
+
+        result = self.run_updates(
+            "--base",
+            str(self.root / "docker"),
+            input_text="a\n",
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+        self.assertNotIn("Selected tag update(s):", result.stdout)
+        sudo_log = self.sudo_log.read_text(encoding="utf-8")
+        self.assertNotIn("--allow-tag-updates", sudo_log)
+        self.assertNotIn("--tag-override", sudo_log)
+
+    def test_interactive_all_tag_override_aborts_when_snapshot_lines_change(self) -> None:
+        self.wud_file.write_text("repo/app:1.0 tag=wrong\n", encoding="utf-8")
+        hook = self.root / "change-wud-file"
+        hook.write_text(
+            f"#!/usr/bin/env bash\nprintf 'repo/app:changed tag=wrong\\n' > {self.wud_file}\n",
+            encoding="utf-8",
+        )
+        hook.chmod(0o755)
+
+        result = self.run_updates(
+            "--base",
+            str(self.root / "docker"),
+            input_text="a\ny\n3.0\n",
+            env_overrides={"FAKE_COLUMN_HOOK": str(hook)},
+        )
+
+        self.assertEqual(result.returncode, 1)
+        self.assertIn(
+            "WUD file changed while selecting updates; please rerun updates.",
+            result.stderr,
+        )
+        self.assertFalse(self.sudo_log.exists())
+        self.assertFalse(Path(f"{self.wud_file}.lock").exists())
+
     def test_interactive_holds_wud_lock_for_updater_handoff(self) -> None:
         self.wud_file.write_text("repo/app:latest\n", encoding="utf-8")
 

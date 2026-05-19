@@ -44,6 +44,7 @@ def _add_update_from_wud_options(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--no-color", action="store_true")
     parser.add_argument("--only-lines", metavar="SPEC")
     parser.add_argument("--remove-lines-before-run", metavar="SPEC")
+    parser.add_argument("--tag-override", metavar="LINE=TAG", action="append")
 
 
 def _add_updates_options(parser: argparse.ArgumentParser) -> None:

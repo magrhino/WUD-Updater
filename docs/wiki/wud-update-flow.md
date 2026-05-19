@@ -36,6 +36,12 @@ as successful.
 Tag updates use a `tag=<new-tag>` token after a tagged source image. They stay
 pending unless the updater is run with `--allow-tag-updates`.
 
+Manual tag overrides can be supplied for a single updater run with
+`--tag-override LINE=TAG`, where `LINE` is the original WUD file line number.
+Overrides require `--allow-tag-updates` and do not rewrite the todo file. Before
+rewriting Compose files, the updater validates each final tag with
+`docker manifest inspect`.
+
 Older lines with a trailing `sha256=...` token are preserved as raw file lines
 when cleanup rewrites the todo file. The display wrappers hide that suffix when
 showing pending entries.
@@ -72,6 +78,15 @@ Apply tag updates explicitly:
 
 ```bash
 updates --yes --allow-tag-updates
+```
+
+Interactive `updates` runs show selected tag update entries and can accept a
+temporary replacement tag before handing off to `docker-update-from-wud`.
+
+Override a WUD-proposed tag directly:
+
+```bash
+docker-update-from-wud --yes --allow-tag-updates --tag-override 1=5.2.0
 ```
 
 Interactive `updates` runs can apply all entries, select numbered entries,

@@ -37,6 +37,11 @@ image_digests(){
   [[ -f "$file" ]] && cat "$file"
 }
 
+manifest_file(){
+  local image="$1" suffix="$2"
+  printf '%s/manifests/%s.%s' "$ROOT" "$(safe_name "$image")" "$suffix"
+}
+
 compose_service_images_from_file(){
   local file="$1" service="${2:-}" output
   [[ -f "$file" ]] || return 1
@@ -322,6 +327,24 @@ image_cmd(){
   fi
 }
 
+manifest_cmd(){
+  local subcmd="${1:-}" image="${2:-}" file
+  [[ "$subcmd" == "inspect" ]] || return 1
+  log_call "manifest inspect $image"
+  file="$(manifest_file "$image" fail)"
+  if [[ -f "$file" ]]; then
+    file="$(manifest_file "$image" stderr)"
+    [[ -f "$file" ]] && cat "$file" >&2
+    return 19
+  fi
+  file="$(manifest_file "$image" stdout)"
+  if [[ -f "$file" ]]; then
+    cat "$file"
+  else
+    printf '{}\n'
+  fi
+}
+
 ps_cmd(){
   log_call "ps $*"
   if [[ "${1:-}" == "--format" ]]; then
@@ -337,6 +360,7 @@ main(){
   case "$cmd" in
     compose) compose_cmd "$@" ;;
     image) image_cmd "$@" ;;
+    manifest) manifest_cmd "$@" ;;
     inspect) inspect_cmd "$@" ;;
     ps) ps_cmd "$@" ;;
     *) return 1 ;;

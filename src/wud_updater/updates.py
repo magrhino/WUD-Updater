@@ -14,6 +14,7 @@ from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from .images import image_has_tag, image_with_tag, tag_value_valid
 from .terminal import TerminalRenderer
 
 
@@ -44,6 +45,22 @@ class TodoEntry:
         if match is None:
             return self.raw
         return match.group(1)
+
+    @property
+    def first(self) -> str:
+        return _first_token(self.raw)
+
+    @property
+    def desired_tag(self) -> str:
+        tag = ""
+        for token in _rest_tokens(self.raw):
+            if token.startswith("tag="):
+                tag = token.removeprefix("tag=")
+        if not image_has_tag(self.first):
+            return ""
+        if not tag_value_valid(tag):
+            return ""
+        return tag
 
 
 @dataclass(frozen=True)
@@ -175,6 +192,8 @@ class UpdatesRunner:
         self.todo_entries: list[TodoEntry] = []
         self.selected_line_spec = ""
         self.remove_line_spec = ""
+        self.allow_tag_updates = options.allow_tag_updates
+        self.tag_override_specs: list[str] = []
         self.renderer = TerminalRenderer(
             no_color=options.no_color,
             environ=self.environ,
@@ -390,6 +409,7 @@ class UpdatesRunner:
                 print("⏸️  Skipped running updates.")
                 return False
             if choice in ("a", "A", "all", "ALL", "y", "Y", "yes", "YES"):
+                self._prompt_tag_updates(list(range(1, todo_count + 1)))
                 return True
 
             if choice in ("s", "S", "select", "SELECT"):
@@ -428,6 +448,7 @@ class UpdatesRunner:
             selected_display
         )
         print(f"Selected {len(selected_display)} of {todo_count} pending update(s).")
+        self._prompt_tag_updates(selected_display)
 
         if unselected_display:
             remove_reply = _prompt(
@@ -439,6 +460,43 @@ class UpdatesRunner:
                 )
 
         return True
+
+    def _prompt_tag_updates(self, display_numbers: Sequence[int]) -> None:
+        tag_entries = [
+            (display, self.todo_entries[display - 1])
+            for display in display_numbers
+            if self.todo_entries[display - 1].desired_tag
+        ]
+        if not tag_entries:
+            return
+
+        print("Selected tag update(s):")
+        for display, entry in tag_entries:
+            desired_tag = entry.desired_tag
+            print(
+                f"  {display}. {entry.first} -> "
+                f"{image_with_tag(entry.first, desired_tag)}"
+            )
+
+        if not self.allow_tag_updates:
+            reply = _prompt("Apply selected tag update entries? (y/N) ")
+            if reply not in ("y", "Y", "yes", "YES", "Yes"):
+                return
+            self.allow_tag_updates = True
+
+        for display, entry in tag_entries:
+            current_tag = entry.desired_tag
+            while True:
+                reply = _prompt(
+                    f"Override tag for update {display} [{current_tag}]: "
+                ).strip()
+                if reply == "":
+                    break
+                if tag_value_valid(reply):
+                    if reply != current_tag:
+                        self.tag_override_specs.append(f"{entry.line_no}={reply}")
+                    break
+                print("Invalid tag. Use a Docker tag value like 5.2.0.")
 
     def _read_display_selection(self, prompt: str, todo_count: int) -> list[int]:
         while True:
@@ -458,7 +516,11 @@ class UpdatesRunner:
         return ",".join(_unique_in_order(line_numbers))
 
     def _lock_updater_handoff(self) -> None:
-        if self.selected_line_spec == "" and self.remove_line_spec == "":
+        if (
+            self.selected_line_spec == ""
+            and self.remove_line_spec == ""
+            and not self.tag_override_specs
+        ):
             return
         self.lock.acquire()
         if not self._selected_lines_match_snapshot():
@@ -471,6 +533,10 @@ class UpdatesRunner:
         selected_items = [
             *self.selected_line_spec.split(","),
             *self.remove_line_spec.split(","),
+            *(
+                override.partition("=")[0]
+                for override in self.tag_override_specs
+            ),
         ]
         wanted = {
             int(item)
@@ -507,8 +573,10 @@ class UpdatesRunner:
             updater_args.extend(["--only-lines", self.selected_line_spec])
         if self.remove_line_spec:
             updater_args.extend(["--remove-lines-before-run", self.remove_line_spec])
-        if self.options.allow_tag_updates:
+        if self.allow_tag_updates:
             updater_args.append("--allow-tag-updates")
+        for override in self.tag_override_specs:
+            updater_args.extend(["--tag-override", override])
         if self.options.no_color:
             updater_args.append("--no-color")
         updater_args.append("--yes")
@@ -717,6 +785,27 @@ def _parse_todo_entries(text: str) -> list[TodoEntry]:
             continue
         entries.append(TodoEntry(line_no=line_no, raw=raw))
     return entries
+
+
+def _first_token(value: str) -> str:
+    stripped = value.strip()
+    if stripped == "":
+        return ""
+    match = _SHELL_SPACE_RE.search(stripped)
+    if match is None:
+        return stripped
+    return stripped[: match.start()]
+
+
+def _rest_tokens(value: str) -> list[str]:
+    first = _first_token(value)
+    if first == "":
+        return []
+    rest = value.strip()[len(first) :]
+    stripped = rest.strip()
+    if stripped == "":
+        return []
+    return [part for part in _SHELL_SPACE_RE.split(stripped) if part]
 
 
 def _read_todo_entries_with_sudo(

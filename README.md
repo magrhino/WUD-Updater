@@ -67,6 +67,7 @@ updates --yes --allow-tag-updates
 docker-update-from-wud --dry-run
 docker-update-from-wud --yes
 docker-update-from-wud --yes --allow-tag-updates
+docker-update-from-wud --yes --allow-tag-updates --tag-override 1=5.2.0
 ```
 
 The Python package also exposes the same tools through:

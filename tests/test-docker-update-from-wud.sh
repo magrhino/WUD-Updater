@@ -33,7 +33,7 @@ setup_case(){
   WUD_FILE="$TEST_TMP/images.todo"
   LOG_DIR="$TEST_TMP/logs"
   FAKE_ROOT="$TEST_TMP/fake"
-  mkdir -p "$BASE" "$LOG_DIR" "$FAKE_ROOT/images" "$FAKE_ROOT/stacks" "$FAKE_ROOT/containers"
+  mkdir -p "$BASE" "$LOG_DIR" "$FAKE_ROOT/images" "$FAKE_ROOT/manifests" "$FAKE_ROOT/stacks" "$FAKE_ROOT/containers"
   : > "$FAKE_ROOT/containers.tsv"
   : > "$FAKE_ROOT/calls.log"
 }
@@ -99,6 +99,13 @@ set_image_after_pull(){
   else
     : > "$FAKE_ROOT/images/$safe.after_digests"
   fi
+}
+
+set_manifest_failure(){
+  local image="$1" stderr="$2" safe
+  safe="$(safe_name "$image")"
+  : > "$FAKE_ROOT/manifests/$safe.fail"
+  printf '%s\n' "$stderr" > "$FAKE_ROOT/manifests/$safe.stderr"
 }
 
 run_script(){
@@ -475,6 +482,41 @@ test_allowed_tag_update_rewrites_compose_and_cleans_line(){
   teardown_case
 }
 
+test_tag_override_rewrites_compose_to_override(){
+  setup_case
+  printf 'repo/app:1.0 tag=wrong\n' > "$WUD_FILE"
+  make_single_service_stack app "$BASE/app" docker-compose.yml repo/app:1.0
+  set_image_state repo/app:1.0 old sha256:old
+  set_image_after_pull repo/app:3.0 new sha256:new
+
+  run_script --yes --allow-tag-updates --tag-override 1=3.0
+
+  assert_status 0
+  assert_file_equals "$WUD_FILE" ''
+  grep -q -- 'image: repo/app:3.0' "$BASE/app/docker-compose.yml" || fail "compose file did not contain override tag"
+  assert_calls_contain 'manifest inspect repo/app:3.0'
+  assert_calls_contain 'compose -f docker-compose.yml pull app'
+  teardown_case
+}
+
+test_manifest_validation_failure_prevents_tag_rewrite(){
+  setup_case
+  printf 'repo/app:1.0 tag=2.0\n' > "$WUD_FILE"
+  make_single_service_stack app "$BASE/app" docker-compose.yml repo/app:1.0
+  set_image_state repo/app:1.0 old sha256:old
+  set_manifest_failure repo/app:2.0 "manifest unknown"
+
+  run_script --yes --allow-tag-updates
+
+  assert_status 1
+  assert_file_equals "$WUD_FILE" 'repo/app:1.0 tag=2.0'
+  grep -q -- 'image: repo/app:1.0' "$BASE/app/docker-compose.yml" || fail "compose file changed despite manifest failure"
+  grep -q -- 'manifest unknown' "$TEST_TMP/output.log" || fail "manifest error was not reported"
+  assert_calls_contain 'manifest inspect repo/app:2.0'
+  assert_calls_not_contain 'compose -f .* pull'
+  teardown_case
+}
+
 test_unhealthy_tag_update_rolls_back_and_writes_incident_log(){
   setup_case
   printf 'repo/app:1.0 tag=2.0\n' > "$WUD_FILE"
@@ -792,6 +834,8 @@ main(){
   run_test test_tag_update_requires_explicit_flag
   run_test test_tag_update_dry_run_does_not_rewrite_compose
   run_test test_allowed_tag_update_rewrites_compose_and_cleans_line
+  run_test test_tag_override_rewrites_compose_to_override
+  run_test test_manifest_validation_failure_prevents_tag_rewrite
   run_test test_unhealthy_tag_update_rolls_back_and_writes_incident_log
   run_test test_pinned_digest_mismatch_prevents_cleanup
   run_test test_pinned_digest_match_allows_cleanup

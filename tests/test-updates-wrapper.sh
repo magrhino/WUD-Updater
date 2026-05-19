@@ -311,6 +311,75 @@ test_interactive_remove_unselected_passes_remove_lines(){
   teardown_case
 }
 
+test_interactive_tag_override_passes_original_line_number(){
+  setup_case
+  printf 'repo/app:1.0 tag=wrong\n' > "$WUD_FILE"
+
+  run_updates_with_input 's\n1\ny\n3.0\n' --base "$TEST_TMP/docker"
+
+  assert_status 0
+  grep -q -- "--only-lines 1 --allow-tag-updates --tag-override 1=3.0 --yes" "$TEST_TMP/sudo.log" || fail "sudo did not receive tag override arguments"
+  grep -q -- "--tag-override 1=3.0" "$TEST_TMP/updater.log" || fail "updater did not receive tag override"
+  grep -q -- "Selected tag update(s):" "$TEST_TMP/output.log" || fail "tag update prompt was not shown"
+  teardown_case
+}
+
+test_interactive_tag_override_empty_keeps_wud_tag(){
+  setup_case
+  printf 'repo/app:1.0 tag=2.0\n' > "$WUD_FILE"
+
+  run_updates_with_input 's\n1\ny\n\n' --base "$TEST_TMP/docker"
+
+  assert_status 0
+  grep -q -- "--only-lines 1 --allow-tag-updates --yes" "$TEST_TMP/sudo.log" || fail "sudo did not receive allow tag updates"
+  ! grep -q -- "--tag-override" "$TEST_TMP/sudo.log" || fail "empty override should not pass tag override"
+  teardown_case
+}
+
+test_interactive_declined_tag_updates_do_not_enable_allow_flag(){
+  setup_case
+  printf 'repo/app:1.0 tag=2.0\n' > "$WUD_FILE"
+
+  run_updates_with_input 's\n1\nn\n' --base "$TEST_TMP/docker"
+
+  assert_status 0
+  grep -q -- "--only-lines 1 --yes" "$TEST_TMP/sudo.log" || fail "sudo did not run selected line"
+  ! grep -q -- "--allow-tag-updates" "$TEST_TMP/sudo.log" || fail "declined tag update should not pass allow flag"
+  ! grep -q -- "--tag-override" "$TEST_TMP/sudo.log" || fail "declined tag update should not pass override"
+  teardown_case
+}
+
+test_interactive_untagged_tag_token_does_not_prompt(){
+  setup_case
+  printf 'repo/app tag=2.0\n' > "$WUD_FILE"
+
+  run_updates_with_input 'a\n' --base "$TEST_TMP/docker"
+
+  assert_status 0
+  ! grep -q -- "Selected tag update(s):" "$TEST_TMP/output.log" || fail "untagged tag token should not show tag prompt"
+  ! grep -q -- "--allow-tag-updates" "$TEST_TMP/sudo.log" || fail "untagged tag token should not pass allow flag"
+  ! grep -q -- "--tag-override" "$TEST_TMP/sudo.log" || fail "untagged tag token should not pass override"
+  teardown_case
+}
+
+test_interactive_all_tag_override_aborts_when_snapshot_lines_change(){
+  setup_case
+  printf 'repo/app:1.0 tag=wrong\n' > "$WUD_FILE"
+  cat > "$TEST_TMP/change-wud-file" <<HOOK
+#!/usr/bin/env bash
+printf 'repo/app:changed tag=wrong\n' > "$WUD_FILE"
+HOOK
+  chmod +x "$TEST_TMP/change-wud-file"
+
+  run_updates_with_input 'a\ny\n3.0\n' FAKE_COLUMN_HOOK="$TEST_TMP/change-wud-file" --base "$TEST_TMP/docker"
+
+  assert_status 1
+  grep -q 'WUD file changed while selecting updates; please rerun updates.' "$TEST_TMP/output.log" || fail "missing changed-file validation message"
+  [[ ! -e "$TEST_TMP/sudo.log" ]] || fail "sudo was invoked after tag override line changed"
+  [[ ! -d "$WUD_FILE.lock" ]] || fail "WUD lock was not released after validation failure"
+  teardown_case
+}
+
 test_interactive_select_aborts_when_snapshot_lines_change(){
   setup_case
   {
@@ -353,6 +422,11 @@ main(){
   run_test test_interactive_select_passes_original_line_numbers
   run_test test_interactive_exclude_passes_complement_line_numbers
   run_test test_interactive_remove_unselected_passes_remove_lines
+  run_test test_interactive_tag_override_passes_original_line_number
+  run_test test_interactive_tag_override_empty_keeps_wud_tag
+  run_test test_interactive_declined_tag_updates_do_not_enable_allow_flag
+  run_test test_interactive_untagged_tag_token_does_not_prompt
+  run_test test_interactive_all_tag_override_aborts_when_snapshot_lines_change
   run_test test_interactive_select_aborts_when_snapshot_lines_change
 }
 
