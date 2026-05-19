@@ -14,7 +14,7 @@ from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from .images import image_with_tag, tag_value_valid
+from .images import image_has_tag, image_with_tag, tag_value_valid
 from .terminal import TerminalRenderer
 
 
@@ -56,6 +56,8 @@ class TodoEntry:
         for token in _rest_tokens(self.raw):
             if token.startswith("tag="):
                 tag = token.removeprefix("tag=")
+        if not image_has_tag(self.first):
+            return ""
         if not tag_value_valid(tag):
             return ""
         return tag
@@ -514,7 +516,11 @@ class UpdatesRunner:
         return ",".join(_unique_in_order(line_numbers))
 
     def _lock_updater_handoff(self) -> None:
-        if self.selected_line_spec == "" and self.remove_line_spec == "":
+        if (
+            self.selected_line_spec == ""
+            and self.remove_line_spec == ""
+            and not self.tag_override_specs
+        ):
             return
         self.lock.acquire()
         if not self._selected_lines_match_snapshot():
@@ -527,6 +533,10 @@ class UpdatesRunner:
         selected_items = [
             *self.selected_line_spec.split(","),
             *self.remove_line_spec.split(","),
+            *(
+                override.partition("=")[0]
+                for override in self.tag_override_specs
+            ),
         ]
         wanted = {
             int(item)

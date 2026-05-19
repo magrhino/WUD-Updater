@@ -238,10 +238,18 @@ tag_value_valid() {
   [[ "$1" =~ ^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$ ]]
 }
 
+image_has_tag() {
+  local image="${1%%@sha256:*}" last
+  last="${image##*/}"
+  [[ "$last" == *:* ]]
+}
+
 line_desired_tag() {
-  local line="$1" token tag=""
+  local line="$1" token tag="" first
   local tokens=()
   read -r -a tokens <<< "$line"
+  first="${tokens[0]:-}"
+  image_has_tag "$first" || return 1
   for token in "${tokens[@]:1}"; do
     if [[ "$token" == tag=* ]]; then
       tag="${token#tag=}"
@@ -377,6 +385,14 @@ write_line_spec_numbers() {
   done >> "$output"
 }
 
+write_tag_override_line_numbers() {
+  local output="$1" override
+  [ "${#tag_override_specs[@]}" -gt 0 ] || return 0
+  for override in "${tag_override_specs[@]}"; do
+    [ -n "$override" ] && printf '%s\n' "${override%%=*}"
+  done >> "$output"
+}
+
 selected_lines_match_snapshot() {
   local wanted expected current line_no line
   wanted="$(mktemp "${TMPDIR:-/tmp}/wud-selected-lines.XXXXXX")" || return 1
@@ -391,6 +407,7 @@ selected_lines_match_snapshot() {
 
   write_line_spec_numbers "$selected_line_spec" "$wanted"
   write_line_spec_numbers "$remove_line_spec" "$wanted"
+  write_tag_override_line_numbers "$wanted"
   sort -n -u "$wanted" -o "$wanted"
 
   while IFS=$'\t' read -r line_no line; do
@@ -417,7 +434,7 @@ selected_lines_match_snapshot() {
 }
 
 lock_updater_handoff() {
-  [ -n "$selected_line_spec$remove_line_spec" ] || return 0
+  [ -n "$selected_line_spec$remove_line_spec" ] || [ "${#tag_override_specs[@]}" -gt 0 ] || return 0
   acquire_wud_lock
   if ! selected_lines_match_snapshot; then
     release_wud_lock

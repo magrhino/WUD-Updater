@@ -349,6 +349,37 @@ test_interactive_declined_tag_updates_do_not_enable_allow_flag(){
   teardown_case
 }
 
+test_interactive_untagged_tag_token_does_not_prompt(){
+  setup_case
+  printf 'repo/app tag=2.0\n' > "$WUD_FILE"
+
+  run_updates_with_input 'a\n' --base "$TEST_TMP/docker"
+
+  assert_status 0
+  ! grep -q -- "Selected tag update(s):" "$TEST_TMP/output.log" || fail "untagged tag token should not show tag prompt"
+  ! grep -q -- "--allow-tag-updates" "$TEST_TMP/sudo.log" || fail "untagged tag token should not pass allow flag"
+  ! grep -q -- "--tag-override" "$TEST_TMP/sudo.log" || fail "untagged tag token should not pass override"
+  teardown_case
+}
+
+test_interactive_all_tag_override_aborts_when_snapshot_lines_change(){
+  setup_case
+  printf 'repo/app:1.0 tag=wrong\n' > "$WUD_FILE"
+  cat > "$TEST_TMP/change-wud-file" <<HOOK
+#!/usr/bin/env bash
+printf 'repo/app:changed tag=wrong\n' > "$WUD_FILE"
+HOOK
+  chmod +x "$TEST_TMP/change-wud-file"
+
+  run_updates_with_input 'a\ny\n3.0\n' FAKE_COLUMN_HOOK="$TEST_TMP/change-wud-file" --base "$TEST_TMP/docker"
+
+  assert_status 1
+  grep -q 'WUD file changed while selecting updates; please rerun updates.' "$TEST_TMP/output.log" || fail "missing changed-file validation message"
+  [[ ! -e "$TEST_TMP/sudo.log" ]] || fail "sudo was invoked after tag override line changed"
+  [[ ! -d "$WUD_FILE.lock" ]] || fail "WUD lock was not released after validation failure"
+  teardown_case
+}
+
 test_interactive_select_aborts_when_snapshot_lines_change(){
   setup_case
   {
@@ -394,6 +425,8 @@ main(){
   run_test test_interactive_tag_override_passes_original_line_number
   run_test test_interactive_tag_override_empty_keeps_wud_tag
   run_test test_interactive_declined_tag_updates_do_not_enable_allow_flag
+  run_test test_interactive_untagged_tag_token_does_not_prompt
+  run_test test_interactive_all_tag_override_aborts_when_snapshot_lines_change
   run_test test_interactive_select_aborts_when_snapshot_lines_change
 }
 
