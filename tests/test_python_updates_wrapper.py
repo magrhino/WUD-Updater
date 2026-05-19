@@ -192,13 +192,13 @@ class PythonUpdatesWrapperTests(unittest.TestCase):
         sudo_log = self.sudo_log.read_text(encoding="utf-8")
         self.assertIn("--only-lines 2,5 --remove-lines-before-run 4 --yes", sudo_log)
 
-    def test_interactive_tag_override_passes_original_line_number(self) -> None:
+    def test_interactive_tag_change_passes_original_line_number(self) -> None:
         self.wud_file.write_text("repo/app:1.0 tag=wrong\n", encoding="utf-8")
 
         result = self.run_updates(
             "--base",
             str(self.root / "docker"),
-            input_text="s\n1\ny\n3.0\n",
+            input_text="s\n1\nc\n3.0\n",
         )
 
         self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
@@ -209,19 +209,21 @@ class PythonUpdatesWrapperTests(unittest.TestCase):
         )
         self.assertIn("Selected tag update(s):", result.stdout)
 
-    def test_interactive_tag_override_empty_keeps_wud_tag(self) -> None:
+    def test_interactive_tag_yes_keeps_wud_tag_without_override_prompt(self) -> None:
         self.wud_file.write_text("repo/app:1.0 tag=2.0\n", encoding="utf-8")
 
         result = self.run_updates(
             "--base",
             str(self.root / "docker"),
-            input_text="s\n1\ny\n\n",
+            input_text="s\n1\ny\n",
         )
 
         self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
         sudo_log = self.sudo_log.read_text(encoding="utf-8")
         self.assertIn("--only-lines 1 --allow-tag-updates --yes", sudo_log)
         self.assertNotIn("--tag-override", sudo_log)
+        self.assertIn("[y]es/[n]o/[c]hange", result.stdout)
+        self.assertNotIn("Override tag for update", result.stdout)
 
     def test_interactive_declined_tag_updates_do_not_enable_allow_flag(self) -> None:
         self.wud_file.write_text("repo/app:1.0 tag=2.0\n", encoding="utf-8")
@@ -265,7 +267,7 @@ class PythonUpdatesWrapperTests(unittest.TestCase):
         result = self.run_updates(
             "--base",
             str(self.root / "docker"),
-            input_text="a\ny\n3.0\n",
+            input_text="a\nc\n3.0\n",
             env_overrides={"FAKE_COLUMN_HOOK": str(hook)},
         )
 

@@ -234,8 +234,8 @@ updates --yes
 updates --yes --allow-tag-updates
 ```
 
-During interactive runs, `updates` prompts for selected tag updates and accepts
-an optional replacement tag before calling the updater.
+During interactive runs, `updates` prompts for selected tag updates and lets you
+apply them as shown, skip them, or change the tag before calling the updater.
 
 ## Environment Variables
 

@@ -519,7 +519,7 @@ choose_update_lines() {
 
 prompt_tag_updates() {
   local display_csv="$1" display_no=0 line_no line first tag reply
-  local override idx
+  local change_tags=0 override idx
   local tag_displays=()
   local tag_lines=()
   local tag_firsts=()
@@ -550,16 +550,30 @@ prompt_tag_updates() {
   done
 
   if [ "$allow_tag_updates" -eq 0 ]; then
-    read -r -p "Apply selected tag update entries? (y/N) " reply || reply=""
-    case "$reply" in
-      [yY]|[yY][eE][sS])
-        allow_tag_updates=1
-        ;;
-      *)
-        return 0
-        ;;
-    esac
+    while true; do
+      printf '%s' "Apply selected tag update entries? [y]es/[n]o/[c]hange (default n): "
+      read -r reply || reply=""
+      case "$reply" in
+        [yY]|[yY][eE][sS])
+          allow_tag_updates=1
+          break
+          ;;
+        ""|[nN]|[nN][oO])
+          return 0
+          ;;
+        [cC]|[cC][hH][aA][nN][gG][eE])
+          allow_tag_updates=1
+          change_tags=1
+          break
+          ;;
+        *)
+          echo "Invalid choice. Enter y, n, or c."
+          ;;
+      esac
+    done
   fi
+
+  [ "$change_tags" -eq 1 ] || return 0
 
   for ((idx=0; idx<${#tag_displays[@]}; idx++)); do
     display_no="${tag_displays[$idx]}"

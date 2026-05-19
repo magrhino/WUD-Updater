@@ -80,8 +80,9 @@ Apply tag updates explicitly:
 updates --yes --allow-tag-updates
 ```
 
-Interactive `updates` runs show selected tag update entries and can accept a
-temporary replacement tag before handing off to `docker-update-from-wud`.
+Interactive `updates` runs show selected tag update entries and ask whether to
+apply them as shown, skip them, or change the tag before handing off to
+`docker-update-from-wud`.
 
 Override a WUD-proposed tag directly:
 

@@ -163,7 +163,7 @@ class TerminalRenderer:
 
         console = self._console(self.stream)
         console.print(question, style="bold cyan")
-        console.print("  [a] all   [s] select   [x] exclude   [n] skip", style="blue")
+        console.print(f"  {choices}", style="blue")
         try:
             return input("Choice: ")
         except EOFError:
