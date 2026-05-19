@@ -13,6 +13,7 @@ from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
+from typing import TextIO
 
 from .command import CommandError, CommandResult, CommandRunner
 from .compose import ComposeCli, ComposeDiscoveryError, ComposeStack, ServiceImage
@@ -26,6 +27,7 @@ from .images import (
 )
 from .line_specs import LineSpecError, parse_line_spec
 from .locks import DirectoryLock, WudLockError
+from .terminal import TerminalRenderer
 from .wud_file import (
     ParsedWudFile,
     WudTarget,
@@ -123,9 +125,16 @@ class FailureRecord:
 
 
 class Logger:
-    def __init__(self, log_file: Path, *, no_color: bool = False) -> None:
+    def __init__(
+        self,
+        log_file: Path,
+        *,
+        no_color: bool = False,
+        environ: Mapping[str, str] | None = None,
+    ) -> None:
         self.log_file = log_file
         self.no_color = no_color
+        self.renderer = TerminalRenderer(no_color=no_color, environ=environ)
 
     def info(self, message: str) -> None:
         self._term("INFO", message)
@@ -140,11 +149,21 @@ class Logger:
         with self.log_file.open("a", encoding="utf-8") as file:
             file.write(f"[{timestamp()}] [{level}] {message}\n")
 
-    def _term(self, level: str, message: str, *, stream: object | None = None) -> None:
+    def rich_enabled(self) -> bool:
+        return self.renderer.rich_enabled()
+
+    def _term(self, level: str, message: str, *, stream: TextIO | None = None) -> None:
         if stream is None:
             stream = sys.stdout
-        print(f"[{timestamp()}] {message}", file=stream)
-        self.plain(level, message)
+        stamped = timestamp()
+        self.renderer.log_line(
+            timestamp=stamped,
+            level=level,
+            message=message,
+            stream=stream,
+        )
+        with self.log_file.open("a", encoding="utf-8") as file:
+            file.write(f"[{stamped}] [{level}] {message}\n")
 
 
 class UpdateFromWudRunner:
@@ -162,7 +181,11 @@ class UpdateFromWudRunner:
         self.docker = DockerCli(runner=self.command_runner)
         self.compose = ComposeCli(runner=self.command_runner)
         self.log_file = prepare_log_file(options.log_dir, self.owner)
-        self.log = Logger(self.log_file, no_color=options.no_color)
+        self.log = Logger(
+            self.log_file,
+            no_color=options.no_color,
+            environ=self.environ,
+        )
         self.failures: list[FailureRecord] = []
 
     def run(self) -> int:
@@ -333,16 +356,33 @@ class UpdateFromWudRunner:
 
     def _update_stack(self, stack: ComposeStack, matches: Sequence[Match]) -> StackStatus:
         opts = self.options
-        self.log.info(f"[{stack.name}] Checking for updates (mode={opts.mode})")
         services = _update_services(matches)
         service_scoped = services is not None
         services_label = " ".join(services or ())
-        if service_scoped:
-            self.log.info(f"[{stack.name}] Matched compose service(s): {services_label}")
+
+        if self.log.rich_enabled():
+            self.log.plain("INFO", f"[{stack.name}] Checking for updates (mode={opts.mode})")
+            panel_lines = [(f"Checking for updates (mode={opts.mode})", "info")]
+            if service_scoped:
+                message = f"Matched compose service(s): {services_label}"
+                self.log.plain("INFO", f"[{stack.name}] {message}")
+                panel_lines.append((message, "info"))
+            else:
+                message = (
+                    "Could not map every matched image to a compose service; "
+                    "using stack-level pull/recreate"
+                )
+                self.log.plain("WARN", f"[{stack.name}] {message}")
+                panel_lines.append((message, "warning"))
+            self.log.renderer.stack_summary(stack.name, panel_lines)
         else:
-            self.log.warn(
-                f"[{stack.name}] Could not map every matched image to a compose service; using stack-level pull/recreate"
-            )
+            self.log.info(f"[{stack.name}] Checking for updates (mode={opts.mode})")
+            if service_scoped:
+                self.log.info(f"[{stack.name}] Matched compose service(s): {services_label}")
+            else:
+                self.log.warn(
+                    f"[{stack.name}] Could not map every matched image to a compose service; using stack-level pull/recreate"
+                )
 
         images = tuple(stack.images)
         before = self._image_state(images)
@@ -993,6 +1033,27 @@ class UpdateFromWudRunner:
         self.log.info("PTY     : python subprocess")
 
     def _print_targets(self, parsed: ParsedWudFile) -> None:
+        if self.log.rich_enabled():
+            self.log.plain("INFO", "Targets:")
+            rows: list[tuple[int, str, str, str]] = []
+            for target in parsed.targets:
+                suffix = f" sha256={target.digest}" if target.digest else ""
+                suffix += f" tag={target.desired_tag}" if target.desired_tag else ""
+                self.log.plain(
+                    "INFO",
+                    f"  line {target.line_no}: {target.first}{suffix}",
+                )
+                rows.append(
+                    (
+                        target.line_no,
+                        target.first,
+                        target.digest,
+                        target.desired_tag,
+                    )
+                )
+            self.log.renderer.updater_targets(rows)
+            return
+
         self.log.info("Targets:")
         for target in parsed.targets:
             suffix = f" sha256={target.digest}" if target.digest else ""
@@ -1008,6 +1069,40 @@ class UpdateFromWudRunner:
             self.log.info(f"  line {target.line_no}: {target.first} -> {desired_image}")
 
     def _print_plan(self, matches: Sequence[Match]) -> None:
+        if self.log.rich_enabled():
+            self.log.plain("INFO", "Stacks to update:")
+            rows: list[tuple[str, str, list[str]]] = []
+            for stack in _stacks_to_update(matches):
+                self.log.plain("INFO", f"  - {stack.name} ({stack.directory})")
+                stack_matches = [
+                    match for match in matches if match.stack.index == stack.index
+                ]
+                services = _update_services(stack_matches)
+                if services is None:
+                    services_label = "stack-level fallback"
+                    self.log.plain("INFO", "      services: stack-level fallback")
+                else:
+                    services_label = " ".join(services)
+                    self.log.plain("INFO", f"      services: {services_label}")
+
+                plan_lines: list[str] = []
+                lines = {
+                    (
+                        match.target.line_no,
+                        match.target.first,
+                        match.resolved,
+                        match.target.desired_tag,
+                    )
+                    for match in stack_matches
+                }
+                for line_no, target, resolved, desired_tag in sorted(lines):
+                    line = _plan_line(line_no, target, resolved, desired_tag)
+                    self.log.plain("INFO", f"      {line}")
+                    plan_lines.append(line)
+                rows.append((stack.name, services_label, plan_lines))
+            self.log.renderer.updater_stack_plan(rows)
+            return
+
         self.log.info("Stacks to update:")
         for stack in _stacks_to_update(matches):
             self.log.info(f"  - {stack.name} ({stack.directory})")
@@ -1022,15 +1117,7 @@ class UpdateFromWudRunner:
                 for match in stack_matches
             }
             for line_no, target, resolved, desired_tag in sorted(lines):
-                if desired_tag:
-                    desired_image = image_with_tag(resolved, desired_tag)
-                    self.log.info(
-                        f"      line {line_no}: {resolved} -> {desired_image} (tag update)"
-                    )
-                elif target == resolved:
-                    self.log.info(f"      line {line_no}: {target}")
-                else:
-                    self.log.info(f"      line {line_no}: {target} -> {resolved}")
+                self.log.info(f"      {_plan_line(line_no, target, resolved, desired_tag)}")
 
     def _confirm_before_mutation(self) -> None:
         if self.options.assume_yes:
@@ -1245,6 +1332,20 @@ def _stacks_to_update(matches: Sequence[Match]) -> tuple[ComposeStack, ...]:
     for match in matches:
         stacks[match.stack.index] = match.stack
     return tuple(stacks[idx] for idx in sorted(stacks))
+
+
+def _plan_line(
+    line_no: int,
+    target: str,
+    resolved: str,
+    desired_tag: str,
+) -> str:
+    if desired_tag:
+        desired_image = image_with_tag(resolved, desired_tag)
+        return f"line {line_no}: {resolved} -> {desired_image} (tag update)"
+    if target == resolved:
+        return f"line {line_no}: {target}"
+    return f"line {line_no}: {target} -> {resolved}"
 
 
 def _failed_line_numbers(

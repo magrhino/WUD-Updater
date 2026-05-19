@@ -1,0 +1,72 @@
+from __future__ import annotations
+
+import unittest
+from io import StringIO
+
+from wud_updater.terminal import RICH_AVAILABLE, TerminalRenderer
+
+
+class TerminalRendererTests(unittest.TestCase):
+    def test_plain_docker_updates_output_matches_legacy_shape(self) -> None:
+        output = StringIO()
+        renderer = TerminalRenderer(stream=output)
+
+        renderer.docker_updates([(1, "repo/app:latest")])
+
+        text = output.getvalue()
+        self.assertIn("=== 📦 Docker Updates ===", text)
+        self.assertIn("1\trepo/app:latest", text)
+        self.assertNotIn("\x1b[", text)
+        self.assertNotIn("╭", text)
+
+    def test_no_color_disables_forced_rich_output(self) -> None:
+        output = StringIO()
+        renderer = TerminalRenderer(
+            no_color=True,
+            stream=output,
+            force_rich=True,
+            width=80,
+        )
+
+        renderer.docker_updates([(1, "repo/app:latest")])
+
+        text = output.getvalue()
+        self.assertIn("=== 📦 Docker Updates ===", text)
+        self.assertNotIn("\x1b[", text)
+        self.assertNotIn("╭", text)
+
+    @unittest.skipUnless(RICH_AVAILABLE, "Rich is not installed")
+    def test_forced_rich_docker_updates_output_uses_panel_table_and_color(self) -> None:
+        output = StringIO()
+        renderer = TerminalRenderer(stream=output, force_rich=True, width=80)
+
+        renderer.docker_updates([(1, "repo/app:latest")])
+
+        text = output.getvalue()
+        self.assertIn("Docker Updates", text)
+        self.assertIn("Image / container target", text)
+        self.assertIn("repo/app:latest", text)
+        self.assertIn("pending", text)
+        self.assertIn("╭", text)
+        self.assertIn("\x1b[", text)
+
+    @unittest.skipUnless(RICH_AVAILABLE, "Rich is not installed")
+    def test_forced_rich_log_line_styles_level(self) -> None:
+        output = StringIO()
+        renderer = TerminalRenderer(stream=output, force_rich=True, width=80)
+
+        renderer.log_line(
+            timestamp="12:41:08",
+            level="WARN",
+            message="[app] stopping affected service",
+        )
+
+        text = output.getvalue()
+        self.assertIn("12:41:08", text)
+        self.assertIn("WARN", text)
+        self.assertIn("[app] stopping affected service", text)
+        self.assertIn("\x1b[", text)
+
+
+if __name__ == "__main__":
+    unittest.main()
