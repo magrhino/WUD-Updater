@@ -302,7 +302,8 @@ class PythonUpdatesWrapperTests(unittest.TestCase):
             "--security-opt no-new-privileges",
             docker_calls,
         )
-        self.assertIn(f"-v wud-out:{self.root}", docker_calls)
+        self.assertNotIn("-v wud-out:", docker_calls)
+        self.assertNotIn("WUD_OUT_FILE=", docker_calls)
         self.assertIn(
             "--mount type=bind,src=/var/run/middleware,"
             "dst=/var/run/middleware,readonly",
@@ -377,11 +378,17 @@ class PythonUpdatesWrapperTests(unittest.TestCase):
         self.assertNotIn("super-secret-api-key", result.stdout)
         self.assertNotIn("super-secret-api-key", result.stderr)
         self.assertNotIn("super-secret-api-key", midclt_calls)
-        status_payload = json.loads(
-            (self.root / "truenas-status.json").read_text(encoding="utf-8")
-        )
+        self.assertFalse((self.root / "truenas-status.json").exists())
+        status_payload = json.loads(result.stdout)
         self.assertTrue(status_payload["update"]["ok"])
         self.assertTrue(status_payload["alerts"]["ok"])
+        self.assertEqual(
+            status_payload["update"]["data"],
+            {"status": "AVAILABLE", "version": "25.10.1"},
+        )
+        self.assertEqual(status_payload["alerts"]["data"], ["Pool needs attention"])
+        self.assertNotIn("private-update-detail", result.stdout)
+        self.assertNotIn("private-alert-arg", result.stdout)
 
     def test_truenas_update_status_up_to_date(self) -> None:
         result = self.run_updates(
@@ -433,9 +440,8 @@ class PythonUpdatesWrapperTests(unittest.TestCase):
         )
 
         self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
-        status_payload = json.loads(
-            (self.root / "truenas-status.json").read_text(encoding="utf-8")
-        )
+        self.assertFalse((self.root / "truenas-status.json").exists())
+        status_payload = json.loads(result.stdout)
         self.assertFalse(status_payload["update"]["ok"])
         self.assertEqual(status_payload["update"]["reason"], "midclt exited 2")
 
@@ -552,21 +558,19 @@ if [[ "$1" == "run" ]]; then
   if [[ "${FAKE_DOCKER_RUN_RETURN:-0}" != "0" ]]; then
     exit "$FAKE_DOCKER_RUN_RETURN"
   fi
-  out_dir="$(dirname "${FAKE_WUD_FILE:?FAKE_WUD_FILE is required}")"
-  status_file="$out_dir/truenas-status.json"
   if [[ "${FAKE_DOCKER_STATUS_RESPONSE:-}" == "invalid" ]]; then
-    printf 'not json\\n' > "$status_file"
+    printf 'not json\\n'
     exit 0
   fi
   case "${FAKE_TRUENAS_UPDATE_STATUS:-available}" in
     unavailable)
-      update_data='{"code":"NORMAL","status":{"new_version":null},"error":null}'
+      update_data='{"status":"UNAVAILABLE"}'
       ;;
     error)
-      update_data='{"code":"ERROR","status":null,"error":{"reason":"update train failed"}}'
+      update_data='{"status":"ERROR","reason":"update train failed"}'
       ;;
     *)
-      update_data='{"code":"NORMAL","status":{"new_version":{"version":"25.10.1"}},"error":null}'
+      update_data='{"status":"AVAILABLE","version":"25.10.1"}'
       ;;
   esac
   case "${FAKE_TRUENAS_ALERT_STATUS:-active}" in
@@ -574,10 +578,10 @@ if [[ "$1" == "run" ]]; then
       alert_data='[]'
       ;;
     *)
-      alert_data='[{"dismissed":false,"formatted":"Pool needs attention"},{"dismissed":true,"formatted":"Dismissed alert"}]'
+      alert_data='["Pool needs attention"]'
       ;;
   esac
-  printf '{"update":{"ok":true,"data":%s,"reason":""},"alerts":{"ok":true,"data":%s,"reason":""}}\\n' "$update_data" "$alert_data" > "$status_file"
+  printf '{"update":{"ok":true,"data":%s,"reason":""},"alerts":{"ok":true,"data":%s,"reason":""}}\\n' "$update_data" "$alert_data"
   exit 0
 fi
 exit 1
@@ -612,7 +616,7 @@ case "$*" in
         printf '{"code":"ERROR","status":null,"error":{"reason":"update train failed"}}\\n'
         ;;
       *)
-        printf '{"code":"NORMAL","status":{"new_version":{"version":"25.10.1"}},"error":null}\\n'
+        printf '{"code":"NORMAL","status":{"new_version":{"version":"25.10.1"}},"error":null,"private":"private-update-detail"}\\n'
         ;;
     esac
     ;;
@@ -622,7 +626,7 @@ case "$*" in
         printf '[]\\n'
         ;;
       *)
-        printf '[{"dismissed":false,"formatted":"Pool needs attention"},{"dismissed":true,"formatted":"Dismissed alert"}]\\n'
+        printf '[{"dismissed":false,"formatted":"Pool needs attention","args":{"private":"private-alert-arg"},"mail":{"to":"private@example.test"}},{"dismissed":true,"formatted":"Dismissed alert"}]\\n'
         ;;
     esac
     ;;

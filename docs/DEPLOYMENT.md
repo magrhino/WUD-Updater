@@ -113,13 +113,12 @@ short-lived sibling container can run local `midclt` calls. Set
 TrueNAS release, then set `TRUENAS_STATUS_CHECK=1` to opt in.
 
 When enabled, the Python `updates` wrapper uses Docker to inspect its own
-container, starts the same image with `--network none`, mounts only the WUD
-output mount plus a read-only `/var/run/middleware` bind mount, writes
-`truenas-status.json` beside `images.todo`, and exits. If the helper prints
-`TrueNAS not reachable`, check that Docker can start sibling containers, the
-client tag matches the TrueNAS release, the WUD output mount is writable, and
-the TrueNAS middleware socket exists at `/var/run/middleware` on the Docker
-host.
+container, starts the same image with `--network none`, mounts only
+`/var/run/middleware` through Docker `--mount` so a missing host path fails,
+reads minimized status JSON from the helper's stdout, and exits. If the helper
+prints `TrueNAS not reachable`, check that Docker can start sibling containers,
+the client tag matches the TrueNAS release, and the TrueNAS middleware socket
+exists at `/var/run/middleware` on the Docker host.
 
 For local image development and smoke tests, use
 [`docs/examples/docker-compose.build.yml`](examples/docker-compose.build.yml).
@@ -284,8 +283,10 @@ logs where they print helper commands.
 
 The TrueNAS status helper does not use a TrueNAS API key. It relies on Docker
 access to start a short-lived container with the local middleware socket
-mounted, so treat `TRUENAS_STATUS_CHECK=1` as trusted-host access similar to
-other Docker socket workflows.
+mounted, so treat `TRUENAS_STATUS_CHECK=1` as broad trusted-host TrueNAS
+middleware access similar to other Docker socket workflows. The helper uses a
+read-only bind mount and only calls read status methods, but Unix socket method
+authorization is still controlled by TrueNAS middleware, not by the mount flag.
 
 `--dry-run` does not pull images, recreate containers, remove WUD lines, or
 otherwise mutate host state. Mutating Docker operations require interactive

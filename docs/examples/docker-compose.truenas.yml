@@ -27,7 +27,7 @@ services:
       OUT_UID: "1000"
       OUT_GID: "1000"
       # Uses Docker to start a short-lived helper container that mounts the
-      # local TrueNAS middleware socket and writes sanitized status JSON to /out.
+      # local TrueNAS middleware socket and returns minimized status JSON.
       TRUENAS_STATUS_CHECK: "1"
       TRUENAS_STATUS_TIMEOUT: "5"
     volumes:
