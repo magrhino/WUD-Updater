@@ -53,6 +53,7 @@ dry_run=0
 allow_tag_updates=0
 selected_line_spec=""
 remove_line_spec=""
+tag_override_specs=()
 todo_entries=""
 todo_file_lines=()
 wud_lock_dir=""
@@ -227,6 +228,42 @@ display_todo_entries() {
   done <<< "$todo_entries" | column -t
 }
 
+line_first_token() {
+  local line="$1" first
+  read -r first _ <<< "$line"
+  printf '%s' "$first"
+}
+
+tag_value_valid() {
+  [[ "$1" =~ ^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$ ]]
+}
+
+line_desired_tag() {
+  local line="$1" token tag=""
+  local tokens=()
+  read -r -a tokens <<< "$line"
+  for token in "${tokens[@]:1}"; do
+    if [[ "$token" == tag=* ]]; then
+      tag="${token#tag=}"
+    fi
+  done
+  tag_value_valid "$tag" || return 1
+  printf '%s' "$tag"
+}
+
+image_repo_ref() {
+  local image="${1%%@sha256:*}" last
+  last="${image##*/}"
+  if [[ "$last" == *:* ]]; then
+    image="${image%:*}"
+  fi
+  printf '%s' "$image"
+}
+
+image_with_tag() {
+  printf '%s:%s' "$(image_repo_ref "$1")" "$2"
+}
+
 csv_contains() {
   local csv="$1" needle="$2" item
   local items=()
@@ -261,6 +298,14 @@ csv_count() {
     [ -n "$item" ] && count=$((count + 1))
   done
   printf '%s' "$count"
+}
+
+all_display_csv() {
+  local max="$1" n result=""
+  for ((n=1; n<=max; n++)); do
+    result="$(csv_append_unique "$result" "$n")"
+  done
+  printf '%s' "$result"
 }
 
 parse_display_spec() {
@@ -385,6 +430,7 @@ choose_update_lines() {
   todo_count="${#todo_file_lines[@]}"
   selected_line_spec=""
   remove_line_spec=""
+  tag_override_specs=()
 
   while true; do
     read -r -p "Run Docker updates? [a=all, s=select, x=exclude, n=skip] " choice || choice=""
@@ -394,6 +440,7 @@ choose_update_lines() {
         return 1
         ;;
       a|A|all|ALL|y|Y|yes|YES)
+        prompt_tag_updates "$(all_display_csv "$todo_count")"
         return 0
         ;;
       s|S|select|SELECT)
@@ -439,6 +486,7 @@ choose_update_lines() {
 
   selected_line_spec="$(display_csv_to_file_line_csv "$selected_display")"
   echo "Selected $(csv_count "$selected_display") of $todo_count pending update(s)."
+  prompt_tag_updates "$selected_display"
 
   if [ -n "$unselected_display" ]; then
     read -r -p "Remove unselected entries from the WUD file before running? (y/N) " remove_reply || remove_reply=""
@@ -452,6 +500,68 @@ choose_update_lines() {
   return 0
 }
 
+prompt_tag_updates() {
+  local display_csv="$1" display_no=0 line_no line first tag reply
+  local override idx
+  local tag_displays=()
+  local tag_lines=()
+  local tag_firsts=()
+  local tag_values=()
+  [ -n "$display_csv" ] || return 0
+
+  while IFS=$'\t' read -r line_no line; do
+    [ -n "$line_no" ] || continue
+    display_no=$((display_no + 1))
+    csv_contains "$display_csv" "$display_no" || continue
+    tag="$(line_desired_tag "$line" 2>/dev/null || true)"
+    [ -n "$tag" ] || continue
+    first="$(line_first_token "$line")"
+    tag_displays+=("$display_no")
+    tag_lines+=("$line_no")
+    tag_firsts+=("$first")
+    tag_values+=("$tag")
+  done <<< "$todo_entries"
+
+  [ "${#tag_displays[@]}" -gt 0 ] || return 0
+
+  echo "Selected tag update(s):"
+  for ((idx=0; idx<${#tag_displays[@]}; idx++)); do
+    printf '  %s. %s -> %s\n' \
+      "${tag_displays[$idx]}" \
+      "${tag_firsts[$idx]}" \
+      "$(image_with_tag "${tag_firsts[$idx]}" "${tag_values[$idx]}")"
+  done
+
+  if [ "$allow_tag_updates" -eq 0 ]; then
+    read -r -p "Apply selected tag update entries? (y/N) " reply || reply=""
+    case "$reply" in
+      [yY]|[yY][eE][sS])
+        allow_tag_updates=1
+        ;;
+      *)
+        return 0
+        ;;
+    esac
+  fi
+
+  for ((idx=0; idx<${#tag_displays[@]}; idx++)); do
+    display_no="${tag_displays[$idx]}"
+    line_no="${tag_lines[$idx]}"
+    tag="${tag_values[$idx]}"
+    while true; do
+      read -r -p "Override tag for update $display_no [$tag]: " override || override=""
+      [ -n "$override" ] || break
+      if tag_value_valid "$override"; then
+        if [ "$override" != "$tag" ]; then
+          tag_override_specs+=("${line_no}=${override}")
+        fi
+        break
+      fi
+      echo "Invalid tag. Use a Docker tag value like 5.2.0."
+    done
+  done
+}
+
 run_updater() {
   local rc
   local updater_env=()
@@ -461,6 +571,11 @@ run_updater() {
   [ -n "$selected_line_spec" ] && updater_args+=(--only-lines "$selected_line_spec")
   [ -n "$remove_line_spec" ] && updater_args+=(--remove-lines-before-run "$remove_line_spec")
   [ "$allow_tag_updates" -eq 1 ] && updater_args+=(--allow-tag-updates)
+  if [ "${#tag_override_specs[@]}" -gt 0 ]; then
+    for override in "${tag_override_specs[@]}"; do
+      updater_args+=(--tag-override "$override")
+    done
+  fi
   updater_args+=(--yes)
 
   if [ -n "$out_uid" ] || [ -n "$out_gid" ]; then

@@ -10,7 +10,7 @@ import sys
 import tempfile
 import time
 from collections.abc import Iterable, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime
 from pathlib import Path
 from typing import TextIO
@@ -24,6 +24,7 @@ from .images import (
     image_has_tag,
     image_matches_resolved_target,
     image_with_tag,
+    tag_value_valid,
 )
 from .line_specs import LineSpecError, parse_line_spec
 from .locks import DirectoryLock, WudLockError
@@ -65,6 +66,7 @@ class UpdaterOptions:
     no_color: bool = False
     only_lines: str = ""
     remove_lines_before_run: str = ""
+    tag_overrides: tuple["TagOverride", ...] = ()
     docker_base_label: str | None = None
     wud_file_label: str | None = None
     log_dir_label: str | None = None
@@ -90,6 +92,12 @@ class TagUpdate:
     old_image: str
     desired_tag: str
     new_image: str
+
+
+@dataclass(frozen=True)
+class TagOverride:
+    line_no: int
+    tag: str
 
 
 @dataclass(frozen=True)
@@ -194,6 +202,8 @@ class UpdateFromWudRunner:
             raise UpdaterError("--mode must be pause|stop|live")
         if opts.max_wait < 0:
             raise UpdaterError("--max-wait must be an integer number of seconds")
+        if opts.tag_overrides and not opts.allow_tag_updates:
+            raise UpdaterError("--tag-override requires --allow-tag-updates")
 
         lock = DirectoryLock(
             opts.wud_file,
@@ -227,6 +237,9 @@ class UpdateFromWudRunner:
                 return 0
 
             self._print_plan(matches)
+
+            if not self._validate_tag_manifests(matches):
+                return 1
 
             if opts.dry_run:
                 self.log.info(
@@ -303,7 +316,43 @@ class UpdateFromWudRunner:
         )
         for warning in parsed.warnings:
             self.log.warn(warning)
-        return parsed
+        return self._apply_tag_overrides(parsed)
+
+    def _apply_tag_overrides(self, parsed: ParsedWudFile) -> ParsedWudFile:
+        overrides = {item.line_no: item.tag for item in self.options.tag_overrides}
+        if not overrides:
+            return parsed
+
+        targets_by_line = {target.line_no: target for target in parsed.targets}
+        missing = sorted(set(overrides) - set(targets_by_line))
+        if missing:
+            line_list = ", ".join(str(line_no) for line_no in missing)
+            raise UpdaterError(
+                f"--tag-override line(s) did not match selected WUD entries: {line_list}"
+            )
+
+        updated_targets: list[WudTarget] = []
+        for target in parsed.targets:
+            override = overrides.get(target.line_no)
+            if override is None:
+                updated_targets.append(target)
+                continue
+            if not target.desired_tag:
+                raise UpdaterError(
+                    f"--tag-override line {target.line_no} does not target a tag update"
+                )
+            self.log.info(
+                "Tag override: "
+                f"line {target.line_no} uses tag {override} "
+                f"instead of {target.desired_tag}"
+            )
+            updated_targets.append(replace(target, desired_tag=override))
+
+        return ParsedWudFile(
+            lines=parsed.lines,
+            targets=tuple(updated_targets),
+            warnings=parsed.warnings,
+        )
 
     def _build_matches(
         self,
@@ -850,6 +899,10 @@ class UpdateFromWudRunner:
         for line in details.splitlines():
             self.log.plain("ERROR", f"[{stack.name}] {line}")
 
+    def _log_command_result(self, result: CommandResult) -> None:
+        for line in _render_command_result(result):
+            self.log.plain("ERROR", line.rstrip("\n"))
+
     def _cid_summary(self, cid: str) -> str:
         lines = self.docker.try_inspect(cid, CONTAINER_SUMMARY_FORMAT)
         return lines[0] if lines else ""
@@ -864,6 +917,27 @@ class UpdateFromWudRunner:
             if image
         }
 
+    def _validate_tag_manifests(self, matches: Sequence[Match]) -> bool:
+        ok = True
+        for update in self._tag_updates(matches):
+            try:
+                self.docker.manifest_inspect(update.new_image)
+            except CommandError as exc:
+                ok = False
+                self.log.error(
+                    "Invalid or unavailable remote tag: "
+                    f"{update.old_image} -> {update.new_image}"
+                )
+                for line in exc.result.stderr_lines:
+                    self.log.error(f"manifest stderr: {sanitize_stream(line)}")
+                self._log_command_result(exc.result)
+            else:
+                self.log.info(
+                    "Validated remote tag: "
+                    f"{update.old_image} -> {update.new_image}"
+                )
+        return ok
+
     def _verify_expected_digests(
         self,
         stack: ComposeStack,
@@ -872,16 +946,21 @@ class UpdateFromWudRunner:
     ) -> bool:
         ok = True
         requirements = {
-            (match.target.line_no, match.target.first, match.resolved, match.target.digest)
+            (
+                match.target.line_no,
+                match.target.first,
+                _digest_check_image(match),
+                _digest_check_allow_repo(match),
+                match.target.digest,
+            )
             for match in matches
             if match.target.digest
         }
-        for line_no, target, resolved, expected in sorted(requirements):
-            allow_repo = resolved != target or not image_has_tag(resolved)
+        for line_no, target, expected_image, allow_repo, expected in sorted(requirements):
             matched = False
             digest_ok = False
             for image in images:
-                if not image_matches_resolved_target(image, resolved, allow_repo):
+                if not image_matches_resolved_target(image, expected_image, allow_repo):
                     continue
                 matched = True
                 if self.docker.image_has_digest(image, expected):
@@ -1028,6 +1107,8 @@ class UpdateFromWudRunner:
             self.log.info(f"Only    : {opts.only_lines}")
         if opts.remove_lines_before_run:
             self.log.info(f"Remove  : {opts.remove_lines_before_run}")
+        for override in opts.tag_overrides:
+            self.log.info(f"Override: line {override.line_no} tag={override.tag}")
         if self.owner.configured:
             self.log.info(f"Owner   : {self.owner.uid}:{self.owner.gid}")
         self.log.info("PTY     : python subprocess")
@@ -1161,6 +1242,10 @@ def options_from_namespace(args: object, *, environ: Mapping[str, str] | None = 
     wud_file = Path(wud_file_label)
     log_dir = Path(log_dir_label)
     max_wait = parse_seconds(getattr(args, "max_wait", None), "--max-wait")
+    tag_overrides = parse_tag_overrides(getattr(args, "tag_override", None) or ())
+    allow_tag_updates = bool(getattr(args, "allow_tag_updates", False))
+    if tag_overrides and not allow_tag_updates:
+        raise UpdaterError("--tag-override requires --allow-tag-updates")
     return UpdaterOptions(
         docker_base=docker_base,
         wud_file=wud_file,
@@ -1169,10 +1254,11 @@ def options_from_namespace(args: object, *, environ: Mapping[str, str] | None = 
         max_wait=max_wait,
         dry_run=bool(getattr(args, "dry_run", False)),
         assume_yes=bool(getattr(args, "yes", False)),
-        allow_tag_updates=bool(getattr(args, "allow_tag_updates", False)),
+        allow_tag_updates=allow_tag_updates,
         no_color=bool(getattr(args, "no_color", False)),
         only_lines=getattr(args, "only_lines", None) or "",
         remove_lines_before_run=getattr(args, "remove_lines_before_run", None) or "",
+        tag_overrides=tag_overrides,
         docker_base_label=docker_base_label,
         wud_file_label=wud_file_label,
         log_dir_label=log_dir_label,
@@ -1244,6 +1330,27 @@ def parse_seconds(value: str | None, label: str) -> int:
     if not re.fullmatch(r"[0-9]+", str(value)):
         raise UpdaterError(f"{label} must be an integer number of seconds")
     return int(str(value), 10)
+
+
+def parse_tag_overrides(values: Sequence[str]) -> tuple[TagOverride, ...]:
+    overrides: list[TagOverride] = []
+    seen: set[int] = set()
+    for value in values:
+        line_raw, sep, tag = value.partition("=")
+        if not sep or not line_raw or not tag:
+            raise UpdaterError("--tag-override must use LINE=TAG")
+        if not re.fullmatch(r"[0-9]+", line_raw):
+            raise UpdaterError("--tag-override line must be a positive integer")
+        line_no = int(line_raw, 10)
+        if line_no < 1:
+            raise UpdaterError("--tag-override line must be a positive integer")
+        if line_no in seen:
+            raise UpdaterError(f"--tag-override line {line_no} was provided more than once")
+        if not tag_value_valid(tag):
+            raise UpdaterError(f"--tag-override line {line_no} has invalid tag: {tag}")
+        overrides.append(TagOverride(line_no=line_no, tag=tag))
+        seen.add(line_no)
+    return tuple(overrides)
 
 
 def apply_compose_tag_updates(
@@ -1346,6 +1453,18 @@ def _plan_line(
     if target == resolved:
         return f"line {line_no}: {target}"
     return f"line {line_no}: {target} -> {resolved}"
+
+
+def _digest_check_image(match: Match) -> str:
+    if match.target.desired_tag:
+        return image_with_tag(match.compose_image, match.target.desired_tag)
+    return match.resolved
+
+
+def _digest_check_allow_repo(match: Match) -> bool:
+    if match.target.desired_tag:
+        return False
+    return match.resolved != match.target.first or not image_has_tag(match.resolved)
 
 
 def _failed_line_numbers(

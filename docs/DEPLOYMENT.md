@@ -88,6 +88,13 @@ For tag updates, keep the explicit opt-in:
 docker compose -f docs/examples/docker-compose.example.yml run --rm wud-updater docker-update-from-wud --yes --allow-tag-updates
 ```
 
+To correct a bad WUD-proposed tag for one run, use the original WUD file line
+number:
+
+```bash
+docker compose -f docs/examples/docker-compose.example.yml run --rm wud-updater docker-update-from-wud --yes --allow-tag-updates --tag-override 1=5.2.0
+```
+
 The example mounts:
 
 | Mount | Purpose |
@@ -226,6 +233,9 @@ updates --dry-run
 updates --yes
 updates --yes --allow-tag-updates
 ```
+
+During interactive runs, `updates` prompts for selected tag updates and accepts
+an optional replacement tag before calling the updater.
 
 ## Environment Variables
 
