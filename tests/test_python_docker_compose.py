@@ -256,7 +256,7 @@ class ComposeCliTests(FakeDockerCase):
             [
                 "compose -f docker-compose.yml pull app",
                 "compose -f docker-compose.yml stop app",
-                "compose -f docker-compose.yml up -d --remove-orphans app",
+                "compose -f docker-compose.yml up -d --remove-orphans --no-deps app",
             ],
         )
 
@@ -334,7 +334,7 @@ class ComposeCliTests(FakeDockerCase):
             [
                 "compose -f docker-compose.yml pull app",
                 "compose -f docker-compose.yml pause app",
-                "compose -f docker-compose.yml up -d --remove-orphans app",
+                "compose -f docker-compose.yml up -d --remove-orphans --no-deps app",
                 "compose -f docker-compose.yml unpause app",
             ],
         )
@@ -360,7 +360,7 @@ class ComposeCliTests(FakeDockerCase):
             [
                 "compose -f docker-compose.yml pull app",
                 "compose -f docker-compose.yml pause app",
-                "compose -f docker-compose.yml up -d --remove-orphans app",
+                "compose -f docker-compose.yml up -d --remove-orphans --no-deps app",
                 "compose -f docker-compose.yml unpause app",
             ],
         )
@@ -386,7 +386,7 @@ class ComposeCliTests(FakeDockerCase):
         self.assertEqual(
             self.call_commands(),
             [
-                "compose -f docker-compose.yml up -d --remove-orphans --wait --wait-timeout 7 app"
+                "compose -f docker-compose.yml up -d --remove-orphans --no-deps --wait --wait-timeout 7 app"
             ],
         )
 

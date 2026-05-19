@@ -499,6 +499,46 @@ test_tag_override_rewrites_compose_to_override(){
   teardown_case
 }
 
+test_tag_update_uses_direct_service_image_map(){
+  setup_case
+  printf 'linuxserver/qbittorrent:5.1.4 tag=20.04.1\n' > "$WUD_FILE"
+  make_stack media "$BASE/media" docker-compose.yml
+  cat > "$BASE/media/docker-compose.yml" <<'YAML'
+services:
+  vpn:
+    image: qmcgaw/gluetun:latest
+  qbittorrent:
+    image: ghcr.io/linuxserver/qbittorrent:5.1.4
+    depends_on:
+      vpn:
+        condition: service_started
+  sidecar:
+    image: ghcr.io/example/sidecar:latest
+    depends_on:
+      qbittorrent:
+        condition: service_started
+YAML
+  printf '%s\n' vpn qbittorrent sidecar > "$FAKE_ROOT/stacks/media/services.txt"
+  printf '%s\n' cid-qbittorrent > "$FAKE_ROOT/stacks/media/cids.txt"
+  printf '%s\n' cid-qbittorrent > "$FAKE_ROOT/stacks/media/cids-qbittorrent.txt"
+  printf '/cid-qbittorrent|running|healthy|0|0\n' > "$FAKE_ROOT/containers/cid-qbittorrent.summary"
+  set_image_state ghcr.io/linuxserver/qbittorrent:5.1.4 old sha256:old
+  set_image_after_pull ghcr.io/linuxserver/qbittorrent:5.2.0 new sha256:new
+
+  run_script --yes --allow-tag-updates --tag-override 1=5.2.0
+
+  assert_status 0
+  assert_file_equals "$WUD_FILE" ''
+  grep -q -- 'image: ghcr.io/linuxserver/qbittorrent:5.2.0' "$BASE/media/docker-compose.yml" || fail "compose file did not contain new qBittorrent tag"
+  grep -q -- 'image: ghcr.io/example/sidecar:latest' "$BASE/media/docker-compose.yml" || fail "sidecar image changed unexpectedly"
+  assert_calls_contain 'compose -f docker-compose.yml pull qbittorrent'
+  assert_calls_contain 'compose -f docker-compose.yml stop qbittorrent'
+  assert_calls_contain 'compose -f docker-compose.yml up -d .*--no-deps.* qbittorrent'
+  assert_calls_not_contain 'compose -f docker-compose.yml pull sidecar'
+  assert_calls_not_contain 'compose -f docker-compose.yml stop sidecar'
+  teardown_case
+}
+
 test_manifest_validation_failure_prevents_tag_rewrite(){
   setup_case
   printf 'repo/app:1.0 tag=2.0\n' > "$WUD_FILE"
@@ -802,7 +842,7 @@ test_service_scoped_update_only_touches_matched_service(){
   assert_file_equals "$WUD_FILE" ''
   assert_calls_contain 'compose -f docker-compose.yml pull app'
   assert_calls_contain 'compose -f docker-compose.yml stop app'
-  assert_calls_contain 'compose -f docker-compose.yml up -d .* app'
+  assert_calls_contain 'compose -f docker-compose.yml up -d .*--no-deps.* app'
   assert_calls_not_contain 'compose -f docker-compose.yml pull db'
   assert_calls_not_contain 'compose -f docker-compose.yml stop db'
   assert_calls_not_contain 'compose -f docker-compose.yml down'
@@ -835,6 +875,7 @@ main(){
   run_test test_tag_update_dry_run_does_not_rewrite_compose
   run_test test_allowed_tag_update_rewrites_compose_and_cleans_line
   run_test test_tag_override_rewrites_compose_to_override
+  run_test test_tag_update_uses_direct_service_image_map
   run_test test_manifest_validation_failure_prevents_tag_rewrite
   run_test test_unhealthy_tag_update_rolls_back_and_writes_incident_log
   run_test test_pinned_digest_mismatch_prevents_cleanup

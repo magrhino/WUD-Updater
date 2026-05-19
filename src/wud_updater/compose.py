@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import re
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
@@ -76,15 +77,12 @@ class ComposeCli:
         directory: str | Path,
         file: str,
     ) -> tuple[ServiceImage, ...]:
-        pairs: set[ServiceImage] = set()
-        for service in self.config_services(directory, file):
-            try:
-                images = self.config_images(directory, file, service)
-            except CommandError:
-                continue
-            for image in images:
-                pairs.add(ServiceImage(service=service, image=image))
-        return tuple(sorted(pairs, key=lambda pair: (pair.service, pair.image)))
+        result = self.runner.capture(
+            self._compose_args(file, "config", "--format", "json"),
+            cwd=directory,
+            check=True,
+        )
+        return _service_image_pairs_from_config_json(result.stdout)
 
     def try_service_image_pairs(
         self,
@@ -93,7 +91,7 @@ class ComposeCli:
     ) -> tuple[ServiceImage, ...]:
         try:
             return self.service_image_pairs(directory, file)
-        except CommandError:
+        except (CommandError, ValueError):
             return ()
 
     def discover_stacks(self, docker_base: str | Path) -> tuple[ComposeStack, ...]:
@@ -166,6 +164,8 @@ class ComposeCli:
         wait_timeout: int | None = None,
     ) -> CommandResult:
         args = ["up", "-d", "--remove-orphans"]
+        if services:
+            args.append("--no-deps")
         if wait:
             args.append("--wait")
             if wait_timeout is not None:
@@ -310,3 +310,21 @@ def _nonblank_lines(lines: Iterable[str]) -> list[str]:
 
 def _sorted_unique_nonblank(lines: Iterable[str]) -> list[str]:
     return sorted(set(_nonblank_lines(lines)))
+
+
+def _service_image_pairs_from_config_json(config_json: str) -> tuple[ServiceImage, ...]:
+    parsed = json.loads(config_json)
+    if not isinstance(parsed, dict):
+        raise ValueError("Compose config JSON is not an object.")
+    services = parsed.get("services")
+    if not isinstance(services, dict):
+        raise ValueError("Compose config JSON has no services object.")
+
+    pairs: set[ServiceImage] = set()
+    for service, config in services.items():
+        if not isinstance(service, str) or not isinstance(config, dict):
+            continue
+        image = config.get("image")
+        if isinstance(image, str) and image:
+            pairs.add(ServiceImage(service=service, image=image))
+    return tuple(sorted(pairs, key=lambda pair: (pair.service, pair.image)))

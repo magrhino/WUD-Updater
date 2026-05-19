@@ -84,6 +84,47 @@ compose_services_from_file(){
   printf '%s\n' "$output"
 }
 
+compose_config_json_from_file(){
+  local file="$1" output
+  [[ -f "$file" ]] || return 1
+  output="$(awk '
+    function esc(value) {
+      gsub(/\\/, "\\\\", value)
+      gsub(/"/, "\\\"", value)
+      return value
+    }
+    /^  [A-Za-z0-9_.-]+:/ {
+      svc = $1
+      sub(/:$/, "", svc)
+      next
+    }
+    /^[[:space:]]+image:[[:space:]]*/ {
+      value = $0
+      sub(/^[[:space:]]*image:[[:space:]]*/, "", value)
+      sub(/[[:space:]]+#.*/, "", value)
+      sub(/^[[:space:]]+/, "", value)
+      sub(/[[:space:]]+$/, "", value)
+      quote = substr(value, 1, 1)
+      if ((quote == "\"" || quote == "\047") && substr(value, length(value), 1) == quote) {
+        value = substr(value, 2, length(value) - 2)
+      }
+      if (svc != "" && value != "") {
+        if (found) {
+          printf ","
+        }
+        printf "\"%s\":{\"image\":\"%s\"}", esc(svc), esc(value)
+        found = 1
+      }
+    }
+    END {
+      if (!found) {
+        exit 1
+      }
+    }
+  ' "$file")" || return 1
+  printf '{"services":{%s}}\n' "$output"
+}
+
 service_images(){
   local id="$1" service="${2:-}" file="${3:-}"
   if [[ -n "$file" ]] && compose_service_images_from_file "$file" "$service"; then
@@ -186,6 +227,13 @@ compose_cmd(){
   case "$cmd" in
     config)
       case "${1:-}" in
+        --format)
+          if [[ "${2:-}" == "json" ]]; then
+            compose_config_json_from_file "$file"
+          else
+            return 1
+          fi
+          ;;
         --images)
           if [[ -n "${2:-}" ]]; then
             service_images "$id" "$2" "$file"
