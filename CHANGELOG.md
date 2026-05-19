@@ -4,6 +4,18 @@ All notable changes to WUD-Updater are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com) and versions follow
 [Semantic Versioning](https://semver.org).
 
+## [0.10.0](https://github.com/magrhino/WUD-Updater/compare/v0.9.2...v0.10.0) (2026-05-19)
+
+
+### Features
+
+* **updater:** allow service label to force stack recreation ([601f4bc](https://github.com/magrhino/WUD-Updater/commit/601f4bcaf3acc1a76bbf41cdc57c19ae0cf59514))
+
+
+### Bug Fixes
+
+* **updater:** map compose services from structured config ([1b74d5a](https://github.com/magrhino/WUD-Updater/commit/1b74d5a76630e74842a37f9fee0fd58e2dd2bb82))
+
 ## [0.9.2](https://github.com/magrhino/WUD-Updater/compare/v0.9.1...v0.9.2) (2026-05-19)
 
 
