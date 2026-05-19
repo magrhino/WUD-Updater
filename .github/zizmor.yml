@@ -1,7 +1,7 @@
 rules:
   dangerous-triggers:
     ignore:
-      - release-please.yml:7
+      - release-please.yml:3
   unpinned-uses:
     config:
       policies:

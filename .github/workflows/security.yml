@@ -23,7 +23,11 @@ jobs:
     name: dependency review
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    if: ${{ github.event_name == 'pull_request' }}
+    if: >-
+      ${{
+        github.event_name == 'pull_request' &&
+        github.event.repository.private == false
+      }}
     permissions:
       contents: read
 
@@ -43,6 +47,7 @@ jobs:
     name: codeql
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    if: ${{ github.event.repository.private == false }}
     permissions:
       contents: read
       security-events: write
@@ -90,7 +95,11 @@ jobs:
     name: scorecard
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    if: ${{ github.event_name != 'pull_request' }}
+    if: >-
+      ${{
+        github.event_name != 'pull_request' &&
+        github.event.repository.private == false
+      }}
     permissions:
       checks: read
       contents: read
