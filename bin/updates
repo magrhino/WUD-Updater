@@ -22,13 +22,30 @@ if [ -r "$config_file" ]; then
   . "$config_file"
 fi
 
+python_has_runtime_deps() {
+  "$1" - >/dev/null 2>&1 <<'PY'
+import sys
+if sys.version_info < (3, 10):
+    raise SystemExit(1)
+import rich
+import ruamel.yaml
+PY
+}
+
 if [[ "${WUD_UPDATER_PYTHON:-}" == "1" ]]; then
+  python_bin="${PYTHON_BIN:-python3}"
+  venv_dir="${WUD_UPDATER_VENV:-$repo_dir/.venv}"
+  if [[ -z "${PYTHON_BIN:-}" && -x "$venv_dir/bin/python" ]]; then
+    if ! python_has_runtime_deps "$python_bin"; then
+      python_bin="$venv_dir/bin/python"
+    fi
+  fi
   if [[ -n "${PYTHONPATH:-}" ]]; then
     export PYTHONPATH="${repo_dir}/src:${PYTHONPATH}"
   else
     export PYTHONPATH="${repo_dir}/src"
   fi
-  exec "${PYTHON_BIN:-python3}" -m wud_updater.cli updates "$@"
+  exec "$python_bin" -m wud_updater.cli updates "$@"
 fi
 
 docker_base="${DOCKER_BASE:-$HOME/docker}"

@@ -212,6 +212,13 @@ The installer creates symlinks for `updates` and `docker-update-from-wud`, makes
 scripts executable, and links the `wud/` directory for the WUD container. It
 refuses to replace existing non-symlink targets.
 
+The installer also checks the host Python runtime used by the command wrappers.
+If required Python packages are missing from host Python and from the repo-local
+`.venv`, it creates `.venv` and installs the package there. The wrappers use
+that venv automatically when `PYTHON_BIN` is unset and host `python3` is missing
+runtime dependencies. Set `PYTHON_BIN` when you want the wrappers to use a
+specific interpreter instead.
+
 Mount the installed WUD scripts and output directory into the WUD container:
 
 ```yaml
@@ -279,7 +286,8 @@ Core updater and wrapper values:
 | `WUD_UPDATER_CONFIG` | `$HOME/.config/wud-updater/env` | Host config file read by `updates`. |
 | `WUD_UPDATER_PYTHON` | unset | Set to `1` to run the Python `updates` wrapper from `bin/updates`. |
 | `WUD_UPDATER_USE_SUDO` | enabled | For `WUD_UPDATER_PYTHON=1`, set to `0` to disable sudo file fallbacks and run `WUD_UPDATER` directly. |
-| `PYTHON_BIN` | `python3` | Python interpreter used by Python entrypoint wrappers. |
+| `PYTHON_BIN` | `python3`, with repo `.venv` fallback when unset | Python interpreter used by Python entrypoint wrappers. Set this to bypass automatic `.venv` fallback. |
+| `WUD_UPDATER_VENV` | Repo-local `.venv` | Optional installer and wrapper venv path for host runtime dependencies. |
 
 Container and installer values:
 
