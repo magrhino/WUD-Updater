@@ -4,6 +4,13 @@ All notable changes to WUD-Updater are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com) and versions follow
 [Semantic Versioning](https://semver.org).
 
+## [0.8.0](https://github.com/magrhino/WUD-Updater/compare/v0.7.0...v0.8.0) (2026-05-19)
+
+
+### Features
+
+* **cli:** add rich terminal improvements ([#26](https://github.com/magrhino/WUD-Updater/issues/26)) ([d46170f](https://github.com/magrhino/WUD-Updater/commit/d46170ff7892337b63b9f34f8d338de219ec26f8))
+
 ## [0.7.0](https://github.com/magrhino/WUD-Updater/compare/v0.6.0...v0.7.0) (2026-05-19)
 
 
