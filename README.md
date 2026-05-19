@@ -50,6 +50,12 @@ Install local commands and host-managed WUD script mounts:
 ./install.sh
 ```
 
+The installer checks the host Python runtime used by the command wrappers. If
+required Python packages are missing from host Python and from the repo-local
+`.venv`, it creates `.venv` and installs the package there. The wrappers use
+that venv automatically when `PYTHON_BIN` is unset and host `python3` is missing
+runtime dependencies.
+
 Make sure the install bin directory is on your `PATH`, configure WUD to call
 `/wud/on-update.sh`, then review or apply pending updates:
 

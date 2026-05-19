@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import unittest
 from io import StringIO
+from unittest import mock
 
 from wud_updater.terminal import RICH_AVAILABLE, TerminalRenderer
 
@@ -66,6 +67,25 @@ class TerminalRendererTests(unittest.TestCase):
         self.assertIn("WARN", text)
         self.assertIn("[app] stopping affected service", text)
         self.assertIn("\x1b[", text)
+
+    @unittest.skipUnless(RICH_AVAILABLE, "Rich is not installed")
+    def test_forced_rich_prompt_choice_uses_supplied_choices(self) -> None:
+        output = StringIO()
+        renderer = TerminalRenderer(stream=output, force_rich=True, width=80)
+
+        with mock.patch("builtins.input", return_value="c") as input_mock:
+            choice = renderer.prompt_choice(
+                "Apply selected tag update entries?",
+                "[y] yes   [n] no   [c] change",
+            )
+
+        self.assertEqual(choice, "c")
+        input_mock.assert_called_once_with("Choice: ")
+        text = output.getvalue()
+        self.assertIn("Apply selected tag update entries?", text)
+        self.assertIn("[y] yes", text)
+        self.assertIn("[c] change", text)
+        self.assertNotIn("[a] all", text)
 
 
 if __name__ == "__main__":

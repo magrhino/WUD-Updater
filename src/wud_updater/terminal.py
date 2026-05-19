@@ -163,7 +163,10 @@ class TerminalRenderer:
 
         console = self._console(self.stream)
         console.print(question, style="bold cyan")
-        console.print("  [a] all   [s] select   [x] exclude   [n] skip", style="blue")
+        if Text is not None:
+            console.print(Text(f"  {choices}", style="blue"))
+        else:
+            console.print(f"  {choices}", style="blue", markup=False)
         try:
             return input("Choice: ")
         except EOFError:

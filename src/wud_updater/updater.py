@@ -15,6 +15,10 @@ from datetime import datetime
 from pathlib import Path
 from typing import TextIO
 
+from ruamel.yaml import YAML
+from ruamel.yaml.comments import CommentedMap
+from ruamel.yaml.error import YAMLError
+
 from .command import CommandError, CommandResult, CommandRunner
 from .compose import ComposeCli, ComposeDiscoveryError, ComposeStack, ServiceImage
 from .config import DEFAULT_MAX_WAIT, DEFAULT_UPDATE_MODE
@@ -41,9 +45,6 @@ from .wud_file import (
 CONTAINER_SUMMARY_FORMAT = "{{.Name}}|{{.State.Status}}|{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}|{{.RestartCount}}|{{.State.ExitCode}}"
 HEALTH_LOG_FORMAT = "{{if .State.Health}}{{range .State.Health.Log}}{{println .Output}}{{end}}{{end}}"
 VALID_MODES = frozenset({"pause", "stop", "live"})
-_IMAGE_LINE_RE = re.compile(
-    r"^([ \t]*image:[ \t]*)([\"']?)([^\"'\s#]+)\2([ \t]*(?:#.*)?)$"
-)
 _SAFE_COMPONENT_RE = re.compile(r"[^A-Za-z0-9._-]")
 _CONTROL_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
 _EXCLUSIVE_CREATE_ATTEMPTS = 100
@@ -51,6 +52,10 @@ _EXCLUSIVE_CREATE_ATTEMPTS = 100
 
 class UpdaterError(RuntimeError):
     """Raised for a user-facing updater failure."""
+
+
+class ComposeTagRewriteError(RuntimeError):
+    """Raised when a Compose tag rewrite cannot be proven safe."""
 
 
 @dataclass(frozen=True)
@@ -92,6 +97,7 @@ class TagUpdate:
     old_image: str
     desired_tag: str
     new_image: str
+    services: tuple[str, ...]
 
 
 @dataclass(frozen=True)
@@ -238,6 +244,8 @@ class UpdateFromWudRunner:
 
             self._print_plan(matches)
 
+            if not self._validate_tag_update_plan(matches):
+                return 1
             if not self._validate_tag_manifests(matches):
                 return 1
 
@@ -459,6 +467,18 @@ class UpdateFromWudRunner:
                 return StackStatus("failure", "compose-backup-failed")
             try:
                 applied_tags = apply_compose_tag_updates(compose_path, tag_updates)
+            except ComposeTagRewriteError as exc:
+                self.log.error(
+                    f"[{stack.name}] Could not safely rewrite compose image tag(s): {exc}"
+                )
+                self._record_failure(
+                    stack,
+                    matches,
+                    phase="compose-tag-rewrite",
+                    reason="compose-tag-rewrite-failed",
+                    note=str(exc),
+                )
+                return StackStatus("failure", "compose-tag-rewrite-failed")
             except OSError as exc:
                 self.log.error(
                     f"[{stack.name}] Could not rewrite compose image tag(s): {exc}"
@@ -497,6 +517,20 @@ class UpdateFromWudRunner:
                     compose_backup,
                     "compose-refresh-failed",
                     phase="compose-refresh",
+                )
+            if not self._validate_applied_tag_updates(
+                stack,
+                applied_tags,
+                refreshed.service_images,
+            ):
+                return self._handle_tag_update_failure(
+                    stack,
+                    matches,
+                    services,
+                    applied_tags,
+                    compose_backup,
+                    "compose-tag-validation-failed",
+                    phase="compose-tag-validation",
                 )
             current_stack = refreshed
             images = tuple(current_stack.images)
@@ -938,6 +972,72 @@ class UpdateFromWudRunner:
                 )
         return ok
 
+    def _validate_tag_update_plan(self, matches: Sequence[Match]) -> bool:
+        ok = True
+        desired_by_service: dict[tuple[int, str, str], set[str]] = {}
+        for match in matches:
+            if not match.target.desired_tag:
+                continue
+            if not match.service:
+                ok = False
+                self.log.error(
+                    f"[{match.stack.name}] Tag update for {match.compose_image} "
+                    "cannot be safely rewritten because the compose service image "
+                    "could not be mapped."
+                )
+                continue
+            key = (match.stack.index, match.service, match.compose_image)
+            desired_by_service.setdefault(key, set()).add(match.target.desired_tag)
+
+        for stack_index, service, image in sorted(desired_by_service):
+            desired = desired_by_service[(stack_index, service, image)]
+            if len(desired) <= 1:
+                continue
+            ok = False
+            stack_name = next(
+                (
+                    match.stack.name
+                    for match in matches
+                    if match.stack.index == stack_index
+                ),
+                str(stack_index),
+            )
+            self.log.error(
+                f"[{stack_name}] Conflicting tag updates for service {service} "
+                f"image {image}: {', '.join(sorted(desired))}"
+            )
+        return ok
+
+    def _validate_applied_tag_updates(
+        self,
+        stack: ComposeStack,
+        applied_tags: Sequence[AppliedTagUpdate],
+        service_images: Sequence[ServiceImage],
+    ) -> bool:
+        ok = True
+        image_by_service = {
+            (item.service, item.image)
+            for item in service_images
+        }
+        for applied in applied_tags:
+            expected_replacements = len(applied.services)
+            if applied.replacements != expected_replacements:
+                ok = False
+                self.log.error(
+                    f"[{stack.name}] Compose tag rewrite touched "
+                    f"{applied.replacements} image line(s) for {applied.old_image}, "
+                    f"expected {expected_replacements}."
+                )
+            for service in applied.services:
+                if (service, applied.new_image) in image_by_service:
+                    continue
+                ok = False
+                self.log.error(
+                    f"[{stack.name}] Compose service {service} did not resolve "
+                    f"to rewritten image {applied.new_image} after tag rewrite."
+                )
+        return ok
+
     def _verify_expected_digests(
         self,
         stack: ComposeStack,
@@ -979,12 +1079,25 @@ class UpdateFromWudRunner:
         return ok
 
     def _tag_updates(self, matches: Sequence[Match]) -> tuple[TagUpdate, ...]:
-        updates: set[tuple[str, str, str]] = set()
+        services_by_update: dict[tuple[str, str, str], set[str]] = {}
         for match in matches:
             if match.target.desired_tag:
                 new_image = image_with_tag(match.compose_image, match.target.desired_tag)
-                updates.add((match.compose_image, match.target.desired_tag, new_image))
-        return tuple(TagUpdate(*item) for item in sorted(updates))
+                key = (match.compose_image, match.target.desired_tag, new_image)
+                services_by_update.setdefault(key, set())
+                if match.service:
+                    services_by_update[key].add(match.service)
+        return tuple(
+            TagUpdate(
+                old_image=old_image,
+                desired_tag=desired_tag,
+                new_image=new_image,
+                services=tuple(sorted(services)),
+            )
+            for (old_image, desired_tag, new_image), services in sorted(
+                services_by_update.items()
+            )
+        )
 
     def _refresh_stack_images(self, stack: ComposeStack) -> ComposeStack | None:
         try:
@@ -1357,30 +1470,66 @@ def apply_compose_tag_updates(
     compose_path: Path,
     updates: Sequence[TagUpdate],
 ) -> tuple[AppliedTagUpdate, ...]:
-    new_for = {update.old_image: update for update in updates}
-    counts = {update.old_image: 0 for update in updates}
-    original = compose_path.read_text(encoding="utf-8").splitlines(keepends=True)
-    rendered: list[str] = []
-    for line in original:
-        newline = "\n" if line.endswith("\n") else ""
-        body = line[:-1] if newline else line
-        match = _IMAGE_LINE_RE.fullmatch(body)
-        if match is not None and match.group(3) in new_for:
-            update = new_for[match.group(3)]
-            rendered.append(
-                f"{match.group(1)}{match.group(2)}{update.new_image}"
-                f"{match.group(2)}{match.group(4)}{newline}"
+    if not updates:
+        return ()
+
+    source = compose_path.read_text(encoding="utf-8")
+    yaml = YAML(typ="rt")
+    yaml.preserve_quotes = True
+    try:
+        parsed = yaml.load(source)
+    except YAMLError as exc:
+        raise ComposeTagRewriteError(
+            f"Compose file YAML could not be parsed: {exc}"
+        ) from exc
+    if not isinstance(parsed, CommentedMap):
+        raise ComposeTagRewriteError("Compose file is not a YAML mapping.")
+    services = parsed.get("services")
+    if not isinstance(services, CommentedMap):
+        raise ComposeTagRewriteError("Compose file has no services mapping.")
+
+    line_offsets = _line_start_offsets(source)
+    spans: list[tuple[int, int, str, TagUpdate]] = []
+    counts = {id(update): 0 for update in updates}
+    seen_spans: set[tuple[int, int]] = set()
+
+    for update in updates:
+        if not update.services:
+            raise ComposeTagRewriteError(
+                f"No compose service was mapped for {update.old_image}."
             )
-            counts[update.old_image] += 1
-        else:
-            rendered.append(line)
+        for service in update.services:
+            span = _service_image_scalar_span(
+                services,
+                service,
+                update.old_image,
+                source,
+                line_offsets,
+            )
+            if span in seen_spans:
+                raise ComposeTagRewriteError(
+                    f"Service {service} image for {update.old_image} was "
+                    "selected more than once."
+                )
+            seen_spans.add(span)
+            spans.append((*span, update.new_image, update))
+            counts[id(update)] += 1
+
+    rendered = source
+    for start, end, replacement, _update in sorted(
+        spans,
+        key=lambda item: item[0],
+        reverse=True,
+    ):
+        rendered = f"{rendered[:start]}{replacement}{rendered[end:]}"
 
     applied = tuple(
         AppliedTagUpdate(
             old_image=update.old_image,
             desired_tag=update.desired_tag,
             new_image=update.new_image,
-            replacements=counts[update.old_image],
+            services=update.services,
+            replacements=counts[id(update)],
         )
         for update in updates
     )
@@ -1394,7 +1543,7 @@ def apply_compose_tag_updates(
     tmp_path: Path | None = Path(tmp_name)
     try:
         with os.fdopen(fd, "w", encoding="utf-8", newline="") as tmp:
-            tmp.write("".join(rendered))
+            tmp.write(rendered)
         st = compose_path.stat()
         os.chown(tmp_path, st.st_uid, st.st_gid)
         os.chmod(tmp_path, st.st_mode & 0o7777)
@@ -1408,6 +1557,76 @@ def apply_compose_tag_updates(
                 pass
 
     return applied
+
+
+def _line_start_offsets(source: str) -> list[int]:
+    offsets = [0]
+    for match in re.finditer("\n", source):
+        offsets.append(match.end())
+    return offsets
+
+
+def _service_image_scalar_span(
+    services: CommentedMap,
+    service: str,
+    old_image: str,
+    source: str,
+    line_offsets: Sequence[int],
+) -> tuple[int, int]:
+    service_config = services.get(service)
+    if not isinstance(service_config, CommentedMap):
+        raise ComposeTagRewriteError(
+            f"Service {service} is not a mapping with a direct image field."
+        )
+    image_value = service_config.get("image")
+    if not isinstance(image_value, str):
+        raise ComposeTagRewriteError(
+            f"Service {service} image is not a direct string scalar."
+        )
+    if "$" in image_value:
+        raise ComposeTagRewriteError(
+            f"Service {service} image uses interpolation and needs manual review."
+        )
+    if image_value != old_image:
+        raise ComposeTagRewriteError(
+            f"Service {service} image is {image_value}, expected {old_image}."
+        )
+
+    try:
+        line_no, _col = service_config.lc.value("image")
+    except (AttributeError, KeyError, TypeError, ValueError) as exc:
+        raise ComposeTagRewriteError(
+            f"Service {service} image source location is unavailable."
+        ) from exc
+
+    if line_no < 0 or line_no >= len(line_offsets):
+        raise ComposeTagRewriteError(
+            f"Service {service} image source location is invalid."
+        )
+
+    line_start = line_offsets[line_no]
+    line_end = source.find("\n", line_start)
+    if line_end == -1:
+        line_end = len(source)
+    line = source[line_start:line_end]
+    body = line[:-1] if line.endswith("\r") else line
+    pattern = re.compile(
+        r"^([ \t]*(?:[\"']image[\"']|image)[ \t]*:[ \t]*)"
+        r"([\"']?)"
+        + re.escape(old_image)
+        + r"\2"
+        r"([ \t]*(?:#.*)?)$"
+    )
+    match = pattern.fullmatch(body)
+    if match is None:
+        raise ComposeTagRewriteError(
+            f"Service {service} image uses unsupported YAML syntax for automatic "
+            "rewrite."
+        )
+
+    start = line_start + len(match.group(1)) + len(match.group(2))
+    end = start + len(old_image)
+    return start, end
 
 
 def _backup_compose(compose_path: Path) -> Path:

@@ -11,7 +11,9 @@ run(){
 
 python_bin="${PYTHON_BIN:-}"
 if [ -z "$python_bin" ]; then
-  if command -v python3.14 >/dev/null 2>&1; then
+  if [ -x "$REPO_ROOT/.venv/bin/python" ]; then
+    python_bin="$REPO_ROOT/.venv/bin/python"
+  elif command -v python3.14 >/dev/null 2>&1; then
     python_bin="python3.14"
   elif command -v python3.13 >/dev/null 2>&1; then
     python_bin="python3.13"

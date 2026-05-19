@@ -478,11 +478,33 @@ class UpdatesRunner:
                 f"{image_with_tag(entry.first, desired_tag)}"
             )
 
+        change_tags = False
         if not self.allow_tag_updates:
-            reply = _prompt("Apply selected tag update entries? (y/N) ")
-            if reply not in ("y", "Y", "yes", "YES", "Yes"):
-                return
-            self.allow_tag_updates = True
+            while True:
+                if self.renderer.rich_enabled():
+                    reply = self.renderer.prompt_choice(
+                        "Apply selected tag update entries?",
+                        "[y] yes   [n] no   [c] change",
+                    )
+                else:
+                    reply = _prompt(
+                        "Apply selected tag update entries? "
+                        "[y]es/[n]o/[c]hange (default n): "
+                    )
+                choice = reply.strip().casefold()
+                if choice in {"y", "yes"}:
+                    self.allow_tag_updates = True
+                    break
+                if choice in {"", "n", "no"}:
+                    return
+                if choice in {"c", "change"}:
+                    self.allow_tag_updates = True
+                    change_tags = True
+                    break
+                print("Invalid choice. Enter y, n, or c.")
+
+        if not change_tags:
+            return
 
         for display, entry in tag_entries:
             current_tag = entry.desired_tag
