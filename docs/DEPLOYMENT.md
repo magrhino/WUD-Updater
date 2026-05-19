@@ -54,7 +54,10 @@ docker run --rm \
 - Docker with the Compose plugin on the host.
 - Standard shell tools used by wrapper and callback scripts: `awk`, `sort`,
   `sed`, `perl`, `find`, `grep`, `cut`, `column`, and `mktemp`.
-- `jq` and `midclt` are optional for TrueNAS status checks in `updates`.
+- `jq` and `midclt` are optional for the default Bash `updates` wrapper's
+  local TrueNAS status checks.
+- Containerized TrueNAS status checks require Docker access and a helper image
+  built with a compatible TrueNAS API client.
 - `curl` and `jq` are required for release-note helper scripts.
 
 ## Docker Compose
@@ -110,15 +113,18 @@ For containerized TrueNAS status checks, use
 That variant builds the helper image with the official TrueNAS API client so a
 short-lived sibling container can run local `midclt` calls. Set
 `TRUENAS_API_CLIENT_REF` to an API client tag that is compatible with your
-TrueNAS release, then set `TRUENAS_STATUS_CHECK=1` to opt in.
+TrueNAS release. The example sets `WUD_UPDATER_PYTHON=1`,
+`WUD_UPDATER_USE_SUDO=0`, and `TRUENAS_STATUS_CHECK=1`; the TrueNAS helper is
+only wired into the Python/container `updates` wrapper.
 
 When enabled, the Python `updates` wrapper uses Docker to inspect its own
 container, starts the same image with `--network none`, mounts only
 `/var/run/middleware` through Docker `--mount` so a missing host path fails,
-reads minimized status JSON from the helper's stdout, and exits. If the helper
-prints `TrueNAS not reachable`, check that Docker can start sibling containers,
-the client tag matches the TrueNAS release, and the TrueNAS middleware socket
-exists at `/var/run/middleware` on the Docker host.
+calls `midclt call update.status` and `midclt call alert.list` inside the
+helper, reads minimized status JSON from the helper's stdout, and exits. If the
+wrapper prints `TrueNAS not reachable`, check that Docker can start sibling
+containers, the client tag matches the TrueNAS release, and the TrueNAS
+middleware socket exists at `/var/run/middleware` on the Docker host.
 
 For local image development and smoke tests, use
 [`docs/examples/docker-compose.build.yml`](examples/docker-compose.build.yml).
@@ -279,7 +285,7 @@ TrueNAS status helper values for the Python `updates` wrapper:
 | Variable | Default | Purpose |
 |---|---|---|
 | `TRUENAS_STATUS_CHECK` | unset | For the Python/container `updates` wrapper, set to `1` to run the short-lived local `midclt` status helper. |
-| `TRUENAS_STATUS_TIMEOUT` | `5` | Seconds to wait for each TrueNAS status or alert API call before skipping it. |
+| `TRUENAS_STATUS_TIMEOUT` | `5` | Seconds to wait for each helper `midclt` call before skipping it. The parent wrapper derives a longer Docker helper timeout from this value. |
 
 Release-note notification values for the WUD container:
 

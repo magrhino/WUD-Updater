@@ -38,7 +38,9 @@ WUD or WUD-Updater, start from
 For containerized TrueNAS status checks, start from
 `docs/examples/docker-compose.truenas.yml`. It builds a version-matched
 TrueNAS client and uses an opt-in short-lived helper container for local status
-checks without storing a TrueNAS API key.
+checks without storing a TrueNAS API key. That example enables the Python
+`updates` wrapper because the container helper is only used when
+`TRUENAS_STATUS_CHECK=1` is set there.
 
 ### Host Install
 

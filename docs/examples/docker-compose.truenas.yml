@@ -22,6 +22,7 @@ services:
       WUD_LOG_DIR: /logs
       WUD_SYNC_SCRIPTS: "1"
       WUD_SCRIPTS_DIR: /managed-wud
+      # TrueNAS helper support is implemented in the Python/container wrapper.
       WUD_UPDATER_PYTHON: "1"
       WUD_UPDATER_USE_SUDO: "0"
       OUT_UID: "1000"
