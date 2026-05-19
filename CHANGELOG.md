@@ -4,6 +4,23 @@ All notable changes to WUD-Updater are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com) and versions follow
 [Semantic Versioning](https://semver.org).
 
+## [0.7.0](https://github.com/magrhino/WUD-Updater/compare/v0.6.0...v0.7.0) (2026-05-19)
+
+
+### Features
+
+* **ci:** Add CodeQL analysis workflow configuration ([093ae59](https://github.com/magrhino/WUD-Updater/commit/093ae5991a8991134d057922e427a58b1d96429b))
+
+
+### Bug Fixes
+
+* **updater:** write default error reports for failed updates ([58c2696](https://github.com/magrhino/WUD-Updater/commit/58c2696b167c1ed547d677bd5ed703e34db7f19d))
+
+
+### Documentation
+
+* **truenas:** clarify status helper behavior ([3ad3c6f](https://github.com/magrhino/WUD-Updater/commit/3ad3c6f12abdcb9d664a33cef564b0427b72885a))
+
 ## [0.6.0](https://github.com/magrhino/WUD-Updater/compare/v0.5.0...v0.6.0) (2026-05-19)
 
 
