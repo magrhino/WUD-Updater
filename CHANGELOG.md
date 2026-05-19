@@ -4,6 +4,13 @@ All notable changes to WUD-Updater are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com) and versions follow
 [Semantic Versioning](https://semver.org).
 
+## [0.9.2](https://github.com/magrhino/WUD-Updater/compare/v0.9.1...v0.9.2) (2026-05-19)
+
+
+### Bug Fixes
+
+* **ui:** omit empty rich panel style ([27a8fb2](https://github.com/magrhino/WUD-Updater/commit/27a8fb2be73389c5b4f8ab7adec907de88cd8bd3))
+
 ## [0.9.1](https://github.com/magrhino/WUD-Updater/compare/v0.9.0...v0.9.1) (2026-05-19)
 
 
