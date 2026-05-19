@@ -4,6 +4,13 @@ All notable changes to WUD-Updater are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com) and versions follow
 [Semantic Versioning](https://semver.org).
 
+## [0.6.0](https://github.com/magrhino/WUD-Updater/compare/v0.5.0...v0.6.0) (2026-05-19)
+
+
+### Features
+
+* **truenas:** Switch TrueNAS status checks to a local helper container ([#23](https://github.com/magrhino/WUD-Updater/issues/23)) ([b780b18](https://github.com/magrhino/WUD-Updater/commit/b780b1866386bbd36c812c471c5e6ca7fb70b780))
+
 ## [0.5.0](https://github.com/magrhino/WUD-Updater/compare/v0.4.3...v0.5.0) (2026-05-18)
 
 
