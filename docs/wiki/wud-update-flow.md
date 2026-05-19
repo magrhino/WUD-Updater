@@ -42,6 +42,11 @@ Overrides require `--allow-tag-updates` and do not rewrite the todo file. Before
 rewriting Compose files, the updater validates each final tag with
 `docker manifest inspect`.
 
+Compose tag rewrites only update direct `services.<name>.image` scalar values.
+Interpolated image values such as `repo/app:${TAG}`, inherited image values, and
+ambiguous Compose source layouts fail closed and leave the WUD entry pending for
+manual review.
+
 Older lines with a trailing `sha256=...` token are preserved as raw file lines
 when cleanup rewrites the todo file. The display wrappers hide that suffix when
 showing pending entries.

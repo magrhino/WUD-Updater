@@ -12,8 +12,16 @@ from pathlib import Path
 from unittest import mock
 
 from wud_updater.command import CommandRunner
+from wud_updater.compose import ComposeStack, ServiceImage
 from wud_updater.file_ops import OwnerConfig
-from wud_updater.updater import UpdaterOptions, UpdateFromWudRunner, prepare_log_file
+from wud_updater.updater import (
+    ComposeTagRewriteError,
+    TagUpdate,
+    UpdaterOptions,
+    UpdateFromWudRunner,
+    apply_compose_tag_updates,
+    prepare_log_file,
+)
 
 
 class PythonUpdateFromWudTests(unittest.TestCase):
@@ -337,6 +345,223 @@ class PythonUpdateFromWudTests(unittest.TestCase):
         calls = self.calls()
         self.assertRegex(calls, r"compose -f docker-compose.yml pull app")
         self.assertRegex(calls, r"compose -f docker-compose.yml up -d .* app")
+
+    def test_surgical_tag_rewrite_preserves_unrelated_compose_content(self) -> None:
+        compose_file = self.root / "compose.yml"
+        original = (
+            "x-template:\n"
+            "  image: repo/app:1.0\n"
+            "services:\n"
+            "  app:\n"
+            "    image: \"repo/app:1.0\" # keep comment\n"
+            "    labels:\n"
+            "      image: repo/app:1.0\n"
+            "  db:\n"
+            "    image: repo/db:1.0\n"
+        )
+        compose_file.write_text(original, encoding="utf-8")
+
+        applied = apply_compose_tag_updates(
+            compose_file,
+            (
+                TagUpdate(
+                    old_image="repo/app:1.0",
+                    desired_tag="2.0",
+                    new_image="repo/app:2.0",
+                    services=("app",),
+                ),
+            ),
+        )
+
+        self.assertEqual(applied[0].replacements, 1)
+        self.assertEqual(
+            compose_file.read_text(encoding="utf-8"),
+            original.replace(
+                '    image: "repo/app:1.0" # keep comment',
+                '    image: "repo/app:2.0" # keep comment',
+            ),
+        )
+
+    def test_surgical_tag_rewrite_rejects_interpolated_image(self) -> None:
+        compose_file = self.root / "compose.yml"
+        original = "services:\n  app:\n    image: repo/app:${TAG}\n"
+        compose_file.write_text(original, encoding="utf-8")
+
+        with self.assertRaisesRegex(ComposeTagRewriteError, "interpolation"):
+            apply_compose_tag_updates(
+                compose_file,
+                (
+                    TagUpdate(
+                        old_image="repo/app:${TAG}",
+                        desired_tag="2.0",
+                        new_image="repo/app:2.0",
+                        services=("app",),
+                    ),
+                ),
+            )
+
+        self.assertEqual(compose_file.read_text(encoding="utf-8"), original)
+
+    def test_surgical_tag_rewrite_rejects_extension_only_image(self) -> None:
+        compose_file = self.root / "compose.yml"
+        original = (
+            "x-template:\n"
+            "  image: repo/app:1.0\n"
+            "services:\n"
+            "  app:\n"
+            "    labels:\n"
+            "      image: repo/app:1.0\n"
+        )
+        compose_file.write_text(original, encoding="utf-8")
+
+        with self.assertRaisesRegex(ComposeTagRewriteError, "direct string"):
+            apply_compose_tag_updates(
+                compose_file,
+                (
+                    TagUpdate(
+                        old_image="repo/app:1.0",
+                        desired_tag="2.0",
+                        new_image="repo/app:2.0",
+                        services=("app",),
+                    ),
+                ),
+            )
+
+        self.assertEqual(compose_file.read_text(encoding="utf-8"), original)
+
+    def test_surgical_tag_rewrite_rejects_invalid_yaml(self) -> None:
+        compose_file = self.root / "compose.yml"
+        original = "services:\n  app:\n    image: [repo/app:1.0\n"
+        compose_file.write_text(original, encoding="utf-8")
+
+        with self.assertRaisesRegex(ComposeTagRewriteError, "could not be parsed"):
+            apply_compose_tag_updates(
+                compose_file,
+                (
+                    TagUpdate(
+                        old_image="repo/app:1.0",
+                        desired_tag="2.0",
+                        new_image="repo/app:2.0",
+                        services=("app",),
+                    ),
+                ),
+            )
+
+        self.assertEqual(compose_file.read_text(encoding="utf-8"), original)
+
+    def test_conflicting_duplicate_tag_updates_fail_before_manifest(self) -> None:
+        self.wud_file.write_text(
+            "repo/app:1.0 tag=2.0\nrepo/app:1.0 tag=3.0\n",
+            encoding="utf-8",
+        )
+        stack_dir = self.make_stack("app", [("app", "repo/app:1.0", "cid-app")])
+        self.set_image_state("repo/app:1.0", "old", "sha256:old")
+
+        result = self.run_python("--yes", "--allow-tag-updates")
+
+        self.assertEqual(result.returncode, 1)
+        self.assertEqual(
+            self.wud_file.read_text(encoding="utf-8"),
+            "repo/app:1.0 tag=2.0\nrepo/app:1.0 tag=3.0\n",
+        )
+        self.assertIn("Conflicting tag updates", result.stderr)
+        self.assertIn(
+            "image: repo/app:1.0",
+            (stack_dir / "docker-compose.yml").read_text(encoding="utf-8"),
+        )
+        calls = self.calls()
+        self.assertNotIn("manifest inspect", calls)
+        self.assertNotRegex(calls, r"compose -f .* pull")
+
+    def test_tag_update_without_service_map_fails_before_manifest(self) -> None:
+        self.wud_file.write_text("repo/app:1.0 tag=2.0\n", encoding="utf-8")
+        stack_dir = self.make_stack("app", [("app", "repo/app:1.0", "cid-app")])
+        self.set_image_state("repo/app:1.0", "old", "sha256:old")
+        options = UpdaterOptions(
+            docker_base=self.base,
+            wud_file=self.wud_file,
+            log_dir=self.log_dir,
+            max_wait=0,
+            assume_yes=True,
+            allow_tag_updates=True,
+            no_color=True,
+        )
+        runner = UpdateFromWudRunner(
+            options,
+            environ=self.env,
+            command_runner=CommandRunner(env=self.env),
+        )
+        stdout = StringIO()
+        stderr = StringIO()
+
+        with (
+            mock.patch.object(runner.compose, "try_service_image_pairs", return_value=()),
+            redirect_stdout(stdout),
+            redirect_stderr(stderr),
+        ):
+            status = runner.run()
+
+        self.assertEqual(status, 1, stderr.getvalue() + stdout.getvalue())
+        self.assertEqual(
+            self.wud_file.read_text(encoding="utf-8"),
+            "repo/app:1.0 tag=2.0\n",
+        )
+        self.assertIn("could not be mapped", stderr.getvalue())
+        self.assertIn(
+            "image: repo/app:1.0",
+            (stack_dir / "docker-compose.yml").read_text(encoding="utf-8"),
+        )
+        calls = self.calls()
+        self.assertNotIn("manifest inspect", calls)
+        self.assertNotRegex(calls, r"compose -f .* pull")
+
+    def test_tag_update_validation_failure_rolls_back_before_pull(self) -> None:
+        self.wud_file.write_text("repo/app:1.0 tag=2.0\n", encoding="utf-8")
+        stack_dir = self.make_stack("app", [("app", "repo/app:1.0", "cid-app")])
+        self.set_image_state("repo/app:1.0", "old", "sha256:old")
+        options = UpdaterOptions(
+            docker_base=self.base,
+            wud_file=self.wud_file,
+            log_dir=self.log_dir,
+            max_wait=0,
+            assume_yes=True,
+            allow_tag_updates=True,
+            no_color=True,
+        )
+        runner = UpdateFromWudRunner(
+            options,
+            environ=self.env,
+            command_runner=CommandRunner(env=self.env),
+        )
+        refreshed = ComposeStack(
+            index=1,
+            directory=stack_dir,
+            file="docker-compose.yml",
+            name="app",
+            images=("repo/app:1.0",),
+            service_images=(ServiceImage(service="app", image="repo/app:1.0"),),
+        )
+        stdout = StringIO()
+        stderr = StringIO()
+
+        with (
+            mock.patch.object(runner, "_refresh_stack_images", return_value=refreshed),
+            redirect_stdout(stdout),
+            redirect_stderr(stderr),
+        ):
+            status = runner.run()
+
+        self.assertEqual(status, 1, stderr.getvalue() + stdout.getvalue())
+        self.assertEqual(
+            self.wud_file.read_text(encoding="utf-8"),
+            "repo/app:1.0 tag=2.0\n",
+        )
+        self.assertIn(
+            "image: repo/app:1.0",
+            (stack_dir / "docker-compose.yml").read_text(encoding="utf-8"),
+        )
+        self.assertIn("did not resolve to rewritten image", stderr.getvalue())
+        self.assertNotRegex(self.calls(), r"compose -f .* pull")
 
     def test_tag_override_requires_allow_tag_updates(self) -> None:
         self.wud_file.write_text("repo/app:1.0 tag=2.0\n", encoding="utf-8")

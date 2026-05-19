@@ -236,6 +236,9 @@ updates --yes --allow-tag-updates
 
 During interactive runs, `updates` prompts for selected tag updates and lets you
 apply them as shown, skip them, or change the tag before calling the updater.
+Automatic Compose tag rewrites only support direct service `image:` values; image
+values provided through interpolation or inherited YAML snippets are left pending
+for manual review.
 
 ## Environment Variables
 
