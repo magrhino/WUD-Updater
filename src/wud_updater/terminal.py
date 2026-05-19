@@ -184,13 +184,17 @@ class TerminalRenderer:
         if not self.rich_enabled(target) or Panel is None:
             print(str(body), file=target)
             return
+        panel_options = {
+            "title": f" {title} ",
+            "title_align": "left",
+            "border_style": "bold cyan",
+        }
+        if body_style is not None:
+            panel_options["style"] = body_style
         self._console(target).print(
             Panel(
                 body,
-                title=f" {title} ",
-                title_align="left",
-                border_style="bold cyan",
-                style=body_style,
+                **panel_options,
             )
         )
 

@@ -83,7 +83,7 @@ Use the shell already used by the target script.
 | TrueNAS API deployment compose config check | `docker compose -f docs/examples/docker-compose.truenas.yml config` |
 | local build compose config check | `docker compose -f docs/examples/docker-compose.build.yml config` |
 | container image build | `docker build -t wud-updater:local .` |
-| Python dev dependency install | `python3 -m venv .venv`, `. .venv/bin/activate`, then `python -m pip install -e '.[dev]'` |
+| Python dev dependency install | Check for `.venv/bin/python` first and activate it when present; otherwise run `python3 -m venv .venv`, `. .venv/bin/activate`, then `python -m pip install -e '.[dev]'` |
 | Python lint | `ruff check .` |
 | Python syntax check | `python3 -m py_compile src/wud_updater/*.py tests/run-python-tests.py tests/test_python_*.py` |
 | Python tests | `python3 tests/run-python-tests.py` |
@@ -102,6 +102,7 @@ Use the shell already used by the target script.
 - Container packaging change: run `bash -n entrypoint.sh`, ShellCheck through `tests/run-all.sh`, `tests/test-entrypoint.sh`, and `tests/container-build.sh` when Docker is available. The container build test validates Compose config, including the TrueNAS API example, builds the image, and smoke-runs the default non-mutating command.
 - Release-note behavior change: syntax-check the touched scripts, run ShellCheck, run `tests/test-github-release-embed.sh`, `tests/test-release-notes-to-discord.sh`, and `tests/test-tag-manager.sh` when Discord payload or release-note routing changes, and avoid live Discord/GitHub calls unless explicitly requested or needed.
 - Python updater/config change: run `ruff check .`, Python syntax check, `tests/run-python-tests.py`, and `tests/run-all.sh` when practical.
+- Rich terminal rendering change: create or update focused tests that exercise the Rich-enabled path for the touched surface, using mocks when local Rich is unavailable; run `python3 -m unittest tests.test_python_terminal` plus Python syntax checks before broader suites.
 - GitHub Actions workflow change: run `actionlint` when available; if not installed, inspect the touched workflow YAML and report that local actionlint was not available. For release workflow changes, also inspect tag, permission, and GHCR image-tag behavior.
 - Security workflow change: run `actionlint` when available, `git diff --check`, `tests/run-all.sh`, and the local `zizmor` command when installed; verify CodeQL, Dependency Review, and SARIF uploads in the first GitHub run after the repository is public or GHAS-backed scanning is enabled.
 - GitHub template change: validate issue-template YAML when practical, run `git diff --check`, and skip application tests unless executable examples or commands changed.
