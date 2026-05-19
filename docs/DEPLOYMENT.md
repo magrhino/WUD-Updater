@@ -224,11 +224,11 @@ updates --yes --allow-tag-updates
 ## Environment Variables
 
 `updates` reads optional host overrides from the environment or from
-`$HOME/.config/wud-updater/env`. Start from `template.env`:
+`$HOME/.config/wud-updater/env`. Start from the tracked template:
 
 ```bash
 mkdir -p "$HOME/.config/wud-updater"
-cp template.env "$HOME/.config/wud-updater/env"
+cp docs/examples/template.env "$HOME/.config/wud-updater/env"
 ```
 
 Common host values:
@@ -244,29 +244,63 @@ OUT_UID="1000"
 OUT_GID="1000"
 ```
 
+Core updater and wrapper values:
+
 | Variable | Default | Purpose |
 |---|---|---|
 | `DOCKER_BASE` | Host: `$HOME/docker`; container: `/host/docker` | Compose project search root. |
+| `DOCKER_HOST` | Docker CLI default | Optional Docker daemon endpoint, such as the hardened example's socket proxy. |
 | `WUD_OUT_FILE` | Host: `$DOCKER_BASE/wud/out/images.todo`; container: `/out/images.todo` | Shared pending-update file. |
 | `WUD_LOG_DIR` | Host: `./logs`; container: `/logs` | Updater log directory. Set to `$DOCKER_BASE/logs` to keep the previous layout. |
 | `WUD_UPDATE_MODE` | `stop` | Update mode for matched Compose services or stacks: `pause`, `stop`, or `live`. |
 | `WUD_MAX_WAIT` | `180` | Seconds to wait for health after recreation. |
 | `WUD_LOCK_TIMEOUT` | `30` | Seconds to wait for the shared todo-file lock. |
 | `OUT_UID` / `OUT_GID` | unset | Optional owner for rewritten todo files and updater logs. `OUT_GUID` is accepted as an alias for `OUT_GID`. |
-| `WUD_UPDATER` | `bin/docker-update-from-wud` | Updater command invoked by `updates`. |
+| `WUD_UPDATER` | Host: repo-local `bin/docker-update-from-wud`; image: `/app/bin/docker-update-from-wud` | Updater command invoked by `updates`. |
 | `WUD_UPDATER_CONFIG` | `$HOME/.config/wud-updater/env` | Host config file read by `updates`. |
 | `WUD_UPDATER_PYTHON` | unset | Set to `1` to run the Python `updates` wrapper from `bin/updates`. |
 | `WUD_UPDATER_USE_SUDO` | enabled | For `WUD_UPDATER_PYTHON=1`, set to `0` to disable sudo file fallbacks and run `WUD_UPDATER` directly. |
 | `PYTHON_BIN` | `python3` | Python interpreter used by Python entrypoint wrappers. |
+
+Container and installer values:
+
+| Variable | Default | Purpose |
+|---|---|---|
 | `WUD_SYNC_SCRIPTS` | unset | Set to `1` in the helper container to sync packaged WUD scripts before normal commands. |
 | `WUD_SCRIPTS_DIR` | `/managed-wud` | Managed script sync destination. |
 | `WUD_APP_DIR` | `/app` | Application root inside the helper container. |
+| `BIN_DIR` | `$HOME/bin` | Host installer destination for the `updates` and `docker-update-from-wud` symlinks. |
+| `WUD_SCRIPTS_LINK` | `$DOCKER_BASE/wud/scripts` | Host installer symlink target for the mounted `wud/` scripts. |
+| `WUD_OUT_DIR` | `$DOCKER_BASE/wud/out` | Host installer-created output directory that should be mounted at `/out`. |
+| `TRUENAS_API_CLIENT_REF` | TrueNAS example: `TS-26.0.0-BETA.1`; Dockerfile default: unset | Build arg used by the TrueNAS Compose example to install a compatible TrueNAS API client. |
+
+TrueNAS status helper values for the Python `updates` wrapper:
+
+| Variable | Default | Purpose |
+|---|---|---|
 | `TRUENAS_STATUS_CHECK` | unset | For the Python/container `updates` wrapper, set to `1` to run the short-lived local `midclt` status helper. |
 | `TRUENAS_STATUS_TIMEOUT` | `5` | Seconds to wait for each TrueNAS status or alert API call before skipping it. |
 
-For release-note notifications, provide webhook and GitHub token values through
-the WUD container environment or another host-local secret store. Do not put
-secrets in this repository.
+Release-note notification values for the WUD container:
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `DISCORD_RELEASES_WEBHOOK` | unset | Required by the default `/wud/release-notes-to-discord.sh` helper when rich release notes are enabled. |
+| `DISCORD_WEBHOOK` | unset | Webhook used by the optional `/wud/tag-manager.sh` router for normal release embeds. |
+| `ADMIN_WEBHOOK` | `DISCORD_WEBHOOK` | Optional webhook for tag-manager missing-mapping alerts. |
+| `GITHUB_TOKEN` | unset | Optional GitHub API token for higher release-note lookup rate limits. |
+| `MAX_COMMITS` | `3` | Maximum representative commits or pull requests included in release embeds. |
+| `COLOR_HEX` | `0x57F287` | Discord embed color used by `github-release-embed.sh`. |
+| `UPSTREAM_MAP` | `/wud/upstreams.txt` | LinuxServer.io image to upstream repository map used by `tag-manager.sh`. |
+| `RELEASE_EMBED` | `/wud/github-release-embed.sh` | Embed builder invoked by `tag-manager.sh`. |
+| `LOG_DIR` | `/out` | Directory for `tag-manager.YYYYMMDD.log`. |
+
+WUD supplies callback fields such as `update_available`, `image_name`,
+`image_tag_value`, `name`, `update_kind_kind`, `update_kind_remote_value`, and
+`result_tag`; these are runtime inputs to the mounted scripts, not deployment
+settings you normally set yourself. Provide webhook and GitHub token values
+through the WUD container environment or another host-local secret store. Do not
+put secrets in this repository.
 
 ## Security Notes
 
