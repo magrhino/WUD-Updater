@@ -4,6 +4,13 @@ All notable changes to WUD-Updater are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com) and versions follow
 [Semantic Versioning](https://semver.org).
 
+## [0.9.1](https://github.com/magrhino/WUD-Updater/compare/v0.9.0...v0.9.1) (2026-05-19)
+
+
+### Bug Fixes
+
+* **updates:** Fix tag update confirmation flow and harden compose tag rewrites ([#30](https://github.com/magrhino/WUD-Updater/issues/30)) ([e083d49](https://github.com/magrhino/WUD-Updater/commit/e083d4976ce53e6b4e31ba9ff4e2e9594c2433ba))
+
 ## [0.9.0](https://github.com/magrhino/WUD-Updater/compare/v0.8.0...v0.9.0) (2026-05-19)
 
 
