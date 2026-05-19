@@ -152,6 +152,14 @@ run_post_up_hook(){
   fi
 }
 
+emit_failure_output(){
+  local id="$1" phase="$2"
+  local stdout_file="$ROOT/stacks/$id/${phase}_stdout"
+  local stderr_file="$ROOT/stacks/$id/${phase}_stderr"
+  [[ -f "$stdout_file" ]] && cat "$stdout_file"
+  [[ -f "$stderr_file" ]] && cat "$stderr_file" >&2
+}
+
 compose_cmd(){
   local file="" id cmd
   while [[ $# -gt 0 ]]; do
@@ -197,17 +205,26 @@ compose_cmd(){
       esac
       ;;
     pull)
-      [[ -f "$ROOT/stacks/$id/pull_fail" ]] && return 17
+      if [[ -f "$ROOT/stacks/$id/pull_fail" ]]; then
+        emit_failure_output "$id" pull
+        return 17
+      fi
       apply_pull_state "$id" "$file" "$@"
       run_post_pull_hook "$id" "$@"
       return 0
       ;;
     stop)
-      [[ -f "$ROOT/stacks/$id/stop_fail" ]] && return 18
+      if [[ -f "$ROOT/stacks/$id/stop_fail" ]]; then
+        emit_failure_output "$id" stop
+        return 18
+      fi
       return 0
       ;;
     down)
-      [[ -f "$ROOT/stacks/$id/down_fail" ]] && return 18
+      if [[ -f "$ROOT/stacks/$id/down_fail" ]]; then
+        emit_failure_output "$id" down
+        return 18
+      fi
       return 0
       ;;
     up)
@@ -219,16 +236,25 @@ compose_cmd(){
         fi
         return 0
       fi
-      [[ -f "$ROOT/stacks/$id/up_fail" ]] && return 19
+      if [[ -f "$ROOT/stacks/$id/up_fail" ]]; then
+        emit_failure_output "$id" up
+        return 19
+      fi
       run_post_up_hook "$id" "$file" "$@"
       return 0
       ;;
     pause)
-      [[ -f "$ROOT/stacks/$id/pause_fail" ]] && return 20
+      if [[ -f "$ROOT/stacks/$id/pause_fail" ]]; then
+        emit_failure_output "$id" pause
+        return 20
+      fi
       return 0
       ;;
     unpause)
-      [[ -f "$ROOT/stacks/$id/unpause_fail" ]] && return 21
+      if [[ -f "$ROOT/stacks/$id/unpause_fail" ]]; then
+        emit_failure_output "$id" unpause
+        return 21
+      fi
       return 0
       ;;
     ps)

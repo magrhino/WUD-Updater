@@ -141,6 +141,11 @@ class PythonUpdateFromWudTests(unittest.TestCase):
     def calls(self) -> str:
         return (self.fake_root / "calls.log").read_text(encoding="utf-8")
 
+    def latest_error_report(self) -> Path:
+        reports = sorted(self.log_dir.glob("update-from-wud-v2-*.errors.log"))
+        self.assertTrue(reports, "expected updater error report")
+        return reports[-1]
+
     def test_wrapper_default_dry_run_plans_without_mutation(self) -> None:
         self.wud_file.write_text("repo/app:latest\n", encoding="utf-8")
         self.make_stack("app", [("app", "repo/app:latest", "cid-app")])
@@ -193,6 +198,69 @@ class PythonUpdateFromWudTests(unittest.TestCase):
             "repo/app@sha256:good\n",
         )
         self.assertNotRegex(self.calls(), r"compose -f .* up -d")
+
+    def test_up_wait_failure_writes_error_report_with_command_output(self) -> None:
+        self.env["FAKE_COMPOSE_UP_WAIT"] = "1"
+        self.wud_file.write_text("repo/app:latest\n", encoding="utf-8")
+        self.make_stack("app", [("app", "repo/app:latest", None)])
+        self.set_image_state("repo/app:latest", "old", "sha256:old")
+        self.set_image_after_pull("repo/app:latest", "new", "sha256:new")
+        stack_state = self.fake_root / "stacks" / "app"
+        (stack_state / "up_fail").write_text("", encoding="utf-8")
+        (stack_state / "up_stdout").write_text("compose stdout before failure\n", encoding="utf-8")
+        (stack_state / "up_stderr").write_text("network create failed\n", encoding="utf-8")
+
+        result = self.run_python("--yes")
+
+        self.assertEqual(result.returncode, 1, result.stderr + result.stdout)
+        self.assertIn("error report:", result.stderr)
+        self.assertEqual(self.wud_file.read_text(encoding="utf-8"), "repo/app:latest\n")
+        report = self.latest_error_report().read_text(encoding="utf-8")
+        self.assertIn("phase=up", report)
+        self.assertIn("reason=up-or-health-failed", report)
+        self.assertIn("wud_entries_restored=yes", report)
+        self.assertIn("exit_code=19", report)
+        self.assertIn("--wait --wait-timeout 0 app", report)
+        self.assertIn("compose stdout before failure", report)
+        self.assertIn("network create failed", report)
+        self.assertIn("health: docker compose ps -q returned no containers", report)
+
+    def test_pull_failure_writes_error_report(self) -> None:
+        self.wud_file.write_text("repo/app:latest\n", encoding="utf-8")
+        self.make_stack("app", [("app", "repo/app:latest", "cid-app")])
+        self.set_image_state("repo/app:latest", "old", "sha256:old")
+        stack_state = self.fake_root / "stacks" / "app"
+        (stack_state / "pull_fail").write_text("", encoding="utf-8")
+        (stack_state / "pull_stderr").write_text("manifest fetch failed\n", encoding="utf-8")
+
+        result = self.run_python("--yes")
+
+        self.assertEqual(result.returncode, 1, result.stderr + result.stdout)
+        report = self.latest_error_report().read_text(encoding="utf-8")
+        self.assertIn("phase=pull", report)
+        self.assertIn("reason=pull-failed", report)
+        self.assertIn("exit_code=17", report)
+        self.assertIn("manifest fetch failed", report)
+        self.assertIn("health: container=cid-app status=running health=healthy", report)
+
+    def test_stop_failure_reports_failed_phase_after_recovery(self) -> None:
+        self.wud_file.write_text("repo/app:latest\n", encoding="utf-8")
+        self.make_stack("app", [("app", "repo/app:latest", "cid-app")])
+        self.set_image_state("repo/app:latest", "old", "sha256:old")
+        self.set_image_after_pull("repo/app:latest", "new", "sha256:new")
+        stack_state = self.fake_root / "stacks" / "app"
+        (stack_state / "stop_fail").write_text("", encoding="utf-8")
+        (stack_state / "stop_stderr").write_text("container stop failed\n", encoding="utf-8")
+
+        result = self.run_python("--yes")
+
+        self.assertEqual(result.returncode, 1, result.stderr + result.stdout)
+        report = self.latest_error_report().read_text(encoding="utf-8")
+        self.assertIn("phase=stop", report)
+        self.assertIn("reason=down-failed", report)
+        self.assertIn("exit_code=18", report)
+        self.assertIn("container stop failed", report)
+        self.assertIn("Compose up recovery succeeded", report)
 
     def test_tag_update_requires_explicit_flag(self) -> None:
         self.wud_file.write_text("repo/app:1.0 tag=2.0\n", encoding="utf-8")

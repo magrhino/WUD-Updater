@@ -180,6 +180,10 @@ latest_log_file(){
   find "$LOG_DIR" -type f -name 'update-from-wud-v2-*.log' -print | sort | tail -n 1
 }
 
+latest_error_report_file(){
+  find "$LOG_DIR" -type f -name 'update-from-wud-v2-*.errors.log' -print | sort | tail -n 1
+}
+
 test_help_exits_successfully(){
   setup_case
 
@@ -644,6 +648,33 @@ test_empty_health_ps_fails(){
   teardown_case
 }
 
+test_up_failure_writes_error_report(){
+  setup_case
+  printf 'repo/app:latest\n' > "$WUD_FILE"
+  make_single_service_stack app "$BASE/app" docker-compose.yml repo/app:latest ""
+  : > "$FAKE_ROOT/stacks/app/cids.txt"
+  : > "$FAKE_ROOT/stacks/app/up_fail"
+  printf 'compose stderr failure\n' > "$FAKE_ROOT/stacks/app/up_stderr"
+  set_image_state repo/app:latest old sha256:old
+  set_image_after_pull repo/app:latest new sha256:new
+
+  run_script FAKE_COMPOSE_UP_WAIT=1 --yes
+
+  assert_status 1
+  assert_file_equals "$WUD_FILE" 'repo/app:latest'
+  grep -q -- 'error report:' "$TEST_TMP/output.log" || fail "missing error report path in output"
+  local report
+  report="$(latest_error_report_file)"
+  [[ -n "$report" && -f "$report" ]] || fail "expected updater error report"
+  grep -q -- 'phase=up' "$report" || fail "report missing up phase"
+  grep -q -- 'reason=up-or-health-failed' "$report" || fail "report missing up failure reason"
+  grep -q -- 'exit_code=19' "$report" || fail "report missing command exit code"
+  grep -q -- 'compose stderr failure' "$report" || fail "report missing command stderr"
+  grep -q -- 'health: docker compose ps -q returned no containers' "$report" || fail "report missing health detail"
+  grep -q -- 'wud_entries_restored=yes' "$report" || fail "report missing WUD restore state"
+  teardown_case
+}
+
 test_comments_and_blank_lines_preserved(){
   setup_case
   printf '# header\n\nrepo/app:latest\n# footer\n' > "$WUD_FILE"
@@ -770,6 +801,7 @@ main(){
   run_test test_out_owner_config_requires_uid_and_group
   run_test test_stack_level_digest_cleanup_handles_no_service_map
   run_test test_empty_health_ps_fails
+  run_test test_up_failure_writes_error_report
   run_test test_comments_and_blank_lines_preserved
   run_test test_paths_with_spaces
   run_test test_live_mode_does_not_stop_or_down

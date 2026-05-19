@@ -5,12 +5,17 @@ from __future__ import annotations
 import os
 import shlex
 import subprocess
+import sys
+import threading
+from collections import deque
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
+from typing import TextIO
 
 
 CommandArg = str | os.PathLike[str]
+STREAM_TAIL_LINES = 200
 
 
 @dataclass(frozen=True)
@@ -20,6 +25,8 @@ class CommandResult:
     returncode: int
     stdout: str = ""
     stderr: str = ""
+    stdout_truncated: bool = False
+    stderr_truncated: bool = False
 
     @property
     def ok(self) -> bool:
@@ -147,7 +154,72 @@ class CommandRunner:
         changing the Docker/Compose call sites.
         """
 
-        return self.run(args, cwd=cwd, env=env, check=check)
+        return self.run_streaming(args, cwd=cwd, env=env, check=check)
+
+    def run_streaming(
+        self,
+        args: Sequence[CommandArg],
+        *,
+        cwd: str | Path | None = None,
+        env: Mapping[str, str] | None = None,
+        check: bool = True,
+        tail_lines: int = STREAM_TAIL_LINES,
+    ) -> CommandResult:
+        """Run a command, stream output live, and keep a bounded output tail."""
+
+        argv = normalize_args(args)
+        cwd_path = Path(cwd) if cwd is not None else None
+        stdout_tail: deque[str] = deque(maxlen=tail_lines)
+        stderr_tail: deque[str] = deque(maxlen=tail_lines)
+        stdout_count = [0]
+        stderr_count = [0]
+        try:
+            process = subprocess.Popen(
+                argv,
+                cwd=str(cwd_path) if cwd_path is not None else None,
+                env=self._merged_env(env),
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                bufsize=1,
+            )
+        except OSError as exc:
+            result = _result_from_os_error(argv, cwd_path, exc)
+            if check and not result.ok:
+                raise CommandError(result)
+            return result
+
+        threads = [
+            threading.Thread(
+                target=_stream_pipe,
+                args=(process.stdout, sys.stdout, stdout_tail, stdout_count),
+                daemon=True,
+            ),
+            threading.Thread(
+                target=_stream_pipe,
+                args=(process.stderr, sys.stderr, stderr_tail, stderr_count),
+                daemon=True,
+            ),
+        ]
+        for thread in threads:
+            thread.start()
+        returncode = process.wait()
+        for thread in threads:
+            thread.join()
+
+        result = CommandResult(
+            args=argv,
+            cwd=cwd_path,
+            returncode=returncode,
+            stdout="".join(stdout_tail),
+            stderr="".join(stderr_tail),
+            stdout_truncated=stdout_count[0] > tail_lines,
+            stderr_truncated=stderr_count[0] > tail_lines,
+        )
+        if check and not result.ok:
+            raise CommandError(result)
+        return result
 
     def _merged_env(self, env: Mapping[str, str] | None) -> dict[str, str] | None:
         if self._env is None and env is None:
@@ -166,6 +238,24 @@ def normalize_args(args: Sequence[CommandArg]) -> tuple[str, ...]:
 
 def display_command(args: Sequence[CommandArg]) -> str:
     return shlex.join(normalize_args(args))
+
+
+def _stream_pipe(
+    source: TextIO | None,
+    target: TextIO,
+    tail: deque[str],
+    count: list[int],
+) -> None:
+    if source is None:
+        return
+    for line in source:
+        count[0] += 1
+        tail.append(line)
+        try:
+            target.write(line)
+            target.flush()
+        except OSError:
+            pass
 
 
 def _result_from_os_error(

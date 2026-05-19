@@ -14,7 +14,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
-from .command import CommandError, CommandRunner
+from .command import CommandError, CommandResult, CommandRunner
 from .compose import ComposeCli, ComposeDiscoveryError, ComposeStack, ServiceImage
 from .config import DEFAULT_MAX_WAIT, DEFAULT_UPDATE_MODE
 from .docker_cli import DockerCli
@@ -101,6 +101,27 @@ class StackStatus:
     reason: str
 
 
+@dataclass(frozen=True)
+class UpResult:
+    ok: bool
+    wait_handled: bool
+    command_error: CommandError | None = None
+    health_details: str = ""
+
+
+@dataclass
+class FailureRecord:
+    stack: ComposeStack
+    services: tuple[str, ...] | None
+    matches: tuple[Match, ...]
+    phase: str
+    reason: str
+    command_result: CommandResult | None = None
+    health_details: str = ""
+    note: str = ""
+    wud_restored: bool | None = None
+
+
 class Logger:
     def __init__(self, log_file: Path, *, no_color: bool = False) -> None:
         self.log_file = log_file
@@ -142,6 +163,7 @@ class UpdateFromWudRunner:
         self.compose = ComposeCli(runner=self.command_runner)
         self.log_file = prepare_log_file(options.log_dir, self.owner)
         self.log = Logger(self.log_file, no_color=options.no_color)
+        self.failures: list[FailureRecord] = []
 
     def run(self) -> int:
         opts = self.options
@@ -218,13 +240,22 @@ class UpdateFromWudRunner:
                     lock=lock,
                     owner=self.owner,
                 )
+                self._mark_failed_lines_restored(failed_lines)
                 self.log.warn(f"Restored failed WUD entries in {opts.wud_file}")
             else:
+                self._mark_failed_lines_restored(())
                 self.log.info("Successful WUD entries were removed before update.")
 
             fail_count = sum(1 for status in stack_statuses.values() if status.status != "success")
             if fail_count:
-                self.log.error(f"Completed with {fail_count} failure(s). See log: {self.log_file}")
+                error_report = self._write_error_report()
+                if error_report is not None:
+                    self.log.error(
+                        f"Completed with {fail_count} failure(s). See log: {self.log_file}; "
+                        f"error report: {error_report}"
+                    )
+                else:
+                    self.log.error(f"Completed with {fail_count} failure(s). See log: {self.log_file}")
                 return 1
 
             self.log.info(f"Done. See log: {self.log_file}")
@@ -329,6 +360,13 @@ class UpdateFromWudRunner:
                 self.log.error(
                     f"[{stack.name}] Could not back up compose file before tag update: {exc}"
                 )
+                self._record_failure(
+                    stack,
+                    matches,
+                    phase="compose-backup",
+                    reason="compose-backup-failed",
+                    note=str(exc),
+                )
                 return StackStatus("failure", "compose-backup-failed")
             try:
                 applied_tags = apply_compose_tag_updates(compose_path, tag_updates)
@@ -336,10 +374,24 @@ class UpdateFromWudRunner:
                 self.log.error(
                     f"[{stack.name}] Could not rewrite compose image tag(s): {exc}"
                 )
+                self._record_failure(
+                    stack,
+                    matches,
+                    phase="compose-tag-rewrite",
+                    reason="compose-tag-rewrite-failed",
+                    note=str(exc),
+                )
                 return StackStatus("failure", "compose-tag-rewrite-failed")
             if not applied_tags:
                 self.log.error(
                     f"[{stack.name}] Could not rewrite compose image tag(s); leaving WUD entry pending for manual review."
+                )
+                self._record_failure(
+                    stack,
+                    matches,
+                    phase="compose-tag-rewrite",
+                    reason="compose-tag-rewrite-failed",
+                    note="No compose image lines were rewritten.",
                 )
                 return StackStatus("failure", "compose-tag-rewrite-failed")
             for applied in applied_tags:
@@ -350,25 +402,38 @@ class UpdateFromWudRunner:
             if refreshed is None:
                 return self._handle_tag_update_failure(
                     stack,
+                    matches,
                     services,
                     applied_tags,
                     compose_backup,
                     "compose-refresh-failed",
+                    phase="compose-refresh",
                 )
             current_stack = refreshed
             images = tuple(current_stack.images)
 
         try:
             self.compose.pull(stack.directory, stack.file, services)
-        except CommandError:
+        except CommandError as exc:
             if applied_tags and compose_backup is not None:
                 return self._handle_tag_update_failure(
                     stack,
+                    matches,
                     services,
                     applied_tags,
                     compose_backup,
                     "pull-failed",
+                    phase="pull",
+                    command_error=exc,
                 )
+            self._record_failure(
+                stack,
+                matches,
+                phase="pull",
+                reason="pull-failed",
+                command_error=exc,
+                health_details=self._capture_health_details(stack, services),
+            )
             return StackStatus("failure", "pull-failed")
 
         after = self._image_state(images)
@@ -376,11 +441,20 @@ class UpdateFromWudRunner:
             if applied_tags and compose_backup is not None:
                 return self._handle_tag_update_failure(
                     stack,
+                    matches,
                     services,
                     applied_tags,
                     compose_backup,
                     "expected-digest-not-reached",
+                    phase="digest",
                 )
+            self._record_failure(
+                stack,
+                matches,
+                phase="digest",
+                reason="expected-digest-not-reached",
+                health_details=self._capture_health_details(stack, services),
+            )
             return StackStatus("failure", "expected-digest-not-reached")
 
         changes = _updated_images(before, after)
@@ -394,6 +468,8 @@ class UpdateFromWudRunner:
             return StackStatus("success", "already-current")
 
         down_failed = False
+        down_error: CommandError | None = None
+        down_phase = "stop" if service_scoped else "down"
         if opts.mode == "pause":
             self.log.warn(
                 f"[{stack.name}] Mode pause is deprecated; pausing before recreate and unpausing before health check"
@@ -410,8 +486,9 @@ class UpdateFromWudRunner:
                 else:
                     self.log.warn(f"[{stack.name}] Bringing down stack")
                     self.compose.down(stack.directory, stack.file)
-            except CommandError:
+            except CommandError as exc:
                 down_failed = True
+                down_error = exc
                 self.log.warn(
                     f"[{stack.name}] Stop/down failed; attempting up for recovery, but this stack will not be marked successful"
                 )
@@ -421,63 +498,119 @@ class UpdateFromWudRunner:
         else:
             self.log.info(f"[{stack.name}] Bringing stack up")
 
-        up_ok, wait_handled = self._run_compose_up(stack, services)
-        if not up_ok:
+        up_result = self._run_compose_up(stack, services)
+        if not up_result.ok:
             if applied_tags and compose_backup is not None:
                 return self._handle_tag_update_failure(
                     stack,
+                    matches,
                     services,
                     applied_tags,
                     compose_backup,
                     "up-or-health-failed",
+                    phase="up",
+                    command_error=up_result.command_error,
+                    failure_health=up_result.health_details,
                 )
+            if down_failed and down_error is not None:
+                self._record_failure(
+                    stack,
+                    matches,
+                    phase=down_phase,
+                    reason="down-failed",
+                    command_error=down_error,
+                    health_details=self._capture_health_details(stack, services),
+                    note="Update recovery also failed during compose up.",
+                )
+            self._record_failure(
+                stack,
+                matches,
+                phase="up",
+                reason="up-or-health-failed",
+                command_error=up_result.command_error,
+                health_details=up_result.health_details,
+            )
             return StackStatus("failure", "up-or-health-failed")
 
         if opts.mode == "pause":
             self.log.warn(f"[{stack.name}] Unpausing before health check")
             try:
                 self.compose.unpause(stack.directory, stack.file, services)
-            except CommandError:
+            except CommandError as exc:
                 if applied_tags and compose_backup is not None:
                     return self._handle_tag_update_failure(
                         stack,
+                        matches,
                         services,
                         applied_tags,
                         compose_backup,
                         "unpause-failed",
+                        phase="unpause",
+                        command_error=exc,
                     )
+                self._record_failure(
+                    stack,
+                    matches,
+                    phase="unpause",
+                    reason="unpause-failed",
+                    command_error=exc,
+                    health_details=self._capture_health_details(stack, services),
+                )
                 return StackStatus("failure", "unpause-failed")
-            wait_handled = False
+            up_result = UpResult(up_result.ok, False, up_result.command_error, up_result.health_details)
 
-        if wait_handled or self._wait_for_health(stack, services):
+        if up_result.wait_handled or self._wait_for_health(stack, services):
             self.log.info(f"[{stack.name}] Healthy")
             if down_failed:
                 if applied_tags and compose_backup is not None:
                     return self._handle_tag_update_failure(
                         stack,
+                        matches,
                         services,
                         applied_tags,
                         compose_backup,
                         "down-failed",
+                        phase=down_phase,
+                        command_error=down_error,
                     )
+                self._record_failure(
+                    stack,
+                    matches,
+                    phase=down_phase,
+                    reason="down-failed",
+                    command_error=down_error,
+                    health_details=self._capture_health_details(stack, services),
+                    note="Compose up recovery succeeded, but the earlier stop/down command failed.",
+                )
                 return StackStatus("failure", "down-failed")
             return StackStatus("success", "updated")
 
+        health_details = self._capture_health_details(stack, services)
         if applied_tags and compose_backup is not None:
             return self._handle_tag_update_failure(
                 stack,
+                matches,
                 services,
                 applied_tags,
                 compose_backup,
                 "health-failed",
+                phase="health",
+                failure_health=health_details,
             )
+        self._record_failure(
+            stack,
+            matches,
+            phase="health",
+            reason="health-failed",
+            health_details=health_details,
+        )
         return StackStatus("failure", "health-failed")
 
     def _run_compose_up(
         self,
         stack: ComposeStack,
         services: Sequence[str] | None,
-    ) -> tuple[bool, bool]:
+    ) -> UpResult:
         if self.options.mode != "pause" and self.compose.up_wait_supported(stack.directory, stack.file):
             self.log.info(
                 f"[{stack.name}] docker compose up --wait is supported; using native wait"
@@ -490,17 +623,21 @@ class UpdateFromWudRunner:
                     wait=True,
                     wait_timeout=self.options.max_wait,
                 )
-                return True, True
-            except CommandError:
+                return UpResult(True, True)
+            except CommandError as exc:
                 self.log.error(f"[{stack.name}] docker compose up --wait failed")
-                self._log_health_details(stack, services)
-                return False, True
+                health_details = self._capture_health_details(stack, services)
+                self._log_health_details(stack, services, health_details)
+                return UpResult(False, True, exc, health_details)
 
         try:
             self.compose.up(stack.directory, stack.file, services)
-            return True, False
-        except CommandError:
-            return False, False
+            return UpResult(True, False)
+        except CommandError as exc:
+            self.log.error(f"[{stack.name}] docker compose up failed")
+            health_details = self._capture_health_details(stack, services)
+            self._log_health_details(stack, services, health_details)
+            return UpResult(False, False, exc, health_details)
 
     def _wait_for_health(
         self,
@@ -537,27 +674,45 @@ class UpdateFromWudRunner:
     def _handle_tag_update_failure(
         self,
         stack: ComposeStack,
+        matches: Sequence[Match],
         services: Sequence[str] | None,
         applied_tags: Sequence[AppliedTagUpdate],
         compose_backup: Path,
         reason: str,
+        *,
+        phase: str,
+        command_error: CommandError | None = None,
+        failure_health: str | None = None,
     ) -> StackStatus:
-        failure_health = self._capture_health_details(stack, services)
+        if failure_health is None:
+            failure_health = self._capture_health_details(stack, services)
         self.log.warn(f"[{stack.name}] Restoring compose file after failed tag update.")
         rollback_result = "rollback-failed-manual-review-required"
+        rollback_error: CommandError | None = None
         try:
             shutil.copy2(compose_backup, stack.directory / stack.file)
-            up_ok, wait_handled = self._run_compose_up(stack, services)
-            if up_ok and (wait_handled or self._wait_for_health(stack, services)):
+            rollback_up = self._run_compose_up(stack, services)
+            if rollback_up.ok and (rollback_up.wait_handled or self._wait_for_health(stack, services)):
                 rollback_result = "restored-and-healthy"
                 self.log.warn(
                     f"[{stack.name}] Rolled back to previous tag; leaving WUD entry pending for manual review."
                 )
             else:
+                rollback_error = rollback_up.command_error
                 self.log.error(f"[{stack.name}] Rollback failed; manual review required.")
         except OSError:
             self.log.error(f"[{stack.name}] Rollback failed; manual review required.")
 
+        report_error = command_error or rollback_error
+        self._record_failure(
+            stack,
+            matches,
+            phase=phase,
+            reason=reason,
+            command_error=report_error,
+            health_details=failure_health,
+            note=f"tag rollback={rollback_result}",
+        )
         self._write_tag_incident_log(
             stack,
             services,
@@ -647,8 +802,12 @@ class UpdateFromWudRunner:
         self,
         stack: ComposeStack,
         services: Sequence[str] | None,
+        health_details: str | None = None,
     ) -> None:
-        for line in self._capture_health_details(stack, services).splitlines():
+        details = health_details
+        if details is None:
+            details = self._capture_health_details(stack, services)
+        for line in details.splitlines():
             self.log.plain("ERROR", f"[{stack.name}] {line}")
 
     def _cid_summary(self, cid: str) -> str:
@@ -722,6 +881,97 @@ class UpdateFromWudRunner:
             images=images,
             service_images=self.compose.try_service_image_pairs(stack.directory, stack.file),
         )
+
+    def _record_failure(
+        self,
+        stack: ComposeStack,
+        matches: Sequence[Match],
+        *,
+        phase: str,
+        reason: str,
+        command_error: CommandError | None = None,
+        health_details: str = "",
+        note: str = "",
+    ) -> None:
+        services = _update_services(matches)
+        self.failures.append(
+            FailureRecord(
+                stack=stack,
+                services=services,
+                matches=tuple(matches),
+                phase=phase,
+                reason=reason,
+                command_result=command_error.result if command_error else None,
+                health_details=health_details,
+                note=note,
+            )
+        )
+
+    def _mark_failed_lines_restored(self, failed_lines: Iterable[int]) -> None:
+        restored = set(failed_lines)
+        for failure in self.failures:
+            failure_lines = {match.target.line_no for match in failure.matches}
+            failure.wud_restored = bool(failure_lines & restored)
+
+    def _write_error_report(self) -> Path | None:
+        if not self.failures:
+            return None
+        report_path = self._error_report_path()
+        content = self._render_error_report(report_path)
+        try:
+            return _create_unique_text_file_exclusive(
+                report_path,
+                content,
+                owner=self.owner,
+            )
+        except OSError as exc:
+            self.log.error(f"Could not write error report: {exc}")
+            return None
+
+    def _error_report_path(self) -> Path:
+        name = self.log_file.name
+        if name.endswith(".log"):
+            name = f"{name[:-4]}.errors.log"
+        else:
+            name = f"{name}.errors.log"
+        return self.log_file.with_name(name)
+
+    def _render_error_report(self, report_path: Path) -> str:
+        content = [
+            "WUD-Updater error report\n",
+            f"timestamp={timestamp()}\n",
+            f"central_log={self.log_file}\n",
+            f"error_report={report_path}\n",
+            f"failures={len(self.failures)}\n",
+        ]
+        for index, failure in enumerate(self.failures, start=1):
+            content.extend(self._render_failure(index, failure))
+        return "".join(content)
+
+    def _render_failure(self, index: int, failure: FailureRecord) -> list[str]:
+        services = " ".join(failure.services or ()) or "stack-level"
+        restored = _restored_text(failure.wud_restored)
+        content = [
+            f"\n[Failure {index}]\n",
+            f"stack={failure.stack.name}\n",
+            f"stack_dir={failure.stack.directory}\n",
+            f"compose_file={failure.stack.file}\n",
+            f"services={services}\n",
+            f"phase={failure.phase}\n",
+            f"reason={failure.reason}\n",
+            f"wud_entries_restored={restored}\n",
+            "targets:\n",
+        ]
+        for line in _failure_target_lines(failure.matches):
+            content.append(f"  {line}\n")
+        if failure.note:
+            content.append(f"note={sanitize_stream(failure.note)}\n")
+        result = failure.command_result
+        if result is not None:
+            content.extend(_render_command_result(result))
+        content.append("health:\n")
+        content.extend(_indented_block(failure.health_details, "  "))
+        return content
 
     def _print_header(self) -> None:
         opts = self.options
@@ -1038,6 +1288,72 @@ def _split_summary(summary: str) -> tuple[str, str, str, str, str]:
 def safe_component(value: str) -> str:
     cleaned = _SAFE_COMPONENT_RE.sub("_", value)
     return cleaned or "tag"
+
+
+def _failure_target_lines(matches: Sequence[Match]) -> list[str]:
+    lines: list[str] = []
+    seen: set[tuple[int, str, str, str, str, str]] = set()
+    for match in sorted(
+        matches,
+        key=lambda item: (
+            item.target.line_no,
+            item.target.first,
+            item.resolved,
+            item.compose_image,
+            item.service,
+        ),
+    ):
+        suffix = f" sha256={match.target.digest}" if match.target.digest else ""
+        suffix += f" tag={match.target.desired_tag}" if match.target.desired_tag else ""
+        key = (
+            match.target.line_no,
+            match.target.first,
+            suffix,
+            match.resolved,
+            match.compose_image,
+            match.service,
+        )
+        if key in seen:
+            continue
+        seen.add(key)
+        service = match.service or "stack-level"
+        lines.append(
+            f"line {match.target.line_no}: {match.target.first}{suffix}; "
+            f"resolved={match.resolved}; compose_image={match.compose_image}; "
+            f"service={service}"
+        )
+    return lines
+
+
+def _render_command_result(result: CommandResult) -> list[str]:
+    content = [
+        "command:\n",
+        f"  cwd={result.cwd if result.cwd is not None else ''}\n",
+        f"  argv={result.display}\n",
+        f"  exit_code={result.returncode}\n",
+        f"  stdout_tail_truncated={_bool_text(result.stdout_truncated)}\n",
+        "  stdout_tail:\n",
+    ]
+    content.extend(_indented_block(result.stdout, "    "))
+    content.append(f"  stderr_tail_truncated={_bool_text(result.stderr_truncated)}\n")
+    content.append("  stderr_tail:\n")
+    content.extend(_indented_block(result.stderr, "    "))
+    return content
+
+
+def _indented_block(value: str, prefix: str) -> list[str]:
+    if not value.strip():
+        return [f"{prefix}(empty)\n"]
+    lines: list[str] = []
+    for line in value.splitlines():
+        lines.append(f"{prefix}{sanitize_stream(line)}\n")
+    return lines
+
+
+def _restored_text(value: bool | None) -> str:
+    if value is None:
+        return "unknown"
+    return "yes" if value else "no"
 
 
 def sanitize_stream(value: str) -> str:
