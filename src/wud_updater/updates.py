@@ -14,6 +14,8 @@ from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from .terminal import TerminalRenderer
+
 
 DEFAULT_UPDATE_MODE = "stop"
 DEFAULT_MAX_WAIT = "180"
@@ -59,6 +61,7 @@ class UpdatesOptions:
     out_gid: str = ""
     lock_timeout: str = ""
     use_sudo: bool = True
+    no_color: bool = False
     truenas_status_check: bool = False
     truenas_status_timeout: str = DEFAULT_TRUENAS_STATUS_TIMEOUT
 
@@ -172,6 +175,10 @@ class UpdatesRunner:
         self.todo_entries: list[TodoEntry] = []
         self.selected_line_spec = ""
         self.remove_line_spec = ""
+        self.renderer = TerminalRenderer(
+            no_color=options.no_color,
+            environ=self.environ,
+        )
         self.lock = UpdatesFileLock(
             options.wud_file,
             options.lock_timeout or DEFAULT_LOCK_TIMEOUT,
@@ -189,13 +196,21 @@ class UpdatesRunner:
             self.lock.release()
 
     def _run(self) -> int:
-        print("=== 📦 Docker Updates ===")
         self.todo_entries = self._snapshot_todo_entries()
 
-        if self.todo_entries:
-            _display_todo_entries(self.todo_entries, env=self.environ)
+        if self.renderer.rich_enabled():
+            self.renderer.docker_updates(
+                [
+                    (display_no, entry.display_raw)
+                    for display_no, entry in enumerate(self.todo_entries, start=1)
+                ]
+            )
         else:
-            print("✅ No pending Docker updates!")
+            print("=== 📦 Docker Updates ===")
+            if self.todo_entries:
+                _display_todo_entries(self.todo_entries, env=self.environ)
+            else:
+                print("✅ No pending Docker updates!")
 
         if self.options.truenas_status_check:
             snapshot = _refresh_truenas_status(self.options, self.environ)
@@ -287,38 +302,79 @@ class UpdatesRunner:
         return _parse_todo_entries(text)
 
     def _print_system_update_status(self, result: TrueNasCallResult) -> None:
-        print("=== 🖥️ TrueNAS System Update ===")
         if not result.ok:
-            _print_truenas_unreachable("system update check", result.reason)
+            line = _truenas_unreachable_message("system update check", result.reason)
+            self.renderer.truenas_panel(
+                "TrueNAS System",
+                [(line, "info")],
+                plain_header="=== 🖥️ TrueNAS System Update ===",
+            )
             return
 
         status = _truenas_update_status(result.data)
         if status == "UNAVAILABLE":
-            print("✅ System up to date")
+            line = "✅ System up to date"
+            kind = "success"
         elif status == "AVAILABLE":
             version = _truenas_update_version(result.data)
             suffix = f" ({version})" if version else ""
-            print(f"⚠️  System update available!{suffix}")
+            line = f"⚠️  System update available!{suffix}"
+            kind = "warning"
         elif status == "ERROR":
             reason = _truenas_update_error_reason(result.data) or "<no response>"
-            print(f"❓ TrueNAS update status error: {reason}")
+            line = f"❓ TrueNAS update status error: {reason}"
+            kind = "error"
         else:
-            print(f"❓ Unknown status: {status or '<no response>'}")
+            line = f"❓ Unknown status: {status or '<no response>'}"
+            kind = "error"
+
+        self.renderer.truenas_panel(
+            "TrueNAS System",
+            [(line, kind)],
+            plain_header="=== 🖥️ TrueNAS System Update ===",
+        )
 
     def _print_alert_status(self, result: TrueNasCallResult) -> None:
-        print("=== 🚨 TrueNAS Alerts ===")
         if not result.ok:
-            _print_truenas_unreachable("alert check", result.reason)
+            line = _truenas_unreachable_message("alert check", result.reason)
+            self.renderer.truenas_panel(
+                "TrueNAS Alerts",
+                [(line, "info")],
+                plain_header="=== 🚨 TrueNAS Alerts ===",
+            )
             return
 
         alerts = _truenas_active_alerts(result.data)
         if alerts is None:
-            _print_truenas_unreachable("alert check", "invalid alert response")
+            line = _truenas_unreachable_message(
+                "alert check",
+                "invalid alert response",
+            )
+            self.renderer.truenas_panel(
+                "TrueNAS Alerts",
+                [(line, "info")],
+                plain_header="=== 🚨 TrueNAS Alerts ===",
+            )
             return
         if alerts:
-            _print_numbered_lines("\n".join(alerts), self.environ)
+            if self.renderer.rich_enabled():
+                self.renderer.truenas_panel(
+                    "TrueNAS Alerts",
+                    [
+                        (f"{index}. {alert}", "warning")
+                        for index, alert in enumerate(alerts, start=1)
+                    ],
+                    plain_header="=== 🚨 TrueNAS Alerts ===",
+                )
+            else:
+                print("=== 🚨 TrueNAS Alerts ===")
+                _print_numbered_lines("\n".join(alerts), self.environ)
         else:
-            print("✅ No active alerts")
+            self.renderer.truenas_panel(
+                "TrueNAS Alerts",
+                [("✅ No active alerts", "success")],
+                plain_header="=== 🚨 TrueNAS Alerts ===",
+            )
 
     def _choose_update_lines(self) -> bool:
         todo_count = len(self.todo_entries)
@@ -326,7 +382,10 @@ class UpdatesRunner:
         self.remove_line_spec = ""
 
         while True:
-            choice = _prompt("Run Docker updates? [a=all, s=select, x=exclude, n=skip] ")
+            choice = self.renderer.prompt_choice(
+                "Run Docker updates?",
+                "[a=all, s=select, x=exclude, n=skip]",
+            )
             if choice in ("", "n", "N", "no", "NO"):
                 print("⏸️  Skipped running updates.")
                 return False
@@ -450,6 +509,8 @@ class UpdatesRunner:
             updater_args.extend(["--remove-lines-before-run", self.remove_line_spec])
         if self.options.allow_tag_updates:
             updater_args.append("--allow-tag-updates")
+        if self.options.no_color:
+            updater_args.append("--no-color")
         updater_args.append("--yes")
 
         updater_env: list[str] = []
@@ -597,6 +658,7 @@ def options_from_namespace(
             environ.get("WUD_UPDATER_USE_SUDO"),
             no_updater_sudo=bool(getattr(args, "no_updater_sudo", False)),
         ),
+        no_color=bool(getattr(args, "no_color", False)),
         truenas_status_check=_resolve_bool_env(
             environ.get("TRUENAS_STATUS_CHECK"),
             "TRUENAS_STATUS_CHECK",
@@ -1144,8 +1206,12 @@ def _midclt_command(method: str) -> list[str]:
 
 
 def _print_truenas_unreachable(check: str, reason: str = "") -> None:
+    print(_truenas_unreachable_message(check, reason))
+
+
+def _truenas_unreachable_message(check: str, reason: str = "") -> str:
     suffix = f" ({reason})" if reason else ""
-    print(f"ℹ️  TrueNAS not reachable; skipping {check}.{suffix}")
+    return f"ℹ️  TrueNAS not reachable; skipping {check}.{suffix}"
 
 
 def _truenas_update_status(data: object | None) -> str:

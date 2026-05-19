@@ -118,6 +118,28 @@ class CliTests(unittest.TestCase):
         self.assertIn("✅ No pending Docker updates!", stdout)
         self.assertEqual(stderr, "")
 
+    def test_updates_no_color_option_is_accepted(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="wud-python-cli.") as tmpdir:
+            env = {
+                "HOME": tmpdir,
+                "WUD_UPDATER_CONFIG": str(Path(tmpdir) / "missing-env"),
+                "PATH": os.environ.get("PATH", ""),
+            }
+            with mock.patch.dict(os.environ, env, clear=True):
+                status, stdout, stderr = self._run_main(
+                    [
+                        "updates",
+                        "--dry-run",
+                        "--no-color",
+                        "--file",
+                        str(Path(tmpdir) / "missing.todo"),
+                    ]
+                )
+
+        self.assertEqual(status, 0)
+        self.assertIn("✅ No pending Docker updates!", stdout)
+        self.assertEqual(stderr, "")
+
     def test_updates_yes_without_pending_entries_exits_successfully(self) -> None:
         with tempfile.TemporaryDirectory(prefix="wud-python-cli.") as tmpdir:
             env = {

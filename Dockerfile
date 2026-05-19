@@ -45,8 +45,12 @@ RUN set -eux; \
 
 WORKDIR /app
 
-COPY bin/ /app/bin/
+COPY pyproject.toml README.md /app/
 COPY src/ /app/src/
+
+RUN python -m pip install --no-cache-dir .
+
+COPY bin/ /app/bin/
 COPY wud/ /app/wud/
 COPY entrypoint.sh /app/entrypoint.sh
 
