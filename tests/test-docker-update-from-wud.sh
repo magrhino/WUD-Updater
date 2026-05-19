@@ -101,6 +101,11 @@ set_image_after_pull(){
   fi
 }
 
+set_container_label(){
+  local cid="$1" key="$2" value="$3"
+  printf '%s=%s\n' "$key" "$value" >> "$FAKE_ROOT/containers/$cid.labels"
+}
+
 set_manifest_failure(){
   local image="$1" stderr="$2" safe
   safe="$(safe_name "$image")"
@@ -849,6 +854,32 @@ test_service_scoped_update_only_touches_matched_service(){
   teardown_case
 }
 
+test_recreate_stack_label_forces_stack_level_update(){
+  setup_case
+  printf 'repo/app:latest\n' > "$WUD_FILE"
+  make_stack stack "$BASE/stack" docker-compose.yml
+  add_service stack app repo/app:latest cid-app
+  add_service stack db repo/db:latest cid-db
+  set_container_label cid-app WUD-UPDATER-RECREATE-STACK true
+  set_image_state repo/app:latest old-app sha256:old-app
+  set_image_after_pull repo/app:latest new-app sha256:new-app
+  set_image_state repo/db:latest old-db sha256:old-db
+  set_image_after_pull repo/db:latest old-db sha256:old-db
+
+  run_script --yes --mode stop
+
+  assert_status 0
+  assert_file_equals "$WUD_FILE" ''
+  grep -q -- 'stack-level recreate (WUD-UPDATER-RECREATE-STACK=true)' "$TEST_TMP/output.log" || fail "plan did not report stack recreate label"
+  assert_calls_contain 'inspect cid-app'
+  assert_calls_contain 'compose -f docker-compose.yml pull[[:space:]]*$'
+  assert_calls_contain 'compose -f docker-compose.yml down[[:space:]]*$'
+  assert_calls_contain 'compose -f docker-compose.yml up -d --remove-orphans$'
+  assert_calls_not_contain 'compose -f docker-compose.yml stop app'
+  assert_calls_not_contain 'compose -f docker-compose.yml up -d .*--no-deps'
+  teardown_case
+}
+
 run_test(){
   local name="$1"
   printf 'running %s\n' "$name"
@@ -892,6 +923,7 @@ main(){
   run_test test_live_mode_does_not_stop_or_down
   run_test test_stop_mode_stops_before_up
   run_test test_service_scoped_update_only_touches_matched_service
+  run_test test_recreate_stack_label_forces_stack_level_update
 }
 
 trap teardown_case EXIT

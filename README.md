@@ -13,6 +13,8 @@ notifications.
 - When approved, `docker-update-from-wud` pulls matching Docker Compose services
   or stacks, recreates them, waits for health, and removes successfully processed
   lines from the WUD file.
+- A Compose service can opt into full-stack recreation by running with the label
+  `WUD-UPDATER-RECREATE-STACK=true`.
 
 ## Quick Start
 

@@ -95,6 +95,24 @@ number:
 docker compose -f docs/examples/docker-compose.example.yml run --rm wud-updater docker-update-from-wud --yes --allow-tag-updates --tag-override 1=5.2.0
 ```
 
+By default, the updater recreates only the Compose service that owns the matched
+image. For services whose update should restart the whole Compose project, add a
+label to that service:
+
+```yaml
+services:
+  vpn:
+    image: example/vpn:latest
+    labels:
+      - WUD-UPDATER-RECREATE-STACK=true
+```
+
+When the matched running service container has
+`WUD-UPDATER-RECREATE-STACK=true`, `docker-update-from-wud` uses stack-level
+pull/recreate behavior for that Compose project. In stop mode, that means
+`docker compose pull`, `docker compose down`, and `docker compose up` for the
+stack instead of service-scoped stop/up.
+
 The example mounts:
 
 | Mount | Purpose |

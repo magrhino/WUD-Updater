@@ -340,6 +340,14 @@ inspect_cmd(){
   target="${1:-}"
   log_call "inspect $target"
 
+  if [[ "$format" == *'.Config.Labels'* ]]; then
+    local labels_file="$ROOT/containers/$target.labels"
+    if [[ -f "$labels_file" ]]; then
+      awk -F= '$1 == "WUD-UPDATER-RECREATE-STACK" {print $2}' "$labels_file"
+    fi
+    return 0
+  fi
+
   if [[ "$format" == *'.State.Health.Log'* ]]; then
     [[ -f "$ROOT/containers/$target.healthlog" ]] && cat "$ROOT/containers/$target.healthlog"
     return 0
