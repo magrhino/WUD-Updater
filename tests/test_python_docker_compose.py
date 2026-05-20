@@ -215,6 +215,37 @@ class ComposeCliTests(FakeDockerCase):
             ),
         )
 
+    def test_service_image_pairs_reads_network_mode(self) -> None:
+        stack = self.base / "media"
+        stack.mkdir()
+        (stack / ".fake-docker-id").write_text("media\n", encoding="utf-8")
+        (stack / "docker-compose.yml").write_text(
+            "\n".join(
+                [
+                    "services:",
+                    "  gluetun:",
+                    "    image: qmcgaw/gluetun:latest",
+                    "  qbittorrent:",
+                    "    image: ghcr.io/linuxserver/qbittorrent:5.1.4",
+                    "    network_mode: service:gluetun",
+                    "",
+                ]
+            ),
+            encoding="utf-8",
+        )
+
+        self.assertEqual(
+            self.compose.service_image_pairs(stack, "docker-compose.yml"),
+            (
+                ServiceImage(service="gluetun", image="qmcgaw/gluetun:latest"),
+                ServiceImage(
+                    service="qbittorrent",
+                    image="ghcr.io/linuxserver/qbittorrent:5.1.4",
+                    network_mode="service:gluetun",
+                ),
+            ),
+        )
+
     def test_ps_quiet_scopes_to_services_when_provided(self) -> None:
         stack = self.make_stack(
             "stack",
@@ -389,6 +420,23 @@ class ComposeCliTests(FakeDockerCase):
             self.call_commands(),
             [
                 "compose -f docker-compose.yml up -d --remove-orphans --no-deps --wait --wait-timeout 7 app"
+            ],
+        )
+
+    def test_up_can_omit_no_deps_for_expanded_service_scope(self) -> None:
+        stack = self.make_stack("stack", [("app", "repo/app:latest", "cid-app")])
+
+        self.compose.up(
+            stack,
+            "docker-compose.yml",
+            ["provider", "app"],
+            no_deps=False,
+        )
+
+        self.assertEqual(
+            self.call_commands(),
+            [
+                "compose -f docker-compose.yml up -d --remove-orphans provider app",
             ],
         )
 

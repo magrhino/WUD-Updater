@@ -26,6 +26,7 @@ _WAIT_FLAG_RE = re.compile(r"(^|\s)--wait([=,\s]|$)")
 class ServiceImage:
     service: str
     image: str
+    network_mode: str = ""
 
 
 @dataclass(frozen=True)
@@ -163,11 +164,12 @@ class ComposeCli:
         wait: bool = False,
         wait_timeout: int | None = None,
         force_recreate: bool = False,
+        no_deps: bool = True,
     ) -> CommandResult:
         args = ["up", "-d", "--remove-orphans"]
         if force_recreate:
             args.append("--force-recreate")
-        if services:
+        if services and no_deps:
             args.append("--no-deps")
         if wait:
             args.append("--wait")
@@ -330,6 +332,14 @@ def _service_image_pairs_from_config_json(config_json: str) -> tuple[ServiceImag
         if not isinstance(service, str) or not isinstance(config, dict):
             continue
         image = config.get("image")
+        network_mode = config.get("network_mode")
+        network_mode_text = network_mode if isinstance(network_mode, str) else ""
         if isinstance(image, str) and image:
-            pairs.add(ServiceImage(service=service, image=image))
+            pairs.add(
+                ServiceImage(
+                    service=service,
+                    image=image,
+                    network_mode=network_mode_text,
+                )
+            )
     return tuple(sorted(pairs, key=lambda pair: (pair.service, pair.image)))

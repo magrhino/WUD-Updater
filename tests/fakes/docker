@@ -93,14 +93,8 @@ compose_config_json_from_file(){
       gsub(/"/, "\\\"", value)
       return value
     }
-    /^  [A-Za-z0-9_.-]+:/ {
-      svc = $1
-      sub(/:$/, "", svc)
-      next
-    }
-    /^[[:space:]]+image:[[:space:]]*/ {
-      value = $0
-      sub(/^[[:space:]]*image:[[:space:]]*/, "", value)
+    function scalar(value) {
+      sub(/^[[:space:]]*[^:]+:[[:space:]]*/, "", value)
       sub(/[[:space:]]+#.*/, "", value)
       sub(/^[[:space:]]+/, "", value)
       sub(/[[:space:]]+$/, "", value)
@@ -108,15 +102,39 @@ compose_config_json_from_file(){
       if ((quote == "\"" || quote == "\047") && substr(value, length(value), 1) == quote) {
         value = substr(value, 2, length(value) - 2)
       }
-      if (svc != "" && value != "") {
+      return value
+    }
+    function flush_service() {
+      if (svc != "" && image != "") {
         if (found) {
           printf ","
         }
-        printf "\"%s\":{\"image\":\"%s\"}", esc(svc), esc(value)
+        printf "\"%s\":{\"image\":\"%s\"", esc(svc), esc(image)
+        if (network_mode != "") {
+          printf ",\"network_mode\":\"%s\"", esc(network_mode)
+        }
+        printf "}"
         found = 1
       }
     }
+    /^  [A-Za-z0-9_.-]+:/ {
+      flush_service()
+      svc = $1
+      sub(/:$/, "", svc)
+      image = ""
+      network_mode = ""
+      next
+    }
+    /^[[:space:]]+image:[[:space:]]*/ {
+      image = scalar($0)
+      next
+    }
+    /^[[:space:]]+network_mode:[[:space:]]*/ {
+      network_mode = scalar($0)
+      next
+    }
     END {
+      flush_service()
       if (!found) {
         exit 1
       }

@@ -312,7 +312,7 @@ class PythonUpdateFromWudTests(unittest.TestCase):
         self.assertIn("phase=stop", report)
         self.assertIn("reason=down-failed", report)
         self.assertIn("argv=docker compose -f docker-compose.yml up", report)
-        self.assertIn("--force-recreate", report)
+        self.assertNotIn("--force-recreate", report)
         self.assertIn("recovery up failed", report)
         self.assertNotIn("argv=docker compose -f docker-compose.yml down", report)
 

@@ -79,6 +79,30 @@ make_single_service_stack(){
   add_service "$id" app "$image" "$cid"
 }
 
+make_gluetun_qbittorrent_stack(){
+  local id="$1" qbit_image="$2"
+  make_stack "$id" "$BASE/$id" docker-compose.yml
+  cat > "$BASE/$id/docker-compose.yml" <<YAML
+services:
+  gluetun:
+    image: qmcgaw/gluetun:latest
+  qbittorrent:
+    image: $qbit_image
+    network_mode: service:gluetun
+YAML
+  printf '%s\n' gluetun qbittorrent > "$FAKE_ROOT/stacks/$id/services.txt"
+  printf '%s\n' qmcgaw/gluetun:latest "$qbit_image" > "$FAKE_ROOT/stacks/$id/images.txt"
+  {
+    printf '%s\t%s\n' gluetun qmcgaw/gluetun:latest
+    printf '%s\t%s\n' qbittorrent "$qbit_image"
+  } > "$FAKE_ROOT/stacks/$id/service-images.tsv"
+  printf '%s\n' cid-gluetun cid-qbittorrent > "$FAKE_ROOT/stacks/$id/cids.txt"
+  printf '%s\n' cid-gluetun > "$FAKE_ROOT/stacks/$id/cids-gluetun.txt"
+  printf '%s\n' cid-qbittorrent > "$FAKE_ROOT/stacks/$id/cids-qbittorrent.txt"
+  printf '/cid-gluetun|running|healthy|0|0\n' > "$FAKE_ROOT/containers/cid-gluetun.summary"
+  printf '/cid-qbittorrent|running|healthy|0|0\n' > "$FAKE_ROOT/containers/cid-qbittorrent.summary"
+}
+
 set_image_state(){
   local image="$1" id="$2" digest="${3:-}" safe
   safe="$(safe_name "$image")"
@@ -547,6 +571,70 @@ YAML
   teardown_case
 }
 
+test_network_mode_provider_tag_update_omits_no_deps(){
+  setup_case
+  printf 'ghcr.io/linuxserver/qbittorrent:5.1.4 tag=5.2.0\n' > "$WUD_FILE"
+  make_gluetun_qbittorrent_stack media ghcr.io/linuxserver/qbittorrent:5.1.4
+  set_image_state ghcr.io/linuxserver/qbittorrent:5.1.4 old-qbit sha256:old-qbit
+  set_image_after_pull ghcr.io/linuxserver/qbittorrent:5.2.0 new-qbit sha256:new-qbit
+
+  run_script --yes --allow-tag-updates
+
+  assert_status 0
+  assert_file_equals "$WUD_FILE" ''
+  grep -q -- 'image: ghcr.io/linuxserver/qbittorrent:5.2.0' "$BASE/media/docker-compose.yml" || fail "compose file did not contain new qBittorrent tag"
+  assert_calls_contain 'compose -f docker-compose.yml pull qbittorrent'
+  assert_calls_not_contain 'compose -f docker-compose.yml pull gluetun'
+  assert_calls_contain 'compose -f docker-compose.yml stop qbittorrent gluetun'
+  assert_calls_contain 'compose -f docker-compose.yml up -d --remove-orphans gluetun qbittorrent$'
+  assert_calls_not_contain 'compose -f docker-compose.yml up -d .*--no-deps'
+  teardown_case
+}
+
+test_network_mode_provider_tag_update_rollback_omits_no_deps(){
+  setup_case
+  printf 'ghcr.io/linuxserver/qbittorrent:5.1.4 tag=5.2.0\n' > "$WUD_FILE"
+  make_gluetun_qbittorrent_stack media ghcr.io/linuxserver/qbittorrent:5.1.4
+  set_image_state ghcr.io/linuxserver/qbittorrent:5.1.4 old-qbit sha256:old-qbit
+  set_image_after_pull ghcr.io/linuxserver/qbittorrent:5.2.0 new-qbit sha256:new-qbit
+  : > "$FAKE_ROOT/stacks/media/up_fail"
+  printf 'network namespace recreate failed\n' > "$FAKE_ROOT/stacks/media/up_stderr"
+
+  run_script --yes --allow-tag-updates
+
+  assert_status 1
+  assert_file_equals "$WUD_FILE" 'ghcr.io/linuxserver/qbittorrent:5.1.4 tag=5.2.0'
+  grep -q -- 'image: ghcr.io/linuxserver/qbittorrent:5.1.4' "$BASE/media/docker-compose.yml" || fail "compose file was not rolled back"
+  local up_count
+  up_count="$(grep -Ec 'compose -f docker-compose.yml up -d --remove-orphans gluetun qbittorrent$' "$FAKE_ROOT/calls.log")"
+  [[ "$up_count" == "2" ]] || fail "expected update and rollback up without --no-deps, got $up_count"
+  assert_calls_not_contain 'compose -f docker-compose.yml up -d .*--no-deps'
+  teardown_case
+}
+
+test_network_mode_provider_label_forces_stack_level_update(){
+  setup_case
+  printf 'ghcr.io/linuxserver/qbittorrent:5.1.4\n' > "$WUD_FILE"
+  make_gluetun_qbittorrent_stack media ghcr.io/linuxserver/qbittorrent:5.1.4
+  set_container_label cid-gluetun WUD-UPDATER-RECREATE-STACK true
+  set_image_state ghcr.io/linuxserver/qbittorrent:5.1.4 old-qbit sha256:old-qbit
+  set_image_after_pull ghcr.io/linuxserver/qbittorrent:5.1.4 new-qbit sha256:new-qbit
+
+  run_script --yes --mode stop
+
+  assert_status 0
+  assert_file_equals "$WUD_FILE" ''
+  grep -q -- 'qbittorrent (stack-level recreate: WUD-UPDATER-RECREATE-STACK=true)' "$TEST_TMP/output.log" || fail "plan did not report provider stack recreate"
+  assert_calls_contain 'inspect cid-gluetun'
+  assert_calls_contain 'compose -f docker-compose.yml pull qbittorrent'
+  assert_calls_not_contain 'compose -f docker-compose.yml pull gluetun'
+  assert_calls_contain 'compose -f docker-compose.yml stop qbittorrent gluetun'
+  assert_calls_contain 'compose -f docker-compose.yml up -d --remove-orphans$'
+  assert_calls_not_contain 'compose -f docker-compose.yml up -d .*--no-deps'
+  assert_calls_not_contain 'compose -f docker-compose.yml up -d .*--force-recreate'
+  teardown_case
+}
+
 test_manifest_validation_failure_prevents_tag_rewrite(){
   setup_case
   printf 'repo/app:1.0 tag=2.0\n' > "$WUD_FILE"
@@ -882,7 +970,8 @@ test_recreate_stack_label_forces_stack_level_update(){
   assert_calls_not_contain 'compose -f docker-compose.yml pull db'
   assert_calls_not_contain 'compose -f docker-compose.yml down[[:space:]]*$'
   assert_calls_contain 'compose -f docker-compose.yml stop db app'
-  assert_calls_contain 'compose -f docker-compose.yml up -d --remove-orphans --force-recreate$'
+  assert_calls_contain 'compose -f docker-compose.yml up -d --remove-orphans$'
+  assert_calls_not_contain 'compose -f docker-compose.yml up -d .*--force-recreate'
   assert_calls_not_contain 'compose -f docker-compose.yml up -d .*--no-deps'
   teardown_case
 }
@@ -910,7 +999,8 @@ test_recreate_stack_label_preserves_gluetun_network_stack(){
   assert_calls_not_contain 'compose -f docker-compose.yml pull gluetun'
   assert_calls_not_contain 'compose -f docker-compose.yml down'
   assert_calls_contain 'compose -f docker-compose.yml stop thelounge speedtest-tracker mamapi qbittorrent gluetun'
-  assert_calls_contain 'compose -f docker-compose.yml up -d --remove-orphans --force-recreate$'
+  assert_calls_contain 'compose -f docker-compose.yml up -d --remove-orphans$'
+  assert_calls_not_contain 'compose -f docker-compose.yml up -d .*--force-recreate'
   assert_calls_not_contain 'compose -f docker-compose.yml up -d .*--no-deps'
   teardown_case
 }
@@ -942,6 +1032,9 @@ main(){
   run_test test_allowed_tag_update_rewrites_compose_and_cleans_line
   run_test test_tag_override_rewrites_compose_to_override
   run_test test_tag_update_uses_direct_service_image_map
+  run_test test_network_mode_provider_tag_update_omits_no_deps
+  run_test test_network_mode_provider_tag_update_rollback_omits_no_deps
+  run_test test_network_mode_provider_label_forces_stack_level_update
   run_test test_manifest_validation_failure_prevents_tag_rewrite
   run_test test_unhealthy_tag_update_rolls_back_and_writes_incident_log
   run_test test_pinned_digest_mismatch_prevents_cleanup

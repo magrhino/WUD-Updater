@@ -135,6 +135,7 @@ class UpdateScope:
     stack_reason: str = ""
     stop_services: tuple[str, ...] | None = None
     force_recreate: bool = False
+    up_no_deps: bool = True
 
 
 @dataclass
@@ -542,6 +543,7 @@ class UpdateFromWudRunner:
                     "compose-refresh-failed",
                     phase="compose-refresh",
                     force_recreate=scope.force_recreate,
+                    no_deps=scope.up_no_deps,
                 )
             if not self._validate_applied_tag_updates(
                 stack,
@@ -557,6 +559,7 @@ class UpdateFromWudRunner:
                     "compose-tag-validation-failed",
                     phase="compose-tag-validation",
                     force_recreate=scope.force_recreate,
+                    no_deps=scope.up_no_deps,
                 )
             current_stack = refreshed
             images = tuple(current_stack.images)
@@ -568,13 +571,14 @@ class UpdateFromWudRunner:
                 return self._handle_tag_update_failure(
                     stack,
                     matches,
-                    pull_services,
+                    services,
                     applied_tags,
                     compose_backup,
                     "pull-failed",
                     phase="pull",
                     command_error=exc,
                     force_recreate=scope.force_recreate,
+                    no_deps=scope.up_no_deps,
                 )
             self._record_failure(
                 stack,
@@ -599,6 +603,7 @@ class UpdateFromWudRunner:
                     "expected-digest-not-reached",
                     phase="digest",
                     force_recreate=scope.force_recreate,
+                    no_deps=scope.up_no_deps,
                 )
             self._record_failure(
                 stack,
@@ -634,8 +639,8 @@ class UpdateFromWudRunner:
         elif opts.mode == "stop":
             try:
                 if service_scoped:
-                    self.log.warn(f"[{stack.name}] Stopping affected service(s): {services_label}")
-                    self.compose.stop(stack.directory, stack.file, services)
+                    self.log.warn(f"[{stack.name}] Stopping affected service(s): {stop_services_label}")
+                    self.compose.stop(stack.directory, stack.file, stop_services)
                 else:
                     if stop_services_label:
                         self.log.warn(
@@ -660,6 +665,7 @@ class UpdateFromWudRunner:
             stack,
             services,
             force_recreate=scope.force_recreate,
+            no_deps=scope.up_no_deps,
         )
         if not up_result.ok:
             if applied_tags and compose_backup is not None:
@@ -681,6 +687,7 @@ class UpdateFromWudRunner:
                     command_error=failure_error,
                     failure_health=up_result.health_details,
                     force_recreate=scope.force_recreate,
+                    no_deps=scope.up_no_deps,
                 )
             if down_failed and down_error is not None:
                 self._record_failure(
@@ -720,6 +727,7 @@ class UpdateFromWudRunner:
                         phase="unpause",
                         command_error=exc,
                         force_recreate=scope.force_recreate,
+                        no_deps=scope.up_no_deps,
                     )
                 self._record_failure(
                     stack,
@@ -747,6 +755,7 @@ class UpdateFromWudRunner:
                         phase=down_phase,
                         command_error=down_error,
                         force_recreate=scope.force_recreate,
+                        no_deps=scope.up_no_deps,
                     )
                 self._record_failure(
                     stack,
@@ -773,6 +782,7 @@ class UpdateFromWudRunner:
                 phase="health",
                 failure_health=health_details,
                 force_recreate=scope.force_recreate,
+                no_deps=scope.up_no_deps,
             )
         self._record_failure(
             stack,
@@ -790,6 +800,7 @@ class UpdateFromWudRunner:
         services: Sequence[str] | None,
         *,
         force_recreate: bool = False,
+        no_deps: bool = True,
     ) -> UpResult:
         if self.options.mode != "pause" and self.compose.up_wait_supported(stack.directory, stack.file):
             self.log.info(
@@ -803,6 +814,7 @@ class UpdateFromWudRunner:
                     wait=True,
                     wait_timeout=self.options.max_wait,
                     force_recreate=force_recreate,
+                    no_deps=no_deps,
                 )
                 return UpResult(True, True)
             except CommandError as exc:
@@ -817,6 +829,7 @@ class UpdateFromWudRunner:
                 stack.file,
                 services,
                 force_recreate=force_recreate,
+                no_deps=no_deps,
             )
             return UpResult(True, False)
         except CommandError as exc:
@@ -870,6 +883,7 @@ class UpdateFromWudRunner:
         command_error: CommandError | None = None,
         failure_health: str | None = None,
         force_recreate: bool = False,
+        no_deps: bool = True,
     ) -> StackStatus:
         if failure_health is None:
             failure_health = self._capture_health_details(stack, services)
@@ -882,6 +896,7 @@ class UpdateFromWudRunner:
                 stack,
                 services,
                 force_recreate=force_recreate,
+                no_deps=no_deps,
             )
             if rollback_up.ok and (rollback_up.wait_handled or self._wait_for_health(stack, services)):
                 rollback_result = "restored-and-healthy"
@@ -973,19 +988,34 @@ class UpdateFromWudRunner:
                 stop_services=self._stack_stop_services(stack),
                 force_recreate=True,
             )
-        label_cid = self._stack_recreate_label_cid(stack, services)
+        lifecycle_services, uses_network_provider = _expand_network_mode_services(
+            services,
+            _network_mode_providers(stack.service_images),
+        )
+        stop_services = (
+            tuple(reversed(lifecycle_services))
+            if uses_network_provider
+            else lifecycle_services
+        )
+
+        label_cid = self._stack_recreate_label_cid(stack, lifecycle_services)
         if label_cid:
             return UpdateScope(
                 services=None,
                 pull_services=services,
                 stack_reason=(
-                    f"matched service container {label_cid} has "
+                    f"selected service scope container {label_cid} has "
                     f"{RECREATE_STACK_LABEL}=true"
                 ),
                 stop_services=self._stack_stop_services(stack),
-                force_recreate=True,
+                force_recreate=False,
             )
-        return UpdateScope(services=services, pull_services=services)
+        return UpdateScope(
+            services=lifecycle_services,
+            pull_services=services,
+            stop_services=stop_services,
+            up_no_deps=not uses_network_provider,
+        )
 
     def _stack_stop_services(self, stack: ComposeStack) -> tuple[str, ...] | None:
         try:
@@ -1753,6 +1783,52 @@ def _backup_compose(compose_path: Path) -> Path:
 
 def _services_for_image(service_images: Sequence[ServiceImage], image: str) -> tuple[str, ...]:
     return tuple(sorted({item.service for item in service_images if item.image == image}))
+
+
+def _network_mode_providers(service_images: Sequence[ServiceImage]) -> dict[str, str]:
+    providers: dict[str, str] = {}
+    for item in service_images:
+        mode = item.network_mode.strip()
+        if not mode.startswith("service:"):
+            continue
+        provider = mode.removeprefix("service:").strip()
+        if provider:
+            providers[item.service] = provider
+    return providers
+
+
+def _expand_network_mode_services(
+    services: Sequence[str],
+    providers: Mapping[str, str],
+) -> tuple[tuple[str, ...], bool]:
+    expanded: list[str] = []
+    seen: set[str] = set()
+    visiting: set[str] = set()
+    uses_network_provider = False
+
+    def visit(service: str) -> None:
+        nonlocal uses_network_provider
+        if service in seen:
+            return
+        if service in visiting:
+            expanded.append(service)
+            seen.add(service)
+            return
+
+        visiting.add(service)
+        provider = providers.get(service)
+        if provider and provider != service:
+            uses_network_provider = True
+            visit(provider)
+        visiting.remove(service)
+
+        if service not in seen:
+            expanded.append(service)
+            seen.add(service)
+
+    for service in services:
+        visit(service)
+    return tuple(expanded), uses_network_provider
 
 
 def _update_services(matches: Sequence[Match]) -> tuple[str, ...] | None:
