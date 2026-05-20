@@ -1357,6 +1357,8 @@ class UpdateFromWudRunner:
                 )
             self._apply_audit_db_owner(chown_parent=chown_parent)
         except (OSError, sqlite3.Error, DatabaseError, OwnerConfigError) as exc:
+            if self.audit_conn is not None and self.audit_run_id is not None:
+                self._finish_audit_run("failure", best_effort=True)
             if conn is not None:
                 conn.close()
             self.audit_conn = None

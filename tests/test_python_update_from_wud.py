@@ -294,6 +294,50 @@ class PythonUpdateFromWudTests(unittest.TestCase):
         self.assertNotRegex(self.calls(), r"compose -f .* pull")
         self.assertNotRegex(self.calls(), r"compose -f .* up -d")
 
+    def test_audit_owner_failure_marks_started_run_failed(self) -> None:
+        self.wud_file.write_text("repo/app:latest\n", encoding="utf-8")
+        self.make_stack("app", [("app", "repo/app:latest", "cid-app")])
+        self.set_image_state("repo/app:latest", "old", "sha256:old")
+        self.set_image_after_pull("repo/app:latest", "new", "sha256:new")
+        options = UpdaterOptions(
+            docker_base=self.base,
+            wud_file=self.wud_file,
+            log_dir=self.log_dir,
+            max_wait=0,
+            assume_yes=True,
+            no_color=True,
+            db_path=self.db_path,
+        )
+        runner = UpdateFromWudRunner(
+            options,
+            environ=self.env,
+            command_runner=CommandRunner(env=self.env),
+        )
+        stdout = StringIO()
+        stderr = StringIO()
+
+        with (
+            mock.patch(
+                "wud_updater.updater._apply_sqlite_owner",
+                side_effect=OSError("chown failed"),
+            ),
+            redirect_stdout(stdout),
+            redirect_stderr(stderr),
+        ):
+            with self.assertRaisesRegex(
+                UpdaterError,
+                "Could not initialize audit database: chown failed",
+            ):
+                runner.run()
+
+        self.assertEqual(self.wud_file.read_text(encoding="utf-8"), "repo/app:latest\n")
+        self.assertNotRegex(self.calls(), r"compose -f .* pull")
+        self.assertNotRegex(self.calls(), r"compose -f .* up -d")
+        runs = self.db_rows("SELECT * FROM update_runs")
+        self.assertEqual(len(runs), 1)
+        self.assertEqual(runs[0]["status"], "failure")
+        self.assertIsNotNone(runs[0]["finished_at"])
+
     def test_late_audit_write_failure_marks_run_failed(self) -> None:
         self.wud_file.write_text("repo/app:latest\n", encoding="utf-8")
         self.make_stack("app", [("app", "repo/app:latest", "cid-app")])
