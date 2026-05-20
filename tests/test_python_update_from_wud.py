@@ -235,6 +235,38 @@ class PythonUpdateFromWudTests(unittest.TestCase):
         self.assertEqual(known[0]["image_id"], "new-app")
         self.assertTrue(known[0]["digest"].endswith("@sha256:new-app"))
 
+    def test_remove_lines_before_run_records_discarded_audit_entries(self) -> None:
+        self.wud_file.write_text(
+            "repo/app:one\nrepo/app:two\nrepo/app:three\n",
+            encoding="utf-8",
+        )
+        self.make_stack("stack", [("app", "repo/app:two", "cid-app")])
+        self.set_image_state("repo/app:two", "old", "sha256:old")
+        self.set_image_after_pull("repo/app:two", "new", "sha256:new")
+
+        result = self.run_python(
+            "--yes",
+            "--only-lines",
+            "2",
+            "--remove-lines-before-run",
+            "1,3",
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+        self.assertEqual(self.wud_file.read_text(encoding="utf-8"), "")
+        pending = self.db_rows(
+            "SELECT * FROM pending_updates ORDER BY line_no"
+        )
+        self.assertEqual(len(pending), 3)
+        self.assertEqual(
+            [(row["line_no"], row["status"], row["status_reason"]) for row in pending],
+            [
+                (1, "resolved", "removed-before-run"),
+                (2, "resolved", "updated"),
+                (3, "resolved", "removed-before-run"),
+            ],
+        )
+
     def test_digest_mismatch_restores_line_and_skips_recreate(self) -> None:
         self.wud_file.write_text("repo/app@sha256:good\n", encoding="utf-8")
         self.make_stack("app", [("app", "repo/app:latest", "cid-app")])

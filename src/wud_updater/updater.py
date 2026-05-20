@@ -290,13 +290,20 @@ class UpdateFromWudRunner:
                 return 0
 
             self._confirm_before_mutation()
-            self._start_audit(parsed)
-            self._mark_unmatched_pending(parsed, matches, skipped_tags)
-            self._mark_matched_pending(matches, status="in_progress")
+            remove_line_numbers = parse_line_spec(
+                opts.remove_lines_before_run,
+                len(parsed.lines),
+                "--remove-lines-before-run",
+            )
             in_flight_lines = sorted(
                 {match.target.line_no for match in matches}
-                | set(parse_line_spec(opts.remove_lines_before_run, len(parsed.lines), "--remove-lines-before-run"))
+                | set(remove_line_numbers)
             )
+            audit_parsed = self._audit_parsed_file(parsed, in_flight_lines)
+            self._start_audit(audit_parsed)
+            self._mark_unmatched_pending(audit_parsed, matches, skipped_tags)
+            self._mark_removed_pending(audit_parsed, remove_line_numbers, matches)
+            self._mark_matched_pending(matches, status="in_progress")
             remove_lines_before_run(
                 opts.wud_file,
                 parsed,
@@ -378,7 +385,12 @@ class UpdateFromWudRunner:
             self.log.warn(warning)
         return self._apply_tag_overrides(parsed)
 
-    def _apply_tag_overrides(self, parsed: ParsedWudFile) -> ParsedWudFile:
+    def _apply_tag_overrides(
+        self,
+        parsed: ParsedWudFile,
+        *,
+        log: bool = True,
+    ) -> ParsedWudFile:
         overrides = {item.line_no: item.tag for item in self.options.tag_overrides}
         if not overrides:
             return parsed
@@ -401,11 +413,12 @@ class UpdateFromWudRunner:
                 raise UpdaterError(
                     f"--tag-override line {target.line_no} does not target a tag update"
                 )
-            self.log.info(
-                "Tag override: "
-                f"line {target.line_no} uses tag {override} "
-                f"instead of {target.desired_tag}"
-            )
+            if log:
+                self.log.info(
+                    "Tag override: "
+                    f"line {target.line_no} uses tag {override} "
+                    f"instead of {target.desired_tag}"
+                )
             updated_targets.append(replace(target, desired_tag=override))
 
         return ParsedWudFile(
@@ -413,6 +426,20 @@ class UpdateFromWudRunner:
             targets=tuple(updated_targets),
             warnings=parsed.warnings,
         )
+
+    def _audit_parsed_file(
+        self,
+        parsed: ParsedWudFile,
+        audit_lines: Sequence[int],
+    ) -> ParsedWudFile:
+        target_lines = {target.line_no for target in parsed.targets}
+        if set(audit_lines).issubset(target_lines):
+            return parsed
+        audit_parsed = parse_wud_file(
+            self.options.wud_file,
+            selected_lines=sorted(target_lines | set(audit_lines)),
+        )
+        return self._apply_tag_overrides(audit_parsed, log=False)
 
     def _build_matches(
         self,
@@ -1434,6 +1461,27 @@ class UpdateFromWudRunner:
                 service_key=_service_key(match),
                 stack_name=match.stack.name,
                 service_name=match.service,
+            )
+
+    def _mark_removed_pending(
+        self,
+        parsed: ParsedWudFile,
+        remove_lines: Iterable[int],
+        matches: Sequence[Match],
+    ) -> None:
+        if self.audit_conn is None or self.audit_run_id is None:
+            return
+        matched_lines = {match.target.line_no for match in matches}
+        removed_lines = set(remove_lines) - matched_lines
+        for target in parsed.targets:
+            if target.line_no not in removed_lines:
+                continue
+            update_pending_update(
+                self.audit_conn,
+                run_id=self.audit_run_id,
+                line_no=target.line_no,
+                status="resolved",
+                status_reason="removed-before-run",
             )
 
     def _mark_failed_pending(
