@@ -1801,6 +1801,7 @@ def _expand_network_mode_services(
     services: Sequence[str],
     providers: Mapping[str, str],
 ) -> tuple[tuple[str, ...], bool]:
+    consumers_by_provider = _network_mode_consumers(providers)
     expanded: list[str] = []
     seen: set[str] = set()
     visiting: set[str] = set()
@@ -1811,8 +1812,6 @@ def _expand_network_mode_services(
         if service in seen:
             return
         if service in visiting:
-            expanded.append(service)
-            seen.add(service)
             return
 
         visiting.add(service)
@@ -1820,15 +1819,32 @@ def _expand_network_mode_services(
         if provider and provider != service:
             uses_network_provider = True
             visit(provider)
-        visiting.remove(service)
+
+        if service in consumers_by_provider:
+            uses_network_provider = True
 
         if service not in seen:
             expanded.append(service)
             seen.add(service)
 
+        for consumer in consumers_by_provider.get(service, ()):
+            visit(consumer)
+        visiting.remove(service)
+
     for service in services:
         visit(service)
     return tuple(expanded), uses_network_provider
+
+
+def _network_mode_consumers(providers: Mapping[str, str]) -> dict[str, tuple[str, ...]]:
+    consumers: dict[str, list[str]] = {}
+    for service, provider in providers.items():
+        if provider and provider != service:
+            consumers.setdefault(provider, []).append(service)
+    return {
+        provider: tuple(sorted(service_names))
+        for provider, service_names in consumers.items()
+    }
 
 
 def _update_services(matches: Sequence[Match]) -> tuple[str, ...] | None:

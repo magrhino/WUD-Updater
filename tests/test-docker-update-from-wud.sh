@@ -89,18 +89,24 @@ services:
   qbittorrent:
     image: $qbit_image
     network_mode: service:gluetun
+  mamapi:
+    image: ghcr.io/example/mamapi:latest
+    network_mode: service:gluetun
 YAML
-  printf '%s\n' gluetun qbittorrent > "$FAKE_ROOT/stacks/$id/services.txt"
-  printf '%s\n' qmcgaw/gluetun:latest "$qbit_image" > "$FAKE_ROOT/stacks/$id/images.txt"
+  printf '%s\n' gluetun qbittorrent mamapi > "$FAKE_ROOT/stacks/$id/services.txt"
+  printf '%s\n' qmcgaw/gluetun:latest "$qbit_image" ghcr.io/example/mamapi:latest > "$FAKE_ROOT/stacks/$id/images.txt"
   {
     printf '%s\t%s\n' gluetun qmcgaw/gluetun:latest
     printf '%s\t%s\n' qbittorrent "$qbit_image"
+    printf '%s\t%s\n' mamapi ghcr.io/example/mamapi:latest
   } > "$FAKE_ROOT/stacks/$id/service-images.tsv"
-  printf '%s\n' cid-gluetun cid-qbittorrent > "$FAKE_ROOT/stacks/$id/cids.txt"
+  printf '%s\n' cid-gluetun cid-qbittorrent cid-mamapi > "$FAKE_ROOT/stacks/$id/cids.txt"
   printf '%s\n' cid-gluetun > "$FAKE_ROOT/stacks/$id/cids-gluetun.txt"
   printf '%s\n' cid-qbittorrent > "$FAKE_ROOT/stacks/$id/cids-qbittorrent.txt"
+  printf '%s\n' cid-mamapi > "$FAKE_ROOT/stacks/$id/cids-mamapi.txt"
   printf '/cid-gluetun|running|healthy|0|0\n' > "$FAKE_ROOT/containers/cid-gluetun.summary"
   printf '/cid-qbittorrent|running|healthy|0|0\n' > "$FAKE_ROOT/containers/cid-qbittorrent.summary"
+  printf '/cid-mamapi|running|healthy|0|0\n' > "$FAKE_ROOT/containers/cid-mamapi.summary"
 }
 
 set_image_state(){
@@ -585,8 +591,9 @@ test_network_mode_provider_tag_update_omits_no_deps(){
   grep -q -- 'image: ghcr.io/linuxserver/qbittorrent:5.2.0' "$BASE/media/docker-compose.yml" || fail "compose file did not contain new qBittorrent tag"
   assert_calls_contain 'compose -f docker-compose.yml pull qbittorrent'
   assert_calls_not_contain 'compose -f docker-compose.yml pull gluetun'
-  assert_calls_contain 'compose -f docker-compose.yml stop qbittorrent gluetun'
-  assert_calls_contain 'compose -f docker-compose.yml up -d --remove-orphans gluetun qbittorrent$'
+  assert_calls_not_contain 'compose -f docker-compose.yml pull mamapi'
+  assert_calls_contain 'compose -f docker-compose.yml stop qbittorrent mamapi gluetun'
+  assert_calls_contain 'compose -f docker-compose.yml up -d --remove-orphans gluetun mamapi qbittorrent$'
   assert_calls_not_contain 'compose -f docker-compose.yml up -d .*--no-deps'
   teardown_case
 }
@@ -606,8 +613,28 @@ test_network_mode_provider_tag_update_rollback_omits_no_deps(){
   assert_file_equals "$WUD_FILE" 'ghcr.io/linuxserver/qbittorrent:5.1.4 tag=5.2.0'
   grep -q -- 'image: ghcr.io/linuxserver/qbittorrent:5.1.4' "$BASE/media/docker-compose.yml" || fail "compose file was not rolled back"
   local up_count
-  up_count="$(grep -Ec 'compose -f docker-compose.yml up -d --remove-orphans gluetun qbittorrent$' "$FAKE_ROOT/calls.log")"
+  up_count="$(grep -Ec 'compose -f docker-compose.yml up -d --remove-orphans gluetun mamapi qbittorrent$' "$FAKE_ROOT/calls.log")"
   [[ "$up_count" == "2" ]] || fail "expected update and rollback up without --no-deps, got $up_count"
+  assert_calls_not_contain 'compose -f docker-compose.yml up -d .*--no-deps'
+  teardown_case
+}
+
+test_network_mode_provider_update_includes_consumers(){
+  setup_case
+  printf 'qmcgaw/gluetun:latest\n' > "$WUD_FILE"
+  make_gluetun_qbittorrent_stack media ghcr.io/linuxserver/qbittorrent:5.1.4
+  set_image_state qmcgaw/gluetun:latest old-gluetun sha256:old-gluetun
+  set_image_after_pull qmcgaw/gluetun:latest new-gluetun sha256:new-gluetun
+
+  run_script --yes --mode stop
+
+  assert_status 0
+  assert_file_equals "$WUD_FILE" ''
+  assert_calls_contain 'compose -f docker-compose.yml pull gluetun'
+  assert_calls_not_contain 'compose -f docker-compose.yml pull qbittorrent'
+  assert_calls_not_contain 'compose -f docker-compose.yml pull mamapi'
+  assert_calls_contain 'compose -f docker-compose.yml stop qbittorrent mamapi gluetun'
+  assert_calls_contain 'compose -f docker-compose.yml up -d --remove-orphans gluetun mamapi qbittorrent$'
   assert_calls_not_contain 'compose -f docker-compose.yml up -d .*--no-deps'
   teardown_case
 }
@@ -628,7 +655,8 @@ test_network_mode_provider_label_forces_stack_level_update(){
   assert_calls_contain 'inspect cid-gluetun'
   assert_calls_contain 'compose -f docker-compose.yml pull qbittorrent'
   assert_calls_not_contain 'compose -f docker-compose.yml pull gluetun'
-  assert_calls_contain 'compose -f docker-compose.yml stop qbittorrent gluetun'
+  assert_calls_not_contain 'compose -f docker-compose.yml pull mamapi'
+  assert_calls_contain 'compose -f docker-compose.yml stop mamapi qbittorrent gluetun'
   assert_calls_contain 'compose -f docker-compose.yml up -d --remove-orphans$'
   assert_calls_not_contain 'compose -f docker-compose.yml up -d .*--no-deps'
   assert_calls_not_contain 'compose -f docker-compose.yml up -d .*--force-recreate'
@@ -1034,6 +1062,7 @@ main(){
   run_test test_tag_update_uses_direct_service_image_map
   run_test test_network_mode_provider_tag_update_omits_no_deps
   run_test test_network_mode_provider_tag_update_rollback_omits_no_deps
+  run_test test_network_mode_provider_update_includes_consumers
   run_test test_network_mode_provider_label_forces_stack_level_update
   run_test test_manifest_validation_failure_prevents_tag_rewrite
   run_test test_unhealthy_tag_update_rolls_back_and_writes_incident_log
