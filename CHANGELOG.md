@@ -4,6 +4,18 @@ All notable changes to WUD-Updater are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com) and versions follow
 [Semantic Versioning](https://semver.org).
 
+## [0.12.0](https://github.com/magrhino/WUD-Updater/compare/v0.11.1...v0.12.0) (2026-05-20)
+
+
+### Features
+
+* **db:** Use the existing SQLite3 DB for updater state ([#38](https://github.com/magrhino/WUD-Updater/issues/38)) ([ecc0829](https://github.com/magrhino/WUD-Updater/commit/ecc0829a29a1ed485bfb5b17eb2ea7436348c0dc))
+
+
+### Bug Fixes
+
+* **updater:** scope network consumer updates to matched service ([8ec7720](https://github.com/magrhino/WUD-Updater/commit/8ec77203540eec04d62dfec2d71b40779166205a))
+
 ## [0.11.1](https://github.com/magrhino/WUD-Updater/compare/v0.11.0...v0.11.1) (2026-05-20)
 
 
