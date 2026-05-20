@@ -1,11 +1,15 @@
 from __future__ import annotations
 
+import re
 import unittest
 from io import StringIO
 from unittest import mock
 
 from wud_updater import banner
 from wud_updater.terminal import RICH_AVAILABLE, TerminalRenderer
+
+ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
+FULL_ART_MARKER = "____    __    ____"
 
 
 class FakeResponse:
@@ -40,6 +44,22 @@ class BannerTests(unittest.TestCase):
         self.assertNotIn("\x1b[", text)
         self.assertNotIn("╭", text)
 
+    def test_plain_narrow_banner_uses_compact_fallback(self) -> None:
+        output = StringIO()
+        renderer = TerminalRenderer(no_color=True, stream=output, width=30)
+
+        renderer.startup_banner(
+            art=f"{FULL_ART_MARKER}{'_' * 30}\n",
+            local_tag="v0.10.1",
+            release_status=("Up to date: v0.10.1", "success"),
+        )
+
+        text = output.getvalue()
+        self.assertNotIn(FULL_ART_MARKER, text)
+        self.assertIn("WUD-Updater v0.10.1", text)
+        self.assertIn("Up to date: v0.10.1", text)
+        self.assertLessEqual(max(len(line) for line in text.splitlines()), 30)
+
     @unittest.skipUnless(RICH_AVAILABLE, "Rich is not installed")
     def test_rich_banner_uses_panel_text_and_color(self) -> None:
         output = StringIO()
@@ -56,6 +76,40 @@ class BannerTests(unittest.TestCase):
         self.assertIn("Update available: v0.10.1 -> v0.11.0", text)
         self.assertIn("╭", text)
         self.assertIn("\x1b[", text)
+
+    @unittest.skipUnless(RICH_AVAILABLE, "Rich is not installed")
+    def test_rich_wide_banner_keeps_full_art(self) -> None:
+        output = StringIO()
+        renderer = TerminalRenderer(stream=output, force_rich=True, width=146)
+
+        with mock.patch.dict("os.environ", {"TERM": "xterm-256color"}):
+            renderer.startup_banner(
+                art=banner.load_ascii_art(),
+                local_tag="v0.10.1",
+                release_status=("Up to date: v0.10.1", "success"),
+            )
+
+        text = _strip_ansi(output.getvalue())
+        self.assertIn(FULL_ART_MARKER, text)
+        self.assertIn("WUD-Updater v0.10.1", text)
+        self.assertIn("Up to date: v0.10.1", text)
+
+    @unittest.skipUnless(RICH_AVAILABLE, "Rich is not installed")
+    def test_rich_narrow_banner_uses_compact_fallback(self) -> None:
+        output = StringIO()
+        renderer = TerminalRenderer(stream=output, force_rich=True, width=80)
+
+        with mock.patch.dict("os.environ", {"TERM": "xterm-256color"}):
+            renderer.startup_banner(
+                art=banner.load_ascii_art(),
+                local_tag="v0.10.1",
+                release_status=("Up to date: v0.10.1", "success"),
+            )
+
+        text = _strip_ansi(output.getvalue())
+        self.assertNotIn(FULL_ART_MARKER, text)
+        self.assertIn("WUD-Updater v0.10.1", text)
+        self.assertIn("Up to date: v0.10.1", text)
 
     def test_release_status_reports_newer_latest_tag(self) -> None:
         self.assertEqual(
@@ -110,6 +164,10 @@ class BannerTests(unittest.TestCase):
 
         self.assertFalse(printed)
         self.assertEqual(output.getvalue(), "")
+
+
+def _strip_ansi(text: str) -> str:
+    return ANSI_RE.sub("", text)
 
 
 if __name__ == "__main__":
