@@ -4,6 +4,18 @@ All notable changes to WUD-Updater are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com) and versions follow
 [Semantic Versioning](https://semver.org).
 
+## [0.11.0](https://github.com/magrhino/WUD-Updater/compare/v0.10.1...v0.11.0) (2026-05-20)
+
+
+### Features
+
+* add startup banner release check ([4b3d99e](https://github.com/magrhino/WUD-Updater/commit/4b3d99efa481700e038aa389f713be6190fe98cd))
+
+
+### Bug Fixes
+
+* **updater:** avoid compose down for stack recreate ([a4ec1d8](https://github.com/magrhino/WUD-Updater/commit/a4ec1d897c14ac19fc77a886ba22d87344d5faad))
+
 ## [0.10.1](https://github.com/magrhino/WUD-Updater/compare/v0.10.0...v0.10.1) (2026-05-20)
 
 
