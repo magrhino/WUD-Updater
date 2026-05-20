@@ -105,6 +105,21 @@ class PythonUpdatesWrapperTests(unittest.TestCase):
         self.assertIn("OUT_UID=1000 OUT_GID=1001", updater_log)
         self.assertIn("--allow-tag-updates --yes", updater_log)
 
+    def test_yes_preserves_db_path_through_sudo_env(self) -> None:
+        self.wud_file.write_text("repo/app:latest\n", encoding="utf-8")
+        db_path = self.root / "state" / "wud-updater.sqlite"
+
+        result = self.run_updates(
+            "--yes",
+            env_overrides={"WUD_DB_PATH": str(db_path)},
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+        sudo_log = self.sudo_log.read_text(encoding="utf-8")
+        updater_log = self.updater_log.read_text(encoding="utf-8")
+        self.assertIn(f"env WUD_DB_PATH={db_path} {self.updater}", sudo_log)
+        self.assertIn(f"WUD_DB_PATH={db_path}", updater_log)
+
     def test_no_updater_sudo_flag_invokes_updater_directly(self) -> None:
         self.wud_file.write_text("repo/app:latest\n", encoding="utf-8")
 
@@ -748,7 +763,7 @@ while (($#)); do
       ;;
   esac
 done
-printf 'OUT_UID=%s OUT_GID=%s WUD_LOCK_TIMEOUT=%s WUD_LOCK_HELD_BY_PARENT=%s\\n' "${OUT_UID:-}" "${OUT_GID:-}" "${WUD_LOCK_TIMEOUT:-}" "${WUD_LOCK_HELD_BY_PARENT:-}" >> "${FAKE_UPDATER_LOG:?FAKE_UPDATER_LOG is required}"
+printf 'OUT_UID=%s OUT_GID=%s WUD_LOCK_TIMEOUT=%s WUD_LOCK_HELD_BY_PARENT=%s WUD_DB_PATH=%s\\n' "${OUT_UID:-}" "${OUT_GID:-}" "${WUD_LOCK_TIMEOUT:-}" "${WUD_LOCK_HELD_BY_PARENT:-}" "${WUD_DB_PATH:-}" >> "${FAKE_UPDATER_LOG:?FAKE_UPDATER_LOG is required}"
 if [[ "${FAKE_UPDATER_ASSERT_LOCK:-}" = "1" ]]; then
   if [[ "${WUD_LOCK_HELD_BY_PARENT:-}" != "1" ]]; then
     printf 'missing WUD_LOCK_HELD_BY_PARENT\\n' >> "$FAKE_UPDATER_LOG"

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import shutil
 import sys
 from collections.abc import Mapping, Sequence
 from typing import Any, TextIO
@@ -21,6 +22,7 @@ except ImportError:  # pragma: no cover - plain fallback is tested directly.
     Text = None
 
 RICH_AVAILABLE = Console is not None
+_BANNER_BOX_HORIZONTAL_OVERHEAD = 4
 
 
 class TerminalRenderer:
@@ -208,15 +210,21 @@ class TerminalRenderer:
     ) -> None:
         target = self.stream if stream is None else stream
         if self.rich_enabled(target) and Panel is not None and Text is not None:
+            console = self._console(target)
+            include_art = _banner_art_fits(
+                art,
+                _banner_content_width(console.width),
+            )
             body = Text()
-            body.append(art.rstrip("\n"), style="bold cyan")
-            body.append("\n\n")
+            if include_art:
+                body.append(art.rstrip("\n"), style="bold cyan")
+                body.append("\n\n")
             body.append(f"WUD-Updater {local_tag}", style="bold green")
             if release_status is not None:
                 message, kind = release_status
                 body.append("\n")
                 body.append(message, style=_KIND_STYLES.get(kind, "white"))
-            self._console(target).print(
+            console.print(
                 Panel(
                     body,
                     title=f" WUD-Updater {local_tag} ",
@@ -230,6 +238,7 @@ class TerminalRenderer:
             art=art,
             local_tag=local_tag,
             release_status=release_status,
+            terminal_width=_terminal_width(target, self.width),
         ):
             print(line, file=target)
 
@@ -310,13 +319,34 @@ def _stream_is_tty(stream: TextIO) -> bool:
     return bool(isatty and isatty())
 
 
+def _terminal_width(_stream: TextIO, explicit_width: int | None) -> int:
+    if explicit_width is not None:
+        return explicit_width
+    return shutil.get_terminal_size(fallback=(80, 24)).columns
+
+
+def _banner_content_width(terminal_width: int) -> int:
+    return max(0, terminal_width - _BANNER_BOX_HORIZONTAL_OVERHEAD)
+
+
+def _banner_art_fits(art: str, content_width: int) -> bool:
+    art_lines = art.rstrip("\n").splitlines()
+    art_width = max((len(line) for line in art_lines), default=0)
+    return art_width <= content_width
+
+
 def _plain_banner_lines(
     *,
     art: str,
     local_tag: str,
     release_status: tuple[str, str] | None,
+    terminal_width: int,
 ) -> list[str]:
-    content = [*art.rstrip("\n").splitlines(), "", f"WUD-Updater {local_tag}"]
+    content: list[str] = []
+    if _banner_art_fits(art, _banner_content_width(terminal_width)):
+        content.extend(art.rstrip("\n").splitlines())
+        content.append("")
+    content.append(f"WUD-Updater {local_tag}")
     if release_status is not None:
         content.append(release_status[0])
     width = max((len(line) for line in content), default=0)

@@ -2,11 +2,12 @@ from __future__ import annotations
 
 import os
 import re
+import sqlite3
 import subprocess
 import sys
 import tempfile
 import unittest
-from contextlib import redirect_stderr, redirect_stdout
+from contextlib import closing, redirect_stderr, redirect_stdout
 from io import StringIO
 from pathlib import Path
 from unittest import mock
@@ -17,8 +18,10 @@ from wud_updater.file_ops import OwnerConfig
 from wud_updater.updater import (
     ComposeTagRewriteError,
     TagUpdate,
+    UpdaterError,
     UpdaterOptions,
     UpdateFromWudRunner,
+    _apply_sqlite_owner,
     apply_compose_tag_updates,
     prepare_log_file,
 )
@@ -32,6 +35,7 @@ class PythonUpdateFromWudTests(unittest.TestCase):
         self.base = self.root / "base"
         self.wud_file = self.root / "images.todo"
         self.log_dir = self.root / "logs"
+        self.db_path = self.root / "state" / "wud-updater.sqlite"
         self.fake_root = self.root / "fake"
         for path in (
             self.base,
@@ -50,6 +54,7 @@ class PythonUpdateFromWudTests(unittest.TestCase):
         self.env["PATH"] = f"{self.repo_root / 'tests' / 'fakes'}:{self.env['PATH']}"
         self.env["PYTHONPATH"] = str(self.repo_root / "src")
         self.env["WUD_UPDATER_BANNER"] = "0"
+        self.env["WUD_DB_PATH"] = str(self.db_path)
 
     def tearDown(self) -> None:
         self.tmp.cleanup()
@@ -167,6 +172,11 @@ class PythonUpdateFromWudTests(unittest.TestCase):
         self.assertTrue(reports, "expected updater error report")
         return reports[-1]
 
+    def db_rows(self, query: str, params: tuple[object, ...] = ()) -> list[sqlite3.Row]:
+        with closing(sqlite3.connect(self.db_path)) as conn:
+            conn.row_factory = sqlite3.Row
+            return list(conn.execute(query, params))
+
     def test_wrapper_default_dry_run_plans_without_mutation(self) -> None:
         self.wud_file.write_text("repo/app:latest\n", encoding="utf-8")
         self.make_stack("app", [("app", "repo/app:latest", "cid-app")])
@@ -180,6 +190,7 @@ class PythonUpdateFromWudTests(unittest.TestCase):
         self.assertIn("line 1: repo/app:latest", result.stdout)
         self.assertNotRegex(self.calls(), r"compose -f .* pull")
         self.assertNotRegex(self.calls(), r"compose -f .* up -d")
+        self.assertFalse(self.db_path.exists())
 
     def test_python_updates_matched_service_and_cleans_wud_line(self) -> None:
         self.wud_file.write_text("repo/app:latest\n", encoding="utf-8")
@@ -204,6 +215,57 @@ class PythonUpdateFromWudTests(unittest.TestCase):
         self.assertRegex(calls, r"compose -f docker-compose.yml stop app")
         self.assertRegex(calls, r"compose -f docker-compose.yml up -d .* app")
         self.assertNotRegex(calls, r"compose -f docker-compose.yml pull db")
+        runs = self.db_rows("SELECT * FROM update_runs")
+        pending = self.db_rows("SELECT * FROM pending_updates")
+        events = self.db_rows("SELECT * FROM update_events")
+        known = self.db_rows("SELECT * FROM known_images")
+        self.assertEqual(len(runs), 1)
+        self.assertEqual(runs[0]["status"], "success")
+        self.assertTrue(runs[0]["finished_at"].endswith("+00:00"))
+        self.assertEqual(len(pending), 1)
+        self.assertEqual(pending[0]["status"], "resolved")
+        self.assertEqual(pending[0]["status_reason"], "updated")
+        self.assertEqual(pending[0]["service_key"], "stack/app")
+        self.assertEqual(len(events), 1)
+        self.assertEqual(events[0]["status"], "success")
+        self.assertEqual(events[0]["service_name"], "app")
+        self.assertEqual(len(known), 1)
+        self.assertEqual(known[0]["service_key"], "stack/app")
+        self.assertEqual(known[0]["image"], "repo/app:latest")
+        self.assertEqual(known[0]["image_id"], "new-app")
+        self.assertTrue(known[0]["digest"].endswith("@sha256:new-app"))
+
+    def test_remove_lines_before_run_records_discarded_audit_entries(self) -> None:
+        self.wud_file.write_text(
+            "repo/app:one\nrepo/app:two\nrepo/app:three\n",
+            encoding="utf-8",
+        )
+        self.make_stack("stack", [("app", "repo/app:two", "cid-app")])
+        self.set_image_state("repo/app:two", "old", "sha256:old")
+        self.set_image_after_pull("repo/app:two", "new", "sha256:new")
+
+        result = self.run_python(
+            "--yes",
+            "--only-lines",
+            "2",
+            "--remove-lines-before-run",
+            "1,3",
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+        self.assertEqual(self.wud_file.read_text(encoding="utf-8"), "")
+        pending = self.db_rows(
+            "SELECT * FROM pending_updates ORDER BY line_no"
+        )
+        self.assertEqual(len(pending), 3)
+        self.assertEqual(
+            [(row["line_no"], row["status"], row["status_reason"]) for row in pending],
+            [
+                (1, "resolved", "removed-before-run"),
+                (2, "resolved", "updated"),
+                (3, "resolved", "removed-before-run"),
+            ],
+        )
 
     def test_digest_mismatch_restores_line_and_skips_recreate(self) -> None:
         self.wud_file.write_text("repo/app@sha256:good\n", encoding="utf-8")
@@ -219,6 +281,208 @@ class PythonUpdateFromWudTests(unittest.TestCase):
             "repo/app@sha256:good\n",
         )
         self.assertNotRegex(self.calls(), r"compose -f .* up -d")
+        pending = self.db_rows("SELECT * FROM pending_updates")
+        runs = self.db_rows("SELECT * FROM update_runs")
+        self.assertEqual(runs[0]["status"], "failure")
+        self.assertEqual(pending[0]["status"], "failed")
+        self.assertEqual(pending[0]["status_reason"], "expected-digest-not-reached")
+
+    def test_multi_stack_failure_keeps_failure_reason_in_pending_audit(self) -> None:
+        self.wud_file.write_text("repo/app:latest\n", encoding="utf-8")
+        self.make_stack("ok", [("app", "repo/app:latest", "cid-ok")])
+        self.make_stack("zbad", [("app", "repo/app:latest", "cid-bad")])
+        self.set_image_state("repo/app:latest", "old", "sha256:old")
+        self.set_image_after_pull("repo/app:latest", "new", "sha256:new")
+        stack_state = self.fake_root / "stacks" / "zbad"
+        (stack_state / "pull_fail").write_text("", encoding="utf-8")
+        (stack_state / "pull_stderr").write_text("manifest fetch failed\n", encoding="utf-8")
+
+        result = self.run_python("--yes")
+
+        self.assertEqual(result.returncode, 1, result.stderr + result.stdout)
+        pending = self.db_rows("SELECT * FROM pending_updates")
+        self.assertEqual(len(pending), 1)
+        self.assertEqual(pending[0]["status"], "failed")
+        self.assertEqual(pending[0]["status_reason"], "pull-failed")
+        self.assertEqual(pending[0]["service_key"], "zbad/app")
+        self.assertEqual(pending[0]["stack_name"], "zbad")
+        self.assertEqual(pending[0]["service_name"], "app")
+
+    def test_malformed_audit_db_fails_before_mutation(self) -> None:
+        self.wud_file.write_text("repo/app:latest\n", encoding="utf-8")
+        self.make_stack("app", [("app", "repo/app:latest", "cid-app")])
+        self.set_image_state("repo/app:latest", "old", "sha256:old")
+        self.set_image_after_pull("repo/app:latest", "new", "sha256:new")
+        self.db_path.parent.mkdir(parents=True, exist_ok=True)
+        with sqlite3.connect(self.db_path) as conn:
+            conn.execute("PRAGMA user_version = 99")
+
+        result = self.run_python("--yes")
+
+        self.assertEqual(result.returncode, 1, result.stderr + result.stdout)
+        self.assertIn("Could not initialize audit database:", result.stderr)
+        self.assertIn("Unsupported database schema version: 99", result.stderr)
+        self.assertEqual(self.wud_file.read_text(encoding="utf-8"), "repo/app:latest\n")
+        self.assertNotRegex(self.calls(), r"compose -f .* pull")
+        self.assertNotRegex(self.calls(), r"compose -f .* up -d")
+
+    def test_audit_owner_failure_marks_started_run_failed(self) -> None:
+        self.wud_file.write_text("repo/app:latest\n", encoding="utf-8")
+        self.make_stack("app", [("app", "repo/app:latest", "cid-app")])
+        self.set_image_state("repo/app:latest", "old", "sha256:old")
+        self.set_image_after_pull("repo/app:latest", "new", "sha256:new")
+        options = UpdaterOptions(
+            docker_base=self.base,
+            wud_file=self.wud_file,
+            log_dir=self.log_dir,
+            max_wait=0,
+            assume_yes=True,
+            no_color=True,
+            db_path=self.db_path,
+        )
+        runner = UpdateFromWudRunner(
+            options,
+            environ=self.env,
+            command_runner=CommandRunner(env=self.env),
+        )
+        stdout = StringIO()
+        stderr = StringIO()
+
+        with (
+            mock.patch(
+                "wud_updater.updater._apply_sqlite_owner",
+                side_effect=OSError("chown failed"),
+            ),
+            redirect_stdout(stdout),
+            redirect_stderr(stderr),
+        ):
+            with self.assertRaisesRegex(
+                UpdaterError,
+                "Could not initialize audit database: chown failed",
+            ):
+                runner.run()
+
+        self.assertEqual(self.wud_file.read_text(encoding="utf-8"), "repo/app:latest\n")
+        self.assertNotRegex(self.calls(), r"compose -f .* pull")
+        self.assertNotRegex(self.calls(), r"compose -f .* up -d")
+        runs = self.db_rows("SELECT * FROM update_runs")
+        self.assertEqual(len(runs), 1)
+        self.assertEqual(runs[0]["status"], "failure")
+        self.assertIsNotNone(runs[0]["finished_at"])
+
+    def test_late_audit_write_failure_marks_run_failed(self) -> None:
+        self.wud_file.write_text("repo/app:latest\n", encoding="utf-8")
+        self.make_stack("app", [("app", "repo/app:latest", "cid-app")])
+        self.set_image_state("repo/app:latest", "old", "sha256:old")
+        self.set_image_after_pull("repo/app:latest", "new", "sha256:new")
+        options = UpdaterOptions(
+            docker_base=self.base,
+            wud_file=self.wud_file,
+            log_dir=self.log_dir,
+            max_wait=0,
+            assume_yes=True,
+            no_color=True,
+            db_path=self.db_path,
+        )
+        runner = UpdateFromWudRunner(
+            options,
+            environ=self.env,
+            command_runner=CommandRunner(env=self.env),
+        )
+        stdout = StringIO()
+        stderr = StringIO()
+
+        with (
+            mock.patch(
+                "wud_updater.updater.insert_update_event",
+                side_effect=sqlite3.OperationalError("database is locked"),
+            ),
+            redirect_stdout(stdout),
+            redirect_stderr(stderr),
+        ):
+            with self.assertRaisesRegex(
+                UpdaterError,
+                "Could not update audit database: database is locked",
+            ):
+                runner.run()
+
+        self.assertEqual(self.wud_file.read_text(encoding="utf-8"), "")
+        runs = self.db_rows("SELECT * FROM update_runs")
+        self.assertEqual(len(runs), 1)
+        self.assertEqual(runs[0]["status"], "failure")
+        self.assertIsNotNone(runs[0]["finished_at"])
+
+    def test_audit_start_applies_configured_owner_to_db_path(self) -> None:
+        self.wud_file.write_text("repo/app:latest\n", encoding="utf-8")
+        self.make_stack("app", [("app", "repo/app:latest", "cid-app")])
+        self.set_image_state("repo/app:latest", "old", "sha256:old")
+        self.set_image_after_pull("repo/app:latest", "new", "sha256:new")
+        self.env["OUT_UID"] = str(os.getuid())
+        self.env["OUT_GID"] = str(os.getgid())
+        options = UpdaterOptions(
+            docker_base=self.base,
+            wud_file=self.wud_file,
+            log_dir=self.log_dir,
+            max_wait=0,
+            assume_yes=True,
+            no_color=True,
+            db_path=self.db_path,
+        )
+        runner = UpdateFromWudRunner(
+            options,
+            environ=self.env,
+            command_runner=CommandRunner(env=self.env),
+        )
+        stdout = StringIO()
+        stderr = StringIO()
+
+        with (
+            mock.patch("wud_updater.updater._apply_sqlite_owner") as apply_owner,
+            redirect_stdout(stdout),
+            redirect_stderr(stderr),
+        ):
+            status = runner.run()
+
+        self.assertEqual(status, 0, stderr.getvalue() + stdout.getvalue())
+        apply_owner.assert_any_call(self.db_path, runner.owner, chown_parent=True)
+
+    def test_apply_sqlite_owner_leaves_existing_db_directory_alone(self) -> None:
+        db_path = self.root / "state" / "wud-updater.sqlite"
+        sidecars = [
+            db_path,
+            Path(f"{db_path}-wal"),
+            Path(f"{db_path}-shm"),
+            Path(f"{db_path}-journal"),
+        ]
+        db_path.parent.mkdir(parents=True, exist_ok=True)
+        for path in sidecars:
+            path.write_text("", encoding="utf-8")
+        owner = OwnerConfig.from_values(str(os.getuid()), str(os.getgid()))
+
+        with mock.patch("wud_updater.updater.apply_configured_owner") as apply_owner:
+            _apply_sqlite_owner(db_path, owner)
+
+        called_paths = [Path(call.args[0]) for call in apply_owner.call_args_list]
+        self.assertEqual(called_paths, sidecars)
+
+    def test_apply_sqlite_owner_updates_created_db_directory_and_sidecars(self) -> None:
+        db_path = self.root / "created-state" / "wud-updater.sqlite"
+        sidecars = [
+            db_path,
+            Path(f"{db_path}-wal"),
+            Path(f"{db_path}-shm"),
+            Path(f"{db_path}-journal"),
+        ]
+        db_path.parent.mkdir(parents=True, exist_ok=True)
+        for path in sidecars:
+            path.write_text("", encoding="utf-8")
+        owner = OwnerConfig.from_values(str(os.getuid()), str(os.getgid()))
+
+        with mock.patch("wud_updater.updater.apply_configured_owner") as apply_owner:
+            _apply_sqlite_owner(db_path, owner, chown_parent=True)
+
+        called_paths = [Path(call.args[0]) for call in apply_owner.call_args_list]
+        self.assertEqual(called_paths, [db_path.parent, *sidecars])
 
     def test_up_wait_failure_writes_error_report_with_command_output(self) -> None:
         self.env["FAKE_COMPOSE_UP_WAIT"] = "1"
@@ -336,6 +600,29 @@ class PythonUpdateFromWudTests(unittest.TestCase):
         )
         self.assertNotRegex(self.calls(), r"compose -f .* pull")
         self.assertNotRegex(self.calls(), r"compose -f .* up -d")
+        pending = self.db_rows("SELECT * FROM pending_updates")
+        self.assertEqual(len(pending), 1)
+        self.assertEqual(pending[0]["status"], "pending")
+        self.assertEqual(pending[0]["status_reason"], "tag-update-disabled")
+
+    def test_unmatched_entry_remains_pending_with_reason(self) -> None:
+        self.wud_file.write_text("repo/missing:latest\n", encoding="utf-8")
+        self.make_stack("app", [("app", "repo/app:latest", "cid-app")])
+
+        result = self.run_python("--yes")
+
+        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+        self.assertEqual(
+            self.wud_file.read_text(encoding="utf-8"),
+            "repo/missing:latest\n",
+        )
+        self.assertNotRegex(self.calls(), r"compose -f .* pull")
+        pending = self.db_rows("SELECT * FROM pending_updates")
+        runs = self.db_rows("SELECT * FROM update_runs")
+        self.assertEqual(runs[0]["status"], "success")
+        self.assertEqual(len(pending), 1)
+        self.assertEqual(pending[0]["status"], "pending")
+        self.assertEqual(pending[0]["status_reason"], "unmatched")
 
     def test_tag_update_dry_run_does_not_rewrite_compose(self) -> None:
         self.wud_file.write_text("repo/app:1.0 tag=2.0\n", encoding="utf-8")
@@ -357,6 +644,7 @@ class PythonUpdateFromWudTests(unittest.TestCase):
         )
         self.assertNotRegex(self.calls(), r"compose -f .* pull")
         self.assertNotRegex(self.calls(), r"compose -f .* up -d")
+        self.assertFalse(self.db_path.exists())
 
     def test_allowed_tag_update_rewrites_compose_and_cleans_line(self) -> None:
         self.wud_file.write_text("repo/app:1.0 tag=2.0\n", encoding="utf-8")
