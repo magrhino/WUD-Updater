@@ -110,8 +110,10 @@ services:
 When the matched running service container has
 `WUD-UPDATER-RECREATE-STACK=true`, `docker-update-from-wud` uses stack-level
 pull/recreate behavior for that Compose project. In stop mode, that means
-`docker compose pull`, `docker compose down`, and `docker compose up` for the
-stack instead of service-scoped stop/up.
+pulling only the matched service image, stopping the project services, and
+running `docker compose up --force-recreate` for the stack. This recreates
+containers while preserving Compose networks instead of using
+`docker compose down`.
 
 The example mounts:
 

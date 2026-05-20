@@ -282,7 +282,7 @@ class PythonUpdateFromWudTests(unittest.TestCase):
         self.assertIn("container stop failed", report)
         self.assertIn("Compose up recovery succeeded", report)
 
-    def test_tag_update_down_failure_keeps_down_command_after_failed_recovery(self) -> None:
+    def test_tag_update_stack_recreate_reports_recovery_up_failure(self) -> None:
         self.env["FAKE_COMPOSE_UP_WAIT"] = "1"
         self.wud_file.write_text("repo/app:1.0 tag=2.0\n", encoding="utf-8")
         self.make_stack("app", [("app", "repo/app:1.0", "cid-app")])
@@ -293,9 +293,9 @@ class PythonUpdateFromWudTests(unittest.TestCase):
             "WUD-UPDATER-RECREATE-STACK=true\n",
             encoding="utf-8",
         )
-        (stack_state / "down_fail").write_text("", encoding="utf-8")
-        (stack_state / "down_stderr").write_text(
-            "network remove failed\n",
+        (stack_state / "stop_fail").write_text("", encoding="utf-8")
+        (stack_state / "stop_stderr").write_text(
+            "container stop failed\n",
             encoding="utf-8",
         )
         (stack_state / "up_fail").write_text("", encoding="utf-8")
@@ -308,12 +308,12 @@ class PythonUpdateFromWudTests(unittest.TestCase):
 
         self.assertEqual(result.returncode, 1, result.stderr + result.stdout)
         report = self.latest_error_report().read_text(encoding="utf-8")
-        self.assertIn("phase=down", report)
+        self.assertIn("phase=stop", report)
         self.assertIn("reason=down-failed", report)
-        self.assertIn("argv=docker compose -f docker-compose.yml down", report)
-        self.assertIn("network remove failed", report)
-        self.assertNotIn("argv=docker compose -f docker-compose.yml up", report)
-        self.assertNotIn("recovery up failed", report)
+        self.assertIn("argv=docker compose -f docker-compose.yml up", report)
+        self.assertIn("--force-recreate", report)
+        self.assertIn("recovery up failed", report)
+        self.assertNotIn("argv=docker compose -f docker-compose.yml down", report)
 
     def test_tag_update_requires_explicit_flag(self) -> None:
         self.wud_file.write_text("repo/app:1.0 tag=2.0\n", encoding="utf-8")

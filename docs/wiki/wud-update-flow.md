@@ -89,7 +89,8 @@ By default, matched Compose services are recreated without their dependencies.
 If updating a service should recreate the whole Compose project, label that
 service with `WUD-UPDATER-RECREATE-STACK=true`. When a matched running service
 container has that label, the updater uses stack-level pull/recreate behavior
-instead of service-scoped stop/up.
+instead of service-scoped stop/up: it stops the project services and runs
+`docker compose up --force-recreate` without tearing down Compose networks.
 
 Interactive `updates` runs show selected tag update entries and ask whether to
 apply them as shown, skip them, or change the tag before handing off to

@@ -260,7 +260,7 @@ class ComposeCliTests(FakeDockerCase):
             ],
         )
 
-    def test_pull_and_recreate_stack_level_uses_down_before_up(self) -> None:
+    def test_pull_and_recreate_stack_level_stops_before_force_recreate(self) -> None:
         stack = self.make_stack("stack", [("app", "repo/app:latest", "cid-app")])
         self.set_image_after_pull("repo/app:latest", "new-app", "sha256:new-app")
 
@@ -275,8 +275,9 @@ class ComposeCliTests(FakeDockerCase):
             self.call_commands(),
             [
                 "compose -f docker-compose.yml pull ",
-                "compose -f docker-compose.yml down ",
-                "compose -f docker-compose.yml up -d --remove-orphans",
+                "compose -f docker-compose.yml config --services",
+                "compose -f docker-compose.yml stop app",
+                "compose -f docker-compose.yml up -d --remove-orphans --force-recreate",
             ],
         )
 
@@ -292,10 +293,10 @@ class ComposeCliTests(FakeDockerCase):
 
         self.assertEqual(self.call_commands(), [])
 
-    def test_pull_and_recreate_attempts_up_after_down_failure(self) -> None:
+    def test_pull_and_recreate_attempts_up_after_stack_stop_failure(self) -> None:
         stack = self.make_stack("stack", [("app", "repo/app:latest", "cid-app")])
         self.set_image_after_pull("repo/app:latest", "new-app", "sha256:new-app")
-        (self.fake_root / "stacks" / "stack" / "down_fail").write_text(
+        (self.fake_root / "stacks" / "stack" / "stop_fail").write_text(
             "1",
             encoding="utf-8",
         )
@@ -312,8 +313,9 @@ class ComposeCliTests(FakeDockerCase):
             self.call_commands(),
             [
                 "compose -f docker-compose.yml pull ",
-                "compose -f docker-compose.yml down ",
-                "compose -f docker-compose.yml up -d --remove-orphans",
+                "compose -f docker-compose.yml config --services",
+                "compose -f docker-compose.yml stop app",
+                "compose -f docker-compose.yml up -d --remove-orphans --force-recreate",
             ],
         )
 

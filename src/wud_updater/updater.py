@@ -133,6 +133,8 @@ class UpdateScope:
     services: tuple[str, ...] | None
     pull_services: tuple[str, ...] | None
     stack_reason: str = ""
+    stop_services: tuple[str, ...] | None = None
+    force_recreate: bool = False
 
 
 @dataclass
@@ -426,9 +428,11 @@ class UpdateFromWudRunner:
         scope = self._update_scope(stack, matches)
         services = scope.services
         pull_services = scope.pull_services
+        stop_services = scope.stop_services if scope.stop_services is not None else services
         service_scoped = services is not None
         services_label = " ".join(services or ())
         pull_services_label = " ".join(pull_services or ())
+        stop_services_label = " ".join(stop_services or ())
 
         if self.log.rich_enabled():
             self.log.plain("INFO", f"[{stack.name}] Checking for updates (mode={opts.mode})")
@@ -537,6 +541,7 @@ class UpdateFromWudRunner:
                     compose_backup,
                     "compose-refresh-failed",
                     phase="compose-refresh",
+                    force_recreate=scope.force_recreate,
                 )
             if not self._validate_applied_tag_updates(
                 stack,
@@ -551,6 +556,7 @@ class UpdateFromWudRunner:
                     compose_backup,
                     "compose-tag-validation-failed",
                     phase="compose-tag-validation",
+                    force_recreate=scope.force_recreate,
                 )
             current_stack = refreshed
             images = tuple(current_stack.images)
@@ -568,6 +574,7 @@ class UpdateFromWudRunner:
                     "pull-failed",
                     phase="pull",
                     command_error=exc,
+                    force_recreate=scope.force_recreate,
                 )
             self._record_failure(
                 stack,
@@ -591,6 +598,7 @@ class UpdateFromWudRunner:
                     compose_backup,
                     "expected-digest-not-reached",
                     phase="digest",
+                    force_recreate=scope.force_recreate,
                 )
             self._record_failure(
                 stack,
@@ -614,7 +622,7 @@ class UpdateFromWudRunner:
 
         down_failed = False
         down_error: CommandError | None = None
-        down_phase = "stop" if service_scoped else "down"
+        down_phase = "stop"
         if opts.mode == "pause":
             self.log.warn(
                 f"[{stack.name}] Mode pause is deprecated; pausing before recreate and unpausing before health check"
@@ -629,13 +637,18 @@ class UpdateFromWudRunner:
                     self.log.warn(f"[{stack.name}] Stopping affected service(s): {services_label}")
                     self.compose.stop(stack.directory, stack.file, services)
                 else:
-                    self.log.warn(f"[{stack.name}] Bringing down stack")
-                    self.compose.down(stack.directory, stack.file)
+                    if stop_services_label:
+                        self.log.warn(
+                            f"[{stack.name}] Stopping stack service(s): {stop_services_label}"
+                        )
+                    else:
+                        self.log.warn(f"[{stack.name}] Stopping stack")
+                    self.compose.stop(stack.directory, stack.file, stop_services)
             except CommandError as exc:
                 down_failed = True
                 down_error = exc
                 self.log.warn(
-                    f"[{stack.name}] Stop/down failed; attempting up for recovery, but this stack will not be marked successful"
+                    f"[{stack.name}] Stop failed; attempting up for recovery, but this stack will not be marked successful"
                 )
 
         if service_scoped:
@@ -643,7 +656,11 @@ class UpdateFromWudRunner:
         else:
             self.log.info(f"[{stack.name}] Bringing stack up")
 
-        up_result = self._run_compose_up(stack, services)
+        up_result = self._run_compose_up(
+            stack,
+            services,
+            force_recreate=scope.force_recreate,
+        )
         if not up_result.ok:
             if applied_tags and compose_backup is not None:
                 failure_phase = "up"
@@ -663,6 +680,7 @@ class UpdateFromWudRunner:
                     phase=failure_phase,
                     command_error=failure_error,
                     failure_health=up_result.health_details,
+                    force_recreate=scope.force_recreate,
                 )
             if down_failed and down_error is not None:
                 self._record_failure(
@@ -701,6 +719,7 @@ class UpdateFromWudRunner:
                         "unpause-failed",
                         phase="unpause",
                         command_error=exc,
+                        force_recreate=scope.force_recreate,
                     )
                 self._record_failure(
                     stack,
@@ -727,6 +746,7 @@ class UpdateFromWudRunner:
                         "down-failed",
                         phase=down_phase,
                         command_error=down_error,
+                        force_recreate=scope.force_recreate,
                     )
                 self._record_failure(
                     stack,
@@ -736,7 +756,7 @@ class UpdateFromWudRunner:
                     services=services,
                     command_error=down_error,
                     health_details=self._capture_health_details(stack, services),
-                    note="Compose up recovery succeeded, but the earlier stop/down command failed.",
+                    note="Compose up recovery succeeded, but the earlier stop command failed.",
                 )
                 return StackStatus("failure", "down-failed")
             return StackStatus("success", "updated")
@@ -752,6 +772,7 @@ class UpdateFromWudRunner:
                 "health-failed",
                 phase="health",
                 failure_health=health_details,
+                force_recreate=scope.force_recreate,
             )
         self._record_failure(
             stack,
@@ -767,6 +788,8 @@ class UpdateFromWudRunner:
         self,
         stack: ComposeStack,
         services: Sequence[str] | None,
+        *,
+        force_recreate: bool = False,
     ) -> UpResult:
         if self.options.mode != "pause" and self.compose.up_wait_supported(stack.directory, stack.file):
             self.log.info(
@@ -779,6 +802,7 @@ class UpdateFromWudRunner:
                     services,
                     wait=True,
                     wait_timeout=self.options.max_wait,
+                    force_recreate=force_recreate,
                 )
                 return UpResult(True, True)
             except CommandError as exc:
@@ -788,7 +812,12 @@ class UpdateFromWudRunner:
                 return UpResult(False, True, exc, health_details)
 
         try:
-            self.compose.up(stack.directory, stack.file, services)
+            self.compose.up(
+                stack.directory,
+                stack.file,
+                services,
+                force_recreate=force_recreate,
+            )
             return UpResult(True, False)
         except CommandError as exc:
             self.log.error(f"[{stack.name}] docker compose up failed")
@@ -840,6 +869,7 @@ class UpdateFromWudRunner:
         phase: str,
         command_error: CommandError | None = None,
         failure_health: str | None = None,
+        force_recreate: bool = False,
     ) -> StackStatus:
         if failure_health is None:
             failure_health = self._capture_health_details(stack, services)
@@ -848,7 +878,11 @@ class UpdateFromWudRunner:
         rollback_error: CommandError | None = None
         try:
             shutil.copy2(compose_backup, stack.directory / stack.file)
-            rollback_up = self._run_compose_up(stack, services)
+            rollback_up = self._run_compose_up(
+                stack,
+                services,
+                force_recreate=force_recreate,
+            )
             if rollback_up.ok and (rollback_up.wait_handled or self._wait_for_health(stack, services)):
                 rollback_result = "restored-and-healthy"
                 self.log.warn(
@@ -860,7 +894,7 @@ class UpdateFromWudRunner:
         except OSError:
             self.log.error(f"[{stack.name}] Rollback failed; manual review required.")
 
-        report_error = command_error or rollback_error
+        report_error = rollback_error or command_error
         self._record_failure(
             stack,
             matches,
@@ -933,7 +967,12 @@ class UpdateFromWudRunner:
     def _update_scope(self, stack: ComposeStack, matches: Sequence[Match]) -> UpdateScope:
         services = _update_services(matches)
         if services is None:
-            return UpdateScope(services=None, pull_services=None)
+            return UpdateScope(
+                services=None,
+                pull_services=None,
+                stop_services=self._stack_stop_services(stack),
+                force_recreate=True,
+            )
         label_cid = self._stack_recreate_label_cid(stack, services)
         if label_cid:
             return UpdateScope(
@@ -943,8 +982,19 @@ class UpdateFromWudRunner:
                     f"matched service container {label_cid} has "
                     f"{RECREATE_STACK_LABEL}=true"
                 ),
+                stop_services=self._stack_stop_services(stack),
+                force_recreate=True,
             )
         return UpdateScope(services=services, pull_services=services)
+
+    def _stack_stop_services(self, stack: ComposeStack) -> tuple[str, ...] | None:
+        try:
+            services = self.compose.config_services(stack.directory, stack.file)
+        except CommandError:
+            return None
+        if not services:
+            return None
+        return tuple(reversed(services))
 
     def _stack_recreate_label_cid(
         self,

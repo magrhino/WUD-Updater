@@ -715,8 +715,9 @@ test_stack_level_digest_cleanup_handles_no_service_map(){
 
   assert_status 0
   assert_file_equals "$WUD_FILE" ''
-  assert_calls_contain 'compose -f docker-compose.yml down'
-  assert_calls_contain 'compose -f docker-compose.yml up -d --remove-orphans$'
+  assert_calls_not_contain 'compose -f docker-compose.yml down'
+  assert_calls_contain 'compose -f docker-compose.yml stop[[:space:]]*$'
+  assert_calls_contain 'compose -f docker-compose.yml up -d --remove-orphans --force-recreate$'
   teardown_case
 }
 
@@ -848,6 +849,7 @@ test_service_scoped_update_only_touches_matched_service(){
   assert_calls_contain 'compose -f docker-compose.yml pull app'
   assert_calls_contain 'compose -f docker-compose.yml stop app'
   assert_calls_contain 'compose -f docker-compose.yml up -d .*--no-deps.* app'
+  assert_calls_not_contain 'compose -f docker-compose.yml up -d .*--force-recreate.* app'
   assert_calls_not_contain 'compose -f docker-compose.yml pull db'
   assert_calls_not_contain 'compose -f docker-compose.yml stop db'
   assert_calls_not_contain 'compose -f docker-compose.yml down'
@@ -875,9 +877,37 @@ test_recreate_stack_label_forces_stack_level_update(){
   assert_calls_contain 'compose -f docker-compose.yml pull app'
   assert_calls_not_contain 'compose -f docker-compose.yml pull[[:space:]]*$'
   assert_calls_not_contain 'compose -f docker-compose.yml pull db'
-  assert_calls_contain 'compose -f docker-compose.yml down[[:space:]]*$'
-  assert_calls_contain 'compose -f docker-compose.yml up -d --remove-orphans$'
-  assert_calls_not_contain 'compose -f docker-compose.yml stop app'
+  assert_calls_not_contain 'compose -f docker-compose.yml down[[:space:]]*$'
+  assert_calls_contain 'compose -f docker-compose.yml stop db app'
+  assert_calls_contain 'compose -f docker-compose.yml up -d --remove-orphans --force-recreate$'
+  assert_calls_not_contain 'compose -f docker-compose.yml up -d .*--no-deps'
+  teardown_case
+}
+
+test_recreate_stack_label_preserves_gluetun_network_stack(){
+  setup_case
+  printf 'ghcr.io/linuxserver/qbittorrent:5.1.4\n' > "$WUD_FILE"
+  make_stack qbittorrent "$BASE/qbittorrent" docker-compose.yml
+  add_service qbittorrent gluetun qmcgaw/gluetun:latest cid-gluetun
+  add_service qbittorrent qbittorrent ghcr.io/linuxserver/qbittorrent:5.1.4 cid-qbittorrent
+  add_service qbittorrent mamapi ghcr.io/elforkhead/mamapi:latest cid-mamapi
+  add_service qbittorrent speedtest-tracker ghcr.io/linuxserver/speedtest-tracker:latest cid-speedtest
+  add_service qbittorrent thelounge ghcr.io/linuxserver/thelounge:latest cid-thelounge
+  set_container_label cid-qbittorrent WUD-UPDATER-RECREATE-STACK true
+  set_image_state ghcr.io/linuxserver/qbittorrent:5.1.4 old-qbit sha256:old-qbit
+  set_image_after_pull ghcr.io/linuxserver/qbittorrent:5.1.4 new-qbit sha256:new-qbit
+
+  run_script --yes --mode stop
+
+  assert_status 0
+  assert_file_equals "$WUD_FILE" ''
+  grep -q -- 'qbittorrent (stack-level recreate: WUD-UPDATER-RECREATE-STACK=true)' "$TEST_TMP/output.log" || fail "plan did not report Gluetun stack recreate"
+  assert_calls_contain 'inspect cid-qbittorrent'
+  assert_calls_contain 'compose -f docker-compose.yml pull qbittorrent'
+  assert_calls_not_contain 'compose -f docker-compose.yml pull gluetun'
+  assert_calls_not_contain 'compose -f docker-compose.yml down'
+  assert_calls_contain 'compose -f docker-compose.yml stop thelounge speedtest-tracker mamapi qbittorrent gluetun'
+  assert_calls_contain 'compose -f docker-compose.yml up -d --remove-orphans --force-recreate$'
   assert_calls_not_contain 'compose -f docker-compose.yml up -d .*--no-deps'
   teardown_case
 }
@@ -926,6 +956,7 @@ main(){
   run_test test_stop_mode_stops_before_up
   run_test test_service_scoped_update_only_touches_matched_service
   run_test test_recreate_stack_label_forces_stack_level_update
+  run_test test_recreate_stack_label_preserves_gluetun_network_stack
 }
 
 trap teardown_case EXIT

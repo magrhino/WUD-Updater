@@ -162,8 +162,11 @@ class ComposeCli:
         *,
         wait: bool = False,
         wait_timeout: int | None = None,
+        force_recreate: bool = False,
     ) -> CommandResult:
         args = ["up", "-d", "--remove-orphans"]
+        if force_recreate:
+            args.append("--force-recreate")
         if services:
             args.append("--no-deps")
         if wait:
@@ -212,12 +215,13 @@ class ComposeCli:
         max_wait: int = 180,
         use_native_wait: bool | None = None,
     ) -> None:
-        """Run the shell updater's pull/stop-or-down/up command sequence."""
+        """Run the shell updater's pull/stop/up command sequence."""
 
         if mode not in {"pause", "stop", "live"}:
             raise ValueError("mode must be pause, stop, or live")
 
         service_args = tuple(_service_args(services))
+        force_recreate = not service_args
         self.pull(directory, file, service_args)
 
         pre_up_error: CommandError | None = None
@@ -228,10 +232,10 @@ class ComposeCli:
                 pass
         elif mode == "stop":
             try:
-                if service_args:
-                    self.stop(directory, file, service_args)
-                else:
-                    self.down(directory, file)
+                stop_services = service_args or tuple(
+                    reversed(self.config_services(directory, file))
+                )
+                self.stop(directory, file, stop_services)
             except CommandError as exc:
                 pre_up_error = exc
 
@@ -247,6 +251,7 @@ class ComposeCli:
             service_args,
             wait=wait,
             wait_timeout=max_wait if wait else None,
+            force_recreate=force_recreate,
         )
 
         if mode == "pause":
