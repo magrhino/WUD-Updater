@@ -11,9 +11,12 @@ from wud_updater.db import (
     active_snooze,
     connect_db,
     init_db,
+    insert_pending_update,
     insert_snooze,
     insert_update_event,
     insert_update_run,
+    update_pending_update,
+    upsert_known_image,
 )
 
 
@@ -44,6 +47,7 @@ class DatabaseTests(unittest.TestCase):
                     "snoozes",
                     "service_policy",
                     "known_images",
+                    "pending_updates",
                 },
             )
 
@@ -66,7 +70,7 @@ class DatabaseTests(unittest.TestCase):
         self.assertIsNotNone(row)
         self.assertEqual(row["status"], "started")
 
-    def test_init_db_sets_user_version_to_one(self) -> None:
+    def test_init_db_sets_user_version_to_current_schema(self) -> None:
         with sqlite3.connect(":memory:") as conn:
             init_db(conn)
 
@@ -96,6 +100,43 @@ class DatabaseTests(unittest.TestCase):
             version = conn.execute("PRAGMA user_version").fetchone()[0]
 
         self.assertEqual(version, SCHEMA_VERSION)
+
+    def test_init_db_migrates_v1_schema_to_v2(self) -> None:
+        with sqlite3.connect(":memory:") as conn:
+            conn.executescript(V1_SCHEMA_SQL)
+            conn.execute("PRAGMA user_version = 1")
+
+            init_db(conn)
+            version = conn.execute("PRAGMA user_version").fetchone()[0]
+            pending_table = conn.execute(
+                """
+                SELECT name
+                FROM sqlite_master
+                WHERE type = 'table'
+                  AND name = 'pending_updates'
+                """
+            ).fetchone()
+
+        self.assertEqual(version, SCHEMA_VERSION)
+        self.assertIsNotNone(pending_table)
+
+    def test_init_db_rejects_malformed_existing_pending_updates(self) -> None:
+        with sqlite3.connect(":memory:") as conn:
+            conn.executescript(V1_SCHEMA_SQL)
+            conn.execute(
+                """
+                CREATE TABLE pending_updates (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    run_id INTEGER NOT NULL
+                )
+                """
+            )
+
+            with self.assertRaisesRegex(
+                DatabaseError,
+                "Unexpected columns for table pending_updates",
+            ):
+                init_db(conn)
 
     def test_init_db_rejects_existing_table_with_missing_columns(self) -> None:
         with sqlite3.connect(":memory:") as conn:
@@ -255,6 +296,132 @@ class DatabaseTests(unittest.TestCase):
         self.assertIsNotNone(row)
         self.assertEqual(row["reason"], "maintenance")
         self.assertIsNone(missing)
+
+    def test_pending_update_helpers_insert_and_update_status(self) -> None:
+        with sqlite3.connect(":memory:") as conn:
+            conn.row_factory = sqlite3.Row
+            init_db(conn)
+            run_id = insert_update_run(conn)
+
+            pending_id = insert_pending_update(
+                conn,
+                run_id=run_id,
+                line_no=7,
+                raw="repo/app:latest",
+                image="repo/app:latest",
+                target_digest="sha256:target",
+                service_key="stack/app",
+            )
+            update_pending_update(
+                conn,
+                run_id=run_id,
+                line_no=7,
+                status="resolved",
+                status_reason="updated",
+                stack_name="stack",
+                service_name="app",
+            )
+            row = conn.execute(
+                "SELECT * FROM pending_updates WHERE id = ?",
+                (pending_id,),
+            ).fetchone()
+
+        self.assertEqual(row["line_no"], 7)
+        self.assertEqual(row["target_digest"], "sha256:target")
+        self.assertEqual(row["service_key"], "stack/app")
+        self.assertEqual(row["stack_name"], "stack")
+        self.assertEqual(row["service_name"], "app")
+        self.assertEqual(row["status"], "resolved")
+        self.assertEqual(row["status_reason"], "updated")
+
+    def test_known_image_upsert_replaces_service_state(self) -> None:
+        with sqlite3.connect(":memory:") as conn:
+            conn.row_factory = sqlite3.Row
+            init_db(conn)
+
+            upsert_known_image(
+                conn,
+                service_key="stack/app",
+                image="repo/app:1.0",
+                image_id="old",
+                digest="sha256:old",
+                updated_at="2026-05-18T12:00:00+00:00",
+            )
+            upsert_known_image(
+                conn,
+                service_key="stack/app",
+                image="repo/app:2.0",
+                image_id="new",
+                digest="sha256:new",
+                updated_at="2026-05-18T12:01:00+00:00",
+            )
+            rows = conn.execute("SELECT * FROM known_images").fetchall()
+
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["service_key"], "stack/app")
+        self.assertEqual(rows[0]["image"], "repo/app:2.0")
+        self.assertEqual(rows[0]["image_id"], "new")
+        self.assertEqual(rows[0]["digest"], "sha256:new")
+
+
+V1_SCHEMA_SQL = """
+CREATE TABLE update_runs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    started_at TEXT NOT NULL,
+    finished_at TEXT,
+    status TEXT NOT NULL,
+    dry_run INTEGER NOT NULL DEFAULT 0,
+    mode TEXT NOT NULL DEFAULT '',
+    wud_file TEXT NOT NULL DEFAULT '',
+    log_file TEXT NOT NULL DEFAULT '',
+    metadata_json TEXT NOT NULL DEFAULT '{}'
+);
+
+CREATE TABLE update_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    run_id INTEGER NOT NULL,
+    created_at TEXT NOT NULL,
+    service_name TEXT NOT NULL,
+    stack_name TEXT NOT NULL DEFAULT '',
+    image TEXT NOT NULL,
+    target_image TEXT NOT NULL DEFAULT '',
+    old_image_id TEXT NOT NULL DEFAULT '',
+    new_image_id TEXT NOT NULL DEFAULT '',
+    old_digest TEXT NOT NULL DEFAULT '',
+    new_digest TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL,
+    metadata_json TEXT NOT NULL DEFAULT '{}',
+    FOREIGN KEY (run_id) REFERENCES update_runs(id) ON DELETE CASCADE
+);
+
+CREATE TABLE snoozes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    service_key TEXT NOT NULL,
+    snoozed_until TEXT NOT NULL,
+    reason TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL,
+    metadata_json TEXT NOT NULL DEFAULT '{}'
+);
+
+CREATE TABLE service_policy (
+    service_key TEXT PRIMARY KEY,
+    update_mode TEXT NOT NULL DEFAULT '',
+    auto_update INTEGER NOT NULL DEFAULT 1,
+    snooze_default_seconds INTEGER,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    metadata_json TEXT NOT NULL DEFAULT '{}'
+);
+
+CREATE TABLE known_images (
+    service_key TEXT PRIMARY KEY,
+    image TEXT NOT NULL,
+    image_id TEXT NOT NULL DEFAULT '',
+    digest TEXT NOT NULL DEFAULT '',
+    updated_at TEXT NOT NULL,
+    metadata_json TEXT NOT NULL DEFAULT '{}'
+);
+"""
 
 
 if __name__ == "__main__":

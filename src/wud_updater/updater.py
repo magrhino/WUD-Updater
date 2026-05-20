@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import errno
+import json
 import os
 import re
 import shutil
+import sqlite3
 import sys
 import tempfile
 import time
@@ -22,6 +24,17 @@ from ruamel.yaml.error import YAMLError
 from .command import CommandError, CommandResult, CommandRunner
 from .compose import ComposeCli, ComposeDiscoveryError, ComposeStack, ServiceImage
 from .config import DEFAULT_MAX_WAIT, DEFAULT_UPDATE_MODE
+from .db import (
+    DatabaseError,
+    connect_db,
+    init_db,
+    insert_pending_update,
+    insert_update_event,
+    insert_update_run,
+    update_pending_update,
+    upsert_known_image,
+    utc_timestamp as db_utc_timestamp,
+)
 from .docker_cli import DockerCli
 from .file_ops import OwnerConfig, OwnerConfigError, apply_configured_owner
 from .images import (
@@ -75,6 +88,7 @@ class UpdaterOptions:
     only_lines: str = ""
     remove_lines_before_run: str = ""
     tag_overrides: tuple["TagOverride", ...] = ()
+    db_path: Path | None = None
     docker_base_label: str | None = None
     wud_file_label: str | None = None
     log_dir_label: str | None = None
@@ -214,6 +228,8 @@ class UpdateFromWudRunner:
             environ=self.environ,
         )
         self.failures: list[FailureRecord] = []
+        self.audit_conn: sqlite3.Connection | None = None
+        self.audit_run_id: int | None = None
 
     def run(self) -> int:
         opts = self.options
@@ -252,6 +268,10 @@ class UpdateFromWudRunner:
             self._print_skipped_tag_updates(skipped_tags)
 
             if not matches:
+                if not opts.dry_run:
+                    self._start_audit(parsed)
+                    self._mark_unmatched_pending(parsed, matches, skipped_tags)
+                    self._finish_audit_run("success")
                 self.log.info("No stacks matched the list; nothing to do.")
                 return 0
 
@@ -269,6 +289,9 @@ class UpdateFromWudRunner:
                 return 0
 
             self._confirm_before_mutation()
+            self._start_audit(parsed)
+            self._mark_unmatched_pending(parsed, matches, skipped_tags)
+            self._mark_matched_pending(matches, status="in_progress")
             in_flight_lines = sorted(
                 {match.target.line_no for match in matches}
                 | set(parse_line_spec(opts.remove_lines_before_run, len(parsed.lines), "--remove-lines-before-run"))
@@ -298,13 +321,18 @@ class UpdateFromWudRunner:
                     owner=self.owner,
                 )
                 self._mark_failed_lines_restored(failed_lines)
+                self._mark_failed_pending(matches, stack_statuses, failed_lines)
                 self.log.warn(f"Restored failed WUD entries in {opts.wud_file}")
             else:
                 self._mark_failed_lines_restored(())
                 self.log.info("Successful WUD entries were removed before update.")
+            self._mark_successful_pending(matches, stack_statuses)
+            self._record_update_events(matches, stack_statuses)
+            self._record_known_images(matches, stack_statuses)
 
             fail_count = sum(1 for status in stack_statuses.values() if status.status != "success")
             if fail_count:
+                self._finish_audit_run("failure")
                 error_report = self._write_error_report()
                 if error_report is not None:
                     self.log.error(
@@ -315,11 +343,15 @@ class UpdateFromWudRunner:
                     self.log.error(f"Completed with {fail_count} failure(s). See log: {self.log_file}")
                 return 1
 
+            self._finish_audit_run("success")
             self.log.info(f"Done. See log: {self.log_file}")
             return 0
         except (CommandError, ComposeDiscoveryError, LineSpecError, OwnerConfigError, WudLockError) as exc:
+            self._finish_audit_run("failure")
             raise UpdaterError(str(exc)) from exc
         finally:
+            if self.audit_conn is not None:
+                self.audit_conn.close()
             lock.close()
 
     def _parse_wud_file(self) -> ParsedWudFile:
@@ -1287,6 +1319,182 @@ class UpdateFromWudRunner:
             )
         )
 
+    def _start_audit(self, parsed: ParsedWudFile) -> None:
+        if self.audit_run_id is not None:
+            return
+        conn: sqlite3.Connection | None = None
+        try:
+            conn = connect_db(_db_path(self.options, self.environ))
+            init_db(conn)
+            self.audit_conn = conn
+            self.audit_run_id = insert_update_run(
+                conn,
+                status="started",
+                dry_run=False,
+                mode=self.options.mode,
+                wud_file=self.options.wud_file_label or str(self.options.wud_file),
+                log_file=str(self.log_file),
+            )
+            for target in parsed.targets:
+                insert_pending_update(
+                    conn,
+                    run_id=self.audit_run_id,
+                    line_no=target.line_no,
+                    raw=target.raw,
+                    image=target.first,
+                    target_digest=target.digest,
+                    desired_tag=target.desired_tag,
+                )
+        except (OSError, sqlite3.Error, DatabaseError) as exc:
+            if conn is not None:
+                conn.close()
+            self.audit_conn = None
+            self.audit_run_id = None
+            raise UpdaterError(f"Could not initialize audit database: {exc}") from exc
+
+    def _finish_audit_run(self, status: str) -> None:
+        if self.audit_conn is None or self.audit_run_id is None:
+            return
+        with self.audit_conn:
+            self.audit_conn.execute(
+                """
+                UPDATE update_runs
+                SET status = ?,
+                    finished_at = ?
+                WHERE id = ?
+                """,
+                (status, db_utc_timestamp(), self.audit_run_id),
+            )
+
+    def _mark_unmatched_pending(
+        self,
+        parsed: ParsedWudFile,
+        matches: Sequence[Match],
+        skipped_tags: Sequence[WudTarget],
+    ) -> None:
+        if self.audit_conn is None or self.audit_run_id is None:
+            return
+        matched_lines = {match.target.line_no for match in matches}
+        skipped_lines = {target.line_no for target in skipped_tags}
+        for target in parsed.targets:
+            if target.line_no in matched_lines:
+                continue
+            reason = "tag-update-disabled" if target.line_no in skipped_lines else "unmatched"
+            update_pending_update(
+                self.audit_conn,
+                run_id=self.audit_run_id,
+                line_no=target.line_no,
+                status="pending",
+                status_reason=reason,
+            )
+
+    def _mark_matched_pending(
+        self,
+        matches: Sequence[Match],
+        *,
+        status: str,
+    ) -> None:
+        if self.audit_conn is None or self.audit_run_id is None:
+            return
+        for line_no, match in _first_match_by_line(matches).items():
+            update_pending_update(
+                self.audit_conn,
+                run_id=self.audit_run_id,
+                line_no=line_no,
+                status=status,
+                status_reason="matched",
+                service_key=_service_key(match),
+                stack_name=match.stack.name,
+                service_name=match.service,
+            )
+
+    def _mark_failed_pending(
+        self,
+        matches: Sequence[Match],
+        stack_statuses: Mapping[int, StackStatus],
+        failed_lines: Iterable[int],
+    ) -> None:
+        if self.audit_conn is None or self.audit_run_id is None:
+            return
+        for line_no in failed_lines:
+            match = _failed_match_for_line(line_no, matches, stack_statuses)
+            if match is None:
+                continue
+            reason = _line_status_reason(line_no, matches, stack_statuses)
+            update_pending_update(
+                self.audit_conn,
+                run_id=self.audit_run_id,
+                line_no=line_no,
+                status="failed",
+                status_reason=reason,
+                service_key=_service_key(match),
+                stack_name=match.stack.name,
+                service_name=match.service,
+            )
+
+    def _mark_successful_pending(
+        self,
+        matches: Sequence[Match],
+        stack_statuses: Mapping[int, StackStatus],
+    ) -> None:
+        if self.audit_conn is None or self.audit_run_id is None:
+            return
+        failed = set(_failed_line_numbers(matches, stack_statuses))
+        for line_no, match in _first_match_by_line(matches).items():
+            if line_no in failed:
+                continue
+            reason = _line_status_reason(line_no, matches, stack_statuses)
+            update_pending_update(
+                self.audit_conn,
+                run_id=self.audit_run_id,
+                line_no=line_no,
+                status="resolved",
+                status_reason=reason,
+                service_key=_service_key(match),
+                stack_name=match.stack.name,
+                service_name=match.service,
+            )
+
+    def _record_update_events(
+        self,
+        matches: Sequence[Match],
+        stack_statuses: Mapping[int, StackStatus],
+    ) -> None:
+        if self.audit_conn is None or self.audit_run_id is None:
+            return
+        for match in matches:
+            status = stack_statuses.get(match.stack.index, StackStatus("failure", "missing"))
+            insert_update_event(
+                self.audit_conn,
+                run_id=self.audit_run_id,
+                service_name=match.service,
+                stack_name=match.stack.name,
+                image=match.compose_image,
+                target_image=_target_image_for_match(match),
+                status=status.status,
+                metadata_json=json.dumps({"reason": status.reason}, sort_keys=True),
+            )
+
+    def _record_known_images(
+        self,
+        matches: Sequence[Match],
+        stack_statuses: Mapping[int, StackStatus],
+    ) -> None:
+        if self.audit_conn is None:
+            return
+        for match in matches:
+            status = stack_statuses.get(match.stack.index)
+            if status is None or status.status != "success":
+                continue
+            image = _target_image_for_match(match)
+            upsert_known_image(
+                self.audit_conn,
+                service_key=_service_key(match),
+                image=image,
+                image_id=self.docker.image_id(image),
+                digest=self.docker.image_digest(image),
+            )
+
     def _mark_failed_lines_restored(self, failed_lines: Iterable[int]) -> None:
         restored = set(failed_lines)
         for failure in self.failures:
@@ -1495,6 +1703,7 @@ def options_from_namespace(args: object, *, environ: Mapping[str, str] | None = 
     docker_base = Path(docker_base_label)
     wud_file = Path(wud_file_label)
     log_dir = Path(log_dir_label)
+    db_path = Path(env.get("WUD_DB_PATH") or str(log_dir / "wud-updater.sqlite"))
     max_wait = parse_seconds(getattr(args, "max_wait", None), "--max-wait")
     tag_overrides = parse_tag_overrides(getattr(args, "tag_override", None) or ())
     allow_tag_updates = bool(getattr(args, "allow_tag_updates", False))
@@ -1513,6 +1722,7 @@ def options_from_namespace(args: object, *, environ: Mapping[str, str] | None = 
         only_lines=getattr(args, "only_lines", None) or "",
         remove_lines_before_run=getattr(args, "remove_lines_before_run", None) or "",
         tag_overrides=tag_overrides,
+        db_path=db_path,
         docker_base_label=docker_base_label,
         wud_file_label=wud_file_label,
         log_dir_label=log_dir_label,
@@ -1923,6 +2133,77 @@ def _failed_line_numbers(
         if any(stack_statuses.get(idx, StackStatus("failure", "missing")).status != "success" for idx in idxs):
             failed.append(line_no)
     return failed
+
+
+def _first_match_by_line(matches: Sequence[Match]) -> dict[int, Match]:
+    first: dict[int, Match] = {}
+    for match in matches:
+        first.setdefault(match.target.line_no, match)
+    return first
+
+
+def _failed_match_for_line(
+    line_no: int,
+    matches: Sequence[Match],
+    stack_statuses: Mapping[int, StackStatus],
+) -> Match | None:
+    first: Match | None = None
+    for match in matches:
+        if match.target.line_no != line_no:
+            continue
+        if first is None:
+            first = match
+        status = stack_statuses.get(match.stack.index, StackStatus("failure", "missing"))
+        if status.status != "success":
+            return match
+    return first
+
+
+def _line_status_reason(
+    line_no: int,
+    matches: Sequence[Match],
+    stack_statuses: Mapping[int, StackStatus],
+) -> str:
+    statuses = [
+        stack_statuses.get(match.stack.index, StackStatus("failure", "missing"))
+        for match in matches
+        if match.target.line_no == line_no
+    ]
+    failure_reasons = {
+        status.reason for status in statuses if status.status != "success"
+    }
+    if failure_reasons:
+        return sorted(failure_reasons)[0]
+    reasons = {
+        status.reason
+        for status in statuses
+    }
+    if "updated" in reasons:
+        return "updated"
+    if "already-current" in reasons:
+        return "already-current"
+    return sorted(reasons)[0] if reasons else "missing"
+
+
+def _service_key(match: Match) -> str:
+    if match.service:
+        return f"{match.stack.name}/{match.service}"
+    return f"{match.stack.name}/{match.compose_image}"
+
+
+def _target_image_for_match(match: Match) -> str:
+    if match.target.desired_tag:
+        return image_with_tag(match.compose_image, match.target.desired_tag)
+    return match.resolved
+
+
+def _db_path(options: UpdaterOptions, environ: Mapping[str, str]) -> Path:
+    configured = environ.get("WUD_DB_PATH")
+    if configured:
+        return Path(configured)
+    if options.db_path is not None:
+        return options.db_path
+    return options.log_dir / "wud-updater.sqlite"
 
 
 def _updated_images(

@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 ColumnSchema = tuple[str, str, int, str | None, int]
 
@@ -63,6 +63,29 @@ EXPECTED_SCHEMA: dict[str, tuple[ColumnSchema, ...]] = {
         ("updated_at", "TEXT", 1, None, 0),
         ("metadata_json", "TEXT", 1, "'{}'", 0),
     ),
+    "pending_updates": (
+        ("id", "INTEGER", 0, None, 1),
+        ("run_id", "INTEGER", 1, None, 0),
+        ("line_no", "INTEGER", 1, None, 0),
+        ("raw", "TEXT", 1, None, 0),
+        ("image", "TEXT", 1, None, 0),
+        ("target_digest", "TEXT", 1, "''", 0),
+        ("desired_tag", "TEXT", 1, "''", 0),
+        ("service_key", "TEXT", 1, "''", 0),
+        ("stack_name", "TEXT", 1, "''", 0),
+        ("service_name", "TEXT", 1, "''", 0),
+        ("status", "TEXT", 1, None, 0),
+        ("status_reason", "TEXT", 1, "''", 0),
+        ("created_at", "TEXT", 1, None, 0),
+        ("updated_at", "TEXT", 1, None, 0),
+        ("metadata_json", "TEXT", 1, "'{}'", 0),
+    ),
+}
+
+EXPECTED_SCHEMA_V1 = {
+    name: columns
+    for name, columns in EXPECTED_SCHEMA.items()
+    if name != "pending_updates"
 }
 
 
@@ -90,6 +113,11 @@ def init_db(conn: sqlite3.Connection) -> None:
 
     version = _user_version(conn)
     if version == SCHEMA_VERSION:
+        _validate_schema(conn)
+        return
+    if version == 1:
+        _validate_schema(conn, expected_schema=EXPECTED_SCHEMA_V1)
+        _migrate_v1_to_v2(conn)
         _validate_schema(conn)
         return
     if version != 0:
@@ -156,10 +184,36 @@ def init_db(conn: sqlite3.Connection) -> None:
                 metadata_json TEXT NOT NULL DEFAULT '{}'
             );
 
+            CREATE TABLE IF NOT EXISTS pending_updates (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                run_id INTEGER NOT NULL,
+                line_no INTEGER NOT NULL,
+                raw TEXT NOT NULL,
+                image TEXT NOT NULL,
+                target_digest TEXT NOT NULL DEFAULT '',
+                desired_tag TEXT NOT NULL DEFAULT '',
+                service_key TEXT NOT NULL DEFAULT '',
+                stack_name TEXT NOT NULL DEFAULT '',
+                service_name TEXT NOT NULL DEFAULT '',
+                status TEXT NOT NULL,
+                status_reason TEXT NOT NULL DEFAULT '',
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                metadata_json TEXT NOT NULL DEFAULT '{}',
+                UNIQUE (run_id, line_no),
+                FOREIGN KEY (run_id) REFERENCES update_runs(id) ON DELETE CASCADE
+            );
+
             CREATE INDEX IF NOT EXISTS idx_update_events_run_id
                 ON update_events (run_id);
             CREATE INDEX IF NOT EXISTS idx_snoozes_service_key_until
                 ON snoozes (service_key, snoozed_until);
+            CREATE INDEX IF NOT EXISTS idx_pending_updates_run_id
+                ON pending_updates (run_id);
+            CREATE INDEX IF NOT EXISTS idx_pending_updates_status
+                ON pending_updates (status);
+            CREATE INDEX IF NOT EXISTS idx_pending_updates_service_key_status
+                ON pending_updates (service_key, status);
             """
         )
         _validate_schema(conn)
@@ -317,6 +371,144 @@ def active_snooze(
     return cursor.fetchone()
 
 
+def insert_pending_update(
+    conn: sqlite3.Connection,
+    *,
+    run_id: int,
+    line_no: int,
+    raw: str,
+    image: str,
+    target_digest: str = "",
+    desired_tag: str = "",
+    service_key: str = "",
+    stack_name: str = "",
+    service_name: str = "",
+    status: str = "pending",
+    status_reason: str = "",
+    created_at: str | None = None,
+    updated_at: str | None = None,
+    metadata_json: str = "{}",
+) -> int:
+    """Insert one parsed WUD target as explicit pending/update state."""
+
+    now = utc_timestamp()
+    created = created_at or now
+    updated = updated_at or created
+    with conn:
+        cursor = conn.execute(
+            """
+            INSERT INTO pending_updates (
+                run_id,
+                line_no,
+                raw,
+                image,
+                target_digest,
+                desired_tag,
+                service_key,
+                stack_name,
+                service_name,
+                status,
+                status_reason,
+                created_at,
+                updated_at,
+                metadata_json
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                run_id,
+                line_no,
+                raw,
+                image,
+                target_digest,
+                desired_tag,
+                service_key,
+                stack_name,
+                service_name,
+                status,
+                status_reason,
+                created,
+                updated,
+                metadata_json,
+            ),
+        )
+    return int(cursor.lastrowid)
+
+
+def update_pending_update(
+    conn: sqlite3.Connection,
+    *,
+    run_id: int,
+    line_no: int,
+    status: str,
+    status_reason: str = "",
+    service_key: str | None = None,
+    stack_name: str | None = None,
+    service_name: str | None = None,
+    updated_at: str | None = None,
+) -> None:
+    """Update explicit pending state for one parsed WUD target."""
+
+    assignments = ["status = ?", "status_reason = ?", "updated_at = ?"]
+    values: list[object] = [status, status_reason, updated_at or utc_timestamp()]
+    if service_key is not None:
+        assignments.append("service_key = ?")
+        values.append(service_key)
+    if stack_name is not None:
+        assignments.append("stack_name = ?")
+        values.append(stack_name)
+    if service_name is not None:
+        assignments.append("service_name = ?")
+        values.append(service_name)
+    values.extend([run_id, line_no])
+    with conn:
+        conn.execute(
+            f"""
+            UPDATE pending_updates
+            SET {", ".join(assignments)}
+            WHERE run_id = ?
+              AND line_no = ?
+            """,
+            values,
+        )
+
+
+def upsert_known_image(
+    conn: sqlite3.Connection,
+    *,
+    service_key: str,
+    image: str,
+    image_id: str = "",
+    digest: str = "",
+    updated_at: str | None = None,
+    metadata_json: str = "{}",
+) -> None:
+    """Record the latest known image state for a service key."""
+
+    updated = updated_at or utc_timestamp()
+    with conn:
+        conn.execute(
+            """
+            INSERT INTO known_images (
+                service_key,
+                image,
+                image_id,
+                digest,
+                updated_at,
+                metadata_json
+            )
+            VALUES (?, ?, ?, ?, ?, ?)
+            ON CONFLICT(service_key) DO UPDATE SET
+                image = excluded.image,
+                image_id = excluded.image_id,
+                digest = excluded.digest,
+                updated_at = excluded.updated_at,
+                metadata_json = excluded.metadata_json
+            """,
+            (service_key, image, image_id, digest, updated, metadata_json),
+        )
+
+
 def utc_timestamp() -> str:
     """Return a stable UTC timestamp format for SQLite text comparisons."""
 
@@ -341,8 +533,13 @@ def _validate_existing_schema_objects(conn: sqlite3.Connection) -> None:
         _validate_table_columns(conn, table_name, expected_columns)
 
 
-def _validate_schema(conn: sqlite3.Connection) -> None:
-    for table_name, expected_columns in EXPECTED_SCHEMA.items():
+def _validate_schema(
+    conn: sqlite3.Connection,
+    *,
+    expected_schema: dict[str, tuple[ColumnSchema, ...]] | None = None,
+) -> None:
+    schema = expected_schema or EXPECTED_SCHEMA
+    for table_name, expected_columns in schema.items():
         object_type = _sqlite_object_type(conn, table_name)
         if object_type is None:
             raise DatabaseError(f"Missing expected table: {table_name}")
@@ -411,3 +608,44 @@ def _format_column_names(names: tuple[str, ...]) -> str:
     if not names:
         return "<none>"
     return ", ".join(names)
+
+
+def _migrate_v1_to_v2(conn: sqlite3.Connection) -> None:
+    object_type = _sqlite_object_type(conn, "pending_updates")
+    if object_type is not None:
+        if object_type != "table":
+            raise DatabaseError(
+                f"Expected pending_updates to be a table, found {object_type}"
+            )
+        _validate_table_columns(conn, "pending_updates", EXPECTED_SCHEMA["pending_updates"])
+    with conn:
+        conn.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS pending_updates (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                run_id INTEGER NOT NULL,
+                line_no INTEGER NOT NULL,
+                raw TEXT NOT NULL,
+                image TEXT NOT NULL,
+                target_digest TEXT NOT NULL DEFAULT '',
+                desired_tag TEXT NOT NULL DEFAULT '',
+                service_key TEXT NOT NULL DEFAULT '',
+                stack_name TEXT NOT NULL DEFAULT '',
+                service_name TEXT NOT NULL DEFAULT '',
+                status TEXT NOT NULL,
+                status_reason TEXT NOT NULL DEFAULT '',
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                metadata_json TEXT NOT NULL DEFAULT '{}',
+                UNIQUE (run_id, line_no),
+                FOREIGN KEY (run_id) REFERENCES update_runs(id) ON DELETE CASCADE
+            );
+            CREATE INDEX IF NOT EXISTS idx_pending_updates_run_id
+                ON pending_updates (run_id);
+            CREATE INDEX IF NOT EXISTS idx_pending_updates_status
+                ON pending_updates (status);
+            CREATE INDEX IF NOT EXISTS idx_pending_updates_service_key_status
+                ON pending_updates (service_key, status);
+            """
+        )
+        conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
