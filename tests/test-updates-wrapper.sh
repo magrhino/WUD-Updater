@@ -96,6 +96,7 @@ run_updates(){
       FAKE_SUDO_LOG="$TEST_TMP/sudo.log" \
       FAKE_UPDATER_LOG="$TEST_TMP/updater.log" \
       FAKE_WUD_FILE="$WUD_FILE" \
+      WUD_UPDATER_BANNER=0 \
       env "${env_args[@]}" "$SCRIPT" --file "$WUD_FILE" "$@" > "$TEST_TMP/output.log" 2>&1 || LAST_STATUS=$?
   else
     PATH="$FAKE_BIN:$PATH" \
@@ -103,6 +104,7 @@ run_updates(){
       FAKE_SUDO_LOG="$TEST_TMP/sudo.log" \
       FAKE_UPDATER_LOG="$TEST_TMP/updater.log" \
       FAKE_WUD_FILE="$WUD_FILE" \
+      WUD_UPDATER_BANNER=0 \
       "$SCRIPT" --file "$WUD_FILE" "$@" > "$TEST_TMP/output.log" 2>&1 || LAST_STATUS=$?
   fi
 }
@@ -123,6 +125,7 @@ run_updates_with_input(){
       FAKE_SUDO_LOG="$TEST_TMP/sudo.log" \
       FAKE_UPDATER_LOG="$TEST_TMP/updater.log" \
       FAKE_WUD_FILE="$WUD_FILE" \
+      WUD_UPDATER_BANNER=0 \
       env "${env_args[@]}" "$SCRIPT" --file "$WUD_FILE" "$@" > "$TEST_TMP/output.log" 2>&1 || LAST_STATUS=$?
   else
     printf '%b' "$input" | PATH="$FAKE_BIN:$PATH" \
@@ -130,6 +133,7 @@ run_updates_with_input(){
       FAKE_SUDO_LOG="$TEST_TMP/sudo.log" \
       FAKE_UPDATER_LOG="$TEST_TMP/updater.log" \
       FAKE_WUD_FILE="$WUD_FILE" \
+      WUD_UPDATER_BANNER=0 \
       "$SCRIPT" --file "$WUD_FILE" "$@" > "$TEST_TMP/output.log" 2>&1 || LAST_STATUS=$?
   fi
 }
@@ -149,6 +153,17 @@ test_dry_run_does_not_invoke_updater(){
   [[ ! -e "$TEST_TMP/sudo.log" ]] || fail "sudo was invoked during dry-run"
   [[ ! -e "$TEST_TMP/updater.log" ]] || fail "updater was invoked during dry-run"
   grep -q 'Dry-run mode: not running updates' "$TEST_TMP/output.log" || fail "missing dry-run message"
+  teardown_case
+}
+
+test_forced_banner_prints_before_legacy_updates_output(){
+  setup_case
+
+  run_updates WUD_UPDATER_BANNER=1 WUD_UPDATER_RELEASE_CHECK=0 --dry-run
+
+  assert_status 0
+  grep -q 'WUD-Updater v' "$TEST_TMP/output.log" || fail "missing startup banner"
+  grep -q '=== 📦 Docker Updates ===' "$TEST_TMP/output.log" || fail "missing updates output"
   teardown_case
 }
 
@@ -412,6 +427,7 @@ run_test(){
 
 main(){
   run_test test_dry_run_does_not_invoke_updater
+  run_test test_forced_banner_prints_before_legacy_updates_output
   run_test test_yes_invokes_configured_updater_through_sudo
   run_test test_log_dir_cli_overrides_environment
   run_test test_yes_passes_owner_config_through_sudo_env

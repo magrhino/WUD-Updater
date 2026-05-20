@@ -14,6 +14,7 @@ from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from .banner import print_startup_banner
 from .images import image_has_tag, image_with_tag, tag_value_valid
 from .terminal import TerminalRenderer
 
@@ -670,8 +671,14 @@ def run_updates_from_namespace(
     *,
     repo_root: str | Path,
     environ: Mapping[str, str] | None = None,
+    show_banner: bool = False,
 ) -> int:
     env = load_configured_environ(environ)
+    if show_banner:
+        print_startup_banner(
+            environ=env,
+            no_color=bool(getattr(args, "no_color", False)),
+        )
     try:
         options = options_from_namespace(args, repo_root=repo_root, environ=env)
     except UpdatesError as exc:

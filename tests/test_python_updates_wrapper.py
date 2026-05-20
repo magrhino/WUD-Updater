@@ -42,6 +42,7 @@ class PythonUpdatesWrapperTests(unittest.TestCase):
             "FAKE_SUDO_LOG": str(self.sudo_log),
             "FAKE_UPDATER_LOG": str(self.updater_log),
             "FAKE_WUD_FILE": str(self.wud_file),
+            "WUD_UPDATER_BANNER": "0",
         }
         if include_pythonpath:
             env_defaults["PYTHONPATH"] = str(self.repo_root / "src")

@@ -32,6 +32,33 @@ import ruamel.yaml
 PY
 }
 
+python_can_run_banner() {
+  "$1" - >/dev/null 2>&1 <<'PY'
+import sys
+raise SystemExit(0 if sys.version_info >= (3, 10) else 1)
+PY
+}
+
+print_startup_banner() {
+  local banner_python_bin="${PYTHON_BIN:-python3}"
+  local venv_dir="${WUD_UPDATER_VENV:-$repo_dir/.venv}"
+  local banner_pythonpath="$repo_dir/src"
+
+  if [[ -z "${PYTHON_BIN:-}" && -x "$venv_dir/bin/python" ]]; then
+    if ! python_can_run_banner "$banner_python_bin"; then
+      banner_python_bin="$venv_dir/bin/python"
+    fi
+  fi
+  python_can_run_banner "$banner_python_bin" || return 0
+
+  if [[ -n "${PYTHONPATH:-}" ]]; then
+    banner_pythonpath="$banner_pythonpath:$PYTHONPATH"
+  fi
+
+  PYTHONPATH="$banner_pythonpath" "$banner_python_bin" -m wud_updater.banner \
+    2>/dev/null || true
+}
+
 if [[ "${WUD_UPDATER_PYTHON:-}" == "1" ]]; then
   python_bin="${PYTHON_BIN:-python3}"
   venv_dir="${WUD_UPDATER_VENV:-$repo_dir/.venv}"
@@ -138,6 +165,8 @@ done
 if [ "$wud_file_explicit" -eq 0 ]; then
   wud_file="$docker_base/wud/out/images.todo"
 fi
+
+print_startup_banner
 
 wud_lock_timeout_seconds() {
   local timeout="${lock_timeout:-30}"

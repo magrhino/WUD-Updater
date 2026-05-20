@@ -108,6 +108,7 @@ run ruff check .
 
 run "$python_bin" -m py_compile \
   src/wud_updater/__init__.py \
+  src/wud_updater/banner.py \
   src/wud_updater/cli.py \
   src/wud_updater/command.py \
   src/wud_updater/compose.py \
@@ -123,6 +124,7 @@ run "$python_bin" -m py_compile \
   src/wud_updater/updater.py \
   src/wud_updater/wud_file.py \
   tests/run-python-tests.py \
+  tests/test_python_banner.py \
   tests/test_python_cli.py \
   tests/test_python_config.py \
   tests/test_python_db.py \

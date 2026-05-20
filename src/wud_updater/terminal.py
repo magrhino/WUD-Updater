@@ -198,6 +198,41 @@ class TerminalRenderer:
             )
         )
 
+    def startup_banner(
+        self,
+        *,
+        art: str,
+        local_tag: str,
+        release_status: tuple[str, str] | None = None,
+        stream: TextIO | None = None,
+    ) -> None:
+        target = self.stream if stream is None else stream
+        if self.rich_enabled(target) and Panel is not None and Text is not None:
+            body = Text()
+            body.append(art.rstrip("\n"), style="bold cyan")
+            body.append("\n\n")
+            body.append(f"WUD-Updater {local_tag}", style="bold green")
+            if release_status is not None:
+                message, kind = release_status
+                body.append("\n")
+                body.append(message, style=_KIND_STYLES.get(kind, "white"))
+            self._console(target).print(
+                Panel(
+                    body,
+                    title=f" WUD-Updater {local_tag} ",
+                    title_align="left",
+                    border_style="bold cyan",
+                )
+            )
+            return
+
+        for line in _plain_banner_lines(
+            art=art,
+            local_tag=local_tag,
+            release_status=release_status,
+        ):
+            print(line, file=target)
+
     def updater_targets(self, rows: Sequence[tuple[int, str, str, str]]) -> None:
         if not self.rich_enabled():
             return
@@ -273,6 +308,24 @@ class TerminalRenderer:
 def _stream_is_tty(stream: TextIO) -> bool:
     isatty = getattr(stream, "isatty", None)
     return bool(isatty and isatty())
+
+
+def _plain_banner_lines(
+    *,
+    art: str,
+    local_tag: str,
+    release_status: tuple[str, str] | None,
+) -> list[str]:
+    content = [*art.rstrip("\n").splitlines(), "", f"WUD-Updater {local_tag}"]
+    if release_status is not None:
+        content.append(release_status[0])
+    width = max((len(line) for line in content), default=0)
+    horizontal = f"+-{'-' * width}-+"
+    lines = [horizontal]
+    for line in content:
+        lines.append(f"| {line.ljust(width)} |")
+    lines.append(horizontal)
+    return lines
 
 
 _LEVEL_STYLES = {

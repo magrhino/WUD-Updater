@@ -306,6 +306,8 @@ Core updater and wrapper values:
 | `WUD_UPDATER_CONFIG` | `$HOME/.config/wud-updater/env` | Host config file read by `updates`. |
 | `WUD_UPDATER_PYTHON` | unset | Set to `1` to run the Python `updates` wrapper from `bin/updates`. |
 | `WUD_UPDATER_USE_SUDO` | enabled | For `WUD_UPDATER_PYTHON=1`, set to `0` to disable sudo file fallbacks and run `WUD_UPDATER` directly. |
+| `WUD_UPDATER_BANNER` | `auto` | Startup banner mode: `auto` prints on TTY startup, `1` forces it, and `0` disables it. |
+| `WUD_UPDATER_RELEASE_CHECK` | `auto` | Latest-release check mode for the startup banner: `auto` or `1` tries GitHub briefly when the banner prints, and `0` disables the network check. |
 | `PYTHON_BIN` | `python3`, with repo `.venv` fallback when unset | Python interpreter used by Python entrypoint wrappers. Set this to bypass automatic `.venv` fallback. |
 | `WUD_UPDATER_VENV` | Repo-local `.venv` | Optional installer and wrapper venv path for host runtime dependencies. |
 

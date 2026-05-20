@@ -8,6 +8,7 @@ from io import StringIO
 from pathlib import Path
 from unittest import mock
 
+from wud_updater.banner import current_tag
 from wud_updater.cli import main
 
 
@@ -94,6 +95,42 @@ class CliTests(unittest.TestCase):
         self.assertIn(f"Log file: {log_dir}", stdout)
         self.assertEqual(stderr, "")
 
+    def test_update_from_wud_prints_forced_startup_banner(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="wud-python-cli.") as tmpdir:
+            root = Path(tmpdir)
+            base = root / "base"
+            wud_file = root / "images.todo"
+            log_dir = root / "logs"
+            base.mkdir()
+            wud_file.write_text("", encoding="utf-8")
+
+            env = {
+                "WUD_UPDATER_BANNER": "1",
+                "WUD_UPDATER_RELEASE_CHECK": "0",
+                "PATH": os.environ.get("PATH", ""),
+            }
+            with mock.patch.dict(os.environ, env, clear=True):
+                status, stdout, stderr = self._run_main(
+                    [
+                        "update-from-wud",
+                        "--dry-run",
+                        "--base",
+                        str(base),
+                        "--file",
+                        str(wud_file),
+                        "--log-dir",
+                        str(log_dir),
+                        "--max-wait",
+                        "0",
+                        "--yes",
+                    ]
+                )
+
+        self.assertEqual(status, 0)
+        self.assertIn(f"WUD-Updater {current_tag()}", stdout)
+        self.assertIn("Nothing to do; list is empty.", stdout)
+        self.assertEqual(stderr, "")
+
     def test_updates_dry_run_exits_successfully_without_mutation(self) -> None:
         with tempfile.TemporaryDirectory(prefix="wud-python-cli.") as tmpdir:
             env = {
@@ -138,6 +175,44 @@ class CliTests(unittest.TestCase):
 
         self.assertEqual(status, 0)
         self.assertIn("✅ No pending Docker updates!", stdout)
+        self.assertEqual(stderr, "")
+
+    def test_updates_prints_forced_startup_banner(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="wud-python-cli.") as tmpdir:
+            env = {
+                "HOME": tmpdir,
+                "WUD_UPDATER_CONFIG": str(Path(tmpdir) / "missing-env"),
+                "WUD_UPDATER_BANNER": "1",
+                "WUD_UPDATER_RELEASE_CHECK": "0",
+                "PATH": os.environ.get("PATH", ""),
+            }
+            with mock.patch.dict(os.environ, env, clear=True):
+                status, stdout, stderr = self._run_main(
+                    [
+                        "updates",
+                        "--dry-run",
+                        "--file",
+                        str(Path(tmpdir) / "missing.todo"),
+                    ]
+                )
+
+        self.assertEqual(status, 0)
+        self.assertIn(f"WUD-Updater {current_tag()}", stdout)
+        self.assertIn("✅ No pending Docker updates!", stdout)
+        self.assertEqual(stderr, "")
+
+    def test_truenas_status_export_skips_forced_startup_banner(self) -> None:
+        env = {
+            "WUD_UPDATER_BANNER": "1",
+            "WUD_UPDATER_RELEASE_CHECK": "0",
+            "PATH": os.environ.get("PATH", ""),
+        }
+        with mock.patch.dict(os.environ, env, clear=True):
+            status, stdout, stderr = self._run_main(["truenas-status-export"])
+
+        self.assertEqual(status, 0)
+        self.assertNotIn("WUD-Updater", stdout)
+        self.assertTrue(stdout.strip().startswith("{"))
         self.assertEqual(stderr, "")
 
     def test_updates_yes_without_pending_entries_exits_successfully(self) -> None:

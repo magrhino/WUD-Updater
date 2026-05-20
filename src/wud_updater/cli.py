@@ -7,6 +7,7 @@ import sys
 from collections.abc import Sequence
 from pathlib import Path
 
+from .banner import print_startup_banner
 from .updater import UpdaterError, options_from_namespace, run_update_from_wud
 from .updates import (
     run_truenas_status_export_from_namespace,
@@ -59,6 +60,7 @@ def _add_updates_options(parser: argparse.ArgumentParser) -> None:
 
 
 def _run_update_from_wud(args: argparse.Namespace) -> int:
+    print_startup_banner(no_color=bool(getattr(args, "no_color", False)))
     try:
         options = options_from_namespace(args)
     except UpdaterError as exc:
@@ -71,6 +73,7 @@ def _run_updates(args: argparse.Namespace) -> int:
     return run_updates_from_namespace(
         args,
         repo_root=Path(__file__).resolve().parents[2],
+        show_banner=True,
     )
 
 
