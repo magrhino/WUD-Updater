@@ -1815,19 +1815,15 @@ def _expand_network_mode_services(
             return
 
         visiting.add(service)
-        provider = providers.get(service)
-        if provider and provider != service:
-            uses_network_provider = True
-            visit(provider)
-
-        if service in consumers_by_provider:
+        consumers = consumers_by_provider.get(service, ())
+        if consumers:
             uses_network_provider = True
 
         if service not in seen:
             expanded.append(service)
             seen.add(service)
 
-        for consumer in consumers_by_provider.get(service, ()):
+        for consumer in consumers:
             visit(consumer)
         visiting.remove(service)
 

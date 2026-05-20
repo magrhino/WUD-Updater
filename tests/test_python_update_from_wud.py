@@ -380,6 +380,78 @@ class PythonUpdateFromWudTests(unittest.TestCase):
         self.assertRegex(calls, r"compose -f docker-compose.yml pull app")
         self.assertRegex(calls, r"compose -f docker-compose.yml up -d .* app")
 
+    def test_network_mode_consumer_tag_update_stays_service_scoped(self) -> None:
+        self.wud_file.write_text(
+            "ghcr.io/linuxserver/qbittorrent:5.1.4 tag=5.2.0\n",
+            encoding="utf-8",
+        )
+        stack_dir = self.base / "media"
+        stack_dir.mkdir()
+        (stack_dir / ".fake-docker-id").write_text("media\n", encoding="utf-8")
+        compose_file = stack_dir / "docker-compose.yml"
+        compose_file.write_text(
+            "\n".join(
+                [
+                    "services:",
+                    "  gluetun:",
+                    "    image: qmcgaw/gluetun:latest",
+                    "  qbittorrent:",
+                    "    image: ghcr.io/linuxserver/qbittorrent:5.1.4",
+                    "    network_mode: service:gluetun",
+                    "  mamapi:",
+                    "    image: ghcr.io/example/mamapi:latest",
+                    "    network_mode: service:gluetun",
+                    "",
+                ]
+            ),
+            encoding="utf-8",
+        )
+        stack_state = self.fake_root / "stacks" / "media"
+        stack_state.mkdir()
+        (stack_state / "cids.txt").write_text(
+            "cid-gluetun\ncid-qbittorrent\ncid-mamapi\n",
+            encoding="utf-8",
+        )
+        (stack_state / "cids-qbittorrent.txt").write_text(
+            "cid-qbittorrent\n",
+            encoding="utf-8",
+        )
+        for cid in ("cid-gluetun", "cid-qbittorrent", "cid-mamapi"):
+            (self.fake_root / "containers" / f"{cid}.summary").write_text(
+                f"/{cid}|running|healthy|0|0\n",
+                encoding="utf-8",
+            )
+        self.set_image_state(
+            "ghcr.io/linuxserver/qbittorrent:5.1.4",
+            "old-qbit",
+            "sha256:old-qbit",
+        )
+        self.set_image_after_pull(
+            "ghcr.io/linuxserver/qbittorrent:5.2.0",
+            "new-qbit",
+            "sha256:new-qbit",
+        )
+
+        result = self.run_python("--yes", "--allow-tag-updates")
+
+        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+        self.assertEqual(self.wud_file.read_text(encoding="utf-8"), "")
+        self.assertIn(
+            "image: ghcr.io/linuxserver/qbittorrent:5.2.0",
+            compose_file.read_text(encoding="utf-8"),
+        )
+        calls = self.calls()
+        self.assertRegex(calls, r"compose -f docker-compose.yml pull qbittorrent")
+        self.assertRegex(calls, r"compose -f docker-compose.yml stop qbittorrent")
+        self.assertRegex(
+            calls,
+            r"compose -f docker-compose.yml up -d --remove-orphans --no-deps qbittorrent",
+        )
+        self.assertNotRegex(calls, r"compose -f docker-compose.yml pull gluetun")
+        self.assertNotRegex(calls, r"compose -f docker-compose.yml pull mamapi")
+        self.assertNotRegex(calls, r"compose -f docker-compose.yml stop .*gluetun")
+        self.assertNotRegex(calls, r"compose -f docker-compose.yml stop .*mamapi")
+
     def test_surgical_tag_rewrite_preserves_unrelated_compose_content(self) -> None:
         compose_file = self.root / "compose.yml"
         original = (
