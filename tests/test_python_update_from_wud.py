@@ -282,6 +282,39 @@ class PythonUpdateFromWudTests(unittest.TestCase):
         self.assertIn("container stop failed", report)
         self.assertIn("Compose up recovery succeeded", report)
 
+    def test_tag_update_down_failure_keeps_down_command_after_failed_recovery(self) -> None:
+        self.env["FAKE_COMPOSE_UP_WAIT"] = "1"
+        self.wud_file.write_text("repo/app:1.0 tag=2.0\n", encoding="utf-8")
+        self.make_stack("app", [("app", "repo/app:1.0", "cid-app")])
+        self.set_image_state("repo/app:1.0", "old", "sha256:old")
+        self.set_image_after_pull("repo/app:2.0", "new", "sha256:new")
+        stack_state = self.fake_root / "stacks" / "app"
+        (self.fake_root / "containers" / "cid-app.labels").write_text(
+            "WUD-UPDATER-RECREATE-STACK=true\n",
+            encoding="utf-8",
+        )
+        (stack_state / "down_fail").write_text("", encoding="utf-8")
+        (stack_state / "down_stderr").write_text(
+            "network remove failed\n",
+            encoding="utf-8",
+        )
+        (stack_state / "up_fail").write_text("", encoding="utf-8")
+        (stack_state / "up_stderr").write_text(
+            "recovery up failed\n",
+            encoding="utf-8",
+        )
+
+        result = self.run_python("--yes", "--allow-tag-updates")
+
+        self.assertEqual(result.returncode, 1, result.stderr + result.stdout)
+        report = self.latest_error_report().read_text(encoding="utf-8")
+        self.assertIn("phase=down", report)
+        self.assertIn("reason=down-failed", report)
+        self.assertIn("argv=docker compose -f docker-compose.yml down", report)
+        self.assertIn("network remove failed", report)
+        self.assertNotIn("argv=docker compose -f docker-compose.yml up", report)
+        self.assertNotIn("recovery up failed", report)
+
     def test_tag_update_requires_explicit_flag(self) -> None:
         self.wud_file.write_text("repo/app:1.0 tag=2.0\n", encoding="utf-8")
         stack_dir = self.make_stack("app", [("app", "repo/app:1.0", "cid-app")])

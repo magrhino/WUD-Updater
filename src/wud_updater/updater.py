@@ -131,6 +131,7 @@ class UpResult:
 @dataclass(frozen=True)
 class UpdateScope:
     services: tuple[str, ...] | None
+    pull_services: tuple[str, ...] | None
     stack_reason: str = ""
 
 
@@ -424,8 +425,10 @@ class UpdateFromWudRunner:
         opts = self.options
         scope = self._update_scope(stack, matches)
         services = scope.services
+        pull_services = scope.pull_services
         service_scoped = services is not None
         services_label = " ".join(services or ())
+        pull_services_label = " ".join(pull_services or ())
 
         if self.log.rich_enabled():
             self.log.plain("INFO", f"[{stack.name}] Checking for updates (mode={opts.mode})")
@@ -435,16 +438,24 @@ class UpdateFromWudRunner:
                 self.log.plain("INFO", f"[{stack.name}] {message}")
                 panel_lines.append((message, "info"))
             else:
-                message = _stack_level_scope_message(scope.stack_reason)
+                message = _stack_level_scope_message(scope)
                 self.log.plain("WARN", f"[{stack.name}] {message}")
                 panel_lines.append((message, "warning"))
+                if pull_services is not None:
+                    pull_message = f"Pulling matched compose service(s): {pull_services_label}"
+                    self.log.plain("INFO", f"[{stack.name}] {pull_message}")
+                    panel_lines.append((pull_message, "info"))
             self.log.renderer.stack_summary(stack.name, panel_lines)
         else:
             self.log.info(f"[{stack.name}] Checking for updates (mode={opts.mode})")
             if service_scoped:
                 self.log.info(f"[{stack.name}] Matched compose service(s): {services_label}")
             else:
-                self.log.warn(f"[{stack.name}] {_stack_level_scope_message(scope.stack_reason)}")
+                self.log.warn(f"[{stack.name}] {_stack_level_scope_message(scope)}")
+                if pull_services is not None:
+                    self.log.info(
+                        f"[{stack.name}] Pulling matched compose service(s): {pull_services_label}"
+                    )
 
         images = tuple(stack.images)
         before = self._image_state(images)
@@ -467,7 +478,7 @@ class UpdateFromWudRunner:
                     matches,
                     phase="compose-backup",
                     reason="compose-backup-failed",
-                    services=services,
+                    services=pull_services,
                     note=str(exc),
                 )
                 return StackStatus("failure", "compose-backup-failed")
@@ -482,7 +493,7 @@ class UpdateFromWudRunner:
                     matches,
                     phase="compose-tag-rewrite",
                     reason="compose-tag-rewrite-failed",
-                    services=services,
+                    services=pull_services,
                     note=str(exc),
                 )
                 return StackStatus("failure", "compose-tag-rewrite-failed")
@@ -495,7 +506,7 @@ class UpdateFromWudRunner:
                     matches,
                     phase="compose-tag-rewrite",
                     reason="compose-tag-rewrite-failed",
-                    services=services,
+                    services=pull_services,
                     note=str(exc),
                 )
                 return StackStatus("failure", "compose-tag-rewrite-failed")
@@ -508,7 +519,7 @@ class UpdateFromWudRunner:
                     matches,
                     phase="compose-tag-rewrite",
                     reason="compose-tag-rewrite-failed",
-                    services=services,
+                    services=pull_services,
                     note="No compose image lines were rewritten.",
                 )
                 return StackStatus("failure", "compose-tag-rewrite-failed")
@@ -545,13 +556,13 @@ class UpdateFromWudRunner:
             images = tuple(current_stack.images)
 
         try:
-            self.compose.pull(stack.directory, stack.file, services)
+            self.compose.pull(stack.directory, stack.file, pull_services)
         except CommandError as exc:
             if applied_tags and compose_backup is not None:
                 return self._handle_tag_update_failure(
                     stack,
                     matches,
-                    services,
+                    pull_services,
                     applied_tags,
                     compose_backup,
                     "pull-failed",
@@ -563,9 +574,9 @@ class UpdateFromWudRunner:
                 matches,
                 phase="pull",
                 reason="pull-failed",
-                services=services,
+                services=pull_services,
                 command_error=exc,
-                health_details=self._capture_health_details(stack, services),
+                health_details=self._capture_health_details(stack, pull_services),
             )
             return StackStatus("failure", "pull-failed")
 
@@ -586,8 +597,8 @@ class UpdateFromWudRunner:
                 matches,
                 phase="digest",
                 reason="expected-digest-not-reached",
-                services=services,
-                health_details=self._capture_health_details(stack, services),
+                services=pull_services,
+                health_details=self._capture_health_details(stack, pull_services),
             )
             return StackStatus("failure", "expected-digest-not-reached")
 
@@ -635,15 +646,22 @@ class UpdateFromWudRunner:
         up_result = self._run_compose_up(stack, services)
         if not up_result.ok:
             if applied_tags and compose_backup is not None:
+                failure_phase = "up"
+                failure_reason = "up-or-health-failed"
+                failure_error = up_result.command_error
+                if down_failed and down_error is not None:
+                    failure_phase = down_phase
+                    failure_reason = "down-failed"
+                    failure_error = down_error
                 return self._handle_tag_update_failure(
                     stack,
                     matches,
                     services,
                     applied_tags,
                     compose_backup,
-                    "up-or-health-failed",
-                    phase="up",
-                    command_error=up_result.command_error,
+                    failure_reason,
+                    phase=failure_phase,
+                    command_error=failure_error,
                     failure_health=up_result.health_details,
                 )
             if down_failed and down_error is not None:
@@ -915,17 +933,18 @@ class UpdateFromWudRunner:
     def _update_scope(self, stack: ComposeStack, matches: Sequence[Match]) -> UpdateScope:
         services = _update_services(matches)
         if services is None:
-            return UpdateScope(services=None)
+            return UpdateScope(services=None, pull_services=None)
         label_cid = self._stack_recreate_label_cid(stack, services)
         if label_cid:
             return UpdateScope(
                 services=None,
+                pull_services=services,
                 stack_reason=(
                     f"matched service container {label_cid} has "
                     f"{RECREATE_STACK_LABEL}=true"
                 ),
             )
-        return UpdateScope(services=services)
+        return UpdateScope(services=services, pull_services=services)
 
     def _stack_recreate_label_cid(
         self,
@@ -1321,12 +1340,8 @@ class UpdateFromWudRunner:
                     match for match in matches if match.stack.index == stack.index
                 ]
                 scope = self._update_scope(stack, stack_matches)
-                if scope.services is None:
-                    services_label = _stack_level_plan_label(scope.stack_reason)
-                    self.log.plain("INFO", f"      services: {services_label}")
-                else:
-                    services_label = " ".join(scope.services)
-                    self.log.plain("INFO", f"      services: {services_label}")
+                services_label = _scope_plan_label(scope)
+                self.log.plain("INFO", f"      services: {services_label}")
 
                 plan_lines: list[str] = []
                 lines = {
@@ -1351,10 +1366,7 @@ class UpdateFromWudRunner:
             self.log.info(f"  - {stack.name} ({stack.directory})")
             stack_matches = [match for match in matches if match.stack.index == stack.index]
             scope = self._update_scope(stack, stack_matches)
-            if scope.services is None:
-                self.log.info(f"      services: {_stack_level_plan_label(scope.stack_reason)}")
-            else:
-                self.log.info(f"      services: {' '.join(scope.services)}")
+            self.log.info(f"      services: {_scope_plan_label(scope)}")
             lines = {
                 (match.target.line_no, match.target.first, match.resolved, match.target.desired_tag)
                 for match in stack_matches
@@ -1706,17 +1718,26 @@ def _label_value_is_true(value: str) -> bool:
     return value.strip().lower() == "true"
 
 
-def _stack_level_scope_message(reason: str) -> str:
-    if reason:
-        return f"{reason}; using stack-level pull/recreate"
+def _stack_level_scope_message(scope: UpdateScope) -> str:
+    if scope.stack_reason:
+        if scope.pull_services is not None:
+            return f"{scope.stack_reason}; using service pull with stack-level recreate"
+        return f"{scope.stack_reason}; using stack-level pull/recreate"
     return (
         "Could not map every matched image to a compose service; "
         "using stack-level pull/recreate"
     )
 
 
-def _stack_level_plan_label(reason: str) -> str:
-    if reason:
+def _scope_plan_label(scope: UpdateScope) -> str:
+    if scope.services is not None:
+        return " ".join(scope.services)
+    if scope.stack_reason:
+        if scope.pull_services is not None:
+            return (
+                f"{' '.join(scope.pull_services)} "
+                f"(stack-level recreate: {RECREATE_STACK_LABEL}=true)"
+            )
         return f"stack-level recreate ({RECREATE_STACK_LABEL}=true)"
     return "stack-level fallback"
 

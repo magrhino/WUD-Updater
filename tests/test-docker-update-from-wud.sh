@@ -870,9 +870,11 @@ test_recreate_stack_label_forces_stack_level_update(){
 
   assert_status 0
   assert_file_equals "$WUD_FILE" ''
-  grep -q -- 'stack-level recreate (WUD-UPDATER-RECREATE-STACK=true)' "$TEST_TMP/output.log" || fail "plan did not report stack recreate label"
+  grep -q -- 'app (stack-level recreate: WUD-UPDATER-RECREATE-STACK=true)' "$TEST_TMP/output.log" || fail "plan did not report service pull with stack recreate label"
   assert_calls_contain 'inspect cid-app'
-  assert_calls_contain 'compose -f docker-compose.yml pull[[:space:]]*$'
+  assert_calls_contain 'compose -f docker-compose.yml pull app'
+  assert_calls_not_contain 'compose -f docker-compose.yml pull[[:space:]]*$'
+  assert_calls_not_contain 'compose -f docker-compose.yml pull db'
   assert_calls_contain 'compose -f docker-compose.yml down[[:space:]]*$'
   assert_calls_contain 'compose -f docker-compose.yml up -d --remove-orphans$'
   assert_calls_not_contain 'compose -f docker-compose.yml stop app'
