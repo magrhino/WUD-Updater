@@ -82,6 +82,7 @@ if [ -n "$wud_file" ]; then
   wud_file_explicit=1
 fi
 log_dir="${WUD_LOG_DIR:-./logs}"
+db_path="${WUD_DB_PATH:-}"
 updater="${WUD_UPDATER:-$repo_dir/bin/docker-update-from-wud}"
 update_mode="${WUD_UPDATE_MODE:-stop}"
 max_wait="${WUD_MAX_WAIT:-180}"
@@ -659,6 +660,7 @@ run_updater() {
     [ -n "$out_uid" ] && updater_env+=("OUT_UID=$out_uid")
     [ -n "$out_gid" ] && updater_env+=("OUT_GID=$out_gid")
   fi
+  [ -n "$db_path" ] && updater_env+=("WUD_DB_PATH=$db_path")
   [ -n "$lock_timeout" ] && updater_env+=("WUD_LOCK_TIMEOUT=$lock_timeout")
   if [ "$wud_lock_held" -eq 1 ]; then
     updater_env+=("WUD_LOCK_HELD_BY_PARENT=1")

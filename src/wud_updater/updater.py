@@ -230,6 +230,7 @@ class UpdateFromWudRunner:
         self.failures: list[FailureRecord] = []
         self.audit_conn: sqlite3.Connection | None = None
         self.audit_run_id: int | None = None
+        self.audit_db_path: Path | None = None
 
     def run(self) -> int:
         opts = self.options
@@ -1324,7 +1325,9 @@ class UpdateFromWudRunner:
             return
         conn: sqlite3.Connection | None = None
         try:
-            conn = connect_db(_db_path(self.options, self.environ))
+            db_path = _db_path(self.options, self.environ)
+            conn = connect_db(db_path)
+            self.audit_db_path = db_path
             init_db(conn)
             self.audit_conn = conn
             self.audit_run_id = insert_update_run(
@@ -1345,12 +1348,19 @@ class UpdateFromWudRunner:
                     target_digest=target.digest,
                     desired_tag=target.desired_tag,
                 )
-        except (OSError, sqlite3.Error, DatabaseError) as exc:
+            self._apply_audit_db_owner()
+        except (OSError, sqlite3.Error, DatabaseError, OwnerConfigError) as exc:
             if conn is not None:
                 conn.close()
             self.audit_conn = None
             self.audit_run_id = None
+            self.audit_db_path = None
             raise UpdaterError(f"Could not initialize audit database: {exc}") from exc
+
+    def _apply_audit_db_owner(self) -> None:
+        if self.audit_db_path is None:
+            return
+        _apply_sqlite_owner(self.audit_db_path, self.owner)
 
     def _finish_audit_run(self, status: str) -> None:
         if self.audit_conn is None or self.audit_run_id is None:
@@ -2204,6 +2214,25 @@ def _db_path(options: UpdaterOptions, environ: Mapping[str, str]) -> Path:
     if options.db_path is not None:
         return options.db_path
     return options.log_dir / "wud-updater.sqlite"
+
+
+def _apply_sqlite_owner(db_path: Path, owner: OwnerConfig) -> None:
+    if not owner.configured or str(db_path) == ":memory:":
+        return
+    if db_path.parent.exists():
+        apply_configured_owner(db_path.parent, owner)
+    for path in _sqlite_state_paths(db_path):
+        if path.exists():
+            apply_configured_owner(path, owner)
+
+
+def _sqlite_state_paths(db_path: Path) -> tuple[Path, ...]:
+    return (
+        db_path,
+        Path(f"{db_path}-wal"),
+        Path(f"{db_path}-shm"),
+        Path(f"{db_path}-journal"),
+    )
 
 
 def _updated_images(

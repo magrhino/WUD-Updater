@@ -20,6 +20,7 @@ from wud_updater.updater import (
     TagUpdate,
     UpdaterOptions,
     UpdateFromWudRunner,
+    _apply_sqlite_owner,
     apply_compose_tag_updates,
     prepare_log_file,
 )
@@ -291,6 +292,59 @@ class PythonUpdateFromWudTests(unittest.TestCase):
         self.assertEqual(self.wud_file.read_text(encoding="utf-8"), "repo/app:latest\n")
         self.assertNotRegex(self.calls(), r"compose -f .* pull")
         self.assertNotRegex(self.calls(), r"compose -f .* up -d")
+
+    def test_audit_start_applies_configured_owner_to_db_path(self) -> None:
+        self.wud_file.write_text("repo/app:latest\n", encoding="utf-8")
+        self.make_stack("app", [("app", "repo/app:latest", "cid-app")])
+        self.set_image_state("repo/app:latest", "old", "sha256:old")
+        self.set_image_after_pull("repo/app:latest", "new", "sha256:new")
+        self.env["OUT_UID"] = str(os.getuid())
+        self.env["OUT_GID"] = str(os.getgid())
+        options = UpdaterOptions(
+            docker_base=self.base,
+            wud_file=self.wud_file,
+            log_dir=self.log_dir,
+            max_wait=0,
+            assume_yes=True,
+            no_color=True,
+            db_path=self.db_path,
+        )
+        runner = UpdateFromWudRunner(
+            options,
+            environ=self.env,
+            command_runner=CommandRunner(env=self.env),
+        )
+        stdout = StringIO()
+        stderr = StringIO()
+
+        with (
+            mock.patch("wud_updater.updater._apply_sqlite_owner") as apply_owner,
+            redirect_stdout(stdout),
+            redirect_stderr(stderr),
+        ):
+            status = runner.run()
+
+        self.assertEqual(status, 0, stderr.getvalue() + stdout.getvalue())
+        apply_owner.assert_any_call(self.db_path, runner.owner)
+
+    def test_apply_sqlite_owner_updates_db_directory_and_sidecars(self) -> None:
+        db_path = self.root / "state" / "wud-updater.sqlite"
+        sidecars = [
+            db_path,
+            Path(f"{db_path}-wal"),
+            Path(f"{db_path}-shm"),
+            Path(f"{db_path}-journal"),
+        ]
+        db_path.parent.mkdir(parents=True, exist_ok=True)
+        for path in sidecars:
+            path.write_text("", encoding="utf-8")
+        owner = OwnerConfig.from_values(str(os.getuid()), str(os.getgid()))
+
+        with mock.patch("wud_updater.updater.apply_configured_owner") as apply_owner:
+            _apply_sqlite_owner(db_path, owner)
+
+        called_paths = [Path(call.args[0]) for call in apply_owner.call_args_list]
+        self.assertEqual(called_paths, [db_path.parent, *sidecars])
 
     def test_up_wait_failure_writes_error_report_with_command_output(self) -> None:
         self.env["FAKE_COMPOSE_UP_WAIT"] = "1"
