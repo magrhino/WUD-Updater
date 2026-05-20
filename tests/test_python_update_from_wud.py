@@ -7,7 +7,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
-from contextlib import redirect_stderr, redirect_stdout
+from contextlib import closing, redirect_stderr, redirect_stdout
 from io import StringIO
 from pathlib import Path
 from unittest import mock
@@ -18,6 +18,7 @@ from wud_updater.file_ops import OwnerConfig
 from wud_updater.updater import (
     ComposeTagRewriteError,
     TagUpdate,
+    UpdaterError,
     UpdaterOptions,
     UpdateFromWudRunner,
     _apply_sqlite_owner,
@@ -172,7 +173,7 @@ class PythonUpdateFromWudTests(unittest.TestCase):
         return reports[-1]
 
     def db_rows(self, query: str, params: tuple[object, ...] = ()) -> list[sqlite3.Row]:
-        with sqlite3.connect(self.db_path) as conn:
+        with closing(sqlite3.connect(self.db_path)) as conn:
             conn.row_factory = sqlite3.Row
             return list(conn.execute(query, params))
 
@@ -292,6 +293,48 @@ class PythonUpdateFromWudTests(unittest.TestCase):
         self.assertEqual(self.wud_file.read_text(encoding="utf-8"), "repo/app:latest\n")
         self.assertNotRegex(self.calls(), r"compose -f .* pull")
         self.assertNotRegex(self.calls(), r"compose -f .* up -d")
+
+    def test_late_audit_write_failure_marks_run_failed(self) -> None:
+        self.wud_file.write_text("repo/app:latest\n", encoding="utf-8")
+        self.make_stack("app", [("app", "repo/app:latest", "cid-app")])
+        self.set_image_state("repo/app:latest", "old", "sha256:old")
+        self.set_image_after_pull("repo/app:latest", "new", "sha256:new")
+        options = UpdaterOptions(
+            docker_base=self.base,
+            wud_file=self.wud_file,
+            log_dir=self.log_dir,
+            max_wait=0,
+            assume_yes=True,
+            no_color=True,
+            db_path=self.db_path,
+        )
+        runner = UpdateFromWudRunner(
+            options,
+            environ=self.env,
+            command_runner=CommandRunner(env=self.env),
+        )
+        stdout = StringIO()
+        stderr = StringIO()
+
+        with (
+            mock.patch(
+                "wud_updater.updater.insert_update_event",
+                side_effect=sqlite3.OperationalError("database is locked"),
+            ),
+            redirect_stdout(stdout),
+            redirect_stderr(stderr),
+        ):
+            with self.assertRaisesRegex(
+                UpdaterError,
+                "Could not update audit database: database is locked",
+            ):
+                runner.run()
+
+        self.assertEqual(self.wud_file.read_text(encoding="utf-8"), "")
+        runs = self.db_rows("SELECT * FROM update_runs")
+        self.assertEqual(len(runs), 1)
+        self.assertEqual(runs[0]["status"], "failure")
+        self.assertIsNotNone(runs[0]["finished_at"])
 
     def test_audit_start_applies_configured_owner_to_db_path(self) -> None:
         self.wud_file.write_text("repo/app:latest\n", encoding="utf-8")

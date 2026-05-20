@@ -348,8 +348,14 @@ class UpdateFromWudRunner:
             self.log.info(f"Done. See log: {self.log_file}")
             return 0
         except (CommandError, ComposeDiscoveryError, LineSpecError, OwnerConfigError, WudLockError) as exc:
-            self._finish_audit_run("failure")
+            self._finish_audit_run("failure", best_effort=True)
             raise UpdaterError(str(exc)) from exc
+        except (sqlite3.Error, DatabaseError) as exc:
+            self._finish_audit_run("failure", best_effort=True)
+            raise UpdaterError(f"Could not update audit database: {exc}") from exc
+        except UpdaterError:
+            self._finish_audit_run("failure", best_effort=True)
+            raise
         finally:
             if self.audit_conn is not None:
                 self.audit_conn.close()
@@ -1362,19 +1368,24 @@ class UpdateFromWudRunner:
             return
         _apply_sqlite_owner(self.audit_db_path, self.owner)
 
-    def _finish_audit_run(self, status: str) -> None:
+    def _finish_audit_run(self, status: str, *, best_effort: bool = False) -> None:
         if self.audit_conn is None or self.audit_run_id is None:
             return
-        with self.audit_conn:
-            self.audit_conn.execute(
-                """
-                UPDATE update_runs
-                SET status = ?,
-                    finished_at = ?
-                WHERE id = ?
-                """,
-                (status, db_utc_timestamp(), self.audit_run_id),
-            )
+        try:
+            with self.audit_conn:
+                self.audit_conn.execute(
+                    """
+                    UPDATE update_runs
+                    SET status = ?,
+                        finished_at = ?
+                    WHERE id = ?
+                    """,
+                    (status, db_utc_timestamp(), self.audit_run_id),
+                )
+        except sqlite3.Error:
+            if best_effort:
+                return
+            raise
 
     def _mark_unmatched_pending(
         self,
