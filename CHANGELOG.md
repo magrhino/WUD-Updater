@@ -4,6 +4,14 @@ All notable changes to WUD-Updater are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com) and versions follow
 [Semantic Versioning](https://semver.org).
 
+## [0.11.1](https://github.com/magrhino/WUD-Updater/compare/v0.11.0...v0.11.1) (2026-05-20)
+
+
+### Bug Fixes
+
+* **updater:** expand network-mode lifecycle scope ([1ec9150](https://github.com/magrhino/WUD-Updater/commit/1ec9150bc1339494837b7a867c0e055ff6d185af))
+* **updater:** include network-mode consumers in lifecycle scope ([19d0a33](https://github.com/magrhino/WUD-Updater/commit/19d0a33482dbb92f43a974f1948c974575daba11))
+
 ## [0.11.0](https://github.com/magrhino/WUD-Updater/compare/v0.10.1...v0.11.0) (2026-05-20)
 
 
