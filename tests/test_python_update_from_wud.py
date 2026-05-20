@@ -368,9 +368,9 @@ class PythonUpdateFromWudTests(unittest.TestCase):
             status = runner.run()
 
         self.assertEqual(status, 0, stderr.getvalue() + stdout.getvalue())
-        apply_owner.assert_any_call(self.db_path, runner.owner)
+        apply_owner.assert_any_call(self.db_path, runner.owner, chown_parent=True)
 
-    def test_apply_sqlite_owner_updates_db_directory_and_sidecars(self) -> None:
+    def test_apply_sqlite_owner_leaves_existing_db_directory_alone(self) -> None:
         db_path = self.root / "state" / "wud-updater.sqlite"
         sidecars = [
             db_path,
@@ -385,6 +385,25 @@ class PythonUpdateFromWudTests(unittest.TestCase):
 
         with mock.patch("wud_updater.updater.apply_configured_owner") as apply_owner:
             _apply_sqlite_owner(db_path, owner)
+
+        called_paths = [Path(call.args[0]) for call in apply_owner.call_args_list]
+        self.assertEqual(called_paths, sidecars)
+
+    def test_apply_sqlite_owner_updates_created_db_directory_and_sidecars(self) -> None:
+        db_path = self.root / "created-state" / "wud-updater.sqlite"
+        sidecars = [
+            db_path,
+            Path(f"{db_path}-wal"),
+            Path(f"{db_path}-shm"),
+            Path(f"{db_path}-journal"),
+        ]
+        db_path.parent.mkdir(parents=True, exist_ok=True)
+        for path in sidecars:
+            path.write_text("", encoding="utf-8")
+        owner = OwnerConfig.from_values(str(os.getuid()), str(os.getgid()))
+
+        with mock.patch("wud_updater.updater.apply_configured_owner") as apply_owner:
+            _apply_sqlite_owner(db_path, owner, chown_parent=True)
 
         called_paths = [Path(call.args[0]) for call in apply_owner.call_args_list]
         self.assertEqual(called_paths, [db_path.parent, *sidecars])

@@ -1332,6 +1332,7 @@ class UpdateFromWudRunner:
         conn: sqlite3.Connection | None = None
         try:
             db_path = _db_path(self.options, self.environ)
+            chown_parent = _sqlite_parent_missing(db_path)
             conn = connect_db(db_path)
             self.audit_db_path = db_path
             init_db(conn)
@@ -1354,7 +1355,7 @@ class UpdateFromWudRunner:
                     target_digest=target.digest,
                     desired_tag=target.desired_tag,
                 )
-            self._apply_audit_db_owner()
+            self._apply_audit_db_owner(chown_parent=chown_parent)
         except (OSError, sqlite3.Error, DatabaseError, OwnerConfigError) as exc:
             if conn is not None:
                 conn.close()
@@ -1363,10 +1364,14 @@ class UpdateFromWudRunner:
             self.audit_db_path = None
             raise UpdaterError(f"Could not initialize audit database: {exc}") from exc
 
-    def _apply_audit_db_owner(self) -> None:
+    def _apply_audit_db_owner(self, *, chown_parent: bool = False) -> None:
         if self.audit_db_path is None:
             return
-        _apply_sqlite_owner(self.audit_db_path, self.owner)
+        _apply_sqlite_owner(
+            self.audit_db_path,
+            self.owner,
+            chown_parent=chown_parent,
+        )
 
     def _finish_audit_run(self, status: str, *, best_effort: bool = False) -> None:
         if self.audit_conn is None or self.audit_run_id is None:
@@ -2227,10 +2232,19 @@ def _db_path(options: UpdaterOptions, environ: Mapping[str, str]) -> Path:
     return options.log_dir / "wud-updater.sqlite"
 
 
-def _apply_sqlite_owner(db_path: Path, owner: OwnerConfig) -> None:
+def _sqlite_parent_missing(db_path: Path) -> bool:
+    return str(db_path) != ":memory:" and not db_path.parent.exists()
+
+
+def _apply_sqlite_owner(
+    db_path: Path,
+    owner: OwnerConfig,
+    *,
+    chown_parent: bool = False,
+) -> None:
     if not owner.configured or str(db_path) == ":memory:":
         return
-    if db_path.parent.exists():
+    if chown_parent and db_path.parent.exists():
         apply_configured_owner(db_path.parent, owner)
     for path in _sqlite_state_paths(db_path):
         if path.exists():
