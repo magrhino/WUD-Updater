@@ -4,6 +4,13 @@ All notable changes to WUD-Updater are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com) and versions follow
 [Semantic Versioning](https://semver.org).
 
+## [0.10.1](https://github.com/magrhino/WUD-Updater/compare/v0.10.0...v0.10.1) (2026-05-20)
+
+
+### Bug Fixes
+
+* **updater:** avoid pulling unrelated services during stack recreate ([b9b6da1](https://github.com/magrhino/WUD-Updater/commit/b9b6da15961f94346fec0efa7bf6750c995b22a3))
+
 ## [0.10.0](https://github.com/magrhino/WUD-Updater/compare/v0.9.2...v0.10.0) (2026-05-19)
 
 
