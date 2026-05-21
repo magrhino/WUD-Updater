@@ -298,7 +298,7 @@ class UpdateFromWudRunner:
                         "Dry-run only; reported container bind-mount path issue without mutating."
                     )
                 else:
-                    return 1
+                    return self._finish_preflight_failure(parsed, matches, skipped_tags)
             if not self._validate_tag_manifests(matches):
                 return 1
 
@@ -1290,6 +1290,8 @@ class UpdateFromWudRunner:
 
     def _validate_compose_bind_mount_paths(self, matches: Sequence[Match]) -> bool:
         ok = True
+        issue_messages: dict[int, list[str]] = {}
+        issue_services: dict[int, set[str]] = {}
         for stack in _stacks_to_update(matches):
             stack_matches = [match for match in matches if match.stack.index == stack.index]
             mounts = self.compose.try_service_bind_mounts(
@@ -1313,36 +1315,62 @@ class UpdateFromWudRunner:
                 if not issue:
                     continue
                 ok = False
-                self._log_bind_mount_path_issue(stack, mount, issue)
+                messages = self._bind_mount_path_issue_messages(stack, mount, issue)
+                self._log_bind_mount_path_issue(messages)
+                if not self.options.dry_run:
+                    issue_messages.setdefault(stack.index, []).extend(messages)
+                    issue_services.setdefault(stack.index, set()).add(mount.service)
+        if not self.options.dry_run:
+            for stack in _stacks_to_update(matches):
+                messages = issue_messages.get(stack.index)
+                if not messages:
+                    continue
+                stack_matches = [
+                    match for match in matches if match.stack.index == stack.index
+                ]
+                services = tuple(sorted(issue_services.get(stack.index, ()))) or None
+                self._record_failure(
+                    stack,
+                    stack_matches,
+                    phase="preflight",
+                    reason="bind-mount-path-invalid",
+                    services=services,
+                    health_details="\n".join(messages),
+                )
         return ok
 
-    def _log_bind_mount_path_issue(
+    def _bind_mount_path_issue_messages(
         self,
         stack: ComposeStack,
         mount: ComposeBindMount,
         issue: str,
-    ) -> None:
-        log = self.log.warn if self.options.dry_run else self.log.error
+    ) -> list[str]:
         target = f" -> {mount.target}" if mount.target else ""
-        log(
+        messages = [
             f"[{stack.name}] Compose bind mount for service {mount.service} "
             f"resolves to {mount.source}{target}; {issue}."
-        )
+        ]
         if self.options.host_docker_base is not None:
-            log(
+            messages.append(
                 f"[{stack.name}] HOST_DOCKER_BASE is set to "
                 f"{self.options.host_docker_base}; verify it is the Docker "
                 f"daemon-visible host root that corresponds to "
                 f"DOCKER_BASE={self.options.docker_base}."
             )
-            return
-        log(
+            return messages
+        messages.append(
             f"[{stack.name}] Mount the Compose root at the same absolute path "
             "the Docker daemon uses, then set DOCKER_BASE to that path "
             "(for example DOCKER_BASE=/srv/docker with /srv/docker:/srv/docker), "
             "or keep the helper path and set HOST_DOCKER_BASE=/srv/docker "
             "to the matching daemon-visible host root."
         )
+        return messages
+
+    def _log_bind_mount_path_issue(self, messages: Sequence[str]) -> None:
+        log = self.log.warn if self.options.dry_run else self.log.error
+        for message in messages:
+            log(message)
 
     def _validate_applied_tag_updates(
         self,
@@ -1491,6 +1519,44 @@ class UpdateFromWudRunner:
                 note=note,
             )
         )
+
+    def _finish_preflight_failure(
+        self,
+        parsed: ParsedWudFile,
+        matches: Sequence[Match],
+        skipped_tags: Sequence[WudTarget],
+    ) -> int:
+        preflight_failures = [
+            failure
+            for failure in self.failures
+            if failure.phase == "preflight"
+            and failure.reason == "bind-mount-path-invalid"
+        ]
+        failed_stack_indices = {failure.stack.index for failure in preflight_failures}
+        failed_matches = [
+            match for match in matches if match.stack.index in failed_stack_indices
+        ]
+        failed_lines = sorted({match.target.line_no for match in failed_matches})
+        stack_statuses = {
+            stack_index: StackStatus("failure", "bind-mount-path-invalid")
+            for stack_index in failed_stack_indices
+        }
+
+        self._start_audit(parsed)
+        self._mark_unmatched_pending(parsed, matches, skipped_tags)
+        self._mark_failed_pending(failed_matches, stack_statuses, failed_lines)
+        self._mark_failed_lines_restored(())
+        self._finish_audit_run("failure")
+
+        error_report = self._write_error_report()
+        if error_report is not None:
+            self.log.error(
+                "Completed with preflight failure(s). "
+                f"See log: {self.log_file}; error report: {error_report}"
+            )
+        else:
+            self.log.error(f"Completed with preflight failure(s). See log: {self.log_file}")
+        return 1
 
     def _start_audit(self, parsed: ParsedWudFile) -> None:
         if self.audit_run_id is not None:
@@ -1772,7 +1838,8 @@ class UpdateFromWudRunner:
         result = failure.command_result
         if result is not None:
             content.extend(_render_command_result(result))
-        content.append("health:\n")
+        details_label = "details" if failure.phase == "preflight" else "health"
+        content.append(f"{details_label}:\n")
         content.extend(_indented_block(failure.health_details, "  "))
         return content
 

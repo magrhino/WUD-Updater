@@ -326,7 +326,7 @@ class PythonUpdateFromWudTests(unittest.TestCase):
         self.assertNotRegex(self.calls(), r"compose -f .* pull")
         self.assertNotRegex(self.calls(), r"compose -f .* up -d")
 
-    def test_container_bridge_bind_mount_preflight_blocks_before_mutation(self) -> None:
+    def test_container_bridge_bind_mount_preflight_fails_before_mutation(self) -> None:
         self.wud_file.write_text("repo/app:latest\n", encoding="utf-8")
         self.make_stack("app", [("app", "repo/app:latest", "cid-app")])
         options = UpdaterOptions(
@@ -360,8 +360,24 @@ class PythonUpdateFromWudTests(unittest.TestCase):
         self.assertEqual(self.wud_file.read_text(encoding="utf-8"), "repo/app:latest\n")
         self.assertIn("helper-only prefix /host", stderr.getvalue())
         self.assertIn("HOST_DOCKER_BASE=/srv/docker", stderr.getvalue())
+        self.assertIn("error report:", stderr.getvalue())
         self.assertNotRegex(self.calls(), r"compose -f .* pull")
         self.assertNotRegex(self.calls(), r"compose -f .* up -d")
+        report = self.latest_error_report().read_text(encoding="utf-8")
+        self.assertIn("phase=preflight", report)
+        self.assertIn("reason=bind-mount-path-invalid", report)
+        self.assertIn("/host/docker/app/config", report)
+        self.assertIn("helper-only prefix /host", report)
+        runs = self.db_rows("SELECT * FROM update_runs")
+        pending = self.db_rows("SELECT * FROM pending_updates")
+        self.assertEqual(len(runs), 1)
+        self.assertEqual(runs[0]["status"], "failure")
+        self.assertTrue(runs[0]["finished_at"].endswith("+00:00"))
+        self.assertEqual(len(pending), 1)
+        self.assertEqual(pending[0]["status"], "failed")
+        self.assertEqual(pending[0]["status_reason"], "bind-mount-path-invalid")
+        self.assertEqual(pending[0]["stack_name"], "app")
+        self.assertEqual(pending[0]["service_name"], "app")
 
     def test_container_bridge_bind_mount_preflight_warns_on_dry_run(self) -> None:
         self.wud_file.write_text("repo/app:latest\n", encoding="utf-8")
@@ -399,6 +415,8 @@ class PythonUpdateFromWudTests(unittest.TestCase):
         self.assertIn("reported container bind-mount path issue", stdout.getvalue())
         self.assertNotRegex(self.calls(), r"compose -f .* pull")
         self.assertNotRegex(self.calls(), r"compose -f .* up -d")
+        self.assertFalse(self.db_path.exists())
+        self.assertFalse(list(self.log_dir.glob("update-from-wud-v2-*.errors.log")))
 
     def test_container_bridge_bind_mount_preflight_allows_host_paths(self) -> None:
         self.wud_file.write_text("repo/app:latest\n", encoding="utf-8")

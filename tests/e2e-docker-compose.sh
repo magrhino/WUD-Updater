@@ -129,6 +129,40 @@ assert_volume_glob_exists(){
     fail "expected $volume to contain $pattern"
 }
 
+volume_file_count(){
+  local volume="$1" pattern="$2"
+  docker run --rm -v "$volume:/mnt" "$IMAGE" \
+    bash -lc 'find /mnt -maxdepth 1 -type f -name "$1" -print | wc -l | tr -d " "' _ "$pattern"
+}
+
+volume_central_log_count(){
+  local volume="$1"
+  docker run --rm -v "$volume:/mnt" "$IMAGE" \
+    bash -lc 'find /mnt -maxdepth 1 -type f -name "update-from-wud-v2-*.log" ! -name "*.errors.log" -print | wc -l | tr -d " "'
+}
+
+latest_volume_file_name(){
+  local volume="$1" pattern="$2"
+  docker run --rm -v "$volume:/mnt" "$IMAGE" \
+    bash -lc 'find /mnt -maxdepth 1 -type f -name "$1" -printf "%f\n" | sort | tail -n 1' _ "$pattern"
+}
+
+assert_volume_sqlite_scalar(){
+  local volume="$1" path="$2" query="$3" expected="$4" actual
+  actual="$(
+    docker run --rm -v "$volume:/mnt" "$IMAGE" python -c '
+import sqlite3
+import sys
+
+conn = sqlite3.connect(sys.argv[1])
+row = conn.execute(sys.argv[2]).fetchone()
+print("" if row is None else row[0])
+' "/mnt/$path" "$query"
+  )"
+  [[ "$actual" == "$expected" ]] ||
+    fail "expected $volume:$path query [$query] to return [$expected], got [$actual]"
+}
+
 container_id(){
   compose ps -q app
 }
@@ -230,6 +264,17 @@ services:
 YAML
 }
 
+write_preflight_failure_compose_file(){
+  mkdir -p "$STACK_DIR/data"
+  cat > "$COMPOSE_FILE" <<YAML
+services:
+  app:
+    image: ${APP_IMAGE}
+    volumes:
+      - ./data:/data
+YAML
+}
+
 run_updater_e2e(){
   write_compose_file
   run compose up -d
@@ -261,6 +306,68 @@ run_updater_e2e(){
   docker run --rm -v "$LOG_VOLUME:/mnt" "$IMAGE" test -s /mnt/e2e.sqlite ||
     fail "expected audit database to be created"
   assert_volume_glob_exists "$LOG_VOLUME" 'update-from-wud-v2-*.log'
+}
+
+run_preflight_failure_e2e(){
+  local output rc log_count_before log_count_after error_count_before error_count_after
+  local report report_content
+
+  run compose down -v --remove-orphans
+  write_preflight_failure_compose_file
+  write_volume_file "$OUT_VOLUME" images.todo "$APP_IMAGE"
+  log_count_before="$(volume_central_log_count "$LOG_VOLUME")"
+  error_count_before="$(volume_file_count "$LOG_VOLUME" 'update-from-wud-v2-*.errors.log')"
+
+  set +e
+  output="$(
+    docker run --rm \
+      -v /var/run/docker.sock:/var/run/docker.sock \
+      -v "$STACK_DIR:/host/docker" \
+      -v "$OUT_VOLUME:/out" \
+      -v "$LOG_VOLUME:/logs" \
+      -e WUD_UPDATER_BANNER=0 \
+      -e WUD_DB_PATH=/logs/e2e-preflight.sqlite \
+      -e OUT_UID="$(id -u)" \
+      -e OUT_GID="$(id -g)" \
+      "$IMAGE" \
+      docker-update-from-wud \
+      --base /host/docker \
+      --file /out/images.todo \
+      --log-dir /logs \
+      --mode live \
+      --max-wait 30 \
+      --yes \
+      --no-color 2>&1
+  )"
+  rc=$?
+  set -e
+  printf '%s\n' "$output"
+
+  [[ "$rc" -eq 1 ]] || fail "expected preflight failure exit 1, got $rc"
+  [[ "$output" == *"error report:"* ]] || fail "expected preflight output to include error report path"
+  assert_volume_file_equals "$OUT_VOLUME" images.todo "$APP_IMAGE"
+
+  log_count_after="$(volume_central_log_count "$LOG_VOLUME")"
+  error_count_after="$(volume_file_count "$LOG_VOLUME" 'update-from-wud-v2-*.errors.log')"
+  [[ "$log_count_after" -gt "$log_count_before" ]] || fail "expected a new central updater log"
+  [[ "$error_count_after" -gt "$error_count_before" ]] || fail "expected a new updater error report"
+
+  report="$(latest_volume_file_name "$LOG_VOLUME" 'update-from-wud-v2-*.errors.log')"
+  [[ -n "$report" ]] || fail "expected latest error report name"
+  report_content="$(volume_file_content "$LOG_VOLUME" "$report")"
+  [[ "$report_content" == *"phase=preflight"* ]] || fail "report missing preflight phase"
+  [[ "$report_content" == *"reason=bind-mount-path-invalid"* ]] || fail "report missing bind mount reason"
+  [[ "$report_content" == *"/host/docker/data -> /data"* ]] || fail "report missing bad bind source"
+  [[ "$report_content" == *"helper-only prefix /host"* ]] || fail "report missing helper-only guidance"
+
+  docker run --rm -v "$LOG_VOLUME:/mnt" "$IMAGE" test -s /mnt/e2e-preflight.sqlite ||
+    fail "expected preflight audit database to be created"
+  assert_volume_sqlite_scalar "$LOG_VOLUME" e2e-preflight.sqlite \
+    "SELECT status FROM update_runs ORDER BY id DESC LIMIT 1" \
+    failure
+  assert_volume_sqlite_scalar "$LOG_VOLUME" e2e-preflight.sqlite \
+    "SELECT status || ':' || status_reason FROM pending_updates ORDER BY line_no LIMIT 1" \
+    failed:bind-mount-path-invalid
 }
 
 run_wud_callback_smoke(){
@@ -311,6 +418,7 @@ main(){
   start_registry
   prepare_images
   run_updater_e2e
+  run_preflight_failure_e2e
   run_wud_callback_smoke
 }
 
