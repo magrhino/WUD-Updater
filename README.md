@@ -21,7 +21,9 @@ notifications.
 ### Container First
 
 Review `docs/examples/docker-compose.example.yml`, especially the host Docker
-stack path mounted at `/host/docker`, then run the non-mutating default command:
+stack path mounted at the same absolute path inside the helper. This matters
+when Compose files use relative bind mounts such as `./config:/config`. Then
+run the non-mutating default command:
 
 ```bash
 docker compose -f docs/examples/docker-compose.example.yml run --rm wud-updater

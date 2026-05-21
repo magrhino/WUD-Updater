@@ -30,6 +30,13 @@ class ServiceImage:
 
 
 @dataclass(frozen=True)
+class ComposeBindMount:
+    service: str
+    source: str
+    target: str = ""
+
+
+@dataclass(frozen=True)
 class ComposeStack:
     index: int
     directory: Path
@@ -78,11 +85,7 @@ class ComposeCli:
         directory: str | Path,
         file: str,
     ) -> tuple[ServiceImage, ...]:
-        result = self.runner.capture(
-            self._compose_args(file, "config", "--format", "json"),
-            cwd=directory,
-            check=True,
-        )
+        result = self.config_json(directory, file)
         return _service_image_pairs_from_config_json(result.stdout)
 
     def try_service_image_pairs(
@@ -94,6 +97,31 @@ class ComposeCli:
             return self.service_image_pairs(directory, file)
         except (CommandError, ValueError):
             return ()
+
+    def service_bind_mounts(
+        self,
+        directory: str | Path,
+        file: str,
+    ) -> tuple[ComposeBindMount, ...]:
+        result = self.config_json(directory, file)
+        return _service_bind_mounts_from_config_json(result.stdout)
+
+    def try_service_bind_mounts(
+        self,
+        directory: str | Path,
+        file: str,
+    ) -> tuple[ComposeBindMount, ...]:
+        try:
+            return self.service_bind_mounts(directory, file)
+        except (CommandError, ValueError):
+            return ()
+
+    def config_json(self, directory: str | Path, file: str) -> CommandResult:
+        return self.runner.capture(
+            self._compose_args(file, "config", "--format", "json"),
+            cwd=directory,
+            check=True,
+        )
 
     def discover_stacks(self, docker_base: str | Path) -> tuple[ComposeStack, ...]:
         stacks: list[ComposeStack] = []
@@ -343,3 +371,34 @@ def _service_image_pairs_from_config_json(config_json: str) -> tuple[ServiceImag
                 )
             )
     return tuple(sorted(pairs, key=lambda pair: (pair.service, pair.image)))
+
+
+def _service_bind_mounts_from_config_json(config_json: str) -> tuple[ComposeBindMount, ...]:
+    parsed = json.loads(config_json)
+    if not isinstance(parsed, dict):
+        raise ValueError("Compose config JSON is not an object.")
+    services = parsed.get("services")
+    if not isinstance(services, dict):
+        raise ValueError("Compose config JSON has no services object.")
+
+    mounts: set[ComposeBindMount] = set()
+    for service, config in services.items():
+        if not isinstance(service, str) or not isinstance(config, dict):
+            continue
+        volumes = config.get("volumes")
+        if not isinstance(volumes, list):
+            continue
+        for volume in volumes:
+            if not isinstance(volume, dict) or volume.get("type") != "bind":
+                continue
+            source = volume.get("source")
+            target = volume.get("target")
+            if isinstance(source, str) and source:
+                mounts.add(
+                    ComposeBindMount(
+                        service=service,
+                        source=source,
+                        target=target if isinstance(target, str) else "",
+                    )
+                )
+    return tuple(sorted(mounts, key=lambda item: (item.service, item.source, item.target)))

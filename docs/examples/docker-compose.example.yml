@@ -11,7 +11,7 @@ services:
   wud-updater:
     image: ghcr.io/magrhino/wud-updater:latest
     environment:
-      DOCKER_BASE: /host/docker
+      DOCKER_BASE: ${HOST_DOCKER_BASE:-/srv/docker}
       WUD_OUT_FILE: /out/images.todo
       WUD_LOG_DIR: /logs
       WUD_SYNC_SCRIPTS: "1"
@@ -20,7 +20,7 @@ services:
       OUT_GID: "1000"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
-      - /srv/docker:/host/docker
+      - ${HOST_DOCKER_BASE:-/srv/docker}:${HOST_DOCKER_BASE:-/srv/docker}
       - ./logs:/logs
       - wud-scripts:/managed-wud
       - wud-out:/out

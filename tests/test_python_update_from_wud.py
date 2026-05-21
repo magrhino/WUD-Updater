@@ -13,7 +13,7 @@ from pathlib import Path
 from unittest import mock
 
 from wud_updater.command import CommandRunner
-from wud_updater.compose import ComposeStack, ServiceImage
+from wud_updater.compose import ComposeBindMount, ComposeStack, ServiceImage
 from wud_updater.file_ops import OwnerConfig
 from wud_updater.updater import (
     ComposeTagRewriteError,
@@ -325,6 +325,119 @@ class PythonUpdateFromWudTests(unittest.TestCase):
         self.assertEqual(self.wud_file.read_text(encoding="utf-8"), "repo/app:latest\n")
         self.assertNotRegex(self.calls(), r"compose -f .* pull")
         self.assertNotRegex(self.calls(), r"compose -f .* up -d")
+
+    def test_container_bridge_bind_mount_preflight_blocks_before_mutation(self) -> None:
+        self.wud_file.write_text("repo/app:latest\n", encoding="utf-8")
+        self.make_stack("app", [("app", "repo/app:latest", "cid-app")])
+        options = UpdaterOptions(
+            docker_base=self.base,
+            wud_file=self.wud_file,
+            log_dir=self.log_dir,
+            max_wait=0,
+            assume_yes=True,
+            no_color=True,
+        )
+        runner = UpdateFromWudRunner(
+            options,
+            environ=self.env,
+            command_runner=CommandRunner(env=self.env),
+        )
+        stdout = StringIO()
+        stderr = StringIO()
+
+        with (
+            mock.patch.object(
+                runner.compose,
+                "try_service_bind_mounts",
+                return_value=(ComposeBindMount("app", "/host/docker/app/config", "/config"),),
+            ),
+            redirect_stdout(stdout),
+            redirect_stderr(stderr),
+        ):
+            status = runner.run()
+
+        self.assertEqual(status, 1, stderr.getvalue() + stdout.getvalue())
+        self.assertEqual(self.wud_file.read_text(encoding="utf-8"), "repo/app:latest\n")
+        self.assertIn("helper-only prefix /host", stderr.getvalue())
+        self.assertIn("HOST_DOCKER_BASE=/srv/docker", stderr.getvalue())
+        self.assertNotRegex(self.calls(), r"compose -f .* pull")
+        self.assertNotRegex(self.calls(), r"compose -f .* up -d")
+
+    def test_container_bridge_bind_mount_preflight_warns_on_dry_run(self) -> None:
+        self.wud_file.write_text("repo/app:latest\n", encoding="utf-8")
+        self.make_stack("app", [("app", "repo/app:latest", "cid-app")])
+        options = UpdaterOptions(
+            docker_base=self.base,
+            wud_file=self.wud_file,
+            log_dir=self.log_dir,
+            max_wait=0,
+            dry_run=True,
+            no_color=True,
+        )
+        runner = UpdateFromWudRunner(
+            options,
+            environ=self.env,
+            command_runner=CommandRunner(env=self.env),
+        )
+        stdout = StringIO()
+        stderr = StringIO()
+
+        with (
+            mock.patch.object(
+                runner.compose,
+                "try_service_bind_mounts",
+                return_value=(ComposeBindMount("app", "/host/docker/app/config", "/config"),),
+            ),
+            redirect_stdout(stdout),
+            redirect_stderr(stderr),
+        ):
+            status = runner.run()
+
+        self.assertEqual(status, 0, stderr.getvalue() + stdout.getvalue())
+        self.assertEqual(self.wud_file.read_text(encoding="utf-8"), "repo/app:latest\n")
+        self.assertIn("helper-only prefix /host", stdout.getvalue())
+        self.assertIn("reported container bind-mount path issue", stdout.getvalue())
+        self.assertNotRegex(self.calls(), r"compose -f .* pull")
+        self.assertNotRegex(self.calls(), r"compose -f .* up -d")
+
+    def test_container_bridge_bind_mount_preflight_allows_host_paths(self) -> None:
+        self.wud_file.write_text("repo/app:latest\n", encoding="utf-8")
+        self.make_stack("app", [("app", "repo/app:latest", "cid-app")])
+        self.set_image_state("repo/app:latest", "old", "sha256:old")
+        self.set_image_after_pull("repo/app:latest", "new", "sha256:new")
+        options = UpdaterOptions(
+            docker_base=self.base,
+            wud_file=self.wud_file,
+            log_dir=self.log_dir,
+            max_wait=0,
+            assume_yes=True,
+            no_color=True,
+        )
+        runner = UpdateFromWudRunner(
+            options,
+            environ=self.env,
+            command_runner=CommandRunner(env=self.env),
+        )
+        stdout = StringIO()
+        stderr = StringIO()
+
+        with (
+            mock.patch.object(
+                runner.compose,
+                "try_service_bind_mounts",
+                return_value=(
+                    ComposeBindMount("app", "/mnt/nvme-pool/docker/app/config", "/config"),
+                ),
+            ),
+            redirect_stdout(stdout),
+            redirect_stderr(stderr),
+        ):
+            status = runner.run()
+
+        self.assertEqual(status, 0, stderr.getvalue() + stdout.getvalue())
+        self.assertEqual(self.wud_file.read_text(encoding="utf-8"), "")
+        self.assertRegex(self.calls(), r"compose -f docker-compose.yml pull app")
+        self.assertRegex(self.calls(), r"compose -f docker-compose.yml up -d .* app")
 
     def test_audit_owner_failure_marks_started_run_failed(self) -> None:
         self.wud_file.write_text("repo/app:latest\n", encoding="utf-8")
