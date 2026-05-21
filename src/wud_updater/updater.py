@@ -1536,6 +1536,9 @@ class UpdateFromWudRunner:
         failed_matches = [
             match for match in matches if match.stack.index in failed_stack_indices
         ]
+        skipped_matches = [
+            match for match in matches if match.stack.index not in failed_stack_indices
+        ]
         failed_lines = sorted({match.target.line_no for match in failed_matches})
         stack_statuses = {
             stack_index: StackStatus("failure", "bind-mount-path-invalid")
@@ -1544,6 +1547,11 @@ class UpdateFromWudRunner:
 
         self._start_audit(parsed)
         self._mark_unmatched_pending(parsed, matches, skipped_tags)
+        self._mark_matched_pending(
+            skipped_matches,
+            status="pending",
+            status_reason="preflight-skipped",
+        )
         self._mark_failed_pending(failed_matches, stack_statuses, failed_lines)
         self._mark_failed_lines_restored(())
         self._finish_audit_run("failure")
@@ -1653,6 +1661,7 @@ class UpdateFromWudRunner:
         matches: Sequence[Match],
         *,
         status: str,
+        status_reason: str = "matched",
     ) -> None:
         if self.audit_conn is None or self.audit_run_id is None:
             return
@@ -1662,7 +1671,7 @@ class UpdateFromWudRunner:
                 run_id=self.audit_run_id,
                 line_no=line_no,
                 status=status,
-                status_reason="matched",
+                status_reason=status_reason,
                 service_key=_service_key(match),
                 stack_name=match.stack.name,
                 service_name=match.service,

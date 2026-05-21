@@ -379,6 +379,70 @@ class PythonUpdateFromWudTests(unittest.TestCase):
         self.assertEqual(pending[0]["stack_name"], "app")
         self.assertEqual(pending[0]["service_name"], "app")
 
+    def test_container_bridge_bind_mount_preflight_marks_unaffected_matches_pending(self) -> None:
+        self.wud_file.write_text("repo/bad:latest\nrepo/ok:latest\n", encoding="utf-8")
+        self.make_stack("bad", [("app", "repo/bad:latest", "cid-bad")])
+        self.make_stack("ok", [("app", "repo/ok:latest", "cid-ok")])
+        options = UpdaterOptions(
+            docker_base=self.base,
+            wud_file=self.wud_file,
+            log_dir=self.log_dir,
+            max_wait=0,
+            assume_yes=True,
+            no_color=True,
+        )
+        runner = UpdateFromWudRunner(
+            options,
+            environ=self.env,
+            command_runner=CommandRunner(env=self.env),
+        )
+        stdout = StringIO()
+        stderr = StringIO()
+
+        def bind_mounts(directory: Path, file: str, **_: object) -> tuple[ComposeBindMount, ...]:
+            if Path(directory).name == "bad":
+                return (ComposeBindMount("app", "/host/docker/bad/config", "/config"),)
+            return ()
+
+        with (
+            mock.patch.object(
+                runner.compose,
+                "try_service_bind_mounts",
+                side_effect=bind_mounts,
+            ),
+            redirect_stdout(stdout),
+            redirect_stderr(stderr),
+        ):
+            status = runner.run()
+
+        self.assertEqual(status, 1, stderr.getvalue() + stdout.getvalue())
+        self.assertEqual(
+            self.wud_file.read_text(encoding="utf-8"),
+            "repo/bad:latest\nrepo/ok:latest\n",
+        )
+        self.assertNotRegex(self.calls(), r"compose -f .* pull")
+        self.assertNotRegex(self.calls(), r"compose -f .* up -d")
+        runs = self.db_rows("SELECT * FROM update_runs")
+        pending = self.db_rows("SELECT * FROM pending_updates ORDER BY line_no")
+        self.assertEqual(len(runs), 1)
+        self.assertEqual(runs[0]["status"], "failure")
+        self.assertEqual(
+            [
+                (
+                    row["line_no"],
+                    row["status"],
+                    row["status_reason"],
+                    row["stack_name"],
+                    row["service_name"],
+                )
+                for row in pending
+            ],
+            [
+                (1, "failed", "bind-mount-path-invalid", "bad", "app"),
+                (2, "pending", "preflight-skipped", "ok", "app"),
+            ],
+        )
+
     def test_container_bridge_bind_mount_preflight_warns_on_dry_run(self) -> None:
         self.wud_file.write_text("repo/app:latest\n", encoding="utf-8")
         self.make_stack("app", [("app", "repo/app:latest", "cid-app")])
