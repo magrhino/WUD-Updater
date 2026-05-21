@@ -2,9 +2,12 @@ from __future__ import annotations
 
 import os
 import re
+import sys
 import tempfile
 import unittest
+from io import StringIO
 from pathlib import Path
+from unittest import mock
 
 from wud_updater.command import CommandError, CommandRunner, display_command
 from wud_updater.compose import ComposeCli, ComposeDiscoveryError, ServiceImage
@@ -17,6 +20,71 @@ class CommandHelperTests(unittest.TestCase):
             display_command(["docker", "compose", "-f", "compose file.yml", "pull"]),
             "docker compose -f 'compose file.yml' pull",
         )
+
+    @unittest.skipUnless(os.name == "posix", "PTY support is POSIX-only")
+    def test_run_in_pty_exposes_stdout_and_stderr_as_ttys(self) -> None:
+        output = StringIO()
+        runner = CommandRunner()
+
+        with (
+            mock.patch("sys.stdout", output),
+            mock.patch.dict(os.environ, {"COLUMNS": "100", "LINES": "40"}),
+        ):
+            result = runner.run_in_pty(
+                [
+                    sys.executable,
+                    "-c",
+                    (
+                        "import os, sys; "
+                        "size = os.get_terminal_size(1); "
+                        "print(f'out={os.isatty(1)} err={os.isatty(2)} "
+                        "size={size.columns}x{size.lines}'); "
+                        "print('stderr line', file=sys.stderr); "
+                        "raise SystemExit(3)"
+                    ),
+                ],
+                check=False,
+            )
+
+        self.assertEqual(result.returncode, 3)
+        self.assertIn("out=True err=True", output.getvalue())
+        self.assertIn("size=100x40", output.getvalue())
+        self.assertIn("stderr line", output.getvalue())
+        self.assertIn("out=True err=True", result.stdout)
+        self.assertIn("size=100x40", result.stdout)
+        self.assertIn("stderr line", result.stdout)
+        self.assertEqual(result.stderr, "")
+
+    @unittest.skipUnless(os.name == "posix", "PTY support is POSIX-only")
+    def test_run_in_pty_falls_back_to_streaming_when_openpty_fails(self) -> None:
+        stdout = StringIO()
+        stderr = StringIO()
+        runner = CommandRunner()
+
+        with (
+            mock.patch("wud_updater.command.pty.openpty", side_effect=OSError("no pty")),
+            mock.patch("sys.stdout", stdout),
+            mock.patch("sys.stderr", stderr),
+        ):
+            result = runner.run_in_pty(
+                [
+                    sys.executable,
+                    "-c",
+                    (
+                        "import sys; "
+                        "print('streamed stdout'); "
+                        "print('streamed stderr', file=sys.stderr); "
+                        "raise SystemExit(3)"
+                    ),
+                ],
+                check=False,
+            )
+
+        self.assertEqual(result.returncode, 3)
+        self.assertEqual(stdout.getvalue(), "streamed stdout\n")
+        self.assertIn("streamed stderr\n", stderr.getvalue())
+        self.assertEqual(result.stdout, "streamed stdout\n")
+        self.assertEqual(result.stderr, "streamed stderr\n")
 
 
 class FakeDockerCase(unittest.TestCase):
