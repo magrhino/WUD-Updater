@@ -439,6 +439,75 @@ class PythonUpdateFromWudTests(unittest.TestCase):
         self.assertRegex(self.calls(), r"compose -f docker-compose.yml pull app")
         self.assertRegex(self.calls(), r"compose -f docker-compose.yml up -d .* app")
 
+    def test_host_docker_base_maps_project_directory_and_allows_binds(self) -> None:
+        self.wud_file.write_text("repo/app:latest\n", encoding="utf-8")
+        self.make_stack("app", [("app", "repo/app:latest", "cid-app")])
+        self.set_image_state("repo/app:latest", "old", "sha256:old")
+        self.set_image_after_pull("repo/app:latest", "new", "sha256:new")
+        host_base = self.root / "host-docker"
+        expected_project_directory = host_base / "app"
+        expected_project_directory.mkdir(parents=True)
+        (expected_project_directory / "docker-compose.yml").write_text(
+            (self.base / "app" / "docker-compose.yml").read_text(encoding="utf-8"),
+            encoding="utf-8",
+        )
+        options = UpdaterOptions(
+            docker_base=self.base,
+            wud_file=self.wud_file,
+            log_dir=self.log_dir,
+            max_wait=0,
+            assume_yes=True,
+            no_color=True,
+            host_docker_base=host_base,
+            host_docker_base_label=str(host_base),
+        )
+        runner = UpdateFromWudRunner(
+            options,
+            environ=self.env,
+            command_runner=CommandRunner(env=self.env),
+        )
+        stdout = StringIO()
+        stderr = StringIO()
+        project_directories: list[Path | None] = []
+
+        def bind_mounts(
+            directory: Path,
+            file: str,
+            *,
+            project_directory: Path | None = None,
+        ) -> tuple[ComposeBindMount, ...]:
+            self.assertEqual(directory, self.base / "app")
+            self.assertEqual(file, "docker-compose.yml")
+            project_directories.append(project_directory)
+            source = str((project_directory or directory) / "config")
+            return (ComposeBindMount("app", source, "/config"),)
+
+        with (
+            mock.patch.object(
+                runner.compose,
+                "try_service_bind_mounts",
+                side_effect=bind_mounts,
+            ),
+            redirect_stdout(stdout),
+            redirect_stderr(stderr),
+        ):
+            status = runner.run()
+
+        self.assertEqual(status, 0, stderr.getvalue() + stdout.getvalue())
+        self.assertEqual(project_directories, [expected_project_directory])
+        self.assertEqual(self.wud_file.read_text(encoding="utf-8"), "")
+        self.assertIn(f"HostBase: {host_base}", stdout.getvalue())
+        self.assertRegex(
+            self.calls(),
+            rf"compose --project-directory {re.escape(str(expected_project_directory))} "
+            r"-f docker-compose.yml pull app",
+        )
+        self.assertRegex(
+            self.calls(),
+            rf"compose --project-directory {re.escape(str(expected_project_directory))} "
+            r"-f docker-compose.yml up -d .* app",
+        )
+
     def test_audit_owner_failure_marks_started_run_failed(self) -> None:
         self.wud_file.write_text("repo/app:latest\n", encoding="utf-8")
         self.make_stack("app", [("app", "repo/app:latest", "cid-app")])

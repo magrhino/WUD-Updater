@@ -16,6 +16,7 @@ from wud_updater.compose import (
     ComposeCli,
     ComposeDiscoveryError,
     ServiceImage,
+    _project_directory_for_stack,
     _service_bind_mounts_from_config_json,
 )
 from wud_updater.docker_cli import ContainerImage, DockerCli
@@ -289,6 +290,70 @@ class ComposeCliTests(FakeDockerCase):
                 ServiceImage(service="db", image="repo/db:latest"),
             ),
         )
+
+    def test_discover_stacks_maps_project_base_to_stack_project_directory(self) -> None:
+        stack = self.make_stack("stack", [("app", "repo/app:latest", "cid-app")])
+        project_base = self.root / "host-docker"
+        mirrored_stack = project_base / "stack"
+        mirrored_stack.mkdir(parents=True)
+        (mirrored_stack / "docker-compose.yml").write_text(
+            (stack / "docker-compose.yml").read_text(encoding="utf-8"),
+            encoding="utf-8",
+        )
+
+        stacks = self.compose.discover_stacks(self.base, project_base=project_base)
+
+        self.assertEqual(len(stacks), 1)
+        self.assertEqual(stacks[0].directory, stack)
+        self.assertEqual(stacks[0].project_directory, project_base / "stack")
+        self.assertIn(
+            f"compose --project-directory {project_base / 'stack'} "
+            "-f docker-compose.yml config --images",
+            self.call_commands(),
+        )
+
+    def test_discover_stacks_rejects_unmounted_project_base(self) -> None:
+        self.make_stack("stack", [("app", "repo/app:latest", "cid-app")])
+        project_base = self.root / "host-docker"
+
+        with self.assertRaisesRegex(ComposeDiscoveryError, "not a readable compose file"):
+            self.compose.discover_stacks(self.base, project_base=project_base)
+
+    def test_project_directory_is_passed_to_stack_commands(self) -> None:
+        stack = self.make_stack("stack", [("app", "repo/app:latest", "cid-app")])
+        project_directory = self.root / "host-docker" / "stack"
+
+        self.compose.pull(
+            stack,
+            "docker-compose.yml",
+            ["app"],
+            project_directory=project_directory,
+        )
+        self.compose.ps_quiet(
+            stack,
+            "docker-compose.yml",
+            ["app"],
+            project_directory=project_directory,
+        )
+
+        self.assertIn(
+            f"compose --project-directory {project_directory} "
+            "-f docker-compose.yml pull app",
+            self.call_commands(),
+        )
+        self.assertIn(
+            f"compose --project-directory {project_directory} "
+            "-f docker-compose.yml ps -q app",
+            self.call_commands(),
+        )
+
+    def test_project_directory_mapping_rejects_stack_outside_base(self) -> None:
+        with self.assertRaisesRegex(ComposeDiscoveryError, "not under DOCKER_BASE"):
+            _project_directory_for_stack(
+                Path("/host/other/app"),
+                Path("/host/docker"),
+                Path("/srv/docker"),
+            )
 
     def test_service_image_pairs_reads_network_mode(self) -> None:
         stack = self.base / "media"

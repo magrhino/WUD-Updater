@@ -60,7 +60,7 @@ while (($#)); do
       ;;
   esac
 done
-printf 'OUT_UID=%s OUT_GID=%s OUT_GUID=%s WUD_LOCK_TIMEOUT=%s WUD_LOCK_HELD_BY_PARENT=%s WUD_DB_PATH=%s\n' "${OUT_UID:-}" "${OUT_GID:-}" "${OUT_GUID:-}" "${WUD_LOCK_TIMEOUT:-}" "${WUD_LOCK_HELD_BY_PARENT:-}" "${WUD_DB_PATH:-}" >> "${FAKE_UPDATER_LOG:?FAKE_UPDATER_LOG is required}"
+printf 'OUT_UID=%s OUT_GID=%s OUT_GUID=%s WUD_LOCK_TIMEOUT=%s WUD_LOCK_HELD_BY_PARENT=%s WUD_DB_PATH=%s HOST_DOCKER_BASE=%s\n' "${OUT_UID:-}" "${OUT_GID:-}" "${OUT_GUID:-}" "${WUD_LOCK_TIMEOUT:-}" "${WUD_LOCK_HELD_BY_PARENT:-}" "${WUD_DB_PATH:-}" "${HOST_DOCKER_BASE:-}" >> "${FAKE_UPDATER_LOG:?FAKE_UPDATER_LOG is required}"
 if [[ "${FAKE_UPDATER_ASSERT_LOCK:-}" = "1" ]]; then
   if [[ "${WUD_LOCK_HELD_BY_PARENT:-}" != "1" ]]; then
     printf 'missing WUD_LOCK_HELD_BY_PARENT\n' >> "$FAKE_UPDATER_LOG"
@@ -225,6 +225,19 @@ test_yes_passes_db_path_through_sudo_env(){
   assert_status 0
   grep -q -- "env WUD_DB_PATH=$db_path $TEST_TMP/updater --base $TEST_TMP/docker --file $WUD_FILE --log-dir ./logs --mode stop --max-wait 180 --yes" "$TEST_TMP/sudo.log" || fail "sudo did not receive expected db path env"
   grep -q -- "WUD_DB_PATH=$db_path" "$TEST_TMP/updater.log" || fail "updater did not receive db path env"
+  teardown_case
+}
+
+test_yes_passes_host_docker_base_through_sudo_env(){
+  setup_case
+  local host_base="$TEST_TMP/host-docker"
+  printf 'repo/app:latest\n' > "$WUD_FILE"
+
+  run_updates HOST_DOCKER_BASE="$host_base" --yes --base "$TEST_TMP/docker"
+
+  assert_status 0
+  grep -q -- "env HOST_DOCKER_BASE=$host_base $TEST_TMP/updater --base $TEST_TMP/docker --file $WUD_FILE --log-dir ./logs --mode stop --max-wait 180 --yes" "$TEST_TMP/sudo.log" || fail "sudo did not receive expected host docker base env"
+  grep -q -- "HOST_DOCKER_BASE=$host_base" "$TEST_TMP/updater.log" || fail "updater did not receive host docker base env"
   teardown_case
 }
 
@@ -446,6 +459,7 @@ main(){
   run_test test_yes_passes_owner_config_through_sudo_env
   run_test test_yes_passes_lock_timeout_through_sudo_env
   run_test test_yes_passes_db_path_through_sudo_env
+  run_test test_yes_passes_host_docker_base_through_sudo_env
   run_test test_yes_passes_allow_tag_updates_flag
   run_test test_interactive_all_preserves_default_updater_args
   run_test test_interactive_display_uses_snapshot_without_holding_wud_lock

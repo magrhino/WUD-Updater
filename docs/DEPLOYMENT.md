@@ -132,6 +132,17 @@ can resolve to helper-only paths that the host Docker daemon cannot create. Set
 `WUD_OUT_FILE` to the todo file shared with WUD. Set `WUD_LOG_DIR` to the
 mounted log directory used by the updater.
 
+Existing deployments that mount stacks at a helper-only path can keep that
+layout only if the daemon-visible host root is also readable inside the helper.
+For example, with `/srv/docker:/host/docker`, either switch to
+`/srv/docker:/srv/docker`, or add a second `/srv/docker:/srv/docker` mount, set
+`DOCKER_BASE=/host/docker`, and set `HOST_DOCKER_BASE=/srv/docker`.
+
+The updater passes the mapped stack path to Compose as `--project-directory`.
+That means relative bind mounts, `.env`, `env_file`, build contexts, and similar
+project-relative files must exist under `HOST_DOCKER_BASE` and be readable from
+inside the helper.
+
 For a socket-proxy deployment, use
 [`docs/examples/docker-compose.hardened.yml`](examples/docker-compose.hardened.yml).
 That variant mounts `/var/run/docker.sock` only into a LinuxServer.io socket
@@ -298,6 +309,7 @@ Core updater and wrapper values:
 | Variable | Default | Purpose |
 |---|---|---|
 | `DOCKER_BASE` | Host: `$HOME/docker`; container examples: `${HOST_DOCKER_BASE:-/srv/docker}` | Compose project search root. Containerized runs should mount this at the same absolute path the Docker daemon uses. |
+| `HOST_DOCKER_BASE` | unset | Optional daemon-visible host root matching `DOCKER_BASE` inside the helper. The path must also be mounted/readable inside the helper because Compose uses it as `--project-directory`. |
 | `DOCKER_HOST` | Docker CLI default | Optional Docker daemon endpoint, such as the hardened example's socket proxy. |
 | `WUD_OUT_FILE` | Host: `$DOCKER_BASE/wud/out/images.todo`; container: `/out/images.todo` | Shared pending-update file. |
 | `WUD_LOG_DIR` | Host: `./logs`; container: `/logs` | Updater log directory. Set to `$DOCKER_BASE/logs` to keep the previous layout. |
