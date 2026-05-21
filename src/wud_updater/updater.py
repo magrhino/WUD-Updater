@@ -376,6 +376,9 @@ class UpdateFromWudRunner:
         except (CommandError, ComposeDiscoveryError, LineSpecError, OwnerConfigError, WudLockError) as exc:
             self._finish_audit_run("failure", best_effort=True)
             raise UpdaterError(str(exc)) from exc
+        except OSError as exc:
+            self._finish_audit_run("failure", best_effort=True)
+            raise UpdaterError(f"Filesystem operation failed: {exc}") from exc
         except (sqlite3.Error, DatabaseError) as exc:
             self._finish_audit_run("failure", best_effort=True)
             raise UpdaterError(f"Could not update audit database: {exc}") from exc

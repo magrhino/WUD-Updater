@@ -594,6 +594,47 @@ class PythonUpdateFromWudTests(unittest.TestCase):
         self.assertEqual(runs[0]["status"], "failure")
         self.assertIsNotNone(runs[0]["finished_at"])
 
+    def test_wud_file_rewrite_failure_is_user_facing(self) -> None:
+        self.wud_file.write_text("repo/app:latest\n", encoding="utf-8")
+        self.make_stack("app", [("app", "repo/app:latest", "cid-app")])
+        self.set_image_state("repo/app:latest", "old", "sha256:old")
+        self.set_image_after_pull("repo/app:latest", "new", "sha256:new")
+        options = UpdaterOptions(
+            docker_base=self.base,
+            wud_file=self.wud_file,
+            log_dir=self.log_dir,
+            max_wait=0,
+            assume_yes=True,
+            no_color=True,
+            db_path=self.db_path,
+        )
+        runner = UpdateFromWudRunner(
+            options,
+            environ=self.env,
+            command_runner=CommandRunner(env=self.env),
+        )
+        stdout = StringIO()
+        stderr = StringIO()
+
+        with (
+            mock.patch(
+                "wud_updater.updater.remove_lines_before_run",
+                side_effect=OSError("metadata verification failed"),
+            ),
+            redirect_stdout(stdout),
+            redirect_stderr(stderr),
+        ):
+            with self.assertRaisesRegex(
+                UpdaterError,
+                "Filesystem operation failed: metadata verification failed",
+            ):
+                runner.run()
+
+        runs = self.db_rows("SELECT * FROM update_runs")
+        self.assertEqual(len(runs), 1)
+        self.assertEqual(runs[0]["status"], "failure")
+        self.assertIsNotNone(runs[0]["finished_at"])
+
     def test_audit_start_applies_configured_owner_to_db_path(self) -> None:
         self.wud_file.write_text("repo/app:latest\n", encoding="utf-8")
         self.make_stack("app", [("app", "repo/app:latest", "cid-app")])

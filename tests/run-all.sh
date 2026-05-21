@@ -68,6 +68,7 @@ run bash -n \
   tests/run-all.sh \
   tests/test-docker-update-from-wud.sh \
   tests/container-build.sh \
+  tests/e2e-docker-compose.sh \
   tests/test-entrypoint.sh \
   tests/test-github-release-embed.sh \
   tests/test-release-notes-to-discord.sh \
@@ -95,6 +96,7 @@ run shellcheck \
   tests/run-all.sh \
   tests/test-docker-update-from-wud.sh \
   tests/container-build.sh \
+  tests/e2e-docker-compose.sh \
   tests/test-entrypoint.sh \
   tests/test-github-release-embed.sh \
   tests/test-release-notes-to-discord.sh \

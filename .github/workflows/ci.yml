@@ -26,6 +26,11 @@ on:
         required: false
         default: false
         type: boolean
+      run_e2e:
+        description: Run the optional Docker end-to-end job.
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -91,7 +96,7 @@ jobs:
           workflows=false
           for file in "${files[@]}"; do
             case "$file" in
-              Dockerfile|.dockerignore|entrypoint.sh|docs/examples/docker-compose*.yml|bin/*|wud/*|tests/container-build.sh|tests/test-entrypoint.sh)
+              Dockerfile|.dockerignore|entrypoint.sh|docs/examples/docker-compose*.yml|bin/*|wud/*|tests/container-build.sh|tests/e2e-docker-compose.sh|tests/test-entrypoint.sh)
                 docker=true
                 ;;
               .github/workflows/*)
@@ -235,6 +240,41 @@ jobs:
 
       - name: Run container build test
         run: tests/container-build.sh
+
+  docker-e2e:
+    name: docker e2e
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs:
+      - changes
+    if: >-
+      ${{
+        !(
+          (github.event_name == 'pull_request' && contains(github.event.pull_request.title, '[skip ci]')) ||
+          (github.event_name == 'push' && (
+            startsWith(github.event.head_commit.message, 'docs:') ||
+            startsWith(github.event.head_commit.message, 'docs(') ||
+            startsWith(github.event.head_commit.message, 'docs!:') ||
+            startsWith(github.event.head_commit.message, 'chore:') ||
+            startsWith(github.event.head_commit.message, 'chore(') ||
+            startsWith(github.event.head_commit.message, 'chore!:')
+          ))
+        ) &&
+        (
+          (github.event_name == 'workflow_dispatch' && inputs.run_e2e) ||
+          (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'ci:e2e')) ||
+          needs.changes.outputs.docker == 'true'
+        )
+      }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Run Docker end-to-end test
+        run: tests/e2e-docker-compose.sh
 
   actionlint:
     name: actionlint
