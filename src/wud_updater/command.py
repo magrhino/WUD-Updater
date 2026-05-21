@@ -2,8 +2,12 @@
 
 from __future__ import annotations
 
+import codecs
+import errno
 import os
+import shutil
 import shlex
+import struct
 import subprocess
 import sys
 import threading
@@ -13,9 +17,19 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TextIO
 
+try:  # pragma: no cover - platform availability is covered by fallback tests.
+    import fcntl
+    import pty
+    import termios
+except ImportError:  # pragma: no cover - Windows fallback.
+    fcntl = None
+    pty = None
+    termios = None
+
 
 CommandArg = str | os.PathLike[str]
 STREAM_TAIL_LINES = 200
+MAX_WINSIZE_VALUE = 65535
 
 
 @dataclass(frozen=True)
@@ -150,11 +164,75 @@ class CommandRunner:
     ) -> CommandResult:
         """Run a mutating command.
 
-        Keep this method boundary so real PTY handling can be added without
-        changing the Docker/Compose call sites.
+        Attach stdout/stderr to a real PTY so tools such as Docker Compose keep
+        their native progress UI while still returning a bounded output tail.
         """
 
-        return self.run_streaming(args, cwd=cwd, env=env, check=check)
+        if os.name != "posix" or pty is None:
+            return self.run_streaming(args, cwd=cwd, env=env, check=check)
+
+        argv = normalize_args(args)
+        cwd_path = Path(cwd) if cwd is not None else None
+        tail = _TextTail(STREAM_TAIL_LINES)
+        decoder = codecs.getincrementaldecoder("utf-8")("replace")
+
+        try:
+            master_fd, slave_fd = pty.openpty()
+        except OSError:
+            return self.run_streaming(args, cwd=cwd, env=env, check=check)
+
+        _copy_terminal_size(slave_fd, sys.stdout)
+        try:
+            try:
+                process = subprocess.Popen(
+                    argv,
+                    cwd=str(cwd_path) if cwd_path is not None else None,
+                    env=self._merged_env(env),
+                    stdin=subprocess.DEVNULL,
+                    stdout=slave_fd,
+                    stderr=slave_fd,
+                    close_fds=True,
+                )
+            except OSError as exc:
+                result = _result_from_os_error(argv, cwd_path, exc)
+                if check and not result.ok:
+                    raise CommandError(result)
+                return result
+            finally:
+                os.close(slave_fd)
+
+            while True:
+                try:
+                    chunk = os.read(master_fd, 4096)
+                except OSError as exc:
+                    if exc.errno == errno.EINTR:
+                        continue
+                    if exc.errno == errno.EIO:
+                        break
+                    raise
+                if not chunk:
+                    break
+                _write_stream_bytes(sys.stdout, chunk)
+                tail.feed(decoder.decode(chunk))
+
+            returncode = process.wait()
+            tail.feed(decoder.decode(b"", final=True))
+            tail.close()
+        finally:
+            os.close(master_fd)
+
+        result = CommandResult(
+            args=argv,
+            cwd=cwd_path,
+            returncode=returncode,
+            stdout=tail.text,
+            stderr="",
+            stdout_truncated=tail.truncated,
+            stderr_truncated=False,
+        )
+        if check and not result.ok:
+            raise CommandError(result)
+        return result
 
     def run_streaming(
         self,
@@ -256,6 +334,91 @@ def _stream_pipe(
             target.flush()
         except OSError:
             pass
+
+
+class _TextTail:
+    def __init__(self, max_lines: int) -> None:
+        self.max_lines = max_lines
+        self.lines: deque[str] = deque(maxlen=max_lines)
+        self.line_count = 0
+        self.partial = ""
+
+    def feed(self, text: str) -> None:
+        if not text:
+            return
+        combined = self.partial + text
+        parts = combined.splitlines(keepends=True)
+        if combined and not combined.endswith(("\n", "\r")):
+            self.partial = parts.pop() if parts else combined
+        else:
+            self.partial = ""
+        for part in parts:
+            self._append(part)
+        self._flush_long_partial()
+
+    def close(self) -> None:
+        if self.partial:
+            self._append(self.partial)
+            self.partial = ""
+
+    @property
+    def text(self) -> str:
+        return "".join(self.lines)
+
+    @property
+    def truncated(self) -> bool:
+        return self.line_count > self.max_lines
+
+    def _append(self, line: str) -> None:
+        self.line_count += 1
+        self.lines.append(line)
+
+    def _flush_long_partial(self) -> None:
+        while len(self.partial) > 8192:
+            self._append(self.partial[:8192])
+            self.partial = self.partial[8192:]
+
+
+def _write_stream_bytes(target: TextIO, chunk: bytes) -> None:
+    try:
+        buffer = getattr(target, "buffer", None)
+        if buffer is not None:
+            buffer.write(chunk)
+            buffer.flush()
+        else:
+            target.write(chunk.decode("utf-8", errors="replace"))
+            target.flush()
+    except OSError:
+        pass
+
+
+def _copy_terminal_size(slave_fd: int, stream: TextIO) -> None:
+    if fcntl is None or termios is None:
+        return
+    try:
+        size = _terminal_size_bytes(stream)
+        fcntl.ioctl(slave_fd, termios.TIOCSWINSZ, size)
+    except (OSError, ValueError):
+        return
+
+
+def _terminal_size_bytes(stream: TextIO) -> bytes:
+    fileno = getattr(stream, "fileno", None)
+    if fileno is not None:
+        try:
+            stream_fd = fileno()
+            if stream_fd >= 0:
+                size = fcntl.ioctl(stream_fd, termios.TIOCGWINSZ, b"\0" * 8)
+                rows, columns, _xpixels, _ypixels = struct.unpack("HHHH", size)
+                if rows > 0 and columns > 0:
+                    return size
+        except (OSError, ValueError):
+            pass
+
+    size = shutil.get_terminal_size(fallback=(80, 24))
+    lines = min(max(size.lines, 1), MAX_WINSIZE_VALUE)
+    columns = min(max(size.columns, 1), MAX_WINSIZE_VALUE)
+    return struct.pack("HHHH", lines, columns, 0, 0)
 
 
 def _result_from_os_error(
