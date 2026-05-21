@@ -61,6 +61,7 @@ jobs:
       }}
     outputs:
       docker: ${{ steps.filter.outputs.docker }}
+      docker_e2e: ${{ steps.filter.outputs.docker_e2e }}
       workflows: ${{ steps.filter.outputs.workflows }}
 
     steps:
@@ -93,12 +94,20 @@ jobs:
           fi
 
           docker=false
+          docker_e2e=false
           workflows=false
           for file in "${files[@]}"; do
             case "$file" in
               Dockerfile|.dockerignore|entrypoint.sh|docs/examples/docker-compose*.yml|bin/*|wud/*|tests/container-build.sh|tests/e2e-docker-compose.sh|tests/test-entrypoint.sh)
                 docker=true
                 ;;
+            esac
+            case "$file" in
+              Dockerfile|.dockerignore|entrypoint.sh|pyproject.toml|bin/*|wud/*|src/wud_updater/*|tests/e2e-docker-compose.sh)
+                docker_e2e=true
+                ;;
+            esac
+            case "$file" in
               .github/workflows/*)
                 workflows=true
                 ;;
@@ -107,6 +116,7 @@ jobs:
 
           {
             printf 'docker=%s\n' "$docker"
+            printf 'docker_e2e=%s\n' "$docker_e2e"
             printf 'workflows=%s\n' "$workflows"
           } >> "$GITHUB_OUTPUT"
 
@@ -263,7 +273,7 @@ jobs:
         (
           (github.event_name == 'workflow_dispatch' && inputs.run_e2e) ||
           (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'ci:e2e')) ||
-          needs.changes.outputs.docker == 'true'
+          needs.changes.outputs.docker_e2e == 'true'
         )
       }}
 
