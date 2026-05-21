@@ -4,6 +4,13 @@ All notable changes to WUD-Updater are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com) and versions follow
 [Semantic Versioning](https://semver.org).
 
+## [0.12.1](https://github.com/magrhino/WUD-Updater/compare/v0.12.0...v0.12.1) (2026-05-21)
+
+
+### Bug Fixes
+
+* **updater:** Warn on Compose bind mounts that resolve only inside the helper container ([#39](https://github.com/magrhino/WUD-Updater/issues/39)) ([7ac9399](https://github.com/magrhino/WUD-Updater/commit/7ac93994200cf3699b20d6d98213128ed0ecf550))
+
 ## [0.12.0](https://github.com/magrhino/WUD-Updater/compare/v0.11.1...v0.12.0) (2026-05-20)
 
 
