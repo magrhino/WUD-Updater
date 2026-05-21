@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import re
 import tempfile
@@ -7,7 +8,13 @@ import unittest
 from pathlib import Path
 
 from wud_updater.command import CommandError, CommandRunner, display_command
-from wud_updater.compose import ComposeCli, ComposeDiscoveryError, ServiceImage
+from wud_updater.compose import (
+    ComposeBindMount,
+    ComposeCli,
+    ComposeDiscoveryError,
+    ServiceImage,
+    _service_bind_mounts_from_config_json,
+)
 from wud_updater.docker_cli import ContainerImage, DockerCli
 
 
@@ -243,6 +250,45 @@ class ComposeCliTests(FakeDockerCase):
                     image="ghcr.io/linuxserver/qbittorrent:5.1.4",
                     network_mode="service:gluetun",
                 ),
+            ),
+        )
+
+    def test_service_bind_mounts_from_config_json_reads_bind_sources(self) -> None:
+        config_json = json.dumps(
+            {
+                "services": {
+                    "web": {
+                        "volumes": [
+                            {
+                                "type": "bind",
+                                "source": "/host/docker/web/config",
+                                "target": "/config",
+                            },
+                            {
+                                "type": "volume",
+                                "source": "named-data",
+                                "target": "/data",
+                            },
+                        ]
+                    },
+                    "worker": {
+                        "volumes": [
+                            {
+                                "type": "bind",
+                                "source": "/mnt/pool/worker",
+                                "target": "/work",
+                            }
+                        ]
+                    },
+                }
+            }
+        )
+
+        self.assertEqual(
+            _service_bind_mounts_from_config_json(config_json),
+            (
+                ComposeBindMount("web", "/host/docker/web/config", "/config"),
+                ComposeBindMount("worker", "/mnt/pool/worker", "/work"),
             ),
         )
 

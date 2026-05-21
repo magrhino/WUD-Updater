@@ -17,7 +17,7 @@ services:
         TRUENAS_API_CLIENT_REF: ${TRUENAS_API_CLIENT_REF:-TS-26.0.0-BETA.1}
     image: magrhino/wud-updater:truenas-status
     environment:
-      DOCKER_BASE: /host/docker
+      DOCKER_BASE: ${HOST_DOCKER_BASE:-/srv/docker}
       WUD_OUT_FILE: /out/images.todo
       WUD_LOG_DIR: /logs
       WUD_SYNC_SCRIPTS: "1"
@@ -36,7 +36,7 @@ services:
       # Prefer the hardened socket-proxy example when you do not need this raw
       # socket in the helper container.
       - /var/run/docker.sock:/var/run/docker.sock
-      - /srv/docker:/host/docker
+      - ${HOST_DOCKER_BASE:-/srv/docker}:${HOST_DOCKER_BASE:-/srv/docker}
       - ./logs:/logs
       - wud-scripts:/managed-wud
       - wud-out:/out

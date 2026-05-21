@@ -80,7 +80,7 @@ services:
     environment:
       # The Docker CLI and Compose plugin use the same constrained proxy.
       DOCKER_HOST: tcp://socket-proxy-wud-updater:2375
-      DOCKER_BASE: /host/docker
+      DOCKER_BASE: ${HOST_DOCKER_BASE:-/srv/docker}
       WUD_OUT_FILE: /out/images.todo
       WUD_LOG_DIR: /logs
       WUD_SYNC_SCRIPTS: "1"
@@ -94,7 +94,7 @@ services:
     volumes:
       # Keep this path aligned with DOCKER_BASE. It is writable because the
       # updater may rewrite Compose image tags when --allow-tag-updates is used.
-      - /srv/docker:/host/docker
+      - ${HOST_DOCKER_BASE:-/srv/docker}:${HOST_DOCKER_BASE:-/srv/docker}
       # Updater logs are kept outside the Docker stack root.
       - ./logs:/logs
       # Startup sync copies this repo's WUD callback scripts here for WUD.

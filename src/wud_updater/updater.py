@@ -22,7 +22,13 @@ from ruamel.yaml.comments import CommentedMap
 from ruamel.yaml.error import YAMLError
 
 from .command import CommandError, CommandResult, CommandRunner
-from .compose import ComposeCli, ComposeDiscoveryError, ComposeStack, ServiceImage
+from .compose import (
+    ComposeBindMount,
+    ComposeCli,
+    ComposeDiscoveryError,
+    ComposeStack,
+    ServiceImage,
+)
 from .config import DEFAULT_MAX_WAIT, DEFAULT_UPDATE_MODE
 from .db import (
     DatabaseError,
@@ -64,6 +70,7 @@ _SAFE_COMPONENT_RE = re.compile(r"[^A-Za-z0-9._-]")
 _CONTROL_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
 _EXCLUSIVE_CREATE_ATTEMPTS = 100
 _SERVICES_UNSET = object()
+_HELPER_ONLY_MOUNT_PREFIXES = (Path("/host"), Path("/docker-host"), Path("/container-host"))
 
 
 class UpdaterError(RuntimeError):
@@ -280,6 +287,13 @@ class UpdateFromWudRunner:
 
             if not self._validate_tag_update_plan(matches):
                 return 1
+            if not self._validate_compose_bind_mount_paths(matches):
+                if opts.dry_run:
+                    self.log.warn(
+                        "Dry-run only; reported container bind-mount path issue without mutating."
+                    )
+                else:
+                    return 1
             if not self._validate_tag_manifests(matches):
                 return 1
 
@@ -1215,6 +1229,49 @@ class UpdateFromWudRunner:
                 f"image {image}: {', '.join(sorted(desired))}"
             )
         return ok
+
+    def _validate_compose_bind_mount_paths(self, matches: Sequence[Match]) -> bool:
+        ok = True
+        for stack in _stacks_to_update(matches):
+            stack_matches = [match for match in matches if match.stack.index == stack.index]
+            mounts = self.compose.try_service_bind_mounts(stack.directory, stack.file)
+            if not mounts:
+                continue
+            scope = self._update_scope(stack, stack_matches)
+            scoped_services = set(scope.services or ())
+            if scope.services is None:
+                scoped_services = {mount.service for mount in mounts}
+            for mount in mounts:
+                if mount.service not in scoped_services:
+                    continue
+                issue = _container_bind_mount_path_issue(
+                    mount,
+                    docker_base=self.options.docker_base,
+                )
+                if not issue:
+                    continue
+                ok = False
+                self._log_bind_mount_path_issue(stack, mount, issue)
+        return ok
+
+    def _log_bind_mount_path_issue(
+        self,
+        stack: ComposeStack,
+        mount: ComposeBindMount,
+        issue: str,
+    ) -> None:
+        log = self.log.warn if self.options.dry_run else self.log.error
+        target = f" -> {mount.target}" if mount.target else ""
+        log(
+            f"[{stack.name}] Compose bind mount for service {mount.service} "
+            f"resolves to {mount.source}{target}; {issue}."
+        )
+        log(
+            f"[{stack.name}] Mount the Compose root at the same absolute path "
+            "the Docker daemon uses, then set DOCKER_BASE to that path "
+            "(for example HOST_DOCKER_BASE=/srv/docker with "
+            "${HOST_DOCKER_BASE}:${HOST_DOCKER_BASE})."
+        )
 
     def _validate_applied_tag_updates(
         self,
@@ -2171,6 +2228,34 @@ def _stacks_to_update(matches: Sequence[Match]) -> tuple[ComposeStack, ...]:
     for match in matches:
         stacks[match.stack.index] = match.stack
     return tuple(stacks[idx] for idx in sorted(stacks))
+
+
+def _container_bind_mount_path_issue(
+    mount: ComposeBindMount,
+    *,
+    docker_base: Path,
+) -> str:
+    source = Path(mount.source)
+    if not source.is_absolute():
+        return ""
+    for prefix in _HELPER_ONLY_MOUNT_PREFIXES:
+        if _path_is_or_under(source, prefix):
+            base_hint = ""
+            if _path_is_or_under(source, docker_base):
+                base_hint = f" from DOCKER_BASE={docker_base}"
+            return (
+                f"the source path is under helper-only prefix {prefix}{base_hint}; "
+                "the Docker daemon must be able to see bind sources at the same path"
+            )
+    return ""
+
+
+def _path_is_or_under(path: Path, parent: Path) -> bool:
+    try:
+        path.relative_to(parent)
+    except ValueError:
+        return False
+    return True
 
 
 def _plan_line(

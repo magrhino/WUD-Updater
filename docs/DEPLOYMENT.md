@@ -38,10 +38,10 @@ and the WUD output path:
 ```bash
 docker run --rm \
   -v /var/run/docker.sock:/var/run/docker.sock \
-  -v /srv/docker:/host/docker \
+  -v /srv/docker:/srv/docker \
   -v wud-out:/out \
   -v "$PWD/logs":/logs \
-  -e DOCKER_BASE=/host/docker \
+  -e DOCKER_BASE=/srv/docker \
   -e WUD_OUT_FILE=/out/images.todo \
   -e WUD_LOG_DIR=/logs \
   ghcr.io/magrhino/wud-updater:latest
@@ -120,14 +120,17 @@ The example mounts:
 | Mount | Purpose |
 |---|---|
 | `/var/run/docker.sock:/var/run/docker.sock` | Lets the helper inspect, pull, and recreate host Docker workloads. |
-| `/srv/docker:/host/docker` | Makes host Compose stacks visible inside the helper. |
+| `${HOST_DOCKER_BASE:-/srv/docker}:${HOST_DOCKER_BASE:-/srv/docker}` | Makes host Compose stacks visible inside the helper at the same absolute path the Docker daemon uses. |
 | `./logs:/logs` | Stores updater logs outside the Docker stack root. |
 | `wud-scripts:/managed-wud` | Managed volume that receives packaged WUD scripts. |
 | `wud-out:/out` | Shared WUD todo-file output volume. |
 
-Set `DOCKER_BASE` to the path that contains the Compose projects as seen inside
-the helper container. Set `WUD_OUT_FILE` to the todo file shared with WUD. Set
-`WUD_LOG_DIR` to the mounted log directory used by the updater.
+Set `DOCKER_BASE` to the path that contains the Compose projects. For
+containerized updater runs, mount that path at the same absolute location inside
+the helper; otherwise relative Compose bind mounts such as `./config:/config`
+can resolve to helper-only paths that the host Docker daemon cannot create. Set
+`WUD_OUT_FILE` to the todo file shared with WUD. Set `WUD_LOG_DIR` to the
+mounted log directory used by the updater.
 
 For a socket-proxy deployment, use
 [`docs/examples/docker-compose.hardened.yml`](examples/docker-compose.hardened.yml).
@@ -173,14 +176,14 @@ services:
   wud-updater:
     image: ghcr.io/magrhino/wud-updater:latest
     environment:
-      DOCKER_BASE: /host/docker
+      DOCKER_BASE: ${HOST_DOCKER_BASE:-/srv/docker}
       WUD_OUT_FILE: /out/images.todo
       WUD_LOG_DIR: /logs
       WUD_SYNC_SCRIPTS: "1"
       WUD_SCRIPTS_DIR: /managed-wud
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
-      - /srv/docker:/host/docker
+      - ${HOST_DOCKER_BASE:-/srv/docker}:${HOST_DOCKER_BASE:-/srv/docker}
       - ./logs:/logs
       - wud-scripts:/managed-wud
       - wud-out:/out
@@ -294,7 +297,7 @@ Core updater and wrapper values:
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `DOCKER_BASE` | Host: `$HOME/docker`; container: `/host/docker` | Compose project search root. |
+| `DOCKER_BASE` | Host: `$HOME/docker`; container examples: `${HOST_DOCKER_BASE:-/srv/docker}` | Compose project search root. Containerized runs should mount this at the same absolute path the Docker daemon uses. |
 | `DOCKER_HOST` | Docker CLI default | Optional Docker daemon endpoint, such as the hardened example's socket proxy. |
 | `WUD_OUT_FILE` | Host: `$DOCKER_BASE/wud/out/images.todo`; container: `/out/images.todo` | Shared pending-update file. |
 | `WUD_LOG_DIR` | Host: `./logs`; container: `/logs` | Updater log directory. Set to `$DOCKER_BASE/logs` to keep the previous layout. |
