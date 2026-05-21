@@ -97,6 +97,8 @@ class UpdaterOptions:
     tag_overrides: tuple["TagOverride", ...] = ()
     db_path: Path | None = None
     docker_base_label: str | None = None
+    host_docker_base: Path | None = None
+    host_docker_base_label: str | None = None
     wud_file_label: str | None = None
     log_dir_label: str | None = None
 
@@ -271,7 +273,10 @@ class UpdateFromWudRunner:
                 return 0
 
             self._print_targets(parsed)
-            stacks = self.compose.discover_stacks(opts.docker_base)
+            stacks = self.compose.discover_stacks(
+                opts.docker_base,
+                project_base=opts.host_docker_base,
+            )
             matches, skipped_tags = self._build_matches(parsed, stacks)
             self._print_skipped_tag_updates(skipped_tags)
 
@@ -645,7 +650,12 @@ class UpdateFromWudRunner:
             images = tuple(current_stack.images)
 
         try:
-            self.compose.pull(stack.directory, stack.file, pull_services)
+            self.compose.pull(
+                stack.directory,
+                stack.file,
+                pull_services,
+                project_directory=stack.project_directory,
+            )
         except CommandError as exc:
             if applied_tags and compose_backup is not None:
                 return self._handle_tag_update_failure(
@@ -713,14 +723,24 @@ class UpdateFromWudRunner:
                 f"[{stack.name}] Mode pause is deprecated; pausing before recreate and unpausing before health check"
             )
             try:
-                self.compose.pause(stack.directory, stack.file, services)
+                self.compose.pause(
+                    stack.directory,
+                    stack.file,
+                    services,
+                    project_directory=stack.project_directory,
+                )
             except CommandError:
                 self.log.warn(f"[{stack.name}] Pause failed; continuing with live recreate")
         elif opts.mode == "stop":
             try:
                 if service_scoped:
                     self.log.warn(f"[{stack.name}] Stopping affected service(s): {stop_services_label}")
-                    self.compose.stop(stack.directory, stack.file, stop_services)
+                    self.compose.stop(
+                        stack.directory,
+                        stack.file,
+                        stop_services,
+                        project_directory=stack.project_directory,
+                    )
                 else:
                     if stop_services_label:
                         self.log.warn(
@@ -728,7 +748,12 @@ class UpdateFromWudRunner:
                         )
                     else:
                         self.log.warn(f"[{stack.name}] Stopping stack")
-                    self.compose.stop(stack.directory, stack.file, stop_services)
+                    self.compose.stop(
+                        stack.directory,
+                        stack.file,
+                        stop_services,
+                        project_directory=stack.project_directory,
+                    )
             except CommandError as exc:
                 down_failed = True
                 down_error = exc
@@ -794,7 +819,12 @@ class UpdateFromWudRunner:
         if opts.mode == "pause":
             self.log.warn(f"[{stack.name}] Unpausing before health check")
             try:
-                self.compose.unpause(stack.directory, stack.file, services)
+                    self.compose.unpause(
+                        stack.directory,
+                        stack.file,
+                        services,
+                        project_directory=stack.project_directory,
+                    )
             except CommandError as exc:
                 if applied_tags and compose_backup is not None:
                     return self._handle_tag_update_failure(
@@ -882,7 +912,11 @@ class UpdateFromWudRunner:
         force_recreate: bool = False,
         no_deps: bool = True,
     ) -> UpResult:
-        if self.options.mode != "pause" and self.compose.up_wait_supported(stack.directory, stack.file):
+        if self.options.mode != "pause" and self.compose.up_wait_supported(
+            stack.directory,
+            stack.file,
+            project_directory=stack.project_directory,
+        ):
             self.log.info(
                 f"[{stack.name}] docker compose up --wait is supported; using native wait"
             )
@@ -895,6 +929,7 @@ class UpdateFromWudRunner:
                     wait_timeout=self.options.max_wait,
                     force_recreate=force_recreate,
                     no_deps=no_deps,
+                    project_directory=stack.project_directory,
                 )
                 return UpResult(True, True)
             except CommandError as exc:
@@ -910,6 +945,7 @@ class UpdateFromWudRunner:
                 services,
                 force_recreate=force_recreate,
                 no_deps=no_deps,
+                project_directory=stack.project_directory,
             )
             return UpResult(True, False)
         except CommandError as exc:
@@ -928,7 +964,12 @@ class UpdateFromWudRunner:
             time.sleep(2)
 
         while True:
-            cids = self.compose.ps_quiet(stack.directory, stack.file, services)
+            cids = self.compose.ps_quiet(
+                stack.directory,
+                stack.file,
+                services,
+                project_directory=stack.project_directory,
+            )
             ok = bool(cids)
             for cid in cids:
                 summary = self._cid_summary(cid)
@@ -1099,7 +1140,11 @@ class UpdateFromWudRunner:
 
     def _stack_stop_services(self, stack: ComposeStack) -> tuple[str, ...] | None:
         try:
-            services = self.compose.config_services(stack.directory, stack.file)
+            services = self.compose.config_services(
+                stack.directory,
+                stack.file,
+                project_directory=stack.project_directory,
+            )
         except CommandError:
             return None
         if not services:
@@ -1111,7 +1156,12 @@ class UpdateFromWudRunner:
         stack: ComposeStack,
         services: Sequence[str],
     ) -> str:
-        for cid in self.compose.ps_quiet(stack.directory, stack.file, services):
+        for cid in self.compose.ps_quiet(
+            stack.directory,
+            stack.file,
+            services,
+            project_directory=stack.project_directory,
+        ):
             for value in self.docker.try_inspect(cid, RECREATE_STACK_LABEL_FORMAT):
                 if _label_value_is_true(value):
                     return cid
@@ -1122,7 +1172,12 @@ class UpdateFromWudRunner:
         stack: ComposeStack,
         services: Sequence[str] | None,
     ) -> str:
-        cids = self.compose.ps_quiet(stack.directory, stack.file, services)
+        cids = self.compose.ps_quiet(
+            stack.directory,
+            stack.file,
+            services,
+            project_directory=stack.project_directory,
+        )
         if not cids:
             return "health: docker compose ps -q returned no containers\n"
 
@@ -1234,7 +1289,11 @@ class UpdateFromWudRunner:
         ok = True
         for stack in _stacks_to_update(matches):
             stack_matches = [match for match in matches if match.stack.index == stack.index]
-            mounts = self.compose.try_service_bind_mounts(stack.directory, stack.file)
+            mounts = self.compose.try_service_bind_mounts(
+                stack.directory,
+                stack.file,
+                project_directory=stack.project_directory,
+            )
             if not mounts:
                 continue
             scope = self._update_scope(stack, stack_matches)
@@ -1266,11 +1325,20 @@ class UpdateFromWudRunner:
             f"[{stack.name}] Compose bind mount for service {mount.service} "
             f"resolves to {mount.source}{target}; {issue}."
         )
+        if self.options.host_docker_base is not None:
+            log(
+                f"[{stack.name}] HOST_DOCKER_BASE is set to "
+                f"{self.options.host_docker_base}; verify it is the Docker "
+                f"daemon-visible host root that corresponds to "
+                f"DOCKER_BASE={self.options.docker_base}."
+            )
+            return
         log(
             f"[{stack.name}] Mount the Compose root at the same absolute path "
             "the Docker daemon uses, then set DOCKER_BASE to that path "
-            "(for example HOST_DOCKER_BASE=/srv/docker with "
-            "${HOST_DOCKER_BASE}:${HOST_DOCKER_BASE})."
+            "(for example DOCKER_BASE=/srv/docker with /srv/docker:/srv/docker), "
+            "or keep the helper path and set HOST_DOCKER_BASE=/srv/docker "
+            "to the matching daemon-visible host root."
         )
 
     def _validate_applied_tag_updates(
@@ -1366,7 +1434,13 @@ class UpdateFromWudRunner:
 
     def _refresh_stack_images(self, stack: ComposeStack) -> ComposeStack | None:
         try:
-            images = tuple(self.compose.config_images(stack.directory, stack.file))
+            images = tuple(
+                self.compose.config_images(
+                    stack.directory,
+                    stack.file,
+                    project_directory=stack.project_directory,
+                )
+            )
         except CommandError:
             self.log.error(f"[{stack.name}] Could not refresh compose images after tag rewrite.")
             return None
@@ -1376,7 +1450,12 @@ class UpdateFromWudRunner:
             file=stack.file,
             name=stack.name,
             images=images,
-            service_images=self.compose.try_service_image_pairs(stack.directory, stack.file),
+            service_images=self.compose.try_service_image_pairs(
+                stack.directory,
+                stack.file,
+                project_directory=stack.project_directory,
+            ),
+            project_directory=stack.project_directory,
         )
 
     def _record_failure(
@@ -1698,6 +1777,10 @@ class UpdateFromWudRunner:
         opts = self.options
         self.log.info("docker-update-from-wud-v2")
         self.log.info(f"Base    : {opts.docker_base_label or str(opts.docker_base)}")
+        if opts.host_docker_base is not None:
+            self.log.info(
+                f"HostBase: {opts.host_docker_base_label or str(opts.host_docker_base)}"
+            )
         self.log.info(f"WUD file: {opts.wud_file_label or str(opts.wud_file)}")
         self.log.info(f"Log file: {self.log_file}")
         self.log.info(f"Mode    : {opts.mode}")
@@ -1837,6 +1920,15 @@ def options_from_namespace(args: object, *, environ: Mapping[str, str] | None = 
     wud_file = Path(wud_file_label)
     log_dir = Path(log_dir_label)
     db_path = Path(env.get("WUD_DB_PATH") or str(log_dir / "wud-updater.sqlite"))
+    host_docker_base_label = env.get("HOST_DOCKER_BASE") or ""
+    host_docker_base = Path(host_docker_base_label) if host_docker_base_label else None
+    if host_docker_base is not None:
+        if not host_docker_base.is_absolute():
+            raise UpdaterError("HOST_DOCKER_BASE must be an absolute path")
+        if not docker_base.is_absolute():
+            raise UpdaterError(
+                "DOCKER_BASE must be an absolute path when HOST_DOCKER_BASE is set"
+            )
     max_wait = parse_seconds(getattr(args, "max_wait", None), "--max-wait")
     tag_overrides = parse_tag_overrides(getattr(args, "tag_override", None) or ())
     allow_tag_updates = bool(getattr(args, "allow_tag_updates", False))
@@ -1857,6 +1949,8 @@ def options_from_namespace(args: object, *, environ: Mapping[str, str] | None = 
         tag_overrides=tag_overrides,
         db_path=db_path,
         docker_base_label=docker_base_label,
+        host_docker_base=host_docker_base,
+        host_docker_base_label=host_docker_base_label or None,
         wud_file_label=wud_file_label,
         log_dir_label=log_dir_label,
     )

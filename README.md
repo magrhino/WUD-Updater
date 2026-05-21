@@ -25,6 +25,12 @@ stack path mounted at the same absolute path inside the helper. This matters
 when Compose files use relative bind mounts such as `./config:/config`. Then
 run the non-mutating default command:
 
+If you keep an existing helper-only mount such as `/srv/docker:/host/docker`,
+either switch to `/srv/docker:/srv/docker`, or add a second `/srv/docker:/srv/docker`
+mount and set `HOST_DOCKER_BASE=/srv/docker`. Compose reads project-relative
+files such as `.env`, `env_file`, build contexts, and relative bind mounts from
+the `HOST_DOCKER_BASE` path, so that path must also be readable inside the helper.
+
 ```bash
 docker compose -f docs/examples/docker-compose.example.yml run --rm wud-updater
 ```

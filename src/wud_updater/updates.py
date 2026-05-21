@@ -612,6 +612,8 @@ class UpdatesRunner:
                 updater_env.append(f"OUT_GID={self.options.out_gid}")
         if self.options.use_sudo and self.environ.get("WUD_DB_PATH"):
             updater_env.append(f"WUD_DB_PATH={self.environ['WUD_DB_PATH']}")
+        if self.options.use_sudo and self.environ.get("HOST_DOCKER_BASE"):
+            updater_env.append(f"HOST_DOCKER_BASE={self.environ['HOST_DOCKER_BASE']}")
         if self.options.lock_timeout:
             updater_env.append(f"WUD_LOCK_TIMEOUT={self.options.lock_timeout}")
         if self.lock.held:

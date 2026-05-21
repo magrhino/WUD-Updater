@@ -170,10 +170,14 @@ apply_image_after_pull(){
   safe="$(safe_name "$image")"
   src="$ROOT/images/$safe.after_id"
   dst="$ROOT/images/$safe.id"
-  [[ -f "$src" ]] && cp "$src" "$dst"
+  if [[ -f "$src" ]]; then
+    cp "$src" "$dst"
+  fi
   src="$ROOT/images/$safe.after_digests"
   dst="$ROOT/images/$safe.digests"
-  [[ -f "$src" ]] && cp "$src" "$dst"
+  if [[ -f "$src" ]]; then
+    cp "$src" "$dst"
+  fi
 }
 
 apply_pull_state(){
@@ -190,13 +194,13 @@ apply_pull_state(){
       while IFS= read -r image; do
         [[ -z "$image" ]] && continue
         apply_image_after_pull "$image"
-      done < <(service_images "$id" "$service" "$file")
+      done < <(service_images "$id" "$service" "$file" || true)
     done
   else
     while IFS= read -r image; do
       [[ -z "$image" ]] && continue
       apply_image_after_pull "$image"
-    done < <(service_images "$id" "" "$file")
+    done < <(service_images "$id" "" "$file" || true)
   fi
 }
 
@@ -225,9 +229,13 @@ emit_failure_output(){
 }
 
 compose_cmd(){
-  local file="" id cmd
+  local file="" project_directory="" id cmd
   while [[ $# -gt 0 ]]; do
     case "$1" in
+      --project-directory)
+        project_directory="${2:-}"
+        shift 2
+        ;;
       -f)
         file="${2:-}"
         shift 2
@@ -240,7 +248,11 @@ compose_cmd(){
   cmd="${1:-}"
   shift || true
   id="$(stack_id)"
-  log_call "compose -f $file $cmd $*"
+  if [[ -n "$project_directory" ]]; then
+    log_call "compose --project-directory $project_directory -f $file $cmd $*"
+  else
+    log_call "compose -f $file $cmd $*"
+  fi
 
   case "$cmd" in
     config)
