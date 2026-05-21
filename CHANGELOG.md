@@ -4,6 +4,13 @@ All notable changes to WUD-Updater are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com) and versions follow
 [Semantic Versioning](https://semver.org).
 
+## [0.12.2](https://github.com/magrhino/WUD-Updater/compare/v0.12.1...v0.12.2) (2026-05-21)
+
+
+### Bug Fixes
+
+* **compose:** validate mapped host project directories ([#41](https://github.com/magrhino/WUD-Updater/issues/41)) ([6f1c3bb](https://github.com/magrhino/WUD-Updater/commit/6f1c3bbb738e4c1d11db31ac8d5366789f29c92f))
+
 ## [0.12.1](https://github.com/magrhino/WUD-Updater/compare/v0.12.0...v0.12.1) (2026-05-21)
 
 
