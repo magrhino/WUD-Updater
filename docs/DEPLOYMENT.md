@@ -54,7 +54,7 @@ docker run --rm \
 - Docker with the Compose plugin on the host.
 - Standard shell tools used by wrapper and callback scripts: `awk`, `sort`,
   `sed`, `perl`, `find`, `grep`, `cut`, `column`, and `mktemp`.
-- `jq` and `midclt` are optional for the default Bash `updates` wrapper's
+- `jq` and `midclt` are optional for the legacy Bash `updates` fallback's
   local TrueNAS status checks.
 - Containerized TrueNAS status checks require Docker access and a helper image
   built with a compatible TrueNAS API client.
@@ -154,9 +154,9 @@ For containerized TrueNAS status checks, use
 That variant builds the helper image with the official TrueNAS API client so a
 short-lived sibling container can run local `midclt` calls. Set
 `TRUENAS_API_CLIENT_REF` to an API client tag that is compatible with your
-TrueNAS release. The example sets `WUD_UPDATER_PYTHON=true`,
-`WUD_UPDATER_USE_SUDO=false`, and `TRUENAS_STATUS_CHECK=true`; the TrueNAS helper is
-only wired into the Python/container `updates` wrapper.
+TrueNAS release. The example uses the Python/container `updates` wrapper by
+default and sets `WUD_UPDATER_USE_SUDO=false` and `TRUENAS_STATUS_CHECK=true`;
+the TrueNAS helper is only wired into that wrapper.
 
 When enabled, the Python `updates` wrapper uses Docker to inspect its own
 container, starts the same image with `--network none`, mounts only
@@ -322,8 +322,8 @@ Boolean examples use `true` and `false`; legacy aliases `1`, `0`, `yes`, `no`,
 | `OUT_UID` / `OUT_GID` | unset | Optional owner for rewritten todo files and updater logs. `OUT_GUID` is accepted as an alias for `OUT_GID`. |
 | `WUD_UPDATER` | Host: repo-local `bin/docker-update-from-wud`; image: `/app/bin/docker-update-from-wud` | Updater command invoked by `updates`. |
 | `WUD_UPDATER_CONFIG` | `$HOME/.config/wud-updater/env` | Host config file read by `updates`. |
-| `WUD_UPDATER_PYTHON` | unset | Set to `true` to run the Python `updates` wrapper from `bin/updates`. |
-| `WUD_UPDATER_USE_SUDO` | enabled | For `WUD_UPDATER_PYTHON=true`, set to `false` to disable sudo file fallbacks and run `WUD_UPDATER` directly. |
+| `WUD_UPDATER_PYTHON` | `true` | Set to `false` to use the temporary legacy Bash `updates` fallback. |
+| `WUD_UPDATER_USE_SUDO` | `true` | For the Python `updates` wrapper, set to `false` to disable sudo file fallbacks and run `WUD_UPDATER` directly. |
 | `WUD_UPDATER_BANNER` | `auto` | Startup banner mode: `auto` prints on TTY startup, `true` forces it, and `false` disables it. |
 | `WUD_UPDATER_RELEASE_CHECK` | `auto` | Latest-release check mode for the startup banner: `auto` or `true` tries GitHub briefly when the banner prints, and `false` disables the network check. |
 | `PYTHON_BIN` | `python3`, with repo `.venv` fallback when unset | Python interpreter used by Python entrypoint wrappers. Set this to bypass automatic `.venv` fallback. |

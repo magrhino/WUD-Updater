@@ -97,6 +97,7 @@ run_updates(){
       FAKE_UPDATER_LOG="$TEST_TMP/updater.log" \
       FAKE_WUD_FILE="$WUD_FILE" \
       WUD_UPDATER_BANNER=false \
+      WUD_UPDATER_PYTHON=false \
       env "${env_args[@]}" "$SCRIPT" --file "$WUD_FILE" "$@" > "$TEST_TMP/output.log" 2>&1 || LAST_STATUS=$?
   else
     PATH="$FAKE_BIN:$PATH" \
@@ -105,6 +106,7 @@ run_updates(){
       FAKE_UPDATER_LOG="$TEST_TMP/updater.log" \
       FAKE_WUD_FILE="$WUD_FILE" \
       WUD_UPDATER_BANNER=false \
+      WUD_UPDATER_PYTHON=false \
       "$SCRIPT" --file "$WUD_FILE" "$@" > "$TEST_TMP/output.log" 2>&1 || LAST_STATUS=$?
   fi
 }
@@ -126,6 +128,7 @@ run_updates_with_input(){
       FAKE_UPDATER_LOG="$TEST_TMP/updater.log" \
       FAKE_WUD_FILE="$WUD_FILE" \
       WUD_UPDATER_BANNER=false \
+      WUD_UPDATER_PYTHON=false \
       env "${env_args[@]}" "$SCRIPT" --file "$WUD_FILE" "$@" > "$TEST_TMP/output.log" 2>&1 || LAST_STATUS=$?
   else
     printf '%b' "$input" | PATH="$FAKE_BIN:$PATH" \
@@ -134,6 +137,7 @@ run_updates_with_input(){
       FAKE_UPDATER_LOG="$TEST_TMP/updater.log" \
       FAKE_WUD_FILE="$WUD_FILE" \
       WUD_UPDATER_BANNER=false \
+      WUD_UPDATER_PYTHON=false \
       "$SCRIPT" --file "$WUD_FILE" "$@" > "$TEST_TMP/output.log" 2>&1 || LAST_STATUS=$?
   fi
 }

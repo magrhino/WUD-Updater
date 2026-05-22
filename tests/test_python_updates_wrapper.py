@@ -35,6 +35,7 @@ class PythonUpdatesWrapperTests(unittest.TestCase):
         include_pythonpath: bool = True,
     ) -> subprocess.CompletedProcess[str]:
         env = os.environ.copy()
+        env.pop("WUD_UPDATER_PYTHON", None)
         env_defaults = {
             "PATH": f"{self.fake_bin}:{env.get('PATH', '')}",
             "WUD_UPDATER": str(self.updater),
@@ -566,7 +567,20 @@ class PythonUpdatesWrapperTests(unittest.TestCase):
         self.assertFalse(status_payload["update"]["ok"])
         self.assertEqual(status_payload["update"]["reason"], "midclt exited 2")
 
-    def test_bin_updates_opt_in_dispatches_python_wrapper(self) -> None:
+    def test_bin_updates_dispatches_python_wrapper_by_default(self) -> None:
+        self.wud_file.write_text("repo/app:latest\n", encoding="utf-8")
+
+        result = self.run_updates(
+            "--dry-run",
+            command=[str(self.repo_root / "bin" / "updates")],
+            env_overrides={"PYTHON_BIN": sys.executable},
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+        self.assertIn("Dry-run mode: not running updates", result.stdout)
+        self.assertFalse(self.sudo_log.exists())
+
+    def test_bin_updates_accepts_explicit_true(self) -> None:
         self.wud_file.write_text("repo/app:latest\n", encoding="utf-8")
 
         result = self.run_updates(
@@ -598,7 +612,7 @@ class PythonUpdatesWrapperTests(unittest.TestCase):
         self.assertIn("Dry-run mode: not running updates", result.stdout)
         self.assertFalse(self.sudo_log.exists())
 
-    def test_bin_updates_opt_in_resolves_installed_symlink(self) -> None:
+    def test_bin_updates_default_resolves_installed_symlink(self) -> None:
         self.wud_file.write_text("repo/app:latest\n", encoding="utf-8")
         installed_bin = self.root / "installed-bin"
         installed_bin.mkdir()
@@ -608,10 +622,7 @@ class PythonUpdatesWrapperTests(unittest.TestCase):
         result = self.run_updates(
             "--dry-run",
             command=[str(installed_updates)],
-            env_overrides={
-                "WUD_UPDATER_PYTHON": "true",
-                "PYTHON_BIN": sys.executable,
-            },
+            env_overrides={"PYTHON_BIN": sys.executable},
             include_pythonpath=False,
         )
 
@@ -619,13 +630,12 @@ class PythonUpdatesWrapperTests(unittest.TestCase):
         self.assertIn("Dry-run mode: not running updates", result.stdout)
         self.assertFalse(self.sudo_log.exists())
 
-    def test_bin_updates_config_file_can_enable_python_wrapper(self) -> None:
+    def test_bin_updates_config_file_is_sourced_before_python_dispatch(self) -> None:
         self.wud_file.write_text("repo/app:latest\n", encoding="utf-8")
         config_file = self.root / "host-env"
         config_file.write_text(
             "\n".join(
                 [
-                    "WUD_UPDATER_PYTHON=true",
                     f'PYTHON_BIN="{sys.executable}"',
                     "WUD_UPDATER_USE_SUDO=false",
                     "",
@@ -646,15 +656,44 @@ class PythonUpdatesWrapperTests(unittest.TestCase):
         self.assertIn("Dry-run mode: not running updates", result.stdout)
         self.assertFalse(self.sudo_log.exists())
 
-    def test_no_updater_sudo_stays_python_only(self) -> None:
+    def test_bin_updates_default_accepts_no_updater_sudo(self) -> None:
+        self.wud_file.write_text("repo/app:latest\n", encoding="utf-8")
+
+        result = self.run_updates(
+            "--yes",
+            "--no-updater-sudo",
+            command=[str(self.repo_root / "bin" / "updates")],
+            env_overrides={"PYTHON_BIN": sys.executable},
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+        self.assertFalse(self.sudo_log.exists())
+        self.assertIn("--yes", self.updater_log.read_text(encoding="utf-8"))
+
+    def test_bin_updates_zero_flag_uses_legacy_bash_fallback(self) -> None:
         result = self.run_updates(
             "--dry-run",
             "--no-updater-sudo",
             command=[str(self.repo_root / "bin" / "updates")],
+            env_overrides={"WUD_UPDATER_PYTHON": "0"},
         )
 
         self.assertEqual(result.returncode, 2)
         self.assertIn("Unknown argument: --no-updater-sudo", result.stderr)
+
+    def test_bin_updates_invalid_python_flag_fails(self) -> None:
+        result = self.run_updates(
+            "--dry-run",
+            command=[str(self.repo_root / "bin" / "updates")],
+            env_overrides={"WUD_UPDATER_PYTHON": "maybe"},
+        )
+
+        self.assertEqual(result.returncode, 2)
+        self.assertIn(
+            "WUD_UPDATER_PYTHON must be one of",
+            result.stderr,
+        )
+        self.assertEqual(result.stdout, "")
 
     def _write_fakes(self) -> None:
         self._write_executable(

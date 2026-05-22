@@ -22,17 +22,6 @@ if [ -r "$config_file" ]; then
   . "$config_file"
 fi
 
-env_bool_enabled() {
-  case "${1:-}" in
-    1|[Tt][Rr][Uu][Ee]|[Yy][Ee][Ss]|[Oo][Nn])
-      return 0
-      ;;
-    *)
-      return 1
-      ;;
-  esac
-}
-
 python_has_runtime_deps() {
   "$1" - >/dev/null 2>&1 <<'PY'
 import sys
@@ -70,7 +59,7 @@ print_startup_banner() {
     2>/dev/null || true
 }
 
-if env_bool_enabled "${WUD_UPDATER_PYTHON:-}"; then
+run_python_updates() {
   python_bin="${PYTHON_BIN:-python3}"
   venv_dir="${WUD_UPDATER_VENV:-$repo_dir/.venv}"
   if [[ -z "${PYTHON_BIN:-}" && -x "$venv_dir/bin/python" ]]; then
@@ -84,7 +73,19 @@ if env_bool_enabled "${WUD_UPDATER_PYTHON:-}"; then
     export PYTHONPATH="${repo_dir}/src"
   fi
   exec "$python_bin" -m wud_updater.cli updates "$@"
-fi
+}
+
+case "${WUD_UPDATER_PYTHON:-true}" in
+  1|[Tt][Rr][Uu][Ee]|[Yy][Ee][Ss]|[Oo][Nn])
+    run_python_updates "$@"
+    ;;
+  0|[Ff][Aa][Ll][Ss][Ee]|[Nn][Oo]|[Oo][Ff][Ff])
+    ;;
+  *)
+    echo "WUD_UPDATER_PYTHON must be one of true, false, 1, 0, yes, no, on, or off" >&2
+    exit 2
+    ;;
+esac
 
 docker_base="${DOCKER_BASE:-$HOME/docker}"
 host_docker_base="${HOST_DOCKER_BASE:-}"
