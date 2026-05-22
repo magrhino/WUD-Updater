@@ -22,6 +22,17 @@ if [ -r "$config_file" ]; then
   . "$config_file"
 fi
 
+env_bool_enabled() {
+  case "${1:-}" in
+    1|[Tt][Rr][Uu][Ee]|[Yy][Ee][Ss]|[Oo][Nn])
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
 python_has_runtime_deps() {
   "$1" - >/dev/null 2>&1 <<'PY'
 import sys
@@ -59,7 +70,7 @@ print_startup_banner() {
     2>/dev/null || true
 }
 
-if [[ "${WUD_UPDATER_PYTHON:-}" == "1" ]]; then
+if env_bool_enabled "${WUD_UPDATER_PYTHON:-}"; then
   python_bin="${PYTHON_BIN:-python3}"
   venv_dir="${WUD_UPDATER_VENV:-$repo_dir/.venv}"
   if [[ -z "${PYTHON_BIN:-}" && -x "$venv_dir/bin/python" ]]; then
