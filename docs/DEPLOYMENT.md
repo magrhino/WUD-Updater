@@ -54,7 +54,7 @@ docker run --rm \
 - Docker with the Compose plugin on the host.
 - Standard shell tools used by wrapper and callback scripts: `awk`, `sort`,
   `sed`, `perl`, `find`, `grep`, `cut`, `column`, and `mktemp`.
-- `jq` and `midclt` are optional for the default Bash `updates` wrapper's
+- `jq` and `midclt` are optional for the legacy Bash `updates` fallback's
   local TrueNAS status checks.
 - Containerized TrueNAS status checks require Docker access and a helper image
   built with a compatible TrueNAS API client.
@@ -154,9 +154,9 @@ For containerized TrueNAS status checks, use
 That variant builds the helper image with the official TrueNAS API client so a
 short-lived sibling container can run local `midclt` calls. Set
 `TRUENAS_API_CLIENT_REF` to an API client tag that is compatible with your
-TrueNAS release. The example sets `WUD_UPDATER_PYTHON=1`,
-`WUD_UPDATER_USE_SUDO=0`, and `TRUENAS_STATUS_CHECK=1`; the TrueNAS helper is
-only wired into the Python/container `updates` wrapper.
+TrueNAS release. The example sets `WUD_UPDATER_USE_SUDO=0` and
+`TRUENAS_STATUS_CHECK=1`; the TrueNAS helper is only wired into the Python
+`updates` wrapper.
 
 When enabled, the Python `updates` wrapper uses Docker to inspect its own
 container, starts the same image with `--network none`, mounts only
@@ -319,8 +319,8 @@ Core updater and wrapper values:
 | `OUT_UID` / `OUT_GID` | unset | Optional owner for rewritten todo files and updater logs. `OUT_GUID` is accepted as an alias for `OUT_GID`. |
 | `WUD_UPDATER` | Host: repo-local `bin/docker-update-from-wud`; image: `/app/bin/docker-update-from-wud` | Updater command invoked by `updates`. |
 | `WUD_UPDATER_CONFIG` | `$HOME/.config/wud-updater/env` | Host config file read by `updates`. |
-| `WUD_UPDATER_PYTHON` | unset | Set to `1` to run the Python `updates` wrapper from `bin/updates`. |
-| `WUD_UPDATER_USE_SUDO` | enabled | For `WUD_UPDATER_PYTHON=1`, set to `0` to disable sudo file fallbacks and run `WUD_UPDATER` directly. |
+| `WUD_UPDATER_PYTHON` | enabled | Set to `0` to use the temporary legacy Bash `updates` fallback. |
+| `WUD_UPDATER_USE_SUDO` | enabled | For the Python `updates` wrapper, set to `0` to disable sudo file fallbacks and run `WUD_UPDATER` directly. |
 | `WUD_UPDATER_BANNER` | `auto` | Startup banner mode: `auto` prints on TTY startup, `1` forces it, and `0` disables it. |
 | `WUD_UPDATER_RELEASE_CHECK` | `auto` | Latest-release check mode for the startup banner: `auto` or `1` tries GitHub briefly when the banner prints, and `0` disables the network check. |
 | `PYTHON_BIN` | `python3`, with repo `.venv` fallback when unset | Python interpreter used by Python entrypoint wrappers. Set this to bypass automatic `.venv` fallback. |
@@ -342,7 +342,7 @@ TrueNAS status helper values for the Python `updates` wrapper:
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `TRUENAS_STATUS_CHECK` | unset | For the Python/container `updates` wrapper, set to `1` to run the short-lived local `midclt` status helper. |
+| `TRUENAS_STATUS_CHECK` | unset | For the Python `updates` wrapper, set to `1` to run the short-lived local `midclt` status helper. |
 | `TRUENAS_STATUS_TIMEOUT` | `5` | Seconds to wait for each helper `midclt` call before skipping it. The parent wrapper derives a longer Docker helper timeout from this value. |
 
 Release-note notification values for the WUD container:

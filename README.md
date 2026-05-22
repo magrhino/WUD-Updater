@@ -8,8 +8,8 @@ notifications.
 
 - WUD calls `/wud/on-update.sh` when an image update is available.
 - The WUD-side scripts append pending image targets to `/out/images.todo`.
-- The host command `updates` shows pending Docker updates, TrueNAS update status,
-  and active alerts.
+- The host command `updates` shows pending Docker updates and can optionally
+  show TrueNAS update status and active alerts.
 - When approved, `docker-update-from-wud` pulls matching Docker Compose services
   or stack-scoped service images, recreates containers, waits for health, and
   removes successfully processed lines from the WUD file.
@@ -48,8 +48,7 @@ WUD or WUD-Updater, start from
 For containerized TrueNAS status checks, start from
 `docs/examples/docker-compose.truenas.yml`. It builds a version-matched
 TrueNAS client and uses an opt-in short-lived helper container for local status
-checks without storing a TrueNAS API key. That example enables the Python
-`updates` wrapper because the container helper is only used when
+checks without storing a TrueNAS API key. The helper is only used when
 `TRUENAS_STATUS_CHECK=1` is set there.
 
 ### Host Install

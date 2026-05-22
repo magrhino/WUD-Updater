@@ -59,7 +59,7 @@ print_startup_banner() {
     2>/dev/null || true
 }
 
-if [[ "${WUD_UPDATER_PYTHON:-}" == "1" ]]; then
+run_python_updates() {
   python_bin="${PYTHON_BIN:-python3}"
   venv_dir="${WUD_UPDATER_VENV:-$repo_dir/.venv}"
   if [[ -z "${PYTHON_BIN:-}" && -x "$venv_dir/bin/python" ]]; then
@@ -73,7 +73,19 @@ if [[ "${WUD_UPDATER_PYTHON:-}" == "1" ]]; then
     export PYTHONPATH="${repo_dir}/src"
   fi
   exec "$python_bin" -m wud_updater.cli updates "$@"
-fi
+}
+
+case "${WUD_UPDATER_PYTHON:-1}" in
+  1|[Tt][Rr][Uu][Ee]|[Yy][Ee][Ss]|[Oo][Nn])
+    run_python_updates "$@"
+    ;;
+  0|[Ff][Aa][Ll][Ss][Ee]|[Nn][Oo]|[Oo][Ff][Ff])
+    ;;
+  *)
+    echo "WUD_UPDATER_PYTHON must be one of 1, 0, true, false, yes, no, on, or off" >&2
+    exit 2
+    ;;
+esac
 
 docker_base="${DOCKER_BASE:-$HOME/docker}"
 host_docker_base="${HOST_DOCKER_BASE:-}"

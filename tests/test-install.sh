@@ -173,7 +173,6 @@ test_dispatchers_use_local_venv_when_host_python_lacks_deps(){
     unset PYTHON_BIN
     PATH="$fake_bin:$PATH" \
       WUD_UPDATER_VENV="$venv_dir" \
-      WUD_UPDATER_PYTHON=1 \
       WUD_UPDATER_CONFIG="$TEST_TMP/missing-config" \
       FAKE_PYTHON_LOG="$TEST_TMP/python.log" \
       "$REPO_ROOT/bin/updates" --dry-run
