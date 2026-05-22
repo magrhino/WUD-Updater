@@ -186,11 +186,30 @@ test_sync_command_copies_scripts_and_exits(){
 
 test_startup_sync_runs_before_command(){
   setup_case
+  WUD_SYNC_SCRIPTS=true run_entrypoint updates --yes
+  assert_status 0
+  assert_output "Synced WUD scripts to $TEST_TMP/managed-wud
+updates [--yes]"
+  assert_synced_scripts
+  teardown_case
+}
+
+test_startup_sync_accepts_legacy_one(){
+  setup_case
   WUD_SYNC_SCRIPTS=1 run_entrypoint updates --yes
   assert_status 0
   assert_output "Synced WUD scripts to $TEST_TMP/managed-wud
 updates [--yes]"
   assert_synced_scripts
+  teardown_case
+}
+
+test_startup_sync_accepts_legacy_zero_as_disabled(){
+  setup_case
+  WUD_SYNC_SCRIPTS=0 run_entrypoint updates --yes
+  assert_status 0
+  assert_output 'updates [--yes]'
+  [[ ! -e "$TEST_TMP/managed-wud/.wud-updater-managed" ]] || fail "legacy zero enabled sync"
   teardown_case
 }
 
@@ -266,6 +285,8 @@ main(){
   run_test test_debug_command_executes_directly
   run_test test_sync_command_copies_scripts_and_exits
   run_test test_startup_sync_runs_before_command
+  run_test test_startup_sync_accepts_legacy_one
+  run_test test_startup_sync_accepts_legacy_zero_as_disabled
   run_test test_sync_removes_stale_files
   run_test test_sync_refuses_non_empty_unmanaged_destination
   run_test test_sync_refuses_empty_destination

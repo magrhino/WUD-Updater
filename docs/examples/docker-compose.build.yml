@@ -15,7 +15,7 @@ services:
       DOCKER_BASE: ${HOST_DOCKER_BASE:-/srv/docker}
       WUD_OUT_FILE: /out/images.todo
       WUD_LOG_DIR: /logs
-      WUD_SYNC_SCRIPTS: "1"
+      WUD_SYNC_SCRIPTS: "true"
       WUD_SCRIPTS_DIR: /managed-wud
       OUT_UID: "1000"
       OUT_GID: "1000"

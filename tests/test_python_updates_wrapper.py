@@ -42,7 +42,7 @@ class PythonUpdatesWrapperTests(unittest.TestCase):
             "FAKE_SUDO_LOG": str(self.sudo_log),
             "FAKE_UPDATER_LOG": str(self.updater_log),
             "FAKE_WUD_FILE": str(self.wud_file),
-            "WUD_UPDATER_BANNER": "0",
+            "WUD_UPDATER_BANNER": "false",
         }
         if include_pythonpath:
             env_defaults["PYTHONPATH"] = str(self.repo_root / "src")
@@ -174,7 +174,7 @@ class PythonUpdatesWrapperTests(unittest.TestCase):
             str(cli_log_dir),
             env_overrides={
                 "WUD_LOG_DIR": str(self.root / "env-logs"),
-                "WUD_UPDATER_USE_SUDO": "0",
+                "WUD_UPDATER_USE_SUDO": "false",
             },
         )
 
@@ -189,7 +189,7 @@ class PythonUpdatesWrapperTests(unittest.TestCase):
 
         result = self.run_updates(
             "--yes",
-            env_overrides={"WUD_UPDATER_USE_SUDO": "0"},
+            env_overrides={"WUD_UPDATER_USE_SUDO": "false"},
         )
 
         self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
@@ -406,7 +406,7 @@ class PythonUpdatesWrapperTests(unittest.TestCase):
         result = self.run_updates(
             "--dry-run",
             env_overrides={
-                "TRUENAS_STATUS_CHECK": "1",
+                "TRUENAS_STATUS_CHECK": "true",
                 "HOSTNAME": "wud-updater-1",
                 "FAKE_DOCKER_LOG": str(docker_log),
             },
@@ -440,7 +440,7 @@ class PythonUpdatesWrapperTests(unittest.TestCase):
         result = self.run_updates(
             "--dry-run",
             env_overrides={
-                "TRUENAS_STATUS_CHECK": "1",
+                "TRUENAS_STATUS_CHECK": "true",
                 "HOSTNAME": "wud-updater-1",
                 "FAKE_DOCKER_RUN_RETURN": "2",
             },
@@ -458,7 +458,7 @@ class PythonUpdatesWrapperTests(unittest.TestCase):
         result = self.run_updates(
             "--dry-run",
             env_overrides={
-                "TRUENAS_STATUS_CHECK": "1",
+                "TRUENAS_STATUS_CHECK": "true",
                 "HOSTNAME": "wud-updater-1",
                 "FAKE_DOCKER_STATUS_RESPONSE": "invalid",
             },
@@ -515,7 +515,7 @@ class PythonUpdatesWrapperTests(unittest.TestCase):
         result = self.run_updates(
             "--dry-run",
             env_overrides={
-                "TRUENAS_STATUS_CHECK": "1",
+                "TRUENAS_STATUS_CHECK": "true",
                 "HOSTNAME": "wud-updater-1",
                 "FAKE_TRUENAS_UPDATE_STATUS": "unavailable",
             },
@@ -528,7 +528,7 @@ class PythonUpdatesWrapperTests(unittest.TestCase):
         result = self.run_updates(
             "--dry-run",
             env_overrides={
-                "TRUENAS_STATUS_CHECK": "1",
+                "TRUENAS_STATUS_CHECK": "true",
                 "HOSTNAME": "wud-updater-1",
                 "FAKE_TRUENAS_UPDATE_STATUS": "error",
             },
@@ -541,7 +541,7 @@ class PythonUpdatesWrapperTests(unittest.TestCase):
         result = self.run_updates(
             "--dry-run",
             env_overrides={
-                "TRUENAS_STATUS_CHECK": "1",
+                "TRUENAS_STATUS_CHECK": "true",
                 "HOSTNAME": "wud-updater-1",
                 "FAKE_TRUENAS_ALERT_STATUS": "none",
             },
@@ -573,6 +573,22 @@ class PythonUpdatesWrapperTests(unittest.TestCase):
             "--dry-run",
             command=[str(self.repo_root / "bin" / "updates")],
             env_overrides={
+                "WUD_UPDATER_PYTHON": "true",
+                "PYTHON_BIN": sys.executable,
+            },
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+        self.assertIn("Dry-run mode: not running updates", result.stdout)
+        self.assertFalse(self.sudo_log.exists())
+
+    def test_bin_updates_opt_in_accepts_legacy_one(self) -> None:
+        self.wud_file.write_text("repo/app:latest\n", encoding="utf-8")
+
+        result = self.run_updates(
+            "--dry-run",
+            command=[str(self.repo_root / "bin" / "updates")],
+            env_overrides={
                 "WUD_UPDATER_PYTHON": "1",
                 "PYTHON_BIN": sys.executable,
             },
@@ -593,7 +609,7 @@ class PythonUpdatesWrapperTests(unittest.TestCase):
             "--dry-run",
             command=[str(installed_updates)],
             env_overrides={
-                "WUD_UPDATER_PYTHON": "1",
+                "WUD_UPDATER_PYTHON": "true",
                 "PYTHON_BIN": sys.executable,
             },
             include_pythonpath=False,
@@ -609,9 +625,9 @@ class PythonUpdatesWrapperTests(unittest.TestCase):
         config_file.write_text(
             "\n".join(
                 [
-                    "WUD_UPDATER_PYTHON=1",
+                    "WUD_UPDATER_PYTHON=true",
                     f'PYTHON_BIN="{sys.executable}"',
-                    "WUD_UPDATER_USE_SUDO=0",
+                    "WUD_UPDATER_USE_SUDO=false",
                     "",
                 ]
             ),

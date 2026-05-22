@@ -286,7 +286,7 @@ run_updater_e2e(){
     -v "$STACK_DIR:$STACK_DIR" \
     -v "$OUT_VOLUME:/out" \
     -v "$LOG_VOLUME:/logs" \
-    -e WUD_UPDATER_BANNER=0 \
+    -e WUD_UPDATER_BANNER=false \
     -e WUD_DB_PATH=/logs/e2e.sqlite \
     -e OUT_UID="$(id -u)" \
     -e OUT_GID="$(id -g)" \
@@ -325,7 +325,7 @@ run_preflight_failure_e2e(){
       -v "$STACK_DIR:/host/docker" \
       -v "$OUT_VOLUME:/out" \
       -v "$LOG_VOLUME:/logs" \
-      -e WUD_UPDATER_BANNER=0 \
+      -e WUD_UPDATER_BANNER=false \
       -e WUD_DB_PATH=/logs/e2e-preflight.sqlite \
       -e OUT_UID="$(id -u)" \
       -e OUT_GID="$(id -g)" \

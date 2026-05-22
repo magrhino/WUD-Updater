@@ -53,7 +53,7 @@ class PythonUpdateFromWudTests(unittest.TestCase):
         self.env["FAKE_DOCKER_ROOT"] = str(self.fake_root)
         self.env["PATH"] = f"{self.repo_root / 'tests' / 'fakes'}:{self.env['PATH']}"
         self.env["PYTHONPATH"] = str(self.repo_root / "src")
-        self.env["WUD_UPDATER_BANNER"] = "0"
+        self.env["WUD_UPDATER_BANNER"] = "false"
         self.env["WUD_DB_PATH"] = str(self.db_path)
 
     def tearDown(self) -> None:

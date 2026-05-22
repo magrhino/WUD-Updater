@@ -8,6 +8,17 @@ wud_log_dir="${WUD_LOG_DIR:-/logs}"
 wud_scripts_dir="${WUD_SCRIPTS_DIR-/managed-wud}"
 wud_scripts_marker=".wud-updater-managed"
 
+env_bool_enabled(){
+  case "${1:-}" in
+    1|[Tt][Rr][Uu][Ee]|[Yy][Ee][Ss]|[Oo][Nn])
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
 has_arg(){
   local wanted="$1" arg
   shift
@@ -162,7 +173,7 @@ elif [[ "$1" == -* ]]; then
   set -- updates "$@"
 fi
 
-if [[ "${WUD_SYNC_SCRIPTS:-}" == "1" && "$1" != "sync-wud-scripts" ]]; then
+if env_bool_enabled "${WUD_SYNC_SCRIPTS:-}" && [[ "$1" != "sync-wud-scripts" ]]; then
   sync_wud_scripts
 fi
 

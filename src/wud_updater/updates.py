@@ -986,7 +986,7 @@ def _resolve_use_sudo(
     if normalized in {"0", "false", "no", "off"}:
         return False
     raise UpdatesError(
-        "WUD_UPDATER_USE_SUDO must be one of 1, 0, true, false, yes, no, on, or off"
+        "WUD_UPDATER_USE_SUDO must be one of true, false, 1, 0, yes, no, on, or off"
     )
 
 
@@ -1000,7 +1000,7 @@ def _resolve_bool_env(value: str | None, label: str, *, default: bool) -> bool:
     if normalized in {"0", "false", "no", "off"}:
         return False
     raise UpdatesError(
-        f"{label} must be one of 1, 0, true, false, yes, no, on, or off"
+        f"{label} must be one of true, false, 1, 0, yes, no, on, or off"
     )
 
 
@@ -1101,9 +1101,9 @@ def _run_truenas_status_helper(
         "--security-opt",
         "no-new-privileges",
         "-e",
-        "TRUENAS_STATUS_CHECK=0",
+        "TRUENAS_STATUS_CHECK=false",
         "-e",
-        "WUD_SYNC_SCRIPTS=0",
+        "WUD_SYNC_SCRIPTS=false",
         "-e",
         f"TRUENAS_STATUS_TIMEOUT={options.truenas_status_timeout}",
         "--mount",

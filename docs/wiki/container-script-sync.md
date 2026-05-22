@@ -6,7 +6,7 @@ sync with the image version.
 
 ## How It Works
 
-Set `WUD_SYNC_SCRIPTS=1` on the `wud-updater` service. Before running its normal
+Set `WUD_SYNC_SCRIPTS=true` on the `wud-updater` service. Before running its normal
 command, the entrypoint copies packaged scripts from `/app/wud` into
 `WUD_SCRIPTS_DIR`, which defaults to `/managed-wud`.
 
@@ -20,7 +20,7 @@ services:
 
   wud-updater:
     environment:
-      WUD_SYNC_SCRIPTS: "1"
+      WUD_SYNC_SCRIPTS: "true"
       WUD_SCRIPTS_DIR: /managed-wud
     volumes:
       - wud-scripts:/managed-wud
@@ -58,7 +58,7 @@ docker compose -f docs/examples/docker-compose.example.yml run --rm wud-updater 
 ```
 
 Run this once before relying on `/wud/on-update.sh` in a fresh empty script
-volume. During upgrades, recreating `wud-updater` with `WUD_SYNC_SCRIPTS=1`
+volume. During upgrades, recreating `wud-updater` with `WUD_SYNC_SCRIPTS=true`
 refreshes the scripts automatically.
 
 For local image development, use

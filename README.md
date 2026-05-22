@@ -50,7 +50,7 @@ For containerized TrueNAS status checks, start from
 TrueNAS client and uses an opt-in short-lived helper container for local status
 checks without storing a TrueNAS API key. That example enables the Python
 `updates` wrapper because the container helper is only used when
-`TRUENAS_STATUS_CHECK=1` is set there.
+`TRUENAS_STATUS_CHECK=true` is set there.
 
 ### Host Install
 
