@@ -83,10 +83,10 @@ services:
       DOCKER_BASE: ${HOST_DOCKER_BASE:-/srv/docker}
       WUD_OUT_FILE: /out/images.todo
       WUD_LOG_DIR: /logs
-      WUD_SYNC_SCRIPTS: "1"
+      WUD_SYNC_SCRIPTS: "true"
       WUD_SCRIPTS_DIR: /managed-wud
       # The Python wrapper avoids sudo inside the read-only helper container.
-      WUD_UPDATER_USE_SUDO: "0"
+      WUD_UPDATER_USE_SUDO: "false"
       HOME: /tmp
       OUT_UID: "1000"
       OUT_GID: "1000"

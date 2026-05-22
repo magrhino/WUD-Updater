@@ -148,8 +148,8 @@ class BannerTests(unittest.TestCase):
 
         printed = banner.print_startup_banner(
             environ={
-                "WUD_UPDATER_BANNER": "1",
-                "WUD_UPDATER_RELEASE_CHECK": "0",
+                "WUD_UPDATER_BANNER": "true",
+                "WUD_UPDATER_RELEASE_CHECK": "false",
             },
             stream=output,
         )

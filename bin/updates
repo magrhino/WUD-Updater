@@ -75,14 +75,14 @@ run_python_updates() {
   exec "$python_bin" -m wud_updater.cli updates "$@"
 }
 
-case "${WUD_UPDATER_PYTHON:-1}" in
+case "${WUD_UPDATER_PYTHON:-true}" in
   1|[Tt][Rr][Uu][Ee]|[Yy][Ee][Ss]|[Oo][Nn])
     run_python_updates "$@"
     ;;
   0|[Ff][Aa][Ll][Ss][Ee]|[Nn][Oo]|[Oo][Ff][Ff])
     ;;
   *)
-    echo "WUD_UPDATER_PYTHON must be one of 1, 0, true, false, yes, no, on, or off" >&2
+    echo "WUD_UPDATER_PYTHON must be one of true, false, 1, 0, yes, no, on, or off" >&2
     exit 2
     ;;
 esac

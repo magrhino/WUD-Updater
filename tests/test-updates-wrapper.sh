@@ -96,8 +96,8 @@ run_updates(){
       FAKE_SUDO_LOG="$TEST_TMP/sudo.log" \
       FAKE_UPDATER_LOG="$TEST_TMP/updater.log" \
       FAKE_WUD_FILE="$WUD_FILE" \
-      WUD_UPDATER_BANNER=0 \
-      WUD_UPDATER_PYTHON=0 \
+      WUD_UPDATER_BANNER=false \
+      WUD_UPDATER_PYTHON=false \
       env "${env_args[@]}" "$SCRIPT" --file "$WUD_FILE" "$@" > "$TEST_TMP/output.log" 2>&1 || LAST_STATUS=$?
   else
     PATH="$FAKE_BIN:$PATH" \
@@ -105,8 +105,8 @@ run_updates(){
       FAKE_SUDO_LOG="$TEST_TMP/sudo.log" \
       FAKE_UPDATER_LOG="$TEST_TMP/updater.log" \
       FAKE_WUD_FILE="$WUD_FILE" \
-      WUD_UPDATER_BANNER=0 \
-      WUD_UPDATER_PYTHON=0 \
+      WUD_UPDATER_BANNER=false \
+      WUD_UPDATER_PYTHON=false \
       "$SCRIPT" --file "$WUD_FILE" "$@" > "$TEST_TMP/output.log" 2>&1 || LAST_STATUS=$?
   fi
 }
@@ -127,8 +127,8 @@ run_updates_with_input(){
       FAKE_SUDO_LOG="$TEST_TMP/sudo.log" \
       FAKE_UPDATER_LOG="$TEST_TMP/updater.log" \
       FAKE_WUD_FILE="$WUD_FILE" \
-      WUD_UPDATER_BANNER=0 \
-      WUD_UPDATER_PYTHON=0 \
+      WUD_UPDATER_BANNER=false \
+      WUD_UPDATER_PYTHON=false \
       env "${env_args[@]}" "$SCRIPT" --file "$WUD_FILE" "$@" > "$TEST_TMP/output.log" 2>&1 || LAST_STATUS=$?
   else
     printf '%b' "$input" | PATH="$FAKE_BIN:$PATH" \
@@ -136,8 +136,8 @@ run_updates_with_input(){
       FAKE_SUDO_LOG="$TEST_TMP/sudo.log" \
       FAKE_UPDATER_LOG="$TEST_TMP/updater.log" \
       FAKE_WUD_FILE="$WUD_FILE" \
-      WUD_UPDATER_BANNER=0 \
-      WUD_UPDATER_PYTHON=0 \
+      WUD_UPDATER_BANNER=false \
+      WUD_UPDATER_PYTHON=false \
       "$SCRIPT" --file "$WUD_FILE" "$@" > "$TEST_TMP/output.log" 2>&1 || LAST_STATUS=$?
   fi
 }
@@ -163,7 +163,7 @@ test_dry_run_does_not_invoke_updater(){
 test_forced_banner_prints_before_legacy_updates_output(){
   setup_case
 
-  run_updates WUD_UPDATER_BANNER=1 WUD_UPDATER_RELEASE_CHECK=0 --dry-run
+  run_updates WUD_UPDATER_BANNER=true WUD_UPDATER_RELEASE_CHECK=false --dry-run
 
   assert_status 0
   grep -q 'WUD-Updater v' "$TEST_TMP/output.log" || fail "missing startup banner"

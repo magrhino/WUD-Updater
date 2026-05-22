@@ -154,9 +154,9 @@ For containerized TrueNAS status checks, use
 That variant builds the helper image with the official TrueNAS API client so a
 short-lived sibling container can run local `midclt` calls. Set
 `TRUENAS_API_CLIENT_REF` to an API client tag that is compatible with your
-TrueNAS release. The example sets `WUD_UPDATER_USE_SUDO=0` and
-`TRUENAS_STATUS_CHECK=1`; the TrueNAS helper is only wired into the Python
-`updates` wrapper.
+TrueNAS release. The example uses the Python/container `updates` wrapper by
+default and sets `WUD_UPDATER_USE_SUDO=false` and `TRUENAS_STATUS_CHECK=true`;
+the TrueNAS helper is only wired into that wrapper.
 
 When enabled, the Python `updates` wrapper uses Docker to inspect its own
 container, starts the same image with `--network none`, mounts only
@@ -190,7 +190,7 @@ services:
       DOCKER_BASE: ${HOST_DOCKER_BASE:-/srv/docker}
       WUD_OUT_FILE: /out/images.todo
       WUD_LOG_DIR: /logs
-      WUD_SYNC_SCRIPTS: "1"
+      WUD_SYNC_SCRIPTS: "true"
       WUD_SCRIPTS_DIR: /managed-wud
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
@@ -206,7 +206,7 @@ volumes:
 
 ## WUD Script Sync
 
-Set `WUD_SYNC_SCRIPTS=1` to copy packaged WUD scripts from `/app/wud` into a
+Set `WUD_SYNC_SCRIPTS=true` to copy packaged WUD scripts from `/app/wud` into a
 managed shared volume before normal command execution. The destination defaults
 to `/managed-wud`; set `WUD_SCRIPTS_DIR` to override it.
 
@@ -306,6 +306,9 @@ OUT_GID="1000"
 
 Core updater and wrapper values:
 
+Boolean examples use `true` and `false`; legacy aliases `1`, `0`, `yes`, `no`,
+`on`, and `off` are still accepted where boolean parsing is supported.
+
 | Variable | Default | Purpose |
 |---|---|---|
 | `DOCKER_BASE` | Host: `$HOME/docker`; container examples: `${HOST_DOCKER_BASE:-/srv/docker}` | Compose project search root. Containerized runs should mount this at the same absolute path the Docker daemon uses. |
@@ -319,10 +322,10 @@ Core updater and wrapper values:
 | `OUT_UID` / `OUT_GID` | unset | Optional owner for rewritten todo files and updater logs. `OUT_GUID` is accepted as an alias for `OUT_GID`. |
 | `WUD_UPDATER` | Host: repo-local `bin/docker-update-from-wud`; image: `/app/bin/docker-update-from-wud` | Updater command invoked by `updates`. |
 | `WUD_UPDATER_CONFIG` | `$HOME/.config/wud-updater/env` | Host config file read by `updates`. |
-| `WUD_UPDATER_PYTHON` | enabled | Set to `0` to use the temporary legacy Bash `updates` fallback. |
-| `WUD_UPDATER_USE_SUDO` | enabled | For the Python `updates` wrapper, set to `0` to disable sudo file fallbacks and run `WUD_UPDATER` directly. |
-| `WUD_UPDATER_BANNER` | `auto` | Startup banner mode: `auto` prints on TTY startup, `1` forces it, and `0` disables it. |
-| `WUD_UPDATER_RELEASE_CHECK` | `auto` | Latest-release check mode for the startup banner: `auto` or `1` tries GitHub briefly when the banner prints, and `0` disables the network check. |
+| `WUD_UPDATER_PYTHON` | `true` | Set to `false` to use the temporary legacy Bash `updates` fallback. |
+| `WUD_UPDATER_USE_SUDO` | `true` | For the Python `updates` wrapper, set to `false` to disable sudo file fallbacks and run `WUD_UPDATER` directly. |
+| `WUD_UPDATER_BANNER` | `auto` | Startup banner mode: `auto` prints on TTY startup, `true` forces it, and `false` disables it. |
+| `WUD_UPDATER_RELEASE_CHECK` | `auto` | Latest-release check mode for the startup banner: `auto` or `true` tries GitHub briefly when the banner prints, and `false` disables the network check. |
 | `PYTHON_BIN` | `python3`, with repo `.venv` fallback when unset | Python interpreter used by Python entrypoint wrappers. Set this to bypass automatic `.venv` fallback. |
 | `WUD_UPDATER_VENV` | Repo-local `.venv` | Optional installer and wrapper venv path for host runtime dependencies. |
 
@@ -330,7 +333,7 @@ Container and installer values:
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `WUD_SYNC_SCRIPTS` | unset | Set to `1` in the helper container to sync packaged WUD scripts before normal commands. |
+| `WUD_SYNC_SCRIPTS` | unset | Set to `true` in the helper container to sync packaged WUD scripts before normal commands. |
 | `WUD_SCRIPTS_DIR` | `/managed-wud` | Managed script sync destination. |
 | `WUD_APP_DIR` | `/app` | Application root inside the helper container. |
 | `BIN_DIR` | `$HOME/bin` | Host installer destination for the `updates` and `docker-update-from-wud` symlinks. |
@@ -342,7 +345,7 @@ TrueNAS status helper values for the Python `updates` wrapper:
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `TRUENAS_STATUS_CHECK` | unset | For the Python `updates` wrapper, set to `1` to run the short-lived local `midclt` status helper. |
+| `TRUENAS_STATUS_CHECK` | unset | For the Python/container `updates` wrapper, set to `true` to run the short-lived local `midclt` status helper. |
 | `TRUENAS_STATUS_TIMEOUT` | `5` | Seconds to wait for each helper `midclt` call before skipping it. The parent wrapper derives a longer Docker helper timeout from this value. |
 
 Release-note notification values for the WUD container:
@@ -381,7 +384,7 @@ logs where they print helper commands.
 
 The TrueNAS status helper does not use a TrueNAS API key. It relies on Docker
 access to start a short-lived container with the local middleware socket
-mounted, so treat `TRUENAS_STATUS_CHECK=1` as broad trusted-host TrueNAS
+mounted, so treat `TRUENAS_STATUS_CHECK=true` as broad trusted-host TrueNAS
 middleware access similar to other Docker socket workflows. The helper uses a
 read-only bind mount and only calls read status methods, but Unix socket method
 authorization is still controlled by TrueNAS middleware, not by the mount flag.

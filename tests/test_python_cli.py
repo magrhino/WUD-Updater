@@ -105,8 +105,8 @@ class CliTests(unittest.TestCase):
             wud_file.write_text("", encoding="utf-8")
 
             env = {
-                "WUD_UPDATER_BANNER": "1",
-                "WUD_UPDATER_RELEASE_CHECK": "0",
+                "WUD_UPDATER_BANNER": "true",
+                "WUD_UPDATER_RELEASE_CHECK": "false",
                 "PATH": os.environ.get("PATH", ""),
             }
             with mock.patch.dict(os.environ, env, clear=True):
@@ -182,8 +182,8 @@ class CliTests(unittest.TestCase):
             env = {
                 "HOME": tmpdir,
                 "WUD_UPDATER_CONFIG": str(Path(tmpdir) / "missing-env"),
-                "WUD_UPDATER_BANNER": "1",
-                "WUD_UPDATER_RELEASE_CHECK": "0",
+                "WUD_UPDATER_BANNER": "true",
+                "WUD_UPDATER_RELEASE_CHECK": "false",
                 "PATH": os.environ.get("PATH", ""),
             }
             with mock.patch.dict(os.environ, env, clear=True):
@@ -203,8 +203,8 @@ class CliTests(unittest.TestCase):
 
     def test_truenas_status_export_skips_forced_startup_banner(self) -> None:
         env = {
-            "WUD_UPDATER_BANNER": "1",
-            "WUD_UPDATER_RELEASE_CHECK": "0",
+            "WUD_UPDATER_BANNER": "true",
+            "WUD_UPDATER_RELEASE_CHECK": "false",
             "PATH": os.environ.get("PATH", ""),
         }
         with mock.patch.dict(os.environ, env, clear=True):

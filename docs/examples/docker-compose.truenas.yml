@@ -20,15 +20,15 @@ services:
       DOCKER_BASE: ${HOST_DOCKER_BASE:-/srv/docker}
       WUD_OUT_FILE: /out/images.todo
       WUD_LOG_DIR: /logs
-      WUD_SYNC_SCRIPTS: "1"
+      WUD_SYNC_SCRIPTS: "true"
       WUD_SCRIPTS_DIR: /managed-wud
-      # TrueNAS helper support is implemented in the Python wrapper.
-      WUD_UPDATER_USE_SUDO: "0"
+      # TrueNAS helper support is implemented in the Python/container wrapper.
+      WUD_UPDATER_USE_SUDO: "false"
       OUT_UID: "1000"
       OUT_GID: "1000"
       # Uses Docker to start a short-lived helper container that mounts the
       # local TrueNAS middleware socket and returns minimized status JSON.
-      TRUENAS_STATUS_CHECK: "1"
+      TRUENAS_STATUS_CHECK: "true"
       TRUENAS_STATUS_TIMEOUT: "5"
     volumes:
       # WARNING: the Docker socket gives root-equivalent control over the host.

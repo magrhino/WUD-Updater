@@ -4,6 +4,14 @@ All notable changes to WUD-Updater are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com) and versions follow
 [Semantic Versioning](https://semver.org).
 
+## [0.12.3](https://github.com/magrhino/WUD-Updater/compare/v0.12.2...v0.12.3) (2026-05-21)
+
+
+### Bug Fixes
+
+* **updater:** record preflight-skipped audit rows ([ba9026f](https://github.com/magrhino/WUD-Updater/commit/ba9026f718cb2948ae31c720156b9b26cb8eec97))
+* **updater:** report bind-mount preflight failures ([a23635e](https://github.com/magrhino/WUD-Updater/commit/a23635e76f09d47ca613f383d6c96d04160ca92c))
+
 ## [0.12.2](https://github.com/magrhino/WUD-Updater/compare/v0.12.1...v0.12.2) (2026-05-21)
 
 
