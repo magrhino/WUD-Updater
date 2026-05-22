@@ -195,6 +195,18 @@ test_self_update_yes_runs_wud_entry_first(){
   teardown_case
 }
 
+test_self_update_tag_entry_enables_tag_updates(){
+  setup_case
+  printf 'ghcr.io/magrhino/wud-updater:1.0 tag=2.0\nrepo/app:latest\n' > "$WUD_FILE"
+
+  run_updates FAKE_UPDATER_REMOVE_ONLY_LINES=1 --yes --base "$TEST_TMP/docker"
+
+  assert_status 0
+  grep -q -- "--only-lines 1 --allow-tag-updates --yes" "$TEST_TMP/updater.log" || fail "self-update tag entry did not enable tag updates"
+  grep -q -- "--base $TEST_TMP/docker --file $WUD_FILE --log-dir ./logs --mode stop --max-wait 180 --yes" "$TEST_TMP/updater.log" || fail "allow-tag-updates leaked into remaining updates"
+  teardown_case
+}
+
 test_self_update_dry_run_does_not_invoke_updater(){
   setup_case
   printf 'wud-updater\n' > "$WUD_FILE"
@@ -544,6 +556,7 @@ run_test(){
 main(){
   run_test test_dry_run_does_not_invoke_updater
   run_test test_self_update_yes_runs_wud_entry_first
+  run_test test_self_update_tag_entry_enables_tag_updates
   run_test test_self_update_dry_run_does_not_invoke_updater
   run_test test_self_update_eof_does_not_invoke_updater
   run_test test_no_self_update_flag_disables_preflight

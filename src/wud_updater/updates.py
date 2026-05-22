@@ -304,6 +304,7 @@ class UpdatesRunner:
 
     def _run_wud_file_self_update(self, display_numbers: Sequence[int]) -> int | None:
         lines = self._display_numbers_to_file_line_spec(display_numbers)
+        allow_tag_updates = self.allow_tag_updates
         count = len(display_numbers)
         entry_label = "entry" if count == 1 else "entries"
         if not self._confirm_self_update(
@@ -315,6 +316,8 @@ class UpdatesRunner:
         self.selected_line_spec = lines
         self.remove_line_spec = ""
         self.tag_override_specs = []
+        if any(self.todo_entries[display - 1].desired_tag for display in display_numbers):
+            self.allow_tag_updates = True
         try:
             self._lock_updater_handoff()
             return self._run_updater()
@@ -323,6 +326,7 @@ class UpdatesRunner:
             self.selected_line_spec = ""
             self.remove_line_spec = ""
             self.tag_override_specs = []
+            self.allow_tag_updates = allow_tag_updates
 
     def _run_github_release_self_update(
         self,

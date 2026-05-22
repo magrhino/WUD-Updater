@@ -826,8 +826,19 @@ self_update_display_csv() {
   printf '%s' "$result"
 }
 
+display_csv_has_desired_tag() {
+  local display_csv="$1" display_no=0 line_no line
+  while IFS=$'\t' read -r line_no line; do
+    [ -n "$line_no" ] || continue
+    display_no=$((display_no + 1))
+    csv_contains "$display_csv" "$display_no" || continue
+    line_desired_tag "$line" >/dev/null 2>&1 && return 0
+  done <<< "$todo_entries"
+  return 1
+}
+
 run_wud_file_self_update() {
-  local display_csv="$1" count rc entry_label
+  local display_csv="$1" count rc entry_label old_allow_tag_updates
   count="$(csv_count "$display_csv")"
   if [ "$count" = "1" ]; then
     entry_label="entry"
@@ -841,13 +852,21 @@ run_wud_file_self_update() {
   selected_line_spec="$(display_csv_to_file_line_csv "$display_csv")"
   remove_line_spec=""
   tag_override_specs=()
-  lock_updater_handoff || return $?
-  run_updater
-  rc=$?
+  old_allow_tag_updates="$allow_tag_updates"
+  if display_csv_has_desired_tag "$display_csv"; then
+    allow_tag_updates=1
+  fi
+  if lock_updater_handoff; then
+    run_updater
+    rc=$?
+  else
+    rc=$?
+  fi
   release_wud_lock
   selected_line_spec=""
   remove_line_spec=""
   tag_override_specs=()
+  allow_tag_updates="$old_allow_tag_updates"
   return "$rc"
 }
 

@@ -107,6 +107,23 @@ class PythonUpdatesWrapperTests(unittest.TestCase):
             "repo/app:latest\n",
         )
 
+    def test_self_update_tag_entry_enables_tag_updates(self) -> None:
+        self.wud_file.write_text(
+            "ghcr.io/magrhino/wud-updater:1.0 tag=2.0\nrepo/app:latest\n",
+            encoding="utf-8",
+        )
+
+        result = self.run_updates(
+            "--yes",
+            env_overrides={"FAKE_UPDATER_REMOVE_ONLY_LINES": "1"},
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+        arg_lines = _updater_arg_lines(self.updater_log.read_text(encoding="utf-8"))
+        self.assertGreaterEqual(len(arg_lines), 2)
+        self.assertIn("--only-lines 1 --allow-tag-updates --yes", arg_lines[0])
+        self.assertNotIn("--allow-tag-updates", arg_lines[1])
+
     def test_self_update_prompt_decline_continues_to_normal_selection(self) -> None:
         self.wud_file.write_text(
             "ghcr.io/magrhino/wud-updater:latest\nrepo/app:latest\n",
