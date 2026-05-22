@@ -787,11 +787,21 @@ prompt_self_update() {
   [ "$auto_run" -eq 1 ] && return 0
 
   while true; do
-    read -r -p "Update WUD-Updater before other Docker updates? (Y/n) " reply || reply=""
+    if ! read -r -p "Update WUD-Updater before other Docker updates? (Y/n) " reply; then
+      echo "⏸️  Skipped WUD-Updater self-update."
+      return 1
+    fi
     choice="$(printf '%s' "$reply" | tr '[:upper:]' '[:lower:]')"
     case "$choice" in
-      ""|y|yes)
+      y|yes)
         return 0
+        ;;
+      "")
+        if [ -t 0 ]; then
+          return 0
+        fi
+        echo "⏸️  Skipped WUD-Updater self-update."
+        return 1
         ;;
       n|no)
         echo "⏸️  Skipped WUD-Updater self-update."

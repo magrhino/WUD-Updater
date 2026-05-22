@@ -366,10 +366,20 @@ class UpdatesRunner:
                     "[Y] yes   [n] no",
                 )
             else:
-                reply = _prompt("Update WUD-Updater before other Docker updates? (Y/n) ")
+                reply = _prompt_or_none(
+                    "Update WUD-Updater before other Docker updates? (Y/n) "
+                )
+            if reply is None:
+                print("⏸️  Skipped WUD-Updater self-update.")
+                return False
             choice = reply.strip().casefold()
-            if choice in {"", "y", "yes"}:
+            if choice in {"y", "yes"}:
                 return True
+            if choice == "":
+                if sys.stdin.isatty():
+                    return True
+                print("⏸️  Skipped WUD-Updater self-update.")
+                return False
             if choice in {"n", "no"}:
                 print("⏸️  Skipped WUD-Updater self-update.")
                 return False
@@ -1064,6 +1074,13 @@ def _prompt(prompt: str) -> str:
         return input(prompt)
     except EOFError:
         return ""
+
+
+def _prompt_or_none(prompt: str) -> str | None:
+    try:
+        return input(prompt)
+    except EOFError:
+        return None
 
 
 def _parse_lock_timeout(value: str) -> int:

@@ -209,6 +209,19 @@ test_self_update_dry_run_does_not_invoke_updater(){
   teardown_case
 }
 
+test_self_update_eof_does_not_invoke_updater(){
+  setup_case
+  printf 'wud-updater\nrepo/app:latest\n' > "$WUD_FILE"
+
+  run_updates_with_input ''
+
+  assert_status 0
+  grep -q 'Skipped WUD-Updater self-update' "$TEST_TMP/output.log" || fail "missing self-update EOF skip message"
+  [[ ! -e "$TEST_TMP/sudo.log" ]] || fail "sudo was invoked after self-update EOF"
+  [[ ! -e "$TEST_TMP/updater.log" ]] || fail "updater was invoked after self-update EOF"
+  teardown_case
+}
+
 test_no_self_update_flag_disables_preflight(){
   setup_case
   printf 'ghcr.io/magrhino/wud-updater:latest\n' > "$WUD_FILE"
@@ -532,6 +545,7 @@ main(){
   run_test test_dry_run_does_not_invoke_updater
   run_test test_self_update_yes_runs_wud_entry_first
   run_test test_self_update_dry_run_does_not_invoke_updater
+  run_test test_self_update_eof_does_not_invoke_updater
   run_test test_no_self_update_flag_disables_preflight
   run_test test_self_update_env_disables_preflight
   run_test test_forced_banner_prints_before_legacy_updates_output

@@ -125,6 +125,19 @@ class PythonUpdatesWrapperTests(unittest.TestCase):
         self.assertIn("--only-lines 2 --yes", sudo_log)
         self.assertNotIn("--only-lines 1", sudo_log)
 
+    def test_self_update_eof_declines_without_invoking_updater(self) -> None:
+        self.wud_file.write_text(
+            "ghcr.io/magrhino/wud-updater:latest\nrepo/app:latest\n",
+            encoding="utf-8",
+        )
+
+        result = self.run_updates(input_text="")
+
+        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+        self.assertIn("Skipped WUD-Updater self-update", result.stdout)
+        self.assertFalse(self.sudo_log.exists())
+        self.assertFalse(self.updater_log.exists())
+
     def test_self_update_dry_run_reports_without_invoking_updater(self) -> None:
         self.wud_file.write_text(
             "ghcr.io/magrhino/wud-updater:latest\n",

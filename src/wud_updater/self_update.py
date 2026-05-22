@@ -126,14 +126,14 @@ def main(argv: Sequence[str] | None = None) -> int:
 
 
 def _inspected_container_image(container: Mapping[str, object]) -> str:
-    image = container.get("Image")
-    if isinstance(image, str) and image:
-        return image
     config = container.get("Config")
     if isinstance(config, dict):
         image = config.get("Image")
         if isinstance(image, str) and image:
             return image
+    image = container.get("Image")
+    if isinstance(image, str) and image:
+        return image
     return ""
 
 
