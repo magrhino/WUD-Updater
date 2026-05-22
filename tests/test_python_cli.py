@@ -136,6 +136,7 @@ class CliTests(unittest.TestCase):
             env = {
                 "HOME": tmpdir,
                 "WUD_UPDATER_CONFIG": str(Path(tmpdir) / "missing-env"),
+                "WUD_UPDATER_RELEASE_CHECK": "0",
                 "PATH": os.environ.get("PATH", ""),
             }
             with mock.patch.dict(os.environ, env, clear=True):
@@ -160,6 +161,7 @@ class CliTests(unittest.TestCase):
             env = {
                 "HOME": tmpdir,
                 "WUD_UPDATER_CONFIG": str(Path(tmpdir) / "missing-env"),
+                "WUD_UPDATER_RELEASE_CHECK": "0",
                 "PATH": os.environ.get("PATH", ""),
             }
             with mock.patch.dict(os.environ, env, clear=True):
@@ -220,6 +222,7 @@ class CliTests(unittest.TestCase):
             env = {
                 "HOME": tmpdir,
                 "WUD_UPDATER_CONFIG": str(Path(tmpdir) / "missing-env"),
+                "WUD_UPDATER_RELEASE_CHECK": "0",
                 "PATH": os.environ.get("PATH", ""),
             }
             with mock.patch.dict(os.environ, env, clear=True):

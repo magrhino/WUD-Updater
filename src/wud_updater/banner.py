@@ -111,6 +111,20 @@ def release_status(
     return (f"Up to date: {local_tag}", "success")
 
 
+def release_update_available(local_tag: str, latest_tag: str | None) -> bool:
+    if latest_tag is None:
+        return False
+    comparison = _compare_semver_tags(latest_tag, local_tag)
+    if comparison is None:
+        return False
+    return comparison > 0
+
+
+def release_check_enabled(environ: Mapping[str, str] | None = None) -> bool:
+    env = dict(os.environ if environ is None else environ)
+    return _release_check_enabled(env)
+
+
 def main() -> int:
     print_startup_banner()
     return 0

@@ -121,6 +121,7 @@ run "$python_bin" -m py_compile \
   src/wud_updater/images.py \
   src/wud_updater/line_specs.py \
   src/wud_updater/locks.py \
+  src/wud_updater/self_update.py \
   src/wud_updater/terminal.py \
   src/wud_updater/updates.py \
   src/wud_updater/updater.py \

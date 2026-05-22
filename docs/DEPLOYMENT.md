@@ -325,7 +325,8 @@ Boolean examples use `true` and `false`; legacy aliases `1`, `0`, `yes`, `no`,
 | `WUD_UPDATER_PYTHON` | `true` | Set to `false` to use the temporary legacy Bash `updates` fallback. |
 | `WUD_UPDATER_USE_SUDO` | `true` | For the Python `updates` wrapper, set to `false` to disable sudo file fallbacks and run `WUD_UPDATER` directly. |
 | `WUD_UPDATER_BANNER` | `auto` | Startup banner mode: `auto` prints on TTY startup, `true` forces it, and `false` disables it. |
-| `WUD_UPDATER_RELEASE_CHECK` | `auto` | Latest-release check mode for the startup banner: `auto` or `true` tries GitHub briefly when the banner prints, and `false` disables the network check. |
+| `WUD_UPDATER_RELEASE_CHECK` | `auto` | Latest-release check mode: `auto` or `true` lets startup banner and self-update release checks try GitHub briefly, and `false` disables the network check. |
+| `WUD_UPDATER_SELF_UPDATE` | enabled | Set to `false`, `0`, `no`, or `off` to disable the default `updates` self-update preflight. |
 | `PYTHON_BIN` | `python3`, with repo `.venv` fallback when unset | Python interpreter used by Python entrypoint wrappers. Set this to bypass automatic `.venv` fallback. |
 | `WUD_UPDATER_VENV` | Repo-local `.venv` | Optional installer and wrapper venv path for host runtime dependencies. |
 
@@ -392,6 +393,14 @@ authorization is still controlled by TrueNAS middleware, not by the mount flag.
 `--dry-run` does not pull images, recreate containers, remove WUD lines, or
 otherwise mutate host state. Mutating Docker operations require interactive
 confirmation or `--yes`.
+
+By default, `updates` checks for a WUD-Updater update before applying other
+pending Docker updates. It first honors a matching WUD todo entry, and if none
+exists it can use the GitHub latest-release check to try a temporary
+WUD-Updater image target. Use `updates --no-self-update` or
+`WUD_UPDATER_SELF_UPDATE=0` to skip this preflight. `WUD_UPDATER_RELEASE_CHECK=0`
+disables only the GitHub release-check source; WUD todo-file detection still
+runs unless self-update is disabled.
 
 ## Maintenance And Upgrades
 
