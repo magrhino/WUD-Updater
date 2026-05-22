@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import subprocess
 import sys
 from collections.abc import Mapping, Sequence
@@ -21,6 +22,7 @@ from .images import repo_key
 DEFAULT_SELF_UPDATE_IMAGE = "ghcr.io/magrhino/wud-updater:latest"
 SELF_UPDATE_REPOS = frozenset({"magrhino/wud-updater", "wud-updater"})
 FALSE_VALUES = frozenset({"0", "false", "no", "off"})
+_SEMVER_IMAGE_TAG_RE = re.compile(r"^v?[0-9]+\.[0-9]+\.[0-9]+(?:[-+].*)?$")
 
 
 @dataclass(frozen=True)
@@ -71,8 +73,18 @@ def github_release_self_update(
     return ReleaseSelfUpdate(
         local_tag=local_tag,
         latest_tag=latest_tag or "",
-        target=current_container_image(env) or DEFAULT_SELF_UPDATE_IMAGE,
+        target=release_self_update_target(current_container_image(env), latest_tag),
     )
+
+
+def release_self_update_target(current_image: str, latest_tag: str) -> str:
+    if current_image == "":
+        return DEFAULT_SELF_UPDATE_IMAGE
+
+    current_tag = _image_reference_tag(current_image)
+    if _is_release_image_tag(current_tag) and _normalize_tag(current_tag) != latest_tag:
+        return f"{current_image} tag={latest_tag}"
+    return current_image
 
 
 def current_container_image(
@@ -141,6 +153,22 @@ def _normalized_env_value(value: str | None) -> str:
     if value is None or value.strip() == "":
         return "auto"
     return value.strip().lower()
+
+
+def _image_reference_tag(image: str) -> str:
+    without_digest = image.split("@sha256:", 1)[0]
+    last = without_digest.rsplit("/", 1)[-1]
+    if ":" not in last:
+        return ""
+    return last.rsplit(":", 1)[1]
+
+
+def _is_release_image_tag(tag: str) -> bool:
+    return bool(_SEMVER_IMAGE_TAG_RE.fullmatch(tag))
+
+
+def _normalize_tag(tag: str) -> str:
+    return tag if tag.startswith("v") else f"v{tag}"
 
 
 if __name__ == "__main__":

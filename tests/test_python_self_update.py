@@ -4,7 +4,7 @@ import subprocess
 import unittest
 from unittest import mock
 
-from wud_updater.self_update import current_container_image
+from wud_updater.self_update import current_container_image, release_self_update_target
 
 
 class SelfUpdateTests(unittest.TestCase):
@@ -24,6 +24,25 @@ class SelfUpdateTests(unittest.TestCase):
             image = current_container_image({"HOSTNAME": "wud-updater-1"})
 
         self.assertEqual(image, "ghcr.io/magrhino/wud-updater:latest")
+
+    def test_release_self_update_target_rewrites_pinned_release_tag(self) -> None:
+        target = release_self_update_target(
+            "ghcr.io/magrhino/wud-updater:v0.12.2",
+            "v0.12.3",
+        )
+
+        self.assertEqual(
+            target,
+            "ghcr.io/magrhino/wud-updater:v0.12.2 tag=v0.12.3",
+        )
+
+    def test_release_self_update_target_keeps_floating_tag(self) -> None:
+        target = release_self_update_target(
+            "ghcr.io/magrhino/wud-updater:latest",
+            "v0.12.3",
+        )
+
+        self.assertEqual(target, "ghcr.io/magrhino/wud-updater:latest")
 
 
 if __name__ == "__main__":

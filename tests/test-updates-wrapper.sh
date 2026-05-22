@@ -76,6 +76,9 @@ if [[ "${FAKE_UPDATER_ASSERT_LOCK:-}" = "1" ]]; then
     exit 22
   fi
 fi
+if [[ -n "$wud_file" && "${FAKE_UPDATER_LOG_WUD_CONTENT:-}" = "1" ]]; then
+  printf 'WUD_CONTENT=%s\n' "$(tr '\n' '|' < "$wud_file")" >> "${FAKE_UPDATER_LOG:?FAKE_UPDATER_LOG is required}"
+fi
 if [[ -n "$wud_file" && -n "$only_lines" && "${FAKE_UPDATER_REMOVE_ONLY_LINES:-}" = "1" ]]; then
   tmp="${wud_file}.fake-update.$$"
   awk -v spec="$only_lines" 'BEGIN {
@@ -255,6 +258,31 @@ test_self_update_env_disables_preflight(){
   assert_status 0
   ! grep -q 'WUD-Updater self-update detected' "$TEST_TMP/output.log" || fail "self-update env did not disable preflight"
   ! grep -q -- "--only-lines" "$TEST_TMP/updater.log" || fail "self-update line selection was passed when disabled"
+  teardown_case
+}
+
+test_github_release_self_update_rewrites_pinned_release_tag(){
+  setup_case
+  : > "$WUD_FILE"
+  cat > "$FAKE_BIN/python3" <<'FAKE_PYTHON'
+#!/usr/bin/env bash
+if [[ "${1:-}" == "-" ]]; then
+  exit 0
+fi
+if [[ "${1:-} ${2:-} ${3:-}" == "-m wud_updater.self_update github-target" ]]; then
+  printf 'ghcr.io/magrhino/wud-updater:v0.12.2 tag=v999.0.0\n'
+  exit 0
+fi
+exit 1
+FAKE_PYTHON
+  chmod +x "$FAKE_BIN/python3"
+
+  run_updates FAKE_UPDATER_LOG_WUD_CONTENT=1 WUD_UPDATER_RELEASE_CHECK=1 --yes
+
+  assert_status 0
+  grep -q 'WUD-Updater release update available' "$TEST_TMP/output.log" || fail "missing GitHub self-update notice"
+  grep -q 'WUD_CONTENT=ghcr.io/magrhino/wud-updater:v0.12.2 tag=v999.0.0|' "$TEST_TMP/updater.log" || fail "temporary self-update target did not include desired release tag"
+  grep -q -- "--allow-tag-updates --yes" "$TEST_TMP/updater.log" || fail "GitHub self-update did not allow tag rewrite"
   teardown_case
 }
 
@@ -561,6 +589,7 @@ main(){
   run_test test_self_update_eof_does_not_invoke_updater
   run_test test_no_self_update_flag_disables_preflight
   run_test test_self_update_env_disables_preflight
+  run_test test_github_release_self_update_rewrites_pinned_release_tag
   run_test test_forced_banner_prints_before_legacy_updates_output
   run_test test_yes_invokes_configured_updater_through_sudo
   run_test test_log_dir_cli_overrides_environment

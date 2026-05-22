@@ -871,7 +871,7 @@ run_wud_file_self_update() {
 }
 
 run_github_release_self_update() {
-  local target="$1" tmp_dir tmp_file rc
+  local target="$1" tmp_dir tmp_file rc old_allow_tag_updates
   local old_wud_file old_selected_line_spec old_remove_line_spec
   local -a old_tag_override_specs=()
 
@@ -886,11 +886,17 @@ run_github_release_self_update() {
   old_wud_file="$wud_file"
   old_selected_line_spec="$selected_line_spec"
   old_remove_line_spec="$remove_line_spec"
-  old_tag_override_specs=("${tag_override_specs[@]}")
+  if ((${#tag_override_specs[@]})); then
+    old_tag_override_specs=("${tag_override_specs[@]}")
+  fi
+  old_allow_tag_updates="$allow_tag_updates"
   wud_file="$tmp_file"
   selected_line_spec=""
   remove_line_spec=""
   tag_override_specs=()
+  if [[ "$target" == *" tag="* ]]; then
+    allow_tag_updates=1
+  fi
 
   run_updater
   rc=$?
@@ -898,7 +904,11 @@ run_github_release_self_update() {
   wud_file="$old_wud_file"
   selected_line_spec="$old_selected_line_spec"
   remove_line_spec="$old_remove_line_spec"
-  tag_override_specs=("${old_tag_override_specs[@]}")
+  tag_override_specs=()
+  if ((${#old_tag_override_specs[@]})); then
+    tag_override_specs=("${old_tag_override_specs[@]}")
+  fi
+  allow_tag_updates="$old_allow_tag_updates"
   rm -rf "$tmp_dir"
   return "$rc"
 }

@@ -344,15 +344,19 @@ class UpdatesRunner:
             selected = self.selected_line_spec
             removed = self.remove_line_spec
             overrides = list(self.tag_override_specs)
+            allow_tag_updates = self.allow_tag_updates
             self.selected_line_spec = ""
             self.remove_line_spec = ""
             self.tag_override_specs = []
+            if " tag=" in release_update.target:
+                self.allow_tag_updates = True
             try:
                 return self._run_updater(wud_file=str(todo_file))
             finally:
                 self.selected_line_spec = selected
                 self.remove_line_spec = removed
                 self.tag_override_specs = overrides
+                self.allow_tag_updates = allow_tag_updates
 
     def _confirm_self_update(self, message: str) -> bool:
         print()
