@@ -1428,6 +1428,48 @@ class PythonUpdateFromWudTests(unittest.TestCase):
 
         self.assertEqual(compose_file.read_text(encoding="utf-8"), original)
 
+    def test_compose_tag_exclusion_rejects_service_anchor(self) -> None:
+        compose_file = self.root / "compose.yml"
+        original = "\n".join(
+            [
+                "x-base: &base",
+                "  image: repo/app:1.0",
+                "services:",
+                "  app: *base",
+                "",
+            ]
+        )
+        compose_file.write_text(original, encoding="utf-8")
+        stack = ComposeStack(
+            index=1,
+            directory=self.root,
+            file="compose.yml",
+            name="app",
+            images=("repo/app:1.0",),
+            service_images=(ServiceImage("app", "repo/app:1.0"),),
+        )
+
+        with self.assertRaisesRegex(ComposeTagRewriteError, "YAML anchors or aliases"):
+            apply_compose_tag_exclusions(
+                compose_file,
+                (
+                    TagExclusionUpdate(
+                        stack=stack,
+                        service="app",
+                        image="repo/app:1.0",
+                        image_repo="repo/app",
+                        tag="2.0",
+                        source_line=1,
+                        scope="service",
+                    ),
+                ),
+                existing_exact_tags={},
+            )
+
+        content = compose_file.read_text(encoding="utf-8")
+        self.assertEqual(content, original)
+        self.assertNotIn("wud.tag.exclude", content)
+
     def test_compose_tag_exclusion_rejects_shared_label_anchor(self) -> None:
         compose_file = self.root / "compose.yml"
         original = "\n".join(

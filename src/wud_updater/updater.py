@@ -2728,6 +2728,7 @@ def render_compose_tag_exclusions(
             raise ComposeTagRewriteError(
                 f"Service {service} is not a mapping with direct labels."
             )
+        _reject_yaml_anchor_or_alias_service_config(services, service, service_config)
         labels = service_config.get("labels")
         if labels is not None:
             _reject_yaml_anchor_or_alias_labels(services, service, labels)
@@ -2852,6 +2853,25 @@ def _get_service_label_value(service_config: CommentedMap, key: str) -> str:
                 return label_value
         return ""
     raise ComposeTagRewriteError("Service labels use unsupported YAML syntax.")
+
+
+def _reject_yaml_anchor_or_alias_service_config(
+    services: CommentedMap,
+    service: str,
+    service_config: CommentedMap,
+) -> None:
+    anchor = getattr(service_config, "anchor", None)
+    if getattr(anchor, "value", None):
+        raise ComposeTagRewriteError(
+            f"Service {service} uses YAML anchors or aliases and needs manual review."
+        )
+    for other_service, other_config in services.items():
+        if other_service == service or not isinstance(other_config, CommentedMap):
+            continue
+        if other_config is service_config:
+            raise ComposeTagRewriteError(
+                f"Service {service} uses YAML anchors or aliases and needs manual review."
+            )
 
 
 def _reject_yaml_anchor_or_alias_labels(
