@@ -12,6 +12,7 @@ from io import StringIO
 from pathlib import Path
 from unittest import mock
 
+from wud_updater.banner import current_tag
 from wud_updater.updates import run_updates_from_namespace
 
 
@@ -235,6 +236,10 @@ class PythonUpdatesWrapperTests(unittest.TestCase):
                 "wud_updater.self_update.fetch_latest_release_tag",
                 return_value="v999.0.0",
             ),
+            mock.patch(
+                "wud_updater.self_update.current_container_image",
+                return_value="",
+            ),
             redirect_stdout(stdout),
             redirect_stderr(stderr),
         ):
@@ -246,7 +251,11 @@ class PythonUpdatesWrapperTests(unittest.TestCase):
 
         self.assertEqual(status, 0, stderr.getvalue() + stdout.getvalue())
         log = self.updater_log.read_text(encoding="utf-8")
-        self.assertIn("WUD_CONTENT=wud-updater:test|", log)
+        self.assertIn(
+            "WUD_CONTENT="
+            f"ghcr.io/magrhino/wud-updater:{current_tag()} tag=v999.0.0|",
+            log,
+        )
         arg_lines = _updater_arg_lines(log)
         self.assertGreaterEqual(len(arg_lines), 2)
         self.assertNotIn(str(self.wud_file), arg_lines[0])

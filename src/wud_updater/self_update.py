@@ -16,10 +16,11 @@ from .banner import (
     release_check_enabled,
     release_update_available,
 )
-from .images import repo_key
+from .images import repo_key, tag_value_valid
 
 
 DEFAULT_SELF_UPDATE_IMAGE = "ghcr.io/magrhino/wud-updater:latest"
+DEFAULT_SELF_UPDATE_REPOSITORY = "ghcr.io/magrhino/wud-updater"
 SELF_UPDATE_REPOS = frozenset({"magrhino/wud-updater", "wud-updater"})
 FALSE_VALUES = frozenset({"0", "false", "no", "off"})
 _SEMVER_IMAGE_TAG_RE = re.compile(r"^v?[0-9]+\.[0-9]+\.[0-9]+(?:[-+].*)?$")
@@ -69,16 +70,27 @@ def github_release_self_update(
     latest_tag = fetch_latest_release_tag(timeout=timeout)
     if not release_update_available(local_tag, latest_tag):
         return None
+    latest_tag = latest_tag or ""
 
     return ReleaseSelfUpdate(
         local_tag=local_tag,
-        latest_tag=latest_tag or "",
-        target=release_self_update_target(current_container_image(env), latest_tag),
+        latest_tag=latest_tag,
+        target=release_self_update_target(
+            current_container_image(env),
+            local_tag,
+            latest_tag,
+        ),
     )
 
 
-def release_self_update_target(current_image: str, latest_tag: str) -> str:
+def release_self_update_target(
+    current_image: str,
+    local_tag: str,
+    latest_tag: str,
+) -> str:
     if current_image == "":
+        if _is_release_image_tag(local_tag) and tag_value_valid(local_tag):
+            return f"{DEFAULT_SELF_UPDATE_REPOSITORY}:{local_tag} tag={latest_tag}"
         return DEFAULT_SELF_UPDATE_IMAGE
 
     current_tag = _image_reference_tag(current_image)
