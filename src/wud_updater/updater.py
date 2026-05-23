@@ -2729,6 +2729,7 @@ def render_compose_tag_exclusions(
                 f"Service {service} is not a mapping with direct labels."
             )
         _reject_yaml_anchor_or_alias_service_config(services, service, service_config)
+        _materialize_inherited_service_labels(service_config, service)
         labels = service_config.get("labels")
         if labels is not None:
             _reject_yaml_anchor_or_alias_labels(services, service, labels)
@@ -2759,6 +2760,49 @@ def render_compose_tag_exclusions(
     output = StringIO()
     yaml.dump(parsed, output)
     return output.getvalue(), tuple(applied)
+
+
+def _materialize_inherited_service_labels(
+    service_config: CommentedMap,
+    service: str,
+) -> None:
+    if _commented_map_has_direct_key(service_config, "labels"):
+        return
+
+    labels = service_config.get("labels")
+    if labels is None:
+        return
+    if isinstance(labels, CommentedMap):
+        service_config["labels"] = _copy_label_map(labels)
+        return
+    if isinstance(labels, CommentedSeq):
+        service_config["labels"] = _copy_label_sequence(labels)
+        return
+    raise ComposeTagRewriteError(
+        f"Service {service} labels use unsupported YAML syntax."
+    )
+
+
+def _commented_map_has_direct_key(mapping: CommentedMap, key: str) -> bool:
+    try:
+        direct_items = mapping.non_merged_items()
+    except AttributeError:
+        return key in mapping
+    return any(item_key == key for item_key, _item_value in direct_items)
+
+
+def _copy_label_map(labels: CommentedMap) -> CommentedMap:
+    copied = CommentedMap()
+    for key, value in labels.items():
+        copied[key] = value
+    return copied
+
+
+def _copy_label_sequence(labels: CommentedSeq) -> CommentedSeq:
+    copied = CommentedSeq()
+    for item in labels:
+        copied.append(item)
+    return copied
 
 
 def _line_start_offsets(source: str) -> list[int]:
