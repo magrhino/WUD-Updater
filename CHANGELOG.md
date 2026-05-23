@@ -4,6 +4,18 @@ All notable changes to WUD-Updater are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com) and versions follow
 [Semantic Versioning](https://semver.org).
 
+## [0.13.0](https://github.com/magrhino/WUD-Updater/compare/v0.12.3...v0.13.0) (2026-05-23)
+
+
+### Features
+
+* **updates:** default host wrapper to python ([#45](https://github.com/magrhino/WUD-Updater/issues/45)) ([04ab55d](https://github.com/magrhino/WUD-Updater/commit/04ab55dcb673051326e51d5a70e86261a576f9f0))
+
+
+### Bug Fixes
+
+* **updates:** Fix WUD-Updater self-update fallback target ([#47](https://github.com/magrhino/WUD-Updater/issues/47)) ([3e2d268](https://github.com/magrhino/WUD-Updater/commit/3e2d26865304ef7dea97b463f29eac94c663db21))
+
 ## [0.12.3](https://github.com/magrhino/WUD-Updater/compare/v0.12.2...v0.12.3) (2026-05-21)
 
 
