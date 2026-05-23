@@ -745,6 +745,7 @@ class UpdateFromWudRunner:
         if not updates:
             return statuses
 
+        successful_updates: list[TagExclusionUpdate] = []
         for stack, stack_updates in _tag_exclusion_updates_by_stack(updates).items():
             existing_exact_tags = self._existing_exact_tag_exclusions(stack_updates)
             try:
@@ -778,9 +779,10 @@ class UpdateFromWudRunner:
                     f"{item.service}: {', '.join(item.tags)}"
                 )
             self._record_tag_exclusion_rules(stack_updates)
+            successful_updates.extend(stack_updates)
 
         if self.options.recreate_excluded_services:
-            self._recreate_tag_exclusion_services(updates, statuses)
+            self._recreate_tag_exclusion_services(successful_updates, statuses)
         return statuses
 
     def _existing_exact_tag_exclusions(
@@ -2726,6 +2728,9 @@ def render_compose_tag_exclusions(
             raise ComposeTagRewriteError(
                 f"Service {service} is not a mapping with direct labels."
             )
+        labels = service_config.get("labels")
+        if labels is not None:
+            _reject_yaml_anchor_or_alias_labels(services, service, labels)
         existing_tags = set(existing_exact_tags.get(service, set()))
         new_tags = existing_tags | service_tags[service]
         current_value = _get_service_label_value(service_config, "wud.tag.exclude")
@@ -2847,6 +2852,25 @@ def _get_service_label_value(service_config: CommentedMap, key: str) -> str:
                 return label_value
         return ""
     raise ComposeTagRewriteError("Service labels use unsupported YAML syntax.")
+
+
+def _reject_yaml_anchor_or_alias_labels(
+    services: CommentedMap,
+    service: str,
+    labels: object,
+) -> None:
+    anchor = getattr(labels, "anchor", None)
+    if getattr(anchor, "value", None):
+        raise ComposeTagRewriteError(
+            f"Service {service} labels use YAML anchors or aliases and need manual review."
+        )
+    for other_service, other_config in services.items():
+        if other_service == service or not isinstance(other_config, CommentedMap):
+            continue
+        if other_config.get("labels") is labels:
+            raise ComposeTagRewriteError(
+                f"Service {service} labels use YAML anchors or aliases and need manual review."
+            )
 
 
 def _set_service_label_value(
