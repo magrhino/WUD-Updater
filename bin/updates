@@ -132,6 +132,8 @@ allow_tag_updates=0
 self_update=1
 selected_line_spec=""
 remove_line_spec=""
+exclude_tag_line_spec=""
+recreate_excluded_services=0
 tag_override_specs=()
 todo_entries=""
 todo_file_lines=()
@@ -546,6 +548,7 @@ selected_lines_match_snapshot() {
 
   write_line_spec_numbers "$selected_line_spec" "$wanted"
   write_line_spec_numbers "$remove_line_spec" "$wanted"
+  write_line_spec_numbers "$exclude_tag_line_spec" "$wanted"
   write_tag_override_line_numbers "$wanted"
   sort -n -u "$wanted" -o "$wanted"
 
@@ -573,7 +576,7 @@ selected_lines_match_snapshot() {
 }
 
 lock_updater_handoff() {
-  [ -n "$selected_line_spec$remove_line_spec" ] || [ "${#tag_override_specs[@]}" -gt 0 ] || return 0
+  [ -n "$selected_line_spec$remove_line_spec$exclude_tag_line_spec" ] || [ "${#tag_override_specs[@]}" -gt 0 ] || return 0
   acquire_wud_lock
   if ! selected_lines_match_snapshot; then
     release_wud_lock
@@ -586,6 +589,8 @@ choose_update_lines() {
   todo_count="${#todo_file_lines[@]}"
   selected_line_spec=""
   remove_line_spec=""
+  exclude_tag_line_spec=""
+  recreate_excluded_services=0
   tag_override_specs=()
 
   while true; do
@@ -659,6 +664,7 @@ choose_update_lines() {
 prompt_tag_updates() {
   local display_csv="$1" display_no=0 line_no line first tag reply
   local change_tags=0 override idx
+  local exclude_lines=""
   local tag_displays=()
   local tag_lines=()
   local tag_firsts=()
@@ -690,7 +696,7 @@ prompt_tag_updates() {
 
   if [ "$allow_tag_updates" -eq 0 ]; then
     while true; do
-      printf '%s' "Apply selected tag update entries? [y]es/[n]o/[c]hange (default n): "
+      printf '%s' "Apply selected tag update entries? [y]es/[n]o/[c]hange/[e]xclude (default n): "
       read -r reply || reply=""
       case "$reply" in
         [yY]|[yY][eE][sS])
@@ -705,8 +711,31 @@ prompt_tag_updates() {
           change_tags=1
           break
           ;;
+        [eE]|[eE][xX][cC][lL][uU][dD][eE])
+          for ((idx=0; idx<${#tag_lines[@]}; idx++)); do
+            exclude_lines="$(csv_append_unique "$exclude_lines" "${tag_lines[$idx]}")"
+          done
+          exclude_tag_line_spec="$exclude_lines"
+          while true; do
+            read -r -p "Recreate affected services so WUD sees exclusions now? (Y/n) " reply || reply=""
+            case "$reply" in
+              ""|[yY]|[yY][eE][sS])
+                recreate_excluded_services=1
+                break
+                ;;
+              [nN]|[nN][oO])
+                recreate_excluded_services=0
+                break
+                ;;
+              *)
+                echo "Invalid choice. Enter y or n."
+                ;;
+            esac
+          done
+          return 0
+          ;;
         *)
-          echo "Invalid choice. Enter y, n, or c."
+          echo "Invalid choice. Enter y, n, c, or e."
           ;;
       esac
     done
@@ -746,6 +775,8 @@ run_updater() {
       updater_args+=(--tag-override "$override")
     done
   fi
+  [ -n "$exclude_tag_line_spec" ] && updater_args+=(--exclude-tag-lines "$exclude_tag_line_spec")
+  [ "$recreate_excluded_services" -eq 1 ] && updater_args+=(--recreate-excluded-services)
   updater_args+=(--yes)
 
   if [ -n "$out_uid" ] || [ -n "$out_gid" ]; then
@@ -851,6 +882,8 @@ run_wud_file_self_update() {
 
   selected_line_spec="$(display_csv_to_file_line_csv "$display_csv")"
   remove_line_spec=""
+  exclude_tag_line_spec=""
+  recreate_excluded_services=0
   tag_override_specs=()
   old_allow_tag_updates="$allow_tag_updates"
   if display_csv_has_desired_tag "$display_csv"; then
@@ -865,6 +898,8 @@ run_wud_file_self_update() {
   release_wud_lock
   selected_line_spec=""
   remove_line_spec=""
+  exclude_tag_line_spec=""
+  recreate_excluded_services=0
   tag_override_specs=()
   allow_tag_updates="$old_allow_tag_updates"
   return "$rc"
@@ -872,7 +907,8 @@ run_wud_file_self_update() {
 
 run_github_release_self_update() {
   local target="$1" tmp_dir tmp_file rc old_allow_tag_updates
-  local old_wud_file old_selected_line_spec old_remove_line_spec
+  local old_wud_file old_selected_line_spec old_remove_line_spec old_exclude_tag_line_spec
+  local old_recreate_excluded_services
   local -a old_tag_override_specs=()
 
   if ! prompt_self_update "🔁 WUD-Updater release update available."; then
@@ -886,6 +922,8 @@ run_github_release_self_update() {
   old_wud_file="$wud_file"
   old_selected_line_spec="$selected_line_spec"
   old_remove_line_spec="$remove_line_spec"
+  old_exclude_tag_line_spec="$exclude_tag_line_spec"
+  old_recreate_excluded_services="$recreate_excluded_services"
   if ((${#tag_override_specs[@]})); then
     old_tag_override_specs=("${tag_override_specs[@]}")
   fi
@@ -893,6 +931,8 @@ run_github_release_self_update() {
   wud_file="$tmp_file"
   selected_line_spec=""
   remove_line_spec=""
+  exclude_tag_line_spec=""
+  recreate_excluded_services=0
   tag_override_specs=()
   if [[ "$target" == *" tag="* ]]; then
     allow_tag_updates=1
@@ -904,6 +944,8 @@ run_github_release_self_update() {
   wud_file="$old_wud_file"
   selected_line_spec="$old_selected_line_spec"
   remove_line_spec="$old_remove_line_spec"
+  exclude_tag_line_spec="$old_exclude_tag_line_spec"
+  recreate_excluded_services="$old_recreate_excluded_services"
   tag_override_specs=()
   if ((${#old_tag_override_specs[@]})); then
     tag_override_specs=("${old_tag_override_specs[@]}")

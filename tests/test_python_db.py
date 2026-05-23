@@ -9,12 +9,14 @@ from wud_updater.db import (
     DatabaseError,
     SCHEMA_VERSION,
     active_snooze,
+    active_tag_exclusion_rules,
     connect_db,
     init_db,
     insert_pending_update,
     insert_snooze,
     insert_update_event,
     insert_update_run,
+    upsert_tag_exclusion_rule,
     update_pending_update,
     upsert_known_image,
 )
@@ -48,6 +50,7 @@ class DatabaseTests(unittest.TestCase):
                     "service_policy",
                     "known_images",
                     "pending_updates",
+                    "tag_exclusion_rules",
                 },
             )
 
@@ -101,24 +104,45 @@ class DatabaseTests(unittest.TestCase):
 
         self.assertEqual(version, SCHEMA_VERSION)
 
-    def test_init_db_migrates_v1_schema_to_v2(self) -> None:
+    def test_init_db_migrates_v1_schema_to_current(self) -> None:
         with sqlite3.connect(":memory:") as conn:
             conn.executescript(V1_SCHEMA_SQL)
             conn.execute("PRAGMA user_version = 1")
 
             init_db(conn)
             version = conn.execute("PRAGMA user_version").fetchone()[0]
-            pending_table = conn.execute(
+            tables = {
+                row[0]
+                for row in conn.execute(
+                    """
+                    SELECT name
+                    FROM sqlite_master
+                    WHERE type = 'table'
+                    """
+                )
+            }
+
+        self.assertEqual(version, SCHEMA_VERSION)
+        self.assertGreaterEqual(tables, {"pending_updates", "tag_exclusion_rules"})
+
+    def test_init_db_migrates_v2_schema_to_current(self) -> None:
+        with sqlite3.connect(":memory:") as conn:
+            conn.executescript(V2_SCHEMA_SQL)
+            conn.execute("PRAGMA user_version = 2")
+
+            init_db(conn)
+            version = conn.execute("PRAGMA user_version").fetchone()[0]
+            exclusion_table = conn.execute(
                 """
                 SELECT name
                 FROM sqlite_master
                 WHERE type = 'table'
-                  AND name = 'pending_updates'
+                  AND name = 'tag_exclusion_rules'
                 """
             ).fetchone()
 
         self.assertEqual(version, SCHEMA_VERSION)
-        self.assertIsNotNone(pending_table)
+        self.assertIsNotNone(exclusion_table)
 
     def test_init_db_rejects_malformed_existing_pending_updates(self) -> None:
         with sqlite3.connect(":memory:") as conn:
@@ -363,6 +387,56 @@ class DatabaseTests(unittest.TestCase):
         self.assertEqual(rows[0]["image_id"], "new")
         self.assertEqual(rows[0]["digest"], "sha256:new")
 
+    def test_tag_exclusion_upsert_is_idempotent_and_active_lookup_merges_scopes(
+        self,
+    ) -> None:
+        with sqlite3.connect(":memory:") as conn:
+            conn.row_factory = sqlite3.Row
+            init_db(conn)
+
+            first_id = upsert_tag_exclusion_rule(
+                conn,
+                scope="image_repo",
+                image_repo="repo/app",
+                tag="2.0",
+                regex_fragment="2\\.0",
+                created_at="2026-05-18T12:00:00+00:00",
+                updated_at="2026-05-18T12:00:00+00:00",
+            )
+            second_id = upsert_tag_exclusion_rule(
+                conn,
+                scope="image_repo",
+                image_repo="repo/app",
+                tag="2.0",
+                regex_fragment="2\\.0",
+                updated_at="2026-05-18T12:01:00+00:00",
+            )
+            upsert_tag_exclusion_rule(
+                conn,
+                scope="service",
+                image_repo="repo/app",
+                service_key="app/api",
+                tag="3.0",
+                regex_fragment="3\\.0",
+            )
+            upsert_tag_exclusion_rule(
+                conn,
+                scope="service",
+                image_repo="repo/app",
+                service_key="app/other",
+                tag="4.0",
+                regex_fragment="4\\.0",
+            )
+
+            rows = active_tag_exclusion_rules(
+                conn,
+                image_repo="repo/app",
+                service_key="app/api",
+            )
+
+        self.assertEqual(first_id, second_id)
+        self.assertEqual([row["tag"] for row in rows], ["2.0", "3.0"])
+
 
 V1_SCHEMA_SQL = """
 CREATE TABLE update_runs (
@@ -422,6 +496,31 @@ CREATE TABLE known_images (
     metadata_json TEXT NOT NULL DEFAULT '{}'
 );
 """
+
+V2_SCHEMA_SQL = (
+    V1_SCHEMA_SQL
+    + """
+CREATE TABLE pending_updates (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    run_id INTEGER NOT NULL,
+    line_no INTEGER NOT NULL,
+    raw TEXT NOT NULL,
+    image TEXT NOT NULL,
+    target_digest TEXT NOT NULL DEFAULT '',
+    desired_tag TEXT NOT NULL DEFAULT '',
+    service_key TEXT NOT NULL DEFAULT '',
+    stack_name TEXT NOT NULL DEFAULT '',
+    service_name TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL,
+    status_reason TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    metadata_json TEXT NOT NULL DEFAULT '{}',
+    UNIQUE (run_id, line_no),
+    FOREIGN KEY (run_id) REFERENCES update_runs(id) ON DELETE CASCADE
+);
+"""
+)
 
 
 if __name__ == "__main__":

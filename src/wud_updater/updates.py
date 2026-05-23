@@ -203,6 +203,8 @@ class UpdatesRunner:
         self.remove_line_spec = ""
         self.allow_tag_updates = options.allow_tag_updates
         self.tag_override_specs: list[str] = []
+        self.exclude_tag_line_spec = ""
+        self.recreate_excluded_services = False
         self.renderer = TerminalRenderer(
             no_color=options.no_color,
             environ=self.environ,
@@ -316,6 +318,8 @@ class UpdatesRunner:
         self.selected_line_spec = lines
         self.remove_line_spec = ""
         self.tag_override_specs = []
+        self.exclude_tag_line_spec = ""
+        self.recreate_excluded_services = False
         if any(self.todo_entries[display - 1].desired_tag for display in display_numbers):
             self.allow_tag_updates = True
         try:
@@ -326,6 +330,8 @@ class UpdatesRunner:
             self.selected_line_spec = ""
             self.remove_line_spec = ""
             self.tag_override_specs = []
+            self.exclude_tag_line_spec = ""
+            self.recreate_excluded_services = False
             self.allow_tag_updates = allow_tag_updates
 
     def _run_github_release_self_update(
@@ -344,10 +350,14 @@ class UpdatesRunner:
             selected = self.selected_line_spec
             removed = self.remove_line_spec
             overrides = list(self.tag_override_specs)
+            excluded = self.exclude_tag_line_spec
+            recreate_excluded = self.recreate_excluded_services
             allow_tag_updates = self.allow_tag_updates
             self.selected_line_spec = ""
             self.remove_line_spec = ""
             self.tag_override_specs = []
+            self.exclude_tag_line_spec = ""
+            self.recreate_excluded_services = False
             if " tag=" in release_update.target:
                 self.allow_tag_updates = True
             try:
@@ -356,6 +366,8 @@ class UpdatesRunner:
                 self.selected_line_spec = selected
                 self.remove_line_spec = removed
                 self.tag_override_specs = overrides
+                self.exclude_tag_line_spec = excluded
+                self.recreate_excluded_services = recreate_excluded
                 self.allow_tag_updates = allow_tag_updates
 
     def _confirm_self_update(self, message: str) -> bool:
@@ -519,6 +531,8 @@ class UpdatesRunner:
         todo_count = len(self.todo_entries)
         self.selected_line_spec = ""
         self.remove_line_spec = ""
+        self.exclude_tag_line_spec = ""
+        self.recreate_excluded_services = False
 
         while True:
             choice = self.renderer.prompt_choice(
@@ -604,12 +618,12 @@ class UpdatesRunner:
                 if self.renderer.rich_enabled():
                     reply = self.renderer.prompt_choice(
                         "Apply selected tag update entries?",
-                        "[y] yes   [n] no   [c] change",
+                        "[y] yes   [n] no   [c] change   [e] exclude",
                     )
                 else:
                     reply = _prompt(
                         "Apply selected tag update entries? "
-                        "[y]es/[n]o/[c]hange (default n): "
+                        "[y]es/[n]o/[c]hange/[e]xclude (default n): "
                     )
                 choice = reply.strip().casefold()
                 if choice in {"y", "yes"}:
@@ -621,7 +635,13 @@ class UpdatesRunner:
                     self.allow_tag_updates = True
                     change_tags = True
                     break
-                print("Invalid choice. Enter y, n, or c.")
+                if choice in {"e", "exclude"}:
+                    self.exclude_tag_line_spec = ",".join(
+                        _unique_in_order(str(entry.line_no) for _display, entry in tag_entries)
+                    )
+                    self.recreate_excluded_services = self._confirm_recreate_exclusions()
+                    return
+                print("Invalid choice. Enter y, n, c, or e.")
 
         if not change_tags:
             return
@@ -639,6 +659,24 @@ class UpdatesRunner:
                         self.tag_override_specs.append(f"{entry.line_no}={reply}")
                     break
                 print("Invalid tag. Use a Docker tag value like 5.2.0.")
+
+    def _confirm_recreate_exclusions(self) -> bool:
+        while True:
+            if self.renderer.rich_enabled():
+                reply = self.renderer.prompt_choice(
+                    "Recreate affected services so WUD sees exclusions now?",
+                    "[Y] yes   [n] no",
+                )
+            else:
+                reply = _prompt(
+                    "Recreate affected services so WUD sees exclusions now? (Y/n) "
+                )
+            choice = reply.strip().casefold()
+            if choice in {"", "y", "yes"}:
+                return True
+            if choice in {"n", "no"}:
+                return False
+            print("Invalid choice. Enter y or n.")
 
     def _read_display_selection(self, prompt: str, todo_count: int) -> list[int]:
         while True:
@@ -661,6 +699,7 @@ class UpdatesRunner:
         if (
             self.selected_line_spec == ""
             and self.remove_line_spec == ""
+            and self.exclude_tag_line_spec == ""
             and not self.tag_override_specs
         ):
             return
@@ -675,6 +714,7 @@ class UpdatesRunner:
         selected_items = [
             *self.selected_line_spec.split(","),
             *self.remove_line_spec.split(","),
+            *self.exclude_tag_line_spec.split(","),
             *(
                 override.partition("=")[0]
                 for override in self.tag_override_specs
@@ -720,6 +760,10 @@ class UpdatesRunner:
             updater_args.append("--allow-tag-updates")
         for override in self.tag_override_specs:
             updater_args.extend(["--tag-override", override])
+        if self.exclude_tag_line_spec:
+            updater_args.extend(["--exclude-tag-lines", self.exclude_tag_line_spec])
+        if self.recreate_excluded_services:
+            updater_args.append("--recreate-excluded-services")
         if self.options.no_color:
             updater_args.append("--no-color")
         updater_args.append("--yes")

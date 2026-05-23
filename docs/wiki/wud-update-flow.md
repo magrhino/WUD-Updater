@@ -93,13 +93,27 @@ instead of service-scoped stop/up: it stops the project services and runs
 `docker compose up -d --remove-orphans` without tearing down Compose networks.
 
 Interactive `updates` runs show selected tag update entries and ask whether to
-apply them as shown, skip them, or change the tag before handing off to
-`docker-update-from-wud`.
+apply them as shown, skip them, change the tag, or exclude the proposed exact
+tag before handing off to `docker-update-from-wud`.
+
+When you choose to exclude a tag, the updater writes WUD's native
+`wud.tag.exclude` label into the matched Compose service definition. If every
+service using the same image repository can be updated cleanly, the exclusion is
+applied repo-wide; otherwise it falls back to the selected service. Existing
+user-authored exclude regexes are preserved and the updater stores managed exact
+tag exclusions in SQLite. You can also let the wrapper recreate affected
+services immediately so WUD sees the new container labels before its next scan.
 
 Override a WUD-proposed tag directly:
 
 ```bash
 docker-update-from-wud --yes --allow-tag-updates --tag-override 1=5.2.0
+```
+
+Exclude a WUD-proposed tag directly:
+
+```bash
+docker-update-from-wud --yes --exclude-tag-lines 1 --recreate-excluded-services
 ```
 
 Interactive `updates` runs can apply all entries, select numbered entries,

@@ -95,6 +95,18 @@ number:
 docker compose -f docs/examples/docker-compose.example.yml run --rm wud-updater docker-update-from-wud --yes --allow-tag-updates --tag-override 1=5.2.0
 ```
 
+To reject a WUD-proposed tag durably, exclude the original WUD file line. The
+updater writes WUD's native `wud.tag.exclude` label to the matching Compose
+service, stores the managed exact-tag rule in SQLite, and removes the WUD line
+after the label is written:
+
+```bash
+docker compose -f docs/examples/docker-compose.example.yml run --rm wud-updater docker-update-from-wud --yes --exclude-tag-lines 1
+```
+
+Add `--recreate-excluded-services` when you want Compose to recreate affected
+services immediately so WUD sees the new container labels before its next scan.
+
 By default, the updater recreates only the Compose service that owns the matched
 image. For services whose update should restart the whole Compose project, add a
 label to that service:
@@ -276,10 +288,12 @@ updates --yes --allow-tag-updates
 ```
 
 During interactive runs, `updates` prompts for selected tag updates and lets you
-apply them as shown, skip them, or change the tag before calling the updater.
-Automatic Compose tag rewrites only support direct service `image:` values; image
-values provided through interpolation or inherited YAML snippets are left pending
-for manual review.
+apply them as shown, skip them, change the tag, or exclude the exact proposed
+tag before calling the updater. Tag exclusions update `wud.tag.exclude` in
+Compose and can optionally recreate affected services immediately. Automatic
+Compose tag rewrites and exclusion labels only support direct service `image:`
+values; image values provided through interpolation or inherited YAML snippets
+are left pending for manual review.
 
 ## Environment Variables
 

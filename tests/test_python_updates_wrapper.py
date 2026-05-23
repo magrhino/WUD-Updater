@@ -504,6 +504,38 @@ class PythonUpdatesWrapperTests(unittest.TestCase):
         self.assertIn("[y]es/[n]o/[c]hange", result.stdout)
         self.assertNotIn("Override tag for update", result.stdout)
 
+    def test_interactive_tag_exclude_passes_line_and_recreate_flag(self) -> None:
+        self.wud_file.write_text("repo/app:1.0 tag=2.0\n", encoding="utf-8")
+
+        result = self.run_updates(
+            "--base",
+            str(self.root / "docker"),
+            input_text="s\n1\ne\ny\n",
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+        sudo_log = self.sudo_log.read_text(encoding="utf-8")
+        self.assertIn(
+            "--only-lines 1 --exclude-tag-lines 1 --recreate-excluded-services --yes",
+            sudo_log,
+        )
+        self.assertNotIn("--allow-tag-updates", sudo_log)
+        self.assertNotIn("--tag-override", sudo_log)
+
+    def test_interactive_tag_exclude_can_skip_recreate(self) -> None:
+        self.wud_file.write_text("repo/app:1.0 tag=2.0\n", encoding="utf-8")
+
+        result = self.run_updates(
+            "--base",
+            str(self.root / "docker"),
+            input_text="s\n1\ne\nn\n",
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+        sudo_log = self.sudo_log.read_text(encoding="utf-8")
+        self.assertIn("--only-lines 1 --exclude-tag-lines 1 --yes", sudo_log)
+        self.assertNotIn("--recreate-excluded-services", sudo_log)
+
     def test_interactive_declined_tag_updates_do_not_enable_allow_flag(self) -> None:
         self.wud_file.write_text("repo/app:1.0 tag=2.0\n", encoding="utf-8")
 

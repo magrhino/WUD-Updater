@@ -509,6 +509,31 @@ test_interactive_tag_yes_keeps_wud_tag_without_override_prompt(){
   teardown_case
 }
 
+test_interactive_tag_exclude_passes_line_and_recreate_flag(){
+  setup_case
+  printf 'repo/app:1.0 tag=2.0\n' > "$WUD_FILE"
+
+  run_updates_with_input 's\n1\ne\ny\n' --base "$TEST_TMP/docker"
+
+  assert_status 0
+  grep -q -- "--only-lines 1 --exclude-tag-lines 1 --recreate-excluded-services --yes" "$TEST_TMP/sudo.log" || fail "sudo did not receive tag exclusion arguments"
+  ! grep -q -- "--allow-tag-updates" "$TEST_TMP/sudo.log" || fail "exclude choice should not allow tag updates"
+  ! grep -q -- "--tag-override" "$TEST_TMP/sudo.log" || fail "exclude choice should not pass tag override"
+  teardown_case
+}
+
+test_interactive_tag_exclude_can_skip_recreate(){
+  setup_case
+  printf 'repo/app:1.0 tag=2.0\n' > "$WUD_FILE"
+
+  run_updates_with_input 's\n1\ne\nn\n' --base "$TEST_TMP/docker"
+
+  assert_status 0
+  grep -q -- "--only-lines 1 --exclude-tag-lines 1 --yes" "$TEST_TMP/sudo.log" || fail "sudo did not receive tag exclusion"
+  ! grep -q -- "--recreate-excluded-services" "$TEST_TMP/sudo.log" || fail "skip recreate should not pass recreate flag"
+  teardown_case
+}
+
 test_interactive_declined_tag_updates_do_not_enable_allow_flag(){
   setup_case
   printf 'repo/app:1.0 tag=2.0\n' > "$WUD_FILE"
@@ -607,6 +632,8 @@ main(){
   run_test test_interactive_remove_unselected_passes_remove_lines
   run_test test_interactive_tag_change_passes_original_line_number
   run_test test_interactive_tag_yes_keeps_wud_tag_without_override_prompt
+  run_test test_interactive_tag_exclude_passes_line_and_recreate_flag
+  run_test test_interactive_tag_exclude_can_skip_recreate
   run_test test_interactive_declined_tag_updates_do_not_enable_allow_flag
   run_test test_interactive_untagged_tag_token_does_not_prompt
   run_test test_interactive_all_tag_override_aborts_when_snapshot_lines_change
