@@ -9,6 +9,7 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 import time
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
@@ -16,6 +17,12 @@ from pathlib import Path
 
 from .banner import print_startup_banner
 from .images import image_has_tag, image_with_tag, tag_value_valid
+from .self_update import (
+    ReleaseSelfUpdate,
+    github_release_self_update,
+    self_update_display_numbers,
+    self_update_enabled,
+)
 from .terminal import TerminalRenderer
 
 
@@ -80,6 +87,7 @@ class UpdatesOptions:
     lock_timeout: str = ""
     use_sudo: bool = True
     no_color: bool = False
+    self_update: bool = True
     truenas_status_check: bool = False
     truenas_status_timeout: str = DEFAULT_TRUENAS_STATUS_TIMEOUT
 
@@ -217,6 +225,11 @@ class UpdatesRunner:
 
     def _run(self) -> int:
         self.todo_entries = self._snapshot_todo_entries()
+        self_update_status = self._run_self_update_preflight()
+        if self_update_status is not None:
+            if self_update_status != 0:
+                return self_update_status
+            self.todo_entries = self._snapshot_todo_entries()
 
         if self.renderer.rich_enabled():
             self.renderer.docker_updates(
@@ -273,6 +286,112 @@ class UpdatesRunner:
         status = self._run_updater()
         self.lock.release()
         return status
+
+    def _run_self_update_preflight(self) -> int | None:
+        if not self.options.self_update:
+            return None
+        if not os.access(self.options.updater, os.X_OK):
+            return None
+
+        display_numbers = self_update_display_numbers(self.todo_entries)
+        if display_numbers:
+            return self._run_wud_file_self_update(display_numbers)
+
+        release_update = github_release_self_update(self.environ)
+        if release_update is None:
+            return None
+        return self._run_github_release_self_update(release_update)
+
+    def _run_wud_file_self_update(self, display_numbers: Sequence[int]) -> int | None:
+        lines = self._display_numbers_to_file_line_spec(display_numbers)
+        allow_tag_updates = self.allow_tag_updates
+        count = len(display_numbers)
+        entry_label = "entry" if count == 1 else "entries"
+        if not self._confirm_self_update(
+            f"🔁 WUD-Updater self-update detected in the WUD file "
+            f"({count} {entry_label}).",
+        ):
+            return None
+
+        self.selected_line_spec = lines
+        self.remove_line_spec = ""
+        self.tag_override_specs = []
+        if any(self.todo_entries[display - 1].desired_tag for display in display_numbers):
+            self.allow_tag_updates = True
+        try:
+            self._lock_updater_handoff()
+            return self._run_updater()
+        finally:
+            self.lock.release()
+            self.selected_line_spec = ""
+            self.remove_line_spec = ""
+            self.tag_override_specs = []
+            self.allow_tag_updates = allow_tag_updates
+
+    def _run_github_release_self_update(
+        self,
+        release_update: ReleaseSelfUpdate,
+    ) -> int | None:
+        if not self._confirm_self_update(
+            "🔁 WUD-Updater release update available: "
+            f"{release_update.local_tag} -> {release_update.latest_tag}."
+        ):
+            return None
+
+        with tempfile.TemporaryDirectory(prefix="wud-self-update.") as tmpdir:
+            todo_file = Path(tmpdir) / "images.todo"
+            todo_file.write_text(f"{release_update.target}\n", encoding="utf-8")
+            selected = self.selected_line_spec
+            removed = self.remove_line_spec
+            overrides = list(self.tag_override_specs)
+            allow_tag_updates = self.allow_tag_updates
+            self.selected_line_spec = ""
+            self.remove_line_spec = ""
+            self.tag_override_specs = []
+            if " tag=" in release_update.target:
+                self.allow_tag_updates = True
+            try:
+                return self._run_updater(wud_file=str(todo_file))
+            finally:
+                self.selected_line_spec = selected
+                self.remove_line_spec = removed
+                self.tag_override_specs = overrides
+                self.allow_tag_updates = allow_tag_updates
+
+    def _confirm_self_update(self, message: str) -> bool:
+        print()
+        print(message)
+        if self.options.dry_run:
+            print("👀 Dry-run mode: not running WUD-Updater self-update.")
+            return False
+        if self.options.auto_run:
+            return True
+
+        while True:
+            if self.renderer.rich_enabled():
+                reply = self.renderer.prompt_choice(
+                    "Update WUD-Updater before other Docker updates?",
+                    "[Y] yes   [n] no",
+                )
+            else:
+                reply = _prompt_or_none(
+                    "Update WUD-Updater before other Docker updates? (Y/n) "
+                )
+            if reply is None:
+                print("⏸️  Skipped WUD-Updater self-update.")
+                return False
+            choice = reply.strip().casefold()
+            if choice in {"y", "yes"}:
+                return True
+            if choice == "":
+                if sys.stdin.isatty():
+                    return True
+                print("⏸️  Skipped WUD-Updater self-update.")
+                return False
+            if choice in {"n", "no"}:
+                print("⏸️  Skipped WUD-Updater self-update.")
+                return False
+            print("Invalid choice. Enter y or n.")
 
     def _snapshot_todo_entries(self) -> list[TodoEntry]:
         wud_file = Path(self.options.wud_file)
@@ -579,12 +698,13 @@ class UpdatesRunner:
         ]
         return expected == current
 
-    def _run_updater(self) -> int:
+    def _run_updater(self, *, wud_file: str | None = None) -> int:
+        target_wud_file = wud_file or self.options.wud_file
         updater_args = [
             "--base",
             self.options.docker_base,
             "--file",
-            self.options.wud_file,
+            target_wud_file,
             "--log-dir",
             self.options.log_dir,
             "--mode",
@@ -760,6 +880,10 @@ def options_from_namespace(
             no_updater_sudo=bool(getattr(args, "no_updater_sudo", False)),
         ),
         no_color=bool(getattr(args, "no_color", False)),
+        self_update=self_update_enabled(
+            environ,
+            cli_value=getattr(args, "self_update", None),
+        ),
         truenas_status_check=_resolve_bool_env(
             environ.get("TRUENAS_STATUS_CHECK"),
             "TRUENAS_STATUS_CHECK",
@@ -958,6 +1082,13 @@ def _prompt(prompt: str) -> str:
         return input(prompt)
     except EOFError:
         return ""
+
+
+def _prompt_or_none(prompt: str) -> str | None:
+    try:
+        return input(prompt)
+    except EOFError:
+        return None
 
 
 def _parse_lock_timeout(value: str) -> int:

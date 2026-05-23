@@ -49,10 +49,15 @@ FAKE_SUDO
 #!/usr/bin/env bash
 args=("$@")
 wud_file=""
+only_lines=""
 while (($#)); do
   case "$1" in
     --file)
       wud_file="${2:-}"
+      shift 2
+      ;;
+    --only-lines)
+      only_lines="${2:-}"
       shift 2
       ;;
     *)
@@ -70,6 +75,22 @@ if [[ "${FAKE_UPDATER_ASSERT_LOCK:-}" = "1" ]]; then
     printf 'missing WUD file lock\n' >> "$FAKE_UPDATER_LOG"
     exit 22
   fi
+fi
+if [[ -n "$wud_file" && "${FAKE_UPDATER_LOG_WUD_CONTENT:-}" = "1" ]]; then
+  printf 'WUD_CONTENT=%s\n' "$(tr '\n' '|' < "$wud_file")" >> "${FAKE_UPDATER_LOG:?FAKE_UPDATER_LOG is required}"
+fi
+if [[ -n "$wud_file" && -n "$only_lines" && "${FAKE_UPDATER_REMOVE_ONLY_LINES:-}" = "1" ]]; then
+  tmp="${wud_file}.fake-update.$$"
+  awk -v spec="$only_lines" 'BEGIN {
+    split(spec, items, ",")
+    for (idx in items) {
+      if (items[idx] != "") {
+        remove[items[idx]] = 1
+      }
+    }
+  }
+  !(FNR in remove)' "$wud_file" > "$tmp"
+  mv "$tmp" "$wud_file"
 fi
 printf '%s\n' "${args[*]}" >> "${FAKE_UPDATER_LOG:?FAKE_UPDATER_LOG is required}"
 exit 0
@@ -97,6 +118,7 @@ run_updates(){
       FAKE_UPDATER_LOG="$TEST_TMP/updater.log" \
       FAKE_WUD_FILE="$WUD_FILE" \
       WUD_UPDATER_BANNER=false \
+      WUD_UPDATER_RELEASE_CHECK=false \
       WUD_UPDATER_PYTHON=false \
       env "${env_args[@]}" "$SCRIPT" --file "$WUD_FILE" "$@" > "$TEST_TMP/output.log" 2>&1 || LAST_STATUS=$?
   else
@@ -106,6 +128,7 @@ run_updates(){
       FAKE_UPDATER_LOG="$TEST_TMP/updater.log" \
       FAKE_WUD_FILE="$WUD_FILE" \
       WUD_UPDATER_BANNER=false \
+      WUD_UPDATER_RELEASE_CHECK=false \
       WUD_UPDATER_PYTHON=false \
       "$SCRIPT" --file "$WUD_FILE" "$@" > "$TEST_TMP/output.log" 2>&1 || LAST_STATUS=$?
   fi
@@ -128,6 +151,7 @@ run_updates_with_input(){
       FAKE_UPDATER_LOG="$TEST_TMP/updater.log" \
       FAKE_WUD_FILE="$WUD_FILE" \
       WUD_UPDATER_BANNER=false \
+      WUD_UPDATER_RELEASE_CHECK=false \
       WUD_UPDATER_PYTHON=false \
       env "${env_args[@]}" "$SCRIPT" --file "$WUD_FILE" "$@" > "$TEST_TMP/output.log" 2>&1 || LAST_STATUS=$?
   else
@@ -137,6 +161,7 @@ run_updates_with_input(){
       FAKE_UPDATER_LOG="$TEST_TMP/updater.log" \
       FAKE_WUD_FILE="$WUD_FILE" \
       WUD_UPDATER_BANNER=false \
+      WUD_UPDATER_RELEASE_CHECK=false \
       WUD_UPDATER_PYTHON=false \
       "$SCRIPT" --file "$WUD_FILE" "$@" > "$TEST_TMP/output.log" 2>&1 || LAST_STATUS=$?
   fi
@@ -157,6 +182,107 @@ test_dry_run_does_not_invoke_updater(){
   [[ ! -e "$TEST_TMP/sudo.log" ]] || fail "sudo was invoked during dry-run"
   [[ ! -e "$TEST_TMP/updater.log" ]] || fail "updater was invoked during dry-run"
   grep -q 'Dry-run mode: not running updates' "$TEST_TMP/output.log" || fail "missing dry-run message"
+  teardown_case
+}
+
+test_self_update_yes_runs_wud_entry_first(){
+  setup_case
+  printf 'ghcr.io/magrhino/wud-updater:latest\nrepo/app:latest\n' > "$WUD_FILE"
+
+  run_updates FAKE_UPDATER_REMOVE_ONLY_LINES=1 --yes --base "$TEST_TMP/docker"
+
+  assert_status 0
+  grep -q 'WUD-Updater self-update detected' "$TEST_TMP/output.log" || fail "missing self-update notice"
+  grep -q -- "--only-lines 1 --yes" "$TEST_TMP/updater.log" || fail "self-update line was not run first"
+  grep -q '^repo/app:latest$' "$WUD_FILE" || fail "remaining WUD entry was not refreshed after self-update"
+  teardown_case
+}
+
+test_self_update_tag_entry_enables_tag_updates(){
+  setup_case
+  printf 'ghcr.io/magrhino/wud-updater:1.0 tag=2.0\nrepo/app:latest\n' > "$WUD_FILE"
+
+  run_updates FAKE_UPDATER_REMOVE_ONLY_LINES=1 --yes --base "$TEST_TMP/docker"
+
+  assert_status 0
+  grep -q -- "--only-lines 1 --allow-tag-updates --yes" "$TEST_TMP/updater.log" || fail "self-update tag entry did not enable tag updates"
+  grep -q -- "--base $TEST_TMP/docker --file $WUD_FILE --log-dir ./logs --mode stop --max-wait 180 --yes" "$TEST_TMP/updater.log" || fail "allow-tag-updates leaked into remaining updates"
+  teardown_case
+}
+
+test_self_update_dry_run_does_not_invoke_updater(){
+  setup_case
+  printf 'wud-updater\n' > "$WUD_FILE"
+
+  run_updates --dry-run
+
+  assert_status 0
+  grep -q 'WUD-Updater self-update detected' "$TEST_TMP/output.log" || fail "missing self-update notice"
+  grep -q 'not running WUD-Updater self-update' "$TEST_TMP/output.log" || fail "missing self-update dry-run message"
+  [[ ! -e "$TEST_TMP/sudo.log" ]] || fail "sudo was invoked during self-update dry-run"
+  [[ ! -e "$TEST_TMP/updater.log" ]] || fail "updater was invoked during self-update dry-run"
+  teardown_case
+}
+
+test_self_update_eof_does_not_invoke_updater(){
+  setup_case
+  printf 'wud-updater\nrepo/app:latest\n' > "$WUD_FILE"
+
+  run_updates_with_input ''
+
+  assert_status 0
+  grep -q 'Skipped WUD-Updater self-update' "$TEST_TMP/output.log" || fail "missing self-update EOF skip message"
+  [[ ! -e "$TEST_TMP/sudo.log" ]] || fail "sudo was invoked after self-update EOF"
+  [[ ! -e "$TEST_TMP/updater.log" ]] || fail "updater was invoked after self-update EOF"
+  teardown_case
+}
+
+test_no_self_update_flag_disables_preflight(){
+  setup_case
+  printf 'ghcr.io/magrhino/wud-updater:latest\n' > "$WUD_FILE"
+
+  run_updates --yes --no-self-update
+
+  assert_status 0
+  ! grep -q 'WUD-Updater self-update detected' "$TEST_TMP/output.log" || fail "self-update preflight was not disabled"
+  ! grep -q -- "--only-lines" "$TEST_TMP/updater.log" || fail "self-update line selection was passed when disabled"
+  teardown_case
+}
+
+test_self_update_env_disables_preflight(){
+  setup_case
+  printf 'wud-updater\n' > "$WUD_FILE"
+
+  run_updates WUD_UPDATER_SELF_UPDATE=0 --yes
+
+  assert_status 0
+  ! grep -q 'WUD-Updater self-update detected' "$TEST_TMP/output.log" || fail "self-update env did not disable preflight"
+  ! grep -q -- "--only-lines" "$TEST_TMP/updater.log" || fail "self-update line selection was passed when disabled"
+  teardown_case
+}
+
+test_github_release_self_update_rewrites_pinned_release_tag(){
+  setup_case
+  : > "$WUD_FILE"
+  cat > "$FAKE_BIN/python3" <<'FAKE_PYTHON'
+#!/usr/bin/env bash
+if [[ "${1:-}" == "-" ]]; then
+  exit 0
+fi
+if [[ "${1:-} ${2:-} ${3:-}" == "-m wud_updater.self_update github-target" ]]; then
+  printf 'ghcr.io/magrhino/wud-updater:v0.12.2 tag=v999.0.0\n'
+  exit 0
+fi
+exit 1
+FAKE_PYTHON
+  chmod +x "$FAKE_BIN/python3"
+
+  run_updates FAKE_UPDATER_LOG_WUD_CONTENT=1 WUD_UPDATER_RELEASE_CHECK=1 --yes
+
+  assert_status 0
+  grep -q 'WUD-Updater release update available' "$TEST_TMP/output.log" || fail "missing GitHub self-update notice"
+  grep -q 'WUD_CONTENT=ghcr.io/magrhino/wud-updater:v0.12.2 tag=v999.0.0|' "$TEST_TMP/updater.log" || fail "temporary self-update target did not include desired release tag"
+  grep -q -- "--allow-tag-updates --yes" "$TEST_TMP/updater.log" || fail "GitHub self-update did not allow tag rewrite"
   teardown_case
 }
 
@@ -457,6 +583,13 @@ run_test(){
 
 main(){
   run_test test_dry_run_does_not_invoke_updater
+  run_test test_self_update_yes_runs_wud_entry_first
+  run_test test_self_update_tag_entry_enables_tag_updates
+  run_test test_self_update_dry_run_does_not_invoke_updater
+  run_test test_self_update_eof_does_not_invoke_updater
+  run_test test_no_self_update_flag_disables_preflight
+  run_test test_self_update_env_disables_preflight
+  run_test test_github_release_self_update_rewrites_pinned_release_tag
   run_test test_forced_banner_prints_before_legacy_updates_output
   run_test test_yes_invokes_configured_updater_through_sudo
   run_test test_log_dir_cli_overrides_environment

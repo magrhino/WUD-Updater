@@ -78,6 +78,7 @@ updates --yes
 ```bash
 updates
 updates --dry-run
+updates --no-self-update
 updates --yes --allow-tag-updates
 docker-update-from-wud --dry-run
 docker-update-from-wud --yes

@@ -52,6 +52,20 @@ def _add_updates_options(parser: argparse.ArgumentParser) -> None:
     _add_common_options(parser)
     parser.add_argument("--log-dir", metavar="PATH")
     parser.add_argument("--no-color", action="store_true")
+    self_update = parser.add_mutually_exclusive_group()
+    self_update.add_argument(
+        "--self-update",
+        dest="self_update",
+        action="store_true",
+        default=None,
+        help="run WUD-Updater's own update before other pending entries",
+    )
+    self_update.add_argument(
+        "--no-self-update",
+        dest="self_update",
+        action="store_false",
+        help="disable the WUD-Updater self-update preflight",
+    )
     parser.add_argument(
         "--no-updater-sudo",
         action="store_true",

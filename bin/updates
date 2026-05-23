@@ -59,6 +59,26 @@ print_startup_banner() {
     2>/dev/null || true
 }
 
+python_self_update_github_target() {
+  local self_python_bin="${PYTHON_BIN:-python3}"
+  local venv_dir="${WUD_UPDATER_VENV:-$repo_dir/.venv}"
+  local self_pythonpath="$repo_dir/src"
+
+  if [[ -z "${PYTHON_BIN:-}" && -x "$venv_dir/bin/python" ]]; then
+    if ! python_can_run_banner "$self_python_bin"; then
+      self_python_bin="$venv_dir/bin/python"
+    fi
+  fi
+  python_can_run_banner "$self_python_bin" || return 0
+
+  if [[ -n "${PYTHONPATH:-}" ]]; then
+    self_pythonpath="$self_pythonpath:$PYTHONPATH"
+  fi
+
+  PYTHONPATH="$self_pythonpath" "$self_python_bin" -m wud_updater.self_update \
+    github-target 2>/dev/null || true
+}
+
 run_python_updates() {
   python_bin="${PYTHON_BIN:-python3}"
   venv_dir="${WUD_UPDATER_VENV:-$repo_dir/.venv}"
@@ -109,6 +129,7 @@ lock_timeout="${WUD_LOCK_TIMEOUT:-}"
 auto_run=0
 dry_run=0
 allow_tag_updates=0
+self_update=1
 selected_line_spec=""
 remove_line_spec=""
 tag_override_specs=()
@@ -119,9 +140,15 @@ wud_lock_held=0
 wud_lock_via_sudo=0
 updater_rc=0
 
+case "${WUD_UPDATER_SELF_UPDATE:-}" in
+  0|false|FALSE|False|no|NO|No|off|OFF|Off)
+    self_update=0
+    ;;
+esac
+
 usage() {
   cat <<EOF
-Usage: updates [-y|--yes] [--dry-run] [--allow-tag-updates] [--base PATH] [--file PATH] [--log-dir PATH] [--mode pause|stop|live] [--max-wait SECONDS]
+Usage: updates [-y|--yes] [--dry-run] [--self-update|--no-self-update] [--allow-tag-updates] [--base PATH] [--file PATH] [--log-dir PATH] [--mode pause|stop|live] [--max-wait SECONDS]
 
 Shows Docker updates from WUD, TrueNAS update status, and active TrueNAS alerts.
 When Docker updates are pending, prompts before running docker-update-from-wud.
@@ -141,6 +168,14 @@ while [ "$#" -gt 0 ]; do
       ;;
     --allow-tag-updates)
       allow_tag_updates=1
+      shift
+      ;;
+    --self-update)
+      self_update=1
+      shift
+      ;;
+    --no-self-update)
+      self_update=0
       shift
       ;;
     --base)
@@ -276,6 +311,28 @@ load_todo_arrays() {
   done <<< "$todo_entries"
 }
 
+snapshot_todo_entries() {
+  todo_entries=""
+  if [ -e "$wud_file" ] && [ -s "$wud_file" ]; then
+    acquire_wud_lock
+    if [ -r "$wud_file" ]; then
+      todo_entries="$(read_todo_entries || true)"
+    else
+      todo_entries="$(sudo awk '
+        {
+          trimmed = $0
+          sub(/^[[:space:]]+/, "", trimmed)
+          if (trimmed != "" && trimmed !~ /^#/) {
+            print NR "\t" $0
+          }
+        }
+      ' "$wud_file" || true)"
+    fi
+  fi
+  load_todo_arrays
+  release_wud_lock
+}
+
 display_todo_entries() {
   local display_no=0 line_no line
   while IFS=$'\t' read -r line_no line; do
@@ -292,6 +349,28 @@ line_first_token() {
   local line="$1" first
   read -r first _ <<< "$line"
   printf '%s' "$first"
+}
+
+image_repo_key() {
+  local image="${1%%@sha256:*}" left rest last
+  left="${image%%/*}"
+  if [[ "$image" == */* && ( "$left" == *.* || "$left" == *:* || "$left" == "localhost" ) ]]; then
+    rest="${image#*/}"
+  else
+    rest="$image"
+  fi
+  last="${rest##*/}"
+  if [[ "$last" == *:* ]]; then
+    rest="${rest%:*}"
+  fi
+  printf '%s' "$rest" | tr '[:upper:]' '[:lower:]'
+}
+
+is_self_update_line() {
+  local first key
+  first="$(line_first_token "$1")"
+  key="$(image_repo_key "$first")"
+  [[ "$key" == "magrhino/wud-updater" || "$key" == "wud-updater" ]]
 }
 
 tag_value_valid() {
@@ -697,25 +776,168 @@ run_updater() {
   return "$rc"
 }
 
-echo "=== 📦 Docker Updates ==="
-if [ -e "$wud_file" ] && [ -s "$wud_file" ]; then
-  acquire_wud_lock
-  if [ -r "$wud_file" ]; then
-    todo_entries="$(read_todo_entries || true)"
-  else
-    todo_entries="$(sudo awk '
-      {
-        trimmed = $0
-        sub(/^[[:space:]]+/, "", trimmed)
-        if (trimmed != "" && trimmed !~ /^#/) {
-          print NR "\t" $0
-        }
-      }
-    ' "$wud_file" || true)"
+prompt_self_update() {
+  local message="$1" reply choice
+  echo
+  echo "$message"
+  if [ "$dry_run" -eq 1 ]; then
+    echo "👀 Dry-run mode: not running WUD-Updater self-update."
+    return 1
   fi
-fi
-load_todo_arrays
-release_wud_lock
+  [ "$auto_run" -eq 1 ] && return 0
+
+  while true; do
+    if ! read -r -p "Update WUD-Updater before other Docker updates? (Y/n) " reply; then
+      echo "⏸️  Skipped WUD-Updater self-update."
+      return 1
+    fi
+    choice="$(printf '%s' "$reply" | tr '[:upper:]' '[:lower:]')"
+    case "$choice" in
+      y|yes)
+        return 0
+        ;;
+      "")
+        if [ -t 0 ]; then
+          return 0
+        fi
+        echo "⏸️  Skipped WUD-Updater self-update."
+        return 1
+        ;;
+      n|no)
+        echo "⏸️  Skipped WUD-Updater self-update."
+        return 1
+        ;;
+      *)
+        echo "Invalid choice. Enter y or n."
+        ;;
+    esac
+  done
+}
+
+self_update_display_csv() {
+  local display_no=0 line_no line result=""
+  while IFS=$'\t' read -r line_no line; do
+    [ -n "$line_no" ] || continue
+    display_no=$((display_no + 1))
+    if is_self_update_line "$line"; then
+      result="$(csv_append_unique "$result" "$display_no")"
+    fi
+  done <<< "$todo_entries"
+  printf '%s' "$result"
+}
+
+display_csv_has_desired_tag() {
+  local display_csv="$1" display_no=0 line_no line
+  while IFS=$'\t' read -r line_no line; do
+    [ -n "$line_no" ] || continue
+    display_no=$((display_no + 1))
+    csv_contains "$display_csv" "$display_no" || continue
+    line_desired_tag "$line" >/dev/null 2>&1 && return 0
+  done <<< "$todo_entries"
+  return 1
+}
+
+run_wud_file_self_update() {
+  local display_csv="$1" count rc entry_label old_allow_tag_updates
+  count="$(csv_count "$display_csv")"
+  if [ "$count" = "1" ]; then
+    entry_label="entry"
+  else
+    entry_label="entries"
+  fi
+  if ! prompt_self_update "🔁 WUD-Updater self-update detected in the WUD file ($count $entry_label)."; then
+    return 0
+  fi
+
+  selected_line_spec="$(display_csv_to_file_line_csv "$display_csv")"
+  remove_line_spec=""
+  tag_override_specs=()
+  old_allow_tag_updates="$allow_tag_updates"
+  if display_csv_has_desired_tag "$display_csv"; then
+    allow_tag_updates=1
+  fi
+  if lock_updater_handoff; then
+    run_updater
+    rc=$?
+  else
+    rc=$?
+  fi
+  release_wud_lock
+  selected_line_spec=""
+  remove_line_spec=""
+  tag_override_specs=()
+  allow_tag_updates="$old_allow_tag_updates"
+  return "$rc"
+}
+
+run_github_release_self_update() {
+  local target="$1" tmp_dir tmp_file rc old_allow_tag_updates
+  local old_wud_file old_selected_line_spec old_remove_line_spec
+  local -a old_tag_override_specs=()
+
+  if ! prompt_self_update "🔁 WUD-Updater release update available."; then
+    return 0
+  fi
+
+  tmp_dir="$(mktemp -d "${TMPDIR:-/tmp}/wud-self-update.XXXXXX")" || return 1
+  tmp_file="$tmp_dir/images.todo"
+  printf '%s\n' "$target" > "$tmp_file"
+
+  old_wud_file="$wud_file"
+  old_selected_line_spec="$selected_line_spec"
+  old_remove_line_spec="$remove_line_spec"
+  if ((${#tag_override_specs[@]})); then
+    old_tag_override_specs=("${tag_override_specs[@]}")
+  fi
+  old_allow_tag_updates="$allow_tag_updates"
+  wud_file="$tmp_file"
+  selected_line_spec=""
+  remove_line_spec=""
+  tag_override_specs=()
+  if [[ "$target" == *" tag="* ]]; then
+    allow_tag_updates=1
+  fi
+
+  run_updater
+  rc=$?
+
+  wud_file="$old_wud_file"
+  selected_line_spec="$old_selected_line_spec"
+  remove_line_spec="$old_remove_line_spec"
+  tag_override_specs=()
+  if ((${#old_tag_override_specs[@]})); then
+    tag_override_specs=("${old_tag_override_specs[@]}")
+  fi
+  allow_tag_updates="$old_allow_tag_updates"
+  rm -rf "$tmp_dir"
+  return "$rc"
+}
+
+run_self_update_preflight() {
+  local display_csv target rc
+  [ "$self_update" -eq 1 ] || return 0
+  [ -x "$updater" ] || return 0
+
+  display_csv="$(self_update_display_csv)"
+  if [ -n "$display_csv" ]; then
+    run_wud_file_self_update "$display_csv"
+    rc=$?
+    [ "$rc" -eq 0 ] || return "$rc"
+    snapshot_todo_entries
+    return 0
+  fi
+
+  target="$(python_self_update_github_target)"
+  target="${target%%$'\n'*}"
+  [ -n "$target" ] || return 0
+  run_github_release_self_update "$target"
+}
+
+echo "=== 📦 Docker Updates ==="
+snapshot_todo_entries
+run_self_update_preflight
+self_update_rc=$?
+[ "$self_update_rc" -eq 0 ] || exit "$self_update_rc"
 
 if [ -n "$todo_entries" ]; then
   display_todo_entries
