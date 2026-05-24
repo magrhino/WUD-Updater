@@ -4,6 +4,13 @@ All notable changes to WUD-Updater are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com) and versions follow
 [Semantic Versioning](https://semver.org).
 
+## [0.14.0](https://github.com/magrhino/WUD-Updater/compare/v0.13.0...v0.14.0) (2026-05-24)
+
+
+### Features
+
+* **updater:** Add prompted tag exclusions to the updater flow ([#48](https://github.com/magrhino/WUD-Updater/issues/48)) ([6ce34ce](https://github.com/magrhino/WUD-Updater/commit/6ce34cec024a96a88b0cc65832fdcd5de195992f))
+
 ## [0.13.0](https://github.com/magrhino/WUD-Updater/compare/v0.12.3...v0.13.0) (2026-05-23)
 
 
