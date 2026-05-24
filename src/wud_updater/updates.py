@@ -9,7 +9,6 @@ import re
 import shutil
 import subprocess
 import sys
-import tempfile
 import time
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
@@ -90,6 +89,12 @@ class UpdatesOptions:
     self_update: bool = True
     truenas_status_check: bool = False
     truenas_status_timeout: str = DEFAULT_TRUENAS_STATUS_TIMEOUT
+
+
+@dataclass(frozen=True)
+class SelfUpdatePreflightResult:
+    status: int
+    continue_updates: bool = True
 
 
 @dataclass(frozen=True)
@@ -229,8 +234,8 @@ class UpdatesRunner:
         self.todo_entries = self._snapshot_todo_entries()
         self_update_status = self._run_self_update_preflight()
         if self_update_status is not None:
-            if self_update_status != 0:
-                return self_update_status
+            if self_update_status.status != 0 or not self_update_status.continue_updates:
+                return self_update_status.status
             self.todo_entries = self._snapshot_todo_entries()
 
         if self.renderer.rich_enabled():
@@ -289,7 +294,7 @@ class UpdatesRunner:
         self.lock.release()
         return status
 
-    def _run_self_update_preflight(self) -> int | None:
+    def _run_self_update_preflight(self) -> SelfUpdatePreflightResult | None:
         if not self.options.self_update:
             return None
         if not os.access(self.options.updater, os.X_OK):
@@ -297,12 +302,18 @@ class UpdatesRunner:
 
         display_numbers = self_update_display_numbers(self.todo_entries)
         if display_numbers:
-            return self._run_wud_file_self_update(display_numbers)
+            status = self._run_wud_file_self_update(display_numbers)
+            if status is None:
+                return None
+            return SelfUpdatePreflightResult(status=status)
 
         release_update = github_release_self_update(self.environ)
         if release_update is None:
             return None
-        return self._run_github_release_self_update(release_update)
+        status = self._run_github_release_self_update(release_update)
+        if status is None:
+            return None
+        return SelfUpdatePreflightResult(status=status, continue_updates=False)
 
     def _run_wud_file_self_update(self, display_numbers: Sequence[int]) -> int | None:
         lines = self._display_numbers_to_file_line_spec(display_numbers)
@@ -344,31 +355,34 @@ class UpdatesRunner:
         ):
             return None
 
-        with tempfile.TemporaryDirectory(prefix="wud-self-update.") as tmpdir:
-            todo_file = Path(tmpdir) / "images.todo"
-            todo_file.write_text(f"{release_update.target}\n", encoding="utf-8")
-            selected = self.selected_line_spec
-            removed = self.remove_line_spec
-            overrides = list(self.tag_override_specs)
-            excluded = self.exclude_tag_line_spec
-            recreate_excluded = self.recreate_excluded_services
-            allow_tag_updates = self.allow_tag_updates
-            self.selected_line_spec = ""
-            self.remove_line_spec = ""
-            self.tag_override_specs = []
-            self.exclude_tag_line_spec = ""
-            self.recreate_excluded_services = False
-            if " tag=" in release_update.target:
-                self.allow_tag_updates = True
-            try:
-                return self._run_updater(wud_file=str(todo_file))
-            finally:
-                self.selected_line_spec = selected
-                self.remove_line_spec = removed
-                self.tag_override_specs = overrides
-                self.exclude_tag_line_spec = excluded
-                self.recreate_excluded_services = recreate_excluded
-                self.allow_tag_updates = allow_tag_updates
+        return self._pull_self_update_image(release_update.target)
+
+    def _pull_self_update_image(self, target: str) -> int:
+        image = _self_update_pull_image(target)
+        if image == "":
+            raise UpdatesError("Could not determine WUD-Updater image to pull.")
+
+        if self.options.use_sudo:
+            print(f"🚀 Pulling WUD-Updater image via: sudo docker pull {image}")
+            command = ["sudo", "docker", "pull", image]
+        else:
+            print(f"🚀 Pulling WUD-Updater image via: docker pull {image}")
+            command = ["docker", "pull", image]
+
+        try:
+            result = subprocess.run(command, env=self.environ, check=False)
+            returncode = result.returncode
+        except OSError as exc:
+            print(exc, file=sys.stderr)
+            returncode = _os_error_returncode(exc)
+
+        print()
+        if returncode == 0:
+            print(f"✅ WUD-Updater image pull completed (exit {returncode}).")
+            print("Please restart the wud-updater container before running updates again.")
+        else:
+            print(f"❌ WUD-Updater image pull failed (exit {returncode}).")
+        return returncode
 
     def _confirm_self_update(self, message: str) -> bool:
         print()
@@ -1007,6 +1021,21 @@ def _rest_tokens(value: str) -> list[str]:
     if stripped == "":
         return []
     return [part for part in _SHELL_SPACE_RE.split(stripped) if part]
+
+
+def _self_update_pull_image(target: str) -> str:
+    image = _first_token(target)
+    if image == "":
+        return ""
+
+    desired_tag = ""
+    for token in _rest_tokens(target):
+        if token.startswith("tag="):
+            desired_tag = token.removeprefix("tag=")
+
+    if desired_tag and image_has_tag(image) and tag_value_valid(desired_tag):
+        return image_with_tag(image, desired_tag)
+    return image
 
 
 def _read_todo_entries_with_sudo(

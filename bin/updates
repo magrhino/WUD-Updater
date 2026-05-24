@@ -135,6 +135,7 @@ remove_line_spec=""
 exclude_tag_line_spec=""
 recreate_excluded_services=0
 tag_override_specs=()
+stop_after_self_update=0
 todo_entries=""
 todo_file_lines=()
 wud_lock_dir=""
@@ -906,53 +907,50 @@ run_wud_file_self_update() {
 }
 
 run_github_release_self_update() {
-  local target="$1" tmp_dir tmp_file rc old_allow_tag_updates
-  local old_wud_file old_selected_line_spec old_remove_line_spec old_exclude_tag_line_spec
-  local old_recreate_excluded_services
-  local -a old_tag_override_specs=()
+  local target="$1" image rc
 
   if ! prompt_self_update "🔁 WUD-Updater release update available."; then
     return 0
   fi
 
-  tmp_dir="$(mktemp -d "${TMPDIR:-/tmp}/wud-self-update.XXXXXX")" || return 1
-  tmp_file="$tmp_dir/images.todo"
-  printf '%s\n' "$target" > "$tmp_file"
+  stop_after_self_update=1
+  image="$(self_update_pull_image "$target")" || {
+    echo "Could not determine WUD-Updater image to pull." >&2
+    return 1
+  }
 
-  old_wud_file="$wud_file"
-  old_selected_line_spec="$selected_line_spec"
-  old_remove_line_spec="$remove_line_spec"
-  old_exclude_tag_line_spec="$exclude_tag_line_spec"
-  old_recreate_excluded_services="$recreate_excluded_services"
-  if ((${#tag_override_specs[@]})); then
-    old_tag_override_specs=("${tag_override_specs[@]}")
-  fi
-  old_allow_tag_updates="$allow_tag_updates"
-  wud_file="$tmp_file"
-  selected_line_spec=""
-  remove_line_spec=""
-  exclude_tag_line_spec=""
-  recreate_excluded_services=0
-  tag_override_specs=()
-  if [[ "$target" == *" tag="* ]]; then
-    allow_tag_updates=1
-  fi
-
-  run_updater
+  echo "🚀 Pulling WUD-Updater image via: sudo docker pull $image"
+  sudo docker pull "$image"
   rc=$?
-
-  wud_file="$old_wud_file"
-  selected_line_spec="$old_selected_line_spec"
-  remove_line_spec="$old_remove_line_spec"
-  exclude_tag_line_spec="$old_exclude_tag_line_spec"
-  recreate_excluded_services="$old_recreate_excluded_services"
-  tag_override_specs=()
-  if ((${#old_tag_override_specs[@]})); then
-    tag_override_specs=("${old_tag_override_specs[@]}")
+  echo
+  if [ "$rc" -eq 0 ]; then
+    echo "✅ WUD-Updater image pull completed (exit $rc)."
+    echo "Please restart the wud-updater container before running updates again."
+  else
+    echo "❌ WUD-Updater image pull failed (exit $rc)."
   fi
-  allow_tag_updates="$old_allow_tag_updates"
-  rm -rf "$tmp_dir"
   return "$rc"
+}
+
+self_update_pull_image() {
+  local target="$1" first token desired_tag=""
+  local tokens=()
+
+  read -r first _ <<< "$target"
+  [ -n "$first" ] || return 1
+
+  read -r -a tokens <<< "$target"
+  for token in "${tokens[@]:1}"; do
+    if [[ "$token" == tag=* ]]; then
+      desired_tag="${token#tag=}"
+    fi
+  done
+
+  if [ -n "$desired_tag" ] && image_has_tag "$first" && tag_value_valid "$desired_tag"; then
+    image_with_tag "$first" "$desired_tag"
+  else
+    printf '%s\n' "$first"
+  fi
 }
 
 run_self_update_preflight() {
@@ -980,6 +978,7 @@ snapshot_todo_entries
 run_self_update_preflight
 self_update_rc=$?
 [ "$self_update_rc" -eq 0 ] || exit "$self_update_rc"
+[ "$stop_after_self_update" -eq 0 ] || exit 0
 
 if [ -n "$todo_entries" ]; then
   display_todo_entries

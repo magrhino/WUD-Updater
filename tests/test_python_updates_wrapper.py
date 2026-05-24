@@ -12,7 +12,6 @@ from io import StringIO
 from pathlib import Path
 from unittest import mock
 
-from wud_updater.banner import current_tag
 from wud_updater.updates import run_updates_from_namespace
 
 
@@ -27,6 +26,7 @@ class PythonUpdatesWrapperTests(unittest.TestCase):
         self.updater = self.root / "updater"
         self.sudo_log = self.root / "sudo.log"
         self.updater_log = self.root / "updater.log"
+        self.docker_log = self.root / "docker.log"
         self._write_fakes()
 
     def tearDown(self) -> None:
@@ -198,7 +198,7 @@ class PythonUpdatesWrapperTests(unittest.TestCase):
             self.updater_log.read_text(encoding="utf-8"),
         )
 
-    def test_github_release_self_update_uses_temporary_target(self) -> None:
+    def test_github_release_self_update_pulls_release_image_and_exits(self) -> None:
         self.wud_file.write_text("repo/app:latest\n", encoding="utf-8")
         env = os.environ.copy()
         env.update(
@@ -208,8 +208,7 @@ class PythonUpdatesWrapperTests(unittest.TestCase):
                 "WUD_UPDATER_CONFIG": str(self.root / "missing-env"),
                 "FAKE_SUDO_LOG": str(self.sudo_log),
                 "FAKE_UPDATER_LOG": str(self.updater_log),
-                "FAKE_WUD_FILE": str(self.wud_file),
-                "FAKE_UPDATER_LOG_WUD_CONTENT": "1",
+                "FAKE_DOCKER_LOG": str(self.docker_log),
                 "WUD_UPDATER_BANNER": "0",
                 "WUD_UPDATER_RELEASE_CHECK": "1",
                 "HOSTNAME": "wud-updater-1",
@@ -250,18 +249,21 @@ class PythonUpdatesWrapperTests(unittest.TestCase):
             )
 
         self.assertEqual(status, 0, stderr.getvalue() + stdout.getvalue())
-        log = self.updater_log.read_text(encoding="utf-8")
+        self.assertFalse(self.updater_log.exists())
         self.assertIn(
-            "WUD_CONTENT="
-            f"ghcr.io/magrhino/wud-updater:{current_tag()} tag=v999.0.0|",
-            log,
+            "pull ghcr.io/magrhino/wud-updater:v999.0.0",
+            self.docker_log.read_text(encoding="utf-8"),
         )
-        arg_lines = _updater_arg_lines(log)
-        self.assertGreaterEqual(len(arg_lines), 2)
-        self.assertNotIn(str(self.wud_file), arg_lines[0])
-        self.assertIn(f"--file {self.wud_file}", arg_lines[1])
+        self.assertIn(
+            "docker pull ghcr.io/magrhino/wud-updater:v999.0.0",
+            self.sudo_log.read_text(encoding="utf-8"),
+        )
+        self.assertIn(
+            "Please restart the wud-updater container before running updates again.",
+            stdout.getvalue(),
+        )
 
-    def test_github_release_self_update_rewrites_pinned_release_tag(self) -> None:
+    def test_github_release_self_update_pulls_rewritten_pinned_release_tag(self) -> None:
         self.wud_file.write_text("repo/app:latest\n", encoding="utf-8")
         env = os.environ.copy()
         env.update(
@@ -271,8 +273,7 @@ class PythonUpdatesWrapperTests(unittest.TestCase):
                 "WUD_UPDATER_CONFIG": str(self.root / "missing-env"),
                 "FAKE_SUDO_LOG": str(self.sudo_log),
                 "FAKE_UPDATER_LOG": str(self.updater_log),
-                "FAKE_WUD_FILE": str(self.wud_file),
-                "FAKE_UPDATER_LOG_WUD_CONTENT": "1",
+                "FAKE_DOCKER_LOG": str(self.docker_log),
                 "WUD_UPDATER_BANNER": "0",
                 "WUD_UPDATER_RELEASE_CHECK": "1",
                 "HOSTNAME": "wud-updater-1",
@@ -313,15 +314,79 @@ class PythonUpdatesWrapperTests(unittest.TestCase):
             )
 
         self.assertEqual(status, 0, stderr.getvalue() + stdout.getvalue())
-        log = self.updater_log.read_text(encoding="utf-8")
         self.assertIn(
-            "WUD_CONTENT=ghcr.io/magrhino/wud-updater:v0.12.2 tag=v999.0.0|",
-            log,
+            "pull ghcr.io/magrhino/wud-updater:v999.0.0",
+            self.docker_log.read_text(encoding="utf-8"),
         )
-        arg_lines = _updater_arg_lines(log)
-        self.assertGreaterEqual(len(arg_lines), 2)
-        self.assertIn("--allow-tag-updates", arg_lines[0])
-        self.assertNotIn("--allow-tag-updates", arg_lines[1])
+        self.assertFalse(self.updater_log.exists())
+        self.assertIn(
+            "Please restart the wud-updater container before running updates again.",
+            stdout.getvalue(),
+        )
+
+    def test_github_release_self_update_failed_pull_exits_without_restart_message(
+        self,
+    ) -> None:
+        self.wud_file.write_text("repo/app:latest\n", encoding="utf-8")
+        env = os.environ.copy()
+        env.update(
+            {
+                "PATH": f"{self.fake_bin}:{env.get('PATH', '')}",
+                "WUD_UPDATER": str(self.updater),
+                "WUD_UPDATER_CONFIG": str(self.root / "missing-env"),
+                "FAKE_SUDO_LOG": str(self.sudo_log),
+                "FAKE_UPDATER_LOG": str(self.updater_log),
+                "FAKE_DOCKER_LOG": str(self.docker_log),
+                "FAKE_DOCKER_PULL_RETURN": "17",
+                "WUD_UPDATER_BANNER": "0",
+                "WUD_UPDATER_RELEASE_CHECK": "1",
+                "HOSTNAME": "wud-updater-1",
+            }
+        )
+        args = Namespace(
+            base=str(self.root / "docker"),
+            file=str(self.wud_file),
+            log_dir=None,
+            mode=None,
+            max_wait=None,
+            dry_run=False,
+            yes=True,
+            allow_tag_updates=False,
+            no_color=True,
+            no_updater_sudo=False,
+            self_update=None,
+        )
+        stdout = StringIO()
+        stderr = StringIO()
+
+        with (
+            mock.patch(
+                "wud_updater.self_update.fetch_latest_release_tag",
+                return_value="v999.0.0",
+            ),
+            mock.patch(
+                "wud_updater.self_update.current_container_image",
+                return_value="ghcr.io/magrhino/wud-updater:v0.12.2",
+            ),
+            redirect_stdout(stdout),
+            redirect_stderr(stderr),
+        ):
+            status = run_updates_from_namespace(
+                args,
+                repo_root=self.repo_root,
+                environ=env,
+            )
+
+        self.assertEqual(status, 17, stderr.getvalue() + stdout.getvalue())
+        self.assertFalse(self.updater_log.exists())
+        self.assertIn(
+            "pull ghcr.io/magrhino/wud-updater:v999.0.0",
+            self.docker_log.read_text(encoding="utf-8"),
+        )
+        self.assertNotIn(
+            "Please restart the wud-updater container before running updates again.",
+            stdout.getvalue(),
+        )
 
     def test_yes_invokes_configured_updater_through_sudo_env(self) -> None:
         self.wud_file.write_text("repo/app:latest\n", encoding="utf-8")
@@ -1000,6 +1065,9 @@ printf '%s\\n' "$*" >> "${FAKE_SUDO_LOG:?FAKE_SUDO_LOG is required}"
             """#!/usr/bin/env bash
 if [[ -n "${FAKE_DOCKER_LOG:-}" ]]; then
   printf '%s\\n' "$*" >> "$FAKE_DOCKER_LOG"
+fi
+if [[ "$1" == "pull" ]]; then
+  exit "${FAKE_DOCKER_PULL_RETURN:-0}"
 fi
 if [[ "$1 $2" == "container inspect" ]]; then
   out_dir="$(dirname "${FAKE_WUD_FILE:?FAKE_WUD_FILE is required}")"
