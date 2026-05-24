@@ -4,6 +4,14 @@ All notable changes to WUD-Updater are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com) and versions follow
 [Semantic Versioning](https://semver.org).
 
+## [0.14.1](https://github.com/magrhino/WUD-Updater/compare/v0.14.0...v0.14.1) (2026-05-24)
+
+
+### Bug Fixes
+
+* **updates:** handle pinned release self-updates ([d0f7b4e](https://github.com/magrhino/WUD-Updater/commit/d0f7b4e12038edf07b0672c99a1074b1cfe59f70))
+* **updates:** pull release self-update image directly ([d473715](https://github.com/magrhino/WUD-Updater/commit/d4737157cd9bb1407553b1795a351442e5c5f756))
+
 ## [0.14.0](https://github.com/magrhino/WUD-Updater/compare/v0.13.0...v0.14.0) (2026-05-24)
 
 
