@@ -76,6 +76,23 @@ class DoctorTests(unittest.TestCase):
         self.assertIn("[WARN] bind mount path safety", stdout)
         self.assertIn("app: /host/app/config", stdout)
 
+    def test_doctor_fails_for_invalid_boolean_environment_values(self) -> None:
+        labels = (
+            "WUD_SYNC_SCRIPTS",
+            "WUD_UPDATER_USE_SUDO",
+            "TRUENAS_STATUS_CHECK",
+        )
+        for label in labels:
+            with self.subTest(label=label):
+                status, stdout = self._run_doctor({label: "treu"})
+
+                self.assertEqual(status, 1, stdout)
+                self.assertIn(
+                    f"[FAIL] configuration: {label} must be one of",
+                    stdout,
+                )
+                self.assertIn("Result: 1 failure(s), 0 warning(s)", stdout)
+
     def _run_doctor(
         self,
         env_overrides: dict[str, str] | None = None,

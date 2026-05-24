@@ -57,6 +57,10 @@ class DoctorCheck:
     detail: str = ""
 
 
+class DoctorConfigError(RuntimeError):
+    """Raised for invalid doctor configuration."""
+
+
 class Doctor:
     def __init__(
         self,
@@ -585,7 +589,13 @@ def run_doctor_from_namespace(
     environ: Mapping[str, str] | None = None,
 ) -> int:
     env = load_configured_environ(environ)
-    options = options_from_namespace(args, repo_root=repo_root, environ=env)
+    try:
+        options = options_from_namespace(args, repo_root=repo_root, environ=env)
+    except DoctorConfigError as exc:
+        print("WUD-Updater doctor")
+        print(f"[FAIL] configuration: {exc}")
+        print("Result: 1 failure(s), 0 warning(s)")
+        return 1
     return Doctor(options, environ=env).run()
 
 
@@ -632,10 +642,19 @@ def options_from_namespace(
         updater=updater,
         host_docker_base=Path(host_docker_base) if host_docker_base else None,
         docker_host=environ.get("DOCKER_HOST") or "",
-        sync_scripts=_env_bool(environ.get("WUD_SYNC_SCRIPTS"), default=False),
-        updater_use_sudo=_env_bool(environ.get("WUD_UPDATER_USE_SUDO"), default=True),
-        truenas_status_check=_env_bool(
+        sync_scripts=_resolve_bool_env(
+            environ.get("WUD_SYNC_SCRIPTS"),
+            "WUD_SYNC_SCRIPTS",
+            default=False,
+        ),
+        updater_use_sudo=_resolve_bool_env(
+            environ.get("WUD_UPDATER_USE_SUDO"),
+            "WUD_UPDATER_USE_SUDO",
+            default=True,
+        ),
+        truenas_status_check=_resolve_bool_env(
             environ.get("TRUENAS_STATUS_CHECK"),
+            "TRUENAS_STATUS_CHECK",
             default=False,
         ),
         truenas_status_timeout=(
@@ -688,14 +707,18 @@ def _docker_unix_socket_path(docker_host: str) -> Path | None:
     return None
 
 
-def _env_bool(value: str | None, *, default: bool) -> bool:
+def _resolve_bool_env(value: str | None, label: str, *, default: bool) -> bool:
     if value is None or value == "":
         return default
-    if value.lower() in {"1", "true", "yes", "on"}:
+
+    normalized = value.strip().lower()
+    if normalized in {"1", "true", "yes", "on"}:
         return True
-    if value.lower() in {"0", "false", "no", "off"}:
+    if normalized in {"0", "false", "no", "off"}:
         return False
-    return default
+    raise DoctorConfigError(
+        f"{label} must be one of true, false, 1, 0, yes, no, on, or off"
+    )
 
 
 def _write_probe(directory: Path) -> str:
