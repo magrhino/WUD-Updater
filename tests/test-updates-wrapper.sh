@@ -273,6 +273,33 @@ test_self_update_env_disables_preflight(){
   teardown_case
 }
 
+test_github_release_self_update_pulls_latest_and_exits(){
+  setup_case
+  printf 'repo/app:latest\n' > "$WUD_FILE"
+  cat > "$FAKE_BIN/python3" <<'FAKE_PYTHON'
+#!/usr/bin/env bash
+if [[ "${1:-}" == "-" ]]; then
+  exit 0
+fi
+if [[ "${1:-} ${2:-} ${3:-}" == "-m wud_updater.self_update github-target" ]]; then
+  printf 'ghcr.io/magrhino/wud-updater:latest\n'
+  exit 0
+fi
+exit 1
+FAKE_PYTHON
+  chmod +x "$FAKE_BIN/python3"
+
+  run_updates FAKE_DOCKER_LOG="$TEST_TMP/docker.log" WUD_UPDATER_RELEASE_CHECK=1 --yes
+
+  assert_status 0
+  grep -q 'WUD-Updater release update available' "$TEST_TMP/output.log" || fail "missing GitHub self-update notice"
+  grep -q 'pull ghcr.io/magrhino/wud-updater:latest' "$TEST_TMP/docker.log" || fail "GitHub self-update did not pull latest tag"
+  grep -q 'docker pull ghcr.io/magrhino/wud-updater:latest' "$TEST_TMP/sudo.log" || fail "GitHub self-update did not pull through sudo"
+  grep -q 'Please restart the wud-updater container before running updates again.' "$TEST_TMP/output.log" || fail "missing restart instruction"
+  [[ ! -e "$TEST_TMP/updater.log" ]] || fail "updater was invoked after release self-update pull"
+  teardown_case
+}
+
 test_github_release_self_update_rewrites_pinned_release_tag(){
   setup_case
   printf 'repo/app:latest\n' > "$WUD_FILE"
@@ -289,14 +316,15 @@ exit 1
 FAKE_PYTHON
   chmod +x "$FAKE_BIN/python3"
 
-  run_updates FAKE_DOCKER_LOG="$TEST_TMP/docker.log" WUD_UPDATER_RELEASE_CHECK=1 --yes
+  run_updates FAKE_UPDATER_LOG_WUD_CONTENT=1 WUD_UPDATER_RELEASE_CHECK=1 --yes
 
   assert_status 0
   grep -q 'WUD-Updater release update available' "$TEST_TMP/output.log" || fail "missing GitHub self-update notice"
-  grep -q 'pull ghcr.io/magrhino/wud-updater:v999.0.0' "$TEST_TMP/docker.log" || fail "GitHub self-update did not pull desired release tag"
-  grep -q 'docker pull ghcr.io/magrhino/wud-updater:v999.0.0' "$TEST_TMP/sudo.log" || fail "GitHub self-update did not pull through sudo"
-  grep -q 'Please restart the wud-updater container before running updates again.' "$TEST_TMP/output.log" || fail "missing restart instruction"
-  [[ ! -e "$TEST_TMP/updater.log" ]] || fail "updater was invoked after release self-update pull"
+  grep -q 'WUD_CONTENT=ghcr.io/magrhino/wud-updater:v0.12.2 tag=v999.0.0|' "$TEST_TMP/updater.log" || fail "temporary self-update target did not include desired release tag"
+  grep -q -- "--allow-tag-updates --yes" "$TEST_TMP/updater.log" || fail "GitHub self-update did not allow tag rewrite"
+  [[ "$(grep -c '^--base ' "$TEST_TMP/updater.log")" -eq 1 ]] || fail "normal updates continued after release self-update"
+  ! grep -q -- "--file $WUD_FILE" "$TEST_TMP/updater.log" || fail "normal WUD file was updated after release self-update"
+  [[ ! -e "$TEST_TMP/docker.log" ]] || fail "pinned release self-update used direct docker pull"
   teardown_case
 }
 
@@ -309,7 +337,7 @@ if [[ "${1:-}" == "-" ]]; then
   exit 0
 fi
 if [[ "${1:-} ${2:-} ${3:-}" == "-m wud_updater.self_update github-target" ]]; then
-  printf 'ghcr.io/magrhino/wud-updater:v0.12.2 tag=v999.0.0\n'
+  printf 'ghcr.io/magrhino/wud-updater:latest\n'
   exit 0
 fi
 exit 1
@@ -319,7 +347,7 @@ FAKE_PYTHON
   run_updates FAKE_DOCKER_LOG="$TEST_TMP/docker.log" FAKE_DOCKER_PULL_RETURN=17 WUD_UPDATER_RELEASE_CHECK=1 --yes
 
   assert_status 17
-  grep -q 'pull ghcr.io/magrhino/wud-updater:v999.0.0' "$TEST_TMP/docker.log" || fail "GitHub self-update did not attempt desired release tag"
+  grep -q 'pull ghcr.io/magrhino/wud-updater:latest' "$TEST_TMP/docker.log" || fail "GitHub self-update did not attempt latest release tag"
   ! grep -q 'Please restart the wud-updater container before running updates again.' "$TEST_TMP/output.log" || fail "restart instruction printed after failed pull"
   [[ ! -e "$TEST_TMP/updater.log" ]] || fail "updater was invoked after failed release self-update pull"
   teardown_case
@@ -653,6 +681,7 @@ main(){
   run_test test_self_update_eof_does_not_invoke_updater
   run_test test_no_self_update_flag_disables_preflight
   run_test test_self_update_env_disables_preflight
+  run_test test_github_release_self_update_pulls_latest_and_exits
   run_test test_github_release_self_update_rewrites_pinned_release_tag
   run_test test_github_release_self_update_failed_pull_exits_without_restart_message
   run_test test_forced_banner_prints_before_legacy_updates_output

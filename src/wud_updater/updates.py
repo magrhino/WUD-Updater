@@ -9,6 +9,7 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 import time
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
@@ -355,7 +356,35 @@ class UpdatesRunner:
         ):
             return None
 
+        if _self_update_desired_tag(release_update.target):
+            return self._run_github_release_tag_update(release_update.target)
         return self._pull_self_update_image(release_update.target)
+
+    def _run_github_release_tag_update(self, target: str) -> int:
+        with tempfile.TemporaryDirectory(prefix="wud-self-update.") as tmpdir:
+            todo_file = Path(tmpdir) / "images.todo"
+            todo_file.write_text(f"{target}\n", encoding="utf-8")
+            selected = self.selected_line_spec
+            removed = self.remove_line_spec
+            overrides = list(self.tag_override_specs)
+            excluded = self.exclude_tag_line_spec
+            recreate_excluded = self.recreate_excluded_services
+            allow_tag_updates = self.allow_tag_updates
+            self.selected_line_spec = ""
+            self.remove_line_spec = ""
+            self.tag_override_specs = []
+            self.exclude_tag_line_spec = ""
+            self.recreate_excluded_services = False
+            self.allow_tag_updates = True
+            try:
+                return self._run_updater(wud_file=str(todo_file))
+            finally:
+                self.selected_line_spec = selected
+                self.remove_line_spec = removed
+                self.tag_override_specs = overrides
+                self.exclude_tag_line_spec = excluded
+                self.recreate_excluded_services = recreate_excluded
+                self.allow_tag_updates = allow_tag_updates
 
     def _pull_self_update_image(self, target: str) -> int:
         image = _self_update_pull_image(target)
@@ -1028,14 +1057,26 @@ def _self_update_pull_image(target: str) -> str:
     if image == "":
         return ""
 
+    desired_tag = _self_update_desired_tag(target)
+
+    if desired_tag:
+        return image_with_tag(image, desired_tag)
+    return image
+
+
+def _self_update_desired_tag(target: str) -> str:
+    image = _first_token(target)
+    if image == "":
+        return ""
+
     desired_tag = ""
     for token in _rest_tokens(target):
         if token.startswith("tag="):
             desired_tag = token.removeprefix("tag=")
 
     if desired_tag and image_has_tag(image) and tag_value_valid(desired_tag):
-        return image_with_tag(image, desired_tag)
-    return image
+        return desired_tag
+    return ""
 
 
 def _read_todo_entries_with_sudo(

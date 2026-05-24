@@ -914,6 +914,11 @@ run_github_release_self_update() {
   fi
 
   stop_after_self_update=1
+  if self_update_desired_tag "$target" >/dev/null 2>&1; then
+    run_github_release_tag_self_update "$target"
+    return $?
+  fi
+
   image="$(self_update_pull_image "$target")" || {
     echo "Could not determine WUD-Updater image to pull." >&2
     return 1
@@ -932,7 +937,68 @@ run_github_release_self_update() {
   return "$rc"
 }
 
+run_github_release_tag_self_update() {
+  local target="$1" tmp_dir tmp_file rc old_allow_tag_updates
+  local old_wud_file old_selected_line_spec old_remove_line_spec old_exclude_tag_line_spec
+  local old_recreate_excluded_services
+  local -a old_tag_override_specs=()
+
+  tmp_dir="$(mktemp -d "${TMPDIR:-/tmp}/wud-self-update.XXXXXX")" || return 1
+  tmp_file="$tmp_dir/images.todo"
+  printf '%s\n' "$target" > "$tmp_file" || {
+    rc=$?
+    rm -rf "$tmp_dir"
+    return "$rc"
+  }
+
+  old_wud_file="$wud_file"
+  old_selected_line_spec="$selected_line_spec"
+  old_remove_line_spec="$remove_line_spec"
+  old_exclude_tag_line_spec="$exclude_tag_line_spec"
+  old_recreate_excluded_services="$recreate_excluded_services"
+  if ((${#tag_override_specs[@]})); then
+    old_tag_override_specs=("${tag_override_specs[@]}")
+  fi
+  old_allow_tag_updates="$allow_tag_updates"
+  wud_file="$tmp_file"
+  selected_line_spec=""
+  remove_line_spec=""
+  exclude_tag_line_spec=""
+  recreate_excluded_services=0
+  tag_override_specs=()
+  allow_tag_updates=1
+
+  run_updater
+  rc=$?
+
+  wud_file="$old_wud_file"
+  selected_line_spec="$old_selected_line_spec"
+  remove_line_spec="$old_remove_line_spec"
+  exclude_tag_line_spec="$old_exclude_tag_line_spec"
+  recreate_excluded_services="$old_recreate_excluded_services"
+  tag_override_specs=()
+  if ((${#old_tag_override_specs[@]})); then
+    tag_override_specs=("${old_tag_override_specs[@]}")
+  fi
+  allow_tag_updates="$old_allow_tag_updates"
+  rm -rf "$tmp_dir"
+  return "$rc"
+}
+
 self_update_pull_image() {
+  local target="$1" first desired_tag
+
+  read -r first _ <<< "$target"
+  [ -n "$first" ] || return 1
+
+  if desired_tag="$(self_update_desired_tag "$target")"; then
+    image_with_tag "$first" "$desired_tag"
+  else
+    printf '%s\n' "$first"
+  fi
+}
+
+self_update_desired_tag() {
   local target="$1" first token desired_tag=""
   local tokens=()
 
@@ -947,10 +1013,10 @@ self_update_pull_image() {
   done
 
   if [ -n "$desired_tag" ] && image_has_tag "$first" && tag_value_valid "$desired_tag"; then
-    image_with_tag "$first" "$desired_tag"
-  else
-    printf '%s\n' "$first"
+    printf '%s\n' "$desired_tag"
+    return 0
   fi
+  return 1
 }
 
 run_self_update_preflight() {

@@ -410,9 +410,10 @@ confirmation or `--yes`.
 
 By default, `updates` checks for a WUD-Updater update before applying other
 pending Docker updates. It first honors a matching WUD todo entry, and if none
-exists it can use the GitHub latest-release check to pull the newer
-WUD-Updater image directly and ask you to restart the container before
-continuing. Use `updates --no-self-update` or
+exists it can use the GitHub latest-release check. Floating tags such as
+`latest` are pulled directly and then ask you to restart the container; pinned
+release tags use the normal updater path so the Compose image tag can be
+rewritten before restart. Use `updates --no-self-update` or
 `WUD_UPDATER_SELF_UPDATE=0` to skip this preflight. `WUD_UPDATER_RELEASE_CHECK=0`
 disables only the GitHub release-check source; WUD todo-file detection still
 runs unless self-update is disabled.
