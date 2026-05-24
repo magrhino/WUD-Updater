@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 ColumnSchema = tuple[str, str, int, str | None, int]
 
@@ -80,11 +80,30 @@ EXPECTED_SCHEMA: dict[str, tuple[ColumnSchema, ...]] = {
         ("updated_at", "TEXT", 1, None, 0),
         ("metadata_json", "TEXT", 1, "'{}'", 0),
     ),
+    "tag_exclusion_rules": (
+        ("id", "INTEGER", 0, None, 1),
+        ("scope", "TEXT", 1, None, 0),
+        ("image_repo", "TEXT", 1, None, 0),
+        ("service_key", "TEXT", 1, "''", 0),
+        ("match_type", "TEXT", 1, None, 0),
+        ("tag", "TEXT", 1, None, 0),
+        ("regex_fragment", "TEXT", 1, None, 0),
+        ("status", "TEXT", 1, "'active'", 0),
+        ("created_at", "TEXT", 1, None, 0),
+        ("updated_at", "TEXT", 1, None, 0),
+        ("metadata_json", "TEXT", 1, "'{}'", 0),
+    ),
+}
+
+EXPECTED_SCHEMA_V2 = {
+    name: columns
+    for name, columns in EXPECTED_SCHEMA.items()
+    if name != "tag_exclusion_rules"
 }
 
 EXPECTED_SCHEMA_V1 = {
     name: columns
-    for name, columns in EXPECTED_SCHEMA.items()
+    for name, columns in EXPECTED_SCHEMA_V2.items()
     if name != "pending_updates"
 }
 
@@ -115,9 +134,15 @@ def init_db(conn: sqlite3.Connection) -> None:
     if version == SCHEMA_VERSION:
         _validate_schema(conn)
         return
+    if version == 2:
+        _validate_schema(conn, expected_schema=EXPECTED_SCHEMA_V2)
+        _migrate_v2_to_v3(conn)
+        _validate_schema(conn)
+        return
     if version == 1:
         _validate_schema(conn, expected_schema=EXPECTED_SCHEMA_V1)
         _migrate_v1_to_v2(conn)
+        _migrate_v2_to_v3(conn)
         _validate_schema(conn)
         return
     if version != 0:
@@ -214,6 +239,23 @@ def init_db(conn: sqlite3.Connection) -> None:
                 ON pending_updates (status);
             CREATE INDEX IF NOT EXISTS idx_pending_updates_service_key_status
                 ON pending_updates (service_key, status);
+
+            CREATE TABLE IF NOT EXISTS tag_exclusion_rules (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                scope TEXT NOT NULL,
+                image_repo TEXT NOT NULL,
+                service_key TEXT NOT NULL DEFAULT '',
+                match_type TEXT NOT NULL,
+                tag TEXT NOT NULL,
+                regex_fragment TEXT NOT NULL,
+                status TEXT NOT NULL DEFAULT 'active',
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                metadata_json TEXT NOT NULL DEFAULT '{}',
+                UNIQUE (scope, image_repo, service_key, match_type, tag)
+            );
+            CREATE INDEX IF NOT EXISTS idx_tag_exclusion_rules_lookup
+                ON tag_exclusion_rules (status, image_repo, service_key, match_type);
             """
         )
         _validate_schema(conn)
@@ -509,6 +551,104 @@ def upsert_known_image(
         )
 
 
+def upsert_tag_exclusion_rule(
+    conn: sqlite3.Connection,
+    *,
+    scope: str,
+    image_repo: str,
+    service_key: str = "",
+    match_type: str = "exact",
+    tag: str,
+    regex_fragment: str,
+    status: str = "active",
+    created_at: str | None = None,
+    updated_at: str | None = None,
+    metadata_json: str = "{}",
+) -> int:
+    """Store or refresh one WUD tag exclusion rule."""
+
+    now = utc_timestamp()
+    created = created_at or now
+    updated = updated_at or now
+    with conn:
+        conn.execute(
+            """
+            INSERT INTO tag_exclusion_rules (
+                scope,
+                image_repo,
+                service_key,
+                match_type,
+                tag,
+                regex_fragment,
+                status,
+                created_at,
+                updated_at,
+                metadata_json
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(scope, image_repo, service_key, match_type, tag)
+            DO UPDATE SET
+                regex_fragment = excluded.regex_fragment,
+                status = excluded.status,
+                updated_at = excluded.updated_at,
+                metadata_json = excluded.metadata_json
+            """,
+            (
+                scope,
+                image_repo,
+                service_key,
+                match_type,
+                tag,
+                regex_fragment,
+                status,
+                created,
+                updated,
+                metadata_json,
+            ),
+        )
+    row = conn.execute(
+        """
+        SELECT id
+        FROM tag_exclusion_rules
+        WHERE scope = ?
+          AND image_repo = ?
+          AND service_key = ?
+          AND match_type = ?
+          AND tag = ?
+        LIMIT 1
+        """,
+        (scope, image_repo, service_key, match_type, tag),
+    ).fetchone()
+    return int(row["id"] if isinstance(row, sqlite3.Row) else row[0])
+
+
+def active_tag_exclusion_rules(
+    conn: sqlite3.Connection,
+    *,
+    image_repo: str,
+    service_key: str = "",
+    match_type: str = "exact",
+) -> tuple[sqlite3.Row, ...]:
+    """Return active exact exclusions for an image repo and optional service."""
+
+    cursor = conn.execute(
+        """
+        SELECT *
+        FROM tag_exclusion_rules
+        WHERE status = 'active'
+          AND image_repo = ?
+          AND match_type = ?
+          AND (
+                (scope = 'image_repo' AND service_key = '')
+             OR (scope = 'service' AND service_key = ?)
+          )
+        ORDER BY tag COLLATE BINARY
+        """,
+        (image_repo, match_type, service_key),
+    )
+    return tuple(cursor.fetchall())
+
+
 def utc_timestamp() -> str:
     """Return a stable UTC timestamp format for SQLite text comparisons."""
 
@@ -646,6 +786,42 @@ def _migrate_v1_to_v2(conn: sqlite3.Connection) -> None:
                 ON pending_updates (status);
             CREATE INDEX IF NOT EXISTS idx_pending_updates_service_key_status
                 ON pending_updates (service_key, status);
+            """
+        )
+        conn.execute("PRAGMA user_version = 2")
+
+
+def _migrate_v2_to_v3(conn: sqlite3.Connection) -> None:
+    object_type = _sqlite_object_type(conn, "tag_exclusion_rules")
+    if object_type is not None:
+        if object_type != "table":
+            raise DatabaseError(
+                f"Expected tag_exclusion_rules to be a table, found {object_type}"
+            )
+        _validate_table_columns(
+            conn,
+            "tag_exclusion_rules",
+            EXPECTED_SCHEMA["tag_exclusion_rules"],
+        )
+    with conn:
+        conn.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS tag_exclusion_rules (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                scope TEXT NOT NULL,
+                image_repo TEXT NOT NULL,
+                service_key TEXT NOT NULL DEFAULT '',
+                match_type TEXT NOT NULL,
+                tag TEXT NOT NULL,
+                regex_fragment TEXT NOT NULL,
+                status TEXT NOT NULL DEFAULT 'active',
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                metadata_json TEXT NOT NULL DEFAULT '{}',
+                UNIQUE (scope, image_repo, service_key, match_type, tag)
+            );
+            CREATE INDEX IF NOT EXISTS idx_tag_exclusion_rules_lookup
+                ON tag_exclusion_rules (status, image_repo, service_key, match_type);
             """
         )
         conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")

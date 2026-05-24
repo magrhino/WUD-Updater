@@ -14,11 +14,12 @@ import time
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, replace
 from datetime import datetime
+from io import StringIO
 from pathlib import Path
 from typing import TextIO
 
 from ruamel.yaml import YAML
-from ruamel.yaml.comments import CommentedMap
+from ruamel.yaml.comments import CommentedMap, CommentedSeq
 from ruamel.yaml.error import YAMLError
 
 from .command import CommandError, CommandResult, CommandRunner
@@ -32,12 +33,14 @@ from .compose import (
 from .config import DEFAULT_MAX_WAIT, DEFAULT_UPDATE_MODE
 from .db import (
     DatabaseError,
+    active_tag_exclusion_rules,
     connect_db,
     init_db,
     insert_pending_update,
     insert_update_event,
     insert_update_run,
     update_pending_update,
+    upsert_tag_exclusion_rule,
     upsert_known_image,
     utc_timestamp as db_utc_timestamp,
 )
@@ -46,6 +49,7 @@ from .file_ops import OwnerConfig, OwnerConfigError, apply_configured_owner
 from .images import (
     image_has_tag,
     image_matches_resolved_target,
+    repo_key,
     image_with_tag,
     tag_value_valid,
 )
@@ -68,6 +72,7 @@ RECREATE_STACK_LABEL_FORMAT = f'{{{{ index .Config.Labels "{RECREATE_STACK_LABEL
 VALID_MODES = frozenset({"pause", "stop", "live"})
 _SAFE_COMPONENT_RE = re.compile(r"[^A-Za-z0-9._-]")
 _CONTROL_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
+_JS_REGEX_SPECIAL_RE = re.compile(r"([\\^$.*+?()[\]{}|])")
 _EXCLUSIVE_CREATE_ATTEMPTS = 100
 _SERVICES_UNSET = object()
 _HELPER_ONLY_MOUNT_PREFIXES = (Path("/host"), Path("/docker-host"), Path("/container-host"))
@@ -95,6 +100,8 @@ class UpdaterOptions:
     only_lines: str = ""
     remove_lines_before_run: str = ""
     tag_overrides: tuple["TagOverride", ...] = ()
+    exclude_tag_lines: str = ""
+    recreate_excluded_services: bool = False
     db_path: Path | None = None
     docker_base_label: str | None = None
     host_docker_base: Path | None = None
@@ -130,6 +137,28 @@ class TagUpdate:
 class TagOverride:
     line_no: int
     tag: str
+
+
+@dataclass(frozen=True)
+class TagExclusionUpdate:
+    stack: ComposeStack
+    service: str
+    image: str
+    image_repo: str
+    tag: str
+    source_line: int
+    scope: str
+
+    @property
+    def service_key(self) -> str:
+        return f"{self.stack.name}/{self.service}"
+
+
+@dataclass(frozen=True)
+class AppliedTagExclusion:
+    service: str
+    image_repo: str
+    tags: tuple[str, ...]
 
 
 @dataclass(frozen=True)
@@ -264,31 +293,51 @@ class UpdateFromWudRunner:
             if lock.parent_held:
                 lock.acquire()
 
-            parsed = self._parse_wud_file()
+            parsed, excluded_tags = self._parse_wud_files()
             if opts.dry_run or not opts.remove_lines_before_run:
                 lock.release_parent()
 
-            if not parsed.targets:
+            if not parsed.targets and not excluded_tags.targets:
                 self.log.info("Nothing to do; list is empty.")
                 return 0
 
-            self._print_targets(parsed)
+            if parsed.targets:
+                self._print_targets(parsed)
+            self._print_tag_exclusions(excluded_tags)
             stacks = self.compose.discover_stacks(
                 opts.docker_base,
                 project_base=opts.host_docker_base,
             )
+            exclusion_matches, invalid_exclusions = self._build_tag_exclusion_matches(
+                excluded_tags,
+                stacks,
+            )
+            exclusion_updates, exclusion_failures = self._plan_tag_exclusions(
+                exclusion_matches,
+                stacks,
+            )
+            exclusion_failures.extend(invalid_exclusions)
+            self._print_tag_exclusion_plan(exclusion_updates, exclusion_failures)
             matches, skipped_tags = self._build_matches(parsed, stacks)
             self._print_skipped_tag_updates(skipped_tags)
 
-            if not matches:
+            if not matches and not exclusion_updates:
                 if not opts.dry_run:
-                    self._start_audit(parsed)
-                    self._mark_unmatched_pending(parsed, matches, skipped_tags)
-                    self._finish_audit_run("success")
+                    audit_parsed = self._audit_parsed_file(
+                        parsed,
+                        [target.line_no for target in excluded_tags.targets],
+                    )
+                    self._start_audit(audit_parsed)
+                    self._mark_unmatched_pending(audit_parsed, matches, skipped_tags)
+                    self._mark_tag_exclusion_failures(exclusion_failures)
+                    self._finish_audit_run(
+                        "failure" if exclusion_failures else "success"
+                    )
                 self.log.info("No stacks matched the list; nothing to do.")
-                return 0
+                return 1 if exclusion_failures else 0
 
-            self._print_plan(matches)
+            if matches:
+                self._print_plan(matches)
 
             if not self._validate_tag_update_plan(matches):
                 return 1
@@ -317,15 +366,22 @@ class UpdateFromWudRunner:
             in_flight_lines = sorted(
                 {match.target.line_no for match in matches}
                 | set(remove_line_numbers)
+                | {update.source_line for update in exclusion_updates}
             )
-            audit_parsed = self._audit_parsed_file(parsed, in_flight_lines)
+            audit_lines = sorted(
+                set(in_flight_lines)
+                | {target.line_no for target, _reason in exclusion_failures}
+            )
+            audit_parsed = self._audit_parsed_file(parsed, audit_lines)
             self._start_audit(audit_parsed)
             self._mark_unmatched_pending(audit_parsed, matches, skipped_tags)
             self._mark_removed_pending(audit_parsed, remove_line_numbers, matches)
             self._mark_matched_pending(matches, status="in_progress")
+            self._mark_tag_exclusions_pending(exclusion_updates)
+            self._mark_tag_exclusion_failures(exclusion_failures)
             remove_lines_before_run(
                 opts.wud_file,
-                parsed,
+                audit_parsed,
                 in_flight_lines,
                 lock=lock,
                 owner=self.owner,
@@ -333,16 +389,27 @@ class UpdateFromWudRunner:
             self.log.info("Removed in-flight WUD entries before update.")
             lock.release_parent()
 
+            exclusion_statuses = self._apply_tag_exclusions(exclusion_updates)
             stack_statuses: dict[int, StackStatus] = {}
             for stack in _stacks_to_update(matches):
                 stack_matches = [match for match in matches if match.stack.index == stack.index]
                 stack_statuses[stack.index] = self._update_stack(stack, stack_matches)
 
             failed_lines = _failed_line_numbers(matches, stack_statuses)
+            failed_lines.extend(
+                sorted(
+                    {
+                        update.source_line
+                        for update in exclusion_updates
+                        if exclusion_statuses.get(update.source_line, StackStatus("failure", "missing")).status
+                        != "success"
+                    }
+                )
+            )
             if failed_lines:
                 restore_failed_lines(
                     opts.wud_file,
-                    parsed,
+                    audit_parsed,
                     failed_lines,
                     lock=lock,
                     owner=self.owner,
@@ -354,10 +421,17 @@ class UpdateFromWudRunner:
                 self._mark_failed_lines_restored(())
                 self.log.info("Successful WUD entries were removed before update.")
             self._mark_successful_pending(matches, stack_statuses)
+            self._mark_successful_tag_exclusions(exclusion_updates, exclusion_statuses)
             self._record_update_events(matches, stack_statuses)
             self._record_known_images(matches, stack_statuses)
 
-            fail_count = sum(1 for status in stack_statuses.values() if status.status != "success")
+            fail_count = sum(
+                1 for status in stack_statuses.values() if status.status != "success"
+            ) + sum(
+                1
+                for status in exclusion_statuses.values()
+                if status.status != "success"
+            ) + len(exclusion_failures)
             if fail_count:
                 self._finish_audit_run("failure")
                 error_report = self._write_error_report()
@@ -390,22 +464,37 @@ class UpdateFromWudRunner:
                 self.audit_conn.close()
             lock.close()
 
-    def _parse_wud_file(self) -> ParsedWudFile:
+    def _parse_wud_files(self) -> tuple[ParsedWudFile, ParsedWudFile]:
         opts = self.options
         full_parse = parse_wud_file(opts.wud_file)
         only_lines = parse_line_spec(opts.only_lines, len(full_parse.lines), "--only-lines")
+        exclude_lines = parse_line_spec(
+            opts.exclude_tag_lines,
+            len(full_parse.lines),
+            "--exclude-tag-lines",
+        )
         parse_line_spec(
             opts.remove_lines_before_run,
             len(full_parse.lines),
             "--remove-lines-before-run",
         )
+        update_lines: set[int] | None = set(only_lines) if only_lines else None
+        if exclude_lines:
+            if update_lines is None:
+                update_lines = {
+                    line.line_no for line in full_parse.lines if line.actionable
+                }
+            update_lines -= set(exclude_lines)
         parsed = parse_wud_file(
             opts.wud_file,
-            selected_lines=only_lines if only_lines else None,
+            selected_lines=sorted(update_lines) if update_lines is not None else None,
         )
+        excluded = parse_wud_file(opts.wud_file, selected_lines=exclude_lines)
         for warning in parsed.warnings:
             self.log.warn(warning)
-        return self._apply_tag_overrides(parsed)
+        for warning in excluded.warnings:
+            self.log.warn(warning)
+        return self._apply_tag_overrides(parsed), excluded
 
     def _apply_tag_overrides(
         self,
@@ -511,6 +600,298 @@ class UpdateFromWudRunner:
             )
         )
         return matches, skipped_tags
+
+    def _build_tag_exclusion_matches(
+        self,
+        parsed: ParsedWudFile,
+        stacks: Sequence[ComposeStack],
+    ) -> tuple[list[Match], list[tuple[WudTarget, str]]]:
+        container_images = {item.name: item.image for item in self.docker.try_container_images()}
+        matches: list[Match] = []
+        failures: list[tuple[WudTarget, str]] = []
+        seen: set[tuple[int, int, str, str, str]] = set()
+
+        for target in parsed.targets:
+            if not target.desired_tag:
+                failures.append((target, "not-a-tag-update"))
+                continue
+
+            resolved = container_images.get(target.first, target.first)
+            allow_repo = target.allow_repo or resolved != target.first or not image_has_tag(resolved)
+
+            for stack in stacks:
+                for image in stack.images:
+                    if not image_matches_resolved_target(image, resolved, allow_repo):
+                        continue
+                    services = _services_for_image(stack.service_images, image)
+                    for service in services:
+                        key = (stack.index, target.line_no, resolved, image, service)
+                        if key in seen:
+                            continue
+                        matches.append(Match(stack, target, resolved, image, service))
+                        seen.add(key)
+
+            if not any(match.target.line_no == target.line_no for match in matches):
+                failures.append((target, "unmatched"))
+
+        matches.sort(
+            key=lambda item: (
+                item.stack.index,
+                item.target.line_no,
+                item.target.first,
+                item.resolved,
+                item.compose_image,
+                item.service,
+            )
+        )
+        return matches, failures
+
+    def _plan_tag_exclusions(
+        self,
+        matches: Sequence[Match],
+        stacks: Sequence[ComposeStack],
+    ) -> tuple[list[TagExclusionUpdate], list[tuple[WudTarget, str]]]:
+        updates: list[TagExclusionUpdate] = []
+        failures: list[tuple[WudTarget, str]] = []
+
+        by_line = _first_match_by_line(matches)
+        for line_no in sorted(by_line):
+            first_match = by_line[line_no]
+            line_matches = [match for match in matches if match.target.line_no == line_no]
+            if not all(match.service for match in line_matches):
+                failures.append((first_match.target, "service-unmapped"))
+                continue
+
+            image_repo = repo_key(first_match.compose_image)
+            repo_updates = self._tag_exclusion_repo_updates(
+                stacks,
+                image_repo=image_repo,
+                tag=first_match.target.desired_tag,
+                source_line=line_no,
+            )
+            if repo_updates and self._can_apply_tag_exclusions(repo_updates):
+                updates.extend(repo_updates)
+                continue
+
+            service_updates = [
+                TagExclusionUpdate(
+                    stack=match.stack,
+                    service=match.service,
+                    image=match.compose_image,
+                    image_repo=repo_key(match.compose_image),
+                    tag=match.target.desired_tag,
+                    source_line=line_no,
+                    scope="service",
+                )
+                for match in line_matches
+                if match.service
+            ]
+            if service_updates and self._can_apply_tag_exclusions(service_updates):
+                updates.extend(service_updates)
+            else:
+                failures.append((first_match.target, "compose-label-unsupported"))
+
+        return _unique_tag_exclusion_updates(updates), failures
+
+    def _tag_exclusion_repo_updates(
+        self,
+        stacks: Sequence[ComposeStack],
+        *,
+        image_repo: str,
+        tag: str,
+        source_line: int,
+    ) -> list[TagExclusionUpdate]:
+        updates: list[TagExclusionUpdate] = []
+        for stack in stacks:
+            for service_image in stack.service_images:
+                if repo_key(service_image.image) != image_repo:
+                    continue
+                updates.append(
+                    TagExclusionUpdate(
+                        stack=stack,
+                        service=service_image.service,
+                        image=service_image.image,
+                        image_repo=image_repo,
+                        tag=tag,
+                        source_line=source_line,
+                        scope="image_repo",
+                    )
+                )
+        return updates
+
+    def _can_apply_tag_exclusions(
+        self,
+        updates: Sequence[TagExclusionUpdate],
+    ) -> bool:
+        try:
+            for stack, stack_updates in _tag_exclusion_updates_by_stack(updates).items():
+                render_compose_tag_exclusions(
+                    stack.directory / stack.file,
+                    stack_updates,
+                    existing_exact_tags={},
+                )
+        except ComposeTagRewriteError:
+            return False
+        return True
+
+    def _apply_tag_exclusions(
+        self,
+        updates: Sequence[TagExclusionUpdate],
+    ) -> dict[int, StackStatus]:
+        statuses = {
+            line_no: StackStatus("success", "tag-excluded")
+            for line_no in {update.source_line for update in updates}
+        }
+        if not updates:
+            return statuses
+
+        successful_updates: list[TagExclusionUpdate] = []
+        for stack, stack_updates in _tag_exclusion_updates_by_stack(updates).items():
+            existing_exact_tags = self._existing_exact_tag_exclusions(stack_updates)
+            try:
+                applied = apply_compose_tag_exclusions(
+                    stack.directory / stack.file,
+                    stack_updates,
+                    existing_exact_tags=existing_exact_tags,
+                )
+            except ComposeTagRewriteError as exc:
+                self.log.error(
+                    f"[{stack.name}] Could not safely write wud.tag.exclude: {exc}"
+                )
+                for update in stack_updates:
+                    statuses[update.source_line] = StackStatus(
+                        "failure",
+                        "tag-exclusion-label-failed",
+                    )
+                continue
+            except OSError as exc:
+                self.log.error(f"[{stack.name}] Could not write wud.tag.exclude: {exc}")
+                for update in stack_updates:
+                    statuses[update.source_line] = StackStatus(
+                        "failure",
+                        "tag-exclusion-label-failed",
+                    )
+                continue
+
+            for item in applied:
+                self.log.info(
+                    f"[{stack.name}] Updated wud.tag.exclude for service "
+                    f"{item.service}: {', '.join(item.tags)}"
+                )
+            self._record_tag_exclusion_rules(stack_updates)
+            successful_updates.extend(stack_updates)
+
+        if self.options.recreate_excluded_services:
+            self._recreate_tag_exclusion_services(successful_updates, statuses)
+        return statuses
+
+    def _existing_exact_tag_exclusions(
+        self,
+        updates: Sequence[TagExclusionUpdate],
+    ) -> dict[str, set[str]]:
+        existing: dict[str, set[str]] = {}
+        if self.audit_conn is None:
+            return existing
+        for update in updates:
+            rows = active_tag_exclusion_rules(
+                self.audit_conn,
+                image_repo=update.image_repo,
+                service_key=update.service_key,
+            )
+            tags = existing.setdefault(update.service, set())
+            tags.update(str(row["tag"]) for row in rows)
+        return existing
+
+    def _record_tag_exclusion_rules(
+        self,
+        updates: Sequence[TagExclusionUpdate],
+    ) -> None:
+        if self.audit_conn is None:
+            return
+        seen: set[tuple[str, str, str, str]] = set()
+        for update in updates:
+            service_key = "" if update.scope == "image_repo" else update.service_key
+            key = (update.scope, update.image_repo, service_key, update.tag)
+            if key in seen:
+                continue
+            seen.add(key)
+            upsert_tag_exclusion_rule(
+                self.audit_conn,
+                scope=update.scope,
+                image_repo=update.image_repo,
+                service_key=service_key,
+                tag=update.tag,
+                regex_fragment=js_regex_escape(update.tag),
+            )
+
+    def _recreate_tag_exclusion_services(
+        self,
+        updates: Sequence[TagExclusionUpdate],
+        statuses: dict[int, StackStatus],
+    ) -> None:
+        for stack, stack_updates in _tag_exclusion_updates_by_stack(updates).items():
+            services = tuple(sorted({update.service for update in stack_updates}))
+            result = self._run_compose_up(stack, services, no_deps=True)
+            if result.ok and (result.wait_handled or self._wait_for_health(stack, services)):
+                continue
+            for update in stack_updates:
+                statuses[update.source_line] = StackStatus(
+                    "failure",
+                    "tag-exclusion-recreate-failed",
+                )
+
+    def _mark_tag_exclusions_pending(
+        self,
+        updates: Sequence[TagExclusionUpdate],
+    ) -> None:
+        if self.audit_conn is None or self.audit_run_id is None:
+            return
+        for line_no, update in _first_tag_exclusion_by_line(updates).items():
+            update_pending_update(
+                self.audit_conn,
+                run_id=self.audit_run_id,
+                line_no=line_no,
+                status="in_progress",
+                status_reason="tag-exclusion",
+                service_key=update.service_key,
+                stack_name=update.stack.name,
+                service_name=update.service,
+            )
+
+    def _mark_successful_tag_exclusions(
+        self,
+        updates: Sequence[TagExclusionUpdate],
+        statuses: Mapping[int, StackStatus],
+    ) -> None:
+        if self.audit_conn is None or self.audit_run_id is None:
+            return
+        for line_no, update in _first_tag_exclusion_by_line(updates).items():
+            status = statuses.get(line_no, StackStatus("failure", "missing"))
+            update_pending_update(
+                self.audit_conn,
+                run_id=self.audit_run_id,
+                line_no=line_no,
+                status="resolved" if status.status == "success" else "failed",
+                status_reason=status.reason,
+                service_key=update.service_key,
+                stack_name=update.stack.name,
+                service_name=update.service,
+            )
+
+    def _mark_tag_exclusion_failures(
+        self,
+        failures: Sequence[tuple[WudTarget, str]],
+    ) -> None:
+        if self.audit_conn is None or self.audit_run_id is None:
+            return
+        for target, reason in failures:
+            update_pending_update(
+                self.audit_conn,
+                run_id=self.audit_run_id,
+                line_no=target.line_no,
+                status="failed",
+                status_reason=f"tag-exclusion-{reason}",
+            )
 
     def _update_stack(self, stack: ComposeStack, matches: Sequence[Match]) -> StackStatus:
         opts = self.options
@@ -1871,6 +2252,11 @@ class UpdateFromWudRunner:
             self.log.info(f"Only    : {opts.only_lines}")
         if opts.remove_lines_before_run:
             self.log.info(f"Remove  : {opts.remove_lines_before_run}")
+        if opts.exclude_tag_lines:
+            self.log.info(f"Exclude : {opts.exclude_tag_lines}")
+            self.log.info(
+                f"Recreate: {_bool_text(opts.recreate_excluded_services)}"
+            )
         for override in opts.tag_overrides:
             self.log.info(f"Override: line {override.line_no} tag={override.tag}")
         if self.owner.configured:
@@ -1905,6 +2291,20 @@ class UpdateFromWudRunner:
             suffix += f" tag={target.desired_tag}" if target.desired_tag else ""
             self.log.info(f"  line {target.line_no}: {target.first}{suffix}")
 
+    def _print_tag_exclusions(self, parsed: ParsedWudFile) -> None:
+        if not parsed.targets:
+            return
+        self.log.info("Tag exclusions requested:")
+        for target in parsed.targets:
+            if target.desired_tag:
+                desired_image = image_with_tag(target.first, target.desired_tag)
+                self.log.info(
+                    f"  line {target.line_no}: exclude {target.desired_tag} "
+                    f"for {desired_image}"
+                )
+            else:
+                self.log.info(f"  line {target.line_no}: cannot exclude {target.first}")
+
     def _print_skipped_tag_updates(self, skipped_tags: Sequence[WudTarget]) -> None:
         if not skipped_tags:
             return
@@ -1912,6 +2312,30 @@ class UpdateFromWudRunner:
         for target in skipped_tags:
             desired_image = image_with_tag(target.first, target.desired_tag)
             self.log.info(f"  line {target.line_no}: {target.first} -> {desired_image}")
+
+    def _print_tag_exclusion_plan(
+        self,
+        updates: Sequence[TagExclusionUpdate],
+        failures: Sequence[tuple[WudTarget, str]],
+    ) -> None:
+        if updates:
+            self.log.info("Tag exclusions to write:")
+            seen: set[tuple[str, str, str, str]] = set()
+            for update in updates:
+                key = (update.stack.name, update.service, update.image_repo, update.tag)
+                if key in seen:
+                    continue
+                seen.add(key)
+                self.log.info(
+                    f"  [{update.stack.name}] {update.service}: "
+                    f"exclude {update.tag} for {update.image_repo} "
+                    f"({update.scope})"
+                )
+        for target, reason in failures:
+            self.log.warn(
+                f"Tag exclusion for line {target.line_no} could not be planned: "
+                f"{reason}"
+            )
 
     def _print_plan(self, matches: Sequence[Match]) -> None:
         if self.log.rich_enabled():
@@ -2026,6 +2450,10 @@ def options_from_namespace(args: object, *, environ: Mapping[str, str] | None = 
         only_lines=getattr(args, "only_lines", None) or "",
         remove_lines_before_run=getattr(args, "remove_lines_before_run", None) or "",
         tag_overrides=tag_overrides,
+        exclude_tag_lines=getattr(args, "exclude_tag_lines", None) or "",
+        recreate_excluded_services=bool(
+            getattr(args, "recreate_excluded_services", False)
+        ),
         db_path=db_path,
         docker_base_label=docker_base_label,
         host_docker_base=host_docker_base,
@@ -2216,6 +2644,167 @@ def apply_compose_tag_updates(
     return applied
 
 
+def apply_compose_tag_exclusions(
+    compose_path: Path,
+    updates: Sequence[TagExclusionUpdate],
+    *,
+    existing_exact_tags: Mapping[str, set[str]],
+) -> tuple[AppliedTagExclusion, ...]:
+    """Write WUD exact-tag exclusions into service labels."""
+
+    rendered, applied = render_compose_tag_exclusions(
+        compose_path,
+        updates,
+        existing_exact_tags=existing_exact_tags,
+    )
+    fd, tmp_name = tempfile.mkstemp(
+        prefix=f".{compose_path.name}.exclude.",
+        dir=str(compose_path.parent),
+    )
+    tmp_path: Path | None = Path(tmp_name)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8", newline="") as tmp:
+            tmp.write(rendered)
+        st = compose_path.stat()
+        os.chown(tmp_path, st.st_uid, st.st_gid)
+        os.chmod(tmp_path, st.st_mode & 0o7777)
+        os.replace(tmp_path, compose_path)
+        tmp_path = None
+    finally:
+        if tmp_path is not None:
+            try:
+                tmp_path.unlink()
+            except FileNotFoundError:
+                pass
+    return applied
+
+
+def render_compose_tag_exclusions(
+    compose_path: Path,
+    updates: Sequence[TagExclusionUpdate],
+    *,
+    existing_exact_tags: Mapping[str, set[str]],
+) -> tuple[str, tuple[AppliedTagExclusion, ...]]:
+    """Return Compose YAML with WUD exact-tag exclusions applied."""
+
+    if not updates:
+        return compose_path.read_text(encoding="utf-8"), ()
+
+    source = compose_path.read_text(encoding="utf-8")
+    yaml = YAML(typ="rt")
+    yaml.preserve_quotes = True
+    try:
+        parsed = yaml.load(source)
+    except YAMLError as exc:
+        raise ComposeTagRewriteError(
+            f"Compose file YAML could not be parsed: {exc}"
+        ) from exc
+    if not isinstance(parsed, CommentedMap):
+        raise ComposeTagRewriteError("Compose file is not a YAML mapping.")
+    services = parsed.get("services")
+    if not isinstance(services, CommentedMap):
+        raise ComposeTagRewriteError("Compose file has no services mapping.")
+
+    line_offsets = _line_start_offsets(source)
+    service_tags: dict[str, set[str]] = {}
+    service_repos: dict[str, str] = {}
+    service_images: dict[str, str] = {}
+    for update in updates:
+        _service_image_scalar_span(
+            services,
+            update.service,
+            update.image,
+            source,
+            line_offsets,
+        )
+        service_tags.setdefault(update.service, set()).add(update.tag)
+        service_repos[update.service] = update.image_repo
+        service_images[update.service] = update.image
+
+    applied: list[AppliedTagExclusion] = []
+    for service in sorted(service_tags):
+        service_config = services.get(service)
+        if not isinstance(service_config, CommentedMap):
+            raise ComposeTagRewriteError(
+                f"Service {service} is not a mapping with direct labels."
+            )
+        _reject_yaml_anchor_or_alias_service_config(services, service, service_config)
+        _materialize_inherited_service_labels(service_config, service)
+        labels = service_config.get("labels")
+        if labels is not None:
+            _reject_yaml_anchor_or_alias_labels(services, service, labels)
+        existing_tags = set(existing_exact_tags.get(service, set()))
+        new_tags = existing_tags | service_tags[service]
+        current_value = _get_service_label_value(service_config, "wud.tag.exclude")
+        current_regex = compose_unescape_dollars(current_value)
+        previous_managed = exact_tags_regex(existing_tags)
+        next_managed = exact_tags_regex(new_tags)
+        next_regex = merge_wud_exclude_regex(
+            current_regex,
+            previous_managed=previous_managed,
+            next_managed=next_managed,
+        )
+        _set_service_label_value(
+            service_config,
+            "wud.tag.exclude",
+            compose_escape_dollars(next_regex),
+        )
+        applied.append(
+            AppliedTagExclusion(
+                service=service,
+                image_repo=service_repos[service],
+                tags=tuple(sorted(new_tags)),
+            )
+        )
+
+    output = StringIO()
+    yaml.dump(parsed, output)
+    return output.getvalue(), tuple(applied)
+
+
+def _materialize_inherited_service_labels(
+    service_config: CommentedMap,
+    service: str,
+) -> None:
+    if _commented_map_has_direct_key(service_config, "labels"):
+        return
+
+    labels = service_config.get("labels")
+    if labels is None:
+        return
+    if isinstance(labels, CommentedMap):
+        service_config["labels"] = _copy_label_map(labels)
+        return
+    if isinstance(labels, CommentedSeq):
+        service_config["labels"] = _copy_label_sequence(labels)
+        return
+    raise ComposeTagRewriteError(
+        f"Service {service} labels use unsupported YAML syntax."
+    )
+
+
+def _commented_map_has_direct_key(mapping: CommentedMap, key: str) -> bool:
+    try:
+        direct_items = mapping.non_merged_items()
+    except AttributeError:
+        return key in mapping
+    return any(item_key == key for item_key, _item_value in direct_items)
+
+
+def _copy_label_map(labels: CommentedMap) -> CommentedMap:
+    copied = CommentedMap()
+    for key, value in labels.items():
+        copied[key] = value
+    return copied
+
+
+def _copy_label_sequence(labels: CommentedSeq) -> CommentedSeq:
+    copied = CommentedSeq()
+    for item in labels:
+        copied.append(item)
+    return copied
+
+
 def _line_start_offsets(source: str) -> list[int]:
     offsets = [0]
     for match in re.finditer("\n", source):
@@ -2284,6 +2873,96 @@ def _service_image_scalar_span(
     start = line_start + len(match.group(1)) + len(match.group(2))
     end = start + len(old_image)
     return start, end
+
+
+def _get_service_label_value(service_config: CommentedMap, key: str) -> str:
+    labels = service_config.get("labels")
+    if labels is None:
+        return ""
+    if isinstance(labels, CommentedMap):
+        value = labels.get(key)
+        if value is None:
+            return ""
+        if not isinstance(value, str):
+            raise ComposeTagRewriteError(f"Label {key} is not a string value.")
+        return value
+    if isinstance(labels, CommentedSeq):
+        for item in labels:
+            if not isinstance(item, str):
+                raise ComposeTagRewriteError(
+                    "Service labels use unsupported non-string list entries."
+                )
+            label_key, sep, label_value = item.partition("=")
+            if sep and label_key == key:
+                return label_value
+        return ""
+    raise ComposeTagRewriteError("Service labels use unsupported YAML syntax.")
+
+
+def _reject_yaml_anchor_or_alias_service_config(
+    services: CommentedMap,
+    service: str,
+    service_config: CommentedMap,
+) -> None:
+    anchor = getattr(service_config, "anchor", None)
+    if getattr(anchor, "value", None):
+        raise ComposeTagRewriteError(
+            f"Service {service} uses YAML anchors or aliases and needs manual review."
+        )
+    for other_service, other_config in services.items():
+        if other_service == service or not isinstance(other_config, CommentedMap):
+            continue
+        if other_config is service_config:
+            raise ComposeTagRewriteError(
+                f"Service {service} uses YAML anchors or aliases and needs manual review."
+            )
+
+
+def _reject_yaml_anchor_or_alias_labels(
+    services: CommentedMap,
+    service: str,
+    labels: object,
+) -> None:
+    anchor = getattr(labels, "anchor", None)
+    if getattr(anchor, "value", None):
+        raise ComposeTagRewriteError(
+            f"Service {service} labels use YAML anchors or aliases and need manual review."
+        )
+    for other_service, other_config in services.items():
+        if other_service == service or not isinstance(other_config, CommentedMap):
+            continue
+        if other_config.get("labels") is labels:
+            raise ComposeTagRewriteError(
+                f"Service {service} labels use YAML anchors or aliases and need manual review."
+            )
+
+
+def _set_service_label_value(
+    service_config: CommentedMap,
+    key: str,
+    value: str,
+) -> None:
+    labels = service_config.get("labels")
+    if labels is None:
+        labels = CommentedSeq()
+        service_config["labels"] = labels
+    if isinstance(labels, CommentedMap):
+        labels[key] = value
+        return
+    if isinstance(labels, CommentedSeq):
+        replacement = f"{key}={value}"
+        for index, item in enumerate(labels):
+            if not isinstance(item, str):
+                raise ComposeTagRewriteError(
+                    "Service labels use unsupported non-string list entries."
+                )
+            label_key, sep, _label_value = item.partition("=")
+            if sep and label_key == key:
+                labels[index] = replacement
+                return
+        labels.append(replacement)
+        return
+    raise ComposeTagRewriteError("Service labels use unsupported YAML syntax.")
 
 
 def _backup_compose(compose_path: Path) -> Path:
@@ -2597,6 +3276,76 @@ def _split_summary(summary: str) -> tuple[str, str, str, str, str]:
 def safe_component(value: str) -> str:
     cleaned = _SAFE_COMPONENT_RE.sub("_", value)
     return cleaned or "tag"
+
+
+def js_regex_escape(value: str) -> str:
+    return _JS_REGEX_SPECIAL_RE.sub(r"\\\1", value)
+
+
+def exact_tags_regex(tags: Iterable[str]) -> str:
+    fragments = [js_regex_escape(tag) for tag in sorted(set(tags))]
+    if not fragments:
+        return ""
+    if len(fragments) == 1:
+        return f"^{fragments[0]}$"
+    return f"^(?:{'|'.join(fragments)})$"
+
+
+def compose_escape_dollars(value: str) -> str:
+    return value.replace("$", "$$")
+
+
+def compose_unescape_dollars(value: str) -> str:
+    return value.replace("$$", "$")
+
+
+def merge_wud_exclude_regex(
+    current_regex: str,
+    *,
+    previous_managed: str,
+    next_managed: str,
+) -> str:
+    if not next_managed:
+        return current_regex
+    if not current_regex or current_regex == previous_managed:
+        return next_managed
+    if current_regex == next_managed:
+        return current_regex
+    return f"(?:{current_regex})|(?:{next_managed})"
+
+
+def _unique_tag_exclusion_updates(
+    updates: Iterable[TagExclusionUpdate],
+) -> list[TagExclusionUpdate]:
+    unique: dict[tuple[int, str, str, str, str], TagExclusionUpdate] = {}
+    for update in updates:
+        key = (
+            update.stack.index,
+            update.service,
+            update.image_repo,
+            update.tag,
+            update.scope,
+        )
+        unique.setdefault(key, update)
+    return [unique[key] for key in sorted(unique)]
+
+
+def _tag_exclusion_updates_by_stack(
+    updates: Sequence[TagExclusionUpdate],
+) -> dict[ComposeStack, list[TagExclusionUpdate]]:
+    grouped: dict[ComposeStack, list[TagExclusionUpdate]] = {}
+    for update in updates:
+        grouped.setdefault(update.stack, []).append(update)
+    return grouped
+
+
+def _first_tag_exclusion_by_line(
+    updates: Sequence[TagExclusionUpdate],
+) -> dict[int, TagExclusionUpdate]:
+    first: dict[int, TagExclusionUpdate] = {}
+    for update in updates:
+        first.setdefault(update.source_line, update)
+    return first
 
 
 def _failure_target_lines(matches: Sequence[Match]) -> list[str]:
