@@ -116,6 +116,7 @@ run "$python_bin" -m py_compile \
   src/wud_updater/compose.py \
   src/wud_updater/config.py \
   src/wud_updater/db.py \
+  src/wud_updater/doctor.py \
   src/wud_updater/docker_cli.py \
   src/wud_updater/file_ops.py \
   src/wud_updater/images.py \
@@ -131,6 +132,7 @@ run "$python_bin" -m py_compile \
   tests/test_python_cli.py \
   tests/test_python_config.py \
   tests/test_python_db.py \
+  tests/test_python_doctor.py \
   tests/test_python_docker_compose.py \
   tests/test_python_self_update.py \
   tests/test_python_terminal.py \

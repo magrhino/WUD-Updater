@@ -217,6 +217,36 @@ class CliTests(unittest.TestCase):
         self.assertTrue(stdout.strip().startswith("{"))
         self.assertEqual(stderr, "")
 
+    def test_doctor_subcommand_accepts_container_path_options(self) -> None:
+        with mock.patch(
+            "wud_updater.cli.run_doctor_from_namespace",
+            return_value=17,
+        ) as run_doctor:
+            status, stdout, stderr = self._run_main(
+                [
+                    "doctor",
+                    "--base",
+                    "/srv/docker",
+                    "--file",
+                    "/out/images.todo",
+                    "--log-dir",
+                    "/logs",
+                    "--scripts-dir",
+                    "/managed-wud",
+                    "--no-color",
+                ]
+            )
+
+        self.assertEqual(status, 17)
+        self.assertEqual(stdout, "")
+        self.assertEqual(stderr, "")
+        args = run_doctor.call_args.args[0]
+        self.assertEqual(args.base, "/srv/docker")
+        self.assertEqual(args.file, "/out/images.todo")
+        self.assertEqual(args.log_dir, "/logs")
+        self.assertEqual(args.scripts_dir, "/managed-wud")
+        self.assertTrue(args.no_color)
+
     def test_updates_yes_without_pending_entries_exits_successfully(self) -> None:
         with tempfile.TemporaryDirectory(prefix="wud-python-cli.") as tmpdir:
             env = {

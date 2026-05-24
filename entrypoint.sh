@@ -173,7 +173,8 @@ elif [[ "$1" == -* ]]; then
   set -- updates "$@"
 fi
 
-if env_bool_enabled "${WUD_SYNC_SCRIPTS:-}" && [[ "$1" != "sync-wud-scripts" ]]; then
+if env_bool_enabled "${WUD_SYNC_SCRIPTS:-}" &&
+  [[ "$1" != "sync-wud-scripts" && "$1" != "doctor" ]]; then
   sync_wud_scripts
 fi
 
@@ -193,6 +194,21 @@ case "$1" in
       export PYTHONPATH="$app_dir/src"
     fi
     exec "${PYTHON_BIN:-python3}" -m wud_updater.cli truenas-status-export "$@"
+    ;;
+  doctor)
+    shift
+    doctor_args=()
+    has_arg --base "$@" || doctor_args+=(--base "$docker_base")
+    has_arg --file "$@" || doctor_args+=(--file "$wud_out_file")
+    has_arg --log-dir "$@" || doctor_args+=(--log-dir "$wud_log_dir")
+    has_arg --scripts-dir "$@" || doctor_args+=(--scripts-dir "$wud_scripts_dir")
+    if [[ -n "${PYTHONPATH:-}" ]]; then
+      export PYTHONPATH="$app_dir/src:$PYTHONPATH"
+    else
+      export PYTHONPATH="$app_dir/src"
+    fi
+    export WUD_APP_DIR="$app_dir"
+    exec "${PYTHON_BIN:-python3}" -m wud_updater.cli doctor "${doctor_args[@]}" "$@"
     ;;
   docker-update-from-wud)
     shift

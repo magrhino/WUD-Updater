@@ -143,6 +143,15 @@ test_truenas_status_export_dispatches_python_cli(){
   teardown_case
 }
 
+test_doctor_dispatch_injects_paths_and_skips_startup_sync(){
+  setup_case
+  PYTHON_BIN="$TEST_TMP/python" WUD_SYNC_SCRIPTS=true run_entrypoint doctor --no-color
+  assert_status 0
+  assert_output "python [-m] [wud_updater.cli] [doctor] [--base] [$TEST_TMP/docker] [--file] [$TEST_TMP/out/images.todo] [--log-dir] [/logs] [--scripts-dir] [$TEST_TMP/managed-wud] [--no-color]"
+  [[ ! -e "$TEST_TMP/managed-wud/.wud-updater-managed" ]] || fail "doctor ran startup sync"
+  teardown_case
+}
+
 test_updater_dispatch_injects_missing_paths(){
   setup_case
   run_entrypoint docker-update-from-wud --yes
@@ -279,6 +288,7 @@ main(){
   run_test test_leading_flag_runs_updates
   run_test test_updates_dispatch_passes_arguments
   run_test test_truenas_status_export_dispatches_python_cli
+  run_test test_doctor_dispatch_injects_paths_and_skips_startup_sync
   run_test test_updater_dispatch_injects_missing_paths
   run_test test_updater_dispatch_preserves_explicit_paths
   run_test test_updater_dispatch_preserves_explicit_log_dir

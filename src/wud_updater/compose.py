@@ -530,6 +530,12 @@ def _compose_files_under(docker_base: str | Path) -> list[Path]:
     return sorted(files)
 
 
+def compose_files_under(docker_base: str | Path) -> tuple[Path, ...]:
+    """Return compose files discovered with the updater's stack search rules."""
+
+    return tuple(_compose_files_under(docker_base))
+
+
 def _service_args(services: Sequence[str] | None) -> tuple[str, ...]:
     if services is None:
         return ()

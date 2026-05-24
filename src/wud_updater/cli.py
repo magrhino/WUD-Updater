@@ -8,7 +8,7 @@ from collections.abc import Sequence
 from pathlib import Path
 
 from .banner import print_startup_banner
-from .updater import UpdaterError, options_from_namespace, run_update_from_wud
+from .doctor import run_doctor_from_namespace
 from .updates import (
     run_truenas_status_export_from_namespace,
     run_updates_from_namespace,
@@ -75,7 +75,17 @@ def _add_updates_options(parser: argparse.ArgumentParser) -> None:
     )
 
 
+def _add_doctor_options(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--base", metavar="PATH")
+    parser.add_argument("--file", metavar="PATH")
+    parser.add_argument("--log-dir", metavar="PATH")
+    parser.add_argument("--scripts-dir", metavar="PATH")
+    parser.add_argument("--no-color", action="store_true")
+
+
 def _run_update_from_wud(args: argparse.Namespace) -> int:
+    from .updater import UpdaterError, options_from_namespace, run_update_from_wud
+
     print_startup_banner(no_color=bool(getattr(args, "no_color", False)))
     try:
         options = options_from_namespace(args)
@@ -95,6 +105,13 @@ def _run_updates(args: argparse.Namespace) -> int:
 
 def _run_truenas_status_export(args: argparse.Namespace) -> int:
     return run_truenas_status_export_from_namespace(args)
+
+
+def _run_doctor(args: argparse.Namespace) -> int:
+    return run_doctor_from_namespace(
+        args,
+        repo_root=Path(__file__).resolve().parents[2],
+    )
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -121,6 +138,13 @@ def build_parser() -> argparse.ArgumentParser:
     )
     _add_updates_options(updates)
     updates.set_defaults(handler=_run_updates)
+
+    doctor = subcommands.add_parser(
+        "doctor",
+        help="check WUD-Updater container setup and Docker access",
+    )
+    _add_doctor_options(doctor)
+    doctor.set_defaults(handler=_run_doctor)
 
     truenas_status_export = subcommands.add_parser(
         "truenas-status-export",
