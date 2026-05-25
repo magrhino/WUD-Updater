@@ -601,6 +601,43 @@ test_interactive_tag_exclude_can_skip_recreate(){
   teardown_case
 }
 
+test_interactive_tag_exclude_selects_subset_of_tag_lines(){
+  setup_case
+  {
+    printf 'repo/app:1.0 tag=2.0\n'
+    printf 'repo/sidecar:latest\n'
+    printf 'repo/db:1.0 tag=1.1\n'
+    printf 'repo/cache:1.0 tag=1.2\n'
+  } > "$WUD_FILE"
+
+  run_updates_with_input 's\n1-4\ne\n1,4\nn\n' --base "$TEST_TMP/docker"
+
+  assert_status 0
+  grep -q -- "--only-lines 1,2,3,4 --exclude-tag-lines 1,4 --yes" "$TEST_TMP/sudo.log" || fail "sudo did not receive selected tag exclusions"
+  grep -q -- "--exclude-tag-lines 1,4" "$TEST_TMP/updater.log" || fail "updater did not receive selected tag exclusions"
+  ! grep -q -- "--allow-tag-updates" "$TEST_TMP/sudo.log" || fail "exclude subset should not allow tag updates"
+  ! grep -q -- "--tag-override" "$TEST_TMP/sudo.log" || fail "exclude subset should not pass tag override"
+  teardown_case
+}
+
+test_interactive_tag_exclude_rejects_non_tag_selection(){
+  setup_case
+  {
+    printf 'repo/app:1.0 tag=2.0\n'
+    printf 'repo/sidecar:latest\n'
+    printf 'repo/db:1.0 tag=1.1\n'
+  } > "$WUD_FILE"
+
+  run_updates_with_input 's\n1-3\ne\n2\n1,3\nn\n' --base "$TEST_TMP/docker"
+
+  assert_status 0
+  grep -q -- "Invalid tag selection. Use listed tag update numbers/ranges like 1,3-5." "$TEST_TMP/output.log" || fail "non-tag selection was not rejected"
+  grep -q -- "--only-lines 1,2,3 --exclude-tag-lines 1,3 --yes" "$TEST_TMP/sudo.log" || fail "sudo did not receive corrected tag exclusions"
+  ! grep -q -- "--allow-tag-updates" "$TEST_TMP/sudo.log" || fail "corrected exclusion should not allow tag updates"
+  ! grep -q -- "--tag-override" "$TEST_TMP/sudo.log" || fail "corrected exclusion should not pass tag override"
+  teardown_case
+}
+
 test_interactive_declined_tag_updates_do_not_enable_allow_flag(){
   setup_case
   printf 'repo/app:1.0 tag=2.0\n' > "$WUD_FILE"
@@ -703,6 +740,8 @@ main(){
   run_test test_interactive_tag_yes_keeps_wud_tag_without_override_prompt
   run_test test_interactive_tag_exclude_passes_line_and_recreate_flag
   run_test test_interactive_tag_exclude_can_skip_recreate
+  run_test test_interactive_tag_exclude_selects_subset_of_tag_lines
+  run_test test_interactive_tag_exclude_rejects_non_tag_selection
   run_test test_interactive_declined_tag_updates_do_not_enable_allow_flag
   run_test test_interactive_untagged_tag_token_does_not_prompt
   run_test test_interactive_all_tag_override_aborts_when_snapshot_lines_change

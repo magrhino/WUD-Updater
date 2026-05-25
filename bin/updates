@@ -664,8 +664,11 @@ choose_update_lines() {
 
 prompt_tag_updates() {
   local display_csv="$1" display_no=0 line_no line first tag reply
-  local change_tags=0 override idx
-  local exclude_lines=""
+  local max_display="${#todo_file_lines[@]}"
+  local change_tags=0 override idx invalid
+  local exclude_display exclude_display_csv exclude_lines=""
+  local tag_display_csv=""
+  local exclude_displays=()
   local tag_displays=()
   local tag_lines=()
   local tag_firsts=()
@@ -679,6 +682,7 @@ prompt_tag_updates() {
     tag="$(line_desired_tag "$line" 2>/dev/null || true)"
     [ -n "$tag" ] || continue
     first="$(line_first_token "$line")"
+    tag_display_csv="$(csv_append_unique "$tag_display_csv" "$display_no")"
     tag_displays+=("$display_no")
     tag_lines+=("$line_no")
     tag_firsts+=("$first")
@@ -713,9 +717,40 @@ prompt_tag_updates() {
           break
           ;;
         [eE]|[eE][xX][cC][lL][uU][dD][eE])
-          for ((idx=0; idx<${#tag_lines[@]}; idx++)); do
-            exclude_lines="$(csv_append_unique "$exclude_lines" "${tag_lines[$idx]}")"
+          if [ "${#tag_lines[@]}" -eq 1 ]; then
+            exclude_display_csv="${tag_displays[0]}"
+          else
+            while true; do
+              read -r -p "Enter tag update numbers/ranges to exclude: " reply || reply=""
+              if [ -z "${reply//[[:space:]]/}" ]; then
+                echo "⏸️  No tag exclusions selected."
+                return 0
+              fi
+              if exclude_display_csv="$(parse_display_spec "$reply" "$max_display")"; then
+                invalid=0
+                IFS=',' read -r -a exclude_displays <<< "$exclude_display_csv"
+                for exclude_display in "${exclude_displays[@]}"; do
+                  if ! csv_contains "$tag_display_csv" "$exclude_display"; then
+                    invalid=1
+                    break
+                  fi
+                done
+                [ "$invalid" -eq 0 ] && break
+              fi
+              echo "Invalid tag selection. Use listed tag update numbers/ranges like 1,3-5."
+            done
+          fi
+          exclude_lines=""
+          IFS=',' read -r -a exclude_displays <<< "$exclude_display_csv"
+          for exclude_display in "${exclude_displays[@]}"; do
+            for ((idx=0; idx<${#tag_lines[@]}; idx++)); do
+              if [ "${tag_displays[$idx]}" = "$exclude_display" ]; then
+                exclude_lines="$(csv_append_unique "$exclude_lines" "${tag_lines[$idx]}")"
+                break
+              fi
+            done
           done
+          [ -n "$exclude_lines" ] || return 0
           exclude_tag_line_spec="$exclude_lines"
           while true; do
             read -r -p "Recreate affected services so WUD sees exclusions now? (Y/n) " reply || reply=""

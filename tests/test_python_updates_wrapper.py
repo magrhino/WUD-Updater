@@ -608,6 +608,67 @@ class PythonUpdatesWrapperTests(unittest.TestCase):
         self.assertIn("--only-lines 1 --exclude-tag-lines 1 --yes", sudo_log)
         self.assertNotIn("--recreate-excluded-services", sudo_log)
 
+    def test_interactive_tag_exclude_selects_subset_of_tag_lines(self) -> None:
+        self.wud_file.write_text(
+            "\n".join(
+                [
+                    "repo/app:1.0 tag=2.0",
+                    "repo/sidecar:latest",
+                    "repo/db:1.0 tag=1.1",
+                    "repo/cache:1.0 tag=1.2",
+                    "",
+                ]
+            ),
+            encoding="utf-8",
+        )
+
+        result = self.run_updates(
+            "--base",
+            str(self.root / "docker"),
+            input_text="s\n1-4\ne\n1,4\nn\n",
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+        sudo_log = self.sudo_log.read_text(encoding="utf-8")
+        self.assertIn(
+            "--only-lines 1,2,3,4 --exclude-tag-lines 1,4 --yes",
+            sudo_log,
+        )
+        self.assertNotIn("--allow-tag-updates", sudo_log)
+        self.assertNotIn("--tag-override", sudo_log)
+
+    def test_interactive_tag_exclude_rejects_non_tag_selection(self) -> None:
+        self.wud_file.write_text(
+            "\n".join(
+                [
+                    "repo/app:1.0 tag=2.0",
+                    "repo/sidecar:latest",
+                    "repo/db:1.0 tag=1.1",
+                    "",
+                ]
+            ),
+            encoding="utf-8",
+        )
+
+        result = self.run_updates(
+            "--base",
+            str(self.root / "docker"),
+            input_text="s\n1-3\ne\n2\n1,3\nn\n",
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+        self.assertIn(
+            "Invalid tag selection. Use listed tag update numbers/ranges like 1,3-5.",
+            result.stdout,
+        )
+        sudo_log = self.sudo_log.read_text(encoding="utf-8")
+        self.assertIn(
+            "--only-lines 1,2,3 --exclude-tag-lines 1,3 --yes",
+            sudo_log,
+        )
+        self.assertNotIn("--allow-tag-updates", sudo_log)
+        self.assertNotIn("--tag-override", sudo_log)
+
     def test_interactive_declined_tag_updates_do_not_enable_allow_flag(self) -> None:
         self.wud_file.write_text("repo/app:1.0 tag=2.0\n", encoding="utf-8")
 
