@@ -13,7 +13,11 @@ from pathlib import Path
 from unittest import mock
 
 from wud_updater.command import CommandRunner
-from wud_updater.compose import ComposeBindMount, ComposeStack, ServiceImage
+from wud_updater.compose import (
+    ComposeBindMount,
+    ComposeStack,
+    ServiceImage,
+)
 from wud_updater.file_ops import OwnerConfig
 from wud_updater.updater import (
     ComposeTagRewriteError,
@@ -819,6 +823,37 @@ class PythonUpdateFromWudTests(unittest.TestCase):
         self.assertIn("network create failed", report)
         self.assertIn("health: docker compose ps -q returned no containers", report)
 
+    def test_invalid_runtime_port_fails_preflight_before_pull(self) -> None:
+        self.wud_file.write_text("repo/app:latest\n", encoding="utf-8")
+        stack_dir = self.make_stack("app", [("app", "repo/app:latest", "cid-app")])
+        (stack_dir / "docker-compose.yml").write_text(
+            "\n".join(
+                [
+                    "services:",
+                    "  app:",
+                    "    image: repo/app:latest",
+                    "    expose:",
+                    "      - \u201c8083\u201d",
+                    "",
+                ]
+            ),
+            encoding="utf-8",
+        )
+
+        result = self.run_python("--yes")
+
+        self.assertEqual(result.returncode, 1, result.stderr + result.stdout)
+        self.assertEqual(self.wud_file.read_text(encoding="utf-8"), "repo/app:latest\n")
+        calls = self.calls()
+        self.assertNotRegex(calls, r"compose -f docker-compose.yml pull")
+        self.assertNotRegex(calls, r"compose -f docker-compose.yml stop")
+        self.assertNotRegex(calls, r"compose -f docker-compose.yml up")
+        report = self.latest_error_report().read_text(encoding="utf-8")
+        self.assertIn("phase=preflight", report)
+        self.assertIn("reason=compose-port-invalid", report)
+        self.assertIn("Compose service app has invalid expose value", report)
+        self.assertIn("\u201c8083\u201d", report)
+
     def test_pull_failure_writes_error_report(self) -> None:
         self.wud_file.write_text("repo/app:latest\n", encoding="utf-8")
         self.make_stack("app", [("app", "repo/app:latest", "cid-app")])
@@ -973,6 +1008,78 @@ class PythonUpdateFromWudTests(unittest.TestCase):
             self.calls(),
             r"compose -f docker-compose.yml up -d --remove-orphans --no-deps app",
         )
+
+    def test_exclude_tag_line_recreate_includes_missing_network_provider(self) -> None:
+        self.wud_file.write_text(
+            "ghcr.io/linuxserver/qbittorrent:5.1.4 tag=5.2.0\n",
+            encoding="utf-8",
+        )
+        stack_dir = self.base / "media"
+        stack_dir.mkdir()
+        (stack_dir / ".fake-docker-id").write_text("media\n", encoding="utf-8")
+        compose_file = stack_dir / "docker-compose.yml"
+        compose_file.write_text(
+            "\n".join(
+                [
+                    "services:",
+                    "  gluetun:",
+                    "    image: qmcgaw/gluetun:latest",
+                    "  qbittorrent:",
+                    "    image: ghcr.io/linuxserver/qbittorrent:5.1.4",
+                    "    network_mode: service:gluetun",
+                    "",
+                ]
+            ),
+            encoding="utf-8",
+        )
+        stack_state = self.fake_root / "stacks" / "media"
+        stack_state.mkdir()
+        (stack_state / "cids.txt").write_text(
+            "cid-qbittorrent\n",
+            encoding="utf-8",
+        )
+        (stack_state / "cids-qbittorrent.txt").write_text(
+            "cid-qbittorrent\n",
+            encoding="utf-8",
+        )
+        for cid in ("cid-gluetun", "cid-qbittorrent"):
+            (self.fake_root / "containers" / f"{cid}.summary").write_text(
+                f"/{cid}|running|healthy|0|0\n",
+                encoding="utf-8",
+            )
+        hook = self.fake_root / "post-up-hook"
+        hook.write_text(
+            "\n".join(
+                [
+                    "#!/usr/bin/env bash",
+                    "set -euo pipefail",
+                    'printf "cid-gluetun\\n" > "$FAKE_DOCKER_ROOT/stacks/media/cids-gluetun.txt"',
+                    "",
+                ]
+            ),
+            encoding="utf-8",
+        )
+        hook.chmod(0o755)
+
+        result = self.run_python(
+            "--yes",
+            "--exclude-tag-lines",
+            "1",
+            "--recreate-excluded-services",
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+        self.assertEqual(self.wud_file.read_text(encoding="utf-8"), "")
+        self.assertIn(
+            "wud.tag.exclude=^5\\.2\\.0$$",
+            compose_file.read_text(encoding="utf-8"),
+        )
+        calls = self.calls()
+        self.assertRegex(
+            calls,
+            r"compose -f docker-compose.yml up -d --remove-orphans gluetun qbittorrent",
+        )
+        self.assertNotRegex(calls, r"compose -f docker-compose.yml up -d .*--no-deps")
 
     def test_exclude_tag_line_recreates_only_successful_label_writes(self) -> None:
         self.wud_file.write_text("repo/app:1.0 tag=2.0\n", encoding="utf-8")
@@ -1164,6 +1271,10 @@ class PythonUpdateFromWudTests(unittest.TestCase):
             "cid-gluetun\ncid-qbittorrent\ncid-mamapi\n",
             encoding="utf-8",
         )
+        (stack_state / "cids-gluetun.txt").write_text(
+            "cid-gluetun\n",
+            encoding="utf-8",
+        )
         (stack_state / "cids-qbittorrent.txt").write_text(
             "cid-qbittorrent\n",
             encoding="utf-8",
@@ -1203,6 +1314,87 @@ class PythonUpdateFromWudTests(unittest.TestCase):
         self.assertNotRegex(calls, r"compose -f docker-compose.yml pull mamapi")
         self.assertNotRegex(calls, r"compose -f docker-compose.yml stop .*gluetun")
         self.assertNotRegex(calls, r"compose -f docker-compose.yml stop .*mamapi")
+
+    def test_network_mode_consumer_up_includes_missing_provider(self) -> None:
+        self.wud_file.write_text(
+            "ghcr.io/linuxserver/qbittorrent:5.1.4 tag=5.2.0\n",
+            encoding="utf-8",
+        )
+        stack_dir = self.base / "media"
+        stack_dir.mkdir()
+        (stack_dir / ".fake-docker-id").write_text("media\n", encoding="utf-8")
+        compose_file = stack_dir / "docker-compose.yml"
+        compose_file.write_text(
+            "\n".join(
+                [
+                    "services:",
+                    "  gluetun:",
+                    "    image: qmcgaw/gluetun:latest",
+                    "  qbittorrent:",
+                    "    image: ghcr.io/linuxserver/qbittorrent:5.1.4",
+                    "    network_mode: service:gluetun",
+                    "",
+                ]
+            ),
+            encoding="utf-8",
+        )
+        stack_state = self.fake_root / "stacks" / "media"
+        stack_state.mkdir()
+        (stack_state / "cids.txt").write_text(
+            "cid-qbittorrent\n",
+            encoding="utf-8",
+        )
+        (stack_state / "cids-qbittorrent.txt").write_text(
+            "cid-qbittorrent\n",
+            encoding="utf-8",
+        )
+        for cid in ("cid-gluetun", "cid-qbittorrent"):
+            (self.fake_root / "containers" / f"{cid}.summary").write_text(
+                f"/{cid}|running|healthy|0|0\n",
+                encoding="utf-8",
+            )
+        hook = self.fake_root / "post-up-hook"
+        hook.write_text(
+            "\n".join(
+                [
+                    "#!/usr/bin/env bash",
+                    "set -euo pipefail",
+                    'printf "cid-gluetun\\n" > "$FAKE_DOCKER_ROOT/stacks/media/cids-gluetun.txt"',
+                    "",
+                ]
+            ),
+            encoding="utf-8",
+        )
+        hook.chmod(0o755)
+        self.set_image_state(
+            "ghcr.io/linuxserver/qbittorrent:5.1.4",
+            "old-qbit",
+            "sha256:old-qbit",
+        )
+        self.set_image_after_pull(
+            "ghcr.io/linuxserver/qbittorrent:5.2.0",
+            "new-qbit",
+            "sha256:new-qbit",
+        )
+
+        result = self.run_python("--yes", "--allow-tag-updates")
+
+        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+        self.assertEqual(self.wud_file.read_text(encoding="utf-8"), "")
+        self.assertIn(
+            "image: ghcr.io/linuxserver/qbittorrent:5.2.0",
+            compose_file.read_text(encoding="utf-8"),
+        )
+        calls = self.calls()
+        self.assertRegex(calls, r"compose -f docker-compose.yml pull qbittorrent")
+        self.assertRegex(calls, r"compose -f docker-compose.yml stop qbittorrent")
+        self.assertRegex(
+            calls,
+            r"compose -f docker-compose.yml up -d --remove-orphans gluetun qbittorrent",
+        )
+        self.assertNotRegex(calls, r"compose -f docker-compose.yml up -d .*--no-deps")
+        self.assertNotRegex(calls, r"compose -f docker-compose.yml pull gluetun")
+        self.assertNotRegex(calls, r"compose -f docker-compose.yml stop .*gluetun")
 
     def test_surgical_tag_rewrite_preserves_unrelated_compose_content(self) -> None:
         compose_file = self.root / "compose.yml"
