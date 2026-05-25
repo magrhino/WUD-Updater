@@ -4,6 +4,14 @@ All notable changes to WUD-Updater are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com) and versions follow
 [Semantic Versioning](https://semver.org).
 
+## [0.15.1](https://github.com/magrhino/WUD-Updater/compare/v0.15.0...v0.15.1) (2026-05-25)
+
+
+### Bug Fixes
+
+* **updater:** preflight invalid compose ports ([#55](https://github.com/magrhino/WUD-Updater/issues/55)) ([4b0c1dc](https://github.com/magrhino/WUD-Updater/commit/4b0c1dcc3d50fc445d16239a587edbe29d708f9f))
+* **updates:** allow selectable tag exclusions ([#53](https://github.com/magrhino/WUD-Updater/issues/53)) ([49864ec](https://github.com/magrhino/WUD-Updater/commit/49864eca3602f73698202755c3e458b446f9189f))
+
 ## [0.15.0](https://github.com/magrhino/WUD-Updater/compare/v0.14.1...v0.15.0) (2026-05-25)
 
 
