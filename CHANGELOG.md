@@ -4,6 +4,13 @@ All notable changes to WUD-Updater are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com) and versions follow
 [Semantic Versioning](https://semver.org).
 
+## [0.15.0](https://github.com/magrhino/WUD-Updater/compare/v0.14.1...v0.15.0) (2026-05-25)
+
+
+### Features
+
+* **doctor:** Add container doctor mode for WUD-Updater ([#51](https://github.com/magrhino/WUD-Updater/issues/51)) ([4446086](https://github.com/magrhino/WUD-Updater/commit/44460864c1699f2701d134072bd30e6ef5775f30))
+
 ## [0.14.1](https://github.com/magrhino/WUD-Updater/compare/v0.14.0...v0.14.1) (2026-05-24)
 
 
