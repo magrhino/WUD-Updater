@@ -26,7 +26,14 @@ are also published as `X.Y.Z`, `X.Y`, and `latest`.
 
 The image uses `python:3.14-slim-bookworm`, installs the Docker CLI with the
 Compose plugin, copies `bin/`, `src/`, and `wud/` into `/app`, and starts through
-`tini`. With no command, it runs the non-mutating default:
+`tini`. Run doctor first to validate Docker access, mounted paths, script
+permissions, and Compose rendering:
+
+```bash
+doctor
+```
+
+With no command, the image runs the non-mutating default:
 
 ```bash
 updates --dry-run
@@ -67,6 +74,7 @@ The repository example is at
 It uses the published GHCR image by default. Run it from the repository root:
 
 ```bash
+docker compose -f docs/examples/docker-compose.example.yml run --rm wud-updater doctor
 docker compose -f docs/examples/docker-compose.example.yml run --rm wud-updater
 ```
 
@@ -244,6 +252,32 @@ docker compose -f docs/examples/docker-compose.example.yml run --rm wud-updater 
 Use the same `sync-wud-scripts` command with
 `docs/examples/docker-compose.hardened.yml` when bootstrapping the hardened
 socket-proxy example.
+
+## Doctor Mode
+
+Use `doctor` after changing container mounts, Docker socket access, or helper
+environment variables:
+
+```bash
+docker compose -f docs/examples/docker-compose.example.yml run --rm wud-updater doctor
+```
+
+Doctor mode is read-only except for short-lived permission probe files that it
+creates and removes in writable runtime directories. It checks:
+
+- Docker CLI, Docker Compose plugin, Docker daemon reachability, and the Docker
+  socket or configured `DOCKER_HOST`.
+- `DOCKER_BASE`, `HOST_DOCKER_BASE`, `WUD_OUT_FILE`, `WUD_LOG_DIR`, packaged WUD
+  scripts, and managed script-sync destination permissions.
+- Compose stack discovery under `DOCKER_BASE`; every discovered compose file
+  must render with `docker compose config`.
+- Known helper-only bind-source prefixes such as `/host`, `/docker-host`, and
+  `/container-host`, which the host Docker daemon usually cannot see.
+
+The command uses strict exit status: Docker access failures, missing required
+mounts, bad permissions, invalid script sync destinations, and missing or
+invalid Compose stacks exit nonzero. Disabled optional checks such as
+`TRUENAS_STATUS_CHECK=false` are reported as warnings.
 
 ## Host Install
 

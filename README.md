@@ -25,7 +25,7 @@ notifications.
 Review `docs/examples/docker-compose.example.yml`, especially the host Docker
 stack path mounted at the same absolute path inside the helper. This matters
 when Compose files use relative bind mounts such as `./config:/config`. Then
-run the non-mutating default command:
+run doctor and the non-mutating default command:
 
 If you keep an existing helper-only mount such as `/srv/docker:/host/docker`,
 either switch to `/srv/docker:/srv/docker`, or add a second `/srv/docker:/srv/docker`
@@ -34,6 +34,7 @@ files such as `.env`, `env_file`, build contexts, and relative bind mounts from
 the `HOST_DOCKER_BASE` path, so that path must also be readable inside the helper.
 
 ```bash
+docker compose -f docs/examples/docker-compose.example.yml run --rm wud-updater doctor
 docker compose -f docs/examples/docker-compose.example.yml run --rm wud-updater
 ```
 
@@ -82,6 +83,7 @@ updates
 updates --dry-run
 updates --no-self-update
 updates --yes --allow-tag-updates
+wud-updater doctor
 docker-update-from-wud --dry-run
 docker-update-from-wud --yes
 docker-update-from-wud --yes --allow-tag-updates
@@ -92,6 +94,7 @@ docker-update-from-wud --yes --exclude-tag-lines 1
 The Python package also exposes the same tools through:
 
 ```bash
+wud-updater doctor
 wud-updater updates --dry-run
 wud-updater update-from-wud --dry-run
 ```
