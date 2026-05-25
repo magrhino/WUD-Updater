@@ -27,6 +27,7 @@ from .compose import (
     ComposeBindMount,
     ComposeCli,
     ComposeDiscoveryError,
+    ComposeRuntimePortIssue,
     ComposeStack,
     ServiceImage,
 )
@@ -341,6 +342,30 @@ class UpdateFromWudRunner:
 
             if not self._validate_tag_update_plan(matches):
                 return 1
+            preflight_matches = _unique_matches(
+                (
+                    *matches,
+                    *_tag_exclusion_preflight_matches(
+                        exclusion_matches,
+                        exclusion_updates,
+                    ),
+                )
+            )
+            if not self._validate_compose_runtime_ports(preflight_matches):
+                if opts.dry_run:
+                    self.log.warn(
+                        "Dry-run only; reported Compose runtime port issue without mutating."
+                    )
+                else:
+                    audit_parsed = self._audit_parsed_file(
+                        parsed,
+                        [match.target.line_no for match in preflight_matches],
+                    )
+                    return self._finish_preflight_failure(
+                        audit_parsed,
+                        preflight_matches,
+                        skipped_tags,
+                    )
             if not self._validate_compose_bind_mount_paths(matches):
                 if opts.dry_run:
                     self.log.warn(
@@ -831,8 +856,25 @@ class UpdateFromWudRunner:
     ) -> None:
         for stack, stack_updates in _tag_exclusion_updates_by_stack(updates).items():
             services = tuple(sorted({update.service for update in stack_updates}))
-            result = self._run_compose_up(stack, services, no_deps=True)
-            if result.ok and (result.wait_handled or self._wait_for_health(stack, services)):
+            network_providers = _network_mode_providers(stack.service_images)
+            up_services, uses_network_provider = _expand_network_mode_services(
+                services,
+                network_providers,
+            )
+            missing_providers = self._missing_network_mode_providers(
+                stack,
+                services,
+                network_providers,
+            )
+            if missing_providers:
+                up_services = _ordered_unique((*missing_providers, *up_services))
+                uses_network_provider = True
+            result = self._run_compose_up(
+                stack,
+                up_services,
+                no_deps=not uses_network_provider,
+            )
+            if result.ok and (result.wait_handled or self._wait_for_health(stack, up_services)):
                 continue
             for update in stack_updates:
                 statuses[update.source_line] = StackStatus(
@@ -1493,12 +1535,23 @@ class UpdateFromWudRunner:
                 stop_services=self._stack_stop_services(stack),
                 force_recreate=True,
             )
+        network_providers = _network_mode_providers(stack.service_images)
         lifecycle_services, uses_network_provider = _expand_network_mode_services(
             services,
-            _network_mode_providers(stack.service_images),
+            network_providers,
         )
+        missing_providers = self._missing_network_mode_providers(
+            stack,
+            services,
+            network_providers,
+        )
+        if missing_providers:
+            lifecycle_services = _ordered_unique((*missing_providers, *lifecycle_services))
+            uses_network_provider = True
         stop_services = (
-            tuple(reversed(lifecycle_services))
+            services
+            if missing_providers
+            else tuple(reversed(lifecycle_services))
             if uses_network_provider
             else lifecycle_services
         )
@@ -1521,6 +1574,27 @@ class UpdateFromWudRunner:
             stop_services=stop_services,
             up_no_deps=not uses_network_provider,
         )
+
+    def _missing_network_mode_providers(
+        self,
+        stack: ComposeStack,
+        services: Sequence[str],
+        providers: Mapping[str, str],
+    ) -> tuple[str, ...]:
+        missing: list[str] = []
+        for service in services:
+            provider = providers.get(service)
+            if not provider or provider in services or provider in missing:
+                continue
+            cids = self.compose.ps_quiet(
+                stack.directory,
+                stack.file,
+                (provider,),
+                project_directory=stack.project_directory,
+            )
+            if not cids:
+                missing.append(provider)
+        return tuple(missing)
 
     def _stack_stop_services(self, stack: ComposeStack) -> tuple[str, ...] | None:
         try:
@@ -1720,6 +1794,61 @@ class UpdateFromWudRunner:
                 )
         return ok
 
+    def _validate_compose_runtime_ports(self, matches: Sequence[Match]) -> bool:
+        ok = True
+        issue_messages: dict[int, list[str]] = {}
+        issue_services: dict[int, set[str]] = {}
+        for stack in _stacks_to_update(matches):
+            stack_matches = [match for match in matches if match.stack.index == stack.index]
+            issues = self.compose.try_service_runtime_port_issues(
+                stack.directory,
+                stack.file,
+                project_directory=stack.project_directory,
+            )
+            if not issues:
+                continue
+            scope = self._update_scope(stack, stack_matches)
+            scoped_services = set(scope.services or ())
+            if scope.services is None:
+                scoped_services = {issue.service for issue in issues}
+            for issue in issues:
+                if issue.service not in scoped_services:
+                    continue
+                ok = False
+                message = self._compose_runtime_port_issue_message(stack, issue)
+                self._log_preflight_issue(message)
+                if not self.options.dry_run:
+                    issue_messages.setdefault(stack.index, []).append(message)
+                    issue_services.setdefault(stack.index, set()).add(issue.service)
+        if not self.options.dry_run:
+            for stack in _stacks_to_update(matches):
+                messages = issue_messages.get(stack.index)
+                if not messages:
+                    continue
+                stack_matches = [
+                    match for match in matches if match.stack.index == stack.index
+                ]
+                services = tuple(sorted(issue_services.get(stack.index, ()))) or None
+                self._record_failure(
+                    stack,
+                    stack_matches,
+                    phase="preflight",
+                    reason="compose-port-invalid",
+                    services=services,
+                    health_details="\n".join(messages),
+                )
+        return ok
+
+    def _compose_runtime_port_issue_message(
+        self,
+        stack: ComposeStack,
+        issue: ComposeRuntimePortIssue,
+    ) -> str:
+        return (
+            f"[{stack.name}] Compose service {issue.service} has invalid "
+            f"{issue.field} value {issue.value!r}: {issue.reason}."
+        )
+
     def _bind_mount_path_issue_messages(
         self,
         stack: ComposeStack,
@@ -1749,9 +1878,12 @@ class UpdateFromWudRunner:
         return messages
 
     def _log_bind_mount_path_issue(self, messages: Sequence[str]) -> None:
-        log = self.log.warn if self.options.dry_run else self.log.error
         for message in messages:
-            log(message)
+            self._log_preflight_issue(message)
+
+    def _log_preflight_issue(self, message: str) -> None:
+        log = self.log.warn if self.options.dry_run else self.log.error
+        log(message)
 
     def _validate_applied_tag_updates(
         self,
@@ -1911,7 +2043,6 @@ class UpdateFromWudRunner:
             failure
             for failure in self.failures
             if failure.phase == "preflight"
-            and failure.reason == "bind-mount-path-invalid"
         ]
         failed_stack_indices = {failure.stack.index for failure in preflight_failures}
         failed_matches = [
@@ -1922,7 +2053,10 @@ class UpdateFromWudRunner:
         ]
         failed_lines = sorted({match.target.line_no for match in failed_matches})
         stack_statuses = {
-            stack_index: StackStatus("failure", "bind-mount-path-invalid")
+            stack_index: StackStatus(
+                "failure",
+                _preflight_status_reason(stack_index, preflight_failures),
+            )
             for stack_index in failed_stack_indices
         }
 
@@ -3038,6 +3172,17 @@ def _network_mode_consumers(providers: Mapping[str, str]) -> dict[str, tuple[str
     }
 
 
+def _ordered_unique(services: Iterable[str]) -> tuple[str, ...]:
+    ordered: list[str] = []
+    seen: set[str] = set()
+    for service in services:
+        if service in seen:
+            continue
+        seen.add(service)
+        ordered.append(service)
+    return tuple(ordered)
+
+
 def _update_services(matches: Sequence[Match]) -> tuple[str, ...] | None:
     services = sorted({match.service for match in matches if match.service})
     if not services:
@@ -3155,6 +3300,39 @@ def _first_match_by_line(matches: Sequence[Match]) -> dict[int, Match]:
     return first
 
 
+def _tag_exclusion_preflight_matches(
+    matches: Sequence[Match],
+    updates: Sequence[TagExclusionUpdate],
+) -> tuple[Match, ...]:
+    keys = {
+        (update.stack.index, update.service, update.source_line)
+        for update in updates
+    }
+    return tuple(
+        match
+        for match in matches
+        if (match.stack.index, match.service, match.target.line_no) in keys
+    )
+
+
+def _unique_matches(matches: Iterable[Match]) -> tuple[Match, ...]:
+    unique: list[Match] = []
+    seen: set[tuple[int, int, str, str, str]] = set()
+    for match in matches:
+        key = (
+            match.stack.index,
+            match.target.line_no,
+            match.resolved,
+            match.compose_image,
+            match.service,
+        )
+        if key in seen:
+            continue
+        seen.add(key)
+        unique.append(match)
+    return tuple(unique)
+
+
 def _failed_match_for_line(
     line_no: int,
     matches: Sequence[Match],
@@ -3196,6 +3374,24 @@ def _line_status_reason(
     if "already-current" in reasons:
         return "already-current"
     return sorted(reasons)[0] if reasons else "missing"
+
+
+def _preflight_status_reason(
+    stack_index: int,
+    failures: Sequence[FailureRecord],
+) -> str:
+    reasons = sorted(
+        {
+            failure.reason
+            for failure in failures
+            if failure.stack.index == stack_index
+        }
+    )
+    if len(reasons) == 1:
+        return reasons[0]
+    if reasons:
+        return "preflight-failed"
+    return "missing"
 
 
 def _service_key(match: Match) -> str:

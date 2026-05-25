@@ -15,9 +15,11 @@ from wud_updater.compose import (
     ComposeBindMount,
     ComposeCli,
     ComposeDiscoveryError,
+    ComposeRuntimePortIssue,
     ServiceImage,
     _project_directory_for_stack,
     _service_bind_mounts_from_config_json,
+    _service_runtime_port_issues_from_config_json,
 )
 from wud_updater.docker_cli import ContainerImage, DockerCli
 
@@ -422,6 +424,46 @@ class ComposeCliTests(FakeDockerCase):
             (
                 ComposeBindMount("web", "/host/docker/web/config", "/config"),
                 ComposeBindMount("worker", "/mnt/pool/worker", "/work"),
+            ),
+        )
+
+    def test_service_runtime_port_issues_accept_valid_values(self) -> None:
+        config_json = json.dumps(
+            {
+                "services": {
+                    "web": {
+                        "expose": ["8083", "9000-9002/tcp"],
+                        "ports": [
+                            {"target": 8083, "published": "8083"},
+                            {"target": 8443, "published": "10443-10444"},
+                        ],
+                    }
+                }
+            }
+        )
+
+        self.assertEqual(_service_runtime_port_issues_from_config_json(config_json), ())
+
+    def test_service_runtime_port_issues_reports_smart_quote_expose(self) -> None:
+        config_json = json.dumps(
+            {
+                "services": {
+                    "calibre-web": {
+                        "expose": ["\u201c8083\u201d"],
+                    }
+                }
+            }
+        )
+
+        self.assertEqual(
+            _service_runtime_port_issues_from_config_json(config_json),
+            (
+                ComposeRuntimePortIssue(
+                    service="calibre-web",
+                    field="expose",
+                    value="\u201c8083\u201d",
+                    reason="expected numeric port or port range from 1 to 65535",
+                ),
             ),
         )
 

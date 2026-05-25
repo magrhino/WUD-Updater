@@ -94,6 +94,7 @@ compose_config_json_from_file(){
       return value
     }
     function scalar(value) {
+      sub(/^[[:space:]]*-[[:space:]]*/, "", value)
       sub(/^[[:space:]]*[^:]+:[[:space:]]*/, "", value)
       sub(/[[:space:]]+#.*/, "", value)
       sub(/^[[:space:]]+/, "", value)
@@ -113,9 +114,21 @@ compose_config_json_from_file(){
         if (network_mode != "") {
           printf ",\"network_mode\":\"%s\"", esc(network_mode)
         }
+        if (expose_count > 0) {
+          printf ",\"expose\":["
+          for (i = 1; i <= expose_count; i++) {
+            if (i > 1) {
+              printf ","
+            }
+            printf "\"%s\"", esc(expose[i])
+          }
+          printf "]"
+        }
         printf "}"
         found = 1
       }
+      expose_count = 0
+      in_expose = 0
     }
     /^  [A-Za-z0-9_.-]+:/ {
       flush_service()
@@ -123,15 +136,32 @@ compose_config_json_from_file(){
       sub(/:$/, "", svc)
       image = ""
       network_mode = ""
+      expose_count = 0
+      in_expose = 0
       next
     }
+    /^[[:space:]]+expose:[[:space:]]*$/ {
+      in_expose = 1
+      next
+    }
+    /^[[:space:]]+-[[:space:]]*/ {
+      if (in_expose) {
+        expose[++expose_count] = scalar($0)
+        next
+      }
+    }
     /^[[:space:]]+image:[[:space:]]*/ {
+      in_expose = 0
       image = scalar($0)
       next
     }
     /^[[:space:]]+network_mode:[[:space:]]*/ {
+      in_expose = 0
       network_mode = scalar($0)
       next
+    }
+    /^[[:space:]]+[A-Za-z0-9_.-]+:/ {
+      in_expose = 0
     }
     END {
       flush_service()

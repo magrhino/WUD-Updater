@@ -38,6 +38,14 @@ class ComposeBindMount:
 
 
 @dataclass(frozen=True)
+class ComposeRuntimePortIssue:
+    service: str
+    field: str
+    value: str
+    reason: str
+
+
+@dataclass(frozen=True)
 class ComposeStack:
     index: int
     directory: Path
@@ -153,6 +161,36 @@ class ComposeCli:
     ) -> tuple[ComposeBindMount, ...]:
         try:
             return self.service_bind_mounts(
+                directory,
+                file,
+                project_directory=project_directory,
+            )
+        except (CommandError, ValueError):
+            return ()
+
+    def service_runtime_port_issues(
+        self,
+        directory: str | Path,
+        file: str,
+        *,
+        project_directory: str | Path | None = None,
+    ) -> tuple[ComposeRuntimePortIssue, ...]:
+        result = self.config_json(
+            directory,
+            file,
+            project_directory=project_directory,
+        )
+        return _service_runtime_port_issues_from_config_json(result.stdout)
+
+    def try_service_runtime_port_issues(
+        self,
+        directory: str | Path,
+        file: str,
+        *,
+        project_directory: str | Path | None = None,
+    ) -> tuple[ComposeRuntimePortIssue, ...]:
+        try:
+            return self.service_runtime_port_issues(
                 directory,
                 file,
                 project_directory=project_directory,
@@ -649,3 +687,118 @@ def _service_bind_mounts_from_config_json(config_json: str) -> tuple[ComposeBind
                     )
                 )
     return tuple(sorted(mounts, key=lambda item: (item.service, item.source, item.target)))
+
+
+def _service_runtime_port_issues_from_config_json(
+    config_json: str,
+) -> tuple[ComposeRuntimePortIssue, ...]:
+    parsed = json.loads(config_json)
+    if not isinstance(parsed, dict):
+        raise ValueError("Compose config JSON is not an object.")
+    services = parsed.get("services")
+    if not isinstance(services, dict):
+        raise ValueError("Compose config JSON has no services object.")
+
+    issues: list[ComposeRuntimePortIssue] = []
+    for service, config in services.items():
+        if not isinstance(service, str) or not isinstance(config, dict):
+            continue
+        expose = config.get("expose")
+        if isinstance(expose, list):
+            for item in expose:
+                value = _display_runtime_port_value(item)
+                reason = _runtime_expose_issue(item)
+                if reason:
+                    issues.append(
+                        ComposeRuntimePortIssue(
+                            service=service,
+                            field="expose",
+                            value=value,
+                            reason=reason,
+                        )
+                    )
+        ports = config.get("ports")
+        if isinstance(ports, list):
+            for item in ports:
+                issues.extend(_runtime_port_issues(service, item))
+    return tuple(issues)
+
+
+def _runtime_expose_issue(value: object) -> str:
+    if not isinstance(value, (str, int)):
+        return "expected numeric port or port range with optional protocol"
+    text = str(value).strip()
+    if not text:
+        return "expected numeric port or port range with optional protocol"
+    return _port_range_issue(text)
+
+
+def _runtime_port_issues(
+    service: str,
+    value: object,
+) -> tuple[ComposeRuntimePortIssue, ...]:
+    if not isinstance(value, dict):
+        reason = "expected normalized Compose port mapping object"
+        return (
+            ComposeRuntimePortIssue(
+                service=service,
+                field="ports",
+                value=_display_runtime_port_value(value),
+                reason=reason,
+            ),
+        )
+
+    issues: list[ComposeRuntimePortIssue] = []
+    target = value.get("target")
+    target_issue = _port_number_issue(target)
+    if target_issue:
+        issues.append(
+            ComposeRuntimePortIssue(
+                service=service,
+                field="ports.target",
+                value=_display_runtime_port_value(target),
+                reason=target_issue,
+            )
+        )
+
+    published = value.get("published")
+    if published not in (None, ""):
+        published_issue = _port_range_issue(str(published).strip())
+        if published_issue:
+            issues.append(
+                ComposeRuntimePortIssue(
+                    service=service,
+                    field="ports.published",
+                    value=_display_runtime_port_value(published),
+                    reason=published_issue,
+                )
+            )
+    return tuple(issues)
+
+
+def _port_range_issue(value: str) -> str:
+    port_text, sep, protocol = value.partition("/")
+    if sep and protocol not in {"tcp", "udp", "sctp"}:
+        return "expected protocol tcp, udp, or sctp"
+    parts = port_text.split("-")
+    if len(parts) > 2 or any(_port_number_issue(part) for part in parts):
+        return "expected numeric port or port range from 1 to 65535"
+    if len(parts) == 2 and int(parts[0]) > int(parts[1]):
+        return "expected port range start to be less than or equal to end"
+    return ""
+
+
+def _port_number_issue(value: object) -> str:
+    text = str(value).strip()
+    if not text.isascii() or not text.isdigit():
+        return "expected numeric port from 1 to 65535"
+    port = int(text)
+    if port < 1 or port > 65535:
+        return "expected numeric port from 1 to 65535"
+    return ""
+
+
+def _display_runtime_port_value(value: object) -> str:
+    if isinstance(value, str):
+        return value
+    return json.dumps(value, sort_keys=True)
