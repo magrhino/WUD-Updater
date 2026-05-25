@@ -679,10 +679,12 @@ class UpdatesRunner:
                     change_tags = True
                     break
                 if choice in {"e", "exclude"}:
-                    self.exclude_tag_line_spec = ",".join(
-                        _unique_in_order(str(entry.line_no) for _display, entry in tag_entries)
-                    )
-                    self.recreate_excluded_services = self._confirm_recreate_exclusions()
+                    line_spec = self._select_tag_exclusion_line_spec(tag_entries)
+                    if line_spec:
+                        self.exclude_tag_line_spec = line_spec
+                        self.recreate_excluded_services = (
+                            self._confirm_recreate_exclusions()
+                        )
                     return
                 print("Invalid choice. Enter y, n, c, or e.")
 
@@ -702,6 +704,32 @@ class UpdatesRunner:
                         self.tag_override_specs.append(f"{entry.line_no}={reply}")
                     break
                 print("Invalid tag. Use a Docker tag value like 5.2.0.")
+
+    def _select_tag_exclusion_line_spec(
+        self,
+        tag_entries: Sequence[tuple[int, TodoEntry]],
+    ) -> str:
+        if len(tag_entries) == 1:
+            return str(tag_entries[0][1].line_no)
+
+        tag_display_numbers = {display for display, _entry in tag_entries}
+        while True:
+            selected_display = self._read_tag_exclusion_selection()
+            if not selected_display:
+                return ""
+            if all(display in tag_display_numbers for display in selected_display):
+                selected_set = set(selected_display)
+                return ",".join(
+                    _unique_in_order(
+                        str(entry.line_no)
+                        for display, entry in tag_entries
+                        if display in selected_set
+                    )
+                )
+            print(
+                "Invalid tag selection. "
+                "Use listed tag update numbers/ranges like 1,3-5."
+            )
 
     def _confirm_recreate_exclusions(self) -> bool:
         while True:
@@ -731,6 +759,20 @@ class UpdatesRunner:
                 return _parse_display_spec(reply, todo_count)
             except ValueError:
                 print("Invalid selection. Use numbers/ranges like 1,3-5.")
+
+    def _read_tag_exclusion_selection(self) -> list[int]:
+        while True:
+            reply = _prompt("Enter tag update numbers/ranges to exclude: ")
+            if _SHELL_SPACE_RE.sub("", reply) == "":
+                print("⏸️  No tag exclusions selected.")
+                return []
+            try:
+                return _parse_display_spec(reply, len(self.todo_entries))
+            except ValueError:
+                print(
+                    "Invalid tag selection. "
+                    "Use listed tag update numbers/ranges like 1,3-5."
+                )
 
     def _display_numbers_to_file_line_spec(self, display_numbers: Iterable[int]) -> str:
         line_numbers: list[str] = []

@@ -288,8 +288,8 @@ updates --yes --allow-tag-updates
 ```
 
 During interactive runs, `updates` prompts for selected tag updates and lets you
-apply them as shown, skip them, change the tag, or exclude the exact proposed
-tag before calling the updater. Tag exclusions update `wud.tag.exclude` in
+apply them as shown, skip them, change the tag, or exclude selected exact
+proposed tags before calling the updater. Tag exclusions update `wud.tag.exclude` in
 Compose and can optionally recreate affected services immediately. Automatic
 Compose tag rewrites and exclusion labels only support direct service `image:`
 values; image values provided through interpolation or inherited YAML snippets

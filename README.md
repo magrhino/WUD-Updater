@@ -13,8 +13,8 @@ notifications.
 - When approved, `docker-update-from-wud` pulls matching Docker Compose services
   or stack-scoped service images, recreates containers, waits for health, and
   removes successfully processed lines from the WUD file.
-- Interactive tag prompts can apply, change, skip, or durably exclude WUD's
-  proposed exact tag through the native `wud.tag.exclude` Compose label.
+- Interactive tag prompts can apply, change, skip, or durably exclude selected
+  proposed exact tags through the native `wud.tag.exclude` Compose label.
 - A Compose service can opt into full-stack recreation by running with the label
   `WUD-UPDATER-RECREATE-STACK=true`.
 
