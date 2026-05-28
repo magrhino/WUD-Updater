@@ -892,6 +892,75 @@ def test_state_operations_write_rows_and_audit_entries(tmp_path: Path) -> None:
     assert event_metadata[-1]["after"]["status"] == "disabled"
 
 
+def test_service_policy_upsert_preserves_omitted_existing_fields(
+    tmp_path: Path,
+) -> None:
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+        },
+    )
+    headers = _csrf_headers(client)
+
+    created = client.post(
+        "/api/v1/state/operations",
+        json={
+            "kind": "upsert_service_policy",
+            "service_key": "stack/app",
+            "update_mode": "stop",
+            "auto_update": False,
+            "snooze_default_seconds": 600,
+        },
+        headers=headers,
+    )
+    mode_only_update = client.post(
+        "/api/v1/state/operations",
+        json={
+            "kind": "upsert_service_policy",
+            "service_key": "stack/app",
+            "update_mode": "live",
+        },
+        headers=headers,
+    )
+    auto_only_update = client.post(
+        "/api/v1/state/operations",
+        json={
+            "kind": "upsert_service_policy",
+            "service_key": "stack/app",
+            "auto_update": True,
+        },
+        headers=headers,
+    )
+    explicit_clear = client.post(
+        "/api/v1/state/operations",
+        json={
+            "kind": "upsert_service_policy",
+            "service_key": "stack/app",
+            "snooze_default_seconds": None,
+        },
+        headers=headers,
+    )
+
+    assert created.status_code == 200
+    assert mode_only_update.status_code == 200
+    mode_resource = mode_only_update.json()["resource"]
+    assert mode_resource["update_mode"] == "live"
+    assert mode_resource["auto_update"] is False
+    assert mode_resource["snooze_default_seconds"] == 600
+    assert auto_only_update.status_code == 200
+    auto_resource = auto_only_update.json()["resource"]
+    assert auto_resource["update_mode"] == "live"
+    assert auto_resource["auto_update"] is True
+    assert auto_resource["snooze_default_seconds"] == 600
+    assert explicit_clear.status_code == 200
+    clear_resource = explicit_clear.json()["resource"]
+    assert clear_resource["update_mode"] == "live"
+    assert clear_resource["auto_update"] is True
+    assert clear_resource["snooze_default_seconds"] is None
+
+
 def test_state_operation_rolls_back_when_audit_insert_fails(
     tmp_path: Path,
     monkeypatch,

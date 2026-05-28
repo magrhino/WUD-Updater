@@ -1670,6 +1670,10 @@ def _upsert_service_policy(
 ) -> StateOperationResponse:
     service_key = _required_state_text(payload.service_key, "service_key")
     before_row = _service_policy_row(conn, service_key)
+    update_mode, auto_update, snooze_default_seconds = _service_policy_upsert_values(
+        payload,
+        before_row,
+    )
     now = utc_timestamp()
     conn.execute(
         """
@@ -1691,9 +1695,9 @@ def _upsert_service_policy(
         """,
         (
             service_key,
-            payload.update_mode,
-            int(payload.auto_update),
-            payload.snooze_default_seconds,
+            update_mode,
+            int(auto_update),
+            snooze_default_seconds,
             now,
             now,
         ),
@@ -1720,6 +1724,36 @@ def _upsert_service_policy(
         resource_id=service_key,
         resource=_service_policy_from_row(after_row),
     )
+
+
+def _service_policy_upsert_values(
+    payload: UpsertServicePolicyOperation,
+    before_row: sqlite3.Row | None,
+) -> tuple[str, bool, int | None]:
+    if before_row is None:
+        return payload.update_mode, payload.auto_update, payload.snooze_default_seconds
+
+    fields_set = payload.model_fields_set
+    update_mode = (
+        payload.update_mode
+        if "update_mode" in fields_set
+        else str(before_row["update_mode"])
+    )
+    auto_update = (
+        payload.auto_update
+        if "auto_update" in fields_set
+        else bool(before_row["auto_update"])
+    )
+    snooze_default_seconds = (
+        payload.snooze_default_seconds
+        if "snooze_default_seconds" in fields_set
+        else (
+            None
+            if before_row["snooze_default_seconds"] is None
+            else int(before_row["snooze_default_seconds"])
+        )
+    )
+    return update_mode, auto_update, snooze_default_seconds
 
 
 def _delete_service_policy(
