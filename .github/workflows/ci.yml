@@ -98,7 +98,7 @@ jobs:
           workflows=false
           for file in "${files[@]}"; do
             case "$file" in
-              Dockerfile|.dockerignore|entrypoint.sh|docs/examples/docker-compose*.yml|bin/*|wud/*|tests/container-build.sh|tests/e2e-docker-compose.sh|tests/test-entrypoint.sh)
+              Dockerfile|.dockerignore|entrypoint.sh|docs/examples/docker-compose*.yml|bin/*|wud/*|webui/**|tests/container-build.sh|tests/e2e-docker-compose.sh|tests/test-entrypoint.sh)
                 docker=true
                 ;;
             esac
@@ -145,6 +145,13 @@ jobs:
         uses: actions/checkout@v6
         with:
           persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: webui/package-lock.json
 
       - name: Install ShellCheck
         shell: bash
