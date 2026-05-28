@@ -4,7 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "vite",
+    "dev": "node scripts/dev-server.mjs",
+    "dev:vite": "vite --host 127.0.0.1 --port 5173",
     "build": "vue-tsc --noEmit && vite build",
     "typecheck": "vue-tsc --noEmit"
   },
@@ -20,6 +21,7 @@
     "@vitejs/plugin-vue": "^5.2.0",
     "typescript": "^5.7.0",
     "vite": "^6.0.0",
+    "vite-plugin-vue-devtools": "^8.1.2",
     "vue-tsc": "^2.1.0"
   }
 }

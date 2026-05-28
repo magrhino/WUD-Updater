@@ -151,14 +151,17 @@ run "$python_bin" -m py_compile \
   tests/test_python_update_from_wud.py \
   tests/test_python_updates_wrapper.py \
   tests/test_python_web.py \
+  tests/test_python_webui_demo_state.py \
   tests/test_python_wud_file_ops.py \
-  tests/test_python_wud_parsing.py
+  tests/test_python_wud_parsing.py \
+  webui/scripts/seed_demo_state.py
 
 run "$python_bin" tests/run-python-tests.py
 
 run "$python_bin" -m pytest tests/test_python_web.py
 
 if command -v npm >/dev/null 2>&1 && [[ -f webui/package-lock.json ]]; then
+  run node --check webui/scripts/dev-server.mjs
   run npm --prefix webui ci
   run npm --prefix webui run typecheck
   run npm --prefix webui run build

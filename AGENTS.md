@@ -19,6 +19,7 @@ Repo-local routing/context only for WUD-Updater. Global instructions control def
 | `bin/docker-update-from-wud` | Symlink-safe dispatcher for the default Python updater. | `README.md`, `src/wud_updater/cli.py`, `src/wud_updater/updater.py`, and dispatcher tests. | Keep argument pass-through exact; preserve `PYTHON_BIN` and `PYTHONPATH` behavior. | Adding updater logic here instead of in Python. |
 | `pyproject.toml`, `src/wud_updater/` | Default Python updater package plus the opt-in Python `updates` wrapper. | `pyproject.toml`, `src/wud_updater/cli.py`, relevant Python module, and relevant Python tests. | Keep `wud-updater updates` opt-in until promoted separately. | Moving WUD callback scripts out of shell. |
 | `webui/` | Vue 3/Vite/TypeScript SPA for the read-only WebUI. | `webui/package.json`, `src/wud_updater/web.py`, `tests/test_python_web.py`, and relevant Vue view/store files. | Keep auth/session state out of localStorage; use the typed API client and Pinia stores; prefer read-only views unless mutation work is explicitly requested. | Adding mutation UX without matching backend CSRF/origin, read-only-mode, and audit tests. |
+| `Makefile` | Developer convenience targets for WebUI demo state and local dev. | `Makefile`, `webui/package.json`, `webui/scripts/*`, and relevant tests. | Keep targets thin wrappers around checked-in scripts; do not hard-code machine-specific paths. | Production install or release behavior unless the task explicitly targets it. |
 | `wud/on-update.sh`, `wud/append-updates.sh` | WUD notification callback and line-oriented update-list writer. | Both files plus WUD env variable usage. | Keep POSIX `sh` compatibility and container defaults for `/wud` and `/out`. | Host-specific paths, secrets, or behavior that belongs in `bin/`. |
 | `wud/tag-manager.sh`, `wud/github-release-embed.sh`, `wud/release-notes-to-discord.sh`, `wud/http.sh`, `wud/upstreams.txt` | Discord/GitHub release-note helpers, shared HTTP behavior, and LinuxServer.io upstream mapping. | The called helper; for `wud/github-release-embed.sh`, inspect args, router, and relevant provider section first; read `wud/http.sh` for release-note curl behavior and `wud/upstreams.txt` when mapping is involved. | Keep webhook/token values environment-driven and redacted in logs. Preserve standardized `curl`/`jq` based GitHub and Discord behavior. | Network calls unless validating release-note behavior. |
 | `install.sh` | Idempotent installer that chmods scripts and creates host symlinks for CLI commands and WUD scripts. | `install.sh`, then README install section. | Preserve refusal to replace non-symlink targets and existing env overrides. | Changing default target layout unless the task asks for installer behavior changes. |
@@ -92,6 +93,8 @@ Use the shell already used by the target script.
 | WebUI dependency install | `npm --prefix webui ci` |
 | WebUI typecheck | `npm --prefix webui run typecheck` |
 | WebUI build | `npm --prefix webui run build` |
+| WebUI demo state | `make webui-demo-state` |
+| WebUI dev server | `make webui-dev` |
 | typecheck | Python typecheck is not configured; WebUI typecheck uses `npm --prefix webui run typecheck`. |
 | unit tests | `tests/run-all.sh` |
 | build | WebUI build uses `npm --prefix webui run build`; container image build uses `docker build -t wud-updater:local .`. |
@@ -108,7 +111,7 @@ Use the shell already used by the target script.
 - Release-note behavior change: syntax-check the touched scripts, run ShellCheck, run `tests/test-github-release-embed.sh`, `tests/test-release-notes-to-discord.sh`, and `tests/test-tag-manager.sh` when Discord payload or release-note routing changes, and avoid live Discord/GitHub calls unless explicitly requested or needed.
 - Python updater/config change: run `ruff check .`, Python syntax check, `tests/run-python-tests.py`, and `tests/run-all.sh` when practical.
 - Rich terminal rendering change: create or update focused tests that exercise the Rich-enabled path for the touched surface, using mocks when local Rich is unavailable; run `python3 -m unittest tests.test_python_terminal` plus Python syntax checks before broader suites.
-- WebUI frontend change: run `npm --prefix webui ci`, `npm --prefix webui run typecheck`, `npm --prefix webui run build`, and `tests/test_python_web.py` when API contracts or auth assumptions are involved. Run `tests/container-build.sh` when packaged static assets, Dockerfile behavior, or container startup changes.
+- WebUI frontend change: run `npm --prefix webui ci`, `npm --prefix webui run typecheck`, `npm --prefix webui run build`, and `tests/test_python_web.py` when API contracts or auth assumptions are involved. For local dev/demo changes, also run the focused demo seeder test and `node --check webui/scripts/dev-server.mjs`. Run `tests/container-build.sh` when packaged static assets, Dockerfile behavior, or container startup changes.
 - GitHub Actions workflow change: run `actionlint` when available; if not installed, inspect the touched workflow YAML and report that local actionlint was not available. For release workflow changes, also inspect tag, permission, and GHCR image-tag behavior.
 - Security workflow change: run `actionlint` when available, `git diff --check`, `tests/run-all.sh`, and the local `zizmor` command when installed; verify CodeQL, Dependency Review, and SARIF uploads in the first GitHub run after the repository is public or GHAS-backed scanning is enabled.
 - GitHub template change: validate issue-template YAML when practical, run `git diff --check`, and skip application tests unless executable examples or commands changed.
@@ -126,7 +129,7 @@ Use the shell already used by the target script.
 
 - `bin/`: Host commands for reviewing WUD output and dispatching the default Python updater.
 - `src/wud_updater/`: Default Python updater package plus the opt-in Python host wrapper.
-- `webui/`: Vue/Vite SPA for login, dashboard, pending updates, run history, and logs.
+- `webui/`: Vue/Vite SPA for login, dashboard, pending updates, run history, logs, and local demo-state dev tooling.
 - `wud/`: Container-mounted callback scripts for collecting WUD updates and optionally posting GitHub release notes to Discord.
 - `install.sh`: Host setup helper that creates symlinks and executable bits without replacing existing non-symlink targets.
 - `tests/`: Shell-based local and CI validation using temp directories, fake external commands, and a Docker-gated Compose E2E harness.
