@@ -43,6 +43,7 @@ from .config import ConfigError, UpdaterConfig, load_config
 from .db import DatabaseError, SCHEMA_VERSION, connect_db, init_db, utc_timestamp
 from .db import _user_version as db_user_version
 from .db import _validate_schema as validate_db_schema
+from .locks import DirectoryLock, WudLockError
 from .plans import (
     DryRunPlan,
     PlanFileMissing,
@@ -765,27 +766,32 @@ def api_apply_plan(payload: ApplyPlanRequest, request: Request) -> ApplyJobRespo
         raise HTTPException(status_code=403, detail="mutations are disabled")
     if _active_apply_job_exists(request):
         raise HTTPException(status_code=409, detail="an apply job is already running")
+    wud_lock = _acquire_apply_wud_lock(settings)
     try:
-        plan = _build_web_plan(
-            settings,
-            PlanRequest(
-                line_numbers=payload.line_numbers,
-                allow_tag_updates=payload.allow_tag_updates,
-            ),
-        )
-    except (PlanInputError, PlanFileMissing) as exc:
-        raise HTTPException(status_code=409, detail="plan is stale") from exc
-    except OSError as exc:
-        raise HTTPException(
-            status_code=500,
-            detail=f"could not revalidate plan: {exc}",
-        ) from exc
+        try:
+            plan = _build_web_plan(
+                settings,
+                PlanRequest(
+                    line_numbers=payload.line_numbers,
+                    allow_tag_updates=payload.allow_tag_updates,
+                ),
+            )
+        except (PlanInputError, PlanFileMissing) as exc:
+            raise HTTPException(status_code=409, detail="plan is stale") from exc
+        except OSError as exc:
+            raise HTTPException(
+                status_code=500,
+                detail=f"could not revalidate plan: {exc}",
+            ) from exc
 
-    if not secrets.compare_digest(plan.plan_id, payload.plan_id):
-        raise HTTPException(status_code=409, detail="plan is stale")
-    if not _plan_can_apply(plan, settings):
-        raise HTTPException(status_code=409, detail="plan is not ready to apply")
-    return _submit_apply_job(request, settings, plan, payload)
+        if not secrets.compare_digest(plan.plan_id, payload.plan_id):
+            raise HTTPException(status_code=409, detail="plan is stale")
+        if not _plan_can_apply(plan, settings):
+            raise HTTPException(status_code=409, detail="plan is not ready to apply")
+        return _submit_apply_job(request, settings, plan, payload, wud_lock)
+    except Exception:
+        wud_lock.close()
+        raise
 
 
 def api_apply_job(job_id: str, request: Request) -> ApplyJobResponse:
@@ -933,11 +939,24 @@ def _plan_can_apply(plan: DryRunPlan, settings: WebSettings) -> bool:
     )
 
 
+def _acquire_apply_wud_lock(settings: WebSettings) -> DirectoryLock:
+    lock = DirectoryLock(
+        settings.config.wud_out_file,
+        timeout_seconds=(settings.command_env or {}).get("WUD_LOCK_TIMEOUT", "30"),
+    )
+    try:
+        lock.acquire()
+    except WudLockError as exc:
+        raise HTTPException(status_code=409, detail="WUD file is locked") from exc
+    return lock
+
+
 def _submit_apply_job(
     request: Request,
     settings: WebSettings,
     plan: DryRunPlan,
     payload: ApplyPlanRequest,
+    wud_lock: DirectoryLock,
 ) -> ApplyJobResponse:
     apply_lock: Lock = request.app.state.web_apply_lock
     jobs: dict[str, WebApplyJob] = request.app.state.web_apply_jobs
@@ -961,6 +980,7 @@ def _submit_apply_job(
             jobs,
             apply_lock,
             job.id,
+            wud_lock,
         )
         return response
 
@@ -980,6 +1000,7 @@ def _run_apply_job(
     jobs: dict[str, WebApplyJob],
     apply_lock: Lock,
     job_id: str,
+    wud_lock: DirectoryLock,
 ) -> None:
     _update_apply_job(
         jobs,
@@ -996,10 +1017,12 @@ def _run_apply_job(
             allow_tag_updates=allow_tag_updates,
             plan_id=plan_id,
         )
+        apply_env = dict(settings.command_env or {})
+        apply_env["WUD_LOCK_HELD_BY_PARENT"] = "1"
         runner = UpdateFromWudRunner(
             options,
-            environ=settings.command_env,
-            command_runner=CommandRunner(env=settings.command_env),
+            environ=apply_env,
+            command_runner=CommandRunner(env=apply_env),
         )
         status_code = runner.run()
         _update_apply_job(
@@ -1023,6 +1046,8 @@ def _run_apply_job(
             finished_at=utc_timestamp(),
             error=str(exc),
         )
+    finally:
+        wud_lock.close()
 
 
 def _update_apply_job(

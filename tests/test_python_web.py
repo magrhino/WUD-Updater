@@ -18,6 +18,7 @@ from wud_updater.db import (
     insert_update_event,
     insert_update_run,
 )
+from wud_updater.locks import DirectoryLock, WudLockError, lock_dir_for
 from wud_updater.web import create_app
 
 
@@ -1012,6 +1013,180 @@ def test_apply_endpoint_runs_existing_updater_and_records_audit(
     assert detail["metadata"]["selected_line_numbers"] == [1]
     assert detail["pending_updates"][0]["line_no"] == 1
     assert detail["pending_updates"][0]["status"] == "resolved"
+    assert not lock_dir_for(wud_file).exists()
+
+
+def test_apply_endpoint_holds_wud_lock_for_worker_handoff(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    fake_env, fake_root = _fake_docker_env(tmp_path)
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+            **fake_env,
+        },
+    )
+    wud_file = tmp_path / "state" / "images.todo"
+    wud_file.write_text("repo/app:latest\n", encoding="utf-8")
+    _make_fake_stack(
+        tmp_path,
+        fake_root,
+        "stack",
+        [("app", "repo/app:latest", "cid-app")],
+    )
+    observed: dict[str, object] = {}
+
+    def fake_run(runner: object) -> int:
+        environ = getattr(runner, "environ")
+        observed["lock_flag"] = environ.get("WUD_LOCK_HELD_BY_PARENT")
+        observed["lock_exists"] = lock_dir_for(wud_file).is_dir()
+        contender = DirectoryLock(wud_file, timeout_seconds=0)
+        try:
+            contender.acquire()
+        except WudLockError:
+            observed["contended"] = True
+        else:
+            contender.close()
+            observed["contended"] = False
+        return 0
+
+    monkeypatch.setattr(web_module.UpdateFromWudRunner, "run", fake_run)
+    headers = _csrf_headers(client)
+    plan = client.post(
+        "/api/v1/plans",
+        json={"line_numbers": [1]},
+        headers=headers,
+    ).json()
+
+    apply_response = client.post(
+        "/api/v1/plans/apply",
+        json={
+            "plan_id": plan["plan_id"],
+            "line_numbers": [1],
+            "confirmation": "apply",
+        },
+        headers=headers,
+    )
+    job = _wait_apply_job(client, apply_response.json()["job_id"])
+
+    assert apply_response.status_code == 202
+    assert job["status"] == "success"
+    assert observed == {
+        "lock_flag": "1",
+        "lock_exists": True,
+        "contended": True,
+    }
+    assert not lock_dir_for(wud_file).exists()
+    calls = _fake_docker_calls(fake_root)
+    assert " pull " not in calls
+    assert " up -d " not in calls
+
+
+def test_apply_endpoint_releases_wud_lock_when_runner_raises(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    fake_env, fake_root = _fake_docker_env(tmp_path)
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+            **fake_env,
+        },
+    )
+    wud_file = tmp_path / "state" / "images.todo"
+    wud_file.write_text("repo/app:latest\n", encoding="utf-8")
+    _make_fake_stack(
+        tmp_path,
+        fake_root,
+        "stack",
+        [("app", "repo/app:latest", "cid-app")],
+    )
+
+    def fake_run(_runner: object) -> int:
+        assert lock_dir_for(wud_file).is_dir()
+        raise RuntimeError("runner exploded")
+
+    monkeypatch.setattr(web_module.UpdateFromWudRunner, "run", fake_run)
+    headers = _csrf_headers(client)
+    plan = client.post(
+        "/api/v1/plans",
+        json={"line_numbers": [1]},
+        headers=headers,
+    ).json()
+
+    apply_response = client.post(
+        "/api/v1/plans/apply",
+        json={
+            "plan_id": plan["plan_id"],
+            "line_numbers": [1],
+            "confirmation": "apply",
+        },
+        headers=headers,
+    )
+    job = _wait_apply_job(client, apply_response.json()["job_id"])
+
+    assert apply_response.status_code == 202
+    assert job["status"] == "failure"
+    assert job["error"] == "runner exploded"
+    assert not lock_dir_for(wud_file).exists()
+    calls = _fake_docker_calls(fake_root)
+    assert " pull " not in calls
+    assert " up -d " not in calls
+
+
+def test_apply_endpoint_rejects_existing_wud_lock_without_queueing_job(
+    tmp_path: Path,
+) -> None:
+    fake_env, fake_root = _fake_docker_env(tmp_path)
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+            "WUD_LOCK_TIMEOUT": "0",
+            **fake_env,
+        },
+    )
+    wud_file = tmp_path / "state" / "images.todo"
+    wud_file.write_text("repo/app:latest\n", encoding="utf-8")
+    _make_fake_stack(
+        tmp_path,
+        fake_root,
+        "stack",
+        [("app", "repo/app:latest", "cid-app")],
+    )
+    headers = _csrf_headers(client)
+    plan = client.post(
+        "/api/v1/plans",
+        json={"line_numbers": [1]},
+        headers=headers,
+    ).json()
+    external_lock = DirectoryLock(wud_file, timeout_seconds=0)
+    external_lock.acquire()
+    try:
+        response = client.post(
+            "/api/v1/plans/apply",
+            json={
+                "plan_id": plan["plan_id"],
+                "line_numbers": [1],
+                "confirmation": "apply",
+            },
+            headers=headers,
+        )
+    finally:
+        external_lock.close()
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == "WUD file is locked"
+    assert client.app.state.web_apply_jobs == {}
+    calls = _fake_docker_calls(fake_root)
+    assert " pull " not in calls
+    assert " up -d " not in calls
 
 
 def test_apply_endpoint_rejects_concurrent_jobs(tmp_path: Path) -> None:
