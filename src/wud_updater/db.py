@@ -7,11 +7,16 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 
 ColumnSchema = tuple[str, str, int, str | None, int]
 
 EXPECTED_SCHEMA: dict[str, tuple[ColumnSchema, ...]] = {
+    "schema_migrations": (
+        ("version", "INTEGER", 0, None, 1),
+        ("name", "TEXT", 1, None, 0),
+        ("applied_at", "TEXT", 1, None, 0),
+    ),
     "update_runs": (
         ("id", "INTEGER", 0, None, 1),
         ("started_at", "TEXT", 1, None, 0),
@@ -93,11 +98,44 @@ EXPECTED_SCHEMA: dict[str, tuple[ColumnSchema, ...]] = {
         ("updated_at", "TEXT", 1, None, 0),
         ("metadata_json", "TEXT", 1, "'{}'", 0),
     ),
+    "web_users": (
+        ("id", "INTEGER", 0, None, 1),
+        ("username", "TEXT", 1, None, 0),
+        ("password_hash", "TEXT", 1, None, 0),
+        ("role", "TEXT", 1, "'admin'", 0),
+        ("created_at", "TEXT", 1, None, 0),
+        ("password_updated_at", "TEXT", 1, None, 0),
+        ("disabled_at", "TEXT", 0, None, 0),
+    ),
+    "web_sessions": (
+        ("id_hash", "TEXT", 0, None, 1),
+        ("user_id", "INTEGER", 1, None, 0),
+        ("created_at", "TEXT", 1, None, 0),
+        ("last_seen_at", "TEXT", 1, None, 0),
+        ("expires_at", "TEXT", 1, None, 0),
+        ("user_agent_hash", "TEXT", 1, "''", 0),
+        ("revoked_at", "TEXT", 0, None, 0),
+    ),
+    "web_settings": (
+        ("key", "TEXT", 0, None, 1),
+        ("value", "TEXT", 1, None, 0),
+        ("updated_at", "TEXT", 1, None, 0),
+    ),
+}
+
+WEB_SCHEMA_TABLES = frozenset(
+    {"schema_migrations", "web_users", "web_sessions", "web_settings"}
+)
+
+EXPECTED_SCHEMA_V3 = {
+    name: columns
+    for name, columns in EXPECTED_SCHEMA.items()
+    if name not in WEB_SCHEMA_TABLES
 }
 
 EXPECTED_SCHEMA_V2 = {
     name: columns
-    for name, columns in EXPECTED_SCHEMA.items()
+    for name, columns in EXPECTED_SCHEMA_V3.items()
     if name != "tag_exclusion_rules"
 }
 
@@ -133,16 +171,32 @@ def init_db(conn: sqlite3.Connection) -> None:
     version = _user_version(conn)
     if version == SCHEMA_VERSION:
         _validate_schema(conn)
+        _ensure_schema_migrations(conn)
+        _backfill_schema_migrations(conn, SCHEMA_VERSION)
+        _validate_schema(conn)
+        return
+    if version == 3:
+        _validate_schema(conn, expected_schema=EXPECTED_SCHEMA_V3)
+        _ensure_schema_migrations(conn)
+        _backfill_schema_migrations(conn, 3)
+        _migrate_v3_to_v4(conn)
+        _validate_schema(conn)
         return
     if version == 2:
         _validate_schema(conn, expected_schema=EXPECTED_SCHEMA_V2)
+        _ensure_schema_migrations(conn)
+        _backfill_schema_migrations(conn, 2)
         _migrate_v2_to_v3(conn)
+        _migrate_v3_to_v4(conn)
         _validate_schema(conn)
         return
     if version == 1:
         _validate_schema(conn, expected_schema=EXPECTED_SCHEMA_V1)
+        _ensure_schema_migrations(conn)
+        _backfill_schema_migrations(conn, 1)
         _migrate_v1_to_v2(conn)
         _migrate_v2_to_v3(conn)
+        _migrate_v3_to_v4(conn)
         _validate_schema(conn)
         return
     if version != 0:
@@ -152,6 +206,12 @@ def init_db(conn: sqlite3.Connection) -> None:
     with conn:
         conn.executescript(
             """
+            CREATE TABLE IF NOT EXISTS schema_migrations (
+                version INTEGER PRIMARY KEY,
+                name TEXT NOT NULL,
+                applied_at TEXT NOT NULL
+            );
+
             CREATE TABLE IF NOT EXISTS update_runs (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 started_at TEXT NOT NULL,
@@ -256,9 +316,41 @@ def init_db(conn: sqlite3.Connection) -> None:
             );
             CREATE INDEX IF NOT EXISTS idx_tag_exclusion_rules_lookup
                 ON tag_exclusion_rules (status, image_repo, service_key, match_type);
+
+            CREATE TABLE IF NOT EXISTS web_users (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                username TEXT NOT NULL UNIQUE,
+                password_hash TEXT NOT NULL,
+                role TEXT NOT NULL DEFAULT 'admin',
+                created_at TEXT NOT NULL,
+                password_updated_at TEXT NOT NULL,
+                disabled_at TEXT
+            );
+
+            CREATE TABLE IF NOT EXISTS web_sessions (
+                id_hash TEXT PRIMARY KEY,
+                user_id INTEGER NOT NULL,
+                created_at TEXT NOT NULL,
+                last_seen_at TEXT NOT NULL,
+                expires_at TEXT NOT NULL,
+                user_agent_hash TEXT NOT NULL DEFAULT '',
+                revoked_at TEXT,
+                FOREIGN KEY (user_id) REFERENCES web_users(id) ON DELETE CASCADE
+            );
+            CREATE INDEX IF NOT EXISTS idx_web_sessions_user_id
+                ON web_sessions (user_id);
+            CREATE INDEX IF NOT EXISTS idx_web_sessions_expires_at
+                ON web_sessions (expires_at);
+
+            CREATE TABLE IF NOT EXISTS web_settings (
+                key TEXT PRIMARY KEY,
+                value TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
             """
         )
         _validate_schema(conn)
+        _backfill_schema_migrations(conn, SCHEMA_VERSION)
         conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
 
 
@@ -750,6 +842,68 @@ def _format_column_names(names: tuple[str, ...]) -> str:
     return ", ".join(names)
 
 
+MIGRATION_NAMES = {
+    1: "create update state tables",
+    2: "add pending update records",
+    3: "add tag exclusion rules",
+    4: "add web auth state",
+}
+
+
+def _ensure_schema_migrations(conn: sqlite3.Connection) -> None:
+    object_type = _sqlite_object_type(conn, "schema_migrations")
+    if object_type is not None:
+        if object_type != "table":
+            raise DatabaseError(
+                f"Expected schema_migrations to be a table, found {object_type}"
+            )
+        _validate_table_columns(
+            conn,
+            "schema_migrations",
+            EXPECTED_SCHEMA["schema_migrations"],
+        )
+        return
+    with conn:
+        conn.execute(
+            """
+            CREATE TABLE schema_migrations (
+                version INTEGER PRIMARY KEY,
+                name TEXT NOT NULL,
+                applied_at TEXT NOT NULL
+            )
+            """
+        )
+
+
+def _backfill_schema_migrations(conn: sqlite3.Connection, version: int) -> None:
+    _ensure_schema_migrations(conn)
+    with conn:
+        for migration_version in range(1, version + 1):
+            name = MIGRATION_NAMES.get(
+                migration_version,
+                f"schema version {migration_version}",
+            )
+            conn.execute(
+                """
+                INSERT OR IGNORE INTO schema_migrations (version, name, applied_at)
+                VALUES (?, ?, ?)
+                """,
+                (migration_version, name, utc_timestamp()),
+            )
+
+
+def _record_schema_migration(conn: sqlite3.Connection, version: int) -> None:
+    name = MIGRATION_NAMES.get(version, f"schema version {version}")
+    with conn:
+        conn.execute(
+            """
+            INSERT OR IGNORE INTO schema_migrations (version, name, applied_at)
+            VALUES (?, ?, ?)
+            """,
+            (version, name, utc_timestamp()),
+        )
+
+
 def _migrate_v1_to_v2(conn: sqlite3.Connection) -> None:
     object_type = _sqlite_object_type(conn, "pending_updates")
     if object_type is not None:
@@ -789,6 +943,7 @@ def _migrate_v1_to_v2(conn: sqlite3.Connection) -> None:
             """
         )
         conn.execute("PRAGMA user_version = 2")
+    _record_schema_migration(conn, 2)
 
 
 def _migrate_v2_to_v3(conn: sqlite3.Connection) -> None:
@@ -824,4 +979,53 @@ def _migrate_v2_to_v3(conn: sqlite3.Connection) -> None:
                 ON tag_exclusion_rules (status, image_repo, service_key, match_type);
             """
         )
+        conn.execute("PRAGMA user_version = 3")
+    _record_schema_migration(conn, 3)
+
+
+def _migrate_v3_to_v4(conn: sqlite3.Connection) -> None:
+    for table_name in ("web_users", "web_sessions", "web_settings"):
+        object_type = _sqlite_object_type(conn, table_name)
+        if object_type is not None:
+            if object_type != "table":
+                raise DatabaseError(
+                    f"Expected {table_name} to be a table, found {object_type}"
+                )
+            _validate_table_columns(conn, table_name, EXPECTED_SCHEMA[table_name])
+    with conn:
+        conn.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS web_users (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                username TEXT NOT NULL UNIQUE,
+                password_hash TEXT NOT NULL,
+                role TEXT NOT NULL DEFAULT 'admin',
+                created_at TEXT NOT NULL,
+                password_updated_at TEXT NOT NULL,
+                disabled_at TEXT
+            );
+
+            CREATE TABLE IF NOT EXISTS web_sessions (
+                id_hash TEXT PRIMARY KEY,
+                user_id INTEGER NOT NULL,
+                created_at TEXT NOT NULL,
+                last_seen_at TEXT NOT NULL,
+                expires_at TEXT NOT NULL,
+                user_agent_hash TEXT NOT NULL DEFAULT '',
+                revoked_at TEXT,
+                FOREIGN KEY (user_id) REFERENCES web_users(id) ON DELETE CASCADE
+            );
+            CREATE INDEX IF NOT EXISTS idx_web_sessions_user_id
+                ON web_sessions (user_id);
+            CREATE INDEX IF NOT EXISTS idx_web_sessions_expires_at
+                ON web_sessions (expires_at);
+
+            CREATE TABLE IF NOT EXISTS web_settings (
+                key TEXT PRIMARY KEY,
+                value TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
+            """
+        )
         conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
+    _record_schema_migration(conn, 4)

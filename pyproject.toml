@@ -9,6 +9,7 @@ description = "Python package for WUD updater commands."
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
+    "argon2-cffi>=23.1,<26",
     "fastapi>=0.115,<1",
     "pydantic>=2,<3",
     "rich>=13.7,<15",

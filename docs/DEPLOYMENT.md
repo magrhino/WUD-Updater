@@ -377,12 +377,28 @@ Boolean examples use `true` and `false`; legacy aliases `1`, `0`, `yes`, `no`,
 | `WUD_UPDATER_SELF_UPDATE` | enabled | Set to `false`, `0`, `no`, or `off` to disable the default `updates` self-update preflight. |
 | `PYTHON_BIN` | `python3`, with repo `.venv` fallback when unset | Python interpreter used by Python entrypoint wrappers. Set this to bypass automatic `.venv` fallback. |
 | `WUD_UPDATER_VENV` | Repo-local `.venv` | Optional installer and wrapper venv path for host runtime dependencies. |
-| `WUD_WEB_TOKEN` | unset | Required token for `wud-updater web` browser login and bearer-token API clients unless `WUD_WEB_DEV_NO_AUTH=true` is set for tests or local development. |
+| `WUD_WEB_TOKEN` | unset | Optional bearer token for API clients after first-run setup. This token is not accepted by the browser login form and does not bypass setup. |
 | `WUD_WEB_DEV_NO_AUTH` | `false` | Explicitly disables WebUI API auth for tests or local development only. |
 | `WUD_WEB_ALLOWED_ORIGINS` | same origin only | Comma-separated extra origins accepted by the CSRF/Origin checks for login, logout, and future mutating WebUI routes. |
+| `WUD_WEB_PUBLIC_ORIGIN` | unset | Public `http://` or `https://` origin used for setup links, CSRF origin checks, and secure-cookie auto-detection when the WebUI is behind a reverse proxy. |
+| `WUD_WEB_ALLOWED_HOSTS` | loopback, configured public origin, and bind host | Comma-separated hostnames or IPs accepted in the HTTP `Host` header. Set this when exposing the WebUI by LAN address or DNS name. |
+| `WUD_WEB_TRUSTED_PROXIES` | unset | Comma-separated proxy IP/CIDR entries whose `Forwarded` or `X-Forwarded-*` headers are trusted for scheme/host detection. |
+| `WUD_WEB_SECURE_COOKIES` | `auto` | Cookie `Secure` mode: `auto` enables it for effective HTTPS origins, `true` always enables it, and `false` disables it for local HTTP testing. |
 | `WUD_WEB_HOST` | `127.0.0.1` | Host passed to Uvicorn when running `wud-updater web`. |
 | `WUD_WEB_PORT` | `8080` | Port passed to Uvicorn when running `wud-updater web`. |
 | `WUD_WEB_STATIC_DIR` | packaged SPA, auto-detected if present | Optional built SPA directory override. Backend tests and API startup do not require a frontend build. |
+
+On first WebUI start, if no admin user exists in `WUD_DB_PATH`, the server logs
+a one-time setup link. Open that link, create the first admin username and a
+password of at least 12 characters, then use the normal sign-in page. Setup
+claim values, password hashes, and browser sessions are stored in the existing
+SQLite database; only hashed secrets are persisted.
+
+When publishing the WebUI through a reverse proxy, configure the proxy to
+preserve the original `Host` header or add the proxy-facing host to
+`WUD_WEB_ALLOWED_HOSTS`. Set `WUD_WEB_PUBLIC_ORIGIN` to the browser-visible
+origin and list only the proxy addresses in `WUD_WEB_TRUSTED_PROXIES`; forwarded
+headers from other clients are ignored.
 
 Container and installer values:
 

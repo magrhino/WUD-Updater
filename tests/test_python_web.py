@@ -1,9 +1,15 @@
 from __future__ import annotations
 
+import time
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from threading import Event, Lock
+from types import SimpleNamespace
 
+from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
+from wud_updater import web as web_module
 from wud_updater.db import (
     connect_db,
     init_db,
@@ -31,6 +37,7 @@ def _web_env(
         "WUD_OUT_FILE": str(wud_file),
         "WUD_LOG_DIR": str(root / "logs"),
         "WUD_DB_PATH": str(db_path),
+        "WUD_WEB_ALLOWED_HOSTS": "testserver",
     }
     if env:
         values.update(env)
@@ -56,6 +63,31 @@ def _csrf_headers(client: TestClient) -> dict[str, str]:
     }
 
 
+def _setup_admin(
+    client: TestClient,
+    *,
+    username: str = "admin",
+    password: str = "correct horse battery staple",
+) -> None:
+    claim = client.app.state.web_setup_claim
+    response = client.post(
+        "/api/v1/setup/claim",
+        json={"claim": claim, "username": username, "password": password},
+        headers=_csrf_headers(client),
+    )
+    assert response.status_code == 200
+
+
+def _contains_key(value: object, target: str) -> bool:
+    if isinstance(value, dict):
+        return target in value or any(
+            _contains_key(item, target) for item in value.values()
+        )
+    if isinstance(value, list):
+        return any(_contains_key(item, target) for item in value)
+    return False
+
+
 def _insert_run(tmp_path: Path, *, log_file: str = "") -> int:
     db_path = tmp_path / "state" / "wud.sqlite"
     with connect_db(db_path) as conn:
@@ -75,18 +107,20 @@ def _insert_run(tmp_path: Path, *, log_file: str = "") -> int:
 def test_api_rejects_unauthenticated_requests_without_dev_bypass(
     tmp_path: Path,
 ) -> None:
-    client = _client(tmp_path, {"WUD_WEB_TOKEN": "secret"})
+    client = _client(tmp_path)
 
     response = client.get("/api/v1/status")
 
-    assert response.status_code == 401
-    assert response.json()["detail"] == "authentication required"
+    assert response.status_code == 403
+    assert response.json()["detail"] == "setup required"
 
 
 def test_api_accepts_bearer_token(tmp_path: Path) -> None:
     client = _client(tmp_path, {"WUD_WEB_TOKEN": "secret"})
+    _setup_admin(client)
+    api_client = _client(tmp_path, {"WUD_WEB_TOKEN": "secret"})
 
-    response = client.get(
+    response = api_client.get(
         "/api/v1/status",
         headers={"Authorization": "Bearer secret"},
     )
@@ -96,7 +130,7 @@ def test_api_accepts_bearer_token(tmp_path: Path) -> None:
 
 
 def test_csrf_endpoint_sets_double_submit_cookie(tmp_path: Path) -> None:
-    client = _client(tmp_path, {"WUD_WEB_TOKEN": "secret"})
+    client = _client(tmp_path)
 
     response = client.get("/api/v1/auth/csrf")
 
@@ -105,14 +139,209 @@ def test_csrf_endpoint_sets_double_submit_cookie(tmp_path: Path) -> None:
     assert client.cookies.get("wud_csrf_token") == response.json()["csrf_token"]
 
 
-def test_login_sets_http_only_session_cookie(tmp_path: Path) -> None:
+def test_first_run_setup_claim_creates_admin_and_burns_claim(tmp_path: Path) -> None:
+    client = _client(tmp_path)
+    claim = client.app.state.web_setup_claim
+
+    before = client.get("/api/v1/setup/status")
+    setup_response = client.post(
+        "/api/v1/setup/claim",
+        json={
+            "claim": claim,
+            "username": "admin",
+            "password": "correct horse battery staple",
+        },
+        headers=_csrf_headers(client),
+    )
+    status_response = client.get("/api/v1/status")
+    replay_response = client.post(
+        "/api/v1/setup/claim",
+        json={
+            "claim": claim,
+            "username": "other",
+            "password": "correct horse battery staple",
+        },
+        headers=_csrf_headers(client),
+    )
+    after = client.get("/api/v1/setup/status")
+
+    assert before.status_code == 200
+    assert before.json()["setup_required"] is True
+    assert claim not in before.text
+    assert setup_response.status_code == 200
+    assert setup_response.json()["authenticated"] is True
+    assert setup_response.json()["setup_required"] is False
+    assert status_response.status_code == 200
+    assert replay_response.status_code == 409
+    assert after.json()["setup_required"] is False
+
+
+def test_first_run_setup_claim_serializes_concurrent_claims(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    client = _client(tmp_path)
+    settings = client.app.state.web_settings
+    claim = client.app.state.web_setup_claim
+    db_path = tmp_path / "state" / "wud.sqlite"
+
+    class SlowPasswordHasher:
+        def __init__(self) -> None:
+            self.calls = 0
+            self.first_hash_started = Event()
+            self.release_first_hash = Event()
+            self.lock = Lock()
+
+        def hash(self, password: str) -> str:
+            with self.lock:
+                self.calls += 1
+                call = self.calls
+            if call == 1:
+                self.first_hash_started.set()
+                assert self.release_first_hash.wait(timeout=5)
+            return f"hashed-{password}-{call}"
+
+    hasher = SlowPasswordHasher()
+    monkeypatch.setattr(web_module, "PASSWORD_HASHER", hasher)
+
+    def claim_admin(username: str) -> tuple[str, int | str]:
+        try:
+            user_id = web_module._claim_initial_admin(
+                settings,
+                claim,
+                username,
+                "correct horse battery staple",
+            )
+        except HTTPException as exc:
+            return ("error", exc.status_code)
+        return ("ok", user_id)
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        first = executor.submit(claim_admin, "admin-a")
+        assert hasher.first_hash_started.wait(timeout=5)
+        second = executor.submit(claim_admin, "admin-b")
+        time.sleep(0.1)
+        hasher.release_first_hash.set()
+        results = [first.result(timeout=5), second.result(timeout=5)]
+
+    with connect_db(db_path) as conn:
+        users = conn.execute("SELECT username FROM web_users").fetchall()
+
+    assert sorted(result[0] for result in results) == ["error", "ok"]
+    assert ("error", 409) in results
+    assert [row["username"] for row in users] == ["admin-a"]
+    assert hasher.calls == 1
+
+
+def test_setup_claim_rejects_expired_secret(tmp_path: Path) -> None:
+    client = _client(tmp_path)
+    db_path = tmp_path / "state" / "wud.sqlite"
+    with connect_db(db_path) as conn:
+        conn.execute(
+            """
+            UPDATE web_settings
+            SET value = '2000-01-01T00:00:00+00:00'
+            WHERE key = 'setup_claim_expires_at'
+            """
+        )
+
+    response = client.post(
+        "/api/v1/setup/claim",
+        json={
+            "claim": client.app.state.web_setup_claim,
+            "username": "admin",
+            "password": "correct horse battery staple",
+        },
+        headers=_csrf_headers(client),
+    )
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == "setup claim expired"
+
+
+def test_setup_claim_validation_redacts_submitted_inputs(tmp_path: Path) -> None:
+    client = _client(tmp_path)
+    submitted_password = "tinysecret!"
+
+    response = client.post(
+        "/api/v1/setup/claim",
+        json={
+            "claim": client.app.state.web_setup_claim,
+            "username": "admin",
+            "password": submitted_password,
+        },
+        headers=_csrf_headers(client),
+    )
+
+    assert response.status_code == 422
+    assert submitted_password not in response.text
+    assert not _contains_key(response.json(), "input")
+
+
+def test_invalid_setup_claim_does_not_hash_password(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    client = _client(tmp_path)
+
+    class ExplodingPasswordHasher:
+        def hash(self, _password: str) -> str:
+            raise AssertionError("password hash should not be called")
+
+    monkeypatch.setattr(web_module, "PASSWORD_HASHER", ExplodingPasswordHasher())
+
+    response = client.post(
+        "/api/v1/setup/claim",
+        json={
+            "claim": "not-the-claim",
+            "username": "admin",
+            "password": "correct horse battery staple",
+        },
+        headers=_csrf_headers(client),
+    )
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == "setup claim is invalid"
+
+
+def test_browser_token_login_payload_is_not_accepted(tmp_path: Path) -> None:
+    setup_client = _client(tmp_path)
+    _setup_admin(setup_client)
     client = _client(tmp_path, {"WUD_WEB_TOKEN": "secret"})
-    headers = _csrf_headers(client)
+
+    response = client.post(
+        "/api/v1/auth/login",
+        json={"token": "secret"},
+        headers=_csrf_headers(client),
+    )
+
+    assert response.status_code == 422
+
+
+def test_login_validation_redacts_submitted_inputs(tmp_path: Path) -> None:
+    client = _client(tmp_path)
+    submitted_password = "x" * 1025
+
+    response = client.post(
+        "/api/v1/auth/login",
+        json={"username": "admin", "password": submitted_password},
+        headers=_csrf_headers(client),
+    )
+
+    assert response.status_code == 422
+    assert submitted_password not in response.text
+    assert not _contains_key(response.json(), "input")
+
+
+def test_login_sets_http_only_session_cookie(tmp_path: Path) -> None:
+    setup_client = _client(tmp_path)
+    _setup_admin(setup_client)
+    client = _client(tmp_path)
 
     login_response = client.post(
         "/api/v1/auth/login",
-        json={"token": "secret"},
-        headers=headers,
+        json={"username": "admin", "password": "correct horse battery staple"},
+        headers=_csrf_headers(client),
     )
     status_response = client.get("/api/v1/status")
 
@@ -123,14 +352,15 @@ def test_login_sets_http_only_session_cookie(tmp_path: Path) -> None:
     assert status_response.status_code == 200
 
 
-def test_login_rejects_wrong_token(tmp_path: Path) -> None:
-    client = _client(tmp_path, {"WUD_WEB_TOKEN": "secret"})
-    headers = _csrf_headers(client)
+def test_login_rejects_wrong_password(tmp_path: Path) -> None:
+    setup_client = _client(tmp_path)
+    _setup_admin(setup_client)
+    client = _client(tmp_path)
 
     response = client.post(
         "/api/v1/auth/login",
-        json={"token": "wrong"},
-        headers=headers,
+        json={"username": "admin", "password": "wrong"},
+        headers=_csrf_headers(client),
     )
 
     assert response.status_code == 401
@@ -138,20 +368,30 @@ def test_login_rejects_wrong_token(tmp_path: Path) -> None:
 
 
 def test_login_requires_csrf_origin_headers(tmp_path: Path) -> None:
-    client = _client(tmp_path, {"WUD_WEB_TOKEN": "secret"})
+    setup_client = _client(tmp_path)
+    _setup_admin(setup_client)
+    client = _client(tmp_path)
 
-    response = client.post("/api/v1/auth/login", json={"token": "secret"})
+    response = client.post(
+        "/api/v1/auth/login",
+        json={"username": "admin", "password": "correct horse battery staple"},
+    )
 
     assert response.status_code == 403
     assert response.json()["detail"] == "origin header is required"
 
 
 def test_session_endpoint_reports_cookie_auth_state(tmp_path: Path) -> None:
-    client = _client(tmp_path, {"WUD_WEB_TOKEN": "secret"})
+    setup_client = _client(tmp_path)
+    _setup_admin(setup_client)
+    client = _client(tmp_path)
     before = client.get("/api/v1/auth/session")
-    headers = _csrf_headers(client)
 
-    client.post("/api/v1/auth/login", json={"token": "secret"}, headers=headers)
+    client.post(
+        "/api/v1/auth/login",
+        json={"username": "admin", "password": "correct horse battery staple"},
+        headers=_csrf_headers(client),
+    )
     after = client.get("/api/v1/auth/session")
 
     assert before.status_code == 200
@@ -161,9 +401,15 @@ def test_session_endpoint_reports_cookie_auth_state(tmp_path: Path) -> None:
 
 
 def test_logout_clears_session_and_csrf_cookies(tmp_path: Path) -> None:
-    client = _client(tmp_path, {"WUD_WEB_TOKEN": "secret"})
+    setup_client = _client(tmp_path)
+    _setup_admin(setup_client)
+    client = _client(tmp_path)
     headers = _csrf_headers(client)
-    client.post("/api/v1/auth/login", json={"token": "secret"}, headers=headers)
+    client.post(
+        "/api/v1/auth/login",
+        json={"username": "admin", "password": "correct horse battery staple"},
+        headers=headers,
+    )
 
     response = client.post("/api/v1/auth/logout", headers=headers)
     status_response = client.get("/api/v1/status")
@@ -175,15 +421,17 @@ def test_logout_clears_session_and_csrf_cookies(tmp_path: Path) -> None:
     assert status_response.status_code == 401
 
 
-def test_api_rejects_missing_token_configuration_without_dev_bypass(
+def test_api_rejects_unauthenticated_requests_after_setup(
     tmp_path: Path,
 ) -> None:
+    setup_client = _client(tmp_path)
+    _setup_admin(setup_client)
     client = _client(tmp_path)
 
     response = client.get("/api/v1/status")
 
-    assert response.status_code == 503
-    assert response.json()["detail"] == "web auth token is not configured"
+    assert response.status_code == 401
+    assert response.json()["detail"] == "authentication required"
 
 
 def test_api_allows_dev_auth_bypass_only_when_explicitly_enabled(
@@ -408,3 +656,118 @@ def test_csrf_origin_scaffold_rejects_unsafe_api_requests(tmp_path: Path) -> Non
 
     assert response.status_code == 403
     assert response.json()["detail"] == "origin header is required"
+
+
+def test_host_allowlist_rejects_unknown_hosts(tmp_path: Path) -> None:
+    client = _client(tmp_path)
+
+    response = client.get("/api/v1/setup/status", headers={"Host": "evil.test"})
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "host is not allowed"
+
+
+def test_web_startup_rejects_bind_host_missing_from_allowed_hosts(
+    tmp_path: Path,
+    monkeypatch,
+    capsys,
+) -> None:
+    for key, value in _web_env(
+        tmp_path,
+        {"WUD_WEB_DEV_NO_AUTH": "true"},
+    ).items():
+        monkeypatch.setenv(key, value)
+
+    status = web_module.run_web_from_namespace(
+        SimpleNamespace(
+            base=None,
+            file=None,
+            log_dir=None,
+            db_path=None,
+            host="192.0.2.10",
+            port=None,
+            static_dir=None,
+        )
+    )
+    stderr = capsys.readouterr().err
+
+    assert status == 1
+    assert "WUD_WEB_ALLOWED_HOSTS must include 192.0.2.10" in stderr
+
+
+def test_forwarded_headers_require_trusted_proxy(tmp_path: Path) -> None:
+    env = {
+        "WUD_WEB_ALLOWED_HOSTS": "internal.test,wud.example.test",
+        "WUD_WEB_TRUSTED_PROXIES": "10.0.0.1/32",
+        "WUD_WEB_SECURE_COOKIES": "false",
+    }
+    app = create_app(environ=_web_env(tmp_path, env))
+    headers = {
+        "Host": "internal.test",
+        "Origin": "https://wud.example.test",
+        "X-Forwarded-Proto": "https",
+        "X-Forwarded-Host": "wud.example.test",
+    }
+    untrusted = TestClient(
+        app,
+        base_url="http://internal.test",
+        client=("192.0.2.1", 50000),
+    )
+    trusted = TestClient(
+        app,
+        base_url="http://internal.test",
+        client=("10.0.0.1", 50000),
+    )
+    csrf_response = untrusted.get("/api/v1/auth/csrf", headers=headers)
+    untrusted_headers = {
+        **headers,
+        "x-wud-csrf-token": csrf_response.json()["csrf_token"],
+    }
+
+    untrusted_response = untrusted.post(
+        "/api/v1/setup/claim",
+        json={
+            "claim": app.state.web_setup_claim,
+            "username": "admin",
+            "password": "correct horse battery staple",
+        },
+        headers=untrusted_headers,
+    )
+    csrf_response = trusted.get("/api/v1/auth/csrf", headers=headers)
+    trusted_headers = {
+        **headers,
+        "x-wud-csrf-token": csrf_response.json()["csrf_token"],
+    }
+    trusted_response = trusted.post(
+        "/api/v1/setup/claim",
+        json={
+            "claim": app.state.web_setup_claim,
+            "username": "admin",
+            "password": "correct horse battery staple",
+        },
+        headers=trusted_headers,
+    )
+
+    assert untrusted_response.status_code == 403
+    assert untrusted_response.json()["detail"] == "origin is not allowed"
+    assert trusted_response.status_code == 200
+
+
+def test_secure_cookie_auto_follows_effective_origin(tmp_path: Path) -> None:
+    http_client = _client(tmp_path)
+    https_client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_PUBLIC_ORIGIN": "https://wud.example.test",
+            "WUD_WEB_ALLOWED_HOSTS": "wud.example.test",
+        },
+    )
+
+    http_response = http_client.get("/api/v1/auth/csrf")
+    https_response = https_client.get(
+        "/api/v1/auth/csrf",
+        headers={"Host": "wud.example.test"},
+    )
+
+    assert "Secure" not in http_response.headers["set-cookie"]
+    assert "Secure" in https_response.headers["set-cookie"]

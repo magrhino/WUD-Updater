@@ -1,16 +1,27 @@
 import { computed, ref } from "vue";
 import { defineStore } from "pinia";
 
-import { ApiError, type AuthSessionResponse, webApi } from "../api/client";
+import {
+  ApiError,
+  type AuthSessionResponse,
+  type SetupStatusResponse,
+  webApi,
+} from "../api/client";
 
 export const useAuthStore = defineStore("auth", () => {
   const session = ref<AuthSessionResponse | null>(null);
+  const setupStatus = ref<SetupStatusResponse | null>(null);
   const csrfToken = ref("");
   const loading = ref(false);
   const error = ref("");
 
   const authenticated = computed(() => session.value?.authenticated === true);
   const authRequired = computed(() => session.value?.auth_required !== false);
+  const setupRequired = computed(
+    () =>
+      session.value?.setup_required === true ||
+      setupStatus.value?.setup_required === true,
+  );
 
   async function ensureCsrf(): Promise<string> {
     if (!csrfToken.value) {
@@ -32,11 +43,47 @@ export const useAuthStore = defineStore("auth", () => {
     }
   }
 
-  async function login(token: string): Promise<void> {
+  async function loadSetupStatus(): Promise<void> {
     loading.value = true;
     error.value = "";
     try {
-      session.value = await webApi.login(token, await ensureCsrf());
+      setupStatus.value = await webApi.setupStatus();
+    } catch (exc) {
+      setupStatus.value = null;
+      error.value = errorMessage(exc);
+    } finally {
+      loading.value = false;
+    }
+  }
+
+  async function claimSetup(
+    claim: string,
+    username: string,
+    password: string,
+  ): Promise<void> {
+    loading.value = true;
+    error.value = "";
+    try {
+      session.value = await webApi.setupClaim(
+        claim,
+        username,
+        password,
+        await ensureCsrf(),
+      );
+      setupStatus.value = null;
+    } catch (exc) {
+      error.value = errorMessage(exc);
+      throw exc;
+    } finally {
+      loading.value = false;
+    }
+  }
+
+  async function login(username: string, password: string): Promise<void> {
+    loading.value = true;
+    error.value = "";
+    try {
+      session.value = await webApi.login(username, password, await ensureCsrf());
     } catch (exc) {
       error.value = errorMessage(exc);
       throw exc;
@@ -61,12 +108,16 @@ export const useAuthStore = defineStore("auth", () => {
 
   return {
     session,
+    setupStatus,
     loading,
     error,
     authenticated,
     authRequired,
+    setupRequired,
     ensureCsrf,
     loadSession,
+    loadSetupStatus,
+    claimSetup,
     login,
     logout,
   };

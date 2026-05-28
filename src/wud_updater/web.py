@@ -2,22 +2,23 @@
 
 from __future__ import annotations
 
-import base64
-import binascii
-import hmac
+import hashlib
+import ipaddress
 import json
 import os
 import secrets
 import sqlite3
 import sys
-import time
 from collections.abc import Awaitable, Callable, Mapping
-from contextlib import closing
+from contextlib import closing, contextmanager
 from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Annotated, Any
-from urllib.parse import quote
+from urllib.parse import quote, urlencode, urlsplit
 
+from argon2 import PasswordHasher
+from argon2.exceptions import InvalidHashError, VerificationError, VerifyMismatchError
 from fastapi import (
     APIRouter,
     Depends,
@@ -28,13 +29,15 @@ from fastapi import (
     Request,
     Response,
 )
+from fastapi.encoders import jsonable_encoder
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from . import __version__
 from .config import ConfigError, UpdaterConfig, load_config
-from .db import DatabaseError, SCHEMA_VERSION
+from .db import DatabaseError, SCHEMA_VERSION, connect_db, init_db, utc_timestamp
 from .db import _user_version as db_user_version
 from .db import _validate_schema as validate_db_schema
 from .wud_file import ParsedWudFile, parse_wud_file
@@ -46,12 +49,19 @@ DEFAULT_RUN_LIMIT = 50
 DEFAULT_LOG_TAIL_BYTES = 262_144
 MAX_LOG_TAIL_BYTES = 1_048_576
 SESSION_MAX_AGE_SECONDS = 86_400
+SETUP_CLAIM_MAX_AGE_SECONDS = 86_400
+PASSWORD_MIN_LENGTH = 12
 SAFE_METHODS = frozenset({"GET", "HEAD", "OPTIONS", "TRACE"})
 TRUE_VALUES = frozenset({"1", "true", "yes", "on"})
 FALSE_VALUES = frozenset({"", "0", "false", "no", "off"})
+SECURE_COOKIE_MODES = frozenset({"auto", "true", "false"})
 CSRF_HEADER = "x-wud-csrf-token"
 CSRF_COOKIE = "wud_csrf_token"
 SESSION_COOKIE = "wud_session"
+SETUP_CLAIM_HASH_KEY = "setup_claim_hash"
+SETUP_CLAIM_EXPIRES_KEY = "setup_claim_expires_at"
+DEFAULT_ALLOWED_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
+PASSWORD_HASHER = PasswordHasher()
 
 
 class WebConfigError(ValueError):
@@ -68,6 +78,10 @@ class WebSettings:
     auth_token: str
     dev_no_auth: bool = False
     allowed_origins: frozenset[str] = frozenset()
+    public_origin: str = ""
+    allowed_hosts: frozenset[str] = frozenset()
+    trusted_proxies: tuple[ipaddress.IPv4Network | ipaddress.IPv6Network, ...] = ()
+    secure_cookies: str = "auto"
     mutations_enabled: bool = False
     static_dir: Path | None = None
 
@@ -106,6 +120,7 @@ class StatusResponse(BaseModel):
     db_ready: bool
     auth_required: bool
     dev_auth_bypass: bool
+    setup_required: bool
     mutations_enabled: bool
     static_spa_available: bool
     warnings: list[str] = Field(default_factory=list)
@@ -115,15 +130,34 @@ class CsrfResponse(BaseModel):
     csrf_token: str
 
 
-class LoginRequest(BaseModel):
-    token: str
-
-
-class AuthSessionResponse(BaseModel):
+class SetupStatusResponse(BaseModel):
+    setup_required: bool
+    claim_required: bool
     authenticated: bool
     auth_required: bool
     dev_auth_bypass: bool
     mutations_enabled: bool
+    password_min_length: int
+
+
+class SetupClaimRequest(BaseModel):
+    claim: str = Field(min_length=1)
+    username: str = Field(min_length=1, max_length=128)
+    password: str = Field(min_length=PASSWORD_MIN_LENGTH, max_length=1024)
+
+
+class LoginRequest(BaseModel):
+    username: str = Field(min_length=1, max_length=128)
+    password: str = Field(min_length=1, max_length=1024)
+
+
+class AuthSessionResponse(BaseModel):
+    authenticated: bool
+    setup_required: bool
+    auth_required: bool
+    dev_auth_bypass: bool
+    mutations_enabled: bool
+    username: str | None = None
 
 
 class RunSummary(BaseModel):
@@ -202,17 +236,42 @@ def create_app(
         redoc_url=None,
     )
     app.state.web_settings = active_settings
+    app.state.web_setup_claim = ""
+    if not active_settings.dev_no_auth:
+        app.state.web_setup_claim = _prepare_web_auth_state(active_settings)
+    app.add_exception_handler(
+        RequestValidationError,
+        _validation_exception_handler,
+    )
 
     @app.middleware("http")
-    async def csrf_origin_scaffold(
+    async def web_request_safety(
         request: Request,
         call_next: Callable[[Request], Awaitable[Response]],
     ) -> Response:
+        host_error = _host_header_error(request, active_settings)
+        if host_error is not None:
+            return host_error
         if _requires_csrf_origin_check(request):
             error = _csrf_origin_error(request, active_settings)
             if error is not None:
                 return error
         return await call_next(request)
+
+    setup_router = APIRouter(prefix="/api/v1/setup")
+    setup_router.add_api_route(
+        "/status",
+        api_setup_status,
+        methods=["GET"],
+        response_model=SetupStatusResponse,
+    )
+    setup_router.add_api_route(
+        "/claim",
+        api_setup_claim,
+        methods=["POST"],
+        response_model=AuthSessionResponse,
+    )
+    app.include_router(setup_router)
 
     auth_router = APIRouter(prefix="/api/v1/auth")
     auth_router.add_api_route(
@@ -288,11 +347,24 @@ def load_web_settings(
     env = os.environ if environ is None else environ
     config = load_config(env)
     configured_static = static_dir or env.get("WUD_WEB_STATIC_DIR") or None
+    public_origin = _parse_public_origin(env.get("WUD_WEB_PUBLIC_ORIGIN", ""))
     return WebSettings(
         config=config,
         auth_token=env.get("WUD_WEB_TOKEN", ""),
         dev_no_auth=_parse_bool(env.get("WUD_WEB_DEV_NO_AUTH"), default=False),
         allowed_origins=_parse_origins(env.get("WUD_WEB_ALLOWED_ORIGINS", "")),
+        public_origin=public_origin,
+        allowed_hosts=_parse_allowed_hosts(
+            env.get("WUD_WEB_ALLOWED_HOSTS", ""),
+            public_origin=public_origin,
+            bind_host=env.get("WUD_WEB_HOST", DEFAULT_WEB_HOST),
+        ),
+        trusted_proxies=_parse_trusted_proxies(
+            env.get("WUD_WEB_TRUSTED_PROXIES", "")
+        ),
+        secure_cookies=_parse_secure_cookie_mode(
+            env.get("WUD_WEB_SECURE_COOKIES", "auto")
+        ),
         mutations_enabled=_parse_bool(
             env.get("WUD_WEB_MUTATIONS_ENABLED"),
             default=False,
@@ -314,6 +386,7 @@ def run_web_from_namespace(args: object) -> int:
             or env.get("WUD_WEB_HOST")
             or DEFAULT_WEB_HOST
         )
+        _validate_bind_host_allowed(settings, host)
         port = _parse_port(getattr(args, "port", None) or env.get("WUD_WEB_PORT"))
     except (ConfigError, WebConfigError) as exc:
         print(exc, file=sys.stderr)
@@ -321,7 +394,11 @@ def run_web_from_namespace(args: object) -> int:
 
     import uvicorn
 
-    uvicorn.run(create_app(settings), host=host, port=port)
+    app = create_app(settings)
+    setup_claim = str(getattr(app.state, "web_setup_claim", ""))
+    if setup_claim:
+        _print_setup_claim(settings, host=host, port=port, claim=setup_claim)
+    uvicorn.run(app, host=host, port=port)
     return 0
 
 
@@ -332,14 +409,11 @@ async def require_auth(
     settings = _settings(request)
     if settings.dev_no_auth:
         return
-    if not settings.auth_token:
-        raise HTTPException(
-            status_code=503,
-            detail="web auth token is not configured",
-        )
+    if _setup_required(settings):
+        raise HTTPException(status_code=403, detail="setup required")
     if _bearer_token_valid(settings, authorization):
         return
-    if _session_cookie_valid(settings, request.cookies.get(SESSION_COOKIE, "")):
+    if _session_user(settings, request) is not None:
         return
     raise HTTPException(
         status_code=401,
@@ -348,9 +422,52 @@ async def require_auth(
     )
 
 
-def api_auth_csrf(response: Response) -> CsrfResponse:
+def api_setup_status(
+    request: Request,
+    authorization: Annotated[str | None, Header()] = None,
+) -> SetupStatusResponse:
+    settings = _settings(request)
+    setup_required = _setup_required(settings)
+    return SetupStatusResponse(
+        setup_required=setup_required,
+        claim_required=setup_required and not settings.dev_no_auth,
+        authenticated=_request_authenticated(settings, request, authorization),
+        auth_required=settings.auth_required,
+        dev_auth_bypass=settings.dev_no_auth,
+        mutations_enabled=settings.mutations_enabled,
+        password_min_length=PASSWORD_MIN_LENGTH,
+    )
+
+
+def api_setup_claim(
+    payload: SetupClaimRequest,
+    request: Request,
+    response: Response,
+) -> AuthSessionResponse:
+    settings = _settings(request)
+    if settings.dev_no_auth:
+        return _auth_session_response(
+            settings,
+            authenticated=True,
+            setup_required=False,
+        )
+    username = _normalize_username(payload.username)
+    if not username:
+        raise HTTPException(status_code=422, detail="username is required")
+    user_id = _claim_initial_admin(settings, payload.claim, username, payload.password)
+    session_id = _create_web_session(settings, user_id=user_id, request=request)
+    _set_session_cookie(response, session_id, request, settings)
+    return _auth_session_response(
+        settings,
+        authenticated=True,
+        setup_required=False,
+        username=username,
+    )
+
+
+def api_auth_csrf(request: Request, response: Response) -> CsrfResponse:
     csrf_token = secrets.token_urlsafe(32)
-    _set_csrf_cookie(response, csrf_token)
+    _set_csrf_cookie(response, csrf_token, request, _settings(request))
     return CsrfResponse(csrf_token=csrf_token)
 
 
@@ -361,20 +478,28 @@ def api_auth_login(
 ) -> AuthSessionResponse:
     settings = _settings(request)
     if settings.dev_no_auth:
-        return _auth_session_response(settings, authenticated=True)
-    if not settings.auth_token:
-        raise HTTPException(
-            status_code=503,
-            detail="web auth token is not configured",
+        return _auth_session_response(
+            settings,
+            authenticated=True,
+            setup_required=False,
         )
-    if not secrets.compare_digest(payload.token, settings.auth_token):
+    if _setup_required(settings):
+        raise HTTPException(status_code=403, detail="setup required")
+    user = _verify_web_user(settings, payload.username, payload.password)
+    if user is None:
         raise HTTPException(
             status_code=401,
             detail="authentication required",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    _set_session_cookie(response, _make_session_cookie(settings))
-    return _auth_session_response(settings, authenticated=True)
+    session_id = _create_web_session(settings, user_id=int(user["id"]), request=request)
+    _set_session_cookie(response, session_id, request, settings)
+    return _auth_session_response(
+        settings,
+        authenticated=True,
+        setup_required=False,
+        username=str(user["username"]),
+    )
 
 
 def api_auth_logout(
@@ -382,9 +507,14 @@ def api_auth_logout(
     response: Response,
 ) -> AuthSessionResponse:
     settings = _settings(request)
+    _revoke_web_session(settings, request.cookies.get(SESSION_COOKIE, ""))
     _clear_session_cookie(response)
     _clear_csrf_cookie(response)
-    return _auth_session_response(settings, authenticated=settings.dev_no_auth)
+    return _auth_session_response(
+        settings,
+        authenticated=settings.dev_no_auth,
+        setup_required=_setup_required(settings),
+    )
 
 
 def api_auth_session(
@@ -392,12 +522,19 @@ def api_auth_session(
     authorization: Annotated[str | None, Header()] = None,
 ) -> AuthSessionResponse:
     settings = _settings(request)
+    setup_required = _setup_required(settings)
+    user = _session_user(settings, request)
     authenticated = (
         settings.dev_no_auth
-        or _bearer_token_valid(settings, authorization)
-        or _session_cookie_valid(settings, request.cookies.get(SESSION_COOKIE, ""))
+        or (not setup_required and _bearer_token_valid(settings, authorization))
+        or user is not None
     )
-    return _auth_session_response(settings, authenticated=authenticated)
+    return _auth_session_response(
+        settings,
+        authenticated=authenticated,
+        setup_required=setup_required,
+        username=None if user is None else str(user["username"]),
+    )
 
 
 def api_status(request: Request) -> StatusResponse:
@@ -417,6 +554,7 @@ def api_status(request: Request) -> StatusResponse:
         db_ready=db_ready,
         auth_required=settings.auth_required,
         dev_auth_bypass=settings.dev_no_auth,
+        setup_required=_setup_required(settings),
         mutations_enabled=settings.mutations_enabled,
         static_spa_available=_static_spa_available(settings),
         warnings=warnings,
@@ -697,13 +835,330 @@ def _auth_session_response(
     settings: WebSettings,
     *,
     authenticated: bool,
+    setup_required: bool,
+    username: str | None = None,
 ) -> AuthSessionResponse:
     return AuthSessionResponse(
         authenticated=authenticated,
+        setup_required=setup_required,
         auth_required=settings.auth_required,
         dev_auth_bypass=settings.dev_no_auth,
         mutations_enabled=settings.mutations_enabled,
+        username=username,
     )
+
+
+async def _validation_exception_handler(
+    _request: Request,
+    exc: RequestValidationError,
+) -> JSONResponse:
+    return JSONResponse(
+        status_code=422,
+        content={"detail": jsonable_encoder(_strip_validation_inputs(exc.errors()))},
+    )
+
+
+def _strip_validation_inputs(value: Any) -> Any:
+    if isinstance(value, dict):
+        return {
+            key: _strip_validation_inputs(item)
+            for key, item in value.items()
+            if key != "input"
+        }
+    if isinstance(value, list):
+        return [_strip_validation_inputs(item) for item in value]
+    return value
+
+
+def _prepare_web_auth_state(settings: WebSettings) -> str:
+    with connect_db(settings.config.db_path) as conn:
+        init_db(conn)
+        user_count = _web_user_count(conn)
+        if user_count > 0:
+            _delete_web_setting(conn, SETUP_CLAIM_HASH_KEY)
+            _delete_web_setting(conn, SETUP_CLAIM_EXPIRES_KEY)
+            return ""
+        claim = secrets.token_urlsafe(32)
+        with conn:
+            _set_web_setting(conn, SETUP_CLAIM_HASH_KEY, _secret_hash(claim))
+            _set_web_setting(
+                conn,
+                SETUP_CLAIM_EXPIRES_KEY,
+                _utc_timestamp_after(SETUP_CLAIM_MAX_AGE_SECONDS),
+            )
+        return claim
+
+
+def _setup_required(settings: WebSettings) -> bool:
+    if settings.dev_no_auth:
+        return False
+    try:
+        with connect_db(settings.config.db_path) as conn:
+            init_db(conn)
+            return _web_user_count(conn) == 0
+    except (OSError, sqlite3.Error, DatabaseError) as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=f"could not read web auth state: {exc}",
+        ) from exc
+
+
+def _claim_initial_admin(
+    settings: WebSettings,
+    claim: str,
+    username: str,
+    password: str,
+) -> int:
+    now = utc_timestamp()
+    try:
+        with connect_db(settings.config.db_path) as conn:
+            init_db(conn)
+            with _immediate_transaction(conn):
+                if _web_user_count(conn) > 0:
+                    raise HTTPException(status_code=409, detail="setup is complete")
+                expected_hash = _web_setting(conn, SETUP_CLAIM_HASH_KEY)
+                expires_at = _web_setting(conn, SETUP_CLAIM_EXPIRES_KEY)
+                if not expected_hash or not expires_at:
+                    raise HTTPException(status_code=403, detail="setup claim is invalid")
+                if expires_at < now:
+                    raise HTTPException(status_code=403, detail="setup claim expired")
+                if not secrets.compare_digest(expected_hash, _secret_hash(claim)):
+                    raise HTTPException(status_code=403, detail="setup claim is invalid")
+                password_hash = PASSWORD_HASHER.hash(password)
+                cursor = conn.execute(
+                    """
+                    INSERT INTO web_users (
+                        username,
+                        password_hash,
+                        role,
+                        created_at,
+                        password_updated_at
+                    )
+                    VALUES (?, ?, 'admin', ?, ?)
+                    """,
+                    (username, password_hash, now, now),
+                )
+                _delete_web_setting(conn, SETUP_CLAIM_HASH_KEY)
+                _delete_web_setting(conn, SETUP_CLAIM_EXPIRES_KEY)
+                return int(cursor.lastrowid)
+    except HTTPException:
+        raise
+    except sqlite3.IntegrityError as exc:
+        raise HTTPException(status_code=409, detail="username is unavailable") from exc
+    except (OSError, sqlite3.Error, DatabaseError) as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=f"could not complete setup: {exc}",
+        ) from exc
+
+
+@contextmanager
+def _immediate_transaction(conn: sqlite3.Connection):
+    conn.execute("BEGIN IMMEDIATE")
+    try:
+        yield
+    except Exception:
+        conn.rollback()
+        raise
+    else:
+        conn.commit()
+
+
+def _verify_web_user(
+    settings: WebSettings,
+    username: str,
+    password: str,
+) -> sqlite3.Row | None:
+    normalized = _normalize_username(username)
+    if not normalized:
+        return None
+    try:
+        with connect_db(settings.config.db_path) as conn:
+            init_db(conn)
+            user = conn.execute(
+                """
+                SELECT *
+                FROM web_users
+                WHERE username = ?
+                  AND disabled_at IS NULL
+                LIMIT 1
+                """,
+                (normalized,),
+            ).fetchone()
+            if user is None:
+                return None
+            try:
+                verified = PASSWORD_HASHER.verify(str(user["password_hash"]), password)
+            except (InvalidHashError, VerificationError, VerifyMismatchError):
+                return None
+            if verified and PASSWORD_HASHER.check_needs_rehash(
+                str(user["password_hash"])
+            ):
+                with conn:
+                    conn.execute(
+                        """
+                        UPDATE web_users
+                        SET password_hash = ?,
+                            password_updated_at = ?
+                        WHERE id = ?
+                        """,
+                        (PASSWORD_HASHER.hash(password), utc_timestamp(), user["id"]),
+                    )
+            return user
+    except (OSError, sqlite3.Error, DatabaseError) as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=f"could not verify credentials: {exc}",
+        ) from exc
+
+
+def _create_web_session(
+    settings: WebSettings,
+    *,
+    user_id: int,
+    request: Request,
+) -> str:
+    session_id = secrets.token_urlsafe(48)
+    now = utc_timestamp()
+    expires_at = _utc_timestamp_after(SESSION_MAX_AGE_SECONDS)
+    try:
+        with connect_db(settings.config.db_path) as conn:
+            init_db(conn)
+            with conn:
+                conn.execute(
+                    """
+                    INSERT INTO web_sessions (
+                        id_hash,
+                        user_id,
+                        created_at,
+                        last_seen_at,
+                        expires_at,
+                        user_agent_hash
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        _secret_hash(session_id),
+                        user_id,
+                        now,
+                        now,
+                        expires_at,
+                        _user_agent_hash(request),
+                    ),
+                )
+    except (OSError, sqlite3.Error, DatabaseError) as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=f"could not create session: {exc}",
+        ) from exc
+    return session_id
+
+
+def _session_user(settings: WebSettings, request: Request) -> sqlite3.Row | None:
+    session_id = request.cookies.get(SESSION_COOKIE, "")
+    if not session_id:
+        return None
+    try:
+        with connect_db(settings.config.db_path) as conn:
+            init_db(conn)
+            row = conn.execute(
+                """
+                SELECT web_sessions.id_hash, web_users.*
+                FROM web_sessions
+                JOIN web_users ON web_users.id = web_sessions.user_id
+                WHERE web_sessions.id_hash = ?
+                  AND web_sessions.revoked_at IS NULL
+                  AND web_sessions.expires_at >= ?
+                  AND web_users.disabled_at IS NULL
+                LIMIT 1
+                """,
+                (_secret_hash(session_id), utc_timestamp()),
+            ).fetchone()
+            if row is None:
+                return None
+            with conn:
+                conn.execute(
+                    """
+                    UPDATE web_sessions
+                    SET last_seen_at = ?
+                    WHERE id_hash = ?
+                    """,
+                    (utc_timestamp(), row["id_hash"]),
+                )
+            return row
+    except (OSError, sqlite3.Error, DatabaseError):
+        return None
+
+
+def _revoke_web_session(settings: WebSettings, session_id: str) -> None:
+    if not session_id:
+        return
+    try:
+        with connect_db(settings.config.db_path) as conn:
+            init_db(conn)
+            with conn:
+                conn.execute(
+                    """
+                    UPDATE web_sessions
+                    SET revoked_at = ?
+                    WHERE id_hash = ?
+                    """,
+                    (utc_timestamp(), _secret_hash(session_id)),
+                )
+    except (OSError, sqlite3.Error, DatabaseError):
+        return
+
+
+def _request_authenticated(
+    settings: WebSettings,
+    request: Request,
+    authorization: str | None,
+) -> bool:
+    if settings.dev_no_auth:
+        return True
+    if _setup_required(settings):
+        return False
+    return _bearer_token_valid(settings, authorization) or _session_user(
+        settings,
+        request,
+    ) is not None
+
+
+def _web_user_count(conn: sqlite3.Connection) -> int:
+    row = conn.execute("SELECT COUNT(*) FROM web_users").fetchone()
+    return int(row[0])
+
+
+def _web_setting(conn: sqlite3.Connection, key: str) -> str:
+    row = conn.execute(
+        """
+        SELECT value
+        FROM web_settings
+        WHERE key = ?
+        LIMIT 1
+        """,
+        (key,),
+    ).fetchone()
+    if row is None:
+        return ""
+    return str(row["value"] if isinstance(row, sqlite3.Row) else row[0])
+
+
+def _set_web_setting(conn: sqlite3.Connection, key: str, value: str) -> None:
+    conn.execute(
+        """
+        INSERT INTO web_settings (key, value, updated_at)
+        VALUES (?, ?, ?)
+        ON CONFLICT(key) DO UPDATE SET
+            value = excluded.value,
+            updated_at = excluded.updated_at
+        """,
+        (key, value, utc_timestamp()),
+    )
+
+
+def _delete_web_setting(conn: sqlite3.Connection, key: str) -> None:
+    conn.execute("DELETE FROM web_settings WHERE key = ?", (key,))
 
 
 def _bearer_token_valid(settings: WebSettings, authorization: str | None) -> bool:
@@ -717,62 +1172,32 @@ def _bearer_token_valid(settings: WebSettings, authorization: str | None) -> boo
     )
 
 
-def _make_session_cookie(settings: WebSettings) -> str:
-    payload = _b64encode_json(
-        {
-            "v": 1,
-            "exp": int(time.time()) + SESSION_MAX_AGE_SECONDS,
-            "nonce": secrets.token_urlsafe(24),
-        }
-    )
-    signature = _session_signature(settings, payload)
-    return f"{payload}.{signature}"
+def _normalize_username(value: str) -> str:
+    return value.strip()
 
 
-def _session_cookie_valid(settings: WebSettings, value: str) -> bool:
-    if not settings.auth_token or "." not in value:
-        return False
-    payload, signature = value.rsplit(".", 1)
-    if not hmac.compare_digest(_session_signature(settings, payload), signature):
-        return False
-    try:
-        decoded = json.loads(_b64decode(payload).decode("utf-8"))
-    except (binascii.Error, ValueError, UnicodeDecodeError, json.JSONDecodeError):
-        return False
-    if not isinstance(decoded, dict):
-        return False
-    if decoded.get("v") != 1:
-        return False
-    expires_at = decoded.get("exp")
-    if not isinstance(expires_at, int):
-        return False
-    return expires_at >= int(time.time())
+def _secret_hash(value: str) -> str:
+    return hashlib.sha256(value.encode("utf-8")).hexdigest()
 
 
-def _session_signature(settings: WebSettings, payload: str) -> str:
-    digest = hmac.new(
-        settings.auth_token.encode("utf-8"),
-        payload.encode("ascii"),
-        "sha256",
-    ).digest()
-    return _b64encode(digest)
+def _user_agent_hash(request: Request) -> str:
+    user_agent = request.headers.get("user-agent", "")
+    return "" if not user_agent else _secret_hash(user_agent)
 
 
-def _b64encode_json(value: dict[str, Any]) -> str:
-    payload = json.dumps(value, separators=(",", ":")).encode("utf-8")
-    return _b64encode(payload)
+def _utc_timestamp_after(seconds: int) -> str:
+    return (
+        datetime.now(timezone.utc).replace(microsecond=0)
+        + timedelta(seconds=seconds)
+    ).isoformat()
 
 
-def _b64encode(value: bytes) -> str:
-    return base64.urlsafe_b64encode(value).decode("ascii").rstrip("=")
-
-
-def _b64decode(value: str) -> bytes:
-    padding = "=" * (-len(value) % 4)
-    return base64.urlsafe_b64decode(f"{value}{padding}".encode("ascii"))
-
-
-def _set_csrf_cookie(response: Response, csrf_token: str) -> None:
+def _set_csrf_cookie(
+    response: Response,
+    csrf_token: str,
+    request: Request,
+    settings: WebSettings,
+) -> None:
     response.set_cookie(
         CSRF_COOKIE,
         csrf_token,
@@ -780,6 +1205,7 @@ def _set_csrf_cookie(response: Response, csrf_token: str) -> None:
         httponly=False,
         samesite="strict",
         path="/",
+        secure=_secure_cookie(settings, request),
     )
 
 
@@ -787,7 +1213,12 @@ def _clear_csrf_cookie(response: Response) -> None:
     response.delete_cookie(CSRF_COOKIE, path="/", samesite="strict")
 
 
-def _set_session_cookie(response: Response, session: str) -> None:
+def _set_session_cookie(
+    response: Response,
+    session: str,
+    request: Request,
+    settings: WebSettings,
+) -> None:
     response.set_cookie(
         SESSION_COOKIE,
         session,
@@ -795,6 +1226,7 @@ def _set_session_cookie(response: Response, session: str) -> None:
         httponly=True,
         samesite="strict",
         path="/",
+        secure=_secure_cookie(settings, request),
     )
 
 
@@ -894,18 +1326,86 @@ def _csrf_origin_error(
     return None
 
 
+def _host_header_error(
+    request: Request,
+    settings: WebSettings,
+) -> JSONResponse | None:
+    host = request.headers.get("host", "")
+    normalized = _normalize_host(host)
+    if normalized and normalized in settings.allowed_hosts:
+        return None
+    return JSONResponse({"detail": "host is not allowed"}, status_code=400)
+
+
 def _origin_allowed(
     request: Request,
     settings: WebSettings,
     origin: str,
 ) -> bool:
-    if origin in settings.allowed_origins:
-        return True
-    host = request.headers.get("host", "")
-    if not host:
+    normalized = _normalize_origin(origin)
+    if not normalized:
         return False
-    same_origin = f"{request.url.scheme}://{host}"
-    return secrets.compare_digest(origin, same_origin)
+    if normalized in settings.allowed_origins:
+        return True
+    same_origin = _effective_origin(request, settings)
+    return secrets.compare_digest(normalized, same_origin)
+
+
+def _secure_cookie(settings: WebSettings, request: Request) -> bool:
+    if settings.secure_cookies == "true":
+        return True
+    if settings.secure_cookies == "false":
+        return False
+    return _effective_origin(request, settings).startswith("https://")
+
+
+def _effective_origin(request: Request, settings: WebSettings) -> str:
+    if settings.public_origin:
+        return settings.public_origin
+    forwarded = _trusted_forwarded_origin(request, settings)
+    if forwarded:
+        return forwarded
+    host = request.headers.get("host", "")
+    return _normalize_origin(f"{request.url.scheme}://{host}")
+
+
+def _trusted_forwarded_origin(request: Request, settings: WebSettings) -> str:
+    if not _client_is_trusted_proxy(request, settings):
+        return ""
+    forwarded_origin = _origin_from_forwarded_header(request.headers.get("forwarded", ""))
+    if forwarded_origin:
+        return forwarded_origin
+    proto = request.headers.get("x-forwarded-proto", "").split(",", 1)[0].strip()
+    host = request.headers.get("x-forwarded-host", "").split(",", 1)[0].strip()
+    if proto and host:
+        return _normalize_origin(f"{proto}://{host}")
+    return ""
+
+
+def _origin_from_forwarded_header(value: str) -> str:
+    if not value:
+        return ""
+    first = value.split(",", 1)[0]
+    parts: dict[str, str] = {}
+    for segment in first.split(";"):
+        key, separator, raw = segment.strip().partition("=")
+        if separator:
+            parts[key.lower()] = raw.strip().strip('"')
+    proto = parts.get("proto", "")
+    host = parts.get("host", "")
+    if proto and host:
+        return _normalize_origin(f"{proto}://{host}")
+    return ""
+
+
+def _client_is_trusted_proxy(request: Request, settings: WebSettings) -> bool:
+    if request.client is None:
+        return False
+    try:
+        address = ipaddress.ip_address(request.client.host)
+    except ValueError:
+        return False
+    return any(address in network for network in settings.trusted_proxies)
 
 
 def _forbidden(detail: str) -> JSONResponse:
@@ -957,12 +1457,54 @@ def _environment_with_cli_overrides(
 
 
 def _validate_startup_auth(settings: WebSettings) -> None:
-    if settings.dev_no_auth:
+    if settings.secure_cookies not in SECURE_COOKIE_MODES:
+        raise WebConfigError("WUD_WEB_SECURE_COOKIES must be auto, true, or false")
+
+
+def _validate_bind_host_allowed(settings: WebSettings, host: str) -> None:
+    normalized = _normalize_host(host)
+    if not normalized or normalized in {"0.0.0.0", "::"}:
         return
-    if not settings.auth_token:
-        raise WebConfigError(
-            "WUD_WEB_TOKEN must be set unless WUD_WEB_DEV_NO_AUTH=true"
+    if normalized in settings.allowed_hosts:
+        return
+    raise WebConfigError(
+        f"WUD_WEB_ALLOWED_HOSTS must include {normalized} when binding "
+        "the WebUI to that host. Set WUD_WEB_ALLOWED_HOSTS to the browser-visible "
+        "hostname or IP address."
+    )
+
+
+def _print_setup_claim(
+    settings: WebSettings,
+    *,
+    host: str,
+    port: int,
+    claim: str,
+) -> None:
+    setup_url = _setup_url(settings, host=host, port=port, claim=claim)
+    print("WUD-Updater WebUI is not configured.", file=sys.stderr)
+    print("", file=sys.stderr)
+    print("Open this one-time setup link to create the first admin account:", file=sys.stderr)
+    print("", file=sys.stderr)
+    print(setup_url, file=sys.stderr)
+    if host in {"0.0.0.0", "::"} and not settings.public_origin:
+        print("", file=sys.stderr)
+        print(
+            "Set WUD_WEB_PUBLIC_ORIGIN and WUD_WEB_ALLOWED_HOSTS when exposing "
+            "the WebUI through a LAN address or reverse proxy.",
+            file=sys.stderr,
         )
+
+
+def _setup_url(settings: WebSettings, *, host: str, port: int, claim: str) -> str:
+    origin = settings.public_origin
+    if not origin:
+        display_host = "127.0.0.1" if host in {"0.0.0.0", "::"} else host
+        if ":" in display_host and not display_host.startswith("["):
+            display_host = f"[{display_host}]"
+        origin = f"http://{display_host}:{port}"
+    query = urlencode({"claim": claim})
+    return f"{origin}/#/setup?{query}"
 
 
 def _parse_bool(value: str | None, *, default: bool) -> bool:
@@ -978,8 +1520,99 @@ def _parse_bool(value: str | None, *, default: bool) -> bool:
 
 def _parse_origins(value: str) -> frozenset[str]:
     return frozenset(
-        origin.strip().rstrip("/") for origin in value.split(",") if origin.strip()
+        origin
+        for origin in (_normalize_origin(item) for item in value.split(","))
+        if origin
     )
+
+
+def _parse_public_origin(value: str) -> str:
+    if not value.strip():
+        return ""
+    origin = _normalize_origin(value)
+    if not origin:
+        raise WebConfigError("WUD_WEB_PUBLIC_ORIGIN must be an http(s) origin")
+    return origin
+
+
+def _parse_allowed_hosts(
+    value: str,
+    *,
+    public_origin: str,
+    bind_host: str,
+) -> frozenset[str]:
+    hosts = set(DEFAULT_ALLOWED_HOSTS)
+    if public_origin:
+        public_host = _host_from_origin(public_origin)
+        if public_host:
+            hosts.add(public_host)
+    bind = _normalize_host(bind_host)
+    if bind and bind not in {"0.0.0.0", "::"}:
+        hosts.add(bind)
+    for item in value.split(","):
+        host = _normalize_host(item)
+        if host:
+            hosts.add(host)
+    return frozenset(hosts)
+
+
+def _parse_trusted_proxies(
+    value: str,
+) -> tuple[ipaddress.IPv4Network | ipaddress.IPv6Network, ...]:
+    networks: list[ipaddress.IPv4Network | ipaddress.IPv6Network] = []
+    for item in value.split(","):
+        raw = item.strip()
+        if not raw:
+            continue
+        try:
+            networks.append(ipaddress.ip_network(raw, strict=False))
+        except ValueError as exc:
+            raise WebConfigError(
+                f"WUD_WEB_TRUSTED_PROXIES contains invalid address: {raw}"
+            ) from exc
+    return tuple(networks)
+
+
+def _parse_secure_cookie_mode(value: str) -> str:
+    normalized = value.strip().lower() or "auto"
+    if normalized not in SECURE_COOKIE_MODES:
+        raise WebConfigError("WUD_WEB_SECURE_COOKIES must be auto, true, or false")
+    return normalized
+
+
+def _normalize_origin(value: str) -> str:
+    raw = value.strip().rstrip("/")
+    if not raw:
+        return ""
+    parsed = urlsplit(raw)
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        return ""
+    if parsed.username or parsed.password or parsed.path or parsed.query or parsed.fragment:
+        return ""
+    host = parsed.hostname
+    if not host:
+        return ""
+    netloc = parsed.netloc.lower()
+    return f"{parsed.scheme.lower()}://{netloc}"
+
+
+def _host_from_origin(origin: str) -> str:
+    parsed = urlsplit(origin)
+    return _normalize_host(parsed.hostname or "")
+
+
+def _normalize_host(value: str) -> str:
+    raw = value.strip().lower().rstrip(".")
+    if not raw:
+        return ""
+    if raw.startswith("["):
+        end = raw.find("]")
+        return raw[1:end] if end != -1 else ""
+    if raw.count(":") == 1:
+        host, _, port = raw.partition(":")
+        if port.isdigit():
+            return host
+    return raw
 
 
 def _parse_port(value: object) -> int:

@@ -8,13 +8,14 @@ import { useAuthStore } from "../stores/auth";
 const auth = useAuthStore();
 const route = useRoute();
 const router = useRouter();
-const token = ref("");
+const username = ref("");
+const password = ref("");
 const submitting = ref(false);
 
 async function submit(): Promise<void> {
   submitting.value = true;
   try {
-    await auth.login(token.value);
+    await auth.login(username.value, password.value);
     const redirect = typeof route.query.redirect === "string" ? route.query.redirect : "/";
     await router.replace(redirect);
   } finally {
@@ -41,20 +42,26 @@ async function submit(): Promise<void> {
       </n-alert>
 
       <n-form @submit.prevent="submit">
-        <n-form-item label="Token">
+        <n-form-item label="Username">
           <n-input
-            v-model:value="token"
+            v-model:value="username"
+            autocomplete="username"
+            autofocus
+          />
+        </n-form-item>
+        <n-form-item label="Password">
+          <n-input
+            v-model:value="password"
             type="password"
             show-password-on="click"
             autocomplete="current-password"
-            autofocus
           />
         </n-form-item>
         <n-button
           attr-type="submit"
           type="primary"
           block
-          :disabled="!token"
+          :disabled="!username || !password"
           :loading="submitting || auth.loading"
         >
           <template #icon>
