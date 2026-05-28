@@ -377,6 +377,12 @@ Boolean examples use `true` and `false`; legacy aliases `1`, `0`, `yes`, `no`,
 | `WUD_UPDATER_SELF_UPDATE` | enabled | Set to `false`, `0`, `no`, or `off` to disable the default `updates` self-update preflight. |
 | `PYTHON_BIN` | `python3`, with repo `.venv` fallback when unset | Python interpreter used by Python entrypoint wrappers. Set this to bypass automatic `.venv` fallback. |
 | `WUD_UPDATER_VENV` | Repo-local `.venv` | Optional installer and wrapper venv path for host runtime dependencies. |
+| `WUD_WEB_TOKEN` | unset | Required bearer token for `wud-updater web` unless `WUD_WEB_DEV_NO_AUTH=true` is set for tests or local development. |
+| `WUD_WEB_DEV_NO_AUTH` | `false` | Explicitly disables WebUI API auth for tests or local development only. |
+| `WUD_WEB_ALLOWED_ORIGINS` | same origin only | Comma-separated extra origins accepted by the CSRF/Origin scaffold for future mutating WebUI routes. |
+| `WUD_WEB_HOST` | `127.0.0.1` | Host passed to Uvicorn when running `wud-updater web`. |
+| `WUD_WEB_PORT` | `8080` | Port passed to Uvicorn when running `wud-updater web`. |
+| `WUD_WEB_STATIC_DIR` | auto-detected if present | Optional built SPA directory. Backend tests and API startup do not require a frontend build. |
 
 Container and installer values:
 

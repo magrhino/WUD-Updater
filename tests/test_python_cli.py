@@ -247,6 +247,40 @@ class CliTests(unittest.TestCase):
         self.assertEqual(args.scripts_dir, "/managed-wud")
         self.assertTrue(args.no_color)
 
+    def test_web_subcommand_accepts_server_and_state_options(self) -> None:
+        with mock.patch("wud_updater.cli._run_web", return_value=19) as run_web:
+            status, stdout, stderr = self._run_main(
+                [
+                    "web",
+                    "--base",
+                    "/srv/docker",
+                    "--file",
+                    "/out/images.todo",
+                    "--log-dir",
+                    "/logs",
+                    "--db-path",
+                    "/state/wud.sqlite",
+                    "--host",
+                    "127.0.0.1",
+                    "--port",
+                    "8081",
+                    "--static-dir",
+                    "/app/webui",
+                ]
+            )
+
+        self.assertEqual(status, 19)
+        self.assertEqual(stdout, "")
+        self.assertEqual(stderr, "")
+        args = run_web.call_args.args[0]
+        self.assertEqual(args.base, "/srv/docker")
+        self.assertEqual(args.file, "/out/images.todo")
+        self.assertEqual(args.log_dir, "/logs")
+        self.assertEqual(args.db_path, "/state/wud.sqlite")
+        self.assertEqual(args.host, "127.0.0.1")
+        self.assertEqual(args.port, "8081")
+        self.assertEqual(args.static_dir, "/app/webui")
+
     def test_updates_yes_without_pending_entries_exits_successfully(self) -> None:
         with tempfile.TemporaryDirectory(prefix="wud-python-cli.") as tmpdir:
             env = {

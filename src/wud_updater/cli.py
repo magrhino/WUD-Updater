@@ -83,6 +83,16 @@ def _add_doctor_options(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--no-color", action="store_true")
 
 
+def _add_web_options(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--base", metavar="PATH")
+    parser.add_argument("--file", metavar="PATH")
+    parser.add_argument("--log-dir", metavar="PATH")
+    parser.add_argument("--db-path", metavar="PATH")
+    parser.add_argument("--host", metavar="HOST")
+    parser.add_argument("--port", metavar="PORT")
+    parser.add_argument("--static-dir", metavar="PATH")
+
+
 def _run_update_from_wud(args: argparse.Namespace) -> int:
     from .updater import UpdaterError, options_from_namespace, run_update_from_wud
 
@@ -112,6 +122,12 @@ def _run_doctor(args: argparse.Namespace) -> int:
         args,
         repo_root=Path(__file__).resolve().parents[2],
     )
+
+
+def _run_web(args: argparse.Namespace) -> int:
+    from .web import run_web_from_namespace
+
+    return run_web_from_namespace(args)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -145,6 +161,13 @@ def build_parser() -> argparse.ArgumentParser:
     )
     _add_doctor_options(doctor)
     doctor.set_defaults(handler=_run_doctor)
+
+    web = subcommands.add_parser(
+        "web",
+        help="run the read-only WebUI API server",
+    )
+    _add_web_options(web)
+    web.set_defaults(handler=_run_web)
 
     truenas_status_export = subcommands.add_parser(
         "truenas-status-export",

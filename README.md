@@ -89,6 +89,7 @@ docker-update-from-wud --yes
 docker-update-from-wud --yes --allow-tag-updates
 docker-update-from-wud --yes --allow-tag-updates --tag-override 1=5.2.0
 docker-update-from-wud --yes --exclude-tag-lines 1
+wud-updater web
 ```
 
 The Python package also exposes the same tools through:
@@ -97,7 +98,13 @@ The Python package also exposes the same tools through:
 wud-updater doctor
 wud-updater updates --dry-run
 wud-updater update-from-wud --dry-run
+wud-updater web
 ```
+
+`wud-updater web` starts the read-only `/api/v1/*` FastAPI service for the
+WebUI foundation. Set `WUD_WEB_TOKEN` and send requests with
+`Authorization: Bearer <token>`. `WUD_WEB_DEV_NO_AUTH=true` is only for local
+development and tests.
 
 ## Documentation
 
