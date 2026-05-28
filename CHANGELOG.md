@@ -4,6 +4,13 @@ All notable changes to WUD-Updater are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com) and versions follow
 [Semantic Versioning](https://semver.org).
 
+## [0.17.0](https://github.com/magrhino/WUD-Updater/compare/v0.16.0...v0.17.0) (2026-05-28)
+
+
+### Features
+
+* **ui:** add read-only vue webui ([#58](https://github.com/magrhino/WUD-Updater/issues/58)) ([5d343c0](https://github.com/magrhino/WUD-Updater/commit/5d343c09d713787df5bf418e6965cadd5192edeb))
+
 ## [0.16.0](https://github.com/magrhino/WUD-Updater/compare/v0.15.1...v0.16.0) (2026-05-28)
 
 
