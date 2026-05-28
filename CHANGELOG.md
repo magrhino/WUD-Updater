@@ -4,6 +4,13 @@ All notable changes to WUD-Updater are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com) and versions follow
 [Semantic Versioning](https://semver.org).
 
+## [0.19.0](https://github.com/magrhino/WUD-Updater/compare/v0.18.0...v0.19.0) (2026-05-28)
+
+
+### Features
+
+* **webui:** Add safe WebUI plan application and container docs ([#64](https://github.com/magrhino/WUD-Updater/issues/64)) ([9b0fdff](https://github.com/magrhino/WUD-Updater/commit/9b0fdff3c2005c17279639d4008ed64a76ecaa81))
+
 ## [0.18.0](https://github.com/magrhino/WUD-Updater/compare/v0.17.0...v0.18.0) (2026-05-28)
 
 
