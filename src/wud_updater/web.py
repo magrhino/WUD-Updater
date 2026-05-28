@@ -29,6 +29,8 @@ from fastapi import (
     Request,
     Response,
 )
+from fastapi.encoders import jsonable_encoder
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
@@ -237,6 +239,10 @@ def create_app(
     app.state.web_setup_claim = ""
     if not active_settings.dev_no_auth:
         app.state.web_setup_claim = _prepare_web_auth_state(active_settings)
+    app.add_exception_handler(
+        RequestValidationError,
+        _validation_exception_handler,
+    )
 
     @app.middleware("http")
     async def web_request_safety(
@@ -841,6 +847,28 @@ def _auth_session_response(
     )
 
 
+async def _validation_exception_handler(
+    _request: Request,
+    exc: RequestValidationError,
+) -> JSONResponse:
+    return JSONResponse(
+        status_code=422,
+        content={"detail": jsonable_encoder(_strip_validation_inputs(exc.errors()))},
+    )
+
+
+def _strip_validation_inputs(value: Any) -> Any:
+    if isinstance(value, dict):
+        return {
+            key: _strip_validation_inputs(item)
+            for key, item in value.items()
+            if key != "input"
+        }
+    if isinstance(value, list):
+        return [_strip_validation_inputs(item) for item in value]
+    return value
+
+
 def _prepare_web_auth_state(settings: WebSettings) -> str:
     with connect_db(settings.config.db_path) as conn:
         init_db(conn)
@@ -881,7 +909,6 @@ def _claim_initial_admin(
     password: str,
 ) -> int:
     now = utc_timestamp()
-    password_hash = PASSWORD_HASHER.hash(password)
     try:
         with connect_db(settings.config.db_path) as conn:
             init_db(conn)
@@ -896,6 +923,7 @@ def _claim_initial_admin(
                     raise HTTPException(status_code=403, detail="setup claim expired")
                 if not secrets.compare_digest(expected_hash, _secret_hash(claim)):
                     raise HTTPException(status_code=403, detail="setup claim is invalid")
+                password_hash = PASSWORD_HASHER.hash(password)
                 cursor = conn.execute(
                     """
                     INSERT INTO web_users (

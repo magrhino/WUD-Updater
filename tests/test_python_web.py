@@ -4,6 +4,7 @@ from pathlib import Path
 
 from fastapi.testclient import TestClient
 
+from wud_updater import web as web_module
 from wud_updater.db import (
     connect_db,
     init_db,
@@ -70,6 +71,16 @@ def _setup_admin(
         headers=_csrf_headers(client),
     )
     assert response.status_code == 200
+
+
+def _contains_key(value: object, target: str) -> bool:
+    if isinstance(value, dict):
+        return target in value or any(
+            _contains_key(item, target) for item in value.values()
+        )
+    if isinstance(value, list):
+        return any(_contains_key(item, target) for item in value)
+    return False
 
 
 def _insert_run(tmp_path: Path, *, log_file: str = "") -> int:
@@ -186,6 +197,51 @@ def test_setup_claim_rejects_expired_secret(tmp_path: Path) -> None:
     assert response.json()["detail"] == "setup claim expired"
 
 
+def test_setup_claim_validation_redacts_submitted_inputs(tmp_path: Path) -> None:
+    client = _client(tmp_path)
+    submitted_password = "tinysecret!"
+
+    response = client.post(
+        "/api/v1/setup/claim",
+        json={
+            "claim": client.app.state.web_setup_claim,
+            "username": "admin",
+            "password": submitted_password,
+        },
+        headers=_csrf_headers(client),
+    )
+
+    assert response.status_code == 422
+    assert submitted_password not in response.text
+    assert not _contains_key(response.json(), "input")
+
+
+def test_invalid_setup_claim_does_not_hash_password(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    client = _client(tmp_path)
+
+    class ExplodingPasswordHasher:
+        def hash(self, _password: str) -> str:
+            raise AssertionError("password hash should not be called")
+
+    monkeypatch.setattr(web_module, "PASSWORD_HASHER", ExplodingPasswordHasher())
+
+    response = client.post(
+        "/api/v1/setup/claim",
+        json={
+            "claim": "not-the-claim",
+            "username": "admin",
+            "password": "correct horse battery staple",
+        },
+        headers=_csrf_headers(client),
+    )
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == "setup claim is invalid"
+
+
 def test_browser_token_login_payload_is_not_accepted(tmp_path: Path) -> None:
     setup_client = _client(tmp_path)
     _setup_admin(setup_client)
@@ -198,6 +254,21 @@ def test_browser_token_login_payload_is_not_accepted(tmp_path: Path) -> None:
     )
 
     assert response.status_code == 422
+
+
+def test_login_validation_redacts_submitted_inputs(tmp_path: Path) -> None:
+    client = _client(tmp_path)
+    submitted_password = "x" * 1025
+
+    response = client.post(
+        "/api/v1/auth/login",
+        json={"username": "admin", "password": submitted_password},
+        headers=_csrf_headers(client),
+    )
+
+    assert response.status_code == 422
+    assert submitted_password not in response.text
+    assert not _contains_key(response.json(), "input")
 
 
 def test_login_sets_http_only_session_cookie(tmp_path: Path) -> None:
