@@ -38,4 +38,4 @@ package-dir = {"" = "src"}
 where = ["src"]
 
 [tool.setuptools.package-data]
-wud_updater = ["ascii-text-art.txt"]
+wud_updater = ["ascii-text-art.txt", "web_static/index.html", "web_static/assets/*"]

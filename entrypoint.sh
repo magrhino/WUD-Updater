@@ -218,6 +218,19 @@ case "$1" in
     has_arg --log-dir "$@" || updater_args+=(--log-dir "$wud_log_dir")
     exec "$app_dir/bin/docker-update-from-wud" "${updater_args[@]}" "$@"
     ;;
+  web)
+    shift
+    web_args=()
+    has_arg --base "$@" || web_args+=(--base "$docker_base")
+    has_arg --file "$@" || web_args+=(--file "$wud_out_file")
+    has_arg --log-dir "$@" || web_args+=(--log-dir "$wud_log_dir")
+    if [[ -n "${PYTHONPATH:-}" ]]; then
+      export PYTHONPATH="$app_dir/src:$PYTHONPATH"
+    else
+      export PYTHONPATH="$app_dir/src"
+    fi
+    exec "${PYTHON_BIN:-python3}" -m wud_updater.cli web "${web_args[@]}" "$@"
+    ;;
   *)
     exec "$@"
     ;;

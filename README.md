@@ -102,9 +102,10 @@ wud-updater web
 ```
 
 `wud-updater web` starts the read-only `/api/v1/*` FastAPI service for the
-WebUI foundation. Set `WUD_WEB_TOKEN` and send requests with
-`Authorization: Bearer <token>`. `WUD_WEB_DEV_NO_AUTH=true` is only for local
-development and tests.
+WebUI and serves the packaged Vue SPA when static assets are present. Set
+`WUD_WEB_TOKEN`, open the server in a browser, and sign in with that token. API
+clients can still send `Authorization: Bearer <token>`. `WUD_WEB_DEV_NO_AUTH=true`
+is only for local development and tests.
 
 ## Documentation
 

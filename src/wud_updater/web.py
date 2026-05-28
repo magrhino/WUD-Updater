@@ -2,11 +2,15 @@
 
 from __future__ import annotations
 
+import base64
+import binascii
+import hmac
 import json
 import os
 import secrets
 import sqlite3
 import sys
+import time
 from collections.abc import Awaitable, Callable, Mapping
 from contextlib import closing
 from dataclasses import dataclass
@@ -14,7 +18,16 @@ from pathlib import Path
 from typing import Annotated, Any
 from urllib.parse import quote
 
-from fastapi import APIRouter, Depends, FastAPI, Header, HTTPException, Request, Response
+from fastapi import (
+    APIRouter,
+    Depends,
+    FastAPI,
+    Header,
+    HTTPException,
+    Query,
+    Request,
+    Response,
+)
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
@@ -30,11 +43,15 @@ from .wud_file import ParsedWudFile, parse_wud_file
 DEFAULT_WEB_HOST = "127.0.0.1"
 DEFAULT_WEB_PORT = 8080
 DEFAULT_RUN_LIMIT = 50
+DEFAULT_LOG_TAIL_BYTES = 262_144
+MAX_LOG_TAIL_BYTES = 1_048_576
+SESSION_MAX_AGE_SECONDS = 86_400
 SAFE_METHODS = frozenset({"GET", "HEAD", "OPTIONS", "TRACE"})
 TRUE_VALUES = frozenset({"1", "true", "yes", "on"})
 FALSE_VALUES = frozenset({"", "0", "false", "no", "off"})
 CSRF_HEADER = "x-wud-csrf-token"
 CSRF_COOKIE = "wud_csrf_token"
+SESSION_COOKIE = "wud_session"
 
 
 class WebConfigError(ValueError):
@@ -94,6 +111,21 @@ class StatusResponse(BaseModel):
     warnings: list[str] = Field(default_factory=list)
 
 
+class CsrfResponse(BaseModel):
+    csrf_token: str
+
+
+class LoginRequest(BaseModel):
+    token: str
+
+
+class AuthSessionResponse(BaseModel):
+    authenticated: bool
+    auth_required: bool
+    dev_auth_bypass: bool
+    mutations_enabled: bool
+
+
 class RunSummary(BaseModel):
     id: int
     started_at: str
@@ -145,6 +177,15 @@ class RunDetail(RunSummary):
     events: list[RunEventRecord] = Field(default_factory=list)
 
 
+class RunLogResponse(BaseModel):
+    run_id: int
+    log_file: str
+    exists: bool
+    content: str
+    truncated: bool
+    max_bytes: int
+
+
 def create_app(
     settings: WebSettings | None = None,
     *,
@@ -173,6 +214,33 @@ def create_app(
                 return error
         return await call_next(request)
 
+    auth_router = APIRouter(prefix="/api/v1/auth")
+    auth_router.add_api_route(
+        "/csrf",
+        api_auth_csrf,
+        methods=["GET"],
+        response_model=CsrfResponse,
+    )
+    auth_router.add_api_route(
+        "/login",
+        api_auth_login,
+        methods=["POST"],
+        response_model=AuthSessionResponse,
+    )
+    auth_router.add_api_route(
+        "/logout",
+        api_auth_logout,
+        methods=["POST"],
+        response_model=AuthSessionResponse,
+    )
+    auth_router.add_api_route(
+        "/session",
+        api_auth_session,
+        methods=["GET"],
+        response_model=AuthSessionResponse,
+    )
+    app.include_router(auth_router)
+
     router = APIRouter(
         prefix="/api/v1",
         dependencies=[Depends(require_auth)],
@@ -200,6 +268,12 @@ def create_app(
         api_run_detail,
         methods=["GET"],
         response_model=RunDetail,
+    )
+    router.add_api_route(
+        "/runs/{run_id}/log",
+        api_run_log,
+        methods=["GET"],
+        response_model=RunLogResponse,
     )
     app.include_router(router)
     _mount_static_spa_if_present(app, active_settings)
@@ -263,19 +337,67 @@ async def require_auth(
             status_code=503,
             detail="web auth token is not configured",
         )
-    scheme, separator, token = (authorization or "").partition(" ")
-    if separator != " " or scheme.lower() != "bearer":
+    if _bearer_token_valid(settings, authorization):
+        return
+    if _session_cookie_valid(settings, request.cookies.get(SESSION_COOKIE, "")):
+        return
+    raise HTTPException(
+        status_code=401,
+        detail="authentication required",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+
+
+def api_auth_csrf(response: Response) -> CsrfResponse:
+    csrf_token = secrets.token_urlsafe(32)
+    _set_csrf_cookie(response, csrf_token)
+    return CsrfResponse(csrf_token=csrf_token)
+
+
+def api_auth_login(
+    payload: LoginRequest,
+    request: Request,
+    response: Response,
+) -> AuthSessionResponse:
+    settings = _settings(request)
+    if settings.dev_no_auth:
+        return _auth_session_response(settings, authenticated=True)
+    if not settings.auth_token:
+        raise HTTPException(
+            status_code=503,
+            detail="web auth token is not configured",
+        )
+    if not secrets.compare_digest(payload.token, settings.auth_token):
         raise HTTPException(
             status_code=401,
             detail="authentication required",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    if not secrets.compare_digest(token, settings.auth_token):
-        raise HTTPException(
-            status_code=401,
-            detail="authentication required",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
+    _set_session_cookie(response, _make_session_cookie(settings))
+    return _auth_session_response(settings, authenticated=True)
+
+
+def api_auth_logout(
+    request: Request,
+    response: Response,
+) -> AuthSessionResponse:
+    settings = _settings(request)
+    _clear_session_cookie(response)
+    _clear_csrf_cookie(response)
+    return _auth_session_response(settings, authenticated=settings.dev_no_auth)
+
+
+def api_auth_session(
+    request: Request,
+    authorization: Annotated[str | None, Header()] = None,
+) -> AuthSessionResponse:
+    settings = _settings(request)
+    authenticated = (
+        settings.dev_no_auth
+        or _bearer_token_valid(settings, authorization)
+        or _session_cookie_valid(settings, request.cookies.get(SESSION_COOKIE, ""))
+    )
+    return _auth_session_response(settings, authenticated=authenticated)
 
 
 def api_status(request: Request) -> StatusResponse:
@@ -374,6 +496,47 @@ def api_run_detail(run_id: int, request: Request) -> RunDetail:
         pending_updates=[_pending_update_from_row(row) for row in pending],
         events=[_event_from_row(row) for row in events],
     )
+
+
+def api_run_log(
+    run_id: int,
+    request: Request,
+    tail_bytes: int = Query(default=DEFAULT_LOG_TAIL_BYTES, ge=1),
+) -> RunLogResponse:
+    settings = _settings(request)
+    max_bytes = min(tail_bytes, MAX_LOG_TAIL_BYTES)
+    try:
+        with closing(_connect_readonly_db(settings)) as conn:
+            run = conn.execute(
+                """
+                SELECT id, log_file
+                FROM update_runs
+                WHERE id = ?
+                """,
+                (run_id,),
+            ).fetchone()
+            if run is None:
+                raise HTTPException(status_code=404, detail="run not found")
+    except ReadOnlyDatabaseMissing as exc:
+        raise HTTPException(status_code=404, detail="run not found") from exc
+    except (OSError, sqlite3.Error, DatabaseError) as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=f"could not read database: {exc}",
+        ) from exc
+
+    raw_log_file = str(run["log_file"] or "")
+    log_path = _safe_log_path(settings, raw_log_file)
+    if log_path is None:
+        return RunLogResponse(
+            run_id=run_id,
+            log_file=raw_log_file,
+            exists=False,
+            content="",
+            truncated=False,
+            max_bytes=max_bytes,
+        )
+    return _run_log_response(run_id, raw_log_file, log_path, max_bytes)
 
 
 def _settings(request: Request) -> WebSettings:
@@ -528,6 +691,183 @@ def _metadata_from_row(row: sqlite3.Row) -> dict[str, Any]:
             detail="metadata JSON must be an object",
         )
     return value
+
+
+def _auth_session_response(
+    settings: WebSettings,
+    *,
+    authenticated: bool,
+) -> AuthSessionResponse:
+    return AuthSessionResponse(
+        authenticated=authenticated,
+        auth_required=settings.auth_required,
+        dev_auth_bypass=settings.dev_no_auth,
+        mutations_enabled=settings.mutations_enabled,
+    )
+
+
+def _bearer_token_valid(settings: WebSettings, authorization: str | None) -> bool:
+    if not settings.auth_token:
+        return False
+    scheme, separator, token = (authorization or "").partition(" ")
+    return (
+        separator == " "
+        and scheme.lower() == "bearer"
+        and secrets.compare_digest(token, settings.auth_token)
+    )
+
+
+def _make_session_cookie(settings: WebSettings) -> str:
+    payload = _b64encode_json(
+        {
+            "v": 1,
+            "exp": int(time.time()) + SESSION_MAX_AGE_SECONDS,
+            "nonce": secrets.token_urlsafe(24),
+        }
+    )
+    signature = _session_signature(settings, payload)
+    return f"{payload}.{signature}"
+
+
+def _session_cookie_valid(settings: WebSettings, value: str) -> bool:
+    if not settings.auth_token or "." not in value:
+        return False
+    payload, signature = value.rsplit(".", 1)
+    if not hmac.compare_digest(_session_signature(settings, payload), signature):
+        return False
+    try:
+        decoded = json.loads(_b64decode(payload).decode("utf-8"))
+    except (binascii.Error, ValueError, UnicodeDecodeError, json.JSONDecodeError):
+        return False
+    if not isinstance(decoded, dict):
+        return False
+    if decoded.get("v") != 1:
+        return False
+    expires_at = decoded.get("exp")
+    if not isinstance(expires_at, int):
+        return False
+    return expires_at >= int(time.time())
+
+
+def _session_signature(settings: WebSettings, payload: str) -> str:
+    digest = hmac.new(
+        settings.auth_token.encode("utf-8"),
+        payload.encode("ascii"),
+        "sha256",
+    ).digest()
+    return _b64encode(digest)
+
+
+def _b64encode_json(value: dict[str, Any]) -> str:
+    payload = json.dumps(value, separators=(",", ":")).encode("utf-8")
+    return _b64encode(payload)
+
+
+def _b64encode(value: bytes) -> str:
+    return base64.urlsafe_b64encode(value).decode("ascii").rstrip("=")
+
+
+def _b64decode(value: str) -> bytes:
+    padding = "=" * (-len(value) % 4)
+    return base64.urlsafe_b64decode(f"{value}{padding}".encode("ascii"))
+
+
+def _set_csrf_cookie(response: Response, csrf_token: str) -> None:
+    response.set_cookie(
+        CSRF_COOKIE,
+        csrf_token,
+        max_age=SESSION_MAX_AGE_SECONDS,
+        httponly=False,
+        samesite="strict",
+        path="/",
+    )
+
+
+def _clear_csrf_cookie(response: Response) -> None:
+    response.delete_cookie(CSRF_COOKIE, path="/", samesite="strict")
+
+
+def _set_session_cookie(response: Response, session: str) -> None:
+    response.set_cookie(
+        SESSION_COOKIE,
+        session,
+        max_age=SESSION_MAX_AGE_SECONDS,
+        httponly=True,
+        samesite="strict",
+        path="/",
+    )
+
+
+def _clear_session_cookie(response: Response) -> None:
+    response.delete_cookie(SESSION_COOKIE, path="/", samesite="strict")
+
+
+def _safe_log_path(settings: WebSettings, raw_log_file: str) -> Path | None:
+    if not raw_log_file:
+        return None
+    log_dir = settings.config.log_dir
+    candidate = Path(raw_log_file)
+    if not candidate.is_absolute():
+        candidate = log_dir / candidate
+    try:
+        resolved_log_dir = log_dir.resolve(strict=False)
+        if candidate.exists():
+            resolved_candidate = candidate.resolve(strict=True)
+        else:
+            resolved_candidate = candidate.resolve(strict=False)
+    except OSError as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=f"could not resolve log file: {exc}",
+        ) from exc
+    if not _path_is_or_under(resolved_candidate, resolved_log_dir):
+        raise HTTPException(status_code=403, detail="log file is outside WUD_LOG_DIR")
+    return candidate
+
+
+def _path_is_or_under(path: Path, parent: Path) -> bool:
+    try:
+        path.relative_to(parent)
+    except ValueError:
+        return False
+    return True
+
+
+def _run_log_response(
+    run_id: int,
+    raw_log_file: str,
+    log_path: Path,
+    max_bytes: int,
+) -> RunLogResponse:
+    try:
+        if not log_path.is_file():
+            return RunLogResponse(
+                run_id=run_id,
+                log_file=raw_log_file,
+                exists=False,
+                content="",
+                truncated=False,
+                max_bytes=max_bytes,
+            )
+        size = log_path.stat().st_size
+        truncated = size > max_bytes
+        with log_path.open("rb") as file:
+            if truncated:
+                file.seek(-max_bytes, os.SEEK_END)
+            content = file.read(max_bytes).decode("utf-8", errors="replace")
+    except OSError as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=f"could not read log file: {exc}",
+        ) from exc
+    return RunLogResponse(
+        run_id=run_id,
+        log_file=raw_log_file,
+        exists=True,
+        content=content,
+        truncated=truncated,
+        max_bytes=max_bytes,
+    )
 
 
 def _requires_csrf_origin_check(request: Request) -> bool:

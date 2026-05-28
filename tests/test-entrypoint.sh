@@ -176,6 +176,14 @@ test_updater_dispatch_preserves_explicit_log_dir(){
   teardown_case
 }
 
+test_web_dispatch_injects_paths(){
+  setup_case
+  PYTHON_BIN="$TEST_TMP/python" run_entrypoint web --host 0.0.0.0
+  assert_status 0
+  assert_output "python [-m] [wud_updater.cli] [web] [--base] [$TEST_TMP/docker] [--file] [$TEST_TMP/out/images.todo] [--log-dir] [/logs] [--host] [0.0.0.0]"
+  teardown_case
+}
+
 test_debug_command_executes_directly(){
   setup_case
   run_entrypoint /bin/sh -c "printf 'debug [%s]\n' \"\$1\"" shell arg
@@ -292,6 +300,7 @@ main(){
   run_test test_updater_dispatch_injects_missing_paths
   run_test test_updater_dispatch_preserves_explicit_paths
   run_test test_updater_dispatch_preserves_explicit_log_dir
+  run_test test_web_dispatch_injects_paths
   run_test test_debug_command_executes_directly
   run_test test_sync_command_copies_scripts_and_exits
   run_test test_startup_sync_runs_before_command
