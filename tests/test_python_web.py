@@ -4,6 +4,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from threading import Event, Lock
+from types import SimpleNamespace
 
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
@@ -664,6 +665,34 @@ def test_host_allowlist_rejects_unknown_hosts(tmp_path: Path) -> None:
 
     assert response.status_code == 400
     assert response.json()["detail"] == "host is not allowed"
+
+
+def test_web_startup_rejects_bind_host_missing_from_allowed_hosts(
+    tmp_path: Path,
+    monkeypatch,
+    capsys,
+) -> None:
+    for key, value in _web_env(
+        tmp_path,
+        {"WUD_WEB_DEV_NO_AUTH": "true"},
+    ).items():
+        monkeypatch.setenv(key, value)
+
+    status = web_module.run_web_from_namespace(
+        SimpleNamespace(
+            base=None,
+            file=None,
+            log_dir=None,
+            db_path=None,
+            host="192.0.2.10",
+            port=None,
+            static_dir=None,
+        )
+    )
+    stderr = capsys.readouterr().err
+
+    assert status == 1
+    assert "WUD_WEB_ALLOWED_HOSTS must include 192.0.2.10" in stderr
 
 
 def test_forwarded_headers_require_trusted_proxy(tmp_path: Path) -> None:

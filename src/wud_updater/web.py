@@ -386,6 +386,7 @@ def run_web_from_namespace(args: object) -> int:
             or env.get("WUD_WEB_HOST")
             or DEFAULT_WEB_HOST
         )
+        _validate_bind_host_allowed(settings, host)
         port = _parse_port(getattr(args, "port", None) or env.get("WUD_WEB_PORT"))
     except (ConfigError, WebConfigError) as exc:
         print(exc, file=sys.stderr)
@@ -1458,6 +1459,19 @@ def _environment_with_cli_overrides(
 def _validate_startup_auth(settings: WebSettings) -> None:
     if settings.secure_cookies not in SECURE_COOKIE_MODES:
         raise WebConfigError("WUD_WEB_SECURE_COOKIES must be auto, true, or false")
+
+
+def _validate_bind_host_allowed(settings: WebSettings, host: str) -> None:
+    normalized = _normalize_host(host)
+    if not normalized or normalized in {"0.0.0.0", "::"}:
+        return
+    if normalized in settings.allowed_hosts:
+        return
+    raise WebConfigError(
+        f"WUD_WEB_ALLOWED_HOSTS must include {normalized} when binding "
+        "the WebUI to that host. Set WUD_WEB_ALLOWED_HOSTS to the browser-visible "
+        "hostname or IP address."
+    )
 
 
 def _print_setup_claim(
