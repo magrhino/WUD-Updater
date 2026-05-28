@@ -44,6 +44,7 @@ class DatabaseTests(unittest.TestCase):
             self.assertGreaterEqual(
                 tables,
                 {
+                    "schema_migrations",
                     "update_runs",
                     "update_events",
                     "snoozes",
@@ -51,6 +52,9 @@ class DatabaseTests(unittest.TestCase):
                     "known_images",
                     "pending_updates",
                     "tag_exclusion_rules",
+                    "web_users",
+                    "web_sessions",
+                    "web_settings",
                 },
             )
 
@@ -80,6 +84,20 @@ class DatabaseTests(unittest.TestCase):
             version = conn.execute("PRAGMA user_version").fetchone()[0]
 
         self.assertEqual(version, SCHEMA_VERSION)
+
+    def test_init_db_records_schema_migrations(self) -> None:
+        with sqlite3.connect(":memory:") as conn:
+            init_db(conn)
+
+            rows = conn.execute(
+                """
+                SELECT version
+                FROM schema_migrations
+                ORDER BY version
+                """
+            ).fetchall()
+
+        self.assertEqual([row[0] for row in rows], [1, 2, 3, 4])
 
     def test_init_db_accepts_matching_version_zero_table(self) -> None:
         with sqlite3.connect(":memory:") as conn:
@@ -140,9 +158,47 @@ class DatabaseTests(unittest.TestCase):
                   AND name = 'tag_exclusion_rules'
                 """
             ).fetchone()
+            web_users_table = conn.execute(
+                """
+                SELECT name
+                FROM sqlite_master
+                WHERE type = 'table'
+                  AND name = 'web_users'
+                """
+            ).fetchone()
 
         self.assertEqual(version, SCHEMA_VERSION)
         self.assertIsNotNone(exclusion_table)
+        self.assertIsNotNone(web_users_table)
+
+    def test_init_db_migrates_v3_schema_and_preserves_update_rows(self) -> None:
+        with sqlite3.connect(":memory:") as conn:
+            conn.executescript(V3_SCHEMA_SQL)
+            conn.execute("PRAGMA user_version = 3")
+            conn.execute(
+                """
+                INSERT INTO update_runs (started_at, status)
+                VALUES ('2026-05-18T12:00:00+00:00', 'success')
+                """
+            )
+
+            init_db(conn)
+            version = conn.execute("PRAGMA user_version").fetchone()[0]
+            run = conn.execute("SELECT status FROM update_runs").fetchone()
+            migration_versions = [
+                row[0]
+                for row in conn.execute(
+                    """
+                    SELECT version
+                    FROM schema_migrations
+                    ORDER BY version
+                    """
+                )
+            ]
+
+        self.assertEqual(version, SCHEMA_VERSION)
+        self.assertEqual(run[0], "success")
+        self.assertEqual(migration_versions, [1, 2, 3, 4])
 
     def test_init_db_rejects_malformed_existing_pending_updates(self) -> None:
         with sqlite3.connect(":memory:") as conn:
@@ -518,6 +574,26 @@ CREATE TABLE pending_updates (
     metadata_json TEXT NOT NULL DEFAULT '{}',
     UNIQUE (run_id, line_no),
     FOREIGN KEY (run_id) REFERENCES update_runs(id) ON DELETE CASCADE
+);
+"""
+)
+
+V3_SCHEMA_SQL = (
+    V2_SCHEMA_SQL
+    + """
+CREATE TABLE tag_exclusion_rules (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    scope TEXT NOT NULL,
+    image_repo TEXT NOT NULL,
+    service_key TEXT NOT NULL DEFAULT '',
+    match_type TEXT NOT NULL,
+    tag TEXT NOT NULL,
+    regex_fragment TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'active',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    metadata_json TEXT NOT NULL DEFAULT '{}',
+    UNIQUE (scope, image_repo, service_key, match_type, tag)
 );
 """
 )

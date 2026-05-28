@@ -28,6 +28,7 @@ export interface StatusResponse {
   db_ready: boolean;
   auth_required: boolean;
   dev_auth_bypass: boolean;
+  setup_required: boolean;
   mutations_enabled: boolean;
   static_spa_available: boolean;
   warnings: string[];
@@ -35,13 +36,25 @@ export interface StatusResponse {
 
 export interface AuthSessionResponse {
   authenticated: boolean;
+  setup_required: boolean;
   auth_required: boolean;
   dev_auth_bypass: boolean;
   mutations_enabled: boolean;
+  username: string | null;
 }
 
 export interface CsrfResponse {
   csrf_token: string;
+}
+
+export interface SetupStatusResponse {
+  setup_required: boolean;
+  claim_required: boolean;
+  authenticated: boolean;
+  auth_required: boolean;
+  dev_auth_bypass: boolean;
+  mutations_enabled: boolean;
+  password_min_length: number;
 }
 
 export interface RunSummary {
@@ -147,12 +160,24 @@ async function apiRequest<T>(
 
 export const webApi = {
   csrf: () => apiRequest<CsrfResponse>("/auth/csrf"),
+  setupStatus: () => apiRequest<SetupStatusResponse>("/setup/status"),
+  setupClaim: (
+    claim: string,
+    username: string,
+    password: string,
+    csrfToken: string,
+  ) =>
+    apiRequest<AuthSessionResponse>("/setup/claim", {
+      method: "POST",
+      headers: { "x-wud-csrf-token": csrfToken },
+      body: JSON.stringify({ claim, username, password }),
+    }),
   session: () => apiRequest<AuthSessionResponse>("/auth/session"),
-  login: (token: string, csrfToken: string) =>
+  login: (username: string, password: string, csrfToken: string) =>
     apiRequest<AuthSessionResponse>("/auth/login", {
       method: "POST",
       headers: { "x-wud-csrf-token": csrfToken },
-      body: JSON.stringify({ token }),
+      body: JSON.stringify({ username, password }),
     }),
   logout: (csrfToken: string) =>
     apiRequest<AuthSessionResponse>("/auth/logout", {

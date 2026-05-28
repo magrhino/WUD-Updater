@@ -19,7 +19,9 @@ const router = useRouter();
 const auth = useAuthStore();
 const webui = useWebuiStore();
 
-const showShell = computed(() => route.name !== "login" && auth.authenticated);
+const showShell = computed(
+  () => route.name !== "login" && route.name !== "setup" && auth.authenticated,
+);
 const navItems = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard },
   { to: "/pending", label: "Pending", icon: ListChecks },

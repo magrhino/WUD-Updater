@@ -102,10 +102,13 @@ wud-updater web
 ```
 
 `wud-updater web` starts the read-only `/api/v1/*` FastAPI service for the
-WebUI and serves the packaged Vue SPA when static assets are present. Set
-`WUD_WEB_TOKEN`, open the server in a browser, and sign in with that token. API
-clients can still send `Authorization: Bearer <token>`. `WUD_WEB_DEV_NO_AUTH=true`
-is only for local development and tests.
+WebUI and serves the packaged Vue SPA when static assets are present. On first
+start, the server logs a one-time setup link for creating the first admin
+username and password. After setup, browser sessions use an HttpOnly cookie and
+CSRF protection. API clients can optionally send `Authorization: Bearer <token>`
+when `WUD_WEB_TOKEN` is set, but that token is not used for browser login and
+does not bypass first-run setup. `WUD_WEB_DEV_NO_AUTH=true` is only for local
+development and tests.
 
 ## Documentation
 
