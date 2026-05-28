@@ -56,6 +56,17 @@ EOF
   exit 127
 fi
 
+if ! "$python_bin" -c 'import pytest' >/dev/null 2>&1; then
+  cat >&2 <<EOF
+pytest is required to run the full test suite.
+Install the Python development dependencies in a virtual environment, for example:
+  $python_bin -m venv .venv
+  . .venv/bin/activate
+  python -m pip install -e '.[dev]'
+EOF
+  exit 127
+fi
+
 run bash -n \
   entrypoint.sh \
   install.sh \
@@ -126,6 +137,7 @@ run "$python_bin" -m py_compile \
   src/wud_updater/terminal.py \
   src/wud_updater/updates.py \
   src/wud_updater/updater.py \
+  src/wud_updater/web.py \
   src/wud_updater/wud_file.py \
   tests/run-python-tests.py \
   tests/test_python_banner.py \
@@ -138,10 +150,13 @@ run "$python_bin" -m py_compile \
   tests/test_python_terminal.py \
   tests/test_python_update_from_wud.py \
   tests/test_python_updates_wrapper.py \
+  tests/test_python_web.py \
   tests/test_python_wud_file_ops.py \
   tests/test_python_wud_parsing.py
 
 run "$python_bin" tests/run-python-tests.py
+
+run "$python_bin" -m pytest tests/test_python_web.py
 
 for test_script in tests/test-*.sh; do
   run "$test_script"
