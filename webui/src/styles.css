@@ -176,6 +176,15 @@ a {
   gap: 16px;
 }
 
+.pending-heading {
+  align-items: center;
+}
+
+.pending-actions {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
 .text-link,
 .icon-link {
   color: #0f6fbd;
@@ -279,6 +288,76 @@ a {
   margin: 0;
 }
 
+.plan-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.plan-summary div {
+  display: grid;
+  gap: 4px;
+  min-height: 74px;
+  padding: 12px;
+  border: 1px solid #e6ecef;
+  border-radius: 7px;
+}
+
+.plan-summary span {
+  color: #65747a;
+  font-size: 0.82rem;
+}
+
+.plan-summary strong {
+  font-size: 1.18rem;
+}
+
+.plan-section {
+  margin-top: 16px;
+}
+
+.plan-stack {
+  display: grid;
+  gap: 12px;
+  padding: 16px 0 0;
+  border-top: 1px solid #e6ecef;
+}
+
+.plan-stack:first-child {
+  padding-top: 0;
+  border-top: 0;
+}
+
+.plan-actions {
+  display: grid;
+  gap: 8px;
+}
+
+.plan-action {
+  display: grid;
+  grid-template-columns: minmax(96px, auto) minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  min-height: 38px;
+  padding: 8px 10px;
+  border: 1px solid #e6ecef;
+  border-radius: 7px;
+  background: #f9fbfc;
+}
+
+.plan-action code {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: #263239;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 0.82rem;
+}
+
+.plan-line-row {
+  grid-template-columns: minmax(56px, auto) minmax(120px, 0.7fr) minmax(0, 2fr);
+}
+
 .login-page {
   display: grid;
   min-height: 100vh;
@@ -368,6 +447,10 @@ a {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .plan-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .topbar {
     align-items: flex-start;
   }
@@ -384,6 +467,12 @@ a {
   }
 
   .list-row {
+    grid-template-columns: 1fr;
+  }
+
+  .plan-action,
+  .plan-line-row,
+  .plan-summary {
     grid-template-columns: 1fr;
   }
 

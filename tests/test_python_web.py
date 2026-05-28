@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -102,6 +103,78 @@ def _insert_run(tmp_path: Path, *, log_file: str = "") -> int:
             log_file=log_file,
             metadata_json='{"source":"test"}',
         )
+
+
+def _fake_docker_env(tmp_path: Path) -> tuple[dict[str, str], Path]:
+    fake_root = tmp_path / "fake-docker"
+    for path in (
+        fake_root / "images",
+        fake_root / "manifests",
+        fake_root / "stacks",
+        fake_root / "containers",
+    ):
+        path.mkdir(parents=True, exist_ok=True)
+    (fake_root / "containers.tsv").write_text("", encoding="utf-8")
+    (fake_root / "calls.log").write_text("", encoding="utf-8")
+    repo_root = Path(__file__).resolve().parents[1]
+    return (
+        {
+            "FAKE_DOCKER_ROOT": str(fake_root),
+            "PATH": f"{repo_root / 'tests' / 'fakes'}:{os.environ['PATH']}",
+        },
+        fake_root,
+    )
+
+
+def _make_fake_stack(
+    tmp_path: Path,
+    fake_root: Path,
+    stack_id: str,
+    services: list[tuple[str, str, str | None]],
+) -> Path:
+    directory = tmp_path / "docker" / stack_id
+    directory.mkdir(parents=True, exist_ok=True)
+    (directory / ".fake-docker-id").write_text(f"{stack_id}\n", encoding="utf-8")
+    stack_state = fake_root / "stacks" / stack_id
+    stack_state.mkdir(parents=True, exist_ok=True)
+
+    compose_lines = ["services:\n"]
+    service_rows: list[str] = []
+    image_rows: list[str] = []
+    cids: list[str] = []
+    for service, image, cid in services:
+        compose_lines.extend([f"  {service}:\n", f"    image: {image}\n"])
+        service_rows.append(f"{service}\n")
+        image_rows.append(f"{image}\n")
+        with (stack_state / "service-images.tsv").open("a", encoding="utf-8") as file:
+            file.write(f"{service}\t{image}\n")
+        if cid is None:
+            continue
+        cids.append(cid)
+        (stack_state / f"cids-{service}.txt").write_text(
+            f"{cid}\n",
+            encoding="utf-8",
+        )
+        (fake_root / "containers" / f"{cid}.summary").write_text(
+            f"/{cid}|running|healthy|0|0\n",
+            encoding="utf-8",
+        )
+
+    (directory / "docker-compose.yml").write_text(
+        "".join(compose_lines),
+        encoding="utf-8",
+    )
+    (stack_state / "services.txt").write_text("".join(service_rows), encoding="utf-8")
+    (stack_state / "images.txt").write_text("".join(image_rows), encoding="utf-8")
+    (stack_state / "cids.txt").write_text(
+        "".join(f"{cid}\n" for cid in cids),
+        encoding="utf-8",
+    )
+    return directory
+
+
+def _fake_docker_calls(fake_root: Path) -> str:
+    return (fake_root / "calls.log").read_text(encoding="utf-8")
 
 
 def test_api_rejects_unauthenticated_requests_without_dev_bypass(
@@ -481,6 +554,158 @@ def test_pending_endpoint_reads_wud_file_without_mutation(tmp_path: Path) -> Non
     assert body["items"][0]["image"] == "nginx:1.25"
     assert body["items"][0]["desired_tag"] == "1.26"
     assert wud_file.read_text(encoding="utf-8") == original
+
+
+def test_plan_endpoint_rejects_unauthenticated_requests(tmp_path: Path) -> None:
+    client = _client(tmp_path)
+
+    response = client.post(
+        "/api/v1/plans",
+        json={"line_numbers": [1]},
+        headers=_csrf_headers(client),
+    )
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == "setup required"
+
+
+def test_plan_endpoint_requires_csrf_origin_headers(tmp_path: Path) -> None:
+    client = _client(tmp_path, {"WUD_WEB_DEV_NO_AUTH": "true"})
+
+    response = client.post("/api/v1/plans", json={"line_numbers": [1]})
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == "origin header is required"
+
+
+def test_plan_endpoint_returns_selected_dry_run_without_mutation(
+    tmp_path: Path,
+) -> None:
+    fake_env, fake_root = _fake_docker_env(tmp_path)
+    client = _client(tmp_path, {"WUD_WEB_DEV_NO_AUTH": "true", **fake_env})
+    wud_file = tmp_path / "state" / "images.todo"
+    db_path = tmp_path / "state" / "wud.sqlite"
+    log_dir = tmp_path / "state" / "logs"
+    original = "repo/app:latest\nrepo/db:latest\n"
+    wud_file.write_text(original, encoding="utf-8")
+    compose_dir = _make_fake_stack(
+        tmp_path,
+        fake_root,
+        "stack",
+        [
+            ("app", "repo/app:latest", "cid-app"),
+            ("db", "repo/db:latest", "cid-db"),
+        ],
+    )
+    compose_before = (compose_dir / "docker-compose.yml").read_text(encoding="utf-8")
+
+    response = client.post(
+        "/api/v1/plans",
+        json={"line_numbers": [2]},
+        headers=_csrf_headers(client),
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["dry_run"] is True
+    assert body["can_apply"] is False
+    assert body["status"] == "ready"
+    assert body["selected_line_numbers"] == [2]
+    assert body["summary"]["target_count"] == 1
+    assert body["summary"]["matched_target_count"] == 1
+    assert [target["line_no"] for target in body["targets"]] == [2]
+    assert body["stacks"][0]["name"] == "stack"
+    assert body["stacks"][0]["services"] == ["db"]
+    assert body["stacks"][0]["lines"][0]["service"] == "db"
+    assert body["stacks"][0]["actions"][0]["kind"] == "pull"
+    assert body["stacks"][0]["actions"][0]["args"][-1] == "db"
+    assert body["issues"] == []
+    assert wud_file.read_text(encoding="utf-8") == original
+    assert (compose_dir / "docker-compose.yml").read_text(encoding="utf-8") == compose_before
+    assert not db_path.exists()
+    assert not log_dir.exists()
+    calls = _fake_docker_calls(fake_root)
+    assert " pull " not in calls
+    assert " up -d " not in calls
+
+
+def test_plan_endpoint_skips_tag_updates_unless_allowed(tmp_path: Path) -> None:
+    fake_env, fake_root = _fake_docker_env(tmp_path)
+    client = _client(tmp_path, {"WUD_WEB_DEV_NO_AUTH": "true", **fake_env})
+    wud_file = tmp_path / "state" / "images.todo"
+    wud_file.write_text("repo/app:1.0 tag=2.0\n", encoding="utf-8")
+    compose_dir = _make_fake_stack(
+        tmp_path,
+        fake_root,
+        "stack",
+        [("app", "repo/app:1.0", "cid-app")],
+    )
+    compose_before = (compose_dir / "docker-compose.yml").read_text(encoding="utf-8")
+    headers = _csrf_headers(client)
+
+    skipped = client.post(
+        "/api/v1/plans",
+        json={"line_numbers": [1]},
+        headers=headers,
+    )
+    allowed = client.post(
+        "/api/v1/plans",
+        json={"line_numbers": [1], "allow_tag_updates": True},
+        headers=headers,
+    )
+
+    assert skipped.status_code == 200
+    skipped_body = skipped.json()
+    assert skipped_body["status"] == "empty"
+    assert skipped_body["skipped"][0]["reason"] == "tag-updates-disabled"
+    assert skipped_body["stacks"] == []
+    assert allowed.status_code == 200
+    allowed_body = allowed.json()
+    assert allowed_body["status"] == "ready"
+    assert allowed_body["stacks"][0]["tag_updates"][0]["old_image"] == "repo/app:1.0"
+    assert allowed_body["stacks"][0]["tag_updates"][0]["new_image"] == "repo/app:2.0"
+    assert allowed_body["stacks"][0]["lines"][0]["action"] == "tag-update"
+    assert (compose_dir / "docker-compose.yml").read_text(encoding="utf-8") == compose_before
+    assert "manifest inspect repo/app:2.0" in _fake_docker_calls(fake_root)
+    assert "repo/app:1.0 tag=2.0\n" == wud_file.read_text(encoding="utf-8")
+
+
+def test_plan_endpoint_rejects_invalid_or_non_actionable_lines(
+    tmp_path: Path,
+) -> None:
+    fake_env, fake_root = _fake_docker_env(tmp_path)
+    client = _client(tmp_path, {"WUD_WEB_DEV_NO_AUTH": "true", **fake_env})
+    wud_file = tmp_path / "state" / "images.todo"
+    wud_file.write_text("# ignored\nrepo/app:latest\n", encoding="utf-8")
+    _make_fake_stack(
+        tmp_path,
+        fake_root,
+        "stack",
+        [("app", "repo/app:latest", "cid-app")],
+    )
+    headers = _csrf_headers(client)
+
+    zero = client.post(
+        "/api/v1/plans",
+        json={"line_numbers": [0]},
+        headers=headers,
+    )
+    comment = client.post(
+        "/api/v1/plans",
+        json={"line_numbers": [1]},
+        headers=headers,
+    )
+    missing = client.post(
+        "/api/v1/plans",
+        json={"line_numbers": [3]},
+        headers=headers,
+    )
+
+    assert zero.status_code == 422
+    assert comment.status_code == 422
+    assert "actionable WUD target lines" in comment.json()["detail"]
+    assert missing.status_code == 422
+    assert "actionable WUD target lines" in missing.json()["detail"]
 
 
 def test_runs_list_returns_empty_without_creating_missing_database(

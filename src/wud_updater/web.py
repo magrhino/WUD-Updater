@@ -11,10 +11,10 @@ import sqlite3
 import sys
 from collections.abc import Awaitable, Callable, Mapping
 from contextlib import closing, contextmanager
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 from urllib.parse import quote, urlencode, urlsplit
 
 from argon2 import PasswordHasher
@@ -40,6 +40,12 @@ from .config import ConfigError, UpdaterConfig, load_config
 from .db import DatabaseError, SCHEMA_VERSION, connect_db, init_db, utc_timestamp
 from .db import _user_version as db_user_version
 from .db import _validate_schema as validate_db_schema
+from .plans import (
+    DryRunPlan,
+    PlanFileMissing,
+    PlanInputError,
+    build_dry_run_plan,
+)
 from .wud_file import ParsedWudFile, parse_wud_file
 
 
@@ -62,6 +68,8 @@ SETUP_CLAIM_HASH_KEY = "setup_claim_hash"
 SETUP_CLAIM_EXPIRES_KEY = "setup_claim_expires_at"
 DEFAULT_ALLOWED_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
 PASSWORD_HASHER = PasswordHasher()
+LineNumber = Annotated[int, Field(ge=1)]
+PlanStatus = Literal["ready", "empty", "blocked"]
 
 
 class WebConfigError(ValueError):
@@ -84,6 +92,8 @@ class WebSettings:
     secure_cookies: str = "auto"
     mutations_enabled: bool = False
     static_dir: Path | None = None
+    host_docker_base: Path | None = None
+    command_env: Mapping[str, str] | None = None
 
     @property
     def auth_required(self) -> bool:
@@ -220,6 +230,106 @@ class RunLogResponse(BaseModel):
     max_bytes: int
 
 
+class PlanRequest(BaseModel):
+    line_numbers: list[LineNumber] = Field(min_length=1)
+    allow_tag_updates: bool = False
+
+
+class PlanSummary(BaseModel):
+    target_count: int
+    matched_target_count: int
+    stack_count: int
+    service_count: int
+    skipped_count: int
+    issue_count: int
+
+
+class PlanIssue(BaseModel):
+    severity: str
+    code: str
+    message: str
+    line_no: int | None = None
+    stack: str = ""
+    service: str = ""
+
+
+class PlanTarget(BaseModel):
+    line_no: int
+    raw: str
+    image: str
+    resolved_image: str
+    digest: str
+    desired_tag: str
+    matched: bool
+    action: str
+
+
+class PlanLine(BaseModel):
+    line_no: int
+    raw: str
+    image: str
+    resolved_image: str
+    compose_image: str
+    target_image: str
+    service: str
+    digest: str
+    desired_tag: str
+    action: str
+
+
+class PlanTagUpdate(BaseModel):
+    old_image: str
+    desired_tag: str
+    new_image: str
+    services: list[str] = Field(default_factory=list)
+
+
+class PlanAction(BaseModel):
+    kind: str
+    description: str
+    cwd: str
+    args: list[str] = Field(default_factory=list)
+
+
+class PlanStack(BaseModel):
+    name: str
+    directory: str
+    compose_file: str
+    project_directory: str
+    services_label: str
+    services: list[str] = Field(default_factory=list)
+    pull_services: list[str] = Field(default_factory=list)
+    stop_services: list[str] = Field(default_factory=list)
+    force_recreate: bool
+    up_no_deps: bool
+    tag_updates: list[PlanTagUpdate] = Field(default_factory=list)
+    actions: list[PlanAction] = Field(default_factory=list)
+    lines: list[PlanLine] = Field(default_factory=list)
+
+
+class PlanSkipped(BaseModel):
+    line_no: int
+    raw: str
+    image: str
+    desired_tag: str
+    reason: str
+
+
+class PlanResponse(BaseModel):
+    dry_run: bool
+    can_apply: bool
+    status: PlanStatus
+    source_file: str
+    mode: str
+    max_wait: int
+    selected_line_numbers: list[int] = Field(default_factory=list)
+    summary: PlanSummary
+    targets: list[PlanTarget] = Field(default_factory=list)
+    stacks: list[PlanStack] = Field(default_factory=list)
+    skipped: list[PlanSkipped] = Field(default_factory=list)
+    issues: list[PlanIssue] = Field(default_factory=list)
+
+
 def create_app(
     settings: WebSettings | None = None,
     *,
@@ -317,6 +427,12 @@ def create_app(
         response_model=PendingResponse,
     )
     router.add_api_route(
+        "/plans",
+        api_create_plan,
+        methods=["POST"],
+        response_model=PlanResponse,
+    )
+    router.add_api_route(
         "/runs",
         api_runs,
         methods=["GET"],
@@ -348,6 +464,7 @@ def load_web_settings(
     config = load_config(env)
     configured_static = static_dir or env.get("WUD_WEB_STATIC_DIR") or None
     public_origin = _parse_public_origin(env.get("WUD_WEB_PUBLIC_ORIGIN", ""))
+    host_docker_base = _parse_host_docker_base(env, config)
     return WebSettings(
         config=config,
         auth_token=env.get("WUD_WEB_TOKEN", ""),
@@ -370,6 +487,8 @@ def load_web_settings(
             default=False,
         ),
         static_dir=_resolve_static_dir(configured_static),
+        host_docker_base=host_docker_base,
+        command_env=dict(env),
     )
 
 
@@ -565,6 +684,28 @@ def api_pending(request: Request) -> PendingResponse:
     return _pending_response(_settings(request))
 
 
+def api_create_plan(payload: PlanRequest, request: Request) -> PlanResponse:
+    settings = _settings(request)
+    try:
+        plan = build_dry_run_plan(
+            settings.config,
+            line_numbers=payload.line_numbers,
+            allow_tag_updates=payload.allow_tag_updates,
+            host_docker_base=settings.host_docker_base,
+            environ=settings.command_env,
+        )
+    except PlanInputError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except PlanFileMissing as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except OSError as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=f"could not create plan: {exc}",
+        ) from exc
+    return _plan_response(plan)
+
+
 def api_runs(request: Request) -> list[RunSummary]:
     settings = _settings(request)
     try:
@@ -704,6 +845,10 @@ def _pending_response(settings: WebSettings) -> PendingResponse:
         items=items,
         warnings=list(parsed.warnings),
     )
+
+
+def _plan_response(plan: DryRunPlan) -> PlanResponse:
+    return PlanResponse.model_validate(asdict(plan))
 
 
 def _parse_pending_file(settings: WebSettings) -> tuple[bool, ParsedWudFile]:
@@ -1437,6 +1582,23 @@ def _resolve_static_dir(configured: str | Path | None) -> Path | None:
         if (candidate / "index.html").is_file():
             return candidate
     return None
+
+
+def _parse_host_docker_base(
+    env: Mapping[str, str],
+    config: UpdaterConfig,
+) -> Path | None:
+    value = env.get("HOST_DOCKER_BASE") or ""
+    if not value:
+        return None
+    path = Path(value)
+    if not path.is_absolute():
+        raise WebConfigError("HOST_DOCKER_BASE must be an absolute path")
+    if not config.docker_base.is_absolute():
+        raise WebConfigError(
+            "DOCKER_BASE must be an absolute path when HOST_DOCKER_BASE is set"
+        )
+    return path
 
 
 def _environment_with_cli_overrides(

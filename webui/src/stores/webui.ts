@@ -3,6 +3,7 @@ import { defineStore } from "pinia";
 
 import {
   ApiError,
+  type PlanResponse,
   type PendingResponse,
   type RunDetail,
   type RunLogResponse,
@@ -10,10 +11,12 @@ import {
   type StatusResponse,
   webApi,
 } from "../api/client";
+import { useAuthStore } from "./auth";
 
 export const useWebuiStore = defineStore("webui", () => {
   const status = ref<StatusResponse | null>(null);
   const pending = ref<PendingResponse | null>(null);
+  const plan = ref<PlanResponse | null>(null);
   const runs = ref<RunSummary[]>([]);
   const runDetails = ref<Record<number, RunDetail>>({});
   const runLogs = ref<Record<number, RunLogResponse>>({});
@@ -42,6 +45,24 @@ export const useWebuiStore = defineStore("webui", () => {
     await loadWithState(async () => {
       pending.value = await webApi.pending();
     });
+  }
+
+  async function createPlan(
+    lineNumbers: number[],
+    allowTagUpdates: boolean,
+  ): Promise<void> {
+    const auth = useAuthStore();
+    await loadWithState(async () => {
+      plan.value = await webApi.createPlan(
+        lineNumbers,
+        allowTagUpdates,
+        await auth.ensureCsrf(),
+      );
+    });
+  }
+
+  function clearPlan(): void {
+    plan.value = null;
   }
 
   async function loadRuns(): Promise<void> {
@@ -84,6 +105,7 @@ export const useWebuiStore = defineStore("webui", () => {
   return {
     status,
     pending,
+    plan,
     runs,
     runDetails,
     runLogs,
@@ -92,6 +114,8 @@ export const useWebuiStore = defineStore("webui", () => {
     warnings,
     loadDashboard,
     loadPending,
+    createPlan,
+    clearPlan,
     loadRuns,
     loadRunDetail,
     loadRunLog,
