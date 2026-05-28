@@ -228,6 +228,93 @@ export interface RunLogResponse {
   max_bytes: number;
 }
 
+export type ServicePolicyUpdateMode = "" | "pause" | "stop" | "live";
+export type SnoozeState = "active" | "expired" | "all";
+export type TagExclusionScope = "image_repo" | "service";
+export type TagExclusionMatchType = "exact";
+export type TagExclusionStatus = "active" | "disabled";
+export type TagExclusionStatusFilter = TagExclusionStatus | "all";
+
+export interface ServicePolicyRecord {
+  service_key: string;
+  update_mode: string;
+  auto_update: boolean;
+  snooze_default_seconds: number | null;
+  created_at: string;
+  updated_at: string;
+  metadata: Record<string, unknown>;
+}
+
+export interface SnoozeRecord {
+  id: number;
+  service_key: string;
+  snoozed_until: string;
+  reason: string;
+  created_at: string;
+  active: boolean;
+  metadata: Record<string, unknown>;
+}
+
+export interface TagExclusionRuleRecord {
+  id: number;
+  scope: string;
+  image_repo: string;
+  service_key: string;
+  match_type: string;
+  tag: string;
+  regex_fragment: string;
+  status: string;
+  created_at: string;
+  updated_at: string;
+  metadata: Record<string, unknown>;
+}
+
+export type StateOperation =
+  | {
+      kind: "upsert_service_policy";
+      service_key: string;
+      update_mode?: ServicePolicyUpdateMode;
+      auto_update?: boolean;
+      snooze_default_seconds?: number | null;
+    }
+  | {
+      kind: "delete_service_policy";
+      service_key: string;
+    }
+  | {
+      kind: "create_snooze";
+      service_key: string;
+      snoozed_until: string;
+      reason?: string;
+    }
+  | {
+      kind: "delete_snooze";
+      snooze_id: number;
+    }
+  | {
+      kind: "upsert_tag_exclusion";
+      scope: TagExclusionScope;
+      image_repo: string;
+      service_key?: string;
+      match_type?: TagExclusionMatchType;
+      tag: string;
+      status?: TagExclusionStatus;
+    }
+  | {
+      kind: "set_tag_exclusion_status";
+      rule_id: number;
+      status: TagExclusionStatus;
+    };
+
+export interface StateOperationResponse {
+  operation: StateOperation["kind"];
+  status: "success";
+  audit_run_id: number;
+  resource_type: string;
+  resource_id: string;
+  resource: ServicePolicyRecord | SnoozeRecord | TagExclusionRuleRecord | null;
+}
+
 export class ApiError extends Error {
   constructor(
     readonly status: number,
@@ -299,6 +386,19 @@ export const webApi = {
     }),
   status: () => apiRequest<StatusResponse>("/status"),
   pending: () => apiRequest<PendingResponse>("/pending"),
+  servicePolicies: () => apiRequest<ServicePolicyRecord[]>("/service-policies"),
+  snoozes: (state: SnoozeState = "active") =>
+    apiRequest<SnoozeRecord[]>(`/snoozes?state=${encodeURIComponent(state)}`),
+  tagExclusions: (status: TagExclusionStatusFilter = "active") =>
+    apiRequest<TagExclusionRuleRecord[]>(
+      `/tag-exclusions?status=${encodeURIComponent(status)}`,
+    ),
+  stateOperation: (operation: StateOperation, csrfToken: string) =>
+    apiRequest<StateOperationResponse>("/state/operations", {
+      method: "POST",
+      headers: { "x-wud-csrf-token": csrfToken },
+      body: JSON.stringify(operation),
+    }),
   createPlan: (
     lineNumbers: number[],
     allowTagUpdates: boolean,
