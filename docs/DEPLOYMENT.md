@@ -169,6 +169,23 @@ That variant mounts `/var/run/docker.sock` only into a LinuxServer.io socket
 proxy sidecar, points WUD and the helper at `tcp://socket-proxy-wud-updater:2375`,
 and keeps the proxy on an internal Docker network.
 
+For a long-running WebUI container, use
+[`docs/examples/docker-compose.webui.yml`](examples/docker-compose.webui.yml).
+That variant runs `wud-updater web`, serves the packaged SPA on
+`127.0.0.1:8080`, persists SQLite state in `/logs/wud-updater.sqlite`, and keeps
+browser mutations disabled unless `WUD_WEB_MUTATIONS_ENABLED=true` is set. Start
+it and read the one-time setup link from the service logs:
+
+```bash
+docker compose -f docs/examples/docker-compose.webui.yml up -d
+docker compose -f docs/examples/docker-compose.webui.yml logs wud-updater
+```
+
+Open the setup link, create the first admin username and a password with at
+least 12 characters, then sign in at `http://127.0.0.1:8080`. See
+[`docs/wiki/webui-container.md`](wiki/webui-container.md) for reverse-proxy,
+LAN exposure, login, and mutation notes.
+
 For containerized TrueNAS status checks, use
 [`docs/examples/docker-compose.truenas.yml`](examples/docker-compose.truenas.yml).
 That variant builds the helper image with the official TrueNAS API client so a
@@ -364,6 +381,7 @@ Boolean examples use `true` and `false`; legacy aliases `1`, `0`, `yes`, `no`,
 | `DOCKER_HOST` | Docker CLI default | Optional Docker daemon endpoint, such as the hardened example's socket proxy. |
 | `WUD_OUT_FILE` | Host: `$DOCKER_BASE/wud/out/images.todo`; container: `/out/images.todo` | Shared pending-update file. |
 | `WUD_LOG_DIR` | Host: `./logs`; container: `/logs` | Updater log directory. Set to `$DOCKER_BASE/logs` to keep the previous layout. |
+| `WUD_DB_PATH` | `$WUD_LOG_DIR/wud-updater.sqlite` | SQLite database path for setup state, sessions, run history, audit records, and managed tag exclusions. Preserve this file for WebUI login continuity and history. |
 | `WUD_UPDATE_MODE` | `stop` | Update mode for matched Compose services or stacks: `pause`, `stop`, or `live`. |
 | `WUD_MAX_WAIT` | `180` | Seconds to wait for health after recreation. |
 | `WUD_LOCK_TIMEOUT` | `30` | Seconds to wait for the shared todo-file lock. |
@@ -384,6 +402,7 @@ Boolean examples use `true` and `false`; legacy aliases `1`, `0`, `yes`, `no`,
 | `WUD_WEB_ALLOWED_HOSTS` | loopback, configured public origin, and bind host | Comma-separated hostnames or IPs accepted in the HTTP `Host` header. Set this when exposing the WebUI by LAN address or DNS name. |
 | `WUD_WEB_TRUSTED_PROXIES` | unset | Comma-separated proxy IP/CIDR entries whose `Forwarded` or `X-Forwarded-*` headers are trusted for scheme/host detection. |
 | `WUD_WEB_SECURE_COOKIES` | `auto` | Cookie `Secure` mode: `auto` enables it for effective HTTPS origins, `true` always enables it, and `false` disables it for local HTTP testing. |
+| `WUD_WEB_MUTATIONS_ENABLED` | `false` | Enables browser plan/apply update mutations when set to `true`. Leave unset or `false` for read-only WebUI deployments. |
 | `WUD_WEB_HOST` | `127.0.0.1` | Host passed to Uvicorn when running `wud-updater web`. |
 | `WUD_WEB_PORT` | `8080` | Port passed to Uvicorn when running `wud-updater web`. |
 | `WUD_WEB_STATIC_DIR` | packaged SPA, auto-detected if present | Optional built SPA directory override. Backend tests and API startup do not require a frontend build. |

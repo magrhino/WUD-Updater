@@ -5,6 +5,7 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
 cd "$REPO_ROOT"
 
 COMPOSE_EXAMPLE="docs/examples/docker-compose.example.yml"
+COMPOSE_WEBUI="docs/examples/docker-compose.webui.yml"
 COMPOSE_HARDENED="docs/examples/docker-compose.hardened.yml"
 COMPOSE_BUILD="docs/examples/docker-compose.build.yml"
 COMPOSE_TRUENAS="docs/examples/docker-compose.truenas.yml"
@@ -53,6 +54,7 @@ need_cmd docker
 run docker version
 run docker compose version
 run_quiet docker compose -f "$COMPOSE_EXAMPLE" config
+run_quiet docker compose -f "$COMPOSE_WEBUI" config
 run_quiet docker compose -f "$COMPOSE_HARDENED" config
 run_quiet docker compose -f "$COMPOSE_BUILD" config
 run_quiet docker compose -f "$COMPOSE_TRUENAS" config

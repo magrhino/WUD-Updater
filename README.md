@@ -54,6 +54,22 @@ TrueNAS client and uses an opt-in short-lived helper container for local status
 checks without storing a TrueNAS API key. The helper is only used when
 `TRUENAS_STATUS_CHECK=true` is set there.
 
+### WebUI Container
+
+For a long-running local WebUI, start from
+`docs/examples/docker-compose.webui.yml`:
+
+```bash
+docker compose -f docs/examples/docker-compose.webui.yml up -d
+docker compose -f docs/examples/docker-compose.webui.yml logs wud-updater
+```
+
+Open the one-time `/#/setup?claim=...` link printed in the logs, create the
+first admin username and a password with at least 12 characters, then sign in at
+`http://127.0.0.1:8080`. The example keeps browser access bound to loopback and
+leaves WebUI mutations disabled unless you explicitly set
+`WUD_WEB_MUTATIONS_ENABLED=true`.
+
 ### Host Install
 
 Install local commands and host-managed WUD script mounts:
@@ -117,6 +133,7 @@ development and tests.
 | Deployment, configuration, maintenance, and security notes | [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) |
 | Complete documentation index | [docs/README.md](docs/README.md) |
 | Docker Compose example | [docs/examples/docker-compose.example.yml](docs/examples/docker-compose.example.yml) |
+| Long-running WebUI Docker Compose example | [docs/examples/docker-compose.webui.yml](docs/examples/docker-compose.webui.yml) |
 | Hardened Docker Compose example | [docs/examples/docker-compose.hardened.yml](docs/examples/docker-compose.hardened.yml) |
 | TrueNAS status Docker Compose example | [docs/examples/docker-compose.truenas.yml](docs/examples/docker-compose.truenas.yml) |
 | Release notes | [CHANGELOG.md](CHANGELOG.md) |
