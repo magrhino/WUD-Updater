@@ -53,7 +53,9 @@ const backend = spawn(
   },
 );
 
-await waitForBackend();
+if (!(await waitForBackend())) {
+  process.exit(1);
+}
 
 const viteBin = join(
   webuiDir,
@@ -109,7 +111,7 @@ async function waitForBackend() {
     try {
       const response = await fetch(url);
       if (response.ok) {
-        return;
+        return true;
       }
     } catch {
       // Uvicorn is still starting.
@@ -118,6 +120,7 @@ async function waitForBackend() {
   }
   console.error(`Timed out waiting for backend at ${url}`);
   shutdown(1);
+  return false;
 }
 
 function resolvePython() {

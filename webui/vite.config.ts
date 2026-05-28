@@ -1,9 +1,11 @@
-import { defineConfig, type PluginOption } from "vite";
+import { defineConfig, loadEnv, type PluginOption } from "vite";
 import vue from "@vitejs/plugin-vue";
 import vueDevTools from "vite-plugin-vue-devtools";
 
-export default defineConfig(({ command }) => {
+export default defineConfig(({ command, mode }) => {
   const plugins: PluginOption[] = [vue()];
+  const env = loadEnv(mode, ".", "WUD_WEB_DEV_");
+  const backendPort = env.WUD_WEB_DEV_BACKEND_PORT ?? "8080";
   if (command === "serve") {
     plugins.push(vueDevTools());
   }
@@ -16,7 +18,7 @@ export default defineConfig(({ command }) => {
       strictPort: true,
       proxy: {
         "/api": {
-          target: "http://127.0.0.1:8080",
+          target: `http://127.0.0.1:${backendPort}`,
           changeOrigin: true,
         },
       },
