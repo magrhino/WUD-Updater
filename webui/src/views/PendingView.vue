@@ -1,17 +1,22 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
-import { breakpointsTailwind, useBreakpoints } from "@vueuse/core";
-import { Check, ClipboardList, X } from "@lucide/vue";
+import { breakpointsTailwind, useBreakpoints, useIntervalFn } from "@vueuse/core";
+import { Check, ClipboardList, Play, X } from "@lucide/vue";
 import type { DataTableColumns, DataTableRowKey } from "naive-ui";
 
 import type { PendingItem, PlanAction, PlanIssue } from "../api/client";
+import { useAuthStore } from "../stores/auth";
 import { useWebuiStore } from "../stores/webui";
 
 const webui = useWebuiStore();
+const auth = useAuthStore();
 const breakpoints = useBreakpoints(breakpointsTailwind);
 const isMobile = breakpoints.smaller("md");
 const selectedLineNumbers = ref<number[]>([]);
 const allowTagUpdates = ref(false);
+const showApplyConfirm = ref(false);
+const pollingJobId = ref("");
+const terminalJobStatuses = new Set(["success", "failure"]);
 
 const columns = computed<DataTableColumns<PendingItem>>(() => [
   { type: "selection", width: 48 },
@@ -49,6 +54,40 @@ const planTitle = computed(() => {
     return "No planned changes";
   }
   return "Ready dry run";
+});
+const applyAvailable = computed(
+  () => webui.plan?.status === "ready" && webui.plan.can_apply,
+);
+const applyDisabled = computed(() => !applyAvailable.value || webui.loading);
+const mutationDisabledMessage = computed(() => {
+  if (!webui.plan || webui.plan.status !== "ready" || webui.plan.can_apply) {
+    return "";
+  }
+  if (!auth.session?.mutations_enabled) {
+    return "Read-only mode is active. Set WUD_WEB_MUTATIONS_ENABLED=true on the server to apply updates.";
+  }
+  return "This plan cannot be applied.";
+});
+const applyJobAlertType = computed(() => {
+  if (webui.applyJob?.status === "failure") {
+    return "error";
+  }
+  if (webui.applyJob?.status === "success") {
+    return "success";
+  }
+  return "info";
+});
+const applyJobTitle = computed(() => {
+  if (!webui.applyJob) {
+    return "";
+  }
+  if (webui.applyJob.status === "success") {
+    return "Apply complete";
+  }
+  if (webui.applyJob.status === "failure") {
+    return "Apply failed";
+  }
+  return "Apply running";
 });
 
 function rowKey(row: PendingItem): number {
@@ -95,6 +134,41 @@ function clearPlanOnOptionChange(): void {
   webui.clearPlan();
 }
 
+function openApplyConfirm(): void {
+  if (applyDisabled.value) {
+    return;
+  }
+  showApplyConfirm.value = true;
+}
+
+async function confirmApply(): Promise<void> {
+  if (!webui.plan || applyDisabled.value) {
+    return;
+  }
+  const job = await webui.applyPlan(
+    webui.plan.plan_id,
+    webui.plan.selected_line_numbers,
+    allowTagUpdates.value,
+  );
+  pollingJobId.value = job.job_id;
+  resumeApplyPolling();
+  showApplyConfirm.value = false;
+}
+
+async function pollApplyJob(): Promise<void> {
+  if (!pollingJobId.value) {
+    pauseApplyPolling();
+    return;
+  }
+  await webui.loadApplyJob(pollingJobId.value);
+  if (!webui.applyJob || !terminalJobStatuses.has(webui.applyJob.status)) {
+    return;
+  }
+  pollingJobId.value = "";
+  pauseApplyPolling();
+  await Promise.all([webui.loadPending(), webui.loadRuns()]);
+}
+
 function actionCommand(action: PlanAction): string {
   return action.args.length ? action.args.join(" ") : action.description;
 }
@@ -113,6 +187,12 @@ function issueLabel(issue: PlanIssue): string {
     .join(" / ");
   return target ? `${target}: ${issue.message}` : issue.message;
 }
+
+const { pause: pauseApplyPolling, resume: resumeApplyPolling } = useIntervalFn(
+  pollApplyJob,
+  1000,
+  { immediate: false },
+);
 
 onMounted(() => {
   void webui.loadPending();
@@ -216,7 +296,22 @@ onMounted(() => {
           <p class="eyebrow">Dry run</p>
           <h2>{{ planTitle }}</h2>
         </div>
-        <n-tag :type="planAlertType">{{ webui.plan.status }}</n-tag>
+        <div class="inline-actions pending-actions">
+          <n-tag :type="planAlertType">{{ webui.plan.status }}</n-tag>
+          <n-button
+            v-if="applyAvailable"
+            type="primary"
+            size="small"
+            :disabled="applyDisabled"
+            :loading="webui.loading"
+            @click="openApplyConfirm"
+          >
+            <template #icon>
+              <Play :size="16" />
+            </template>
+            Apply
+          </n-button>
+        </div>
       </div>
 
       <div class="plan-summary">
@@ -237,6 +332,15 @@ onMounted(() => {
           <strong>{{ webui.plan.summary.issue_count }}</strong>
         </div>
       </div>
+
+      <n-alert
+        v-if="mutationDisabledMessage"
+        class="plan-section"
+        type="warning"
+        :show-icon="false"
+      >
+        {{ mutationDisabledMessage }}
+      </n-alert>
 
       <div v-if="webui.plan.issues.length" class="warning-list plan-section">
         <n-alert
@@ -295,5 +399,71 @@ onMounted(() => {
         </div>
       </div>
     </section>
+
+    <section v-if="webui.applyJob" class="section-panel">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">Apply job</p>
+          <h2>{{ applyJobTitle }}</h2>
+        </div>
+        <n-tag :type="applyJobAlertType">{{ webui.applyJob.status }}</n-tag>
+      </div>
+
+      <div class="compact-list">
+        <div class="list-row">
+          <span>Lines</span>
+          <strong>{{ webui.applyJob.selected_line_numbers.join(", ") }}</strong>
+          <em>{{ webui.applyJob.started_at || "Queued" }}</em>
+        </div>
+        <div v-if="webui.applyJob.run_id" class="list-row">
+          <span>Run</span>
+          <strong>#{{ webui.applyJob.run_id }}</strong>
+          <em class="inline-actions">
+            <RouterLink
+              class="text-link"
+              :to="{ name: 'run-detail', params: { id: webui.applyJob.run_id } }"
+            >
+              Details
+            </RouterLink>
+            <RouterLink
+              class="text-link"
+              :to="{ name: 'run-log', params: { id: webui.applyJob.run_id } }"
+            >
+              Log
+            </RouterLink>
+          </em>
+        </div>
+      </div>
+
+      <n-alert
+        v-if="webui.applyJob.error"
+        class="plan-section"
+        type="error"
+        :show-icon="false"
+      >
+        {{ webui.applyJob.error }}
+      </n-alert>
+    </section>
+
+    <n-modal
+      v-model:show="showApplyConfirm"
+      preset="dialog"
+      title="Apply selected updates"
+      positive-text="Apply"
+      negative-text="Cancel"
+      :positive-button-props="{ type: 'primary', loading: webui.loading }"
+      @positive-click="confirmApply"
+    >
+      <div v-if="webui.plan" class="confirmation-list">
+        <div>
+          <span>Lines</span>
+          <strong>{{ webui.plan.selected_line_numbers.join(", ") }}</strong>
+        </div>
+        <div v-for="stack in webui.plan.stacks" :key="stack.name">
+          <span>{{ stack.name }}</span>
+          <strong>{{ stack.services_label }}</strong>
+        </div>
+      </div>
+    </n-modal>
   </section>
 </template>

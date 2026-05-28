@@ -9,11 +9,13 @@ import os
 import secrets
 import sqlite3
 import sys
+from concurrent.futures import ThreadPoolExecutor
 from collections.abc import Awaitable, Callable, Mapping
 from contextlib import closing, contextmanager
 from dataclasses import asdict, dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from threading import Lock
 from typing import Annotated, Any, Literal
 from urllib.parse import quote, urlencode, urlsplit
 
@@ -36,6 +38,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from . import __version__
+from .command import CommandRunner
 from .config import ConfigError, UpdaterConfig, load_config
 from .db import DatabaseError, SCHEMA_VERSION, connect_db, init_db, utc_timestamp
 from .db import _user_version as db_user_version
@@ -46,6 +49,7 @@ from .plans import (
     PlanInputError,
     build_dry_run_plan,
 )
+from .updater import UpdateFromWudRunner, UpdaterOptions
 from .wud_file import ParsedWudFile, parse_wud_file
 
 
@@ -70,6 +74,7 @@ DEFAULT_ALLOWED_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
 PASSWORD_HASHER = PasswordHasher()
 LineNumber = Annotated[int, Field(ge=1)]
 PlanStatus = Literal["ready", "empty", "blocked"]
+ApplyJobStatus = Literal["queued", "running", "success", "failure"]
 
 
 class WebConfigError(ValueError):
@@ -98,6 +103,18 @@ class WebSettings:
     @property
     def auth_required(self) -> bool:
         return not self.dev_no_auth
+
+
+@dataclass
+class WebApplyJob:
+    id: str
+    status: ApplyJobStatus
+    selected_line_numbers: tuple[int, ...]
+    run_id: int | None = None
+    log_file: str = ""
+    started_at: str | None = None
+    finished_at: str | None = None
+    error: str = ""
 
 
 class PendingItem(BaseModel):
@@ -316,6 +333,7 @@ class PlanSkipped(BaseModel):
 
 
 class PlanResponse(BaseModel):
+    plan_id: str
     dry_run: bool
     can_apply: bool
     status: PlanStatus
@@ -328,6 +346,24 @@ class PlanResponse(BaseModel):
     stacks: list[PlanStack] = Field(default_factory=list)
     skipped: list[PlanSkipped] = Field(default_factory=list)
     issues: list[PlanIssue] = Field(default_factory=list)
+
+
+class ApplyPlanRequest(BaseModel):
+    plan_id: str = Field(min_length=1)
+    line_numbers: list[LineNumber] = Field(min_length=1)
+    allow_tag_updates: bool = False
+    confirmation: Literal["apply"]
+
+
+class ApplyJobResponse(BaseModel):
+    job_id: str
+    status: ApplyJobStatus
+    run_id: int | None = None
+    log_file: str = ""
+    started_at: str | None = None
+    finished_at: str | None = None
+    error: str = ""
+    selected_line_numbers: list[int] = Field(default_factory=list)
 
 
 def create_app(
@@ -347,12 +383,22 @@ def create_app(
     )
     app.state.web_settings = active_settings
     app.state.web_setup_claim = ""
+    app.state.web_apply_executor = ThreadPoolExecutor(max_workers=1)
+    app.state.web_apply_lock = Lock()
+    app.state.web_apply_jobs = {}
     if not active_settings.dev_no_auth:
         app.state.web_setup_claim = _prepare_web_auth_state(active_settings)
     app.add_exception_handler(
         RequestValidationError,
         _validation_exception_handler,
     )
+
+    def shutdown_apply_executor() -> None:
+        app.state.web_apply_executor.shutdown(wait=False, cancel_futures=True)
+
+    router_shutdown = getattr(getattr(app, "router", None), "on_shutdown", None)
+    if isinstance(router_shutdown, list):
+        router_shutdown.append(shutdown_apply_executor)
 
     @app.middleware("http")
     async def web_request_safety(
@@ -431,6 +477,19 @@ def create_app(
         api_create_plan,
         methods=["POST"],
         response_model=PlanResponse,
+    )
+    router.add_api_route(
+        "/plans/apply",
+        api_apply_plan,
+        methods=["POST"],
+        response_model=ApplyJobResponse,
+        status_code=202,
+    )
+    router.add_api_route(
+        "/apply-jobs/{job_id}",
+        api_apply_job,
+        methods=["GET"],
+        response_model=ApplyJobResponse,
     )
     router.add_api_route(
         "/runs",
@@ -687,13 +746,7 @@ def api_pending(request: Request) -> PendingResponse:
 def api_create_plan(payload: PlanRequest, request: Request) -> PlanResponse:
     settings = _settings(request)
     try:
-        plan = build_dry_run_plan(
-            settings.config,
-            line_numbers=payload.line_numbers,
-            allow_tag_updates=payload.allow_tag_updates,
-            host_docker_base=settings.host_docker_base,
-            environ=settings.command_env,
-        )
+        plan = _build_web_plan(settings, payload)
     except PlanInputError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     except PlanFileMissing as exc:
@@ -703,7 +756,46 @@ def api_create_plan(payload: PlanRequest, request: Request) -> PlanResponse:
             status_code=500,
             detail=f"could not create plan: {exc}",
         ) from exc
-    return _plan_response(plan)
+    return _plan_response(plan, settings)
+
+
+def api_apply_plan(payload: ApplyPlanRequest, request: Request) -> ApplyJobResponse:
+    settings = _settings(request)
+    if not settings.mutations_enabled:
+        raise HTTPException(status_code=403, detail="mutations are disabled")
+    if _active_apply_job_exists(request):
+        raise HTTPException(status_code=409, detail="an apply job is already running")
+    try:
+        plan = _build_web_plan(
+            settings,
+            PlanRequest(
+                line_numbers=payload.line_numbers,
+                allow_tag_updates=payload.allow_tag_updates,
+            ),
+        )
+    except (PlanInputError, PlanFileMissing) as exc:
+        raise HTTPException(status_code=409, detail="plan is stale") from exc
+    except OSError as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=f"could not revalidate plan: {exc}",
+        ) from exc
+
+    if not secrets.compare_digest(plan.plan_id, payload.plan_id):
+        raise HTTPException(status_code=409, detail="plan is stale")
+    if not _plan_can_apply(plan, settings):
+        raise HTTPException(status_code=409, detail="plan is not ready to apply")
+    return _submit_apply_job(request, settings, plan, payload)
+
+
+def api_apply_job(job_id: str, request: Request) -> ApplyJobResponse:
+    jobs: dict[str, WebApplyJob] = request.app.state.web_apply_jobs
+    apply_lock: Lock = request.app.state.web_apply_lock
+    with apply_lock:
+        job = jobs.get(job_id)
+        if job is None:
+            raise HTTPException(status_code=404, detail="apply job not found")
+        return _apply_job_response(job)
 
 
 def api_runs(request: Request) -> list[RunSummary]:
@@ -822,6 +914,189 @@ def _settings(request: Request) -> WebSettings:
     return request.app.state.web_settings
 
 
+def _build_web_plan(settings: WebSettings, payload: PlanRequest) -> DryRunPlan:
+    return build_dry_run_plan(
+        settings.config,
+        line_numbers=payload.line_numbers,
+        allow_tag_updates=payload.allow_tag_updates,
+        host_docker_base=settings.host_docker_base,
+        environ=settings.command_env,
+    )
+
+
+def _plan_can_apply(plan: DryRunPlan, settings: WebSettings) -> bool:
+    return (
+        settings.mutations_enabled
+        and plan.status == "ready"
+        and not any(issue.severity == "error" for issue in plan.issues)
+    )
+
+
+def _submit_apply_job(
+    request: Request,
+    settings: WebSettings,
+    plan: DryRunPlan,
+    payload: ApplyPlanRequest,
+) -> ApplyJobResponse:
+    apply_lock: Lock = request.app.state.web_apply_lock
+    jobs: dict[str, WebApplyJob] = request.app.state.web_apply_jobs
+    executor: ThreadPoolExecutor = request.app.state.web_apply_executor
+    with apply_lock:
+        if any(job.status in {"queued", "running"} for job in jobs.values()):
+            raise HTTPException(status_code=409, detail="an apply job is already running")
+        job = WebApplyJob(
+            id=secrets.token_urlsafe(18),
+            status="queued",
+            selected_line_numbers=tuple(plan.selected_line_numbers),
+        )
+        jobs[job.id] = job
+        response = _apply_job_response(job)
+        executor.submit(
+            _run_apply_job,
+            settings,
+            plan.plan_id,
+            tuple(plan.selected_line_numbers),
+            payload.allow_tag_updates,
+            jobs,
+            apply_lock,
+            job.id,
+        )
+        return response
+
+
+def _active_apply_job_exists(request: Request) -> bool:
+    apply_lock: Lock = request.app.state.web_apply_lock
+    jobs: dict[str, WebApplyJob] = request.app.state.web_apply_jobs
+    with apply_lock:
+        return any(job.status in {"queued", "running"} for job in jobs.values())
+
+
+def _run_apply_job(
+    settings: WebSettings,
+    plan_id: str,
+    line_numbers: tuple[int, ...],
+    allow_tag_updates: bool,
+    jobs: dict[str, WebApplyJob],
+    apply_lock: Lock,
+    job_id: str,
+) -> None:
+    _update_apply_job(
+        jobs,
+        apply_lock,
+        job_id,
+        status="running",
+        started_at=utc_timestamp(),
+    )
+    runner: UpdateFromWudRunner | None = None
+    try:
+        options = _apply_options(
+            settings,
+            line_numbers=line_numbers,
+            allow_tag_updates=allow_tag_updates,
+            plan_id=plan_id,
+        )
+        runner = UpdateFromWudRunner(
+            options,
+            environ=settings.command_env,
+            command_runner=CommandRunner(env=settings.command_env),
+        )
+        status_code = runner.run()
+        _update_apply_job(
+            jobs,
+            apply_lock,
+            job_id,
+            status="success" if status_code == 0 else "failure",
+            run_id=runner.audit_run_id,
+            log_file=str(runner.log_file),
+            finished_at=utc_timestamp(),
+            error="" if status_code == 0 else f"updater exited with status {status_code}",
+        )
+    except Exception as exc:
+        _update_apply_job(
+            jobs,
+            apply_lock,
+            job_id,
+            status="failure",
+            run_id=None if runner is None else runner.audit_run_id,
+            log_file="" if runner is None else str(runner.log_file),
+            finished_at=utc_timestamp(),
+            error=str(exc),
+        )
+
+
+def _update_apply_job(
+    jobs: dict[str, WebApplyJob],
+    apply_lock: Lock,
+    job_id: str,
+    **changes: object,
+) -> None:
+    with apply_lock:
+        job = jobs.get(job_id)
+        if job is None:
+            return
+        for key, value in changes.items():
+            setattr(job, key, value)
+
+
+def _apply_options(
+    settings: WebSettings,
+    *,
+    line_numbers: tuple[int, ...],
+    allow_tag_updates: bool,
+    plan_id: str,
+) -> UpdaterOptions:
+    line_spec = _line_spec(line_numbers)
+    metadata_json = json.dumps(
+        {
+            "plan_id": plan_id,
+            "selected_line_numbers": list(line_numbers),
+            "source": "webui",
+        },
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    config = settings.config
+    host_docker_base_label = (
+        None if settings.host_docker_base is None else str(settings.host_docker_base)
+    )
+    return UpdaterOptions(
+        docker_base=config.docker_base,
+        wud_file=config.wud_out_file,
+        log_dir=config.log_dir,
+        mode=config.update_mode,
+        max_wait=config.max_wait,
+        dry_run=False,
+        assume_yes=True,
+        allow_tag_updates=allow_tag_updates,
+        only_lines=line_spec,
+        remove_lines_before_run=line_spec,
+        db_path=config.db_path,
+        docker_base_label=str(config.docker_base),
+        host_docker_base=settings.host_docker_base,
+        host_docker_base_label=host_docker_base_label,
+        wud_file_label=str(config.wud_out_file),
+        log_dir_label=str(config.log_dir),
+        metadata_json=metadata_json,
+    )
+
+
+def _line_spec(line_numbers: tuple[int, ...]) -> str:
+    return ",".join(str(line_no) for line_no in sorted(set(line_numbers)))
+
+
+def _apply_job_response(job: WebApplyJob) -> ApplyJobResponse:
+    return ApplyJobResponse(
+        job_id=job.id,
+        status=job.status,
+        run_id=job.run_id,
+        log_file=job.log_file,
+        started_at=job.started_at,
+        finished_at=job.finished_at,
+        error=job.error,
+        selected_line_numbers=list(job.selected_line_numbers),
+    )
+
+
 def _pending_response(settings: WebSettings) -> PendingResponse:
     exists, parsed = _parse_pending_file(settings)
     items = [
@@ -847,8 +1122,10 @@ def _pending_response(settings: WebSettings) -> PendingResponse:
     )
 
 
-def _plan_response(plan: DryRunPlan) -> PlanResponse:
-    return PlanResponse.model_validate(asdict(plan))
+def _plan_response(plan: DryRunPlan, settings: WebSettings) -> PlanResponse:
+    payload = asdict(plan)
+    payload["can_apply"] = _plan_can_apply(plan, settings)
+    return PlanResponse.model_validate(payload)
 
 
 def _parse_pending_file(settings: WebSettings) -> tuple[bool, ParsedWudFile]:

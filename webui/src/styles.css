@@ -358,6 +358,26 @@ a {
   grid-template-columns: minmax(56px, auto) minmax(120px, 0.7fr) minmax(0, 2fr);
 }
 
+.confirmation-list {
+  display: grid;
+  gap: 10px;
+}
+
+.confirmation-list div {
+  display: grid;
+  grid-template-columns: 80px minmax(0, 1fr);
+  gap: 10px;
+}
+
+.confirmation-list span {
+  color: #65747a;
+}
+
+.confirmation-list strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
 .login-page {
   display: grid;
   min-height: 100vh;

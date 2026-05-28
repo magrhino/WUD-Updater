@@ -101,6 +101,7 @@ export interface PlanSkipped {
 }
 
 export interface PlanResponse {
+  plan_id: string;
   dry_run: boolean;
   can_apply: boolean;
   status: PlanStatus;
@@ -113,6 +114,19 @@ export interface PlanResponse {
   stacks: PlanStack[];
   skipped: PlanSkipped[];
   issues: PlanIssue[];
+}
+
+export type ApplyJobStatus = "queued" | "running" | "success" | "failure";
+
+export interface ApplyJobResponse {
+  job_id: string;
+  status: ApplyJobStatus;
+  run_id: number | null;
+  log_file: string;
+  started_at: string | null;
+  finished_at: string | null;
+  error: string;
+  selected_line_numbers: number[];
 }
 
 export interface StatusResponse {
@@ -296,6 +310,23 @@ export const webApi = {
         allow_tag_updates: allowTagUpdates,
       }),
     }),
+  applyPlan: (
+    planId: string,
+    lineNumbers: number[],
+    allowTagUpdates: boolean,
+    csrfToken: string,
+  ) =>
+    apiRequest<ApplyJobResponse>("/plans/apply", {
+      method: "POST",
+      headers: { "x-wud-csrf-token": csrfToken },
+      body: JSON.stringify({
+        plan_id: planId,
+        line_numbers: lineNumbers,
+        allow_tag_updates: allowTagUpdates,
+        confirmation: "apply",
+      }),
+    }),
+  applyJob: (jobId: string) => apiRequest<ApplyJobResponse>(`/apply-jobs/${jobId}`),
   runs: () => apiRequest<RunSummary[]>("/runs"),
   runDetail: (runId: number) => apiRequest<RunDetail>(`/runs/${runId}`),
   runLog: (runId: number, tailBytes = 262_144) =>

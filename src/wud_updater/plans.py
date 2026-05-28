@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
 
 from .command import CommandError, CommandRunner
@@ -128,6 +130,7 @@ class DryRunPlanSummary:
 
 @dataclass(frozen=True)
 class DryRunPlan:
+    plan_id: str
     dry_run: bool
     can_apply: bool
     status: str
@@ -207,7 +210,8 @@ class _PlanBuilder:
             skipped_count=len(skipped),
             issue_count=len(issues),
         )
-        return DryRunPlan(
+        plan = DryRunPlan(
+            plan_id="",
             dry_run=True,
             can_apply=False,
             status=status,
@@ -220,6 +224,16 @@ class _PlanBuilder:
             stacks=plan_stacks,
             skipped=tuple(skipped),
             issues=tuple(issues),
+        )
+        return replace(
+            plan,
+            plan_id=_plan_id(
+                plan,
+                config=self.config,
+                allow_tag_updates=self.allow_tag_updates,
+                host_docker_base=self.host_docker_base,
+                wud_file_hash=_file_sha256(self.config.wud_out_file),
+            ),
         )
 
     def _build_matches(
@@ -784,6 +798,45 @@ def _read_wud_file(path: Path) -> ParsedWudFile:
         return parse_wud_file(path)
     except FileNotFoundError as exc:
         raise PlanFileMissing(f"WUD file not found: {path}") from exc
+
+
+def _file_sha256(path: Path) -> str:
+    try:
+        data = path.read_bytes()
+    except FileNotFoundError as exc:
+        raise PlanFileMissing(f"WUD file not found: {path}") from exc
+    return hashlib.sha256(data).hexdigest()
+
+
+def _plan_id(
+    plan: DryRunPlan,
+    *,
+    config: UpdaterConfig,
+    allow_tag_updates: bool,
+    host_docker_base: Path | None,
+    wud_file_hash: str,
+) -> str:
+    plan_payload = asdict(plan)
+    plan_payload.pop("plan_id", None)
+    plan_payload.pop("can_apply", None)
+    payload = {
+        "version": 1,
+        "allow_tag_updates": allow_tag_updates,
+        "docker_base": str(config.docker_base),
+        "host_docker_base": "" if host_docker_base is None else str(host_docker_base),
+        "max_wait": config.max_wait,
+        "mode": config.update_mode,
+        "plan": plan_payload,
+        "source_file": str(config.wud_out_file),
+        "wud_file_sha256": wud_file_hash,
+    }
+    canonical = json.dumps(
+        payload,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=True,
+    )
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
 def _selected_line_numbers(line_numbers: Sequence[int]) -> tuple[int, ...]:
