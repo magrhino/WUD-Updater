@@ -918,8 +918,8 @@ def _plan_status(
         return "blocked"
     if not matches:
         return "empty"
-    if skipped and not matches:
-        return "empty"
+    if skipped:
+        return "blocked"
     return "ready"
 
 

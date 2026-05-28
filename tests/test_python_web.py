@@ -683,6 +683,62 @@ def test_plan_endpoint_skips_tag_updates_unless_allowed(tmp_path: Path) -> None:
     assert "repo/app:1.0 tag=2.0\n" == wud_file.read_text(encoding="utf-8")
 
 
+def test_apply_endpoint_rejects_mixed_plan_with_skipped_lines_without_mutation(
+    tmp_path: Path,
+) -> None:
+    fake_env, fake_root = _fake_docker_env(tmp_path)
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+            **fake_env,
+        },
+    )
+    wud_file = tmp_path / "state" / "images.todo"
+    original = "repo/app:latest\nrepo/worker:1.0 tag=2.0\n"
+    wud_file.write_text(original, encoding="utf-8")
+    _make_fake_stack(
+        tmp_path,
+        fake_root,
+        "stack",
+        [
+            ("app", "repo/app:latest", "cid-app"),
+            ("worker", "repo/worker:1.0", "cid-worker"),
+        ],
+    )
+    headers = _csrf_headers(client)
+
+    plan_response = client.post(
+        "/api/v1/plans",
+        json={"line_numbers": [1, 2]},
+        headers=headers,
+    )
+    plan = plan_response.json()
+    apply_response = client.post(
+        "/api/v1/plans/apply",
+        json={
+            "plan_id": plan["plan_id"],
+            "line_numbers": [1, 2],
+            "confirmation": "apply",
+        },
+        headers=headers,
+    )
+
+    assert plan_response.status_code == 200
+    assert plan["status"] == "blocked"
+    assert plan["can_apply"] is False
+    assert plan["summary"]["matched_target_count"] == 1
+    assert plan["skipped"][0]["line_no"] == 2
+    assert plan["skipped"][0]["reason"] == "tag-updates-disabled"
+    assert apply_response.status_code == 409
+    assert apply_response.json()["detail"] == "plan is not ready to apply"
+    assert wud_file.read_text(encoding="utf-8") == original
+    calls = _fake_docker_calls(fake_root)
+    assert " pull " not in calls
+    assert " up -d " not in calls
+
+
 def test_plan_endpoint_rejects_invalid_or_non_actionable_lines(
     tmp_path: Path,
 ) -> None:
