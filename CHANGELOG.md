@@ -4,6 +4,13 @@ All notable changes to WUD-Updater are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com) and versions follow
 [Semantic Versioning](https://semver.org).
 
+## [0.20.0](https://github.com/magrhino/WUD-Updater/compare/v0.19.0...v0.20.0) (2026-05-28)
+
+
+### Features
+
+* **webui:** Expose typed WebUI state operations ([#67](https://github.com/magrhino/WUD-Updater/issues/67)) ([3441090](https://github.com/magrhino/WUD-Updater/commit/34410908c4c15069e4c066317c12ff8ec9bb1346))
+
 ## [0.19.0](https://github.com/magrhino/WUD-Updater/compare/v0.18.0...v0.19.0) (2026-05-28)
 
 
