@@ -4,6 +4,13 @@ All notable changes to WUD-Updater are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com) and versions follow
 [Semantic Versioning](https://semver.org).
 
+## [0.16.0](https://github.com/magrhino/WUD-Updater/compare/v0.15.1...v0.16.0) (2026-05-28)
+
+
+### Features
+
+* **web:** [codex] add read-only WebUI API foundation ([#56](https://github.com/magrhino/WUD-Updater/issues/56)) ([285dabe](https://github.com/magrhino/WUD-Updater/commit/285dabe414db8ff1cb022abd33ab2c6839dc52d6))
+
 ## [0.15.1](https://github.com/magrhino/WUD-Updater/compare/v0.15.0...v0.15.1) (2026-05-25)
 
 
