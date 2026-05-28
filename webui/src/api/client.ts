@@ -238,6 +238,8 @@ export class ApiError extends Error {
   }
 }
 
+const API_PREFIX = "/api/v1";
+
 async function apiRequest<T>(
   path: string,
   options: RequestInit = {},
@@ -248,7 +250,7 @@ async function apiRequest<T>(
     headers.set("Content-Type", "application/json");
   }
 
-  const response = await fetch(`/api/v1${path}`, {
+  const response = await fetch(`${API_PREFIX}${path}`, {
     ...options,
     credentials: "include",
     headers,
@@ -310,6 +312,22 @@ export const webApi = {
         allow_tag_updates: allowTagUpdates,
       }),
     }),
+  createJob: (
+    planId: string,
+    lineNumbers: number[],
+    allowTagUpdates: boolean,
+    csrfToken: string,
+  ) =>
+    apiRequest<ApplyJobResponse>("/jobs", {
+      method: "POST",
+      headers: { "x-wud-csrf-token": csrfToken },
+      body: JSON.stringify({
+        plan_id: planId,
+        line_numbers: lineNumbers,
+        allow_tag_updates: allowTagUpdates,
+        confirmation: "apply",
+      }),
+    }),
   applyPlan: (
     planId: string,
     lineNumbers: number[],
@@ -326,7 +344,14 @@ export const webApi = {
         confirmation: "apply",
       }),
     }),
+  job: (jobId: string) =>
+    apiRequest<ApplyJobResponse>(`/jobs/${encodeURIComponent(jobId)}`),
   applyJob: (jobId: string) => apiRequest<ApplyJobResponse>(`/apply-jobs/${jobId}`),
+  openJobStream: (jobId: string) =>
+    new EventSource(
+      `${API_PREFIX}/jobs/${encodeURIComponent(jobId)}/stream`,
+      { withCredentials: true },
+    ),
   runs: () => apiRequest<RunSummary[]>("/runs"),
   runDetail: (runId: number) => apiRequest<RunDetail>(`/runs/${runId}`),
   runLog: (runId: number, tailBytes = 262_144) =>

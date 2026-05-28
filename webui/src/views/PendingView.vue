@@ -1,10 +1,16 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue";
-import { breakpointsTailwind, useBreakpoints, useIntervalFn } from "@vueuse/core";
+import { computed, onMounted, onUnmounted, ref } from "vue";
+import { breakpointsTailwind, useBreakpoints } from "@vueuse/core";
 import { Check, ClipboardList, Play, X } from "@lucide/vue";
 import type { DataTableColumns, DataTableRowKey } from "naive-ui";
 
-import type { PendingItem, PlanAction, PlanIssue } from "../api/client";
+import {
+  webApi,
+  type ApplyJobResponse,
+  type PendingItem,
+  type PlanAction,
+  type PlanIssue,
+} from "../api/client";
 import { useAuthStore } from "../stores/auth";
 import { useWebuiStore } from "../stores/webui";
 
@@ -15,7 +21,7 @@ const isMobile = breakpoints.smaller("md");
 const selectedLineNumbers = ref<number[]>([]);
 const allowTagUpdates = ref(false);
 const showApplyConfirm = ref(false);
-const pollingJobId = ref("");
+const jobEventSource = ref<EventSource | null>(null);
 const terminalJobStatuses = new Set(["success", "failure"]);
 
 const columns = computed<DataTableColumns<PendingItem>>(() => [
@@ -145,28 +151,51 @@ async function confirmApply(): Promise<void> {
   if (!webui.plan || applyDisabled.value) {
     return;
   }
-  const job = await webui.applyPlan(
+  const job = await webui.createJob(
     webui.plan.plan_id,
     webui.plan.selected_line_numbers,
     allowTagUpdates.value,
   );
-  pollingJobId.value = job.job_id;
-  resumeApplyPolling();
+  subscribeApplyJob(job.job_id);
   showApplyConfirm.value = false;
 }
 
-async function pollApplyJob(): Promise<void> {
-  if (!pollingJobId.value) {
-    pauseApplyPolling();
+function subscribeApplyJob(jobId: string): void {
+  closeJobStream();
+  const source = webApi.openJobStream(jobId);
+  jobEventSource.value = source;
+  source.addEventListener("job", (event) => {
+    void handleJobEvent(event as MessageEvent<string>);
+  });
+  source.onerror = () => {
+    if (webui.applyJob && terminalJobStatuses.has(webui.applyJob.status)) {
+      closeJobStream();
+      return;
+    }
+    void webui.loadApplyJob(jobId).catch(() => undefined);
+  };
+}
+
+async function handleJobEvent(event: MessageEvent<string>): Promise<void> {
+  let job: ApplyJobResponse;
+  try {
+    job = JSON.parse(event.data) as ApplyJobResponse;
+  } catch {
+    webui.setError("Job status stream returned invalid data.");
+    closeJobStream();
     return;
   }
-  await webui.loadApplyJob(pollingJobId.value);
-  if (!webui.applyJob || !terminalJobStatuses.has(webui.applyJob.status)) {
+  webui.setApplyJob(job);
+  if (!terminalJobStatuses.has(job.status)) {
     return;
   }
-  pollingJobId.value = "";
-  pauseApplyPolling();
+  closeJobStream();
   await Promise.all([webui.loadPending(), webui.loadRuns()]);
+}
+
+function closeJobStream(): void {
+  jobEventSource.value?.close();
+  jobEventSource.value = null;
 }
 
 function actionCommand(action: PlanAction): string {
@@ -188,14 +217,12 @@ function issueLabel(issue: PlanIssue): string {
   return target ? `${target}: ${issue.message}` : issue.message;
 }
 
-const { pause: pauseApplyPolling, resume: resumeApplyPolling } = useIntervalFn(
-  pollApplyJob,
-  1000,
-  { immediate: false },
-);
-
 onMounted(() => {
   void webui.loadPending();
+});
+
+onUnmounted(() => {
+  closeJobStream();
 });
 </script>
 

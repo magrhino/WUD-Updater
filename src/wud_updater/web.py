@@ -10,12 +10,12 @@ import secrets
 import sqlite3
 import sys
 from concurrent.futures import ThreadPoolExecutor
-from collections.abc import Awaitable, Callable, Mapping
+from collections.abc import Awaitable, Callable, Iterator, Mapping
 from contextlib import closing, contextmanager
 from dataclasses import asdict, dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from threading import Lock
+from threading import Condition, Lock
 from typing import Annotated, Any, Literal
 from urllib.parse import quote, urlencode, urlsplit
 
@@ -33,7 +33,7 @@ from fastapi import (
 )
 from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
@@ -76,6 +76,8 @@ PASSWORD_HASHER = PasswordHasher()
 LineNumber = Annotated[int, Field(ge=1)]
 PlanStatus = Literal["ready", "empty", "blocked"]
 ApplyJobStatus = Literal["queued", "running", "success", "failure"]
+TERMINAL_APPLY_JOB_STATUSES = frozenset({"success", "failure"})
+JOB_STREAM_HEARTBEAT_SECONDS = 15.0
 
 
 class WebConfigError(ValueError):
@@ -111,6 +113,7 @@ class WebApplyJob:
     id: str
     status: ApplyJobStatus
     selected_line_numbers: tuple[int, ...]
+    version: int = 0
     run_id: int | None = None
     log_file: str = ""
     started_at: str | None = None
@@ -386,6 +389,7 @@ def create_app(
     app.state.web_setup_claim = ""
     app.state.web_apply_executor = ThreadPoolExecutor(max_workers=1)
     app.state.web_apply_lock = Lock()
+    app.state.web_apply_condition = Condition(app.state.web_apply_lock)
     app.state.web_apply_jobs = {}
     if not active_settings.dev_no_auth:
         app.state.web_setup_claim = _prepare_web_auth_state(active_settings)
@@ -478,6 +482,24 @@ def create_app(
         api_create_plan,
         methods=["POST"],
         response_model=PlanResponse,
+    )
+    router.add_api_route(
+        "/jobs",
+        api_create_job,
+        methods=["POST"],
+        response_model=ApplyJobResponse,
+        status_code=202,
+    )
+    router.add_api_route(
+        "/jobs/{job_id}",
+        api_job,
+        methods=["GET"],
+        response_model=ApplyJobResponse,
+    )
+    router.add_api_route(
+        "/jobs/{job_id}/stream",
+        api_job_stream,
+        methods=["GET"],
     )
     router.add_api_route(
         "/plans/apply",
@@ -760,7 +782,7 @@ def api_create_plan(payload: PlanRequest, request: Request) -> PlanResponse:
     return _plan_response(plan, settings)
 
 
-def api_apply_plan(payload: ApplyPlanRequest, request: Request) -> ApplyJobResponse:
+def api_create_job(payload: ApplyPlanRequest, request: Request) -> ApplyJobResponse:
     settings = _settings(request)
     if not settings.mutations_enabled:
         raise HTTPException(status_code=403, detail="mutations are disabled")
@@ -794,7 +816,11 @@ def api_apply_plan(payload: ApplyPlanRequest, request: Request) -> ApplyJobRespo
         raise
 
 
-def api_apply_job(job_id: str, request: Request) -> ApplyJobResponse:
+def api_apply_plan(payload: ApplyPlanRequest, request: Request) -> ApplyJobResponse:
+    return api_create_job(payload, request)
+
+
+def api_job(job_id: str, request: Request) -> ApplyJobResponse:
     jobs: dict[str, WebApplyJob] = request.app.state.web_apply_jobs
     apply_lock: Lock = request.app.state.web_apply_lock
     with apply_lock:
@@ -802,6 +828,22 @@ def api_apply_job(job_id: str, request: Request) -> ApplyJobResponse:
         if job is None:
             raise HTTPException(status_code=404, detail="apply job not found")
         return _apply_job_response(job)
+
+
+def api_apply_job(job_id: str, request: Request) -> ApplyJobResponse:
+    return api_job(job_id, request)
+
+
+def api_job_stream(job_id: str, request: Request) -> StreamingResponse:
+    _require_apply_job(job_id, request)
+    return StreamingResponse(
+        _apply_job_stream(request, job_id),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 def api_runs(request: Request) -> list[RunSummary]:
@@ -958,10 +1000,10 @@ def _submit_apply_job(
     payload: ApplyPlanRequest,
     wud_lock: DirectoryLock,
 ) -> ApplyJobResponse:
-    apply_lock: Lock = request.app.state.web_apply_lock
+    apply_condition: Condition = request.app.state.web_apply_condition
     jobs: dict[str, WebApplyJob] = request.app.state.web_apply_jobs
     executor: ThreadPoolExecutor = request.app.state.web_apply_executor
-    with apply_lock:
+    with apply_condition:
         if any(job.status in {"queued", "running"} for job in jobs.values()):
             raise HTTPException(status_code=409, detail="an apply job is already running")
         job = WebApplyJob(
@@ -971,6 +1013,7 @@ def _submit_apply_job(
         )
         jobs[job.id] = job
         response = _apply_job_response(job)
+        apply_condition.notify_all()
         executor.submit(
             _run_apply_job,
             settings,
@@ -978,7 +1021,7 @@ def _submit_apply_job(
             tuple(plan.selected_line_numbers),
             payload.allow_tag_updates,
             jobs,
-            apply_lock,
+            apply_condition,
             job.id,
             wud_lock,
         )
@@ -992,19 +1035,61 @@ def _active_apply_job_exists(request: Request) -> bool:
         return any(job.status in {"queued", "running"} for job in jobs.values())
 
 
+def _require_apply_job(job_id: str, request: Request) -> WebApplyJob:
+    apply_lock: Lock = request.app.state.web_apply_lock
+    jobs: dict[str, WebApplyJob] = request.app.state.web_apply_jobs
+    with apply_lock:
+        job = jobs.get(job_id)
+        if job is None:
+            raise HTTPException(status_code=404, detail="apply job not found")
+        return job
+
+
+def _apply_job_stream(request: Request, job_id: str) -> Iterator[str]:
+    jobs: dict[str, WebApplyJob] = request.app.state.web_apply_jobs
+    apply_condition: Condition = request.app.state.web_apply_condition
+    last_version = -1
+
+    while True:
+        with apply_condition:
+            while True:
+                job = jobs.get(job_id)
+                if job is None:
+                    return
+                if job.version != last_version:
+                    response = _apply_job_response(job)
+                    version = job.version
+                    terminal = job.status in TERMINAL_APPLY_JOB_STATUSES
+                    break
+                if not apply_condition.wait(timeout=JOB_STREAM_HEARTBEAT_SECONDS):
+                    response = None
+                    version = last_version
+                    terminal = False
+                    break
+
+        if response is None:
+            yield ": heartbeat\n\n"
+            continue
+
+        yield _sse_job_event(response)
+        last_version = version
+        if terminal:
+            return
+
+
 def _run_apply_job(
     settings: WebSettings,
     plan_id: str,
     line_numbers: tuple[int, ...],
     allow_tag_updates: bool,
     jobs: dict[str, WebApplyJob],
-    apply_lock: Lock,
+    apply_condition: Condition,
     job_id: str,
     wud_lock: DirectoryLock,
 ) -> None:
     _update_apply_job(
         jobs,
-        apply_lock,
+        apply_condition,
         job_id,
         status="running",
         started_at=utc_timestamp(),
@@ -1027,7 +1112,7 @@ def _run_apply_job(
         status_code = runner.run()
         _update_apply_job(
             jobs,
-            apply_lock,
+            apply_condition,
             job_id,
             status="success" if status_code == 0 else "failure",
             run_id=runner.audit_run_id,
@@ -1038,7 +1123,7 @@ def _run_apply_job(
     except Exception as exc:
         _update_apply_job(
             jobs,
-            apply_lock,
+            apply_condition,
             job_id,
             status="failure",
             run_id=None if runner is None else runner.audit_run_id,
@@ -1052,16 +1137,18 @@ def _run_apply_job(
 
 def _update_apply_job(
     jobs: dict[str, WebApplyJob],
-    apply_lock: Lock,
+    apply_condition: Condition,
     job_id: str,
     **changes: object,
 ) -> None:
-    with apply_lock:
+    with apply_condition:
         job = jobs.get(job_id)
         if job is None:
             return
         for key, value in changes.items():
             setattr(job, key, value)
+        job.version += 1
+        apply_condition.notify_all()
 
 
 def _apply_options(
@@ -1121,6 +1208,15 @@ def _apply_job_response(job: WebApplyJob) -> ApplyJobResponse:
         error=job.error,
         selected_line_numbers=list(job.selected_line_numbers),
     )
+
+
+def _sse_job_event(job: ApplyJobResponse) -> str:
+    payload = json.dumps(
+        jsonable_encoder(job),
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    return f"event: job\ndata: {payload}\n\n"
 
 
 def _pending_response(settings: WebSettings) -> PendingResponse:

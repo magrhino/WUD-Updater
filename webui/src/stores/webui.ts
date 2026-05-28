@@ -70,14 +70,14 @@ export const useWebuiStore = defineStore("webui", () => {
     plan.value = null;
   }
 
-  async function applyPlan(
+  async function createJob(
     planId: string,
     lineNumbers: number[],
     allowTagUpdates: boolean,
   ): Promise<ApplyJobResponse> {
     const auth = useAuthStore();
     await loadWithState(async () => {
-      applyJob.value = await webApi.applyPlan(
+      applyJob.value = await webApi.createJob(
         planId,
         lineNumbers,
         allowTagUpdates,
@@ -90,9 +90,25 @@ export const useWebuiStore = defineStore("webui", () => {
     return applyJob.value;
   }
 
+  async function applyPlan(
+    planId: string,
+    lineNumbers: number[],
+    allowTagUpdates: boolean,
+  ): Promise<ApplyJobResponse> {
+    return createJob(planId, lineNumbers, allowTagUpdates);
+  }
+
+  function setApplyJob(job: ApplyJobResponse): void {
+    applyJob.value = job;
+  }
+
+  function setError(message: string): void {
+    error.value = message;
+  }
+
   async function loadApplyJob(jobId: string): Promise<void> {
     try {
-      applyJob.value = await webApi.applyJob(jobId);
+      applyJob.value = await webApi.job(jobId);
     } catch (exc) {
       error.value = errorMessage(exc);
       throw exc;
@@ -151,7 +167,10 @@ export const useWebuiStore = defineStore("webui", () => {
     loadPending,
     createPlan,
     clearPlan,
+    createJob,
     applyPlan,
+    setApplyJob,
+    setError,
     loadApplyJob,
     loadRuns,
     loadRunDetail,

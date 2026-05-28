@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import time
 from concurrent.futures import ThreadPoolExecutor
@@ -181,13 +182,28 @@ def _fake_docker_calls(fake_root: Path) -> str:
 def _wait_apply_job(client: TestClient, job_id: str) -> dict[str, object]:
     deadline = time.time() + 5
     while time.time() < deadline:
-        response = client.get(f"/api/v1/apply-jobs/{job_id}")
+        response = client.get(f"/api/v1/jobs/{job_id}")
         assert response.status_code == 200
         body = response.json()
         if body["status"] not in {"queued", "running"}:
             return body
         time.sleep(0.02)
     raise AssertionError(f"apply job {job_id} did not finish")
+
+
+def _sse_job_events(content: str) -> list[dict[str, object]]:
+    events: list[dict[str, object]] = []
+    for block in content.split("\n\n"):
+        event_name = ""
+        data: list[str] = []
+        for line in block.splitlines():
+            if line.startswith("event: "):
+                event_name = line.removeprefix("event: ")
+            elif line.startswith("data: "):
+                data.append(line.removeprefix("data: "))
+        if event_name == "job" and data:
+            events.append(json.loads("\n".join(data)))
+    return events
 
 
 def test_api_rejects_unauthenticated_requests_without_dev_bypass(
@@ -717,7 +733,7 @@ def test_apply_endpoint_rejects_mixed_plan_with_skipped_lines_without_mutation(
     )
     plan = plan_response.json()
     apply_response = client.post(
-        "/api/v1/plans/apply",
+        "/api/v1/jobs",
         json={
             "plan_id": plan["plan_id"],
             "line_numbers": [1, 2],
@@ -782,7 +798,7 @@ def test_apply_endpoint_rejects_unauthenticated_requests(tmp_path: Path) -> None
     client = _client(tmp_path, {"WUD_WEB_MUTATIONS_ENABLED": "true"})
 
     response = client.post(
-        "/api/v1/plans/apply",
+        "/api/v1/jobs",
         json={
             "plan_id": "plan",
             "line_numbers": [1],
@@ -802,7 +818,7 @@ def test_apply_endpoint_requires_csrf_origin_headers(tmp_path: Path) -> None:
     )
 
     missing = client.post(
-        "/api/v1/plans/apply",
+        "/api/v1/jobs",
         json={
             "plan_id": "plan",
             "line_numbers": [1],
@@ -811,7 +827,7 @@ def test_apply_endpoint_requires_csrf_origin_headers(tmp_path: Path) -> None:
     )
     csrf_response = client.get("/api/v1/auth/csrf")
     bad_origin = client.post(
-        "/api/v1/plans/apply",
+        "/api/v1/jobs",
         json={
             "plan_id": "plan",
             "line_numbers": [1],
@@ -848,7 +864,7 @@ def test_apply_endpoint_rejects_read_only_mode(tmp_path: Path) -> None:
     ).json()
 
     response = client.post(
-        "/api/v1/plans/apply",
+        "/api/v1/jobs",
         json={
             "plan_id": plan["plan_id"],
             "line_numbers": [1],
@@ -890,7 +906,7 @@ def test_apply_endpoint_rejects_stale_plan_without_mutation(tmp_path: Path) -> N
     wud_file.write_text("repo/app:latest\n# changed\n", encoding="utf-8")
 
     response = client.post(
-        "/api/v1/plans/apply",
+        "/api/v1/jobs",
         json={
             "plan_id": plan["plan_id"],
             "line_numbers": [1],
@@ -931,7 +947,7 @@ def test_apply_endpoint_rejects_empty_or_blocked_plan(tmp_path: Path) -> None:
     ).json()
 
     response = client.post(
-        "/api/v1/plans/apply",
+        "/api/v1/jobs",
         json={
             "plan_id": plan["plan_id"],
             "line_numbers": [1],
@@ -985,7 +1001,7 @@ def test_apply_endpoint_runs_existing_updater_and_records_audit(
     ).json()
 
     apply_response = client.post(
-        "/api/v1/plans/apply",
+        "/api/v1/jobs",
         json={
             "plan_id": plan["plan_id"],
             "line_numbers": [1],
@@ -1014,6 +1030,165 @@ def test_apply_endpoint_runs_existing_updater_and_records_audit(
     assert detail["pending_updates"][0]["line_no"] == 1
     assert detail["pending_updates"][0]["status"] == "resolved"
     assert not lock_dir_for(wud_file).exists()
+
+
+def test_legacy_apply_routes_remain_compatible(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    fake_env, fake_root = _fake_docker_env(tmp_path)
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+            **fake_env,
+        },
+    )
+    wud_file = tmp_path / "state" / "images.todo"
+    wud_file.write_text("repo/app:latest\n", encoding="utf-8")
+    _make_fake_stack(
+        tmp_path,
+        fake_root,
+        "stack",
+        [("app", "repo/app:latest", "cid-app")],
+    )
+
+    monkeypatch.setattr(web_module.UpdateFromWudRunner, "run", lambda _runner: 0)
+    headers = _csrf_headers(client)
+    plan = client.post(
+        "/api/v1/plans",
+        json={"line_numbers": [1]},
+        headers=headers,
+    ).json()
+
+    apply_response = client.post(
+        "/api/v1/plans/apply",
+        json={
+            "plan_id": plan["plan_id"],
+            "line_numbers": [1],
+            "confirmation": "apply",
+        },
+        headers=headers,
+    )
+    job = _wait_apply_job(client, apply_response.json()["job_id"])
+    legacy_status = client.get(f"/api/v1/apply-jobs/{job['job_id']}")
+
+    assert apply_response.status_code == 202
+    assert job["status"] == "success"
+    assert legacy_status.status_code == 200
+    assert legacy_status.json()["job_id"] == job["job_id"]
+    calls = _fake_docker_calls(fake_root)
+    assert " pull " not in calls
+    assert " up -d " not in calls
+
+
+def test_job_stream_returns_404_for_missing_job(tmp_path: Path) -> None:
+    client = _client(tmp_path, {"WUD_WEB_DEV_NO_AUTH": "true"})
+
+    response = client.get("/api/v1/jobs/missing/stream")
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "apply job not found"
+
+
+def test_job_stream_emits_initial_and_terminal_status(tmp_path: Path) -> None:
+    fake_env, fake_root = _fake_docker_env(tmp_path)
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+            **fake_env,
+        },
+    )
+    wud_file = tmp_path / "state" / "images.todo"
+    wud_file.write_text("repo/app:latest\n", encoding="utf-8")
+    _make_fake_stack(
+        tmp_path,
+        fake_root,
+        "stack",
+        [("app", "repo/app:latest", "cid-app")],
+    )
+    hook = fake_root / "post-pull-hook"
+    hook.write_text("#!/usr/bin/env bash\nsleep 0.1\n", encoding="utf-8")
+    hook.chmod(0o755)
+    headers = _csrf_headers(client)
+    plan = client.post(
+        "/api/v1/plans",
+        json={"line_numbers": [1]},
+        headers=headers,
+    ).json()
+    apply_response = client.post(
+        "/api/v1/jobs",
+        json={
+            "plan_id": plan["plan_id"],
+            "line_numbers": [1],
+            "confirmation": "apply",
+        },
+        headers=headers,
+    )
+
+    with client.stream(
+        "GET",
+        f"/api/v1/jobs/{apply_response.json()['job_id']}/stream",
+    ) as response:
+        content = response.read().decode("utf-8")
+
+    events = _sse_job_events(content)
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/event-stream")
+    assert len(events) >= 2
+    assert events[0]["job_id"] == apply_response.json()["job_id"]
+    assert events[0]["status"] in {"queued", "running"}
+    assert events[-1]["status"] == "success"
+    assert events[-1]["selected_line_numbers"] == [1]
+
+
+def test_job_status_get_and_stream_do_not_mutate(tmp_path: Path) -> None:
+    fake_env, fake_root = _fake_docker_env(tmp_path)
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+            **fake_env,
+        },
+    )
+    wud_file = tmp_path / "state" / "images.todo"
+    wud_file.write_text("repo/app:latest\n", encoding="utf-8")
+    _make_fake_stack(
+        tmp_path,
+        fake_root,
+        "stack",
+        [("app", "repo/app:latest", "cid-app")],
+    )
+    headers = _csrf_headers(client)
+    plan = client.post(
+        "/api/v1/plans",
+        json={"line_numbers": [1]},
+        headers=headers,
+    ).json()
+    apply_response = client.post(
+        "/api/v1/jobs",
+        json={
+            "plan_id": plan["plan_id"],
+            "line_numbers": [1],
+            "confirmation": "apply",
+        },
+        headers=headers,
+    )
+    job = _wait_apply_job(client, apply_response.json()["job_id"])
+    (fake_root / "calls.log").write_text("", encoding="utf-8")
+
+    status_response = client.get(f"/api/v1/jobs/{job['job_id']}")
+    stream_response = client.get(f"/api/v1/jobs/{job['job_id']}/stream")
+
+    assert status_response.status_code == 200
+    assert status_response.json()["status"] == "success"
+    assert stream_response.status_code == 200
+    assert _sse_job_events(stream_response.text)[-1]["status"] == "success"
+    assert _fake_docker_calls(fake_root) == ""
 
 
 def test_apply_endpoint_holds_wud_lock_for_worker_handoff(
@@ -1062,7 +1237,7 @@ def test_apply_endpoint_holds_wud_lock_for_worker_handoff(
     ).json()
 
     apply_response = client.post(
-        "/api/v1/plans/apply",
+        "/api/v1/jobs",
         json={
             "plan_id": plan["plan_id"],
             "line_numbers": [1],
@@ -1120,7 +1295,7 @@ def test_apply_endpoint_releases_wud_lock_when_runner_raises(
     ).json()
 
     apply_response = client.post(
-        "/api/v1/plans/apply",
+        "/api/v1/jobs",
         json={
             "plan_id": plan["plan_id"],
             "line_numbers": [1],
@@ -1170,7 +1345,7 @@ def test_apply_endpoint_rejects_existing_wud_lock_without_queueing_job(
     external_lock.acquire()
     try:
         response = client.post(
-            "/api/v1/plans/apply",
+            "/api/v1/jobs",
             json={
                 "plan_id": plan["plan_id"],
                 "line_numbers": [1],
@@ -1222,8 +1397,8 @@ def test_apply_endpoint_rejects_concurrent_jobs(tmp_path: Path) -> None:
         "confirmation": "apply",
     }
 
-    first = client.post("/api/v1/plans/apply", json=payload, headers=headers)
-    second = client.post("/api/v1/plans/apply", json=payload, headers=headers)
+    first = client.post("/api/v1/jobs", json=payload, headers=headers)
+    second = client.post("/api/v1/jobs", json=payload, headers=headers)
     job = _wait_apply_job(client, first.json()["job_id"])
 
     assert first.status_code == 202
@@ -1262,7 +1437,7 @@ def test_apply_endpoint_reports_updater_failure_and_preserves_line(
     ).json()
 
     apply_response = client.post(
-        "/api/v1/plans/apply",
+        "/api/v1/jobs",
         json={
             "plan_id": plan["plan_id"],
             "line_numbers": [1],
