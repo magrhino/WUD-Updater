@@ -14,9 +14,15 @@ from wud_updater.db import (
 from wud_updater.web import create_app
 
 
-def _client(tmp_path: Path, env: dict[str, str] | None = None) -> TestClient:
+def _web_env(
+    tmp_path: Path,
+    env: dict[str, str] | None = None,
+    *,
+    create_root: bool = True,
+) -> dict[str, str]:
     root = tmp_path / "state"
-    root.mkdir()
+    if create_root:
+        root.mkdir()
     wud_file = root / "images.todo"
     db_path = root / "wud.sqlite"
     values = {
@@ -28,6 +34,16 @@ def _client(tmp_path: Path, env: dict[str, str] | None = None) -> TestClient:
     }
     if env:
         values.update(env)
+    return values
+
+
+def _client(
+    tmp_path: Path,
+    env: dict[str, str] | None = None,
+    *,
+    create_root: bool = True,
+) -> TestClient:
+    values = _web_env(tmp_path, env, create_root=create_root)
     return TestClient(create_app(environ=values))
 
 
@@ -77,6 +93,26 @@ def test_api_allows_dev_auth_bypass_only_when_explicitly_enabled(
     assert response.json()["dev_auth_bypass"] is True
 
 
+def test_status_reports_missing_database_without_creating_it(tmp_path: Path) -> None:
+    root = tmp_path / "state"
+    db_path = root / "wud.sqlite"
+    client = _client(
+        tmp_path,
+        {"WUD_WEB_DEV_NO_AUTH": "true"},
+        create_root=False,
+    )
+
+    response = client.get("/api/v1/status")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["db_ready"] is False
+    assert body["ok"] is False
+    assert body["warnings"] == [f"database file does not exist: {db_path}"]
+    assert not root.exists()
+    assert not db_path.exists()
+
+
 def test_pending_endpoint_reads_wud_file_without_mutation(tmp_path: Path) -> None:
     wud_file = tmp_path / "state" / "images.todo"
     client = _client(tmp_path, {"WUD_WEB_DEV_NO_AUTH": "true"})
@@ -92,6 +128,44 @@ def test_pending_endpoint_reads_wud_file_without_mutation(tmp_path: Path) -> Non
     assert body["items"][0]["image"] == "nginx:1.25"
     assert body["items"][0]["desired_tag"] == "1.26"
     assert wud_file.read_text(encoding="utf-8") == original
+
+
+def test_runs_list_returns_empty_without_creating_missing_database(
+    tmp_path: Path,
+) -> None:
+    root = tmp_path / "state"
+    db_path = root / "wud.sqlite"
+    client = _client(
+        tmp_path,
+        {"WUD_WEB_DEV_NO_AUTH": "true"},
+        create_root=False,
+    )
+
+    response = client.get("/api/v1/runs")
+
+    assert response.status_code == 200
+    assert response.json() == []
+    assert not root.exists()
+    assert not db_path.exists()
+
+
+def test_run_detail_returns_not_found_without_creating_missing_database(
+    tmp_path: Path,
+) -> None:
+    root = tmp_path / "state"
+    db_path = root / "wud.sqlite"
+    client = _client(
+        tmp_path,
+        {"WUD_WEB_DEV_NO_AUTH": "true"},
+        create_root=False,
+    )
+
+    response = client.get("/api/v1/runs/1")
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "run not found"
+    assert not root.exists()
+    assert not db_path.exists()
 
 
 def test_runs_endpoints_read_existing_sqlite_state(tmp_path: Path) -> None:

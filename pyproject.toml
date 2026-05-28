@@ -10,6 +10,7 @@ readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
     "fastapi>=0.115,<1",
+    "pydantic>=2,<3",
     "rich>=13.7,<15",
     "ruamel.yaml>=0.18.13,<0.20",
     "uvicorn>=0.32,<1",
