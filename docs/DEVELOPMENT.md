@@ -44,13 +44,63 @@ Container checks require Docker:
 
 ```bash
 docker compose -f docs/examples/docker-compose.example.yml config
+docker compose -f docs/examples/docker-compose.webui.yml config
 docker compose -f docs/examples/docker-compose.hardened.yml config
+docker compose -f docs/examples/docker-compose.truenas.yml config
 docker compose -f docs/examples/docker-compose.build.yml config
 tests/container-build.sh
 ```
 
 The deployment compose example uses the published GHCR image. The build compose
 artifact keeps the repository-local image build path used by smoke tests.
+
+## WebUI Development
+
+Install the frontend dependencies before running the Vue/Vite checks:
+
+```bash
+npm --prefix webui ci
+npm --prefix webui run typecheck
+npm --prefix webui run build
+```
+
+For the local demo server, seed disposable state and run both the FastAPI
+backend and Vite frontend through the checked-in wrapper:
+
+```bash
+make webui-demo-state
+make webui-dev
+```
+
+`make webui-dev` starts the backend on `127.0.0.1:8080`, the frontend on
+`127.0.0.1:5173`, sets `WUD_WEB_DEV_NO_AUTH=true`, and allows the Vite origin
+for CSRF/Origin checks. The demo server uses `local-dev/` for disposable Docker
+fixtures, WUD output, logs, and `WUD_DB_PATH`.
+
+Useful WebUI development variables:
+
+| Variable | Purpose |
+|---|---|
+| `WUD_DB_PATH` | SQLite database path for WebUI setup state, sessions, run history, audit records, and managed tag exclusions. |
+| `WUD_WEB_MUTATIONS_ENABLED` | Set to `true` only when testing browser-initiated plan/apply flows; default is read-only. |
+| `WUD_WEB_DEV_BACKEND_PORT` | Backend port used by `webui/scripts/dev-server.mjs` and the Vite proxy; default `8080`. |
+| `WUD_WEB_DEV_FRONTEND_PORT` | Vite frontend port used by the dev-server wrapper; default `5173`. |
+| `VITE_WUD_BACKEND_URL` | Backend URL exported by the dev-server wrapper for frontend experiments; the checked-in SPA currently uses same-origin `/api` requests through the Vite proxy. |
+| `WUD_WEB_HOST` / `WUD_WEB_PORT` | Host and port used when running `wud-updater web` manually. |
+| `WUD_WEB_STATIC_DIR` | Optional built SPA directory override for manual backend testing. |
+| `WUD_WEB_DEV_NO_AUTH` | Development-only auth bypass used by tests and the local demo wrapper. |
+| `WUD_WEB_ALLOWED_ORIGINS` | Extra allowed origins for login, logout, setup, and mutation CSRF/Origin checks. |
+| `WUD_WEB_PUBLIC_ORIGIN` | Browser-visible origin used for setup links, reverse proxies, and secure-cookie auto-detection. |
+| `WUD_WEB_ALLOWED_HOSTS` | Accepted HTTP `Host` names when exposing the WebUI outside loopback. |
+| `WUD_WEB_TRUSTED_PROXIES` | Proxy IP/CIDR entries whose forwarded headers are trusted. |
+| `WUD_WEB_SECURE_COOKIES` | Cookie Secure mode: `auto`, `true`, or `false`; keep `auto` outside local HTTP tests. |
+
+For manual backend-only testing with a built SPA:
+
+```bash
+npm --prefix webui run build
+wud-updater web --host 127.0.0.1 --port 8080 --static-dir webui/dist
+```
 
 ## CI
 

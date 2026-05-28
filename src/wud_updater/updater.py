@@ -109,6 +109,7 @@ class UpdaterOptions:
     host_docker_base_label: str | None = None
     wud_file_label: str | None = None
     log_dir_label: str | None = None
+    metadata_json: str = "{}"
 
 
 @dataclass(frozen=True)
@@ -2099,6 +2100,7 @@ class UpdateFromWudRunner:
                 mode=self.options.mode,
                 wud_file=self.options.wud_file_label or str(self.options.wud_file),
                 log_file=str(self.log_file),
+                metadata_json=self.options.metadata_json,
             )
             for target in parsed.targets:
                 insert_pending_update(

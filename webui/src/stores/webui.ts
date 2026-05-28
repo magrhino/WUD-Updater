@@ -3,6 +3,8 @@ import { defineStore } from "pinia";
 
 import {
   ApiError,
+  type ApplyJobResponse,
+  type PlanResponse,
   type PendingResponse,
   type RunDetail,
   type RunLogResponse,
@@ -10,10 +12,13 @@ import {
   type StatusResponse,
   webApi,
 } from "../api/client";
+import { useAuthStore } from "./auth";
 
 export const useWebuiStore = defineStore("webui", () => {
   const status = ref<StatusResponse | null>(null);
   const pending = ref<PendingResponse | null>(null);
+  const plan = ref<PlanResponse | null>(null);
+  const applyJob = ref<ApplyJobResponse | null>(null);
   const runs = ref<RunSummary[]>([]);
   const runDetails = ref<Record<number, RunDetail>>({});
   const runLogs = ref<Record<number, RunLogResponse>>({});
@@ -40,8 +45,58 @@ export const useWebuiStore = defineStore("webui", () => {
 
   async function loadPending(): Promise<void> {
     await loadWithState(async () => {
+      plan.value = null;
       pending.value = await webApi.pending();
     });
+  }
+
+  async function createPlan(
+    lineNumbers: number[],
+    allowTagUpdates: boolean,
+  ): Promise<void> {
+    const auth = useAuthStore();
+    await loadWithState(async () => {
+      plan.value = null;
+      applyJob.value = null;
+      plan.value = await webApi.createPlan(
+        lineNumbers,
+        allowTagUpdates,
+        await auth.ensureCsrf(),
+      );
+    });
+  }
+
+  function clearPlan(): void {
+    plan.value = null;
+  }
+
+  async function applyPlan(
+    planId: string,
+    lineNumbers: number[],
+    allowTagUpdates: boolean,
+  ): Promise<ApplyJobResponse> {
+    const auth = useAuthStore();
+    await loadWithState(async () => {
+      applyJob.value = await webApi.applyPlan(
+        planId,
+        lineNumbers,
+        allowTagUpdates,
+        await auth.ensureCsrf(),
+      );
+    });
+    if (applyJob.value === null) {
+      throw new Error("Apply job was not created");
+    }
+    return applyJob.value;
+  }
+
+  async function loadApplyJob(jobId: string): Promise<void> {
+    try {
+      applyJob.value = await webApi.applyJob(jobId);
+    } catch (exc) {
+      error.value = errorMessage(exc);
+      throw exc;
+    }
   }
 
   async function loadRuns(): Promise<void> {
@@ -84,6 +139,8 @@ export const useWebuiStore = defineStore("webui", () => {
   return {
     status,
     pending,
+    plan,
+    applyJob,
     runs,
     runDetails,
     runLogs,
@@ -92,6 +149,10 @@ export const useWebuiStore = defineStore("webui", () => {
     warnings,
     loadDashboard,
     loadPending,
+    createPlan,
+    clearPlan,
+    applyPlan,
+    loadApplyJob,
     loadRuns,
     loadRunDetail,
     loadRunLog,

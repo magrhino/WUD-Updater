@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -17,6 +18,7 @@ from wud_updater.db import (
     insert_update_event,
     insert_update_run,
 )
+from wud_updater.locks import DirectoryLock, WudLockError, lock_dir_for
 from wud_updater.web import create_app
 
 
@@ -102,6 +104,90 @@ def _insert_run(tmp_path: Path, *, log_file: str = "") -> int:
             log_file=log_file,
             metadata_json='{"source":"test"}',
         )
+
+
+def _fake_docker_env(tmp_path: Path) -> tuple[dict[str, str], Path]:
+    fake_root = tmp_path / "fake-docker"
+    for path in (
+        fake_root / "images",
+        fake_root / "manifests",
+        fake_root / "stacks",
+        fake_root / "containers",
+    ):
+        path.mkdir(parents=True, exist_ok=True)
+    (fake_root / "containers.tsv").write_text("", encoding="utf-8")
+    (fake_root / "calls.log").write_text("", encoding="utf-8")
+    repo_root = Path(__file__).resolve().parents[1]
+    return (
+        {
+            "FAKE_DOCKER_ROOT": str(fake_root),
+            "PATH": f"{repo_root / 'tests' / 'fakes'}:{os.environ['PATH']}",
+        },
+        fake_root,
+    )
+
+
+def _make_fake_stack(
+    tmp_path: Path,
+    fake_root: Path,
+    stack_id: str,
+    services: list[tuple[str, str, str | None]],
+) -> Path:
+    directory = tmp_path / "docker" / stack_id
+    directory.mkdir(parents=True, exist_ok=True)
+    (directory / ".fake-docker-id").write_text(f"{stack_id}\n", encoding="utf-8")
+    stack_state = fake_root / "stacks" / stack_id
+    stack_state.mkdir(parents=True, exist_ok=True)
+
+    compose_lines = ["services:\n"]
+    service_rows: list[str] = []
+    image_rows: list[str] = []
+    cids: list[str] = []
+    for service, image, cid in services:
+        compose_lines.extend([f"  {service}:\n", f"    image: {image}\n"])
+        service_rows.append(f"{service}\n")
+        image_rows.append(f"{image}\n")
+        with (stack_state / "service-images.tsv").open("a", encoding="utf-8") as file:
+            file.write(f"{service}\t{image}\n")
+        if cid is None:
+            continue
+        cids.append(cid)
+        (stack_state / f"cids-{service}.txt").write_text(
+            f"{cid}\n",
+            encoding="utf-8",
+        )
+        (fake_root / "containers" / f"{cid}.summary").write_text(
+            f"/{cid}|running|healthy|0|0\n",
+            encoding="utf-8",
+        )
+
+    (directory / "docker-compose.yml").write_text(
+        "".join(compose_lines),
+        encoding="utf-8",
+    )
+    (stack_state / "services.txt").write_text("".join(service_rows), encoding="utf-8")
+    (stack_state / "images.txt").write_text("".join(image_rows), encoding="utf-8")
+    (stack_state / "cids.txt").write_text(
+        "".join(f"{cid}\n" for cid in cids),
+        encoding="utf-8",
+    )
+    return directory
+
+
+def _fake_docker_calls(fake_root: Path) -> str:
+    return (fake_root / "calls.log").read_text(encoding="utf-8")
+
+
+def _wait_apply_job(client: TestClient, job_id: str) -> dict[str, object]:
+    deadline = time.time() + 5
+    while time.time() < deadline:
+        response = client.get(f"/api/v1/apply-jobs/{job_id}")
+        assert response.status_code == 200
+        body = response.json()
+        if body["status"] not in {"queued", "running"}:
+            return body
+        time.sleep(0.02)
+    raise AssertionError(f"apply job {job_id} did not finish")
 
 
 def test_api_rejects_unauthenticated_requests_without_dev_bypass(
@@ -481,6 +567,719 @@ def test_pending_endpoint_reads_wud_file_without_mutation(tmp_path: Path) -> Non
     assert body["items"][0]["image"] == "nginx:1.25"
     assert body["items"][0]["desired_tag"] == "1.26"
     assert wud_file.read_text(encoding="utf-8") == original
+
+
+def test_plan_endpoint_rejects_unauthenticated_requests(tmp_path: Path) -> None:
+    client = _client(tmp_path)
+
+    response = client.post(
+        "/api/v1/plans",
+        json={"line_numbers": [1]},
+        headers=_csrf_headers(client),
+    )
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == "setup required"
+
+
+def test_plan_endpoint_requires_csrf_origin_headers(tmp_path: Path) -> None:
+    client = _client(tmp_path, {"WUD_WEB_DEV_NO_AUTH": "true"})
+
+    response = client.post("/api/v1/plans", json={"line_numbers": [1]})
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == "origin header is required"
+
+
+def test_plan_endpoint_returns_selected_dry_run_without_mutation(
+    tmp_path: Path,
+) -> None:
+    fake_env, fake_root = _fake_docker_env(tmp_path)
+    client = _client(tmp_path, {"WUD_WEB_DEV_NO_AUTH": "true", **fake_env})
+    wud_file = tmp_path / "state" / "images.todo"
+    db_path = tmp_path / "state" / "wud.sqlite"
+    log_dir = tmp_path / "state" / "logs"
+    original = "repo/app:latest\nrepo/db:latest\n"
+    wud_file.write_text(original, encoding="utf-8")
+    compose_dir = _make_fake_stack(
+        tmp_path,
+        fake_root,
+        "stack",
+        [
+            ("app", "repo/app:latest", "cid-app"),
+            ("db", "repo/db:latest", "cid-db"),
+        ],
+    )
+    compose_before = (compose_dir / "docker-compose.yml").read_text(encoding="utf-8")
+
+    response = client.post(
+        "/api/v1/plans",
+        json={"line_numbers": [2]},
+        headers=_csrf_headers(client),
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["dry_run"] is True
+    assert body["can_apply"] is False
+    assert body["plan_id"]
+    assert body["status"] == "ready"
+    assert body["selected_line_numbers"] == [2]
+    assert body["summary"]["target_count"] == 1
+    assert body["summary"]["matched_target_count"] == 1
+    assert [target["line_no"] for target in body["targets"]] == [2]
+    assert body["stacks"][0]["name"] == "stack"
+    assert body["stacks"][0]["services"] == ["db"]
+    assert body["stacks"][0]["lines"][0]["service"] == "db"
+    assert body["stacks"][0]["actions"][0]["kind"] == "pull"
+    assert body["stacks"][0]["actions"][0]["args"][-1] == "db"
+    assert body["issues"] == []
+    assert wud_file.read_text(encoding="utf-8") == original
+    assert (compose_dir / "docker-compose.yml").read_text(encoding="utf-8") == compose_before
+    assert not db_path.exists()
+    assert not log_dir.exists()
+    calls = _fake_docker_calls(fake_root)
+    assert " pull " not in calls
+    assert " up -d " not in calls
+
+
+def test_plan_endpoint_skips_tag_updates_unless_allowed(tmp_path: Path) -> None:
+    fake_env, fake_root = _fake_docker_env(tmp_path)
+    client = _client(tmp_path, {"WUD_WEB_DEV_NO_AUTH": "true", **fake_env})
+    wud_file = tmp_path / "state" / "images.todo"
+    wud_file.write_text("repo/app:1.0 tag=2.0\n", encoding="utf-8")
+    compose_dir = _make_fake_stack(
+        tmp_path,
+        fake_root,
+        "stack",
+        [("app", "repo/app:1.0", "cid-app")],
+    )
+    compose_before = (compose_dir / "docker-compose.yml").read_text(encoding="utf-8")
+    headers = _csrf_headers(client)
+
+    skipped = client.post(
+        "/api/v1/plans",
+        json={"line_numbers": [1]},
+        headers=headers,
+    )
+    allowed = client.post(
+        "/api/v1/plans",
+        json={"line_numbers": [1], "allow_tag_updates": True},
+        headers=headers,
+    )
+
+    assert skipped.status_code == 200
+    skipped_body = skipped.json()
+    assert skipped_body["status"] == "empty"
+    assert skipped_body["skipped"][0]["reason"] == "tag-updates-disabled"
+    assert skipped_body["stacks"] == []
+    assert allowed.status_code == 200
+    allowed_body = allowed.json()
+    assert allowed_body["status"] == "ready"
+    assert allowed_body["stacks"][0]["tag_updates"][0]["old_image"] == "repo/app:1.0"
+    assert allowed_body["stacks"][0]["tag_updates"][0]["new_image"] == "repo/app:2.0"
+    assert allowed_body["stacks"][0]["lines"][0]["action"] == "tag-update"
+    assert (compose_dir / "docker-compose.yml").read_text(encoding="utf-8") == compose_before
+    assert "manifest inspect repo/app:2.0" in _fake_docker_calls(fake_root)
+    assert "repo/app:1.0 tag=2.0\n" == wud_file.read_text(encoding="utf-8")
+
+
+def test_apply_endpoint_rejects_mixed_plan_with_skipped_lines_without_mutation(
+    tmp_path: Path,
+) -> None:
+    fake_env, fake_root = _fake_docker_env(tmp_path)
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+            **fake_env,
+        },
+    )
+    wud_file = tmp_path / "state" / "images.todo"
+    original = "repo/app:latest\nrepo/worker:1.0 tag=2.0\n"
+    wud_file.write_text(original, encoding="utf-8")
+    _make_fake_stack(
+        tmp_path,
+        fake_root,
+        "stack",
+        [
+            ("app", "repo/app:latest", "cid-app"),
+            ("worker", "repo/worker:1.0", "cid-worker"),
+        ],
+    )
+    headers = _csrf_headers(client)
+
+    plan_response = client.post(
+        "/api/v1/plans",
+        json={"line_numbers": [1, 2]},
+        headers=headers,
+    )
+    plan = plan_response.json()
+    apply_response = client.post(
+        "/api/v1/plans/apply",
+        json={
+            "plan_id": plan["plan_id"],
+            "line_numbers": [1, 2],
+            "confirmation": "apply",
+        },
+        headers=headers,
+    )
+
+    assert plan_response.status_code == 200
+    assert plan["status"] == "blocked"
+    assert plan["can_apply"] is False
+    assert plan["summary"]["matched_target_count"] == 1
+    assert plan["skipped"][0]["line_no"] == 2
+    assert plan["skipped"][0]["reason"] == "tag-updates-disabled"
+    assert apply_response.status_code == 409
+    assert apply_response.json()["detail"] == "plan is not ready to apply"
+    assert wud_file.read_text(encoding="utf-8") == original
+    calls = _fake_docker_calls(fake_root)
+    assert " pull " not in calls
+    assert " up -d " not in calls
+
+
+def test_plan_endpoint_rejects_invalid_or_non_actionable_lines(
+    tmp_path: Path,
+) -> None:
+    fake_env, fake_root = _fake_docker_env(tmp_path)
+    client = _client(tmp_path, {"WUD_WEB_DEV_NO_AUTH": "true", **fake_env})
+    wud_file = tmp_path / "state" / "images.todo"
+    wud_file.write_text("# ignored\nrepo/app:latest\n", encoding="utf-8")
+    _make_fake_stack(
+        tmp_path,
+        fake_root,
+        "stack",
+        [("app", "repo/app:latest", "cid-app")],
+    )
+    headers = _csrf_headers(client)
+
+    zero = client.post(
+        "/api/v1/plans",
+        json={"line_numbers": [0]},
+        headers=headers,
+    )
+    comment = client.post(
+        "/api/v1/plans",
+        json={"line_numbers": [1]},
+        headers=headers,
+    )
+    missing = client.post(
+        "/api/v1/plans",
+        json={"line_numbers": [3]},
+        headers=headers,
+    )
+
+    assert zero.status_code == 422
+    assert comment.status_code == 422
+    assert "actionable WUD target lines" in comment.json()["detail"]
+    assert missing.status_code == 422
+    assert "actionable WUD target lines" in missing.json()["detail"]
+
+
+def test_apply_endpoint_rejects_unauthenticated_requests(tmp_path: Path) -> None:
+    client = _client(tmp_path, {"WUD_WEB_MUTATIONS_ENABLED": "true"})
+
+    response = client.post(
+        "/api/v1/plans/apply",
+        json={
+            "plan_id": "plan",
+            "line_numbers": [1],
+            "confirmation": "apply",
+        },
+        headers=_csrf_headers(client),
+    )
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == "setup required"
+
+
+def test_apply_endpoint_requires_csrf_origin_headers(tmp_path: Path) -> None:
+    client = _client(
+        tmp_path,
+        {"WUD_WEB_DEV_NO_AUTH": "true", "WUD_WEB_MUTATIONS_ENABLED": "true"},
+    )
+
+    missing = client.post(
+        "/api/v1/plans/apply",
+        json={
+            "plan_id": "plan",
+            "line_numbers": [1],
+            "confirmation": "apply",
+        },
+    )
+    csrf_response = client.get("/api/v1/auth/csrf")
+    bad_origin = client.post(
+        "/api/v1/plans/apply",
+        json={
+            "plan_id": "plan",
+            "line_numbers": [1],
+            "confirmation": "apply",
+        },
+        headers={
+            "Origin": "http://evil.example",
+            "x-wud-csrf-token": csrf_response.json()["csrf_token"],
+        },
+    )
+
+    assert missing.status_code == 403
+    assert missing.json()["detail"] == "origin header is required"
+    assert bad_origin.status_code == 403
+    assert bad_origin.json()["detail"] == "origin is not allowed"
+
+
+def test_apply_endpoint_rejects_read_only_mode(tmp_path: Path) -> None:
+    fake_env, fake_root = _fake_docker_env(tmp_path)
+    client = _client(tmp_path, {"WUD_WEB_DEV_NO_AUTH": "true", **fake_env})
+    wud_file = tmp_path / "state" / "images.todo"
+    wud_file.write_text("repo/app:latest\n", encoding="utf-8")
+    _make_fake_stack(
+        tmp_path,
+        fake_root,
+        "stack",
+        [("app", "repo/app:latest", "cid-app")],
+    )
+    headers = _csrf_headers(client)
+    plan = client.post(
+        "/api/v1/plans",
+        json={"line_numbers": [1]},
+        headers=headers,
+    ).json()
+
+    response = client.post(
+        "/api/v1/plans/apply",
+        json={
+            "plan_id": plan["plan_id"],
+            "line_numbers": [1],
+            "confirmation": "apply",
+        },
+        headers=headers,
+    )
+
+    assert plan["can_apply"] is False
+    assert response.status_code == 403
+    assert response.json()["detail"] == "mutations are disabled"
+    assert " pull " not in _fake_docker_calls(fake_root)
+
+
+def test_apply_endpoint_rejects_stale_plan_without_mutation(tmp_path: Path) -> None:
+    fake_env, fake_root = _fake_docker_env(tmp_path)
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+            **fake_env,
+        },
+    )
+    wud_file = tmp_path / "state" / "images.todo"
+    wud_file.write_text("repo/app:latest\n", encoding="utf-8")
+    _make_fake_stack(
+        tmp_path,
+        fake_root,
+        "stack",
+        [("app", "repo/app:latest", "cid-app")],
+    )
+    headers = _csrf_headers(client)
+    plan = client.post(
+        "/api/v1/plans",
+        json={"line_numbers": [1]},
+        headers=headers,
+    ).json()
+    wud_file.write_text("repo/app:latest\n# changed\n", encoding="utf-8")
+
+    response = client.post(
+        "/api/v1/plans/apply",
+        json={
+            "plan_id": plan["plan_id"],
+            "line_numbers": [1],
+            "confirmation": "apply",
+        },
+        headers=headers,
+    )
+
+    assert plan["can_apply"] is True
+    assert response.status_code == 409
+    assert response.json()["detail"] == "plan is stale"
+    assert " pull " not in _fake_docker_calls(fake_root)
+
+
+def test_apply_endpoint_rejects_empty_or_blocked_plan(tmp_path: Path) -> None:
+    fake_env, fake_root = _fake_docker_env(tmp_path)
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+            **fake_env,
+        },
+    )
+    wud_file = tmp_path / "state" / "images.todo"
+    wud_file.write_text("repo/app:1.0 tag=2.0\n", encoding="utf-8")
+    _make_fake_stack(
+        tmp_path,
+        fake_root,
+        "stack",
+        [("app", "repo/app:1.0", "cid-app")],
+    )
+    headers = _csrf_headers(client)
+    plan = client.post(
+        "/api/v1/plans",
+        json={"line_numbers": [1]},
+        headers=headers,
+    ).json()
+
+    response = client.post(
+        "/api/v1/plans/apply",
+        json={
+            "plan_id": plan["plan_id"],
+            "line_numbers": [1],
+            "confirmation": "apply",
+        },
+        headers=headers,
+    )
+
+    assert plan["status"] == "empty"
+    assert plan["can_apply"] is False
+    assert response.status_code == 409
+    assert response.json()["detail"] == "plan is not ready to apply"
+    assert " pull " not in _fake_docker_calls(fake_root)
+
+
+def test_apply_endpoint_runs_existing_updater_and_records_audit(
+    tmp_path: Path,
+) -> None:
+    fake_env, fake_root = _fake_docker_env(tmp_path)
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+            **fake_env,
+        },
+    )
+    wud_file = tmp_path / "state" / "images.todo"
+    original = "repo/app:latest\nrepo/db:latest\n"
+    wud_file.write_text(original, encoding="utf-8")
+    _make_fake_stack(
+        tmp_path,
+        fake_root,
+        "stack",
+        [
+            ("app", "repo/app:latest", "cid-app"),
+            ("db", "repo/db:latest", "cid-db"),
+        ],
+    )
+    image_state = fake_root / "images" / "repo_app_latest.id"
+    image_state.write_text("old\n", encoding="utf-8")
+    (fake_root / "images" / "repo_app_latest.after_id").write_text(
+        "new\n",
+        encoding="utf-8",
+    )
+    headers = _csrf_headers(client)
+    plan = client.post(
+        "/api/v1/plans",
+        json={"line_numbers": [1]},
+        headers=headers,
+    ).json()
+
+    apply_response = client.post(
+        "/api/v1/plans/apply",
+        json={
+            "plan_id": plan["plan_id"],
+            "line_numbers": [1],
+            "confirmation": "apply",
+        },
+        headers=headers,
+    )
+    job = _wait_apply_job(client, apply_response.json()["job_id"])
+
+    assert apply_response.status_code == 202
+    assert apply_response.json()["status"] == "queued"
+    assert plan["can_apply"] is True
+    assert job["status"] == "success"
+    assert job["run_id"]
+    assert job["selected_line_numbers"] == [1]
+    assert wud_file.read_text(encoding="utf-8") == "repo/db:latest\n"
+    calls = _fake_docker_calls(fake_root)
+    assert "compose -f docker-compose.yml pull app" in calls
+    assert "compose -f docker-compose.yml stop app" in calls
+    assert "compose -f docker-compose.yml up -d --remove-orphans --no-deps app" in calls
+
+    detail = client.get(f"/api/v1/runs/{job['run_id']}").json()
+    assert detail["metadata"]["source"] == "webui"
+    assert detail["metadata"]["plan_id"] == plan["plan_id"]
+    assert detail["metadata"]["selected_line_numbers"] == [1]
+    assert detail["pending_updates"][0]["line_no"] == 1
+    assert detail["pending_updates"][0]["status"] == "resolved"
+    assert not lock_dir_for(wud_file).exists()
+
+
+def test_apply_endpoint_holds_wud_lock_for_worker_handoff(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    fake_env, fake_root = _fake_docker_env(tmp_path)
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+            **fake_env,
+        },
+    )
+    wud_file = tmp_path / "state" / "images.todo"
+    wud_file.write_text("repo/app:latest\n", encoding="utf-8")
+    _make_fake_stack(
+        tmp_path,
+        fake_root,
+        "stack",
+        [("app", "repo/app:latest", "cid-app")],
+    )
+    observed: dict[str, object] = {}
+
+    def fake_run(runner: object) -> int:
+        environ = getattr(runner, "environ")
+        observed["lock_flag"] = environ.get("WUD_LOCK_HELD_BY_PARENT")
+        observed["lock_exists"] = lock_dir_for(wud_file).is_dir()
+        contender = DirectoryLock(wud_file, timeout_seconds=0)
+        try:
+            contender.acquire()
+        except WudLockError:
+            observed["contended"] = True
+        else:
+            contender.close()
+            observed["contended"] = False
+        return 0
+
+    monkeypatch.setattr(web_module.UpdateFromWudRunner, "run", fake_run)
+    headers = _csrf_headers(client)
+    plan = client.post(
+        "/api/v1/plans",
+        json={"line_numbers": [1]},
+        headers=headers,
+    ).json()
+
+    apply_response = client.post(
+        "/api/v1/plans/apply",
+        json={
+            "plan_id": plan["plan_id"],
+            "line_numbers": [1],
+            "confirmation": "apply",
+        },
+        headers=headers,
+    )
+    job = _wait_apply_job(client, apply_response.json()["job_id"])
+
+    assert apply_response.status_code == 202
+    assert job["status"] == "success"
+    assert observed == {
+        "lock_flag": "1",
+        "lock_exists": True,
+        "contended": True,
+    }
+    assert not lock_dir_for(wud_file).exists()
+    calls = _fake_docker_calls(fake_root)
+    assert " pull " not in calls
+    assert " up -d " not in calls
+
+
+def test_apply_endpoint_releases_wud_lock_when_runner_raises(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    fake_env, fake_root = _fake_docker_env(tmp_path)
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+            **fake_env,
+        },
+    )
+    wud_file = tmp_path / "state" / "images.todo"
+    wud_file.write_text("repo/app:latest\n", encoding="utf-8")
+    _make_fake_stack(
+        tmp_path,
+        fake_root,
+        "stack",
+        [("app", "repo/app:latest", "cid-app")],
+    )
+
+    def fake_run(_runner: object) -> int:
+        assert lock_dir_for(wud_file).is_dir()
+        raise RuntimeError("runner exploded")
+
+    monkeypatch.setattr(web_module.UpdateFromWudRunner, "run", fake_run)
+    headers = _csrf_headers(client)
+    plan = client.post(
+        "/api/v1/plans",
+        json={"line_numbers": [1]},
+        headers=headers,
+    ).json()
+
+    apply_response = client.post(
+        "/api/v1/plans/apply",
+        json={
+            "plan_id": plan["plan_id"],
+            "line_numbers": [1],
+            "confirmation": "apply",
+        },
+        headers=headers,
+    )
+    job = _wait_apply_job(client, apply_response.json()["job_id"])
+
+    assert apply_response.status_code == 202
+    assert job["status"] == "failure"
+    assert job["error"] == "runner exploded"
+    assert not lock_dir_for(wud_file).exists()
+    calls = _fake_docker_calls(fake_root)
+    assert " pull " not in calls
+    assert " up -d " not in calls
+
+
+def test_apply_endpoint_rejects_existing_wud_lock_without_queueing_job(
+    tmp_path: Path,
+) -> None:
+    fake_env, fake_root = _fake_docker_env(tmp_path)
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+            "WUD_LOCK_TIMEOUT": "0",
+            **fake_env,
+        },
+    )
+    wud_file = tmp_path / "state" / "images.todo"
+    wud_file.write_text("repo/app:latest\n", encoding="utf-8")
+    _make_fake_stack(
+        tmp_path,
+        fake_root,
+        "stack",
+        [("app", "repo/app:latest", "cid-app")],
+    )
+    headers = _csrf_headers(client)
+    plan = client.post(
+        "/api/v1/plans",
+        json={"line_numbers": [1]},
+        headers=headers,
+    ).json()
+    external_lock = DirectoryLock(wud_file, timeout_seconds=0)
+    external_lock.acquire()
+    try:
+        response = client.post(
+            "/api/v1/plans/apply",
+            json={
+                "plan_id": plan["plan_id"],
+                "line_numbers": [1],
+                "confirmation": "apply",
+            },
+            headers=headers,
+        )
+    finally:
+        external_lock.close()
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == "WUD file is locked"
+    assert client.app.state.web_apply_jobs == {}
+    calls = _fake_docker_calls(fake_root)
+    assert " pull " not in calls
+    assert " up -d " not in calls
+
+
+def test_apply_endpoint_rejects_concurrent_jobs(tmp_path: Path) -> None:
+    fake_env, fake_root = _fake_docker_env(tmp_path)
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+            **fake_env,
+        },
+    )
+    wud_file = tmp_path / "state" / "images.todo"
+    wud_file.write_text("repo/app:latest\n", encoding="utf-8")
+    _make_fake_stack(
+        tmp_path,
+        fake_root,
+        "stack",
+        [("app", "repo/app:latest", "cid-app")],
+    )
+    hook = fake_root / "post-pull-hook"
+    hook.write_text("#!/usr/bin/env bash\nsleep 0.3\n", encoding="utf-8")
+    hook.chmod(0o755)
+    headers = _csrf_headers(client)
+    plan = client.post(
+        "/api/v1/plans",
+        json={"line_numbers": [1]},
+        headers=headers,
+    ).json()
+    payload = {
+        "plan_id": plan["plan_id"],
+        "line_numbers": [1],
+        "confirmation": "apply",
+    }
+
+    first = client.post("/api/v1/plans/apply", json=payload, headers=headers)
+    second = client.post("/api/v1/plans/apply", json=payload, headers=headers)
+    job = _wait_apply_job(client, first.json()["job_id"])
+
+    assert first.status_code == 202
+    assert second.status_code == 409
+    assert second.json()["detail"] == "an apply job is already running"
+    assert job["status"] == "success"
+
+
+def test_apply_endpoint_reports_updater_failure_and_preserves_line(
+    tmp_path: Path,
+) -> None:
+    fake_env, fake_root = _fake_docker_env(tmp_path)
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+            **fake_env,
+        },
+    )
+    wud_file = tmp_path / "state" / "images.todo"
+    original = "repo/app:latest\n"
+    wud_file.write_text(original, encoding="utf-8")
+    _make_fake_stack(
+        tmp_path,
+        fake_root,
+        "stack",
+        [("app", "repo/app:latest", "cid-app")],
+    )
+    (fake_root / "stacks" / "stack" / "pull_fail").write_text("", encoding="utf-8")
+    headers = _csrf_headers(client)
+    plan = client.post(
+        "/api/v1/plans",
+        json={"line_numbers": [1]},
+        headers=headers,
+    ).json()
+
+    apply_response = client.post(
+        "/api/v1/plans/apply",
+        json={
+            "plan_id": plan["plan_id"],
+            "line_numbers": [1],
+            "confirmation": "apply",
+        },
+        headers=headers,
+    )
+    job = _wait_apply_job(client, apply_response.json()["job_id"])
+
+    assert apply_response.status_code == 202
+    assert job["status"] == "failure"
+    assert job["run_id"]
+    assert "updater exited with status 1" in str(job["error"])
+    assert wud_file.read_text(encoding="utf-8") == original
+    detail = client.get(f"/api/v1/runs/{job['run_id']}").json()
+    assert detail["status"] == "failure"
+    assert detail["pending_updates"][0]["status"] == "failed"
 
 
 def test_runs_list_returns_empty_without_creating_missing_database(

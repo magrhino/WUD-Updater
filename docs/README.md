@@ -11,6 +11,7 @@ short; detailed setup and behavior notes live here.
 | Deployment reference | [DEPLOYMENT.md](DEPLOYMENT.md) |
 | Development, CI, and release automation | [DEVELOPMENT.md](DEVELOPMENT.md) |
 | Docker Compose example | [examples/docker-compose.example.yml](examples/docker-compose.example.yml) |
+| Long-running WebUI Docker Compose example | [examples/docker-compose.webui.yml](examples/docker-compose.webui.yml) |
 | Hardened Docker Compose example | [examples/docker-compose.hardened.yml](examples/docker-compose.hardened.yml) |
 | TrueNAS status Docker Compose example | [examples/docker-compose.truenas.yml](examples/docker-compose.truenas.yml) |
 | Local Docker Compose build artifact | [examples/docker-compose.build.yml](examples/docker-compose.build.yml) |
@@ -23,6 +24,7 @@ short; detailed setup and behavior notes live here.
 |---|---|
 | WUD callback flow, todo-file format, digest updates, and tag updates | [wiki/wud-update-flow.md](wiki/wud-update-flow.md) |
 | Managed WUD script volume sync behavior | [wiki/container-script-sync.md](wiki/container-script-sync.md) |
+| Long-running WebUI container setup, login, and exposure notes | [wiki/webui-container.md](wiki/webui-container.md) |
 | GitHub and Discord release-note notifications | [wiki/release-note-notifications.md](wiki/release-note-notifications.md) |
 
 ## Repository Areas

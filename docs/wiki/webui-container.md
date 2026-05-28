@@ -1,0 +1,83 @@
+# WebUI Container
+
+The packaged image can run the FastAPI backend and Vue SPA as a long-running
+WebUI container. The example keeps browser access local-only by default and
+starts in read-only mode.
+
+## Start The WebUI
+
+Review the stack path in
+[`docs/examples/docker-compose.webui.yml`](../examples/docker-compose.webui.yml),
+then start the service:
+
+```bash
+docker compose -f docs/examples/docker-compose.webui.yml up -d
+```
+
+The example publishes `127.0.0.1:8080:8080`, so the browser entrypoint is:
+
+```text
+http://127.0.0.1:8080
+```
+
+The same stack also starts WUD and syncs packaged callback scripts into the
+shared `wud-scripts` volume. Configure WUD to call:
+
+```text
+/wud/on-update.sh
+```
+
+## First Login
+
+On first start, the WebUI creates a one-time setup claim and prints a setup URL
+to the server logs. Read it with:
+
+```bash
+docker compose -f docs/examples/docker-compose.webui.yml logs wud-updater
+```
+
+Open the `/#/setup?claim=...` URL, create the first admin username, and choose a
+password with at least 12 characters. After setup succeeds, return to
+`http://127.0.0.1:8080` and sign in with that username and password.
+
+The setup claim, password hash, sessions, update runs, managed tag exclusions,
+and audit records are stored in SQLite at `WUD_DB_PATH`. The example sets that
+path to `/logs/wud-updater.sqlite`, backed by `./logs` on the Compose host.
+Keep that directory when recreating the container, or the WebUI will require
+setup again and previous run history will be lost.
+
+## Network Exposure
+
+For a local workstation, keep the default loopback port binding. For LAN or
+reverse-proxy exposure, change the port binding intentionally and set the
+browser-visible origin and accepted hosts:
+
+```yaml
+environment:
+  WUD_WEB_PUBLIC_ORIGIN: "https://wud.example.test"
+  WUD_WEB_ALLOWED_HOSTS: "wud.example.test,127.0.0.1,localhost"
+  WUD_WEB_TRUSTED_PROXIES: "127.0.0.1/32"
+```
+
+If TLS terminates at a reverse proxy, keep `WUD_WEB_SECURE_COOKIES=auto` unless
+you have a specific local HTTP testing reason to disable secure cookies. Only
+list proxy IPs or CIDRs you control in `WUD_WEB_TRUSTED_PROXIES`; forwarded
+headers from other clients are ignored.
+
+## Read-Only And Mutations
+
+The WebUI is read-only by default. It can display pending updates, run history,
+and logs without enabling browser-initiated Docker mutations.
+
+To apply updates from the browser, set:
+
+```yaml
+environment:
+  WUD_WEB_MUTATIONS_ENABLED: "true"
+```
+
+Mutation requests still require the normal authenticated browser session, CSRF
+checks, Origin/Host validation, one active job at a time, and the WebUI's
+plan-first apply flow. Keep the Docker socket, stack root, WUD output file,
+logs, and SQLite database mounted exactly as the example shows before enabling
+this mode.

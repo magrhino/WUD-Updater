@@ -18,6 +18,117 @@ export interface PendingResponse {
   warnings: string[];
 }
 
+export type PlanStatus = "ready" | "empty" | "blocked";
+
+export interface PlanSummary {
+  target_count: number;
+  matched_target_count: number;
+  stack_count: number;
+  service_count: number;
+  skipped_count: number;
+  issue_count: number;
+}
+
+export interface PlanIssue {
+  severity: string;
+  code: string;
+  message: string;
+  line_no: number | null;
+  stack: string;
+  service: string;
+}
+
+export interface PlanTarget {
+  line_no: number;
+  raw: string;
+  image: string;
+  resolved_image: string;
+  digest: string;
+  desired_tag: string;
+  matched: boolean;
+  action: string;
+}
+
+export interface PlanLine {
+  line_no: number;
+  raw: string;
+  image: string;
+  resolved_image: string;
+  compose_image: string;
+  target_image: string;
+  service: string;
+  digest: string;
+  desired_tag: string;
+  action: string;
+}
+
+export interface PlanTagUpdate {
+  old_image: string;
+  desired_tag: string;
+  new_image: string;
+  services: string[];
+}
+
+export interface PlanAction {
+  kind: string;
+  description: string;
+  cwd: string;
+  args: string[];
+}
+
+export interface PlanStack {
+  name: string;
+  directory: string;
+  compose_file: string;
+  project_directory: string;
+  services_label: string;
+  services: string[];
+  pull_services: string[];
+  stop_services: string[];
+  force_recreate: boolean;
+  up_no_deps: boolean;
+  tag_updates: PlanTagUpdate[];
+  actions: PlanAction[];
+  lines: PlanLine[];
+}
+
+export interface PlanSkipped {
+  line_no: number;
+  raw: string;
+  image: string;
+  desired_tag: string;
+  reason: string;
+}
+
+export interface PlanResponse {
+  plan_id: string;
+  dry_run: boolean;
+  can_apply: boolean;
+  status: PlanStatus;
+  source_file: string;
+  mode: string;
+  max_wait: number;
+  selected_line_numbers: number[];
+  summary: PlanSummary;
+  targets: PlanTarget[];
+  stacks: PlanStack[];
+  skipped: PlanSkipped[];
+  issues: PlanIssue[];
+}
+
+export type ApplyJobStatus = "queued" | "running" | "success" | "failure";
+
+export interface ApplyJobResponse {
+  job_id: string;
+  status: ApplyJobStatus;
+  run_id: number | null;
+  log_file: string;
+  started_at: string | null;
+  finished_at: string | null;
+  error: string;
+  selected_line_numbers: number[];
+}
+
 export interface StatusResponse {
   ok: boolean;
   version: string;
@@ -186,6 +297,36 @@ export const webApi = {
     }),
   status: () => apiRequest<StatusResponse>("/status"),
   pending: () => apiRequest<PendingResponse>("/pending"),
+  createPlan: (
+    lineNumbers: number[],
+    allowTagUpdates: boolean,
+    csrfToken: string,
+  ) =>
+    apiRequest<PlanResponse>("/plans", {
+      method: "POST",
+      headers: { "x-wud-csrf-token": csrfToken },
+      body: JSON.stringify({
+        line_numbers: lineNumbers,
+        allow_tag_updates: allowTagUpdates,
+      }),
+    }),
+  applyPlan: (
+    planId: string,
+    lineNumbers: number[],
+    allowTagUpdates: boolean,
+    csrfToken: string,
+  ) =>
+    apiRequest<ApplyJobResponse>("/plans/apply", {
+      method: "POST",
+      headers: { "x-wud-csrf-token": csrfToken },
+      body: JSON.stringify({
+        plan_id: planId,
+        line_numbers: lineNumbers,
+        allow_tag_updates: allowTagUpdates,
+        confirmation: "apply",
+      }),
+    }),
+  applyJob: (jobId: string) => apiRequest<ApplyJobResponse>(`/apply-jobs/${jobId}`),
   runs: () => apiRequest<RunSummary[]>("/runs"),
   runDetail: (runId: number) => apiRequest<RunDetail>(`/runs/${runId}`),
   runLog: (runId: number, tailBytes = 262_144) =>

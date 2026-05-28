@@ -1,0 +1,42 @@
+services:
+  wud:
+    image: getwud/wud:latest
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - wud-scripts:/wud:ro
+      - wud-out:/out
+    # Configure your WUD trigger to call:
+    #   /wud/on-update.sh
+
+  wud-updater:
+    image: ghcr.io/magrhino/wud-updater:latest
+    environment:
+      DOCKER_BASE: ${HOST_DOCKER_BASE:-/srv/docker}
+      WUD_OUT_FILE: /out/images.todo
+      WUD_LOG_DIR: /logs
+      WUD_DB_PATH: /logs/wud-updater.sqlite
+      WUD_SYNC_SCRIPTS: "true"
+      WUD_SCRIPTS_DIR: /managed-wud
+      WUD_WEB_HOST: 0.0.0.0
+      WUD_WEB_PORT: "8080"
+      OUT_UID: "1000"
+      OUT_GID: "1000"
+      # Keep the WebUI read-only unless you are ready to apply updates from the browser.
+      # WUD_WEB_MUTATIONS_ENABLED: "true"
+      # For LAN or reverse-proxy exposure, also set:
+      # WUD_WEB_PUBLIC_ORIGIN: "https://wud.example.test"
+      # WUD_WEB_ALLOWED_HOSTS: "wud.example.test,127.0.0.1,localhost"
+      # WUD_WEB_TRUSTED_PROXIES: "127.0.0.1/32"
+    ports:
+      - "127.0.0.1:8080:8080"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ${HOST_DOCKER_BASE:-/srv/docker}:${HOST_DOCKER_BASE:-/srv/docker}
+      - ./logs:/logs
+      - wud-scripts:/managed-wud
+      - wud-out:/out
+    command: ["web"]
+
+volumes:
+  wud-scripts:
+  wud-out:
