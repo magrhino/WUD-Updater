@@ -10,7 +10,7 @@ import secrets
 import sqlite3
 import sys
 from collections.abc import Awaitable, Callable, Mapping
-from contextlib import closing
+from contextlib import closing, contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -912,7 +912,7 @@ def _claim_initial_admin(
     try:
         with connect_db(settings.config.db_path) as conn:
             init_db(conn)
-            with conn:
+            with _immediate_transaction(conn):
                 if _web_user_count(conn) > 0:
                     raise HTTPException(status_code=409, detail="setup is complete")
                 expected_hash = _web_setting(conn, SETUP_CLAIM_HASH_KEY)
@@ -949,6 +949,18 @@ def _claim_initial_admin(
             status_code=500,
             detail=f"could not complete setup: {exc}",
         ) from exc
+
+
+@contextmanager
+def _immediate_transaction(conn: sqlite3.Connection):
+    conn.execute("BEGIN IMMEDIATE")
+    try:
+        yield
+    except Exception:
+        conn.rollback()
+        raise
+    else:
+        conn.commit()
 
 
 def _verify_web_user(

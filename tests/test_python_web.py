@@ -1,7 +1,11 @@
 from __future__ import annotations
 
+import time
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from threading import Event, Lock
 
+from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
 from wud_updater import web as web_module
@@ -169,6 +173,63 @@ def test_first_run_setup_claim_creates_admin_and_burns_claim(tmp_path: Path) -> 
     assert status_response.status_code == 200
     assert replay_response.status_code == 409
     assert after.json()["setup_required"] is False
+
+
+def test_first_run_setup_claim_serializes_concurrent_claims(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    client = _client(tmp_path)
+    settings = client.app.state.web_settings
+    claim = client.app.state.web_setup_claim
+    db_path = tmp_path / "state" / "wud.sqlite"
+
+    class SlowPasswordHasher:
+        def __init__(self) -> None:
+            self.calls = 0
+            self.first_hash_started = Event()
+            self.release_first_hash = Event()
+            self.lock = Lock()
+
+        def hash(self, password: str) -> str:
+            with self.lock:
+                self.calls += 1
+                call = self.calls
+            if call == 1:
+                self.first_hash_started.set()
+                assert self.release_first_hash.wait(timeout=5)
+            return f"hashed-{password}-{call}"
+
+    hasher = SlowPasswordHasher()
+    monkeypatch.setattr(web_module, "PASSWORD_HASHER", hasher)
+
+    def claim_admin(username: str) -> tuple[str, int | str]:
+        try:
+            user_id = web_module._claim_initial_admin(
+                settings,
+                claim,
+                username,
+                "correct horse battery staple",
+            )
+        except HTTPException as exc:
+            return ("error", exc.status_code)
+        return ("ok", user_id)
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        first = executor.submit(claim_admin, "admin-a")
+        assert hasher.first_hash_started.wait(timeout=5)
+        second = executor.submit(claim_admin, "admin-b")
+        time.sleep(0.1)
+        hasher.release_first_hash.set()
+        results = [first.result(timeout=5), second.result(timeout=5)]
+
+    with connect_db(db_path) as conn:
+        users = conn.execute("SELECT username FROM web_users").fetchall()
+
+    assert sorted(result[0] for result in results) == ["error", "ok"]
+    assert ("error", 409) in results
+    assert [row["username"] for row in users] == ["admin-a"]
+    assert hasher.calls == 1
 
 
 def test_setup_claim_rejects_expired_secret(tmp_path: Path) -> None:
