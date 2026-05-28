@@ -4,6 +4,18 @@ All notable changes to WUD-Updater are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com) and versions follow
 [Semantic Versioning](https://semver.org).
 
+## [0.18.0](https://github.com/magrhino/WUD-Updater/compare/v0.17.0...v0.18.0) (2026-05-28)
+
+
+### Features
+
+* **ui:** Add local Vue dev server and seeded demo state ([#61](https://github.com/magrhino/WUD-Updater/issues/61)) ([d5b349d](https://github.com/magrhino/WUD-Updater/commit/d5b349d66f38d6a4ec0e867a575cb64cec380988))
+
+
+### Bug Fixes
+
+* **auth:** Add first-run setup and session-based login for the WebUI ([#63](https://github.com/magrhino/WUD-Updater/issues/63)) ([f40d0e9](https://github.com/magrhino/WUD-Updater/commit/f40d0e96d8b6fe820eaec1c0d01f88270205e12d))
+
 ## [0.17.0](https://github.com/magrhino/WUD-Updater/compare/v0.16.0...v0.17.0) (2026-05-28)
 
 
