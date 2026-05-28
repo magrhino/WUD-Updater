@@ -3,5 +3,7 @@
 .DS_Store
 *.log
 *.tmp
+webui/node_modules/
+webui/dist/
 out/
 local-dev/

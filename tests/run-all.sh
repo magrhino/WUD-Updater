@@ -158,6 +158,14 @@ run "$python_bin" tests/run-python-tests.py
 
 run "$python_bin" -m pytest tests/test_python_web.py
 
+if command -v npm >/dev/null 2>&1 && [[ -f webui/package-lock.json ]]; then
+  run npm --prefix webui ci
+  run npm --prefix webui run typecheck
+  run npm --prefix webui run build
+else
+  printf '==> skipping webui npm checks; npm or webui/package-lock.json not found\n'
+fi
+
 for test_script in tests/test-*.sh; do
   run "$test_script"
 done

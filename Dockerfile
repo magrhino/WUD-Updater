@@ -1,3 +1,14 @@
+FROM node:22-bookworm-slim AS webui-build
+
+WORKDIR /webui
+
+COPY webui/package*.json /webui/
+RUN npm ci
+
+COPY webui/ /webui/
+RUN npm run build
+
+
 FROM python:3.14-slim-bookworm
 
 ARG TRUENAS_API_CLIENT_REF=""
@@ -47,6 +58,7 @@ WORKDIR /app
 
 COPY pyproject.toml README.md /app/
 COPY src/ /app/src/
+COPY --from=webui-build /webui/dist/ /app/src/wud_updater/web_static/
 
 RUN python -m pip install --no-cache-dir .
 
