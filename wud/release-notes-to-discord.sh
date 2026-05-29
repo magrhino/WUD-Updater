@@ -6,6 +6,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 source "${SCRIPT_DIR}/http.sh"
 
 PROVIDER="${PROVIDER:-auto}"
+PROVIDER_EXPLICIT=0
 IMAGE=""
 CONTAINER_NAME=""
 CURRENT_TAG=""
@@ -85,9 +86,17 @@ while [[ "$#" -gt 0 && "${1:-}" == --* ]]; do
   case "$1" in
     --provider)
       PROVIDER="${2:?missing value for --provider}"
+      PROVIDER_EXPLICIT=1
       shift 2
       ;;
-    --repo|--upstream)
+    --repo)
+      set_upstream_repo "${2:?missing value for $1}"
+      if (( ! PROVIDER_EXPLICIT )); then
+        PROVIDER="github"
+      fi
+      shift 2
+      ;;
+    --upstream)
       set_upstream_repo "${2:?missing value for $1}"
       shift 2
       ;;
@@ -523,8 +532,9 @@ case "$PROVIDER" in
   lsio)
     ;;
   auto|"")
-    if ! resolve_auto_provider; then
-      rc=$?
+    rc=0
+    resolve_auto_provider || rc=$?
+    if (( rc != 0 )); then
       if (( rc == 2 )); then
         exit 0
       fi

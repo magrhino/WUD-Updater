@@ -106,6 +106,13 @@ if [[ "$url" == "https://discord.test/webhook" ]]; then
   fi
   exit 0
 fi
+if [[ "$url" == "https://discord.test/admin" ]]; then
+  printf '%s' "$payload" > "${FAKE_ADMIN_PAYLOAD:?}"
+  if [[ "$write_out" == *"%{http_code}"* ]]; then
+    printf '\n204'
+  fi
+  exit 0
+fi
 if [[ "$url" == https://discord.test/fail/* ]]; then
   if [[ "$write_out" == *"%{http_code}"* ]]; then
     printf '\n500'
@@ -171,6 +178,22 @@ test_ghcr_image_uses_github_release_engine(){
   teardown_case
 }
 
+test_direct_repo_arg_uses_github_release_engine(){
+  setup_case
+  local payload_file="$TEST_TMP/payload.json"
+
+  PATH="$TEST_TMP/bin:$PATH" \
+    FAKE_WEBHOOK_PAYLOAD="$payload_file" \
+    FAKE_CURL_ARGS_LOG="$TEST_TMP/curl.args" \
+    "$SCRIPT" --repo acme/app --webhook https://discord.test/webhook > "$TEST_TMP/output.log" 2>&1 || fail "direct repo release note script failed"
+
+  [[ -s "$payload_file" ]] || fail "webhook payload was not captured"
+  jq -e '.username == "GitHub Release Notes"' "$payload_file" >/dev/null || fail "release engine username missing"
+  jq -e '.embeds[0].fields[] | select(.name == "Repository" and .value == "acme/app")' "$payload_file" >/dev/null || fail "direct repo was not used"
+  jq -e '.embeds[0].fields[] | select(.name == "Links" and (.value | contains("GitHub release")))' "$payload_file" >/dev/null || fail "GitHub release link was not rendered"
+  teardown_case
+}
+
 test_oci_source_label_uses_github_release_engine(){
   setup_case
   local payload_file="$TEST_TMP/payload.json"
@@ -193,6 +216,28 @@ test_linuxserver_image_shows_lsio_and_upstream_links(){
   jq -e '.embeds[0].fields[] | select(.name == "LSIO Tag" and .value == "`5.1.0-ls1`")' "$payload_file" >/dev/null || fail "LSIO tag was not rendered"
   jq -e '.embeds[0].fields[] | select(.name == "Upstream Version" and .value == "`v5.1.0`")' "$payload_file" >/dev/null || fail "upstream version was not rendered"
   jq -e '.embeds[0].fields[] | select(.name == "Links" and (.value | contains("LSIO release") and contains("Upstream release")))' "$payload_file" >/dev/null || fail "LSIO and upstream links were not rendered"
+  teardown_case
+}
+
+test_missing_linuxserver_mapping_posts_admin_only(){
+  setup_case
+  local payload_file="$TEST_TMP/payload.json"
+  local admin_payload_file="$TEST_TMP/admin-payload.json"
+  : > "$TEST_TMP/upstreams.txt"
+
+  PATH="$TEST_TMP/bin:$PATH" \
+    DISCORD_RELEASES_WEBHOOK="https://discord.test/webhook" \
+    ADMIN_WEBHOOK="https://discord.test/admin" \
+    FAKE_WEBHOOK_PAYLOAD="$payload_file" \
+    FAKE_ADMIN_PAYLOAD="$admin_payload_file" \
+    FAKE_CURL_ARGS_LOG="$TEST_TMP/curl.args" \
+    FAKE_IMAGE_SOURCE="" \
+    UPSTREAM_MAP="$TEST_TMP/upstreams.txt" \
+    "$SCRIPT" "linuxserver/radarr:latest" "container" "latest" > "$TEST_TMP/output.log" 2>&1 || fail "missing mapping script failed"
+
+  [[ -s "$admin_payload_file" ]] || fail "admin webhook payload was not captured"
+  [[ ! -s "$payload_file" ]] || fail "normal webhook received a minimal notice"
+  jq -e '.content | contains("Missing upstream mapping")' "$admin_payload_file" >/dev/null || fail "admin missing-mapping alert was not sent"
   teardown_case
 }
 
@@ -237,8 +282,10 @@ run_test(){
 
 main(){
   run_test test_ghcr_image_uses_github_release_engine
+  run_test test_direct_repo_arg_uses_github_release_engine
   run_test test_oci_source_label_uses_github_release_engine
   run_test test_linuxserver_image_shows_lsio_and_upstream_links
+  run_test test_missing_linuxserver_mapping_posts_admin_only
   run_test test_missing_source_posts_minimal_notice
   run_test test_missing_source_webhook_failure_is_nonzero_and_redacted
 }
