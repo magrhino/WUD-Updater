@@ -1,0 +1,342 @@
+<script setup lang="ts">
+import { computed, onMounted, reactive, ref, watch } from "vue";
+import { useBreakpoints } from "@vueuse/core";
+import { Edit3, Save, ShieldOff } from "@lucide/vue";
+
+import type {
+  TagExclusionRuleRecord,
+  TagExclusionScope,
+  TagExclusionStatus,
+  TagExclusionStatusFilter,
+} from "../api/client";
+import { useAuthStore } from "../stores/auth";
+import { useWebuiStore } from "../stores/webui";
+
+const webui = useWebuiStore();
+const auth = useAuthStore();
+const breakpoints = useBreakpoints({ managementDesktop: 1120 });
+const useManagementCards = breakpoints.smaller("managementDesktop");
+const statusFilter = ref<TagExclusionStatusFilter>("active");
+const showStatusConfirm = ref(false);
+const statusTarget = ref<TagExclusionRuleRecord | null>(null);
+const nextStatus = ref<TagExclusionStatus>("disabled");
+
+const exclusionForm = reactive({
+  scope: "image_repo" as TagExclusionScope,
+  imageRepo: "",
+  serviceKey: "",
+  tag: "",
+  status: "active" as TagExclusionStatus,
+});
+
+const scopeOptions = [
+  { label: "Image repo", value: "image_repo" },
+  { label: "Service", value: "service" },
+];
+const statusOptions = [
+  { label: "Active", value: "active" },
+  { label: "Disabled", value: "disabled" },
+];
+const statusFilterOptions = [
+  { label: "Active", value: "active" },
+  { label: "Disabled", value: "disabled" },
+  { label: "All", value: "all" },
+];
+
+const mutationsEnabled = computed(
+  () => auth.session?.mutations_enabled === true,
+);
+const saveDisabled = computed(
+  () =>
+    !mutationsEnabled.value ||
+    !exclusionForm.imageRepo.trim() ||
+    !exclusionForm.tag.trim() ||
+    (exclusionForm.scope === "service" && !exclusionForm.serviceKey.trim()) ||
+    webui.loading,
+);
+
+function editExclusion(rule: TagExclusionRuleRecord): void {
+  exclusionForm.scope = rule.scope as TagExclusionScope;
+  exclusionForm.imageRepo = rule.image_repo;
+  exclusionForm.serviceKey = rule.service_key;
+  exclusionForm.tag = rule.tag;
+  exclusionForm.status = rule.status as TagExclusionStatus;
+}
+
+function resetExclusionForm(): void {
+  exclusionForm.scope = "image_repo";
+  exclusionForm.imageRepo = "";
+  exclusionForm.serviceKey = "";
+  exclusionForm.tag = "";
+  exclusionForm.status = "active";
+}
+
+function scopeLabel(rule: TagExclusionRuleRecord): string {
+  return rule.scope === "service" ? "service" : "image repo";
+}
+
+function targetLabel(rule: TagExclusionRuleRecord): string {
+  return rule.scope === "service" ? rule.service_key : rule.image_repo;
+}
+
+async function saveExclusion(): Promise<void> {
+  if (saveDisabled.value) {
+    return;
+  }
+  await webui.upsertTagExclusion(
+    exclusionForm.scope,
+    exclusionForm.imageRepo.trim(),
+    exclusionForm.scope === "service" ? exclusionForm.serviceKey.trim() : "",
+    exclusionForm.tag.trim(),
+    exclusionForm.status,
+    statusFilter.value,
+  );
+}
+
+function openStatusConfirm(
+  rule: TagExclusionRuleRecord,
+  status: TagExclusionStatus,
+): void {
+  if (!mutationsEnabled.value) {
+    return;
+  }
+  statusTarget.value = rule;
+  nextStatus.value = status;
+  showStatusConfirm.value = true;
+}
+
+async function confirmStatusChange(): Promise<void> {
+  if (statusTarget.value === null) {
+    return;
+  }
+  await webui.setTagExclusionStatus(
+    statusTarget.value.id,
+    nextStatus.value,
+    statusFilter.value,
+  );
+  statusTarget.value = null;
+}
+
+onMounted(() => {
+  void webui.loadTagExclusions(statusFilter.value);
+});
+
+watch(statusFilter, (nextFilter) => {
+  void webui.loadTagExclusions(nextFilter);
+});
+</script>
+
+<template>
+  <section class="content-stack">
+    <n-alert v-if="webui.error" type="error" :show-icon="false">
+      {{ webui.error }}
+    </n-alert>
+    <n-alert v-if="!mutationsEnabled" type="info" :show-icon="false">
+      Read-only mode is active. Set WUD_WEB_MUTATIONS_ENABLED=true on the server to manage tag exclusions.
+    </n-alert>
+
+    <section class="section-panel">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">Tag exclusion</p>
+          <h2>{{ exclusionForm.imageRepo && exclusionForm.tag ? "Edit rule" : "New rule" }}</h2>
+        </div>
+      </div>
+      <n-form class="management-form" @submit.prevent="saveExclusion">
+        <n-form-item label="Scope">
+          <n-select
+            v-model:value="exclusionForm.scope"
+            :options="scopeOptions"
+            :disabled="webui.loading"
+          />
+        </n-form-item>
+        <n-form-item label="Image repo">
+          <n-input
+            v-model:value="exclusionForm.imageRepo"
+            placeholder="repo/app"
+            :disabled="webui.loading"
+          />
+        </n-form-item>
+        <n-form-item v-if="exclusionForm.scope === 'service'" label="Service key">
+          <n-input
+            v-model:value="exclusionForm.serviceKey"
+            placeholder="stack/service"
+            :disabled="webui.loading"
+          />
+        </n-form-item>
+        <n-form-item label="Tag">
+          <n-input
+            v-model:value="exclusionForm.tag"
+            placeholder="2.0"
+            :disabled="webui.loading"
+          />
+        </n-form-item>
+        <n-form-item label="Status">
+          <n-select
+            v-model:value="exclusionForm.status"
+            :options="statusOptions"
+            :disabled="webui.loading"
+          />
+        </n-form-item>
+        <div class="form-actions">
+          <n-button quaternary :disabled="webui.loading" @click="resetExclusionForm">
+            Clear
+          </n-button>
+          <n-button
+            type="primary"
+            attr-type="submit"
+            :disabled="saveDisabled"
+            :loading="webui.loading"
+          >
+            <template #icon>
+              <Save :size="16" />
+            </template>
+            Save
+          </n-button>
+        </div>
+      </n-form>
+    </section>
+
+    <section class="section-panel">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">SQLite state</p>
+          <h2>{{ webui.tagExclusions.length }} tag exclusions</h2>
+        </div>
+        <n-select
+          v-model:value="statusFilter"
+          class="filter-control"
+          :options="statusFilterOptions"
+          :disabled="webui.loading"
+        />
+      </div>
+
+      <div v-if="!useManagementCards" class="management-table exclusion-table">
+        <div class="management-table-head">
+          <span>Target</span>
+          <span>Scope</span>
+          <span>Tag</span>
+          <span>Status</span>
+          <span>Actions</span>
+        </div>
+        <div
+          v-for="rule in webui.tagExclusions"
+          :key="rule.id"
+          class="management-row"
+        >
+          <strong>{{ targetLabel(rule) }}</strong>
+          <span>{{ scopeLabel(rule) }}</span>
+          <code>{{ rule.tag }}</code>
+          <n-tag size="small" :type="rule.status === 'active' ? 'warning' : 'default'">
+            {{ rule.status }}
+          </n-tag>
+          <div class="table-actions">
+            <n-button size="small" quaternary @click="editExclusion(rule)">
+              <template #icon>
+                <Edit3 :size="15" />
+              </template>
+              Edit
+            </n-button>
+            <n-button
+              size="small"
+              quaternary
+              :type="rule.status === 'active' ? 'warning' : 'primary'"
+              :disabled="!mutationsEnabled"
+              @click="
+                openStatusConfirm(
+                  rule,
+                  rule.status === 'active' ? 'disabled' : 'active',
+                )
+              "
+            >
+              <template #icon>
+                <ShieldOff :size="15" />
+              </template>
+              {{ rule.status === "active" ? "Disable" : "Enable" }}
+            </n-button>
+          </div>
+        </div>
+      </div>
+
+      <div v-else class="mobile-list">
+        <article
+          v-for="rule in webui.tagExclusions"
+          :key="rule.id"
+          class="mobile-card"
+        >
+          <div class="mobile-card-title">
+            <strong>{{ targetLabel(rule) }}</strong>
+            <n-tag size="small" :type="rule.status === 'active' ? 'warning' : 'default'">
+              {{ rule.status }}
+            </n-tag>
+          </div>
+          <dl>
+            <div>
+              <dt>Scope</dt>
+              <dd>{{ scopeLabel(rule) }}</dd>
+            </div>
+            <div>
+              <dt>Tag</dt>
+              <dd>{{ rule.tag }}</dd>
+            </div>
+            <div v-if="rule.scope === 'service'">
+              <dt>Repository</dt>
+              <dd>{{ rule.image_repo }}</dd>
+            </div>
+          </dl>
+          <div class="table-actions">
+            <n-button size="small" quaternary @click="editExclusion(rule)">
+              <template #icon>
+                <Edit3 :size="15" />
+              </template>
+              Edit
+            </n-button>
+            <n-button
+              size="small"
+              quaternary
+              :type="rule.status === 'active' ? 'warning' : 'primary'"
+              :disabled="!mutationsEnabled"
+              @click="
+                openStatusConfirm(
+                  rule,
+                  rule.status === 'active' ? 'disabled' : 'active',
+                )
+              "
+            >
+              <template #icon>
+                <ShieldOff :size="15" />
+              </template>
+              {{ rule.status === "active" ? "Disable" : "Enable" }}
+            </n-button>
+          </div>
+        </article>
+      </div>
+      <div v-if="!webui.tagExclusions.length" class="empty-state">No tag exclusions.</div>
+    </section>
+
+    <n-modal
+      v-model:show="showStatusConfirm"
+      preset="dialog"
+      title="Update tag exclusion"
+      positive-text="Confirm"
+      negative-text="Cancel"
+      :positive-button-props="{ type: nextStatus === 'active' ? 'primary' : 'warning', loading: webui.loading }"
+      @positive-click="confirmStatusChange"
+    >
+      <div v-if="statusTarget" class="confirmation-list">
+        <div>
+          <span>Target</span>
+          <strong>{{ targetLabel(statusTarget) }}</strong>
+        </div>
+        <div>
+          <span>Tag</span>
+          <strong>{{ statusTarget.tag }}</strong>
+        </div>
+        <div>
+          <span>Status</span>
+          <strong>{{ nextStatus }}</strong>
+        </div>
+      </div>
+    </n-modal>
+  </section>
+</template>

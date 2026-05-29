@@ -1,7 +1,16 @@
 <script setup lang="ts">
 import { computed, onMounted } from "vue";
 import { RouterLink } from "vue-router";
-import { AlertTriangle, CheckCircle2, Clock3, Database, ListChecks } from "@lucide/vue";
+import {
+  AlertTriangle,
+  BellOff,
+  CheckCircle2,
+  Clock3,
+  Database,
+  ListChecks,
+  Settings2,
+  Tags,
+} from "@lucide/vue";
 
 import { useWebuiStore } from "../stores/webui";
 
@@ -92,6 +101,32 @@ onMounted(() => {
           <span>#{{ run.id }}</span>
           <strong>{{ run.status }}</strong>
           <em>{{ run.started_at }}</em>
+        </RouterLink>
+      </div>
+    </section>
+
+    <section class="section-panel">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">Controls</p>
+          <h2>Management</h2>
+        </div>
+      </div>
+      <div class="shortcut-grid">
+        <RouterLink to="/policies" class="shortcut-card">
+          <Settings2 :size="20" />
+          <span>Policies</span>
+          <strong>{{ webui.servicePolicies.length }}</strong>
+        </RouterLink>
+        <RouterLink to="/snoozes" class="shortcut-card">
+          <BellOff :size="20" />
+          <span>Active snoozes</span>
+          <strong>{{ webui.snoozes.length }}</strong>
+        </RouterLink>
+        <RouterLink to="/tag-exclusions" class="shortcut-card">
+          <Tags :size="20" />
+          <span>Active exclusions</span>
+          <strong>{{ webui.tagExclusions.length }}</strong>
         </RouterLink>
       </div>
     </section>
