@@ -1,4 +1,4 @@
-import { h, type Component } from "vue";
+import { h, type Component, type VNodeChild } from "vue";
 import { mount, type VueWrapper } from "@vue/test-utils";
 import { createPinia, setActivePinia, type Pinia } from "pinia";
 import type { Router } from "vue-router";
@@ -8,11 +8,55 @@ type MountOptions = {
   router?: Router;
 };
 
+type DataTableColumn = {
+  key?: string;
+  type?: string;
+  render?: (row: Record<string, unknown>) => VNodeChild;
+};
+
 const passthrough = (tag: string) => ({
   setup(_: unknown, { slots }: { slots: Record<string, () => unknown> }) {
     return () => h(tag, [slots.default?.()]);
   },
 });
+
+function callUpdateValue(listener: unknown, value: string): void {
+  if (typeof listener === "function") {
+    listener(value);
+  } else if (Array.isArray(listener)) {
+    for (const handler of listener) {
+      callUpdateValue(handler, value);
+    }
+  }
+}
+
+const nInputStub: Component = {
+  props: {
+    disabled: Boolean,
+    placeholder: String,
+    size: String,
+    type: String,
+    value: [String, Number],
+  },
+  emits: ["update:value"],
+  setup(props, { attrs, emit }) {
+    return () => {
+      const { onUpdateValue, ...inputAttrs } = attrs as Record<string, unknown>;
+      return h("input", {
+        ...inputAttrs,
+        disabled: props.disabled,
+        placeholder: props.placeholder,
+        type: props.type || "text",
+        value: props.value ?? "",
+        onInput: (event: Event) => {
+          const value = (event.target as HTMLInputElement).value;
+          emit("update:value", value);
+          callUpdateValue(onUpdateValue, value);
+        },
+      });
+    };
+  },
+};
 
 export const naiveStubs: Record<string, Component> = {
   NAlert: {
@@ -77,6 +121,7 @@ export const naiveStubs: Record<string, Component> = {
   NConfigProvider: passthrough("div"),
   NDataTable: {
     props: {
+      columns: Array,
       data: Array,
       checkedRowKeys: Array,
       rowKey: Function,
@@ -88,26 +133,43 @@ export const naiveStubs: Record<string, Component> = {
           "div",
           { role: "table" },
           (props.data ?? []).map((row: unknown) => {
-            const record = row as { line_no: number; image: string };
+            const record = row as Record<string, unknown> & {
+              line_no: number;
+              image: string;
+            };
+            const columns = (props.columns ?? []) as DataTableColumn[];
             const key = props.rowKey
               ? props.rowKey(record)
               : record.line_no;
             const checked = (props.checkedRowKeys ?? []).includes(key);
-            return h("label", { role: "row", key }, [
-              h("input", {
-                type: "checkbox",
-                checked,
-                onChange: (event: Event) => {
-                  const selected = new Set(props.checkedRowKeys ?? []);
-                  if ((event.target as HTMLInputElement).checked) {
-                    selected.add(key);
-                  } else {
-                    selected.delete(key);
-                  }
-                  emit("update:checked-row-keys", [...selected]);
-                },
-              }),
-              h("span", record.image),
+            return h("div", { role: "row", key }, [
+              h("label", [
+                h("input", {
+                  type: "checkbox",
+                  checked,
+                  onChange: (event: Event) => {
+                    const selected = new Set(props.checkedRowKeys ?? []);
+                    if ((event.target as HTMLInputElement).checked) {
+                      selected.add(key);
+                    } else {
+                      selected.delete(key);
+                    }
+                    emit("update:checked-row-keys", [...selected]);
+                  },
+                }),
+                h("span", record.image),
+              ]),
+              ...columns
+                .filter((column) => column.type !== "selection")
+                .map((column, index) =>
+                  h(
+                    "span",
+                    { role: "cell", key: column.key ?? index },
+                    column.render
+                      ? [column.render(record)]
+                      : [String(column.key ? record[column.key] ?? "" : "")],
+                  ),
+                ),
             ]);
           }),
         );
@@ -141,27 +203,8 @@ export const naiveStubs: Record<string, Component> = {
         ]);
     },
   },
-  NInput: {
-    props: {
-      disabled: Boolean,
-      placeholder: String,
-      type: String,
-      value: [String, Number],
-    },
-    emits: ["update:value"],
-    setup(props, { attrs, emit }) {
-      return () =>
-        h("input", {
-          ...attrs,
-          disabled: props.disabled,
-          placeholder: props.placeholder,
-          type: props.type || "text",
-          value: props.value ?? "",
-          onInput: (event: Event) =>
-            emit("update:value", (event.target as HTMLInputElement).value),
-        });
-    },
-  },
+  NInput: nInputStub,
+  Input: nInputStub,
   NInputNumber: {
     props: {
       disabled: Boolean,

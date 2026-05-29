@@ -1,6 +1,5 @@
 import { createPinia, setActivePinia } from "pinia";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { nextTick } from "vue";
 
 import { webApi } from "../src/api/client";
 import PendingView from "../src/views/PendingView.vue";
@@ -20,11 +19,6 @@ import {
   tagExclusion,
 } from "./helpers/fixtures";
 import { mountWithApp } from "./helpers/mount";
-
-type PendingViewVm = InstanceType<typeof PendingView> & {
-  selectedLineNumbers: number[];
-  updateTagOverride: (item: ReturnType<typeof pendingItem>, value: string) => void;
-};
 
 function setupStores(mutationsEnabled: boolean) {
   const pinia = createPinia();
@@ -51,7 +45,10 @@ describe("mutating WebUI views", () => {
     const createPlan = vi.spyOn(webui, "createPlan");
     const wrapper = mountWithApp(PendingView, { pinia });
 
-    await wrapper.findAll("button").find((button) => button.text().includes("All"))?.trigger("click");
+    await wrapper
+      .findAll("button")
+      .find((button) => button.text().includes("All"))
+      ?.trigger("click");
 
     expect(wrapper.text()).toContain("Read-only mode is active");
     const updateButton = wrapper
@@ -70,10 +67,10 @@ describe("mutating WebUI views", () => {
     const createPlan = vi.spyOn(webui, "createPlan");
     const wrapper = mountWithApp(PendingView, { pinia });
 
-    const vm = wrapper.vm as PendingViewVm;
-    vm.selectedLineNumbers = [item.line_no];
-    vm.updateTagOverride(item, "bad tag");
-    await nextTick();
+    await wrapper.findAll("button").find((button) => button.text().includes("All"))?.trigger("click");
+    await wrapper
+      .find(`input[aria-label="New tag for ${item.image}"]`)
+      .setValue("bad tag");
 
     expect(wrapper.text()).toContain("Line 1 has an invalid new tag");
     const previewButton = wrapper
