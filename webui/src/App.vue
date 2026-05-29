@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { RouterLink, RouterView, useRoute, useRouter } from "vue-router";
-import type { GlobalThemeOverrides } from "naive-ui";
 import {
   Activity,
   BellOff,
@@ -17,62 +16,12 @@ import {
 
 import { useAuthStore } from "./stores/auth";
 import { useWebuiStore } from "./stores/webui";
+import { themeOverrides } from "./theme";
 
 const route = useRoute();
 const router = useRouter();
 const auth = useAuthStore();
 const webui = useWebuiStore();
-const fontFamily =
-  'Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
-
-const themeOverrides: GlobalThemeOverrides = {
-  common: {
-    baseColor: "#ffffff",
-    bodyColor: "#f5f7f8",
-    cardColor: "#ffffff",
-    modalColor: "#ffffff",
-    tableColor: "#ffffff",
-    tableHeaderColor: "#f0f5f6",
-    hoverColor: "#f9fbfc",
-    inputColor: "#ffffff",
-    inputColorDisabled: "#f9fbfc",
-    borderColor: "#dbe3e6",
-    dividerColor: "#e6ecef",
-    primaryColor: "#137a63",
-    primaryColorHover: "#106a58",
-    primaryColorPressed: "#0c5748",
-    primaryColorSuppl: "#137a63",
-    infoColor: "#0f6fbd",
-    infoColorHover: "#0d5f9f",
-    infoColorPressed: "#0b4e84",
-    infoColorSuppl: "#0f6fbd",
-    successColor: "#137a63",
-    successColorHover: "#106a58",
-    successColorPressed: "#0c5748",
-    successColorSuppl: "#137a63",
-    warningColor: "#9a5b00",
-    warningColorHover: "#824d00",
-    warningColorPressed: "#663c00",
-    warningColorSuppl: "#9a5b00",
-    errorColor: "#b42318",
-    errorColorHover: "#961b12",
-    errorColorPressed: "#7a160f",
-    errorColorSuppl: "#b42318",
-    textColorBase: "#172026",
-    textColor1: "#172026",
-    textColor2: "#43525a",
-    textColor3: "#65747a",
-    textColorDisabled: "#65747a",
-    placeholderColor: "#65747a",
-    placeholderColorDisabled: "#65747a",
-    iconColor: "#65747a",
-    fontFamily,
-    fontFamilyMono: '"SFMono-Regular", Consolas, "Liberation Mono", monospace',
-    fontSize: "16px",
-    borderRadius: "7px",
-    borderRadiusSmall: "7px",
-  },
-};
 
 const showShell = computed(
   () => route.name !== "login" && route.name !== "setup" && auth.authenticated,
