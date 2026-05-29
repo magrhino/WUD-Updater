@@ -4,6 +4,14 @@ All notable changes to WUD-Updater are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com) and versions follow
 [Semantic Versioning](https://semver.org).
 
+## [0.23.0](https://github.com/magrhino/WUD-Updater/compare/v0.22.2...v0.23.0) (2026-05-29)
+
+
+### Features
+
+* **auth:** add WebUI admin recovery flow ([#109](https://github.com/magrhino/WUD-Updater/issues/109)) ([730e032](https://github.com/magrhino/WUD-Updater/commit/730e032ea73968cda23395c3d314de632e1949b6))
+* **web:** add minimal unauthenticated health endpoint ([#108](https://github.com/magrhino/WUD-Updater/issues/108)) ([5be4e3a](https://github.com/magrhino/WUD-Updater/commit/5be4e3ab3094d5f3327fad46f8b8fe6106d2a4ac))
+
 ## [0.22.2](https://github.com/magrhino/WUD-Updater/compare/v0.22.1...v0.22.2) (2026-05-29)
 
 
