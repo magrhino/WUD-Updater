@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
+import re
 import sqlite3
 import time
 from concurrent.futures import ThreadPoolExecutor
@@ -179,6 +181,11 @@ def _make_fake_stack(
 
 def _fake_docker_calls(fake_root: Path) -> str:
     return (fake_root / "calls.log").read_text(encoding="utf-8")
+
+
+def _fake_image_state_file(fake_root: Path, image: str, suffix: str) -> Path:
+    safe = re.sub(r"[^A-Za-z0-9._-]", "_", image)
+    return fake_root / "images" / f"{safe}.{suffix}"
 
 
 def _wait_apply_job(client: TestClient, job_id: str) -> dict[str, object]:
@@ -607,6 +614,69 @@ def test_release_notes_get_returns_placeholders_without_creating_database(
     assert body["items"][0]["status"] == "missing"
     assert body["items"][0]["provider"] == "github"
     assert not db_path.exists()
+
+
+def test_release_notes_get_uses_docker_source_label_without_creating_database(
+    tmp_path: Path,
+) -> None:
+    wud_file = tmp_path / "state" / "images.todo"
+    db_path = tmp_path / "state" / "wud.sqlite"
+    docker_env, fake_root = _fake_docker_env(tmp_path)
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            **docker_env,
+        },
+    )
+    image = "advplyr/audiobookshelf:latest"
+    wud_file.write_text(f"{image}\n", encoding="utf-8")
+    _fake_image_state_file(fake_root, image, "labels").write_text(
+        "org.opencontainers.image.source=https://github.com/advplyr/audiobookshelf\n",
+        encoding="utf-8",
+    )
+
+    response = client.get("/api/v1/release-notes")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["count"] == 1
+    assert body["items"][0]["status"] == "missing"
+    assert body["items"][0]["provider"] == "github"
+    assert body["items"][0]["upstream_repo"] == "advplyr/audiobookshelf"
+    assert f"image inspect {image}" in _fake_docker_calls(fake_root)
+    assert not db_path.exists()
+
+
+def test_release_notes_get_logs_when_docker_source_label_inspect_fails(
+    tmp_path: Path,
+    caplog,
+) -> None:
+    wud_file = tmp_path / "state" / "images.todo"
+    no_docker_bin = tmp_path / "no-docker-bin"
+    no_docker_bin.mkdir()
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "PATH": str(no_docker_bin),
+        },
+    )
+    image = "advplyr/audiobookshelf:latest"
+    wud_file.write_text(f"{image}\n", encoding="utf-8")
+
+    with caplog.at_level(logging.ERROR, logger="wud_updater.web"):
+        response = client.get("/api/v1/release-notes")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["items"][0]["status"] == "unsupported"
+    assert body["items"][0]["error"] == "no supported GitHub release source found"
+    assert (
+        "WebUI release-note fallback: Docker inspect failed for "
+        "advplyr/audiobookshelf:latest"
+    ) in caplog.text
+    assert "cannot read org.opencontainers.image.source" in caplog.text
 
 
 def test_release_notes_refresh_requires_csrf(tmp_path: Path) -> None:

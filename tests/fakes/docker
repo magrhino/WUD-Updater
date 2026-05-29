@@ -37,6 +37,18 @@ image_digests(){
   [[ -f "$file" ]] && cat "$file"
 }
 
+image_label(){
+  local image="$1" key="$2" file
+  file="$(image_file "$image" labels)"
+  [[ -f "$file" ]] || return 0
+  awk -v key="$key" -F= '
+    $1 == key {
+      sub(/^[^=]*=/, "")
+      print
+      exit
+    }' "$file"
+}
+
 manifest_file(){
   local image="$1" suffix="$2"
   printf '%s/manifests/%s.%s' "$ROOT" "$(safe_name "$image")" "$suffix"
@@ -438,6 +450,8 @@ image_cmd(){
     image_id "$image"
   elif [[ "$format" == *'RepoDigests'* ]]; then
     image_digests "$image"
+  elif [[ "$format" =~ index[[:space:]]+\.Config\.Labels[[:space:]]+\"([^\"]+)\" ]]; then
+    image_label "$image" "${BASH_REMATCH[1]}"
   else
     return 1
   fi

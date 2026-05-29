@@ -73,6 +73,20 @@ class DockerCli:
     def image_digest(self, image: str) -> str:
         return _first_nonblank(self.image_repo_digests(image))
 
+    def image_label(self, image: str, label: str) -> str:
+        value, _error = self.try_image_label(image, label)
+        return value
+
+    def try_image_label(self, image: str, label: str) -> tuple[str, CommandError | None]:
+        fmt = f'{{{{ index .Config.Labels "{label}" }}}}'
+        try:
+            value = _first_nonblank(self.image_inspect(image, fmt))
+        except CommandError as exc:
+            return "", exc
+        if value == "<no value>":
+            return "", None
+        return value, None
+
     def image_has_digest(self, image: str, expected: str) -> bool:
         for digest in self.image_repo_digests(image):
             if digest.rsplit("@", 1)[-1] == expected:

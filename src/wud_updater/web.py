@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import ipaddress
 import json
+import logging
 import os
 import secrets
 import sqlite3
@@ -43,6 +44,7 @@ from .config import ConfigError, UpdaterConfig, load_config
 from .db import DatabaseError, SCHEMA_VERSION, connect_db, init_db, utc_timestamp
 from .db import _user_version as db_user_version
 from .db import _validate_schema as validate_db_schema
+from .docker_cli import DockerCli
 from .images import image_tag, repo_key, tag_value_valid
 from .locks import DirectoryLock, WudLockError
 from .plans import (
@@ -52,12 +54,14 @@ from .plans import (
     build_dry_run_plan,
 )
 from .release_notes import (
+    OCI_SOURCE_LABEL,
+    ReleaseNoteSourceResolver,
     cached_release_notes,
     refresh_release_notes,
     release_note_placeholders,
 )
 from .updater import TagOverride, UpdateFromWudRunner, UpdaterOptions, js_regex_escape
-from .wud_file import ParsedWudFile, parse_wud_file
+from .wud_file import ParsedWudFile, WudTarget, parse_wud_file
 
 
 DEFAULT_WEB_HOST = "127.0.0.1"
@@ -90,6 +94,7 @@ TagExclusionStatus = Literal["active", "disabled"]
 TagExclusionStatusFilter = Literal["active", "disabled", "all"]
 TERMINAL_APPLY_JOB_STATUSES = frozenset({"success", "failure"})
 JOB_STREAM_HEARTBEAT_SECONDS = 15.0
+LOGGER = logging.getLogger(__name__)
 
 
 class WebConfigError(ValueError):
@@ -963,9 +968,14 @@ def api_release_notes(request: Request) -> ReleaseNotesResponse:
                 conn,
                 parsed.targets,
                 settings.command_env or {},
+                source_resolver=_release_note_source_resolver(settings),
             )
     except ReadOnlyDatabaseMissing:
-        items = release_note_placeholders(parsed.targets, settings.command_env or {})
+        items = release_note_placeholders(
+            parsed.targets,
+            settings.command_env or {},
+            source_resolver=_release_note_source_resolver(settings),
+        )
     except (OSError, sqlite3.Error, DatabaseError) as exc:
         raise HTTPException(
             status_code=500,
@@ -992,6 +1002,7 @@ def api_refresh_release_notes(request: Request) -> ReleaseNotesResponse:
                 conn,
                 parsed.targets,
                 settings.command_env or {},
+                source_resolver=_release_note_source_resolver(settings),
             )
     except (OSError, sqlite3.Error, DatabaseError) as exc:
         raise HTTPException(
@@ -1631,6 +1642,29 @@ def _release_notes_response(
         items=[ReleaseNoteInfo.model_validate(asdict(item)) for item in items],
         warnings=warnings,
     )
+
+
+def _release_note_source_resolver(settings: WebSettings) -> ReleaseNoteSourceResolver:
+    docker = DockerCli(runner=CommandRunner(env=settings.command_env))
+    cache: dict[str, str] = {}
+
+    def resolve(target: WudTarget) -> str:
+        if target.first not in cache:
+            value, error = docker.try_image_label(target.first, OCI_SOURCE_LABEL)
+            if error is not None:
+                LOGGER.error(
+                    "WebUI release-note fallback: Docker inspect failed for %s; "
+                    "cannot read %s, so GitHub release links may be unavailable. "
+                    "Command: %s. stderr: %s",
+                    target.first,
+                    OCI_SOURCE_LABEL,
+                    error.result.display,
+                    error.result.stderr.strip() or "<empty>",
+                )
+            cache[target.first] = value
+        return cache[target.first]
+
+    return resolve
 
 
 def _plan_response(plan: DryRunPlan, settings: WebSettings) -> PlanResponse:

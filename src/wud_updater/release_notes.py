@@ -7,6 +7,7 @@ import json
 import re
 import sqlite3
 import urllib.error
+import urllib.parse
 import urllib.request
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import asdict, dataclass, field
@@ -23,6 +24,7 @@ SUCCESS_CACHE_TTL_SECONDS = 21_600
 ERROR_CACHE_TTL_SECONDS = 900
 DEFAULT_GITHUB_TIMEOUT_SECONDS = 6.0
 GITHUB_REPO_RE = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
+OCI_SOURCE_LABEL = "org.opencontainers.image.source"
 SEMVER_RE = re.compile(r"\bv?([0-9]+)\.([0-9]+)\.([0-9]+)(?:[._-][0-9A-Za-z]+)?\b")
 BREAKING_RE = re.compile(
     r"breaking|migration|incompatible|manual step|major change|"
@@ -76,6 +78,9 @@ class ReleaseNoteContext:
     error: str = ""
 
 
+ReleaseNoteSourceResolver = Callable[[WudTarget], str]
+
+
 class GitHubClient:
     """Small GitHub Releases API client using only the standard library."""
 
@@ -114,20 +119,31 @@ def cached_release_notes(
     conn: sqlite3.Connection,
     targets: Iterable[WudTarget],
     environ: Mapping[str, str],
+    *,
+    source_resolver: ReleaseNoteSourceResolver | None = None,
 ) -> list[ReleaseNoteInfo]:
     """Return cached release-note metadata without touching the network."""
 
-    contexts = release_note_contexts(targets, environ)
+    contexts = release_note_contexts(targets, environ, source_resolver=source_resolver)
     return [_cached_info(conn, context) for context in contexts]
 
 
 def release_note_placeholders(
     targets: Iterable[WudTarget],
     environ: Mapping[str, str],
+    *,
+    source_resolver: ReleaseNoteSourceResolver | None = None,
 ) -> list[ReleaseNoteInfo]:
     """Return missing/unsupported metadata without requiring a database."""
 
-    return [_placeholder_info(context) for context in release_note_contexts(targets, environ)]
+    return [
+        _placeholder_info(context)
+        for context in release_note_contexts(
+            targets,
+            environ,
+            source_resolver=source_resolver,
+        )
+    ]
 
 
 def refresh_release_notes(
@@ -137,13 +153,18 @@ def refresh_release_notes(
     *,
     client: GitHubClient | None = None,
     now: str | None = None,
+    source_resolver: ReleaseNoteSourceResolver | None = None,
 ) -> list[ReleaseNoteInfo]:
     """Refresh missing or stale release-note metadata and return current rows."""
 
     active_client = client or GitHubClient(token=environ.get("GITHUB_TOKEN", ""))
     timestamp = now or utc_timestamp()
     infos: list[ReleaseNoteInfo] = []
-    for context in release_note_contexts(targets, environ):
+    for context in release_note_contexts(
+        targets,
+        environ,
+        source_resolver=source_resolver,
+    ):
         cached = _cached_info(conn, context)
         if context.provider == "unsupported":
             infos.append(cached)
@@ -171,6 +192,8 @@ def refresh_release_notes(
 def release_note_contexts(
     targets: Iterable[WudTarget],
     environ: Mapping[str, str],
+    *,
+    source_resolver: ReleaseNoteSourceResolver | None = None,
 ) -> list[ReleaseNoteContext]:
     upstreams = _load_upstream_map(environ)
     contexts: list[ReleaseNoteContext] = []
@@ -199,6 +222,22 @@ def release_note_contexts(
                     provider="lsio",
                     image_repo=lsio_repo,
                     upstream_repo=upstream_repo,
+                    current_tag=current_tag,
+                    target_tag=target_tag,
+                )
+            )
+            continue
+
+        source_repo = _github_source_repo(
+            source_resolver(target) if source_resolver is not None else ""
+        )
+        if source_repo:
+            contexts.append(
+                _context(
+                    target,
+                    provider="github",
+                    image_repo=source_repo,
+                    upstream_repo=source_repo,
                     current_tag=current_tag,
                     target_tag=target_tag,
                 )
@@ -689,6 +728,26 @@ def _ghcr_repo(image: str) -> str:
     if registry.lower() != "ghcr.io" or not sep:
         return ""
     return candidate if _github_repo_valid(candidate) else ""
+
+
+def _github_source_repo(source: str) -> str:
+    value = source.strip()
+    if not value or "github.com" not in value.lower():
+        return ""
+    if value.startswith("git@github.com:"):
+        candidate = value.removeprefix("git@github.com:")
+    else:
+        parse_value = value if "://" in value else f"//{value}"
+        parsed = urllib.parse.urlsplit(parse_value)
+        if parsed.netloc.lower() != "github.com":
+            return ""
+        candidate = parsed.path.lstrip("/")
+    candidate = candidate.removesuffix(".git").strip("/")
+    parts = [part for part in candidate.split("/") if part]
+    if len(parts) < 2:
+        return ""
+    repo = f"{parts[0]}/{parts[1].removesuffix('.git')}"
+    return repo if _github_repo_valid(repo) else ""
 
 
 def _github_repo_valid(value: str) -> bool:

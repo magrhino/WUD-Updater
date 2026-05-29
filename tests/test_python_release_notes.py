@@ -61,6 +61,52 @@ class ReleaseNotesTests(unittest.TestCase):
         self.assertEqual(contexts[0].provider, "unsupported")
         self.assertEqual(contexts[0].error, "no supported GitHub release source found")
 
+    def test_docker_source_label_routes_docker_hub_image_to_github(self) -> None:
+        parsed = parse_wud_text("advplyr/audiobookshelf:latest\n")
+
+        contexts = release_note_contexts(
+            parsed.targets,
+            {},
+            source_resolver=lambda _target: "https://github.com/advplyr/audiobookshelf",
+        )
+
+        self.assertEqual(contexts[0].provider, "github")
+        self.assertEqual(contexts[0].image_repo, "advplyr/audiobookshelf")
+        self.assertEqual(contexts[0].upstream_repo, "advplyr/audiobookshelf")
+
+    def test_docker_source_label_release_metadata_includes_github_link(self) -> None:
+        parsed = parse_wud_text("advplyr/audiobookshelf:latest\n")
+        client = GitHubClient(
+            fetch_json=lambda url: {
+                "https://api.github.com/repos/advplyr/audiobookshelf/releases/latest": {
+                    "tag_name": "v2.35.1",
+                    "name": "v2.35.1",
+                    "html_url": (
+                        "https://github.com/advplyr/audiobookshelf/releases/tag/v2.35.1"
+                    ),
+                    "body": "Routine update",
+                    "published_at": "2026-05-27T20:00:00Z",
+                }
+            }[url]
+        )
+
+        with connect_db(":memory:") as conn:
+            init_db(conn)
+            items = refresh_release_notes(
+                conn,
+                parsed.targets,
+                {},
+                client=client,
+                source_resolver=lambda _target: (
+                    "https://github.com/advplyr/audiobookshelf"
+                ),
+            )
+
+        self.assertEqual(items[0].status, "ready")
+        self.assertEqual(items[0].provider, "github")
+        self.assertEqual(items[0].release_tag, "v2.35.1")
+        self.assertEqual(items[0].links[0].label, "GitHub release")
+
     def test_lsio_release_metadata_includes_both_links(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             upstream_map = Path(tmp) / "upstreams.txt"
@@ -101,6 +147,27 @@ class ReleaseNotesTests(unittest.TestCase):
             [(link.label, link.kind) for link in items[0].links],
             [("LSIO release", "lsio_release"), ("Upstream release", "github_release")],
         )
+
+    def test_lsio_mapping_takes_precedence_over_docker_source_label(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            upstream_map = Path(tmp) / "upstreams.txt"
+            upstream_map.write_text(
+                "linuxserver/docker-calibre: kovidgoyal/calibre\n",
+                encoding="utf-8",
+            )
+            parsed = parse_wud_text("linuxserver/calibre:latest\n")
+
+            contexts = release_note_contexts(
+                parsed.targets,
+                {"UPSTREAM_MAP": str(upstream_map)},
+                source_resolver=lambda _target: (
+                    "https://github.com/linuxserver/docker-calibre"
+                ),
+            )
+
+        self.assertEqual(contexts[0].provider, "lsio")
+        self.assertEqual(contexts[0].image_repo, "linuxserver/docker-calibre")
+        self.assertEqual(contexts[0].upstream_repo, "kovidgoyal/calibre")
 
     def test_v4_database_migrates_release_note_cache(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
