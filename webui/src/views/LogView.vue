@@ -38,7 +38,13 @@ watch(runId, () => {
         <h2>#{{ runId }} log</h2>
       </div>
       <div class="inline-actions">
-        <n-button quaternary circle title="Refresh" @click="load">
+        <n-button
+          quaternary
+          circle
+          title="Refresh"
+          aria-label="Refresh log"
+          @click="load"
+        >
           <template #icon>
             <RefreshCw :size="17" />
           </template>

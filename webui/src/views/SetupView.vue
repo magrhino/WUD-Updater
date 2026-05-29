@@ -23,6 +23,24 @@ const passwordMinLength = computed(
 const passwordsMatch = computed(
   () => password.value.length > 0 && password.value === confirmPassword.value,
 );
+const passwordValidationStatus = computed<"error" | undefined>(() =>
+  password.value.length > 0 && password.value.length < passwordMinLength.value
+    ? "error"
+    : undefined,
+);
+const passwordFeedback = computed(() =>
+  passwordValidationStatus.value === "error"
+    ? `Use at least ${passwordMinLength.value} characters.`
+    : `Minimum ${passwordMinLength.value} characters.`,
+);
+const confirmPasswordValidationStatus = computed<"error" | undefined>(() =>
+  confirmPassword.value && !passwordsMatch.value ? "error" : undefined,
+);
+const confirmPasswordFeedback = computed(() =>
+  confirmPasswordValidationStatus.value === "error"
+    ? "Passwords do not match."
+    : "Repeat the new password.",
+);
 const canSubmit = computed(
   () =>
     Boolean(claim.value) &&
@@ -67,10 +85,15 @@ async function submit(): Promise<void> {
       </n-alert>
 
       <n-form @submit.prevent="submit">
-        <n-form-item label="Username">
+        <n-form-item label="Username" required feedback="Required for setup.">
           <n-input v-model:value="username" autocomplete="username" autofocus />
         </n-form-item>
-        <n-form-item :label="`Password (${passwordMinLength}+ characters)`">
+        <n-form-item
+          :label="`Password (${passwordMinLength}+ characters)`"
+          required
+          :validation-status="passwordValidationStatus"
+          :feedback="passwordFeedback"
+        >
           <n-input
             v-model:value="password"
             type="password"
@@ -78,13 +101,18 @@ async function submit(): Promise<void> {
             autocomplete="new-password"
           />
         </n-form-item>
-        <n-form-item label="Confirm password">
+        <n-form-item
+          label="Confirm password"
+          required
+          :validation-status="confirmPasswordValidationStatus"
+          :feedback="confirmPasswordFeedback"
+        >
           <n-input
             v-model:value="confirmPassword"
             type="password"
             show-password-on="click"
             autocomplete="new-password"
-            :status="confirmPassword && !passwordsMatch ? 'error' : undefined"
+            :status="confirmPasswordValidationStatus"
           />
         </n-form-item>
         <n-button

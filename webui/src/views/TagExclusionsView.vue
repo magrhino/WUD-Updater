@@ -160,21 +160,34 @@ watch(statusFilter, (nextFilter) => {
             :disabled="webui.loading"
           />
         </n-form-item>
-        <n-form-item label="Image repo">
+        <n-form-item
+          label="Image repo"
+          required
+          feedback="Required. Use the repository name without a tag."
+        >
           <n-input
             v-model:value="exclusionForm.imageRepo"
             placeholder="repo/app"
             :disabled="webui.loading"
           />
         </n-form-item>
-        <n-form-item v-if="exclusionForm.scope === 'service'" label="Service key">
+        <n-form-item
+          v-if="exclusionForm.scope === 'service'"
+          label="Service key"
+          required
+          feedback="Required for service-scoped exclusions. Use stack/service."
+        >
           <n-input
             v-model:value="exclusionForm.serviceKey"
             placeholder="stack/service"
             :disabled="webui.loading"
           />
         </n-form-item>
-        <n-form-item label="Tag">
+        <n-form-item
+          label="Tag"
+          required
+          feedback="Required. Match the tag to exclude."
+        >
           <n-input
             v-model:value="exclusionForm.tag"
             placeholder="2.0"
@@ -218,6 +231,7 @@ watch(statusFilter, (nextFilter) => {
           class="filter-control"
           :options="statusFilterOptions"
           :disabled="webui.loading"
+          aria-label="Filter tag exclusions by status"
         />
       </div>
 

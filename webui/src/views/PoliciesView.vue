@@ -128,7 +128,11 @@ onMounted(() => {
         </div>
       </div>
       <n-form class="management-form" @submit.prevent="openSaveConfirm">
-        <n-form-item label="Service key">
+        <n-form-item
+          label="Service key"
+          required
+          feedback="Required to save a policy. Use stack/service."
+        >
           <n-input
             v-model:value="policyForm.serviceKey"
             placeholder="stack/service"
@@ -145,7 +149,10 @@ onMounted(() => {
         <n-form-item label="Auto update">
           <n-switch v-model:value="policyForm.autoUpdate" :disabled="webui.loading" />
         </n-form-item>
-        <n-form-item label="Default snooze seconds">
+        <n-form-item
+          label="Default snooze seconds"
+          feedback="Optional. Leave empty for no default snooze."
+        >
           <n-input-number
             v-model:value="policyForm.snoozeDefaultSeconds"
             clearable

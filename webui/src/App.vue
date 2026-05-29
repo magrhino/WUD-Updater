@@ -102,7 +102,13 @@ async function handleLogout(): Promise<void> {
               <h1>{{ String(route.meta.title ?? route.name ?? "Dashboard") }}</h1>
             </div>
             <div class="topbar-actions">
-              <n-button quaternary circle title="Refresh" @click="refreshCurrentView">
+              <n-button
+                quaternary
+                circle
+                title="Refresh"
+                aria-label="Refresh current view"
+                @click="refreshCurrentView"
+              >
                 <template #icon>
                   <RefreshCw :size="18" />
                 </template>

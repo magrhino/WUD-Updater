@@ -119,17 +119,25 @@ watch(snoozeState, (nextState) => {
         </div>
       </div>
       <n-form class="management-form" @submit.prevent="openCreateConfirm">
-        <n-form-item label="Service key">
+        <n-form-item
+          label="Service key"
+          required
+          feedback="Required to create a snooze. Use stack/service."
+        >
           <n-input
             v-model:value="snoozeForm.serviceKey"
             placeholder="stack/service"
             :disabled="webui.loading"
           />
         </n-form-item>
-        <n-form-item label="Snoozed until">
+        <n-form-item
+          label="Snoozed until"
+          required
+          feedback="Use an ISO timestamp, or choose 1h, 1d, or 7d."
+        >
           <n-input
             v-model:value="snoozeForm.snoozedUntil"
-            placeholder="2026-05-28T18:00:00Z"
+            placeholder="YYYY-MM-DDTHH:MM:SSZ"
             :disabled="webui.loading"
           />
         </n-form-item>
@@ -179,6 +187,7 @@ watch(snoozeState, (nextState) => {
           class="filter-control"
           :options="stateOptions"
           :disabled="webui.loading"
+          aria-label="Filter snoozes by state"
         />
       </div>
 
