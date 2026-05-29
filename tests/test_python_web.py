@@ -573,7 +573,7 @@ def test_status_reports_missing_database_without_creating_it(tmp_path: Path) -> 
 def test_pending_endpoint_reads_wud_file_without_mutation(tmp_path: Path) -> None:
     wud_file = tmp_path / "state" / "images.todo"
     client = _client(tmp_path, {"WUD_WEB_DEV_NO_AUTH": "true"})
-    original = "# ignored\nnginx:1.25 tag=1.26\nredis@sha256:abc\n"
+    original = "# ignored\nnginx:1.25 tag=1.26\nredis:latest@sha256:abc\n"
     wud_file.write_text(original, encoding="utf-8")
 
     response = client.get("/api/v1/pending")
@@ -583,7 +583,10 @@ def test_pending_endpoint_reads_wud_file_without_mutation(tmp_path: Path) -> Non
     assert body["exists"] is True
     assert body["count"] == 2
     assert body["items"][0]["image"] == "nginx:1.25"
+    assert body["items"][0]["current_tag"] == "1.25"
     assert body["items"][0]["desired_tag"] == "1.26"
+    assert body["items"][1]["current_tag"] == "latest"
+    assert body["items"][1]["digest"] == "sha256:abc"
     assert wud_file.read_text(encoding="utf-8") == original
 
 
@@ -1163,6 +1166,88 @@ def test_plan_endpoint_skips_tag_updates_unless_allowed(tmp_path: Path) -> None:
     assert "repo/app:1.0 tag=2.0\n" == wud_file.read_text(encoding="utf-8")
 
 
+def test_plan_endpoint_accepts_tag_overrides(tmp_path: Path) -> None:
+    fake_env, fake_root = _fake_docker_env(tmp_path)
+    client = _client(tmp_path, {"WUD_WEB_DEV_NO_AUTH": "true", **fake_env})
+    wud_file = tmp_path / "state" / "images.todo"
+    wud_file.write_text("repo/app:1.0 tag=wrong\n", encoding="utf-8")
+    _make_fake_stack(
+        tmp_path,
+        fake_root,
+        "stack",
+        [("app", "repo/app:1.0", "cid-app")],
+    )
+
+    response = client.post(
+        "/api/v1/plans",
+        json={
+            "line_numbers": [1],
+            "allow_tag_updates": True,
+            "tag_overrides": [{"line_no": 1, "tag": "3.0"}],
+        },
+        headers=_csrf_headers(client),
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "ready"
+    assert body["stacks"][0]["tag_updates"][0]["new_image"] == "repo/app:3.0"
+    assert body["stacks"][0]["lines"][0]["desired_tag"] == "3.0"
+    assert "manifest inspect repo/app:3.0" in _fake_docker_calls(fake_root)
+
+
+def test_plan_endpoint_rejects_invalid_tag_overrides(tmp_path: Path) -> None:
+    fake_env, fake_root = _fake_docker_env(tmp_path)
+    client = _client(tmp_path, {"WUD_WEB_DEV_NO_AUTH": "true", **fake_env})
+    wud_file = tmp_path / "state" / "images.todo"
+    wud_file.write_text("repo/app:latest\nrepo/db:1.0 tag=2.0\n", encoding="utf-8")
+    _make_fake_stack(
+        tmp_path,
+        fake_root,
+        "stack",
+        [
+            ("app", "repo/app:latest", "cid-app"),
+            ("db", "repo/db:1.0", "cid-db"),
+        ],
+    )
+    headers = _csrf_headers(client)
+
+    invalid_tag = client.post(
+        "/api/v1/plans",
+        json={
+            "line_numbers": [2],
+            "allow_tag_updates": True,
+            "tag_overrides": [{"line_no": 2, "tag": "bad:value"}],
+        },
+        headers=headers,
+    )
+    non_selected = client.post(
+        "/api/v1/plans",
+        json={
+            "line_numbers": [2],
+            "allow_tag_updates": True,
+            "tag_overrides": [{"line_no": 1, "tag": "3.0"}],
+        },
+        headers=headers,
+    )
+    non_tag = client.post(
+        "/api/v1/plans",
+        json={
+            "line_numbers": [1],
+            "allow_tag_updates": True,
+            "tag_overrides": [{"line_no": 1, "tag": "3.0"}],
+        },
+        headers=headers,
+    )
+
+    assert invalid_tag.status_code == 422
+    assert "invalid tag" in invalid_tag.json()["detail"]
+    assert non_selected.status_code == 422
+    assert "selected WUD tag update lines" in non_selected.json()["detail"]
+    assert non_tag.status_code == 422
+    assert "does not target a tag update" in non_tag.json()["detail"]
+
+
 def test_apply_endpoint_rejects_mixed_plan_with_skipped_lines_without_mutation(
     tmp_path: Path,
 ) -> None:
@@ -1493,6 +1578,110 @@ def test_apply_endpoint_runs_existing_updater_and_records_audit(
     assert detail["pending_updates"][0]["line_no"] == 1
     assert detail["pending_updates"][0]["status"] == "resolved"
     assert not lock_dir_for(wud_file).exists()
+
+
+def test_apply_endpoint_passes_tag_overrides_to_updater(tmp_path: Path) -> None:
+    fake_env, fake_root = _fake_docker_env(tmp_path)
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+            **fake_env,
+        },
+    )
+    wud_file = tmp_path / "state" / "images.todo"
+    wud_file.write_text("repo/app:1.0 tag=wrong\n", encoding="utf-8")
+    compose_dir = _make_fake_stack(
+        tmp_path,
+        fake_root,
+        "stack",
+        [("app", "repo/app:1.0", "cid-app")],
+    )
+    (fake_root / "images" / "repo_app_3.0.after_id").write_text(
+        "new\n",
+        encoding="utf-8",
+    )
+    headers = _csrf_headers(client)
+    payload = {
+        "line_numbers": [1],
+        "allow_tag_updates": True,
+        "tag_overrides": [{"line_no": 1, "tag": "3.0"}],
+    }
+    plan = client.post(
+        "/api/v1/plans",
+        json=payload,
+        headers=headers,
+    ).json()
+
+    apply_response = client.post(
+        "/api/v1/jobs",
+        json={
+            "plan_id": plan["plan_id"],
+            **payload,
+            "confirmation": "apply",
+        },
+        headers=headers,
+    )
+    job = _wait_apply_job(client, apply_response.json()["job_id"])
+
+    assert apply_response.status_code == 202
+    assert job["status"] == "success"
+    assert wud_file.read_text(encoding="utf-8") == ""
+    assert "image: repo/app:3.0" in (
+        compose_dir / "docker-compose.yml"
+    ).read_text(encoding="utf-8")
+    calls = _fake_docker_calls(fake_root)
+    assert "manifest inspect repo/app:3.0" in calls
+    assert "compose -f docker-compose.yml pull app" in calls
+
+
+def test_apply_endpoint_rejects_changed_tag_override_as_stale(
+    tmp_path: Path,
+) -> None:
+    fake_env, fake_root = _fake_docker_env(tmp_path)
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+            **fake_env,
+        },
+    )
+    wud_file = tmp_path / "state" / "images.todo"
+    wud_file.write_text("repo/app:1.0 tag=wrong\n", encoding="utf-8")
+    _make_fake_stack(
+        tmp_path,
+        fake_root,
+        "stack",
+        [("app", "repo/app:1.0", "cid-app")],
+    )
+    headers = _csrf_headers(client)
+    plan = client.post(
+        "/api/v1/plans",
+        json={
+            "line_numbers": [1],
+            "allow_tag_updates": True,
+            "tag_overrides": [{"line_no": 1, "tag": "3.0"}],
+        },
+        headers=headers,
+    ).json()
+
+    response = client.post(
+        "/api/v1/jobs",
+        json={
+            "plan_id": plan["plan_id"],
+            "line_numbers": [1],
+            "allow_tag_updates": True,
+            "tag_overrides": [{"line_no": 1, "tag": "2.0"}],
+            "confirmation": "apply",
+        },
+        headers=headers,
+    )
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == "plan is stale"
+    assert " pull " not in _fake_docker_calls(fake_root)
 
 
 def test_legacy_apply_routes_remain_compatible(

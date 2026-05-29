@@ -52,6 +52,16 @@ def image_has_tag(image: str) -> bool:
     return ":" in last
 
 
+def image_tag(image: str) -> str:
+    """Return the tag from an image reference, or an empty string."""
+
+    image = strip_digest(image)
+    last = image.rsplit("/", 1)[-1]
+    if ":" not in last:
+        return ""
+    return last.rsplit(":", 1)[1]
+
+
 def image_key(image: str) -> str:
     """Return the matching key for an image, ignoring registry and digest."""
 

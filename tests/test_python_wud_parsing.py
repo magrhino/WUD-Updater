@@ -7,6 +7,7 @@ from pathlib import Path
 from wud_updater.images import (
     drop_registry,
     image_matches_resolved_target,
+    image_tag,
     image_with_tag,
     image_repo_ref,
     normalize_digest,
@@ -68,6 +69,11 @@ class ImageHelperTests(unittest.TestCase):
         self.assertEqual(normalize_digest("sha256:abc"), "sha256:abc")
         self.assertEqual(normalize_digest("abc"), "sha256:abc")
         self.assertEqual(normalize_digest("repo/app@sha256:abc"), "sha256:abc")
+
+    def test_image_tag_parsing(self) -> None:
+        self.assertEqual(image_tag("repo/app:latest"), "latest")
+        self.assertEqual(image_tag("localhost:5000/repo/app:1.0@sha256:abc"), "1.0")
+        self.assertEqual(image_tag("repo/app@sha256:abc"), "")
 
     def test_image_reference_rewrite_preserves_registry_and_drops_digest(self) -> None:
         self.assertEqual(

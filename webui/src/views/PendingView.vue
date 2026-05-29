@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from "vue";
+import { computed, h, onMounted, onUnmounted, ref, watch } from "vue";
 import { breakpointsTailwind, useBreakpoints } from "@vueuse/core";
 import { Check, ClipboardList, Play, X } from "@lucide/vue";
-import type { DataTableColumns, DataTableRowKey } from "naive-ui";
+import { NInput, type DataTableColumns, type DataTableRowKey } from "naive-ui";
 
 import {
   webApi,
@@ -10,6 +10,7 @@ import {
   type PendingItem,
   type PlanAction,
   type PlanIssue,
+  type TagOverrideRequest,
 } from "../api/client";
 import { useAuthStore } from "../stores/auth";
 import { useWebuiStore } from "../stores/webui";
@@ -20,25 +21,87 @@ const breakpoints = useBreakpoints(breakpointsTailwind);
 const isMobile = breakpoints.smaller("md");
 const selectedLineNumbers = ref<number[]>([]);
 const allowTagUpdates = ref(false);
+const tagOverrides = ref<Record<number, string>>({});
 const showApplyConfirm = ref(false);
 const jobEventSource = ref<EventSource | null>(null);
 const terminalJobStatuses = new Set(["success", "failure"]);
+const tagValuePattern = /^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$/;
 
 const columns = computed<DataTableColumns<PendingItem>>(() => [
   { type: "selection", width: 48 },
   { title: "Line", key: "line_no", width: 80 },
   { title: "Image", key: "image", minWidth: 240 },
   { title: "Repository", key: "repo", minWidth: 200 },
-  { title: "Tag", key: "desired_tag", minWidth: 120 },
-  { title: "Digest", key: "digest", minWidth: 220 },
+  {
+    title: "Current tag",
+    key: "current_tag",
+    minWidth: 120,
+    render: (row) => displayValue(row.current_tag),
+  },
+  {
+    title: "New tag",
+    key: "desired_tag",
+    minWidth: 160,
+    render: (row) => {
+      if (!row.desired_tag) {
+        return displayValue("");
+      }
+      return h(NInput, {
+        value: tagOverrideValue(row),
+        size: "small",
+        class: "tag-override-input",
+        placeholder: row.desired_tag,
+        "aria-label": `New tag for ${row.image}`,
+        onUpdateValue: (value: string) => updateTagOverride(row, value),
+      });
+    },
+  },
+  {
+    title: "New digest",
+    key: "digest",
+    minWidth: 220,
+    render: (row) =>
+      row.digest
+        ? h("code", { class: "digest-value", title: row.digest }, displayDigest(row.digest))
+        : displayValue(""),
+  },
 ]);
 
 const allLineNumbers = computed(
   () => webui.pending?.items.map((item) => item.line_no) ?? [],
 );
 const selectedLineSet = computed(() => new Set(selectedLineNumbers.value));
+const selectedTagOverrideError = computed(() => {
+  for (const item of webui.pending?.items ?? []) {
+    if (!selectedLineSet.value.has(item.line_no) || !item.desired_tag) {
+      continue;
+    }
+    const tag = tagOverrideValue(item).trim();
+    if (!tagValuePattern.test(tag)) {
+      return `Line ${item.line_no} has an invalid new tag. Use a Docker tag value like ${item.desired_tag}.`;
+    }
+  }
+  return "";
+});
+const requestTagOverrides = computed<TagOverrideRequest[]>(() =>
+  (webui.pending?.items ?? [])
+    .filter((item) => selectedLineSet.value.has(item.line_no) && item.desired_tag)
+    .map((item) => ({
+      line_no: item.line_no,
+      tag: tagOverrideValue(item).trim(),
+    }))
+    .filter((item) => {
+      const original = webui.pending?.items.find(
+        (pendingItem) => pendingItem.line_no === item.line_no,
+      );
+      return original !== undefined && item.tag !== original.desired_tag;
+    }),
+);
 const planningDisabled = computed(
-  () => selectedLineNumbers.value.length === 0 || webui.loading,
+  () =>
+    selectedLineNumbers.value.length === 0 ||
+    webui.loading ||
+    Boolean(selectedTagOverrideError.value),
 );
 const planAlertType = computed(() => {
   if (webui.plan?.status === "blocked") {
@@ -65,6 +128,24 @@ const applyAvailable = computed(
   () => webui.plan?.status === "ready" && webui.plan.can_apply,
 );
 const applyDisabled = computed(() => !applyAvailable.value || webui.loading);
+const directUpdateDisabled = computed(
+  () => planningDisabled.value || !auth.session?.mutations_enabled,
+);
+const directUpdateTitle = computed(() => {
+  if (!auth.session?.mutations_enabled) {
+    return "Read-only mode is active. Set WUD_WEB_MUTATIONS_ENABLED=true on the server to apply updates.";
+  }
+  if (selectedTagOverrideError.value) {
+    return selectedTagOverrideError.value;
+  }
+  return "";
+});
+const readOnlySelectionMessage = computed(() => {
+  if (selectedLineNumbers.value.length && !auth.session?.mutations_enabled) {
+    return "Read-only mode is active. Set WUD_WEB_MUTATIONS_ENABLED=true on the server to apply updates.";
+  }
+  return "";
+});
 const mutationDisabledMessage = computed(() => {
   if (!webui.plan || webui.plan.status !== "ready" || webui.plan.can_apply) {
     return "";
@@ -100,6 +181,32 @@ function rowKey(row: PendingItem): number {
   return row.line_no;
 }
 
+function displayValue(value: string): string {
+  return value || "None";
+}
+
+function displayDigest(value: string): string {
+  if (!value || value.length <= 36) {
+    return value;
+  }
+  return `${value.slice(0, 20)}...${value.slice(-12)}`;
+}
+
+function tagOverrideValue(item: PendingItem): string {
+  return tagOverrides.value[item.line_no] ?? item.desired_tag;
+}
+
+function updateTagOverride(item: PendingItem, value: string): void {
+  tagOverrides.value = {
+    ...tagOverrides.value,
+    [item.line_no]: value,
+  };
+  if (value.trim() !== item.desired_tag) {
+    allowTagUpdates.value = true;
+  }
+  webui.clearPlan();
+}
+
 function updateCheckedRowKeys(keys: DataTableRowKey[]): void {
   selectedLineNumbers.value = keys
     .map((key) => Number(key))
@@ -133,7 +240,25 @@ async function createPlan(): Promise<void> {
   if (planningDisabled.value) {
     return;
   }
-  await webui.createPlan(selectedLineNumbers.value, allowTagUpdates.value);
+  await webui.createPlan(
+    selectedLineNumbers.value,
+    allowTagUpdates.value,
+    requestTagOverrides.value,
+  );
+}
+
+async function prepareDirectUpdate(): Promise<void> {
+  if (directUpdateDisabled.value) {
+    return;
+  }
+  await webui.createPlan(
+    selectedLineNumbers.value,
+    allowTagUpdates.value,
+    requestTagOverrides.value,
+  );
+  if (webui.plan?.status === "ready" && webui.plan.can_apply) {
+    showApplyConfirm.value = true;
+  }
 }
 
 function clearPlanOnOptionChange(): void {
@@ -155,6 +280,7 @@ async function confirmApply(): Promise<void> {
     webui.plan.plan_id,
     webui.plan.selected_line_numbers,
     allowTagUpdates.value,
+    requestTagOverrides.value,
   );
   subscribeApplyJob(job.job_id);
   showApplyConfirm.value = false;
@@ -221,6 +347,20 @@ onMounted(() => {
   void webui.loadPending();
 });
 
+watch(
+  () => webui.pending?.items ?? [],
+  (items) => {
+    const next: Record<number, string> = {};
+    for (const item of items) {
+      if (item.desired_tag) {
+        next[item.line_no] = tagOverrides.value[item.line_no] ?? item.desired_tag;
+      }
+    }
+    tagOverrides.value = next;
+  },
+  { immediate: true },
+);
+
 onUnmounted(() => {
   closeJobStream();
 });
@@ -270,10 +410,39 @@ onUnmounted(() => {
           <template #icon>
             <ClipboardList :size="16" />
           </template>
-          Dry-run plan
+          Preview plan
+        </n-button>
+        <n-button
+          type="primary"
+          size="small"
+          secondary
+          :disabled="directUpdateDisabled"
+          :loading="webui.loading"
+          :title="directUpdateTitle"
+          @click="prepareDirectUpdate"
+        >
+          <template #icon>
+            <Play :size="16" />
+          </template>
+          Update selected
         </n-button>
       </div>
     </div>
+
+    <n-alert
+      v-if="readOnlySelectionMessage"
+      type="warning"
+      :show-icon="false"
+    >
+      {{ readOnlySelectionMessage }}
+    </n-alert>
+    <n-alert
+      v-if="selectedTagOverrideError"
+      type="warning"
+      :show-icon="false"
+    >
+      {{ selectedTagOverrideError }}
+    </n-alert>
 
     <n-data-table
       v-if="!isMobile"
@@ -305,12 +474,32 @@ onUnmounted(() => {
             <dd>{{ item.repo }}</dd>
           </div>
           <div>
-            <dt>Tag</dt>
-            <dd>{{ item.desired_tag || "None" }}</dd>
+            <dt>Current tag</dt>
+            <dd>{{ item.current_tag || "None" }}</dd>
           </div>
           <div>
-            <dt>Digest</dt>
-            <dd>{{ item.digest || "None" }}</dd>
+            <dt>New tag</dt>
+            <dd>
+              <n-input
+                v-if="item.desired_tag"
+                :value="tagOverrideValue(item)"
+                size="small"
+                class="tag-override-input"
+                :placeholder="item.desired_tag"
+                :aria-label="`New tag for ${item.image}`"
+                @update:value="updateTagOverride(item, $event)"
+              />
+              <span v-else>None</span>
+            </dd>
+          </div>
+          <div>
+            <dt>New digest</dt>
+            <dd>
+              <code v-if="item.digest" class="digest-value" :title="item.digest">
+                {{ displayDigest(item.digest) }}
+              </code>
+              <span v-else>None</span>
+            </dd>
           </div>
         </dl>
       </article>
@@ -489,6 +678,10 @@ onUnmounted(() => {
         <div v-for="stack in webui.plan.stacks" :key="stack.name">
           <span>{{ stack.name }}</span>
           <strong>{{ stack.services_label }}</strong>
+        </div>
+        <div v-for="override in requestTagOverrides" :key="override.line_no">
+          <span>New tag #{{ override.line_no }}</span>
+          <strong>{{ override.tag }}</strong>
         </div>
       </div>
     </n-modal>

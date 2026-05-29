@@ -17,6 +17,7 @@ from .updater import (
     RECREATE_STACK_LABEL,
     RECREATE_STACK_LABEL_FORMAT,
     Match,
+    TagOverride,
     TagUpdate,
     UpdateScope,
     _container_bind_mount_path_issue,
@@ -150,6 +151,7 @@ class _PlanBuilder:
     config: UpdaterConfig
     line_numbers: Sequence[int]
     allow_tag_updates: bool = False
+    tag_overrides: Sequence[TagOverride] = ()
     host_docker_base: Path | None = None
     command_runner: CommandRunner | None = None
     docker: DockerCli = field(init=False)
@@ -165,6 +167,7 @@ class _PlanBuilder:
         full_parse = _read_wud_file(self.config.wud_out_file)
         _validate_selected_targets(full_parse, selected)
         parsed = parse_wud_file(self.config.wud_out_file, selected_lines=selected)
+        parsed = self._apply_tag_overrides(parsed)
 
         issues = [
             DryRunPlanIssue(
@@ -231,9 +234,44 @@ class _PlanBuilder:
                 plan,
                 config=self.config,
                 allow_tag_updates=self.allow_tag_updates,
+                tag_overrides=self.tag_overrides,
                 host_docker_base=self.host_docker_base,
                 wud_file_hash=_file_sha256(self.config.wud_out_file),
             ),
+        )
+
+    def _apply_tag_overrides(self, parsed: ParsedWudFile) -> ParsedWudFile:
+        overrides = {item.line_no: item.tag for item in self.tag_overrides}
+        if not overrides:
+            return parsed
+        if not self.allow_tag_updates:
+            raise PlanInputError("tag_overrides require allow_tag_updates=true")
+
+        targets_by_line = {target.line_no: target for target in parsed.targets}
+        missing = sorted(set(overrides) - set(targets_by_line))
+        if missing:
+            values = ", ".join(str(line_no) for line_no in missing)
+            raise PlanInputError(
+                "tag_overrides must reference selected WUD tag update lines: "
+                + values
+            )
+
+        updated_targets: list[WudTarget] = []
+        for target in parsed.targets:
+            override = overrides.get(target.line_no)
+            if override is None:
+                updated_targets.append(target)
+                continue
+            if not target.desired_tag:
+                raise PlanInputError(
+                    f"tag_overrides line {target.line_no} does not target a tag update"
+                )
+            updated_targets.append(replace(target, desired_tag=override))
+
+        return ParsedWudFile(
+            lines=parsed.lines,
+            targets=tuple(updated_targets),
+            warnings=parsed.warnings,
         )
 
     def _build_matches(
@@ -780,6 +818,7 @@ def build_dry_run_plan(
     *,
     line_numbers: Sequence[int],
     allow_tag_updates: bool = False,
+    tag_overrides: Sequence[TagOverride] = (),
     host_docker_base: Path | None = None,
     environ: Mapping[str, str] | None = None,
 ) -> DryRunPlan:
@@ -788,6 +827,7 @@ def build_dry_run_plan(
         config=config,
         line_numbers=line_numbers,
         allow_tag_updates=allow_tag_updates,
+        tag_overrides=tag_overrides,
         host_docker_base=host_docker_base,
         command_runner=runner,
     ).build()
@@ -813,6 +853,7 @@ def _plan_id(
     *,
     config: UpdaterConfig,
     allow_tag_updates: bool,
+    tag_overrides: Sequence[TagOverride],
     host_docker_base: Path | None,
     wud_file_hash: str,
 ) -> str:
@@ -822,6 +863,10 @@ def _plan_id(
     payload = {
         "version": 1,
         "allow_tag_updates": allow_tag_updates,
+        "tag_overrides": [
+            {"line_no": item.line_no, "tag": item.tag}
+            for item in sorted(tag_overrides, key=lambda item: item.line_no)
+        ],
         "docker_base": str(config.docker_base),
         "host_docker_base": "" if host_docker_base is None else str(host_docker_base),
         "max_wait": config.max_wait,

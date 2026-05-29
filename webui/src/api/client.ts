@@ -4,6 +4,7 @@ export interface PendingItem {
   image: string;
   key: string;
   repo: string;
+  current_tag: string;
   has_tag: boolean;
   allow_repo: boolean;
   digest: string;
@@ -98,6 +99,11 @@ export interface PlanSkipped {
   image: string;
   desired_tag: string;
   reason: string;
+}
+
+export interface TagOverrideRequest {
+  line_no: number;
+  tag: string;
 }
 
 export interface PlanResponse {
@@ -402,6 +408,7 @@ export const webApi = {
   createPlan: (
     lineNumbers: number[],
     allowTagUpdates: boolean,
+    tagOverrides: TagOverrideRequest[],
     csrfToken: string,
   ) =>
     apiRequest<PlanResponse>("/plans", {
@@ -410,12 +417,14 @@ export const webApi = {
       body: JSON.stringify({
         line_numbers: lineNumbers,
         allow_tag_updates: allowTagUpdates,
+        tag_overrides: tagOverrides,
       }),
     }),
   createJob: (
     planId: string,
     lineNumbers: number[],
     allowTagUpdates: boolean,
+    tagOverrides: TagOverrideRequest[],
     csrfToken: string,
   ) =>
     apiRequest<ApplyJobResponse>("/jobs", {
@@ -425,6 +434,7 @@ export const webApi = {
         plan_id: planId,
         line_numbers: lineNumbers,
         allow_tag_updates: allowTagUpdates,
+        tag_overrides: tagOverrides,
         confirmation: "apply",
       }),
     }),
@@ -432,6 +442,7 @@ export const webApi = {
     planId: string,
     lineNumbers: number[],
     allowTagUpdates: boolean,
+    tagOverrides: TagOverrideRequest[],
     csrfToken: string,
   ) =>
     apiRequest<ApplyJobResponse>("/plans/apply", {
@@ -441,6 +452,7 @@ export const webApi = {
         plan_id: planId,
         line_numbers: lineNumbers,
         allow_tag_updates: allowTagUpdates,
+        tag_overrides: tagOverrides,
         confirmation: "apply",
       }),
     }),

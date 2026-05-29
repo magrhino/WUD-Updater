@@ -16,6 +16,7 @@ import {
   type StatusResponse,
   type StateOperation,
   type StateOperationResponse,
+  type TagOverrideRequest,
   type TagExclusionRuleRecord,
   type TagExclusionScope,
   type TagExclusionStatus,
@@ -81,6 +82,7 @@ export const useWebuiStore = defineStore("webui", () => {
   async function createPlan(
     lineNumbers: number[],
     allowTagUpdates: boolean,
+    tagOverrides: TagOverrideRequest[] = [],
   ): Promise<void> {
     const auth = useAuthStore();
     await loadWithState(async () => {
@@ -89,6 +91,7 @@ export const useWebuiStore = defineStore("webui", () => {
       plan.value = await webApi.createPlan(
         lineNumbers,
         allowTagUpdates,
+        tagOverrides,
         await auth.ensureCsrf(),
       );
     });
@@ -102,6 +105,7 @@ export const useWebuiStore = defineStore("webui", () => {
     planId: string,
     lineNumbers: number[],
     allowTagUpdates: boolean,
+    tagOverrides: TagOverrideRequest[] = [],
   ): Promise<ApplyJobResponse> {
     const auth = useAuthStore();
     await loadWithState(async () => {
@@ -109,6 +113,7 @@ export const useWebuiStore = defineStore("webui", () => {
         planId,
         lineNumbers,
         allowTagUpdates,
+        tagOverrides,
         await auth.ensureCsrf(),
       );
     });
@@ -122,8 +127,9 @@ export const useWebuiStore = defineStore("webui", () => {
     planId: string,
     lineNumbers: number[],
     allowTagUpdates: boolean,
+    tagOverrides: TagOverrideRequest[] = [],
   ): Promise<ApplyJobResponse> {
-    return createJob(planId, lineNumbers, allowTagUpdates);
+    return createJob(planId, lineNumbers, allowTagUpdates, tagOverrides);
   }
 
   function setApplyJob(job: ApplyJobResponse): void {

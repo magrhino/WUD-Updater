@@ -124,7 +124,7 @@ test_container_name_fallback(){
 test_digest_update_kind_fallback(){
   setup_case
   run_script update_available=true image_name=repo/app image_tag_value=latest update_kind_kind=digest update_kind_remote_value="repo/app@sha256:$(hex_digest)"
-  assert_file_equals "repo/app:latest"
+  assert_file_equals "repo/app:latest@sha256:$(hex_digest)"
   teardown_case
 }
 
@@ -151,6 +151,16 @@ test_dedupe_replaces_existing_image_line(){
   printf 'repo/other:latest\nrepo/app:latest sha256=sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\n' > "$OUT_FILE"
   run_script update_available=true image_name=repo/app image_tag_value=latest result_digest="$(hex_digest)"
   assert_file_equals "repo/app:latest
+repo/other:latest"
+  teardown_case
+}
+
+test_dedupe_replaces_existing_digest_pinned_line(){
+  setup_case
+  mkdir -p "$(dirname "$OUT_FILE")"
+  printf 'repo/other:latest\nrepo/app:latest@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\n' > "$OUT_FILE"
+  run_script update_available=true image_name=repo/app image_tag_value=latest update_kind_kind=digest update_kind_remote_value="repo/app@sha256:$(hex_digest)"
+  assert_file_equals "repo/app:latest@sha256:$(hex_digest)
 repo/other:latest"
   teardown_case
 }
@@ -325,6 +335,7 @@ main(){
   run_test test_tag_dedupe_replaces_existing_image_line
   run_test test_invalid_digest_is_omitted
   run_test test_dedupe_replaces_existing_image_line
+  run_test test_dedupe_replaces_existing_digest_pinned_line
   run_test test_existing_file_mode_and_owner_are_preserved
   run_test test_existing_broader_mode_is_preserved
   run_test test_new_file_defaults_to_group_writable_mode

@@ -161,6 +161,32 @@ tag_from_remote() {
   printf '%s' "$tag"
 }
 
+digest_from_remote() {
+  digest="$1"
+  [ -n "$digest" ] || return 1
+
+  case "$digest" in
+    *@sha256:*)
+      digest="sha256:${digest##*@sha256:}"
+      ;;
+    sha256:*)
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+
+  hex="${digest#sha256:}"
+  [ "${#hex}" -eq 64 ] || return 1
+  case "$hex" in
+    *[!0-9A-Fa-f]*)
+      return 1
+      ;;
+  esac
+
+  printf 'sha256:%s' "$hex"
+}
+
 # Only act when there is an update (true)
 if [ "${update_available:-}" = "true" ]; then
   OUT_DIR="$(dirname "$OUT_FILE")"
@@ -179,6 +205,11 @@ if [ "${update_available:-}" = "true" ]; then
     if REMOTE_TAG="$(tag_from_remote "$REMOTE_TAG_SOURCE")"; then
       LINE="${IMAGE} tag=${REMOTE_TAG}"
     fi
+  elif [ "${update_kind_kind:-}" = "digest" ]; then
+    REMOTE_DIGEST_SOURCE="${update_kind_remote_value:-}"
+    if REMOTE_DIGEST="$(digest_from_remote "$REMOTE_DIGEST_SOURCE")"; then
+      LINE="${IMAGE}@${REMOTE_DIGEST}"
+    fi
   fi
 
   umask 077
@@ -193,7 +224,13 @@ if [ "${update_available:-}" = "true" ]; then
 
   # Remove existing lines for this image, with or without a digest suffix.
   if [ -e "$OUT_FILE" ]; then
-    if ! awk -v image="$IMAGE" 'NF == 0 || $1 != image' "$OUT_FILE" > "$TMP"; then
+    if ! awk -v image="$IMAGE" '
+      function target_key(value) {
+        sub(/@sha256:[^[:space:]]+$/, "", value)
+        return value
+      }
+      NF == 0 || target_key($1) != image
+    ' "$OUT_FILE" > "$TMP"; then
       echo "Failed to filter existing entries in $OUT_FILE" >&2
       exit 1
     fi

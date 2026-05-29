@@ -43,7 +43,7 @@ from .config import ConfigError, UpdaterConfig, load_config
 from .db import DatabaseError, SCHEMA_VERSION, connect_db, init_db, utc_timestamp
 from .db import _user_version as db_user_version
 from .db import _validate_schema as validate_db_schema
-from .images import repo_key, tag_value_valid
+from .images import image_tag, repo_key, tag_value_valid
 from .locks import DirectoryLock, WudLockError
 from .plans import (
     DryRunPlan,
@@ -51,7 +51,7 @@ from .plans import (
     PlanInputError,
     build_dry_run_plan,
 )
-from .updater import UpdateFromWudRunner, UpdaterOptions, js_regex_escape
+from .updater import TagOverride, UpdateFromWudRunner, UpdaterOptions, js_regex_escape
 from .wud_file import ParsedWudFile, parse_wud_file
 
 
@@ -134,6 +134,7 @@ class PendingItem(BaseModel):
     image: str
     key: str
     repo: str
+    current_tag: str
     has_tag: bool
     allow_repo: bool
     digest: str
@@ -258,9 +259,15 @@ class RunLogResponse(BaseModel):
     max_bytes: int
 
 
+class TagOverrideRequest(BaseModel):
+    line_no: LineNumber
+    tag: str = Field(min_length=1, max_length=128)
+
+
 class PlanRequest(BaseModel):
     line_numbers: list[LineNumber] = Field(min_length=1)
     allow_tag_updates: bool = False
+    tag_overrides: list[TagOverrideRequest] = Field(default_factory=list)
 
 
 class PlanSummary(BaseModel):
@@ -363,6 +370,7 @@ class ApplyPlanRequest(BaseModel):
     plan_id: str = Field(min_length=1)
     line_numbers: list[LineNumber] = Field(min_length=1)
     allow_tag_updates: bool = False
+    tag_overrides: list[TagOverrideRequest] = Field(default_factory=list)
     confirmation: Literal["apply"]
 
 
@@ -1035,6 +1043,7 @@ def api_create_job(payload: ApplyPlanRequest, request: Request) -> ApplyJobRespo
                 PlanRequest(
                     line_numbers=payload.line_numbers,
                     allow_tag_updates=payload.allow_tag_updates,
+                    tag_overrides=payload.tag_overrides,
                 ),
             )
         except (PlanInputError, PlanFileMissing) as exc:
@@ -1206,9 +1215,30 @@ def _build_web_plan(settings: WebSettings, payload: PlanRequest) -> DryRunPlan:
         settings.config,
         line_numbers=payload.line_numbers,
         allow_tag_updates=payload.allow_tag_updates,
+        tag_overrides=_tag_overrides_from_payload(payload),
         host_docker_base=settings.host_docker_base,
         environ=settings.command_env,
     )
+
+
+def _tag_overrides_from_payload(
+    payload: PlanRequest | ApplyPlanRequest,
+) -> tuple[TagOverride, ...]:
+    overrides: list[TagOverride] = []
+    seen: set[int] = set()
+    for item in payload.tag_overrides:
+        line_no = item.line_no
+        if line_no in seen:
+            raise PlanInputError(
+                f"tag_overrides line {line_no} was provided more than once"
+            )
+        if not tag_value_valid(item.tag):
+            raise PlanInputError(
+                f"tag_overrides line {line_no} has invalid tag: {item.tag}"
+            )
+        overrides.append(TagOverride(line_no=line_no, tag=item.tag))
+        seen.add(line_no)
+    return tuple(overrides)
 
 
 def _plan_can_apply(plan: DryRunPlan, settings: WebSettings) -> bool:
@@ -1259,6 +1289,7 @@ def _submit_apply_job(
             plan.plan_id,
             tuple(plan.selected_line_numbers),
             payload.allow_tag_updates,
+            tuple(_tag_overrides_from_payload(payload)),
             jobs,
             apply_condition,
             job.id,
@@ -1321,6 +1352,7 @@ def _run_apply_job(
     plan_id: str,
     line_numbers: tuple[int, ...],
     allow_tag_updates: bool,
+    tag_overrides: tuple[TagOverride, ...],
     jobs: dict[str, WebApplyJob],
     apply_condition: Condition,
     job_id: str,
@@ -1339,6 +1371,7 @@ def _run_apply_job(
             settings,
             line_numbers=line_numbers,
             allow_tag_updates=allow_tag_updates,
+            tag_overrides=tag_overrides,
             plan_id=plan_id,
         )
         apply_env = dict(settings.command_env or {})
@@ -1395,6 +1428,7 @@ def _apply_options(
     *,
     line_numbers: tuple[int, ...],
     allow_tag_updates: bool,
+    tag_overrides: tuple[TagOverride, ...],
     plan_id: str,
 ) -> UpdaterOptions:
     line_spec = _line_spec(line_numbers)
@@ -1420,6 +1454,7 @@ def _apply_options(
         dry_run=False,
         assume_yes=True,
         allow_tag_updates=allow_tag_updates,
+        tag_overrides=tag_overrides,
         only_lines=line_spec,
         remove_lines_before_run=line_spec,
         db_path=config.db_path,
@@ -1467,6 +1502,7 @@ def _pending_response(settings: WebSettings) -> PendingResponse:
             image=target.first,
             key=target.key,
             repo=target.repo,
+            current_tag=image_tag(target.first),
             has_tag=target.has_tag,
             allow_repo=target.allow_repo,
             digest=target.digest,
