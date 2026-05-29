@@ -55,6 +55,16 @@ updates:
       default-days: 7
       semver-major-days: 14
     groups:
+      npm-tooling-majors:
+        dependency-type: "development"
+        update-types:
+          - "major"
+        patterns:
+          - "vite"
+          - "@vitejs/plugin-vue"
+          - "vitest"
+          - "vue-tsc"
+          - "typescript"
       npm-production:
         dependency-type: "production"
         update-types:
