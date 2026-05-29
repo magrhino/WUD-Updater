@@ -4,6 +4,13 @@ All notable changes to WUD-Updater are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com) and versions follow
 [Semantic Versioning](https://semver.org).
 
+## [0.23.3](https://github.com/magrhino/WUD-Updater/compare/v0.23.2...v0.23.3) (2026-05-29)
+
+
+### Bug Fixes
+
+* **release:** scope release lookup to repository ([d74e8f7](https://github.com/magrhino/WUD-Updater/commit/d74e8f7af29e44bf623fe5ed2ff956e8d9a37ca4))
+
 ## [0.23.2](https://github.com/magrhino/WUD-Updater/compare/v0.23.1...v0.23.2) (2026-05-29)
 
 
