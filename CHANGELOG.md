@@ -4,6 +4,13 @@ All notable changes to WUD-Updater are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com) and versions follow
 [Semantic Versioning](https://semver.org).
 
+## [0.20.1](https://github.com/magrhino/WUD-Updater/compare/v0.20.0...v0.20.1) (2026-05-29)
+
+
+### Bug Fixes
+
+* **ui:** Add parity pages for WebUI state management ([#69](https://github.com/magrhino/WUD-Updater/issues/69)) ([04373aa](https://github.com/magrhino/WUD-Updater/commit/04373aacc62b4d1c25f05afefed237ffafd68e73))
+
 ## [0.20.0](https://github.com/magrhino/WUD-Updater/compare/v0.19.0...v0.20.0) (2026-05-28)
 
 
