@@ -20,6 +20,9 @@ Steps to reproduce the behavior:
 **Expected behavior**
 A clear and concise description of what you expected to happen.
 
+**Architecture**
+Select one: `linux/amd64`, `linux/arm64`, or other/not sure.
+
 **Screenshots**
 If applicable, add screenshots to help explain your problem.
 
