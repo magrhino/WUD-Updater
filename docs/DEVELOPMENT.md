@@ -135,11 +135,11 @@ Optional checks are available when broader coverage is useful:
 ## Releases
 
 Release Please is the normal release path. When a Release Please PR is merged,
-it creates a draft GitHub Release and tag, then calls the release publisher with
-that tag.
+it creates a draft GitHub Release and tag, then dispatches the release
+publisher with that tag.
 
-For manual backfill or retry, dispatch the release workflow with an existing
-stable tag:
+For manual backfill, including an already-created draft release, or retry,
+dispatch the release workflow with an existing stable tag:
 
 ```bash
 gh workflow run release.yml --ref main -f release_tag=v1.2.3

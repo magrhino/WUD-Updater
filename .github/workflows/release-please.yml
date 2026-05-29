@@ -27,9 +27,6 @@ jobs:
       contents: write
       issues: write
       pull-requests: write
-    outputs:
-      release_created: ${{ steps.release.outputs.release_created }}
-      tag_name: ${{ steps.release.outputs.tag_name }}
     if: >-
       ${{
         github.event_name == 'workflow_dispatch' ||
@@ -66,14 +63,21 @@ jobs:
           manifest-file: .release-please-manifest.json
           target-branch: main
 
-  publish-release:
-    name: release gate and publish
-    needs:
-      - release-please
-    if: ${{ needs.release-please.outputs.release_created == 'true' }}
-    uses: ./.github/workflows/release.yml
-    permissions:
-      contents: write
-      packages: write
-    with:
-      release_tag: ${{ needs.release-please.outputs.tag_name }}
+      - name: Dispatch release publisher
+        if: ${{ steps.release.outputs.release_created == 'true' }}
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_PLEASE_TOKEN }}
+          RELEASE_TAG: ${{ steps.release.outputs.tag_name }}
+        run: |
+          set -euo pipefail
+
+          if [[ ! "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            printf 'Release tags must match vX.Y.Z, got: %s\n' "$RELEASE_TAG" >&2
+            exit 1
+          fi
+
+          gh workflow run release.yml \
+            --repo "$GITHUB_REPOSITORY" \
+            --ref main \
+            -f release_tag="$RELEASE_TAG"
