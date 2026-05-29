@@ -4,6 +4,18 @@ on:
   push:
     tags:
       - "v*.*.*"
+  workflow_call:
+    inputs:
+      release_tag:
+        description: Stable release tag to publish, formatted as vX.Y.Z.
+        required: true
+        type: string
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Stable release tag to publish, formatted as vX.Y.Z.
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -31,7 +43,7 @@ jobs:
         id: tag
         shell: bash
         env:
-          RELEASE_TAG: ${{ github.ref_name }}
+          RELEASE_TAG: ${{ inputs.release_tag || github.ref_name }}
         run: |
           set -euo pipefail
 
@@ -137,6 +149,13 @@ jobs:
           ref: ${{ needs.validate-tag.outputs.tag }}
           persist-credentials: false
 
+      - name: Resolve release commit
+        id: release-commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf 'sha=%s\n' "$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
       - name: Set up QEMU
         uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3.7.0
         with:
@@ -148,7 +167,7 @@ jobs:
       - name: Log in to GHCR
         shell: bash
         env:
-          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GHCR_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           printf '%s\n' "$GHCR_TOKEN" | docker login "$REGISTRY" -u "$GITHUB_ACTOR" --password-stdin
@@ -159,13 +178,14 @@ jobs:
           RELEASE_TAG: ${{ needs.validate-tag.outputs.tag }}
           VERSION: ${{ needs.validate-tag.outputs.version }}
           MINOR_VERSION: ${{ needs.validate-tag.outputs.minor }}
+          RELEASE_SHA: ${{ steps.release-commit.outputs.sha }}
         run: |
           set -euo pipefail
 
           image="$REGISTRY/$IMAGE_NAME"
           docker build --platform linux/amd64 \
             --label "org.opencontainers.image.source=https://github.com/$GITHUB_REPOSITORY" \
-            --label "org.opencontainers.image.revision=$GITHUB_SHA" \
+            --label "org.opencontainers.image.revision=$RELEASE_SHA" \
             --label "org.opencontainers.image.version=$RELEASE_TAG" \
             -t "$image:$RELEASE_TAG" \
             -t "$image:$VERSION" \
@@ -202,6 +222,7 @@ jobs:
           RELEASE_TAG: ${{ needs.validate-tag.outputs.tag }}
           VERSION: ${{ needs.validate-tag.outputs.version }}
           MINOR_VERSION: ${{ needs.validate-tag.outputs.minor }}
+          RELEASE_SHA: ${{ steps.release-commit.outputs.sha }}
         run: |
           set -euo pipefail
 
@@ -210,7 +231,7 @@ jobs:
             --platform linux/amd64,linux/arm64 \
             --provenance=false \
             --label "org.opencontainers.image.source=https://github.com/$GITHUB_REPOSITORY" \
-            --label "org.opencontainers.image.revision=$GITHUB_SHA" \
+            --label "org.opencontainers.image.revision=$RELEASE_SHA" \
             --label "org.opencontainers.image.version=$RELEASE_TAG" \
             -t "$image:$RELEASE_TAG" \
             -t "$image:$VERSION" \
@@ -247,7 +268,7 @@ jobs:
       - name: Create or publish GitHub release
         shell: bash
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ needs.validate-tag.outputs.tag }}
         run: |
           set -euo pipefail
