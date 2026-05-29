@@ -52,13 +52,12 @@ jobs:
             printf 'minor=%s\n' "$minor"
           } >> "$GITHUB_OUTPUT"
 
-  test:
-    name: linux tests
+  release-gate:
+    name: release gate
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 90
     needs:
       - validate-tag
-    if: ${{ github.event_name != 'release' }}
 
     steps:
       - name: Check out repository
@@ -66,6 +65,13 @@ jobs:
         with:
           ref: ${{ needs.validate-tag.outputs.tag }}
           persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: webui/package-lock.json
 
       - name: Install ShellCheck
         shell: bash
@@ -88,6 +94,28 @@ jobs:
       - name: Run tests
         run: tests/run-all.sh
 
+      - name: Show Docker versions
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker version
+          docker compose version
+
+      - name: Run container build test
+        run: tests/container-build.sh
+
+      - name: Run Docker end-to-end test
+        run: tests/e2e-docker-compose.sh
+
+      - name: Install frontend dependencies
+        run: npm --prefix webui ci
+
+      - name: Install Chromium
+        run: npm --prefix webui exec playwright install chromium
+
+      - name: Run WebUI smoke tests
+        run: npm --prefix webui run test:smoke
+
   publish-image:
     name: publish image
     runs-on: ubuntu-latest
@@ -97,12 +125,12 @@ jobs:
       packages: write
     needs:
       - validate-tag
-      - test
+      - release-gate
     if: >-
       ${{
         always() &&
         needs.validate-tag.result == 'success' &&
-        (needs.test.result == 'success' || needs.test.result == 'skipped')
+        needs.release-gate.result == 'success'
       }}
 
     steps:
