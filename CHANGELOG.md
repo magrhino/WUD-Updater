@@ -4,6 +4,13 @@ All notable changes to WUD-Updater are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com) and versions follow
 [Semantic Versioning](https://semver.org).
 
+## [0.21.2](https://github.com/magrhino/WUD-Updater/compare/v0.21.1...v0.21.2) (2026-05-29)
+
+
+### Bug Fixes
+
+* **webui:** stabilize mobile shell accessibility ([#75](https://github.com/magrhino/WUD-Updater/issues/75)) ([d28638f](https://github.com/magrhino/WUD-Updater/commit/d28638f6ec05a02b9c993176f945043bef7f1f63))
+
 ## [0.21.1](https://github.com/magrhino/WUD-Updater/compare/v0.21.0...v0.21.1) (2026-05-29)
 
 
