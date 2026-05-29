@@ -447,8 +447,9 @@ Release-note notification values for the WUD container:
 | `DISCORD_WEBHOOK` | unset | Alternate webhook name accepted by `/wud/release-notes-to-discord.sh`. |
 | `ADMIN_WEBHOOK` | selected release webhook | Optional webhook for missing LinuxServer.io upstream mapping alerts. |
 | `GITHUB_TOKEN` | unset | Optional GitHub API token for higher release-note lookup rate limits in WUD notifications and WebUI metadata refreshes. |
+| `MAX_COMMITS` | `3` | Maximum representative commits or pull requests included in Discord release embeds. |
 | `COLOR_HEX` | `0x57F287` | Discord embed color used by `/wud/release-notes-to-discord.sh`. |
-| `UPSTREAM_MAP` | `/wud/upstreams.txt` | LinuxServer.io image to upstream repository map used by `/wud/release-notes-to-discord.sh`. |
+| `UPSTREAM_MAP` | `/wud/upstreams.txt` | LinuxServer.io image to upstream repository map used by explicit LSIO release-note mode and legacy `/wud/tag-manager.sh`. |
 | `RELEASE_EMBED` | `/wud/github-release-embed.sh` | Compatibility hook used when legacy `/wud/tag-manager.sh` is configured. |
 | `LOG_DIR` | `/out` | Compatibility log directory used when legacy `/wud/tag-manager.sh` is configured. |
 

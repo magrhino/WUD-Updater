@@ -24,10 +24,10 @@ It also expects `docker`, `curl`, and `jq` to be available in the runtime
 environment.
 
 The helper tries to discover a GitHub repository from the image's
-`org.opencontainers.image.source` label. It also handles GitHub Container
-Registry images whose `image_name` maps to `Owner/Repo`, and LinuxServer.io
-images through `upstreams.txt`. If no source can be found, it posts a minimal
-update notice.
+`org.opencontainers.image.source` label. It also handles fully qualified GitHub
+Container Registry references that start with `ghcr.io/`, and LinuxServer.io
+images through the legacy `linuxserver/docker-<image>` GitHub release fallback.
+If no source can be found, it posts a minimal update notice.
 
 ## Direct Shell Use
 
@@ -51,8 +51,9 @@ Common variables:
 | `DISCORD_WEBHOOK` | empty | Alternate webhook name. |
 | `ADMIN_WEBHOOK` | selected release webhook | Webhook for missing upstream mapping alerts. |
 | `GITHUB_TOKEN` | empty | Optional token for GitHub API rate limits. |
+| `MAX_COMMITS` | `3` | Maximum representative PRs or commits to include. |
 | `COLOR_HEX` | `0x57F287` | Discord embed color. |
-| `UPSTREAM_MAP` | `/wud/upstreams.txt` | LinuxServer.io image to upstream repository map. |
+| `UPSTREAM_MAP` | `/wud/upstreams.txt` | LinuxServer.io image to upstream repository map used by explicit LSIO mode and `tag-manager.sh`. |
 | `RELEASE_EMBED` | `/wud/github-release-embed.sh` | Compatibility hook used by `tag-manager.sh`. |
 | `LOG_DIR` | `/out` | Compatibility log directory used by `tag-manager.sh`. |
 
@@ -71,12 +72,17 @@ The compatibility wrappers delegate to the canonical helper.
 
 ## LinuxServer.io Mapping
 
-For LinuxServer.io images, `release-notes-to-discord.sh` maps
-`linuxserver/docker-xyz` to an upstream `Owner/Repo` entry in `upstreams.txt`.
-Missing mappings are sent to `ADMIN_WEBHOOK` and the embed is skipped.
+For default WUD callbacks, LinuxServer.io images keep the legacy behavior:
+`linuxserver/xyz` resolves to the GitHub repository
+`linuxserver/docker-xyz`.
 
-LSIO embeds include both the LinuxServer.io release link and the upstream
-release or project link.
+For explicit LSIO mode or existing `tag-manager.sh` configurations,
+`linuxserver/docker-xyz` maps to an upstream `Owner/Repo` entry in
+`upstreams.txt`. Missing mappings are sent to `ADMIN_WEBHOOK` and the embed is
+skipped.
+
+Explicit LSIO embeds include both the LinuxServer.io release link and the
+upstream release or project link.
 
 ## WebUI Release Links
 
@@ -90,5 +96,6 @@ point at a custom LinuxServer.io upstream map.
 Do not commit webhook URLs, GitHub tokens, or private service URLs. Use
 environment variables supplied by WUD, Compose secrets, or host-local config.
 
-The shell helper redacts webhook values in error output. Avoid copying raw
-environment dumps into issues or pull requests.
+The legacy tag manager redacts webhook values when logging helper commands, and
+shared HTTP errors do not print webhook URLs. Avoid copying raw environment
+dumps into issues or pull requests.
