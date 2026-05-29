@@ -4,15 +4,12 @@ on:
   push:
     tags:
       - "v*.*.*"
-  release:
-    types:
-      - published
 
 permissions:
   contents: read
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.release.tag_name || github.ref }}
+  group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: false
 
 env:
@@ -34,7 +31,7 @@ jobs:
         id: tag
         shell: bash
         env:
-          RELEASE_TAG: ${{ github.event.release.tag_name || github.ref_name }}
+          RELEASE_TAG: ${{ github.ref_name }}
         run: |
           set -euo pipefail
 
@@ -247,7 +244,7 @@ jobs:
             fi
           done
 
-      - name: Create GitHub release
+      - name: Create or publish GitHub release
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -255,8 +252,13 @@ jobs:
         run: |
           set -euo pipefail
 
-          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
-            printf 'Release already exists for %s\n' "$RELEASE_TAG"
+          if release_is_draft="$(gh release view "$RELEASE_TAG" --json isDraft --jq '.isDraft' 2>/dev/null)"; then
+            if [[ "$release_is_draft" == "true" ]]; then
+              gh release edit "$RELEASE_TAG" --draft=false --verify-tag
+              printf 'Published draft release for %s\n' "$RELEASE_TAG"
+            else
+              printf 'Release already exists for %s\n' "$RELEASE_TAG"
+            fi
             exit 0
           fi
 
