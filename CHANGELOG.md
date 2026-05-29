@@ -4,6 +4,13 @@ All notable changes to WUD-Updater are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com) and versions follow
 [Semantic Versioning](https://semver.org).
 
+## [0.22.2](https://github.com/magrhino/WUD-Updater/compare/v0.22.1...v0.22.2) (2026-05-29)
+
+
+### Bug Fixes
+
+* **webui:** show recovery message for lost apply jobs ([#104](https://github.com/magrhino/WUD-Updater/issues/104)) ([584d111](https://github.com/magrhino/WUD-Updater/commit/584d1116261c7270fa72bcc862fc0b847cca4299))
+
 ## [0.22.1](https://github.com/magrhino/WUD-Updater/compare/v0.22.0...v0.22.1) (2026-05-29)
 
 
