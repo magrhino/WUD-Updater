@@ -13,9 +13,6 @@ updates:
       prefix: "chore"
       prefix-development: "chore"
       include: "scope"
-    labels:
-      - "dependencies"
-      - "python"
     cooldown:
       default-days: 7
       semver-major-days: 14
@@ -48,9 +45,6 @@ updates:
       prefix: "chore"
       prefix-development: "chore"
       include: "scope"
-    labels:
-      - "dependencies"
-      - "npm"
     cooldown:
       default-days: 7
       semver-major-days: 14
@@ -91,9 +85,6 @@ updates:
     commit-message:
       prefix: "build"
       include: "scope"
-    labels:
-      - "dependencies"
-      - "docker"
     cooldown:
       default-days: 7
 
@@ -108,9 +99,6 @@ updates:
     commit-message:
       prefix: "ci"
       include: "scope"
-    labels:
-      - "dependencies"
-      - "github-actions"
     cooldown:
       default-days: 7
     groups:
