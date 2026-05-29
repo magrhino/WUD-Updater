@@ -215,6 +215,37 @@ def _sse_job_events(content: str) -> list[dict[str, object]]:
     return events
 
 
+def test_healthz_is_unauthenticated_before_setup(tmp_path: Path) -> None:
+    client = _client(tmp_path)
+
+    response = client.get("/healthz")
+
+    assert response.status_code == 200
+
+
+def test_healthz_response_shape_is_minimal(tmp_path: Path) -> None:
+    client = _client(tmp_path)
+
+    response = client.get("/healthz")
+    body = response.json()
+
+    assert response.status_code == 200
+    assert body == {"ok": True, "version": web_module.__version__}
+    assert set(body) == {"ok", "version"}
+    sensitive_keys = {
+        "wud_file",
+        "db_path",
+        "pending_count",
+        "auth_required",
+        "dev_auth_bypass",
+        "setup_required",
+        "mutations_enabled",
+        "public_origin",
+        "trusted_proxies",
+    }
+    assert sensitive_keys.isdisjoint(body)
+
+
 def test_api_rejects_unauthenticated_requests_without_dev_bypass(
     tmp_path: Path,
 ) -> None:

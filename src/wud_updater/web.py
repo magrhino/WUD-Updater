@@ -188,6 +188,11 @@ class ReleaseNotesResponse(BaseModel):
     warnings: list[str] = Field(default_factory=list)
 
 
+class HealthResponse(BaseModel):
+    ok: bool
+    version: str
+
+
 class StatusResponse(BaseModel):
     ok: bool
     version: str
@@ -568,6 +573,13 @@ def create_app(
                 return error
         return await call_next(request)
 
+    app.add_api_route(
+        "/healthz",
+        api_healthz,
+        methods=["GET"],
+        response_model=HealthResponse,
+    )
+
     setup_router = APIRouter(prefix="/api/v1/setup")
     setup_router.add_api_route(
         "/status",
@@ -921,6 +933,10 @@ def api_auth_session(
         setup_required=setup_required,
         username=None if user is None else str(user["username"]),
     )
+
+
+def api_healthz() -> HealthResponse:
+    return HealthResponse(ok=True, version=__version__)
 
 
 def api_status(request: Request) -> StatusResponse:
