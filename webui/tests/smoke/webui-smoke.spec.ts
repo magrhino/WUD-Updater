@@ -318,6 +318,39 @@ test("read-only pending view cannot plan or apply selected updates", async ({ pa
   expect(state.calls.some((call) => call.path === "/api/v1/plans")).toBe(false);
 });
 
+test("mobile shell keeps page width stable and preserves link targets", async ({
+  page,
+}) => {
+  const state = createState({ authenticated: true, mutationsEnabled: false });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await installApiFixtures(page, state);
+
+  await page.goto("/#/");
+  await expect(page.getByRole("heading", { name: "Dashboard" })).toBeVisible();
+
+  await expect(page.locator(".brand")).toHaveAttribute(
+    "aria-label",
+    "WUD-Updater dashboard",
+  );
+  await expect
+    .poll(() =>
+      page.evaluate(() => ({
+        innerWidth: window.innerWidth,
+        scrollWidth: document.documentElement.scrollWidth,
+      })),
+    )
+    .toEqual({ innerWidth: 390, scrollWidth: 390 });
+
+  const pendingLinkBox = await page
+    .locator('a.text-link[href="#/pending"]')
+    .boundingBox();
+  const historyLinkBox = await page
+    .locator('a.text-link[href="#/runs"]')
+    .boundingBox();
+  expect(pendingLinkBox?.height).toBeGreaterThanOrEqual(44);
+  expect(historyLinkBox?.height).toBeGreaterThanOrEqual(44);
+});
+
 test("mutation-enabled pending flow creates jobs only after confirmation", async ({
   page,
 }) => {

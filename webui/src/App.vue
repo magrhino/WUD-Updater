@@ -66,7 +66,7 @@ async function handleLogout(): Promise<void> {
     <n-message-provider>
       <div class="app-shell" :class="{ centered: !showShell }">
         <aside v-if="showShell" class="sidebar">
-          <RouterLink class="brand" to="/">
+          <RouterLink class="brand" to="/" aria-label="WUD-Updater dashboard">
             <Activity :size="22" />
             <span>WUD-Updater</span>
           </RouterLink>
