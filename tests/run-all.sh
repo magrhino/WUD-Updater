@@ -164,6 +164,7 @@ if command -v npm >/dev/null 2>&1 && [[ -f webui/package-lock.json ]]; then
   run node --check webui/scripts/dev-server.mjs
   run npm --prefix webui ci
   run npm --prefix webui run typecheck
+  run npm --prefix webui run test
   run npm --prefix webui run build
 else
   printf '==> skipping webui npm checks; npm or webui/package-lock.json not found\n'
