@@ -112,6 +112,14 @@ jobs:
           ref: ${{ needs.validate-tag.outputs.tag }}
           persist-credentials: false
 
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
       - name: Log in to GHCR
         shell: bash
         env:
@@ -120,7 +128,7 @@ jobs:
           set -euo pipefail
           printf '%s\n' "$GHCR_TOKEN" | docker login "$REGISTRY" -u "$GITHUB_ACTOR" --password-stdin
 
-      - name: Build image
+      - name: Build amd64 smoke image
         shell: bash
         env:
           RELEASE_TAG: ${{ needs.validate-tag.outputs.tag }}
@@ -140,7 +148,7 @@ jobs:
             -t "$image:latest" \
             .
 
-      - name: Validate image
+      - name: Validate amd64 smoke image
         shell: bash
         env:
           RELEASE_TAG: ${{ needs.validate-tag.outputs.tag }}
@@ -163,7 +171,7 @@ jobs:
           [[ -f "$sync_tmp/upstreams.txt" ]]
           docker run --rm "$image:$RELEASE_TAG" docker-update-from-wud --help
 
-      - name: Push image
+      - name: Publish multi-arch image
         shell: bash
         env:
           RELEASE_TAG: ${{ needs.validate-tag.outputs.tag }}
@@ -173,10 +181,43 @@ jobs:
           set -euo pipefail
 
           image="$REGISTRY/$IMAGE_NAME"
-          docker push "$image:$RELEASE_TAG"
-          docker push "$image:$VERSION"
-          docker push "$image:$MINOR_VERSION"
-          docker push "$image:latest"
+          docker buildx build \
+            --platform linux/amd64,linux/arm64 \
+            --provenance=false \
+            --label "org.opencontainers.image.source=https://github.com/$GITHUB_REPOSITORY" \
+            --label "org.opencontainers.image.revision=$GITHUB_SHA" \
+            --label "org.opencontainers.image.version=$RELEASE_TAG" \
+            -t "$image:$RELEASE_TAG" \
+            -t "$image:$VERSION" \
+            -t "$image:$MINOR_VERSION" \
+            -t "$image:latest" \
+            --push \
+            .
+
+      - name: Validate multi-arch image manifests
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ needs.validate-tag.outputs.tag }}
+          VERSION: ${{ needs.validate-tag.outputs.version }}
+          MINOR_VERSION: ${{ needs.validate-tag.outputs.minor }}
+        run: |
+          set -euo pipefail
+
+          image="$REGISTRY/$IMAGE_NAME"
+          expected_platforms="linux/amd64 linux/arm64"
+
+          for tag in "$RELEASE_TAG" "$VERSION" "$MINOR_VERSION" latest; do
+            ref="$image:$tag"
+            platforms="$(
+              docker buildx imagetools inspect --raw "$ref" |
+                jq -r '[.manifests[].platform | "\(.os)/\(.architecture)"] | sort | unique | join(" ")'
+            )"
+
+            if [[ "$platforms" != "$expected_platforms" ]]; then
+              printf 'Expected %s to publish platforms "%s", got "%s"\n' "$ref" "$expected_platforms" "$platforms" >&2
+              exit 1
+            fi
+          done
 
       - name: Create GitHub release
         shell: bash

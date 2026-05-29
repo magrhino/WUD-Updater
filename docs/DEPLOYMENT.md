@@ -22,7 +22,9 @@ docker pull ghcr.io/magrhino/wud-updater:latest
 ```
 
 Use the exact `vX.Y.Z` release tag for reproducible deployments. Release images
-are also published as `X.Y.Z`, `X.Y`, and `latest`.
+are also published as `X.Y.Z`, `X.Y`, and `latest`. The same tags support
+`linux/amd64` and `linux/arm64`, and Docker selects the matching image for the
+host platform automatically.
 
 The image uses `python:3.14-slim-bookworm`, installs the Docker CLI with the
 Compose plugin, copies `bin/`, `src/`, and `wud/` into `/app`, and starts through

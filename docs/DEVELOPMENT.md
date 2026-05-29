@@ -142,7 +142,8 @@ git push origin v1.2.3
 ```
 
 Manual release tags run the Linux validation suite, build the Docker image for
-Linux amd64, publish it to `ghcr.io/magrhino/wud-updater`, and create a GitHub
-Release with generated notes. Release Please-created releases publish the same
-image tags without rerunning the CI validation that already passed before the
-release PR. Image tags are published as `vX.Y.Z`, `X.Y.Z`, `X.Y`, and `latest`.
+Linux amd64 and arm64, publish it to `ghcr.io/magrhino/wud-updater`, and create
+a GitHub Release with generated notes. Release Please-created releases publish
+the same image tags without rerunning the CI validation that already passed
+before the release PR. Image tags are published as `vX.Y.Z`, `X.Y.Z`, `X.Y`,
+and `latest`.
