@@ -4,6 +4,13 @@ All notable changes to WUD-Updater are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com) and versions follow
 [Semantic Versioning](https://semver.org).
 
+## [0.21.1](https://github.com/magrhino/WUD-Updater/compare/v0.21.0...v0.21.1) (2026-05-29)
+
+
+### Bug Fixes
+
+* **webui:** Refine WebUI styling around shared Naive theme tokens ([#73](https://github.com/magrhino/WUD-Updater/issues/73)) ([6ba6122](https://github.com/magrhino/WUD-Updater/commit/6ba6122e3b81d7125f4ec3d80e350619d6ee8af6))
+
 ## [0.21.0](https://github.com/magrhino/WUD-Updater/compare/v0.20.1...v0.21.0) (2026-05-29)
 
 
