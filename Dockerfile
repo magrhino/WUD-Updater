@@ -9,7 +9,7 @@ COPY webui/ /webui/
 RUN npm run build
 
 
-FROM python:3.14-slim-bookworm
+FROM python:3.14.5-slim-bookworm
 
 ARG TRUENAS_API_CLIENT_REF=""
 
