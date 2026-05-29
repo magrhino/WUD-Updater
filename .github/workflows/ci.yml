@@ -31,6 +31,11 @@ on:
         required: false
         default: false
         type: boolean
+      run_webui_smoke:
+        description: Run the optional WebUI browser smoke tests.
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -62,6 +67,7 @@ jobs:
     outputs:
       docker: ${{ steps.filter.outputs.docker }}
       docker_e2e: ${{ steps.filter.outputs.docker_e2e }}
+      webui_smoke: ${{ steps.filter.outputs.webui_smoke }}
       workflows: ${{ steps.filter.outputs.workflows }}
 
     steps:
@@ -95,6 +101,7 @@ jobs:
 
           docker=false
           docker_e2e=false
+          webui_smoke=false
           workflows=false
           for file in "${files[@]}"; do
             case "$file" in
@@ -108,6 +115,11 @@ jobs:
                 ;;
             esac
             case "$file" in
+              webui/**)
+                webui_smoke=true
+                ;;
+            esac
+            case "$file" in
               .github/workflows/*)
                 workflows=true
                 ;;
@@ -117,6 +129,7 @@ jobs:
           {
             printf 'docker=%s\n' "$docker"
             printf 'docker_e2e=%s\n' "$docker_e2e"
+            printf 'webui_smoke=%s\n' "$webui_smoke"
             printf 'workflows=%s\n' "$workflows"
           } >> "$GITHUB_OUTPUT"
 
@@ -173,6 +186,53 @@ jobs:
 
       - name: Run tests
         run: tests/run-all.sh
+
+  webui-smoke:
+    name: webui smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs:
+      - changes
+    if: >-
+      ${{
+        !(
+          (github.event_name == 'pull_request' && contains(github.event.pull_request.title, '[skip ci]')) ||
+          (github.event_name == 'push' && (
+            startsWith(github.event.head_commit.message, 'docs:') ||
+            startsWith(github.event.head_commit.message, 'docs(') ||
+            startsWith(github.event.head_commit.message, 'docs!:') ||
+            startsWith(github.event.head_commit.message, 'chore:') ||
+            startsWith(github.event.head_commit.message, 'chore(') ||
+            startsWith(github.event.head_commit.message, 'chore!:')
+          ))
+        ) &&
+        (
+          (github.event_name == 'workflow_dispatch' && inputs.run_webui_smoke) ||
+          needs.changes.outputs.webui_smoke == 'true'
+        )
+      }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: webui/package-lock.json
+
+      - name: Install frontend dependencies
+        run: npm --prefix webui ci
+
+      - name: Install Chromium
+        run: npm --prefix webui exec playwright install chromium
+
+      - name: Run WebUI smoke tests
+        run: npm --prefix webui run test:smoke
 
   macos-tests:
     name: macos tests

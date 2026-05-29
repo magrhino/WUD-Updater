@@ -93,7 +93,9 @@ Use the shell already used by the target script.
 | Python tests | `python3 tests/run-python-tests.py` |
 | WebUI dependency install | `npm --prefix webui ci` |
 | WebUI typecheck | `npm --prefix webui run typecheck` |
+| WebUI unit tests | `npm --prefix webui run test` |
 | WebUI build | `npm --prefix webui run build` |
+| WebUI browser smoke tests | `npm --prefix webui exec playwright install chromium` then `npm --prefix webui run test:smoke` |
 | WebUI demo state | `make webui-demo-state` |
 | WebUI dev server | `make webui-dev` |
 | typecheck | Python typecheck is not configured; WebUI typecheck uses `npm --prefix webui run typecheck`. |
@@ -112,7 +114,7 @@ Use the shell already used by the target script.
 - Release-note behavior change: syntax-check the touched scripts, run ShellCheck, run `tests/test-github-release-embed.sh`, `tests/test-release-notes-to-discord.sh`, and `tests/test-tag-manager.sh` when Discord payload or release-note routing changes, and avoid live Discord/GitHub calls unless explicitly requested or needed.
 - Python updater/config change: run `ruff check .`, Python syntax check, `tests/run-python-tests.py`, and `tests/run-all.sh` when practical.
 - Rich terminal rendering change: create or update focused tests that exercise the Rich-enabled path for the touched surface, using mocks when local Rich is unavailable; run `python3 -m unittest tests.test_python_terminal` plus Python syntax checks before broader suites.
-- WebUI frontend change: run `npm --prefix webui ci`, `npm --prefix webui run typecheck`, `npm --prefix webui run build`, and `tests/test_python_web.py` when API contracts or auth assumptions are involved. For local dev/demo changes, also run the focused demo seeder test and `node --check webui/scripts/dev-server.mjs`. Run `tests/container-build.sh` when packaged static assets, Dockerfile behavior, WebUI Compose examples, or container startup changes.
+- WebUI frontend change: run `npm --prefix webui ci`, `npm --prefix webui run typecheck`, `npm --prefix webui run test`, `npm --prefix webui run build`, and `tests/test_python_web.py` when API contracts or auth assumptions are involved. Run `npm --prefix webui exec playwright install chromium` and `npm --prefix webui run test:smoke` when browser auth, read-only mutation UX, routing, or smoke fixtures change. For local dev/demo changes, also run the focused demo seeder test and `node --check webui/scripts/dev-server.mjs`. Run `tests/container-build.sh` when packaged static assets, Dockerfile behavior, WebUI Compose examples, or container startup changes.
 - GitHub Actions workflow change: run `actionlint` when available; if not installed, inspect the touched workflow YAML and report that local actionlint was not available. For release workflow changes, also inspect tag, permission, and GHCR image-tag behavior.
 - Security workflow change: run `actionlint` when available, `git diff --check`, `tests/run-all.sh`, and the local `zizmor` command when installed; verify CodeQL, Dependency Review, and SARIF uploads in the first GitHub run after the repository is public or GHAS-backed scanning is enabled.
 - GitHub template change: validate issue-template YAML when practical, run `git diff --check`, and skip application tests unless executable examples or commands changed.

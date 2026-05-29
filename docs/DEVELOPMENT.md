@@ -61,7 +61,16 @@ Install the frontend dependencies before running the Vue/Vite checks:
 ```bash
 npm --prefix webui ci
 npm --prefix webui run typecheck
+npm --prefix webui run test
 npm --prefix webui run build
+```
+
+Browser smoke tests use Playwright Chromium with mocked local API fixtures. Install
+the browser once before running them locally:
+
+```bash
+npm --prefix webui exec playwright install chromium
+npm --prefix webui run test:smoke
 ```
 
 For the local demo server, seed disposable state and run both the FastAPI
@@ -117,6 +126,8 @@ Optional checks are available when broader coverage is useful:
 - Add the `ci:docker` pull request label, manually dispatch CI with
   `run_docker=true`, or change image-impacting files to run the Docker build
   smoke test.
+- Manually dispatch CI with `run_webui_smoke=true`, or change files under
+  `webui/`, to run the Playwright Chromium WebUI smoke tests.
 - Workflow linting runs automatically when files under `.github/workflows/`
   change, and can also be run from manual CI dispatch.
 
