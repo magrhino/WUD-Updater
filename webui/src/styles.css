@@ -256,7 +256,7 @@ a {
 .shortcut-card:focus-visible,
 .list-row.linked:focus-visible,
 .mobile-card.linked:focus-visible {
-  outline: 2px solid var(--color-border-hover);
+  outline: 2px solid var(--color-action-blue);
   outline-offset: 2px;
 }
 
@@ -601,7 +601,7 @@ a {
 
 @media (max-width: 920px) {
   .app-shell {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .sidebar {
@@ -612,7 +612,11 @@ a {
     flex-direction: row;
     align-items: center;
     gap: 12px;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
     padding: 10px 12px;
+    overflow: hidden;
   }
 
   .brand span,
@@ -626,7 +630,10 @@ a {
   }
 
   .nav-list {
+    flex: 1 1 auto;
     grid-auto-flow: column;
+    min-width: 0;
+    max-width: 100%;
     overflow-x: auto;
   }
 
@@ -690,6 +697,13 @@ a {
   .topbar-actions .n-button--circle,
   .inline-actions .n-button--circle {
     min-width: 44px;
+  }
+
+  a.text-link,
+  a.icon-link {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
   }
 
   .filter-control .n-base-selection,
