@@ -99,7 +99,7 @@ jobs:
             exit 1
           fi
 
-          if ! release_is_draft="$(gh release view "$tag" --json isDraft --jq '.isDraft')"; then
+          if ! release_is_draft="$(gh release view "$tag" --repo "$GITHUB_REPOSITORY" --json isDraft --jq '.isDraft')"; then
             printf 'Release Please did not create release %s; refusing to dispatch publisher.\n' "$tag" >&2
             exit 1
           fi
