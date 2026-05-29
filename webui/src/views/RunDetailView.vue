@@ -36,7 +36,7 @@ watch(runId, () => {
       </div>
       <RouterLink :to="`/runs/${runId}/log`" class="icon-link">
         <FileText :size="17" />
-        Log
+        View log
       </RouterLink>
     </div>
 
@@ -63,7 +63,7 @@ watch(runId, () => {
       <section class="section-panel">
         <div class="section-heading">
           <div>
-            <p class="eyebrow">{{ run.wud_file }}</p>
+            <p class="eyebrow value-eyebrow">{{ run.wud_file }}</p>
             <h2>Pending records</h2>
           </div>
         </div>
@@ -80,7 +80,7 @@ watch(runId, () => {
       <section class="section-panel">
         <div class="section-heading">
           <div>
-            <p class="eyebrow">{{ run.log_file || "No log path" }}</p>
+            <p class="eyebrow value-eyebrow">{{ run.log_file || "No log path" }}</p>
             <h2>Events</h2>
           </div>
         </div>

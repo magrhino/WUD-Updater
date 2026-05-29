@@ -34,7 +34,7 @@ watch(runId, () => {
 
     <div class="section-heading">
       <div>
-        <p class="eyebrow">{{ log?.log_file ?? "Run log" }}</p>
+        <p class="eyebrow value-eyebrow">{{ log?.log_file ?? "Run log" }}</p>
         <h2>#{{ runId }} log</h2>
       </div>
       <div class="inline-actions">
@@ -53,7 +53,7 @@ watch(runId, () => {
           <template #icon>
             <Copy :size="17" />
           </template>
-          {{ copied ? "Copied" : "Copy" }}
+          {{ copied ? "Copied" : "Copy log" }}
         </n-button>
       </div>
     </div>

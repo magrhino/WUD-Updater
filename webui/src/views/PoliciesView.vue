@@ -163,7 +163,7 @@ onMounted(() => {
         </n-form-item>
         <div class="form-actions">
           <n-button quaternary :disabled="webui.loading" @click="resetPolicyForm">
-            Clear
+            Clear form
           </n-button>
           <n-button
             type="primary"
@@ -174,7 +174,7 @@ onMounted(() => {
             <template #icon>
               <Save :size="16" />
             </template>
-            Save
+            Save policy
           </n-button>
         </div>
       </n-form>
@@ -277,7 +277,7 @@ onMounted(() => {
       v-model:show="showSaveConfirm"
       preset="dialog"
       title="Save service policy"
-      positive-text="Save"
+      positive-text="Save policy"
       negative-text="Cancel"
       :positive-button-props="{ type: 'primary', loading: webui.loading }"
       @positive-click="confirmSave"

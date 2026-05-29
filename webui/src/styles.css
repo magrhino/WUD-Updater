@@ -88,6 +88,9 @@ a {
   padding: 0 10px;
   border-radius: 7px;
   color: var(--color-sidebar-muted);
+  transition:
+    background-color 180ms ease-out,
+    color 180ms ease-out;
 }
 
 .nav-item.router-link-active,
@@ -137,6 +140,16 @@ a {
   font-weight: 700;
   letter-spacing: 0;
   text-transform: uppercase;
+}
+
+.value-eyebrow {
+  max-width: min(100%, 92ch);
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 0.76rem;
+  font-weight: 700;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+  text-transform: none;
 }
 
 .content-stack {
@@ -204,6 +217,7 @@ a {
   border: 1px solid var(--color-border-subtle);
   border-radius: 7px;
   background: var(--color-panel-tint);
+  transition: border-color 180ms ease-out;
 }
 
 .shortcut-card:hover {
@@ -252,6 +266,23 @@ a {
   gap: 7px;
 }
 
+.text-link:hover,
+.icon-link:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.brand:focus-visible,
+.nav-item:focus-visible,
+.text-link:focus-visible,
+.icon-link:focus-visible,
+.shortcut-card:focus-visible,
+.list-row.linked:focus-visible,
+.mobile-card.linked:focus-visible {
+  outline: 2px solid var(--color-border-hover);
+  outline-offset: 2px;
+}
+
 .compact-list {
   display: grid;
   gap: 8px;
@@ -272,6 +303,11 @@ a {
 .list-row.linked:hover,
 .mobile-card.linked:hover {
   border-color: var(--color-border-hover);
+}
+
+.list-row.linked,
+.mobile-card.linked {
+  transition: border-color 180ms ease-out;
 }
 
 .list-row strong,
@@ -708,5 +744,20 @@ a {
 
   .topbar-actions {
     justify-content: flex-start;
+  }
+
+  .pending-actions {
+    justify-content: flex-start;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
   }
 }

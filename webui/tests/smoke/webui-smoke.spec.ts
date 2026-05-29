@@ -311,7 +311,7 @@ test("read-only pending view cannot plan or apply selected updates", async ({ pa
   await installApiFixtures(page, state);
 
   await page.goto("/#/pending");
-  await page.getByRole("button", { name: /All/ }).click();
+  await page.getByRole("button", { name: /Select all/ }).click();
 
   await expect(page.getByText("Read-only mode is active")).toBeVisible();
   await expect(page.getByRole("button", { name: /Update selected/ })).toBeDisabled();
@@ -325,7 +325,7 @@ test("mutation-enabled pending flow creates jobs only after confirmation", async
   await installApiFixtures(page, state);
 
   await page.goto("/#/pending");
-  await page.getByRole("button", { name: /All/ }).click();
+  await page.getByRole("button", { name: /Select all/ }).click();
   await page.getByRole("button", { name: /Update selected/ }).click();
 
   const dialog = page.getByRole("dialog").filter({

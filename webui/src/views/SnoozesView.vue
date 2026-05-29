@@ -159,7 +159,7 @@ watch(snoozeState, (nextState) => {
             7d
           </n-button>
           <n-button quaternary :disabled="webui.loading" @click="resetSnoozeForm">
-            Clear
+            Clear form
           </n-button>
           <n-button
             type="primary"
@@ -170,7 +170,7 @@ watch(snoozeState, (nextState) => {
             <template #icon>
               <Plus :size="16" />
             </template>
-            Create
+            Create snooze
           </n-button>
         </div>
       </n-form>
@@ -272,7 +272,7 @@ watch(snoozeState, (nextState) => {
       v-model:show="showCreateConfirm"
       preset="dialog"
       title="Create snooze"
-      positive-text="Create"
+      positive-text="Create snooze"
       negative-text="Cancel"
       :positive-button-props="{ type: 'primary', loading: webui.loading }"
       @positive-click="confirmCreate"

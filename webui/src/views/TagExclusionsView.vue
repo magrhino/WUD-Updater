@@ -203,7 +203,7 @@ watch(statusFilter, (nextFilter) => {
         </n-form-item>
         <div class="form-actions">
           <n-button quaternary :disabled="webui.loading" @click="resetExclusionForm">
-            Clear
+            Clear form
           </n-button>
           <n-button
             type="primary"
@@ -214,7 +214,7 @@ watch(statusFilter, (nextFilter) => {
             <template #icon>
               <Save :size="16" />
             </template>
-            Save
+            Save rule
           </n-button>
         </div>
       </n-form>
@@ -342,7 +342,7 @@ watch(statusFilter, (nextFilter) => {
       v-model:show="showSaveConfirm"
       preset="dialog"
       title="Save tag exclusion"
-      positive-text="Save"
+      positive-text="Save rule"
       negative-text="Cancel"
       :positive-button-props="{ type: 'primary', loading: webui.loading }"
       @positive-click="confirmSave"
@@ -379,7 +379,7 @@ watch(statusFilter, (nextFilter) => {
       v-model:show="showStatusConfirm"
       preset="dialog"
       title="Update tag exclusion"
-      positive-text="Confirm"
+      positive-text="Update status"
       negative-text="Cancel"
       :positive-button-props="{ type: nextStatus === 'active' ? 'primary' : 'warning', loading: webui.loading }"
       @positive-click="confirmStatusChange"

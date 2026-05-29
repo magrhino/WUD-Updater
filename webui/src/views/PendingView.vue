@@ -377,7 +377,9 @@ onUnmounted(() => {
 
     <div class="section-heading pending-heading">
       <div>
-        <p class="eyebrow">{{ webui.pending?.source_file ?? "Pending file" }}</p>
+        <p class="eyebrow value-eyebrow">
+          {{ webui.pending?.source_file ?? "Pending file" }}
+        </p>
         <h2>{{ webui.pending?.count ?? 0 }} pending updates</h2>
       </div>
       <div class="inline-actions pending-actions">
@@ -386,13 +388,18 @@ onUnmounted(() => {
           <template #icon>
             <Check :size="16" />
           </template>
-          All
+          Select all
         </n-button>
-        <n-button size="small" quaternary :disabled="!selectedLineNumbers.length" @click="clearSelection">
+        <n-button
+          size="small"
+          quaternary
+          :disabled="!selectedLineNumbers.length"
+          @click="clearSelection"
+        >
           <template #icon>
             <X :size="16" />
           </template>
-          Clear
+          Clear selection
         </n-button>
         <n-checkbox
           v-model:checked="allowTagUpdates"
@@ -525,7 +532,7 @@ onUnmounted(() => {
             <template #icon>
               <Play :size="16" />
             </template>
-            Apply
+            Apply plan
           </n-button>
         </div>
       </div>
@@ -573,7 +580,7 @@ onUnmounted(() => {
         <article v-for="stack in webui.plan.stacks" :key="stack.name" class="plan-stack">
           <div class="section-heading">
             <div>
-              <p class="eyebrow">{{ stack.directory }}</p>
+              <p class="eyebrow value-eyebrow">{{ stack.directory }}</p>
               <h2>{{ stack.name }}</h2>
             </div>
             <n-tag size="small">{{ stack.services_label }}</n-tag>
@@ -665,7 +672,7 @@ onUnmounted(() => {
       v-model:show="showApplyConfirm"
       preset="dialog"
       title="Apply selected updates"
-      positive-text="Apply"
+      positive-text="Apply updates"
       negative-text="Cancel"
       :positive-button-props="{ type: 'primary', loading: webui.loading }"
       @positive-click="confirmApply"
