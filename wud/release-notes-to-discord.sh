@@ -2,6 +2,7 @@
 set -Eeuo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
+# shellcheck disable=SC1091
 # shellcheck source=wud/http.sh
 source "${SCRIPT_DIR}/http.sh"
 
@@ -11,6 +12,8 @@ IMAGE=""
 CONTAINER_NAME=""
 CURRENT_TAG=""
 TAG_OVERRIDE=""
+MAX_COMMITS="${MAX_COMMITS:-3}"
+DEBUG="${DEBUG:-0}"
 UPSTREAM_OWNER=""
 UPSTREAM_REPO=""
 LSIO_OWNER="${LSIO_OWNER:-linuxserver}"
@@ -19,7 +22,6 @@ WEBHOOK="${DISCORD_RELEASES_WEBHOOK:-${DISCORD_WEBHOOK:-}}"
 ADMIN_WEBHOOK="${ADMIN_WEBHOOK:-$WEBHOOK}"
 UPSTREAM_MAP="${UPSTREAM_MAP:-${SCRIPT_DIR}/upstreams.txt}"
 COLOR_HEX="${COLOR_HEX:-0x57F287}"
-DISCORD_COLOR="$((COLOR_HEX))"
 
 usage() {
   cat <<'EOF'
@@ -32,6 +34,16 @@ EOF
 
 err() {
   printf '%s\n' "$*" >&2
+}
+
+ts() {
+  date +"%Y-%m-%d %H:%M:%S"
+}
+
+dbg() {
+  if [[ "$DEBUG" -eq 1 ]]; then
+    printf '[%s] [DEBUG] %s\n' "$(ts)" "$*" >&2 || true
+  fi
 }
 
 sanitize_text() {
@@ -124,6 +136,18 @@ while [[ "$#" -gt 0 && "${1:-}" == --* ]]; do
       CURRENT_TAG="${2:?missing value for --current-tag}"
       shift 2
       ;;
+    --max-commits)
+      MAX_COMMITS="${2:?missing value for --max-commits}"
+      shift 2
+      ;;
+    --color)
+      COLOR_HEX="${2:?missing value for --color}"
+      shift 2
+      ;;
+    --debug)
+      DEBUG=1
+      shift
+      ;;
     --help|-h)
       usage
       exit 0
@@ -141,6 +165,17 @@ if [[ "$#" -gt 0 ]]; then
   CONTAINER_NAME="${2:-}"
   CURRENT_TAG="${3:-}"
 fi
+
+norm_color() {
+  local color="$1"
+  if [[ "$color" =~ ^0x[0-9A-Fa-f]+$ ]]; then
+    printf '%d' "$((color))"
+  else
+    printf '%d' "$color" 2>/dev/null || printf '%d' 5814783
+  fi
+}
+
+DISCORD_COLOR="$(norm_color "$COLOR_HEX")"
 
 api_get() {
   local url="$1" tmp
@@ -175,8 +210,12 @@ lookup_upstream() {
 
 extract_github_source_repo() {
   local source="$1"
+  local owner repo
   [[ "$source" == *github.com* ]] || return 1
-  normalize_repo "$source"
+  owner="$(sed -E 's#.*github\.com[:/]+([^/]+)/.*#\1#' <<<"$source")"
+  repo="$(sed -E 's#.*github\.com[:/]+[^/]+/([^/.]+).*#\1#' <<<"$source")"
+  [[ -n "$owner" && -n "$repo" && "$owner" != "$source" && "$repo" != "$source" ]] || return 1
+  normalize_repo "$owner/$repo"
 }
 
 extract_ghcr_repo() {
@@ -194,7 +233,6 @@ extract_ghcr_repo() {
 
 extract_lsio_repo_from_image() {
   local value="$1" repo base
-  value="${image_name:-$value}"
   value="${value%%@sha256:*}"
   value="${value%%:*}"
   case "$value" in
@@ -216,10 +254,26 @@ release_json_value() {
 }
 
 fetch_github_release() {
-  local owner="$1" repo="$2" tag="${3:-}" rel="" repo_json="" candidate
+  local owner="$1" repo="$2" tag="${3:-}" rel="" list="" list_type="" repo_json="" candidate real
   local -a candidates
 
-  if [[ -n "$tag" && "$tag" != latest && "$tag" != current ]]; then
+  if [[ -n "$tag" ]]; then
+    case "$(printf '%s' "$tag" | tr '[:upper:]' '[:lower:]')" in
+      latest|current)
+        real="$(http_effective_url "https://github.com/${owner}/${repo}/releases/latest" -H "User-Agent: wud-updater-release-notes/1.0" 2>/dev/null || true)"
+        real="$(sed -nE 's#.*/releases/tag/([^/?#]+).*#\1#p' <<<"$real")"
+        if [[ -n "$real" ]]; then
+          dbg "Resolved latest -> tag '$real' via redirect"
+          tag="$real"
+        else
+          dbg "Could not resolve latest via redirect; using API latest endpoint"
+          tag=""
+        fi
+        ;;
+    esac
+  fi
+
+  if [[ -n "$tag" ]]; then
     if [[ "$tag" =~ ^[vV] ]]; then
       candidates=("$tag")
     else
@@ -240,11 +294,31 @@ fetch_github_release() {
     fi
   fi
 
-  repo_json="$(api_get "https://api.github.com/repos/${owner}/${repo}" || true)"
-  if [[ -z "$repo_json" || "$(jq -r 'type' <<<"$repo_json" 2>/dev/null || true)" != "object" ]]; then
-    repo_json="$(jq -n --arg url "https://github.com/${owner}/${repo}" '{html_url:$url}')"
+  if [[ -z "$rel" || "$rel" == "null" || "$(jq -r '.message // empty' <<<"$rel" 2>/dev/null || true)" == "Not Found" ]]; then
+    if [[ -n "$tag" ]]; then
+      list="$(api_get "https://api.github.com/repos/${owner}/${repo}/releases?per_page=100" || true)"
+      list_type="$(jq -r 'type' <<<"$list" 2>/dev/null || true)"
+      if [[ "$list_type" == "array" ]]; then
+        rel="$(jq --arg version "$tag" -c '
+          first(.[] | select(
+            (.tag_name == ("v" + $version)) or
+            (.tag_name == $version) or
+            ((.name // "") | contains($version))
+          )) // empty
+        ' <<<"$list")"
+      fi
+    fi
   fi
-  printf 'FALLBACK\n%s\n' "$repo_json"
+
+  if [[ -z "$rel" || "$rel" == "null" || "$(jq -r '.message // empty' <<<"$rel" 2>/dev/null || true)" == "Not Found" ]]; then
+    repo_json="$(api_get "https://api.github.com/repos/${owner}/${repo}" || true)"
+    if [[ -z "$repo_json" || "$(jq -r 'type' <<<"$repo_json" 2>/dev/null || true)" != "object" ]]; then
+      repo_json="$(jq -n --arg url "https://github.com/${owner}/${repo}" '{html_url:$url}')"
+    fi
+    printf 'FALLBACK\n%s\n' "$repo_json"
+  else
+    printf 'RELEASE\n%s\n' "$rel"
+  fi
 }
 
 detect_breaking() {
@@ -271,6 +345,10 @@ semver_first() {
     || true
 }
 
+strip_md_headers() {
+  sed -E 's/\r//g; s/^\*\*([A-Za-z0-9 _-]+):\*\*/\1:/; s/[[:space:]]+$//'
+}
+
 extract_block_header_ci() {
   local header="$1"
   awk -v target="$(printf '%s' "$header" | tr '[:upper:]' '[:lower:]')" '
@@ -285,43 +363,153 @@ extract_block_header_ci() {
     }'
 }
 
+extract_md_h2_section_ci() {
+  local h2="$1"
+  awk -v key="$(printf '%s' "$h2" | tr '[:upper:]' '[:lower:]')" '
+    function lower(s) { return tolower(s) }
+    /^##[[:space:]]+/ {
+      header = lower($0)
+      sub(/^##[[:space:]]*/, "", header)
+      sub(/[[:space:]:]*$/, "", header)
+      if (header == key) { print $0; show = 1; next }
+      if (show) exit
+    }
+    { if (show) print $0 }
+  '
+}
+
 extract_upstream_version() {
-  sed -nE 's/.*[Uu]pdat(e|ing)[^0-9vV]*([vV]?[0-9][0-9A-Za-z._-]*).*/\2/p' | head -n 1
+  local text version=""
+
+  text="$(cat)"
+  version="$(printf '%s\n' "$text" \
+    | grep -Eoim1 'updat(ing|e)[[:space:]]+to[[:space:]]+[vV]?[0-9]+(\.[0-9]+){1,}([[:alnum:]._-])*' \
+    | sed -E 's/.*to[[:space:]]+//' || true)"
+  [[ -z "$version" ]] && version="$(printf '%s\n' "$text" \
+    | grep -Eoim1 'bump[[:space:]]+to[[:space:]]+[vV]?[0-9]+(\.[0-9]+){1,}([[:alnum:]._-])*' \
+    | sed -E 's/.*to[[:space:]]+//' || true)"
+  [[ -z "$version" ]] && version="$(printf '%s\n' "$text" \
+    | grep -Eoim1 '[vV]?[0-9]+(\.[0-9]+){1,}([[:alnum:]._-])*' || true)"
+  printf '%s' "$version"
 }
 
 extract_alpine_base() {
-  sed -nE 's/.*[Aa]lpine[[:space:]]+([0-9]+(\.[0-9]+)?).*/\1/p' | head -n 1
+  grep -Eoi -m1 'alpine[[:space:]]+[0-9]+\.[0-9]+' | awk '{print $2}'
 }
 
 extract_ci_link() {
-  sed -nE 's#.*(https://ci\.linuxserver\.io/[^ )]+).*#\1#p' | head -n 1
+  grep -Eom1 'https?://[^ ]+ci-tests[^ ]+' || true
 }
 
-build_context_line() {
-  local image="$1" tag="$2"
+select_key_change_bullets() {
+  local max="${1:-7}"
+
+  awk -v max="$max" '
+    function lower(s) { return tolower(s) }
+    function is_bullet(s) { return (s ~ /^[[:space:]]*([*+-]|•)[[:space:]]/) }
+    {
+      lines++
+      line = $0
+      low = lower(line)
+      if (low ~ /^##[[:space:]]*key[[:space:]]*changes[[:space:]]*$/) { in_key = 1; next }
+      if (in_key && line ~ /^##[[:space:]]/) in_key = 0
+      if (in_key && is_bullet(line)) {
+        sub(/^[[:space:]]*([*+-]|•)[[:space:]]*/, "- ", line)
+        print line
+        out++
+        if (out >= max) exit
+      } else if (!in_key && lines <= 200 && is_bullet(line) && seen < max) {
+        sub(/^[[:space:]]*([*+-]|•)[[:space:]]*/, "- ", line)
+        print line
+        seen++
+        if (seen >= max) exit
+      }
+    }
+  '
+}
+
+select_representative_changes() {
+  local owner="$1" repo="$2" max="${3:-3}" section line count=0
+
+  section="$(cat | extract_md_h2_section_ci "changes")"
+  [[ -n "$section" ]] || return 0
+  while IFS= read -r line; do
+    if [[ "$line" =~ \(#([0-9]+)\) ]]; then
+      printf -- '- [#%s](https://github.com/%s/%s/pull/%s)\n' "${BASH_REMATCH[1]}" "$owner" "$repo" "${BASH_REMATCH[1]}"
+      count=$((count + 1))
+    elif [[ "$line" =~ (^|[^A-Za-z0-9_])#([0-9]+) ]]; then
+      printf -- '- [#%s](https://github.com/%s/%s/pull/%s)\n' "${BASH_REMATCH[2]}" "$owner" "$repo" "${BASH_REMATCH[2]}"
+      count=$((count + 1))
+    elif [[ "$line" =~ ([0-9a-f]{7,40}) ]]; then
+      printf -- '- [%s](https://github.com/%s/%s/commit/%s)\n' "${BASH_REMATCH[1]:0:7}" "$owner" "$repo" "${BASH_REMATCH[1]}"
+      count=$((count + 1))
+    fi
+    if (( count >= max )); then
+      break
+    fi
+  done < <(printf '%s\n' "$section" | sed -n '/^##/,$p' | sed '1d')
+}
+
+extract_intro_until_h3() {
+  awk '{ if ($0 ~ /^###[[:space:]]/) exit; print }'
+}
+
+build_context_line_generic() {
+  local image="$1" repo="$2" tag="$3" left
+
+  left="\`$repo\`"
+  [[ -n "$image" ]] && left="\`$image\`"
   if [[ -n "$tag" && "$tag" != "N/A" ]]; then
-    printf '%s%s%s - %s' '`' "$image" '`' "$tag"
+    printf '%s - %s' "$left" "$tag"
   else
-    printf '%s%s%s' '`' "$image" '`'
+    printf '%s' "$left"
+  fi
+}
+
+build_context_line_lsio() {
+  local image="$1" lsio_tag="$2" alpine="$3" tag_suffix
+
+  tag_suffix="$(awk -F- '{print $NF}' <<<"$lsio_tag")"
+  if [[ -n "$alpine" ]]; then
+    printf '%s%s%s - %s - Alpine %s' '`' "$image" '`' "$tag_suffix" "$alpine"
+  else
+    printf '%s%s%s - %s' '`' "$image" '`' "$tag_suffix"
   fi
 }
 
 build_description() {
-  local context="$1" body="$2"
-  {
-    printf '%s\n' "$context"
-    if [[ -n "$body" ]]; then
-      printf '\n**Key changes**\n'
-      printf '%s\n' "$body" \
-        | awk '
-          /^[[:space:]]*[-*][[:space:]]+/ {
-            sub(/^[[:space:]]*[-*][[:space:]]+/, "- ")
-            print
-            count++
-            if (count == 7) exit
-          }'
-    fi
-  } | sanitize_text
+  local context="$1" body="$2" owner="$3" repo="$4"
+  local key_bullets intro_text rep_changes line
+  local -a lines
+
+  lines=("$context")
+  key_bullets="$(select_key_change_bullets 7 <<<"$body" 2>/dev/null || true)"
+  if [[ -z "$key_bullets" && -n "$body" ]]; then
+    intro_text="$(extract_intro_until_h3 <<<"$body" 2>/dev/null | sed '/^[[:space:]]*$/,$d' || true)"
+  fi
+  rep_changes="$(select_representative_changes "$owner" "$repo" "$MAX_COMMITS" <<<"$body" 2>/dev/null || true)"
+
+  if [[ -n "$key_bullets" ]]; then
+    lines+=("")
+    lines+=("**Key changes**")
+    while IFS= read -r line; do
+      lines+=("$line")
+    done <<<"$key_bullets"
+  elif [[ -n "${intro_text:-}" ]]; then
+    lines+=("")
+    lines+=("**Key changes**")
+    lines+=("$(printf '%s' "$intro_text")")
+  fi
+
+  if [[ -n "$rep_changes" ]]; then
+    lines+=("")
+    lines+=("**Representative changes**")
+    while IFS= read -r line; do
+      lines+=("$line")
+    done <<<"$rep_changes"
+  fi
+
+  printf '%s\n' "${lines[@]}" | sanitize_text
 }
 
 send_or_print_payload() {
@@ -334,6 +522,7 @@ send_or_print_payload() {
     err "${HTTP_DISCORD_ERROR:-Discord webhook request failed to send}"
     return 1
   fi
+  printf 'Sent embed to Discord.\n' || true
 }
 
 post_minimal_notice() {
@@ -363,16 +552,19 @@ run_github() {
   fi
   [[ -n "$html" && "$html" != "null" ]] || html="https://github.com/${UPSTREAM_OWNER}/${UPSTREAM_REPO}"
 
-  context="$(build_context_line "${IMAGE:-${UPSTREAM_OWNER}/${UPSTREAM_REPO}}" "$tag")"
-  desc="$(build_description "$context" "$body")"
+  context="$(build_context_line_generic "$IMAGE" "${UPSTREAM_OWNER}/${UPSTREAM_REPO}" "$tag")"
+  desc="$(build_description "$context" "$body" "$UPSTREAM_OWNER" "$UPSTREAM_REPO")"
   desc="${desc:0:3900}"
   if (( exists )); then
     title="Release ${tag} for ${UPSTREAM_OWNER}/${UPSTREAM_REPO}"
     links="[GitHub release](${html})"
+    [[ "$html" == *"/releases/tag/"* ]] && links="${links} - [Full changelog](${html}#user-content-changes)"
   else
     title="${UPSTREAM_OWNER}/${UPSTREAM_REPO} ${name:-releases}"
     links="[GitHub project](${html})"
   fi
+  title="$(printf '%s' "$title" | oneline | sanitize_text)"
+  title="${title:0:240}"
   version="$tag"
   [[ -n "$CURRENT_TAG" && "$tag" != "N/A" ]] && version="${CURRENT_TAG} -> ${tag}"
   breaking="$(detect_breaking "$body" "$CURRENT_TAG" "$tag")"
@@ -403,8 +595,8 @@ run_github() {
 }
 
 run_lsio() {
-  local lsio_json lsio_tag lsio_body lsio_html linux_block remote_block upstream_version_raw upstream_version
-  local alpine_base ci_url lsio_changes_text lsio_non_rebase relkind up_json up_tag up_html up_body up_date exists=0
+  local lsio_json lsio_tag lsio_body lsio_html norm_lsio_body linux_block remote_block upstream_version_raw upstream_version
+  local alpine_base ci_url lsio_changes_text lsio_non_rebase relkind up_json up_name up_tag up_html up_body up_date exists=0
   local context desc title links lsio_changes embed payload line
 
   lsio_json="$(api_get "https://api.github.com/repos/${LSIO_OWNER}/${LSIO_REPO}/releases/latest")"
@@ -415,8 +607,9 @@ run_lsio() {
   lsio_tag="$(release_json_value "$lsio_json" tag_name)"
   lsio_body="$(jq -r '.body // ""' <<<"$lsio_json" | sanitize_text)"
   lsio_html="$(release_json_value "$lsio_json" html_url)"
-  linux_block="$(extract_block_header_ci "linuxserver changes:" <<<"$lsio_body" 2>/dev/null || true)"
-  remote_block="$(extract_block_header_ci "remote changes:" <<<"$lsio_body" 2>/dev/null || true)"
+  norm_lsio_body="$(strip_md_headers <<<"$lsio_body" 2>/dev/null)"
+  linux_block="$(extract_block_header_ci "linuxserver changes:" <<<"$norm_lsio_body" 2>/dev/null || true)"
+  remote_block="$(extract_block_header_ci "remote changes:" <<<"$norm_lsio_body" 2>/dev/null || true)"
   upstream_version_raw="$(extract_upstream_version <<<"$remote_block" 2>/dev/null || true)"
   upstream_version="$(printf '%s' "$upstream_version_raw" | semver_first)"
   [[ -z "$upstream_version" ]] && upstream_version="$(printf '%s' "$lsio_tag" | semver_first)"
@@ -426,14 +619,24 @@ run_lsio() {
   lsio_changes_text="$(sed '1d' <<<"$linux_block" | sed '/^[[:space:]]*$/d')"
   lsio_non_rebase="$(grep -viE '^[[:space:]]*[-*•]?[[:space:]]*rebase( to)? alpine[[:space:]]+[0-9]+\.[0-9]+' <<<"$lsio_changes_text" 2>/dev/null || true)"
 
+  dbg "LSIO tag: $lsio_tag"
+  dbg "Remote version: ${upstream_version:-<none>}"
+  dbg "Alpine base: ${alpine_base:-<none>}"
+  dbg "CI link: ${ci_url:-<none>}"
+
   { read -r relkind; up_json="$(cat)"; } < <(fetch_github_release "$UPSTREAM_OWNER" "$UPSTREAM_REPO" "${upstream_version:-}")
+  if [[ "$relkind" == "FALLBACK" && -z "${upstream_version:-}" ]]; then
+    { read -r relkind; up_json="$(cat)"; } < <(fetch_github_release "$UPSTREAM_OWNER" "$UPSTREAM_REPO" "latest")
+  fi
   if [[ "$relkind" == "RELEASE" ]]; then
     exists=1
+    up_name="$(release_json_value "$up_json" name)"
     up_tag="$(release_json_value "$up_json" tag_name)"
     up_html="$(release_json_value "$up_json" html_url)"
     up_body="$(jq -r '.body // ""' <<<"$up_json" | sanitize_text)"
     up_date="$(jq -r '.published_at // .created_at // ""' <<<"$up_json" | cut -dT -f1)"
   else
+    up_name="$(printf '%s' "${upstream_version:-}" | oneline)"
     up_tag="N/A"
     up_html="$(release_json_value "$up_json" html_url)"
     up_body=""
@@ -441,20 +644,25 @@ run_lsio() {
   fi
   [[ -n "$up_html" && "$up_html" != "null" ]] || up_html="https://github.com/${UPSTREAM_OWNER}/${UPSTREAM_REPO}"
 
-  context="$(build_context_line "${LSIO_OWNER}/${LSIO_REPO}" "$lsio_tag")"
-  desc="$(build_description "$context" "$up_body")"
+  context="$(build_context_line_lsio "${LSIO_OWNER}/${LSIO_REPO}" "$lsio_tag" "${alpine_base:-}")"
+  desc="$(build_description "$context" "$up_body" "$UPSTREAM_OWNER" "$UPSTREAM_REPO")"
   desc="${desc:0:3900}"
   if (( exists )); then
-    links="[LSIO release](${lsio_html}) - [Upstream release](${up_html})"
+    links="[LSIO release](${lsio_html}) - [Upstream release](${up_html}) - [Full changelog](${up_html}#user-content-changes)"
   else
     links="[LSIO release](${lsio_html}) - [Upstream project](https://github.com/${UPSTREAM_OWNER}/${UPSTREAM_REPO})"
   fi
   [[ -n "$ci_url" ]] && links="${links} - [CI](${ci_url})"
   title="${LSIO_OWNER}/${LSIO_REPO} -> ${UPSTREAM_REPO} ${up_tag}"
+  if [[ "$up_tag" == "N/A" && -n "$up_name" ]]; then
+    title="${LSIO_OWNER}/${LSIO_REPO} -> ${UPSTREAM_REPO} ${up_name} (project)"
+  fi
+  title="$(printf '%s' "$title" | oneline | sanitize_text)"
+  title="${title:0:240}"
 
   lsio_changes=""
   if [[ -n "$alpine_base" ]]; then
-    lsio_changes="**Rebase**: Alpine ${alpine_base}\n"
+    lsio_changes="**Rebase**: Alpine ${alpine_base}"$'\n'
   fi
   if [[ -n "$lsio_non_rebase" ]]; then
     while IFS= read -r line; do
@@ -463,6 +671,7 @@ run_lsio() {
     done < <(awk 'NR<=10' <<<"$lsio_non_rebase")
   fi
   lsio_changes="$(printf '%s' "$lsio_changes" | sanitize_text)"
+  [[ -n "$lsio_changes" ]] && lsio_changes="${lsio_changes}"$'\n'
   lsio_changes="${lsio_changes:0:950}"
 
   embed="$(jq -n \
@@ -490,34 +699,24 @@ run_lsio() {
 }
 
 resolve_auto_provider() {
-  local lsio_repo upstream source repo
+  local source repo lsio_repo
 
-  if lsio_repo="$(extract_lsio_repo_from_image "$IMAGE" 2>/dev/null)"; then
-    set_lsio_repo "$lsio_repo"
-    upstream="$(lookup_upstream "${LSIO_OWNER}/${LSIO_REPO}" || true)"
-    if [[ -z "$upstream" ]]; then
-      if [[ -n "$ADMIN_WEBHOOK" ]]; then
-        local payload
-        payload="$(jq -n --arg content "Missing upstream mapping for \`${LSIO_OWNER}/${LSIO_REPO}\`. Add \`${LSIO_OWNER}/${LSIO_REPO}: Owner/Repo\` to \`${UPSTREAM_MAP}\`." '{content:$content, allowed_mentions:{parse:[]}}')"
-        WEBHOOK="$ADMIN_WEBHOOK" send_or_print_payload "$payload" || err "WARN: admin webhook send failed"
-      fi
-      return 2
-    fi
-    set_upstream_repo "$upstream"
-    PROVIDER="lsio"
+  source="$(docker image inspect "$IMAGE" --format '{{ index .Config.Labels "org.opencontainers.image.source" }}' 2>/dev/null || true)"
+  if repo="$(extract_github_source_repo "$source" 2>/dev/null || true)" && [[ -n "$repo" ]]; then
+    set_upstream_repo "$repo"
+    PROVIDER="github"
     return 0
   fi
 
-  if repo="$(extract_ghcr_repo "${image_name:-$IMAGE}" 2>/dev/null || true)" && [[ -n "$repo" ]]; then
+  if repo="$(extract_ghcr_repo "$IMAGE" 2>/dev/null || true)" && [[ -n "$repo" ]]; then
     set_upstream_repo "$repo"
     [[ -z "$TAG_OVERRIDE" ]] && TAG_OVERRIDE="${update_kind_remote_value:-${result_tag:-}}"
     PROVIDER="github"
     return 0
   fi
 
-  source="$(docker image inspect "$IMAGE" --format '{{ index .Config.Labels "org.opencontainers.image.source" }}' 2>/dev/null || true)"
-  if repo="$(extract_github_source_repo "$source" 2>/dev/null || true)" && [[ -n "$repo" ]]; then
-    set_upstream_repo "$repo"
+  if lsio_repo="$(extract_lsio_repo_from_image "$IMAGE" 2>/dev/null)"; then
+    set_upstream_repo "$lsio_repo"
     PROVIDER="github"
     return 0
   fi
@@ -535,9 +734,6 @@ case "$PROVIDER" in
     rc=0
     resolve_auto_provider || rc=$?
     if (( rc != 0 )); then
-      if (( rc == 2 )); then
-        exit 0
-      fi
       post_minimal_notice
       exit $?
     fi

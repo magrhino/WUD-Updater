@@ -81,7 +81,9 @@ run bash -n \
   tests/container-build.sh \
   tests/e2e-docker-compose.sh \
   tests/test-entrypoint.sh \
+  tests/test-github-release-embed.sh \
   tests/test-release-notes-to-discord.sh \
+  tests/test-tag-manager.sh \
   tests/test-wud-append-updates.sh \
   tests/test-install.sh \
   tests/test-updates-wrapper.sh \
@@ -107,7 +109,9 @@ run shellcheck \
   tests/container-build.sh \
   tests/e2e-docker-compose.sh \
   tests/test-entrypoint.sh \
+  tests/test-github-release-embed.sh \
   tests/test-release-notes-to-discord.sh \
+  tests/test-tag-manager.sh \
   tests/test-wud-append-updates.sh \
   tests/test-install.sh \
   tests/test-updates-wrapper.sh \

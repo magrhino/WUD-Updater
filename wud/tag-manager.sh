@@ -2,6 +2,7 @@
 set -Eeuo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
+# shellcheck disable=SC1091
 # shellcheck source=wud/http.sh
 source "${SCRIPT_DIR}/http.sh"
 
@@ -110,17 +111,18 @@ if [[ "$image_name" == linuxserver/* ]]; then
   fi
   upstream_repo="$(lookup_upstream "$lsio_repo" || true)"
   if [[ -z "$upstream_repo" ]]; then
-    message="Missing upstream mapping for \`${lsio_repo}\`. Add \`${lsio_repo}: Owner/Repo\` to \`${UPSTREAM_MAP}\`."
+    message="⚠️ Missing upstream mapping for \`${lsio_repo}\`. Please add a line:
+\`${lsio_repo}: Owner/Repo\` in \`${UPSTREAM_MAP}\`."
     log "$message"
     send_admin_notice "$message" || log "WARN: admin webhook send failed"
     log "Skipping embed call due to missing upstream."
     exit 0
   fi
-  args=("$RELEASE_EMBED" --provider lsio --lsio "$lsio_repo" --upstream "$upstream_repo")
+  args=("$RELEASE_EMBED" --provider lsio --lsio "$lsio_repo" --upstream "$upstream_repo" --debug)
   [[ -n "$DISCORD_WEBHOOK" ]] && args+=(--webhook "$DISCORD_WEBHOOK")
   run_embed "${args[@]}"
 elif [[ "$image_registry_url" == *ghcr.io* ]]; then
-  args=("$RELEASE_EMBED" --provider github --repo "$image_name")
+  args=("$RELEASE_EMBED" --provider github --repo "$image_name" --debug)
   if [[ "$update_kind_kind" == "tag" && -n "$update_kind_remote_value" ]]; then
     args+=(--tag "$update_kind_remote_value")
   elif [[ -n "$result_tag" ]]; then

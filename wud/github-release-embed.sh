@@ -42,22 +42,16 @@ while [[ "$#" -gt 0 ]]; do
       args+=("$1" "$2")
       shift 2
       ;;
-    --max-commits)
+    --max-commits|--color)
       [[ "$#" -ge 2 ]] || {
         printf 'missing value for %s\n' "$1" >&2
         exit 2
       }
-      shift 2
-      ;;
-    --color)
-      [[ "$#" -ge 2 ]] || {
-        printf 'missing value for %s\n' "$1" >&2
-        exit 2
-      }
-      export COLOR_HEX="$2"
+      args+=("$1" "$2")
       shift 2
       ;;
     --debug)
+      args+=("$1")
       shift
       ;;
     -h|--help)
