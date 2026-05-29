@@ -134,18 +134,22 @@ Optional checks are available when broader coverage is useful:
 
 ## Releases
 
-Create a stable release by pushing a `vX.Y.Z` tag:
+Release Please is the normal release path. When a Release Please PR is merged,
+it creates a draft GitHub Release and tag, then calls the release publisher with
+that tag.
+
+For manual backfill or retry, dispatch the release workflow with an existing
+stable tag:
 
 ```bash
-git tag v1.2.3
-git push origin v1.2.3
+gh workflow run release.yml --ref main -f release_tag=v1.2.3
 ```
 
-Release tag events run the release validation gate, build and publish Docker
-images for Linux amd64 and arm64 to `ghcr.io/magrhino/wud-updater`, validate the
-published multi-arch manifests, and then create or publish the GitHub Release.
-Release Please creates draft releases with tags so the public GitHub Release is
-published only after the GHCR image tags are available. The release gate includes
-Linux validation, container build validation, Docker Compose E2E, and WebUI
-smoke checks. Image tags are published as `vX.Y.Z`, `X.Y.Z`, `X.Y`, and
-`latest`.
+The release publisher runs the release validation gate, builds and publishes
+Docker images for Linux amd64 and arm64 to `ghcr.io/magrhino/wud-updater`,
+validates the published multi-arch manifests, and then creates or publishes the
+GitHub Release. The public GitHub Release is published only after the GHCR image
+tags are available. The release gate includes Linux validation, container build
+validation, Docker Compose E2E, and WebUI smoke checks. Image tags are published
+as `vX.Y.Z`, `X.Y.Z`, `X.Y`, and `latest`. Direct pushes of stable `vX.Y.Z` tags
+also run the same publisher as a fallback.

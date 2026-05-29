@@ -25,6 +25,9 @@ jobs:
     name: release please
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    outputs:
+      release_created: ${{ steps.release.outputs.release_created }}
+      tag_name: ${{ steps.release.outputs.tag_name }}
     if: >-
       ${{
         github.event_name == 'workflow_dispatch' ||
@@ -53,9 +56,22 @@ jobs:
 
     steps:
       - name: Run Release Please
+        id: release
         uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5 / v5.0.0
         with:
           token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
           target-branch: main
+
+  publish-release:
+    name: release gate and publish
+    needs:
+      - release-please
+    if: ${{ needs.release-please.outputs.release_created == 'true' }}
+    uses: ./.github/workflows/release.yml
+    permissions:
+      contents: write
+      packages: write
+    with:
+      release_tag: ${{ needs.release-please.outputs.tag_name }}
