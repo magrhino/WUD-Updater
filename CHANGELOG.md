@@ -4,6 +4,13 @@ All notable changes to WUD-Updater are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com) and versions follow
 [Semantic Versioning](https://semver.org).
 
+## [0.22.0](https://github.com/magrhino/WUD-Updater/compare/v0.21.2...v0.22.0) (2026-05-29)
+
+
+### Features
+
+* **webui:** Preserve legacy Discord release-note payloads while adding a shared webui release-note helper ([#77](https://github.com/magrhino/WUD-Updater/issues/77)) ([5f2741c](https://github.com/magrhino/WUD-Updater/commit/5f2741c9d9d0300c9f60b3902490a4910a03e78d))
+
 ## [0.21.2](https://github.com/magrhino/WUD-Updater/compare/v0.21.1...v0.21.2) (2026-05-29)
 
 
