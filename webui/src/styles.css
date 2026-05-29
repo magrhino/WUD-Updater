@@ -274,8 +274,23 @@ a {
 }
 
 .release-notes-muted {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
   color: var(--color-muted-text);
   font-size: 0.82rem;
+}
+
+.release-notes-status {
+  font-weight: 700;
+}
+
+.release-notes-reason {
+  max-width: 34rem;
+  font-size: 0.78rem;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
 }
 
 .icon-link {

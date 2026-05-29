@@ -137,6 +137,62 @@ describe("mutating WebUI views", () => {
     expect(wrapper.text()).toContain("Upstream release");
   });
 
+  it("renders unavailable release-note reasons without hiding LSIO links", () => {
+    const { pinia, webui } = setupStores(false);
+    webui.pending = pendingResponse([
+      pendingItem({
+        line_no: 1,
+        image: "advplyr/audiobookshelf:latest",
+        repo: "advplyr/audiobookshelf",
+      }),
+      pendingItem({
+        line_no: 2,
+        image: "linuxserver/calibre:latest",
+        repo: "linuxserver/calibre",
+      }),
+    ]);
+    webui.releaseNotes = releaseNotesResponse([
+      releaseNoteInfo({
+        line_no: 1,
+        status: "unsupported",
+        provider: "unsupported",
+        image_repo: "advplyr/audiobookshelf",
+        upstream_repo: "",
+        links: [],
+        error: "no supported GitHub release source found",
+      }),
+      releaseNoteInfo({
+        line_no: 2,
+        provider: "lsio",
+        image_repo: "linuxserver/docker-calibre",
+        upstream_repo: "kovidgoyal/calibre",
+        links: [
+          {
+            label: "LSIO release",
+            url: "https://github.com/linuxserver/docker-calibre/releases/tag/1.0.0-ls1",
+            kind: "lsio_release",
+          },
+          {
+            label: "Upstream project",
+            url: "https://github.com/kovidgoyal/calibre",
+            kind: "github_project",
+          },
+        ],
+      }),
+    ]);
+    vi.spyOn(webui, "loadPending").mockResolvedValue();
+    vi.spyOn(webui, "loadReleaseNotes").mockResolvedValue();
+    vi.spyOn(webui, "refreshReleaseNotes").mockResolvedValue();
+    const wrapper = mountWithApp(PendingView, { pinia });
+
+    expect(wrapper.text()).toContain("Unavailable");
+    expect(wrapper.text()).toContain(
+      "Only GHCR and mapped LinuxServer.io images have release-note links.",
+    );
+    expect(wrapper.text()).toContain("LSIO release");
+    expect(wrapper.text()).toContain("Upstream project");
+  });
+
   it("creates an apply job only after explicit confirmation", async () => {
     const { pinia, webui } = setupStores(true);
     webui.pending = pendingResponse();

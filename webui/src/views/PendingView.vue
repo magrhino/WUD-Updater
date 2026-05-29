@@ -226,16 +226,35 @@ function releaseNoteStatus(note: ReleaseNoteInfo | null): string {
   return "Not checked";
 }
 
+function releaseNoteReason(note: ReleaseNoteInfo | null): string {
+  const error = note?.error.trim() ?? "";
+  if (!error) {
+    return "";
+  }
+  const missingMapping = error.match(/^missing LSIO upstream mapping for (.+)$/);
+  if (missingMapping?.[1]) {
+    return `Add a LinuxServer.io upstream map entry for ${missingMapping[1]}.`;
+  }
+  if (error === "no supported GitHub release source found") {
+    return "Only GHCR and mapped LinuxServer.io images have release-note links.";
+  }
+  return error;
+}
+
 function renderReleaseNotes(row: PendingItem) {
   const note = releaseNoteFor(row);
+  const reason = releaseNoteReason(note);
   if (!note?.links.length) {
     return h(
       "span",
       {
         class: "release-notes-muted",
-        title: note?.error || undefined,
+        title: reason || undefined,
       },
-      releaseNoteStatus(note),
+      [
+        h("span", { class: "release-notes-status" }, releaseNoteStatus(note)),
+        reason ? h("span", { class: "release-notes-reason" }, reason) : null,
+      ],
     );
   }
   return h("div", { class: "release-notes-cell" }, [
@@ -633,9 +652,14 @@ onUnmounted(() => {
               <span
                 v-else
                 class="release-notes-muted"
-                :title="releaseNoteFor(item)?.error || undefined"
+                :title="releaseNoteReason(releaseNoteFor(item)) || undefined"
               >
-                {{ releaseNoteStatus(releaseNoteFor(item)) }}
+                <span class="release-notes-status">
+                  {{ releaseNoteStatus(releaseNoteFor(item)) }}
+                </span>
+                <span v-if="releaseNoteReason(releaseNoteFor(item))" class="release-notes-reason">
+                  {{ releaseNoteReason(releaseNoteFor(item)) }}
+                </span>
               </span>
             </dd>
           </div>
