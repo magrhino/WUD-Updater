@@ -26,12 +26,23 @@ import {
 } from "../api/client";
 import { useAuthStore } from "./auth";
 
+export const APPLY_JOB_RECOVERY_MESSAGE =
+  "Last known apply job state is unavailable because the WebUI process restarted. Check Runs -> Latest run and the updater log before applying more updates.";
+
+const APPLY_JOB_STORAGE_KEY = "applyJobId";
+const TERMINAL_APPLY_JOB_STATUSES = new Set<ApplyJobResponse["status"]>([
+  "success",
+  "failure",
+]);
+
 export const useWebuiStore = defineStore("webui", () => {
   const status = ref<StatusResponse | null>(null);
   const pending = ref<PendingResponse | null>(null);
   const releaseNotes = ref<ReleaseNotesResponse | null>(null);
   const plan = ref<PlanResponse | null>(null);
   const applyJob = ref<ApplyJobResponse | null>(null);
+  const rememberedApplyJobId = ref(readRememberedApplyJobId());
+  const applyJobRecovery = ref("");
   const runs = ref<RunSummary[]>([]);
   const runDetails = ref<Record<number, RunDetail>>({});
   const runLogs = ref<Record<number, RunLogResponse>>({});
@@ -140,13 +151,14 @@ export const useWebuiStore = defineStore("webui", () => {
   ): Promise<ApplyJobResponse> {
     const auth = useAuthStore();
     await loadWithState(async () => {
-      applyJob.value = await webApi.createJob(
+      const job = await webApi.createJob(
         planId,
         lineNumbers,
         allowTagUpdates,
         tagOverrides,
         await auth.ensureCsrf(),
       );
+      setApplyJob(job);
     });
     if (applyJob.value === null) {
       throw new Error("Apply job was not created");
@@ -165,19 +177,54 @@ export const useWebuiStore = defineStore("webui", () => {
 
   function setApplyJob(job: ApplyJobResponse): void {
     applyJob.value = job;
+    applyJobRecovery.value = "";
+    rememberApplyJob(job);
   }
 
   function setError(message: string): void {
     error.value = message;
   }
 
-  async function loadApplyJob(jobId: string): Promise<void> {
+  async function loadApplyJob(
+    jobId: string,
+    options: { recoverMissing?: boolean } = {},
+  ): Promise<ApplyJobResponse | null> {
     try {
-      applyJob.value = await webApi.job(jobId);
+      const job = await webApi.job(jobId);
+      setApplyJob(job);
+      return job;
     } catch (exc) {
+      if (
+        options.recoverMissing &&
+        exc instanceof ApiError &&
+        exc.status === 404
+      ) {
+        markApplyJobRecovery();
+        return null;
+      }
       error.value = errorMessage(exc);
       throw exc;
     }
+  }
+
+  function markApplyJobRecovery(): void {
+    applyJob.value = null;
+    applyJobRecovery.value = APPLY_JOB_RECOVERY_MESSAGE;
+    clearRememberedApplyJobId();
+  }
+
+  function rememberApplyJob(job: ApplyJobResponse): void {
+    if (TERMINAL_APPLY_JOB_STATUSES.has(job.status)) {
+      clearRememberedApplyJobId();
+      return;
+    }
+    rememberedApplyJobId.value = job.job_id;
+    writeRememberedApplyJobId(job.job_id);
+  }
+
+  function clearRememberedApplyJobId(): void {
+    rememberedApplyJobId.value = "";
+    removeRememberedApplyJobId();
   }
 
   async function loadRuns(): Promise<void> {
@@ -342,6 +389,8 @@ export const useWebuiStore = defineStore("webui", () => {
     releaseNotes,
     plan,
     applyJob,
+    rememberedApplyJobId,
+    applyJobRecovery,
     runs,
     runDetails,
     runLogs,
@@ -387,4 +436,39 @@ function errorMessage(exc: unknown): string {
     return exc.message;
   }
   return "Request failed";
+}
+
+function readRememberedApplyJobId(): string {
+  const storage = sessionStorageAvailable();
+  try {
+    return storage?.getItem(APPLY_JOB_STORAGE_KEY) ?? "";
+  } catch {
+    return "";
+  }
+}
+
+function writeRememberedApplyJobId(jobId: string): void {
+  const storage = sessionStorageAvailable();
+  try {
+    storage?.setItem(APPLY_JOB_STORAGE_KEY, jobId);
+  } catch {
+    // Remembering a transient job id is best-effort.
+  }
+}
+
+function removeRememberedApplyJobId(): void {
+  const storage = sessionStorageAvailable();
+  try {
+    storage?.removeItem(APPLY_JOB_STORAGE_KEY);
+  } catch {
+    // Remembering a transient job id is best-effort.
+  }
+}
+
+function sessionStorageAvailable(): Storage | null {
+  try {
+    return typeof window === "undefined" ? null : window.sessionStorage;
+  } catch {
+    return null;
+  }
 }
