@@ -53,9 +53,21 @@ Common variables:
 | `GITHUB_TOKEN` | empty | Optional token for GitHub API rate limits. |
 | `COLOR_HEX` | `0x57F287` | Discord embed color. |
 | `UPSTREAM_MAP` | `/wud/upstreams.txt` | LinuxServer.io image to upstream repository map. |
+| `RELEASE_EMBED` | `/wud/github-release-embed.sh` | Compatibility hook used by `tag-manager.sh`. |
+| `LOG_DIR` | `/out` | Compatibility log directory used by `tag-manager.sh`. |
 
 The default `github` provider fetches GitHub Releases for `--repo Owner/Repo`.
 The legacy provider name `generic` is still accepted as an alias.
+
+Compatibility entrypoints remain available for existing WUD configurations:
+
+```bash
+/wud/github-release-embed.sh --repo Owner/Repo --webhook "$DISCORD_WEBHOOK"
+/wud/tag-manager.sh
+```
+
+New configurations should call `/wud/release-notes-to-discord.sh` directly.
+The compatibility wrappers delegate to the canonical helper.
 
 ## LinuxServer.io Mapping
 

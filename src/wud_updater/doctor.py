@@ -434,7 +434,13 @@ class Doctor:
             self._record("FAIL", "packaged WUD scripts", f"{scripts} does not exist")
             return
 
-        required = ("on-update.sh", "append-updates.sh", "release-notes-to-discord.sh")
+        required = (
+            "on-update.sh",
+            "append-updates.sh",
+            "release-notes-to-discord.sh",
+            "github-release-embed.sh",
+            "tag-manager.sh",
+        )
         failures: list[str] = []
         for name in required:
             path = scripts / name

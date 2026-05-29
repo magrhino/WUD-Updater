@@ -74,6 +74,8 @@ run bash -n \
   bin/docker-update-from-wud \
   wud/http.sh \
   wud/release-notes-to-discord.sh \
+  wud/github-release-embed.sh \
+  wud/tag-manager.sh \
   tests/run-all.sh \
   tests/test-docker-update-from-wud.sh \
   tests/container-build.sh \
@@ -98,6 +100,8 @@ run shellcheck \
   wud/append-updates.sh \
   wud/http.sh \
   wud/release-notes-to-discord.sh \
+  wud/github-release-embed.sh \
+  wud/tag-manager.sh \
   tests/run-all.sh \
   tests/test-docker-update-from-wud.sh \
   tests/container-build.sh \

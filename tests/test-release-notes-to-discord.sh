@@ -3,6 +3,8 @@ set -Eeuo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
 SCRIPT="$REPO_ROOT/wud/release-notes-to-discord.sh"
+GITHUB_EMBED="$REPO_ROOT/wud/github-release-embed.sh"
+TAG_MANAGER="$REPO_ROOT/wud/tag-manager.sh"
 TEST_TMP=""
 
 fail(){
@@ -124,6 +126,9 @@ case "$url" in
   https://api.github.com/repos/acme/app/releases/latest)
     write_body "$(release_json "v2.0.0" "acme/app" $'## Changes\n- Routine maintenance')"
     ;;
+  https://api.github.com/repos/acme/app/releases/tags/v2.0.0)
+    write_body "$(release_json "v2.0.0" "acme/app" $'## Changes\n- Routine maintenance')"
+    ;;
   https://api.github.com/repos/linuxserver/docker-radarr/releases/latest)
     write_body "$(release_json "5.1.0-ls1" "linuxserver/docker-radarr" $'LinuxServer Changes:\n- Rebase to Alpine 3.20\n- Add package\n\nRemote Changes:\n- Updating to 5.1.0')"
     ;;
@@ -194,6 +199,30 @@ test_direct_repo_arg_uses_github_release_engine(){
   teardown_case
 }
 
+test_legacy_github_release_embed_wrapper_accepts_compat_args(){
+  setup_case
+  local payload_file="$TEST_TMP/payload.json"
+
+  PATH="$TEST_TMP/bin:$PATH" \
+    FAKE_WEBHOOK_PAYLOAD="$payload_file" \
+    FAKE_CURL_ARGS_LOG="$TEST_TMP/curl.args" \
+    "$GITHUB_EMBED" \
+      --repo acme/app \
+      --webhook https://discord.test/webhook \
+      --image ghcr.io/acme/app:1.0.0 \
+      --container container \
+      --current-tag 1.0.0 \
+      --max-commits 9 \
+      --color 0x123456 \
+      --debug > "$TEST_TMP/output.log" 2>&1 || fail "legacy github-release-embed wrapper failed"
+
+  [[ -s "$payload_file" ]] || fail "webhook payload was not captured"
+  jq -e '.embeds[0].color == 1193046' "$payload_file" >/dev/null || fail "legacy color option was not forwarded"
+  jq -e '.embeds[0].fields[] | select(.name == "Container" and .value == "container")' "$payload_file" >/dev/null || fail "legacy container option was not forwarded"
+  jq -e '.embeds[0].fields[] | select(.name == "Version" and .value == "1.0.0 -> v2.0.0")' "$payload_file" >/dev/null || fail "legacy current tag option was not forwarded"
+  teardown_case
+}
+
 test_oci_source_label_uses_github_release_engine(){
   setup_case
   local payload_file="$TEST_TMP/payload.json"
@@ -241,6 +270,55 @@ test_missing_linuxserver_mapping_posts_admin_only(){
   teardown_case
 }
 
+test_legacy_tag_manager_ghcr_env_uses_wrapper(){
+  setup_case
+  local payload_file="$TEST_TMP/payload.json"
+
+  PATH="$TEST_TMP/bin:$PATH" \
+    DISCORD_WEBHOOK="https://discord.test/webhook" \
+    FAKE_WEBHOOK_PAYLOAD="$payload_file" \
+    FAKE_CURL_ARGS_LOG="$TEST_TMP/curl.args" \
+    LOG_DIR="$TEST_TMP/logs" \
+    RELEASE_EMBED="$GITHUB_EMBED" \
+    image_name="acme/app" \
+    image_registry_url="ghcr.io" \
+    update_available="true" \
+    update_kind_kind="tag" \
+    update_kind_remote_value="2.0.0" \
+    result_tag="" \
+    "$TAG_MANAGER" > "$TEST_TMP/output.log" 2>&1 || fail "legacy tag-manager GHCR wrapper failed"
+
+  [[ -s "$payload_file" ]] || fail "webhook payload was not captured"
+  jq -e '.embeds[0].fields[] | select(.name == "Repository" and .value == "acme/app")' "$payload_file" >/dev/null || fail "legacy tag-manager GHCR repo was not forwarded"
+  jq -e '.embeds[0].fields[] | select(.name == "Version" and .value == "v2.0.0")' "$payload_file" >/dev/null || fail "legacy tag-manager tag was not forwarded"
+  ! grep -q 'discord.test/webhook' "$TEST_TMP/output.log" || fail "legacy tag-manager leaked webhook URL"
+  teardown_case
+}
+
+test_legacy_tag_manager_lsio_env_uses_upstream_map(){
+  setup_case
+  local payload_file="$TEST_TMP/payload.json"
+
+  PATH="$TEST_TMP/bin:$PATH" \
+    DISCORD_WEBHOOK="https://discord.test/webhook" \
+    FAKE_WEBHOOK_PAYLOAD="$payload_file" \
+    FAKE_CURL_ARGS_LOG="$TEST_TMP/curl.args" \
+    LOG_DIR="$TEST_TMP/logs" \
+    RELEASE_EMBED="$GITHUB_EMBED" \
+    UPSTREAM_MAP="$TEST_TMP/upstreams.txt" \
+    image_name="linuxserver/radarr" \
+    image_registry_url="docker.io" \
+    update_available="true" \
+    update_kind_kind="" \
+    update_kind_remote_value="" \
+    result_tag="" \
+    "$TAG_MANAGER" > "$TEST_TMP/output.log" 2>&1 || fail "legacy tag-manager LSIO wrapper failed"
+
+  [[ -s "$payload_file" ]] || fail "webhook payload was not captured"
+  jq -e '.embeds[0].fields[] | select(.name == "Links" and (.value | contains("LSIO release") and contains("Upstream release")))' "$payload_file" >/dev/null || fail "legacy tag-manager LSIO links were not rendered"
+  teardown_case
+}
+
 test_missing_source_posts_minimal_notice(){
   setup_case
   local payload_file="$TEST_TMP/payload.json"
@@ -283,9 +361,12 @@ run_test(){
 main(){
   run_test test_ghcr_image_uses_github_release_engine
   run_test test_direct_repo_arg_uses_github_release_engine
+  run_test test_legacy_github_release_embed_wrapper_accepts_compat_args
   run_test test_oci_source_label_uses_github_release_engine
   run_test test_linuxserver_image_shows_lsio_and_upstream_links
   run_test test_missing_linuxserver_mapping_posts_admin_only
+  run_test test_legacy_tag_manager_ghcr_env_uses_wrapper
+  run_test test_legacy_tag_manager_lsio_env_uses_upstream_map
   run_test test_missing_source_posts_minimal_notice
   run_test test_missing_source_webhook_failure_is_nonzero_and_redacted
 }

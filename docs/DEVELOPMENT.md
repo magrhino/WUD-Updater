@@ -28,7 +28,7 @@ Python unit tests, and updater behavior tests.
 ```bash
 ruff check .
 shellcheck install.sh bin/updates bin/docker-update-from-wud wud/*.sh
-bash -n install.sh bin/updates bin/docker-update-from-wud wud/http.sh wud/release-notes-to-discord.sh
+bash -n install.sh bin/updates bin/docker-update-from-wud wud/http.sh wud/release-notes-to-discord.sh wud/github-release-embed.sh wud/tag-manager.sh
 sh -n wud/on-update.sh wud/append-updates.sh
 python3 -m py_compile src/wud_updater/*.py tests/run-python-tests.py tests/test_python_*.py
 python3 tests/run-python-tests.py

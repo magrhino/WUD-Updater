@@ -404,7 +404,7 @@ async function handleJobEvent(event: MessageEvent<string>): Promise<void> {
     return;
   }
   closeJobStream();
-  await Promise.all([webui.loadPending(), webui.loadRuns()]);
+  await Promise.all([loadPendingAndReleaseNotes(), webui.loadRuns()]);
 }
 
 function closeJobStream(): void {

@@ -1,4 +1,5 @@
 import { createPinia, setActivePinia } from "pinia";
+import { flushPromises } from "@vue/test-utils";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { webApi } from "../src/api/client";
@@ -140,14 +141,23 @@ describe("mutating WebUI views", () => {
     const { pinia, webui } = setupStores(true);
     webui.pending = pendingResponse();
     webui.plan = planResponse();
-    vi.spyOn(webui, "loadPending").mockResolvedValue();
-    vi.spyOn(webui, "loadRuns").mockResolvedValue();
+    const loadPending = vi.spyOn(webui, "loadPending").mockResolvedValue();
+    const loadReleaseNotes = vi.spyOn(webui, "loadReleaseNotes").mockResolvedValue();
+    const refreshReleaseNotes = vi
+      .spyOn(webui, "refreshReleaseNotes")
+      .mockResolvedValue();
+    const loadRuns = vi.spyOn(webui, "loadRuns").mockResolvedValue();
     const createJob = vi
       .spyOn(webui, "createJob")
       .mockResolvedValue(applyJobResponse());
     const close = vi.fn();
+    let jobListener: ((event: MessageEvent<string>) => void) | null = null;
     vi.spyOn(webApi, "openJobStream").mockReturnValue({
-      addEventListener: vi.fn(),
+      addEventListener: vi.fn((type: string, listener: EventListener) => {
+        if (type === "job") {
+          jobListener = listener as (event: MessageEvent<string>) => void;
+        }
+      }),
       close,
       onerror: null,
       onmessage: null,
@@ -178,6 +188,19 @@ describe("mutating WebUI views", () => {
       ?.trigger("click");
 
     expect(createJob).toHaveBeenCalledWith("plan-test", [1], false, []);
+    expect(jobListener).not.toBeNull();
+
+    jobListener?.(
+      new MessageEvent("job", {
+        data: JSON.stringify(applyJobResponse({ status: "success" })),
+      }),
+    );
+    await flushPromises();
+
+    expect(loadPending).toHaveBeenCalled();
+    expect(loadReleaseNotes).toHaveBeenCalled();
+    expect(refreshReleaseNotes).toHaveBeenCalled();
+    expect(loadRuns).toHaveBeenCalled();
   });
 
   it("disables policy mutations in read-only mode", async () => {
