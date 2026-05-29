@@ -3,12 +3,15 @@ import { computed } from "vue";
 import { RouterLink, RouterView, useRoute, useRouter } from "vue-router";
 import {
   Activity,
+  BellOff,
   Clock3,
   LayoutDashboard,
   ListChecks,
   LogOut,
   RefreshCw,
+  Settings2,
   ShieldCheck,
+  Tags,
 } from "@lucide/vue";
 
 import { useAuthStore } from "./stores/auth";
@@ -26,6 +29,9 @@ const navItems = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard },
   { to: "/pending", label: "Pending", icon: ListChecks },
   { to: "/runs", label: "History", icon: Clock3 },
+  { to: "/policies", label: "Policies", icon: Settings2 },
+  { to: "/snoozes", label: "Snoozes", icon: BellOff },
+  { to: "/tag-exclusions", label: "Exclusions", icon: Tags },
 ];
 
 async function refreshCurrentView(): Promise<void> {
@@ -35,6 +41,12 @@ async function refreshCurrentView(): Promise<void> {
     await webui.loadPending();
   } else if (route.name === "runs") {
     await webui.loadRuns();
+  } else if (route.name === "policies") {
+    await webui.loadServicePolicies();
+  } else if (route.name === "snoozes") {
+    await webui.loadSnoozes(webui.snoozeStateFilter);
+  } else if (route.name === "tag-exclusions") {
+    await webui.loadTagExclusions(webui.tagExclusionStatusFilter);
   } else if (route.name === "run-detail") {
     await webui.loadRunDetail(Number(route.params.id));
   } else if (route.name === "run-log") {

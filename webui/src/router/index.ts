@@ -36,6 +36,24 @@ export const router = createRouter({
       meta: { requiresAuth: true, title: "Run history" },
     },
     {
+      path: "/policies",
+      name: "policies",
+      component: () => import("../views/PoliciesView.vue"),
+      meta: { requiresAuth: true, title: "Service policies" },
+    },
+    {
+      path: "/snoozes",
+      name: "snoozes",
+      component: () => import("../views/SnoozesView.vue"),
+      meta: { requiresAuth: true, title: "Snoozes" },
+    },
+    {
+      path: "/tag-exclusions",
+      name: "tag-exclusions",
+      component: () => import("../views/TagExclusionsView.vue"),
+      meta: { requiresAuth: true, title: "Tag exclusions" },
+    },
+    {
       path: "/runs/:id",
       name: "run-detail",
       component: () => import("../views/RunDetailView.vue"),

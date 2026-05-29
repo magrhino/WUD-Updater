@@ -165,6 +165,39 @@ a {
   font-size: 1.25rem;
 }
 
+.shortcut-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.shortcut-card {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  min-height: 58px;
+  padding: 12px;
+  border: 1px solid #e6ecef;
+  border-radius: 7px;
+  background: #f9fbfc;
+}
+
+.shortcut-card:hover {
+  border-color: #86b7dd;
+}
+
+.shortcut-card svg {
+  color: #137a63;
+}
+
+.shortcut-card span,
+.shortcut-card strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
 .section-panel {
   padding: 16px;
 }
@@ -248,6 +281,97 @@ a {
   border-radius: 8px;
   overflow: hidden;
   background: #ffffff;
+}
+
+.management-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 14px;
+  margin-top: 16px;
+}
+
+.form-actions {
+  display: flex;
+  grid-column: 1 / -1;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.filter-control {
+  width: 156px;
+}
+
+.management-table {
+  display: grid;
+  margin-top: 16px;
+  overflow: hidden;
+  border: 1px solid #dbe3e6;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.management-table-head,
+.management-row {
+  display: grid;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  padding: 10px 12px;
+}
+
+.management-table-head {
+  color: #65747a;
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  background: #f0f5f6;
+}
+
+.management-row {
+  border-top: 1px solid #e6ecef;
+}
+
+.management-row strong,
+.management-row span,
+.management-row code {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.management-row code {
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 0.84rem;
+}
+
+.policy-table .management-table-head,
+.policy-table .management-row {
+  grid-template-columns:
+    minmax(180px, 1.5fr) minmax(86px, 0.6fr) minmax(72px, 0.4fr)
+    minmax(96px, 0.5fr) minmax(184px, auto);
+}
+
+.snooze-table .management-table-head,
+.snooze-table .management-row {
+  grid-template-columns:
+    minmax(160px, 1fr) minmax(220px, 1fr) minmax(150px, 1fr)
+    minmax(86px, 0.4fr) minmax(110px, auto);
+}
+
+.exclusion-table .management-table-head,
+.exclusion-table .management-row {
+  grid-template-columns:
+    minmax(160px, 1.2fr) minmax(100px, 0.5fr) minmax(90px, 0.5fr)
+    minmax(92px, 0.5fr) minmax(198px, auto);
+}
+
+.table-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
 }
 
 .mobile-list {
@@ -467,6 +591,10 @@ a {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .shortcut-grid {
+    grid-template-columns: 1fr;
+  }
+
   .plan-summary {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -488,6 +616,18 @@ a {
 
   .list-row {
     grid-template-columns: 1fr;
+  }
+
+  .management-form {
+    grid-template-columns: 1fr;
+  }
+
+  .filter-control {
+    width: 100%;
+  }
+
+  .table-actions {
+    justify-content: flex-start;
   }
 
   .plan-action,
