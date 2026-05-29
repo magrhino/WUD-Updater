@@ -231,6 +231,11 @@ a {
   justify-content: flex-end;
 }
 
+.recovery-actions {
+  flex-wrap: wrap;
+  margin-top: 8px;
+}
+
 .text-link,
 .icon-link {
   color: var(--color-action-blue);

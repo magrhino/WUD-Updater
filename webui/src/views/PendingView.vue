@@ -84,6 +84,7 @@ const releaseNotesByLine = computed(() => {
   }
   return notes;
 });
+const latestRun = computed(() => webui.runs[0] ?? null);
 const selectedLineSet = computed(() => new Set(selectedLineNumbers.value));
 const selectedTagOverrideError = computed(() => {
   for (const item of webui.pending?.items ?? []) {
@@ -405,7 +406,7 @@ function subscribeApplyJob(jobId: string): void {
       closeJobStream();
       return;
     }
-    void webui.loadApplyJob(jobId).catch(() => undefined);
+    void recoverOrRefreshApplyJob(jobId);
   };
 }
 
@@ -423,12 +424,55 @@ async function handleJobEvent(event: MessageEvent<string>): Promise<void> {
     return;
   }
   closeJobStream();
-  await Promise.all([loadPendingAndReleaseNotes(), webui.loadRuns()]);
+  await refreshAfterTerminalJob();
 }
 
 function closeJobStream(): void {
   jobEventSource.value?.close();
   jobEventSource.value = null;
+}
+
+async function recoverOrRefreshApplyJob(jobId: string): Promise<void> {
+  const job = await webui
+    .loadApplyJob(jobId, { recoverMissing: true })
+    .catch(() => undefined);
+  if (job === undefined) {
+    return;
+  }
+  if (job === null) {
+    closeJobStream();
+    await webui.loadRuns().catch(() => undefined);
+    return;
+  }
+  if (terminalJobStatuses.has(job.status)) {
+    closeJobStream();
+    await refreshAfterTerminalJob();
+  }
+}
+
+async function reconnectObservedApplyJob(): Promise<void> {
+  if (!webui.rememberedApplyJobId) {
+    return;
+  }
+  const job = await webui
+    .loadApplyJob(webui.rememberedApplyJobId, { recoverMissing: true })
+    .catch(() => undefined);
+  if (job === undefined) {
+    return;
+  }
+  if (job === null) {
+    await webui.loadRuns().catch(() => undefined);
+    return;
+  }
+  if (terminalJobStatuses.has(job.status)) {
+    await refreshAfterTerminalJob();
+    return;
+  }
+  subscribeApplyJob(job.job_id);
+}
+
+async function refreshAfterTerminalJob(): Promise<void> {
+  await Promise.all([loadPendingAndReleaseNotes(), webui.loadRuns()]);
 }
 
 function actionCommand(action: PlanAction): string {
@@ -458,6 +502,7 @@ async function loadPendingAndReleaseNotes(): Promise<void> {
 
 onMounted(() => {
   void loadPendingAndReleaseNotes();
+  void reconnectObservedApplyJob();
 });
 
 watch(
@@ -489,6 +534,30 @@ onUnmounted(() => {
     </n-alert>
     <n-alert v-if="webui.releaseNotesError" type="warning" :show-icon="false">
       Release-note metadata is unavailable: {{ webui.releaseNotesError }}
+    </n-alert>
+    <n-alert
+      v-if="webui.applyJobRecovery"
+      type="warning"
+      :show-icon="false"
+    >
+      {{ webui.applyJobRecovery }}
+      <span class="inline-actions recovery-actions">
+        <RouterLink class="text-link" to="/runs">Runs</RouterLink>
+        <RouterLink
+          v-if="latestRun"
+          class="text-link"
+          :to="{ name: 'run-detail', params: { id: latestRun.id } }"
+        >
+          Latest run
+        </RouterLink>
+        <RouterLink
+          v-if="latestRun"
+          class="text-link"
+          :to="{ name: 'run-log', params: { id: latestRun.id } }"
+        >
+          Log
+        </RouterLink>
+      </span>
     </n-alert>
 
     <div class="section-heading pending-heading">

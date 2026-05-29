@@ -2,13 +2,16 @@ import { createPinia, setActivePinia } from "pinia";
 import { flushPromises } from "@vue/test-utils";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { webApi } from "../src/api/client";
+import { ApiError, webApi } from "../src/api/client";
 import PendingView from "../src/views/PendingView.vue";
 import PoliciesView from "../src/views/PoliciesView.vue";
 import SnoozesView from "../src/views/SnoozesView.vue";
 import TagExclusionsView from "../src/views/TagExclusionsView.vue";
 import { useAuthStore } from "../src/stores/auth";
-import { useWebuiStore } from "../src/stores/webui";
+import {
+  APPLY_JOB_RECOVERY_MESSAGE,
+  useWebuiStore,
+} from "../src/stores/webui";
 import {
   applyJobResponse,
   authSession,
@@ -17,6 +20,7 @@ import {
   planResponse,
   releaseNoteInfo,
   releaseNotesResponse,
+  runSummary,
   servicePolicy,
   snooze,
   tagExclusion,
@@ -257,6 +261,34 @@ describe("mutating WebUI views", () => {
     expect(loadReleaseNotes).toHaveBeenCalled();
     expect(refreshReleaseNotes).toHaveBeenCalled();
     expect(loadRuns).toHaveBeenCalled();
+  });
+
+  it("shows recovery guidance when a remembered apply job is missing", async () => {
+    window.sessionStorage.setItem("applyJobId", "job-lost");
+    const { pinia, webui } = setupStores(true);
+    webui.pending = pendingResponse();
+    vi.spyOn(webui, "loadPending").mockResolvedValue();
+    vi.spyOn(webui, "loadReleaseNotes").mockResolvedValue();
+    vi.spyOn(webui, "refreshReleaseNotes").mockResolvedValue();
+    vi.spyOn(webApi, "job").mockRejectedValue(
+      new ApiError(404, "apply job not found"),
+    );
+    const loadRuns = vi.spyOn(webui, "loadRuns").mockImplementation(async () => {
+      webui.runs = [runSummary({ id: 42 })];
+    });
+    const wrapper = mountWithApp(PendingView, { pinia });
+
+    await flushPromises();
+
+    expect(webApi.job).toHaveBeenCalledWith("job-lost");
+    expect(loadRuns).toHaveBeenCalled();
+    expect(webui.applyJob).toBeNull();
+    expect(webui.rememberedApplyJobId).toBe("");
+    expect(window.sessionStorage.getItem("applyJobId")).toBeNull();
+    expect(wrapper.text()).toContain(APPLY_JOB_RECOVERY_MESSAGE);
+    expect(wrapper.text()).toContain("Runs");
+    expect(wrapper.text()).toContain("Latest run");
+    expect(wrapper.text()).toContain("Log");
   });
 
   it("disables policy mutations in read-only mode", async () => {

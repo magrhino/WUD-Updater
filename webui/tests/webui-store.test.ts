@@ -2,8 +2,12 @@ import { createPinia, setActivePinia } from "pinia";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { useAuthStore } from "../src/stores/auth";
-import { useWebuiStore } from "../src/stores/webui";
 import {
+  APPLY_JOB_RECOVERY_MESSAGE,
+  useWebuiStore,
+} from "../src/stores/webui";
+import {
+  applyJobResponse,
   releaseNotesResponse,
   planResponse,
   stateOperationResponse,
@@ -106,5 +110,40 @@ describe("webui store", () => {
 
     expect(webui.error).toBe("db missing");
     expect(webui.loading).toBe(false);
+  });
+
+  it("remembers active apply jobs and clears terminal jobs", async () => {
+    mockFetch(applyJobResponse({ job_id: "job-active", status: "running" }));
+    const auth = useAuthStore();
+    vi.spyOn(auth, "ensureCsrf").mockResolvedValue("csrf-job");
+    const webui = useWebuiStore();
+
+    await webui.createJob("plan-test", [1], false, []);
+
+    expect(webui.rememberedApplyJobId).toBe("job-active");
+    expect(window.sessionStorage.getItem("applyJobId")).toBe("job-active");
+
+    webui.setApplyJob(applyJobResponse({ job_id: "job-active", status: "success" }));
+
+    expect(webui.rememberedApplyJobId).toBe("");
+    expect(window.sessionStorage.getItem("applyJobId")).toBeNull();
+  });
+
+  it("marks recovery when a remembered apply job is missing", async () => {
+    window.sessionStorage.setItem("applyJobId", "job-lost");
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(jsonResponse({ detail: "apply job not found" }, 404));
+    vi.stubGlobal("fetch", fetchMock);
+    const webui = useWebuiStore();
+
+    const job = await webui.loadApplyJob("job-lost", { recoverMissing: true });
+
+    expect(job).toBeNull();
+    expect(webui.applyJob).toBeNull();
+    expect(webui.applyJobRecovery).toBe(APPLY_JOB_RECOVERY_MESSAGE);
+    expect(webui.rememberedApplyJobId).toBe("");
+    expect(webui.error).toBe("");
+    expect(window.sessionStorage.getItem("applyJobId")).toBeNull();
   });
 });
