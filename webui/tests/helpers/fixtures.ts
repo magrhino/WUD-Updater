@@ -4,6 +4,8 @@ import type {
   PendingItem,
   PendingResponse,
   PlanResponse,
+  ReleaseNoteInfo,
+  ReleaseNotesResponse,
   RunSummary,
   ServicePolicyRecord,
   SnoozeRecord,
@@ -45,6 +47,44 @@ export function pendingResponse(items = [pendingItem()]): PendingResponse {
   return {
     source_file: "/out/images.todo",
     exists: true,
+    count: items.length,
+    items,
+    warnings: [],
+  };
+}
+
+export function releaseNoteInfo(
+  overrides: Partial<ReleaseNoteInfo> = {},
+): ReleaseNoteInfo {
+  return {
+    line_no: 1,
+    status: "ready",
+    provider: "github",
+    image_repo: "acme/app",
+    upstream_repo: "acme/app",
+    release_tag: "v2.0.0",
+    title: "v2.0.0",
+    published_at: "2026-01-02T00:00:00Z",
+    breaking: false,
+    breaking_reasons: [],
+    links: [
+      {
+        label: "GitHub release",
+        url: "https://github.com/acme/app/releases/tag/v2.0.0",
+        kind: "github_release",
+      },
+    ],
+    refreshed_at: "2026-01-02T00:00:00Z",
+    error: "",
+    ...overrides,
+  };
+}
+
+export function releaseNotesResponse(
+  items = [releaseNoteInfo()],
+): ReleaseNotesResponse {
+  return {
+    source_file: "/out/images.todo",
     count: items.length,
     items,
     warnings: [],

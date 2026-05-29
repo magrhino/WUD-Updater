@@ -164,6 +164,7 @@ test_lsio_image_routes_through_mapping(){
   assert_arg_present "Radarr/Radarr"
   assert_arg_absent "--tag"
   assert_arg_absent "5.1.0-ls1"
+  assert_arg_present "--debug"
   assert_arg_present "--webhook"
   assert_arg_present "https://discord.test/webhook"
   teardown_case
@@ -186,6 +187,7 @@ test_ghcr_image_routes_to_github_provider(){
   assert_arg_present "owner/repo"
   assert_arg_present "--tag"
   assert_arg_present "v2.0.0"
+  assert_arg_present "--debug"
   teardown_case
 }
 

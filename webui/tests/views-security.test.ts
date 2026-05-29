@@ -1,4 +1,5 @@
 import { createPinia, setActivePinia } from "pinia";
+import { flushPromises } from "@vue/test-utils";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { webApi } from "../src/api/client";
@@ -14,6 +15,8 @@ import {
   pendingItem,
   pendingResponse,
   planResponse,
+  releaseNoteInfo,
+  releaseNotesResponse,
   servicePolicy,
   snooze,
   tagExclusion,
@@ -84,18 +87,77 @@ describe("mutating WebUI views", () => {
     expect(createPlan).not.toHaveBeenCalled();
   });
 
+  it("renders release-note links with breaking cues", () => {
+    const { pinia, webui } = setupStores(false);
+    webui.pending = pendingResponse();
+    webui.releaseNotes = releaseNotesResponse([
+      releaseNoteInfo({
+        breaking: true,
+        breaking_reasons: ["Major version changes from 1 to 2."],
+      }),
+    ]);
+    vi.spyOn(webui, "loadPending").mockResolvedValue();
+    vi.spyOn(webui, "loadReleaseNotes").mockResolvedValue();
+    vi.spyOn(webui, "refreshReleaseNotes").mockResolvedValue();
+    const wrapper = mountWithApp(PendingView, { pinia });
+
+    expect(wrapper.text()).toContain("GitHub release");
+    expect(wrapper.text()).toContain("Possible breaking change");
+    expect(wrapper.find('a[href="https://github.com/acme/app/releases/tag/v2.0.0"]').exists()).toBe(true);
+  });
+
+  it("renders both LSIO and upstream release-note links", () => {
+    const { pinia, webui } = setupStores(false);
+    webui.pending = pendingResponse([pendingItem({ image: "linuxserver/radarr:latest" })]);
+    webui.releaseNotes = releaseNotesResponse([
+      releaseNoteInfo({
+        provider: "lsio",
+        image_repo: "linuxserver/docker-radarr",
+        upstream_repo: "Radarr/Radarr",
+        links: [
+          {
+            label: "LSIO release",
+            url: "https://github.com/linuxserver/docker-radarr/releases/tag/5.1.0-ls1",
+            kind: "lsio_release",
+          },
+          {
+            label: "Upstream release",
+            url: "https://github.com/Radarr/Radarr/releases/tag/v5.1.0",
+            kind: "github_release",
+          },
+        ],
+      }),
+    ]);
+    vi.spyOn(webui, "loadPending").mockResolvedValue();
+    vi.spyOn(webui, "loadReleaseNotes").mockResolvedValue();
+    vi.spyOn(webui, "refreshReleaseNotes").mockResolvedValue();
+    const wrapper = mountWithApp(PendingView, { pinia });
+
+    expect(wrapper.text()).toContain("LSIO release");
+    expect(wrapper.text()).toContain("Upstream release");
+  });
+
   it("creates an apply job only after explicit confirmation", async () => {
     const { pinia, webui } = setupStores(true);
     webui.pending = pendingResponse();
     webui.plan = planResponse();
-    vi.spyOn(webui, "loadPending").mockResolvedValue();
-    vi.spyOn(webui, "loadRuns").mockResolvedValue();
+    const loadPending = vi.spyOn(webui, "loadPending").mockResolvedValue();
+    const loadReleaseNotes = vi.spyOn(webui, "loadReleaseNotes").mockResolvedValue();
+    const refreshReleaseNotes = vi
+      .spyOn(webui, "refreshReleaseNotes")
+      .mockResolvedValue();
+    const loadRuns = vi.spyOn(webui, "loadRuns").mockResolvedValue();
     const createJob = vi
       .spyOn(webui, "createJob")
       .mockResolvedValue(applyJobResponse());
     const close = vi.fn();
+    let jobListener: ((event: MessageEvent<string>) => void) | null = null;
     vi.spyOn(webApi, "openJobStream").mockReturnValue({
-      addEventListener: vi.fn(),
+      addEventListener: vi.fn((type: string, listener: EventListener) => {
+        if (type === "job") {
+          jobListener = listener as (event: MessageEvent<string>) => void;
+        }
+      }),
       close,
       onerror: null,
       onmessage: null,
@@ -126,6 +188,19 @@ describe("mutating WebUI views", () => {
       ?.trigger("click");
 
     expect(createJob).toHaveBeenCalledWith("plan-test", [1], false, []);
+    expect(jobListener).not.toBeNull();
+
+    jobListener?.(
+      new MessageEvent("job", {
+        data: JSON.stringify(applyJobResponse({ status: "success" })),
+      }),
+    );
+    await flushPromises();
+
+    expect(loadPending).toHaveBeenCalled();
+    expect(loadReleaseNotes).toHaveBeenCalled();
+    expect(refreshReleaseNotes).toHaveBeenCalled();
+    expect(loadRuns).toHaveBeenCalled();
   });
 
   it("disables policy mutations in read-only mode", async () => {

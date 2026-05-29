@@ -58,9 +58,17 @@ FAKE_WUD_SCRIPT
 #!/bin/sh
 echo append-updates
 FAKE_WUD_SCRIPT
+  cat > "$APP_DIR/wud/release-notes-to-discord.sh" <<'FAKE_WUD_SCRIPT'
+#!/usr/bin/env bash
+echo release-notes-to-discord
+FAKE_WUD_SCRIPT
   cat > "$APP_DIR/wud/github-release-embed.sh" <<'FAKE_WUD_SCRIPT'
 #!/usr/bin/env bash
 echo github-release-embed
+FAKE_WUD_SCRIPT
+  cat > "$APP_DIR/wud/tag-manager.sh" <<'FAKE_WUD_SCRIPT'
+#!/usr/bin/env bash
+echo tag-manager
 FAKE_WUD_SCRIPT
   printf 'linuxserver/example|example/example\n' > "$APP_DIR/wud/upstreams.txt"
   printf 'nested file\n' > "$APP_DIR/wud/nested/example.txt"
@@ -98,7 +106,9 @@ assert_synced_scripts(){
   [[ -f "$dst/.wud-updater-managed" ]] || fail "expected synced marker file"
   [[ -x "$dst/on-update.sh" ]] || fail "expected executable synced on-update.sh"
   [[ -x "$dst/append-updates.sh" ]] || fail "expected executable synced append-updates.sh"
+  [[ -x "$dst/release-notes-to-discord.sh" ]] || fail "expected executable synced release-notes-to-discord.sh"
   [[ -x "$dst/github-release-embed.sh" ]] || fail "expected executable synced github-release-embed.sh"
+  [[ -x "$dst/tag-manager.sh" ]] || fail "expected executable synced tag-manager.sh"
   [[ -f "$dst/upstreams.txt" ]] || fail "expected synced upstreams.txt"
   [[ -f "$dst/nested/example.txt" ]] || fail "expected synced nested file"
 }

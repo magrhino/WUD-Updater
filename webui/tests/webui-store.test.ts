@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useAuthStore } from "../src/stores/auth";
 import { useWebuiStore } from "../src/stores/webui";
 import {
+  releaseNotesResponse,
   planResponse,
   stateOperationResponse,
 } from "./helpers/fixtures";
@@ -64,6 +65,24 @@ describe("webui store", () => {
         "x-wud-csrf-token",
       ),
     ).toBe("csrf-state");
+  });
+
+  it("passes csrf from auth store to release-note refresh", async () => {
+    const fetchMock = mockFetch(releaseNotesResponse());
+    const auth = useAuthStore();
+    const ensureCsrf = vi.spyOn(auth, "ensureCsrf").mockResolvedValue("csrf-notes");
+    const webui = useWebuiStore();
+
+    await webui.refreshReleaseNotes();
+
+    expect(ensureCsrf).toHaveBeenCalledTimes(1);
+    expect(webui.releaseNotes?.items[0].release_tag).toBe("v2.0.0");
+    expect(fetchMock.mock.calls[0][0]).toBe("/api/v1/release-notes/refresh");
+    expect(
+      ((fetchMock.mock.calls[0][1] as RequestInit).headers as Headers).get(
+        "x-wud-csrf-token",
+      ),
+    ).toBe("csrf-notes");
   });
 
   it("clears stale errors and loading state on successful loads", async () => {

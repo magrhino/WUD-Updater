@@ -6,6 +6,7 @@ import {
   type ApplyJobResponse,
   type PlanResponse,
   type PendingResponse,
+  type ReleaseNotesResponse,
   type RunDetail,
   type RunLogResponse,
   type RunSummary,
@@ -28,6 +29,7 @@ import { useAuthStore } from "./auth";
 export const useWebuiStore = defineStore("webui", () => {
   const status = ref<StatusResponse | null>(null);
   const pending = ref<PendingResponse | null>(null);
+  const releaseNotes = ref<ReleaseNotesResponse | null>(null);
   const plan = ref<PlanResponse | null>(null);
   const applyJob = ref<ApplyJobResponse | null>(null);
   const runs = ref<RunSummary[]>([]);
@@ -39,6 +41,8 @@ export const useWebuiStore = defineStore("webui", () => {
   const snoozeStateFilter = ref<SnoozeState>("active");
   const tagExclusionStatusFilter = ref<TagExclusionStatusFilter>("active");
   const loading = ref(false);
+  const releaseNotesLoading = ref(false);
+  const releaseNotesError = ref("");
   const error = ref("");
 
   const warnings = computed(() => [
@@ -77,6 +81,33 @@ export const useWebuiStore = defineStore("webui", () => {
       plan.value = null;
       pending.value = await webApi.pending();
     });
+  }
+
+  async function loadReleaseNotes(): Promise<void> {
+    releaseNotesLoading.value = true;
+    releaseNotesError.value = "";
+    try {
+      releaseNotes.value = await webApi.releaseNotes();
+    } catch (exc) {
+      releaseNotesError.value = errorMessage(exc);
+      throw exc;
+    } finally {
+      releaseNotesLoading.value = false;
+    }
+  }
+
+  async function refreshReleaseNotes(): Promise<void> {
+    const auth = useAuthStore();
+    releaseNotesLoading.value = true;
+    releaseNotesError.value = "";
+    try {
+      releaseNotes.value = await webApi.refreshReleaseNotes(await auth.ensureCsrf());
+    } catch (exc) {
+      releaseNotesError.value = errorMessage(exc);
+      throw exc;
+    } finally {
+      releaseNotesLoading.value = false;
+    }
   }
 
   async function createPlan(
@@ -308,6 +339,7 @@ export const useWebuiStore = defineStore("webui", () => {
   return {
     status,
     pending,
+    releaseNotes,
     plan,
     applyJob,
     runs,
@@ -319,10 +351,14 @@ export const useWebuiStore = defineStore("webui", () => {
     snoozeStateFilter,
     tagExclusionStatusFilter,
     loading,
+    releaseNotesLoading,
+    releaseNotesError,
     error,
     warnings,
     loadDashboard,
     loadPending,
+    loadReleaseNotes,
+    refreshReleaseNotes,
     createPlan,
     clearPlan,
     createJob,

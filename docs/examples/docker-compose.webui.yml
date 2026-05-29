@@ -23,6 +23,8 @@ services:
       OUT_GID: "1000"
       # Keep the WebUI read-only unless you are ready to apply updates from the browser.
       # WUD_WEB_MUTATIONS_ENABLED: "true"
+      # Optional: improves GitHub release-note link lookups in the Pending view.
+      # GITHUB_TOKEN: "${GITHUB_TOKEN:-}"
       # For LAN or reverse-proxy exposure, also set:
       # WUD_WEB_PUBLIC_ORIGIN: "https://wud.example.test"
       # WUD_WEB_ALLOWED_HOSTS: "wud.example.test,127.0.0.1,localhost"

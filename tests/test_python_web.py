@@ -590,6 +590,62 @@ def test_pending_endpoint_reads_wud_file_without_mutation(tmp_path: Path) -> Non
     assert wud_file.read_text(encoding="utf-8") == original
 
 
+def test_release_notes_get_returns_placeholders_without_creating_database(
+    tmp_path: Path,
+) -> None:
+    wud_file = tmp_path / "state" / "images.todo"
+    db_path = tmp_path / "state" / "wud.sqlite"
+    client = _client(tmp_path, {"WUD_WEB_DEV_NO_AUTH": "true"})
+    wud_file.write_text("ghcr.io/acme/app:1.0.0\n", encoding="utf-8")
+
+    response = client.get("/api/v1/release-notes")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["count"] == 1
+    assert body["items"][0]["line_no"] == 1
+    assert body["items"][0]["status"] == "missing"
+    assert body["items"][0]["provider"] == "github"
+    assert not db_path.exists()
+
+
+def test_release_notes_refresh_requires_csrf(tmp_path: Path) -> None:
+    wud_file = tmp_path / "state" / "images.todo"
+    client = _client(tmp_path, {"WUD_WEB_DEV_NO_AUTH": "true"})
+    wud_file.write_text("docker.io/library/redis:latest\n", encoding="utf-8")
+
+    response = client.post("/api/v1/release-notes/refresh")
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == "origin header is required"
+
+    response = client.post(
+        "/api/v1/release-notes/refresh",
+        headers={"Origin": "http://testserver"},
+    )
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == "csrf token is required"
+
+
+def test_release_notes_refresh_works_when_mutations_are_disabled(
+    tmp_path: Path,
+) -> None:
+    wud_file = tmp_path / "state" / "images.todo"
+    client = _client(tmp_path, {"WUD_WEB_DEV_NO_AUTH": "true"})
+    wud_file.write_text("docker.io/library/redis:latest\n", encoding="utf-8")
+
+    response = client.post(
+        "/api/v1/release-notes/refresh",
+        headers=_csrf_headers(client),
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["items"][0]["status"] == "unsupported"
+    assert body["items"][0]["error"] == "no supported GitHub release source found"
+
+
 def test_state_read_endpoints_return_empty_without_creating_missing_database(
     tmp_path: Path,
 ) -> None:

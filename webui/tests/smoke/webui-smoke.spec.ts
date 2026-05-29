@@ -50,6 +50,37 @@ function pendingResponse() {
   };
 }
 
+function releaseNotesResponse() {
+  return {
+    source_file: "/out/images.todo",
+    count: 1,
+    warnings: [],
+    items: [
+      {
+        line_no: 1,
+        status: "ready",
+        provider: "github",
+        image_repo: "repo/app",
+        upstream_repo: "repo/app",
+        release_tag: "v1.1",
+        title: "v1.1",
+        published_at: "2026-01-02T00:00:00Z",
+        breaking: true,
+        breaking_reasons: ["Release notes mention a migration."],
+        links: [
+          {
+            label: "GitHub release",
+            url: "https://github.com/repo/app/releases/tag/v1.1",
+            kind: "github_release",
+          },
+        ],
+        refreshed_at: "2026-01-02T00:00:00Z",
+        error: "",
+      },
+    ],
+  };
+}
+
 function planResponse() {
   return {
     plan_id: "plan-smoke",
@@ -201,6 +232,14 @@ async function fulfillApi(
   }
   if (path === "/api/v1/pending") {
     await json(route, pendingResponse());
+    return;
+  }
+  if (path === "/api/v1/release-notes") {
+    await json(route, releaseNotesResponse());
+    return;
+  }
+  if (path === "/api/v1/release-notes/refresh" && method === "POST") {
+    await json(route, releaseNotesResponse());
     return;
   }
   if (path === "/api/v1/service-policies") {

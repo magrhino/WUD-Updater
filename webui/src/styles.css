@@ -237,6 +237,47 @@ a {
   font-weight: 700;
 }
 
+.release-notes-cell {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.release-note-link,
+.release-breaking-cue {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 24px;
+  border-radius: 999px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+
+.release-note-link {
+  color: var(--color-action-blue);
+}
+
+.release-note-link:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.release-breaking-cue {
+  padding: 0 8px;
+  color: var(--color-warning);
+  background: var(--color-warning-bg);
+}
+
+.release-notes-muted {
+  color: var(--color-muted-text);
+  font-size: 0.82rem;
+}
+
 .icon-link {
   display: inline-flex;
   align-items: center;
@@ -253,6 +294,7 @@ a {
 .nav-item:focus-visible,
 .text-link:focus-visible,
 .icon-link:focus-visible,
+.release-note-link:focus-visible,
 .shortcut-card:focus-visible,
 .list-row.linked:focus-visible,
 .mobile-card.linked:focus-visible {

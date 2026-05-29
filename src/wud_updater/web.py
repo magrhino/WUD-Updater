@@ -51,6 +51,11 @@ from .plans import (
     PlanInputError,
     build_dry_run_plan,
 )
+from .release_notes import (
+    cached_release_notes,
+    refresh_release_notes,
+    release_note_placeholders,
+)
 from .updater import TagOverride, UpdateFromWudRunner, UpdaterOptions, js_regex_escape
 from .wud_file import ParsedWudFile, parse_wud_file
 
@@ -146,6 +151,35 @@ class PendingResponse(BaseModel):
     exists: bool
     count: int
     items: list[PendingItem] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+
+
+class ReleaseNoteLink(BaseModel):
+    label: str
+    url: str
+    kind: str
+
+
+class ReleaseNoteInfo(BaseModel):
+    line_no: int
+    status: str
+    provider: str
+    image_repo: str
+    upstream_repo: str
+    release_tag: str = ""
+    title: str = ""
+    published_at: str = ""
+    breaking: bool = False
+    breaking_reasons: list[str] = Field(default_factory=list)
+    links: list[ReleaseNoteLink] = Field(default_factory=list)
+    refreshed_at: str = ""
+    error: str = ""
+
+
+class ReleaseNotesResponse(BaseModel):
+    source_file: str
+    count: int
+    items: list[ReleaseNoteInfo] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
 
 
@@ -588,6 +622,18 @@ def create_app(
         response_model=PendingResponse,
     )
     router.add_api_route(
+        "/release-notes",
+        api_release_notes,
+        methods=["GET"],
+        response_model=ReleaseNotesResponse,
+    )
+    router.add_api_route(
+        "/release-notes/refresh",
+        api_refresh_release_notes,
+        methods=["POST"],
+        response_model=ReleaseNotesResponse,
+    )
+    router.add_api_route(
         "/service-policies",
         api_service_policies,
         methods=["GET"],
@@ -898,6 +944,61 @@ def api_status(request: Request) -> StatusResponse:
 
 def api_pending(request: Request) -> PendingResponse:
     return _pending_response(_settings(request))
+
+
+def api_release_notes(request: Request) -> ReleaseNotesResponse:
+    settings = _settings(request)
+    exists, parsed = _parse_pending_file(settings)
+    warnings = list(parsed.warnings)
+    if not exists:
+        return ReleaseNotesResponse(
+            source_file=str(settings.config.wud_out_file),
+            count=0,
+            items=[],
+            warnings=warnings,
+        )
+    try:
+        with closing(_connect_readonly_db(settings)) as conn:
+            items = cached_release_notes(
+                conn,
+                parsed.targets,
+                settings.command_env or {},
+            )
+    except ReadOnlyDatabaseMissing:
+        items = release_note_placeholders(parsed.targets, settings.command_env or {})
+    except (OSError, sqlite3.Error, DatabaseError) as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=f"could not read release-note cache: {exc}",
+        ) from exc
+    return _release_notes_response(settings, items, warnings)
+
+
+def api_refresh_release_notes(request: Request) -> ReleaseNotesResponse:
+    settings = _settings(request)
+    exists, parsed = _parse_pending_file(settings)
+    warnings = list(parsed.warnings)
+    if not exists:
+        return ReleaseNotesResponse(
+            source_file=str(settings.config.wud_out_file),
+            count=0,
+            items=[],
+            warnings=warnings,
+        )
+    try:
+        with connect_db(settings.config.db_path) as conn:
+            init_db(conn)
+            items = refresh_release_notes(
+                conn,
+                parsed.targets,
+                settings.command_env or {},
+            )
+    except (OSError, sqlite3.Error, DatabaseError) as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=f"could not refresh release-note metadata: {exc}",
+        ) from exc
+    return _release_notes_response(settings, items, warnings)
 
 
 def api_service_policies(request: Request) -> list[ServicePolicyRecord]:
@@ -1516,6 +1617,19 @@ def _pending_response(settings: WebSettings) -> PendingResponse:
         count=len(items),
         items=items,
         warnings=list(parsed.warnings),
+    )
+
+
+def _release_notes_response(
+    settings: WebSettings,
+    items: list[Any],
+    warnings: list[str],
+) -> ReleaseNotesResponse:
+    return ReleaseNotesResponse(
+        source_file=str(settings.config.wud_out_file),
+        count=len(items),
+        items=[ReleaseNoteInfo.model_validate(asdict(item)) for item in items],
+        warnings=warnings,
     )
 
 

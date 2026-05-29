@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, h, onMounted, onUnmounted, ref, watch } from "vue";
 import { breakpointsTailwind, useBreakpoints } from "@vueuse/core";
-import { Check, ClipboardList, Play, X } from "@lucide/vue";
+import { AlertTriangle, Check, ClipboardList, ExternalLink, Play, X } from "@lucide/vue";
 import { NInput, type DataTableColumns, type DataTableRowKey } from "naive-ui";
 
 import {
@@ -10,6 +10,7 @@ import {
   type PendingItem,
   type PlanAction,
   type PlanIssue,
+  type ReleaseNoteInfo,
   type TagOverrideRequest,
 } from "../api/client";
 import { useAuthStore } from "../stores/auth";
@@ -65,11 +66,24 @@ const columns = computed<DataTableColumns<PendingItem>>(() => [
         ? h("code", { class: "digest-value", title: row.digest }, displayDigest(row.digest))
         : displayValue(""),
   },
+  {
+    title: "Release notes",
+    key: "release_notes",
+    minWidth: 220,
+    render: (row) => renderReleaseNotes(row),
+  },
 ]);
 
 const allLineNumbers = computed(
   () => webui.pending?.items.map((item) => item.line_no) ?? [],
 );
+const releaseNotesByLine = computed(() => {
+  const notes = new Map<number, ReleaseNoteInfo>();
+  for (const item of webui.releaseNotes?.items ?? []) {
+    notes.set(item.line_no, item);
+  }
+  return notes;
+});
 const selectedLineSet = computed(() => new Set(selectedLineNumbers.value));
 const selectedTagOverrideError = computed(() => {
   for (const item of webui.pending?.items ?? []) {
@@ -190,6 +204,80 @@ function displayDigest(value: string): string {
     return value;
   }
   return `${value.slice(0, 20)}...${value.slice(-12)}`;
+}
+
+function releaseNoteFor(item: PendingItem): ReleaseNoteInfo | null {
+  return releaseNotesByLine.value.get(item.line_no) ?? null;
+}
+
+function releaseNoteStatus(note: ReleaseNoteInfo | null): string {
+  if (note?.links.length) {
+    return "";
+  }
+  if (webui.releaseNotesLoading) {
+    return "Checking...";
+  }
+  if (note?.status === "unsupported") {
+    return "Unavailable";
+  }
+  if (note?.status === "error") {
+    return "Check failed";
+  }
+  return "Not checked";
+}
+
+function renderReleaseNotes(row: PendingItem) {
+  const note = releaseNoteFor(row);
+  if (!note?.links.length) {
+    return h(
+      "span",
+      {
+        class: "release-notes-muted",
+        title: note?.error || undefined,
+      },
+      releaseNoteStatus(note),
+    );
+  }
+  return h("div", { class: "release-notes-cell" }, [
+    ...note.links.map((link) =>
+      h(
+        "a",
+        {
+          key: `${row.line_no}-${link.kind}-${link.url}`,
+          class: "release-note-link",
+          href: link.url,
+          target: "_blank",
+          rel: "noreferrer",
+        },
+        [
+          link.label,
+          h(ExternalLink, {
+            size: 14,
+            "aria-hidden": "true",
+          }),
+        ],
+      ),
+    ),
+    note.breaking ? breakingCue(note) : null,
+  ]);
+}
+
+function breakingCue(note: ReleaseNoteInfo) {
+  return h(
+    "span",
+    {
+      class: "release-breaking-cue",
+      title: note.breaking_reasons.join(" "),
+      "aria-label": "Possible breaking change",
+    },
+    [
+      h(AlertTriangle, {
+        size: 14,
+        "aria-hidden": "true",
+      }),
+      "Possible breaking change",
+    ],
+  );
 }
 
 function tagOverrideValue(item: PendingItem): string {
@@ -316,7 +404,7 @@ async function handleJobEvent(event: MessageEvent<string>): Promise<void> {
     return;
   }
   closeJobStream();
-  await Promise.all([webui.loadPending(), webui.loadRuns()]);
+  await Promise.all([loadPendingAndReleaseNotes(), webui.loadRuns()]);
 }
 
 function closeJobStream(): void {
@@ -343,8 +431,14 @@ function issueLabel(issue: PlanIssue): string {
   return target ? `${target}: ${issue.message}` : issue.message;
 }
 
+async function loadPendingAndReleaseNotes(): Promise<void> {
+  await webui.loadPending();
+  await webui.loadReleaseNotes().catch(() => undefined);
+  void webui.refreshReleaseNotes().catch(() => undefined);
+}
+
 onMounted(() => {
-  void webui.loadPending();
+  void loadPendingAndReleaseNotes();
 });
 
 watch(
@@ -373,6 +467,9 @@ onUnmounted(() => {
     </n-alert>
     <n-alert v-if="webui.pending && !webui.pending.exists" type="warning" :show-icon="false">
       {{ webui.pending.source_file }} is missing.
+    </n-alert>
+    <n-alert v-if="webui.releaseNotesError" type="warning" :show-icon="false">
+      Release-note metadata is unavailable: {{ webui.releaseNotesError }}
     </n-alert>
 
     <div class="section-heading pending-heading">
@@ -506,6 +603,40 @@ onUnmounted(() => {
                 {{ displayDigest(item.digest) }}
               </code>
               <span v-else>None</span>
+            </dd>
+          </div>
+          <div>
+            <dt>Release notes</dt>
+            <dd>
+              <div v-if="releaseNoteFor(item)?.links.length" class="release-notes-cell">
+                <a
+                  v-for="link in releaseNoteFor(item)?.links ?? []"
+                  :key="`${item.line_no}-${link.kind}-${link.url}`"
+                  class="release-note-link"
+                  :href="link.url"
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  {{ link.label }}
+                  <ExternalLink :size="14" aria-hidden="true" />
+                </a>
+                <span
+                  v-if="releaseNoteFor(item)?.breaking"
+                  class="release-breaking-cue"
+                  :title="releaseNoteFor(item)?.breaking_reasons.join(' ')"
+                  aria-label="Possible breaking change"
+                >
+                  <AlertTriangle :size="14" aria-hidden="true" />
+                  Possible breaking change
+                </span>
+              </div>
+              <span
+                v-else
+                class="release-notes-muted"
+                :title="releaseNoteFor(item)?.error || undefined"
+              >
+                {{ releaseNoteStatus(releaseNoteFor(item)) }}
+              </span>
             </dd>
           </div>
         </dl>

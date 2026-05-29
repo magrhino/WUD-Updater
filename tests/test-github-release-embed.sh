@@ -10,6 +10,9 @@ fail(){
   if [[ -n "${TEST_TMP:-}" && -f "$TEST_TMP/output.log" ]]; then
     sed 's/^/# /' "$TEST_TMP/output.log" >&2 || true
   fi
+  if [[ -n "${TEST_TMP:-}" && -f "$TEST_TMP/payload.json" ]]; then
+    sed 's/^/# payload: /' "$TEST_TMP/payload.json" >&2 || true
+  fi
   exit 1
 }
 
@@ -107,7 +110,7 @@ fi
 
 case "$url" in
   https://api.github.com/repos/acme/app/releases/latest)
-    write_body "$(release_json "v2.0.0" "acme/app" $'## Key changes\n- Fixed deployment notes\n\n## Changes\n- Merge pull request (#12)')"
+    write_body "$(release_json "v2.0.0" "acme/app" $'## Key changes\n- Fixed deployment notes\n\n## Changes\n- Merge pull request (#12)\n- Merge pull request (#13)')"
     ;;
   https://api.github.com/repos/acme/app/releases/tags/v2.0.0)
     write_body "$(release_json "v2.0.0" "acme/app" $'## Key changes\n- Fixed tagged release')"
@@ -126,6 +129,12 @@ case "$url" in
     ;;
   https://api.github.com/repos/acme/noreleases)
     write_body '{"html_url":"https://github.com/acme/noreleases"}'
+    ;;
+  https://api.github.com/repos/acme/listmatch/releases/tags/v3.4.5|https://api.github.com/repos/acme/listmatch/releases/tags/3.4.5)
+    not_found
+    ;;
+  https://api.github.com/repos/acme/listmatch/releases?per_page=100)
+    write_body "[$(release_json "release-2026-3.4.5" "acme/listmatch" $'## Key changes\n- Matched from release list')]"
     ;;
   https://api.github.com/repos/linuxserver/docker-radarr/releases/latest)
     write_body "$(release_json "5.1.0-ls1" "linuxserver/docker-radarr" $'LinuxServer Changes:\n- Rebase to Alpine 3.20\n- Add package\n\nRemote Changes:\n- Updating to 5.1.0')"
@@ -181,7 +190,7 @@ test_generic_latest_payload_is_neutral(){
   setup_case
   local payload_file="$TEST_TMP/payload.json"
 
-  run_payload "$payload_file" --repo acme/app
+  run_payload "$payload_file" --repo acme/app --max-commits 1
 
   assert_curl_policy_for_url "https://api.github.com/repos/acme/app/releases/latest"
   assert_mentions_disabled "$payload_file"
@@ -189,6 +198,8 @@ test_generic_latest_payload_is_neutral(){
   jq -e '.embeds[0].title == "Release v2.0.0 for acme/app"' "$payload_file" >/dev/null || fail "generic title was wrong"
   jq -e '.embeds[0].footer.text == "Built from GitHub Release"' "$payload_file" >/dev/null || fail "generic footer was wrong"
   jq -e '.embeds[0].fields[] | select(.name == "Repository" and .value == "acme/app")' "$payload_file" >/dev/null || fail "repository field missing"
+  jq -e '.embeds[0].fields[] | select(.name == "Links" and (.value | contains("Full changelog")))' "$payload_file" >/dev/null || fail "full changelog link missing"
+  jq -e '.embeds[0].description as $d | ($d | contains("Representative changes")) and ($d | contains("/pull/12")) and ($d | contains("/pull/13") | not)' "$payload_file" >/dev/null || fail "max commits did not limit representative changes"
   teardown_case
 }
 
@@ -201,6 +212,18 @@ test_generic_explicit_tag_resolves_v_and_plain_tags(){
 
   run_payload "$payload_file" --repo acme/app --tag plain-1
   jq -e '.embeds[0].fields[] | select(.name == "Version" and .value == "plain-1")' "$payload_file" >/dev/null || fail "plain tag was not resolved"
+  teardown_case
+}
+
+test_generic_explicit_tag_searches_release_list(){
+  setup_case
+  local payload_file="$TEST_TMP/payload.json"
+
+  run_payload "$payload_file" --repo acme/listmatch --tag 3.4.5
+
+  assert_mentions_disabled "$payload_file"
+  jq -e '.embeds[0].title == "Release release-2026-3.4.5 for acme/listmatch"' "$payload_file" >/dev/null || fail "release list fallback was not used"
+  jq -e '.embeds[0].fields[] | select(.name == "Links" and (.value | contains("Full changelog")))' "$payload_file" >/dev/null || fail "release list fallback did not render changelog link"
   teardown_case
 }
 
@@ -223,10 +246,11 @@ test_lsio_release_adds_upstream_and_linuxserver_fields(){
   run_payload "$payload_file" --provider lsio --lsio linuxserver/docker-radarr --upstream Radarr/Radarr
 
   assert_mentions_disabled "$payload_file"
+  jq -e '.embeds[0].description | startswith("`linuxserver/docker-radarr` - ls1 - Alpine 3.20")' "$payload_file" >/dev/null || fail "legacy LSIO context was not rendered"
   jq -e '.embeds[0].fields[] | select(.name == "LSIO Tag" and .value == "`5.1.0-ls1`")' "$payload_file" >/dev/null || fail "LSIO tag field missing"
   jq -e '.embeds[0].fields[] | select(.name == "Upstream Version" and .value == "`v5.1.0`")' "$payload_file" >/dev/null || fail "upstream version field missing"
   jq -e '.embeds[0].fields[] | select(.name == "LinuxServer Changes" and (.value | contains("Alpine 3.20") and contains("Add package")))' "$payload_file" >/dev/null || fail "LinuxServer changes field missing"
-  jq -e '.embeds[0].fields[] | select(.name == "Links" and (.value | contains("LSIO release") and contains("Upstream release")))' "$payload_file" >/dev/null || fail "LSIO links missing"
+  jq -e '.embeds[0].fields[] | select(.name == "Links" and (.value | contains("LSIO release") and contains("Upstream release") and contains("Full changelog")))' "$payload_file" >/dev/null || fail "LSIO links missing"
   teardown_case
 }
 
@@ -238,6 +262,7 @@ test_lsio_missing_upstream_release_falls_back_to_project(){
 
   assert_mentions_disabled "$payload_file"
   jq -e '.embeds[0].url == "https://github.com/NoRelease/App"' "$payload_file" >/dev/null || fail "LSIO fallback URL was wrong"
+  jq -e '.embeds[0].title == "linuxserver/docker-missing -> App 9.9.9 (project)"' "$payload_file" >/dev/null || fail "LSIO fallback title was wrong"
   jq -e '.embeds[0].fields[] | select(.name == "Upstream Version" and .value == "`N/A`")' "$payload_file" >/dev/null || fail "LSIO fallback upstream version was wrong"
   teardown_case
 }
@@ -266,6 +291,7 @@ run_test(){
 main(){
   run_test test_generic_latest_payload_is_neutral
   run_test test_generic_explicit_tag_resolves_v_and_plain_tags
+  run_test test_generic_explicit_tag_searches_release_list
   run_test test_generic_missing_release_falls_back_to_project
   run_test test_lsio_release_adds_upstream_and_linuxserver_fields
   run_test test_lsio_missing_upstream_release_falls_back_to_project

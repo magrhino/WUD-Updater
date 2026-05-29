@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 5
 
 ColumnSchema = tuple[str, str, int, str | None, int]
 
@@ -85,6 +85,25 @@ EXPECTED_SCHEMA: dict[str, tuple[ColumnSchema, ...]] = {
         ("updated_at", "TEXT", 1, None, 0),
         ("metadata_json", "TEXT", 1, "'{}'", 0),
     ),
+    "release_note_cache": (
+        ("cache_key", "TEXT", 0, None, 1),
+        ("provider", "TEXT", 1, None, 0),
+        ("image_repo", "TEXT", 1, "''", 0),
+        ("upstream_repo", "TEXT", 1, "''", 0),
+        ("current_tag", "TEXT", 1, "''", 0),
+        ("target_tag", "TEXT", 1, "''", 0),
+        ("status", "TEXT", 1, None, 0),
+        ("release_tag", "TEXT", 1, "''", 0),
+        ("title", "TEXT", 1, "''", 0),
+        ("published_at", "TEXT", 1, "''", 0),
+        ("breaking", "INTEGER", 1, "0", 0),
+        ("breaking_reasons_json", "TEXT", 1, "'[]'", 0),
+        ("links_json", "TEXT", 1, "'[]'", 0),
+        ("error", "TEXT", 1, "''", 0),
+        ("created_at", "TEXT", 1, None, 0),
+        ("updated_at", "TEXT", 1, None, 0),
+        ("metadata_json", "TEXT", 1, "'{}'", 0),
+    ),
     "tag_exclusion_rules": (
         ("id", "INTEGER", 0, None, 1),
         ("scope", "TEXT", 1, None, 0),
@@ -127,9 +146,15 @@ WEB_SCHEMA_TABLES = frozenset(
     {"schema_migrations", "web_users", "web_sessions", "web_settings"}
 )
 
-EXPECTED_SCHEMA_V3 = {
+EXPECTED_SCHEMA_V4 = {
     name: columns
     for name, columns in EXPECTED_SCHEMA.items()
+    if name != "release_note_cache"
+}
+
+EXPECTED_SCHEMA_V3 = {
+    name: columns
+    for name, columns in EXPECTED_SCHEMA_V4.items()
     if name not in WEB_SCHEMA_TABLES
 }
 
@@ -175,11 +200,19 @@ def init_db(conn: sqlite3.Connection) -> None:
         _backfill_schema_migrations(conn, SCHEMA_VERSION)
         _validate_schema(conn)
         return
+    if version == 4:
+        _validate_schema(conn, expected_schema=EXPECTED_SCHEMA_V4)
+        _ensure_schema_migrations(conn)
+        _backfill_schema_migrations(conn, 4)
+        _migrate_v4_to_v5(conn)
+        _validate_schema(conn)
+        return
     if version == 3:
         _validate_schema(conn, expected_schema=EXPECTED_SCHEMA_V3)
         _ensure_schema_migrations(conn)
         _backfill_schema_migrations(conn, 3)
         _migrate_v3_to_v4(conn)
+        _migrate_v4_to_v5(conn)
         _validate_schema(conn)
         return
     if version == 2:
@@ -188,6 +221,7 @@ def init_db(conn: sqlite3.Connection) -> None:
         _backfill_schema_migrations(conn, 2)
         _migrate_v2_to_v3(conn)
         _migrate_v3_to_v4(conn)
+        _migrate_v4_to_v5(conn)
         _validate_schema(conn)
         return
     if version == 1:
@@ -197,6 +231,7 @@ def init_db(conn: sqlite3.Connection) -> None:
         _migrate_v1_to_v2(conn)
         _migrate_v2_to_v3(conn)
         _migrate_v3_to_v4(conn)
+        _migrate_v4_to_v5(conn)
         _validate_schema(conn)
         return
     if version != 0:
@@ -299,6 +334,28 @@ def init_db(conn: sqlite3.Connection) -> None:
                 ON pending_updates (status);
             CREATE INDEX IF NOT EXISTS idx_pending_updates_service_key_status
                 ON pending_updates (service_key, status);
+
+            CREATE TABLE IF NOT EXISTS release_note_cache (
+                cache_key TEXT PRIMARY KEY,
+                provider TEXT NOT NULL,
+                image_repo TEXT NOT NULL DEFAULT '',
+                upstream_repo TEXT NOT NULL DEFAULT '',
+                current_tag TEXT NOT NULL DEFAULT '',
+                target_tag TEXT NOT NULL DEFAULT '',
+                status TEXT NOT NULL,
+                release_tag TEXT NOT NULL DEFAULT '',
+                title TEXT NOT NULL DEFAULT '',
+                published_at TEXT NOT NULL DEFAULT '',
+                breaking INTEGER NOT NULL DEFAULT 0,
+                breaking_reasons_json TEXT NOT NULL DEFAULT '[]',
+                links_json TEXT NOT NULL DEFAULT '[]',
+                error TEXT NOT NULL DEFAULT '',
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                metadata_json TEXT NOT NULL DEFAULT '{}'
+            );
+            CREATE INDEX IF NOT EXISTS idx_release_note_cache_updated_at
+                ON release_note_cache (updated_at);
 
             CREATE TABLE IF NOT EXISTS tag_exclusion_rules (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -847,6 +904,7 @@ MIGRATION_NAMES = {
     2: "add pending update records",
     3: "add tag exclusion rules",
     4: "add web auth state",
+    5: "add release note cache",
 }
 
 
@@ -1027,5 +1085,47 @@ def _migrate_v3_to_v4(conn: sqlite3.Connection) -> None:
             );
             """
         )
-        conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
+        conn.execute("PRAGMA user_version = 4")
     _record_schema_migration(conn, 4)
+
+
+def _migrate_v4_to_v5(conn: sqlite3.Connection) -> None:
+    object_type = _sqlite_object_type(conn, "release_note_cache")
+    if object_type is not None:
+        if object_type != "table":
+            raise DatabaseError(
+                f"Expected release_note_cache to be a table, found {object_type}"
+            )
+        _validate_table_columns(
+            conn,
+            "release_note_cache",
+            EXPECTED_SCHEMA["release_note_cache"],
+        )
+    with conn:
+        conn.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS release_note_cache (
+                cache_key TEXT PRIMARY KEY,
+                provider TEXT NOT NULL,
+                image_repo TEXT NOT NULL DEFAULT '',
+                upstream_repo TEXT NOT NULL DEFAULT '',
+                current_tag TEXT NOT NULL DEFAULT '',
+                target_tag TEXT NOT NULL DEFAULT '',
+                status TEXT NOT NULL,
+                release_tag TEXT NOT NULL DEFAULT '',
+                title TEXT NOT NULL DEFAULT '',
+                published_at TEXT NOT NULL DEFAULT '',
+                breaking INTEGER NOT NULL DEFAULT 0,
+                breaking_reasons_json TEXT NOT NULL DEFAULT '[]',
+                links_json TEXT NOT NULL DEFAULT '[]',
+                error TEXT NOT NULL DEFAULT '',
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                metadata_json TEXT NOT NULL DEFAULT '{}'
+            );
+            CREATE INDEX IF NOT EXISTS idx_release_note_cache_updated_at
+                ON release_note_cache (updated_at);
+            """
+        )
+        conn.execute("PRAGMA user_version = 5")
+    _record_schema_migration(conn, 5)
