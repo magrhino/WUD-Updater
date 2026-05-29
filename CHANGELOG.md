@@ -4,6 +4,14 @@ All notable changes to WUD-Updater are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com) and versions follow
 [Semantic Versioning](https://semver.org).
 
+## [0.22.1](https://github.com/magrhino/WUD-Updater/compare/v0.22.0...v0.22.1) (2026-05-29)
+
+
+### Bug Fixes
+
+* **webui:** explain unavailable release notes ([91dbb26](https://github.com/magrhino/WUD-Updater/commit/91dbb2641ea7583c271f6c1c989f9d96a51650f3))
+* **webui:** resolve release notes from docker source labels ([6990546](https://github.com/magrhino/WUD-Updater/commit/6990546ca9a3770b232ff3798ea6d171c768c968))
+
 ## [0.22.0](https://github.com/magrhino/WUD-Updater/compare/v0.21.2...v0.22.0) (2026-05-29)
 
 
