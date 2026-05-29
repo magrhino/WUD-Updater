@@ -141,8 +141,10 @@ git tag v1.2.3
 git push origin v1.2.3
 ```
 
-Manual release tags run the Linux validation suite, build the Docker image for
-Linux amd64, publish it to `ghcr.io/magrhino/wud-updater`, and create a GitHub
-Release with generated notes. Release Please-created releases publish the same
-image tags without rerunning the CI validation that already passed before the
-release PR. Image tags are published as `vX.Y.Z`, `X.Y.Z`, `X.Y`, and `latest`.
+Release tag and published-release events run the release validation gate, build
+and publish Docker images for Linux amd64 and arm64 to
+`ghcr.io/magrhino/wud-updater`, validate the published multi-arch manifests,
+and create a GitHub Release with generated notes. The release gate includes
+Linux validation, container build validation, Docker Compose E2E, and WebUI
+smoke checks. Image tags are published as `vX.Y.Z`, `X.Y.Z`, `X.Y`, and
+`latest`.

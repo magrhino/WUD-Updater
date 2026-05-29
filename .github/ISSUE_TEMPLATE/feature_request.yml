@@ -44,6 +44,19 @@ body:
     validations:
       required: true
 
+  - type: dropdown
+    id: architecture
+    attributes:
+      label: Architecture scope
+      options:
+        - Not architecture-specific
+        - linux/amd64
+        - linux/arm64
+        - Both linux/amd64 and linux/arm64
+        - Other or not sure
+    validations:
+      required: true
+
   - type: textarea
     id: alternatives
     attributes:
