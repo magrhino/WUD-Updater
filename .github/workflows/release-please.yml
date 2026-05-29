@@ -63,19 +63,57 @@ jobs:
           manifest-file: .release-please-manifest.json
           target-branch: main
 
-      - name: Dispatch release publisher
-        if: ${{ steps.release.outputs.release_created == 'true' }}
+      - name: Resolve release publisher tag
+        id: release-publisher
+        if: >-
+          ${{
+            steps.release.outputs.release_created == 'true' ||
+            (
+              github.event_name == 'pull_request_target' &&
+              github.event.pull_request.merged == true &&
+              contains(github.event.pull_request.labels.*.name, 'autorelease: pending')
+            )
+          }}
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.RELEASE_PLEASE_TOKEN }}
+          EVENT_NAME: ${{ github.event_name }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
           RELEASE_TAG: ${{ steps.release.outputs.tag_name }}
         run: |
           set -euo pipefail
 
-          if [[ ! "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            printf 'Release tags must match vX.Y.Z, got: %s\n' "$RELEASE_TAG" >&2
+          tag="$RELEASE_TAG"
+          if [[ -z "$tag" && "$EVENT_NAME" == "pull_request_target" ]]; then
+            if [[ "$PR_TITLE" =~ ^chore:\ release\ ([0-9]+\.[0-9]+\.[0-9]+)(\ \[skip\ ci\])?$ ]]; then
+              tag="v${BASH_REMATCH[1]}"
+            else
+              printf 'Could not derive release tag from Release Please PR title: %s\n' "$PR_TITLE" >&2
+              exit 1
+            fi
+          fi
+
+          if [[ ! "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            printf 'Release tags must match vX.Y.Z, got: %s\n' "$tag" >&2
             exit 1
           fi
+
+          if ! release_is_draft="$(gh release view "$tag" --json isDraft --jq '.isDraft')"; then
+            printf 'Release Please did not create release %s; refusing to dispatch publisher.\n' "$tag" >&2
+            exit 1
+          fi
+
+          printf 'Resolved release publisher tag %s (draft=%s)\n' "$tag" "$release_is_draft"
+          printf 'tag=%s\n' "$tag" >> "$GITHUB_OUTPUT"
+
+      - name: Dispatch release publisher
+        if: ${{ steps.release-publisher.outputs.tag != '' }}
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_PLEASE_TOKEN }}
+          RELEASE_TAG: ${{ steps.release-publisher.outputs.tag }}
+        run: |
+          set -euo pipefail
 
           gh workflow run release.yml \
             --repo "$GITHUB_REPOSITORY" \
