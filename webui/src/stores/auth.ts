@@ -79,6 +79,29 @@ export const useAuthStore = defineStore("auth", () => {
     }
   }
 
+  async function resetAdmin(
+    claim: string,
+    username: string,
+    password: string,
+  ): Promise<void> {
+    loading.value = true;
+    error.value = "";
+    try {
+      session.value = await webApi.resetAdminClaim(
+        claim,
+        username,
+        password,
+        await ensureCsrf(),
+      );
+      setupStatus.value = null;
+    } catch (exc) {
+      error.value = errorMessage(exc);
+      throw exc;
+    } finally {
+      loading.value = false;
+    }
+  }
+
   async function login(username: string, password: string): Promise<void> {
     loading.value = true;
     error.value = "";
@@ -118,6 +141,7 @@ export const useAuthStore = defineStore("auth", () => {
     loadSession,
     loadSetupStatus,
     claimSetup,
+    resetAdmin,
     login,
     logout,
   };

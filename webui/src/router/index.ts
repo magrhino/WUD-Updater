@@ -21,6 +21,12 @@ export const routes: RouteRecordRaw[] = [
     meta: { requiresAuth: false },
   },
   {
+    path: "/reset-admin",
+    name: "reset-admin",
+    component: () => import("../views/ResetAdminView.vue"),
+    meta: { requiresAuth: false },
+  },
+  {
     path: "/",
     name: "dashboard",
     component: () => import("../views/DashboardView.vue"),

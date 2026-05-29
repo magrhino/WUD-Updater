@@ -81,6 +81,9 @@ CSRF_COOKIE = "wud_csrf_token"
 SESSION_COOKIE = "wud_session"
 SETUP_CLAIM_HASH_KEY = "setup_claim_hash"
 SETUP_CLAIM_EXPIRES_KEY = "setup_claim_expires_at"
+RESET_ADMIN_CLAIM_HASH_KEY = "reset_admin_claim_hash"
+RESET_ADMIN_CLAIM_EXPIRES_KEY = "reset_admin_claim_expires_at"
+RESET_ADMIN_CLAIM_USER_ID_KEY = "reset_admin_claim_user_id"
 DEFAULT_ALLOWED_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
 PASSWORD_HASHER = PasswordHasher()
 LineNumber = Annotated[int, Field(ge=1)]
@@ -103,6 +106,10 @@ class WebConfigError(ValueError):
 
 class ReadOnlyDatabaseMissing(RuntimeError):
     """Raised when the read-only WebUI database does not exist."""
+
+
+class WebAdminResetError(RuntimeError):
+    """Raised when local admin recovery cannot be issued."""
 
 
 @dataclass(frozen=True)
@@ -136,6 +143,15 @@ class WebApplyJob:
     started_at: str | None = None
     finished_at: str | None = None
     error: str = ""
+
+
+@dataclass(frozen=True)
+class AdminRecoveryClaim:
+    username: str
+    claim: str
+    expires_at: str
+    revoked_sessions: int
+    audit_run_id: int
 
 
 class PendingItem(BaseModel):
@@ -227,6 +243,12 @@ class SetupClaimRequest(BaseModel):
 class LoginRequest(BaseModel):
     username: str = Field(min_length=1, max_length=128)
     password: str = Field(min_length=1, max_length=1024)
+
+
+class ResetAdminClaimRequest(BaseModel):
+    claim: str = Field(min_length=1)
+    username: str = Field(min_length=1, max_length=128)
+    password: str = Field(min_length=PASSWORD_MIN_LENGTH, max_length=1024)
 
 
 class AuthSessionResponse(BaseModel):
@@ -597,6 +619,12 @@ def create_app(
         response_model=AuthSessionResponse,
     )
     auth_router.add_api_route(
+        "/reset-admin/claim",
+        api_auth_reset_admin_claim,
+        methods=["POST"],
+        response_model=AuthSessionResponse,
+    )
+    auth_router.add_api_route(
         "/logout",
         api_auth_logout,
         methods=["POST"],
@@ -760,6 +788,12 @@ def load_web_settings(
 
 
 def run_web_from_namespace(args: object) -> int:
+    if getattr(args, "web_command", None) == "reset-admin":
+        return run_web_reset_admin_from_namespace(args)
+    if getattr(args, "user", None):
+        print("--user is only valid with web reset-admin", file=sys.stderr)
+        return 1
+
     env = _environment_with_cli_overrides(args, os.environ)
     try:
         settings = load_web_settings(
@@ -785,6 +819,40 @@ def run_web_from_namespace(args: object) -> int:
     if setup_claim:
         _print_setup_claim(settings, host=host, port=port, claim=setup_claim)
     uvicorn.run(app, host=host, port=port)
+    return 0
+
+
+def run_web_reset_admin_from_namespace(args: object) -> int:
+    username = _normalize_username(str(getattr(args, "user", "") or ""))
+    if not username:
+        print("web reset-admin requires --user USERNAME", file=sys.stderr)
+        return 1
+
+    env = _environment_with_cli_overrides(args, os.environ)
+    try:
+        settings = load_web_settings(env)
+        _validate_startup_auth(settings)
+        host = str(
+            getattr(args, "host", None)
+            or env.get("WUD_WEB_HOST")
+            or DEFAULT_WEB_HOST
+        )
+        _validate_bind_host_allowed(settings, host)
+        port = _parse_port(getattr(args, "port", None) or env.get("WUD_WEB_PORT"))
+        recovery = issue_admin_recovery_claim(settings, username)
+    except (ConfigError, WebConfigError, WebAdminResetError) as exc:
+        print(exc, file=sys.stderr)
+        return 1
+
+    print(
+        _reset_admin_url(
+            settings,
+            host=host,
+            port=port,
+            claim=recovery.claim,
+            username=recovery.username,
+        )
+    )
     return 0
 
 
@@ -885,6 +953,31 @@ def api_auth_login(
         authenticated=True,
         setup_required=False,
         username=str(user["username"]),
+    )
+
+
+def api_auth_reset_admin_claim(
+    payload: ResetAdminClaimRequest,
+    request: Request,
+    response: Response,
+) -> AuthSessionResponse:
+    settings = _settings(request)
+    username = _normalize_username(payload.username)
+    if not username:
+        raise HTTPException(status_code=422, detail="username is required")
+    user_id = _redeem_admin_recovery_claim(
+        settings,
+        claim=payload.claim,
+        username=username,
+        password=payload.password,
+    )
+    session_id = _create_web_session(settings, user_id=user_id, request=request)
+    _set_session_cookie(response, session_id, request, settings)
+    return _auth_session_response(
+        settings,
+        authenticated=True,
+        setup_required=False,
+        username=username,
     )
 
 
@@ -2627,6 +2720,170 @@ def _claim_initial_admin(
         ) from exc
 
 
+def issue_admin_recovery_claim(
+    settings: WebSettings,
+    username: str,
+) -> AdminRecoveryClaim:
+    normalized = _normalize_username(username)
+    if not normalized:
+        raise WebAdminResetError("username is required")
+
+    db_path = settings.config.db_path
+    if str(db_path) != ":memory:" and not db_path.is_file():
+        raise WebAdminResetError(f"database file does not exist: {db_path}")
+
+    now = utc_timestamp()
+    claim = secrets.token_urlsafe(32)
+    expires_at = _utc_timestamp_after(SETUP_CLAIM_MAX_AGE_SECONDS)
+    disabled_password_hash = PASSWORD_HASHER.hash(secrets.token_urlsafe(96))
+    try:
+        with closing(connect_db(db_path)) as conn:
+            init_db(conn)
+            with _immediate_transaction(conn):
+                user = _active_admin_user(conn, normalized)
+                if user is None:
+                    if _web_user_count(conn) == 0:
+                        raise WebAdminResetError("WebUI setup is not complete")
+                    raise WebAdminResetError(f"active admin user not found: {normalized}")
+                user_id = int(user["id"])
+                conn.execute(
+                    """
+                    UPDATE web_users
+                    SET password_hash = ?,
+                        password_updated_at = ?
+                    WHERE id = ?
+                    """,
+                    (disabled_password_hash, now, user_id),
+                )
+                revoked_sessions = conn.execute(
+                    """
+                    UPDATE web_sessions
+                    SET revoked_at = ?
+                    WHERE user_id = ?
+                      AND revoked_at IS NULL
+                    """,
+                    (now, user_id),
+                ).rowcount
+                _set_web_setting(conn, RESET_ADMIN_CLAIM_HASH_KEY, _secret_hash(claim))
+                _set_web_setting(conn, RESET_ADMIN_CLAIM_EXPIRES_KEY, expires_at)
+                _set_web_setting(conn, RESET_ADMIN_CLAIM_USER_ID_KEY, str(user_id))
+                audit_run_id = _insert_auth_audit(
+                    conn,
+                    settings,
+                    source="cli",
+                    operation="admin_reset_claim_issued",
+                    username=normalized,
+                    user_id=user_id,
+                    before={
+                        "password_updated_at": str(user["password_updated_at"]),
+                    },
+                    after={
+                        "claim_expires_at": expires_at,
+                        "password_invalidated": True,
+                        "revoked_sessions": max(0, int(revoked_sessions)),
+                    },
+                )
+                return AdminRecoveryClaim(
+                    username=normalized,
+                    claim=claim,
+                    expires_at=expires_at,
+                    revoked_sessions=max(0, int(revoked_sessions)),
+                    audit_run_id=audit_run_id,
+                )
+    except WebAdminResetError:
+        raise
+    except (OSError, sqlite3.Error, DatabaseError) as exc:
+        raise WebAdminResetError(f"could not issue admin recovery claim: {exc}") from exc
+
+
+def _redeem_admin_recovery_claim(
+    settings: WebSettings,
+    *,
+    claim: str,
+    username: str,
+    password: str,
+) -> int:
+    now = utc_timestamp()
+    try:
+        with closing(connect_db(settings.config.db_path)) as conn:
+            init_db(conn)
+            with _immediate_transaction(conn):
+                expected_hash = _web_setting(conn, RESET_ADMIN_CLAIM_HASH_KEY)
+                expires_at = _web_setting(conn, RESET_ADMIN_CLAIM_EXPIRES_KEY)
+                user_id_raw = _web_setting(conn, RESET_ADMIN_CLAIM_USER_ID_KEY)
+                if not expected_hash or not expires_at or not user_id_raw:
+                    raise HTTPException(
+                        status_code=403,
+                        detail="admin recovery claim is invalid",
+                    )
+                if expires_at < now:
+                    raise HTTPException(
+                        status_code=403,
+                        detail="admin recovery claim expired",
+                    )
+                if not secrets.compare_digest(expected_hash, _secret_hash(claim)):
+                    raise HTTPException(
+                        status_code=403,
+                        detail="admin recovery claim is invalid",
+                    )
+                try:
+                    user_id = int(user_id_raw)
+                except ValueError as exc:
+                    raise HTTPException(
+                        status_code=403,
+                        detail="admin recovery claim is invalid",
+                    ) from exc
+                user = conn.execute(
+                    """
+                    SELECT *
+                    FROM web_users
+                    WHERE id = ?
+                      AND username = ?
+                      AND role = 'admin'
+                      AND disabled_at IS NULL
+                    LIMIT 1
+                    """,
+                    (user_id, username),
+                ).fetchone()
+                if user is None:
+                    raise HTTPException(
+                        status_code=403,
+                        detail="admin recovery claim is invalid",
+                    )
+                conn.execute(
+                    """
+                    UPDATE web_users
+                    SET password_hash = ?,
+                        password_updated_at = ?
+                    WHERE id = ?
+                    """,
+                    (PASSWORD_HASHER.hash(password), now, user_id),
+                )
+                _delete_admin_recovery_claim(conn)
+                _insert_auth_audit(
+                    conn,
+                    settings,
+                    source="webui",
+                    operation="admin_reset_password_changed",
+                    username=username,
+                    user_id=user_id,
+                    before={
+                        "claim_expires_at": expires_at,
+                    },
+                    after={
+                        "password_updated_at": now,
+                    },
+                )
+                return user_id
+    except HTTPException:
+        raise
+    except (OSError, sqlite3.Error, DatabaseError) as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=f"could not reset admin password: {exc}",
+        ) from exc
+
+
 @contextmanager
 def _immediate_transaction(conn: sqlite3.Connection):
     conn.execute("BEGIN IMMEDIATE")
@@ -2799,6 +3056,23 @@ def _request_authenticated(
     ) is not None
 
 
+def _active_admin_user(
+    conn: sqlite3.Connection,
+    username: str,
+) -> sqlite3.Row | None:
+    return conn.execute(
+        """
+        SELECT *
+        FROM web_users
+        WHERE username = ?
+          AND role = 'admin'
+          AND disabled_at IS NULL
+        LIMIT 1
+        """,
+        (username,),
+    ).fetchone()
+
+
 def _web_user_count(conn: sqlite3.Connection) -> int:
     row = conn.execute("SELECT COUNT(*) FROM web_users").fetchone()
     return int(row[0])
@@ -2834,6 +3108,82 @@ def _set_web_setting(conn: sqlite3.Connection, key: str, value: str) -> None:
 
 def _delete_web_setting(conn: sqlite3.Connection, key: str) -> None:
     conn.execute("DELETE FROM web_settings WHERE key = ?", (key,))
+
+
+def _delete_admin_recovery_claim(conn: sqlite3.Connection) -> None:
+    _delete_web_setting(conn, RESET_ADMIN_CLAIM_HASH_KEY)
+    _delete_web_setting(conn, RESET_ADMIN_CLAIM_EXPIRES_KEY)
+    _delete_web_setting(conn, RESET_ADMIN_CLAIM_USER_ID_KEY)
+
+
+def _insert_auth_audit(
+    conn: sqlite3.Connection,
+    settings: WebSettings,
+    *,
+    source: str,
+    operation: str,
+    username: str,
+    user_id: int,
+    before: dict[str, Any] | None,
+    after: dict[str, Any] | None,
+) -> int:
+    now = utc_timestamp()
+    metadata = {
+        "source": source,
+        "operation": operation,
+        "actor_type": "cli" if source == "cli" else "reset_claim",
+        "resource_type": "web_user",
+        "resource_id": str(user_id),
+        "target": {
+            "user_id": user_id,
+            "username": username,
+        },
+    }
+    cursor = conn.execute(
+        """
+        INSERT INTO update_runs (
+            started_at,
+            finished_at,
+            status,
+            dry_run,
+            mode,
+            wud_file,
+            log_file,
+            metadata_json
+        )
+        VALUES (?, ?, 'success', 0, 'web-auth', ?, '', ?)
+        """,
+        (
+            now,
+            now,
+            str(settings.config.wud_out_file),
+            _json_object(metadata),
+        ),
+    )
+    run_id = int(cursor.lastrowid)
+    conn.execute(
+        """
+        INSERT INTO update_events (
+            run_id,
+            created_at,
+            service_name,
+            stack_name,
+            image,
+            target_image,
+            status,
+            metadata_json
+        )
+        VALUES (?, ?, ?, '', 'web_user', ?, 'success', ?)
+        """,
+        (
+            run_id,
+            now,
+            username,
+            str(user_id),
+            _json_object({**metadata, "before": before, "after": after}),
+        ),
+    )
+    return run_id
 
 
 def _bearer_token_valid(settings: WebSettings, authorization: str | None) -> bool:
@@ -3197,6 +3547,24 @@ def _setup_url(settings: WebSettings, *, host: str, port: int, claim: str) -> st
         origin = f"http://{display_host}:{port}"
     query = urlencode({"claim": claim})
     return f"{origin}/#/setup?{query}"
+
+
+def _reset_admin_url(
+    settings: WebSettings,
+    *,
+    host: str,
+    port: int,
+    claim: str,
+    username: str,
+) -> str:
+    origin = settings.public_origin
+    if not origin:
+        display_host = "127.0.0.1" if host in {"0.0.0.0", "::"} else host
+        if ":" in display_host and not display_host.startswith("["):
+            display_host = f"[{display_host}]"
+        origin = f"http://{display_host}:{port}"
+    query = urlencode({"claim": claim, "user": username})
+    return f"{origin}/#/reset-admin?{query}"
 
 
 def _parse_bool(value: str | None, *, default: bool) -> bool:

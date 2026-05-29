@@ -60,6 +60,22 @@ describe("router auth guard", () => {
 
     expect(router.currentRoute.value.name).toBe("dashboard");
   });
+
+  it("allows unauthenticated users to open admin recovery", async () => {
+    const auth = useAuthStore();
+    auth.session = authSession({
+      authenticated: false,
+      setup_required: false,
+      username: null,
+    });
+    const router = createWudRouter(createMemoryHistory());
+
+    await router.push("/reset-admin?claim=recovery&user=admin");
+    await router.isReady();
+
+    expect(router.currentRoute.value.name).toBe("reset-admin");
+    expect(router.currentRoute.value.query.claim).toBe("recovery");
+  });
 });
 
 describe("app shell", () => {

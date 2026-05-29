@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import unittest
 import tempfile
+from contextlib import closing
 from contextlib import redirect_stderr, redirect_stdout
 from io import StringIO
 from pathlib import Path
@@ -10,6 +11,8 @@ from unittest import mock
 
 from wud_updater.banner import current_tag
 from wud_updater.cli import main
+from wud_updater.db import connect_db, init_db, utc_timestamp
+from wud_updater.web import PASSWORD_HASHER
 
 
 class CliTests(unittest.TestCase):
@@ -280,6 +283,93 @@ class CliTests(unittest.TestCase):
         self.assertEqual(args.host, "127.0.0.1")
         self.assertEqual(args.port, "8081")
         self.assertEqual(args.static_dir, "/app/webui")
+
+    def test_web_reset_admin_accepts_user_and_db_path(self) -> None:
+        with mock.patch("wud_updater.cli._run_web", return_value=21) as run_web:
+            status, stdout, stderr = self._run_main(
+                [
+                    "web",
+                    "reset-admin",
+                    "--user",
+                    "admin",
+                    "--db-path",
+                    "/state/wud.sqlite",
+                ]
+            )
+
+        self.assertEqual(status, 21)
+        self.assertEqual(stdout, "")
+        self.assertEqual(stderr, "")
+        args = run_web.call_args.args[0]
+        self.assertEqual(args.web_command, "reset-admin")
+        self.assertEqual(args.user, "admin")
+        self.assertEqual(args.db_path, "/state/wud.sqlite")
+
+    def test_web_reset_admin_uses_configured_db_path(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="wud-python-cli.") as tmpdir:
+            root = Path(tmpdir)
+            db_path = root / "state" / "wud.sqlite"
+            now = utc_timestamp()
+            with closing(connect_db(db_path)) as conn:
+                init_db(conn)
+                with conn:
+                    conn.execute(
+                        """
+                        INSERT INTO web_users (
+                            username,
+                            password_hash,
+                            role,
+                            created_at,
+                            password_updated_at
+                        )
+                        VALUES ('admin', ?, 'admin', ?, ?)
+                        """,
+                        (
+                            PASSWORD_HASHER.hash("correct horse battery staple"),
+                            now,
+                            now,
+                        ),
+                    )
+            env = {"HOME": tmpdir, "PATH": os.environ.get("PATH", "")}
+            with mock.patch.dict(os.environ, env, clear=True):
+                status, stdout, stderr = self._run_main(
+                    [
+                        "web",
+                        "reset-admin",
+                        "--user",
+                        "admin",
+                        "--db-path",
+                        str(db_path),
+                    ]
+                )
+
+        self.assertEqual(status, 0)
+        self.assertEqual(stderr, "")
+        self.assertRegex(
+            stdout.strip(),
+            r"^http://127\.0\.0\.1:8080/#/reset-admin\?claim=.+&user=admin$",
+        )
+
+    def test_web_reset_admin_missing_db_fails_without_recovery_link(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="wud-python-cli.") as tmpdir:
+            db_path = Path(tmpdir) / "missing" / "wud.sqlite"
+            env = {"HOME": tmpdir, "PATH": os.environ.get("PATH", "")}
+            with mock.patch.dict(os.environ, env, clear=True):
+                status, stdout, stderr = self._run_main(
+                    [
+                        "web",
+                        "reset-admin",
+                        "--user",
+                        "admin",
+                        "--db-path",
+                        str(db_path),
+                    ]
+                )
+
+        self.assertEqual(status, 1)
+        self.assertEqual(stdout, "")
+        self.assertIn("database file does not exist", stderr)
+        self.assertNotIn("/#/reset-admin", stderr)
 
     def test_updates_yes_without_pending_entries_exits_successfully(self) -> None:
         with tempfile.TemporaryDirectory(prefix="wud-python-cli.") as tmpdir:
