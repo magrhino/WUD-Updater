@@ -407,6 +407,17 @@ export const webApi = {
       headers: { "x-wud-csrf-token": csrfToken },
       body: JSON.stringify({ claim, username, password }),
     }),
+  resetAdminClaim: (
+    claim: string,
+    username: string,
+    password: string,
+    csrfToken: string,
+  ) =>
+    apiRequest<AuthSessionResponse>("/auth/reset-admin/claim", {
+      method: "POST",
+      headers: { "x-wud-csrf-token": csrfToken },
+      body: JSON.stringify({ claim, username, password }),
+    }),
   session: () => apiRequest<AuthSessionResponse>("/auth/session"),
   login: (username: string, password: string, csrfToken: string) =>
     apiRequest<AuthSessionResponse>("/auth/login", {

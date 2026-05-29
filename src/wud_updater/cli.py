@@ -84,6 +84,7 @@ def _add_doctor_options(parser: argparse.ArgumentParser) -> None:
 
 
 def _add_web_options(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("web_command", nargs="?", choices=("reset-admin",))
     parser.add_argument("--base", metavar="PATH")
     parser.add_argument("--file", metavar="PATH")
     parser.add_argument("--log-dir", metavar="PATH")
@@ -91,6 +92,7 @@ def _add_web_options(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--host", metavar="HOST")
     parser.add_argument("--port", metavar="PORT")
     parser.add_argument("--static-dir", metavar="PATH")
+    parser.add_argument("--user", metavar="USERNAME")
 
 
 def _run_update_from_wud(args: argparse.Namespace) -> int:

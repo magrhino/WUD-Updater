@@ -70,6 +70,18 @@ first admin username and a password with at least 12 characters, then sign in at
 leaves WebUI mutations disabled unless you explicitly set
 `WUD_WEB_MUTATIONS_ENABLED=true`.
 
+If the admin password is lost or an operator needs to rotate access, issue a
+new one-time recovery link from the host or container:
+
+```bash
+wud-updater web reset-admin --user admin
+docker compose -f docs/examples/docker-compose.webui.yml run --rm wud-updater web reset-admin --user admin
+```
+
+The reset command uses the configured `WUD_DB_PATH`, revokes existing sessions
+for that admin, invalidates the old password immediately, and prints only the
+new one-time recovery URL.
+
 ### Host Install
 
 Install local commands and host-managed WUD script mounts:
@@ -106,6 +118,7 @@ docker-update-from-wud --yes --allow-tag-updates
 docker-update-from-wud --yes --allow-tag-updates --tag-override 1=5.2.0
 docker-update-from-wud --yes --exclude-tag-lines 1
 wud-updater web
+wud-updater web reset-admin --user admin
 ```
 
 The Python package also exposes the same tools through:

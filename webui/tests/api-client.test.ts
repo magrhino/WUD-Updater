@@ -31,6 +31,7 @@ describe("webApi", () => {
       webApi.csrf(),
       webApi.setupStatus(),
       webApi.setupClaim("claim", "admin", "password", "csrf"),
+      webApi.resetAdminClaim("claim", "admin", "password", "csrf"),
       webApi.session(),
       webApi.login("admin", "password", "csrf"),
       webApi.logout("csrf"),
@@ -50,7 +51,7 @@ describe("webApi", () => {
       webApi.runLog(1),
     ]);
 
-    expect(fetchMock).toHaveBeenCalledTimes(20);
+    expect(fetchMock).toHaveBeenCalledTimes(21);
     for (const call of fetchMock.mock.calls) {
       expect(requestInit(call).credentials).toBe("include");
     }
@@ -64,6 +65,7 @@ describe("webApi", () => {
     };
 
     await webApi.setupClaim("claim", "admin", "password", "csrf-token");
+    await webApi.resetAdminClaim("claim", "admin", "password", "csrf-token");
     await webApi.login("admin", "password", "csrf-token");
     await webApi.logout("csrf-token");
     await webApi.stateOperation(operation, "csrf-token");

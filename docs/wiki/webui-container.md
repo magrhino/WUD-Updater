@@ -46,6 +46,27 @@ path to `/logs/wud-updater.sqlite`, backed by `./logs` on the Compose host.
 Keep that directory when recreating the container, or the WebUI will require
 setup again and previous run history will be lost.
 
+## Admin Recovery
+
+If the admin password is lost or you need to rotate the admin credentials, run
+the local recovery command against the same `WUD_DB_PATH`:
+
+```bash
+wud-updater web reset-admin --user admin
+```
+
+For the Compose example, run the command through the WebUI container so it uses
+the mounted SQLite database:
+
+```bash
+docker compose -f docs/examples/docker-compose.webui.yml run --rm wud-updater web reset-admin --user admin
+```
+
+The command prints a single `/#/reset-admin?claim=...` link. Opening that link
+lets the named admin set a new password. Issuing the link revokes existing
+sessions for that admin, invalidates the old password immediately, and records
+local audit history without storing or printing the raw recovery claim.
+
 ## Network Exposure
 
 For a local workstation, keep the default loopback port binding. For LAN or

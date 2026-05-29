@@ -97,6 +97,24 @@ describe("auth store", () => {
     );
   });
 
+  it("fetches csrf before admin reset claim", async () => {
+    const fetchMock = responseQueue({ csrf_token: "reset-csrf" }, sessionBody());
+    const auth = useAuthStore();
+
+    await auth.resetAdmin("claim", "admin", "password");
+
+    expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([
+      "/api/v1/auth/csrf",
+      "/api/v1/auth/reset-admin/claim",
+    ]);
+    const resetRequest = fetchMock.mock.calls[1][1] as RequestInit;
+    expect((resetRequest.headers as Headers).get("x-wud-csrf-token")).toBe(
+      "reset-csrf",
+    );
+    expect(window.localStorage.length).toBe(0);
+    expect(window.sessionStorage.length).toBe(0);
+  });
+
   it("sets loading false and surfaces request errors", async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       jsonResponse({ detail: "authentication required" }, 403),
