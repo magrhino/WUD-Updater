@@ -14,6 +14,7 @@ const webui = useWebuiStore();
 const auth = useAuthStore();
 const breakpoints = useBreakpoints({ managementDesktop: 1120 });
 const useManagementCards = breakpoints.smaller("managementDesktop");
+const showSaveConfirm = ref(false);
 const showDeleteConfirm = ref(false);
 const deleteTarget = ref<ServicePolicyRecord | null>(null);
 
@@ -67,7 +68,14 @@ function normalizedSnoozeSeconds(): number | null {
   return Math.max(0, Math.trunc(policyForm.snoozeDefaultSeconds));
 }
 
-async function savePolicy(): Promise<void> {
+function openSaveConfirm(): void {
+  if (saveDisabled.value) {
+    return;
+  }
+  showSaveConfirm.value = true;
+}
+
+async function confirmSave(): Promise<void> {
   if (saveDisabled.value) {
     return;
   }
@@ -119,7 +127,7 @@ onMounted(() => {
           <h2>{{ policyForm.serviceKey ? "Edit policy" : "New policy" }}</h2>
         </div>
       </div>
-      <n-form class="management-form" @submit.prevent="savePolicy">
+      <n-form class="management-form" @submit.prevent="openSaveConfirm">
         <n-form-item label="Service key">
           <n-input
             v-model:value="policyForm.serviceKey"
@@ -257,6 +265,35 @@ onMounted(() => {
       </div>
       <div v-if="!webui.servicePolicies.length" class="empty-state">No service policies.</div>
     </section>
+
+    <n-modal
+      v-model:show="showSaveConfirm"
+      preset="dialog"
+      title="Save service policy"
+      positive-text="Save"
+      negative-text="Cancel"
+      :positive-button-props="{ type: 'primary', loading: webui.loading }"
+      @positive-click="confirmSave"
+    >
+      <div class="confirmation-list">
+        <div>
+          <span>Service</span>
+          <strong>{{ policyForm.serviceKey.trim() }}</strong>
+        </div>
+        <div>
+          <span>Mode</span>
+          <strong>{{ modeLabel(policyForm.updateMode) }}</strong>
+        </div>
+        <div>
+          <span>Auto update</span>
+          <strong>{{ policyForm.autoUpdate ? "Yes" : "No" }}</strong>
+        </div>
+        <div>
+          <span>Snooze</span>
+          <strong>{{ snoozeLabel(normalizedSnoozeSeconds()) }}</strong>
+        </div>
+      </div>
+    </n-modal>
 
     <n-modal
       v-model:show="showDeleteConfirm"

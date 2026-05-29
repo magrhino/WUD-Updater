@@ -17,6 +17,7 @@ const auth = useAuthStore();
 const breakpoints = useBreakpoints({ managementDesktop: 1120 });
 const useManagementCards = breakpoints.smaller("managementDesktop");
 const statusFilter = ref<TagExclusionStatusFilter>("active");
+const showSaveConfirm = ref(false);
 const showStatusConfirm = ref(false);
 const statusTarget = ref<TagExclusionRuleRecord | null>(null);
 const nextStatus = ref<TagExclusionStatus>("disabled");
@@ -75,11 +76,20 @@ function scopeLabel(rule: TagExclusionRuleRecord): string {
   return rule.scope === "service" ? "service" : "image repo";
 }
 
-function targetLabel(rule: TagExclusionRuleRecord): string {
+function targetLabel(
+  rule: Pick<TagExclusionRuleRecord, "scope" | "service_key" | "image_repo">,
+): string {
   return rule.scope === "service" ? rule.service_key : rule.image_repo;
 }
 
-async function saveExclusion(): Promise<void> {
+function openSaveConfirm(): void {
+  if (saveDisabled.value) {
+    return;
+  }
+  showSaveConfirm.value = true;
+}
+
+async function confirmSave(): Promise<void> {
   if (saveDisabled.value) {
     return;
   }
@@ -142,7 +152,7 @@ watch(statusFilter, (nextFilter) => {
           <h2>{{ exclusionForm.imageRepo && exclusionForm.tag ? "Edit rule" : "New rule" }}</h2>
         </div>
       </div>
-      <n-form class="management-form" @submit.prevent="saveExclusion">
+      <n-form class="management-form" @submit.prevent="openSaveConfirm">
         <n-form-item label="Scope">
           <n-select
             v-model:value="exclusionForm.scope"
@@ -313,6 +323,43 @@ watch(statusFilter, (nextFilter) => {
       </div>
       <div v-if="!webui.tagExclusions.length" class="empty-state">No tag exclusions.</div>
     </section>
+
+    <n-modal
+      v-model:show="showSaveConfirm"
+      preset="dialog"
+      title="Save tag exclusion"
+      positive-text="Save"
+      negative-text="Cancel"
+      :positive-button-props="{ type: 'primary', loading: webui.loading }"
+      @positive-click="confirmSave"
+    >
+      <div class="confirmation-list">
+        <div>
+          <span>Target</span>
+          <strong>
+            {{
+              targetLabel({
+                scope: exclusionForm.scope,
+                image_repo: exclusionForm.imageRepo.trim(),
+                service_key: exclusionForm.serviceKey.trim(),
+              })
+            }}
+          </strong>
+        </div>
+        <div>
+          <span>Repository</span>
+          <strong>{{ exclusionForm.imageRepo.trim() }}</strong>
+        </div>
+        <div>
+          <span>Tag</span>
+          <strong>{{ exclusionForm.tag.trim() }}</strong>
+        </div>
+        <div>
+          <span>Status</span>
+          <strong>{{ exclusionForm.status }}</strong>
+        </div>
+      </div>
+    </n-modal>
 
     <n-modal
       v-model:show="showStatusConfirm"

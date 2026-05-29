@@ -12,6 +12,7 @@ const auth = useAuthStore();
 const breakpoints = useBreakpoints({ managementDesktop: 1120 });
 const useManagementCards = breakpoints.smaller("managementDesktop");
 const snoozeState = ref<SnoozeState>("active");
+const showCreateConfirm = ref(false);
 const showDeleteConfirm = ref(false);
 const deleteTarget = ref<SnoozeRecord | null>(null);
 
@@ -56,7 +57,14 @@ function statusLabel(snooze: SnoozeRecord): string {
   return snooze.active ? "active" : "expired";
 }
 
-async function createSnooze(): Promise<void> {
+function openCreateConfirm(): void {
+  if (createDisabled.value) {
+    return;
+  }
+  showCreateConfirm.value = true;
+}
+
+async function confirmCreate(): Promise<void> {
   if (createDisabled.value) {
     return;
   }
@@ -110,7 +118,7 @@ watch(snoozeState, (nextState) => {
           <h2>New snooze</h2>
         </div>
       </div>
-      <n-form class="management-form" @submit.prevent="createSnooze">
+      <n-form class="management-form" @submit.prevent="openCreateConfirm">
         <n-form-item label="Service key">
           <n-input
             v-model:value="snoozeForm.serviceKey"
@@ -250,6 +258,31 @@ watch(snoozeState, (nextState) => {
       </div>
       <div v-if="!webui.snoozes.length" class="empty-state">No snoozes.</div>
     </section>
+
+    <n-modal
+      v-model:show="showCreateConfirm"
+      preset="dialog"
+      title="Create snooze"
+      positive-text="Create"
+      negative-text="Cancel"
+      :positive-button-props="{ type: 'primary', loading: webui.loading }"
+      @positive-click="confirmCreate"
+    >
+      <div class="confirmation-list">
+        <div>
+          <span>Service</span>
+          <strong>{{ snoozeForm.serviceKey.trim() }}</strong>
+        </div>
+        <div>
+          <span>Until</span>
+          <strong>{{ snoozeForm.snoozedUntil.trim() }}</strong>
+        </div>
+        <div>
+          <span>Reason</span>
+          <strong>{{ snoozeForm.reason.trim() || "None" }}</strong>
+        </div>
+      </div>
+    </n-modal>
 
     <n-modal
       v-model:show="showDeleteConfirm"
