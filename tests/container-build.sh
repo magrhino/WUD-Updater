@@ -66,6 +66,6 @@ SYNC_TMP="$(mktemp -d "${TMPDIR:-/tmp}/wud-script-sync-test.XXXXXX")"
 run docker run --rm -v "$SYNC_TMP:/managed-wud" "$IMAGE" sync-wud-scripts
 [[ -x "$SYNC_TMP/on-update.sh" ]]
 [[ -x "$SYNC_TMP/append-updates.sh" ]]
-[[ -x "$SYNC_TMP/github-release-embed.sh" ]]
+[[ -x "$SYNC_TMP/release-notes-to-discord.sh" ]]
 [[ -f "$SYNC_TMP/upstreams.txt" ]]
 run docker run --rm "$IMAGE" docker-update-from-wud --help

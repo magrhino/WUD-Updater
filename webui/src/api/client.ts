@@ -19,6 +19,35 @@ export interface PendingResponse {
   warnings: string[];
 }
 
+export interface ReleaseNoteLink {
+  label: string;
+  url: string;
+  kind: string;
+}
+
+export interface ReleaseNoteInfo {
+  line_no: number;
+  status: string;
+  provider: string;
+  image_repo: string;
+  upstream_repo: string;
+  release_tag: string;
+  title: string;
+  published_at: string;
+  breaking: boolean;
+  breaking_reasons: string[];
+  links: ReleaseNoteLink[];
+  refreshed_at: string;
+  error: string;
+}
+
+export interface ReleaseNotesResponse {
+  source_file: string;
+  count: number;
+  items: ReleaseNoteInfo[];
+  warnings: string[];
+}
+
 export type PlanStatus = "ready" | "empty" | "blocked";
 
 export interface PlanSummary {
@@ -392,6 +421,12 @@ export const webApi = {
     }),
   status: () => apiRequest<StatusResponse>("/status"),
   pending: () => apiRequest<PendingResponse>("/pending"),
+  releaseNotes: () => apiRequest<ReleaseNotesResponse>("/release-notes"),
+  refreshReleaseNotes: (csrfToken: string) =>
+    apiRequest<ReleaseNotesResponse>("/release-notes/refresh", {
+      method: "POST",
+      headers: { "x-wud-csrf-token": csrfToken },
+    }),
   servicePolicies: () => apiRequest<ServicePolicyRecord[]>("/service-policies"),
   snoozes: (state: SnoozeState = "active") =>
     apiRequest<SnoozeRecord[]>(`/snoozes?state=${encodeURIComponent(state)}`),

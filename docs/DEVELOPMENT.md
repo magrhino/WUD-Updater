@@ -28,16 +28,15 @@ Python unit tests, and updater behavior tests.
 ```bash
 ruff check .
 shellcheck install.sh bin/updates bin/docker-update-from-wud wud/*.sh
-bash -n install.sh bin/updates bin/docker-update-from-wud wud/tag-manager.sh wud/github-release-embed.sh wud/release-notes-to-discord.sh
+bash -n install.sh bin/updates bin/docker-update-from-wud wud/http.sh wud/release-notes-to-discord.sh
 sh -n wud/on-update.sh wud/append-updates.sh
 python3 -m py_compile src/wud_updater/*.py tests/run-python-tests.py tests/test_python_*.py
 python3 tests/run-python-tests.py
 tests/test-docker-update-from-wud.sh
-tests/test-github-release-embed.sh
-tests/test-tag-manager.sh
 tests/test-wud-append-updates.sh
 tests/test-updates-wrapper.sh
 tests/test-entrypoint.sh
+tests/test-release-notes-to-discord.sh
 ```
 
 Container checks require Docker:

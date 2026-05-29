@@ -51,6 +51,7 @@ class DatabaseTests(unittest.TestCase):
                     "service_policy",
                     "known_images",
                     "pending_updates",
+                    "release_note_cache",
                     "tag_exclusion_rules",
                     "web_users",
                     "web_sessions",
@@ -97,7 +98,7 @@ class DatabaseTests(unittest.TestCase):
                 """
             ).fetchall()
 
-        self.assertEqual([row[0] for row in rows], [1, 2, 3, 4])
+        self.assertEqual([row[0] for row in rows], [1, 2, 3, 4, 5])
 
     def test_init_db_accepts_matching_version_zero_table(self) -> None:
         with sqlite3.connect(":memory:") as conn:
@@ -198,7 +199,7 @@ class DatabaseTests(unittest.TestCase):
 
         self.assertEqual(version, SCHEMA_VERSION)
         self.assertEqual(run[0], "success")
-        self.assertEqual(migration_versions, [1, 2, 3, 4])
+        self.assertEqual(migration_versions, [1, 2, 3, 4, 5])
 
     def test_init_db_rejects_malformed_existing_pending_updates(self) -> None:
         with sqlite3.connect(":memory:") as conn:

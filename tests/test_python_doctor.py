@@ -183,7 +183,7 @@ exit 2
         docker.chmod(0o755)
 
     def _write_packaged_scripts(self) -> None:
-        for name in ("on-update.sh", "append-updates.sh", "github-release-embed.sh"):
+        for name in ("on-update.sh", "append-updates.sh", "release-notes-to-discord.sh"):
             path = self.packaged_scripts / name
             path.write_text("#!/usr/bin/env sh\nexit 0\n", encoding="utf-8")
             path.chmod(0o755)

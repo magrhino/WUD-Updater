@@ -72,18 +72,14 @@ run bash -n \
   install.sh \
   bin/updates \
   bin/docker-update-from-wud \
-  wud/tag-manager.sh \
   wud/http.sh \
-  wud/github-release-embed.sh \
   wud/release-notes-to-discord.sh \
   tests/run-all.sh \
   tests/test-docker-update-from-wud.sh \
   tests/container-build.sh \
   tests/e2e-docker-compose.sh \
   tests/test-entrypoint.sh \
-  tests/test-github-release-embed.sh \
   tests/test-release-notes-to-discord.sh \
-  tests/test-tag-manager.sh \
   tests/test-wud-append-updates.sh \
   tests/test-install.sh \
   tests/test-updates-wrapper.sh \
@@ -100,18 +96,14 @@ run shellcheck \
   bin/docker-update-from-wud \
   wud/on-update.sh \
   wud/append-updates.sh \
-  wud/tag-manager.sh \
   wud/http.sh \
-  wud/github-release-embed.sh \
   wud/release-notes-to-discord.sh \
   tests/run-all.sh \
   tests/test-docker-update-from-wud.sh \
   tests/container-build.sh \
   tests/e2e-docker-compose.sh \
   tests/test-entrypoint.sh \
-  tests/test-github-release-embed.sh \
   tests/test-release-notes-to-discord.sh \
-  tests/test-tag-manager.sh \
   tests/test-wud-append-updates.sh \
   tests/test-install.sh \
   tests/test-updates-wrapper.sh \
@@ -133,6 +125,7 @@ run "$python_bin" -m py_compile \
   src/wud_updater/images.py \
   src/wud_updater/line_specs.py \
   src/wud_updater/locks.py \
+  src/wud_updater/release_notes.py \
   src/wud_updater/self_update.py \
   src/wud_updater/terminal.py \
   src/wud_updater/updates.py \
@@ -146,6 +139,7 @@ run "$python_bin" -m py_compile \
   tests/test_python_db.py \
   tests/test_python_doctor.py \
   tests/test_python_docker_compose.py \
+  tests/test_python_release_notes.py \
   tests/test_python_self_update.py \
   tests/test_python_terminal.py \
   tests/test_python_update_from_wud.py \

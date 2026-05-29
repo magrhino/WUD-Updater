@@ -14,6 +14,8 @@ import {
   pendingItem,
   pendingResponse,
   planResponse,
+  releaseNoteInfo,
+  releaseNotesResponse,
   servicePolicy,
   snooze,
   tagExclusion,
@@ -82,6 +84,56 @@ describe("mutating WebUI views", () => {
     expect(previewButton?.attributes("disabled")).toBeDefined();
     await previewButton?.trigger("click");
     expect(createPlan).not.toHaveBeenCalled();
+  });
+
+  it("renders release-note links with breaking cues", () => {
+    const { pinia, webui } = setupStores(false);
+    webui.pending = pendingResponse();
+    webui.releaseNotes = releaseNotesResponse([
+      releaseNoteInfo({
+        breaking: true,
+        breaking_reasons: ["Major version changes from 1 to 2."],
+      }),
+    ]);
+    vi.spyOn(webui, "loadPending").mockResolvedValue();
+    vi.spyOn(webui, "loadReleaseNotes").mockResolvedValue();
+    vi.spyOn(webui, "refreshReleaseNotes").mockResolvedValue();
+    const wrapper = mountWithApp(PendingView, { pinia });
+
+    expect(wrapper.text()).toContain("GitHub release");
+    expect(wrapper.text()).toContain("Possible breaking change");
+    expect(wrapper.find('a[href="https://github.com/acme/app/releases/tag/v2.0.0"]').exists()).toBe(true);
+  });
+
+  it("renders both LSIO and upstream release-note links", () => {
+    const { pinia, webui } = setupStores(false);
+    webui.pending = pendingResponse([pendingItem({ image: "linuxserver/radarr:latest" })]);
+    webui.releaseNotes = releaseNotesResponse([
+      releaseNoteInfo({
+        provider: "lsio",
+        image_repo: "linuxserver/docker-radarr",
+        upstream_repo: "Radarr/Radarr",
+        links: [
+          {
+            label: "LSIO release",
+            url: "https://github.com/linuxserver/docker-radarr/releases/tag/5.1.0-ls1",
+            kind: "lsio_release",
+          },
+          {
+            label: "Upstream release",
+            url: "https://github.com/Radarr/Radarr/releases/tag/v5.1.0",
+            kind: "github_release",
+          },
+        ],
+      }),
+    ]);
+    vi.spyOn(webui, "loadPending").mockResolvedValue();
+    vi.spyOn(webui, "loadReleaseNotes").mockResolvedValue();
+    vi.spyOn(webui, "refreshReleaseNotes").mockResolvedValue();
+    const wrapper = mountWithApp(PendingView, { pinia });
+
+    expect(wrapper.text()).toContain("LSIO release");
+    expect(wrapper.text()).toContain("Upstream release");
   });
 
   it("creates an apply job only after explicit confirmation", async () => {

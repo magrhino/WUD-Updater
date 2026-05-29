@@ -16,6 +16,7 @@ fail(){
 setup_case(){
   TEST_TMP="$(mktemp -d "${TMPDIR:-/tmp}/wud-release-notes-test.XXXXXX")"
   mkdir -p "$TEST_TMP/bin"
+  printf 'linuxserver/docker-radarr: Radarr/Radarr\n' > "$TEST_TMP/upstreams.txt"
   write_fakes
 }
 
@@ -117,7 +118,10 @@ case "$url" in
     write_body "$(release_json "v2.0.0" "acme/app" $'## Changes\n- Routine maintenance')"
     ;;
   https://api.github.com/repos/linuxserver/docker-radarr/releases/latest)
-    write_body "$(release_json "v1.0.0" "linuxserver/docker-radarr" $'## Changes\n- Container update')"
+    write_body "$(release_json "5.1.0-ls1" "linuxserver/docker-radarr" $'LinuxServer Changes:\n- Rebase to Alpine 3.20\n- Add package\n\nRemote Changes:\n- Updating to 5.1.0')"
+    ;;
+  https://api.github.com/repos/Radarr/Radarr/releases/tags/v5.1.0)
+    write_body "$(release_json "v5.1.0" "Radarr/Radarr" $'## Changes\n- New queue view')"
     ;;
   *)
     printf 'unexpected curl URL: %s\n' "$url" >&2
@@ -138,6 +142,7 @@ run_notes(){
     FAKE_WEBHOOK_PAYLOAD="$payload_file" \
     FAKE_CURL_ARGS_LOG="$TEST_TMP/curl.args" \
     FAKE_IMAGE_SOURCE="${FAKE_IMAGE_SOURCE:-}" \
+    UPSTREAM_MAP="$TEST_TMP/upstreams.txt" \
     "$SCRIPT" "$image" "container" "$current" > "$TEST_TMP/output.log" 2>&1 || fail "release note script failed"
 }
 
@@ -150,11 +155,11 @@ assert_curl_policy_for_url(){
   [[ "$line" == *"--max-time 20"* ]] || fail "curl call for $url did not set max time"
 }
 
-test_oci_source_uses_github_release_engine(){
+test_ghcr_image_uses_github_release_engine(){
   setup_case
   local payload_file="$TEST_TMP/payload.json"
 
-  FAKE_IMAGE_SOURCE="https://github.com/acme/app" run_notes "ghcr.io/acme/app:1.0.0" "1.0.0" "$payload_file"
+  FAKE_IMAGE_SOURCE="" run_notes "ghcr.io/acme/app:1.0.0" "1.0.0" "$payload_file"
 
   [[ -s "$payload_file" ]] || fail "webhook payload was not captured"
   assert_curl_policy_for_url "https://discord.test/webhook"
@@ -166,15 +171,28 @@ test_oci_source_uses_github_release_engine(){
   teardown_case
 }
 
-test_linuxserver_image_falls_back_to_docker_repo(){
+test_oci_source_label_uses_github_release_engine(){
+  setup_case
+  local payload_file="$TEST_TMP/payload.json"
+
+  FAKE_IMAGE_SOURCE="https://github.com/acme/app" run_notes "docker.io/acme/app:1.0.0" "1.0.0" "$payload_file"
+
+  [[ -s "$payload_file" ]] || fail "webhook payload was not captured"
+  jq -e '.embeds[0].fields[] | select(.name == "Repository" and .value == "acme/app")' "$payload_file" >/dev/null || fail "OCI source label repo was not used"
+  teardown_case
+}
+
+test_linuxserver_image_shows_lsio_and_upstream_links(){
   setup_case
   local payload_file="$TEST_TMP/payload.json"
 
   FAKE_IMAGE_SOURCE="" run_notes "linuxserver/radarr:latest" "latest" "$payload_file"
 
   [[ -s "$payload_file" ]] || fail "webhook payload was not captured"
-  jq -e '.allowed_mentions.parse == []' "$payload_file" >/dev/null || fail "LinuxServer fallback did not disable mentions"
-  jq -e '.embeds[0].fields[] | select(.name == "Repository" and .value == "linuxserver/docker-radarr")' "$payload_file" >/dev/null || fail "LinuxServer source fallback was not used"
+  jq -e '.allowed_mentions.parse == []' "$payload_file" >/dev/null || fail "LinuxServer payload did not disable mentions"
+  jq -e '.embeds[0].fields[] | select(.name == "LSIO Tag" and .value == "`5.1.0-ls1`")' "$payload_file" >/dev/null || fail "LSIO tag was not rendered"
+  jq -e '.embeds[0].fields[] | select(.name == "Upstream Version" and .value == "`v5.1.0`")' "$payload_file" >/dev/null || fail "upstream version was not rendered"
+  jq -e '.embeds[0].fields[] | select(.name == "Links" and (.value | contains("LSIO release") and contains("Upstream release")))' "$payload_file" >/dev/null || fail "LSIO and upstream links were not rendered"
   teardown_case
 }
 
@@ -218,8 +236,9 @@ run_test(){
 }
 
 main(){
-  run_test test_oci_source_uses_github_release_engine
-  run_test test_linuxserver_image_falls_back_to_docker_repo
+  run_test test_ghcr_image_uses_github_release_engine
+  run_test test_oci_source_label_uses_github_release_engine
+  run_test test_linuxserver_image_shows_lsio_and_upstream_links
   run_test test_missing_source_posts_minimal_notice
   run_test test_missing_source_webhook_failure_is_nonzero_and_redacted
 }

@@ -406,6 +406,7 @@ Boolean examples use `true` and `false`; legacy aliases `1`, `0`, `yes`, `no`,
 | `WUD_WEB_HOST` | `127.0.0.1` | Host passed to Uvicorn when running `wud-updater web`. |
 | `WUD_WEB_PORT` | `8080` | Port passed to Uvicorn when running `wud-updater web`. |
 | `WUD_WEB_STATIC_DIR` | packaged SPA, auto-detected if present | Optional built SPA directory override. Backend tests and API startup do not require a frontend build. |
+| `WUD_WEB_UPSTREAM_MAP` | auto-detected | Optional LinuxServer.io image to upstream GitHub repository map used by WebUI release-note link metadata. |
 
 On first WebUI start, if no admin user exists in `WUD_DB_PATH`, the server logs
 a one-time setup link. Open that link, create the first admin username and a
@@ -443,14 +444,11 @@ Release-note notification values for the WUD container:
 | Variable | Default | Purpose |
 |---|---|---|
 | `DISCORD_RELEASES_WEBHOOK` | unset | Required by the default `/wud/release-notes-to-discord.sh` helper when rich release notes are enabled. |
-| `DISCORD_WEBHOOK` | unset | Webhook used by the optional `/wud/tag-manager.sh` router for normal release embeds. |
-| `ADMIN_WEBHOOK` | `DISCORD_WEBHOOK` | Optional webhook for tag-manager missing-mapping alerts. |
-| `GITHUB_TOKEN` | unset | Optional GitHub API token for higher release-note lookup rate limits. |
-| `MAX_COMMITS` | `3` | Maximum representative commits or pull requests included in release embeds. |
-| `COLOR_HEX` | `0x57F287` | Discord embed color used by `github-release-embed.sh`. |
-| `UPSTREAM_MAP` | `/wud/upstreams.txt` | LinuxServer.io image to upstream repository map used by `tag-manager.sh`. |
-| `RELEASE_EMBED` | `/wud/github-release-embed.sh` | Embed builder invoked by `tag-manager.sh`. |
-| `LOG_DIR` | `/out` | Directory for `tag-manager.YYYYMMDD.log`. |
+| `DISCORD_WEBHOOK` | unset | Alternate webhook name accepted by `/wud/release-notes-to-discord.sh`. |
+| `ADMIN_WEBHOOK` | selected release webhook | Optional webhook for missing LinuxServer.io upstream mapping alerts. |
+| `GITHUB_TOKEN` | unset | Optional GitHub API token for higher release-note lookup rate limits in WUD notifications and WebUI metadata refreshes. |
+| `COLOR_HEX` | `0x57F287` | Discord embed color used by `/wud/release-notes-to-discord.sh`. |
+| `UPSTREAM_MAP` | `/wud/upstreams.txt` | LinuxServer.io image to upstream repository map used by `/wud/release-notes-to-discord.sh`. |
 
 WUD supplies callback fields such as `update_available`, `image_name`,
 `image_tag_value`, `name`, `update_kind_kind`, `update_kind_remote_value`, and
