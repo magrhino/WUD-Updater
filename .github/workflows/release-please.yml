@@ -68,6 +68,7 @@ jobs:
         if: >-
           ${{
             steps.release.outputs.release_created == 'true' ||
+            steps.release.outputs.releases_created == 'true' ||
             (
               github.event_name == 'pull_request_target' &&
               github.event.pull_request.merged == true &&
