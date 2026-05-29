@@ -16,6 +16,7 @@ import {
 
 import { useAuthStore } from "./stores/auth";
 import { useWebuiStore } from "./stores/webui";
+import { themeOverrides } from "./theme";
 
 const route = useRoute();
 const router = useRouter();
@@ -61,7 +62,7 @@ async function handleLogout(): Promise<void> {
 </script>
 
 <template>
-  <n-config-provider>
+  <n-config-provider :theme-overrides="themeOverrides">
     <n-message-provider>
       <div class="app-shell" :class="{ centered: !showShell }">
         <aside v-if="showShell" class="sidebar">
@@ -102,7 +103,13 @@ async function handleLogout(): Promise<void> {
               <h1>{{ String(route.meta.title ?? route.name ?? "Dashboard") }}</h1>
             </div>
             <div class="topbar-actions">
-              <n-button quaternary circle title="Refresh" @click="refreshCurrentView">
+              <n-button
+                quaternary
+                circle
+                title="Refresh"
+                aria-label="Refresh current view"
+                @click="refreshCurrentView"
+              >
                 <template #icon>
                   <RefreshCw :size="18" />
                 </template>

@@ -160,21 +160,34 @@ watch(statusFilter, (nextFilter) => {
             :disabled="webui.loading"
           />
         </n-form-item>
-        <n-form-item label="Image repo">
+        <n-form-item
+          label="Image repo"
+          required
+          feedback="Required. Use the repository name without a tag."
+        >
           <n-input
             v-model:value="exclusionForm.imageRepo"
             placeholder="repo/app"
             :disabled="webui.loading"
           />
         </n-form-item>
-        <n-form-item v-if="exclusionForm.scope === 'service'" label="Service key">
+        <n-form-item
+          v-if="exclusionForm.scope === 'service'"
+          label="Service key"
+          required
+          feedback="Required for service-scoped exclusions. Use stack/service."
+        >
           <n-input
             v-model:value="exclusionForm.serviceKey"
             placeholder="stack/service"
             :disabled="webui.loading"
           />
         </n-form-item>
-        <n-form-item label="Tag">
+        <n-form-item
+          label="Tag"
+          required
+          feedback="Required. Match the tag to exclude."
+        >
           <n-input
             v-model:value="exclusionForm.tag"
             placeholder="2.0"
@@ -190,7 +203,7 @@ watch(statusFilter, (nextFilter) => {
         </n-form-item>
         <div class="form-actions">
           <n-button quaternary :disabled="webui.loading" @click="resetExclusionForm">
-            Clear
+            Clear form
           </n-button>
           <n-button
             type="primary"
@@ -201,7 +214,7 @@ watch(statusFilter, (nextFilter) => {
             <template #icon>
               <Save :size="16" />
             </template>
-            Save
+            Save rule
           </n-button>
         </div>
       </n-form>
@@ -218,6 +231,7 @@ watch(statusFilter, (nextFilter) => {
           class="filter-control"
           :options="statusFilterOptions"
           :disabled="webui.loading"
+          aria-label="Filter tag exclusions by status"
         />
       </div>
 
@@ -328,7 +342,7 @@ watch(statusFilter, (nextFilter) => {
       v-model:show="showSaveConfirm"
       preset="dialog"
       title="Save tag exclusion"
-      positive-text="Save"
+      positive-text="Save rule"
       negative-text="Cancel"
       :positive-button-props="{ type: 'primary', loading: webui.loading }"
       @positive-click="confirmSave"
@@ -365,7 +379,7 @@ watch(statusFilter, (nextFilter) => {
       v-model:show="showStatusConfirm"
       preset="dialog"
       title="Update tag exclusion"
-      positive-text="Confirm"
+      positive-text="Update status"
       negative-text="Cancel"
       :positive-button-props="{ type: nextStatus === 'active' ? 'primary' : 'warning', loading: webui.loading }"
       @positive-click="confirmStatusChange"

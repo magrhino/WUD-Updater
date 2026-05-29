@@ -13,3 +13,4 @@ out/
 logs/
 local-dev/
 .agents/
+.impeccable/

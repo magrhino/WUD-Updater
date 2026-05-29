@@ -70,7 +70,7 @@ onMounted(() => {
           <p class="eyebrow">Queue</p>
           <h2>Pending updates</h2>
         </div>
-        <RouterLink to="/pending" class="text-link">View all</RouterLink>
+        <RouterLink to="/pending" class="text-link">View pending</RouterLink>
       </div>
       <div v-if="!webui.pending?.items.length" class="empty-state">No pending updates.</div>
       <div v-else class="compact-list">
@@ -88,7 +88,7 @@ onMounted(() => {
           <p class="eyebrow">History</p>
           <h2>Recent runs</h2>
         </div>
-        <RouterLink to="/runs" class="text-link">View all</RouterLink>
+        <RouterLink to="/runs" class="text-link">View history</RouterLink>
       </div>
       <div v-if="!webui.runs.length" class="empty-state">No runs recorded.</div>
       <div v-else class="compact-list">

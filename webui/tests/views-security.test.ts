@@ -47,7 +47,7 @@ describe("mutating WebUI views", () => {
 
     await wrapper
       .findAll("button")
-      .find((button) => button.text().includes("All"))
+      .find((button) => button.text().includes("Select all"))
       ?.trigger("click");
 
     expect(wrapper.text()).toContain("Read-only mode is active");
@@ -67,7 +67,10 @@ describe("mutating WebUI views", () => {
     const createPlan = vi.spyOn(webui, "createPlan");
     const wrapper = mountWithApp(PendingView, { pinia });
 
-    await wrapper.findAll("button").find((button) => button.text().includes("All"))?.trigger("click");
+    await wrapper
+      .findAll("button")
+      .find((button) => button.text().includes("Select all"))
+      ?.trigger("click");
     await wrapper
       .find(`input[aria-label="New tag for ${item.image}"]`)
       .setValue("bad tag");

@@ -119,17 +119,25 @@ watch(snoozeState, (nextState) => {
         </div>
       </div>
       <n-form class="management-form" @submit.prevent="openCreateConfirm">
-        <n-form-item label="Service key">
+        <n-form-item
+          label="Service key"
+          required
+          feedback="Required to create a snooze. Use stack/service."
+        >
           <n-input
             v-model:value="snoozeForm.serviceKey"
             placeholder="stack/service"
             :disabled="webui.loading"
           />
         </n-form-item>
-        <n-form-item label="Snoozed until">
+        <n-form-item
+          label="Snoozed until"
+          required
+          feedback="Use an ISO timestamp, or choose 1h, 1d, or 7d."
+        >
           <n-input
             v-model:value="snoozeForm.snoozedUntil"
-            placeholder="2026-05-28T18:00:00Z"
+            placeholder="YYYY-MM-DDTHH:MM:SSZ"
             :disabled="webui.loading"
           />
         </n-form-item>
@@ -151,7 +159,7 @@ watch(snoozeState, (nextState) => {
             7d
           </n-button>
           <n-button quaternary :disabled="webui.loading" @click="resetSnoozeForm">
-            Clear
+            Clear form
           </n-button>
           <n-button
             type="primary"
@@ -162,7 +170,7 @@ watch(snoozeState, (nextState) => {
             <template #icon>
               <Plus :size="16" />
             </template>
-            Create
+            Create snooze
           </n-button>
         </div>
       </n-form>
@@ -179,6 +187,7 @@ watch(snoozeState, (nextState) => {
           class="filter-control"
           :options="stateOptions"
           :disabled="webui.loading"
+          aria-label="Filter snoozes by state"
         />
       </div>
 
@@ -263,7 +272,7 @@ watch(snoozeState, (nextState) => {
       v-model:show="showCreateConfirm"
       preset="dialog"
       title="Create snooze"
-      positive-text="Create"
+      positive-text="Create snooze"
       negative-text="Cancel"
       :positive-button-props="{ type: 'primary', loading: webui.loading }"
       @positive-click="confirmCreate"
