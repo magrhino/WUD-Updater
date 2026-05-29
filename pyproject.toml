@@ -21,7 +21,7 @@ dependencies = [
 dev = [
     "httpx>=0.27,<1",
     "pytest>=8.0,<9",
-    "ruff==0.15.13",
+    "ruff==0.15.14",
 ]
 
 [project.scripts]
