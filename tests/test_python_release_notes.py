@@ -8,6 +8,7 @@ from wud_updater.db import connect_db, init_db
 from wud_updater.release_notes import (
     GitHubClient,
     detect_breaking,
+    release_note_contexts,
     refresh_release_notes,
 )
 from wud_updater.wud_file import parse_wud_text
@@ -51,6 +52,14 @@ class ReleaseNotesTests(unittest.TestCase):
         self.assertEqual(items[0].release_tag, "v2.0.0")
         self.assertTrue(items[0].breaking)
         self.assertEqual(items[0].links[0].label, "GitHub release")
+
+    def test_ghcr_detection_requires_registry_component(self) -> None:
+        parsed = parse_wud_text("registry.example.com/ghcr.io/acme/app:1.0.0\n")
+
+        contexts = release_note_contexts(parsed.targets, {})
+
+        self.assertEqual(contexts[0].provider, "unsupported")
+        self.assertEqual(contexts[0].error, "no supported GitHub release source found")
 
     def test_lsio_release_metadata_includes_both_links(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

@@ -685,9 +685,9 @@ def _lsio_repo(repo: str) -> str:
 
 def _ghcr_repo(image: str) -> str:
     repo = image_repo_ref(image)
-    if not repo.startswith("ghcr.io/"):
+    registry, sep, candidate = repo.partition("/")
+    if registry.lower() != "ghcr.io" or not sep:
         return ""
-    candidate = repo.removeprefix("ghcr.io/")
     return candidate if _github_repo_valid(candidate) else ""
 
 
