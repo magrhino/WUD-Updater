@@ -52,6 +52,7 @@ from .plans import (
     PlanFileMissing,
     PlanInputError,
     build_dry_run_plan,
+    resolve_pending_groups,
 )
 from .release_notes import (
     OCI_SOURCE_LABEL,
@@ -88,6 +89,7 @@ DEFAULT_ALLOWED_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
 PASSWORD_HASHER = PasswordHasher()
 LineNumber = Annotated[int, Field(ge=1)]
 PlanStatus = Literal["ready", "empty", "blocked"]
+PendingGroupingStatus = Literal["ready", "unavailable"]
 ApplyJobStatus = Literal["queued", "running", "success", "failure"]
 ServicePolicyUpdateMode = Literal["", "pause", "stop", "live"]
 SnoozeState = Literal["active", "expired", "all"]
@@ -167,11 +169,40 @@ class PendingItem(BaseModel):
     desired_tag: str
 
 
+class PendingGroupedItem(PendingItem):
+    resolved_image: str
+    target_image: str
+    compose_images: list[str] = Field(default_factory=list)
+    services: list[str] = Field(default_factory=list)
+    action: str
+
+
+class PendingStackGroup(BaseModel):
+    name: str
+    directory: str
+    compose_file: str
+    project_directory: str
+    services_label: str
+    services: list[str] = Field(default_factory=list)
+    line_numbers: list[int] = Field(default_factory=list)
+    items: list[PendingGroupedItem] = Field(default_factory=list)
+
+
+class PendingGrouping(BaseModel):
+    status: PendingGroupingStatus
+    groups: list[PendingStackGroup] = Field(default_factory=list)
+    unmatched: list[PendingGroupedItem] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+
+
 class PendingResponse(BaseModel):
     source_file: str
     exists: bool
     count: int
     items: list[PendingItem] = Field(default_factory=list)
+    grouping: PendingGrouping = Field(
+        default_factory=lambda: PendingGrouping(status="unavailable")
+    )
     warnings: list[str] = Field(default_factory=list)
 
 
@@ -1736,7 +1767,58 @@ def _pending_response(settings: WebSettings) -> PendingResponse:
         exists=exists,
         count=len(items),
         items=items,
+        grouping=_pending_grouping_response(settings, parsed),
         warnings=list(parsed.warnings),
+    )
+
+
+def _pending_grouping_response(
+    settings: WebSettings,
+    parsed: ParsedWudFile,
+) -> PendingGrouping:
+    grouping = resolve_pending_groups(
+        settings.config,
+        parsed,
+        host_docker_base=settings.host_docker_base,
+        environ=settings.command_env,
+    )
+    return PendingGrouping(
+        status=grouping.status,
+        groups=[
+            PendingStackGroup(
+                name=group.name,
+                directory=group.directory,
+                compose_file=group.compose_file,
+                project_directory=group.project_directory,
+                services_label=group.services_label,
+                services=list(group.services),
+                line_numbers=list(group.line_numbers),
+                items=[_pending_grouped_item(item) for item in group.items],
+            )
+            for group in grouping.groups
+        ],
+        unmatched=[_pending_grouped_item(item) for item in grouping.unmatched],
+        warnings=list(grouping.warnings),
+    )
+
+
+def _pending_grouped_item(item: Any) -> PendingGroupedItem:
+    return PendingGroupedItem(
+        line_no=item.line_no,
+        raw=item.raw,
+        image=item.image,
+        key=item.key,
+        repo=item.repo,
+        current_tag=image_tag(item.image),
+        has_tag=item.has_tag,
+        allow_repo=item.allow_repo,
+        digest=item.digest,
+        desired_tag=item.desired_tag,
+        resolved_image=item.resolved_image,
+        target_image=item.target_image,
+        compose_images=list(item.compose_images),
+        services=list(item.services),
+        action=item.action,
     )
 
 

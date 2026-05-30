@@ -183,6 +183,13 @@ def _fake_docker_calls(fake_root: Path) -> str:
     return (fake_root / "calls.log").read_text(encoding="utf-8")
 
 
+def _assert_pending_grouping_did_not_mutate(calls: str) -> None:
+    assert "manifest inspect" not in calls
+    assert " pull " not in calls
+    assert " stop " not in calls
+    assert " up " not in calls
+
+
 def _fake_image_state_file(fake_root: Path, image: str, suffix: str) -> Path:
     safe = re.sub(r"[^A-Za-z0-9._-]", "_", image)
     return fake_root / "images" / f"{safe}.{suffix}"
@@ -876,7 +883,129 @@ def test_pending_endpoint_reads_wud_file_without_mutation(tmp_path: Path) -> Non
     assert body["items"][0]["desired_tag"] == "1.26"
     assert body["items"][1]["current_tag"] == "latest"
     assert body["items"][1]["digest"] == "sha256:abc"
+    assert body["grouping"]["status"] == "unavailable"
+    assert body["grouping"]["groups"] == []
+    assert [item["line_no"] for item in body["grouping"]["unmatched"]] == [2, 3]
+    assert body["grouping"]["unmatched"][0]["action"] == "tag-update"
+    assert body["grouping"]["unmatched"][1]["action"] == "update"
+    assert body["grouping"]["warnings"]
     assert wud_file.read_text(encoding="utf-8") == original
+
+
+def test_pending_endpoint_groups_items_by_compose_stack_without_mutation(
+    tmp_path: Path,
+) -> None:
+    fake_env, fake_root = _fake_docker_env(tmp_path)
+    client = _client(tmp_path, {"WUD_WEB_DEV_NO_AUTH": "true", **fake_env})
+    wud_file = tmp_path / "state" / "images.todo"
+    original = "repo/app:latest\nrepo/db:latest\n"
+    wud_file.write_text(original, encoding="utf-8")
+    compose_dir = _make_fake_stack(
+        tmp_path,
+        fake_root,
+        "stack",
+        [
+            ("app", "repo/app:latest", "cid-app"),
+            ("db", "repo/db:latest", "cid-db"),
+        ],
+    )
+    compose_before = (compose_dir / "docker-compose.yml").read_text(encoding="utf-8")
+
+    response = client.get("/api/v1/pending")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert [item["line_no"] for item in body["items"]] == [1, 2]
+    grouping = body["grouping"]
+    assert grouping["status"] == "ready"
+    assert grouping["warnings"] == []
+    assert grouping["unmatched"] == []
+    assert len(grouping["groups"]) == 1
+    group = grouping["groups"][0]
+    assert group["name"] == "stack"
+    assert group["compose_file"] == "docker-compose.yml"
+    assert group["directory"] == str(compose_dir)
+    assert group["project_directory"] == ""
+    assert group["services"] == ["app", "db"]
+    assert group["services_label"] == "app, db"
+    assert group["line_numbers"] == [1, 2]
+    assert [item["line_no"] for item in group["items"]] == [1, 2]
+    assert group["items"][0]["services"] == ["app"]
+    assert group["items"][0]["compose_images"] == ["repo/app:latest"]
+    assert group["items"][0]["resolved_image"] == "repo/app:latest"
+    assert group["items"][0]["target_image"] == "repo/app:latest"
+    assert group["items"][0]["action"] == "update"
+    assert wud_file.read_text(encoding="utf-8") == original
+    assert (
+        (compose_dir / "docker-compose.yml").read_text(encoding="utf-8")
+        == compose_before
+    )
+    _assert_pending_grouping_did_not_mutate(_fake_docker_calls(fake_root))
+
+
+def test_pending_endpoint_reports_unmatched_grouping_items(tmp_path: Path) -> None:
+    fake_env, fake_root = _fake_docker_env(tmp_path)
+    client = _client(tmp_path, {"WUD_WEB_DEV_NO_AUTH": "true", **fake_env})
+    wud_file = tmp_path / "state" / "images.todo"
+    wud_file.write_text("repo/other:latest\n", encoding="utf-8")
+    _make_fake_stack(
+        tmp_path,
+        fake_root,
+        "stack",
+        [("app", "repo/app:latest", "cid-app")],
+    )
+
+    response = client.get("/api/v1/pending")
+
+    assert response.status_code == 200
+    grouping = response.json()["grouping"]
+    assert grouping["status"] == "ready"
+    assert grouping["groups"] == []
+    assert len(grouping["unmatched"]) == 1
+    assert grouping["unmatched"][0]["line_no"] == 1
+    assert grouping["unmatched"][0]["image"] == "repo/other:latest"
+    assert grouping["unmatched"][0]["action"] == "unmatched"
+    assert grouping["unmatched"][0]["services"] == []
+    assert grouping["unmatched"][0]["compose_images"] == []
+    _assert_pending_grouping_did_not_mutate(_fake_docker_calls(fake_root))
+
+
+def test_pending_endpoint_groups_tag_updates_without_allowing_tag_updates(
+    tmp_path: Path,
+) -> None:
+    fake_env, fake_root = _fake_docker_env(tmp_path)
+    client = _client(tmp_path, {"WUD_WEB_DEV_NO_AUTH": "true", **fake_env})
+    wud_file = tmp_path / "state" / "images.todo"
+    original = "repo/app:1.0 tag=2.0\n"
+    wud_file.write_text(original, encoding="utf-8")
+    compose_dir = _make_fake_stack(
+        tmp_path,
+        fake_root,
+        "stack",
+        [("app", "repo/app:1.0", "cid-app")],
+    )
+    compose_before = (compose_dir / "docker-compose.yml").read_text(encoding="utf-8")
+
+    response = client.get("/api/v1/pending")
+
+    assert response.status_code == 200
+    grouping = response.json()["grouping"]
+    assert grouping["status"] == "ready"
+    assert grouping["unmatched"] == []
+    item = grouping["groups"][0]["items"][0]
+    assert item["line_no"] == 1
+    assert item["action"] == "tag-update"
+    assert item["desired_tag"] == "2.0"
+    assert item["resolved_image"] == "repo/app:1.0"
+    assert item["target_image"] == "repo/app:2.0"
+    assert item["compose_images"] == ["repo/app:1.0"]
+    assert item["services"] == ["app"]
+    assert wud_file.read_text(encoding="utf-8") == original
+    assert (
+        (compose_dir / "docker-compose.yml").read_text(encoding="utf-8")
+        == compose_before
+    )
+    _assert_pending_grouping_did_not_mutate(_fake_docker_calls(fake_root))
 
 
 def test_release_notes_get_returns_placeholders_without_creating_database(

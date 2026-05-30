@@ -146,6 +146,44 @@ class DryRunPlan:
     issues: tuple[DryRunPlanIssue, ...] = ()
 
 
+@dataclass(frozen=True)
+class PendingGroupingItem:
+    line_no: int
+    raw: str
+    image: str
+    key: str
+    repo: str
+    has_tag: bool
+    allow_repo: bool
+    digest: str
+    desired_tag: str
+    resolved_image: str
+    target_image: str
+    compose_images: tuple[str, ...]
+    services: tuple[str, ...]
+    action: str
+
+
+@dataclass(frozen=True)
+class PendingStackGroup:
+    name: str
+    directory: str
+    compose_file: str
+    project_directory: str
+    services_label: str
+    services: tuple[str, ...]
+    line_numbers: tuple[int, ...]
+    items: tuple[PendingGroupingItem, ...]
+
+
+@dataclass(frozen=True)
+class PendingGroupingResult:
+    status: str
+    groups: tuple[PendingStackGroup, ...] = ()
+    unmatched: tuple[PendingGroupingItem, ...] = ()
+    warnings: tuple[str, ...] = ()
+
+
 @dataclass
 class _PlanBuilder:
     config: UpdaterConfig
@@ -279,58 +317,12 @@ class _PlanBuilder:
         parsed: ParsedWudFile,
         stacks: Sequence[ComposeStack],
     ) -> tuple[list[Match], list[DryRunPlanSkipped]]:
-        container_images = {
-            item.name: item.image for item in self.docker.try_container_images()
-        }
-        matches: list[Match] = []
-        skipped: list[DryRunPlanSkipped] = []
-        seen: set[tuple[int, int, str, str, str]] = set()
-
-        for target in parsed.targets:
-            if target.desired_tag and not self.allow_tag_updates:
-                skipped.append(_skipped(target, "tag-updates-disabled"))
-                continue
-
-            resolved = container_images.get(target.first, target.first)
-            allow_repo = (
-                target.allow_repo or resolved != target.first or not image_has_tag(resolved)
-            )
-
-            for stack in stacks:
-                for image in stack.images:
-                    if not image_matches_resolved_target(image, resolved, allow_repo):
-                        continue
-                    services = _services_for_image(stack.service_images, image)
-                    if services:
-                        for service in services:
-                            key = (stack.index, target.line_no, resolved, image, service)
-                            if key in seen:
-                                continue
-                            matches.append(Match(stack, target, resolved, image, service))
-                            seen.add(key)
-                    else:
-                        key = (stack.index, target.line_no, resolved, image, "")
-                        if key in seen:
-                            continue
-                        matches.append(Match(stack, target, resolved, image, ""))
-                        seen.add(key)
-
-        matches.sort(
-            key=lambda item: (
-                item.stack.index,
-                item.target.line_no,
-                item.target.first,
-                item.resolved,
-                item.compose_image,
-                item.service,
-            )
+        return _match_targets(
+            parsed,
+            stacks,
+            self.docker,
+            allow_tag_updates=self.allow_tag_updates,
         )
-        matched_lines = {match.target.line_no for match in matches}
-        skipped_lines = {item.line_no for item in skipped}
-        for target in parsed.targets:
-            if target.line_no not in matched_lines and target.line_no not in skipped_lines:
-                skipped.append(_skipped(target, "unmatched"))
-        return matches, skipped
 
     def _unmatched_issues(
         self,
@@ -831,6 +823,206 @@ def build_dry_run_plan(
         host_docker_base=host_docker_base,
         command_runner=runner,
     ).build()
+
+
+def resolve_pending_groups(
+    config: UpdaterConfig,
+    parsed: ParsedWudFile,
+    *,
+    host_docker_base: Path | None = None,
+    environ: Mapping[str, str] | None = None,
+) -> PendingGroupingResult:
+    runner = CommandRunner(env=environ) if environ is not None else CommandRunner()
+    docker = DockerCli(runner=runner)
+    compose = ComposeCli(runner=runner)
+
+    try:
+        stacks = compose.discover_stacks(
+            config.docker_base,
+            project_base=host_docker_base,
+        )
+    except ComposeDiscoveryError as exc:
+        return PendingGroupingResult(
+            status="unavailable",
+            unmatched=tuple(
+                _pending_grouping_item(target, action=_target_action_name(target))
+                for target in parsed.targets
+            ),
+            warnings=(str(exc),),
+        )
+
+    matches, skipped = _match_targets(
+        parsed,
+        stacks,
+        docker,
+        allow_tag_updates=True,
+    )
+    targets_by_line = {target.line_no: target for target in parsed.targets}
+    return PendingGroupingResult(
+        status="ready",
+        groups=_pending_stack_groups(matches),
+        unmatched=tuple(
+            _pending_grouping_item(targets_by_line[item.line_no], action=item.reason)
+            for item in skipped
+            if item.line_no in targets_by_line
+        ),
+    )
+
+
+def _match_targets(
+    parsed: ParsedWudFile,
+    stacks: Sequence[ComposeStack],
+    docker: DockerCli,
+    *,
+    allow_tag_updates: bool,
+) -> tuple[list[Match], list[DryRunPlanSkipped]]:
+    container_images = {item.name: item.image for item in docker.try_container_images()}
+    matches: list[Match] = []
+    skipped: list[DryRunPlanSkipped] = []
+    seen: set[tuple[int, int, str, str, str]] = set()
+
+    for target in parsed.targets:
+        if target.desired_tag and not allow_tag_updates:
+            skipped.append(_skipped(target, "tag-updates-disabled"))
+            continue
+
+        resolved = container_images.get(target.first, target.first)
+        allow_repo = (
+            target.allow_repo or resolved != target.first or not image_has_tag(resolved)
+        )
+
+        for stack in stacks:
+            for image in stack.images:
+                if not image_matches_resolved_target(image, resolved, allow_repo):
+                    continue
+                services = _services_for_image(stack.service_images, image)
+                if services:
+                    for service in services:
+                        key = (stack.index, target.line_no, resolved, image, service)
+                        if key in seen:
+                            continue
+                        matches.append(Match(stack, target, resolved, image, service))
+                        seen.add(key)
+                else:
+                    key = (stack.index, target.line_no, resolved, image, "")
+                    if key in seen:
+                        continue
+                    matches.append(Match(stack, target, resolved, image, ""))
+                    seen.add(key)
+
+    matches.sort(
+        key=lambda item: (
+            item.stack.index,
+            item.target.line_no,
+            item.target.first,
+            item.resolved,
+            item.compose_image,
+            item.service,
+        )
+    )
+    matched_lines = {match.target.line_no for match in matches}
+    skipped_lines = {item.line_no for item in skipped}
+    for target in parsed.targets:
+        if target.line_no not in matched_lines and target.line_no not in skipped_lines:
+            skipped.append(_skipped(target, "unmatched"))
+    return matches, skipped
+
+
+def _pending_stack_groups(matches: Sequence[Match]) -> tuple[PendingStackGroup, ...]:
+    groups: list[PendingStackGroup] = []
+    for stack in _stacks_to_update(matches):
+        stack_matches = [match for match in matches if match.stack.index == stack.index]
+        services = _ordered_unique(
+            match.service for match in stack_matches if match.service
+        )
+        items = _pending_grouping_items(stack_matches)
+        groups.append(
+            PendingStackGroup(
+                name=stack.name,
+                directory=str(stack.directory),
+                compose_file=stack.file,
+                project_directory=(
+                    ""
+                    if stack.project_directory is None
+                    else str(stack.project_directory)
+                ),
+                services_label=_pending_services_label(services),
+                services=services,
+                line_numbers=tuple(item.line_no for item in items),
+                items=items,
+            )
+        )
+    return tuple(groups)
+
+
+def _pending_grouping_items(
+    matches: Sequence[Match],
+) -> tuple[PendingGroupingItem, ...]:
+    items: list[PendingGroupingItem] = []
+    for line_no in sorted({match.target.line_no for match in matches}):
+        line_matches = [match for match in matches if match.target.line_no == line_no]
+        target = line_matches[0].target
+        resolved = line_matches[0].resolved
+        compose_images = _ordered_unique(match.compose_image for match in line_matches)
+        services = _ordered_unique(
+            match.service for match in line_matches if match.service
+        )
+        items.append(
+            _pending_grouping_item(
+                target,
+                resolved_image=resolved,
+                compose_images=compose_images,
+                services=services,
+                action=_target_action_name(target),
+            )
+        )
+    return tuple(items)
+
+
+def _pending_grouping_item(
+    target: WudTarget,
+    *,
+    action: str,
+    resolved_image: str = "",
+    compose_images: Sequence[str] = (),
+    services: Sequence[str] = (),
+) -> PendingGroupingItem:
+    resolved = resolved_image or target.first
+    return PendingGroupingItem(
+        line_no=target.line_no,
+        raw=target.raw,
+        image=target.first,
+        key=target.key,
+        repo=target.repo,
+        has_tag=target.has_tag,
+        allow_repo=target.allow_repo,
+        digest=target.digest,
+        desired_tag=target.desired_tag,
+        resolved_image=resolved,
+        target_image=_pending_target_image(target, resolved, compose_images),
+        compose_images=tuple(compose_images),
+        services=tuple(services),
+        action=action,
+    )
+
+
+def _pending_target_image(
+    target: WudTarget,
+    resolved_image: str,
+    compose_images: Sequence[str],
+) -> str:
+    if not target.desired_tag:
+        return resolved_image
+    base_image = compose_images[0] if compose_images else resolved_image
+    return image_with_tag(base_image, target.desired_tag)
+
+
+def _target_action_name(target: WudTarget) -> str:
+    return "tag-update" if target.desired_tag else "update"
+
+
+def _pending_services_label(services: Sequence[str]) -> str:
+    return ", ".join(services) if services else "stack-level"
 
 
 def _read_wud_file(path: Path) -> ParsedWudFile:
