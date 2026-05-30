@@ -129,10 +129,6 @@ a {
   text-transform: none;
 }
 
-.source-short {
-  display: none;
-}
-
 .content-stack {
   display: grid;
   gap: 16px;
@@ -1137,14 +1133,6 @@ a {
 
   .batch-action-bar {
     top: 76px;
-  }
-
-  .pending-source .source-full {
-    display: none;
-  }
-
-  .pending-source .source-short {
-    display: inline;
   }
 
   .topbar {

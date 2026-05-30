@@ -117,6 +117,9 @@ const releaseNotesByLine = computed(() => {
 const latestRun = computed(() => webui.runs[0] ?? null);
 const pendingSourceFile = computed(() => webui.pending?.source_file ?? "Pending file");
 const pendingSourceLabel = computed(() => fileName(pendingSourceFile.value));
+const pendingSourceDisplay = computed(() =>
+  webui.pending?.source_file ? `Source ${pendingSourceLabel.value}` : "Pending file",
+);
 const selectedLineSet = computed(() => new Set(selectedLineNumbers.value));
 const mutationStateLabel = computed(() =>
   auth.session?.mutations_enabled ? "Mutations enabled" : "Read-only",
@@ -854,8 +857,7 @@ onUnmounted(() => {
     <div class="section-heading pending-heading">
       <div>
         <p class="eyebrow value-eyebrow pending-source" :title="pendingSourceFile">
-          <span class="source-full">{{ pendingSourceFile }}</span>
-          <span class="source-short">{{ pendingSourceLabel }}</span>
+          {{ pendingSourceDisplay }}
         </p>
         <h2>{{ webui.pending?.count ?? 0 }} pending updates</h2>
       </div>
@@ -944,9 +946,8 @@ onUnmounted(() => {
                 @update:checked="toggleStack(group, Boolean($event))"
               >
                 <span class="sr-only">Select stack </span>
-                <strong>{{ group.name }}</strong>
+                <strong :title="group.directory">{{ group.name }}</strong>
               </n-checkbox>
-              <span class="stack-path">{{ group.directory }}</span>
               <div class="stack-identity" aria-label="Stack impact">
                 <span>
                   <span class="identity-label">Services</span>
