@@ -1,9 +1,73 @@
-import type { GlobalThemeOverrides } from "naive-ui";
+import {
+  computed,
+  watchEffect,
+  type ComputedRef,
+  type WritableComputedRef,
+} from "vue";
+import { useColorMode } from "@vueuse/core";
+import { darkTheme, type GlobalTheme, type GlobalThemeOverrides } from "naive-ui";
 
-export const designTokens = {
+export type EffectiveTheme = "light" | "dark";
+export type ThemePreference = "system" | EffectiveTheme;
+
+type StoredThemePreference = "auto" | EffectiveTheme;
+
+export const themeStorageKey = "theme-preference";
+export const themePreferenceOrder: readonly ThemePreference[] = [
+  "system",
+  "light",
+  "dark",
+] as const;
+
+const fontTokens = {
+  sans: 'Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+  mono: '"SFMono-Regular", Consolas, "Liberation Mono", monospace',
+} as const;
+
+type ThemeTokens = {
+  font: typeof fontTokens;
+  color: {
+    ink: string;
+    textSecondary: string;
+    bodyBg: string;
+    surface: string;
+    sidebar: string;
+    sidebarHover: string;
+    sidebarText: string;
+    sidebarMuted: string;
+    mutedText: string;
+    border: string;
+    borderSubtle: string;
+    borderDashed: string;
+    borderHover: string;
+    panelTint: string;
+    tableHead: string;
+    actionBlue: string;
+    actionBlueHover: string;
+    actionBluePressed: string;
+    operationalTeal: string;
+    operationalTealHover: string;
+    operationalTealPressed: string;
+    warning: string;
+    warningBg: string;
+    warningHover: string;
+    warningPressed: string;
+    error: string;
+    errorHover: string;
+    errorPressed: string;
+    loginBg: string;
+    logBg: string;
+    logText: string;
+    codeText: string;
+  };
+  shadow: {
+    panelLift: string;
+  };
+};
+
+const lightDesignTokens: ThemeTokens = {
   font: {
-    sans: 'Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
-    mono: '"SFMono-Regular", Consolas, "Liberation Mono", monospace',
+    ...fontTokens,
   },
   color: {
     ink: "#172026",
@@ -44,95 +108,257 @@ export const designTokens = {
   },
 } as const;
 
-const cssVariables: Record<string, string> = {
-  "--font-sans": designTokens.font.sans,
-  "--font-mono": designTokens.font.mono,
-  "--color-ink": designTokens.color.ink,
-  "--color-text-secondary": designTokens.color.textSecondary,
-  "--color-body-bg": designTokens.color.bodyBg,
-  "--color-surface": designTokens.color.surface,
-  "--color-sidebar": designTokens.color.sidebar,
-  "--color-sidebar-hover": designTokens.color.sidebarHover,
-  "--color-sidebar-text": designTokens.color.sidebarText,
-  "--color-sidebar-muted": designTokens.color.sidebarMuted,
-  "--color-muted-text": designTokens.color.mutedText,
-  "--color-border": designTokens.color.border,
-  "--color-border-subtle": designTokens.color.borderSubtle,
-  "--color-border-dashed": designTokens.color.borderDashed,
-  "--color-border-hover": designTokens.color.borderHover,
-  "--color-panel-tint": designTokens.color.panelTint,
-  "--color-table-head": designTokens.color.tableHead,
-  "--color-action-blue": designTokens.color.actionBlue,
-  "--color-action-blue-hover": designTokens.color.actionBlueHover,
-  "--color-action-blue-pressed": designTokens.color.actionBluePressed,
-  "--color-operational-teal": designTokens.color.operationalTeal,
-  "--color-operational-teal-hover": designTokens.color.operationalTealHover,
-  "--color-operational-teal-pressed": designTokens.color.operationalTealPressed,
-  "--color-warning": designTokens.color.warning,
-  "--color-warning-bg": designTokens.color.warningBg,
-  "--color-warning-hover": designTokens.color.warningHover,
-  "--color-warning-pressed": designTokens.color.warningPressed,
-  "--color-error": designTokens.color.error,
-  "--color-error-hover": designTokens.color.errorHover,
-  "--color-error-pressed": designTokens.color.errorPressed,
-  "--color-login-bg": designTokens.color.loginBg,
-  "--color-log-bg": designTokens.color.logBg,
-  "--color-log-text": designTokens.color.logText,
-  "--color-code-text": designTokens.color.codeText,
-  "--shadow-panel-lift": designTokens.shadow.panelLift,
-};
-
-export function applyThemeCssVars(root = document.documentElement): void {
-  for (const [name, value] of Object.entries(cssVariables)) {
-    root.style.setProperty(name, value);
-  }
-}
-
-export const themeOverrides: GlobalThemeOverrides = {
-  common: {
-    baseColor: designTokens.color.surface,
-    bodyColor: designTokens.color.bodyBg,
-    cardColor: designTokens.color.surface,
-    modalColor: designTokens.color.surface,
-    tableColor: designTokens.color.surface,
-    tableHeaderColor: designTokens.color.tableHead,
-    hoverColor: designTokens.color.panelTint,
-    inputColor: designTokens.color.surface,
-    inputColorDisabled: designTokens.color.panelTint,
-    borderColor: designTokens.color.border,
-    dividerColor: designTokens.color.borderSubtle,
-    primaryColor: designTokens.color.operationalTeal,
-    primaryColorHover: designTokens.color.operationalTealHover,
-    primaryColorPressed: designTokens.color.operationalTealPressed,
-    primaryColorSuppl: designTokens.color.operationalTeal,
-    infoColor: designTokens.color.actionBlue,
-    infoColorHover: designTokens.color.actionBlueHover,
-    infoColorPressed: designTokens.color.actionBluePressed,
-    infoColorSuppl: designTokens.color.actionBlue,
-    successColor: designTokens.color.operationalTeal,
-    successColorHover: designTokens.color.operationalTealHover,
-    successColorPressed: designTokens.color.operationalTealPressed,
-    successColorSuppl: designTokens.color.operationalTeal,
-    warningColor: designTokens.color.warning,
-    warningColorHover: designTokens.color.warningHover,
-    warningColorPressed: designTokens.color.warningPressed,
-    warningColorSuppl: designTokens.color.warning,
-    errorColor: designTokens.color.error,
-    errorColorHover: designTokens.color.errorHover,
-    errorColorPressed: designTokens.color.errorPressed,
-    errorColorSuppl: designTokens.color.error,
-    textColorBase: designTokens.color.ink,
-    textColor1: designTokens.color.ink,
-    textColor2: designTokens.color.textSecondary,
-    textColor3: designTokens.color.mutedText,
-    textColorDisabled: designTokens.color.mutedText,
-    placeholderColor: designTokens.color.mutedText,
-    placeholderColorDisabled: designTokens.color.mutedText,
-    iconColor: designTokens.color.mutedText,
-    fontFamily: designTokens.font.sans,
-    fontFamilyMono: designTokens.font.mono,
-    fontSize: "16px",
-    borderRadius: "7px",
-    borderRadiusSmall: "7px",
+const darkDesignTokens: ThemeTokens = {
+  font: {
+    ...fontTokens,
+  },
+  color: {
+    ink: "#eef7f8",
+    textSecondary: "#c2d0d4",
+    bodyBg: "#0f171a",
+    surface: "#162126",
+    sidebar: "#0a1215",
+    sidebarHover: "#1b3036",
+    sidebarText: "#f4fbfc",
+    sidebarMuted: "#a8bdc3",
+    mutedText: "#9badb3",
+    border: "#31444b",
+    borderSubtle: "#26383f",
+    borderDashed: "#3a5159",
+    borderHover: "#5d9dc9",
+    panelTint: "#111c20",
+    tableHead: "#1c2b31",
+    actionBlue: "#72bdf0",
+    actionBlueHover: "#8fcdf6",
+    actionBluePressed: "#4fa6df",
+    operationalTeal: "#58c5a6",
+    operationalTealHover: "#73d7bb",
+    operationalTealPressed: "#39ab8d",
+    warning: "#ffc766",
+    warningBg: "#332817",
+    warningHover: "#ffd98f",
+    warningPressed: "#e6ae48",
+    error: "#ff9286",
+    errorHover: "#ffafa8",
+    errorPressed: "#e77569",
+    loginBg: "#0d1518",
+    logBg: "#081013",
+    logText: "#d8e8df",
+    codeText: "#d8e7eb",
+  },
+  shadow: {
+    panelLift: "0 1px 2px rgb(0 0 0 / 0.24)",
   },
 };
+
+export const themeDesignTokens = {
+  light: lightDesignTokens,
+  dark: darkDesignTokens,
+} as const;
+
+export const designTokens = themeDesignTokens.light;
+
+function cssVariablesFor(tokens: ThemeTokens): Record<string, string> {
+  return {
+    "--font-sans": tokens.font.sans,
+    "--font-mono": tokens.font.mono,
+    "--color-ink": tokens.color.ink,
+    "--color-text-secondary": tokens.color.textSecondary,
+    "--color-body-bg": tokens.color.bodyBg,
+    "--color-surface": tokens.color.surface,
+    "--color-sidebar": tokens.color.sidebar,
+    "--color-sidebar-hover": tokens.color.sidebarHover,
+    "--color-sidebar-text": tokens.color.sidebarText,
+    "--color-sidebar-muted": tokens.color.sidebarMuted,
+    "--color-muted-text": tokens.color.mutedText,
+    "--color-border": tokens.color.border,
+    "--color-border-subtle": tokens.color.borderSubtle,
+    "--color-border-dashed": tokens.color.borderDashed,
+    "--color-border-hover": tokens.color.borderHover,
+    "--color-panel-tint": tokens.color.panelTint,
+    "--color-table-head": tokens.color.tableHead,
+    "--color-action-blue": tokens.color.actionBlue,
+    "--color-action-blue-hover": tokens.color.actionBlueHover,
+    "--color-action-blue-pressed": tokens.color.actionBluePressed,
+    "--color-operational-teal": tokens.color.operationalTeal,
+    "--color-operational-teal-hover": tokens.color.operationalTealHover,
+    "--color-operational-teal-pressed": tokens.color.operationalTealPressed,
+    "--color-warning": tokens.color.warning,
+    "--color-warning-bg": tokens.color.warningBg,
+    "--color-warning-hover": tokens.color.warningHover,
+    "--color-warning-pressed": tokens.color.warningPressed,
+    "--color-error": tokens.color.error,
+    "--color-error-hover": tokens.color.errorHover,
+    "--color-error-pressed": tokens.color.errorPressed,
+    "--color-login-bg": tokens.color.loginBg,
+    "--color-log-bg": tokens.color.logBg,
+    "--color-log-text": tokens.color.logText,
+    "--color-code-text": tokens.color.codeText,
+    "--shadow-panel-lift": tokens.shadow.panelLift,
+  };
+}
+
+function themeOverridesFor(tokens: ThemeTokens): GlobalThemeOverrides {
+  return {
+    common: {
+      baseColor: tokens.color.surface,
+      bodyColor: tokens.color.bodyBg,
+      cardColor: tokens.color.surface,
+      modalColor: tokens.color.surface,
+      tableColor: tokens.color.surface,
+      tableHeaderColor: tokens.color.tableHead,
+      hoverColor: tokens.color.panelTint,
+      inputColor: tokens.color.surface,
+      inputColorDisabled: tokens.color.panelTint,
+      borderColor: tokens.color.border,
+      dividerColor: tokens.color.borderSubtle,
+      primaryColor: tokens.color.operationalTeal,
+      primaryColorHover: tokens.color.operationalTealHover,
+      primaryColorPressed: tokens.color.operationalTealPressed,
+      primaryColorSuppl: tokens.color.operationalTeal,
+      infoColor: tokens.color.actionBlue,
+      infoColorHover: tokens.color.actionBlueHover,
+      infoColorPressed: tokens.color.actionBluePressed,
+      infoColorSuppl: tokens.color.actionBlue,
+      successColor: tokens.color.operationalTeal,
+      successColorHover: tokens.color.operationalTealHover,
+      successColorPressed: tokens.color.operationalTealPressed,
+      successColorSuppl: tokens.color.operationalTeal,
+      warningColor: tokens.color.warning,
+      warningColorHover: tokens.color.warningHover,
+      warningColorPressed: tokens.color.warningPressed,
+      warningColorSuppl: tokens.color.warning,
+      errorColor: tokens.color.error,
+      errorColorHover: tokens.color.errorHover,
+      errorColorPressed: tokens.color.errorPressed,
+      errorColorSuppl: tokens.color.error,
+      textColorBase: tokens.color.ink,
+      textColor1: tokens.color.ink,
+      textColor2: tokens.color.textSecondary,
+      textColor3: tokens.color.mutedText,
+      textColorDisabled: tokens.color.mutedText,
+      placeholderColor: tokens.color.mutedText,
+      placeholderColorDisabled: tokens.color.mutedText,
+      iconColor: tokens.color.mutedText,
+      fontFamily: tokens.font.sans,
+      fontFamilyMono: tokens.font.mono,
+      fontSize: "16px",
+      borderRadius: "7px",
+      borderRadiusSmall: "7px",
+    },
+  };
+}
+
+export const themeOverridesByMode: Record<EffectiveTheme, GlobalThemeOverrides> = {
+  light: themeOverridesFor(themeDesignTokens.light),
+  dark: themeOverridesFor(themeDesignTokens.dark),
+};
+
+export const themeOverrides = themeOverridesByMode.light;
+
+export const themePreferenceLabels: Record<ThemePreference, string> = {
+  system: "System theme",
+  light: "Light theme",
+  dark: "Dark theme",
+};
+
+function normalizeStoredPreference(value: StoredThemePreference): ThemePreference {
+  return value === "auto" ? "system" : value;
+}
+
+function storedThemePreference(value: ThemePreference): StoredThemePreference {
+  return value === "system" ? "auto" : value;
+}
+
+export function nextThemePreference(current: ThemePreference): ThemePreference {
+  const index = themePreferenceOrder.indexOf(current);
+  return themePreferenceOrder[(index + 1) % themePreferenceOrder.length];
+}
+
+export function detectInitialEffectiveTheme(): EffectiveTheme {
+  if (typeof window === "undefined") {
+    return "light";
+  }
+
+  try {
+    const stored = window.localStorage.getItem(themeStorageKey);
+    if (stored === "dark" || stored === "light") {
+      return stored;
+    }
+  } catch {
+    // Storage can be unavailable in locked-down browsers; system preference still applies.
+  }
+
+  return window.matchMedia?.("(prefers-color-scheme: dark)").matches
+    ? "dark"
+    : "light";
+}
+
+export function applyThemeCssVars(root?: HTMLElement): void;
+export function applyThemeCssVars(
+  theme: EffectiveTheme,
+  root?: HTMLElement,
+): void;
+export function applyThemeCssVars(
+  themeOrRoot: EffectiveTheme | HTMLElement = "light",
+  root = document.documentElement,
+): void {
+  const theme = typeof themeOrRoot === "string" ? themeOrRoot : "light";
+  const target = typeof themeOrRoot === "string" ? root : themeOrRoot;
+  const tokens = themeDesignTokens[theme];
+
+  for (const [name, value] of Object.entries(cssVariablesFor(tokens))) {
+    target.style.setProperty(name, value);
+  }
+
+  target.dataset.theme = theme;
+  target.style.setProperty("color-scheme", theme);
+}
+
+export function useWebuiTheme(): {
+  preference: WritableComputedRef<ThemePreference>;
+  effectiveTheme: ComputedRef<EffectiveTheme>;
+  nextPreference: ComputedRef<ThemePreference>;
+  naiveTheme: ComputedRef<GlobalTheme | undefined>;
+  themeOverrides: ComputedRef<GlobalThemeOverrides>;
+  cycleThemePreference: () => void;
+} {
+  const colorMode = useColorMode({
+    attribute: "data-theme",
+    disableTransition: true,
+    initialValue: "auto",
+    storageKey: themeStorageKey,
+  });
+
+  const preference = computed<ThemePreference>({
+    get: () => normalizeStoredPreference(colorMode.store.value),
+    set: (value) => {
+      colorMode.store.value = storedThemePreference(value);
+    },
+  });
+  const effectiveTheme = computed<EffectiveTheme>(() =>
+    colorMode.state.value === "dark" ? "dark" : "light",
+  );
+  const nextPreference = computed(() => nextThemePreference(preference.value));
+  const naiveTheme = computed(() =>
+    effectiveTheme.value === "dark" ? darkTheme : undefined,
+  );
+  const activeThemeOverrides = computed(
+    () => themeOverridesByMode[effectiveTheme.value],
+  );
+
+  watchEffect(() => {
+    applyThemeCssVars(effectiveTheme.value);
+  });
+
+  return {
+    preference,
+    effectiveTheme,
+    nextPreference,
+    naiveTheme,
+    themeOverrides: activeThemeOverrides,
+    cycleThemePreference: () => {
+      preference.value = nextPreference.value;
+    },
+  };
+}

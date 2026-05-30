@@ -7,6 +7,7 @@ import App from "../src/App.vue";
 import { createWudRouter } from "../src/router";
 import { useAuthStore } from "../src/stores/auth";
 import { useWebuiStore } from "../src/stores/webui";
+import { themeStorageKey } from "../src/theme";
 import { authSession } from "./helpers/fixtures";
 import { mountWithApp } from "./helpers/mount";
 
@@ -102,5 +103,54 @@ describe("app shell", () => {
     await nextTick();
 
     expect(wrapper.text()).toContain("Mutations enabled");
+  });
+
+  it("cycles theme preference from system to light to dark", async () => {
+    const pinia = createPinia();
+    setActivePinia(pinia);
+    const auth = useAuthStore();
+    auth.session = authSession({ mutations_enabled: false });
+    const webui = useWebuiStore();
+    vi.spyOn(webui, "loadDashboard").mockResolvedValue();
+    const router = createWudRouter(createMemoryHistory());
+    await router.push("/");
+    await router.isReady();
+
+    const wrapper = mountWithApp(App, { pinia, router });
+    const themeButton = () => {
+      const button = wrapper
+        .findAll("button")
+        .find((candidate) =>
+          candidate.attributes("aria-label")?.includes("theme"),
+        );
+      if (!button) {
+        throw new Error("theme button was not rendered");
+      }
+      return button;
+    };
+
+    expect(themeButton().attributes("aria-label")).toContain("System theme");
+    expect(themeButton().attributes("title")).toBe("Theme: System theme (light)");
+
+    await themeButton().trigger("click");
+    await nextTick();
+
+    expect(window.localStorage.getItem(themeStorageKey)).toBe("light");
+    expect(document.documentElement.dataset.theme).toBe("light");
+    expect(themeButton().attributes("aria-label")).toContain("Light theme");
+
+    await themeButton().trigger("click");
+    await nextTick();
+
+    expect(window.localStorage.getItem(themeStorageKey)).toBe("dark");
+    expect(document.documentElement.dataset.theme).toBe("dark");
+    expect(themeButton().attributes("aria-label")).toContain("Dark theme");
+
+    await themeButton().trigger("click");
+    await nextTick();
+
+    expect(window.localStorage.getItem(themeStorageKey)).toBe("auto");
+    expect(document.documentElement.dataset.theme).toBe("light");
+    expect(themeButton().attributes("aria-label")).toContain("System theme");
   });
 });

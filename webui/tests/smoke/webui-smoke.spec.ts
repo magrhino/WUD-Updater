@@ -390,6 +390,50 @@ test("mobile shell keeps page width stable and preserves link targets", async ({
   expect(historyLinkBox?.height).toBeGreaterThanOrEqual(44);
 });
 
+test("theme toggle follows system dark mode and cycles preferences", async ({
+  page,
+}) => {
+  const state = createState({ authenticated: true, mutationsEnabled: false });
+  await page.emulateMedia({ colorScheme: "dark" });
+  await installApiFixtures(page, state);
+
+  await page.goto("/#/");
+  await expect(page.getByRole("heading", { name: "Dashboard" })).toBeVisible();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+  await expect
+    .poll(() =>
+      page.evaluate(() =>
+        getComputedStyle(document.documentElement)
+          .getPropertyValue("--color-body-bg")
+          .trim(),
+      ),
+    )
+    .toBe("#0f171a");
+
+  await page.getByRole("button", { name: /System theme/ }).click();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+  await expect
+    .poll(() => page.evaluate(() => localStorage.getItem("theme-preference")))
+    .toBe("light");
+
+  await page.getByRole("button", { name: /Light theme/ }).click();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+  await expect
+    .poll(() => page.evaluate(() => localStorage.getItem("theme-preference")))
+    .toBe("dark");
+
+  await page.getByRole("button", { name: /Dark theme/ }).click();
+  await expect(page.getByRole("button", { name: /System theme/ })).toBeVisible();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+  await expect
+    .poll(() => page.evaluate(() => localStorage.getItem("theme-preference")))
+    .toBe("auto");
+  await expect.poll(() => sensitiveStorageKeys(page)).toEqual({
+    local: [],
+    session: [],
+  });
+});
+
 test("mutation-enabled pending flow creates jobs only after confirmation", async ({
   page,
 }) => {

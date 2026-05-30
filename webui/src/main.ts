@@ -20,7 +20,7 @@ import {
 
 import App from "./App.vue";
 import { router } from "./router";
-import { applyThemeCssVars } from "./theme";
+import { applyThemeCssVars, detectInitialEffectiveTheme } from "./theme";
 import "./styles.css";
 
 const naive = create({
@@ -44,7 +44,7 @@ const naive = create({
 
 const app = createApp(App);
 
-applyThemeCssVars();
+applyThemeCssVars(detectInitialEffectiveTheme());
 
 app.use(createPinia());
 app.use(router);
