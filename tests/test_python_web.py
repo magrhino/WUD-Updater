@@ -866,6 +866,26 @@ def test_status_reports_missing_database_without_creating_it(tmp_path: Path) -> 
     assert not db_path.exists()
 
 
+def test_status_counts_pending_without_resolving_groups(tmp_path: Path) -> None:
+    fake_env, fake_root = _fake_docker_env(tmp_path)
+    client = _client(tmp_path, {"WUD_WEB_DEV_NO_AUTH": "true", **fake_env})
+    wud_file = tmp_path / "state" / "images.todo"
+    wud_file.write_text("repo/app:latest\n", encoding="utf-8")
+    _make_fake_stack(
+        tmp_path,
+        fake_root,
+        "stack",
+        [("app", "repo/app:latest", "cid-app")],
+    )
+
+    response = client.get("/api/v1/status")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["pending_count"] == 1
+    assert _fake_docker_calls(fake_root) == ""
+
+
 def test_pending_endpoint_reads_wud_file_without_mutation(tmp_path: Path) -> None:
     wud_file = tmp_path / "state" / "images.todo"
     client = _client(tmp_path, {"WUD_WEB_DEV_NO_AUTH": "true"})

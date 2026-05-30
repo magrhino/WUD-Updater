@@ -1065,7 +1065,7 @@ def api_healthz() -> HealthResponse:
 
 def api_status(request: Request) -> StatusResponse:
     settings = _settings(request)
-    pending = _pending_response(settings)
+    pending = _pending_response(settings, include_grouping=False)
     db_ready, db_warning = _database_ready(settings)
     warnings = list(pending.warnings)
     if db_warning:
@@ -1745,7 +1745,11 @@ def _sse_job_event(job: ApplyJobResponse) -> str:
     return f"event: job\ndata: {payload}\n\n"
 
 
-def _pending_response(settings: WebSettings) -> PendingResponse:
+def _pending_response(
+    settings: WebSettings,
+    *,
+    include_grouping: bool = True,
+) -> PendingResponse:
     exists, parsed = _parse_pending_file(settings)
     items = [
         PendingItem(
@@ -1767,7 +1771,11 @@ def _pending_response(settings: WebSettings) -> PendingResponse:
         exists=exists,
         count=len(items),
         items=items,
-        grouping=_pending_grouping_response(settings, parsed),
+        grouping=(
+            _pending_grouping_response(settings, parsed)
+            if include_grouping
+            else PendingGrouping(status="unavailable")
+        ),
         warnings=list(parsed.warnings),
     )
 
