@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import sqlite3
 import subprocess
 import sys
@@ -26,13 +27,48 @@ class WebuiDemoStateTests(unittest.TestCase):
 
             wud_file = root / "out" / "images.todo"
             db_path = root / "logs" / "wud-updater.sqlite"
+            docker_base = root / "docker"
+            fake_docker_root = root / "fake-docker"
             logs = sorted(path.name for path in (root / "logs").glob("demo-*.log"))
+            compose_files = sorted(
+                path.relative_to(docker_base).as_posix()
+                for path in docker_base.glob("*/docker-compose.yml")
+            )
 
             self.assertIn("home-assistant", wud_file.read_text(encoding="utf-8"))
             self.assertEqual(
                 logs,
                 ["demo-dry-run.log", "demo-failed.log", "demo-success.log"],
             )
+            self.assertEqual(
+                compose_files,
+                [
+                    "data/docker-compose.yml",
+                    "home/docker-compose.yml",
+                    "media/docker-compose.yml",
+                ],
+            )
+            self.assertIn(
+                "lscr.io/linuxserver/radarr:5.21.1",
+                (docker_base / "media" / "docker-compose.yml").read_text(
+                    encoding="utf-8"
+                ),
+            )
+            self.assertTrue((fake_docker_root / "calls.log").exists())
+            self.assertTrue((fake_docker_root / "containers.tsv").exists())
+            result = subprocess.run(
+                ["docker", "compose", "-f", "docker-compose.yml", "config", "--images"],
+                cwd=docker_base / "media",
+                env={
+                    **os.environ,
+                    "PATH": f"{repo_root / 'tests' / 'fakes'}:{os.environ['PATH']}",
+                    "FAKE_DOCKER_ROOT": str(fake_docker_root),
+                },
+                check=True,
+                text=True,
+                capture_output=True,
+            )
+            self.assertIn("ghcr.io/magrhino/wud-updater:v0.16.0", result.stdout)
             with sqlite3.connect(db_path) as conn:
                 run_count = conn.execute("SELECT COUNT(*) FROM update_runs").fetchone()
                 pending_count = conn.execute(

@@ -105,7 +105,7 @@ function releaseNotesResponse() {
   };
 }
 
-function planResponse() {
+function planResponse(overrides: Record<string, unknown> = {}) {
   return {
     plan_id: "plan-smoke",
     dry_run: true,
@@ -163,6 +163,7 @@ function planResponse() {
     ],
     skipped: [],
     issues: [],
+    ...overrides,
   };
 }
 
@@ -283,7 +284,7 @@ async function fulfillApi(
     return;
   }
   if (path === "/api/v1/plans" && method === "POST") {
-    await json(route, planResponse());
+    await json(route, planResponse({ can_apply: state.mutationsEnabled }));
     return;
   }
   if (path === "/api/v1/jobs" && method === "POST") {
@@ -403,16 +404,19 @@ test("login requests csrf and does not store secrets in browser storage", async 
   });
 });
 
-test("read-only pending view cannot plan or apply selected updates", async ({ page }) => {
+test("read-only pending flow can preview a stack but cannot apply", async ({ page }) => {
   const state = createState({ authenticated: true, mutationsEnabled: false });
   await installApiFixtures(page, state);
 
   await page.goto("/#/pending");
-  await page.getByRole("button", { name: /Select all/ }).click();
+  await page.getByRole("checkbox", { name: /Select stack media/ }).check();
+  await page.getByRole("button", { name: /Preview plan/ }).click();
 
-  await expect(page.getByText("Read-only mode is active")).toBeVisible();
-  await expect(page.getByRole("button", { name: /Update selected/ })).toBeDisabled();
-  expect(state.calls.some((call) => call.path === "/api/v1/plans")).toBe(false);
+  await expect(page.getByText("Read-only mode is active").first()).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Ready dry run" })).toBeVisible();
+  await expect(page.getByRole("button", { name: /Apply plan/ })).toHaveCount(0);
+  expect(state.calls.some((call) => call.path === "/api/v1/plans")).toBe(true);
+  expect(state.calls.some((call) => call.path === "/api/v1/jobs")).toBe(false);
 });
 
 test("mobile shell keeps page width stable and preserves link targets", async ({
@@ -446,6 +450,18 @@ test("mobile shell keeps page width stable and preserves link targets", async ({
     .boundingBox();
   expect(pendingLinkBox?.height).toBeGreaterThanOrEqual(44);
   expect(historyLinkBox?.height).toBeGreaterThanOrEqual(44);
+
+  await page.goto("/#/pending");
+  await expect(page.getByRole("checkbox", { name: /Select stack media/ })).toBeVisible();
+  await expect(page.getByText("Possible breaking change")).toBeVisible();
+  await expect
+    .poll(() =>
+      page.evaluate(() => ({
+        innerWidth: window.innerWidth,
+        scrollWidth: document.documentElement.scrollWidth,
+      })),
+    )
+    .toEqual({ innerWidth: 390, scrollWidth: 390 });
 });
 
 test("theme toggle follows system dark mode and cycles preferences", async ({
@@ -520,20 +536,25 @@ test("mutation-enabled pending flow creates jobs only after confirmation", async
   await installApiFixtures(page, state);
 
   await page.goto("/#/pending");
-  await page.getByRole("button", { name: /Select all/ }).click();
-  await page.getByRole("button", { name: /Update selected/ }).click();
+  await page.getByRole("checkbox", { name: /Select stack media/ }).check();
+  await page.getByRole("button", { name: /Preview plan/ }).click();
+  await expect(page.getByRole("heading", { name: "Ready dry run" })).toBeVisible();
+  await page.getByRole("button", { name: /Apply plan/ }).click();
 
   const dialog = page.getByRole("dialog").filter({
-    hasText: "Apply selected updates",
+    hasText: "Apply update plan",
   });
   await expect(dialog).toBeVisible();
   expect(state.calls.some((call) => call.path === "/api/v1/jobs")).toBe(false);
 
-  await dialog.getByRole("button", { name: "Apply" }).click();
+  await dialog.getByRole("button", { name: "Apply plan" }).click();
 
   const planCall = state.calls.find((call) => call.path === "/api/v1/plans");
   const jobCall = state.calls.find((call) => call.path === "/api/v1/jobs");
   expect(planCall?.headers["x-wud-csrf-token"]).toBe(csrfToken);
+  expect(planCall?.body).toMatchObject({
+    line_numbers: [1],
+  });
   expect(jobCall?.headers["x-wud-csrf-token"]).toBe(csrfToken);
   expect(jobCall?.body).toMatchObject({
     plan_id: "plan-smoke",

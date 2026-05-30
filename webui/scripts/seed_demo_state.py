@@ -5,6 +5,8 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
+import shutil
 import sys
 from pathlib import Path
 
@@ -30,6 +32,28 @@ PENDING_LINES = (
     "lscr.io/linuxserver/radarr:5.21.1 tag=5.22.4",
     "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
     "ghcr.io/magrhino/wud-updater:v0.16.0 tag=v0.16.1",
+)
+
+DEMO_STACKS = (
+    {
+        "name": "home",
+        "services": (
+            ("home-assistant", "ghcr.io/home-assistant/home-assistant:2026.5.1"),
+        ),
+    },
+    {
+        "name": "media",
+        "services": (
+            ("radarr", "lscr.io/linuxserver/radarr:5.21.1"),
+            ("wud-updater", "ghcr.io/magrhino/wud-updater:v0.16.0"),
+        ),
+    },
+    {
+        "name": "data",
+        "services": (
+            ("postgres", "postgres:16"),
+        ),
+    },
 )
 
 RUNS = (
@@ -174,6 +198,8 @@ def main() -> int:
     paths = seed_demo_state(args.root)
     if not args.quiet:
         print("Created WebUI demo state:")
+        print(f"  DOCKER_BASE={paths['docker_base']}")
+        print(f"  FAKE_DOCKER_ROOT={paths['fake_docker_root']}")
         print(f"  WUD_OUT_FILE={paths['wud_file']}")
         print(f"  WUD_LOG_DIR={paths['log_dir']}")
         print(f"  WUD_DB_PATH={paths['db_path']}")
@@ -185,17 +211,20 @@ def seed_demo_state(root: Path) -> dict[str, Path]:
     out_dir = root / "out"
     log_dir = root / "logs"
     docker_base = root / "docker"
+    fake_docker_root = root / "fake-docker"
     wud_file = out_dir / "images.todo"
     db_path = log_dir / "wud-updater.sqlite"
 
     out_dir.mkdir(parents=True, exist_ok=True)
     log_dir.mkdir(parents=True, exist_ok=True)
-    docker_base.mkdir(parents=True, exist_ok=True)
+    _reset_directory(docker_base)
+    _reset_directory(fake_docker_root)
 
     wud_file.write_text("\n".join(PENDING_LINES) + "\n", encoding="utf-8")
     for path in log_dir.glob("demo-*.log"):
         path.unlink()
     _reset_sqlite(db_path)
+    _write_demo_stacks(docker_base, fake_docker_root)
 
     with connect_db(db_path) as conn:
         init_db(conn)
@@ -258,9 +287,16 @@ def seed_demo_state(root: Path) -> dict[str, Path]:
         "out_dir": out_dir,
         "log_dir": log_dir,
         "docker_base": docker_base,
+        "fake_docker_root": fake_docker_root,
         "wud_file": wud_file,
         "db_path": db_path,
     }
+
+
+def _reset_directory(path: Path) -> None:
+    if path.exists():
+        shutil.rmtree(path)
+    path.mkdir(parents=True, exist_ok=True)
 
 
 def _reset_sqlite(db_path: Path) -> None:
@@ -268,6 +304,88 @@ def _reset_sqlite(db_path: Path) -> None:
         path = Path(f"{db_path}{suffix}")
         if path.exists():
             path.unlink()
+
+
+def _write_demo_stacks(docker_base: Path, fake_docker_root: Path) -> None:
+    for directory in (
+        fake_docker_root / "stacks",
+        fake_docker_root / "images",
+        fake_docker_root / "manifests",
+        fake_docker_root / "containers",
+    ):
+        directory.mkdir(parents=True, exist_ok=True)
+
+    containers: list[str] = []
+    for stack in DEMO_STACKS:
+        stack_name = str(stack["name"])
+        services = tuple(stack["services"])
+        stack_dir = docker_base / stack_name
+        stack_dir.mkdir(parents=True, exist_ok=True)
+        (stack_dir / ".fake-docker-id").write_text(f"{stack_name}\n", encoding="utf-8")
+        _write_compose_file(stack_dir / "docker-compose.yml", services)
+        _write_fake_stack_state(fake_docker_root, stack_name, services, containers)
+
+    (fake_docker_root / "containers.tsv").write_text(
+        "".join(containers),
+        encoding="utf-8",
+    )
+    (fake_docker_root / "calls.log").write_text("", encoding="utf-8")
+
+
+def _write_compose_file(path: Path, services: tuple[tuple[str, str], ...]) -> None:
+    lines = ["services:\n"]
+    for service, image in services:
+        lines.extend(
+            [
+                f"  {service}:\n",
+                f"    image: {image}\n",
+                "    restart: unless-stopped\n",
+            ]
+        )
+    path.write_text("".join(lines), encoding="utf-8")
+
+
+def _write_fake_stack_state(
+    fake_docker_root: Path,
+    stack_name: str,
+    services: tuple[tuple[str, str], ...],
+    containers: list[str],
+) -> None:
+    stack_state = fake_docker_root / "stacks" / stack_name
+    stack_state.mkdir(parents=True, exist_ok=True)
+    service_lines: list[str] = []
+    image_lines: list[str] = []
+    cid_lines: list[str] = []
+    service_image_rows: list[str] = []
+    for service, image in services:
+        cid = f"cid-{stack_name}-{service}"
+        service_lines.append(f"{service}\n")
+        image_lines.append(f"{image}\n")
+        cid_lines.append(f"{cid}\n")
+        service_image_rows.append(f"{service}\t{image}\n")
+        (stack_state / f"cids-{service}.txt").write_text(f"{cid}\n", encoding="utf-8")
+        (fake_docker_root / "containers" / f"{cid}.summary").write_text(
+            f"/{cid}|running|healthy|0|0\n",
+            encoding="utf-8",
+        )
+        containers.append(f"{stack_name}-{service}\t{image}\n")
+        _write_fake_image_state(fake_docker_root, image)
+
+    (stack_state / "services.txt").write_text("".join(service_lines), encoding="utf-8")
+    (stack_state / "images.txt").write_text("".join(image_lines), encoding="utf-8")
+    (stack_state / "cids.txt").write_text("".join(cid_lines), encoding="utf-8")
+    (stack_state / "service-images.tsv").write_text(
+        "".join(service_image_rows),
+        encoding="utf-8",
+    )
+
+
+def _write_fake_image_state(fake_docker_root: Path, image: str) -> None:
+    safe = re.sub(r"[^A-Za-z0-9._-]", "_", image)
+    image_dir = fake_docker_root / "images"
+    digest = f"{image}@sha256:{safe[:12].ljust(12, '0')}"
+    (image_dir / f"{safe}.id").write_text(f"sha256:{safe}\n", encoding="utf-8")
+    (image_dir / f"{safe}.digests").write_text(f"{digest}\n", encoding="utf-8")
 
 
 if __name__ == "__main__":

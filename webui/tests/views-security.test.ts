@@ -15,6 +15,8 @@ import {
 import {
   applyJobResponse,
   authSession,
+  pendingGroupedItem,
+  pendingGrouping,
   pendingItem,
   pendingResponse,
   planResponse,
@@ -40,37 +42,161 @@ function buttonByText(wrapperText: string, text: string) {
   return wrapperText.includes(text);
 }
 
+function mockPendingLifecycle(webui: ReturnType<typeof useWebuiStore>) {
+  vi.spyOn(webui, "loadPending").mockResolvedValue();
+  vi.spyOn(webui, "loadReleaseNotes").mockResolvedValue();
+  vi.spyOn(webui, "refreshReleaseNotes").mockResolvedValue();
+}
+
 describe("mutating WebUI views", () => {
   beforeEach(() => {
     setActivePinia(createPinia());
   });
 
-  it("keeps pending updates read-only when mutations are disabled", async () => {
+  it("allows read-only pending previews but blocks apply", async () => {
     const { pinia, webui } = setupStores(false);
     webui.pending = pendingResponse();
-    vi.spyOn(webui, "loadPending").mockResolvedValue();
-    const createPlan = vi.spyOn(webui, "createPlan");
+    mockPendingLifecycle(webui);
+    const createPlan = vi.spyOn(webui, "createPlan").mockImplementation(async () => {
+      webui.plan = planResponse({ can_apply: false });
+    });
+    const createJob = vi.spyOn(webui, "createJob");
+    const wrapper = mountWithApp(PendingView, { pinia });
+
+    await wrapper
+      .find('input[aria-label="Select stack media"]')
+      .setValue(true);
+    await wrapper
+      .findAll("button")
+      .find((button) => button.text().includes("Preview plan"))
+      ?.trigger("click");
+
+    expect(wrapper.text()).toContain("Read-only mode is active");
+    expect(createPlan).toHaveBeenCalledWith([1], false, []);
+    expect(
+      wrapper
+        .findAll("button")
+        .some((button) => button.text().includes("Apply plan")),
+    ).toBe(false);
+    expect(createJob).not.toHaveBeenCalled();
+  });
+
+  it("previews selected stack line numbers", async () => {
+    const { pinia, webui } = setupStores(true);
+    webui.pending = pendingResponse([
+      pendingItem({ line_no: 4, image: "repo/app:1.0", repo: "repo/app" }),
+      pendingItem({ line_no: 9, image: "repo/worker:1.0", repo: "repo/worker" }),
+    ]);
+    mockPendingLifecycle(webui);
+    const createPlan = vi.spyOn(webui, "createPlan").mockResolvedValue();
+    const wrapper = mountWithApp(PendingView, { pinia });
+
+    await wrapper
+      .find('input[aria-label="Select stack media"]')
+      .setValue(true);
+    await wrapper
+      .findAll("button")
+      .find((button) => button.text().includes("Preview plan"))
+      ?.trigger("click");
+
+    expect(createPlan).toHaveBeenCalledWith([4, 9], false, []);
+  });
+
+  it("marks a stack indeterminate after one grouped item is deselected", async () => {
+    const { pinia, webui } = setupStores(true);
+    webui.pending = pendingResponse([
+      pendingItem({ line_no: 1, image: "repo/app:1.0", repo: "repo/app" }),
+      pendingItem({ line_no: 2, image: "repo/worker:1.0", repo: "repo/worker" }),
+    ]);
+    mockPendingLifecycle(webui);
+    const createPlan = vi.spyOn(webui, "createPlan").mockResolvedValue();
+    const wrapper = mountWithApp(PendingView, { pinia });
+    const stackCheckbox = wrapper.find('input[aria-label="Select stack media"]');
+
+    await stackCheckbox.setValue(true);
+    await wrapper
+      .find('input[aria-label="Select update repo/worker:1.0"]')
+      .setValue(false);
+    await wrapper
+      .findAll("button")
+      .find((button) => button.text().includes("Preview plan"))
+      ?.trigger("click");
+
+    expect(
+      wrapper.find('input[aria-label="Select stack media"]').attributes("aria-checked"),
+    ).toBe("mixed");
+    expect(createPlan).toHaveBeenCalledWith([1], false, []);
+  });
+
+  it("excludes unmatched items from select all stack updates", async () => {
+    const stackItem = pendingGroupedItem({
+      line_no: 1,
+      image: "repo/app:1.0",
+      repo: "repo/app",
+    });
+    const unmatchedItem = pendingGroupedItem({
+      line_no: 2,
+      image: "repo/loose:1.0",
+      repo: "repo/loose",
+      services: [],
+    });
+    const { pinia, webui } = setupStores(true);
+    webui.pending = {
+      ...pendingResponse([stackItem, unmatchedItem]),
+      grouping: {
+        ...pendingGrouping([stackItem]),
+        unmatched: [unmatchedItem],
+      },
+    };
+    mockPendingLifecycle(webui);
+    const createPlan = vi.spyOn(webui, "createPlan").mockResolvedValue();
     const wrapper = mountWithApp(PendingView, { pinia });
 
     await wrapper
       .findAll("button")
-      .find((button) => button.text().includes("Select all"))
+      .find((button) => button.text().includes("Select all stack updates"))
+      ?.trigger("click");
+    await wrapper
+      .findAll("button")
+      .find((button) => button.text().includes("Preview plan"))
       ?.trigger("click");
 
-    expect(wrapper.text()).toContain("Read-only mode is active");
-    const updateButton = wrapper
+    expect(wrapper.text()).toContain("Needs review");
+    expect(createPlan).toHaveBeenCalledWith([1], false, []);
+  });
+
+  it("selects tag update rows and enables tag rewrites when an override is edited", async () => {
+    const item = pendingItem();
+    const { pinia, webui } = setupStores(true);
+    webui.pending = pendingResponse([item]);
+    mockPendingLifecycle(webui);
+    const createPlan = vi.spyOn(webui, "createPlan").mockResolvedValue();
+    const wrapper = mountWithApp(PendingView, { pinia });
+
+    await wrapper
+      .find(`input[aria-label="New tag for ${item.image}"]`)
+      .setValue("1.2");
+    await wrapper
       .findAll("button")
-      .find((button) => button.text().includes("Update selected"));
-    expect(updateButton?.attributes("disabled")).toBeDefined();
-    await updateButton?.trigger("click");
-    expect(createPlan).not.toHaveBeenCalled();
+      .find((button) => button.text().includes("Preview plan"))
+      ?.trigger("click");
+
+    expect(
+      (wrapper.find(`input[aria-label="Select update ${item.image}"]`).element as HTMLInputElement)
+        .checked,
+    ).toBe(true);
+    expect(createPlan).toHaveBeenCalledWith(
+      [1],
+      true,
+      [{ line_no: 1, tag: "1.2" }],
+    );
   });
 
   it("blocks invalid pending tag overrides before planning", async () => {
     const item = pendingItem();
     const { pinia, webui } = setupStores(true);
     webui.pending = pendingResponse([item]);
-    vi.spyOn(webui, "loadPending").mockResolvedValue();
+    mockPendingLifecycle(webui);
     const createPlan = vi.spyOn(webui, "createPlan");
     const wrapper = mountWithApp(PendingView, { pinia });
 
@@ -82,13 +208,33 @@ describe("mutating WebUI views", () => {
       .find(`input[aria-label="New tag for ${item.image}"]`)
       .setValue("bad tag");
 
-    expect(wrapper.text()).toContain("Line 1 has an invalid new tag");
+    expect(wrapper.text()).toContain(`${item.image} has an invalid new tag`);
     const previewButton = wrapper
       .findAll("button")
       .find((button) => button.text().includes("Preview plan"));
     expect(previewButton?.attributes("disabled")).toBeDefined();
     await previewButton?.trigger("click");
     expect(createPlan).not.toHaveBeenCalled();
+  });
+
+  it("falls back to pending file order when grouping is unavailable", () => {
+    const { pinia, webui } = setupStores(true);
+    webui.pending = {
+      ...pendingResponse(),
+      grouping: {
+        status: "unavailable",
+        groups: [],
+        unmatched: [],
+        warnings: [],
+      },
+    };
+    mockPendingLifecycle(webui);
+    const wrapper = mountWithApp(PendingView, { pinia });
+
+    expect(wrapper.text()).toContain(
+      "Stack grouping is unavailable. Showing pending file order.",
+    );
+    expect(wrapper.find('[role="table"]').exists()).toBe(true);
   });
 
   it("renders release-note links with breaking cues", () => {

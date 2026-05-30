@@ -7,7 +7,9 @@ import { NInput, type DataTableColumns, type DataTableRowKey } from "naive-ui";
 import {
   webApi,
   type ApplyJobResponse,
+  type PendingGroupedItem,
   type PendingItem,
+  type PendingStackGroup,
   type PlanAction,
   type PlanIssue,
   type ReleaseNoteInfo,
@@ -77,6 +79,24 @@ const columns = computed<DataTableColumns<PendingItem>>(() => [
 const allLineNumbers = computed(
   () => webui.pending?.items.map((item) => item.line_no) ?? [],
 );
+const groupingReady = computed(
+  () => webui.pending?.grouping.status === "ready",
+);
+const stackGroups = computed(() =>
+  groupingReady.value ? (webui.pending?.grouping.groups ?? []) : [],
+);
+const unmatchedItems = computed(() =>
+  groupingReady.value ? (webui.pending?.grouping.unmatched ?? []) : [],
+);
+const stackLineNumbers = computed(() =>
+  uniqueSorted(stackGroups.value.flatMap((group) => group.line_numbers)),
+);
+const selectableLineNumbers = computed(() =>
+  groupingReady.value ? stackLineNumbers.value : allLineNumbers.value,
+);
+const selectAllLabel = computed(() =>
+  groupingReady.value ? "Select all stack updates" : "Select all",
+);
 const releaseNotesByLine = computed(() => {
   const notes = new Map<number, ReleaseNoteInfo>();
   for (const item of webui.releaseNotes?.items ?? []) {
@@ -86,6 +106,12 @@ const releaseNotesByLine = computed(() => {
 });
 const latestRun = computed(() => webui.runs[0] ?? null);
 const selectedLineSet = computed(() => new Set(selectedLineNumbers.value));
+const mutationStateLabel = computed(() =>
+  auth.session?.mutations_enabled ? "Mutations enabled" : "Read-only",
+);
+const mutationStateType = computed(() =>
+  auth.session?.mutations_enabled ? "warning" : "success",
+);
 const selectedTagOverrideError = computed(() => {
   for (const item of webui.pending?.items ?? []) {
     if (!selectedLineSet.value.has(item.line_no) || !item.desired_tag) {
@@ -93,7 +119,7 @@ const selectedTagOverrideError = computed(() => {
     }
     const tag = tagOverrideValue(item).trim();
     if (!tagValuePattern.test(tag)) {
-      return `Line ${item.line_no} has an invalid new tag. Use a Docker tag value like ${item.desired_tag}.`;
+      return `${item.image} has an invalid new tag. Use a Docker tag value like ${item.desired_tag}.`;
     }
   }
   return "";
@@ -143,18 +169,6 @@ const applyAvailable = computed(
   () => webui.plan?.status === "ready" && webui.plan.can_apply,
 );
 const applyDisabled = computed(() => !applyAvailable.value || webui.loading);
-const directUpdateDisabled = computed(
-  () => planningDisabled.value || !auth.session?.mutations_enabled,
-);
-const directUpdateTitle = computed(() => {
-  if (!auth.session?.mutations_enabled) {
-    return "Read-only mode is active. Set WUD_WEB_MUTATIONS_ENABLED=true on the server to apply updates.";
-  }
-  if (selectedTagOverrideError.value) {
-    return selectedTagOverrideError.value;
-  }
-  return "";
-});
 const readOnlySelectionMessage = computed(() => {
   if (selectedLineNumbers.value.length && !auth.session?.mutations_enabled) {
     return "Read-only mode is active. Set WUD_WEB_MUTATIONS_ENABLED=true on the server to apply updates.";
@@ -209,6 +223,10 @@ function displayDigest(value: string): string {
 
 function releaseNoteFor(item: PendingItem): ReleaseNoteInfo | null {
   return releaseNotesByLine.value.get(item.line_no) ?? null;
+}
+
+function uniqueSorted(values: number[]): number[] {
+  return [...new Set(values)].sort((left, right) => left - right);
 }
 
 function releaseNoteStatus(note: ReleaseNoteInfo | null): string {
@@ -309,6 +327,12 @@ function updateTagOverride(item: PendingItem, value: string): void {
     ...tagOverrides.value,
     [item.line_no]: value,
   };
+  if (!selectedLineSet.value.has(item.line_no)) {
+    selectedLineNumbers.value = uniqueSorted([
+      ...selectedLineNumbers.value,
+      item.line_no,
+    ]);
+  }
   if (value.trim() !== item.desired_tag) {
     allowTagUpdates.value = true;
   }
@@ -334,13 +358,44 @@ function toggleLine(lineNo: number, checked: boolean): void {
   webui.clearPlan();
 }
 
-function selectAll(): void {
-  selectedLineNumbers.value = [...allLineNumbers.value];
+function selectAllVisible(): void {
+  selectedLineNumbers.value = [...selectableLineNumbers.value];
   webui.clearPlan();
 }
 
 function clearSelection(): void {
   selectedLineNumbers.value = [];
+  webui.clearPlan();
+}
+
+function stackSelected(group: PendingStackGroup): boolean {
+  return (
+    group.line_numbers.length > 0 &&
+    group.line_numbers.every((lineNo) => selectedLineSet.value.has(lineNo))
+  );
+}
+
+function stackIndeterminate(group: PendingStackGroup): boolean {
+  return (
+    group.line_numbers.some((lineNo) => selectedLineSet.value.has(lineNo)) &&
+    !stackSelected(group)
+  );
+}
+
+function stackHasSelection(group: PendingStackGroup): boolean {
+  return group.line_numbers.some((lineNo) => selectedLineSet.value.has(lineNo));
+}
+
+function toggleStack(group: PendingStackGroup, checked: boolean): void {
+  const selected = new Set(selectedLineNumbers.value);
+  for (const lineNo of group.line_numbers) {
+    if (checked) {
+      selected.add(lineNo);
+    } else {
+      selected.delete(lineNo);
+    }
+  }
+  selectedLineNumbers.value = uniqueSorted([...selected]);
   webui.clearPlan();
 }
 
@@ -353,20 +408,6 @@ async function createPlan(): Promise<void> {
     allowTagUpdates.value,
     requestTagOverrides.value,
   );
-}
-
-async function prepareDirectUpdate(): Promise<void> {
-  if (directUpdateDisabled.value) {
-    return;
-  }
-  await webui.createPlan(
-    selectedLineNumbers.value,
-    allowTagUpdates.value,
-    requestTagOverrides.value,
-  );
-  if (webui.plan?.status === "ready" && webui.plan.can_apply) {
-    showApplyConfirm.value = true;
-  }
 }
 
 function clearPlanOnOptionChange(): void {
@@ -494,6 +535,31 @@ function issueLabel(issue: PlanIssue): string {
   return target ? `${target}: ${issue.message}` : issue.message;
 }
 
+function pluralize(count: number, singular: string, plural = `${singular}s`): string {
+  return `${count} ${count === 1 ? singular : plural}`;
+}
+
+function groupTagChangeCount(group: PendingStackGroup): number {
+  return group.items.filter((item) => item.desired_tag || item.action === "tag-update")
+    .length;
+}
+
+function itemsBreakingCount(items: PendingGroupedItem[]): number {
+  return items.filter((item) => releaseNoteFor(item)?.breaking).length;
+}
+
+function groupedItemServices(item: PendingGroupedItem): string {
+  return item.services.length ? item.services.join(", ") : "stack-level";
+}
+
+function groupedItemTarget(item: PendingGroupedItem): string {
+  return item.target_image || item.resolved_image || item.image;
+}
+
+function groupedItemActionLabel(item: PendingGroupedItem): string {
+  return item.action === "tag-update" ? "Tag update" : "Image update";
+}
+
 async function loadPendingAndReleaseNotes(): Promise<void> {
   await webui.loadPending();
   await webui.loadReleaseNotes().catch(() => undefined);
@@ -526,19 +592,18 @@ onUnmounted(() => {
 
 <template>
   <section class="content-stack">
-    <n-alert v-if="webui.error" type="error" :show-icon="false">
+    <n-alert v-if="webui.error" type="error">
       {{ webui.error }}
     </n-alert>
-    <n-alert v-if="webui.pending && !webui.pending.exists" type="warning" :show-icon="false">
+    <n-alert v-if="webui.pending && !webui.pending.exists" type="warning">
       {{ webui.pending.source_file }} is missing.
     </n-alert>
-    <n-alert v-if="webui.releaseNotesError" type="warning" :show-icon="false">
+    <n-alert v-if="webui.releaseNotesError" type="warning">
       Release-note metadata is unavailable: {{ webui.releaseNotesError }}
     </n-alert>
     <n-alert
       v-if="webui.applyJobRecovery"
       type="warning"
-      :show-icon="false"
     >
       {{ webui.applyJobRecovery }}
       <span class="inline-actions recovery-actions">
@@ -567,13 +632,31 @@ onUnmounted(() => {
         </p>
         <h2>{{ webui.pending?.count ?? 0 }} pending updates</h2>
       </div>
+      <n-tag size="small" :type="mutationStateType">{{ mutationStateLabel }}</n-tag>
+    </div>
+
+    <div class="selection-toolbar">
+      <div class="selection-summary">
+        <strong>{{ selectedLineNumbers.length }} selected</strong>
+        <span v-if="groupingReady">
+          {{ pluralize(stackGroups.length, "stack") }} available
+          <template v-if="unmatchedItems.length">
+            - {{ pluralize(unmatchedItems.length, "item") }} needs review
+          </template>
+        </span>
+        <span v-else>Pending file order</span>
+      </div>
       <div class="inline-actions pending-actions">
-        <n-tag size="small">{{ selectedLineNumbers.length }} selected</n-tag>
-        <n-button size="small" quaternary :disabled="!allLineNumbers.length" @click="selectAll">
+        <n-button
+          size="small"
+          quaternary
+          :disabled="!selectableLineNumbers.length"
+          @click="selectAllVisible"
+        >
           <template #icon>
             <Check :size="16" />
           </template>
-          Select all
+          {{ selectAllLabel }}
         </n-button>
         <n-button
           size="small"
@@ -590,7 +673,7 @@ onUnmounted(() => {
           v-model:checked="allowTagUpdates"
           @update:checked="clearPlanOnOptionChange"
         >
-          Tag updates
+          Allow tag rewrites
         </n-checkbox>
         <n-button
           type="primary"
@@ -604,138 +687,302 @@ onUnmounted(() => {
           </template>
           Preview plan
         </n-button>
-        <n-button
-          type="primary"
-          size="small"
-          secondary
-          :disabled="directUpdateDisabled"
-          :loading="webui.loading"
-          :title="directUpdateTitle"
-          @click="prepareDirectUpdate"
-        >
-          <template #icon>
-            <Play :size="16" />
-          </template>
-          Update selected
-        </n-button>
       </div>
     </div>
 
     <n-alert
       v-if="readOnlySelectionMessage"
       type="warning"
-      :show-icon="false"
     >
       {{ readOnlySelectionMessage }}
     </n-alert>
     <n-alert
       v-if="selectedTagOverrideError"
       type="warning"
-      :show-icon="false"
     >
       {{ selectedTagOverrideError }}
     </n-alert>
 
-    <n-data-table
-      v-if="!isMobile"
-      :columns="columns"
-      :data="webui.pending?.items ?? []"
-      :loading="webui.loading"
-      :pagination="{ pageSize: 15 }"
-      :row-key="rowKey"
-      :checked-row-keys="selectedLineNumbers"
-      size="small"
-      class="data-surface"
-      @update:checked-row-keys="updateCheckedRowKeys"
-    />
+    <template v-if="groupingReady">
+      <section class="stack-selection">
+        <article
+          v-for="group in stackGroups"
+          :key="`${group.directory}/${group.compose_file}`"
+          class="stack-card"
+          :class="{ selected: stackHasSelection(group) }"
+        >
+          <div class="stack-card-header">
+            <div class="stack-title-block">
+              <n-checkbox
+                :checked="stackSelected(group)"
+                :indeterminate="stackIndeterminate(group)"
+                :aria-label="`Select stack ${group.name}`"
+                @update:checked="toggleStack(group, Boolean($event))"
+              >
+                <span class="sr-only">Select stack </span>
+                <strong>{{ group.name }}</strong>
+              </n-checkbox>
+              <span class="stack-path">{{ group.directory }}</span>
+            </div>
+            <div class="stack-card-tags">
+              <n-tag size="small">{{ pluralize(group.items.length, "update") }}</n-tag>
+              <n-tag size="small">{{ group.services_label }}</n-tag>
+              <n-tag v-if="groupTagChangeCount(group)" size="small" type="warning">
+                {{ pluralize(groupTagChangeCount(group), "tag rewrite") }}
+              </n-tag>
+              <n-tag v-if="itemsBreakingCount(group.items)" size="small" type="warning">
+                {{ pluralize(itemsBreakingCount(group.items), "breaking cue") }}
+              </n-tag>
+            </div>
+          </div>
 
-    <div v-else class="mobile-list">
-      <article v-for="item in webui.pending?.items ?? []" :key="item.line_no" class="mobile-card">
-        <div class="mobile-card-title">
-          <n-checkbox
-            :checked="selectedLineSet.has(item.line_no)"
-            @update:checked="toggleLine(item.line_no, Boolean($event))"
-          >
-            <strong>{{ item.image }}</strong>
-          </n-checkbox>
-          <n-tag size="small">#{{ item.line_no }}</n-tag>
-        </div>
-        <dl>
-          <div>
-            <dt>Repository</dt>
-            <dd>{{ item.repo }}</dd>
-          </div>
-          <div>
-            <dt>Current tag</dt>
-            <dd>{{ item.current_tag || "None" }}</dd>
-          </div>
-          <div>
-            <dt>New tag</dt>
-            <dd>
-              <n-input
-                v-if="item.desired_tag"
-                :value="tagOverrideValue(item)"
-                size="small"
-                class="tag-override-input"
-                :placeholder="item.desired_tag"
-                :aria-label="`New tag for ${item.image}`"
-                @update:value="updateTagOverride(item, $event)"
-              />
-              <span v-else>None</span>
-            </dd>
-          </div>
-          <div>
-            <dt>New digest</dt>
-            <dd>
-              <code v-if="item.digest" class="digest-value" :title="item.digest">
-                {{ displayDigest(item.digest) }}
-              </code>
-              <span v-else>None</span>
-            </dd>
-          </div>
-          <div>
-            <dt>Release notes</dt>
-            <dd>
-              <div v-if="releaseNoteFor(item)?.links.length" class="release-notes-cell">
-                <a
-                  v-for="link in releaseNoteFor(item)?.links ?? []"
-                  :key="`${item.line_no}-${link.kind}-${link.url}`"
-                  class="release-note-link"
-                  :href="link.url"
-                  target="_blank"
-                  rel="noreferrer"
+          <div class="stack-items">
+            <div
+              v-for="item in group.items"
+              :key="`${group.name}-${item.line_no}`"
+              class="pending-update-row"
+              :class="{ selected: selectedLineSet.has(item.line_no) }"
+            >
+              <div class="pending-update-main">
+                <n-checkbox
+                  :checked="selectedLineSet.has(item.line_no)"
+                  :aria-label="`Select update ${item.image}`"
+                  @update:checked="toggleLine(item.line_no, Boolean($event))"
                 >
-                  {{ link.label }}
-                  <ExternalLink :size="14" aria-hidden="true" />
-                </a>
+                  <span class="sr-only">Select update </span>
+                  <strong>{{ groupedItemServices(item) }}</strong>
+                </n-checkbox>
+                <n-tag size="small">{{ groupedItemActionLabel(item) }}</n-tag>
+              </div>
+              <div class="pending-update-detail">
+                <code>{{ item.image }}</code>
+                <span>-></span>
+                <code>{{ groupedItemTarget(item) }}</code>
+              </div>
+              <div class="pending-update-meta">
+                <span>Pending file line #{{ item.line_no }}</span>
+                <div v-if="releaseNoteFor(item)?.links.length" class="release-notes-cell">
+                  <a
+                    v-for="link in releaseNoteFor(item)?.links ?? []"
+                    :key="`${item.line_no}-${link.kind}-${link.url}`"
+                    class="release-note-link"
+                    :href="link.url"
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    {{ link.label }}
+                    <ExternalLink :size="14" aria-hidden="true" />
+                  </a>
+                  <span
+                    v-if="releaseNoteFor(item)?.breaking"
+                    class="release-breaking-cue"
+                    :title="releaseNoteFor(item)?.breaking_reasons.join(' ')"
+                    aria-label="Possible breaking change"
+                  >
+                    <AlertTriangle :size="14" aria-hidden="true" />
+                    Possible breaking change
+                  </span>
+                </div>
                 <span
-                  v-if="releaseNoteFor(item)?.breaking"
-                  class="release-breaking-cue"
-                  :title="releaseNoteFor(item)?.breaking_reasons.join(' ')"
-                  aria-label="Possible breaking change"
+                  v-else
+                  class="release-notes-muted"
+                  :title="releaseNoteReason(releaseNoteFor(item)) || undefined"
                 >
-                  <AlertTriangle :size="14" aria-hidden="true" />
-                  Possible breaking change
+                  <span class="release-notes-status">
+                    {{ releaseNoteStatus(releaseNoteFor(item)) }}
+                  </span>
+                  <span v-if="releaseNoteReason(releaseNoteFor(item))" class="release-notes-reason">
+                    {{ releaseNoteReason(releaseNoteFor(item)) }}
+                  </span>
                 </span>
               </div>
-              <span
-                v-else
-                class="release-notes-muted"
-                :title="releaseNoteReason(releaseNoteFor(item)) || undefined"
-              >
-                <span class="release-notes-status">
-                  {{ releaseNoteStatus(releaseNoteFor(item)) }}
-                </span>
-                <span v-if="releaseNoteReason(releaseNoteFor(item))" class="release-notes-reason">
-                  {{ releaseNoteReason(releaseNoteFor(item)) }}
-                </span>
-              </span>
-            </dd>
+              <div v-if="item.desired_tag" class="pending-update-tag">
+                <span>New tag</span>
+                <n-input
+                  :value="tagOverrideValue(item)"
+                  size="small"
+                  class="tag-override-input"
+                  :placeholder="item.desired_tag"
+                  :aria-label="`New tag for ${item.image}`"
+                  @update:value="updateTagOverride(item, $event)"
+                />
+              </div>
+            </div>
           </div>
-        </dl>
-      </article>
-      <div v-if="!webui.pending?.items.length" class="empty-state">No pending updates.</div>
-    </div>
+        </article>
+
+        <article v-if="unmatchedItems.length" class="stack-card needs-review">
+          <div class="stack-card-header">
+            <div class="stack-title-block">
+              <strong>Needs review</strong>
+              <span class="stack-path">
+                These pending updates are not matched to a Compose stack yet.
+              </span>
+            </div>
+            <div class="stack-card-tags">
+              <n-tag size="small" type="warning">
+                {{ pluralize(unmatchedItems.length, "item") }}
+              </n-tag>
+            </div>
+          </div>
+          <div class="stack-items">
+            <div
+              v-for="item in unmatchedItems"
+              :key="`unmatched-${item.line_no}`"
+              class="pending-update-row"
+              :class="{ selected: selectedLineSet.has(item.line_no) }"
+            >
+              <div class="pending-update-main">
+                <n-checkbox
+                  :checked="selectedLineSet.has(item.line_no)"
+                  :aria-label="`Select update ${item.image}`"
+                  @update:checked="toggleLine(item.line_no, Boolean($event))"
+                >
+                  <span class="sr-only">Select update </span>
+                  <strong>{{ item.repo }}</strong>
+                </n-checkbox>
+                <n-tag size="small" type="warning">Needs review</n-tag>
+              </div>
+              <div class="pending-update-detail">
+                <code>{{ item.image }}</code>
+                <span>-></span>
+                <code>{{ groupedItemTarget(item) }}</code>
+              </div>
+              <div class="pending-update-meta">
+                <span>Pending file line #{{ item.line_no }}</span>
+                <span>Preview the plan to see why this target is unresolved.</span>
+              </div>
+              <div v-if="item.desired_tag" class="pending-update-tag">
+                <span>New tag</span>
+                <n-input
+                  :value="tagOverrideValue(item)"
+                  size="small"
+                  class="tag-override-input"
+                  :placeholder="item.desired_tag"
+                  :aria-label="`New tag for ${item.image}`"
+                  @update:value="updateTagOverride(item, $event)"
+                />
+              </div>
+            </div>
+          </div>
+        </article>
+
+        <div
+          v-if="!stackGroups.length && !unmatchedItems.length"
+          class="empty-state"
+        >
+          No pending updates.
+        </div>
+      </section>
+    </template>
+
+    <template v-else-if="webui.pending">
+      <n-alert type="info">
+        Stack grouping is unavailable. Showing pending file order.
+      </n-alert>
+
+      <n-data-table
+        v-if="!isMobile"
+        :columns="columns"
+        :data="webui.pending?.items ?? []"
+        :loading="webui.loading"
+        :pagination="{ pageSize: 15 }"
+        :row-key="rowKey"
+        :checked-row-keys="selectedLineNumbers"
+        size="small"
+        class="data-surface"
+        @update:checked-row-keys="updateCheckedRowKeys"
+      />
+
+      <div v-else class="mobile-list">
+        <article v-for="item in webui.pending?.items ?? []" :key="item.line_no" class="mobile-card">
+          <div class="mobile-card-title">
+            <n-checkbox
+              :checked="selectedLineSet.has(item.line_no)"
+              @update:checked="toggleLine(item.line_no, Boolean($event))"
+            >
+              <span class="sr-only">Select update </span>
+              <strong>{{ item.image }}</strong>
+            </n-checkbox>
+            <n-tag size="small">#{{ item.line_no }}</n-tag>
+          </div>
+          <dl>
+            <div>
+              <dt>Repository</dt>
+              <dd>{{ item.repo }}</dd>
+            </div>
+            <div>
+              <dt>Current tag</dt>
+              <dd>{{ item.current_tag || "None" }}</dd>
+            </div>
+            <div>
+              <dt>New tag</dt>
+              <dd>
+                <n-input
+                  v-if="item.desired_tag"
+                  :value="tagOverrideValue(item)"
+                  size="small"
+                  class="tag-override-input"
+                  :placeholder="item.desired_tag"
+                  :aria-label="`New tag for ${item.image}`"
+                  @update:value="updateTagOverride(item, $event)"
+                />
+                <span v-else>None</span>
+              </dd>
+            </div>
+            <div>
+              <dt>New digest</dt>
+              <dd>
+                <code v-if="item.digest" class="digest-value" :title="item.digest">
+                  {{ displayDigest(item.digest) }}
+                </code>
+                <span v-else>None</span>
+              </dd>
+            </div>
+            <div>
+              <dt>Release notes</dt>
+              <dd>
+                <div v-if="releaseNoteFor(item)?.links.length" class="release-notes-cell">
+                  <a
+                    v-for="link in releaseNoteFor(item)?.links ?? []"
+                    :key="`${item.line_no}-${link.kind}-${link.url}`"
+                    class="release-note-link"
+                    :href="link.url"
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    {{ link.label }}
+                    <ExternalLink :size="14" aria-hidden="true" />
+                  </a>
+                  <span
+                    v-if="releaseNoteFor(item)?.breaking"
+                    class="release-breaking-cue"
+                    :title="releaseNoteFor(item)?.breaking_reasons.join(' ')"
+                    aria-label="Possible breaking change"
+                  >
+                    <AlertTriangle :size="14" aria-hidden="true" />
+                    Possible breaking change
+                  </span>
+                </div>
+                <span
+                  v-else
+                  class="release-notes-muted"
+                  :title="releaseNoteReason(releaseNoteFor(item)) || undefined"
+                >
+                  <span class="release-notes-status">
+                    {{ releaseNoteStatus(releaseNoteFor(item)) }}
+                  </span>
+                  <span v-if="releaseNoteReason(releaseNoteFor(item))" class="release-notes-reason">
+                    {{ releaseNoteReason(releaseNoteFor(item)) }}
+                  </span>
+                </span>
+              </dd>
+            </div>
+          </dl>
+        </article>
+        <div v-if="!webui.pending?.items.length" class="empty-state">No pending updates.</div>
+      </div>
+    </template>
 
     <section v-if="webui.plan" class="section-panel">
       <div class="section-heading">
@@ -784,7 +1031,6 @@ onUnmounted(() => {
         v-if="mutationDisabledMessage"
         class="plan-section"
         type="warning"
-        :show-icon="false"
       >
         {{ mutationDisabledMessage }}
       </n-alert>
@@ -794,7 +1040,6 @@ onUnmounted(() => {
           v-for="issue in webui.plan.issues"
           :key="`${issue.code}-${issue.line_no ?? ''}-${issue.stack}-${issue.service}`"
           :type="issueType(issue)"
-          :show-icon="false"
         >
           {{ issueLabel(issue) }}
         </n-alert>
@@ -858,8 +1103,10 @@ onUnmounted(() => {
 
       <div class="compact-list">
         <div class="list-row">
-          <span>Lines</span>
-          <strong>{{ webui.applyJob.selected_line_numbers.join(", ") }}</strong>
+          <span>Updates</span>
+          <strong>
+            {{ pluralize(webui.applyJob.selected_line_numbers.length, "selected update") }}
+          </strong>
           <em>{{ webui.applyJob.started_at || "Queued" }}</em>
         </div>
         <div v-if="webui.applyJob.run_id" class="list-row">
@@ -886,7 +1133,6 @@ onUnmounted(() => {
         v-if="webui.applyJob.error"
         class="plan-section"
         type="error"
-        :show-icon="false"
       >
         {{ webui.applyJob.error }}
       </n-alert>
@@ -895,24 +1141,26 @@ onUnmounted(() => {
     <n-modal
       v-model:show="showApplyConfirm"
       preset="dialog"
-      title="Apply selected updates"
-      positive-text="Apply updates"
+      title="Apply update plan"
+      positive-text="Apply plan"
       negative-text="Cancel"
       :positive-button-props="{ type: 'primary', loading: webui.loading }"
       @positive-click="confirmApply"
     >
       <div v-if="webui.plan" class="confirmation-list">
-        <div>
-          <span>Lines</span>
-          <strong>{{ webui.plan.selected_line_numbers.join(", ") }}</strong>
-        </div>
         <div v-for="stack in webui.plan.stacks" :key="stack.name">
-          <span>{{ stack.name }}</span>
-          <strong>{{ stack.services_label }}</strong>
+          <span>Stack</span>
+          <strong>{{ stack.name }} - {{ stack.services_label }}</strong>
         </div>
         <div v-for="override in requestTagOverrides" :key="override.line_no">
-          <span>New tag #{{ override.line_no }}</span>
+          <span>Tag override</span>
           <strong>{{ override.tag }}</strong>
+        </div>
+        <div>
+          <span>Updates</span>
+          <strong>
+            {{ pluralize(webui.plan.selected_line_numbers.length, "selected update") }}
+          </strong>
         </div>
       </div>
     </n-modal>

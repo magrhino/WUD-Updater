@@ -102,15 +102,19 @@ export const naiveStubs: Record<string, Component> = {
     props: {
       checked: Boolean,
       disabled: Boolean,
+      indeterminate: Boolean,
     },
     emits: ["update:checked"],
-    setup(props, { emit, slots }) {
+    setup(props, { attrs, emit, slots }) {
       return () =>
         h("label", [
           h("input", {
+            ...attrs,
             type: "checkbox",
             checked: props.checked,
             disabled: props.disabled,
+            indeterminate: props.indeterminate,
+            "aria-checked": props.indeterminate ? "mixed" : String(props.checked),
             onChange: (event: Event) =>
               emit("update:checked", (event.target as HTMLInputElement).checked),
           }),

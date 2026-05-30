@@ -78,14 +78,18 @@ For the local demo server, seed disposable state and run both the FastAPI
 backend and Vite frontend through the checked-in wrapper:
 
 ```bash
-make webui-demo-state
-make webui-dev
+make webui-demo
 ```
 
-`make webui-dev` starts the backend on `127.0.0.1:8080`, the frontend on
+`make webui-demo` starts the backend on `127.0.0.1:8080`, the frontend on
 `127.0.0.1:5173`, sets `WUD_WEB_DEV_NO_AUTH=true`, and allows the Vite origin
 for CSRF/Origin checks. The demo server uses `local-dev/` for disposable Docker
-fixtures, WUD output, logs, and `WUD_DB_PATH`.
+fixtures, WUD output, logs, and `WUD_DB_PATH`. The wrapper also puts the
+checked-in fake Docker command first on `PATH` and points it at
+`local-dev/fake-docker`, so the Pending page can render stack grouping at
+`http://127.0.0.1:5173/#/pending` without a live Docker daemon.
+Use `make webui-demo-state` when you only need to refresh the disposable
+fixtures without starting the servers.
 
 Useful WebUI development variables:
 
