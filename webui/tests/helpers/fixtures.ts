@@ -79,6 +79,7 @@ export function pendingGroupedItem(
     compose_images: [item.image],
     services: ["app"],
     action: item.desired_tag ? "tag-update" : "update",
+    diagnostic: null,
     ...overrides,
   };
 }
@@ -209,6 +210,11 @@ export function planResponse(overrides: Partial<PlanResponse> = {}): PlanRespons
     ],
     skipped: [],
     issues: [],
+    cleanup: {
+      cleanup_id: "",
+      can_remove_unmatched: false,
+      items: [],
+    },
     ...overrides,
   };
 }

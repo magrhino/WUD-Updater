@@ -49,6 +49,40 @@ function mockPendingLifecycle(webui: ReturnType<typeof useWebuiStore>) {
   vi.spyOn(webui, "refreshReleaseNotes").mockResolvedValue();
 }
 
+function unmatchedPendingItem() {
+  return pendingGroupedItem({
+    line_no: 1,
+    raw: "repo/old:latest",
+    image: "repo/old:latest",
+    repo: "repo/old",
+    current_tag: "latest",
+    desired_tag: "",
+    services: [],
+    diagnostic: {
+      code: "compose-label-active-file-missing",
+      message:
+        "Container old was created from stack media, but docker-compose.yml is missing.",
+      hint: "Only docker-compose.archive.yml was found; restore an active Compose file or remove the stale pending line.",
+      stack: "media",
+      service: "old",
+      compose_file: "docker-compose.yml",
+      found_files: ["docker-compose.archive.yml"],
+      details: {},
+    },
+  });
+}
+
+function pendingWithUnmatched(item = unmatchedPendingItem()) {
+  return {
+    ...pendingResponse([item]),
+    grouping: {
+      ...pendingGrouping([]),
+      groups: [],
+      unmatched: [item],
+    },
+  };
+}
+
 function mockApplyJobStream() {
   const close = vi.fn();
   let jobListener: ((event: MessageEvent<string>) => void) | null = null;
@@ -164,6 +198,8 @@ describe("mutating WebUI views", () => {
             line_no: 1,
             stack: "",
             service: "",
+            hint: "",
+            details: {},
           },
         ],
         skipped: [
@@ -198,6 +234,210 @@ describe("mutating WebUI views", () => {
         .some((button) => button.text().includes("Apply 1 update")),
     ).toBe(false);
     expect(createJob).not.toHaveBeenCalled();
+  });
+
+  it("shows unmatched cleanup preview disabled in read-only mode", async () => {
+    const item = unmatchedPendingItem();
+    const { pinia, webui } = setupStores(false);
+    webui.pending = pendingWithUnmatched(item);
+    mockPendingLifecycle(webui);
+    vi.spyOn(webui, "createPlan").mockImplementation(async () => {
+      webui.plan = planResponse({
+        can_apply: false,
+        status: "blocked",
+        summary: {
+          target_count: 1,
+          matched_target_count: 0,
+          stack_count: 0,
+          service_count: 0,
+          skipped_count: 1,
+          issue_count: 1,
+        },
+        stacks: [],
+        issues: [
+          {
+            severity: "error",
+            code: "unmatched",
+            message: "No Compose service matched repo/old:latest.",
+            line_no: 1,
+            stack: "",
+            service: "",
+            hint: item.diagnostic?.hint ?? "",
+            details: {},
+          },
+        ],
+        skipped: [
+          {
+            line_no: 1,
+            raw: "repo/old:latest",
+            image: "repo/old:latest",
+            desired_tag: "",
+            reason: "unmatched",
+          },
+        ],
+        cleanup: {
+          cleanup_id: "cleanup-test",
+          can_remove_unmatched: false,
+          items: [
+            {
+              line_no: 1,
+              raw: "repo/old:latest",
+              image: "repo/old:latest",
+              desired_tag: "",
+              digest: "",
+              reason: "unmatched",
+              diagnostic: item.diagnostic,
+            },
+          ],
+        },
+      });
+    });
+    const cleanupPending = vi.spyOn(webui, "cleanupPending");
+    const wrapper = mountWithApp(PendingView, { pinia });
+
+    await wrapper
+      .find('input[aria-label="Select update repo/old:latest"]')
+      .setValue(true);
+    await wrapper
+      .findAll("button")
+      .find((button) => button.text().includes("Preview selected plan"))
+      ?.trigger("click");
+    await flushPromises();
+
+    const dialog = wrapper.find('[role="dialog"]');
+    expect(dialog.text()).toContain("Unmatched pending entries");
+    expect(dialog.text()).toContain("docker-compose.archive.yml");
+    expect(dialog.text()).toContain("Read-only mode is active");
+    const cleanupButton = dialog
+      .findAll("button")
+      .find((button) => button.text().includes("Remove 1 unmatched entry"));
+    expect(cleanupButton?.attributes("disabled")).toBeDefined();
+    await cleanupButton?.trigger("click");
+
+    expect(cleanupPending).not.toHaveBeenCalled();
+  });
+
+  it("confirms unmatched cleanup before refreshing pending state", async () => {
+    const item = unmatchedPendingItem();
+    const { pinia, webui } = setupStores(true);
+    webui.pending = pendingWithUnmatched(item);
+    const loadPending = vi.spyOn(webui, "loadPending").mockResolvedValue();
+    const loadReleaseNotes = vi.spyOn(webui, "loadReleaseNotes").mockResolvedValue();
+    const refreshReleaseNotes = vi
+      .spyOn(webui, "refreshReleaseNotes")
+      .mockResolvedValue();
+    const loadRuns = vi.spyOn(webui, "loadRuns").mockResolvedValue();
+    vi.spyOn(webui, "createPlan").mockImplementation(async () => {
+      webui.plan = planResponse({
+        can_apply: false,
+        status: "blocked",
+        summary: {
+          target_count: 1,
+          matched_target_count: 0,
+          stack_count: 0,
+          service_count: 0,
+          skipped_count: 1,
+          issue_count: 1,
+        },
+        stacks: [],
+        issues: [
+          {
+            severity: "error",
+            code: "unmatched",
+            message: "No Compose service matched repo/old:latest.",
+            line_no: 1,
+            stack: "",
+            service: "",
+            hint: item.diagnostic?.hint ?? "",
+            details: {},
+          },
+        ],
+        skipped: [
+          {
+            line_no: 1,
+            raw: "repo/old:latest",
+            image: "repo/old:latest",
+            desired_tag: "",
+            reason: "unmatched",
+          },
+        ],
+        cleanup: {
+          cleanup_id: "cleanup-test",
+          can_remove_unmatched: true,
+          items: [
+            {
+              line_no: 1,
+              raw: "repo/old:latest",
+              image: "repo/old:latest",
+              desired_tag: "",
+              digest: "",
+              reason: "unmatched",
+              diagnostic: item.diagnostic,
+            },
+          ],
+        },
+      });
+    });
+    const cleanupPending = vi
+      .spyOn(webui, "cleanupPending")
+      .mockImplementation(async () => {
+        const response = {
+          status: "success" as const,
+          audit_run_id: 42,
+          removed_count: 1,
+          removed: [
+            {
+              line_no: 1,
+              raw: "repo/old:latest",
+              image: "repo/old:latest",
+              reason: "unmatched",
+            },
+          ],
+        };
+        webui.pendingCleanup = response;
+        webui.plan = null;
+        return response;
+      });
+    const wrapper = mountWithApp(PendingView, { pinia });
+
+    await wrapper
+      .find('input[aria-label="Select update repo/old:latest"]')
+      .setValue(true);
+    await wrapper
+      .findAll("button")
+      .find((button) => button.text().includes("Preview selected plan"))
+      ?.trigger("click");
+    await flushPromises();
+
+    expect(wrapper.text()).toContain("Unmatched pending entries");
+    await wrapper
+      .findAll("button")
+      .find((button) => button.text().includes("Remove 1 unmatched entry"))
+      ?.trigger("click");
+    await flushPromises();
+
+    const cleanupDialog = wrapper
+      .findAll('[role="dialog"]')
+      .find((dialog) => dialog.text().includes("Pending cleanup"));
+    expect(cleanupDialog?.text()).toContain("Source lines");
+    expect(cleanupDialog?.text()).toContain("#1 repo/old:latest");
+    expect(cleanupDialog?.text()).toContain("repo/old:latest");
+
+    await cleanupDialog
+      ?.findAll("button")
+      .find((button) => button.text().includes("Remove 1 unmatched entry"))
+      ?.trigger("click");
+    await flushPromises();
+
+    expect(cleanupPending).toHaveBeenCalledWith("cleanup-test", [
+      { line_no: 1, raw: "repo/old:latest" },
+    ]);
+    expect(loadPending).toHaveBeenCalled();
+    expect(loadReleaseNotes).toHaveBeenCalled();
+    expect(refreshReleaseNotes).toHaveBeenCalled();
+    expect(loadRuns).toHaveBeenCalled();
+    expect(wrapper.text()).toContain("1 pending entry removed from images.todo.");
+    expect(wrapper.text()).toContain("Details");
   });
 
   it("starts a stack update with the full stack line set", async () => {

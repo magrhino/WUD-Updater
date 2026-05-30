@@ -161,6 +161,12 @@ a {
   gap: 8px;
 }
 
+.issue-hint {
+  display: block;
+  margin-top: 4px;
+  color: var(--color-muted-text);
+}
+
 .sr-only {
   position: absolute;
   width: 1px;

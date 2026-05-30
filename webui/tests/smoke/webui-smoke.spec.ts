@@ -163,6 +163,11 @@ function planResponse(overrides: Record<string, unknown> = {}) {
     ],
     skipped: [],
     issues: [],
+    cleanup: {
+      cleanup_id: "",
+      can_remove_unmatched: false,
+      items: [],
+    },
     ...overrides,
   };
 }
