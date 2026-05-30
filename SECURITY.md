@@ -106,7 +106,7 @@ The repository keeps security checks high-signal and cost-conscious:
 
 - Dependabot checks Python, npm, Docker, and GitHub Actions dependencies on a
   weekly schedule.
-- CodeQL scans Actions and Python.
+- CodeQL scans Actions, Python, and WebUI JavaScript/TypeScript.
 - The security workflow runs workflow auditing with zizmor.
 - Dependency Review blocks public pull requests with high-severity dependency
   changes when the repository is public.
