@@ -619,7 +619,14 @@ a {
 .release-note-link:focus-visible,
 .shortcut-card:focus-visible,
 .list-row.linked:focus-visible,
-.mobile-card.linked:focus-visible {
+.mobile-card.linked:focus-visible,
+.stack-details summary:focus-visible,
+.preflight-details summary:focus-visible,
+body .n-button:focus-visible,
+body .n-checkbox:focus-within,
+body .n-input:focus-within,
+body .n-base-selection:focus-within,
+body .n-switch:focus-within {
   outline: 2px solid var(--color-action-blue);
   outline-offset: 2px;
 }

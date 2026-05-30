@@ -246,6 +246,15 @@ function themeOverridesFor(tokens: ThemeTokens): GlobalThemeOverrides {
       borderRadius: "7px",
       borderRadiusSmall: "7px",
     },
+    Tag: {
+      borderWarning: `1px solid ${tokens.color.warning}`,
+      colorBorderedWarning: tokens.color.warningBg,
+      colorWarning: tokens.color.warningBg,
+      closeIconColorWarning: tokens.color.warning,
+      closeIconColorHoverWarning: tokens.color.warningHover,
+      closeIconColorPressedWarning: tokens.color.warningPressed,
+      textColorWarning: tokens.color.warning,
+    },
   };
 }
 
