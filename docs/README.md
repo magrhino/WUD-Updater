@@ -8,6 +8,7 @@ short; detailed setup and behavior notes live here.
 | Topic | Where |
 |---|---|
 | Project overview and quick commands | [../README.md](../README.md) |
+| Public static WebUI demo | [magrhino.github.io/WUD-Updater](https://magrhino.github.io/WUD-Updater/) |
 | Security policy and private vulnerability reporting | [../SECURITY.md](../SECURITY.md) |
 | Deployment reference | [DEPLOYMENT.md](DEPLOYMENT.md) |
 | Development, CI, and release automation | [DEVELOPMENT.md](DEVELOPMENT.md) |

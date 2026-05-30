@@ -66,16 +66,28 @@ npm --prefix webui run test
 npm --prefix webui run build
 ```
 
+Build the public static WebUI demo for GitHub Pages with:
+
+```bash
+npm --prefix webui run build:demo
+```
+
+The Pages demo is fixture-backed and runs entirely in the browser. It uses the
+same Vue routes, stores, components, and theme as the real WebUI, but it never
+starts FastAPI, SQLite, fake Docker, or live Docker/Compose operations. Fixture
+paths are sanitized to `demo/...`, and reloads reset the in-browser demo state.
+
 Browser smoke tests use Playwright Chromium with mocked local API fixtures. Install
 the browser once before running them locally:
 
 ```bash
 npm --prefix webui exec playwright install chromium
 npm --prefix webui run test:smoke
+npm --prefix webui run test:smoke:demo
 ```
 
-For the local interactive demo server, seed disposable state and run both the
-FastAPI backend and Vite frontend through the checked-in wrapper:
+For the local interactive full-stack demo server, seed disposable state and run
+both the FastAPI backend and Vite frontend through the checked-in wrapper:
 
 ```bash
 make webui-demo
@@ -87,6 +99,8 @@ make webui-demo
 origin for CSRF/Origin checks. The demo uses `local-dev/` for disposable Docker
 fixtures, WUD output, logs, and `WUD_DB_PATH`.
 
+This local demo is intentionally different from the public GitHub Pages demo:
+it exercises the real backend and updater code paths against fake Docker state.
 The wrapper puts the checked-in fake Docker command first on `PATH` and points
 it at `local-dev/fake-docker`, so interactive actions exercise the real WebUI
 backend and updater code paths without using the host Docker daemon. You can
@@ -100,6 +114,8 @@ Useful WebUI development variables:
 
 | Variable | Purpose |
 |---|---|
+| `VITE_WUD_DEMO_MODE` | Build-time switch for the static GitHub Pages WebUI demo. |
+| `VITE_WUD_PAGES_BASE` | Static demo asset base path; default demo mode value is `/WUD-Updater/`. |
 | `WUD_DB_PATH` | SQLite database path for WebUI setup state, sessions, run history, audit records, and managed tag exclusions. |
 | `WUD_WEB_MUTATIONS_ENABLED` | Set to `true` only when testing browser-initiated plan/apply flows; default is read-only. |
 | `WUD_WEB_DEV_BACKEND_PORT` | Backend port used by `webui/scripts/dev-server.mjs` and the Vite proxy; default `8080`. |
