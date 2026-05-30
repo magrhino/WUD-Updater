@@ -143,6 +143,7 @@ development and tests.
 
 | Topic | Where |
 |---|---|
+| Security policy and private vulnerability reporting | [SECURITY.md](SECURITY.md) |
 | Deployment, configuration, maintenance, and security notes | [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) |
 | Complete documentation index | [docs/README.md](docs/README.md) |
 | Docker Compose example | [docs/examples/docker-compose.example.yml](docs/examples/docker-compose.example.yml) |

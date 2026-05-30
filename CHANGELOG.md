@@ -4,6 +4,13 @@ All notable changes to WUD-Updater are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com) and versions follow
 [Semantic Versioning](https://semver.org).
 
+## [0.24.1](https://github.com/magrhino/WUD-Updater/compare/v0.24.0...v0.24.1) (2026-05-30)
+
+
+### Bug Fixes
+
+* **web:** Avoid resolving pending stack groups in status ([#123](https://github.com/magrhino/WUD-Updater/issues/123)) ([c963a55](https://github.com/magrhino/WUD-Updater/commit/c963a558d89a97644a40d0212de8a81ca3bbcea2))
+
 ## [0.24.0](https://github.com/magrhino/WUD-Updater/compare/v0.23.3...v0.24.0) (2026-05-30)
 
 
