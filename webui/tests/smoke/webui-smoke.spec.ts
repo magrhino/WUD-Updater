@@ -180,6 +180,73 @@ function jobResponse(status = "queued") {
   };
 }
 
+function runSummary() {
+  return {
+    id: 7,
+    started_at: "2026-05-28T12:00:00+00:00",
+    finished_at: "2026-05-28T12:00:01+00:00",
+    status: "success",
+    dry_run: false,
+    mode: "stop",
+    wud_file: "/out/images.todo",
+    log_file: "/out/logs/job-smoke.log",
+    metadata: { source: "webui" },
+  };
+}
+
+function runDetail() {
+  return {
+    ...runSummary(),
+    pending_updates: [
+      {
+        id: 70,
+        run_id: 7,
+        line_no: 1,
+        raw: "repo/app:1.0 tag=1.1",
+        image: "repo/app:1.0",
+        target_digest: "",
+        desired_tag: "1.1",
+        service_key: "media/app",
+        stack_name: "media",
+        service_name: "app",
+        status: "resolved",
+        status_reason: "updated by smoke fixture",
+        created_at: "2026-05-28T12:00:00+00:00",
+        updated_at: "2026-05-28T12:00:01+00:00",
+        metadata: {},
+      },
+    ],
+    events: [
+      {
+        id: 71,
+        run_id: 7,
+        created_at: "2026-05-28T12:00:01+00:00",
+        service_name: "app",
+        stack_name: "media",
+        image: "repo/app:1.0",
+        target_image: "repo/app:1.1",
+        old_image_id: "sha256:old",
+        new_image_id: "sha256:new",
+        old_digest: "sha256:old",
+        new_digest: "sha256:new",
+        status: "success",
+        metadata: {},
+      },
+    ],
+  };
+}
+
+function runLog() {
+  return {
+    run_id: 7,
+    log_file: "/out/logs/job-smoke.log",
+    exists: true,
+    content: "[2026-05-28T12:00:01+00:00] Done.\\n",
+    truncated: false,
+    max_bytes: 262144,
+  };
+}
+
 async function installApiFixtures(page: Page, state: FixtureState) {
   await page.route("**/*", async (route) => {
     const request = route.request();
@@ -280,7 +347,15 @@ async function fulfillApi(
     return;
   }
   if (path === "/api/v1/runs") {
-    await json(route, []);
+    await json(route, [runSummary()]);
+    return;
+  }
+  if (path === "/api/v1/runs/7") {
+    await json(route, runDetail());
+    return;
+  }
+  if (path === "/api/v1/runs/7/log") {
+    await json(route, runLog());
     return;
   }
   if (path === "/api/v1/plans" && method === "POST") {
@@ -417,6 +492,40 @@ test("read-only pending flow can preview a stack but cannot apply", async ({ pag
   await expect(page.getByRole("button", { name: /Apply plan/ })).toHaveCount(0);
   expect(state.calls.some((call) => call.path === "/api/v1/plans")).toBe(true);
   expect(state.calls.some((call) => call.path === "/api/v1/jobs")).toBe(false);
+});
+
+test("mutation-enabled pending flow applies and links to run details", async ({
+  page,
+}) => {
+  const state = createState({ authenticated: true, mutationsEnabled: true });
+  await installApiFixtures(page, state);
+
+  await page.goto("/#/pending");
+  await page.getByRole("checkbox", { name: /Select stack media/ }).check();
+  await page.getByRole("button", { name: /Preview plan/ }).click();
+
+  await expect(page.getByRole("heading", { name: "Ready dry run" })).toBeVisible();
+  await page.getByRole("button", { name: /Apply plan/ }).click();
+  await page
+    .getByRole("dialog")
+    .getByRole("button", { name: /Apply plan/ })
+    .click();
+
+  await expect(page.getByRole("heading", { name: "Apply complete" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Details" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Log" })).toBeVisible();
+  expect(state.calls.some((call) => call.path === "/api/v1/jobs")).toBe(true);
+  expect(
+    state.calls.some((call) => call.path === "/api/v1/jobs/job-smoke/stream"),
+  ).toBe(true);
+
+  await page.getByRole("link", { name: "Details" }).click();
+  await expect(page.getByRole("heading", { name: "#7" })).toBeVisible();
+  await expect(page.getByText("Pending records")).toBeVisible();
+
+  await page.getByRole("link", { name: "View log" }).click();
+  await expect(page.getByRole("heading", { name: "#7 log" })).toBeVisible();
+  await expect(page.getByText("Done.")).toBeVisible();
 });
 
 test("mobile shell keeps page width stable and preserves link targets", async ({

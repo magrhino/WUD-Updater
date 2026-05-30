@@ -56,6 +56,20 @@ class WebuiDemoStateTests(unittest.TestCase):
             )
             self.assertTrue((fake_docker_root / "calls.log").exists())
             self.assertTrue((fake_docker_root / "containers.tsv").exists())
+            self.assertTrue(
+                (
+                    fake_docker_root
+                    / "images"
+                    / "postgres_16.after_digests"
+                ).exists()
+            )
+            self.assertTrue(
+                (
+                    fake_docker_root
+                    / "images"
+                    / "lscr.io_linuxserver_radarr_5.22.4.after_id"
+                ).exists()
+            )
             result = subprocess.run(
                 ["docker", "compose", "-f", "docker-compose.yml", "config", "--images"],
                 cwd=docker_base / "media",
@@ -75,6 +89,20 @@ class WebuiDemoStateTests(unittest.TestCase):
                     "SELECT COUNT(*) FROM pending_updates"
                 ).fetchone()
                 event_count = conn.execute("SELECT COUNT(*) FROM update_events").fetchone()
+                policy_count = conn.execute(
+                    "SELECT COUNT(*) FROM service_policy"
+                ).fetchone()
+                snooze_count = conn.execute("SELECT COUNT(*) FROM snoozes").fetchone()
+                tag_exclusion_count = conn.execute(
+                    "SELECT COUNT(*) FROM tag_exclusion_rules"
+                ).fetchone()
+                active_exclusions = conn.execute(
+                    """
+                    SELECT image_repo, status
+                    FROM tag_exclusion_rules
+                    WHERE status = 'active'
+                    """
+                ).fetchall()
                 versions = conn.execute(
                     """
                     SELECT status, dry_run, log_file
@@ -86,6 +114,13 @@ class WebuiDemoStateTests(unittest.TestCase):
         self.assertEqual(run_count[0], 3)
         self.assertEqual(pending_count[0], 4)
         self.assertEqual(event_count[0], 3)
+        self.assertEqual(policy_count[0], 2)
+        self.assertEqual(snooze_count[0], 2)
+        self.assertEqual(tag_exclusion_count[0], 2)
+        self.assertEqual(
+            active_exclusions[0][0],
+            "ghcr.io/home-assistant/home-assistant",
+        )
         self.assertEqual(versions[0][0], "success")
         self.assertEqual(versions[2][1], 1)
         self.assertTrue(versions[0][2].endswith("demo-success.log"))
