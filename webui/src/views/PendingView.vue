@@ -996,9 +996,19 @@ onUnmounted(() => {
                 >
                   {{ groupedItemActionLabel(item) }}
                 </n-tag>
-                <code :title="item.image">{{ previewImageLabel(item.image) }}</code>
+                <code
+                  class="stack-change-value"
+                  data-label="Current"
+                  :title="item.image"
+                >
+                  {{ previewImageLabel(item.image) }}
+                </code>
                 <span aria-hidden="true">-></span>
-                <code :title="groupedItemTarget(item)">
+                <code
+                  class="stack-change-value"
+                  data-label="Target"
+                  :title="groupedItemTarget(item)"
+                >
                   {{ previewImageLabel(groupedItemTarget(item)) }}
                 </code>
               </span>

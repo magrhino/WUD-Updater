@@ -1218,6 +1218,35 @@ a {
     gap: 4px;
   }
 
+  .stack-change-target {
+    display: grid;
+    align-items: start;
+    gap: 5px;
+  }
+
+  .stack-change-target > .n-tag {
+    width: fit-content;
+  }
+
+  .stack-change-target > span[aria-hidden="true"] {
+    display: none;
+  }
+
+  .stack-change-target code {
+    display: block;
+  }
+
+  .stack-change-value::before {
+    content: attr(data-label);
+    display: block;
+    margin-bottom: 1px;
+    color: var(--color-muted-text);
+    font-family: var(--font-sans);
+    font-size: 0.74rem;
+    font-weight: 700;
+    line-height: 1.2;
+  }
+
   .stack-card-side,
   .stack-card-actions {
     justify-items: start;
