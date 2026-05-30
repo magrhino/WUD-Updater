@@ -28,25 +28,49 @@ function authSession(state: FixtureState) {
 }
 
 function pendingResponse() {
+  const item = {
+    line_no: 1,
+    raw: "repo/app:1.0",
+    image: "repo/app:1.0",
+    key: "repo/app",
+    repo: "repo/app",
+    current_tag: "1.0",
+    has_tag: true,
+    allow_repo: false,
+    digest: "",
+    desired_tag: "1.1",
+  };
+  const groupedItem = {
+    ...item,
+    resolved_image: "repo/app:1.0",
+    target_image: "repo/app:1.1",
+    compose_images: ["repo/app:1.0"],
+    services: ["app"],
+    action: "tag-update",
+  };
   return {
     source_file: "/out/images.todo",
     exists: true,
     count: 1,
     warnings: [],
-    items: [
-      {
-        line_no: 1,
-        raw: "repo/app:1.0",
-        image: "repo/app:1.0",
-        key: "repo/app",
-        repo: "repo/app",
-        current_tag: "1.0",
-        has_tag: true,
-        allow_repo: false,
-        digest: "",
-        desired_tag: "1.1",
-      },
-    ],
+    items: [item],
+    grouping: {
+      status: "ready",
+      groups: [
+        {
+          name: "media",
+          directory: "/docker/media",
+          compose_file: "docker-compose.yml",
+          project_directory: "/docker/media",
+          services_label: "app",
+          services: ["app"],
+          line_numbers: [1],
+          items: [groupedItem],
+        },
+      ],
+      unmatched: [],
+      warnings: [],
+    },
   };
 }
 

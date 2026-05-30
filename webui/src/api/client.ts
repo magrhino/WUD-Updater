@@ -11,11 +11,40 @@ export interface PendingItem {
   desired_tag: string;
 }
 
+export type PendingGroupingStatus = "ready" | "unavailable";
+
+export interface PendingGroupedItem extends PendingItem {
+  resolved_image: string;
+  target_image: string;
+  compose_images: string[];
+  services: string[];
+  action: string;
+}
+
+export interface PendingStackGroup {
+  name: string;
+  directory: string;
+  compose_file: string;
+  project_directory: string;
+  services_label: string;
+  services: string[];
+  line_numbers: number[];
+  items: PendingGroupedItem[];
+}
+
+export interface PendingGrouping {
+  status: PendingGroupingStatus;
+  groups: PendingStackGroup[];
+  unmatched: PendingGroupedItem[];
+  warnings: string[];
+}
+
 export interface PendingResponse {
   source_file: string;
   exists: boolean;
   count: number;
   items: PendingItem[];
+  grouping: PendingGrouping;
   warnings: string[];
 }
 

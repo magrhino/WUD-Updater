@@ -1,6 +1,8 @@
 import type {
   ApplyJobResponse,
   AuthSessionResponse,
+  PendingGroupedItem,
+  PendingGrouping,
   PendingItem,
   PendingResponse,
   PlanResponse,
@@ -43,12 +45,54 @@ export function pendingItem(overrides: Partial<PendingItem> = {}): PendingItem {
   };
 }
 
+export function pendingGroupedItem(
+  overrides: Partial<PendingGroupedItem> = {},
+): PendingGroupedItem {
+  const item = pendingItem(overrides);
+  return {
+    ...item,
+    resolved_image: item.image,
+    target_image: item.desired_tag ? `${item.repo}:${item.desired_tag}` : item.image,
+    compose_images: [item.image],
+    services: ["app"],
+    action: item.desired_tag ? "tag-update" : "update",
+    ...overrides,
+  };
+}
+
+export function pendingGrouping(
+  items = [pendingGroupedItem()],
+): PendingGrouping {
+  return {
+    status: "ready",
+    groups:
+      items.length > 0
+        ? [
+            {
+              name: "media",
+              directory: "/docker/media",
+              compose_file: "docker-compose.yml",
+              project_directory: "/docker/media",
+              services_label: "app",
+              services: ["app"],
+              line_numbers: items.map((item) => item.line_no),
+              items,
+            },
+          ]
+        : [],
+    unmatched: [],
+    warnings: [],
+  };
+}
+
 export function pendingResponse(items = [pendingItem()]): PendingResponse {
+  const groupedItems = items.map((item) => pendingGroupedItem(item));
   return {
     source_file: "/out/images.todo",
     exists: true,
     count: items.length,
     items,
+    grouping: pendingGrouping(groupedItems),
     warnings: [],
   };
 }
