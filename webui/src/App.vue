@@ -8,23 +8,54 @@ import {
   LayoutDashboard,
   ListChecks,
   LogOut,
+  Monitor,
+  Moon,
   RefreshCw,
   Settings2,
   ShieldCheck,
+  Sun,
   Tags,
 } from "@lucide/vue";
 
 import { useAuthStore } from "./stores/auth";
 import { useWebuiStore } from "./stores/webui";
-import { themeOverrides } from "./theme";
+import { themePreferenceLabels, useWebuiTheme } from "./theme";
 
 const route = useRoute();
 const router = useRouter();
 const auth = useAuthStore();
 const webui = useWebuiStore();
+const {
+  preference: themePreference,
+  effectiveTheme,
+  nextPreference,
+  naiveTheme,
+  themeOverrides,
+  cycleThemePreference,
+} = useWebuiTheme();
 
 const showShell = computed(
   () => route.name !== "login" && route.name !== "setup" && auth.authenticated,
+);
+const themePreferenceIcon = computed(() => {
+  if (themePreference.value === "dark") {
+    return Moon;
+  }
+  if (themePreference.value === "light") {
+    return Sun;
+  }
+  return Monitor;
+});
+const themeButtonTitle = computed(() => {
+  const systemState =
+    themePreference.value === "system" ? ` (${effectiveTheme.value})` : "";
+  return `Theme: ${themePreferenceLabels[themePreference.value]}${systemState}`;
+});
+const themeButtonAriaLabel = computed(
+  () =>
+    `${themeButtonTitle.value}. Switch to ${themePreferenceLabels[
+      nextPreference.value
+    ].toLowerCase()}.`,
 );
 const navItems = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard },
@@ -62,7 +93,7 @@ async function handleLogout(): Promise<void> {
 </script>
 
 <template>
-  <n-config-provider :theme-overrides="themeOverrides">
+  <n-config-provider :theme="naiveTheme" :theme-overrides="themeOverrides">
     <n-message-provider>
       <div class="app-shell" :class="{ centered: !showShell }">
         <aside v-if="showShell" class="sidebar">
@@ -103,6 +134,17 @@ async function handleLogout(): Promise<void> {
               <h1>{{ String(route.meta.title ?? route.name ?? "Dashboard") }}</h1>
             </div>
             <div class="topbar-actions">
+              <n-button
+                quaternary
+                circle
+                :title="themeButtonTitle"
+                :aria-label="themeButtonAriaLabel"
+                @click="cycleThemePreference"
+              >
+                <template #icon>
+                  <component :is="themePreferenceIcon" :size="18" />
+                </template>
+              </n-button>
               <n-button
                 quaternary
                 circle
