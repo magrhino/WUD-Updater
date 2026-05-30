@@ -4,6 +4,13 @@ All notable changes to WUD-Updater are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com) and versions follow
 [Semantic Versioning](https://semver.org).
 
+## [0.25.0](https://github.com/magrhino/WUD-Updater/compare/v0.24.2...v0.25.0) (2026-05-30)
+
+
+### Features
+
+* **webui:** Replace the sidebar mutation badge with a release link ([#130](https://github.com/magrhino/WUD-Updater/issues/130)) ([b43464a](https://github.com/magrhino/WUD-Updater/commit/b43464a0bc516358f5157c48ff318bca0727d06e))
+
 ## [0.24.2](https://github.com/magrhino/WUD-Updater/compare/v0.24.1...v0.24.2) (2026-05-30)
 
 
