@@ -513,15 +513,20 @@ test("mutation-enabled pending flow applies and links to run details", async ({
     .getByRole("button", { name: /Apply 1 update/ })
     .click();
 
-  await expect(page.getByRole("heading", { name: "Apply complete" })).toBeVisible();
-  await expect(page.getByRole("link", { name: "Details" })).toBeVisible();
-  await expect(page.getByRole("link", { name: "Log" })).toBeVisible();
+  const applyDialog = page.getByRole("dialog").filter({
+    hasText: "Apply complete",
+  });
+  await expect(
+    applyDialog.getByRole("heading", { name: "Apply complete" }),
+  ).toBeVisible();
+  await expect(applyDialog.getByRole("link", { name: "Details" })).toBeVisible();
+  await expect(applyDialog.getByRole("link", { name: "Log" })).toBeVisible();
   expect(state.calls.some((call) => call.path === "/api/v1/jobs")).toBe(true);
   expect(
     state.calls.some((call) => call.path === "/api/v1/jobs/job-smoke/stream"),
   ).toBe(true);
 
-  await page.getByRole("link", { name: "Details" }).click();
+  await applyDialog.getByRole("link", { name: "Details" }).click();
   await expect(page.getByRole("heading", { name: "#7" })).toBeVisible();
   await expect(page.getByText("Pending records")).toBeVisible();
 

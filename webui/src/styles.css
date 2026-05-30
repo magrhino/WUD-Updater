@@ -271,6 +271,102 @@ a {
   box-shadow: var(--shadow-panel-lift);
 }
 
+.apply-job-panel {
+  display: grid;
+  gap: 12px;
+  scroll-margin-top: 88px;
+}
+
+.apply-job-panel-active {
+  position: sticky;
+  top: 12px;
+  z-index: 8;
+  border-color: var(--color-border-hover);
+}
+
+.apply-job-panel:focus-visible,
+.apply-job-modal h2:focus-visible {
+  outline: 2px solid var(--color-border-hover);
+  outline-offset: 3px;
+}
+
+.apply-job-heading {
+  align-items: center;
+}
+
+.apply-job-summary {
+  max-width: 68ch;
+  margin: 6px 0 0;
+  color: var(--color-muted-text);
+  font-size: 0.9rem;
+}
+
+.apply-job-progress {
+  position: relative;
+  height: 6px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--color-border-subtle);
+}
+
+.apply-job-progress span {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -42%;
+  width: 42%;
+  border-radius: inherit;
+  background: var(--color-operational-teal);
+  animation: apply-job-progress 1.35s ease-in-out infinite;
+}
+
+.apply-job-grid {
+  display: grid;
+  grid-template-columns: minmax(220px, 0.8fr) minmax(0, 1.2fr);
+  gap: 12px;
+  align-items: start;
+}
+
+.apply-job-impact {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 7px;
+  background: var(--color-panel-tint);
+}
+
+.apply-job-impact .compact-list {
+  margin-top: 0;
+}
+
+.apply-job-impact-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.apply-job-modal {
+  width: min(760px, calc(100vw - 32px));
+}
+
+@keyframes apply-job-progress {
+  0% {
+    transform: translateX(0);
+  }
+
+  50% {
+    transform: translateX(150%);
+  }
+
+  100% {
+    transform: translateX(340%);
+  }
+}
+
 .selection-summary {
   display: grid;
   gap: 2px;
@@ -1142,6 +1238,14 @@ body .n-switch:focus-within {
     top: 76px;
   }
 
+  .apply-job-panel-active {
+    top: 76px;
+  }
+
+  .apply-job-grid {
+    grid-template-columns: 1fr;
+  }
+
   .topbar {
     align-items: flex-start;
   }
@@ -1155,6 +1259,7 @@ body .n-switch:focus-within {
   .section-heading,
   .selection-toolbar,
   .batch-action-bar,
+  .apply-job-heading,
   .stack-card-header,
   .pending-update-main,
   .topbar {
@@ -1320,5 +1425,11 @@ body .n-switch:focus-within {
     transition-duration: 0.01ms !important;
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
+  }
+
+  .apply-job-progress span {
+    left: 0;
+    width: 100%;
+    transform: none !important;
   }
 }

@@ -48,6 +48,44 @@ function mockPendingLifecycle(webui: ReturnType<typeof useWebuiStore>) {
   vi.spyOn(webui, "refreshReleaseNotes").mockResolvedValue();
 }
 
+function mockApplyJobStream() {
+  const close = vi.fn();
+  let jobListener: ((event: MessageEvent<string>) => void) | null = null;
+  vi.spyOn(webApi, "openJobStream").mockReturnValue({
+    addEventListener: vi.fn((type: string, listener: EventListener) => {
+      if (type === "job") {
+        jobListener = listener as (event: MessageEvent<string>) => void;
+      }
+    }),
+    close,
+    onerror: null,
+    onmessage: null,
+    onopen: null,
+    readyState: 1,
+    url: "",
+    withCredentials: true,
+    CONNECTING: 0,
+    OPEN: 1,
+    CLOSED: 2,
+    dispatchEvent: vi.fn(),
+    removeEventListener: vi.fn(),
+  } as unknown as EventSource);
+
+  return {
+    close,
+    emitJob(job: ReturnType<typeof applyJobResponse>): void {
+      jobListener?.(
+        new MessageEvent("job", {
+          data: JSON.stringify(job),
+        }),
+      );
+    },
+    get observed(): boolean {
+      return jobListener !== null;
+    },
+  };
+}
+
 describe("mutating WebUI views", () => {
   beforeEach(() => {
     setActivePinia(createPinia());
@@ -573,7 +611,9 @@ describe("mutating WebUI views", () => {
   it("creates an apply job only after explicit confirmation", async () => {
     const { pinia, webui } = setupStores(true);
     webui.pending = pendingResponse();
-    const loadPending = vi.spyOn(webui, "loadPending").mockResolvedValue();
+    const loadPending = vi.spyOn(webui, "loadPending").mockImplementation(async () => {
+      webui.plan = null;
+    });
     const loadReleaseNotes = vi.spyOn(webui, "loadReleaseNotes").mockResolvedValue();
     const refreshReleaseNotes = vi
       .spyOn(webui, "refreshReleaseNotes")
@@ -582,30 +622,12 @@ describe("mutating WebUI views", () => {
     vi.spyOn(webui, "createPlan").mockImplementation(async () => {
       webui.plan = planResponse();
     });
-    const createJob = vi
-      .spyOn(webui, "createJob")
-      .mockResolvedValue(applyJobResponse());
-    const close = vi.fn();
-    let jobListener: ((event: MessageEvent<string>) => void) | null = null;
-    vi.spyOn(webApi, "openJobStream").mockReturnValue({
-      addEventListener: vi.fn((type: string, listener: EventListener) => {
-        if (type === "job") {
-          jobListener = listener as (event: MessageEvent<string>) => void;
-        }
-      }),
-      close,
-      onerror: null,
-      onmessage: null,
-      onopen: null,
-      readyState: 1,
-      url: "",
-      withCredentials: true,
-      CONNECTING: 0,
-      OPEN: 1,
-      CLOSED: 2,
-      dispatchEvent: vi.fn(),
-      removeEventListener: vi.fn(),
-    } as unknown as EventSource);
+    const createJob = vi.spyOn(webui, "createJob").mockImplementation(async () => {
+      const job = applyJobResponse();
+      webui.setApplyJob(job);
+      return job;
+    });
+    const jobStream = mockApplyJobStream();
     const wrapper = mountWithApp(PendingView, { pinia });
 
     await wrapper
@@ -624,19 +646,74 @@ describe("mutating WebUI views", () => {
       ?.trigger("click");
 
     expect(createJob).toHaveBeenCalledWith("plan-test", [1], true, []);
-    expect(jobListener).not.toBeNull();
+    expect(jobStream.observed).toBe(true);
+    await flushPromises();
 
-    jobListener?.(
-      new MessageEvent("job", {
-        data: JSON.stringify(applyJobResponse({ status: "success" })),
-      }),
-    );
+    expect(wrapper.find('[role="dialog"]').text()).toContain("Applying 1 update");
+    expect(wrapper.find(".apply-job-panel").text()).toContain("Applying 1 update");
+    expect(wrapper.find(".apply-job-panel").text()).toContain("repo/app:1.0");
+
+    jobStream.emitJob(applyJobResponse({ status: "success", run_id: 10 }));
     await flushPromises();
 
     expect(loadPending).toHaveBeenCalled();
     expect(loadReleaseNotes).toHaveBeenCalled();
     expect(refreshReleaseNotes).toHaveBeenCalled();
     expect(loadRuns).toHaveBeenCalled();
+    expect(wrapper.find(".apply-job-panel").text()).toContain("Apply complete");
+    expect(wrapper.find(".apply-job-panel").text()).toContain("repo/app:1.0");
+    expect(wrapper.find(".apply-job-panel").text()).toContain("#10");
+  });
+
+  it("keeps failed apply jobs visible with the confirmed plan impact", async () => {
+    const { pinia, webui } = setupStores(true);
+    webui.pending = pendingResponse();
+    mockPendingLifecycle(webui);
+    vi.spyOn(webui, "loadRuns").mockResolvedValue();
+    vi.spyOn(webui, "createPlan").mockImplementation(async () => {
+      webui.plan = planResponse();
+    });
+    vi.spyOn(webui, "createJob").mockImplementation(async () => {
+      const job = applyJobResponse({
+        status: "running",
+        started_at: "2026-05-28T12:00:00+00:00",
+      });
+      webui.setApplyJob(job);
+      return job;
+    });
+    const jobStream = mockApplyJobStream();
+    const wrapper = mountWithApp(PendingView, { pinia });
+
+    await wrapper
+      .findAll("button")
+      .find((button) => button.text().includes("Preview media plan"))
+      ?.trigger("click");
+    await flushPromises();
+    await wrapper
+      .find('[role="dialog"]')
+      .findAll("button")
+      .find((button) => button.text().includes("Apply 1 update"))
+      ?.trigger("click");
+    await flushPromises();
+
+    expect(wrapper.find('[role="dialog"]').text()).toContain("Applying 1 update");
+    expect(wrapper.find(".apply-job-panel").text()).toContain("running");
+    expect(wrapper.find(".apply-job-panel").text()).toContain("repo/app:1.0");
+
+    jobStream.emitJob(
+      applyJobResponse({
+        status: "failure",
+        error: "updater exited with status 1",
+      }),
+    );
+    await flushPromises();
+
+    expect(wrapper.find(".apply-job-panel").text()).toContain("Apply failed");
+    expect(wrapper.find(".apply-job-panel").text()).toContain(
+      "updater exited with status 1",
+    );
+    expect(wrapper.find(".apply-job-panel").text()).toContain("repo/app:1.0");
+    expect(jobStream.close).toHaveBeenCalled();
   });
 
   it("shows recovery guidance when a remembered apply job is missing", async () => {
