@@ -1209,20 +1209,6 @@ def api_pending_cleanup(
 
         removed = _validated_cleanup_lines(payload, payload_lines, cleanup)
         try:
-            remove_lines_before_run(
-                settings.config.wud_out_file,
-                parsed,
-                [item.line_no for item in removed],
-                lock=wud_lock,
-                owner=_owner_config(settings),
-            )
-        except OSError as exc:
-            raise HTTPException(
-                status_code=500,
-                detail=f"could not remove pending lines: {exc}",
-            ) from exc
-
-        try:
             with connect_db(settings.config.db_path) as conn:
                 init_db(conn)
                 with _immediate_transaction(conn):
@@ -1232,6 +1218,21 @@ def api_pending_cleanup(
                         request,
                         removed,
                     )
+                    try:
+                        remove_lines_before_run(
+                            settings.config.wud_out_file,
+                            parsed,
+                            [item.line_no for item in removed],
+                            lock=wud_lock,
+                            owner=_owner_config(settings),
+                        )
+                    except OSError as exc:
+                        raise HTTPException(
+                            status_code=500,
+                            detail=f"could not remove pending lines: {exc}",
+                        ) from exc
+        except HTTPException:
+            raise
         except (OSError, sqlite3.Error, DatabaseError) as exc:
             raise HTTPException(
                 status_code=500,

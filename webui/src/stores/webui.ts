@@ -99,10 +99,14 @@ export const useWebuiStore = defineStore("webui", () => {
     });
   }
 
-  async function loadPending(): Promise<void> {
+  async function loadPending(
+    options: { preserveCleanup?: boolean } = {},
+  ): Promise<void> {
     await loadWithState(async () => {
       plan.value = null;
-      pendingCleanup.value = null;
+      if (!options.preserveCleanup) {
+        pendingCleanup.value = null;
+      }
       pending.value = await webApi.pending();
     });
   }
@@ -142,6 +146,7 @@ export const useWebuiStore = defineStore("webui", () => {
     const auth = useAuthStore();
     await loadWithState(async () => {
       plan.value = null;
+      pendingCleanup.value = null;
       applyJob.value = null;
       applyJobLog.value = null;
       plan.value = await webApi.createPlan(

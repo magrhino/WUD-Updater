@@ -9,6 +9,7 @@ import {
 import {
   applyJobLogResponse,
   applyJobResponse,
+  pendingResponse,
   releaseNotesResponse,
   planResponse,
   statusResponse,
@@ -86,6 +87,32 @@ describe("webui store", () => {
         "x-wud-csrf-token",
       ),
     ).toBe("csrf-cleanup");
+  });
+
+  it("preserves cleanup success while refreshing pending state when requested", async () => {
+    mockFetch(pendingResponse());
+    const webui = useWebuiStore();
+    webui.pendingCleanup = {
+      status: "success",
+      audit_run_id: 12,
+      removed_count: 1,
+      removed: [
+        {
+          line_no: 3,
+          raw: "repo/old:latest",
+          image: "repo/old:latest",
+          reason: "unmatched",
+        },
+      ],
+    };
+
+    await webui.loadPending({ preserveCleanup: true });
+
+    expect(webui.pendingCleanup?.audit_run_id).toBe(12);
+
+    await webui.loadPending();
+
+    expect(webui.pendingCleanup).toBeNull();
   });
 
   it("passes csrf from auth store to state operations", async () => {

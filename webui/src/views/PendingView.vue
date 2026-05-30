@@ -753,7 +753,10 @@ async function confirmCleanup(): Promise<void> {
   showCleanupModal.value = false;
   showPreflightModal.value = false;
   updateIntent.value = null;
-  await Promise.all([loadPendingAndReleaseNotes(), webui.loadRuns()]);
+  await Promise.all([
+    loadPendingAndReleaseNotes({ preserveCleanup: true }),
+    webui.loadRuns(),
+  ]);
 }
 
 async function confirmApply(): Promise<void> {
@@ -1067,8 +1070,10 @@ function planLineTagRewriteLabel(line: PlanLine): string {
   return `${line.compose_image} -> ${line.target_image}`;
 }
 
-async function loadPendingAndReleaseNotes(): Promise<void> {
-  await webui.loadPending();
+async function loadPendingAndReleaseNotes(
+  options: { preserveCleanup?: boolean } = {},
+): Promise<void> {
+  await webui.loadPending(options);
   await webui.loadReleaseNotes().catch(() => undefined);
   void webui.refreshReleaseNotes().catch(() => undefined);
 }

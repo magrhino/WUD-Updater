@@ -2239,6 +2239,63 @@ def test_pending_cleanup_removes_unmatched_entries_and_records_audit(
     assert not lock_dir_for(wud_file).exists()
 
 
+def test_pending_cleanup_audit_failure_does_not_remove_wud_lines(
+    tmp_path: Path,
+) -> None:
+    fake_env, fake_root = _fake_docker_env(tmp_path)
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+            **fake_env,
+        },
+    )
+    wud_file = tmp_path / "state" / "images.todo"
+    original = "repo/old:latest\nrepo/app:latest\n"
+    wud_file.write_text(original, encoding="utf-8")
+    _make_fake_stack(
+        tmp_path,
+        fake_root,
+        "stack",
+        [("app", "repo/app:latest", "cid-app")],
+    )
+    headers = _csrf_headers(client)
+    plan = client.post(
+        "/api/v1/plans",
+        json={"line_numbers": [1, 2]},
+        headers=headers,
+    ).json()
+    original_init_db = web_module.init_db
+
+    def failing_init_db(conn: sqlite3.Connection) -> None:
+        raise web_module.DatabaseError("audit database unavailable")
+
+    web_module.init_db = failing_init_db
+    try:
+        response = client.post(
+            "/api/v1/pending/cleanup",
+            json={
+                "cleanup_id": plan["cleanup"]["cleanup_id"],
+                "lines": [
+                    {
+                        "line_no": plan["cleanup"]["items"][0]["line_no"],
+                        "raw": plan["cleanup"]["items"][0]["raw"],
+                    }
+                ],
+                "confirmation": "remove_unmatched",
+            },
+            headers=headers,
+        )
+    finally:
+        web_module.init_db = original_init_db
+
+    assert response.status_code == 500
+    assert "could not record cleanup audit" in response.json()["detail"]
+    assert wud_file.read_text(encoding="utf-8") == original
+    assert not lock_dir_for(wud_file).exists()
+
+
 def test_pending_cleanup_rejects_stale_raw_line_without_mutation(
     tmp_path: Path,
 ) -> None:

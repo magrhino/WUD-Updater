@@ -36,6 +36,11 @@ describe("demo web API", () => {
     expect(pending.grouping.groups.every((group) => !group.directory.startsWith("/"))).toBe(
       true,
     );
+    expect(
+      pending.grouping.groups.flatMap((group) =>
+        group.items.map((item) => item.diagnostic),
+      ),
+    ).toEqual([null, null, null, null]);
   });
 
   it("creates plans from the current fixture state", async () => {
@@ -54,6 +59,52 @@ describe("demo web API", () => {
     });
     expect(plan.stacks[0]?.name).toBe("media");
     expect(plan.stacks[0]?.services).toEqual(["radarr", "wud-updater"]);
+    expect(plan.cleanup).toEqual({
+      cleanup_id: "",
+      can_remove_unmatched: false,
+      items: [],
+    });
+    expect(plan.issues).toEqual([]);
+  });
+
+  it("removes exact pending lines through demo cleanup", async () => {
+    const api = createDemoWebApi();
+    const pending = await api.pending();
+    const line = pending.items[0];
+
+    const cleanup = await api.cleanupPending(
+      "demo-cleanup",
+      [{ line_no: line.line_no, raw: line.raw }],
+      "csrf",
+    );
+
+    expect(cleanup).toMatchObject({
+      status: "success",
+      audit_run_id: 4,
+      removed_count: 1,
+      removed: [{ line_no: line.line_no, raw: line.raw, reason: "unmatched" }],
+    });
+    expect((await api.pending()).count).toBe(3);
+    await expect(api.runDetail(cleanup.audit_run_id)).resolves.toMatchObject({
+      id: cleanup.audit_run_id,
+      mode: "web-pending-cleanup",
+      metadata: { operation: "remove_unmatched_pending" },
+      pending_updates: [
+        {
+          line_no: line.line_no,
+          status: "resolved",
+          status_reason: "removed-unmatched",
+        },
+      ],
+      events: [{ status: "success" }],
+    });
+    await expect(
+      api.cleanupPending(
+        "demo-cleanup",
+        [{ line_no: line.line_no, raw: line.raw }],
+        "csrf",
+      ),
+    ).rejects.toThrow("cleanup is stale");
   });
 
   it("streams apply jobs and updates pending state and run history", async () => {
