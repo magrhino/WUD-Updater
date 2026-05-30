@@ -4,6 +4,13 @@ All notable changes to WUD-Updater are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com) and versions follow
 [Semantic Versioning](https://semver.org).
 
+## [0.26.0](https://github.com/magrhino/WUD-Updater/compare/v0.25.0...v0.26.0) (2026-05-30)
+
+
+### Features
+
+* **ui:** add unmatched pending cleanup ([#133](https://github.com/magrhino/WUD-Updater/issues/133)) ([3747aea](https://github.com/magrhino/WUD-Updater/commit/3747aeab9c785fe9bc8fb164fbd37cee3518304d))
+
 ## [0.25.0](https://github.com/magrhino/WUD-Updater/compare/v0.24.2...v0.25.0) (2026-05-30)
 
 
