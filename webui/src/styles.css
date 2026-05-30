@@ -73,7 +73,7 @@ a {
 .nav-item.router-link-active,
 .nav-item:hover {
   background: var(--color-sidebar-hover);
-  color: var(--color-surface);
+  color: var(--color-sidebar-text);
 }
 
 .sidebar-footer {
@@ -637,7 +637,7 @@ a {
   place-items: center;
   border-radius: 8px;
   background: var(--color-sidebar);
-  color: var(--color-surface);
+  color: var(--color-sidebar-text);
 }
 
 .block-alert {

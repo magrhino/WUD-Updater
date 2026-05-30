@@ -314,6 +314,40 @@ async function sensitiveStorageKeys(page: Page) {
   }));
 }
 
+async function sidebarForegroundStyles(page: Page, selector: string) {
+  return page.locator(selector).evaluate((element) => {
+    const normalizeColor = (value: string) => {
+      const probe = document.createElement("span");
+      probe.style.color = value;
+      document.body.append(probe);
+      const color = getComputedStyle(probe).color;
+      probe.remove();
+      return color;
+    };
+    const rootStyles = getComputedStyle(document.documentElement);
+    return {
+      color: getComputedStyle(element).color,
+      sidebarText: normalizeColor(
+        rootStyles.getPropertyValue("--color-sidebar-text").trim(),
+      ),
+      surface: normalizeColor(
+        rootStyles.getPropertyValue("--color-surface").trim(),
+      ),
+    };
+  });
+}
+
+async function expectSidebarForegroundToken(page: Page, selector: string) {
+  await expect
+    .poll(async () => {
+      const styles = await sidebarForegroundStyles(page, selector);
+      return (
+        styles.color === styles.sidebarText && styles.color !== styles.surface
+      );
+    })
+    .toBe(true);
+}
+
 test.beforeEach(async ({ context }) => {
   await context.clearCookies();
 });
@@ -409,9 +443,11 @@ test("theme toggle follows system dark mode and cycles preferences", async ({
       ),
     )
     .toBe("#0f171a");
+  await expectSidebarForegroundToken(page, ".nav-item.router-link-active");
 
   await page.getByRole("button", { name: /System theme/ }).click();
   await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+  await expectSidebarForegroundToken(page, ".nav-item.router-link-active");
   await expect
     .poll(() => page.evaluate(() => localStorage.getItem("theme-preference")))
     .toBe("light");
@@ -432,6 +468,25 @@ test("theme toggle follows system dark mode and cycles preferences", async ({
     local: [],
     session: [],
   });
+});
+
+test("login mark uses sidebar foreground token in light and dark themes", async ({
+  page,
+}) => {
+  const state = createState();
+  await page.emulateMedia({ colorScheme: "dark" });
+  await installApiFixtures(page, state);
+
+  await page.goto("/#/login");
+  await expect(page.getByRole("heading", { name: "Sign in" })).toBeVisible();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+  await expectSidebarForegroundToken(page, ".login-mark");
+
+  await page.evaluate(() => localStorage.setItem("theme-preference", "light"));
+  await page.reload();
+  await expect(page.getByRole("heading", { name: "Sign in" })).toBeVisible();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+  await expectSidebarForegroundToken(page, ".login-mark");
 });
 
 test("mutation-enabled pending flow creates jobs only after confirmation", async ({
