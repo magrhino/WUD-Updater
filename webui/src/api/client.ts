@@ -1,3 +1,5 @@
+import { createDemoWebApi } from "./demo";
+
 export interface PendingItem {
   line_no: number;
   raw: string;
@@ -433,7 +435,7 @@ async function apiRequest<T>(
   return body as T;
 }
 
-export const webApi = {
+const liveWebApi = {
   csrf: () => apiRequest<CsrfResponse>("/auth/csrf"),
   setupStatus: () => apiRequest<SetupStatusResponse>("/setup/status"),
   setupClaim: (
@@ -555,3 +557,10 @@ export const webApi = {
   runLog: (runId: number, tailBytes = 262_144) =>
     apiRequest<RunLogResponse>(`/runs/${runId}/log?tail_bytes=${tailBytes}`),
 };
+
+export type WebApi = typeof liveWebApi;
+
+export const webApi: WebApi =
+  import.meta.env.MODE === "demo" || import.meta.env.VITE_WUD_DEMO_MODE === "true"
+    ? createDemoWebApi()
+    : liveWebApi;

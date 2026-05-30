@@ -143,6 +143,7 @@ development and tests.
 
 | Topic | Where |
 |---|---|
+| Public WebUI demo | [magrhino.github.io/WUD-Updater](https://magrhino.github.io/WUD-Updater/) |
 | Security policy and private vulnerability reporting | [SECURITY.md](SECURITY.md) |
 | Deployment, configuration, maintenance, and security notes | [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) |
 | Complete documentation index | [docs/README.md](docs/README.md) |

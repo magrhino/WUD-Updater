@@ -1,0 +1,1212 @@
+import type {
+  ApplyJobLogResponse,
+  ApplyJobResponse,
+  AuthSessionResponse,
+  CsrfResponse,
+  PendingGroupedItem,
+  PendingUpdateRecord,
+  PendingResponse,
+  PlanLine,
+  PlanResponse,
+  PlanStack,
+  ReleaseNoteInfo,
+  ReleaseNotesResponse,
+  RunDetail,
+  RunEventRecord,
+  RunLogResponse,
+  RunSummary,
+  ServicePolicyRecord,
+  SetupStatusResponse,
+  SnoozeRecord,
+  SnoozeState,
+  StatusResponse,
+  StateOperation,
+  StateOperationResponse,
+  TagExclusionRuleRecord,
+  TagExclusionStatusFilter,
+  TagOverrideRequest,
+  WebApi,
+} from "./client";
+
+const DEMO_VERSION = "0.25.0";
+const DEMO_SOURCE_FILE = "demo/out/images.todo";
+const DEMO_DB_PATH = "demo/logs/wud-updater.sqlite";
+const DEMO_LOG_DIR = "demo/logs";
+const DEMO_DOCKER_BASE = "demo/docker";
+const DEMO_CSRF_TOKEN = "demo-csrf-token";
+
+type DemoStackName = "data" | "home" | "media";
+
+type DemoStack = {
+  name: DemoStackName;
+  servicesLabel: string;
+  services: string[];
+};
+
+type DemoJobRecord = {
+  job: ApplyJobResponse;
+  log: ApplyJobLogResponse;
+  lineNumbers: number[];
+  plan: PlanResponse | null;
+  completed: boolean;
+};
+
+type DemoRunFixture = {
+  summary: RunSummary;
+  detail: RunDetail;
+  log: RunLogResponse;
+};
+
+const DEMO_STACKS: Record<DemoStackName, DemoStack> = {
+  data: {
+    name: "data",
+    servicesLabel: "postgres",
+    services: ["postgres"],
+  },
+  home: {
+    name: "home",
+    servicesLabel: "home-assistant",
+    services: ["home-assistant"],
+  },
+  media: {
+    name: "media",
+    servicesLabel: "radarr, wud-updater",
+    services: ["radarr", "wud-updater"],
+  },
+};
+
+type DemoPendingItem = PendingGroupedItem & {
+  stack: DemoStackName;
+  service: string;
+};
+
+const INITIAL_PENDING: DemoPendingItem[] = [
+  {
+    line_no: 2,
+    raw: "ghcr.io/home-assistant/home-assistant:2026.5.1 tag=2026.5.3",
+    image: "ghcr.io/home-assistant/home-assistant:2026.5.1",
+    key: "home-assistant/home-assistant:2026.5.1",
+    repo: "home-assistant/home-assistant",
+    current_tag: "2026.5.1",
+    has_tag: true,
+    allow_repo: false,
+    digest: "",
+    desired_tag: "2026.5.3",
+    resolved_image: "ghcr.io/home-assistant/home-assistant:2026.5.1",
+    target_image: "ghcr.io/home-assistant/home-assistant:2026.5.3",
+    compose_images: ["ghcr.io/home-assistant/home-assistant:2026.5.1"],
+    services: ["home-assistant"],
+    action: "tag-update",
+    stack: "home",
+    service: "home-assistant",
+  },
+  {
+    line_no: 3,
+    raw: "lscr.io/linuxserver/radarr:5.21.1 tag=5.22.4",
+    image: "lscr.io/linuxserver/radarr:5.21.1",
+    key: "linuxserver/radarr:5.21.1",
+    repo: "linuxserver/radarr",
+    current_tag: "5.21.1",
+    has_tag: true,
+    allow_repo: false,
+    digest: "",
+    desired_tag: "5.22.4",
+    resolved_image: "lscr.io/linuxserver/radarr:5.21.1",
+    target_image: "lscr.io/linuxserver/radarr:5.22.4",
+    compose_images: ["lscr.io/linuxserver/radarr:5.21.1"],
+    services: ["radarr"],
+    action: "tag-update",
+    stack: "media",
+    service: "radarr",
+  },
+  {
+    line_no: 4,
+    raw: "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+    image:
+      "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+    key: "postgres:16",
+    repo: "postgres",
+    current_tag: "16",
+    has_tag: true,
+    allow_repo: false,
+    digest: "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+    desired_tag: "",
+    resolved_image:
+      "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+    target_image:
+      "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+    compose_images: ["postgres:16"],
+    services: ["postgres"],
+    action: "update",
+    stack: "data",
+    service: "postgres",
+  },
+  {
+    line_no: 5,
+    raw: "ghcr.io/magrhino/wud-updater:v0.25.0 tag=v0.25.1",
+    image: "ghcr.io/magrhino/wud-updater:v0.25.0",
+    key: "magrhino/wud-updater:v0.25.0",
+    repo: "magrhino/wud-updater",
+    current_tag: "v0.25.0",
+    has_tag: true,
+    allow_repo: false,
+    digest: "",
+    desired_tag: "v0.25.1",
+    resolved_image: "ghcr.io/magrhino/wud-updater:v0.25.0",
+    target_image: "ghcr.io/magrhino/wud-updater:v0.25.1",
+    compose_images: ["ghcr.io/magrhino/wud-updater:v0.25.0"],
+    services: ["wud-updater"],
+    action: "tag-update",
+    stack: "media",
+    service: "wud-updater",
+  },
+];
+
+const INITIAL_POLICIES: ServicePolicyRecord[] = [
+  {
+    service_key: "home/home-assistant",
+    update_mode: "live",
+    auto_update: true,
+    snooze_default_seconds: null,
+    created_at: "2026-05-28T12:00:00+00:00",
+    updated_at: "2026-05-28T12:00:00+00:00",
+    metadata: { source: "demo" },
+  },
+  {
+    service_key: "media/radarr",
+    update_mode: "stop",
+    auto_update: false,
+    snooze_default_seconds: 86_400,
+    created_at: "2026-05-28T12:00:00+00:00",
+    updated_at: "2026-05-28T12:00:00+00:00",
+    metadata: { source: "demo" },
+  },
+];
+
+const INITIAL_SNOOZES: SnoozeRecord[] = [
+  {
+    id: 1,
+    service_key: "media/radarr",
+    snoozed_until: "2099-01-01T00:00:00+00:00",
+    reason: "demo maintenance window",
+    created_at: "2026-05-28T12:00:00+00:00",
+    active: true,
+    metadata: { source: "demo" },
+  },
+  {
+    id: 2,
+    service_key: "data/postgres",
+    snoozed_until: "2020-01-01T00:00:00+00:00",
+    reason: "expired demo snooze",
+    created_at: "2020-01-01T00:00:00+00:00",
+    active: false,
+    metadata: { source: "demo" },
+  },
+];
+
+const INITIAL_TAG_EXCLUSIONS: TagExclusionRuleRecord[] = [
+  {
+    id: 1,
+    scope: "image_repo",
+    image_repo: "ghcr.io/home-assistant/home-assistant",
+    service_key: "",
+    match_type: "exact",
+    tag: "2026.5.3",
+    regex_fragment: "2026\\.5\\.3",
+    status: "active",
+    created_at: "2026-05-28T12:00:00+00:00",
+    updated_at: "2026-05-28T12:00:00+00:00",
+    metadata: { source: "demo" },
+  },
+  {
+    id: 2,
+    scope: "service",
+    image_repo: "lscr.io/linuxserver/radarr",
+    service_key: "media/radarr",
+    match_type: "exact",
+    tag: "5.22.4",
+    regex_fragment: "5\\.22\\.4",
+    status: "disabled",
+    created_at: "2026-05-28T12:00:00+00:00",
+    updated_at: "2026-05-28T12:00:00+00:00",
+    metadata: { source: "demo" },
+  },
+];
+
+const INITIAL_RELEASE_NOTES: ReleaseNoteInfo[] = [
+  releaseNote({
+    line_no: 2,
+    image_repo: "home-assistant/home-assistant",
+    upstream_repo: "home-assistant/core",
+    release_tag: "2026.5.3",
+    title: "Home Assistant Core 2026.5.3",
+    url: "https://github.com/home-assistant/core/releases/tag/2026.5.3",
+  }),
+  releaseNote({
+    line_no: 3,
+    image_repo: "linuxserver/radarr",
+    upstream_repo: "Radarr/Radarr",
+    release_tag: "v5.22.4",
+    title: "Radarr v5.22.4",
+    url: "https://github.com/Radarr/Radarr/releases/tag/v5.22.4",
+  }),
+  releaseNote({
+    line_no: 5,
+    image_repo: "magrhino/wud-updater",
+    upstream_repo: "magrhino/wud-updater",
+    release_tag: "v0.25.1",
+    title: "WUD-Updater v0.25.1",
+    url: "https://github.com/magrhino/wud-updater/releases/tag/v0.25.1",
+  }),
+];
+
+const INITIAL_RUNS: DemoRunFixture[] = [
+  demoRun({
+    id: 3,
+    startedAt: "2026-05-27T22:45:00+00:00",
+    finishedAt: "2026-05-27T22:45:12+00:00",
+    status: "success",
+    dryRun: true,
+    mode: "live",
+    logFile: `${DEMO_LOG_DIR}/demo-dry-run.log`,
+    summary: "dry-run plan",
+    logContent: `[2026-05-27T22:45:00+00:00] docker-update-from-wud-v2
+[2026-05-27T22:45:01+00:00] Dry-run: would update edge/nginx from nginx:1.25 to nginx:1.27.
+[2026-05-27T22:45:12+00:00] Dry-run completed without mutation.
+`,
+    pending: [
+      pendingRecord(1, 3, "nginx:1.25 tag=1.27", "edge/nginx", "planned"),
+    ],
+    events: [],
+  }),
+  demoRun({
+    id: 2,
+    startedAt: "2026-05-28T10:04:00+00:00",
+    finishedAt: "2026-05-28T10:05:09+00:00",
+    status: "failed",
+    dryRun: false,
+    mode: "pause",
+    logFile: `${DEMO_LOG_DIR}/demo-failed.log`,
+    summary: "health check failed",
+    logContent: `[2026-05-28T10:04:00+00:00] docker-update-from-wud-v2
+[2026-05-28T10:04:06+00:00] [apps/api] Pull complete.
+[2026-05-28T10:04:32+00:00] [apps/api] Container recreated.
+[2026-05-28T10:05:09+00:00] [apps/api] Health check timed out; leaving WUD line pending.
+`,
+    pending: [
+      pendingRecord(1, 2, "ghcr.io/example/api:2.8.0 tag=2.9.0", "apps/api", "failed"),
+    ],
+    events: [
+      runEvent(20, 2, "api", "apps", "ghcr.io/example/api:2.8.0", "ghcr.io/example/api:2.9.0", "failed"),
+    ],
+  }),
+  demoRun({
+    id: 1,
+    startedAt: "2026-05-28T12:12:00+00:00",
+    finishedAt: "2026-05-28T12:13:41+00:00",
+    status: "success",
+    dryRun: false,
+    mode: "stop",
+    logFile: `${DEMO_LOG_DIR}/demo-success.log`,
+    summary: "updated two services",
+    logContent: `[2026-05-28T12:12:00+00:00] docker-update-from-wud-v2
+[2026-05-28T12:12:02+00:00] Found 2 matching services.
+[2026-05-28T12:12:38+00:00] [media/sonarr] Recreated container and health check passed.
+[2026-05-28T12:13:40+00:00] [infra/redis] Recreated container and health check passed.
+[2026-05-28T12:13:41+00:00] Done.
+`,
+    pending: [
+      pendingRecord(1, 1, "lscr.io/linuxserver/sonarr:4.0.14 tag=4.0.15", "media/sonarr", "success"),
+      pendingRecord(2, 1, "redis:7.2 tag=7.4", "infra/redis", "success"),
+    ],
+    events: [
+      runEvent(10, 1, "sonarr", "media", "lscr.io/linuxserver/sonarr:4.0.14", "lscr.io/linuxserver/sonarr:4.0.15", "success"),
+      runEvent(11, 1, "redis", "infra", "redis:7.2", "redis:7.4", "success"),
+    ],
+  }),
+];
+
+class DemoApiState {
+  pending = clone(INITIAL_PENDING);
+  policies = clone(INITIAL_POLICIES);
+  snoozes = clone(INITIAL_SNOOZES);
+  tagExclusions = clone(INITIAL_TAG_EXCLUSIONS);
+  runs = clone(INITIAL_RUNS);
+  jobs = new Map<string, DemoJobRecord>();
+  nextJob = 1;
+  nextRun = 4;
+  nextAudit = 100;
+  nextSnooze = 3;
+  nextTagExclusion = 3;
+
+  session(): AuthSessionResponse {
+    return {
+      authenticated: true,
+      setup_required: false,
+      auth_required: false,
+      dev_auth_bypass: true,
+      mutations_enabled: true,
+      username: null,
+    };
+  }
+
+  setupStatus(): SetupStatusResponse {
+    return {
+      setup_required: false,
+      claim_required: false,
+      authenticated: true,
+      auth_required: false,
+      dev_auth_bypass: true,
+      mutations_enabled: true,
+      password_min_length: 12,
+    };
+  }
+
+  status(): StatusResponse {
+    return {
+      ok: true,
+      version: DEMO_VERSION,
+      wud_file: DEMO_SOURCE_FILE,
+      wud_file_exists: true,
+      pending_count: this.pending.length,
+      db_path: DEMO_DB_PATH,
+      db_ready: true,
+      auth_required: false,
+      dev_auth_bypass: true,
+      setup_required: false,
+      mutations_enabled: true,
+      static_spa_available: true,
+      warnings: ["Static demo mode uses in-browser fixture data only."],
+    };
+  }
+
+  pendingResponse(): PendingResponse {
+    return {
+      source_file: DEMO_SOURCE_FILE,
+      exists: true,
+      count: this.pending.length,
+      items: this.pending.map(stripDemoFields),
+      grouping: {
+        status: "ready",
+        groups: (Object.keys(DEMO_STACKS) as DemoStackName[])
+          .map((name) => this.stackGroup(name))
+          .filter((group) => group.items.length > 0),
+        unmatched: [],
+        warnings: [],
+      },
+      warnings: [],
+    };
+  }
+
+  releaseNotes(): ReleaseNotesResponse {
+    const activeLines = new Set(this.pending.map((item) => item.line_no));
+    const items = INITIAL_RELEASE_NOTES.filter((item) => activeLines.has(item.line_no));
+    return {
+      source_file: DEMO_SOURCE_FILE,
+      count: items.length,
+      items: clone(items),
+      warnings: [],
+    };
+  }
+
+  createPlan(
+    lineNumbers: number[],
+    allowTagUpdates: boolean,
+    tagOverrides: TagOverrideRequest[],
+  ): PlanResponse {
+    const requested = new Set(lineNumbers);
+    const selected = this.pending
+      .filter((item) => requested.has(item.line_no))
+      .map((item) => applyTagOverride(item, tagOverrides));
+    const tagUpdateCount = selected.filter((item) => item.action === "tag-update").length;
+    const blockedTagUpdates = tagUpdateCount > 0 && !allowTagUpdates;
+    const stacks = (Object.keys(DEMO_STACKS) as DemoStackName[])
+      .map((name) => planStack(name, selected))
+      .filter((stack) => stack.lines.length > 0);
+
+    return {
+      plan_id: `demo-plan-${Date.now()}`,
+      dry_run: true,
+      can_apply: selected.length > 0 && !blockedTagUpdates,
+      status: selected.length === 0 ? "empty" : blockedTagUpdates ? "blocked" : "ready",
+      source_file: DEMO_SOURCE_FILE,
+      mode: "stop",
+      max_wait: 180,
+      selected_line_numbers: selected.map((item) => item.line_no),
+      summary: {
+        target_count: selected.length,
+        matched_target_count: selected.length,
+        stack_count: stacks.length,
+        service_count: selected.length,
+        skipped_count: 0,
+        issue_count: blockedTagUpdates ? 1 : 0,
+      },
+      targets: selected.map((item) => ({
+        line_no: item.line_no,
+        raw: item.raw,
+        image: item.image,
+        resolved_image: item.resolved_image,
+        digest: item.digest,
+        desired_tag: item.desired_tag,
+        matched: true,
+        action: item.action,
+      })),
+      stacks,
+      skipped: [],
+      issues: blockedTagUpdates
+        ? [
+            {
+              severity: "error",
+              code: "tag_updates_disabled",
+              message: "Tag rewrites must be confirmed before applying this demo plan.",
+              line_no: null,
+              stack: "",
+              service: "",
+            },
+          ]
+        : [],
+    };
+  }
+
+  createJob(
+    planId: string,
+    lineNumbers: number[],
+    allowTagUpdates: boolean,
+    tagOverrides: TagOverrideRequest[],
+  ): ApplyJobResponse {
+    const plan = this.createPlan(lineNumbers, allowTagUpdates, tagOverrides);
+    const jobId = `demo-job-${this.nextJob++}`;
+    const job: ApplyJobResponse = {
+      job_id: jobId,
+      status: planId && plan.can_apply ? "queued" : "failure",
+      run_id: null,
+      log_file: "",
+      started_at: null,
+      finished_at: null,
+      error: plan.can_apply ? "" : "Demo plan is not applyable.",
+      selected_line_numbers: plan.selected_line_numbers,
+    };
+    const log: ApplyJobLogResponse = {
+      job_id: jobId,
+      log_file: "",
+      exists: true,
+      content: "",
+      truncated: false,
+      max_bytes: 65_536,
+      error: "",
+    };
+    this.jobs.set(jobId, {
+      job,
+      log,
+      lineNumbers: plan.selected_line_numbers,
+      plan,
+      completed: false,
+    });
+    return clone(job);
+  }
+
+  completeJob(jobId: string): DemoJobRecord | null {
+    const record = this.jobs.get(jobId);
+    if (!record || record.completed || !record.plan) {
+      return record ?? null;
+    }
+
+    const startedAt = "2026-05-30T20:12:26+00:00";
+    const finishedAt = "2026-05-30T20:12:28+00:00";
+    const logFile = `${DEMO_LOG_DIR}/update-from-wud-v2-demo-${record.job.job_id}.log`;
+    const selectedItems = this.pending.filter((item) =>
+      record.lineNumbers.includes(item.line_no),
+    );
+    const runId = this.nextRun++;
+    const logContent = this.applyLog(record.plan, startedAt, finishedAt, logFile);
+
+    this.pending = this.pending.filter(
+      (item) => !record.lineNumbers.includes(item.line_no),
+    );
+    record.completed = true;
+    record.job = {
+      ...record.job,
+      status: "success",
+      run_id: runId,
+      log_file: logFile,
+      started_at: startedAt,
+      finished_at: finishedAt,
+      error: "",
+    };
+    record.log = {
+      ...record.log,
+      log_file: logFile,
+      content: logContent,
+    };
+    this.runs.unshift(
+      runFromApply(runId, selectedItems, record.plan, startedAt, finishedAt, logFile, logContent),
+    );
+    return record;
+  }
+
+  servicePolicies(): ServicePolicyRecord[] {
+    return clone(this.policies);
+  }
+
+  snoozeRecords(state: SnoozeState): SnoozeRecord[] {
+    return clone(
+      this.snoozes.filter((snooze) => {
+        if (state === "active") {
+          return snooze.active;
+        }
+        if (state === "expired") {
+          return !snooze.active;
+        }
+        return true;
+      }),
+    );
+  }
+
+  tagExclusionRecords(status: TagExclusionStatusFilter): TagExclusionRuleRecord[] {
+    return clone(
+      this.tagExclusions.filter((rule) =>
+        status === "all" ? true : rule.status === status,
+      ),
+    );
+  }
+
+  stateOperation(operation: StateOperation): StateOperationResponse {
+    if (operation.kind === "upsert_service_policy") {
+      const existing = this.policies.find(
+        (policy) => policy.service_key === operation.service_key,
+      );
+      const policy: ServicePolicyRecord = {
+        service_key: operation.service_key,
+        update_mode: operation.update_mode ?? existing?.update_mode ?? "",
+        auto_update: operation.auto_update ?? existing?.auto_update ?? false,
+        snooze_default_seconds:
+          operation.snooze_default_seconds ?? existing?.snooze_default_seconds ?? null,
+        created_at: existing?.created_at ?? nowIso(),
+        updated_at: nowIso(),
+        metadata: { source: "demo" },
+      };
+      this.policies = upsertBy(
+        this.policies,
+        policy,
+        (item) => item.service_key === policy.service_key,
+      );
+      return this.operationResponse(operation.kind, "service_policy", policy.service_key, policy);
+    }
+
+    if (operation.kind === "delete_service_policy") {
+      this.policies = this.policies.filter(
+        (policy) => policy.service_key !== operation.service_key,
+      );
+      return this.operationResponse(
+        operation.kind,
+        "service_policy",
+        operation.service_key,
+        null,
+      );
+    }
+
+    if (operation.kind === "create_snooze") {
+      const snooze: SnoozeRecord = {
+        id: this.nextSnooze++,
+        service_key: operation.service_key,
+        snoozed_until: operation.snoozed_until,
+        reason: operation.reason ?? "",
+        created_at: nowIso(),
+        active: new Date(operation.snoozed_until).getTime() > Date.now(),
+        metadata: { source: "demo" },
+      };
+      this.snoozes.unshift(snooze);
+      return this.operationResponse(operation.kind, "snooze", String(snooze.id), snooze);
+    }
+
+    if (operation.kind === "delete_snooze") {
+      this.snoozes = this.snoozes.filter(
+        (snooze) => snooze.id !== operation.snooze_id,
+      );
+      return this.operationResponse(
+        operation.kind,
+        "snooze",
+        String(operation.snooze_id),
+        null,
+      );
+    }
+
+    if (operation.kind === "upsert_tag_exclusion") {
+      const key = (rule: TagExclusionRuleRecord) =>
+        rule.scope === operation.scope &&
+        rule.image_repo === operation.image_repo &&
+        rule.service_key === (operation.service_key ?? "") &&
+        rule.tag === operation.tag;
+      const existing = this.tagExclusions.find(key);
+      const rule: TagExclusionRuleRecord = {
+        id: existing?.id ?? this.nextTagExclusion++,
+        scope: operation.scope,
+        image_repo: operation.image_repo,
+        service_key: operation.service_key ?? "",
+        match_type: operation.match_type ?? "exact",
+        tag: operation.tag,
+        regex_fragment: escapeRegex(operation.tag),
+        status: operation.status ?? existing?.status ?? "active",
+        created_at: existing?.created_at ?? nowIso(),
+        updated_at: nowIso(),
+        metadata: { source: "demo" },
+      };
+      this.tagExclusions = upsertBy(this.tagExclusions, rule, key);
+      return this.operationResponse(operation.kind, "tag_exclusion", String(rule.id), rule);
+    }
+
+    const rule = this.tagExclusions.find((item) => item.id === operation.rule_id);
+    if (rule) {
+      rule.status = operation.status;
+      rule.updated_at = nowIso();
+    }
+    return this.operationResponse(
+      operation.kind,
+      "tag_exclusion",
+      String(operation.rule_id),
+      rule ?? null,
+    );
+  }
+
+  runSummaries(): RunSummary[] {
+    return clone(this.runs.map((run) => run.summary));
+  }
+
+  runDetail(runId: number): RunDetail {
+    return clone(this.findRun(runId).detail);
+  }
+
+  runLog(runId: number): RunLogResponse {
+    return clone(this.findRun(runId).log);
+  }
+
+  private stackGroup(name: DemoStackName) {
+    const stack = DEMO_STACKS[name];
+    const items = this.pending.filter((item) => item.stack === name);
+    return {
+      name,
+      directory: `${DEMO_DOCKER_BASE}/${name}`,
+      compose_file: "docker-compose.yml",
+      project_directory: "",
+      services_label: stack.servicesLabel,
+      services: stack.services,
+      line_numbers: items.map((item) => item.line_no),
+      items: clone(items.map(stripDemoFields)),
+    };
+  }
+
+  private applyLog(
+    plan: PlanResponse,
+    startedAt: string,
+    finishedAt: string,
+    logFile: string,
+  ): string {
+    const lines = [
+      `[${startedAt}] [INFO] docker-update-from-wud-v2`,
+      `[${startedAt}] [INFO] Base    : ${DEMO_DOCKER_BASE}`,
+      `[${startedAt}] [INFO] WUD file: ${DEMO_SOURCE_FILE}`,
+      `[${startedAt}] [INFO] Log file: ${logFile}`,
+      `[${startedAt}] [INFO] Mode    : ${plan.mode}`,
+      `[${startedAt}] [INFO] Dry-run : false`,
+      `[${startedAt}] [INFO] Confirm : true`,
+      `[${startedAt}] [INFO] TagEdit : true`,
+      `[${startedAt}] [INFO] MaxWait : ${plan.max_wait}s`,
+      `[${startedAt}] [INFO] Removed in-flight WUD entries before update.`,
+    ];
+    for (const stack of plan.stacks) {
+      lines.push(
+        `[${startedAt}] [INFO] [${stack.name}] Checking for updates (mode=${plan.mode})`,
+        `[${startedAt}] [INFO] [${stack.name}] Matched compose service(s): ${stack.services.join(", ")}`,
+      );
+      for (const line of stack.lines) {
+        if (line.action === "tag-update") {
+          lines.push(
+            `[${startedAt}] [INFO] [${stack.name}] Compose tag updated: ${line.compose_image} -> ${line.target_image}`,
+          );
+        }
+      }
+      lines.push(
+        `[${startedAt}] [INFO] [${stack.name}] Stopping affected service(s): ${stack.services.join(", ")}`,
+        `[${startedAt}] [INFO] [${stack.name}] Bringing affected service(s) up: ${stack.services.join(", ")}`,
+        `[${finishedAt}] [INFO] [${stack.name}] Healthy`,
+      );
+    }
+    lines.push(
+      `[${finishedAt}] [INFO] Successful WUD entries were removed before update.`,
+      `[${finishedAt}] [INFO] Done. See log: ${logFile}`,
+      "",
+    );
+    return lines.join("\n");
+  }
+
+  private operationResponse(
+    operation: StateOperation["kind"],
+    resourceType: string,
+    resourceId: string,
+    resource: StateOperationResponse["resource"],
+  ): StateOperationResponse {
+    return {
+      operation,
+      status: "success",
+      audit_run_id: this.nextAudit++,
+      resource_type: resourceType,
+      resource_id: resourceId,
+      resource: clone(resource),
+    };
+  }
+
+  private findRun(runId: number): DemoRunFixture {
+    const run = this.runs.find((item) => item.summary.id === runId);
+    if (!run) {
+      throw new Error(`Demo run ${runId} was not found`);
+    }
+    return run;
+  }
+}
+
+export function createDemoWebApi(): WebApi {
+  const state = new DemoApiState();
+
+  return {
+    csrf: async (): Promise<CsrfResponse> => ({ csrf_token: DEMO_CSRF_TOKEN }),
+    setupStatus: async () => state.setupStatus(),
+    setupClaim: async (
+      _claim: string,
+      _username: string,
+      _password: string,
+      _csrfToken: string,
+    ) => state.session(),
+    resetAdminClaim: async (
+      _claim: string,
+      _username: string,
+      _password: string,
+      _csrfToken: string,
+    ) => state.session(),
+    session: async () => state.session(),
+    login: async (_username: string, _password: string, _csrfToken: string) =>
+      state.session(),
+    logout: async (_csrfToken: string) => state.session(),
+    status: async () => state.status(),
+    pending: async () => state.pendingResponse(),
+    releaseNotes: async () => state.releaseNotes(),
+    refreshReleaseNotes: async (_csrfToken: string) => state.releaseNotes(),
+    servicePolicies: async () => state.servicePolicies(),
+    snoozes: async (snoozeState: SnoozeState = "active") =>
+      state.snoozeRecords(snoozeState),
+    tagExclusions: async (status: TagExclusionStatusFilter = "active") =>
+      state.tagExclusionRecords(status),
+    stateOperation: async (operation: StateOperation, _csrfToken: string) =>
+      state.stateOperation(operation),
+    createPlan: async (
+      lineNumbers: number[],
+      allowTagUpdates: boolean,
+      tagOverrides: TagOverrideRequest[],
+      _csrfToken: string,
+    ) => state.createPlan(lineNumbers, allowTagUpdates, tagOverrides),
+    createJob: async (
+      planId: string,
+      lineNumbers: number[],
+      allowTagUpdates: boolean,
+      tagOverrides: TagOverrideRequest[],
+      _csrfToken: string,
+    ) => state.createJob(planId, lineNumbers, allowTagUpdates, tagOverrides),
+    applyPlan: async (
+      planId: string,
+      lineNumbers: number[],
+      allowTagUpdates: boolean,
+      tagOverrides: TagOverrideRequest[],
+      _csrfToken: string,
+    ) =>
+      state.createJob(
+        planId,
+        lineNumbers,
+        allowTagUpdates,
+        tagOverrides,
+      ),
+    job: async (jobId: string) => clone(requireJob(state, jobId).job),
+    applyJob: async (jobId: string) => clone(requireJob(state, jobId).job),
+    openJobStream: (jobId: string) =>
+      new DemoJobStream(state, jobId) as unknown as EventSource,
+    runs: async () => state.runSummaries(),
+    runDetail: async (runId: number) => state.runDetail(runId),
+    runLog: async (runId: number, _tailBytes = 262_144) => state.runLog(runId),
+  };
+}
+
+class DemoJobStream extends EventTarget {
+  onerror: ((event: Event) => void) | null = null;
+  private timers: number[] = [];
+
+  constructor(
+    private readonly state: DemoApiState,
+    private readonly jobId: string,
+  ) {
+    super();
+    this.schedule();
+  }
+
+  close(): void {
+    for (const timer of this.timers) {
+      window.clearTimeout(timer);
+    }
+    this.timers = [];
+  }
+
+  private schedule(): void {
+    const record = this.state.jobs.get(this.jobId);
+    if (!record) {
+      this.queue(() => this.onerror?.(new Event("error")), 0);
+      return;
+    }
+    this.queue(() => {
+      record.job = {
+        ...record.job,
+        status: "running",
+        started_at: "2026-05-30T20:12:26+00:00",
+      };
+      record.log = {
+        ...record.log,
+        content:
+          "[2026-05-30T20:12:26+00:00] [INFO] docker-update-from-wud-v2\n",
+      };
+      this.emit("job", record.job);
+      this.emit("log", record.log);
+    }, 40);
+    this.queue(() => {
+      const completed = this.state.completeJob(this.jobId);
+      if (!completed) {
+        this.onerror?.(new Event("error"));
+        return;
+      }
+      this.emit("log", completed.log);
+      this.emit("job", completed.job);
+      this.close();
+    }, 140);
+  }
+
+  private queue(callback: () => void, delay: number): void {
+    this.timers.push(window.setTimeout(callback, delay));
+  }
+
+  private emit(type: string, data: unknown): void {
+    this.dispatchEvent(
+      new MessageEvent(type, {
+        data: JSON.stringify(data),
+      }),
+    );
+  }
+}
+
+function requireJob(state: DemoApiState, jobId: string): DemoJobRecord {
+  const job = state.jobs.get(jobId);
+  if (!job) {
+    throw new Error(`Demo job ${jobId} was not found`);
+  }
+  return job;
+}
+
+function stripDemoFields(item: DemoPendingItem): PendingGroupedItem {
+  const { stack: _stack, service: _service, ...pending } = item;
+  return pending;
+}
+
+function applyTagOverride(
+  item: DemoPendingItem,
+  tagOverrides: TagOverrideRequest[],
+): DemoPendingItem {
+  const override = tagOverrides.find((entry) => entry.line_no === item.line_no);
+  if (!override) {
+    return clone(item);
+  }
+  const targetImage = rewriteTag(item.resolved_image, override.tag);
+  return {
+    ...clone(item),
+    desired_tag: override.tag,
+    target_image: targetImage,
+    action: "tag-update",
+  };
+}
+
+function planStack(name: DemoStackName, items: DemoPendingItem[]): PlanStack {
+  const stack = DEMO_STACKS[name];
+  const lines = items
+    .filter((item) => item.stack === name)
+    .map<PlanLine>((item) => ({
+      line_no: item.line_no,
+      raw: item.raw,
+      image: item.image,
+      resolved_image: item.resolved_image,
+      compose_image: item.compose_images[0] ?? item.image,
+      target_image: item.target_image,
+      service: item.service,
+      digest: item.digest,
+      desired_tag: item.desired_tag,
+      action: item.action,
+    }));
+  return {
+    name,
+    directory: `${DEMO_DOCKER_BASE}/${name}`,
+    compose_file: "docker-compose.yml",
+    project_directory: "",
+    services_label: stack.servicesLabel,
+    services: lines.map((line) => line.service),
+    pull_services: lines.map((line) => line.service),
+    stop_services: lines.map((line) => line.service),
+    force_recreate: true,
+    up_no_deps: true,
+    tag_updates: lines
+      .filter((line) => line.action === "tag-update")
+      .map((line) => ({
+        old_image: line.compose_image,
+        desired_tag: line.desired_tag,
+        new_image: line.target_image,
+        services: [line.service],
+      })),
+    actions:
+      lines.length > 0
+        ? [
+            {
+              kind: "pull",
+              description: `pull ${stack.servicesLabel}`,
+              cwd: `${DEMO_DOCKER_BASE}/${name}`,
+              args: ["docker", "compose", "pull", ...lines.map((line) => line.service)],
+            },
+            {
+              kind: "up",
+              description: `recreate ${stack.servicesLabel}`,
+              cwd: `${DEMO_DOCKER_BASE}/${name}`,
+              args: [
+                "docker",
+                "compose",
+                "up",
+                "-d",
+                "--no-deps",
+                "--force-recreate",
+                ...lines.map((line) => line.service),
+              ],
+            },
+          ]
+        : [],
+    lines,
+  };
+}
+
+function runFromApply(
+  runId: number,
+  selectedItems: DemoPendingItem[],
+  plan: PlanResponse,
+  startedAt: string,
+  finishedAt: string,
+  logFile: string,
+  logContent: string,
+): DemoRunFixture {
+  const summary: RunSummary = {
+    id: runId,
+    started_at: startedAt,
+    finished_at: finishedAt,
+    status: "success",
+    dry_run: false,
+    mode: plan.mode,
+    wud_file: DEMO_SOURCE_FILE,
+    log_file: logFile,
+    metadata: { source: "demo", summary: `updated ${selectedItems.length} services` },
+  };
+  const pending_updates = selectedItems.map((item, index) =>
+    pendingRecord(
+      item.line_no,
+      runId,
+      item.raw,
+      `${item.stack}/${item.service}`,
+      "success",
+      index + runId * 100,
+    ),
+  );
+  const events = selectedItems.map((item, index) =>
+    runEvent(
+      index + runId * 1000,
+      runId,
+      item.service,
+      item.stack,
+      item.image,
+      item.target_image,
+      "success",
+    ),
+  );
+  return {
+    summary,
+    detail: {
+      ...summary,
+      pending_updates,
+      events,
+    },
+    log: {
+      run_id: runId,
+      log_file: logFile,
+      exists: true,
+      content: logContent,
+      truncated: false,
+      max_bytes: 262_144,
+    },
+  };
+}
+
+function demoRun(options: {
+  id: number;
+  startedAt: string;
+  finishedAt: string;
+  status: string;
+  dryRun: boolean;
+  mode: string;
+  logFile: string;
+  summary: string;
+  logContent: string;
+  pending: ReturnType<typeof pendingRecord>[];
+  events: RunEventRecord[];
+}): DemoRunFixture {
+  const summary: RunSummary = {
+    id: options.id,
+    started_at: options.startedAt,
+    finished_at: options.finishedAt,
+    status: options.status,
+    dry_run: options.dryRun,
+    mode: options.mode,
+    wud_file: DEMO_SOURCE_FILE,
+    log_file: options.logFile,
+    metadata: { source: "demo", summary: options.summary },
+  };
+  return {
+    summary,
+    detail: {
+      ...summary,
+      pending_updates: options.pending,
+      events: options.events,
+    },
+    log: {
+      run_id: options.id,
+      log_file: options.logFile,
+      exists: true,
+      content: options.logContent,
+      truncated: false,
+      max_bytes: 262_144,
+    },
+  };
+}
+
+function pendingRecord(
+  lineNo: number,
+  runId: number,
+  raw: string,
+  serviceKey: string,
+  status: string,
+  id = lineNo + runId * 10,
+): PendingUpdateRecord {
+  const [stackName, serviceName] = serviceKey.split("/");
+  const image = raw.split(" ")[0] ?? raw;
+  const desiredTag = raw.includes(" tag=") ? raw.split(" tag=")[1] ?? "" : "";
+  return {
+    id,
+    run_id: runId,
+    line_no: lineNo,
+    raw,
+    image,
+    target_digest: "",
+    desired_tag: desiredTag,
+    service_key: serviceKey,
+    stack_name: stackName ?? "",
+    service_name: serviceName ?? "",
+    status,
+    status_reason: status === "failed" ? "container health check timed out" : "demo fixture",
+    created_at: "2026-05-28T12:00:00+00:00",
+    updated_at: "2026-05-28T12:00:01+00:00",
+    metadata: { source: "demo" },
+  };
+}
+
+function runEvent(
+  id: number,
+  runId: number,
+  serviceName: string,
+  stackName: string,
+  image: string,
+  targetImage: string,
+  status: string,
+): RunEventRecord {
+  return {
+    id,
+    run_id: runId,
+    created_at: "2026-05-28T12:00:01+00:00",
+    service_name: serviceName,
+    stack_name: stackName,
+    image,
+    target_image: targetImage,
+    old_image_id: "sha256:demo-old",
+    new_image_id: "sha256:demo-new",
+    old_digest: "sha256:demo-old",
+    new_digest: "sha256:demo-new",
+    status,
+    metadata: { source: "demo" },
+  };
+}
+
+function releaseNote(options: {
+  line_no: number;
+  image_repo: string;
+  upstream_repo: string;
+  release_tag: string;
+  title: string;
+  url: string;
+}): ReleaseNoteInfo {
+  return {
+    line_no: options.line_no,
+    status: "ready",
+    provider: "github",
+    image_repo: options.image_repo,
+    upstream_repo: options.upstream_repo,
+    release_tag: options.release_tag,
+    title: options.title,
+    published_at: "2026-05-28T12:00:00+00:00",
+    breaking: false,
+    breaking_reasons: [],
+    links: [
+      {
+        label: "GitHub release",
+        url: options.url,
+        kind: "github_release",
+      },
+    ],
+    refreshed_at: "2026-05-28T12:00:00+00:00",
+    error: "",
+  };
+}
+
+function rewriteTag(image: string, tag: string): string {
+  const digestless = image.split("@sha256:")[0] ?? image;
+  const slash = digestless.lastIndexOf("/");
+  const colon = digestless.lastIndexOf(":");
+  if (colon > slash) {
+    return `${digestless.slice(0, colon)}:${tag}`;
+  }
+  return `${digestless}:${tag}`;
+}
+
+function upsertBy<T>(items: T[], next: T, matches: (item: T) => boolean): T[] {
+  const index = items.findIndex(matches);
+  if (index === -1) {
+    return [next, ...items];
+  }
+  const updated = [...items];
+  updated[index] = next;
+  return updated;
+}
+
+function escapeRegex(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function nowIso(): string {
+  return new Date().toISOString();
+}
+
+function clone<T>(value: T): T {
+  return JSON.parse(JSON.stringify(value)) as T;
+}
