@@ -4,6 +4,13 @@ All notable changes to WUD-Updater are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com) and versions follow
 [Semantic Versioning](https://semver.org).
 
+## [0.24.0](https://github.com/magrhino/WUD-Updater/compare/v0.23.3...v0.24.0) (2026-05-30)
+
+
+### Features
+
+* **ui:** Add a system-aware theme toggle to the WebUI ([#121](https://github.com/magrhino/WUD-Updater/issues/121)) ([160af1f](https://github.com/magrhino/WUD-Updater/commit/160af1fcaad74bdc9f23203264331617d5449615))
+
 ## [0.23.3](https://github.com/magrhino/WUD-Updater/compare/v0.23.2...v0.23.3) (2026-05-29)
 
 
