@@ -121,7 +121,7 @@ describe("webApi", () => {
 
     expect(constructed).toEqual([
       {
-        url: "/api/v1/jobs/job%20id/stream",
+        url: "/api/v1/jobs/job%20id/stream?log_tail_bytes=65536",
         init: { withCredentials: true },
       },
     ]);

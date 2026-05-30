@@ -3,6 +3,7 @@ import { defineStore } from "pinia";
 
 import {
   ApiError,
+  type ApplyJobLogResponse,
   type ApplyJobResponse,
   type PlanResponse,
   type PendingResponse,
@@ -41,6 +42,7 @@ export const useWebuiStore = defineStore("webui", () => {
   const releaseNotes = ref<ReleaseNotesResponse | null>(null);
   const plan = ref<PlanResponse | null>(null);
   const applyJob = ref<ApplyJobResponse | null>(null);
+  const applyJobLog = ref<ApplyJobLogResponse | null>(null);
   const rememberedApplyJobId = ref(readRememberedApplyJobId());
   const applyJobRecovery = ref("");
   const runs = ref<RunSummary[]>([]);
@@ -130,6 +132,7 @@ export const useWebuiStore = defineStore("webui", () => {
     await loadWithState(async () => {
       plan.value = null;
       applyJob.value = null;
+      applyJobLog.value = null;
       plan.value = await webApi.createPlan(
         lineNumbers,
         allowTagUpdates,
@@ -151,6 +154,7 @@ export const useWebuiStore = defineStore("webui", () => {
   ): Promise<ApplyJobResponse> {
     const auth = useAuthStore();
     await loadWithState(async () => {
+      applyJobLog.value = null;
       const job = await webApi.createJob(
         planId,
         lineNumbers,
@@ -181,6 +185,10 @@ export const useWebuiStore = defineStore("webui", () => {
     rememberApplyJob(job);
   }
 
+  function setApplyJobLog(log: ApplyJobLogResponse): void {
+    applyJobLog.value = log;
+  }
+
   function setError(message: string): void {
     error.value = message;
   }
@@ -209,6 +217,7 @@ export const useWebuiStore = defineStore("webui", () => {
 
   function markApplyJobRecovery(): void {
     applyJob.value = null;
+    applyJobLog.value = null;
     applyJobRecovery.value = APPLY_JOB_RECOVERY_MESSAGE;
     clearRememberedApplyJobId();
   }
@@ -389,6 +398,7 @@ export const useWebuiStore = defineStore("webui", () => {
     releaseNotes,
     plan,
     applyJob,
+    applyJobLog,
     rememberedApplyJobId,
     applyJobRecovery,
     runs,
@@ -413,6 +423,7 @@ export const useWebuiStore = defineStore("webui", () => {
     createJob,
     applyPlan,
     setApplyJob,
+    setApplyJobLog,
     setError,
     loadApplyJob,
     loadRuns,

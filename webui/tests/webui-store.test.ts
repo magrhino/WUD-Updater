@@ -7,6 +7,7 @@ import {
   useWebuiStore,
 } from "../src/stores/webui";
 import {
+  applyJobLogResponse,
   applyJobResponse,
   releaseNotesResponse,
   planResponse,
@@ -123,6 +124,9 @@ describe("webui store", () => {
     expect(webui.rememberedApplyJobId).toBe("job-active");
     expect(window.sessionStorage.getItem("applyJobId")).toBe("job-active");
 
+    webui.setApplyJobLog(applyJobLogResponse({ job_id: "job-active" }));
+    expect(webui.applyJobLog?.content).toContain("docker-update-from-wud-v2");
+
     webui.setApplyJob(applyJobResponse({ job_id: "job-active", status: "success" }));
 
     expect(webui.rememberedApplyJobId).toBe("");
@@ -141,6 +145,7 @@ describe("webui store", () => {
 
     expect(job).toBeNull();
     expect(webui.applyJob).toBeNull();
+    expect(webui.applyJobLog).toBeNull();
     expect(webui.applyJobRecovery).toBe(APPLY_JOB_RECOVERY_MESSAGE);
     expect(webui.rememberedApplyJobId).toBe("");
     expect(webui.error).toBe("");

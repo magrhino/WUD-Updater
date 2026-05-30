@@ -10,6 +10,7 @@ import os
 import secrets
 import sqlite3
 import sys
+import time
 from concurrent.futures import ThreadPoolExecutor
 from collections.abc import Awaitable, Callable, Iterator, Mapping
 from contextlib import closing, contextmanager
@@ -69,6 +70,7 @@ DEFAULT_WEB_HOST = "127.0.0.1"
 DEFAULT_WEB_PORT = 8080
 DEFAULT_RUN_LIMIT = 50
 DEFAULT_LOG_TAIL_BYTES = 262_144
+DEFAULT_JOB_LOG_TAIL_BYTES = 65_536
 MAX_LOG_TAIL_BYTES = 1_048_576
 SESSION_MAX_AGE_SECONDS = 86_400
 SETUP_CLAIM_MAX_AGE_SECONDS = 86_400
@@ -99,6 +101,7 @@ TagExclusionStatus = Literal["active", "disabled"]
 TagExclusionStatusFilter = Literal["active", "disabled", "all"]
 TERMINAL_APPLY_JOB_STATUSES = frozenset({"success", "failure"})
 JOB_STREAM_HEARTBEAT_SECONDS = 15.0
+JOB_STREAM_LOG_POLL_SECONDS = 1.0
 LOGGER = logging.getLogger(__name__)
 
 
@@ -145,6 +148,13 @@ class WebApplyJob:
     started_at: str | None = None
     finished_at: str | None = None
     error: str = ""
+
+
+@dataclass(frozen=True)
+class LogTail:
+    exists: bool
+    content: str
+    truncated: bool
 
 
 @dataclass(frozen=True)
@@ -480,6 +490,16 @@ class ApplyJobResponse(BaseModel):
     finished_at: str | None = None
     error: str = ""
     selected_line_numbers: list[int] = Field(default_factory=list)
+
+
+class ApplyJobLogResponse(BaseModel):
+    job_id: str
+    log_file: str = ""
+    exists: bool = False
+    content: str = ""
+    truncated: bool = False
+    max_bytes: int
+    error: str = ""
 
 
 class ServicePolicyRecord(BaseModel):
@@ -1334,10 +1354,18 @@ def api_apply_job(job_id: str, request: Request) -> ApplyJobResponse:
     return api_job(job_id, request)
 
 
-def api_job_stream(job_id: str, request: Request) -> StreamingResponse:
+def api_job_stream(
+    job_id: str,
+    request: Request,
+    log_tail_bytes: int = Query(default=DEFAULT_JOB_LOG_TAIL_BYTES, ge=1),
+) -> StreamingResponse:
     _require_apply_job(job_id, request)
     return StreamingResponse(
-        _apply_job_stream(request, job_id),
+        _apply_job_stream(
+            request,
+            job_id,
+            log_tail_bytes=min(log_tail_bytes, MAX_LOG_TAIL_BYTES),
+        ),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",
@@ -1567,34 +1595,72 @@ def _require_apply_job(job_id: str, request: Request) -> WebApplyJob:
         return job
 
 
-def _apply_job_stream(request: Request, job_id: str) -> Iterator[str]:
+def _apply_job_stream(
+    request: Request,
+    job_id: str,
+    *,
+    log_tail_bytes: int,
+) -> Iterator[str]:
+    settings = _settings(request)
     jobs: dict[str, WebApplyJob] = request.app.state.web_apply_jobs
     apply_condition: Condition = request.app.state.web_apply_condition
     last_version = -1
+    last_log_signature: tuple[object, ...] | None = None
+    terminal_log_emitted = False
+    last_heartbeat = time.monotonic()
 
     while True:
+        job_snapshot: ApplyJobResponse
+        response: ApplyJobResponse | None = None
+        terminal = False
         with apply_condition:
-            while True:
+            job = jobs.get(job_id)
+            if job is None:
+                return
+            if job.version == last_version:
+                apply_condition.wait(timeout=JOB_STREAM_LOG_POLL_SECONDS)
                 job = jobs.get(job_id)
                 if job is None:
                     return
-                if job.version != last_version:
-                    response = _apply_job_response(job)
-                    version = job.version
-                    terminal = job.status in TERMINAL_APPLY_JOB_STATUSES
-                    break
-                if not apply_condition.wait(timeout=JOB_STREAM_HEARTBEAT_SECONDS):
-                    response = None
-                    version = last_version
-                    terminal = False
-                    break
+            job_snapshot = _apply_job_response(job)
+            if job.version != last_version:
+                response = job_snapshot
+                last_version = job.version
+            terminal = job.status in TERMINAL_APPLY_JOB_STATUSES
 
-        if response is None:
+        if response is not None:
+            yield _sse_job_event(response)
+
+        log_response = _apply_job_log_response(
+            settings,
+            job_snapshot,
+            max_bytes=log_tail_bytes,
+        )
+        if log_response is not None:
+            log_signature = _apply_job_log_signature(log_response)
+            should_emit_log = (
+                bool(log_response.content)
+                or bool(log_response.error)
+                or terminal
+            ) and (
+                log_signature != last_log_signature
+                or (terminal and not terminal_log_emitted)
+            )
+            if should_emit_log:
+                yield _sse_job_log_event(log_response)
+                last_log_signature = log_signature
+                last_heartbeat = time.monotonic()
+                if terminal:
+                    terminal_log_emitted = True
+
+        if response is not None:
+            last_heartbeat = time.monotonic()
+
+        now = time.monotonic()
+        if response is None and now - last_heartbeat >= JOB_STREAM_HEARTBEAT_SECONDS:
             yield ": heartbeat\n\n"
-            continue
+            last_heartbeat = now
 
-        yield _sse_job_event(response)
-        last_version = version
         if terminal:
             return
 
@@ -1632,6 +1698,12 @@ def _run_apply_job(
             options,
             environ=apply_env,
             command_runner=CommandRunner(env=apply_env),
+        )
+        _update_apply_job(
+            jobs,
+            apply_condition,
+            job_id,
+            log_file=str(runner.log_file),
         )
         status_code = runner.run()
         _update_apply_job(
@@ -1743,6 +1815,58 @@ def _sse_job_event(job: ApplyJobResponse) -> str:
         separators=(",", ":"),
     )
     return f"event: job\ndata: {payload}\n\n"
+
+
+def _apply_job_log_response(
+    settings: WebSettings,
+    job: ApplyJobResponse,
+    *,
+    max_bytes: int,
+) -> ApplyJobLogResponse | None:
+    if not job.log_file:
+        return None
+    try:
+        log_path = _safe_log_path(settings, job.log_file)
+        if log_path is None:
+            return None
+        tail = _read_log_tail(log_path, max_bytes)
+    except HTTPException as exc:
+        return ApplyJobLogResponse(
+            job_id=job.job_id,
+            log_file=job.log_file,
+            max_bytes=max_bytes,
+            error=str(exc.detail),
+        )
+    return ApplyJobLogResponse(
+        job_id=job.job_id,
+        log_file=job.log_file,
+        exists=tail.exists,
+        content=tail.content,
+        truncated=tail.truncated,
+        max_bytes=max_bytes,
+    )
+
+
+def _apply_job_log_signature(log: ApplyJobLogResponse) -> tuple[object, ...]:
+    content_hash = hashlib.sha256(log.content.encode("utf-8")).hexdigest()
+    return (
+        log.job_id,
+        log.log_file,
+        log.exists,
+        log.truncated,
+        log.max_bytes,
+        log.error,
+        content_hash,
+    )
+
+
+def _sse_job_log_event(log: ApplyJobLogResponse) -> str:
+    payload = json.dumps(
+        jsonable_encoder(log),
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    return f"event: log\ndata: {payload}\n\n"
 
 
 def _pending_response(
@@ -3402,15 +3526,24 @@ def _run_log_response(
     log_path: Path,
     max_bytes: int,
 ) -> RunLogResponse:
+    tail = _read_log_tail(log_path, max_bytes)
+    return RunLogResponse(
+        run_id=run_id,
+        log_file=raw_log_file,
+        exists=tail.exists,
+        content=tail.content,
+        truncated=tail.truncated,
+        max_bytes=max_bytes,
+    )
+
+
+def _read_log_tail(log_path: Path, max_bytes: int) -> LogTail:
     try:
         if not log_path.is_file():
-            return RunLogResponse(
-                run_id=run_id,
-                log_file=raw_log_file,
+            return LogTail(
                 exists=False,
                 content="",
                 truncated=False,
-                max_bytes=max_bytes,
             )
         size = log_path.stat().st_size
         truncated = size > max_bytes
@@ -3423,13 +3556,10 @@ def _run_log_response(
             status_code=500,
             detail=f"could not read log file: {exc}",
         ) from exc
-    return RunLogResponse(
-        run_id=run_id,
-        log_file=raw_log_file,
+    return LogTail(
         exists=True,
         content=content,
         truncated=truncated,
-        max_bytes=max_bytes,
     )
 
 

@@ -1,4 +1,5 @@
 import type {
+  ApplyJobLogResponse,
   ApplyJobResponse,
   AuthSessionResponse,
   PendingGroupedItem,
@@ -202,6 +203,21 @@ export function applyJobResponse(
     finished_at: null,
     error: "",
     selected_line_numbers: [1],
+    ...overrides,
+  };
+}
+
+export function applyJobLogResponse(
+  overrides: Partial<ApplyJobLogResponse> = {},
+): ApplyJobLogResponse {
+  return {
+    job_id: "job-test",
+    log_file: "/out/logs/job-test.log",
+    exists: true,
+    content: "[2026-05-28T12:00:00+00:00] [INFO] docker-update-from-wud-v2\n",
+    truncated: false,
+    max_bytes: 65_536,
+    error: "",
     ...overrides,
   };
 }

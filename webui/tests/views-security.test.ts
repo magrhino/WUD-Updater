@@ -13,6 +13,7 @@ import {
   useWebuiStore,
 } from "../src/stores/webui";
 import {
+  applyJobLogResponse,
   applyJobResponse,
   authSession,
   pendingGroupedItem,
@@ -51,10 +52,14 @@ function mockPendingLifecycle(webui: ReturnType<typeof useWebuiStore>) {
 function mockApplyJobStream() {
   const close = vi.fn();
   let jobListener: ((event: MessageEvent<string>) => void) | null = null;
+  let logListener: ((event: MessageEvent<string>) => void) | null = null;
   vi.spyOn(webApi, "openJobStream").mockReturnValue({
     addEventListener: vi.fn((type: string, listener: EventListener) => {
       if (type === "job") {
         jobListener = listener as (event: MessageEvent<string>) => void;
+      }
+      if (type === "log") {
+        logListener = listener as (event: MessageEvent<string>) => void;
       }
     }),
     close,
@@ -80,8 +85,22 @@ function mockApplyJobStream() {
         }),
       );
     },
+    emitLog(log: ReturnType<typeof applyJobLogResponse>): void {
+      logListener?.(
+        new MessageEvent("log", {
+          data: JSON.stringify(log),
+        }),
+      );
+    },
+    emitInvalidLog(): void {
+      logListener?.(
+        new MessageEvent("log", {
+          data: "{",
+        }),
+      );
+    },
     get observed(): boolean {
-      return jobListener !== null;
+      return jobListener !== null && logListener !== null;
     },
   };
 }
@@ -653,6 +672,17 @@ describe("mutating WebUI views", () => {
     expect(wrapper.find(".apply-job-panel").text()).toContain("Applying 1 update");
     expect(wrapper.find(".apply-job-panel").text()).toContain("repo/app:1.0");
 
+    jobStream.emitLog(
+      applyJobLogResponse({
+        content: "[2026-05-28T12:00:00+00:00] [INFO] docker-update-from-wud-v2\n",
+      }),
+    );
+    await flushPromises();
+
+    expect(wrapper.find('[role="dialog"]').text()).toContain("Live log");
+    expect(wrapper.find('[role="dialog"]').text()).toContain("docker-update-from-wud-v2");
+    expect(wrapper.find(".apply-job-panel").text()).toContain("docker-update-from-wud-v2");
+
     jobStream.emitJob(applyJobResponse({ status: "success", run_id: 10 }));
     await flushPromises();
 
@@ -714,6 +744,46 @@ describe("mutating WebUI views", () => {
     );
     expect(wrapper.find(".apply-job-panel").text()).toContain("repo/app:1.0");
     expect(jobStream.close).toHaveBeenCalled();
+  });
+
+  it("reports invalid log stream payloads without closing the job stream", async () => {
+    const { pinia, webui } = setupStores(true);
+    webui.pending = pendingResponse();
+    mockPendingLifecycle(webui);
+    vi.spyOn(webui, "loadRuns").mockResolvedValue();
+    vi.spyOn(webui, "createPlan").mockImplementation(async () => {
+      webui.plan = planResponse();
+    });
+    vi.spyOn(webui, "createJob").mockImplementation(async () => {
+      const job = applyJobResponse({ status: "running" });
+      webui.setApplyJob(job);
+      return job;
+    });
+    const jobStream = mockApplyJobStream();
+    const wrapper = mountWithApp(PendingView, { pinia });
+
+    await wrapper
+      .findAll("button")
+      .find((button) => button.text().includes("Preview media plan"))
+      ?.trigger("click");
+    await flushPromises();
+    await wrapper
+      .find('[role="dialog"]')
+      .findAll("button")
+      .find((button) => button.text().includes("Apply 1 update"))
+      ?.trigger("click");
+    await flushPromises();
+
+    jobStream.emitInvalidLog();
+    await flushPromises();
+
+    expect(wrapper.text()).toContain("Job log stream returned invalid data.");
+    expect(jobStream.close).not.toHaveBeenCalled();
+
+    jobStream.emitLog(applyJobLogResponse({ content: "next log line\n" }));
+    await flushPromises();
+
+    expect(wrapper.find(".apply-job-panel").text()).toContain("next log line");
   });
 
   it("shows recovery guidance when a remembered apply job is missing", async () => {

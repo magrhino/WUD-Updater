@@ -6,6 +6,7 @@ import { NInput, type DataTableColumns, type DataTableRowKey } from "naive-ui";
 
 import {
   webApi,
+  type ApplyJobLogResponse,
   type ApplyJobResponse,
   type PendingGroupedItem,
   type PendingItem,
@@ -30,6 +31,8 @@ const showApplyJobModal = ref(false);
 const jobEventSource = ref<EventSource | null>(null);
 const applyJobPanelRef = ref<HTMLElement | null>(null);
 const applyJobModalTitleRef = ref<HTMLElement | null>(null);
+const applyJobPanelLogRef = ref<HTMLElement | null>(null);
+const applyJobModalLogRef = ref<HTMLElement | null>(null);
 const terminalJobStatuses = new Set<ApplyJobResponse["status"]>([
   "success",
   "failure",
@@ -367,6 +370,20 @@ const applyJobImpactLabel = computed(() => {
     return `${pluralize(serviceCount, "service")} across ${pluralize(stackCount, "stack")}`;
   }
   return `${pluralize(serviceCount, "service")} in ${applyJobSnapshot.value.contextLabel}`;
+});
+const applyJobLogText = computed(() => webui.applyJobLog?.content ?? "");
+const applyJobLogTitle = computed(
+  () => webui.applyJobLog?.log_file || webui.applyJob?.log_file || "Live log",
+);
+const applyJobLogEmptyMessage = computed(() =>
+  applyJobActive.value ? "Waiting for log output." : "No live log was captured.",
+);
+const applyJobLogWaiting = computed(() => {
+  const log = webui.applyJobLog;
+  if (!log || log.error) {
+    return !log;
+  }
+  return !log.exists && !log.content;
 });
 
 function rowKey(row: PendingItem): number {
@@ -710,6 +727,9 @@ function subscribeApplyJob(jobId: string): void {
   source.addEventListener("job", (event) => {
     void handleJobEvent(event as MessageEvent<string>);
   });
+  source.addEventListener("log", (event) => {
+    void handleJobLogEvent(event as MessageEvent<string>);
+  });
   source.onerror = () => {
     if (webui.applyJob && terminalJobStatuses.has(webui.applyJob.status)) {
       closeJobStream();
@@ -734,6 +754,26 @@ async function handleJobEvent(event: MessageEvent<string>): Promise<void> {
   }
   closeJobStream();
   await refreshAfterTerminalJob();
+}
+
+async function handleJobLogEvent(event: MessageEvent<string>): Promise<void> {
+  let log: ApplyJobLogResponse;
+  try {
+    log = JSON.parse(event.data) as ApplyJobLogResponse;
+  } catch {
+    webui.setError("Job log stream returned invalid data.");
+    return;
+  }
+  const panelShouldScroll = shouldAutoScrollLog(applyJobPanelLogRef.value);
+  const modalShouldScroll = shouldAutoScrollLog(applyJobModalLogRef.value);
+  webui.setApplyJobLog(log);
+  await nextTick();
+  if (panelShouldScroll) {
+    scrollLogToBottom(applyJobPanelLogRef.value);
+  }
+  if (modalShouldScroll) {
+    scrollLogToBottom(applyJobModalLogRef.value);
+  }
 }
 
 function closeJobStream(): void {
@@ -828,6 +868,22 @@ async function focusApplyJobPanel(): Promise<void> {
 function closeApplyJobModal(): void {
   showApplyJobModal.value = false;
   void focusApplyJobPanel();
+}
+
+function shouldAutoScrollLog(element: HTMLElement | null): boolean {
+  if (!element) {
+    return true;
+  }
+  const distanceFromBottom =
+    element.scrollHeight - element.scrollTop - element.clientHeight;
+  return distanceFromBottom <= 48;
+}
+
+function scrollLogToBottom(element: HTMLElement | null): void {
+  if (!element) {
+    return;
+  }
+  element.scrollTop = element.scrollHeight;
 }
 
 function prefersReducedMotion(): boolean {
@@ -1085,6 +1141,37 @@ watch(
           </div>
         </section>
       </div>
+
+      <section class="apply-job-live-log" aria-labelledby="apply-job-log-title">
+        <div class="apply-job-impact-heading">
+          <strong id="apply-job-log-title">Live log</strong>
+          <span class="apply-job-log-path">{{ applyJobLogTitle }}</span>
+        </div>
+        <n-alert
+          v-if="webui.applyJobLog?.truncated"
+          class="preflight-block"
+          type="warning"
+          :show-icon="false"
+        >
+          Showing the last {{ webui.applyJobLog.max_bytes }} bytes.
+        </n-alert>
+        <n-alert
+          v-if="webui.applyJobLog?.error"
+          class="preflight-block"
+          type="warning"
+          :show-icon="false"
+        >
+          Live log unavailable: {{ webui.applyJobLog.error }}
+        </n-alert>
+        <div v-if="applyJobLogWaiting" class="empty-state">
+          {{ applyJobLogEmptyMessage }}
+        </div>
+        <pre
+          v-else-if="!webui.applyJobLog?.error"
+          ref="applyJobPanelLogRef"
+          class="log-viewer apply-job-log-viewer"
+        >{{ applyJobLogText }}</pre>
+      </section>
 
       <n-alert
         v-if="webui.applyJob.error"
@@ -1810,6 +1897,37 @@ watch(
             </div>
           </section>
         </div>
+
+        <section class="apply-job-live-log" aria-labelledby="apply-job-modal-log-title">
+          <div class="apply-job-impact-heading">
+            <strong id="apply-job-modal-log-title">Live log</strong>
+            <span class="apply-job-log-path">{{ applyJobLogTitle }}</span>
+          </div>
+          <n-alert
+            v-if="webui.applyJobLog?.truncated"
+            class="preflight-block"
+            type="warning"
+            :show-icon="false"
+          >
+            Showing the last {{ webui.applyJobLog.max_bytes }} bytes.
+          </n-alert>
+          <n-alert
+            v-if="webui.applyJobLog?.error"
+            class="preflight-block"
+            type="warning"
+            :show-icon="false"
+          >
+            Live log unavailable: {{ webui.applyJobLog.error }}
+          </n-alert>
+          <div v-if="applyJobLogWaiting" class="empty-state">
+            {{ applyJobLogEmptyMessage }}
+          </div>
+          <pre
+            v-else-if="!webui.applyJobLog?.error"
+            ref="applyJobModalLogRef"
+            class="log-viewer apply-job-log-viewer"
+          >{{ applyJobLogText }}</pre>
+        </section>
 
         <n-alert
           v-if="webui.applyJob.error"
