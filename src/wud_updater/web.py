@@ -12,7 +12,7 @@ import sqlite3
 import sys
 import time
 from concurrent.futures import ThreadPoolExecutor
-from collections.abc import Awaitable, Callable, Iterator, Mapping
+from collections.abc import Awaitable, Callable, Iterator, Mapping, Sequence
 from contextlib import closing, contextmanager
 from dataclasses import asdict, dataclass
 from datetime import datetime, timedelta, timezone
@@ -50,9 +50,12 @@ from .images import image_tag, repo_key, tag_value_valid
 from .locks import DirectoryLock, WudLockError
 from .plans import (
     DryRunPlan,
+    DryRunPlanCleanup,
+    DryRunPlanCleanupItem,
     PlanFileMissing,
     PlanInputError,
     build_dry_run_plan,
+    build_unmatched_cleanup,
     resolve_pending_groups,
 )
 from .release_notes import (
@@ -63,7 +66,8 @@ from .release_notes import (
     release_note_placeholders,
 )
 from .updater import TagOverride, UpdateFromWudRunner, UpdaterOptions, js_regex_escape
-from .wud_file import ParsedWudFile, WudTarget, parse_wud_file
+from .file_ops import OwnerConfig
+from .wud_file import ParsedWudFile, WudTarget, parse_wud_file, remove_lines_before_run
 
 
 DEFAULT_WEB_HOST = "127.0.0.1"
@@ -179,12 +183,24 @@ class PendingItem(BaseModel):
     desired_tag: str
 
 
+class PendingDiagnostic(BaseModel):
+    code: str
+    message: str
+    hint: str = ""
+    stack: str = ""
+    service: str = ""
+    compose_file: str = ""
+    found_files: list[str] = Field(default_factory=list)
+    details: dict[str, Any] = Field(default_factory=dict)
+
+
 class PendingGroupedItem(PendingItem):
     resolved_image: str
     target_image: str
     compose_images: list[str] = Field(default_factory=list)
     services: list[str] = Field(default_factory=list)
     action: str
+    diagnostic: PendingDiagnostic | None = None
 
 
 class PendingStackGroup(BaseModel):
@@ -393,6 +409,8 @@ class PlanIssue(BaseModel):
     line_no: int | None = None
     stack: str = ""
     service: str = ""
+    hint: str = ""
+    details: dict[str, Any] = Field(default_factory=dict)
 
 
 class PlanTarget(BaseModel):
@@ -457,6 +475,22 @@ class PlanSkipped(BaseModel):
     reason: str
 
 
+class PlanCleanupItem(BaseModel):
+    line_no: int
+    raw: str
+    image: str
+    desired_tag: str
+    digest: str
+    reason: str
+    diagnostic: PendingDiagnostic | None = None
+
+
+class PlanCleanup(BaseModel):
+    cleanup_id: str = ""
+    can_remove_unmatched: bool = False
+    items: list[PlanCleanupItem] = Field(default_factory=list)
+
+
 class PlanResponse(BaseModel):
     plan_id: str
     dry_run: bool
@@ -471,6 +505,32 @@ class PlanResponse(BaseModel):
     stacks: list[PlanStack] = Field(default_factory=list)
     skipped: list[PlanSkipped] = Field(default_factory=list)
     issues: list[PlanIssue] = Field(default_factory=list)
+    cleanup: PlanCleanup = Field(default_factory=PlanCleanup)
+
+
+class PendingCleanupLine(BaseModel):
+    line_no: LineNumber
+    raw: str
+
+
+class PendingCleanupRequest(BaseModel):
+    cleanup_id: str = Field(min_length=1)
+    lines: list[PendingCleanupLine] = Field(min_length=1)
+    confirmation: Literal["remove_unmatched"]
+
+
+class PendingCleanupRemovedLine(BaseModel):
+    line_no: int
+    raw: str
+    image: str
+    reason: str
+
+
+class PendingCleanupResponse(BaseModel):
+    status: Literal["success"]
+    audit_run_id: int
+    removed_count: int
+    removed: list[PendingCleanupRemovedLine] = Field(default_factory=list)
 
 
 class ApplyPlanRequest(BaseModel):
@@ -716,6 +776,12 @@ def create_app(
         api_pending,
         methods=["GET"],
         response_model=PendingResponse,
+    )
+    router.add_api_route(
+        "/pending/cleanup",
+        api_pending_cleanup,
+        methods=["POST"],
+        response_model=PendingCleanupResponse,
     )
     router.add_api_route(
         "/release-notes",
@@ -1111,6 +1177,86 @@ def api_pending(request: Request) -> PendingResponse:
     return _pending_response(_settings(request))
 
 
+def api_pending_cleanup(
+    payload: PendingCleanupRequest,
+    request: Request,
+) -> PendingCleanupResponse:
+    settings = _settings(request)
+    if not settings.mutations_enabled:
+        raise HTTPException(status_code=403, detail="mutations are disabled")
+    if _active_apply_job_exists(request):
+        raise HTTPException(status_code=409, detail="an apply job is already running")
+
+    payload_lines = _cleanup_payload_lines(payload)
+    wud_lock = _acquire_apply_wud_lock(settings)
+    try:
+        try:
+            parsed = parse_wud_file(settings.config.wud_out_file)
+            cleanup = build_unmatched_cleanup(
+                settings.config,
+                line_numbers=[line.line_no for line in payload_lines],
+                parsed=parsed,
+                host_docker_base=settings.host_docker_base,
+                environ=settings.command_env,
+            )
+        except (PlanInputError, PlanFileMissing) as exc:
+            raise HTTPException(status_code=409, detail="cleanup is stale") from exc
+        except OSError as exc:
+            raise HTTPException(
+                status_code=500,
+                detail=f"could not revalidate cleanup: {exc}",
+            ) from exc
+
+        removed = _validated_cleanup_lines(payload, payload_lines, cleanup)
+        try:
+            with connect_db(settings.config.db_path) as conn:
+                init_db(conn)
+                with _immediate_transaction(conn):
+                    audit_run_id = _insert_pending_cleanup_audit(
+                        conn,
+                        settings,
+                        request,
+                        removed,
+                    )
+                    try:
+                        remove_lines_before_run(
+                            settings.config.wud_out_file,
+                            parsed,
+                            [item.line_no for item in removed],
+                            lock=wud_lock,
+                            owner=_owner_config(settings),
+                        )
+                    except OSError as exc:
+                        raise HTTPException(
+                            status_code=500,
+                            detail=f"could not remove pending lines: {exc}",
+                        ) from exc
+        except HTTPException:
+            raise
+        except (OSError, sqlite3.Error, DatabaseError) as exc:
+            raise HTTPException(
+                status_code=500,
+                detail=f"could not record cleanup audit: {exc}",
+            ) from exc
+
+        return PendingCleanupResponse(
+            status="success",
+            audit_run_id=audit_run_id,
+            removed_count=len(removed),
+            removed=[
+                PendingCleanupRemovedLine(
+                    line_no=item.line_no,
+                    raw=item.raw,
+                    image=item.image,
+                    reason=item.reason,
+                )
+                for item in removed
+            ],
+        )
+    finally:
+        wud_lock.close()
+
+
 def api_release_notes(request: Request) -> ReleaseNotesResponse:
     settings = _settings(request)
     exists, parsed = _parse_pending_file(settings)
@@ -1488,6 +1634,159 @@ def api_run_log(
 
 def _settings(request: Request) -> WebSettings:
     return request.app.state.web_settings
+
+
+def _cleanup_payload_lines(
+    payload: PendingCleanupRequest,
+) -> tuple[PendingCleanupLine, ...]:
+    seen: set[int] = set()
+    lines: list[PendingCleanupLine] = []
+    for line in payload.lines:
+        if line.line_no in seen:
+            raise HTTPException(
+                status_code=422,
+                detail=f"cleanup line {line.line_no} was provided more than once",
+            )
+        if not line.raw:
+            raise HTTPException(
+                status_code=422,
+                detail=f"cleanup line {line.line_no} raw value is required",
+            )
+        seen.add(line.line_no)
+        lines.append(line)
+    return tuple(lines)
+
+
+def _validated_cleanup_lines(
+    payload: PendingCleanupRequest,
+    payload_lines: Sequence[PendingCleanupLine],
+    cleanup: DryRunPlanCleanup,
+) -> tuple[DryRunPlanCleanupItem, ...]:
+    if not cleanup.items or not cleanup.cleanup_id:
+        raise HTTPException(status_code=409, detail="cleanup is stale")
+    if not secrets.compare_digest(cleanup.cleanup_id, payload.cleanup_id):
+        raise HTTPException(status_code=409, detail="cleanup is stale")
+
+    requested = {(line.line_no, line.raw) for line in payload_lines}
+    available = {(item.line_no, item.raw): item for item in cleanup.items}
+    if requested != set(available):
+        raise HTTPException(status_code=409, detail="cleanup is stale")
+    return tuple(available[key] for key in sorted(available))
+
+
+def _owner_config(settings: WebSettings) -> OwnerConfig:
+    return OwnerConfig(
+        uid=settings.config.out_uid,
+        gid=settings.config.out_gid,
+    )
+
+
+def _insert_pending_cleanup_audit(
+    conn: sqlite3.Connection,
+    settings: WebSettings,
+    request: Request,
+    removed: Sequence[DryRunPlanCleanupItem],
+) -> int:
+    now = utc_timestamp()
+    metadata = {
+        "source": "webui",
+        "operation": "remove_unmatched_pending",
+        "actor_type": _state_actor_type(settings, request),
+        "line_numbers": [item.line_no for item in removed],
+    }
+    cursor = conn.execute(
+        """
+        INSERT INTO update_runs (
+            started_at,
+            finished_at,
+            status,
+            dry_run,
+            mode,
+            wud_file,
+            log_file,
+            metadata_json
+        )
+        VALUES (?, ?, 'success', 0, 'web-pending-cleanup', ?, '', ?)
+        """,
+        (
+            now,
+            now,
+            str(settings.config.wud_out_file),
+            _json_object(metadata),
+        ),
+    )
+    run_id = int(cursor.lastrowid)
+    for item in removed:
+        item_metadata = {
+            "source": "webui",
+            "operation": "remove_unmatched_pending",
+            "reason": item.reason,
+            "diagnostic": (
+                None if item.diagnostic is None else asdict(item.diagnostic)
+            ),
+        }
+        conn.execute(
+            """
+            INSERT INTO pending_updates (
+                run_id,
+                line_no,
+                raw,
+                image,
+                target_digest,
+                desired_tag,
+                service_key,
+                stack_name,
+                service_name,
+                status,
+                status_reason,
+                created_at,
+                updated_at,
+                metadata_json
+            )
+            VALUES (?, ?, ?, ?, ?, ?, '', ?, ?, 'resolved', 'removed-unmatched', ?, ?, ?)
+            """,
+            (
+                run_id,
+                item.line_no,
+                item.raw,
+                item.image,
+                item.digest,
+                item.desired_tag,
+                "" if item.diagnostic is None else item.diagnostic.stack,
+                "" if item.diagnostic is None else item.diagnostic.service,
+                now,
+                now,
+                _json_object(item_metadata),
+            ),
+        )
+        conn.execute(
+            """
+            INSERT INTO update_events (
+                run_id,
+                created_at,
+                service_name,
+                stack_name,
+                image,
+                target_image,
+                status,
+                metadata_json
+            )
+            VALUES (?, ?, ?, ?, ?, '', 'success', ?)
+            """,
+            (
+                run_id,
+                now,
+                (
+                    item.diagnostic.service
+                    if item.diagnostic is not None and item.diagnostic.service
+                    else item.image
+                ),
+                "" if item.diagnostic is None else item.diagnostic.stack,
+                item.image,
+                _json_object(item_metadata),
+            ),
+        )
+    return run_id
 
 
 def _build_web_plan(settings: WebSettings, payload: PlanRequest) -> DryRunPlan:
@@ -1958,6 +2257,9 @@ def _pending_grouped_item(item: Any) -> PendingGroupedItem:
         compose_images=list(item.compose_images),
         services=list(item.services),
         action=item.action,
+        diagnostic=(
+            None if item.diagnostic is None else PendingDiagnostic.model_validate(asdict(item.diagnostic))
+        ),
     )
 
 
@@ -2000,6 +2302,9 @@ def _release_note_source_resolver(settings: WebSettings) -> ReleaseNoteSourceRes
 def _plan_response(plan: DryRunPlan, settings: WebSettings) -> PlanResponse:
     payload = asdict(plan)
     payload["can_apply"] = _plan_can_apply(plan, settings)
+    payload["cleanup"]["can_remove_unmatched"] = (
+        settings.mutations_enabled and bool(plan.cleanup.items)
+    )
     return PlanResponse.model_validate(payload)
 
 

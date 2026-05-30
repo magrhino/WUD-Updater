@@ -9,6 +9,7 @@ import {
 import {
   applyJobLogResponse,
   applyJobResponse,
+  pendingResponse,
   releaseNotesResponse,
   planResponse,
   statusResponse,
@@ -48,6 +49,70 @@ describe("webui store", () => {
         "x-wud-csrf-token",
       ),
     ).toBe("csrf-plan");
+  });
+
+  it("passes csrf from auth store to pending cleanup", async () => {
+    const fetchMock = mockFetch({
+      status: "success",
+      audit_run_id: 12,
+      removed_count: 1,
+      removed: [
+        {
+          line_no: 3,
+          raw: "repo/old:latest",
+          image: "repo/old:latest",
+          reason: "unmatched",
+        },
+      ],
+    });
+    const auth = useAuthStore();
+    const ensureCsrf = vi
+      .spyOn(auth, "ensureCsrf")
+      .mockResolvedValue("csrf-cleanup");
+    const webui = useWebuiStore();
+
+    await webui.cleanupPending("cleanup-test", [
+      { line_no: 3, raw: "repo/old:latest" },
+    ]);
+
+    expect(ensureCsrf).toHaveBeenCalledTimes(1);
+    expect(webui.pendingCleanup?.audit_run_id).toBe(12);
+    expect(JSON.parse(String((fetchMock.mock.calls[0][1] as RequestInit).body))).toEqual({
+      cleanup_id: "cleanup-test",
+      lines: [{ line_no: 3, raw: "repo/old:latest" }],
+      confirmation: "remove_unmatched",
+    });
+    expect(
+      ((fetchMock.mock.calls[0][1] as RequestInit).headers as Headers).get(
+        "x-wud-csrf-token",
+      ),
+    ).toBe("csrf-cleanup");
+  });
+
+  it("preserves cleanup success while refreshing pending state when requested", async () => {
+    mockFetch(pendingResponse());
+    const webui = useWebuiStore();
+    webui.pendingCleanup = {
+      status: "success",
+      audit_run_id: 12,
+      removed_count: 1,
+      removed: [
+        {
+          line_no: 3,
+          raw: "repo/old:latest",
+          image: "repo/old:latest",
+          reason: "unmatched",
+        },
+      ],
+    };
+
+    await webui.loadPending({ preserveCleanup: true });
+
+    expect(webui.pendingCleanup?.audit_run_id).toBe(12);
+
+    await webui.loadPending();
+
+    expect(webui.pendingCleanup).toBeNull();
   });
 
   it("passes csrf from auth store to state operations", async () => {

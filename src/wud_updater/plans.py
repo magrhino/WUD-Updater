@@ -9,7 +9,7 @@ from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
 
 from .command import CommandError, CommandRunner
-from .compose import ComposeCli, ComposeDiscoveryError, ComposeStack
+from .compose import COMPOSE_FILENAMES, ComposeCli, ComposeDiscoveryError, ComposeStack
 from .config import UpdaterConfig
 from .docker_cli import DockerCli
 from .images import image_has_tag, image_matches_resolved_target, image_with_tag
@@ -41,6 +41,21 @@ class PlanFileMissing(FileNotFoundError):
     """Raised when the WUD file is missing for a selected-line plan."""
 
 
+COMPOSE_PROJECT_LABEL = "com.docker.compose.project"
+COMPOSE_WORKING_DIR_LABEL = "com.docker.compose.project.working_dir"
+COMPOSE_CONFIG_FILES_LABEL = "com.docker.compose.project.config_files"
+COMPOSE_SERVICE_LABEL = "com.docker.compose.service"
+UNMATCHED_HINT = (
+    "Restore or rename the active Compose file to a supported compose filename, "
+    "remove the stale WUD entry, or intentionally re-create the stack from an "
+    "active compose file."
+)
+GENERIC_UNMATCHED_HINT = (
+    "Confirm this image is still managed by an active Compose stack, or remove "
+    "the stale WUD entry."
+)
+
+
 @dataclass(frozen=True)
 class DryRunPlanIssue:
     severity: str
@@ -49,6 +64,20 @@ class DryRunPlanIssue:
     line_no: int | None = None
     stack: str = ""
     service: str = ""
+    hint: str = ""
+    details: Mapping[str, object] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class UnmatchedDiagnostic:
+    code: str
+    message: str
+    hint: str = ""
+    stack: str = ""
+    service: str = ""
+    compose_file: str = ""
+    found_files: tuple[str, ...] = ()
+    details: Mapping[str, object] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -130,6 +159,24 @@ class DryRunPlanSummary:
 
 
 @dataclass(frozen=True)
+class DryRunPlanCleanupItem:
+    line_no: int
+    raw: str
+    image: str
+    desired_tag: str
+    digest: str
+    reason: str
+    diagnostic: UnmatchedDiagnostic | None = None
+
+
+@dataclass(frozen=True)
+class DryRunPlanCleanup:
+    cleanup_id: str = ""
+    can_remove_unmatched: bool = False
+    items: tuple[DryRunPlanCleanupItem, ...] = ()
+
+
+@dataclass(frozen=True)
 class DryRunPlan:
     plan_id: str
     dry_run: bool
@@ -144,6 +191,7 @@ class DryRunPlan:
     stacks: tuple[DryRunPlanStack, ...] = ()
     skipped: tuple[DryRunPlanSkipped, ...] = ()
     issues: tuple[DryRunPlanIssue, ...] = ()
+    cleanup: DryRunPlanCleanup = field(default_factory=DryRunPlanCleanup)
 
 
 @dataclass(frozen=True)
@@ -162,6 +210,7 @@ class PendingGroupingItem:
     compose_images: tuple[str, ...]
     services: tuple[str, ...]
     action: str
+    diagnostic: UnmatchedDiagnostic | None = None
 
 
 @dataclass(frozen=True)
@@ -206,6 +255,7 @@ class _PlanBuilder:
         _validate_selected_targets(full_parse, selected)
         parsed = parse_wud_file(self.config.wud_out_file, selected_lines=selected)
         parsed = self._apply_tag_overrides(parsed)
+        wud_file_hash = _file_sha256(self.config.wud_out_file)
 
         issues = [
             DryRunPlanIssue(
@@ -219,6 +269,7 @@ class _PlanBuilder:
         skipped: list[DryRunPlanSkipped] = []
         matches: list[Match] = []
         stacks: tuple[ComposeStack, ...] = ()
+        cleanup = DryRunPlanCleanup()
 
         try:
             stacks = self.compose.discover_stacks(
@@ -235,7 +286,41 @@ class _PlanBuilder:
             )
         else:
             matches, skipped = self._build_matches(parsed, stacks)
-            issues.extend(self._unmatched_issues(parsed.targets, matches, skipped))
+            diagnostics = _unmatched_diagnostics(
+                self.config,
+                parsed.targets,
+                skipped,
+                self.docker,
+                host_docker_base=self.host_docker_base,
+            )
+            issues.extend(
+                self._unmatched_issues(parsed.targets, matches, skipped, diagnostics)
+            )
+            cleanup_skipped = skipped
+            cleanup_diagnostics = diagnostics
+            if not self.allow_tag_updates and any(
+                target.desired_tag for target in parsed.targets
+            ):
+                _cleanup_matches, cleanup_skipped = _match_targets(
+                    parsed,
+                    stacks,
+                    self.docker,
+                    allow_tag_updates=True,
+                )
+                cleanup_diagnostics = _unmatched_diagnostics(
+                    self.config,
+                    parsed.targets,
+                    cleanup_skipped,
+                    self.docker,
+                    host_docker_base=self.host_docker_base,
+                )
+            cleanup = _cleanup_for_skipped(
+                self.config,
+                parsed.targets,
+                cleanup_skipped,
+                cleanup_diagnostics,
+                host_docker_base=self.host_docker_base,
+            )
             issues.extend(self._tag_update_plan_issues(matches))
             issues.extend(self._manifest_issues(matches))
             issues.extend(self._preflight_issues(matches))
@@ -265,6 +350,7 @@ class _PlanBuilder:
             stacks=plan_stacks,
             skipped=tuple(skipped),
             issues=tuple(issues),
+            cleanup=cleanup,
         )
         return replace(
             plan,
@@ -274,7 +360,7 @@ class _PlanBuilder:
                 allow_tag_updates=self.allow_tag_updates,
                 tag_overrides=self.tag_overrides,
                 host_docker_base=self.host_docker_base,
-                wud_file_hash=_file_sha256(self.config.wud_out_file),
+                wud_file_hash=wud_file_hash,
             ),
         )
 
@@ -329,6 +415,7 @@ class _PlanBuilder:
         targets: Sequence[WudTarget],
         matches: Sequence[Match],
         skipped: Sequence[DryRunPlanSkipped],
+        diagnostics: Mapping[int, UnmatchedDiagnostic],
     ) -> list[DryRunPlanIssue]:
         matched_lines = {match.target.line_no for match in matches}
         skipped_reasons = {item.line_no: item.reason for item in skipped}
@@ -338,17 +425,26 @@ class _PlanBuilder:
                 continue
             reason = skipped_reasons.get(target.line_no, "unmatched")
             severity = "warning" if reason == "tag-updates-disabled" else "error"
+            diagnostic = diagnostics.get(target.line_no)
             message = (
                 "Tag update entries require allow_tag_updates=true."
                 if reason == "tag-updates-disabled"
-                else "No Compose stack matched this WUD entry."
+                else (
+                    diagnostic.message
+                    if diagnostic is not None
+                    else "No Compose stack matched this WUD entry."
+                )
             )
             issues.append(
                 DryRunPlanIssue(
                     severity=severity,
-                    code=reason,
+                    code=diagnostic.code if diagnostic is not None else reason,
                     message=message,
                     line_no=target.line_no,
+                    stack="" if diagnostic is None else diagnostic.stack,
+                    service="" if diagnostic is None else diagnostic.service,
+                    hint="" if diagnostic is None else diagnostic.hint,
+                    details={} if diagnostic is None else diagnostic.details,
                 )
             )
         return issues
@@ -825,6 +921,52 @@ def build_dry_run_plan(
     ).build()
 
 
+def build_unmatched_cleanup(
+    config: UpdaterConfig,
+    *,
+    line_numbers: Sequence[int],
+    parsed: ParsedWudFile | None = None,
+    host_docker_base: Path | None = None,
+    environ: Mapping[str, str] | None = None,
+) -> DryRunPlanCleanup:
+    selected = _selected_line_numbers(line_numbers)
+    full_parse = parsed or _read_wud_file(config.wud_out_file)
+    _validate_selected_targets(full_parse, selected)
+    selected_parse = _parsed_for_selected_lines(full_parse, selected)
+    runner = CommandRunner(env=environ) if environ is not None else CommandRunner()
+    docker = DockerCli(runner=runner)
+    compose = ComposeCli(runner=runner)
+
+    try:
+        stacks = compose.discover_stacks(
+            config.docker_base,
+            project_base=host_docker_base,
+        )
+    except ComposeDiscoveryError:
+        return DryRunPlanCleanup()
+
+    _matches, skipped = _match_targets(
+        selected_parse,
+        stacks,
+        docker,
+        allow_tag_updates=True,
+    )
+    diagnostics = _unmatched_diagnostics(
+        config,
+        selected_parse.targets,
+        skipped,
+        docker,
+        host_docker_base=host_docker_base,
+    )
+    return _cleanup_for_skipped(
+        config,
+        selected_parse.targets,
+        skipped,
+        diagnostics,
+        host_docker_base=host_docker_base,
+    )
+
+
 def resolve_pending_groups(
     config: UpdaterConfig,
     parsed: ParsedWudFile,
@@ -857,12 +999,23 @@ def resolve_pending_groups(
         docker,
         allow_tag_updates=True,
     )
+    diagnostics = _unmatched_diagnostics(
+        config,
+        parsed.targets,
+        skipped,
+        docker,
+        host_docker_base=host_docker_base,
+    )
     targets_by_line = {target.line_no: target for target in parsed.targets}
     return PendingGroupingResult(
         status="ready",
         groups=_pending_stack_groups(matches),
         unmatched=tuple(
-            _pending_grouping_item(targets_by_line[item.line_no], action=item.reason)
+            _pending_grouping_item(
+                targets_by_line[item.line_no],
+                action=item.reason,
+                diagnostic=diagnostics.get(item.line_no),
+            )
             for item in skipped
             if item.line_no in targets_by_line
         ),
@@ -928,6 +1081,387 @@ def _match_targets(
     return matches, skipped
 
 
+def _unmatched_diagnostics(
+    config: UpdaterConfig,
+    targets: Sequence[WudTarget],
+    skipped: Sequence[DryRunPlanSkipped],
+    docker: DockerCli,
+    *,
+    host_docker_base: Path | None,
+) -> dict[int, UnmatchedDiagnostic]:
+    skipped_reasons = {item.line_no: item.reason for item in skipped}
+    unmatched_targets = [
+        target for target in targets if skipped_reasons.get(target.line_no) == "unmatched"
+    ]
+    if not unmatched_targets:
+        return {}
+
+    containers = docker.try_container_images()
+    diagnostics: dict[int, UnmatchedDiagnostic] = {}
+    for target in unmatched_targets:
+        diagnostics[target.line_no] = _generic_unmatched_diagnostic()
+        for container in containers:
+            if not _container_matches_target(container.name, container.image, target):
+                continue
+            diagnostic = _compose_label_diagnostic(
+                config,
+                docker,
+                container.name,
+                host_docker_base=host_docker_base,
+            )
+            if diagnostic is not None:
+                diagnostics[target.line_no] = diagnostic
+                break
+    return diagnostics
+
+
+def _container_matches_target(
+    container_name: str,
+    container_image: str,
+    target: WudTarget,
+) -> bool:
+    if container_name == target.first:
+        return True
+    allow_repo = target.allow_repo or not image_has_tag(target.first)
+    return image_matches_resolved_target(container_image, target.first, allow_repo)
+
+
+def _compose_label_diagnostic(
+    config: UpdaterConfig,
+    docker: DockerCli,
+    container_name: str,
+    *,
+    host_docker_base: Path | None,
+) -> UnmatchedDiagnostic | None:
+    working_dir = _container_label(docker, container_name, COMPOSE_WORKING_DIR_LABEL)
+    config_files = _split_compose_config_files(
+        _container_label(docker, container_name, COMPOSE_CONFIG_FILES_LABEL)
+    )
+    if not config_files:
+        return None
+
+    project = _container_label(docker, container_name, COMPOSE_PROJECT_LABEL)
+    service = _container_label(docker, container_name, COMPOSE_SERVICE_LABEL)
+    stack = project or _stack_name_from_label_path(working_dir) or _stack_name_from_label_path(
+        config_files[0]
+    )
+    references = tuple(
+        _display_label_path(path, config, host_docker_base=host_docker_base)
+        for path in config_files
+    )
+    local_paths = tuple(
+        _local_label_path(
+            path,
+            working_dir,
+            config,
+            host_docker_base=host_docker_base,
+        )
+        for path in config_files
+    )
+    if any(path is not None and path.is_file() for path in local_paths):
+        return None
+
+    found_files = _nonstandard_compose_files(
+        local_paths,
+        config,
+        host_docker_base=host_docker_base,
+    )
+    reference_label = _join_display_values(references)
+    if found_files:
+        message = (
+            "No active Compose file matched this WUD entry. Docker labels "
+            f"reference {reference_label}, but only archived/nonstandard "
+            f"compose files were found: {_join_display_values(found_files)}."
+        )
+    else:
+        message = (
+            "No active Compose file matched this WUD entry. Docker labels "
+            f"reference {reference_label}, but the active compose file was not found."
+        )
+    details = {
+        "referenced_compose_files": references,
+        "found_compose_files": found_files,
+    }
+    return UnmatchedDiagnostic(
+        code="compose-label-active-file-missing",
+        message=message,
+        hint=UNMATCHED_HINT,
+        stack=stack,
+        service=service,
+        compose_file=references[0] if references else "",
+        found_files=found_files,
+        details=details,
+    )
+
+
+def _generic_unmatched_diagnostic() -> UnmatchedDiagnostic:
+    return UnmatchedDiagnostic(
+        code="unmatched",
+        message="No Compose stack matched this WUD entry.",
+        hint=GENERIC_UNMATCHED_HINT,
+    )
+
+
+def _container_label(docker: DockerCli, container_name: str, label: str) -> str:
+    fmt = f'{{{{ index .Config.Labels "{label}" }}}}'
+    for value in docker.try_inspect(container_name, fmt):
+        cleaned = value.strip()
+        if cleaned and cleaned != "<no value>":
+            return cleaned
+    return ""
+
+
+def _split_compose_config_files(value: str) -> tuple[str, ...]:
+    return tuple(item.strip() for item in value.split(",") if item.strip())
+
+
+def _local_label_path(
+    value: str,
+    working_dir: str,
+    config: UpdaterConfig,
+    *,
+    host_docker_base: Path | None,
+) -> Path | None:
+    raw = Path(value)
+    if raw.is_absolute():
+        return _map_absolute_label_path(
+            raw,
+            config,
+            host_docker_base=host_docker_base,
+        )
+    local_working_dir = _local_working_dir(
+        working_dir,
+        config,
+        host_docker_base=host_docker_base,
+    )
+    if local_working_dir is None:
+        return None
+    return local_working_dir / value
+
+
+def _local_working_dir(
+    value: str,
+    config: UpdaterConfig,
+    *,
+    host_docker_base: Path | None,
+) -> Path | None:
+    if not value:
+        return None
+    raw = Path(value)
+    if raw.is_absolute():
+        return _map_absolute_label_path(
+            raw,
+            config,
+            host_docker_base=host_docker_base,
+        )
+    return None
+
+
+def _map_absolute_label_path(
+    path: Path,
+    config: UpdaterConfig,
+    *,
+    host_docker_base: Path | None,
+) -> Path | None:
+    if host_docker_base is not None:
+        try:
+            return config.docker_base / path.relative_to(host_docker_base)
+        except ValueError:
+            pass
+    try:
+        path.relative_to(config.docker_base)
+    except ValueError:
+        return None
+    return path
+
+
+def _display_label_path(
+    value: str,
+    config: UpdaterConfig,
+    *,
+    host_docker_base: Path | None,
+) -> str:
+    raw = Path(value)
+    if raw.is_absolute():
+        if host_docker_base is not None:
+            try:
+                return path_display(host_docker_base, raw)
+            except ValueError:
+                pass
+        try:
+            return path_display(config.docker_base, raw)
+        except ValueError:
+            return raw.name
+    cleaned = value.strip().lstrip("./")
+    if cleaned.startswith("../"):
+        return raw.name
+    return cleaned or raw.name
+
+
+def path_display(base: Path, path: Path) -> str:
+    return path.relative_to(base).as_posix()
+
+
+def _stack_name_from_label_path(value: str) -> str:
+    if not value:
+        return ""
+    path = Path(value)
+    if path.name:
+        if path.suffix in {".yml", ".yaml"}:
+            return path.parent.name
+        return path.name
+    return ""
+
+
+def _nonstandard_compose_files(
+    local_paths: Sequence[Path | None],
+    config: UpdaterConfig,
+    *,
+    host_docker_base: Path | None,
+) -> tuple[str, ...]:
+    found: list[str] = []
+    seen: set[str] = set()
+    for local_path in local_paths:
+        if local_path is None:
+            continue
+        directory = local_path.parent
+        try:
+            entries = sorted(directory.iterdir())
+        except OSError:
+            continue
+        for entry in entries:
+            if not entry.is_file():
+                continue
+            if not _nonstandard_compose_filename(entry.name):
+                continue
+            display = _display_local_path(
+                entry,
+                config,
+                host_docker_base=host_docker_base,
+            )
+            if display in seen:
+                continue
+            found.append(display)
+            seen.add(display)
+    return tuple(found)
+
+
+def _nonstandard_compose_filename(name: str) -> bool:
+    lowered = name.lower()
+    return (
+        "compose" in lowered
+        and (lowered.endswith(".yml") or lowered.endswith(".yaml"))
+        and lowered not in COMPOSE_FILENAMES
+    )
+
+
+def _display_local_path(
+    path: Path,
+    config: UpdaterConfig,
+    *,
+    host_docker_base: Path | None,
+) -> str:
+    try:
+        return path_display(config.docker_base, path)
+    except ValueError:
+        pass
+    if host_docker_base is not None:
+        try:
+            return path_display(host_docker_base, path)
+        except ValueError:
+            pass
+    return path.name
+
+
+def _join_display_values(values: Sequence[str]) -> str:
+    if not values:
+        return "an unknown compose file"
+    if len(values) == 1:
+        return values[0]
+    return ", ".join(values)
+
+
+def _cleanup_for_skipped(
+    config: UpdaterConfig,
+    targets: Sequence[WudTarget],
+    skipped: Sequence[DryRunPlanSkipped],
+    diagnostics: Mapping[int, UnmatchedDiagnostic],
+    *,
+    host_docker_base: Path | None,
+) -> DryRunPlanCleanup:
+    skipped_reasons = {item.line_no: item.reason for item in skipped}
+    items = tuple(
+        DryRunPlanCleanupItem(
+            line_no=target.line_no,
+            raw=target.raw,
+            image=target.first,
+            desired_tag=target.desired_tag,
+            digest=target.digest,
+            reason=skipped_reasons[target.line_no],
+            diagnostic=diagnostics.get(target.line_no),
+        )
+        for target in targets
+        if skipped_reasons.get(target.line_no) == "unmatched"
+    )
+    if not items:
+        return DryRunPlanCleanup()
+    return DryRunPlanCleanup(
+        cleanup_id=_cleanup_id(
+            config,
+            items,
+            host_docker_base=host_docker_base,
+        ),
+        can_remove_unmatched=True,
+        items=items,
+    )
+
+
+def _cleanup_id(
+    config: UpdaterConfig,
+    items: Sequence[DryRunPlanCleanupItem],
+    *,
+    host_docker_base: Path | None,
+) -> str:
+    payload = {
+        "version": 1,
+        "docker_base": str(config.docker_base),
+        "host_docker_base": "" if host_docker_base is None else str(host_docker_base),
+        "items": [
+            {
+                "line_no": item.line_no,
+                "raw": item.raw,
+                "image": item.image,
+                "desired_tag": item.desired_tag,
+                "digest": item.digest,
+                "reason": item.reason,
+            }
+            for item in items
+        ],
+        "source_file": str(config.wud_out_file),
+    }
+    canonical = json.dumps(
+        payload,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=True,
+    )
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def _parsed_for_selected_lines(
+    parsed: ParsedWudFile,
+    selected: Sequence[int],
+) -> ParsedWudFile:
+    selected_set = set(selected)
+    return ParsedWudFile(
+        lines=parsed.lines,
+        targets=tuple(
+            target for target in parsed.targets if target.line_no in selected_set
+        ),
+        warnings=parsed.warnings,
+    )
+
+
 def _pending_stack_groups(matches: Sequence[Match]) -> tuple[PendingStackGroup, ...]:
     groups: list[PendingStackGroup] = []
     for stack in _stacks_to_update(matches):
@@ -986,6 +1520,7 @@ def _pending_grouping_item(
     resolved_image: str = "",
     compose_images: Sequence[str] = (),
     services: Sequence[str] = (),
+    diagnostic: UnmatchedDiagnostic | None = None,
 ) -> PendingGroupingItem:
     resolved = resolved_image or target.first
     return PendingGroupingItem(
@@ -1003,6 +1538,7 @@ def _pending_grouping_item(
         compose_images=tuple(compose_images),
         services=tuple(services),
         action=action,
+        diagnostic=diagnostic,
     )
 
 

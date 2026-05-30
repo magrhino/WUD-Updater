@@ -6,6 +6,8 @@ import {
   LIVE_JOB_LOG_TAIL_BYTES,
   type ApplyJobLogResponse,
   type ApplyJobResponse,
+  type PendingCleanupLine,
+  type PendingCleanupResponse,
   type PlanResponse,
   type PendingResponse,
   type ReleaseNotesResponse,
@@ -42,6 +44,7 @@ export const useWebuiStore = defineStore("webui", () => {
   const pending = ref<PendingResponse | null>(null);
   const releaseNotes = ref<ReleaseNotesResponse | null>(null);
   const plan = ref<PlanResponse | null>(null);
+  const pendingCleanup = ref<PendingCleanupResponse | null>(null);
   const applyJob = ref<ApplyJobResponse | null>(null);
   const applyJobLog = ref<ApplyJobLogResponse | null>(null);
   const rememberedApplyJobId = ref(readRememberedApplyJobId());
@@ -96,9 +99,14 @@ export const useWebuiStore = defineStore("webui", () => {
     });
   }
 
-  async function loadPending(): Promise<void> {
+  async function loadPending(
+    options: { preserveCleanup?: boolean } = {},
+  ): Promise<void> {
     await loadWithState(async () => {
       plan.value = null;
+      if (!options.preserveCleanup) {
+        pendingCleanup.value = null;
+      }
       pending.value = await webApi.pending();
     });
   }
@@ -138,6 +146,7 @@ export const useWebuiStore = defineStore("webui", () => {
     const auth = useAuthStore();
     await loadWithState(async () => {
       plan.value = null;
+      pendingCleanup.value = null;
       applyJob.value = null;
       applyJobLog.value = null;
       plan.value = await webApi.createPlan(
@@ -147,6 +156,27 @@ export const useWebuiStore = defineStore("webui", () => {
         await auth.ensureCsrf(),
       );
     });
+  }
+
+  async function cleanupPending(
+    cleanupId: string,
+    lines: PendingCleanupLine[],
+  ): Promise<PendingCleanupResponse> {
+    const auth = useAuthStore();
+    let response: PendingCleanupResponse | null = null;
+    await loadWithState(async () => {
+      response = await webApi.cleanupPending(
+        cleanupId,
+        lines,
+        await auth.ensureCsrf(),
+      );
+      pendingCleanup.value = response;
+      plan.value = null;
+    });
+    if (response === null) {
+      throw new Error("Pending cleanup did not return a response");
+    }
+    return response;
   }
 
   function clearPlan(): void {
@@ -427,6 +457,7 @@ export const useWebuiStore = defineStore("webui", () => {
   return {
     status,
     pending,
+    pendingCleanup,
     releaseNotes,
     plan,
     applyJob,
@@ -452,6 +483,7 @@ export const useWebuiStore = defineStore("webui", () => {
     loadReleaseNotes,
     refreshReleaseNotes,
     createPlan,
+    cleanupPending,
     clearPlan,
     createJob,
     applyPlan,

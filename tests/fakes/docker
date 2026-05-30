@@ -415,7 +415,11 @@ inspect_cmd(){
   if [[ "$format" == *'.Config.Labels'* ]]; then
     local labels_file="$ROOT/containers/$target.labels"
     if [[ -f "$labels_file" ]]; then
-      awk -F= '$1 == "WUD-UPDATER-RECREATE-STACK" {print $2}' "$labels_file"
+      if [[ "$format" =~ index[[:space:]]+\.Config\.Labels[[:space:]]+\"([^\"]+)\" ]]; then
+        awk -F= -v label="${BASH_REMATCH[1]}" '$1 == label {print $2}' "$labels_file"
+      else
+        awk -F= '$1 == "WUD-UPDATER-RECREATE-STACK" {print $2}' "$labels_file"
+      fi
     fi
     return 0
   fi

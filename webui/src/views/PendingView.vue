@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, h, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import { breakpointsTailwind, useBreakpoints } from "@vueuse/core";
-import { AlertTriangle, Check, ExternalLink, Play, X } from "@lucide/vue";
+import { AlertTriangle, Check, ExternalLink, Play, Trash2, X } from "@lucide/vue";
 import { NInput, type DataTableColumns, type DataTableRowKey } from "naive-ui";
 
 import {
@@ -11,6 +11,7 @@ import {
   type PendingGroupedItem,
   type PendingItem,
   type PendingStackGroup,
+  type PlanCleanupItem,
   type PlanAction,
   type PlanIssue,
   type PlanLine,
@@ -27,6 +28,7 @@ const isMobile = breakpoints.smaller("md");
 const selectedLineNumbers = ref<number[]>([]);
 const tagOverrides = ref<Record<number, string>>({});
 const showPreflightModal = ref(false);
+const showCleanupModal = ref(false);
 const showApplyJobModal = ref(false);
 const jobEventSource = ref<EventSource | null>(null);
 const applyJobPanelRef = ref<HTMLElement | null>(null);
@@ -243,6 +245,29 @@ const applyButtonLabel = computed(() =>
     ? `Apply ${pluralize(webui.plan.selected_line_numbers.length, "update")}`
     : "Apply selected updates",
 );
+const cleanupItems = computed(() => webui.plan?.cleanup.items ?? []);
+const cleanupAvailable = computed(() => cleanupItems.value.length > 0);
+const cleanupButtonLabel = computed(() =>
+  `Remove ${pluralize(cleanupItems.value.length, "unmatched entry", "unmatched entries")}`,
+);
+const cleanupDisabled = computed(
+  () => !webui.plan?.cleanup.can_remove_unmatched || webui.loading,
+);
+const cleanupDisabledMessage = computed(() => {
+  if (!webui.plan || !cleanupAvailable.value || webui.plan.cleanup.can_remove_unmatched) {
+    return "";
+  }
+  if (!auth.session?.mutations_enabled) {
+    return "Read-only mode is active. Set WUD_WEB_MUTATIONS_ENABLED=true on the server to remove stale pending entries.";
+  }
+  return "These pending entries cannot be removed right now.";
+});
+const pendingCleanupMessage = computed(() => {
+  if (!webui.pendingCleanup) {
+    return "";
+  }
+  return `${pluralize(webui.pendingCleanup.removed_count, "pending entry", "pending entries")} removed from ${pendingSourceLabel.value}.`;
+});
 const mutationDisabledMessage = computed(() => {
   if (!webui.plan || webui.plan.status !== "ready" || webui.plan.can_apply) {
     return "";
@@ -554,6 +579,7 @@ function lineNumbersHaveTagUpdates(lineNumbers: number[]): boolean {
 
 function clearPreflight(): void {
   showPreflightModal.value = false;
+  showCleanupModal.value = false;
   updateIntent.value = null;
   webui.clearPlan();
 }
@@ -698,6 +724,39 @@ async function startUpdateFlow(input: {
 
 function closePreflightModal(): void {
   clearPreflight();
+}
+
+function openCleanupModal(): void {
+  if (!cleanupAvailable.value) {
+    return;
+  }
+  showCleanupModal.value = true;
+}
+
+function closeCleanupModal(): void {
+  showCleanupModal.value = false;
+}
+
+async function confirmCleanup(): Promise<void> {
+  const cleanup = webui.plan?.cleanup;
+  if (!cleanup?.cleanup_id || cleanupDisabled.value || !cleanup.items.length) {
+    return;
+  }
+  const result = await webui.cleanupPending(
+    cleanup.cleanup_id,
+    cleanup.items.map((item) => ({ line_no: item.line_no, raw: item.raw })),
+  );
+  const removedLines = new Set(result.removed.map((item) => item.line_no));
+  selectedLineNumbers.value = selectedLineNumbers.value.filter(
+    (lineNo) => !removedLines.has(lineNo),
+  );
+  showCleanupModal.value = false;
+  showPreflightModal.value = false;
+  updateIntent.value = null;
+  await Promise.all([
+    loadPendingAndReleaseNotes({ preserveCleanup: true }),
+    webui.loadRuns(),
+  ]);
 }
 
 async function confirmApply(): Promise<void> {
@@ -929,6 +988,22 @@ function issueLabel(issue: PlanIssue): string {
   return target ? `${target}: ${issue.message}` : issue.message;
 }
 
+function issueHint(issue: PlanIssue): string {
+  return issue.hint || "";
+}
+
+function unmatchedDiagnosticMessage(item: PendingGroupedItem): string {
+  return item.diagnostic?.message || "No Compose stack matched this WUD entry.";
+}
+
+function unmatchedDiagnosticHint(item: PendingGroupedItem): string {
+  return item.diagnostic?.hint || "";
+}
+
+function cleanupLineLabel(item: PlanCleanupItem): string {
+  return `#${item.line_no} ${item.image}`;
+}
+
 function pluralize(count: number, singular: string, plural = `${singular}s`): string {
   return `${count} ${count === 1 ? singular : plural}`;
 }
@@ -995,8 +1070,10 @@ function planLineTagRewriteLabel(line: PlanLine): string {
   return `${line.compose_image} -> ${line.target_image}`;
 }
 
-async function loadPendingAndReleaseNotes(): Promise<void> {
-  await webui.loadPending();
+async function loadPendingAndReleaseNotes(
+  options: { preserveCleanup?: boolean } = {},
+): Promise<void> {
+  await webui.loadPending(options);
   await webui.loadReleaseNotes().catch(() => undefined);
   void webui.refreshReleaseNotes().catch(() => undefined);
 }
@@ -1052,6 +1129,17 @@ watch(
     </n-alert>
     <n-alert v-if="webui.releaseNotesError" type="warning">
       Release-note metadata is unavailable: {{ webui.releaseNotesError }}
+    </n-alert>
+    <n-alert v-if="pendingCleanupMessage" type="success">
+      {{ pendingCleanupMessage }}
+      <span class="inline-actions recovery-actions">
+        <RouterLink
+          class="text-link"
+          :to="{ name: 'run-detail', params: { id: webui.pendingCleanup?.audit_run_id } }"
+        >
+          Details
+        </RouterLink>
+      </span>
     </n-alert>
     <n-alert
       v-if="webui.applyJobRecovery"
@@ -1496,7 +1584,10 @@ watch(
                 </div>
                 <div class="pending-update-meta">
                   <span>Pending file line #{{ item.line_no }}</span>
-                  <span>Preview a plan to see why this target is unresolved.</span>
+                  <span>{{ unmatchedDiagnosticMessage(item) }}</span>
+                  <span v-if="unmatchedDiagnosticHint(item)">
+                    {{ unmatchedDiagnosticHint(item) }}
+                  </span>
                 </div>
                 <div v-if="item.desired_tag" class="pending-update-tag">
                   <span>New tag</span>
@@ -1687,6 +1778,40 @@ watch(
         >
           {{ preflightTagRewriteNotice }}
         </n-alert>
+        <n-alert
+          v-if="cleanupDisabledMessage"
+          class="preflight-block"
+          type="warning"
+        >
+          {{ cleanupDisabledMessage }}
+        </n-alert>
+
+        <section
+          v-if="cleanupAvailable"
+          class="preflight-impact preflight-block"
+          aria-labelledby="cleanup-preview-title"
+        >
+          <div class="preflight-impact-heading">
+            <strong id="cleanup-preview-title">Unmatched pending entries</strong>
+            <n-tag size="small" type="warning">
+              {{ pluralize(cleanupItems.length, "entry", "entries") }}
+            </n-tag>
+          </div>
+          <div class="compact-list">
+            <div
+              v-for="item in cleanupItems"
+              :key="`cleanup-${item.line_no}`"
+              class="list-row plan-line-row"
+            >
+              <span>#{{ item.line_no }}</span>
+              <strong>{{ item.image }}</strong>
+              <em>
+                <span>{{ item.diagnostic?.message || item.reason }}</span>
+                <span v-if="item.diagnostic?.hint">{{ item.diagnostic.hint }}</span>
+              </em>
+            </div>
+          </div>
+        </section>
 
         <section
           v-if="webui.plan.status === 'ready'"
@@ -1727,7 +1852,10 @@ watch(
             :key="`${issue.code}-${issue.line_no ?? ''}-${issue.stack}-${issue.service}`"
             :type="issueType(issue)"
           >
-            {{ issueLabel(issue) }}
+            <span>{{ issueLabel(issue) }}</span>
+            <span v-if="issueHint(issue)" class="issue-hint">
+              {{ issueHint(issue) }}
+            </span>
           </n-alert>
         </div>
 
@@ -1808,6 +1936,20 @@ watch(
             Close
           </n-button>
           <n-button
+            v-if="cleanupAvailable"
+            type="warning"
+            size="small"
+            secondary
+            :disabled="cleanupDisabled"
+            :loading="webui.loading"
+            @click="openCleanupModal"
+          >
+            <template #icon>
+              <Trash2 :size="16" />
+            </template>
+            {{ cleanupButtonLabel }}
+          </n-button>
+          <n-button
             v-if="applyAvailable"
             type="primary"
             size="small"
@@ -1819,6 +1961,70 @@ watch(
               <Play :size="16" />
             </template>
             {{ applyButtonLabel }}
+          </n-button>
+        </div>
+      </section>
+    </n-modal>
+
+    <n-modal
+      v-if="webui.plan && cleanupAvailable"
+      v-model:show="showCleanupModal"
+      :mask-closable="false"
+    >
+      <section
+        class="preflight-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="cleanup-modal-title"
+      >
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Pending cleanup</p>
+            <h2 id="cleanup-modal-title">Remove unmatched entries</h2>
+            <p class="preflight-summary-text">
+              These lines will be removed from {{ pendingSourceLabel }} without running Docker updates.
+            </p>
+          </div>
+          <n-tag type="warning">{{ pluralize(cleanupItems.length, "entry", "entries") }}</n-tag>
+        </div>
+
+        <n-alert class="preflight-block" type="warning">
+          The server will re-read {{ pendingSourceLabel }} and reject the cleanup if any selected line changed or now matches an active Compose stack.
+        </n-alert>
+
+        <section class="preflight-impact preflight-block" aria-labelledby="cleanup-lines-title">
+          <div class="preflight-impact-heading">
+            <strong id="cleanup-lines-title">Source lines</strong>
+            <n-tag size="small">{{ pluralize(cleanupItems.length, "line") }}</n-tag>
+          </div>
+          <div class="compact-list">
+            <div
+              v-for="item in cleanupItems"
+              :key="`cleanup-confirm-${item.line_no}`"
+              class="list-row plan-line-row"
+            >
+              <span>Line</span>
+              <strong>{{ cleanupLineLabel(item) }}</strong>
+              <em><code>{{ item.raw }}</code></em>
+            </div>
+          </div>
+        </section>
+
+        <div class="preflight-footer">
+          <n-button size="small" quaternary @click="closeCleanupModal">
+            Cancel
+          </n-button>
+          <n-button
+            type="warning"
+            size="small"
+            :disabled="cleanupDisabled"
+            :loading="webui.loading"
+            @click="confirmCleanup"
+          >
+            <template #icon>
+              <Trash2 :size="16" />
+            </template>
+            {{ cleanupButtonLabel }}
           </n-button>
         </div>
       </section>

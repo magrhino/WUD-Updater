@@ -13,6 +13,17 @@ export interface PendingItem {
   desired_tag: string;
 }
 
+export interface PendingDiagnostic {
+  code: string;
+  message: string;
+  hint: string;
+  stack: string;
+  service: string;
+  compose_file: string;
+  found_files: string[];
+  details: Record<string, unknown>;
+}
+
 export type PendingGroupingStatus = "ready" | "unavailable";
 
 export interface PendingGroupedItem extends PendingItem {
@@ -21,6 +32,7 @@ export interface PendingGroupedItem extends PendingItem {
   compose_images: string[];
   services: string[];
   action: string;
+  diagnostic: PendingDiagnostic | null;
 }
 
 export interface PendingStackGroup {
@@ -97,6 +109,8 @@ export interface PlanIssue {
   line_no: number | null;
   stack: string;
   service: string;
+  hint: string;
+  details: Record<string, unknown>;
 }
 
 export interface PlanTarget {
@@ -161,6 +175,22 @@ export interface PlanSkipped {
   reason: string;
 }
 
+export interface PlanCleanupItem {
+  line_no: number;
+  raw: string;
+  image: string;
+  desired_tag: string;
+  digest: string;
+  reason: string;
+  diagnostic: PendingDiagnostic | null;
+}
+
+export interface PlanCleanup {
+  cleanup_id: string;
+  can_remove_unmatched: boolean;
+  items: PlanCleanupItem[];
+}
+
 export interface TagOverrideRequest {
   line_no: number;
   tag: string;
@@ -180,6 +210,24 @@ export interface PlanResponse {
   stacks: PlanStack[];
   skipped: PlanSkipped[];
   issues: PlanIssue[];
+  cleanup: PlanCleanup;
+}
+
+export interface PendingCleanupLine {
+  line_no: number;
+  raw: string;
+}
+
+export interface PendingCleanupRemovedLine extends PendingCleanupLine {
+  image: string;
+  reason: string;
+}
+
+export interface PendingCleanupResponse {
+  status: "success";
+  audit_run_id: number;
+  removed_count: number;
+  removed: PendingCleanupRemovedLine[];
 }
 
 export type ApplyJobStatus = "queued" | "running" | "success" | "failure";
@@ -474,6 +522,20 @@ const liveWebApi = {
     }),
   status: () => apiRequest<StatusResponse>("/status"),
   pending: () => apiRequest<PendingResponse>("/pending"),
+  cleanupPending: (
+    cleanupId: string,
+    lines: PendingCleanupLine[],
+    csrfToken: string,
+  ) =>
+    apiRequest<PendingCleanupResponse>("/pending/cleanup", {
+      method: "POST",
+      headers: { "x-wud-csrf-token": csrfToken },
+      body: JSON.stringify({
+        cleanup_id: cleanupId,
+        lines,
+        confirmation: "remove_unmatched",
+      }),
+    }),
   releaseNotes: () => apiRequest<ReleaseNotesResponse>("/release-notes"),
   refreshReleaseNotes: (csrfToken: string) =>
     apiRequest<ReleaseNotesResponse>("/release-notes/refresh", {
