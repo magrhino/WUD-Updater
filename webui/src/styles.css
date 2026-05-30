@@ -255,6 +255,22 @@ a {
   box-shadow: var(--shadow-panel-lift);
 }
 
+.batch-action-bar {
+  position: sticky;
+  top: 12px;
+  z-index: 8;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 58px;
+  padding: 10px 12px;
+  border: 1px solid var(--color-border-hover);
+  border-radius: 8px;
+  background: var(--color-surface);
+  box-shadow: var(--shadow-panel-lift);
+}
+
 .selection-summary {
   display: grid;
   gap: 2px;
@@ -308,6 +324,13 @@ a {
   min-width: 0;
 }
 
+.stack-card-side {
+  display: grid;
+  justify-items: end;
+  gap: 8px;
+  min-width: 0;
+}
+
 .stack-title-block {
   display: grid;
   gap: 4px;
@@ -332,6 +355,38 @@ a {
   justify-content: flex-end;
   gap: 6px;
   min-width: 0;
+}
+
+.stack-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+  min-width: 0;
+}
+
+.stack-details,
+.preflight-details {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+.stack-details summary,
+.preflight-details summary {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  min-height: 32px;
+  cursor: pointer;
+  color: var(--color-action-blue);
+  font-size: 0.86rem;
+  font-weight: 700;
+}
+
+.stack-details[open] summary,
+.preflight-details[open] summary {
+  margin-bottom: 8px;
 }
 
 .stack-items {
@@ -745,6 +800,73 @@ a {
   grid-template-columns: minmax(56px, auto) minmax(120px, 0.7fr) minmax(0, 2fr);
 }
 
+.preflight-modal {
+  display: grid;
+  gap: 14px;
+  width: min(720px, calc(100vw - 32px));
+  max-height: calc(100vh - 64px);
+  padding: 18px;
+  overflow: auto;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: var(--color-surface);
+  color: var(--color-ink);
+  box-shadow: var(--shadow-panel-lift);
+}
+
+.preflight-summary-text {
+  max-width: 64ch;
+  margin: 6px 0 0;
+  color: var(--color-muted-text);
+}
+
+.preflight-metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.preflight-metrics div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 7px;
+  background: var(--color-panel-tint);
+}
+
+.preflight-metrics span {
+  color: var(--color-muted-text);
+  font-size: 0.78rem;
+}
+
+.preflight-metrics strong {
+  font-size: 1rem;
+}
+
+.preflight-block {
+  margin-top: 0;
+}
+
+.preflight-details-list {
+  display: grid;
+  gap: 10px;
+}
+
+.preflight-details {
+  padding: 0;
+  border-top: 1px solid var(--color-border-subtle);
+}
+
+.preflight-footer {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+  padding-top: 4px;
+}
+
 .confirmation-list {
   display: grid;
   gap: 10px;
@@ -876,8 +998,13 @@ a {
   }
 
   .selection-toolbar,
+  .batch-action-bar,
   .stack-card-header {
     align-items: flex-start;
+  }
+
+  .batch-action-bar {
+    top: 76px;
   }
 
   .topbar {
@@ -892,6 +1019,7 @@ a {
 
   .section-heading,
   .selection-toolbar,
+  .batch-action-bar,
   .stack-card-header,
   .pending-update-main,
   .topbar {
@@ -957,9 +1085,16 @@ a {
     justify-content: flex-start;
   }
 
+  .stack-card-side,
+  .stack-card-actions {
+    justify-items: start;
+    justify-content: flex-start;
+  }
+
   .plan-action,
   .plan-line-row,
-  .plan-summary {
+  .plan-summary,
+  .preflight-metrics {
     grid-template-columns: 1fr;
   }
 

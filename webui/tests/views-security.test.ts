@@ -53,7 +53,7 @@ describe("mutating WebUI views", () => {
     setActivePinia(createPinia());
   });
 
-  it("allows read-only pending previews but blocks apply", async () => {
+  it("allows read-only pending preflight but blocks apply", async () => {
     const { pinia, webui } = setupStores(false);
     webui.pending = pendingResponse();
     mockPendingLifecycle(webui);
@@ -68,20 +68,82 @@ describe("mutating WebUI views", () => {
       .setValue(true);
     await wrapper
       .findAll("button")
-      .find((button) => button.text().includes("Preview plan"))
+      .find((button) => button.text().includes("Update selected"))
       ?.trigger("click");
+    await flushPromises();
 
     expect(wrapper.text()).toContain("Read-only mode is active");
-    expect(createPlan).toHaveBeenCalledWith([1], false, []);
+    expect(createPlan).toHaveBeenCalledWith([1], true, []);
     expect(
       wrapper
         .findAll("button")
-        .some((button) => button.text().includes("Apply plan")),
+        .some((button) => button.text().includes("Apply update")),
     ).toBe(false);
     expect(createJob).not.toHaveBeenCalled();
   });
 
-  it("previews selected stack line numbers", async () => {
+  it("shows blocked preflight errors without an apply action", async () => {
+    const { pinia, webui } = setupStores(true);
+    webui.pending = pendingResponse();
+    mockPendingLifecycle(webui);
+    const createPlan = vi.spyOn(webui, "createPlan").mockImplementation(async () => {
+      webui.plan = planResponse({
+        can_apply: false,
+        status: "blocked",
+        summary: {
+          target_count: 1,
+          matched_target_count: 0,
+          stack_count: 0,
+          service_count: 0,
+          skipped_count: 1,
+          issue_count: 1,
+        },
+        stacks: [],
+        issues: [
+          {
+            severity: "error",
+            code: "unmatched",
+            message: "No Compose service matched repo/app:1.0.",
+            line_no: 1,
+            stack: "",
+            service: "",
+          },
+        ],
+        skipped: [
+          {
+            line_no: 1,
+            raw: "repo/app:1.0",
+            image: "repo/app:1.0",
+            desired_tag: "1.1",
+            reason: "unmatched",
+          },
+        ],
+      });
+    });
+    const createJob = vi.spyOn(webui, "createJob");
+    const wrapper = mountWithApp(PendingView, { pinia });
+
+    await wrapper
+      .findAll("button")
+      .find((button) => button.text().includes("Update media"))
+      ?.trigger("click");
+    await flushPromises();
+
+    expect(createPlan).toHaveBeenCalledWith([1], true, []);
+    expect(wrapper.find('[role="dialog"]').text()).toContain("Update blocked");
+    expect(wrapper.find('[role="dialog"]').text()).toContain(
+      "No Compose service matched repo/app:1.0.",
+    );
+    expect(
+      wrapper
+        .find('[role="dialog"]')
+        .findAll("button")
+        .some((button) => button.text().includes("Apply update")),
+    ).toBe(false);
+    expect(createJob).not.toHaveBeenCalled();
+  });
+
+  it("starts a stack update with the full stack line set", async () => {
     const { pinia, webui } = setupStores(true);
     webui.pending = pendingResponse([
       pendingItem({ line_no: 4, image: "repo/app:1.0", repo: "repo/app" }),
@@ -92,14 +154,11 @@ describe("mutating WebUI views", () => {
     const wrapper = mountWithApp(PendingView, { pinia });
 
     await wrapper
-      .find('input[aria-label="Select stack media"]')
-      .setValue(true);
-    await wrapper
       .findAll("button")
-      .find((button) => button.text().includes("Preview plan"))
+      .find((button) => button.text().includes("Update media"))
       ?.trigger("click");
 
-    expect(createPlan).toHaveBeenCalledWith([4, 9], false, []);
+    expect(createPlan).toHaveBeenCalledWith([4, 9], true, []);
   });
 
   it("marks a stack indeterminate after one grouped item is deselected", async () => {
@@ -119,13 +178,13 @@ describe("mutating WebUI views", () => {
       .setValue(false);
     await wrapper
       .findAll("button")
-      .find((button) => button.text().includes("Preview plan"))
+      .find((button) => button.text().includes("Update selected"))
       ?.trigger("click");
 
     expect(
       wrapper.find('input[aria-label="Select stack media"]').attributes("aria-checked"),
     ).toBe("mixed");
-    expect(createPlan).toHaveBeenCalledWith([1], false, []);
+    expect(createPlan).toHaveBeenCalledWith([1], true, []);
   });
 
   it("excludes unmatched items from select all stack updates", async () => {
@@ -158,11 +217,11 @@ describe("mutating WebUI views", () => {
       ?.trigger("click");
     await wrapper
       .findAll("button")
-      .find((button) => button.text().includes("Preview plan"))
+      .find((button) => button.text().includes("Update selected"))
       ?.trigger("click");
 
     expect(wrapper.text()).toContain("Needs review");
-    expect(createPlan).toHaveBeenCalledWith([1], false, []);
+    expect(createPlan).toHaveBeenCalledWith([1], true, []);
   });
 
   it("selects tag update rows and enables tag rewrites when an override is edited", async () => {
@@ -178,7 +237,7 @@ describe("mutating WebUI views", () => {
       .setValue("1.2");
     await wrapper
       .findAll("button")
-      .find((button) => button.text().includes("Preview plan"))
+      .find((button) => button.text().includes("Update selected"))
       ?.trigger("click");
 
     expect(
@@ -209,12 +268,22 @@ describe("mutating WebUI views", () => {
       .setValue("bad tag");
 
     expect(wrapper.text()).toContain(`${item.image} has an invalid new tag`);
-    const previewButton = wrapper
+    const updateButton = wrapper
       .findAll("button")
-      .find((button) => button.text().includes("Preview plan"));
-    expect(previewButton?.attributes("disabled")).toBeDefined();
-    await previewButton?.trigger("click");
+      .find((button) => button.text().includes("Update selected"));
+    expect(updateButton?.attributes("disabled")).toBeDefined();
+    await updateButton?.trigger("click");
     expect(createPlan).not.toHaveBeenCalled();
+  });
+
+  it("keeps grouped update details collapsed by default", () => {
+    const { pinia, webui } = setupStores(true);
+    webui.pending = pendingResponse();
+    mockPendingLifecycle(webui);
+    const wrapper = mountWithApp(PendingView, { pinia });
+
+    expect(wrapper.find("details.stack-details").attributes("open")).toBeUndefined();
+    expect(wrapper.text()).toContain("Details");
   });
 
   it("falls back to pending file order when grouping is unavailable", () => {
@@ -346,13 +415,15 @@ describe("mutating WebUI views", () => {
   it("creates an apply job only after explicit confirmation", async () => {
     const { pinia, webui } = setupStores(true);
     webui.pending = pendingResponse();
-    webui.plan = planResponse();
     const loadPending = vi.spyOn(webui, "loadPending").mockResolvedValue();
     const loadReleaseNotes = vi.spyOn(webui, "loadReleaseNotes").mockResolvedValue();
     const refreshReleaseNotes = vi
       .spyOn(webui, "refreshReleaseNotes")
       .mockResolvedValue();
     const loadRuns = vi.spyOn(webui, "loadRuns").mockResolvedValue();
+    vi.spyOn(webui, "createPlan").mockImplementation(async () => {
+      webui.plan = planResponse();
+    });
     const createJob = vi
       .spyOn(webui, "createJob")
       .mockResolvedValue(applyJobResponse());
@@ -381,8 +452,9 @@ describe("mutating WebUI views", () => {
 
     await wrapper
       .findAll("button")
-      .find((button) => button.text().includes("Apply"))
+      .find((button) => button.text().includes("Update media"))
       ?.trigger("click");
+    await flushPromises();
 
     expect(createJob).not.toHaveBeenCalled();
     expect(wrapper.find('[role="dialog"]').exists()).toBe(true);
@@ -390,10 +462,10 @@ describe("mutating WebUI views", () => {
     await wrapper
       .find('[role="dialog"]')
       .findAll("button")
-      .find((button) => button.text().includes("Apply"))
+      .find((button) => button.text().includes("Apply update"))
       ?.trigger("click");
 
-    expect(createJob).toHaveBeenCalledWith("plan-test", [1], false, []);
+    expect(createJob).toHaveBeenCalledWith("plan-test", [1], true, []);
     expect(jobListener).not.toBeNull();
 
     jobListener?.(

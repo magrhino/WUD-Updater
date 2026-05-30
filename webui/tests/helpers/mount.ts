@@ -243,17 +243,19 @@ export const naiveStubs: Record<string, Component> = {
           ? h("div", { role: "dialog" }, [
               props.title ? h("h2", props.title) : null,
               slots.default?.(),
-              h(
-                "button",
-                {
-                  disabled: Boolean(
-                    (props.positiveButtonProps as { loading?: boolean } | undefined)
-                      ?.loading,
-                  ),
-                  onClick: () => emit("positive-click"),
-                },
-                props.positiveText || "Confirm",
-              ),
+              props.positiveText
+                ? h(
+                    "button",
+                    {
+                      disabled: Boolean(
+                        (props.positiveButtonProps as { loading?: boolean } | undefined)
+                          ?.loading,
+                      ),
+                      onClick: () => emit("positive-click"),
+                    },
+                    props.positiveText,
+                  )
+                : null,
             ])
           : null;
     },

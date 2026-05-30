@@ -479,17 +479,17 @@ test("login requests csrf and does not store secrets in browser storage", async 
   });
 });
 
-test("read-only pending flow can preview a stack but cannot apply", async ({ page }) => {
+test("read-only pending flow can preflight a stack but cannot apply", async ({ page }) => {
   const state = createState({ authenticated: true, mutationsEnabled: false });
   await installApiFixtures(page, state);
 
   await page.goto("/#/pending");
   await page.getByRole("checkbox", { name: /Select stack media/ }).check();
-  await page.getByRole("button", { name: /Preview plan/ }).click();
+  await page.getByRole("button", { name: /Update selected/ }).click();
 
   await expect(page.getByText("Read-only mode is active").first()).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Ready dry run" })).toBeVisible();
-  await expect(page.getByRole("button", { name: /Apply plan/ })).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "Update selected" })).toBeVisible();
+  await expect(page.getByRole("button", { name: /Apply update/ })).toHaveCount(0);
   expect(state.calls.some((call) => call.path === "/api/v1/plans")).toBe(true);
   expect(state.calls.some((call) => call.path === "/api/v1/jobs")).toBe(false);
 });
@@ -501,14 +501,12 @@ test("mutation-enabled pending flow applies and links to run details", async ({
   await installApiFixtures(page, state);
 
   await page.goto("/#/pending");
-  await page.getByRole("checkbox", { name: /Select stack media/ }).check();
-  await page.getByRole("button", { name: /Preview plan/ }).click();
+  await page.getByRole("button", { name: /Update media/ }).click();
 
-  await expect(page.getByRole("heading", { name: "Ready dry run" })).toBeVisible();
-  await page.getByRole("button", { name: /Apply plan/ }).click();
+  await expect(page.getByRole("heading", { name: "Update media" })).toBeVisible();
   await page
     .getByRole("dialog")
-    .getByRole("button", { name: /Apply plan/ })
+    .getByRole("button", { name: /Apply update/ })
     .click();
 
   await expect(page.getByRole("heading", { name: "Apply complete" })).toBeVisible();
@@ -562,6 +560,7 @@ test("mobile shell keeps page width stable and preserves link targets", async ({
 
   await page.goto("/#/pending");
   await expect(page.getByRole("checkbox", { name: /Select stack media/ })).toBeVisible();
+  await page.getByText("Details").first().click();
   await expect(page.getByText("Possible breaking change")).toBeVisible();
   await expect
     .poll(() =>
@@ -646,28 +645,29 @@ test("mutation-enabled pending flow creates jobs only after confirmation", async
 
   await page.goto("/#/pending");
   await page.getByRole("checkbox", { name: /Select stack media/ }).check();
-  await page.getByRole("button", { name: /Preview plan/ }).click();
-  await expect(page.getByRole("heading", { name: "Ready dry run" })).toBeVisible();
-  await page.getByRole("button", { name: /Apply plan/ }).click();
+  await page.getByRole("button", { name: /Update selected/ }).click();
+  await expect(page.getByRole("heading", { name: "Update selected" })).toBeVisible();
 
   const dialog = page.getByRole("dialog").filter({
-    hasText: "Apply update plan",
+    hasText: "Update selected",
   });
   await expect(dialog).toBeVisible();
   expect(state.calls.some((call) => call.path === "/api/v1/jobs")).toBe(false);
 
-  await dialog.getByRole("button", { name: "Apply plan" }).click();
+  await dialog.getByRole("button", { name: "Apply update" }).click();
 
   const planCall = state.calls.find((call) => call.path === "/api/v1/plans");
   const jobCall = state.calls.find((call) => call.path === "/api/v1/jobs");
   expect(planCall?.headers["x-wud-csrf-token"]).toBe(csrfToken);
   expect(planCall?.body).toMatchObject({
     line_numbers: [1],
+    allow_tag_updates: true,
   });
   expect(jobCall?.headers["x-wud-csrf-token"]).toBe(csrfToken);
   expect(jobCall?.body).toMatchObject({
     plan_id: "plan-smoke",
     line_numbers: [1],
+    allow_tag_updates: true,
     confirmation: "apply",
   });
 });
