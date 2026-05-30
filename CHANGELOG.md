@@ -4,6 +4,13 @@ All notable changes to WUD-Updater are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com) and versions follow
 [Semantic Versioning](https://semver.org).
 
+## [0.24.2](https://github.com/magrhino/WUD-Updater/compare/v0.24.1...v0.24.2) (2026-05-30)
+
+
+### Bug Fixes
+
+* **ui:** Polish WebUI demo state and pending page interactions ([#127](https://github.com/magrhino/WUD-Updater/issues/127)) ([6c9a1a2](https://github.com/magrhino/WUD-Updater/commit/6c9a1a25010a2f069055c625f3642a9a1a5cf22e))
+
 ## [0.24.1](https://github.com/magrhino/WUD-Updater/compare/v0.24.0...v0.24.1) (2026-05-30)
 
 
