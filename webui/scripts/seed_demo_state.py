@@ -5,6 +5,8 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
+import shutil
 import sys
 from pathlib import Path
 
@@ -17,10 +19,12 @@ if str(SRC_ROOT) not in sys.path:
 from wud_updater.db import (  # noqa: E402
     connect_db,
     init_db,
+    insert_snooze,
     insert_pending_update,
     insert_update_event,
     insert_update_run,
     upsert_known_image,
+    upsert_tag_exclusion_rule,
 )
 
 
@@ -30,6 +34,98 @@ PENDING_LINES = (
     "lscr.io/linuxserver/radarr:5.21.1 tag=5.22.4",
     "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
     "ghcr.io/magrhino/wud-updater:v0.16.0 tag=v0.16.1",
+)
+
+DEMO_STACKS = (
+    {
+        "name": "home",
+        "services": (
+            ("home-assistant", "ghcr.io/home-assistant/home-assistant:2026.5.1"),
+        ),
+    },
+    {
+        "name": "media",
+        "services": (
+            ("radarr", "lscr.io/linuxserver/radarr:5.21.1"),
+            ("wud-updater", "ghcr.io/magrhino/wud-updater:v0.16.0"),
+        ),
+    },
+    {
+        "name": "data",
+        "services": (
+            ("postgres", "postgres:16"),
+        ),
+    },
+)
+
+DEMO_PULL_TARGETS = (
+    (
+        "ghcr.io/home-assistant/home-assistant:2026.5.3",
+        "sha256:demo-home-assistant-new",
+        "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    ),
+    (
+        "lscr.io/linuxserver/radarr:5.22.4",
+        "sha256:demo-radarr-new",
+        "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    ),
+    (
+        "postgres:16",
+        "sha256:demo-postgres-new",
+        "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+    ),
+    (
+        "ghcr.io/magrhino/wud-updater:v0.16.1",
+        "sha256:demo-wud-updater-new",
+        "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    ),
+)
+
+DEMO_SERVICE_POLICIES = (
+    {
+        "service_key": "home/home-assistant",
+        "update_mode": "live",
+        "auto_update": True,
+        "snooze_default_seconds": None,
+    },
+    {
+        "service_key": "media/radarr",
+        "update_mode": "stop",
+        "auto_update": False,
+        "snooze_default_seconds": 86400,
+    },
+)
+
+DEMO_SNOOZES = (
+    {
+        "service_key": "media/radarr",
+        "snoozed_until": "2099-01-01T00:00:00+00:00",
+        "reason": "demo maintenance window",
+        "created_at": "2026-05-28T12:00:00+00:00",
+    },
+    {
+        "service_key": "data/postgres",
+        "snoozed_until": "2020-01-01T00:00:00+00:00",
+        "reason": "expired demo snooze",
+        "created_at": "2020-01-01T00:00:00+00:00",
+    },
+)
+
+DEMO_TAG_EXCLUSIONS = (
+    {
+        "scope": "image_repo",
+        "image_repo": "ghcr.io/home-assistant/home-assistant",
+        "service_key": "",
+        "tag": "2026.5.3",
+        "status": "active",
+    },
+    {
+        "scope": "service",
+        "image_repo": "lscr.io/linuxserver/radarr",
+        "service_key": "media/radarr",
+        "tag": "5.22.4",
+        "status": "disabled",
+    },
 )
 
 RUNS = (
@@ -174,6 +270,8 @@ def main() -> int:
     paths = seed_demo_state(args.root)
     if not args.quiet:
         print("Created WebUI demo state:")
+        print(f"  DOCKER_BASE={paths['docker_base']}")
+        print(f"  FAKE_DOCKER_ROOT={paths['fake_docker_root']}")
         print(f"  WUD_OUT_FILE={paths['wud_file']}")
         print(f"  WUD_LOG_DIR={paths['log_dir']}")
         print(f"  WUD_DB_PATH={paths['db_path']}")
@@ -185,20 +283,24 @@ def seed_demo_state(root: Path) -> dict[str, Path]:
     out_dir = root / "out"
     log_dir = root / "logs"
     docker_base = root / "docker"
+    fake_docker_root = root / "fake-docker"
     wud_file = out_dir / "images.todo"
     db_path = log_dir / "wud-updater.sqlite"
 
     out_dir.mkdir(parents=True, exist_ok=True)
     log_dir.mkdir(parents=True, exist_ok=True)
-    docker_base.mkdir(parents=True, exist_ok=True)
+    _reset_directory(docker_base)
+    _reset_directory(fake_docker_root)
 
     wud_file.write_text("\n".join(PENDING_LINES) + "\n", encoding="utf-8")
     for path in log_dir.glob("demo-*.log"):
         path.unlink()
     _reset_sqlite(db_path)
+    _write_demo_stacks(docker_base, fake_docker_root)
 
     with connect_db(db_path) as conn:
         init_db(conn)
+        _write_demo_management_state(conn)
         for entry in RUNS:
             log_file = log_dir / str(entry["log"])
             log_file.write_text(str(entry["log_content"]), encoding="utf-8")
@@ -258,9 +360,70 @@ def seed_demo_state(root: Path) -> dict[str, Path]:
         "out_dir": out_dir,
         "log_dir": log_dir,
         "docker_base": docker_base,
+        "fake_docker_root": fake_docker_root,
         "wud_file": wud_file,
         "db_path": db_path,
     }
+
+
+def _write_demo_management_state(conn) -> None:
+    created_at = "2026-05-28T12:00:00+00:00"
+    for policy in DEMO_SERVICE_POLICIES:
+        with conn:
+            conn.execute(
+                """
+                INSERT INTO service_policy (
+                    service_key,
+                    update_mode,
+                    auto_update,
+                    snooze_default_seconds,
+                    created_at,
+                    updated_at,
+                    metadata_json
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    str(policy["service_key"]),
+                    str(policy["update_mode"]),
+                    1 if bool(policy["auto_update"]) else 0,
+                    policy["snooze_default_seconds"],
+                    created_at,
+                    created_at,
+                    '{"source":"demo"}',
+                ),
+            )
+
+    for snooze in DEMO_SNOOZES:
+        insert_snooze(
+            conn,
+            service_key=str(snooze["service_key"]),
+            snoozed_until=str(snooze["snoozed_until"]),
+            reason=str(snooze["reason"]),
+            created_at=str(snooze["created_at"]),
+            metadata_json='{"source":"demo"}',
+        )
+
+    for rule in DEMO_TAG_EXCLUSIONS:
+        tag = str(rule["tag"])
+        upsert_tag_exclusion_rule(
+            conn,
+            scope=str(rule["scope"]),
+            image_repo=str(rule["image_repo"]),
+            service_key=str(rule["service_key"]),
+            tag=tag,
+            regex_fragment=re.escape(tag),
+            status=str(rule["status"]),
+            created_at=created_at,
+            updated_at=created_at,
+            metadata_json='{"source":"demo"}',
+        )
+
+
+def _reset_directory(path: Path) -> None:
+    if path.exists():
+        shutil.rmtree(path)
+    path.mkdir(parents=True, exist_ok=True)
 
 
 def _reset_sqlite(db_path: Path) -> None:
@@ -268,6 +431,116 @@ def _reset_sqlite(db_path: Path) -> None:
         path = Path(f"{db_path}{suffix}")
         if path.exists():
             path.unlink()
+
+
+def _write_demo_stacks(docker_base: Path, fake_docker_root: Path) -> None:
+    for directory in (
+        fake_docker_root / "stacks",
+        fake_docker_root / "images",
+        fake_docker_root / "manifests",
+        fake_docker_root / "containers",
+    ):
+        directory.mkdir(parents=True, exist_ok=True)
+
+    containers: list[str] = []
+    for stack in DEMO_STACKS:
+        stack_name = str(stack["name"])
+        services = tuple(stack["services"])
+        stack_dir = docker_base / stack_name
+        stack_dir.mkdir(parents=True, exist_ok=True)
+        (stack_dir / ".fake-docker-id").write_text(f"{stack_name}\n", encoding="utf-8")
+        _write_compose_file(stack_dir / "docker-compose.yml", services)
+        _write_fake_stack_state(fake_docker_root, stack_name, services, containers)
+
+    for image, image_id, digest in DEMO_PULL_TARGETS:
+        _write_fake_image_after_pull(
+            fake_docker_root,
+            image,
+            image_id=image_id,
+            digest=digest,
+        )
+
+    (fake_docker_root / "containers.tsv").write_text(
+        "".join(containers),
+        encoding="utf-8",
+    )
+    (fake_docker_root / "calls.log").write_text("", encoding="utf-8")
+
+
+def _write_compose_file(path: Path, services: tuple[tuple[str, str], ...]) -> None:
+    lines = ["services:\n"]
+    for service, image in services:
+        lines.extend(
+            [
+                f"  {service}:\n",
+                f"    image: {image}\n",
+                "    restart: unless-stopped\n",
+            ]
+        )
+    path.write_text("".join(lines), encoding="utf-8")
+
+
+def _write_fake_stack_state(
+    fake_docker_root: Path,
+    stack_name: str,
+    services: tuple[tuple[str, str], ...],
+    containers: list[str],
+) -> None:
+    stack_state = fake_docker_root / "stacks" / stack_name
+    stack_state.mkdir(parents=True, exist_ok=True)
+    service_lines: list[str] = []
+    image_lines: list[str] = []
+    cid_lines: list[str] = []
+    service_image_rows: list[str] = []
+    for service, image in services:
+        cid = f"cid-{stack_name}-{service}"
+        service_lines.append(f"{service}\n")
+        image_lines.append(f"{image}\n")
+        cid_lines.append(f"{cid}\n")
+        service_image_rows.append(f"{service}\t{image}\n")
+        (stack_state / f"cids-{service}.txt").write_text(f"{cid}\n", encoding="utf-8")
+        (fake_docker_root / "containers" / f"{cid}.summary").write_text(
+            f"/{cid}|running|healthy|0|0\n",
+            encoding="utf-8",
+        )
+        containers.append(f"{stack_name}-{service}\t{image}\n")
+        _write_fake_image_state(fake_docker_root, image)
+
+    (stack_state / "services.txt").write_text("".join(service_lines), encoding="utf-8")
+    (stack_state / "images.txt").write_text("".join(image_lines), encoding="utf-8")
+    (stack_state / "cids.txt").write_text("".join(cid_lines), encoding="utf-8")
+    (stack_state / "service-images.tsv").write_text(
+        "".join(service_image_rows),
+        encoding="utf-8",
+    )
+
+
+def _write_fake_image_state(fake_docker_root: Path, image: str) -> None:
+    safe = _safe_fake_name(image)
+    image_dir = fake_docker_root / "images"
+    digest = f"{image}@sha256:{safe[:12].ljust(12, '0')}"
+    (image_dir / f"{safe}.id").write_text(f"sha256:{safe}\n", encoding="utf-8")
+    (image_dir / f"{safe}.digests").write_text(f"{digest}\n", encoding="utf-8")
+
+
+def _write_fake_image_after_pull(
+    fake_docker_root: Path,
+    image: str,
+    *,
+    image_id: str,
+    digest: str,
+) -> None:
+    safe = _safe_fake_name(image)
+    image_dir = fake_docker_root / "images"
+    (image_dir / f"{safe}.after_id").write_text(f"{image_id}\n", encoding="utf-8")
+    (image_dir / f"{safe}.after_digests").write_text(
+        f"{image}@{digest}\n",
+        encoding="utf-8",
+    )
+
+
+def _safe_fake_name(value: str) -> str:
+    return re.sub(r"[^A-Za-z0-9._-]", "_", value)
 
 
 if __name__ == "__main__":

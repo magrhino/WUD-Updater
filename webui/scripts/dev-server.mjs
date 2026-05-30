@@ -8,6 +8,8 @@ const scriptDir = dirname(fileURLToPath(import.meta.url));
 const webuiDir = resolve(scriptDir, "..");
 const repoRoot = resolve(webuiDir, "..");
 const localDevRoot = resolve(repoRoot, "local-dev");
+const fakeDockerRoot = join(localDevRoot, "fake-docker");
+const fakeDockerBin = join(repoRoot, "tests", "fakes");
 const backendHost = "127.0.0.1";
 const backendPort = process.env.WUD_WEB_DEV_BACKEND_PORT ?? "8080";
 const frontendHost = "127.0.0.1";
@@ -47,7 +49,10 @@ const backend = spawn(
     env: {
       ...process.env,
       PYTHONPATH: pythonPath,
+      PATH: `${fakeDockerBin}${pathSeparator}${process.env.PATH ?? ""}`,
+      FAKE_DOCKER_ROOT: fakeDockerRoot,
       WUD_WEB_DEV_NO_AUTH: "true",
+      WUD_WEB_MUTATIONS_ENABLED: "true",
       WUD_WEB_ALLOWED_ORIGINS: `http://${frontendHost}:${frontendPort},http://localhost:${frontendPort}`,
     },
   },

@@ -33,6 +33,7 @@ function callUpdateValue(listener: unknown, value: string): void {
 const nInputStub: Component = {
   props: {
     disabled: Boolean,
+    inputProps: Object,
     placeholder: String,
     size: String,
     type: String,
@@ -44,6 +45,7 @@ const nInputStub: Component = {
       const { onUpdateValue, ...inputAttrs } = attrs as Record<string, unknown>;
       return h("input", {
         ...inputAttrs,
+        ...(props.inputProps as Record<string, unknown> | undefined),
         disabled: props.disabled,
         placeholder: props.placeholder,
         type: props.type || "text",
@@ -102,15 +104,19 @@ export const naiveStubs: Record<string, Component> = {
     props: {
       checked: Boolean,
       disabled: Boolean,
+      indeterminate: Boolean,
     },
     emits: ["update:checked"],
-    setup(props, { emit, slots }) {
+    setup(props, { attrs, emit, slots }) {
       return () =>
         h("label", [
           h("input", {
+            ...attrs,
             type: "checkbox",
             checked: props.checked,
             disabled: props.disabled,
+            indeterminate: props.indeterminate,
+            "aria-checked": props.indeterminate ? "mixed" : String(props.checked),
             onChange: (event: Event) =>
               emit("update:checked", (event.target as HTMLInputElement).checked),
           }),
@@ -239,17 +245,19 @@ export const naiveStubs: Record<string, Component> = {
           ? h("div", { role: "dialog" }, [
               props.title ? h("h2", props.title) : null,
               slots.default?.(),
-              h(
-                "button",
-                {
-                  disabled: Boolean(
-                    (props.positiveButtonProps as { loading?: boolean } | undefined)
-                      ?.loading,
-                  ),
-                  onClick: () => emit("positive-click"),
-                },
-                props.positiveText || "Confirm",
-              ),
+              props.positiveText
+                ? h(
+                    "button",
+                    {
+                      disabled: Boolean(
+                        (props.positiveButtonProps as { loading?: boolean } | undefined)
+                          ?.loading,
+                      ),
+                      onClick: () => emit("positive-click"),
+                    },
+                    props.positiveText,
+                  )
+                : null,
             ])
           : null;
     },

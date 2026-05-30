@@ -105,7 +105,7 @@ function releaseNotesResponse() {
   };
 }
 
-function planResponse() {
+function planResponse(overrides: Record<string, unknown> = {}) {
   return {
     plan_id: "plan-smoke",
     dry_run: true,
@@ -163,6 +163,7 @@ function planResponse() {
     ],
     skipped: [],
     issues: [],
+    ...overrides,
   };
 }
 
@@ -176,6 +177,73 @@ function jobResponse(status = "queued") {
     finished_at: status === "success" ? "2026-05-28T12:00:01+00:00" : null,
     error: "",
     selected_line_numbers: [1],
+  };
+}
+
+function runSummary() {
+  return {
+    id: 7,
+    started_at: "2026-05-28T12:00:00+00:00",
+    finished_at: "2026-05-28T12:00:01+00:00",
+    status: "success",
+    dry_run: false,
+    mode: "stop",
+    wud_file: "/out/images.todo",
+    log_file: "/out/logs/job-smoke.log",
+    metadata: { source: "webui" },
+  };
+}
+
+function runDetail() {
+  return {
+    ...runSummary(),
+    pending_updates: [
+      {
+        id: 70,
+        run_id: 7,
+        line_no: 1,
+        raw: "repo/app:1.0 tag=1.1",
+        image: "repo/app:1.0",
+        target_digest: "",
+        desired_tag: "1.1",
+        service_key: "media/app",
+        stack_name: "media",
+        service_name: "app",
+        status: "resolved",
+        status_reason: "updated by smoke fixture",
+        created_at: "2026-05-28T12:00:00+00:00",
+        updated_at: "2026-05-28T12:00:01+00:00",
+        metadata: {},
+      },
+    ],
+    events: [
+      {
+        id: 71,
+        run_id: 7,
+        created_at: "2026-05-28T12:00:01+00:00",
+        service_name: "app",
+        stack_name: "media",
+        image: "repo/app:1.0",
+        target_image: "repo/app:1.1",
+        old_image_id: "sha256:old",
+        new_image_id: "sha256:new",
+        old_digest: "sha256:old",
+        new_digest: "sha256:new",
+        status: "success",
+        metadata: {},
+      },
+    ],
+  };
+}
+
+function runLog() {
+  return {
+    run_id: 7,
+    log_file: "/out/logs/job-smoke.log",
+    exists: true,
+    content: "[2026-05-28T12:00:01+00:00] Done.\\n",
+    truncated: false,
+    max_bytes: 262144,
   };
 }
 
@@ -279,11 +347,19 @@ async function fulfillApi(
     return;
   }
   if (path === "/api/v1/runs") {
-    await json(route, []);
+    await json(route, [runSummary()]);
+    return;
+  }
+  if (path === "/api/v1/runs/7") {
+    await json(route, runDetail());
+    return;
+  }
+  if (path === "/api/v1/runs/7/log") {
+    await json(route, runLog());
     return;
   }
   if (path === "/api/v1/plans" && method === "POST") {
-    await json(route, planResponse());
+    await json(route, planResponse({ can_apply: state.mutationsEnabled }));
     return;
   }
   if (path === "/api/v1/jobs" && method === "POST") {
@@ -403,16 +479,55 @@ test("login requests csrf and does not store secrets in browser storage", async 
   });
 });
 
-test("read-only pending view cannot plan or apply selected updates", async ({ page }) => {
+test("read-only pending flow can preflight a stack but cannot apply", async ({ page }) => {
   const state = createState({ authenticated: true, mutationsEnabled: false });
   await installApiFixtures(page, state);
 
   await page.goto("/#/pending");
-  await page.getByRole("button", { name: /Select all/ }).click();
+  await page.getByRole("checkbox", { name: /Select stack media/ }).check();
+  await page.getByRole("button", { name: /Preview selected plan/ }).click();
 
-  await expect(page.getByText("Read-only mode is active")).toBeVisible();
-  await expect(page.getByRole("button", { name: /Update selected/ })).toBeDisabled();
-  expect(state.calls.some((call) => call.path === "/api/v1/plans")).toBe(false);
+  await expect(page.getByText("Read-only mode is active").first()).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Review media plan" })).toBeVisible();
+  await expect(page.getByRole("button", { name: /Apply 1 update/ })).toHaveCount(0);
+  expect(state.calls.some((call) => call.path === "/api/v1/plans")).toBe(true);
+  expect(state.calls.some((call) => call.path === "/api/v1/jobs")).toBe(false);
+});
+
+test("mutation-enabled pending flow applies and links to run details", async ({
+  page,
+}) => {
+  const state = createState({ authenticated: true, mutationsEnabled: true });
+  await installApiFixtures(page, state);
+
+  await page.goto("/#/pending");
+  await page.locator('summary[aria-label="Details for media"]').click();
+  await expect(
+    page.getByRole("textbox", { name: "New tag for repo/app:1.0" }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: /Preview media plan/ }).click();
+
+  await expect(page.getByRole("heading", { name: "Review media plan" })).toBeVisible();
+  await page
+    .getByRole("dialog")
+    .getByRole("button", { name: /Apply 1 update/ })
+    .click();
+
+  await expect(page.getByRole("heading", { name: "Apply complete" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Details" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Log" })).toBeVisible();
+  expect(state.calls.some((call) => call.path === "/api/v1/jobs")).toBe(true);
+  expect(
+    state.calls.some((call) => call.path === "/api/v1/jobs/job-smoke/stream"),
+  ).toBe(true);
+
+  await page.getByRole("link", { name: "Details" }).click();
+  await expect(page.getByRole("heading", { name: "#7" })).toBeVisible();
+  await expect(page.getByText("Pending records")).toBeVisible();
+
+  await page.getByRole("link", { name: "View log" }).click();
+  await expect(page.getByRole("heading", { name: "#7 log" })).toBeVisible();
+  await expect(page.getByText("Done.")).toBeVisible();
 });
 
 test("mobile shell keeps page width stable and preserves link targets", async ({
@@ -446,6 +561,19 @@ test("mobile shell keeps page width stable and preserves link targets", async ({
     .boundingBox();
   expect(pendingLinkBox?.height).toBeGreaterThanOrEqual(44);
   expect(historyLinkBox?.height).toBeGreaterThanOrEqual(44);
+
+  await page.goto("/#/pending");
+  await expect(page.getByRole("checkbox", { name: /Select stack media/ })).toBeVisible();
+  await page.getByText("Details").first().click();
+  await expect(page.getByText("Possible breaking change")).toBeVisible();
+  await expect
+    .poll(() =>
+      page.evaluate(() => ({
+        innerWidth: window.innerWidth,
+        scrollWidth: document.documentElement.scrollWidth,
+      })),
+    )
+    .toEqual({ innerWidth: 390, scrollWidth: 390 });
 });
 
 test("theme toggle follows system dark mode and cycles preferences", async ({
@@ -520,24 +648,30 @@ test("mutation-enabled pending flow creates jobs only after confirmation", async
   await installApiFixtures(page, state);
 
   await page.goto("/#/pending");
-  await page.getByRole("button", { name: /Select all/ }).click();
-  await page.getByRole("button", { name: /Update selected/ }).click();
+  await page.getByRole("checkbox", { name: /Select stack media/ }).check();
+  await page.getByRole("button", { name: /Preview selected plan/ }).click();
+  await expect(page.getByRole("heading", { name: "Review media plan" })).toBeVisible();
 
   const dialog = page.getByRole("dialog").filter({
-    hasText: "Apply selected updates",
+    hasText: "Review media plan",
   });
   await expect(dialog).toBeVisible();
   expect(state.calls.some((call) => call.path === "/api/v1/jobs")).toBe(false);
 
-  await dialog.getByRole("button", { name: "Apply" }).click();
+  await dialog.getByRole("button", { name: "Apply 1 update" }).click();
 
   const planCall = state.calls.find((call) => call.path === "/api/v1/plans");
   const jobCall = state.calls.find((call) => call.path === "/api/v1/jobs");
   expect(planCall?.headers["x-wud-csrf-token"]).toBe(csrfToken);
+  expect(planCall?.body).toMatchObject({
+    line_numbers: [1],
+    allow_tag_updates: true,
+  });
   expect(jobCall?.headers["x-wud-csrf-token"]).toBe(csrfToken);
   expect(jobCall?.body).toMatchObject({
     plan_id: "plan-smoke",
     line_numbers: [1],
+    allow_tag_updates: true,
     confirmation: "apply",
   });
 });
