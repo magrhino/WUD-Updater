@@ -3,6 +3,7 @@ import { defineStore } from "pinia";
 
 import {
   ApiError,
+  LIVE_JOB_LOG_TAIL_BYTES,
   type ApplyJobLogResponse,
   type ApplyJobResponse,
   type PlanResponse,
@@ -212,6 +213,31 @@ export const useWebuiStore = defineStore("webui", () => {
       }
       error.value = errorMessage(exc);
       throw exc;
+    }
+  }
+
+  async function loadApplyJobLogFromRun(
+    job: ApplyJobResponse | null = applyJob.value,
+  ): Promise<ApplyJobLogResponse | null> {
+    if (!job?.run_id) {
+      return null;
+    }
+    try {
+      const runLog = await webApi.runLog(job.run_id, LIVE_JOB_LOG_TAIL_BYTES);
+      const log: ApplyJobLogResponse = {
+        job_id: job.job_id,
+        log_file: runLog.log_file || job.log_file,
+        exists: runLog.exists,
+        content: runLog.content,
+        truncated: runLog.truncated,
+        max_bytes: runLog.max_bytes,
+        error: "",
+      };
+      setApplyJobLog(log);
+      return log;
+    } catch (exc) {
+      error.value = errorMessage(exc);
+      return null;
     }
   }
 
@@ -426,6 +452,7 @@ export const useWebuiStore = defineStore("webui", () => {
     setApplyJobLog,
     setError,
     loadApplyJob,
+    loadApplyJobLogFromRun,
     loadRuns,
     loadRunDetail,
     loadRunLog,

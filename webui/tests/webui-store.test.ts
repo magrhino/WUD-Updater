@@ -133,6 +133,41 @@ describe("webui store", () => {
     expect(window.sessionStorage.getItem("applyJobId")).toBeNull();
   });
 
+  it("loads a terminal apply job log from the persisted run log", async () => {
+    const fetchMock = mockFetch({
+      run_id: 10,
+      log_file: "/out/logs/run-10.log",
+      exists: true,
+      content: "fallback run log\n",
+      truncated: false,
+      max_bytes: 65_536,
+    });
+    const webui = useWebuiStore();
+
+    const log = await webui.loadApplyJobLogFromRun(
+      applyJobResponse({
+        job_id: "job-terminal",
+        run_id: 10,
+        log_file: "/out/logs/job-terminal.log",
+      }),
+    );
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/v1/runs/10/log?tail_bytes=65536",
+      expect.any(Object),
+    );
+    expect(log).toEqual({
+      job_id: "job-terminal",
+      log_file: "/out/logs/run-10.log",
+      exists: true,
+      content: "fallback run log\n",
+      truncated: false,
+      max_bytes: 65_536,
+      error: "",
+    });
+    expect(webui.applyJobLog?.content).toBe("fallback run log\n");
+  });
+
   it("marks recovery when a remembered apply job is missing", async () => {
     window.sessionStorage.setItem("applyJobId", "job-lost");
     const fetchMock = vi

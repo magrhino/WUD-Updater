@@ -400,7 +400,7 @@ export class ApiError extends Error {
 }
 
 const API_PREFIX = "/api/v1";
-const LIVE_JOB_LOG_TAIL_BYTES = 65_536;
+export const LIVE_JOB_LOG_TAIL_BYTES = 65_536;
 
 async function apiRequest<T>(
   path: string,

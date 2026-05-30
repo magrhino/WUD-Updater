@@ -33,6 +33,7 @@ const applyJobPanelRef = ref<HTMLElement | null>(null);
 const applyJobModalTitleRef = ref<HTMLElement | null>(null);
 const applyJobPanelLogRef = ref<HTMLElement | null>(null);
 const applyJobModalLogRef = ref<HTMLElement | null>(null);
+const applyJobRunLogFallbackRunId = ref<number | null>(null);
 const terminalJobStatuses = new Set<ApplyJobResponse["status"]>([
   "success",
   "failure",
@@ -752,8 +753,24 @@ async function handleJobEvent(event: MessageEvent<string>): Promise<void> {
   if (!terminalJobStatuses.has(job.status)) {
     return;
   }
+  await loadTerminalApplyJobLogIfMissing(job);
   closeJobStream();
   await refreshAfterTerminalJob();
+}
+
+async function loadTerminalApplyJobLogIfMissing(
+  job: ApplyJobResponse | null = webui.applyJob,
+): Promise<void> {
+  if (
+    !job?.run_id ||
+    !terminalJobStatuses.has(job.status) ||
+    webui.applyJobLog?.content ||
+    applyJobRunLogFallbackRunId.value === job.run_id
+  ) {
+    return;
+  }
+  applyJobRunLogFallbackRunId.value = job.run_id;
+  await webui.loadApplyJobLogFromRun(job);
 }
 
 async function handleJobLogEvent(event: MessageEvent<string>): Promise<void> {
@@ -1014,6 +1031,14 @@ watch(
       showApplyJobModal.value = false;
     }
   },
+);
+
+watch(
+  () => [webui.applyJob?.status, webui.applyJob?.run_id] as const,
+  () => {
+    void loadTerminalApplyJobLogIfMissing();
+  },
+  { immediate: true },
 );
 </script>
 

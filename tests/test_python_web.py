@@ -222,6 +222,16 @@ def _sse_events(content: str, expected_name: str) -> list[dict[str, object]]:
     return events
 
 
+def _sse_event_names(content: str) -> list[str]:
+    names: list[str] = []
+    for block in content.split("\n\n"):
+        for line in block.splitlines():
+            if line.startswith("event: "):
+                names.append(line.removeprefix("event: "))
+                break
+    return names
+
+
 def _sse_job_events(content: str) -> list[dict[str, object]]:
     return _sse_events(content, "job")
 
@@ -2365,6 +2375,7 @@ def test_job_stream_emits_initial_and_terminal_status(tmp_path: Path) -> None:
     assert log_events[0]["job_id"] == apply_response.json()["job_id"]
     assert log_events[0]["max_bytes"] == 65_536
     assert "docker-update-from-wud-v2" in str(log_events[0]["content"])
+    assert _sse_event_names(content)[-2:] == ["log", "job"]
 
 
 def test_job_stream_caps_live_log_tail_size(tmp_path: Path) -> None:

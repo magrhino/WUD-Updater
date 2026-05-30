@@ -1628,9 +1628,7 @@ def _apply_job_stream(
                 last_version = job.version
             terminal = job.status in TERMINAL_APPLY_JOB_STATUSES
 
-        if response is not None:
-            yield _sse_job_event(response)
-
+        log_event = ""
         log_response = _apply_job_log_response(
             settings,
             job_snapshot,
@@ -1647,11 +1645,20 @@ def _apply_job_stream(
                 or (terminal and not terminal_log_emitted)
             )
             if should_emit_log:
-                yield _sse_job_log_event(log_response)
+                log_event = _sse_job_log_event(log_response)
                 last_log_signature = log_signature
                 last_heartbeat = time.monotonic()
                 if terminal:
                     terminal_log_emitted = True
+
+        if terminal and log_event:
+            yield log_event
+
+        if response is not None:
+            yield _sse_job_event(response)
+
+        if not terminal and log_event:
+            yield log_event
 
         if response is not None:
             last_heartbeat = time.monotonic()
