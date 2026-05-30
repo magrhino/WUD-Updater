@@ -11,6 +11,7 @@ import {
   applyJobResponse,
   releaseNotesResponse,
   planResponse,
+  statusResponse,
   stateOperationResponse,
 } from "./helpers/fixtures";
 
@@ -100,6 +101,16 @@ describe("webui store", () => {
     expect(webui.error).toBe("");
     expect(webui.loading).toBe(false);
     expect(webui.runs).toEqual([]);
+  });
+
+  it("loads status for shell metadata", async () => {
+    const fetchMock = mockFetch(statusResponse({ version: "0.24.2" }));
+    const webui = useWebuiStore();
+
+    await webui.loadStatus();
+
+    expect(fetchMock.mock.calls[0][0]).toBe("/api/v1/status");
+    expect(webui.status?.version).toBe("0.24.2");
   });
 
   it("surfaces backend errors and always clears loading state", async () => {

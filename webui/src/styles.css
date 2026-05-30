@@ -81,6 +81,28 @@ a {
   padding: 0 10px;
 }
 
+.version-tag {
+  max-width: 100%;
+  border-color: rgba(247, 251, 252, 0.18);
+  background: rgba(247, 251, 252, 0.08);
+  color: var(--color-sidebar-muted);
+}
+
+.version-link {
+  display: inline-flex;
+  max-width: 100%;
+  color: inherit;
+  font-weight: 700;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+
+.version-link:hover,
+.version-link:focus-visible {
+  color: var(--color-sidebar-text);
+  text-decoration: underline;
+}
+
 .main-panel {
   min-width: 0;
   padding: 24px;

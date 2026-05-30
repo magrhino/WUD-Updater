@@ -12,6 +12,7 @@ import type {
   RunSummary,
   ServicePolicyRecord,
   SnoozeRecord,
+  StatusResponse,
   StateOperationResponse,
   TagExclusionRuleRecord,
 } from "../../src/api/client";
@@ -26,6 +27,27 @@ export function authSession(
     dev_auth_bypass: false,
     mutations_enabled: false,
     username: "admin",
+    ...overrides,
+  };
+}
+
+export function statusResponse(
+  overrides: Partial<StatusResponse> = {},
+): StatusResponse {
+  return {
+    ok: true,
+    version: "0.24.2",
+    wud_file: "/out/images.todo",
+    wud_file_exists: true,
+    pending_count: 1,
+    db_path: "/out/wud.sqlite",
+    db_ready: true,
+    auth_required: true,
+    dev_auth_bypass: false,
+    setup_required: false,
+    mutations_enabled: false,
+    static_spa_available: true,
+    warnings: [],
     ...overrides,
   };
 }

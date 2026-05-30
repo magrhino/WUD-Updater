@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, watch } from "vue";
 import { RouterLink, RouterView, useRoute, useRouter } from "vue-router";
 import {
   Activity,
@@ -12,7 +12,6 @@ import {
   Moon,
   RefreshCw,
   Settings2,
-  ShieldCheck,
   Sun,
   Tags,
 } from "@lucide/vue";
@@ -34,8 +33,37 @@ const {
   cycleThemePreference,
 } = useWebuiTheme();
 
+const RELEASES_URL = "https://github.com/magrhino/WUD-Updater/releases";
+const VERSION_RELEASE_RE = /^v?\d+\.\d+/;
+
 const showShell = computed(
   () => route.name !== "login" && route.name !== "setup" && auth.authenticated,
+);
+const appVersion = computed(() => webui.status?.version ?? "");
+const appVersionIsRelease = computed(() =>
+  VERSION_RELEASE_RE.test(appVersion.value),
+);
+const appVersionLabel = computed(() => {
+  if (!appVersion.value) {
+    return "";
+  }
+  if (appVersionIsRelease.value) {
+    return appVersion.value.startsWith("v")
+      ? appVersion.value
+      : `v${appVersion.value}`;
+  }
+  return appVersion.value;
+});
+const appVersionHref = computed(() => {
+  if (!appVersion.value || !appVersionIsRelease.value) {
+    return RELEASES_URL;
+  }
+  return `${RELEASES_URL}/tag/${appVersionLabel.value}`;
+});
+const appVersionTitle = computed(() =>
+  appVersionIsRelease.value
+    ? `Open ${appVersionLabel.value} release notes`
+    : "Open WUD-Updater releases",
 );
 const themePreferenceIcon = computed(() => {
   if (themePreference.value === "dark") {
@@ -65,6 +93,16 @@ const navItems = [
   { to: "/snoozes", label: "Snoozes", icon: BellOff },
   { to: "/tag-exclusions", label: "Exclusions", icon: Tags },
 ];
+
+watch(
+  showShell,
+  (visible) => {
+    if (visible && webui.status === null) {
+      void webui.loadStatus().catch(() => undefined);
+    }
+  },
+  { immediate: true },
+);
 
 async function refreshCurrentView(): Promise<void> {
   if (route.name === "dashboard") {
@@ -116,13 +154,20 @@ async function handleLogout(): Promise<void> {
 
           <div class="sidebar-footer">
             <n-tag
+              v-if="appVersionLabel"
+              class="version-tag"
               size="small"
-              :type="auth.session?.mutations_enabled ? 'warning' : 'success'"
             >
-              <template #icon>
-                <ShieldCheck :size="14" />
-              </template>
-              {{ auth.session?.mutations_enabled ? "Mutations enabled" : "Read-only" }}
+              <a
+                class="version-link"
+                :href="appVersionHref"
+                target="_blank"
+                rel="noopener noreferrer"
+                :title="appVersionTitle"
+                :aria-label="appVersionTitle"
+              >
+                {{ appVersionLabel }}
+              </a>
             </n-tag>
           </div>
         </aside>

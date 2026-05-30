@@ -64,6 +64,12 @@ export const useWebuiStore = defineStore("webui", () => {
     ...(pending.value?.warnings ?? []),
   ]);
 
+  async function loadStatus(): Promise<void> {
+    await loadWithState(async () => {
+      status.value = await webApi.status();
+    });
+  }
+
   async function loadDashboard(): Promise<void> {
     await loadWithState(async () => {
       const [
@@ -440,6 +446,7 @@ export const useWebuiStore = defineStore("webui", () => {
     releaseNotesError,
     error,
     warnings,
+    loadStatus,
     loadDashboard,
     loadPending,
     loadReleaseNotes,
