@@ -286,6 +286,155 @@ describe("mutating WebUI views", () => {
     expect(wrapper.text()).toContain("Details");
   });
 
+  it("renders stack services and images as card identity text", () => {
+    const radarr = pendingGroupedItem({
+      line_no: 1,
+      image: "lscr.io/linuxserver/radarr:5.0",
+      repo: "lscr.io/linuxserver/radarr",
+      target_image: "lscr.io/linuxserver/radarr:5.1",
+      services: ["radarr"],
+    });
+    const updater = pendingGroupedItem({
+      line_no: 2,
+      image: "ghcr.io/example/wud-updater:1.0",
+      repo: "ghcr.io/example/wud-updater",
+      desired_tag: "1.1",
+      target_image: "ghcr.io/example/wud-updater:1.1",
+      services: ["wud-updater"],
+    });
+    const { pinia, webui } = setupStores(true);
+    webui.pending = {
+      source_file: "/out/images.todo",
+      exists: true,
+      count: 2,
+      items: [radarr, updater],
+      grouping: {
+        ...pendingGrouping([radarr, updater]),
+        groups: [
+          {
+            ...pendingGrouping([radarr, updater]).groups[0],
+            services_label: "radarr, wud-updater",
+            services: ["radarr", "wud-updater"],
+            line_numbers: [1, 2],
+            items: [radarr, updater],
+          },
+        ],
+      },
+      warnings: [],
+    };
+    mockPendingLifecycle(webui);
+    const wrapper = mountWithApp(PendingView, { pinia });
+    const card = wrapper.find(".stack-card");
+
+    expect(card.find(".stack-identity").text()).toContain(
+      "Services radarr, wud-updater",
+    );
+    expect(card.find(".stack-identity").text()).toContain(
+      "Images lscr.io/linuxserver/radarr:5.1",
+    );
+    expect(card.find(".stack-card-tags").text()).not.toContain(
+      "radarr, wud-updater",
+    );
+  });
+
+  it("shows ready preflight service impact and row tag rewrites", async () => {
+    const { pinia, webui } = setupStores(true);
+    webui.pending = pendingResponse();
+    mockPendingLifecycle(webui);
+    vi.spyOn(webui, "createPlan").mockImplementation(async () => {
+      webui.plan = planResponse({
+        selected_line_numbers: [1, 2],
+        summary: {
+          target_count: 2,
+          matched_target_count: 2,
+          stack_count: 1,
+          service_count: 2,
+          skipped_count: 0,
+          issue_count: 0,
+        },
+        stacks: [
+          {
+            ...planResponse().stacks[0],
+            services_label: "radarr, wud-updater",
+            services: ["radarr", "wud-updater"],
+            pull_services: ["radarr", "wud-updater"],
+            stop_services: ["radarr", "wud-updater"],
+            tag_updates: [
+              {
+                old_image: "lscr.io/linuxserver/radarr:5.0",
+                desired_tag: "5.1",
+                new_image: "lscr.io/linuxserver/radarr:5.1",
+                services: ["radarr"],
+              },
+            ],
+            lines: [
+              {
+                line_no: 1,
+                raw: "lscr.io/linuxserver/radarr:5.0",
+                image: "lscr.io/linuxserver/radarr:5.0",
+                resolved_image: "lscr.io/linuxserver/radarr:5.0",
+                compose_image: "lscr.io/linuxserver/radarr:5.0",
+                target_image: "lscr.io/linuxserver/radarr:5.1",
+                service: "radarr",
+                digest: "",
+                desired_tag: "5.1",
+                action: "tag-update",
+              },
+              {
+                line_no: 2,
+                raw: "ghcr.io/example/wud-updater:1.0",
+                image: "ghcr.io/example/wud-updater:1.0",
+                resolved_image: "ghcr.io/example/wud-updater:1.0",
+                compose_image: "ghcr.io/example/wud-updater:1.0",
+                target_image: "ghcr.io/example/wud-updater:1.1",
+                service: "wud-updater",
+                digest: "",
+                desired_tag: "",
+                action: "update",
+              },
+            ],
+          },
+        ],
+      });
+    });
+    const wrapper = mountWithApp(PendingView, { pinia });
+
+    await wrapper
+      .findAll("button")
+      .find((button) => button.text().includes("Update media"))
+      ?.trigger("click");
+    await flushPromises();
+
+    const dialog = wrapper.find('[role="dialog"]');
+    const impact = dialog.find(".preflight-impact");
+    expect(dialog.find("#preflight-modal-title").text()).toBe("Update media");
+    expect(dialog.find(".preflight-impact-text").text()).toBe(
+      "radarr, wud-updater",
+    );
+    expect(impact.exists()).toBe(true);
+    expect(impact.text()).toContain("Services and images");
+    expect(impact.text()).toContain("radarr");
+    expect(impact.text()).toContain("wud-updater");
+    expect(impact.find(".tag-rewrite-detail").text()).toContain(
+      "lscr.io/linuxserver/radarr:5.0 -> lscr.io/linuxserver/radarr:5.1",
+    );
+    expect(
+      dialog
+        .findAll("details.preflight-details")
+        .some((details) => details.text().includes("Services and images")),
+    ).toBe(false);
+    expect(
+      dialog
+        .findAll("details.preflight-details")
+        .some((details) => details.text().includes("Commands")),
+    ).toBe(true);
+    expect(
+      dialog
+        .findAll("details.preflight-details")
+        .some((details) => details.text().includes("Source lines")),
+    ).toBe(true);
+  });
+
   it("falls back to pending file order when grouping is unavailable", () => {
     const { pinia, webui } = setupStores(true);
     webui.pending = {

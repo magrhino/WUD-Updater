@@ -488,7 +488,7 @@ test("read-only pending flow can preflight a stack but cannot apply", async ({ p
   await page.getByRole("button", { name: /Update selected/ }).click();
 
   await expect(page.getByText("Read-only mode is active").first()).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Update selected" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Update media" })).toBeVisible();
   await expect(page.getByRole("button", { name: /Apply update/ })).toHaveCount(0);
   expect(state.calls.some((call) => call.path === "/api/v1/plans")).toBe(true);
   expect(state.calls.some((call) => call.path === "/api/v1/jobs")).toBe(false);
@@ -646,10 +646,10 @@ test("mutation-enabled pending flow creates jobs only after confirmation", async
   await page.goto("/#/pending");
   await page.getByRole("checkbox", { name: /Select stack media/ }).check();
   await page.getByRole("button", { name: /Update selected/ }).click();
-  await expect(page.getByRole("heading", { name: "Update selected" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Update media" })).toBeVisible();
 
   const dialog = page.getByRole("dialog").filter({
-    hasText: "Update selected",
+    hasText: "Update media",
   });
   await expect(dialog).toBeVisible();
   expect(state.calls.some((call) => call.path === "/api/v1/jobs")).toBe(false);

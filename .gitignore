@@ -5,6 +5,7 @@
 .pytest_cache/
 .venv/
 node_modules/
+webui/test-results/
 *.egg-info/
 __pycache__/
 build/

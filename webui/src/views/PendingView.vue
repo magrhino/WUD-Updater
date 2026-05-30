@@ -12,6 +12,7 @@ import {
   type PendingStackGroup,
   type PlanAction,
   type PlanIssue,
+  type PlanLine,
   type ReleaseNoteInfo,
   type TagOverrideRequest,
 } from "../api/client";
@@ -161,7 +162,8 @@ const preflightTitle = computed(() => {
   if (webui.plan.status === "empty") {
     return "No update changes";
   }
-  return updateIntent.value?.title ?? "Update selected";
+  const context = planContextLabel.value;
+  return `Update ${context === "selected updates" ? "selected services" : context}`;
 });
 const preflightSummary = computed(() => {
   if (!webui.plan) {
@@ -178,7 +180,20 @@ const preflightSummary = computed(() => {
     webui.plan.summary.service_count ||
     webui.plan.summary.target_count ||
     webui.plan.selected_line_numbers.length;
-  return `${pluralize(serviceCount, "service")} in ${planContextLabel.value} will update.`;
+  return `${pluralize(serviceCount, "service")} will update.`;
+});
+const preflightServiceImpactLabel = computed(() => {
+  if (!webui.plan || webui.plan.status !== "ready") {
+    return "";
+  }
+  return summarizeList(
+    planLines.value.map(({ stack, line }) =>
+      webui.plan && webui.plan.summary.stack_count > 1
+        ? `${stack} / ${line.service || "stack-level"}`
+        : line.service || "stack-level",
+    ),
+    4,
+  );
 });
 const applyAvailable = computed(
   () => webui.plan?.status === "ready" && webui.plan.can_apply,
@@ -684,6 +699,14 @@ function pluralize(count: number, singular: string, plural = `${singular}s`): st
   return `${count} ${count === 1 ? singular : plural}`;
 }
 
+function summarizeList(values: string[], limit = 3): string {
+  const uniqueValues = [...new Set(values.filter(Boolean))];
+  if (uniqueValues.length <= limit) {
+    return uniqueValues.join(", ");
+  }
+  return `${uniqueValues.slice(0, limit).join(", ")} +${uniqueValues.length - limit} more`;
+}
+
 function groupTagChangeCount(group: PendingStackGroup): number {
   return group.items.filter((item) => item.desired_tag || item.action === "tag-update")
     .length;
@@ -701,8 +724,33 @@ function groupedItemTarget(item: PendingGroupedItem): string {
   return item.target_image || item.resolved_image || item.image;
 }
 
+function groupedItemImageSummary(group: PendingStackGroup): string {
+  return summarizeList(group.items.map((item) => groupedItemTarget(item)));
+}
+
 function groupedItemActionLabel(item: PendingGroupedItem): string {
   return item.action === "tag-update" ? "Tag update" : "Image update";
+}
+
+function groupedItemTagRewriteLabel(item: PendingGroupedItem): string {
+  if (!item.desired_tag) {
+    return "";
+  }
+  return `${item.image} -> ${groupedItemTarget(item)}`;
+}
+
+function planLineServiceLabel(stack: string, line: PlanLine): string {
+  const service = line.service || "stack-level";
+  return webui.plan?.summary.stack_count && webui.plan.summary.stack_count > 1
+    ? `${stack} / ${service}`
+    : service;
+}
+
+function planLineTagRewriteLabel(line: PlanLine): string {
+  if (!line.desired_tag) {
+    return "";
+  }
+  return `${line.compose_image} -> ${line.target_image}`;
 }
 
 async function loadPendingAndReleaseNotes(): Promise<void> {
@@ -865,11 +913,20 @@ onUnmounted(() => {
                 <strong>{{ group.name }}</strong>
               </n-checkbox>
               <span class="stack-path">{{ group.directory }}</span>
+              <div class="stack-identity" aria-label="Stack impact">
+                <span>
+                  <span class="identity-label">Services</span>
+                  {{ group.services_label }}
+                </span>
+                <span>
+                  <span class="identity-label">Images</span>
+                  {{ groupedItemImageSummary(group) }}
+                </span>
+              </div>
             </div>
             <div class="stack-card-side">
               <div class="stack-card-tags">
                 <n-tag size="small">{{ pluralize(group.items.length, "update") }}</n-tag>
-                <n-tag size="small">{{ group.services_label }}</n-tag>
                 <n-tag v-if="groupTagChangeCount(group)" size="small" type="warning">
                   {{ pluralize(groupTagChangeCount(group), "tag rewrite") }}
                 </n-tag>
@@ -921,6 +978,10 @@ onUnmounted(() => {
                 </div>
                 <div class="pending-update-meta">
                   <span>Pending file line #{{ item.line_no }}</span>
+                  <span v-if="groupedItemTagRewriteLabel(item)" class="tag-rewrite-detail">
+                    <n-tag size="small" type="warning">Tag rewrite</n-tag>
+                    {{ groupedItemTagRewriteLabel(item) }}
+                  </span>
                   <div v-if="releaseNoteFor(item)?.links.length" class="release-notes-cell">
                     <a
                       v-for="link in releaseNoteFor(item)?.links ?? []"
@@ -1212,6 +1273,9 @@ onUnmounted(() => {
             <p class="eyebrow">Preflight</p>
             <h2 id="preflight-modal-title">{{ preflightTitle }}</h2>
             <p class="preflight-summary-text">{{ preflightSummary }}</p>
+            <p v-if="preflightServiceImpactLabel" class="preflight-impact-text">
+              {{ preflightServiceImpactLabel }}
+            </p>
           </div>
           <n-tag :type="planAlertType">{{ webui.plan.status }}</n-tag>
         </div>
@@ -1250,6 +1314,39 @@ onUnmounted(() => {
           {{ preflightTagRewriteNotice }}
         </n-alert>
 
+        <section
+          v-if="webui.plan.status === 'ready'"
+          class="preflight-impact preflight-block"
+          aria-labelledby="preflight-impact-title"
+        >
+          <div class="preflight-impact-heading">
+            <strong id="preflight-impact-title">Services and images</strong>
+            <n-tag size="small">{{ pluralize(planLines.length, "service") }}</n-tag>
+          </div>
+          <div v-if="planLines.length" class="compact-list">
+            <div
+              v-for="{ stack, line } in planLines"
+              :key="`${stack}-${line.line_no}-${line.service}`"
+              class="list-row plan-line-row"
+            >
+              <span>#{{ line.line_no }}</span>
+              <strong>{{ planLineServiceLabel(stack, line) }}</strong>
+              <em>
+                <span v-if="planLineTagRewriteLabel(line)" class="tag-rewrite-detail">
+                  <n-tag size="small" type="warning">Tag rewrite</n-tag>
+                  {{ planLineTagRewriteLabel(line) }}
+                </span>
+                <template v-else>
+                  <code>{{ line.compose_image }}</code>
+                  <span aria-hidden="true"> -> </span>
+                  <code>{{ line.target_image }}</code>
+                </template>
+              </em>
+            </div>
+          </div>
+          <div v-else class="empty-state">No matched services.</div>
+        </section>
+
         <div v-if="webui.plan.issues.length" class="warning-list preflight-block">
           <n-alert
             v-for="issue in webui.plan.issues"
@@ -1261,7 +1358,11 @@ onUnmounted(() => {
         </div>
 
         <div class="preflight-details-list">
-          <details class="preflight-details" :open="webui.plan.status === 'blocked'">
+          <details
+            v-if="webui.plan.status !== 'ready'"
+            class="preflight-details"
+            :open="webui.plan.status === 'blocked'"
+          >
             <summary>Services and images</summary>
             <div v-if="planLines.length" class="compact-list">
               <div
@@ -1270,39 +1371,21 @@ onUnmounted(() => {
                 class="list-row plan-line-row"
               >
                 <span>#{{ line.line_no }}</span>
-                <strong>{{ stack }} / {{ line.service || "stack-level" }}</strong>
-                <em>{{ line.compose_image }} -> {{ line.target_image }}</em>
+                <strong>{{ planLineServiceLabel(stack, line) }}</strong>
+                <em>
+                  <span v-if="planLineTagRewriteLabel(line)" class="tag-rewrite-detail">
+                    <n-tag size="small" type="warning">Tag rewrite</n-tag>
+                    {{ planLineTagRewriteLabel(line) }}
+                  </span>
+                  <template v-else>
+                    <code>{{ line.compose_image }}</code>
+                    <span aria-hidden="true"> -> </span>
+                    <code>{{ line.target_image }}</code>
+                  </template>
+                </em>
               </div>
             </div>
             <div v-else class="empty-state">No matched services.</div>
-          </details>
-
-          <details v-if="visibleTagRewriteCount" class="preflight-details">
-            <summary>Tag rewrites</summary>
-            <div v-if="planTagUpdates.length" class="plan-actions">
-              <div
-                v-for="{ stack, update } in planTagUpdates"
-                :key="`${stack}-${update.old_image}-${update.new_image}`"
-                class="plan-action"
-              >
-                <n-tag size="small">{{ stack }}</n-tag>
-                <code>
-                  {{ update.old_image }} -> {{ update.new_image }}
-                  for {{ update.services.length ? update.services.join(", ") : "stack-level" }}
-                </code>
-              </div>
-            </div>
-            <div v-else class="compact-list">
-              <div
-                v-for="{ stack, line } in plannedTagRewriteLines"
-                :key="`${stack}-${line.line_no}-${line.target_image}`"
-                class="list-row plan-line-row"
-              >
-                <span>#{{ line.line_no }}</span>
-                <strong>{{ stack }} / {{ line.service || "stack-level" }}</strong>
-                <em>{{ line.compose_image }} -> {{ line.target_image }}</em>
-              </div>
-            </div>
           </details>
 
           <details v-if="planActions.length" class="preflight-details">
