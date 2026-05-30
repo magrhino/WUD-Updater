@@ -580,7 +580,9 @@ class DemoApiState {
         update_mode: operation.update_mode ?? existing?.update_mode ?? "",
         auto_update: operation.auto_update ?? existing?.auto_update ?? false,
         snooze_default_seconds:
-          operation.snooze_default_seconds ?? existing?.snooze_default_seconds ?? null,
+          "snooze_default_seconds" in operation
+            ? (operation.snooze_default_seconds ?? null)
+            : (existing?.snooze_default_seconds ?? null),
         created_at: existing?.created_at ?? nowIso(),
         updated_at: nowIso(),
         metadata: { source: "demo" },

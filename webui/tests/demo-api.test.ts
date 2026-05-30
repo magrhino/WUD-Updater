@@ -105,6 +105,14 @@ describe("demo web API", () => {
     );
     await api.stateOperation(
       {
+        kind: "upsert_service_policy",
+        service_key: "media/radarr",
+        snooze_default_seconds: null,
+      },
+      "csrf",
+    );
+    await api.stateOperation(
+      {
         kind: "create_snooze",
         service_key: "home/home-assistant",
         snoozed_until: "2099-02-01T00:00:00+00:00",
@@ -128,6 +136,12 @@ describe("demo web API", () => {
       expect.objectContaining({
         service_key: "media/wud-updater",
         auto_update: true,
+      }),
+    );
+    expect(await api.servicePolicies()).toContainEqual(
+      expect.objectContaining({
+        service_key: "media/radarr",
+        snooze_default_seconds: null,
       }),
     );
     expect(await api.snoozes("active")).toContainEqual(

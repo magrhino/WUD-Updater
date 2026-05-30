@@ -36,6 +36,11 @@ on:
         required: false
         default: false
         type: boolean
+      run_webui_demo:
+        description: Run the optional static WebUI demo checks.
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -68,6 +73,7 @@ jobs:
       docker: ${{ steps.filter.outputs.docker }}
       docker_e2e: ${{ steps.filter.outputs.docker_e2e }}
       webui_smoke: ${{ steps.filter.outputs.webui_smoke }}
+      webui_demo: ${{ steps.filter.outputs.webui_demo }}
       workflows: ${{ steps.filter.outputs.workflows }}
 
     steps:
@@ -102,6 +108,7 @@ jobs:
           docker=false
           docker_e2e=false
           webui_smoke=false
+          webui_demo=false
           workflows=false
           for file in "${files[@]}"; do
             case "$file" in
@@ -120,6 +127,11 @@ jobs:
                 ;;
             esac
             case "$file" in
+              webui/**|.github/workflows/ci.yml|.github/workflows/webui-demo-pages.yml)
+                webui_demo=true
+                ;;
+            esac
+            case "$file" in
               .github/workflows/*)
                 workflows=true
                 ;;
@@ -130,6 +142,7 @@ jobs:
             printf 'docker=%s\n' "$docker"
             printf 'docker_e2e=%s\n' "$docker_e2e"
             printf 'webui_smoke=%s\n' "$webui_smoke"
+            printf 'webui_demo=%s\n' "$webui_demo"
             printf 'workflows=%s\n' "$workflows"
           } >> "$GITHUB_OUTPUT"
 
@@ -233,6 +246,56 @@ jobs:
 
       - name: Run WebUI smoke tests
         run: npm --prefix webui run test:smoke
+
+  webui-demo:
+    name: webui demo
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs:
+      - changes
+    if: >-
+      ${{
+        !(
+          (github.event_name == 'pull_request' && contains(github.event.pull_request.title, '[skip ci]')) ||
+          (github.event_name == 'push' && (
+            startsWith(github.event.head_commit.message, 'docs:') ||
+            startsWith(github.event.head_commit.message, 'docs(') ||
+            startsWith(github.event.head_commit.message, 'docs!:') ||
+            startsWith(github.event.head_commit.message, 'chore:') ||
+            startsWith(github.event.head_commit.message, 'chore(') ||
+            startsWith(github.event.head_commit.message, 'chore!:')
+          ))
+        ) &&
+        (
+          (github.event_name == 'workflow_dispatch' && inputs.run_webui_demo) ||
+          needs.changes.outputs.webui_demo == 'true'
+        )
+      }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: webui/package-lock.json
+
+      - name: Install frontend dependencies
+        run: npm --prefix webui ci
+
+      - name: Build static WebUI demo
+        run: npm --prefix webui run build:demo
+
+      - name: Install Chromium
+        run: npm --prefix webui exec playwright install chromium
+
+      - name: Run static WebUI demo smoke tests
+        run: npm --prefix webui run test:smoke:demo
 
   macos-tests:
     name: macos tests
