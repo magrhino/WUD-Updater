@@ -115,6 +115,8 @@ const releaseNotesByLine = computed(() => {
   return notes;
 });
 const latestRun = computed(() => webui.runs[0] ?? null);
+const pendingSourceFile = computed(() => webui.pending?.source_file ?? "Pending file");
+const pendingSourceLabel = computed(() => fileName(pendingSourceFile.value));
 const selectedLineSet = computed(() => new Set(selectedLineNumbers.value));
 const mutationStateLabel = computed(() =>
   auth.session?.mutations_enabled ? "Mutations enabled" : "Read-only",
@@ -303,12 +305,24 @@ function displayDigest(value: string): string {
   return `${value.slice(0, 20)}...${value.slice(-12)}`;
 }
 
+function previewImageLabel(value: string): string {
+  return value.includes("sha256:") ? displayDigest(value) : value;
+}
+
 function releaseNoteFor(item: PendingItem): ReleaseNoteInfo | null {
   return releaseNotesByLine.value.get(item.line_no) ?? null;
 }
 
 function uniqueSorted(values: number[]): number[] {
   return [...new Set(values)].sort((left, right) => left - right);
+}
+
+function fileName(value: string): string {
+  const trimmed = value.trim();
+  if (!trimmed || trimmed === "Pending file") {
+    return "Pending file";
+  }
+  return trimmed.split(/[\\/]/).filter(Boolean).at(-1) ?? trimmed;
 }
 
 function releaseNoteStatus(note: ReleaseNoteInfo | null): string {
@@ -739,8 +753,12 @@ function groupedItemTarget(item: PendingGroupedItem): string {
   return item.target_image || item.resolved_image || item.image;
 }
 
-function groupedItemImageSummary(group: PendingStackGroup): string {
-  return summarizeList(group.items.map((item) => groupedItemTarget(item)));
+function groupChangePreviewItems(group: PendingStackGroup): PendingGroupedItem[] {
+  return group.items.slice(0, 2);
+}
+
+function groupChangeOverflowCount(group: PendingStackGroup): number {
+  return Math.max(0, group.items.length - groupChangePreviewItems(group).length);
 }
 
 function groupedItemActionLabel(item: PendingGroupedItem): string {
@@ -835,8 +853,9 @@ onUnmounted(() => {
 
     <div class="section-heading pending-heading">
       <div>
-        <p class="eyebrow value-eyebrow">
-          {{ webui.pending?.source_file ?? "Pending file" }}
+        <p class="eyebrow value-eyebrow pending-source" :title="pendingSourceFile">
+          <span class="source-full">{{ pendingSourceFile }}</span>
+          <span class="source-short">{{ pendingSourceLabel }}</span>
         </p>
         <h2>{{ webui.pending?.count ?? 0 }} pending updates</h2>
       </div>
@@ -933,10 +952,6 @@ onUnmounted(() => {
                   <span class="identity-label">Services</span>
                   {{ group.services_label }}
                 </span>
-                <span>
-                  <span class="identity-label">Images</span>
-                  {{ groupedItemImageSummary(group) }}
-                </span>
               </div>
             </div>
             <div class="stack-card-side">
@@ -964,6 +979,32 @@ onUnmounted(() => {
                 </n-button>
               </div>
             </div>
+          </div>
+
+          <div class="stack-change-preview" aria-label="Change preview">
+            <div
+              v-for="item in groupChangePreviewItems(group)"
+              :key="`${group.name}-${item.line_no}-preview`"
+              class="stack-change-row"
+            >
+              <strong class="stack-change-service">{{ groupedItemServices(item) }}</strong>
+              <span class="stack-change-target">
+                <n-tag
+                  size="small"
+                  :type="item.action === 'tag-update' ? 'warning' : 'default'"
+                >
+                  {{ groupedItemActionLabel(item) }}
+                </n-tag>
+                <code :title="item.image">{{ previewImageLabel(item.image) }}</code>
+                <span aria-hidden="true">-></span>
+                <code :title="groupedItemTarget(item)">
+                  {{ previewImageLabel(groupedItemTarget(item)) }}
+                </code>
+              </span>
+            </div>
+            <span v-if="groupChangeOverflowCount(group)" class="stack-change-more">
+              +{{ groupChangeOverflowCount(group) }} more in Details
+            </span>
           </div>
 
           <details class="stack-details">

@@ -287,13 +287,15 @@ describe("mutating WebUI views", () => {
     expect(wrapper.find('summary[aria-label="Details for media"]').exists()).toBe(true);
   });
 
-  it("renders stack services and images as card identity text", () => {
+  it("renders stack services and change preview text", () => {
     const radarr = pendingGroupedItem({
       line_no: 1,
       image: "lscr.io/linuxserver/radarr:5.0",
       repo: "lscr.io/linuxserver/radarr",
+      desired_tag: "",
       target_image: "lscr.io/linuxserver/radarr:5.1",
       services: ["radarr"],
+      action: "update",
     });
     const updater = pendingGroupedItem({
       line_no: 2,
@@ -330,9 +332,15 @@ describe("mutating WebUI views", () => {
     expect(card.find(".stack-identity").text()).toContain(
       "Services radarr, wud-updater",
     );
-    expect(card.find(".stack-identity").text()).toContain(
-      "Images lscr.io/linuxserver/radarr:5.1",
-    );
+    const previewText = card.find(".stack-change-preview").text();
+    expect(previewText).toContain("radarr");
+    expect(previewText).toContain("Image update");
+    expect(previewText).toContain("lscr.io/linuxserver/radarr:5.0");
+    expect(previewText).toContain("lscr.io/linuxserver/radarr:5.1");
+    expect(previewText).toContain("wud-updater");
+    expect(previewText).toContain("Tag update");
+    expect(previewText).toContain("ghcr.io/example/wud-updater:1.0");
+    expect(previewText).toContain("ghcr.io/example/wud-updater:1.1");
     expect(card.find(".stack-card-tags").text()).not.toContain(
       "radarr, wud-updater",
     );
