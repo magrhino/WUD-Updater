@@ -33,6 +33,7 @@ function callUpdateValue(listener: unknown, value: string): void {
 const nInputStub: Component = {
   props: {
     disabled: Boolean,
+    inputProps: Object,
     placeholder: String,
     size: String,
     type: String,
@@ -44,6 +45,7 @@ const nInputStub: Component = {
       const { onUpdateValue, ...inputAttrs } = attrs as Record<string, unknown>;
       return h("input", {
         ...inputAttrs,
+        ...(props.inputProps as Record<string, unknown> | undefined),
         disabled: props.disabled,
         placeholder: props.placeholder,
         type: props.type || "text",

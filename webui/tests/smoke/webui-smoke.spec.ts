@@ -485,11 +485,11 @@ test("read-only pending flow can preflight a stack but cannot apply", async ({ p
 
   await page.goto("/#/pending");
   await page.getByRole("checkbox", { name: /Select stack media/ }).check();
-  await page.getByRole("button", { name: /Update selected/ }).click();
+  await page.getByRole("button", { name: /Preview selected plan/ }).click();
 
   await expect(page.getByText("Read-only mode is active").first()).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Update media" })).toBeVisible();
-  await expect(page.getByRole("button", { name: /Apply update/ })).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "Review media plan" })).toBeVisible();
+  await expect(page.getByRole("button", { name: /Apply 1 update/ })).toHaveCount(0);
   expect(state.calls.some((call) => call.path === "/api/v1/plans")).toBe(true);
   expect(state.calls.some((call) => call.path === "/api/v1/jobs")).toBe(false);
 });
@@ -501,12 +501,16 @@ test("mutation-enabled pending flow applies and links to run details", async ({
   await installApiFixtures(page, state);
 
   await page.goto("/#/pending");
-  await page.getByRole("button", { name: /Update media/ }).click();
+  await page.locator('summary[aria-label="Details for media"]').click();
+  await expect(
+    page.getByRole("textbox", { name: "New tag for repo/app:1.0" }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: /Preview media plan/ }).click();
 
-  await expect(page.getByRole("heading", { name: "Update media" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Review media plan" })).toBeVisible();
   await page
     .getByRole("dialog")
-    .getByRole("button", { name: /Apply update/ })
+    .getByRole("button", { name: /Apply 1 update/ })
     .click();
 
   await expect(page.getByRole("heading", { name: "Apply complete" })).toBeVisible();
@@ -645,16 +649,16 @@ test("mutation-enabled pending flow creates jobs only after confirmation", async
 
   await page.goto("/#/pending");
   await page.getByRole("checkbox", { name: /Select stack media/ }).check();
-  await page.getByRole("button", { name: /Update selected/ }).click();
-  await expect(page.getByRole("heading", { name: "Update media" })).toBeVisible();
+  await page.getByRole("button", { name: /Preview selected plan/ }).click();
+  await expect(page.getByRole("heading", { name: "Review media plan" })).toBeVisible();
 
   const dialog = page.getByRole("dialog").filter({
-    hasText: "Update media",
+    hasText: "Review media plan",
   });
   await expect(dialog).toBeVisible();
   expect(state.calls.some((call) => call.path === "/api/v1/jobs")).toBe(false);
 
-  await dialog.getByRole("button", { name: "Apply update" }).click();
+  await dialog.getByRole("button", { name: "Apply 1 update" }).click();
 
   const planCall = state.calls.find((call) => call.path === "/api/v1/plans");
   const jobCall = state.calls.find((call) => call.path === "/api/v1/jobs");

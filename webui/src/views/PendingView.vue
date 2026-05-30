@@ -64,7 +64,7 @@ const columns = computed<DataTableColumns<PendingItem>>(() => [
         size: "small",
         class: "tag-override-input",
         placeholder: row.desired_tag,
-        "aria-label": `New tag for ${row.image}`,
+        inputProps: tagInputProps(row),
         onUpdateValue: (value: string) => updateTagOverride(row, value),
       });
     },
@@ -154,16 +154,22 @@ const planContextLabel = computed(() => {
 });
 const preflightTitle = computed(() => {
   if (!webui.plan) {
-    return updateIntent.value?.title ?? "Update selected";
+    return updateIntent.value?.title ?? "Preview selected plan";
   }
   if (webui.plan.status === "blocked") {
-    return "Update blocked";
+    return "Plan blocked";
   }
   if (webui.plan.status === "empty") {
-    return "No update changes";
+    return "No changes to apply";
   }
   const context = planContextLabel.value;
-  return `Update ${context === "selected updates" ? "selected services" : context}`;
+  if (context === "selected updates") {
+    return "Review selected updates";
+  }
+  if (/^\d+ stacks?$/.test(context)) {
+    return `Review ${context}`;
+  }
+  return `Review ${context} plan`;
 });
 const preflightSummary = computed(() => {
   if (!webui.plan) {
@@ -180,7 +186,7 @@ const preflightSummary = computed(() => {
     webui.plan.summary.service_count ||
     webui.plan.summary.target_count ||
     webui.plan.selected_line_numbers.length;
-  return `${pluralize(serviceCount, "service")} will update.`;
+  return `${pluralize(serviceCount, "service")} ready to update.`;
 });
 const preflightServiceImpactLabel = computed(() => {
   if (!webui.plan || webui.plan.status !== "ready") {
@@ -199,6 +205,11 @@ const applyAvailable = computed(
   () => webui.plan?.status === "ready" && webui.plan.can_apply,
 );
 const applyDisabled = computed(() => !applyAvailable.value || webui.loading);
+const applyButtonLabel = computed(() =>
+  webui.plan?.selected_line_numbers.length
+    ? `Apply ${pluralize(webui.plan.selected_line_numbers.length, "update")}`
+    : "Apply selected updates",
+);
 const mutationDisabledMessage = computed(() => {
   if (!webui.plan || webui.plan.status !== "ready" || webui.plan.can_apply) {
     return "";
@@ -520,7 +531,7 @@ function updateDisabled(lineNumbers: number[]): boolean {
 
 async function startSelectedUpdate(): Promise<void> {
   await startUpdateFlow({
-    title: "Update selected",
+    title: "Preview selected plan",
     contextLabel: selectedUpdateContext.value,
     lineNumbers: selectedLineNumbers.value,
   });
@@ -528,7 +539,7 @@ async function startSelectedUpdate(): Promise<void> {
 
 async function startStackUpdate(group: PendingStackGroup): Promise<void> {
   await startUpdateFlow({
-    title: `Update ${group.name}`,
+    title: `Preview ${group.name} plan`,
     contextLabel: group.name,
     lineNumbers: group.line_numbers,
   });
@@ -712,6 +723,10 @@ function groupTagChangeCount(group: PendingStackGroup): number {
     .length;
 }
 
+function tagInputProps(item: Pick<PendingItem, "image">): { "aria-label": string } {
+  return { "aria-label": `New tag for ${item.image}` };
+}
+
 function itemsBreakingCount(items: PendingGroupedItem[]): number {
   return items.filter((item) => releaseNoteFor(item)?.breaking).length;
 }
@@ -858,7 +873,7 @@ onUnmounted(() => {
       <div class="selection-summary">
         <strong>{{ batchSummaryLabel }}</strong>
         <span>
-          Preflight runs before anything changes.
+          Preview the plan before anything changes.
           <template v-if="lineNumbersHaveTagUpdates(selectedLineNumbers)">
             Tag rewrites are confirmed before apply.
           </template>
@@ -881,7 +896,7 @@ onUnmounted(() => {
           <template #icon>
             <Play :size="16" />
           </template>
-          Update selected
+          Preview selected plan
         </n-button>
       </div>
     </div>
@@ -945,14 +960,14 @@ onUnmounted(() => {
                   <template #icon>
                     <Play :size="16" />
                   </template>
-                  Update {{ group.name }}
+                  Preview {{ group.name }} plan
                 </n-button>
               </div>
             </div>
           </div>
 
           <details class="stack-details">
-            <summary>Details</summary>
+            <summary :aria-label="`Details for ${group.name}`">Details</summary>
             <div class="stack-items">
               <div
                 v-for="item in group.items"
@@ -1024,7 +1039,7 @@ onUnmounted(() => {
                     size="small"
                     class="tag-override-input"
                     :placeholder="item.desired_tag"
-                    :aria-label="`New tag for ${item.image}`"
+                    :input-props="tagInputProps(item)"
                     @update:value="updateTagOverride(item, $event)"
                   />
                 </div>
@@ -1050,7 +1065,7 @@ onUnmounted(() => {
             </div>
           </div>
           <details class="stack-details">
-            <summary>Details</summary>
+            <summary aria-label="Details for unmatched updates">Details</summary>
             <div class="stack-items">
               <div
                 v-for="item in unmatchedItems"
@@ -1076,7 +1091,7 @@ onUnmounted(() => {
                 </div>
                 <div class="pending-update-meta">
                   <span>Pending file line #{{ item.line_no }}</span>
-                  <span>Update selected to see why this target is unresolved.</span>
+                  <span>Preview a plan to see why this target is unresolved.</span>
                 </div>
                 <div v-if="item.desired_tag" class="pending-update-tag">
                   <span>New tag</span>
@@ -1085,7 +1100,7 @@ onUnmounted(() => {
                     size="small"
                     class="tag-override-input"
                     :placeholder="item.desired_tag"
-                    :aria-label="`New tag for ${item.image}`"
+                    :input-props="tagInputProps(item)"
                     @update:value="updateTagOverride(item, $event)"
                   />
                 </div>
@@ -1151,7 +1166,7 @@ onUnmounted(() => {
                   size="small"
                   class="tag-override-input"
                   :placeholder="item.desired_tag"
-                  :aria-label="`New tag for ${item.image}`"
+                  :input-props="tagInputProps(item)"
                   @update:value="updateTagOverride(item, $event)"
                 />
                 <span v-else>None</span>
@@ -1444,7 +1459,7 @@ onUnmounted(() => {
             <template #icon>
               <Play :size="16" />
             </template>
-            Apply update
+            {{ applyButtonLabel }}
           </n-button>
         </div>
       </section>

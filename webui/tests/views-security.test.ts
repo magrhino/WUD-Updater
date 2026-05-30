@@ -68,7 +68,7 @@ describe("mutating WebUI views", () => {
       .setValue(true);
     await wrapper
       .findAll("button")
-      .find((button) => button.text().includes("Update selected"))
+      .find((button) => button.text().includes("Preview selected plan"))
       ?.trigger("click");
     await flushPromises();
 
@@ -77,7 +77,7 @@ describe("mutating WebUI views", () => {
     expect(
       wrapper
         .findAll("button")
-        .some((button) => button.text().includes("Apply update")),
+        .some((button) => button.text().includes("Apply 1 update")),
     ).toBe(false);
     expect(createJob).not.toHaveBeenCalled();
   });
@@ -125,12 +125,12 @@ describe("mutating WebUI views", () => {
 
     await wrapper
       .findAll("button")
-      .find((button) => button.text().includes("Update media"))
+      .find((button) => button.text().includes("Preview media plan"))
       ?.trigger("click");
     await flushPromises();
 
     expect(createPlan).toHaveBeenCalledWith([1], true, []);
-    expect(wrapper.find('[role="dialog"]').text()).toContain("Update blocked");
+    expect(wrapper.find('[role="dialog"]').text()).toContain("Plan blocked");
     expect(wrapper.find('[role="dialog"]').text()).toContain(
       "No Compose service matched repo/app:1.0.",
     );
@@ -138,7 +138,7 @@ describe("mutating WebUI views", () => {
       wrapper
         .find('[role="dialog"]')
         .findAll("button")
-        .some((button) => button.text().includes("Apply update")),
+        .some((button) => button.text().includes("Apply 1 update")),
     ).toBe(false);
     expect(createJob).not.toHaveBeenCalled();
   });
@@ -155,7 +155,7 @@ describe("mutating WebUI views", () => {
 
     await wrapper
       .findAll("button")
-      .find((button) => button.text().includes("Update media"))
+      .find((button) => button.text().includes("Preview media plan"))
       ?.trigger("click");
 
     expect(createPlan).toHaveBeenCalledWith([4, 9], true, []);
@@ -178,7 +178,7 @@ describe("mutating WebUI views", () => {
       .setValue(false);
     await wrapper
       .findAll("button")
-      .find((button) => button.text().includes("Update selected"))
+      .find((button) => button.text().includes("Preview selected plan"))
       ?.trigger("click");
 
     expect(
@@ -217,7 +217,7 @@ describe("mutating WebUI views", () => {
       ?.trigger("click");
     await wrapper
       .findAll("button")
-      .find((button) => button.text().includes("Update selected"))
+      .find((button) => button.text().includes("Preview selected plan"))
       ?.trigger("click");
 
     expect(wrapper.text()).toContain("Needs review");
@@ -237,7 +237,7 @@ describe("mutating WebUI views", () => {
       .setValue("1.2");
     await wrapper
       .findAll("button")
-      .find((button) => button.text().includes("Update selected"))
+      .find((button) => button.text().includes("Preview selected plan"))
       ?.trigger("click");
 
     expect(
@@ -270,7 +270,7 @@ describe("mutating WebUI views", () => {
     expect(wrapper.text()).toContain(`${item.image} has an invalid new tag`);
     const updateButton = wrapper
       .findAll("button")
-      .find((button) => button.text().includes("Update selected"));
+      .find((button) => button.text().includes("Preview selected plan"));
     expect(updateButton?.attributes("disabled")).toBeDefined();
     await updateButton?.trigger("click");
     expect(createPlan).not.toHaveBeenCalled();
@@ -284,6 +284,7 @@ describe("mutating WebUI views", () => {
 
     expect(wrapper.find("details.stack-details").attributes("open")).toBeUndefined();
     expect(wrapper.text()).toContain("Details");
+    expect(wrapper.find('summary[aria-label="Details for media"]').exists()).toBe(true);
   });
 
   it("renders stack services and images as card identity text", () => {
@@ -401,13 +402,13 @@ describe("mutating WebUI views", () => {
 
     await wrapper
       .findAll("button")
-      .find((button) => button.text().includes("Update media"))
+      .find((button) => button.text().includes("Preview media plan"))
       ?.trigger("click");
     await flushPromises();
 
     const dialog = wrapper.find('[role="dialog"]');
     const impact = dialog.find(".preflight-impact");
-    expect(dialog.find("#preflight-modal-title").text()).toBe("Update media");
+    expect(dialog.find("#preflight-modal-title").text()).toBe("Review media plan");
     expect(dialog.find(".preflight-impact-text").text()).toBe(
       "radarr, wud-updater",
     );
@@ -601,7 +602,7 @@ describe("mutating WebUI views", () => {
 
     await wrapper
       .findAll("button")
-      .find((button) => button.text().includes("Update media"))
+      .find((button) => button.text().includes("Preview media plan"))
       ?.trigger("click");
     await flushPromises();
 
@@ -611,7 +612,7 @@ describe("mutating WebUI views", () => {
     await wrapper
       .find('[role="dialog"]')
       .findAll("button")
-      .find((button) => button.text().includes("Apply update"))
+      .find((button) => button.text().includes("Apply 1 update"))
       ?.trigger("click");
 
     expect(createJob).toHaveBeenCalledWith("plan-test", [1], true, []);
