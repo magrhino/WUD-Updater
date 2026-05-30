@@ -207,7 +207,7 @@ def _wait_apply_job(client: TestClient, job_id: str) -> dict[str, object]:
     raise AssertionError(f"apply job {job_id} did not finish")
 
 
-def _sse_job_events(content: str) -> list[dict[str, object]]:
+def _sse_events(content: str, expected_name: str) -> list[dict[str, object]]:
     events: list[dict[str, object]] = []
     for block in content.split("\n\n"):
         event_name = ""
@@ -217,9 +217,27 @@ def _sse_job_events(content: str) -> list[dict[str, object]]:
                 event_name = line.removeprefix("event: ")
             elif line.startswith("data: "):
                 data.append(line.removeprefix("data: "))
-        if event_name == "job" and data:
+        if event_name == expected_name and data:
             events.append(json.loads("\n".join(data)))
     return events
+
+
+def _sse_event_names(content: str) -> list[str]:
+    names: list[str] = []
+    for block in content.split("\n\n"):
+        for line in block.splitlines():
+            if line.startswith("event: "):
+                names.append(line.removeprefix("event: "))
+                break
+    return names
+
+
+def _sse_job_events(content: str) -> list[dict[str, object]]:
+    return _sse_events(content, "job")
+
+
+def _sse_log_events(content: str) -> list[dict[str, object]]:
+    return _sse_events(content, "log")
 
 
 def test_healthz_is_unauthenticated_before_setup(tmp_path: Path) -> None:
@@ -2345,6 +2363,7 @@ def test_job_stream_emits_initial_and_terminal_status(tmp_path: Path) -> None:
         content = response.read().decode("utf-8")
 
     events = _sse_job_events(content)
+    log_events = _sse_log_events(content)
     assert response.status_code == 200
     assert response.headers["content-type"].startswith("text/event-stream")
     assert len(events) >= 2
@@ -2352,6 +2371,57 @@ def test_job_stream_emits_initial_and_terminal_status(tmp_path: Path) -> None:
     assert events[0]["status"] in {"queued", "running"}
     assert events[-1]["status"] == "success"
     assert events[-1]["selected_line_numbers"] == [1]
+    assert log_events
+    assert log_events[0]["job_id"] == apply_response.json()["job_id"]
+    assert log_events[0]["max_bytes"] == 65_536
+    assert "docker-update-from-wud-v2" in str(log_events[0]["content"])
+    assert _sse_event_names(content)[-2:] == ["log", "job"]
+
+
+def test_job_stream_caps_live_log_tail_size(tmp_path: Path) -> None:
+    fake_env, fake_root = _fake_docker_env(tmp_path)
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+            **fake_env,
+        },
+    )
+    wud_file = tmp_path / "state" / "images.todo"
+    wud_file.write_text("repo/app:latest\n", encoding="utf-8")
+    _make_fake_stack(
+        tmp_path,
+        fake_root,
+        "stack",
+        [("app", "repo/app:latest", "cid-app")],
+    )
+    headers = _csrf_headers(client)
+    plan = client.post(
+        "/api/v1/plans",
+        json={"line_numbers": [1]},
+        headers=headers,
+    ).json()
+    apply_response = client.post(
+        "/api/v1/jobs",
+        json={
+            "plan_id": plan["plan_id"],
+            "line_numbers": [1],
+            "confirmation": "apply",
+        },
+        headers=headers,
+    )
+
+    with client.stream(
+        "GET",
+        f"/api/v1/jobs/{apply_response.json()['job_id']}/stream?log_tail_bytes=9999999",
+    ) as response:
+        content = response.read().decode("utf-8")
+
+    log_events = _sse_log_events(content)
+    assert response.status_code == 200
+    assert log_events
+    assert log_events[0]["max_bytes"] == 1_048_576
 
 
 def test_job_status_get_and_stream_do_not_mutate(tmp_path: Path) -> None:

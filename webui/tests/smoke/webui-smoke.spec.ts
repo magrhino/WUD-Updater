@@ -370,7 +370,18 @@ async function fulfillApi(
     await route.fulfill({
       status: 200,
       contentType: "text/event-stream",
-      body: `event: job\ndata: ${JSON.stringify(jobResponse("success"))}\n\n`,
+      body: [
+        `event: log\ndata: ${JSON.stringify({
+          job_id: "job-smoke",
+          log_file: "/out/logs/job-smoke.log",
+          exists: true,
+          content: "[2026-05-28T12:00:00+00:00] [INFO] docker-update-from-wud-v2\n",
+          truncated: false,
+          max_bytes: 65536,
+          error: "",
+        })}\n\n`,
+        `event: job\ndata: ${JSON.stringify(jobResponse("success"))}\n\n`,
+      ].join(""),
     });
     return;
   }
@@ -513,15 +524,23 @@ test("mutation-enabled pending flow applies and links to run details", async ({
     .getByRole("button", { name: /Apply 1 update/ })
     .click();
 
-  await expect(page.getByRole("heading", { name: "Apply complete" })).toBeVisible();
-  await expect(page.getByRole("link", { name: "Details" })).toBeVisible();
-  await expect(page.getByRole("link", { name: "Log" })).toBeVisible();
+  const applyDialog = page.getByRole("dialog").filter({
+    hasText: "Apply complete",
+  });
+  await expect(
+    applyDialog.getByRole("heading", { name: "Apply complete" }),
+  ).toBeVisible();
+  await expect(applyDialog.getByText("docker-update-from-wud-v2")).toBeVisible();
+  await expect(applyDialog.getByRole("link", { name: "Details" })).toBeVisible();
+  await expect(applyDialog.getByRole("link", { name: "Log" })).toBeVisible();
   expect(state.calls.some((call) => call.path === "/api/v1/jobs")).toBe(true);
   expect(
-    state.calls.some((call) => call.path === "/api/v1/jobs/job-smoke/stream"),
+    state.calls.some((call) =>
+      call.path.startsWith("/api/v1/jobs/job-smoke/stream?"),
+    ),
   ).toBe(true);
 
-  await page.getByRole("link", { name: "Details" }).click();
+  await applyDialog.getByRole("link", { name: "Details" }).click();
   await expect(page.getByRole("heading", { name: "#7" })).toBeVisible();
   await expect(page.getByText("Pending records")).toBeVisible();
 

@@ -3,6 +3,8 @@ import { defineStore } from "pinia";
 
 import {
   ApiError,
+  LIVE_JOB_LOG_TAIL_BYTES,
+  type ApplyJobLogResponse,
   type ApplyJobResponse,
   type PlanResponse,
   type PendingResponse,
@@ -41,6 +43,7 @@ export const useWebuiStore = defineStore("webui", () => {
   const releaseNotes = ref<ReleaseNotesResponse | null>(null);
   const plan = ref<PlanResponse | null>(null);
   const applyJob = ref<ApplyJobResponse | null>(null);
+  const applyJobLog = ref<ApplyJobLogResponse | null>(null);
   const rememberedApplyJobId = ref(readRememberedApplyJobId());
   const applyJobRecovery = ref("");
   const runs = ref<RunSummary[]>([]);
@@ -60,6 +63,12 @@ export const useWebuiStore = defineStore("webui", () => {
     ...(status.value?.warnings ?? []),
     ...(pending.value?.warnings ?? []),
   ]);
+
+  async function loadStatus(): Promise<void> {
+    await loadWithState(async () => {
+      status.value = await webApi.status();
+    });
+  }
 
   async function loadDashboard(): Promise<void> {
     await loadWithState(async () => {
@@ -130,6 +139,7 @@ export const useWebuiStore = defineStore("webui", () => {
     await loadWithState(async () => {
       plan.value = null;
       applyJob.value = null;
+      applyJobLog.value = null;
       plan.value = await webApi.createPlan(
         lineNumbers,
         allowTagUpdates,
@@ -151,6 +161,7 @@ export const useWebuiStore = defineStore("webui", () => {
   ): Promise<ApplyJobResponse> {
     const auth = useAuthStore();
     await loadWithState(async () => {
+      applyJobLog.value = null;
       const job = await webApi.createJob(
         planId,
         lineNumbers,
@@ -181,6 +192,10 @@ export const useWebuiStore = defineStore("webui", () => {
     rememberApplyJob(job);
   }
 
+  function setApplyJobLog(log: ApplyJobLogResponse): void {
+    applyJobLog.value = log;
+  }
+
   function setError(message: string): void {
     error.value = message;
   }
@@ -207,8 +222,34 @@ export const useWebuiStore = defineStore("webui", () => {
     }
   }
 
+  async function loadApplyJobLogFromRun(
+    job: ApplyJobResponse | null = applyJob.value,
+  ): Promise<ApplyJobLogResponse | null> {
+    if (!job?.run_id) {
+      return null;
+    }
+    try {
+      const runLog = await webApi.runLog(job.run_id, LIVE_JOB_LOG_TAIL_BYTES);
+      const log: ApplyJobLogResponse = {
+        job_id: job.job_id,
+        log_file: runLog.log_file || job.log_file,
+        exists: runLog.exists,
+        content: runLog.content,
+        truncated: runLog.truncated,
+        max_bytes: runLog.max_bytes,
+        error: "",
+      };
+      setApplyJobLog(log);
+      return log;
+    } catch (exc) {
+      error.value = errorMessage(exc);
+      return null;
+    }
+  }
+
   function markApplyJobRecovery(): void {
     applyJob.value = null;
+    applyJobLog.value = null;
     applyJobRecovery.value = APPLY_JOB_RECOVERY_MESSAGE;
     clearRememberedApplyJobId();
   }
@@ -389,6 +430,7 @@ export const useWebuiStore = defineStore("webui", () => {
     releaseNotes,
     plan,
     applyJob,
+    applyJobLog,
     rememberedApplyJobId,
     applyJobRecovery,
     runs,
@@ -404,6 +446,7 @@ export const useWebuiStore = defineStore("webui", () => {
     releaseNotesError,
     error,
     warnings,
+    loadStatus,
     loadDashboard,
     loadPending,
     loadReleaseNotes,
@@ -413,8 +456,10 @@ export const useWebuiStore = defineStore("webui", () => {
     createJob,
     applyPlan,
     setApplyJob,
+    setApplyJobLog,
     setError,
     loadApplyJob,
+    loadApplyJobLogFromRun,
     loadRuns,
     loadRunDetail,
     loadRunLog,

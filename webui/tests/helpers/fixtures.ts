@@ -1,4 +1,5 @@
 import type {
+  ApplyJobLogResponse,
   ApplyJobResponse,
   AuthSessionResponse,
   PendingGroupedItem,
@@ -11,6 +12,7 @@ import type {
   RunSummary,
   ServicePolicyRecord,
   SnoozeRecord,
+  StatusResponse,
   StateOperationResponse,
   TagExclusionRuleRecord,
 } from "../../src/api/client";
@@ -25,6 +27,27 @@ export function authSession(
     dev_auth_bypass: false,
     mutations_enabled: false,
     username: "admin",
+    ...overrides,
+  };
+}
+
+export function statusResponse(
+  overrides: Partial<StatusResponse> = {},
+): StatusResponse {
+  return {
+    ok: true,
+    version: "0.24.2",
+    wud_file: "/out/images.todo",
+    wud_file_exists: true,
+    pending_count: 1,
+    db_path: "/out/wud.sqlite",
+    db_ready: true,
+    auth_required: true,
+    dev_auth_bypass: false,
+    setup_required: false,
+    mutations_enabled: false,
+    static_spa_available: true,
+    warnings: [],
     ...overrides,
   };
 }
@@ -202,6 +225,21 @@ export function applyJobResponse(
     finished_at: null,
     error: "",
     selected_line_numbers: [1],
+    ...overrides,
+  };
+}
+
+export function applyJobLogResponse(
+  overrides: Partial<ApplyJobLogResponse> = {},
+): ApplyJobLogResponse {
+  return {
+    job_id: "job-test",
+    log_file: "/out/logs/job-test.log",
+    exists: true,
+    content: "[2026-05-28T12:00:00+00:00] [INFO] docker-update-from-wud-v2\n",
+    truncated: false,
+    max_bytes: 65_536,
+    error: "",
     ...overrides,
   };
 }

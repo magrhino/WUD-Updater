@@ -7,9 +7,11 @@ import {
   useWebuiStore,
 } from "../src/stores/webui";
 import {
+  applyJobLogResponse,
   applyJobResponse,
   releaseNotesResponse,
   planResponse,
+  statusResponse,
   stateOperationResponse,
 } from "./helpers/fixtures";
 
@@ -101,6 +103,16 @@ describe("webui store", () => {
     expect(webui.runs).toEqual([]);
   });
 
+  it("loads status for shell metadata", async () => {
+    const fetchMock = mockFetch(statusResponse({ version: "0.24.2" }));
+    const webui = useWebuiStore();
+
+    await webui.loadStatus();
+
+    expect(fetchMock.mock.calls[0][0]).toBe("/api/v1/status");
+    expect(webui.status?.version).toBe("0.24.2");
+  });
+
   it("surfaces backend errors and always clears loading state", async () => {
     const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ detail: "db missing" }, 503));
     vi.stubGlobal("fetch", fetchMock);
@@ -123,10 +135,48 @@ describe("webui store", () => {
     expect(webui.rememberedApplyJobId).toBe("job-active");
     expect(window.sessionStorage.getItem("applyJobId")).toBe("job-active");
 
+    webui.setApplyJobLog(applyJobLogResponse({ job_id: "job-active" }));
+    expect(webui.applyJobLog?.content).toContain("docker-update-from-wud-v2");
+
     webui.setApplyJob(applyJobResponse({ job_id: "job-active", status: "success" }));
 
     expect(webui.rememberedApplyJobId).toBe("");
     expect(window.sessionStorage.getItem("applyJobId")).toBeNull();
+  });
+
+  it("loads a terminal apply job log from the persisted run log", async () => {
+    const fetchMock = mockFetch({
+      run_id: 10,
+      log_file: "/out/logs/run-10.log",
+      exists: true,
+      content: "fallback run log\n",
+      truncated: false,
+      max_bytes: 65_536,
+    });
+    const webui = useWebuiStore();
+
+    const log = await webui.loadApplyJobLogFromRun(
+      applyJobResponse({
+        job_id: "job-terminal",
+        run_id: 10,
+        log_file: "/out/logs/job-terminal.log",
+      }),
+    );
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/v1/runs/10/log?tail_bytes=65536",
+      expect.any(Object),
+    );
+    expect(log).toEqual({
+      job_id: "job-terminal",
+      log_file: "/out/logs/run-10.log",
+      exists: true,
+      content: "fallback run log\n",
+      truncated: false,
+      max_bytes: 65_536,
+      error: "",
+    });
+    expect(webui.applyJobLog?.content).toBe("fallback run log\n");
   });
 
   it("marks recovery when a remembered apply job is missing", async () => {
@@ -141,6 +191,7 @@ describe("webui store", () => {
 
     expect(job).toBeNull();
     expect(webui.applyJob).toBeNull();
+    expect(webui.applyJobLog).toBeNull();
     expect(webui.applyJobRecovery).toBe(APPLY_JOB_RECOVERY_MESSAGE);
     expect(webui.rememberedApplyJobId).toBe("");
     expect(webui.error).toBe("");

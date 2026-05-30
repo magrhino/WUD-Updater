@@ -193,6 +193,16 @@ export interface ApplyJobResponse {
   selected_line_numbers: number[];
 }
 
+export interface ApplyJobLogResponse {
+  job_id: string;
+  log_file: string;
+  exists: boolean;
+  content: string;
+  truncated: boolean;
+  max_bytes: number;
+  error: string;
+}
+
 export interface StatusResponse {
   ok: boolean;
   version: string;
@@ -390,6 +400,7 @@ export class ApiError extends Error {
 }
 
 const API_PREFIX = "/api/v1";
+export const LIVE_JOB_LOG_TAIL_BYTES = 65_536;
 
 async function apiRequest<T>(
   path: string,
@@ -536,7 +547,7 @@ export const webApi = {
   applyJob: (jobId: string) => apiRequest<ApplyJobResponse>(`/apply-jobs/${jobId}`),
   openJobStream: (jobId: string) =>
     new EventSource(
-      `${API_PREFIX}/jobs/${encodeURIComponent(jobId)}/stream`,
+      `${API_PREFIX}/jobs/${encodeURIComponent(jobId)}/stream?log_tail_bytes=${LIVE_JOB_LOG_TAIL_BYTES}`,
       { withCredentials: true },
     ),
   runs: () => apiRequest<RunSummary[]>("/runs"),

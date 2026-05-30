@@ -8,7 +8,7 @@ import { createWudRouter } from "../src/router";
 import { useAuthStore } from "../src/stores/auth";
 import { useWebuiStore } from "../src/stores/webui";
 import { themeStorageKey } from "../src/theme";
-import { authSession } from "./helpers/fixtures";
+import { authSession, statusResponse } from "./helpers/fixtures";
 import { mountWithApp } from "./helpers/mount";
 
 describe("router auth guard", () => {
@@ -84,25 +84,35 @@ describe("app shell", () => {
     setActivePinia(createPinia());
   });
 
-  it("shows read-only and mutation-enabled shell state", async () => {
+  it("shows a linked release tag in the shell footer", async () => {
     const pinia = createPinia();
     setActivePinia(pinia);
     const auth = useAuthStore();
-    auth.session = authSession({ mutations_enabled: false });
+    auth.session = authSession({ mutations_enabled: true });
     const webui = useWebuiStore();
+    webui.status = statusResponse({ version: "0.24.2" });
     vi.spyOn(webui, "loadDashboard").mockResolvedValue();
     const router = createWudRouter(createMemoryHistory());
     await router.push("/");
     await router.isReady();
 
     const wrapper = mountWithApp(App, { pinia, router });
+    const versionLink = wrapper.find(
+      'a[href="https://github.com/magrhino/WUD-Updater/releases/tag/v0.24.2"]',
+    );
 
-    expect(wrapper.text()).toContain("Read-only");
+    expect(versionLink.exists()).toBe(true);
+    expect(versionLink.text()).toBe("v0.24.2");
+    expect(wrapper.text()).not.toContain("Mutations enabled");
 
-    auth.session = authSession({ mutations_enabled: true });
+    webui.status = statusResponse({ version: "dev-build" });
     await nextTick();
 
-    expect(wrapper.text()).toContain("Mutations enabled");
+    const buildLink = wrapper.find(
+      'a[href="https://github.com/magrhino/WUD-Updater/releases"]',
+    );
+    expect(buildLink.exists()).toBe(true);
+    expect(buildLink.text()).toBe("dev-build");
   });
 
   it("cycles theme preference from system to light to dark", async () => {
