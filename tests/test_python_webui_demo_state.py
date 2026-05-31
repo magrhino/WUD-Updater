@@ -72,6 +72,13 @@ class WebuiDemoStateTests(unittest.TestCase):
             self.assertTrue(
                 (
                     fake_docker_root
+                    / "containers"
+                    / "demo-wud-updater.summary"
+                ).exists()
+            )
+            self.assertTrue(
+                (
+                    fake_docker_root
                     / "images"
                     / "postgres_16.after_digests"
                 ).exists()

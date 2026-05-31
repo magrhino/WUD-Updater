@@ -141,8 +141,6 @@ onMounted(() => {
       {{ webui.error }}
     </n-alert>
 
-    <OnboardingChecklist />
-
     <section v-if="settings" class="section-panel">
       <div class="section-heading">
         <div class="settings-heading-main">
@@ -198,6 +196,8 @@ onMounted(() => {
         {{ restartDisabledReason }}
       </n-alert>
     </section>
+
+    <OnboardingChecklist />
 
     <section class="section-panel">
       <div class="section-heading">

@@ -1532,8 +1532,12 @@ describe("mutating WebUI views", () => {
     const wrapper = mountWithApp(SettingsView, { pinia });
     await flushPromises();
     const text = wrapper.text();
+    const restartIndex = text.indexOf("Restart WebUI container");
+    const checklistIndex = text.indexOf("Setup checklist");
 
     expect(text).toContain("Setup checklist");
+    expect(restartIndex).toBeGreaterThanOrEqual(0);
+    expect(restartIndex).toBeLessThan(checklistIndex);
     expect(text).toContain("Docker daemon access");
     expect(text).toContain("info failed: <redacted>");
     expect(text).toContain("Wire Docker access");
