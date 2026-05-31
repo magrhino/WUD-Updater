@@ -4,6 +4,7 @@ import { useBreakpoints } from "@vueuse/core";
 import { Edit3, Save, Trash2 } from "@lucide/vue";
 
 import type {
+  AutoUpdateDay,
   ServicePolicyRecord,
   ServicePolicyUpdateMode,
 } from "../api/client";
@@ -12,7 +13,7 @@ import { useWebuiStore } from "../stores/webui";
 
 const webui = useWebuiStore();
 const auth = useAuthStore();
-const breakpoints = useBreakpoints({ managementDesktop: 1120 });
+const breakpoints = useBreakpoints({ managementDesktop: 1200 });
 const useManagementCards = breakpoints.smaller("managementDesktop");
 const showSaveConfirm = ref(false);
 const showDeleteConfirm = ref(false);
@@ -21,9 +22,22 @@ const deleteTarget = ref<ServicePolicyRecord | null>(null);
 const policyForm = reactive({
   serviceKey: "",
   updateMode: "" as ServicePolicyUpdateMode,
-  autoUpdate: true,
+  autoUpdate: false,
+  autoUpdateTime: "",
+  autoUpdateDays: [] as AutoUpdateDay[],
   snoozeDefaultSeconds: null as number | null,
 });
+
+const AUTO_UPDATE_TIME_PATTERN = /^([01]\d|2[0-3]):[0-5]\d$/;
+const dayLabels: Record<AutoUpdateDay, string> = {
+  mon: "Mon",
+  tue: "Tue",
+  wed: "Wed",
+  thu: "Thu",
+  fri: "Fri",
+  sat: "Sat",
+  sun: "Sun",
+};
 
 const updateModeOptions = [
   { label: "Default", value: "" },
@@ -31,25 +45,62 @@ const updateModeOptions = [
   { label: "Stop", value: "stop" },
   { label: "Live", value: "live" },
 ];
+const weekdayOptions = Object.entries(dayLabels).map(([value, label]) => ({
+  label,
+  value,
+}));
 
 const mutationsEnabled = computed(
   () => auth.session?.mutations_enabled === true,
 );
+const timezoneKnown = computed(() => webui.status !== null);
+const timezoneLabel = computed(() => webui.status?.timezone ?? "loading");
+const scheduleFeedback = computed(() =>
+  timezoneKnown.value
+    ? `Server timezone: ${timezoneLabel.value}`
+    : "Server timezone is loading.",
+);
+const autoUpdateScheduleValid = computed(
+  () =>
+    !policyForm.autoUpdate ||
+    (AUTO_UPDATE_TIME_PATTERN.test(policyForm.autoUpdateTime) &&
+      policyForm.autoUpdateDays.length > 0),
+);
+const formScheduleLabel = computed(() => {
+  if (!policyForm.autoUpdate) {
+    return "Disabled";
+  }
+  const time = normalizedAutoUpdateTime();
+  if (time === null || policyForm.autoUpdateDays.length === 0) {
+    return "Not scheduled";
+  }
+  const days = policyForm.autoUpdateDays.map((day) => dayLabels[day]).join(", ");
+  return `${days} at ${time}`;
+});
 const saveDisabled = computed(
-  () => !mutationsEnabled.value || !policyForm.serviceKey.trim() || webui.loading,
+  () =>
+    !mutationsEnabled.value ||
+    !policyForm.serviceKey.trim() ||
+    !autoUpdateScheduleValid.value ||
+    (policyForm.autoUpdate && !timezoneKnown.value) ||
+    webui.loading,
 );
 
 function editPolicy(policy: ServicePolicyRecord): void {
   policyForm.serviceKey = policy.service_key;
   policyForm.updateMode = policy.update_mode as ServicePolicyUpdateMode;
   policyForm.autoUpdate = policy.auto_update;
+  policyForm.autoUpdateTime = policy.auto_update_time ?? "";
+  policyForm.autoUpdateDays = [...policy.auto_update_days];
   policyForm.snoozeDefaultSeconds = policy.snooze_default_seconds;
 }
 
 function resetPolicyForm(): void {
   policyForm.serviceKey = "";
   policyForm.updateMode = "";
-  policyForm.autoUpdate = true;
+  policyForm.autoUpdate = false;
+  policyForm.autoUpdateTime = "";
+  policyForm.autoUpdateDays = [];
   policyForm.snoozeDefaultSeconds = null;
 }
 
@@ -61,11 +112,27 @@ function snoozeLabel(seconds: number | null): string {
   return seconds === null ? "None" : `${seconds}s`;
 }
 
+function scheduleLabel(policy: ServicePolicyRecord): string {
+  if (!policy.auto_update) {
+    return "Disabled";
+  }
+  if (policy.auto_update_time === null || policy.auto_update_days.length === 0) {
+    return "Not scheduled";
+  }
+  const days = policy.auto_update_days.map((day) => dayLabels[day]).join(", ");
+  return `${days} at ${policy.auto_update_time}`;
+}
+
 function normalizedSnoozeSeconds(): number | null {
   if (policyForm.snoozeDefaultSeconds === null) {
     return null;
   }
   return Math.max(0, Math.trunc(policyForm.snoozeDefaultSeconds));
+}
+
+function normalizedAutoUpdateTime(): string | null {
+  const value = policyForm.autoUpdateTime.trim();
+  return AUTO_UPDATE_TIME_PATTERN.test(value) ? value : null;
 }
 
 function openSaveConfirm(): void {
@@ -84,6 +151,8 @@ async function confirmSave(): Promise<void> {
     policyForm.updateMode,
     policyForm.autoUpdate,
     normalizedSnoozeSeconds(),
+    normalizedAutoUpdateTime(),
+    [...policyForm.autoUpdateDays],
   );
 }
 
@@ -107,6 +176,9 @@ async function confirmDelete(): Promise<void> {
 }
 
 onMounted(() => {
+  if (webui.status === null) {
+    void webui.loadStatus();
+  }
   void webui.loadServicePolicies();
 });
 </script>
@@ -148,6 +220,25 @@ onMounted(() => {
         </n-form-item>
         <n-form-item label="Auto update">
           <n-switch v-model:value="policyForm.autoUpdate" :disabled="webui.loading" />
+        </n-form-item>
+        <n-form-item
+          :label="`Update time (${timezoneLabel})`"
+          :feedback="scheduleFeedback"
+        >
+          <n-input
+            v-model:value="policyForm.autoUpdateTime"
+            placeholder="09:30"
+            :maxlength="5"
+            :disabled="webui.loading"
+          />
+        </n-form-item>
+        <n-form-item label="Update days">
+          <n-select
+            v-model:value="policyForm.autoUpdateDays"
+            multiple
+            :options="weekdayOptions"
+            :disabled="webui.loading"
+          />
         </n-form-item>
         <n-form-item
           label="Default snooze seconds"
@@ -193,6 +284,7 @@ onMounted(() => {
           <span>Service</span>
           <span>Mode</span>
           <span>Auto</span>
+          <span>Schedule</span>
           <span>Snooze</span>
           <span>Actions</span>
         </div>
@@ -204,6 +296,7 @@ onMounted(() => {
           <strong>{{ policy.service_key }}</strong>
           <n-tag size="small">{{ modeLabel(policy.update_mode) }}</n-tag>
           <span>{{ policy.auto_update ? "Yes" : "No" }}</span>
+          <span>{{ scheduleLabel(policy) }}</span>
           <span>{{ snoozeLabel(policy.snooze_default_seconds) }}</span>
           <div class="table-actions">
             <n-button size="small" quaternary @click="editPolicy(policy)">
@@ -242,6 +335,10 @@ onMounted(() => {
             <div>
               <dt>Auto update</dt>
               <dd>{{ policy.auto_update ? "Yes" : "No" }}</dd>
+            </div>
+            <div>
+              <dt>Schedule</dt>
+              <dd>{{ scheduleLabel(policy) }}</dd>
             </div>
             <div>
               <dt>Snooze</dt>
@@ -294,6 +391,10 @@ onMounted(() => {
         <div>
           <span>Auto update</span>
           <strong>{{ policyForm.autoUpdate ? "Yes" : "No" }}</strong>
+        </div>
+        <div>
+          <span>Schedule</span>
+          <strong>{{ formScheduleLabel }}</strong>
         </div>
         <div>
           <span>Snooze</span>

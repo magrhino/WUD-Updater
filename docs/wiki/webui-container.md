@@ -95,6 +95,7 @@ To apply updates from the browser, set:
 ```yaml
 environment:
   WUD_WEB_MUTATIONS_ENABLED: "true"
+  WUD_TIMEZONE: "America/Chicago"
 ```
 
 Mutation requests still require the normal authenticated browser session, CSRF
@@ -102,3 +103,7 @@ checks, Origin/Host validation, one active job at a time, and the WebUI's
 plan-first apply flow. Keep the Docker socket, stack root, WUD output file,
 logs, and SQLite database mounted exactly as the example shows before enabling
 this mode.
+
+When mutations are enabled, service policies can also schedule automatic
+updates by weekday and local `HH:MM` time. `WUD_TIMEZONE` must be an IANA
+timezone name and defaults to `UTC`.

@@ -247,6 +247,8 @@ const INITIAL_POLICIES: ServicePolicyRecord[] = [
     update_mode: "live",
     auto_update: true,
     snooze_default_seconds: null,
+    auto_update_time: "03:30",
+    auto_update_days: ["mon", "wed", "fri"],
     created_at: "2026-05-28T12:00:00+00:00",
     updated_at: "2026-05-28T12:00:00+00:00",
     metadata: { source: "demo" },
@@ -256,6 +258,8 @@ const INITIAL_POLICIES: ServicePolicyRecord[] = [
     update_mode: "stop",
     auto_update: false,
     snooze_default_seconds: 86_400,
+    auto_update_time: null,
+    auto_update_days: [],
     created_at: "2026-05-28T12:00:00+00:00",
     updated_at: "2026-05-28T12:00:00+00:00",
     metadata: { source: "demo" },
@@ -454,6 +458,8 @@ class DemoApiState {
       dev_auth_bypass: true,
       setup_required: false,
       mutations_enabled: true,
+      timezone: "UTC",
+      auto_update_scheduler_enabled: true,
       static_spa_available: true,
       warnings: ["Static demo mode uses in-browser fixture data only."],
     };
@@ -779,6 +785,14 @@ class DemoApiState {
           "snooze_default_seconds" in operation
             ? (operation.snooze_default_seconds ?? null)
             : (existing?.snooze_default_seconds ?? null),
+        auto_update_time:
+          "auto_update_time" in operation
+            ? (operation.auto_update_time ?? null)
+            : (existing?.auto_update_time ?? null),
+        auto_update_days:
+          "auto_update_days" in operation
+            ? (operation.auto_update_days ?? [])
+            : (existing?.auto_update_days ?? []),
         created_at: existing?.created_at ?? nowIso(),
         updated_at: nowIso(),
         metadata: { source: "demo" },

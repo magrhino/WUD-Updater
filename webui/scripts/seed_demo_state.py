@@ -96,12 +96,16 @@ DEMO_SERVICE_POLICIES = (
         "update_mode": "live",
         "auto_update": True,
         "snooze_default_seconds": None,
+        "auto_update_time": "03:30",
+        "auto_update_days_json": '["mon","wed","fri"]',
     },
     {
         "service_key": "media/radarr",
         "update_mode": "stop",
         "auto_update": False,
         "snooze_default_seconds": 86400,
+        "auto_update_time": None,
+        "auto_update_days_json": "[]",
     },
 )
 
@@ -386,17 +390,21 @@ def _write_demo_management_state(conn) -> None:
                     update_mode,
                     auto_update,
                     snooze_default_seconds,
+                    auto_update_time,
+                    auto_update_days_json,
                     created_at,
                     updated_at,
                     metadata_json
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     str(policy["service_key"]),
                     str(policy["update_mode"]),
                     1 if bool(policy["auto_update"]) else 0,
                     policy["snooze_default_seconds"],
+                    policy["auto_update_time"],
+                    policy["auto_update_days_json"],
                     created_at,
                     created_at,
                     '{"source":"demo"}',

@@ -6,12 +6,14 @@ import os
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 
 DEFAULT_UPDATE_MODE = "stop"
 DEFAULT_MAX_WAIT = 180
 DEFAULT_LOCK_TIMEOUT = 30
 DEFAULT_LOG_DIR = "./logs"
+DEFAULT_TIMEZONE = "UTC"
 VALID_UPDATE_MODES = frozenset({"pause", "stop", "live"})
 
 
@@ -28,6 +30,7 @@ class UpdaterConfig:
     update_mode: str
     max_wait: int
     lock_timeout: int
+    timezone_name: str
     out_uid: int | None
     out_gid: int | None
 
@@ -54,6 +57,17 @@ def _parse_optional_numeric_id(name: str, value: str | None) -> int | None:
     if parsed < 0:
         raise ConfigError(f"{name} must be zero or greater")
     return parsed
+
+
+def _parse_timezone_name(value: str | None) -> str:
+    name = value or DEFAULT_TIMEZONE
+    try:
+        ZoneInfo(name)
+    except ZoneInfoNotFoundError as exc:
+        raise ConfigError(
+            "WUD_TIMEZONE must be an IANA timezone name such as America/Chicago"
+        ) from exc
+    return name
 
 
 def _env_or_default(env: Mapping[str, str], name: str, default: str) -> str:
@@ -106,6 +120,7 @@ def load_config(
         env.get("WUD_LOCK_TIMEOUT"),
         DEFAULT_LOCK_TIMEOUT,
     )
+    timezone_name = _parse_timezone_name(env.get("WUD_TIMEZONE"))
 
     out_uid = _parse_optional_numeric_id("OUT_UID", env.get("OUT_UID"))
     out_gid_value = env.get("OUT_GID") or env.get("OUT_GUID")
@@ -121,6 +136,7 @@ def load_config(
         update_mode=update_mode,
         max_wait=max_wait,
         lock_timeout=lock_timeout,
+        timezone_name=timezone_name,
         out_uid=out_uid,
         out_gid=out_gid,
     )

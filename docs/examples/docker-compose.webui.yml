@@ -15,6 +15,7 @@ services:
       WUD_OUT_FILE: /out/images.todo
       WUD_LOG_DIR: /logs
       WUD_DB_PATH: /logs/wud-updater.sqlite
+      WUD_TIMEZONE: "UTC"
       WUD_SYNC_SCRIPTS: "true"
       WUD_SCRIPTS_DIR: /managed-wud
       WUD_WEB_HOST: 0.0.0.0

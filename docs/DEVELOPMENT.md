@@ -117,6 +117,7 @@ Useful WebUI development variables:
 | `VITE_WUD_DEMO_MODE` | Build-time switch for the static GitHub Pages WebUI demo. |
 | `VITE_WUD_PAGES_BASE` | Static demo asset base path; default demo mode value is `/WUD-Updater/`. |
 | `WUD_DB_PATH` | SQLite database path for WebUI setup state, sessions, run history, audit records, and managed tag exclusions. |
+| `WUD_TIMEZONE` | IANA timezone name used for WebUI auto-update policy schedules. Defaults to `UTC`. |
 | `WUD_WEB_MUTATIONS_ENABLED` | Set to `true` only when testing browser-initiated plan/apply flows; default is read-only. |
 | `WUD_WEB_DEV_BACKEND_PORT` | Backend port used by `webui/scripts/dev-server.mjs` and the Vite proxy; default `8080`. |
 | `WUD_WEB_DEV_FRONTEND_PORT` | Vite frontend port used by the dev-server wrapper; default `5173`. |

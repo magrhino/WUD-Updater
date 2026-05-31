@@ -281,6 +281,8 @@ export interface StatusResponse {
   dev_auth_bypass: boolean;
   setup_required: boolean;
   mutations_enabled: boolean;
+  timezone: string;
+  auto_update_scheduler_enabled: boolean;
   static_spa_available: boolean;
   warnings: string[];
 }
@@ -369,6 +371,7 @@ export interface RunLogResponse {
 }
 
 export type ServicePolicyUpdateMode = "" | "pause" | "stop" | "live";
+export type AutoUpdateDay = "mon" | "tue" | "wed" | "thu" | "fri" | "sat" | "sun";
 export type SnoozeState = "active" | "expired" | "all";
 export type TagExclusionScope = "image_repo" | "service";
 export type TagExclusionMatchType = "exact";
@@ -380,6 +383,8 @@ export interface ServicePolicyRecord {
   update_mode: string;
   auto_update: boolean;
   snooze_default_seconds: number | null;
+  auto_update_time: string | null;
+  auto_update_days: AutoUpdateDay[];
   created_at: string;
   updated_at: string;
   metadata: Record<string, unknown>;
@@ -416,6 +421,8 @@ export type StateOperation =
       update_mode?: ServicePolicyUpdateMode;
       auto_update?: boolean;
       snooze_default_seconds?: number | null;
+      auto_update_time?: string | null;
+      auto_update_days?: AutoUpdateDay[];
     }
   | {
       kind: "delete_service_policy";
