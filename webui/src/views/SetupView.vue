@@ -2,6 +2,7 @@
 import { computed, onMounted, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { ShieldCheck, UserPlus } from "@lucide/vue";
+import { NAlert, NButton, NForm, NFormItem, NInput } from "naive-ui";
 
 import { useAuthStore } from "../stores/auth";
 

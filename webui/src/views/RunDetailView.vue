@@ -2,6 +2,7 @@
 import { computed, onMounted, watch } from "vue";
 import { RouterLink, useRoute } from "vue-router";
 import { FileText } from "@lucide/vue";
+import { NAlert } from "naive-ui";
 
 import { useWebuiStore } from "../stores/webui";
 

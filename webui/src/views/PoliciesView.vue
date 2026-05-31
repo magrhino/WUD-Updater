@@ -2,6 +2,18 @@
 import { computed, onMounted, reactive, ref } from "vue";
 import { useBreakpoints } from "@vueuse/core";
 import { Edit3, Save, Trash2 } from "@lucide/vue";
+import {
+  NAlert,
+  NButton,
+  NForm,
+  NFormItem,
+  NInput,
+  NInputNumber,
+  NModal,
+  NSelect,
+  NSwitch,
+  NTag,
+} from "naive-ui";
 
 import type {
   AutoUpdateDay,

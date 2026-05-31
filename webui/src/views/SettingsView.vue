@@ -9,6 +9,7 @@ import {
   ShieldCheck,
   SlidersHorizontal,
 } from "@lucide/vue";
+import { NAlert, NButton, NModal, NSelect, NTag } from "naive-ui";
 
 import type {
   ManagedSettingEntry,

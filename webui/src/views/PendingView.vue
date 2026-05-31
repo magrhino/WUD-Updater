@@ -2,7 +2,17 @@
 import { computed, h, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import { breakpointsTailwind, useBreakpoints } from "@vueuse/core";
 import { AlertTriangle, Check, ExternalLink, Play, Trash2, X } from "@lucide/vue";
-import { NInput, type DataTableColumns, type DataTableRowKey } from "naive-ui";
+import {
+  NAlert,
+  NButton,
+  NCheckbox,
+  NDataTable,
+  NInput,
+  NModal,
+  NTag,
+  type DataTableColumns,
+  type DataTableRowKey,
+} from "naive-ui";
 
 import {
   webApi,

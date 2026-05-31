@@ -9,6 +9,7 @@ import {
   Stethoscope,
   XCircle,
 } from "@lucide/vue";
+import { NAlert, NButton, NTag } from "naive-ui";
 
 import type { DoctorCheck, DoctorCheckStatus } from "../api/client";
 import { useWebuiStore } from "../stores/webui";

@@ -3,6 +3,7 @@ import { computed, onMounted, watch } from "vue";
 import { useRoute } from "vue-router";
 import { useClipboard } from "@vueuse/core";
 import { Copy, RefreshCw } from "@lucide/vue";
+import { NAlert, NButton } from "naive-ui";
 
 import { useWebuiStore } from "../stores/webui";
 

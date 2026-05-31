@@ -316,6 +316,23 @@ export const naiveStubs: Record<string, Component> = {
   NTag: passthrough("span"),
 };
 
+Object.assign(naiveStubs, {
+  Alert: naiveStubs.NAlert,
+  Button: naiveStubs.NButton,
+  Checkbox: naiveStubs.NCheckbox,
+  ConfigProvider: naiveStubs.NConfigProvider,
+  DataTable: naiveStubs.NDataTable,
+  Form: naiveStubs.NForm,
+  FormItem: naiveStubs.NFormItem,
+  Input: naiveStubs.NInput,
+  InputNumber: naiveStubs.NInputNumber,
+  MessageProvider: naiveStubs.NMessageProvider,
+  Modal: naiveStubs.NModal,
+  Select: naiveStubs.NSelect,
+  Switch: naiveStubs.NSwitch,
+  Tag: naiveStubs.NTag,
+});
+
 export function mountWithApp(component: Component, options: MountOptions = {}): VueWrapper {
   const pinia = options.pinia ?? createPinia();
   setActivePinia(pinia);

@@ -2,7 +2,7 @@
 import { computed, h, onMounted } from "vue";
 import { RouterLink } from "vue-router";
 import { breakpointsTailwind, useBreakpoints } from "@vueuse/core";
-import type { DataTableColumns } from "naive-ui";
+import { NAlert, NDataTable, NTag, type DataTableColumns } from "naive-ui";
 
 import type { RunSummary } from "../api/client";
 import { useWebuiStore } from "../stores/webui";

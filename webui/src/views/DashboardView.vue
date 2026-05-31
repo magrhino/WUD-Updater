@@ -11,6 +11,7 @@ import {
   Settings2,
   Tags,
 } from "@lucide/vue";
+import { NAlert } from "naive-ui";
 
 import { useWebuiStore } from "../stores/webui";
 

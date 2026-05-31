@@ -31,6 +31,25 @@ export default defineConfig(({ command, mode }) => {
     },
     build: {
       chunkSizeWarningLimit: 700,
+      rolldownOptions: {
+        output: {
+          codeSplitting: {
+            groups: [
+              {
+                name: "vue-runtime",
+                test:
+                  /node_modules[\\/](?:@vue|@vueuse|pinia|vue|vue-router)[\\/]/,
+                priority: 20,
+              },
+              {
+                name: "icons",
+                test: /node_modules[\\/]@lucide[\\/]vue[\\/]/,
+                priority: 15,
+              },
+            ],
+          },
+        },
+      },
     },
   };
 });
