@@ -1,16 +1,19 @@
 <script setup lang="ts">
-import { computed, onMounted } from "vue";
+import { computed, onMounted, ref } from "vue";
 import {
   ExternalLink,
   KeyRound,
+  RefreshCw,
   ShieldCheck,
   SlidersHorizontal,
 } from "@lucide/vue";
 
 import type { SecretSettingStatus, SettingsEntry } from "../api/client";
 import OnboardingChecklist from "../components/OnboardingChecklist.vue";
+import { useAuthStore } from "../stores/auth";
 import { useWebuiStore } from "../stores/webui";
 
+const auth = useAuthStore();
 const webui = useWebuiStore();
 
 const PATH_ENTRY_NAMES = new Set([
@@ -31,6 +34,9 @@ const settings = computed(() => webui.settings);
 const updaterEntries = computed(() => settings.value?.updater ?? []);
 const webuiEntries = computed(() => settings.value?.webui ?? []);
 const secrets = computed(() => settings.value?.secrets ?? []);
+const restartDialogVisible = ref(false);
+const restartMessage = ref("");
+const restartError = ref("");
 const allEntries = computed(() => [...updaterEntries.value, ...webuiEntries.value]);
 const pathEntries = computed(() =>
   updaterEntries.value.filter((entry) => PATH_ENTRY_NAMES.has(entry.name)),
@@ -55,6 +61,23 @@ const configuredSecretCount = computed(
 );
 const missingSecretCount = computed(
   () => secrets.value.length - configuredSecretCount.value,
+);
+const restartContainerEntry = computed(() =>
+  webuiEntries.value.find((entry) => entry.name === "WUD_WEB_RESTART_CONTAINER"),
+);
+const restartContainerTarget = computed(() => restartContainerEntry.value?.value ?? "");
+const mutationsEnabled = computed(() => auth.session?.mutations_enabled === true);
+const restartDisabledReason = computed(() => {
+  if (!mutationsEnabled.value) {
+    return "Read-only mode is active. Set WUD_WEB_MUTATIONS_ENABLED=true on the server to restart the WebUI container.";
+  }
+  if (!restartContainerTarget.value) {
+    return "Container restart is unavailable because no current container target was detected or configured.";
+  }
+  return "";
+});
+const restartButtonDisabled = computed(
+  () => webui.loading || restartDisabledReason.value !== "",
 );
 
 function displayValue(value: string): string {
@@ -89,6 +112,24 @@ function secretLabel(secret: SecretSettingStatus): string {
   return secret.configured ? "Configured" : "Not configured";
 }
 
+function openRestartDialog(): void {
+  restartMessage.value = "";
+  restartError.value = "";
+  restartDialogVisible.value = true;
+}
+
+async function confirmRestartContainer(): Promise<void> {
+  restartMessage.value = "";
+  restartError.value = "";
+  try {
+    const response = await webui.restartContainer();
+    restartDialogVisible.value = false;
+    restartMessage.value = `Restart requested for ${response.container}. The WebUI may disconnect while the container comes back.`;
+  } catch (exc) {
+    restartError.value = exc instanceof Error ? exc.message : "Container restart failed";
+  }
+}
+
 onMounted(() => {
   void webui.loadSettings();
 });
@@ -101,6 +142,62 @@ onMounted(() => {
     </n-alert>
 
     <OnboardingChecklist />
+
+    <section v-if="settings" class="section-panel">
+      <div class="section-heading">
+        <div class="settings-heading-main">
+          <p class="eyebrow">Maintenance</p>
+          <h2>Container</h2>
+          <p class="settings-section-copy">
+            Restart the running WebUI container after a helper image update or runtime
+            configuration change.
+          </p>
+        </div>
+        <RefreshCw :size="20" class="section-heading-icon" />
+      </div>
+      <n-alert
+        v-if="restartMessage"
+        type="success"
+        :show-icon="false"
+        class="settings-action-alert"
+      >
+        {{ restartMessage }}
+      </n-alert>
+      <n-alert
+        v-if="restartError"
+        type="error"
+        :show-icon="false"
+        class="settings-action-alert"
+      >
+        {{ restartError }}
+      </n-alert>
+      <div class="settings-action-row">
+        <div>
+          <strong>Restart WebUI container</strong>
+          <span>The current browser session will temporarily lose connection.</span>
+          <code v-if="restartContainerTarget">{{ restartContainerTarget }}</code>
+        </div>
+        <n-button
+          type="warning"
+          :disabled="restartButtonDisabled"
+          :loading="webui.loading"
+          @click="openRestartDialog"
+        >
+          <template #icon>
+            <RefreshCw :size="16" />
+          </template>
+          Restart container
+        </n-button>
+      </div>
+      <n-alert
+        v-if="restartDisabledReason"
+        type="info"
+        :show-icon="false"
+        class="settings-action-alert"
+      >
+        {{ restartDisabledReason }}
+      </n-alert>
+    </section>
 
     <section class="section-panel">
       <div class="section-heading">
@@ -310,5 +407,24 @@ onMounted(() => {
         </a>
       </div>
     </section>
+
+    <n-modal
+      v-model:show="restartDialogVisible"
+      preset="dialog"
+      title="Restart WebUI container"
+      positive-text="Restart container"
+      negative-text="Cancel"
+      :positive-button-props="{ type: 'warning', loading: webui.loading }"
+      @positive-click="confirmRestartContainer"
+    >
+      <n-alert type="warning" :show-icon="false" class="block-alert">
+        This restarts the container serving the WebUI. The page may disconnect until
+        Docker brings it back.
+      </n-alert>
+      <p class="settings-dialog-copy">
+        Target container:
+        <code>{{ restartContainerTarget || "unavailable" }}</code>
+      </p>
+    </n-modal>
   </section>
 </template>

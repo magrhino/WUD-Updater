@@ -2,6 +2,7 @@ import type {
   ApplyJobLogResponse,
   ApplyJobResponse,
   AuthSessionResponse,
+  ContainerRestartResponse,
   CsrfResponse,
   DoctorResponse,
   OnboardingChecklistResponse,
@@ -512,6 +513,13 @@ class DemoApiState {
           "derived",
         ),
         settingEntry("WUD_WEB_MUTATIONS_ENABLED", "true", "false", true),
+        settingEntry(
+          "WUD_WEB_RESTART_CONTAINER",
+          "demo-wud-updater",
+          "",
+          false,
+          "derived",
+        ),
         settingEntry(
           "WUD_WEB_AUTO_UPDATE_SCHEDULER_ENABLED",
           "true",
@@ -1222,6 +1230,11 @@ export function createDemoWebApi(): WebApi {
       state.tagExclusionRecords(status),
     stateOperation: async (operation: StateOperation, _csrfToken: string) =>
       state.stateOperation(operation),
+    restartContainer: async (_csrfToken: string): Promise<ContainerRestartResponse> => ({
+      status: "scheduled",
+      audit_run_id: 9001,
+      container: "demo-wud-updater",
+    }),
     createPlan: async (
       lineNumbers: number[],
       allowTagUpdates: boolean,

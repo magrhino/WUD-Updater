@@ -7,6 +7,7 @@ import ipaddress
 import json
 import logging
 import os
+import re
 import secrets
 import sqlite3
 import sys
@@ -27,6 +28,7 @@ from argon2 import PasswordHasher
 from argon2.exceptions import InvalidHashError, VerificationError, VerifyMismatchError
 from fastapi import (
     APIRouter,
+    BackgroundTasks,
     Depends,
     FastAPI,
     Header,
@@ -42,7 +44,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from . import __version__
-from .command import CommandRunner
+from .command import CommandError, CommandRunner
 from .config import (
     DEFAULT_LOCK_TIMEOUT,
     DEFAULT_MAX_WAIT,
@@ -129,6 +131,7 @@ SENSITIVE_ENV_KEYS = (
     "DISCORD_WEBHOOK",
     "ADMIN_WEBHOOK",
 )
+CONTAINER_REF_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$")
 PASSWORD_HASHER = PasswordHasher()
 LineNumber = Annotated[int, Field(ge=1)]
 PlanStatus = Literal["ready", "empty", "blocked"]
@@ -181,6 +184,7 @@ class WebSettings:
     mutations_enabled: bool = False
     static_dir: Path | None = None
     host_docker_base: Path | None = None
+    restart_container: str = ""
     command_env: Mapping[str, str] | None = None
 
     @property
@@ -833,6 +837,16 @@ class StateOperationResponse(BaseModel):
     resource: ServicePolicyRecord | SnoozeRecord | TagExclusionRuleRecord | None = None
 
 
+class ContainerRestartRequest(BaseModel):
+    confirmation: Literal["restart_container"]
+
+
+class ContainerRestartResponse(BaseModel):
+    status: Literal["scheduled"]
+    audit_run_id: int
+    container: str
+
+
 def create_app(
     settings: WebSettings | None = None,
     *,
@@ -1063,6 +1077,18 @@ def create_app(
         response_model=StateOperationResponse,
     )
     router.add_api_route(
+        "/container/restart",
+        api_restart_container,
+        methods=["POST"],
+        response_model=ContainerRestartResponse,
+        status_code=202,
+    )
+    router.add_api_route(
+        "/container/restart",
+        api_post_only_method_not_allowed,
+        methods=["GET"],
+    )
+    router.add_api_route(
         "/plans",
         api_create_plan,
         methods=["POST"],
@@ -1155,6 +1181,7 @@ def load_web_settings(
         ),
         static_dir=_resolve_static_dir(configured_static),
         host_docker_base=host_docker_base,
+        restart_container=_resolve_restart_container(env),
         command_env=dict(env),
     )
 
@@ -1847,6 +1874,71 @@ def api_state_operation(
             status_code=500,
             detail=f"could not update database: {exc}",
         ) from exc
+
+
+def api_restart_container(
+    payload: ContainerRestartRequest,
+    request: Request,
+    background_tasks: BackgroundTasks,
+) -> ContainerRestartResponse:
+    _ = payload.confirmation
+    settings = _settings(request)
+    if not settings.mutations_enabled:
+        raise HTTPException(status_code=403, detail="mutations are disabled")
+    container = settings.restart_container.strip()
+    if not container:
+        raise HTTPException(
+            status_code=409,
+            detail="container restart target is not configured",
+        )
+    try:
+        _validate_restart_container_target(container)
+    except WebConfigError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    docker = DockerCli(runner=CommandRunner(env=settings.command_env))
+    try:
+        container_id = docker.container_id(container)
+    except CommandError as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=_safe_exception_detail(
+                settings,
+                "could not inspect restart container",
+                exc,
+            ),
+        ) from exc
+    if not container_id:
+        raise HTTPException(
+            status_code=500,
+            detail="could not inspect restart container",
+        )
+
+    try:
+        with connect_db(settings.config.db_path) as conn:
+            init_db(conn)
+            with _immediate_transaction(conn):
+                audit_run_id = _insert_container_restart_audit(
+                    conn,
+                    settings,
+                    request,
+                    container=container,
+                )
+    except (OSError, sqlite3.Error, DatabaseError) as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=_safe_exception_detail(
+                settings,
+                "could not record container restart audit",
+                exc,
+            ),
+        ) from exc
+
+    background_tasks.add_task(_restart_container_task, settings, container)
+    return ContainerRestartResponse(
+        status="scheduled",
+        audit_run_id=audit_run_id,
+        container=container,
+    )
 
 
 def api_create_plan(payload: PlanRequest, request: Request) -> PlanResponse:
@@ -3811,6 +3903,13 @@ def _run_apply_job(
         )
         status_code = runner.run()
         job_status: ApplyJobStatus = "success" if status_code == 0 else "failure"
+        _safe_update_auto_update_schedule_runs(
+            settings,
+            auto_update_schedule_keys,
+            status=job_status,
+            run_id=runner.audit_run_id,
+            error="" if status_code == 0 else f"updater exited with status {status_code}",
+        )
         _update_apply_job(
             jobs,
             apply_condition,
@@ -3821,15 +3920,15 @@ def _run_apply_job(
             finished_at=utc_timestamp(),
             error="" if status_code == 0 else f"updater exited with status {status_code}",
         )
+    except Exception as exc:
+        run_id = None if runner is None else runner.audit_run_id
         _safe_update_auto_update_schedule_runs(
             settings,
             auto_update_schedule_keys,
-            status=job_status,
-            run_id=runner.audit_run_id,
-            error="" if status_code == 0 else f"updater exited with status {status_code}",
+            status="failure",
+            run_id=run_id,
+            error=str(exc),
         )
-    except Exception as exc:
-        run_id = None if runner is None else runner.audit_run_id
         _update_apply_job(
             jobs,
             apply_condition,
@@ -3838,13 +3937,6 @@ def _run_apply_job(
             run_id=run_id,
             log_file="" if runner is None else str(runner.log_file),
             finished_at=utc_timestamp(),
-            error=str(exc),
-        )
-        _safe_update_auto_update_schedule_runs(
-            settings,
-            auto_update_schedule_keys,
-            status="failure",
-            run_id=run_id,
             error=str(exc),
         )
     finally:
@@ -4863,6 +4955,83 @@ def _valid_tag(value: str) -> str:
     if not tag_value_valid(tag):
         raise HTTPException(status_code=422, detail=f"tag is invalid: {tag}")
     return tag
+
+
+def _restart_container_task(settings: WebSettings, container: str) -> None:
+    try:
+        DockerCli(runner=CommandRunner(env=settings.command_env)).restart_container(
+            container,
+            timeout_seconds=10,
+        )
+    except CommandError as exc:
+        detail = exc.result.stderr.strip() or str(exc)
+        LOGGER.error(
+            "WebUI container restart failed for %s: %s",
+            container,
+            _redact_sensitive_text(settings, detail),
+        )
+
+
+def _insert_container_restart_audit(
+    conn: sqlite3.Connection,
+    settings: WebSettings,
+    request: Request,
+    *,
+    container: str,
+) -> int:
+    now = utc_timestamp()
+    metadata = {
+        "source": "webui",
+        "operation": "restart_container",
+        "actor_type": _state_actor_type(settings, request),
+        "resource_type": "container",
+        "resource_id": container,
+        "target": {"container": container},
+    }
+    cursor = conn.execute(
+        """
+        INSERT INTO update_runs (
+            started_at,
+            finished_at,
+            status,
+            dry_run,
+            mode,
+            wud_file,
+            log_file,
+            metadata_json
+        )
+        VALUES (?, ?, 'success', 0, 'web-container-restart', ?, '', ?)
+        """,
+        (
+            now,
+            now,
+            str(settings.config.wud_out_file),
+            _json_object(metadata),
+        ),
+    )
+    run_id = int(cursor.lastrowid)
+    conn.execute(
+        """
+        INSERT INTO update_events (
+            run_id,
+            created_at,
+            service_name,
+            stack_name,
+            image,
+            target_image,
+            status,
+            metadata_json
+        )
+        VALUES (?, ?, 'wud-updater', '', '', ?, 'success', ?)
+        """,
+        (
+            run_id,
+            now,
+            container,
+            _json_object(metadata),
+        ),
+    )
+    return run_id
 
 
 def _insert_state_audit(
@@ -6302,6 +6471,13 @@ def _webui_settings_entries(
             _env_configured(settings, "WUD_WEB_MUTATIONS_ENABLED"),
         ),
         _settings_entry(
+            "WUD_WEB_RESTART_CONTAINER",
+            settings.restart_container,
+            "",
+            _env_configured(settings, "WUD_WEB_RESTART_CONTAINER"),
+            source="derived" if settings.restart_container else None,
+        ),
+        _settings_entry(
             "WUD_WEB_AUTO_UPDATE_SCHEDULER_ENABLED",
             _format_bool(settings.mutations_enabled),
             "false",
@@ -6403,6 +6579,38 @@ def _format_bool(value: bool) -> str:
 
 def _format_sequence(values: Sequence[str] | Iterator[str]) -> str:
     return ", ".join(item for item in values if item)
+
+
+def _resolve_restart_container(env: Mapping[str, str]) -> str:
+    configured = env.get("WUD_WEB_RESTART_CONTAINER")
+    if configured is not None:
+        return _validate_restart_container_target(configured.strip())
+    if not _running_in_container():
+        return ""
+    return _validate_restart_container_target(env.get("HOSTNAME", "").strip())
+
+
+def _running_in_container() -> bool:
+    if Path("/.dockerenv").exists():
+        return True
+    try:
+        cgroup = Path("/proc/1/cgroup").read_text(encoding="utf-8")
+    except OSError:
+        return False
+    return any(
+        marker in cgroup
+        for marker in ("/docker/", "/kubepods/", "/containerd/")
+    )
+
+
+def _validate_restart_container_target(value: str) -> str:
+    if not value:
+        return ""
+    if not CONTAINER_REF_RE.fullmatch(value):
+        raise WebConfigError(
+            "WUD_WEB_RESTART_CONTAINER must be a Docker container name or ID"
+        )
+    return value
 
 
 def _parse_host_docker_base(

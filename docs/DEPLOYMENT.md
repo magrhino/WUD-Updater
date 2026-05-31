@@ -478,7 +478,8 @@ Boolean examples use `true` and `false`; legacy aliases `1`, `0`, `yes`, `no`,
 | `WUD_WEB_ALLOWED_HOSTS` | loopback, configured public origin, and bind host | Comma-separated hostnames or IPs accepted in the HTTP `Host` header. Set this when exposing the WebUI by LAN address or DNS name. |
 | `WUD_WEB_TRUSTED_PROXIES` | unset | Comma-separated proxy IP/CIDR entries whose `Forwarded` or `X-Forwarded-*` headers are trusted for scheme/host detection. |
 | `WUD_WEB_SECURE_COOKIES` | `auto` | Cookie `Secure` mode: `auto` enables it for effective HTTPS origins, `true` always enables it, and `false` disables it for local HTTP testing. |
-| `WUD_WEB_MUTATIONS_ENABLED` | `false` | Enables browser plan/apply update mutations when set to `true`. Leave unset or `false` for read-only WebUI deployments. |
+| `WUD_WEB_MUTATIONS_ENABLED` | `false` | Enables browser plan/apply update mutations and Settings container restart when set to `true`. Leave unset or `false` for read-only WebUI deployments. |
+| `WUD_WEB_RESTART_CONTAINER` | Docker `HOSTNAME` inside a container, otherwise unset | Optional Docker container name or ID restarted from Settings. Set this explicitly only when the auto-detected current container target is unavailable or wrong. |
 | `WUD_WEB_HOST` | `127.0.0.1` | Host passed to Uvicorn when running `wud-updater web`. |
 | `WUD_WEB_PORT` | `8080` | Port passed to Uvicorn when running `wud-updater web`. |
 | `WUD_WEB_STATIC_DIR` | packaged SPA, auto-detected if present | Optional built SPA directory override. Backend tests and API startup do not require a frontend build. |

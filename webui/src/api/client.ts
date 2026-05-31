@@ -536,6 +536,12 @@ export interface StateOperationResponse {
   resource: ServicePolicyRecord | SnoozeRecord | TagExclusionRuleRecord | null;
 }
 
+export interface ContainerRestartResponse {
+  status: "scheduled";
+  audit_run_id: number;
+  container: string;
+}
+
 export class ApiError extends Error {
   constructor(
     readonly status: number,
@@ -687,6 +693,12 @@ const liveWebApi = {
       method: "POST",
       headers: { "x-wud-csrf-token": csrfToken },
       body: JSON.stringify(operation),
+    }),
+  restartContainer: (csrfToken: string) =>
+    apiRequest<ContainerRestartResponse>("/container/restart", {
+      method: "POST",
+      headers: { "x-wud-csrf-token": csrfToken },
+      body: JSON.stringify({ confirmation: "restart_container" }),
     }),
   createPlan: (
     lineNumbers: number[],

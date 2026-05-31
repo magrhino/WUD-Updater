@@ -27,6 +27,7 @@ import {
   type StatusResponse,
   type StateOperation,
   type StateOperationResponse,
+  type ContainerRestartResponse,
   type TagOverrideRequest,
   type TagExclusionRuleRecord,
   type TagExclusionScope,
@@ -454,6 +455,18 @@ export const useWebuiStore = defineStore("webui", () => {
     return response;
   }
 
+  async function restartContainer(): Promise<ContainerRestartResponse> {
+    const auth = useAuthStore();
+    let response: ContainerRestartResponse | null = null;
+    await loadWithState(async () => {
+      response = await webApi.restartContainer(await auth.ensureCsrf());
+    });
+    if (response === null) {
+      throw new Error("Container restart did not return a response");
+    }
+    return response;
+  }
+
   async function upsertServicePolicy(
     serviceKey: string,
     updateMode: ServicePolicyUpdateMode,
@@ -609,6 +622,7 @@ export const useWebuiStore = defineStore("webui", () => {
     loadSnoozes,
     loadTagExclusions,
     stateOperation,
+    restartContainer,
     upsertServicePolicy,
     deleteServicePolicy,
     createSnooze,

@@ -1431,6 +1431,70 @@ describe("mutating WebUI views", () => {
     ).toBe(true);
   });
 
+  it("requires warning confirmation before restarting the WebUI container", async () => {
+    const { pinia, webui } = setupStores(true);
+    webui.settings = settingsResponse({
+      webui: settingsResponse().webui.map((entry) =>
+        entry.name === "WUD_WEB_MUTATIONS_ENABLED"
+          ? { ...entry, value: "true", configured: true, source: "configured" as const }
+          : entry,
+      ),
+    });
+    webui.onboarding = onboardingChecklistResponse({ visible: false });
+    vi.spyOn(webui, "loadSettings").mockResolvedValue();
+    const restartContainer = vi.spyOn(webui, "restartContainer").mockResolvedValue({
+      status: "scheduled",
+      audit_run_id: 42,
+      container: "wud-updater",
+    });
+
+    const wrapper = mountWithApp(SettingsView, { pinia });
+    await flushPromises();
+
+    const restartButton = wrapper
+      .findAll("button")
+      .find((button) => button.text().includes("Restart container"));
+    expect(restartButton?.attributes("disabled")).toBeUndefined();
+    await restartButton?.trigger("click");
+
+    const dialog = wrapper.find('[role="dialog"]');
+    expect(dialog.text()).toContain("Restart WebUI container");
+    expect(dialog.text()).toContain("wud-updater");
+    expect(restartContainer).not.toHaveBeenCalled();
+
+    const confirmButton = dialog
+      .findAll("button")
+      .find((button) => button.text().includes("Restart container"));
+    await confirmButton?.trigger("click");
+    await flushPromises();
+
+    expect(restartContainer).toHaveBeenCalledTimes(1);
+    expect(wrapper.text()).toContain("Restart requested for wud-updater");
+  });
+
+  it("disables container restart in read-only settings", async () => {
+    const { pinia, webui } = setupStores(false);
+    webui.settings = settingsResponse();
+    webui.onboarding = onboardingChecklistResponse({ visible: false });
+    vi.spyOn(webui, "loadSettings").mockResolvedValue();
+    const restartContainer = vi.spyOn(webui, "restartContainer").mockResolvedValue({
+      status: "scheduled",
+      audit_run_id: 42,
+      container: "wud-updater",
+    });
+
+    const wrapper = mountWithApp(SettingsView, { pinia });
+    await flushPromises();
+
+    expect(wrapper.text()).toContain("Read-only mode is active");
+    const restartButton = wrapper
+      .findAll("button")
+      .find((button) => button.text().includes("Restart container"));
+    expect(restartButton?.attributes("disabled")).toBeDefined();
+    await restartButton?.trigger("click");
+    expect(restartContainer).not.toHaveBeenCalled();
+  });
+
   it("renders first-run onboarding checklist with copyable suggestions", async () => {
     const { pinia, webui } = setupStores(false);
     webui.settings = settingsResponse();
