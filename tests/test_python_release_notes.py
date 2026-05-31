@@ -4,7 +4,12 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from wud_updater.db import connect_db, init_db
+try:
+    from tests.test_python_db import V4_SCHEMA_SQL
+except ModuleNotFoundError:
+    from test_python_db import V4_SCHEMA_SQL
+
+from wud_updater.db import SCHEMA_VERSION, connect_db, init_db
 from wud_updater.release_notes import (
     GitHubClient,
     detect_breaking,
@@ -173,10 +178,8 @@ class ReleaseNotesTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             db_path = Path(tmp) / "wud.sqlite"
             with connect_db(db_path) as conn:
-                init_db(conn)
+                conn.executescript(V4_SCHEMA_SQL)
                 with conn:
-                    conn.execute("DROP TABLE release_note_cache")
-                    conn.execute("DELETE FROM schema_migrations WHERE version = 5")
                     conn.execute("PRAGMA user_version = 4")
 
             with connect_db(db_path) as conn:
@@ -191,7 +194,7 @@ class ReleaseNotesTests(unittest.TestCase):
                     """
                 ).fetchone()
 
-        self.assertEqual(version, 5)
+        self.assertEqual(version, SCHEMA_VERSION)
         self.assertIsNotNone(row)
 
 

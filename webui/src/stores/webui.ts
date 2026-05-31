@@ -4,6 +4,7 @@ import { defineStore } from "pinia";
 import {
   ApiError,
   LIVE_JOB_LOG_TAIL_BYTES,
+  type AutoUpdateDay,
   type ApplyJobLogResponse,
   type ApplyJobResponse,
   type PendingCleanupLine,
@@ -363,6 +364,8 @@ export const useWebuiStore = defineStore("webui", () => {
     updateMode: ServicePolicyUpdateMode,
     autoUpdate: boolean,
     snoozeDefaultSeconds: number | null,
+    autoUpdateTime: string | null,
+    autoUpdateDays: AutoUpdateDay[],
   ): Promise<void> {
     await stateOperation({
       kind: "upsert_service_policy",
@@ -370,6 +373,8 @@ export const useWebuiStore = defineStore("webui", () => {
       update_mode: updateMode,
       auto_update: autoUpdate,
       snooze_default_seconds: snoozeDefaultSeconds,
+      auto_update_time: autoUpdateTime,
+      auto_update_days: autoUpdateDays,
     });
     await loadServicePolicies();
   }

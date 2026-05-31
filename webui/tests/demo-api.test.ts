@@ -151,6 +151,8 @@ describe("demo web API", () => {
         update_mode: "stop",
         auto_update: true,
         snooze_default_seconds: null,
+        auto_update_time: "02:15",
+        auto_update_days: ["tue", "thu"],
       },
       "csrf",
     );
@@ -187,6 +189,8 @@ describe("demo web API", () => {
       expect.objectContaining({
         service_key: "media/wud-updater",
         auto_update: true,
+        auto_update_time: "02:15",
+        auto_update_days: ["tue", "thu"],
       }),
     );
     expect(await api.servicePolicies()).toContainEqual(

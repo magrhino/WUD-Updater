@@ -26,6 +26,7 @@ import {
   runSummary,
   servicePolicy,
   snooze,
+  statusResponse,
   tagExclusion,
 } from "./helpers/fixtures";
 import { mountWithApp } from "./helpers/mount";
@@ -36,6 +37,7 @@ function setupStores(mutationsEnabled: boolean) {
   const auth = useAuthStore();
   auth.session = authSession({ mutations_enabled: mutationsEnabled });
   const webui = useWebuiStore();
+  webui.status = statusResponse({ mutations_enabled: mutationsEnabled });
   return { pinia, auth, webui };
 }
 

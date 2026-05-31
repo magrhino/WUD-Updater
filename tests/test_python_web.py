@@ -1269,6 +1269,8 @@ def test_state_read_endpoints_list_existing_sqlite_rows(tmp_path: Path) -> None:
                     update_mode,
                     auto_update,
                     snooze_default_seconds,
+                    auto_update_time,
+                    auto_update_days_json,
                     created_at,
                     updated_at,
                     metadata_json
@@ -1278,6 +1280,8 @@ def test_state_read_endpoints_list_existing_sqlite_rows(tmp_path: Path) -> None:
                     'stop',
                     0,
                     3600,
+                    '09:30',
+                    '["mon","wed"]',
                     '2026-05-28T12:00:00+00:00',
                     '2026-05-28T12:01:00+00:00',
                     '{"source":"test"}'
@@ -1363,6 +1367,8 @@ def test_state_read_endpoints_list_existing_sqlite_rows(tmp_path: Path) -> None:
     assert policies.status_code == 200
     assert policies.json()[0]["service_key"] == "stack/app"
     assert policies.json()[0]["auto_update"] is False
+    assert policies.json()[0]["auto_update_time"] == "09:30"
+    assert policies.json()[0]["auto_update_days"] == ["mon", "wed"]
     assert policies.json()[0]["metadata"] == {"source": "test"}
     assert active_snoozes.status_code == 200
     assert [row["service_key"] for row in active_snoozes.json()] == ["stack/app"]
@@ -1438,6 +1444,8 @@ def test_state_operations_write_rows_and_audit_entries(tmp_path: Path) -> None:
             "update_mode": "pause",
             "auto_update": False,
             "snooze_default_seconds": 600,
+            "auto_update_time": "09:30",
+            "auto_update_days": ["mon", "wed"],
         },
         headers=headers,
     )
@@ -1487,6 +1495,8 @@ def test_state_operations_write_rows_and_audit_entries(tmp_path: Path) -> None:
     assert policy.status_code == 200
     assert policy.json()["resource"]["auto_update"] is False
     assert policy.json()["resource"]["snooze_default_seconds"] == 600
+    assert policy.json()["resource"]["auto_update_time"] == "09:30"
+    assert policy.json()["resource"]["auto_update_days"] == ["mon", "wed"]
     assert deleted_policy.status_code == 200
     assert deleted_policy.json()["resource"] is None
     assert snooze.status_code == 200
@@ -1554,6 +1564,8 @@ def test_service_policy_upsert_preserves_omitted_existing_fields(
             "update_mode": "stop",
             "auto_update": False,
             "snooze_default_seconds": 600,
+            "auto_update_time": "09:30",
+            "auto_update_days": ["mon", "wed"],
         },
         headers=headers,
     )
@@ -1591,16 +1603,22 @@ def test_service_policy_upsert_preserves_omitted_existing_fields(
     assert mode_resource["update_mode"] == "live"
     assert mode_resource["auto_update"] is False
     assert mode_resource["snooze_default_seconds"] == 600
+    assert mode_resource["auto_update_time"] == "09:30"
+    assert mode_resource["auto_update_days"] == ["mon", "wed"]
     assert auto_only_update.status_code == 200
     auto_resource = auto_only_update.json()["resource"]
     assert auto_resource["update_mode"] == "live"
     assert auto_resource["auto_update"] is True
     assert auto_resource["snooze_default_seconds"] == 600
+    assert auto_resource["auto_update_time"] == "09:30"
+    assert auto_resource["auto_update_days"] == ["mon", "wed"]
     assert explicit_clear.status_code == 200
     clear_resource = explicit_clear.json()["resource"]
     assert clear_resource["update_mode"] == "live"
     assert clear_resource["auto_update"] is True
     assert clear_resource["snooze_default_seconds"] is None
+    assert clear_resource["auto_update_time"] == "09:30"
+    assert clear_resource["auto_update_days"] == ["mon", "wed"]
 
 
 def test_state_operation_rolls_back_when_audit_insert_fails(
@@ -1680,6 +1698,11 @@ def test_state_operations_validate_inputs(tmp_path: Path) -> None:
             "image_repo": "repo/app",
             "tag": "bad:value",
         },
+        {
+            "kind": "upsert_service_policy",
+            "service_key": "stack/app",
+            "auto_update_time": "9:30",
+        },
     ]
 
     responses = [
@@ -1687,7 +1710,149 @@ def test_state_operations_validate_inputs(tmp_path: Path) -> None:
         for payload in invalid_payloads
     ]
 
-    assert [response.status_code for response in responses] == [422] * 5
+    assert [response.status_code for response in responses] == [422] * 6
+
+
+def test_auto_update_scheduler_applies_due_policy_at_configured_local_time(
+    tmp_path: Path,
+) -> None:
+    fake_env, fake_root = _fake_docker_env(tmp_path)
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+            "WUD_TIMEZONE": "America/Chicago",
+            **fake_env,
+        },
+    )
+    wud_file = tmp_path / "state" / "images.todo"
+    wud_file.write_text("repo/app:latest\n", encoding="utf-8")
+    _make_fake_stack(
+        tmp_path,
+        fake_root,
+        "stack",
+        [("app", "repo/app:latest", "cid-app")],
+    )
+    (fake_root / "images" / "repo_app_latest.id").write_text(
+        "old\n",
+        encoding="utf-8",
+    )
+    (fake_root / "images" / "repo_app_latest.after_id").write_text(
+        "new\n",
+        encoding="utf-8",
+    )
+    headers = _csrf_headers(client)
+    policy = client.post(
+        "/api/v1/state/operations",
+        json={
+            "kind": "upsert_service_policy",
+            "service_key": "stack/app",
+            "update_mode": "live",
+            "auto_update": True,
+            "auto_update_time": "09:30",
+            "auto_update_days": ["sat"],
+        },
+        headers=headers,
+    )
+
+    now = datetime(2026, 5, 30, 14, 30, tzinfo=timezone.utc)
+    client.app.state.web_auto_update_started_at = now - timedelta(minutes=30)
+    response = web_module._auto_update_tick(
+        client.app,
+        client.app.state.web_settings,
+        now=now,
+    )
+    assert response is not None
+    job = _wait_apply_job(client, response.job_id)
+    second_response = web_module._auto_update_tick(
+        client.app,
+        client.app.state.web_settings,
+        now=now + timedelta(minutes=1),
+    )
+
+    assert policy.status_code == 200
+    assert job["status"] == "success"
+    assert job["selected_line_numbers"] == [1]
+    assert second_response is None
+    assert wud_file.read_text(encoding="utf-8") == ""
+    calls = _fake_docker_calls(fake_root)
+    assert "compose -f docker-compose.yml pull app" in calls
+    assert "compose -f docker-compose.yml up -d --remove-orphans --no-deps app" in calls
+
+    with connect_db(tmp_path / "state" / "wud.sqlite") as conn:
+        schedule_rows = conn.execute(
+            """
+            SELECT *
+            FROM auto_update_schedule_runs
+            ORDER BY schedule_key
+            """
+        ).fetchall()
+        detail = client.get(f"/api/v1/runs/{job['run_id']}").json()
+
+    assert len(schedule_rows) == 1
+    assert schedule_rows[0]["schedule_key"] == (
+        "stack/app|2026-05-30|09:30|America/Chicago"
+    )
+    assert schedule_rows[0]["status"] == "queued"
+    assert detail["metadata"]["source"] == "webui-auto"
+    assert detail["metadata"]["actor_type"] == "scheduler"
+    assert detail["metadata"]["auto_update_service_keys"] == ["stack/app"]
+    assert detail["metadata"]["auto_update_scheduled_for"] == (
+        "2026-05-30T14:30:00+00:00"
+    )
+
+
+def test_auto_update_scheduler_skips_tag_updates_without_mutation(
+    tmp_path: Path,
+) -> None:
+    fake_env, fake_root = _fake_docker_env(tmp_path)
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+            "WUD_TIMEZONE": "America/Chicago",
+            **fake_env,
+        },
+    )
+    wud_file = tmp_path / "state" / "images.todo"
+    original = "repo/app:1.0 tag=2.0\n"
+    wud_file.write_text(original, encoding="utf-8")
+    _make_fake_stack(
+        tmp_path,
+        fake_root,
+        "stack",
+        [("app", "repo/app:1.0", "cid-app")],
+    )
+    policy = client.post(
+        "/api/v1/state/operations",
+        json={
+            "kind": "upsert_service_policy",
+            "service_key": "stack/app",
+            "update_mode": "live",
+            "auto_update": True,
+            "auto_update_time": "09:30",
+            "auto_update_days": ["sat"],
+        },
+        headers=_csrf_headers(client),
+    )
+
+    now = datetime(2026, 5, 30, 14, 30, tzinfo=timezone.utc)
+    client.app.state.web_auto_update_started_at = now - timedelta(minutes=30)
+    response = web_module._auto_update_tick(
+        client.app,
+        client.app.state.web_settings,
+        now=now,
+    )
+
+    assert policy.status_code == 200
+    assert response is None
+    assert wud_file.read_text(encoding="utf-8") == original
+    assert " up -d " not in _fake_docker_calls(fake_root)
+    with connect_db(tmp_path / "state" / "wud.sqlite") as conn:
+        rows = conn.execute("SELECT * FROM auto_update_schedule_runs").fetchall()
+    assert rows == []
 
 
 def test_plan_endpoint_rejects_unauthenticated_requests(tmp_path: Path) -> None:
