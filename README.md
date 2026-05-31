@@ -74,6 +74,9 @@ leaves WebUI mutations disabled unless you explicitly set
 `WUD_WEB_MUTATIONS_ENABLED=true`. Scheduled service-policy auto updates use the
 server's `WUD_TIMEZONE` value, for example `America/Chicago`, and default to
 `UTC`.
+After admin setup, Settings shows a first-run checklist for WUD output sharing,
+Docker and Compose access, script sync, persistence, browser exposure, and
+mutation mode.
 
 If the admin password is lost or an operator needs to rotate access, issue a
 new one-time recovery link from the host or container:

@@ -8,6 +8,8 @@ import {
   type ApplyJobLogResponse,
   type ApplyJobResponse,
   type DoctorResponse,
+  type OnboardingChecklistResponse,
+  type OnboardingDismissResponse,
   type PendingCleanupLine,
   type PendingCleanupResponse,
   type PendingRemovalPlanResponse,
@@ -47,6 +49,7 @@ export const useWebuiStore = defineStore("webui", () => {
   const status = ref<StatusResponse | null>(null);
   const settings = ref<SettingsResponse | null>(null);
   const doctor = ref<DoctorResponse | null>(null);
+  const onboarding = ref<OnboardingChecklistResponse | null>(null);
   const pending = ref<PendingResponse | null>(null);
   const releaseNotes = ref<ReleaseNotesResponse | null>(null);
   const plan = ref<PlanResponse | null>(null);
@@ -91,6 +94,33 @@ export const useWebuiStore = defineStore("webui", () => {
     await loadWithState(async () => {
       doctor.value = await webApi.doctor(await auth.ensureCsrf());
     });
+  }
+
+  async function loadOnboarding(): Promise<void> {
+    const auth = useAuthStore();
+    await loadWithState(async () => {
+      onboarding.value = await webApi.onboardingChecklist(await auth.ensureCsrf());
+    });
+  }
+
+  async function dismissOnboarding(): Promise<OnboardingDismissResponse> {
+    const auth = useAuthStore();
+    let response: OnboardingDismissResponse | null = null;
+    await loadWithState(async () => {
+      response = await webApi.dismissOnboarding(await auth.ensureCsrf());
+      if (onboarding.value) {
+        onboarding.value = {
+          ...onboarding.value,
+          dismissed: response.dismissed,
+          dismissed_at: response.dismissed_at,
+          visible: false,
+        };
+      }
+    });
+    if (response === null) {
+      throw new Error("Onboarding dismiss did not return a response");
+    }
+    return response;
   }
 
   async function loadDashboard(): Promise<void> {
@@ -528,6 +558,7 @@ export const useWebuiStore = defineStore("webui", () => {
     status,
     settings,
     doctor,
+    onboarding,
     pending,
     pendingCleanup,
     pendingRemovalPlan,
@@ -553,6 +584,8 @@ export const useWebuiStore = defineStore("webui", () => {
     loadStatus,
     loadSettings,
     loadDoctor,
+    loadOnboarding,
+    dismissOnboarding,
     loadDashboard,
     loadPending,
     loadReleaseNotes,

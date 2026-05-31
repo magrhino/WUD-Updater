@@ -20,6 +20,7 @@ import {
   applyJobResponse,
   authSession,
   doctorResponse,
+  onboardingChecklistResponse,
   pendingGroupedItem,
   pendingGrouping,
   pendingItem,
@@ -1404,6 +1405,7 @@ describe("mutating WebUI views", () => {
   it("renders read-only settings without exposing secret values or edit controls", async () => {
     const { pinia, webui } = setupStores(false);
     webui.settings = settingsResponse();
+    webui.onboarding = onboardingChecklistResponse({ visible: false });
     vi.spyOn(webui, "loadSettings").mockResolvedValue();
 
     const wrapper = mountWithApp(SettingsView, { pinia });
@@ -1425,6 +1427,57 @@ describe("mutating WebUI views", () => {
     expect(
       wrapper.find(
         'a[href="https://github.com/magrhino/WUD-Updater/blob/main/docs/DEPLOYMENT.md#environment-variables"]',
+      ).exists(),
+    ).toBe(true);
+  });
+
+  it("renders first-run onboarding checklist with copyable suggestions", async () => {
+    const { pinia, webui } = setupStores(false);
+    webui.settings = settingsResponse();
+    webui.onboarding = onboardingChecklistResponse({
+      items: [
+        {
+          key: "docker-access",
+          title: "Docker daemon access",
+          status: "FAIL",
+          detail: "Docker daemon info: info failed: <redacted>",
+          check_codes: ["docker-daemon-info"],
+          suggestions: [
+            {
+              label: "Wire Docker access",
+              description: "Mount the Docker socket or configure DOCKER_HOST.",
+              snippet: "DOCKER_HOST=unix:///var/run/docker.sock",
+            },
+          ],
+          docs: [
+            {
+              label: "Deployment Docker access",
+              url: "https://github.com/magrhino/WUD-Updater/blob/main/docs/DEPLOYMENT.md#requirements",
+            },
+          ],
+        },
+      ],
+    });
+    vi.spyOn(webui, "loadSettings").mockResolvedValue();
+    vi.spyOn(webui, "loadOnboarding").mockResolvedValue();
+    vi.spyOn(webui, "dismissOnboarding").mockResolvedValue({
+      dismissed: true,
+      dismissed_at: "2026-05-31T00:00:00+00:00",
+    });
+
+    const wrapper = mountWithApp(SettingsView, { pinia });
+    await flushPromises();
+    const text = wrapper.text();
+
+    expect(text).toContain("Setup checklist");
+    expect(text).toContain("Docker daemon access");
+    expect(text).toContain("info failed: <redacted>");
+    expect(text).toContain("Wire Docker access");
+    expect(text).toContain("Copy");
+    expect(text).not.toContain("github-token-secret");
+    expect(
+      wrapper.find(
+        'a[href="https://github.com/magrhino/WUD-Updater/blob/main/docs/DEPLOYMENT.md#requirements"]',
       ).exists(),
     ).toBe(true);
   });

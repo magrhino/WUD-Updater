@@ -198,7 +198,8 @@ least 12 characters, then sign in at `http://127.0.0.1:8080`. See
 LAN exposure, login, and mutation notes.
 
 After sign-in, open the WebUI Settings page to review the effective non-secret
-configuration, safety status, and secret presence for the running process.
+configuration, safety status, secret presence, and first-run checklist for the
+running process.
 
 For containerized TrueNAS status checks, use
 [`docs/examples/docker-compose.truenas.yml`](examples/docker-compose.truenas.yml).

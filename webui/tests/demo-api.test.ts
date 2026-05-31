@@ -34,6 +34,18 @@ describe("demo web API", () => {
         { name: "GITHUB_TOKEN", configured: false },
       ]),
     });
+    await expect(api.onboardingChecklist("csrf")).resolves.toMatchObject({
+      visible: true,
+      items: expect.arrayContaining([
+        expect.objectContaining({
+          key: "mutation-mode",
+          status: "WARN",
+        }),
+      ]),
+    });
+    await expect(api.dismissOnboarding("csrf")).resolves.toMatchObject({
+      dismissed: true,
+    });
 
     const pending = await api.pending();
     expect(pending.count).toBe(7);

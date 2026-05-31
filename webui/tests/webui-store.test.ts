@@ -10,6 +10,8 @@ import {
   applyJobLogResponse,
   applyJobResponse,
   doctorResponse,
+  onboardingChecklistResponse,
+  onboardingDismissResponse,
   pendingResponse,
   releaseNotesResponse,
   planResponse,
@@ -70,6 +72,33 @@ describe("webui store", () => {
         "x-wud-csrf-token",
       ),
     ).toBe("csrf-doctor");
+  });
+
+  it("passes csrf from auth store to onboarding checks and dismissal", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse(onboardingChecklistResponse()))
+      .mockResolvedValueOnce(jsonResponse(onboardingDismissResponse()));
+    vi.stubGlobal("fetch", fetchMock);
+    const auth = useAuthStore();
+    const ensureCsrf = vi
+      .spyOn(auth, "ensureCsrf")
+      .mockResolvedValue("csrf-onboarding");
+    const webui = useWebuiStore();
+
+    await webui.loadOnboarding();
+    await webui.dismissOnboarding();
+
+    expect(ensureCsrf).toHaveBeenCalledTimes(2);
+    expect(webui.onboarding?.visible).toBe(false);
+    expect(fetchMock.mock.calls[0][0]).toBe("/api/v1/onboarding/checklist");
+    expect(fetchMock.mock.calls[1][0]).toBe("/api/v1/onboarding/dismiss");
+    for (const call of fetchMock.mock.calls) {
+      expect((call[1] as RequestInit).method).toBe("POST");
+      expect(
+        ((call[1] as RequestInit).headers as Headers).get("x-wud-csrf-token"),
+      ).toBe("csrf-onboarding");
+    }
   });
 
   it("passes csrf from auth store to pending cleanup", async () => {

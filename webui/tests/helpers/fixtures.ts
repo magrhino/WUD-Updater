@@ -3,6 +3,8 @@ import type {
   ApplyJobResponse,
   AuthSessionResponse,
   DoctorResponse,
+  OnboardingChecklistResponse,
+  OnboardingDismissResponse,
   PendingGroupedItem,
   PendingGrouping,
   PendingItem,
@@ -220,6 +222,68 @@ export function doctorResponse(
         suggestions: [],
       },
     ],
+    ...overrides,
+  };
+}
+
+export function onboardingChecklistResponse(
+  overrides: Partial<OnboardingChecklistResponse> = {},
+): OnboardingChecklistResponse {
+  return {
+    dismissed: false,
+    dismissed_at: "",
+    all_passed: false,
+    visible: true,
+    items: [
+      {
+        key: "admin-setup",
+        title: "Admin setup",
+        status: "PASS",
+        detail: "The first admin account exists.",
+        check_codes: ["webui-authentication"],
+        suggestions: [],
+        docs: [
+          {
+            label: "First login",
+            url: "https://github.com/magrhino/WUD-Updater/blob/main/docs/wiki/webui-container.md#first-login",
+          },
+        ],
+      },
+      {
+        key: "docker-access",
+        title: "Docker daemon access",
+        status: "FAIL",
+        detail: "Docker daemon info: permission denied",
+        check_codes: ["docker-daemon-info"],
+        suggestions: [
+          {
+            label: "Wire Docker access",
+            description: "Mount the Docker socket or configure DOCKER_HOST.",
+            snippet: "DOCKER_HOST=unix:///var/run/docker.sock",
+          },
+        ],
+        docs: [],
+      },
+      {
+        key: "mutation-mode",
+        title: "Browser mutation mode",
+        status: "PASS",
+        detail: "Browser apply controls are disabled server-side.",
+        check_codes: ["webui-mutation-gate"],
+        suggestions: [],
+        docs: [],
+      },
+    ],
+    ...overrides,
+  };
+}
+
+export function onboardingDismissResponse(
+  overrides: Partial<OnboardingDismissResponse> = {},
+): OnboardingDismissResponse {
+  return {
+    dismissed: true,
+    dismissed_at: "2026-05-31T00:00:00+00:00",
     ...overrides,
   };
 }

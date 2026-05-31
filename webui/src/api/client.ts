@@ -333,6 +333,34 @@ export interface DoctorResponse {
   checks: DoctorCheck[];
 }
 
+export interface OnboardingDocLink {
+  label: string;
+  url: string;
+}
+
+export interface OnboardingChecklistItem {
+  key: string;
+  title: string;
+  status: DoctorCheckStatus;
+  detail: string;
+  check_codes: string[];
+  suggestions: DoctorSuggestion[];
+  docs: OnboardingDocLink[];
+}
+
+export interface OnboardingChecklistResponse {
+  dismissed: boolean;
+  dismissed_at: string;
+  all_passed: boolean;
+  visible: boolean;
+  items: OnboardingChecklistItem[];
+}
+
+export interface OnboardingDismissResponse {
+  dismissed: boolean;
+  dismissed_at: string;
+}
+
 export interface AuthSessionResponse {
   authenticated: boolean;
   setup_required: boolean;
@@ -593,6 +621,16 @@ const liveWebApi = {
   settings: () => apiRequest<SettingsResponse>("/settings"),
   doctor: (csrfToken: string) =>
     apiRequest<DoctorResponse>("/doctor", {
+      method: "POST",
+      headers: { "x-wud-csrf-token": csrfToken },
+    }),
+  onboardingChecklist: (csrfToken: string) =>
+    apiRequest<OnboardingChecklistResponse>("/onboarding/checklist", {
+      method: "POST",
+      headers: { "x-wud-csrf-token": csrfToken },
+    }),
+  dismissOnboarding: (csrfToken: string) =>
+    apiRequest<OnboardingDismissResponse>("/onboarding/dismiss", {
       method: "POST",
       headers: { "x-wud-csrf-token": csrfToken },
     }),
