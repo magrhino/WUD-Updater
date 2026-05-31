@@ -4,6 +4,13 @@ All notable changes to WUD-Updater are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com) and versions follow
 [Semantic Versioning](https://semver.org).
 
+## [0.27.0](https://github.com/magrhino/WUD-Updater/compare/v0.26.0...v0.27.0) (2026-05-31)
+
+
+### Features
+
+* **webui:** Add selected pending-entry removal to the WebUI demo ([#135](https://github.com/magrhino/WUD-Updater/issues/135)) ([6bf9e11](https://github.com/magrhino/WUD-Updater/commit/6bf9e11ec1d19523abd934139d996c4e5f8bf709))
+
 ## [0.26.0](https://github.com/magrhino/WUD-Updater/compare/v0.25.0...v0.26.0) (2026-05-30)
 
 
