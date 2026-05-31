@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from "vue";
+import { useMediaQuery } from "@vueuse/core";
 import {
+  AlertTriangle,
+  ChevronDown,
   ExternalLink,
   KeyRound,
   RefreshCw,
@@ -45,6 +48,16 @@ const ONBOARDING_CHECKLIST_LABELS: Record<string, string> = {
   visible: "Visible",
   dismissed: "Dismissed",
 };
+const SETTINGS_SECTION_LINKS = [
+  { id: "settings-actions", label: "Actions" },
+  { id: "settings-preferences", label: "Preferences" },
+  { id: "settings-runtime", label: "Runtime" },
+  { id: "settings-paths", label: "Paths" },
+  { id: "settings-behavior", label: "Behavior" },
+  { id: "settings-webui", label: "WebUI safety" },
+  { id: "settings-secrets", label: "Secrets" },
+  { id: "settings-docs", label: "Docs" },
+] as const;
 
 const settings = computed(() => webui.settings);
 const updaterEntries = computed(() => settings.value?.updater ?? []);
@@ -58,6 +71,7 @@ const themePreferenceValue = ref("system");
 const onboardingChecklistValue = ref("visible");
 const preferencesMessage = ref("");
 const preferencesError = ref("");
+const compactSettingsLayout = useMediaQuery("(max-width: 560px)");
 const allEntries = computed(() => [...updaterEntries.value, ...webuiEntries.value]);
 const pathEntries = computed(() =>
   updaterEntries.value.filter((entry) => PATH_ENTRY_NAMES.has(entry.name)),
@@ -94,6 +108,20 @@ const onboardingChecklistEntry = computed(() =>
 );
 const restartContainerTarget = computed(() => restartContainerEntry.value?.value ?? "");
 const mutationsEnabled = computed(() => auth.session?.mutations_enabled === true);
+const mutationStatusIcon = computed(() =>
+  mutationsEnabled.value ? AlertTriangle : ShieldCheck,
+);
+const mutationStatusLabel = computed(() =>
+  mutationsEnabled.value ? "Mutations enabled" : "Read-only mode",
+);
+const mutationStatusDetail = computed(() =>
+  mutationsEnabled.value
+    ? "Browser actions can save managed preferences and request a WebUI container restart."
+    : "Browser mutation actions are disabled server-side. Settings remain visible for inspection.",
+);
+const mutationStatusTagType = computed(() =>
+  mutationsEnabled.value ? "warning" : "success",
+);
 const restartDisabledReason = computed(() => {
   if (!mutationsEnabled.value) {
     return "Read-only mode is active. Set WUD_WEB_MUTATIONS_ENABLED=true on the server to restart the WebUI container.";
@@ -124,6 +152,11 @@ const preferencesDirty = computed(
 const preferenceSaveDisabled = computed(
   () => preferenceControlsDisabled.value || !preferencesDirty.value,
 );
+const restartTargetLabel = computed(() =>
+  restartContainerTarget.value
+    ? `Restart target: ${restartContainerTarget.value}`
+    : "No restart target",
+);
 const themePreferenceOptions = computed(() =>
   managedOptions(themePreferenceEntry.value, THEME_PREFERENCE_LABELS),
 );
@@ -141,10 +174,10 @@ function entryCountLabel(entries: SettingsEntry[]): string {
 
 function sourceLabel(entry: SettingsEntry): string {
   if (entry.source === "request") {
-    return "Request";
+    return "Request scoped";
   }
   if (entry.source === "derived") {
-    return "Derived";
+    return "Runtime derived";
   }
   return entry.configured ? "Configured" : "Default";
 }
@@ -154,7 +187,7 @@ function sourceTagType(entry: SettingsEntry): "default" | "info" | "success" | "
     return "info";
   }
   if (entry.source === "derived") {
-    return "warning";
+    return "info";
   }
   return entry.configured ? "success" : "default";
 }
@@ -203,6 +236,20 @@ function resetPreferenceForm(): void {
   preferencesError.value = "";
 }
 
+function scrollToSettingsSection(id: string): void {
+  if (typeof document === "undefined") {
+    return;
+  }
+  const target = document.getElementById(id);
+  if (!target) {
+    return;
+  }
+  const reducedMotion =
+    typeof window !== "undefined" &&
+    window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  target.scrollIntoView({ behavior: reducedMotion ? "auto" : "smooth", block: "start" });
+}
+
 async function saveManagedPreferences(): Promise<void> {
   preferencesMessage.value = "";
   preferencesError.value = "";
@@ -243,212 +290,300 @@ onMounted(() => {
       {{ webui.error }}
     </n-alert>
 
-    <section v-if="settings" class="section-panel">
-      <div class="section-heading">
-        <div class="settings-heading-main">
-          <p class="eyebrow">Maintenance</p>
-          <h2>Container</h2>
-          <p class="settings-section-copy">
-            Restart the running WebUI container after a helper image update or runtime
-            configuration change.
-          </p>
-        </div>
-        <RefreshCw :size="20" class="section-heading-icon" />
-      </div>
-      <n-alert
-        v-if="restartMessage"
-        type="success"
-        :show-icon="false"
-        class="settings-action-alert"
-      >
-        {{ restartMessage }}
-      </n-alert>
-      <n-alert
-        v-if="restartError"
-        type="error"
-        :show-icon="false"
-        class="settings-action-alert"
-      >
-        {{ restartError }}
-      </n-alert>
-      <div class="settings-action-row">
+    <div
+      v-if="settings"
+      class="settings-safety-strip"
+      :class="{ 'is-mutable': mutationsEnabled, 'is-read-only': !mutationsEnabled }"
+      role="status"
+    >
+      <div class="settings-safety-main">
+        <component :is="mutationStatusIcon" :size="18" aria-hidden="true" />
         <div>
-          <strong>Restart WebUI container</strong>
-          <span>The current browser session will temporarily lose connection.</span>
-          <code v-if="restartContainerTarget">{{ restartContainerTarget }}</code>
+          <strong>{{ mutationStatusLabel }}</strong>
+          <span>{{ mutationStatusDetail }}</span>
         </div>
-        <n-button
-          type="warning"
-          :disabled="restartButtonDisabled"
-          :loading="webui.loading"
-          @click="openRestartDialog"
-        >
-          <template #icon>
-            <RefreshCw :size="16" />
-          </template>
-          Restart container
-        </n-button>
       </div>
-      <n-alert
-        v-if="restartDisabledReason"
-        type="info"
-        :show-icon="false"
-        class="settings-action-alert"
-      >
-        {{ restartDisabledReason }}
-      </n-alert>
-    </section>
+      <div class="settings-safety-meta">
+        <n-tag size="small" :type="mutationStatusTagType">
+          {{ mutationStatusLabel }}
+        </n-tag>
+        <n-tag size="small">
+          {{ restartTargetLabel }}
+        </n-tag>
+      </div>
+    </div>
 
-    <OnboardingChecklist />
+    <nav v-if="settings" class="settings-jump-nav" aria-label="Settings sections">
+      <button
+        v-for="link in SETTINGS_SECTION_LINKS"
+        :key="link.id"
+        type="button"
+        class="settings-jump-button"
+        @click="scrollToSettingsSection(link.id)"
+      >
+        {{ link.label }}
+      </button>
+    </nav>
 
-    <section v-if="settings" class="section-panel">
-      <div class="section-heading">
-        <div class="settings-heading-main">
-          <p class="eyebrow">Managed preferences</p>
-          <h2>WebUI preferences</h2>
-          <p class="settings-section-copy">
-            Browser-facing preferences persisted in SQLite. Runtime configuration,
-            paths, and secrets stay controlled by server config.
-          </p>
-        </div>
-        <Save :size="20" class="section-heading-icon" />
-      </div>
-      <n-alert
-        v-if="preferencesMessage"
-        type="success"
-        :show-icon="false"
-        class="settings-action-alert"
-      >
-        {{ preferencesMessage }}
-      </n-alert>
-      <n-alert
-        v-if="preferencesError"
-        type="error"
-        :show-icon="false"
-        class="settings-action-alert"
-      >
-        {{ preferencesError }}
-      </n-alert>
-      <div class="settings-preference-list">
-        <div class="settings-preference-row">
-          <div>
-            <strong>Theme preference</strong>
-            <span>
-              Source:
-              {{ themePreferenceEntry?.source === "configured" ? "Configured" : "Default" }}
-            </span>
-          </div>
-          <n-select
-            v-model:value="themePreferenceValue"
-            :options="themePreferenceOptions"
-            :disabled="preferenceControlsDisabled"
-            aria-label="Theme preference"
-          />
-        </div>
-        <div class="settings-preference-row">
-          <div>
-            <strong>Onboarding checklist</strong>
-            <span>
-              Source:
-              {{
-                onboardingChecklistEntry?.source === "configured"
-                  ? "Configured"
-                  : "Default"
-              }}
-            </span>
-          </div>
-          <n-select
-            v-model:value="onboardingChecklistValue"
-            :options="onboardingChecklistOptions"
-            :disabled="preferenceControlsDisabled"
-            aria-label="Onboarding checklist"
-          />
-        </div>
-      </div>
-      <div class="settings-action-row settings-preference-actions">
+    <div v-if="settings" id="settings-actions" class="settings-zone">
+      <div class="settings-zone-heading">
         <div>
-          <strong>No restart required</strong>
-          <span>Managed preferences do not alter updater runtime behavior.</span>
+          <h2>Actions</h2>
         </div>
-        <div class="settings-button-group">
-          <n-button :disabled="webui.loading || !preferencesDirty" @click="resetPreferenceForm">
-            <template #icon>
-              <RotateCcw :size="16" />
-            </template>
-            Reset
-          </n-button>
-          <n-button
-            type="primary"
-            :disabled="preferenceSaveDisabled"
-            :loading="webui.loading"
-            @click="saveManagedPreferences"
+      </div>
+
+      <div class="settings-zone-grid settings-actions-grid">
+        <section class="section-panel">
+          <div class="section-heading">
+            <div class="settings-heading-main">
+              <p class="eyebrow">Maintenance</p>
+              <h2>Container</h2>
+              <p class="settings-section-copy">
+                Restart the running WebUI container after a helper image update or
+                runtime configuration change.
+              </p>
+            </div>
+            <RefreshCw :size="20" class="section-heading-icon" />
+          </div>
+          <n-alert
+            v-if="restartMessage"
+            type="success"
+            :show-icon="false"
+            class="settings-action-alert"
           >
-            <template #icon>
-              <Save :size="16" />
-            </template>
-            Save preferences
-          </n-button>
-        </div>
-      </div>
-      <n-alert
-        v-if="preferencesDisabledReason"
-        type="info"
-        :show-icon="false"
-        class="settings-action-alert"
-      >
-        {{ preferencesDisabledReason }}
-      </n-alert>
-    </section>
+            {{ restartMessage }}
+          </n-alert>
+          <n-alert
+            v-if="restartError"
+            type="error"
+            :show-icon="false"
+            class="settings-action-alert"
+          >
+            {{ restartError }}
+          </n-alert>
+          <div class="settings-risk-facts" aria-label="Container restart facts">
+            <div>
+              <span>Target</span>
+              <strong>{{ restartContainerTarget || "Unavailable" }}</strong>
+            </div>
+            <div>
+              <span>Permission</span>
+              <strong>{{ mutationsEnabled ? "Allowed" : "Read-only" }}</strong>
+            </div>
+            <div>
+              <span>Impact</span>
+              <strong>Temporary disconnect</strong>
+            </div>
+          </div>
+          <div class="settings-action-row">
+            <div>
+              <strong>Restart WebUI container</strong>
+              <span>The current browser session will temporarily lose connection.</span>
+              <code v-if="restartContainerTarget">{{ restartContainerTarget }}</code>
+            </div>
+            <n-button
+              type="warning"
+              :disabled="restartButtonDisabled"
+              :loading="webui.loading"
+              @click="openRestartDialog"
+            >
+              <template #icon>
+                <RefreshCw :size="16" />
+              </template>
+              Restart container
+            </n-button>
+          </div>
+          <n-alert
+            v-if="restartDisabledReason"
+            type="info"
+            :show-icon="false"
+            class="settings-action-alert"
+          >
+            {{ restartDisabledReason }}
+          </n-alert>
+        </section>
 
-    <section class="section-panel">
-      <div class="section-heading">
-        <div class="settings-heading-main">
-          <p class="eyebrow">Effective configuration</p>
-          <h2>Runtime settings</h2>
-          <p class="settings-section-copy">
-            Effective values from environment, defaults, and request context. Secret
-            names are shown, raw values stay hidden.
-          </p>
-        </div>
-        <SlidersHorizontal :size="20" class="section-heading-icon settings-overview-icon" />
+        <OnboardingChecklist />
       </div>
-      <div v-if="!settings && !webui.loading" class="empty-state">
-        Settings are unavailable.
-      </div>
-      <div v-else-if="!settings" class="settings-loading" aria-busy="true">
-        <span class="sr-only">Loading settings.</span>
-        <span aria-hidden="true" class="settings-skeleton-row"></span>
-        <span aria-hidden="true" class="settings-skeleton-row"></span>
-        <span aria-hidden="true" class="settings-skeleton-row"></span>
-      </div>
-      <div v-else class="settings-summary-grid" aria-label="Settings summary">
-        <div class="settings-summary-item">
-          <span>Configured values</span>
-          <strong>{{ configuredEntryCount }}</strong>
-        </div>
-        <div class="settings-summary-item">
-          <span>Not explicitly set</span>
-          <strong>{{ inheritedEntryCount }}</strong>
-        </div>
-        <div class="settings-summary-item">
-          <span>Derived or request</span>
-          <strong>{{ runtimeScopedEntryCount }}</strong>
-        </div>
-        <div class="settings-summary-item">
-          <span>Secrets configured</span>
-          <strong>{{ configuredSecretCount }} / {{ secrets.length }}</strong>
-        </div>
-      </div>
-    </section>
+    </div>
 
-    <section v-if="settings" class="section-panel">
-      <div class="section-heading">
+    <div v-if="settings" id="settings-preferences" class="settings-zone">
+      <div class="settings-zone-heading">
+        <div>
+          <h2>Preferences</h2>
+        </div>
+      </div>
+
+      <section class="section-panel">
+        <div class="section-heading">
+          <div class="settings-heading-main">
+            <p class="eyebrow">Managed preferences</p>
+            <h2>WebUI preferences</h2>
+            <p class="settings-section-copy">
+              Browser-facing preferences persisted in SQLite. Runtime configuration,
+              paths, and secrets stay controlled by server config.
+            </p>
+          </div>
+          <Save :size="20" class="section-heading-icon" />
+        </div>
+        <n-alert
+          v-if="preferencesMessage"
+          type="success"
+          :show-icon="false"
+          class="settings-action-alert"
+        >
+          {{ preferencesMessage }}
+        </n-alert>
+        <n-alert
+          v-if="preferencesError"
+          type="error"
+          :show-icon="false"
+          class="settings-action-alert"
+        >
+          {{ preferencesError }}
+        </n-alert>
+        <div class="settings-preference-list">
+          <div class="settings-preference-row">
+            <div>
+              <strong>Theme preference</strong>
+              <span>
+                Source:
+                {{ themePreferenceEntry?.source === "configured" ? "Configured" : "Default" }}
+              </span>
+            </div>
+            <n-select
+              v-model:value="themePreferenceValue"
+              :options="themePreferenceOptions"
+              :disabled="preferenceControlsDisabled"
+              aria-label="Theme preference"
+            />
+          </div>
+          <div class="settings-preference-row">
+            <div>
+              <strong>Onboarding checklist</strong>
+              <span>
+                Source:
+                {{
+                  onboardingChecklistEntry?.source === "configured"
+                    ? "Configured"
+                    : "Default"
+                }}
+              </span>
+            </div>
+            <n-select
+              v-model:value="onboardingChecklistValue"
+              :options="onboardingChecklistOptions"
+              :disabled="preferenceControlsDisabled"
+              aria-label="Onboarding checklist"
+            />
+          </div>
+        </div>
+        <div class="settings-action-row settings-preference-actions">
+          <div>
+            <strong>No restart required</strong>
+            <span>Managed preferences do not alter updater runtime behavior.</span>
+          </div>
+          <div class="settings-button-group">
+            <n-button :disabled="webui.loading || !preferencesDirty" @click="resetPreferenceForm">
+              <template #icon>
+                <RotateCcw :size="16" />
+              </template>
+              Reset
+            </n-button>
+            <n-button
+              type="primary"
+              :disabled="preferenceSaveDisabled"
+              :loading="webui.loading"
+              @click="saveManagedPreferences"
+            >
+              <template #icon>
+                <Save :size="16" />
+              </template>
+              Save preferences
+            </n-button>
+          </div>
+        </div>
+        <n-alert
+          v-if="preferencesDisabledReason"
+          type="info"
+          :show-icon="false"
+          class="settings-action-alert"
+        >
+          {{ preferencesDisabledReason }}
+        </n-alert>
+      </section>
+    </div>
+
+    <div id="settings-runtime" class="settings-zone">
+      <div class="settings-zone-heading">
+        <div>
+          <h2>Effective configuration</h2>
+        </div>
+        <div v-if="settings" class="settings-source-legend" aria-label="Source label legend">
+          <span><strong>Default</strong> fallback</span>
+          <span><strong>Configured</strong> explicit</span>
+          <span><strong>Runtime derived</strong> computed</span>
+          <span><strong>Request scoped</strong> current request</span>
+        </div>
+      </div>
+
+      <section class="section-panel">
+        <div class="section-heading">
+          <div class="settings-heading-main">
+            <p class="eyebrow">Overview</p>
+            <h2>Runtime settings</h2>
+            <p class="settings-section-copy">
+              Secret names are shown, raw values stay hidden.
+            </p>
+          </div>
+          <SlidersHorizontal :size="20" class="section-heading-icon settings-overview-icon" />
+        </div>
+        <div v-if="!settings && !webui.loading" class="empty-state">
+          Settings are unavailable.
+        </div>
+        <div v-else-if="!settings" class="settings-loading" aria-busy="true">
+          <span class="sr-only">Loading settings.</span>
+          <span aria-hidden="true" class="settings-skeleton-row"></span>
+          <span aria-hidden="true" class="settings-skeleton-row"></span>
+          <span aria-hidden="true" class="settings-skeleton-row"></span>
+        </div>
+        <div v-else class="settings-summary-grid" aria-label="Settings summary">
+          <div class="settings-summary-item">
+            <span>Configured values</span>
+            <strong>{{ configuredEntryCount }}</strong>
+          </div>
+          <div class="settings-summary-item">
+            <span>Not explicitly set</span>
+            <strong>{{ inheritedEntryCount }}</strong>
+          </div>
+          <div class="settings-summary-item">
+            <span>Runtime scoped</span>
+            <strong>{{ runtimeScopedEntryCount }}</strong>
+          </div>
+          <div class="settings-summary-item">
+            <span>Secrets configured</span>
+            <strong>{{ configuredSecretCount }} / {{ secrets.length }}</strong>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <details
+      v-if="settings"
+      id="settings-paths"
+      class="section-panel settings-disclosure"
+      :open="!compactSettingsLayout"
+    >
+      <summary class="section-heading settings-disclosure-summary">
         <div>
           <p class="eyebrow">Updater</p>
           <h2>Paths</h2>
         </div>
-        <n-tag size="small">{{ entryCountLabel(pathEntries) }}</n-tag>
-      </div>
+        <div class="settings-heading-meta">
+          <n-tag size="small">{{ entryCountLabel(pathEntries) }}</n-tag>
+          <ChevronDown :size="18" class="settings-disclosure-chevron" />
+        </div>
+      </summary>
       <div
         v-if="pathEntries.length"
         class="settings-list"
@@ -472,16 +607,24 @@ onMounted(() => {
         </div>
       </div>
       <div v-else class="empty-state">Path settings are unavailable.</div>
-    </section>
+    </details>
 
-    <section v-if="settings" class="section-panel">
-      <div class="section-heading">
+    <details
+      v-if="settings"
+      id="settings-behavior"
+      class="section-panel settings-disclosure"
+      :open="!compactSettingsLayout"
+    >
+      <summary class="section-heading settings-disclosure-summary">
         <div>
           <p class="eyebrow">Updater</p>
           <h2>Behavior</h2>
         </div>
-        <n-tag size="small">{{ entryCountLabel(behaviorEntries) }}</n-tag>
-      </div>
+        <div class="settings-heading-meta">
+          <n-tag size="small">{{ entryCountLabel(behaviorEntries) }}</n-tag>
+          <ChevronDown :size="18" class="settings-disclosure-chevron" />
+        </div>
+      </summary>
       <div
         v-if="behaviorEntries.length"
         class="settings-list"
@@ -505,10 +648,15 @@ onMounted(() => {
         </div>
       </div>
       <div v-else class="empty-state">Behavior settings are unavailable.</div>
-    </section>
+    </details>
 
-    <section v-if="settings" class="section-panel">
-      <div class="section-heading">
+    <details
+      v-if="settings"
+      id="settings-webui"
+      class="section-panel settings-disclosure"
+      :open="!compactSettingsLayout"
+    >
+      <summary class="section-heading settings-disclosure-summary">
         <div>
           <p class="eyebrow">WebUI</p>
           <h2>Safety status</h2>
@@ -516,8 +664,9 @@ onMounted(() => {
         <div class="settings-heading-meta">
           <n-tag size="small">{{ entryCountLabel(webuiEntries) }}</n-tag>
           <ShieldCheck :size="20" class="section-heading-icon" />
+          <ChevronDown :size="18" class="settings-disclosure-chevron" />
         </div>
-      </div>
+      </summary>
       <div
         v-if="webuiEntries.length"
         class="settings-list"
@@ -541,10 +690,15 @@ onMounted(() => {
         </div>
       </div>
       <div v-else class="empty-state">WebUI safety settings are unavailable.</div>
-    </section>
+    </details>
 
-    <section v-if="settings" class="section-panel">
-      <div class="section-heading">
+    <details
+      v-if="settings"
+      id="settings-secrets"
+      class="section-panel settings-disclosure"
+      :open="!compactSettingsLayout"
+    >
+      <summary class="section-heading settings-disclosure-summary">
         <div>
           <p class="eyebrow">Secrets</p>
           <h2>Configured values</h2>
@@ -553,8 +707,9 @@ onMounted(() => {
           <n-tag size="small">{{ configuredSecretCount }} configured</n-tag>
           <n-tag v-if="missingSecretCount" size="small">{{ missingSecretCount }} missing</n-tag>
           <KeyRound :size="20" class="section-heading-icon" />
+          <ChevronDown :size="18" class="settings-disclosure-chevron" />
         </div>
-      </div>
+      </summary>
       <div
         v-if="secrets.length"
         class="settings-list"
@@ -578,9 +733,9 @@ onMounted(() => {
         </div>
       </div>
       <div v-else class="empty-state">No secret settings reported.</div>
-    </section>
+    </details>
 
-    <section class="section-panel">
+    <section id="settings-docs" class="section-panel">
       <div class="section-heading">
         <div>
           <p class="eyebrow">Docs</p>
