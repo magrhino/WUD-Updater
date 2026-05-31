@@ -9,6 +9,7 @@ import {
   type ApplyJobResponse,
   type PendingCleanupLine,
   type PendingCleanupResponse,
+  type PendingRemovalPlanResponse,
   type PlanResponse,
   type PendingResponse,
   type ReleaseNotesResponse,
@@ -46,6 +47,7 @@ export const useWebuiStore = defineStore("webui", () => {
   const releaseNotes = ref<ReleaseNotesResponse | null>(null);
   const plan = ref<PlanResponse | null>(null);
   const pendingCleanup = ref<PendingCleanupResponse | null>(null);
+  const pendingRemovalPlan = ref<PendingRemovalPlanResponse | null>(null);
   const applyJob = ref<ApplyJobResponse | null>(null);
   const applyJobLog = ref<ApplyJobLogResponse | null>(null);
   const rememberedApplyJobId = ref(readRememberedApplyJobId());
@@ -105,6 +107,7 @@ export const useWebuiStore = defineStore("webui", () => {
   ): Promise<void> {
     await loadWithState(async () => {
       plan.value = null;
+      pendingRemovalPlan.value = null;
       if (!options.preserveCleanup) {
         pendingCleanup.value = null;
       }
@@ -148,6 +151,7 @@ export const useWebuiStore = defineStore("webui", () => {
     await loadWithState(async () => {
       plan.value = null;
       pendingCleanup.value = null;
+      pendingRemovalPlan.value = null;
       applyJob.value = null;
       applyJobLog.value = null;
       plan.value = await webApi.createPlan(
@@ -173,6 +177,7 @@ export const useWebuiStore = defineStore("webui", () => {
       );
       pendingCleanup.value = response;
       plan.value = null;
+      pendingRemovalPlan.value = null;
     });
     if (response === null) {
       throw new Error("Pending cleanup did not return a response");
@@ -180,8 +185,51 @@ export const useWebuiStore = defineStore("webui", () => {
     return response;
   }
 
+  async function createRemovalPlan(
+    lineNumbers: number[],
+  ): Promise<PendingRemovalPlanResponse> {
+    const auth = useAuthStore();
+    let response: PendingRemovalPlanResponse | null = null;
+    await loadWithState(async () => {
+      plan.value = null;
+      pendingCleanup.value = null;
+      pendingRemovalPlan.value = await webApi.createRemovalPlan(
+        lineNumbers,
+        await auth.ensureCsrf(),
+      );
+      response = pendingRemovalPlan.value;
+    });
+    if (response === null) {
+      throw new Error("Pending removal plan did not return a response");
+    }
+    return response;
+  }
+
+  async function removeSelectedPending(
+    removalId: string,
+    lines: PendingCleanupLine[],
+  ): Promise<PendingCleanupResponse> {
+    const auth = useAuthStore();
+    let response: PendingCleanupResponse | null = null;
+    await loadWithState(async () => {
+      response = await webApi.removeSelectedPending(
+        removalId,
+        lines,
+        await auth.ensureCsrf(),
+      );
+      pendingCleanup.value = response;
+      pendingRemovalPlan.value = null;
+      plan.value = null;
+    });
+    if (response === null) {
+      throw new Error("Pending removal did not return a response");
+    }
+    return response;
+  }
+
   function clearPlan(): void {
     plan.value = null;
+    pendingRemovalPlan.value = null;
   }
 
   async function createJob(
@@ -463,6 +511,7 @@ export const useWebuiStore = defineStore("webui", () => {
     status,
     pending,
     pendingCleanup,
+    pendingRemovalPlan,
     releaseNotes,
     plan,
     applyJob,
@@ -489,6 +538,8 @@ export const useWebuiStore = defineStore("webui", () => {
     refreshReleaseNotes,
     createPlan,
     cleanupPending,
+    createRemovalPlan,
+    removeSelectedPending,
     clearPlan,
     createJob,
     applyPlan,

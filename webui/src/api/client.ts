@@ -230,6 +230,22 @@ export interface PendingCleanupResponse {
   removed: PendingCleanupRemovedLine[];
 }
 
+export interface PendingRemovalPlanLine {
+  line_no: number;
+  raw: string;
+  image: string;
+  desired_tag: string;
+  digest: string;
+}
+
+export interface PendingRemovalPlanResponse {
+  removal_id: string;
+  source_file: string;
+  can_remove: boolean;
+  selected_line_numbers: number[];
+  lines: PendingRemovalPlanLine[];
+}
+
 export type ApplyJobStatus = "queued" | "running" | "success" | "failure";
 
 export interface ApplyJobResponse {
@@ -541,6 +557,26 @@ const liveWebApi = {
         cleanup_id: cleanupId,
         lines,
         confirmation: "remove_unmatched",
+      }),
+    }),
+  createRemovalPlan: (lineNumbers: number[], csrfToken: string) =>
+    apiRequest<PendingRemovalPlanResponse>("/pending/removal-plan", {
+      method: "POST",
+      headers: { "x-wud-csrf-token": csrfToken },
+      body: JSON.stringify({ line_numbers: lineNumbers }),
+    }),
+  removeSelectedPending: (
+    removalId: string,
+    lines: PendingCleanupLine[],
+    csrfToken: string,
+  ) =>
+    apiRequest<PendingCleanupResponse>("/pending/removal", {
+      method: "POST",
+      headers: { "x-wud-csrf-token": csrfToken },
+      body: JSON.stringify({
+        removal_id: removalId,
+        lines,
+        confirmation: "remove_selected",
       }),
     }),
   releaseNotes: () => apiRequest<ReleaseNotesResponse>("/release-notes"),

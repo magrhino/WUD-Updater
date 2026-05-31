@@ -443,6 +443,120 @@ describe("mutating WebUI views", () => {
     expect(wrapper.text()).toContain("Details");
   });
 
+  it("disables selected pending removal in read-only mode", async () => {
+    const { pinia, webui } = setupStores(false);
+    webui.pending = pendingResponse();
+    mockPendingLifecycle(webui);
+    const createRemovalPlan = vi.spyOn(webui, "createRemovalPlan");
+    const wrapper = mountWithApp(PendingView, { pinia });
+
+    await wrapper
+      .find('input[aria-label="Select stack media"]')
+      .setValue(true);
+    await flushPromises();
+
+    expect(wrapper.text()).toContain("Read-only mode is active");
+    const removalButton = wrapper
+      .findAll("button")
+      .find((button) => button.text().includes("Remove 1 selected entry"));
+    expect(removalButton?.attributes("disabled")).toBeDefined();
+    await removalButton?.trigger("click");
+
+    expect(createRemovalPlan).not.toHaveBeenCalled();
+  });
+
+  it("confirms selected pending removal before refreshing pending state", async () => {
+    const item = pendingItem({
+      line_no: 1,
+      raw: "repo/app:1.0 sha256=abc",
+      image: "repo/app:1.0",
+      repo: "repo/app",
+    });
+    const { pinia, webui } = setupStores(true);
+    webui.pending = pendingResponse([item]);
+    const loadPending = vi.spyOn(webui, "loadPending").mockResolvedValue();
+    const loadReleaseNotes = vi.spyOn(webui, "loadReleaseNotes").mockResolvedValue();
+    const refreshReleaseNotes = vi
+      .spyOn(webui, "refreshReleaseNotes")
+      .mockResolvedValue();
+    const loadRuns = vi.spyOn(webui, "loadRuns").mockResolvedValue();
+    const removalPlan = {
+      removal_id: "removal-test",
+      source_file: "/out/images.todo",
+      can_remove: true,
+      selected_line_numbers: [1],
+      lines: [
+        {
+          line_no: 1,
+          raw: item.raw,
+          image: item.image,
+          desired_tag: item.desired_tag,
+          digest: item.digest,
+        },
+      ],
+    };
+    const createRemovalPlan = vi
+      .spyOn(webui, "createRemovalPlan")
+      .mockImplementation(async () => {
+        webui.pendingRemovalPlan = removalPlan;
+        return removalPlan;
+      });
+    const removeSelectedPending = vi
+      .spyOn(webui, "removeSelectedPending")
+      .mockImplementation(async () => {
+        const response = {
+          status: "success" as const,
+          audit_run_id: 77,
+          removed_count: 1,
+          removed: [
+            {
+              line_no: 1,
+              raw: item.raw,
+              image: item.image,
+              reason: "selected",
+            },
+          ],
+        };
+        webui.pendingCleanup = response;
+        webui.pendingRemovalPlan = null;
+        return response;
+      });
+    const wrapper = mountWithApp(PendingView, { pinia });
+
+    await wrapper
+      .find('input[aria-label="Select stack media"]')
+      .setValue(true);
+    await wrapper
+      .findAll("button")
+      .find((button) => button.text().includes("Remove 1 selected entry"))
+      ?.trigger("click");
+    await flushPromises();
+
+    expect(createRemovalPlan).toHaveBeenCalledWith([1]);
+    const removalDialog = wrapper
+      .findAll('[role="dialog"]')
+      .find((dialog) => dialog.text().includes("Pending removal"));
+    expect(removalDialog?.text()).toContain("Source lines");
+    expect(removalDialog?.text()).toContain("#1 repo/app:1.0");
+    expect(removalDialog?.text()).toContain("Containers, images, and Compose services are not deleted or updated");
+
+    await removalDialog
+      ?.findAll("button")
+      .find((button) => button.text().includes("Remove 1 selected entry"))
+      ?.trigger("click");
+    await flushPromises();
+
+    expect(removeSelectedPending).toHaveBeenCalledWith("removal-test", [
+      { line_no: 1, raw: item.raw },
+    ]);
+    expect(loadPending).toHaveBeenCalled();
+    expect(loadReleaseNotes).toHaveBeenCalled();
+    expect(refreshReleaseNotes).toHaveBeenCalled();
+    expect(loadRuns).toHaveBeenCalled();
+    expect(wrapper.text()).toContain("1 pending entry removed from images.todo.");
+    expect(wrapper.text()).toContain("Details");
+  });
+
   it("starts a stack update with the full stack line set", async () => {
     const { pinia, webui } = setupStores(true);
     webui.pending = pendingResponse([

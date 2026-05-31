@@ -13,8 +13,9 @@ test("static demo renders current pending state and completes apply flow", async
   await expect(
     page.getByRole("heading", { name: "Pending updates", exact: true }),
   ).toBeVisible();
-  await expect(page.getByText("4 pending updates")).toBeVisible();
+  await expect(page.getByText("7 pending updates")).toBeVisible();
   await expect(page.getByText("Mutations enabled")).toBeVisible();
+  await expect(page.getByText("3 items needs review")).toBeVisible();
   await expect(
     page.getByTitle("ghcr.io/home-assistant/home-assistant:2026.5.1").first(),
   ).toBeVisible();
@@ -31,7 +32,7 @@ test("static demo renders current pending state and completes apply flow", async
   });
   await expect(applyDialog.getByRole("heading", { name: "Apply complete" })).toBeVisible();
   await expect(applyDialog.getByText("docker-update-from-wud-v2")).toBeVisible();
-  await expect(page.getByText("3 pending updates")).toBeVisible();
+  await expect(page.getByText("6 pending updates")).toBeVisible();
 
   await applyDialog.getByRole("link", { name: "Details" }).click();
   await expect(page.getByRole("heading", { name: "#4" })).toBeVisible();

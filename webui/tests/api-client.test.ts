@@ -38,6 +38,8 @@ describe("webApi", () => {
       webApi.status(),
       webApi.pending(),
       webApi.cleanupPending("cleanup", [{ line_no: 1, raw: "repo/app:1.0" }], "csrf"),
+      webApi.createRemovalPlan([1], "csrf"),
+      webApi.removeSelectedPending("removal", [{ line_no: 1, raw: "repo/app:1.0" }], "csrf"),
       webApi.servicePolicies(),
       webApi.snoozes("active"),
       webApi.tagExclusions("active"),
@@ -52,7 +54,7 @@ describe("webApi", () => {
       webApi.runLog(1),
     ]);
 
-    expect(fetchMock).toHaveBeenCalledTimes(22);
+    expect(fetchMock).toHaveBeenCalledTimes(24);
     for (const call of fetchMock.mock.calls) {
       expect(requestInit(call).credentials).toBe("include");
     }
@@ -71,6 +73,12 @@ describe("webApi", () => {
     await webApi.logout("csrf-token");
     await webApi.cleanupPending(
       "cleanup",
+      [{ line_no: 1, raw: "repo/app:1.0" }],
+      "csrf-token",
+    );
+    await webApi.createRemovalPlan([1], "csrf-token");
+    await webApi.removeSelectedPending(
+      "removal",
       [{ line_no: 1, raw: "repo/app:1.0" }],
       "csrf-token",
     );
@@ -94,6 +102,12 @@ describe("webApi", () => {
       [{ line_no: 3, raw: "repo/old:latest" }],
       "csrf",
     );
+    await webApi.createRemovalPlan([3], "csrf");
+    await webApi.removeSelectedPending(
+      "removal-id",
+      [{ line_no: 3, raw: "repo/old:latest" }],
+      "csrf",
+    );
     await webApi.createPlan([4], true, tagOverrides, "csrf");
     await webApi.createJob("plan-id", [4], true, tagOverrides, "csrf");
     await webApi.applyPlan("plan-id", [4], true, tagOverrides, "csrf");
@@ -104,18 +118,26 @@ describe("webApi", () => {
       confirmation: "remove_unmatched",
     });
     expect(JSON.parse(String(requestInit(fetchMock.mock.calls[1]).body))).toEqual({
+      line_numbers: [3],
+    });
+    expect(JSON.parse(String(requestInit(fetchMock.mock.calls[2]).body))).toEqual({
+      removal_id: "removal-id",
+      lines: [{ line_no: 3, raw: "repo/old:latest" }],
+      confirmation: "remove_selected",
+    });
+    expect(JSON.parse(String(requestInit(fetchMock.mock.calls[3]).body))).toEqual({
       line_numbers: [4],
       allow_tag_updates: true,
       tag_overrides: tagOverrides,
     });
-    expect(JSON.parse(String(requestInit(fetchMock.mock.calls[2]).body))).toEqual({
+    expect(JSON.parse(String(requestInit(fetchMock.mock.calls[4]).body))).toEqual({
       plan_id: "plan-id",
       line_numbers: [4],
       allow_tag_updates: true,
       tag_overrides: tagOverrides,
       confirmation: "apply",
     });
-    expect(JSON.parse(String(requestInit(fetchMock.mock.calls[3]).body))).toEqual({
+    expect(JSON.parse(String(requestInit(fetchMock.mock.calls[5]).body))).toEqual({
       plan_id: "plan-id",
       line_numbers: [4],
       allow_tag_updates: true,
