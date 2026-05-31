@@ -6,6 +6,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiError, webApi } from "../src/api/client";
 import PendingView from "../src/views/PendingView.vue";
 import PoliciesView from "../src/views/PoliciesView.vue";
+import SettingsView from "../src/views/SettingsView.vue";
 import SnoozesView from "../src/views/SnoozesView.vue";
 import TagExclusionsView from "../src/views/TagExclusionsView.vue";
 import { useAuthStore } from "../src/stores/auth";
@@ -26,6 +27,7 @@ import {
   releaseNotesResponse,
   runSummary,
   servicePolicy,
+  settingsResponse,
   snooze,
   statusResponse,
   tagExclusion,
@@ -1395,5 +1397,33 @@ describe("mutating WebUI views", () => {
     expect(disableButton?.attributes("disabled")).toBeDefined();
     await disableButton?.trigger("click");
     expect(setStatus).not.toHaveBeenCalled();
+  });
+
+  it("renders read-only settings without exposing secret values or edit controls", async () => {
+    const { pinia, webui } = setupStores(false);
+    webui.settings = settingsResponse();
+    vi.spyOn(webui, "loadSettings").mockResolvedValue();
+
+    const wrapper = mountWithApp(SettingsView, { pinia });
+    await flushPromises();
+    const text = wrapper.text();
+
+    expect(text).toContain("Runtime settings");
+    expect(text).toContain("DOCKER_BASE");
+    expect(text).toContain("WUD_WEB_PUBLIC_ORIGIN");
+    expect(text).toContain("GITHUB_TOKEN");
+    expect(text).toContain("Configured");
+    expect(text).toContain("Not configured");
+    expect(text).not.toContain("Copy env snippet");
+    expect(text).not.toContain("Copy Compose override");
+    expect(text).not.toContain('DOCKER_BASE="');
+    expect(text).not.toContain("github-token-secret");
+    expect(text).not.toContain("Save settings");
+    expect(text).not.toContain("Delete settings");
+    expect(
+      wrapper.find(
+        'a[href="https://github.com/magrhino/WUD-Updater/blob/main/docs/DEPLOYMENT.md#environment-variables"]',
+      ).exists(),
+    ).toBe(true);
   });
 });

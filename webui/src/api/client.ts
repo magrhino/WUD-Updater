@@ -287,6 +287,27 @@ export interface StatusResponse {
   warnings: string[];
 }
 
+export type SettingsEntrySource = "configured" | "default" | "derived" | "request";
+
+export interface SettingsEntry {
+  name: string;
+  value: string;
+  default_value: string;
+  configured: boolean;
+  source: SettingsEntrySource;
+}
+
+export interface SecretSettingStatus {
+  name: string;
+  configured: boolean;
+}
+
+export interface SettingsResponse {
+  updater: SettingsEntry[];
+  webui: SettingsEntry[];
+  secrets: SecretSettingStatus[];
+}
+
 export interface AuthSessionResponse {
   authenticated: boolean;
   setup_required: boolean;
@@ -544,6 +565,7 @@ const liveWebApi = {
       headers: { "x-wud-csrf-token": csrfToken },
     }),
   status: () => apiRequest<StatusResponse>("/status"),
+  settings: () => apiRequest<SettingsResponse>("/settings"),
   pending: () => apiRequest<PendingResponse>("/pending"),
   cleanupPending: (
     cleanupId: string,

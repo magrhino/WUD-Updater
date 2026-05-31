@@ -63,6 +63,12 @@ export const routes: RouteRecordRaw[] = [
     meta: { requiresAuth: true, title: "Tag exclusions" },
   },
   {
+    path: "/settings",
+    name: "settings",
+    component: () => import("../views/SettingsView.vue"),
+    meta: { requiresAuth: true, title: "Settings" },
+  },
+  {
     path: "/runs/:id",
     name: "run-detail",
     component: () => import("../views/RunDetailView.vue"),

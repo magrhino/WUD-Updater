@@ -17,6 +17,7 @@ import {
   type RunLogResponse,
   type RunSummary,
   type ServicePolicyRecord,
+  type SettingsResponse,
   type ServicePolicyUpdateMode,
   type SnoozeRecord,
   type SnoozeState,
@@ -43,6 +44,7 @@ const TERMINAL_APPLY_JOB_STATUSES = new Set<ApplyJobResponse["status"]>([
 
 export const useWebuiStore = defineStore("webui", () => {
   const status = ref<StatusResponse | null>(null);
+  const settings = ref<SettingsResponse | null>(null);
   const pending = ref<PendingResponse | null>(null);
   const releaseNotes = ref<ReleaseNotesResponse | null>(null);
   const plan = ref<PlanResponse | null>(null);
@@ -73,6 +75,12 @@ export const useWebuiStore = defineStore("webui", () => {
   async function loadStatus(): Promise<void> {
     await loadWithState(async () => {
       status.value = await webApi.status();
+    });
+  }
+
+  async function loadSettings(): Promise<void> {
+    await loadWithState(async () => {
+      settings.value = await webApi.settings();
     });
   }
 
@@ -509,6 +517,7 @@ export const useWebuiStore = defineStore("webui", () => {
 
   return {
     status,
+    settings,
     pending,
     pendingCleanup,
     pendingRemovalPlan,
@@ -532,6 +541,7 @@ export const useWebuiStore = defineStore("webui", () => {
     error,
     warnings,
     loadStatus,
+    loadSettings,
     loadDashboard,
     loadPending,
     loadReleaseNotes,

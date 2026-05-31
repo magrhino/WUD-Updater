@@ -12,6 +12,7 @@ import {
   Moon,
   RefreshCw,
   Settings2,
+  SlidersHorizontal,
   Sun,
   Tags,
 } from "@lucide/vue";
@@ -92,6 +93,7 @@ const navItems = [
   { to: "/policies", label: "Policies", icon: Settings2 },
   { to: "/snoozes", label: "Snoozes", icon: BellOff },
   { to: "/tag-exclusions", label: "Exclusions", icon: Tags },
+  { to: "/settings", label: "Settings", icon: SlidersHorizontal },
 ];
 
 watch(
@@ -117,6 +119,8 @@ async function refreshCurrentView(): Promise<void> {
     await webui.loadSnoozes(webui.snoozeStateFilter);
   } else if (route.name === "tag-exclusions") {
     await webui.loadTagExclusions(webui.tagExclusionStatusFilter);
+  } else if (route.name === "settings") {
+    await webui.loadSettings();
   } else if (route.name === "run-detail") {
     await webui.loadRunDetail(Number(route.params.id));
   } else if (route.name === "run-log") {
@@ -146,6 +150,8 @@ async function handleLogout(): Promise<void> {
               :key="item.to"
               class="nav-item"
               :to="item.to"
+              :title="item.label"
+              :aria-label="item.label"
             >
               <component :is="item.icon" :size="18" />
               <span>{{ item.label }}</span>
