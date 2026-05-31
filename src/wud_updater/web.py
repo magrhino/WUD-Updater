@@ -2003,7 +2003,6 @@ def _due_auto_update_policies(
 ) -> dict[str, AutoUpdatePolicy]:
     tz = ZoneInfo(settings.config.timezone_name)
     local_now = now_utc.astimezone(tz)
-    day = AUTO_UPDATE_DAYS[local_now.weekday()]
     now_text = now_utc.replace(microsecond=0).isoformat()
     rows = conn.execute(
         """
@@ -2017,18 +2016,21 @@ def _due_auto_update_policies(
     policies: dict[str, AutoUpdatePolicy] = {}
     for row in rows:
         days = _auto_update_days_from_row(row)
-        if day not in days:
-            continue
         update_time = str(row["auto_update_time"])
         try:
             parsed_time = datetime_time.fromisoformat(update_time)
         except ValueError:
             continue
-        scheduled_local = datetime.combine(local_now.date(), parsed_time, tzinfo=tz)
-        scheduled_for = scheduled_local.astimezone(timezone.utc)
-        window_end = scheduled_for + timedelta(seconds=AUTO_UPDATE_GRACE_SECONDS)
-        if now_utc < scheduled_for or now_utc >= window_end:
+        occurrence = _auto_update_due_occurrence(
+            local_now=local_now,
+            parsed_time=parsed_time,
+            days=days,
+            now_utc=now_utc,
+            tz=tz,
+        )
+        if occurrence is None:
             continue
+        scheduled_local, scheduled_for, window_end = occurrence
         if started_at >= window_end:
             continue
         service_key = str(row["service_key"])
@@ -2051,6 +2053,30 @@ def _due_auto_update_policies(
             scheduled_for=scheduled_for,
         )
     return policies
+
+
+def _auto_update_due_occurrence(
+    *,
+    local_now: datetime,
+    parsed_time: datetime_time,
+    days: Sequence[str],
+    now_utc: datetime,
+    tz: ZoneInfo,
+) -> tuple[datetime, datetime, datetime] | None:
+    candidate_dates = (
+        local_now.date(),
+        (local_now - timedelta(days=1)).date(),
+    )
+    for local_date in candidate_dates:
+        scheduled_local = datetime.combine(local_date, parsed_time, tzinfo=tz)
+        day = AUTO_UPDATE_DAYS[scheduled_local.weekday()]
+        if day not in days:
+            continue
+        scheduled_for = scheduled_local.astimezone(timezone.utc)
+        window_end = scheduled_for + timedelta(seconds=AUTO_UPDATE_GRACE_SECONDS)
+        if scheduled_for <= now_utc < window_end:
+            return scheduled_local, scheduled_for, window_end
+    return None
 
 
 def _auto_update_selection(

@@ -1945,6 +1945,73 @@ def test_auto_update_scheduler_applies_due_policy_within_grace_window(
     assert wud_file.read_text(encoding="utf-8") == ""
 
 
+def test_auto_update_scheduler_applies_due_policy_after_local_midnight(
+    tmp_path: Path,
+) -> None:
+    fake_env, fake_root = _fake_docker_env(tmp_path)
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+            "WUD_TIMEZONE": "America/Chicago",
+            **fake_env,
+        },
+    )
+    wud_file = tmp_path / "state" / "images.todo"
+    wud_file.write_text("repo/app:latest\n", encoding="utf-8")
+    _make_fake_stack(
+        tmp_path,
+        fake_root,
+        "stack",
+        [("app", "repo/app:latest", "cid-app")],
+    )
+    (fake_root / "images" / "repo_app_latest.id").write_text("old\n", encoding="utf-8")
+    (fake_root / "images" / "repo_app_latest.after_id").write_text(
+        "new\n",
+        encoding="utf-8",
+    )
+    policy = client.post(
+        "/api/v1/state/operations",
+        json={
+            "kind": "upsert_service_policy",
+            "service_key": "stack/app",
+            "update_mode": "live",
+            "auto_update": True,
+            "auto_update_time": "23:58",
+            "auto_update_days": ["sat"],
+        },
+        headers=_csrf_headers(client),
+    )
+
+    now = datetime(2026, 5, 31, 5, 1, tzinfo=timezone.utc)
+    client.app.state.web_auto_update_started_at = now - timedelta(minutes=30)
+    response = web_module._auto_update_tick(
+        client.app,
+        client.app.state.web_settings,
+        now=now,
+    )
+    assert response is not None
+    job = _wait_apply_job(client, response.job_id)
+
+    assert policy.status_code == 200
+    assert job["status"] == "success"
+    assert wud_file.read_text(encoding="utf-8") == ""
+    with connect_db(tmp_path / "state" / "wud.sqlite") as conn:
+        schedule_row = conn.execute(
+            """
+            SELECT *
+            FROM auto_update_schedule_runs
+            """
+        ).fetchone()
+
+    assert schedule_row is not None
+    assert schedule_row["schedule_key"] == (
+        "stack/app|2026-05-30|23:58|America/Chicago"
+    )
+    assert schedule_row["scheduled_for"] == "2026-05-31T04:58:00+00:00"
+
+
 def test_auto_update_scheduler_does_not_apply_late_pending_after_grace_window(
     tmp_path: Path,
 ) -> None:
