@@ -190,6 +190,47 @@ class InitConfigTests(unittest.TestCase):
         self.assertEqual(result.backups[0].read_text(encoding="utf-8"), "existing\n")
         self.assertIn("DOCKER_BASE=", config_file.read_text(encoding="utf-8"))
 
+    def test_existing_later_file_refuses_before_writing_any_file(self) -> None:
+        config_file = self.root / "helper.env"
+        override_file = self.root / "override.yml"
+        override_file.write_text("existing\n", encoding="utf-8")
+        answers = answers_from_namespace(
+            self._args(
+                profile="helper",
+                config_file=str(config_file),
+                compose_override=str(override_file),
+                stack_root=str(self.root / "docker"),
+                no_doctor=True,
+            ),
+            environ=self._env(),
+        )
+
+        with self.assertRaisesRegex(InitConfigError, "Refusing to overwrite"):
+            run_init(answers, repo_root=self.root, environ=self._env())
+
+        self.assertFalse(config_file.exists())
+        self.assertEqual(override_file.read_text(encoding="utf-8"), "existing\n")
+
+    def test_existing_directory_refuses_even_with_backup(self) -> None:
+        config_file = self.root / "env"
+        config_file.mkdir()
+        answers = answers_from_namespace(
+            self._args(
+                profile="host",
+                config_file=str(config_file),
+                stack_root=str(self.root / "docker"),
+                backup_existing=True,
+                no_doctor=True,
+            ),
+            environ=self._env(),
+        )
+
+        with self.assertRaisesRegex(InitConfigError, "non-regular"):
+            run_init(answers, repo_root=self.root, environ=self._env())
+
+        self.assertTrue(config_file.is_dir())
+        self.assertEqual(list(config_file.iterdir()), [])
+
     def test_dry_run_writes_nothing(self) -> None:
         config_file = self.root / "env"
         answers = answers_from_namespace(

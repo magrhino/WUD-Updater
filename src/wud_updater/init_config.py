@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import os
 import shlex
+import stat
 import subprocess
 import sys
 from collections.abc import Callable, Mapping, Sequence
@@ -384,21 +385,41 @@ def _write_generated_files(
 ) -> list[Path]:
     if answers.dry_run:
         return []
+    _preflight_generated_files(files, answers)
     backups: list[Path] = []
     for file in files:
         file.path.parent.mkdir(parents=True, exist_ok=True)
         if file.path.exists():
-            if not answers.backup_existing:
-                raise InitConfigError(
-                    f"Refusing to overwrite existing file: {file.path}. "
-                    "Use --backup-existing to keep a timestamped backup."
-                )
             backup = _backup_path(file.path)
             file.path.replace(backup)
             backups.append(backup)
         file.path.write_text(file.content, encoding="utf-8")
         file.path.chmod(file.mode)
     return backups
+
+
+def _preflight_generated_files(
+    files: Sequence[GeneratedFile],
+    answers: InitAnswers,
+) -> None:
+    seen: set[Path] = set()
+    for file in files:
+        if file.path in seen:
+            raise InitConfigError(f"Generated file targets must be unique: {file.path}")
+        seen.add(file.path)
+
+        try:
+            mode = file.path.lstat().st_mode
+        except FileNotFoundError:
+            continue
+
+        if not stat.S_ISREG(mode):
+            raise InitConfigError(f"Refusing to overwrite non-regular file: {file.path}")
+        if not answers.backup_existing:
+            raise InitConfigError(
+                f"Refusing to overwrite existing file: {file.path}. "
+                "Use --backup-existing to keep a timestamped backup."
+            )
 
 
 def _run_doctor_if_requested(
