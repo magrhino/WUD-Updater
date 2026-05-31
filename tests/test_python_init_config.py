@@ -1,0 +1,338 @@
+from __future__ import annotations
+
+import argparse
+import tempfile
+import unittest
+from contextlib import redirect_stderr, redirect_stdout
+from io import StringIO
+from pathlib import Path
+from unittest import mock
+
+from ruamel.yaml import YAML
+
+from wud_updater.init_config import (
+    InitConfigError,
+    answers_from_namespace,
+    generate_files,
+    run_init,
+    run_init_from_namespace,
+)
+
+
+class InitConfigTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.tmp = tempfile.TemporaryDirectory(prefix="wud-init.")
+        self.root = Path(self.tmp.name)
+
+    def tearDown(self) -> None:
+        self.tmp.cleanup()
+
+    def test_host_config_generation(self) -> None:
+        config_file = self.root / "env"
+        answers = answers_from_namespace(
+            self._args(
+                profile="host",
+                config_file=str(config_file),
+                stack_root=str(self.root / "docker"),
+                log_dir=str(self.root / "logs"),
+                db_path=str(self.root / "logs" / "state.sqlite"),
+                no_doctor=True,
+            ),
+            environ=self._env(),
+        )
+
+        result = run_init(answers, repo_root=self.root, environ=self._env())
+
+        self.assertEqual(result.doctor_status, None)
+        content = config_file.read_text(encoding="utf-8")
+        self.assertIn(f"DOCKER_BASE={self.root / 'docker'}", content)
+        self.assertIn(
+            f"WUD_OUT_FILE={self.root / 'docker' / 'wud' / 'out' / 'images.todo'}",
+            content,
+        )
+        self.assertIn(f"WUD_LOG_DIR={self.root / 'logs'}", content)
+        self.assertIn(f"WUD_DB_PATH={self.root / 'logs' / 'state.sqlite'}", content)
+        self.assertNotIn("WUD_WEB_MUTATIONS_ENABLED", content)
+
+    def test_webui_loopback_env_defaults_to_read_only(self) -> None:
+        config_file = self.root / "webui.env"
+        answers = answers_from_namespace(
+            self._args(
+                profile="webui",
+                config_file=str(config_file),
+                stack_root=str(self.root / "docker"),
+                no_doctor=True,
+            ),
+            environ=self._env(),
+        )
+
+        run_init(answers, repo_root=self.root, environ=self._env())
+
+        content = config_file.read_text(encoding="utf-8")
+        self.assertIn(f"HOST_DOCKER_BASE={self.root / 'docker'}", content)
+        self.assertIn("WEBUI_HTTP_BIND=127.0.0.1", content)
+        self.assertIn("WUD_WEB_PORT=8080", content)
+        self.assertIn("WUD_WEB_MUTATIONS_ENABLED=false", content)
+        self.assertIn("WUD_WEB_PUBLIC_ORIGIN=", content)
+        self.assertIn("WUD_WEB_ALLOWED_HOSTS=", content)
+
+    def test_webui_lan_requires_allowed_hosts_in_non_interactive_mode(self) -> None:
+        with self.assertRaisesRegex(InitConfigError, "--allowed-hosts"):
+            answers_from_namespace(
+                self._args(
+                    profile="webui",
+                    stack_root=str(self.root / "docker"),
+                    web_exposure="lan",
+                ),
+                environ=self._env(),
+            )
+
+    def test_webui_lan_env_can_enable_mutations_explicitly(self) -> None:
+        answers = answers_from_namespace(
+            self._args(
+                profile="webui",
+                stack_root=str(self.root / "docker"),
+                web_exposure="lan",
+                allowed_hosts="wud.lan,192.168.1.20",
+                enable_web_mutations=True,
+                no_doctor=True,
+            ),
+            environ=self._env(),
+        )
+
+        content = generate_files(answers)[0].content
+
+        self.assertIn("WEBUI_HTTP_BIND=0.0.0.0", content)
+        self.assertIn("WUD_WEB_ALLOWED_HOSTS=wud.lan,192.168.1.20", content)
+        self.assertIn("WUD_WEB_MUTATIONS_ENABLED=true", content)
+
+    def test_webui_reverse_proxy_derives_allowed_hosts_from_origin(self) -> None:
+        answers = answers_from_namespace(
+            self._args(
+                profile="webui",
+                stack_root=str(self.root / "docker"),
+                web_exposure="reverse-proxy",
+                public_origin="https://wud.example.test",
+                no_doctor=True,
+            ),
+            environ=self._env(),
+        )
+
+        content = generate_files(answers)[0].content
+
+        self.assertIn("WEBUI_HTTP_BIND=127.0.0.1", content)
+        self.assertIn("WUD_WEB_PUBLIC_ORIGIN=https://wud.example.test", content)
+        self.assertIn(
+            "WUD_WEB_ALLOWED_HOSTS=wud.example.test,127.0.0.1,localhost",
+            content,
+        )
+
+    def test_uid_gid_can_come_from_environment_or_cli_override(self) -> None:
+        env_answers = answers_from_namespace(
+            self._args(
+                profile="helper",
+                stack_root=str(self.root / "docker"),
+                no_doctor=True,
+            ),
+            environ={**self._env(), "OUT_UID": "1234", "OUT_GID": "5678"},
+        )
+        cli_answers = answers_from_namespace(
+            self._args(
+                profile="helper",
+                stack_root=str(self.root / "docker"),
+                uid="2222",
+                gid="3333",
+                no_doctor=True,
+            ),
+            environ={**self._env(), "OUT_UID": "1234", "OUT_GID": "5678"},
+        )
+
+        self.assertIn("OUT_UID=1234", generate_files(env_answers)[0].content)
+        self.assertIn("OUT_GID=5678", generate_files(env_answers)[0].content)
+        self.assertIn("OUT_UID=2222", generate_files(cli_answers)[0].content)
+        self.assertIn("OUT_GID=3333", generate_files(cli_answers)[0].content)
+
+    def test_existing_file_refuses_without_backup(self) -> None:
+        config_file = self.root / "env"
+        config_file.write_text("existing\n", encoding="utf-8")
+        answers = answers_from_namespace(
+            self._args(
+                profile="host",
+                config_file=str(config_file),
+                stack_root=str(self.root / "docker"),
+                no_doctor=True,
+            ),
+            environ=self._env(),
+        )
+
+        with self.assertRaisesRegex(InitConfigError, "Refusing to overwrite"):
+            run_init(answers, repo_root=self.root, environ=self._env())
+
+        self.assertEqual(config_file.read_text(encoding="utf-8"), "existing\n")
+
+    def test_existing_file_can_be_backed_up(self) -> None:
+        config_file = self.root / "env"
+        config_file.write_text("existing\n", encoding="utf-8")
+        answers = answers_from_namespace(
+            self._args(
+                profile="host",
+                config_file=str(config_file),
+                stack_root=str(self.root / "docker"),
+                backup_existing=True,
+                no_doctor=True,
+            ),
+            environ=self._env(),
+        )
+
+        result = run_init(answers, repo_root=self.root, environ=self._env())
+
+        self.assertEqual(len(result.backups), 1)
+        self.assertEqual(result.backups[0].read_text(encoding="utf-8"), "existing\n")
+        self.assertIn("DOCKER_BASE=", config_file.read_text(encoding="utf-8"))
+
+    def test_dry_run_writes_nothing(self) -> None:
+        config_file = self.root / "env"
+        answers = answers_from_namespace(
+            self._args(
+                profile="host",
+                config_file=str(config_file),
+                stack_root=str(self.root / "docker"),
+                dry_run=True,
+            ),
+            environ=self._env(),
+        )
+
+        result = run_init(answers, repo_root=self.root, environ=self._env())
+
+        self.assertEqual(result.backups, ())
+        self.assertFalse(config_file.exists())
+        self.assertIsNone(result.doctor_status)
+
+    def test_non_interactive_requires_profile_and_stack_root(self) -> None:
+        with self.assertRaisesRegex(InitConfigError, "--profile"):
+            answers_from_namespace(self._args(profile=None), environ=self._env())
+
+        with self.assertRaisesRegex(InitConfigError, "--stack-root"):
+            answers_from_namespace(
+                self._args(profile="host", stack_root=None),
+                environ=self._env(),
+            )
+
+    def test_helper_compose_override_yaml_contains_expected_service_fields(self) -> None:
+        override_file = self.root / "override.yml"
+        answers = answers_from_namespace(
+            self._args(
+                profile="helper",
+                compose_override=str(override_file),
+                stack_root=str(self.root / "docker"),
+                no_doctor=True,
+            ),
+            environ=self._env(),
+        )
+
+        run_init(answers, repo_root=self.root, environ=self._env())
+
+        parsed = YAML(typ="safe").load(override_file.read_text(encoding="utf-8"))
+        service = parsed["services"]["wud-updater"]
+        self.assertEqual(service["environment"]["WUD_OUT_FILE"], "/out/images.todo")
+        self.assertEqual(
+            service["environment"]["WUD_DB_PATH"],
+            "/logs/wud-updater.sqlite",
+        )
+        self.assertIn("${WEBUI_LOG_DIR:-./logs}:/logs", service["volumes"])
+        self.assertIn("wud-scripts:/managed-wud", service["volumes"])
+
+    def test_host_doctor_status_becomes_command_status(self) -> None:
+        with mock.patch(
+            "wud_updater.init_config.run_doctor_from_namespace",
+            return_value=5,
+        ):
+            stdout = StringIO()
+            stderr = StringIO()
+            with redirect_stdout(stdout), redirect_stderr(stderr):
+                status = run_init_from_namespace(
+                    self._args(
+                        profile="host",
+                        config_file=str(self.root / "env"),
+                        stack_root=str(self.root / "docker"),
+                    ),
+                    repo_root=self.root,
+                    environ=self._env(),
+                )
+
+        self.assertEqual(status, 5)
+        self.assertIn("Doctor exit status: 5", stdout.getvalue())
+        self.assertEqual(stderr.getvalue(), "")
+
+    def test_container_doctor_runs_only_after_interactive_confirmation(self) -> None:
+        args = self._args(
+            profile="helper",
+            config_file=str(self.root / "helper.env"),
+            no_compose_override=True,
+            stack_root=str(self.root / "docker"),
+            log_dir=str(self.root / "logs"),
+            uid="1000",
+            gid="1000",
+            non_interactive=False,
+        )
+        answers = answers_from_namespace(args, environ=self._env())
+        completed = mock.Mock(returncode=0)
+
+        with (
+            mock.patch("builtins.input", return_value="yes"),
+            mock.patch("wud_updater.init_config.subprocess.run", return_value=completed)
+            as run,
+            redirect_stdout(StringIO()),
+        ):
+            result = run_init(answers, repo_root=self.root, environ=self._env())
+
+        self.assertEqual(result.doctor_status, 0)
+        self.assertEqual(
+            run.call_args.args[0],
+            [
+                "docker",
+                "compose",
+                "--env-file",
+                str(self.root / "helper.env"),
+                "-f",
+                "docs/examples/docker-compose.example.yml",
+                "run",
+                "--rm",
+                "wud-updater",
+                "doctor",
+            ],
+        )
+
+    def _env(self) -> dict[str, str]:
+        return {"HOME": str(self.root), "PATH": ""}
+
+    def _args(self, **overrides: object) -> argparse.Namespace:
+        values = {
+            "profile": "host",
+            "config_file": None,
+            "compose_override": None,
+            "no_compose_override": False,
+            "stack_root": str(self.root / "docker"),
+            "log_dir": None,
+            "db_path": None,
+            "uid": None,
+            "gid": None,
+            "web_exposure": None,
+            "web_bind": None,
+            "web_port": None,
+            "public_origin": None,
+            "allowed_hosts": None,
+            "trusted_proxies": None,
+            "enable_web_mutations": False,
+            "non_interactive": True,
+            "backup_existing": False,
+            "dry_run": False,
+            "no_doctor": False,
+            "no_color": True,
+        }
+        values.update(overrides)
+        return argparse.Namespace(**values)
+
+
+if __name__ == "__main__":
+    unittest.main()
