@@ -154,6 +154,7 @@ def refresh_release_notes(
     client: GitHubClient | None = None,
     now: str | None = None,
     source_resolver: ReleaseNoteSourceResolver | None = None,
+    redact_error: Callable[[str], str] | None = None,
 ) -> list[ReleaseNoteInfo]:
     """Refresh missing or stale release-note metadata and return current rows."""
 
@@ -175,6 +176,9 @@ def refresh_release_notes(
         try:
             info = _fetch_release_note(context, active_client, timestamp)
         except Exception as exc:  # noqa: BLE001 - surfaced as structured metadata.
+            error = str(exc)
+            if redact_error is not None:
+                error = redact_error(error)
             info = ReleaseNoteInfo(
                 line_no=context.line_no,
                 status="error",
@@ -182,7 +186,7 @@ def refresh_release_notes(
                 image_repo=context.image_repo,
                 upstream_repo=context.upstream_repo,
                 refreshed_at=timestamp,
-                error=str(exc),
+                error=error,
             )
         _upsert_cache(conn, context, info, timestamp)
         infos.append(info)
