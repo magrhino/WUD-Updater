@@ -4,6 +4,13 @@ All notable changes to WUD-Updater are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com) and versions follow
 [Semantic Versioning](https://semver.org).
 
+## [0.29.0](https://github.com/magrhino/WUD-Updater/compare/v0.28.0...v0.29.0) (2026-05-31)
+
+
+### Features
+
+* **webui:** add structured doctor results panel ([#142](https://github.com/magrhino/WUD-Updater/issues/142)) ([5404c35](https://github.com/magrhino/WUD-Updater/commit/5404c350693c88d162c334dc8c4336d1394a9f87))
+
 ## [0.28.0](https://github.com/magrhino/WUD-Updater/compare/v0.27.1...v0.28.0) (2026-05-31)
 
 
