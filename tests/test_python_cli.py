@@ -305,6 +305,73 @@ class CliTests(unittest.TestCase):
         self.assertEqual(args.user, "admin")
         self.assertEqual(args.db_path, "/state/wud.sqlite")
 
+    def test_init_subcommand_accepts_configuration_options(self) -> None:
+        with mock.patch("wud_updater.cli._run_init", return_value=23) as run_init:
+            status, stdout, stderr = self._run_main(
+                [
+                    "init",
+                    "--profile",
+                    "webui",
+                    "--config-file",
+                    "/tmp/webui.env",
+                    "--compose-override",
+                    "/tmp/override.yml",
+                    "--stack-root",
+                    "/srv/docker",
+                    "--log-dir",
+                    "/srv/wud/logs",
+                    "--db-path",
+                    "/srv/wud/logs/wud.sqlite",
+                    "--uid",
+                    "1000",
+                    "--gid",
+                    "1000",
+                    "--web-exposure",
+                    "reverse-proxy",
+                    "--web-bind",
+                    "127.0.0.1",
+                    "--web-port",
+                    "8081",
+                    "--public-origin",
+                    "https://wud.example.test",
+                    "--allowed-hosts",
+                    "wud.example.test,localhost",
+                    "--trusted-proxies",
+                    "127.0.0.1/32",
+                    "--enable-web-mutations",
+                    "--non-interactive",
+                    "--backup-existing",
+                    "--dry-run",
+                    "--no-doctor",
+                    "--no-color",
+                ]
+            )
+
+        self.assertEqual(status, 23)
+        self.assertEqual(stdout, "")
+        self.assertEqual(stderr, "")
+        args = run_init.call_args.args[0]
+        self.assertEqual(args.profile, "webui")
+        self.assertEqual(args.config_file, "/tmp/webui.env")
+        self.assertEqual(args.compose_override, "/tmp/override.yml")
+        self.assertEqual(args.stack_root, "/srv/docker")
+        self.assertEqual(args.log_dir, "/srv/wud/logs")
+        self.assertEqual(args.db_path, "/srv/wud/logs/wud.sqlite")
+        self.assertEqual(args.uid, "1000")
+        self.assertEqual(args.gid, "1000")
+        self.assertEqual(args.web_exposure, "reverse-proxy")
+        self.assertEqual(args.web_bind, "127.0.0.1")
+        self.assertEqual(args.web_port, "8081")
+        self.assertEqual(args.public_origin, "https://wud.example.test")
+        self.assertEqual(args.allowed_hosts, "wud.example.test,localhost")
+        self.assertEqual(args.trusted_proxies, "127.0.0.1/32")
+        self.assertTrue(args.enable_web_mutations)
+        self.assertTrue(args.non_interactive)
+        self.assertTrue(args.backup_existing)
+        self.assertTrue(args.dry_run)
+        self.assertTrue(args.no_doctor)
+        self.assertTrue(args.no_color)
+
     def test_web_reset_admin_uses_configured_db_path(self) -> None:
         with tempfile.TemporaryDirectory(prefix="wud-python-cli.") as tmpdir:
             root = Path(tmpdir)

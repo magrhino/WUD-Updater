@@ -95,6 +95,33 @@ def _add_web_options(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--user", metavar="USERNAME")
 
 
+def _add_init_options(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--profile", choices=("host", "webui", "helper", "hardened"))
+    parser.add_argument("--config-file", metavar="PATH")
+    parser.add_argument("--compose-override", metavar="PATH")
+    parser.add_argument("--no-compose-override", action="store_true")
+    parser.add_argument("--stack-root", metavar="PATH")
+    parser.add_argument("--log-dir", metavar="PATH")
+    parser.add_argument("--db-path", metavar="PATH")
+    parser.add_argument("--uid", metavar="ID")
+    parser.add_argument("--gid", metavar="ID")
+    parser.add_argument(
+        "--web-exposure",
+        choices=("loopback", "lan", "reverse-proxy"),
+    )
+    parser.add_argument("--web-bind", metavar="HOST")
+    parser.add_argument("--web-port", metavar="PORT")
+    parser.add_argument("--public-origin", metavar="ORIGIN")
+    parser.add_argument("--allowed-hosts", metavar="HOSTS")
+    parser.add_argument("--trusted-proxies", metavar="CIDRS")
+    parser.add_argument("--enable-web-mutations", action="store_true")
+    parser.add_argument("--non-interactive", action="store_true")
+    parser.add_argument("--backup-existing", action="store_true")
+    parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument("--no-doctor", action="store_true")
+    parser.add_argument("--no-color", action="store_true")
+
+
 def _run_update_from_wud(args: argparse.Namespace) -> int:
     from .updater import UpdaterError, options_from_namespace, run_update_from_wud
 
@@ -130,6 +157,12 @@ def _run_web(args: argparse.Namespace) -> int:
     from .web import run_web_from_namespace
 
     return run_web_from_namespace(args)
+
+
+def _run_init(args: argparse.Namespace) -> int:
+    from .init_config import run_init_from_namespace
+
+    return run_init_from_namespace(args, repo_root=Path(__file__).resolve().parents[2])
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -170,6 +203,13 @@ def build_parser() -> argparse.ArgumentParser:
     )
     _add_web_options(web)
     web.set_defaults(handler=_run_web)
+
+    init = subcommands.add_parser(
+        "init",
+        help="generate first-run configuration files",
+    )
+    _add_init_options(init)
+    init.set_defaults(handler=_run_init)
 
     truenas_status_export = subcommands.add_parser(
         "truenas-status-export",

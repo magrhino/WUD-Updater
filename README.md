@@ -20,6 +20,13 @@ notifications.
 
 ## Quick Start
 
+Generate a local first-run config when you want a guided path instead of
+copying the examples by hand:
+
+```bash
+wud-updater init --profile webui --stack-root /srv/docker --non-interactive
+```
+
 ### Container First
 
 Review `docs/examples/docker-compose.example.yml`, especially the host Docker
@@ -133,6 +140,8 @@ The Python package also exposes the same tools through:
 
 ```bash
 wud-updater doctor
+wud-updater init
+wud-updater init --profile webui --stack-root /srv/docker --non-interactive
 wud-updater updates --dry-run
 wud-updater update-from-wud --dry-run
 wud-updater web

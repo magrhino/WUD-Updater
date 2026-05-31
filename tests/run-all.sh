@@ -131,6 +131,7 @@ run "$python_bin" -m py_compile \
   src/wud_updater/docker_cli.py \
   src/wud_updater/file_ops.py \
   src/wud_updater/images.py \
+  src/wud_updater/init_config.py \
   src/wud_updater/line_specs.py \
   src/wud_updater/locks.py \
   src/wud_updater/release_notes.py \
@@ -147,6 +148,7 @@ run "$python_bin" -m py_compile \
   tests/test_python_db.py \
   tests/test_python_doctor.py \
   tests/test_python_docker_compose.py \
+  tests/test_python_init_config.py \
   tests/test_python_release_notes.py \
   tests/test_python_self_update.py \
   tests/test_python_terminal.py \

@@ -366,6 +366,60 @@ Compose tag rewrites and exclusion labels only support direct service `image:`
 values; image values provided through interpolation or inherited YAML snippets
 are left pending for manual review.
 
+## Init Wizard
+
+`wud-updater init` generates local first-run configuration without creating a
+separate runtime config model. It writes env files and optional Compose
+overrides that use the same variables documented below, refuses to overwrite
+existing files unless `--backup-existing` is set, and keeps
+`WUD_WEB_MUTATIONS_ENABLED=false` unless `--enable-web-mutations` is supplied.
+
+Host command setup:
+
+```bash
+wud-updater init --profile host --stack-root "$HOME/docker" --non-interactive
+updates --dry-run
+```
+
+WebUI container setup:
+
+```bash
+wud-updater init --profile webui --stack-root /srv/docker --non-interactive
+docker compose --env-file "$HOME/.config/wud-updater/webui.env" \
+  -f docs/examples/docker-compose.webui.yml up -d
+```
+
+Helper-only and hardened container setups also generate a Compose override by
+default:
+
+```bash
+wud-updater init --profile helper --stack-root /srv/docker --non-interactive
+docker compose --env-file "$HOME/.config/wud-updater/helper.env" \
+  -f docs/examples/docker-compose.example.yml \
+  -f "$HOME/.config/wud-updater/docker-compose.helper.override.yml" \
+  run --rm wud-updater doctor
+
+wud-updater init --profile hardened --stack-root /srv/docker --non-interactive
+docker compose --env-file "$HOME/.config/wud-updater/hardened.env" \
+  -f docs/examples/docker-compose.hardened.yml \
+  -f "$HOME/.config/wud-updater/docker-compose.hardened.override.yml" \
+  run --rm wud-updater doctor
+```
+
+For LAN or reverse-proxy WebUI exposure, pass the browser-visible host values
+explicitly:
+
+```bash
+wud-updater init --profile webui --stack-root /srv/docker --non-interactive \
+  --web-exposure reverse-proxy \
+  --public-origin https://wud.example.test \
+  --trusted-proxies 127.0.0.1/32
+```
+
+Use `--dry-run` to preview generated paths without writing files. Container
+profiles print the `docker compose ... doctor` command to run manually because
+Compose may create transient containers or volumes.
+
 ## Environment Variables
 
 `updates` reads optional host overrides from the environment or from

@@ -11,6 +11,7 @@ short; detailed setup and behavior notes live here.
 | Public static WebUI demo | [magrhino.github.io/WUD-Updater](https://magrhino.github.io/WUD-Updater/) |
 | Security policy and private vulnerability reporting | [../SECURITY.md](../SECURITY.md) |
 | Deployment reference | [DEPLOYMENT.md](DEPLOYMENT.md) |
+| Generated first-run configuration | [DEPLOYMENT.md#init-wizard](DEPLOYMENT.md#init-wizard) |
 | Development, CI, and release automation | [DEVELOPMENT.md](DEVELOPMENT.md) |
 | Docker Compose example | [examples/docker-compose.example.yml](examples/docker-compose.example.yml) |
 | Long-running WebUI Docker Compose example | [examples/docker-compose.webui.yml](examples/docker-compose.webui.yml) |
