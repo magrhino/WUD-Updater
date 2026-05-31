@@ -6,6 +6,7 @@ import argparse
 import errno
 import os
 import re
+import secrets
 import shutil
 import socket
 import stat
@@ -972,7 +973,7 @@ def _resolve_bool_env(value: str | None, label: str, *, default: bool) -> bool:
 
 
 def _write_probe(directory: Path) -> str:
-    probe = directory / f"{DOCTOR_PROBE_NAME}.{os.getpid()}"
+    probe = directory / f"{DOCTOR_PROBE_NAME}.{os.getpid()}.{secrets.token_hex(8)}"
     try:
         flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
         flags |= getattr(os, "O_NOFOLLOW", 0)

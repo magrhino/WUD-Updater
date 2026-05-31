@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import concurrent.futures
 import os
 import tempfile
 import unittest
@@ -8,7 +9,11 @@ from contextlib import redirect_stdout
 from io import StringIO
 from pathlib import Path
 
-from wud_updater.doctor import doctor_result_from_namespace, run_doctor_from_namespace
+from wud_updater.doctor import (
+    _write_probe,
+    doctor_result_from_namespace,
+    run_doctor_from_namespace,
+)
 
 
 class DoctorTests(unittest.TestCase):
@@ -110,6 +115,12 @@ class DoctorTests(unittest.TestCase):
                     stdout,
                 )
                 self.assertIn("Result: 1 failure(s), 0 warning(s)", stdout)
+
+    def test_permission_probe_names_are_safe_for_concurrent_doctor_runs(self) -> None:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=16) as executor:
+            issues = list(executor.map(lambda _: _write_probe(self.log_dir), range(64)))
+
+        self.assertEqual([issue for issue in issues if issue], [])
 
     def _run_doctor(
         self,
