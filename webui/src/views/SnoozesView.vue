@@ -2,6 +2,16 @@
 import { computed, onMounted, reactive, ref, watch } from "vue";
 import { useBreakpoints } from "@vueuse/core";
 import { Plus, Trash2 } from "@lucide/vue";
+import {
+  NAlert,
+  NButton,
+  NForm,
+  NFormItem,
+  NInput,
+  NModal,
+  NSelect,
+  NTag,
+} from "naive-ui";
 
 import type { SnoozeRecord, SnoozeState } from "../api/client";
 import { useAuthStore } from "../stores/auth";

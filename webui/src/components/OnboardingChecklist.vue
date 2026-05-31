@@ -10,6 +10,7 @@ import {
   XCircle,
   X,
 } from "@lucide/vue";
+import { NButton, NTag } from "naive-ui";
 
 import type { DoctorCheckStatus, OnboardingChecklistItem } from "../api/client";
 import { useWebuiStore } from "../stores/webui";

@@ -241,7 +241,15 @@ async function handleLogout(): Promise<void> {
             </div>
           </header>
 
-          <RouterView />
+          <RouterView v-slot="routeSlot">
+            <Transition name="route-shift" mode="out-in">
+              <component
+                v-if="routeSlot?.Component"
+                :is="routeSlot.Component"
+                :key="route.fullPath"
+              />
+            </Transition>
+          </RouterView>
         </main>
       </div>
     </n-message-provider>

@@ -1,8 +1,26 @@
 <script setup lang="ts">
 import { computed, h, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import { breakpointsTailwind, useBreakpoints } from "@vueuse/core";
-import { AlertTriangle, Check, ExternalLink, Play, Trash2, X } from "@lucide/vue";
-import { NInput, type DataTableColumns, type DataTableRowKey } from "naive-ui";
+import {
+  AlertTriangle,
+  Check,
+  CheckCircle2,
+  ExternalLink,
+  Play,
+  Trash2,
+  X,
+} from "@lucide/vue";
+import {
+  NAlert,
+  NButton,
+  NCheckbox,
+  NDataTable,
+  NInput,
+  NModal,
+  NTag,
+  type DataTableColumns,
+  type DataTableRowKey,
+} from "naive-ui";
 
 import {
   webApi,
@@ -360,6 +378,7 @@ const applyJobAlertType = computed(() => {
 const applyJobActive = computed(
   () => Boolean(webui.applyJob && !terminalJobStatuses.has(webui.applyJob.status)),
 );
+const applyJobSucceeded = computed(() => webui.applyJob?.status === "success");
 const applyJobUpdateCount = computed(
   () =>
     webui.applyJob?.selected_line_numbers.length ||
@@ -1240,14 +1259,22 @@ watch(
       v-if="webui.applyJob"
       ref="applyJobPanelRef"
       class="section-panel apply-job-panel"
-      :class="{ 'apply-job-panel-active': applyJobActive }"
+      :class="{
+        'apply-job-panel-active': applyJobActive,
+        'apply-job-panel-success': applyJobSucceeded,
+      }"
       tabindex="-1"
       aria-labelledby="apply-job-panel-title"
     >
       <div class="section-heading apply-job-heading">
         <div>
           <p class="eyebrow">Apply job</p>
-          <h2 id="apply-job-panel-title">{{ applyJobTitle }}</h2>
+          <div class="apply-job-heading-title">
+            <span v-if="applyJobSucceeded" class="apply-job-complete-mark" aria-hidden="true">
+              <CheckCircle2 :size="18" />
+            </span>
+            <h2 id="apply-job-panel-title">{{ applyJobTitle }}</h2>
+          </div>
           <p class="apply-job-summary" role="status" aria-live="polite">
             {{ applyJobStatusMessage }}
           </p>
@@ -1694,9 +1721,22 @@ watch(
 
         <div
           v-if="!stackGroups.length && !unmatchedItems.length"
-          class="empty-state"
+          class="empty-state clear-queue-state"
+          role="status"
+          aria-live="polite"
         >
-          No pending updates.
+          <span class="clear-queue-mark" aria-hidden="true">
+            <CheckCircle2 :size="24" />
+          </span>
+          <strong>Update queue is clear</strong>
+          <span>{{ pendingSourceLabel }} has no updates waiting for review.</span>
+          <RouterLink
+            v-if="latestRun"
+            class="text-link"
+            :to="{ name: 'run-detail', params: { id: latestRun.id } }"
+          >
+            Review latest run #{{ latestRun.id }}
+          </RouterLink>
         </div>
       </section>
     </template>
@@ -1706,8 +1746,28 @@ watch(
         Stack grouping is unavailable. Showing pending file order.
       </n-alert>
 
+      <div
+        v-if="!webui.pending?.items.length"
+        class="empty-state clear-queue-state"
+        role="status"
+        aria-live="polite"
+      >
+        <span class="clear-queue-mark" aria-hidden="true">
+          <CheckCircle2 :size="24" />
+        </span>
+        <strong>Update queue is clear</strong>
+        <span>{{ pendingSourceLabel }} has no updates waiting for review.</span>
+        <RouterLink
+          v-if="latestRun"
+          class="text-link"
+          :to="{ name: 'run-detail', params: { id: latestRun.id } }"
+        >
+          Review latest run #{{ latestRun.id }}
+        </RouterLink>
+      </div>
+
       <n-data-table
-        v-if="!isMobile"
+        v-else-if="!isMobile"
         :columns="columns"
         :data="webui.pending?.items ?? []"
         :loading="webui.loading"
@@ -1805,7 +1865,6 @@ watch(
             </div>
           </dl>
         </article>
-        <div v-if="!webui.pending?.items.length" class="empty-state">No pending updates.</div>
       </div>
     </template>
 
@@ -2195,13 +2254,22 @@ watch(
         <div class="section-heading apply-job-heading">
           <div>
             <p class="eyebrow">Apply job</p>
-            <h2
-              id="apply-job-modal-title"
-              ref="applyJobModalTitleRef"
-              tabindex="-1"
-            >
-              {{ applyJobTitle }}
-            </h2>
+            <div class="apply-job-heading-title">
+              <span
+                v-if="applyJobSucceeded"
+                class="apply-job-complete-mark"
+                aria-hidden="true"
+              >
+                <CheckCircle2 :size="18" />
+              </span>
+              <h2
+                id="apply-job-modal-title"
+                ref="applyJobModalTitleRef"
+                tabindex="-1"
+              >
+                {{ applyJobTitle }}
+              </h2>
+            </div>
             <p class="apply-job-summary" role="status" aria-live="polite">
               {{ applyJobStatusMessage }}
             </p>

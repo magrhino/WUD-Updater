@@ -2,19 +2,9 @@ import { createApp } from "vue";
 import { createPinia } from "pinia";
 import {
   create,
-  NAlert,
   NButton,
-  NCheckbox,
   NConfigProvider,
-  NDataTable,
-  NForm,
-  NFormItem,
-  NInput,
-  NInputNumber,
   NMessageProvider,
-  NModal,
-  NSelect,
-  NSwitch,
   NTag,
 } from "naive-ui";
 
@@ -25,19 +15,9 @@ import "./styles.css";
 
 const naive = create({
   components: [
-    NAlert,
     NButton,
-    NCheckbox,
     NConfigProvider,
-    NDataTable,
-    NForm,
-    NFormItem,
-    NInput,
-    NInputNumber,
     NMessageProvider,
-    NModal,
-    NSelect,
-    NSwitch,
     NTag,
   ],
 });
