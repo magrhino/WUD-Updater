@@ -571,6 +571,7 @@ def test_onboarding_endpoints_enforce_auth_csrf_and_post(
     missing_csrf = client.post("/api/v1/onboarding/checklist")
     dismiss_missing_csrf = client.post("/api/v1/onboarding/dismiss")
     get_response = client.get("/api/v1/onboarding/checklist")
+    dismiss_get_response = client.get("/api/v1/onboarding/dismiss")
 
     assert auth_response.status_code == 403
     assert auth_response.json()["detail"] == "setup required"
@@ -580,7 +581,10 @@ def test_onboarding_endpoints_enforce_auth_csrf_and_post(
     assert missing_csrf.json()["detail"] == "origin header is required"
     assert dismiss_missing_csrf.status_code == 403
     assert dismiss_missing_csrf.json()["detail"] == "origin header is required"
-    assert get_response.status_code == 404
+    assert get_response.status_code == 405
+    assert get_response.headers["allow"] == "POST"
+    assert dismiss_get_response.status_code == 405
+    assert dismiss_get_response.headers["allow"] == "POST"
 
 
 def test_onboarding_checklist_returns_redacted_setup_items(

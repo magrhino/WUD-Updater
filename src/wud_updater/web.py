@@ -987,10 +987,20 @@ def create_app(
         response_model=OnboardingChecklistResponse,
     )
     router.add_api_route(
+        "/onboarding/checklist",
+        api_post_only_method_not_allowed,
+        methods=["GET"],
+    )
+    router.add_api_route(
         "/onboarding/dismiss",
         api_onboarding_dismiss,
         methods=["POST"],
         response_model=OnboardingDismissResponse,
+    )
+    router.add_api_route(
+        "/onboarding/dismiss",
+        api_post_only_method_not_allowed,
+        methods=["GET"],
     )
     router.add_api_route(
         "/pending",
@@ -1424,6 +1434,10 @@ def api_doctor(request: Request) -> DoctorResponse:
 
 
 def api_doctor_method_not_allowed() -> JSONResponse:
+    return api_post_only_method_not_allowed()
+
+
+def api_post_only_method_not_allowed() -> JSONResponse:
     return JSONResponse(
         {"detail": "method not allowed"},
         status_code=405,
