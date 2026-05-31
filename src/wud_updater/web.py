@@ -123,6 +123,11 @@ RESET_ADMIN_CLAIM_HASH_KEY = "reset_admin_claim_hash"
 RESET_ADMIN_CLAIM_EXPIRES_KEY = "reset_admin_claim_expires_at"
 RESET_ADMIN_CLAIM_USER_ID_KEY = "reset_admin_claim_user_id"
 ONBOARDING_DISMISSED_AT_KEY = "onboarding_checklist_dismissed_at"
+MANAGED_THEME_PREFERENCE_KEY = "theme_preference"
+MANAGED_THEME_PREFERENCE_DB_KEY = "ui.theme_preference"
+MANAGED_ONBOARDING_CHECKLIST_KEY = "onboarding_checklist"
+THEME_PREFERENCE_VALUES = ("system", "light", "dark")
+ONBOARDING_CHECKLIST_VALUES = ("visible", "dismissed")
 DEFAULT_ALLOWED_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
 SENSITIVE_ENV_KEYS = (
     "WUD_WEB_TOKEN",
@@ -139,6 +144,7 @@ PendingGroupingStatus = Literal["ready", "unavailable"]
 DoctorCheckStatus = Literal["PASS", "WARN", "FAIL"]
 ApplyJobStatus = Literal["queued", "running", "success", "failure"]
 SettingsEntrySource = Literal["configured", "default", "derived", "request"]
+ManagedSettingSource = Literal["configured", "default"]
 ServicePolicyUpdateMode = Literal["", "pause", "stop", "live"]
 AutoUpdateDay = Literal["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
 SnoozeState = Literal["active", "expired", "all"]
@@ -375,10 +381,30 @@ class SecretSettingStatus(BaseModel):
     configured: bool
 
 
+class ManagedSettingEntry(BaseModel):
+    key: str
+    value: str
+    default_value: str
+    source: ManagedSettingSource
+    editable: bool
+    allowed_values: list[str] = Field(default_factory=list)
+    restart_required: bool
+
+
+class ManagedSettingsUpdateRequest(BaseModel):
+    values: dict[str, str] = Field(default_factory=dict)
+
+
+class ManagedSettingsUpdateResponse(BaseModel):
+    managed: list[ManagedSettingEntry] = Field(default_factory=list)
+    audit_run_id: int
+
+
 class SettingsResponse(BaseModel):
     updater: list[SettingsEntry] = Field(default_factory=list)
     webui: list[SettingsEntry] = Field(default_factory=list)
     secrets: list[SecretSettingStatus] = Field(default_factory=list)
+    managed: list[ManagedSettingEntry] = Field(default_factory=list)
 
 
 class DoctorSuggestionResponse(BaseModel):
@@ -984,6 +1010,17 @@ def create_app(
         response_model=SettingsResponse,
     )
     router.add_api_route(
+        "/settings/managed",
+        api_update_managed_settings,
+        methods=["POST"],
+        response_model=ManagedSettingsUpdateResponse,
+    )
+    router.add_api_route(
+        "/settings/managed",
+        api_post_only_method_not_allowed,
+        methods=["GET"],
+    )
+    router.add_api_route(
         "/doctor",
         api_doctor,
         methods=["POST"],
@@ -1452,7 +1489,45 @@ def api_settings(request: Request) -> SettingsResponse:
         updater=_updater_settings_entries(settings),
         webui=_webui_settings_entries(settings, request),
         secrets=_secret_settings(settings),
+        managed=_managed_settings_entries(settings),
     )
+
+
+def api_update_managed_settings(
+    payload: ManagedSettingsUpdateRequest,
+    request: Request,
+) -> ManagedSettingsUpdateResponse:
+    settings = _settings(request)
+    if not settings.mutations_enabled:
+        raise HTTPException(status_code=403, detail="mutations are disabled")
+
+    updates = _validated_managed_setting_updates(payload)
+    try:
+        with connect_db(settings.config.db_path) as conn:
+            init_db(conn)
+            with conn:
+                before = _managed_settings_entries_from_conn(conn)
+                _apply_managed_setting_updates(conn, updates)
+                after = _managed_settings_entries_from_conn(conn)
+                audit_run_id = _insert_managed_settings_audit(
+                    conn,
+                    settings,
+                    request,
+                    updated_keys=tuple(updates),
+                    before=_managed_settings_audit_values(before),
+                    after=_managed_settings_audit_values(after),
+                )
+    except (OSError, sqlite3.Error, DatabaseError) as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=_safe_exception_detail(
+                settings,
+                "could not update managed settings",
+                exc,
+            ),
+        ) from exc
+
+    return ManagedSettingsUpdateResponse(managed=after, audit_run_id=audit_run_id)
 
 
 def api_doctor(request: Request) -> DoctorResponse:
@@ -5058,6 +5133,75 @@ def _insert_container_restart_audit(
     return run_id
 
 
+def _insert_managed_settings_audit(
+    conn: sqlite3.Connection,
+    settings: WebSettings,
+    request: Request,
+    *,
+    updated_keys: Sequence[str],
+    before: dict[str, str],
+    after: dict[str, str],
+) -> int:
+    now = utc_timestamp()
+    target = {"keys": sorted(updated_keys)}
+    metadata = {
+        "source": "webui",
+        "operation": "update_managed_settings",
+        "actor_type": _state_actor_type(settings, request),
+        "resource_type": "managed_settings",
+        "resource_id": "webui_preferences",
+        "target": target,
+    }
+    cursor = conn.execute(
+        """
+        INSERT INTO update_runs (
+            started_at,
+            finished_at,
+            status,
+            dry_run,
+            mode,
+            wud_file,
+            log_file,
+            metadata_json
+        )
+        VALUES (?, ?, 'success', 0, 'web-settings', ?, '', ?)
+        """,
+        (
+            now,
+            now,
+            str(settings.config.wud_out_file),
+            _json_object(metadata),
+        ),
+    )
+    run_id = int(cursor.lastrowid)
+    event_metadata = {
+        **metadata,
+        "before": before,
+        "after": after,
+    }
+    conn.execute(
+        """
+        INSERT INTO update_events (
+            run_id,
+            created_at,
+            service_name,
+            stack_name,
+            image,
+            target_image,
+            status,
+            metadata_json
+        )
+        VALUES (?, ?, 'settings', 'webui', 'managed-settings', 'webui-preferences', 'success', ?)
+        """,
+        (
+            run_id,
+            now,
+            _json_object(event_metadata),
+        ),
+    )
+    return run_id
+
+
 def _safe_update_container_restart_audit(
     settings: WebSettings,
     run_id: int,
@@ -6474,6 +6618,126 @@ def _resolve_static_dir(configured: str | Path | None) -> Path | None:
         if (candidate / "index.html").is_file():
             return candidate
     return None
+
+
+def _managed_settings_entries(settings: WebSettings) -> list[ManagedSettingEntry]:
+    try:
+        with closing(_connect_readonly_db(settings)) as conn:
+            values = _managed_settings_db_values(conn)
+    except ReadOnlyDatabaseMissing:
+        values = {}
+    except (OSError, sqlite3.Error, DatabaseError) as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=_safe_exception_detail(
+                settings,
+                "could not read managed settings",
+                exc,
+            ),
+        ) from exc
+    return _managed_settings_entries_from_values(values)
+
+
+def _managed_settings_entries_from_conn(
+    conn: sqlite3.Connection,
+) -> list[ManagedSettingEntry]:
+    return _managed_settings_entries_from_values(_managed_settings_db_values(conn))
+
+
+def _managed_settings_db_values(conn: sqlite3.Connection) -> dict[str, str]:
+    rows = conn.execute(
+        """
+        SELECT key, value
+        FROM web_settings
+        WHERE key IN (?, ?)
+        """,
+        (MANAGED_THEME_PREFERENCE_DB_KEY, ONBOARDING_DISMISSED_AT_KEY),
+    ).fetchall()
+    return {str(row["key"]): str(row["value"]) for row in rows}
+
+
+def _managed_settings_entries_from_values(
+    values: Mapping[str, str],
+) -> list[ManagedSettingEntry]:
+    theme_value = values.get(MANAGED_THEME_PREFERENCE_DB_KEY, "")
+    theme_configured = theme_value in THEME_PREFERENCE_VALUES
+    onboarding_dismissed_at = values.get(ONBOARDING_DISMISSED_AT_KEY, "")
+    return [
+        ManagedSettingEntry(
+            key=MANAGED_THEME_PREFERENCE_KEY,
+            value=theme_value if theme_configured else "system",
+            default_value="system",
+            source="configured" if theme_configured else "default",
+            editable=True,
+            allowed_values=list(THEME_PREFERENCE_VALUES),
+            restart_required=False,
+        ),
+        ManagedSettingEntry(
+            key=MANAGED_ONBOARDING_CHECKLIST_KEY,
+            value="dismissed" if onboarding_dismissed_at else "visible",
+            default_value="visible",
+            source="configured" if onboarding_dismissed_at else "default",
+            editable=True,
+            allowed_values=list(ONBOARDING_CHECKLIST_VALUES),
+            restart_required=False,
+        ),
+    ]
+
+
+def _validated_managed_setting_updates(
+    payload: ManagedSettingsUpdateRequest,
+) -> dict[str, str]:
+    if not payload.values:
+        raise HTTPException(
+            status_code=422,
+            detail="at least one managed setting is required",
+        )
+
+    allowed_values = {
+        MANAGED_THEME_PREFERENCE_KEY: THEME_PREFERENCE_VALUES,
+        MANAGED_ONBOARDING_CHECKLIST_KEY: ONBOARDING_CHECKLIST_VALUES,
+    }
+    updates: dict[str, str] = {}
+    for key, raw_value in payload.values.items():
+        if key not in allowed_values:
+            raise HTTPException(
+                status_code=422,
+                detail=f"managed setting is not editable: {key}",
+            )
+        value = raw_value.strip()
+        if value not in allowed_values[key]:
+            options = ", ".join(allowed_values[key])
+            raise HTTPException(
+                status_code=422,
+                detail=f"{key} must be one of: {options}",
+            )
+        updates[key] = value
+    return updates
+
+
+def _apply_managed_setting_updates(
+    conn: sqlite3.Connection,
+    updates: Mapping[str, str],
+) -> None:
+    for key, value in updates.items():
+        if key == MANAGED_THEME_PREFERENCE_KEY:
+            _set_web_setting(conn, MANAGED_THEME_PREFERENCE_DB_KEY, value)
+        elif key == MANAGED_ONBOARDING_CHECKLIST_KEY:
+            if value == "dismissed":
+                current = _web_setting(conn, ONBOARDING_DISMISSED_AT_KEY)
+                _set_web_setting(
+                    conn,
+                    ONBOARDING_DISMISSED_AT_KEY,
+                    current or utc_timestamp(),
+                )
+            else:
+                _delete_web_setting(conn, ONBOARDING_DISMISSED_AT_KEY)
+
+
+def _managed_settings_audit_values(
+    entries: Sequence[ManagedSettingEntry],
+) -> dict[str, str]:
+    return {entry.key: entry.value for entry in entries}
 
 
 def _updater_settings_entries(settings: WebSettings) -> list[SettingsEntry]:

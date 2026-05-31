@@ -1,14 +1,20 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue";
+import { computed, onMounted, ref, watch } from "vue";
 import {
   ExternalLink,
   KeyRound,
   RefreshCw,
+  RotateCcw,
+  Save,
   ShieldCheck,
   SlidersHorizontal,
 } from "@lucide/vue";
 
-import type { SecretSettingStatus, SettingsEntry } from "../api/client";
+import type {
+  ManagedSettingEntry,
+  SecretSettingStatus,
+  SettingsEntry,
+} from "../api/client";
 import OnboardingChecklist from "../components/OnboardingChecklist.vue";
 import { useAuthStore } from "../stores/auth";
 import { useWebuiStore } from "../stores/webui";
@@ -29,14 +35,28 @@ const BEHAVIOR_ENTRY_NAMES = new Set([
   "WUD_LOCK_TIMEOUT",
   "WUD_TIMEZONE",
 ]);
+const THEME_PREFERENCE_LABELS: Record<string, string> = {
+  system: "System theme",
+  light: "Light theme",
+  dark: "Dark theme",
+};
+const ONBOARDING_CHECKLIST_LABELS: Record<string, string> = {
+  visible: "Visible",
+  dismissed: "Dismissed",
+};
 
 const settings = computed(() => webui.settings);
 const updaterEntries = computed(() => settings.value?.updater ?? []);
 const webuiEntries = computed(() => settings.value?.webui ?? []);
 const secrets = computed(() => settings.value?.secrets ?? []);
+const managedEntries = computed(() => settings.value?.managed ?? []);
 const restartDialogVisible = ref(false);
 const restartMessage = ref("");
 const restartError = ref("");
+const themePreferenceValue = ref("system");
+const onboardingChecklistValue = ref("visible");
+const preferencesMessage = ref("");
+const preferencesError = ref("");
 const allEntries = computed(() => [...updaterEntries.value, ...webuiEntries.value]);
 const pathEntries = computed(() =>
   updaterEntries.value.filter((entry) => PATH_ENTRY_NAMES.has(entry.name)),
@@ -65,6 +85,12 @@ const missingSecretCount = computed(
 const restartContainerEntry = computed(() =>
   webuiEntries.value.find((entry) => entry.name === "WUD_WEB_RESTART_CONTAINER"),
 );
+const themePreferenceEntry = computed(() =>
+  managedEntries.value.find((entry) => entry.key === "theme_preference"),
+);
+const onboardingChecklistEntry = computed(() =>
+  managedEntries.value.find((entry) => entry.key === "onboarding_checklist"),
+);
 const restartContainerTarget = computed(() => restartContainerEntry.value?.value ?? "");
 const mutationsEnabled = computed(() => auth.session?.mutations_enabled === true);
 const restartDisabledReason = computed(() => {
@@ -78,6 +104,30 @@ const restartDisabledReason = computed(() => {
 });
 const restartButtonDisabled = computed(
   () => webui.loading || restartDisabledReason.value !== "",
+);
+const preferencesDisabledReason = computed(() => {
+  if (!mutationsEnabled.value) {
+    return "Read-only mode is active. Set WUD_WEB_MUTATIONS_ENABLED=true on the server to save managed WebUI preferences.";
+  }
+  return "";
+});
+const preferenceControlsDisabled = computed(
+  () => webui.loading || preferencesDisabledReason.value !== "",
+);
+const preferencesDirty = computed(
+  () =>
+    themePreferenceValue.value !== (themePreferenceEntry.value?.value ?? "system") ||
+    onboardingChecklistValue.value !==
+      (onboardingChecklistEntry.value?.value ?? "visible"),
+);
+const preferenceSaveDisabled = computed(
+  () => preferenceControlsDisabled.value || !preferencesDirty.value,
+);
+const themePreferenceOptions = computed(() =>
+  managedOptions(themePreferenceEntry.value, THEME_PREFERENCE_LABELS),
+);
+const onboardingChecklistOptions = computed(() =>
+  managedOptions(onboardingChecklistEntry.value, ONBOARDING_CHECKLIST_LABELS),
 );
 
 function displayValue(value: string): string {
@@ -112,6 +162,22 @@ function secretLabel(secret: SecretSettingStatus): string {
   return secret.configured ? "Configured" : "Not configured";
 }
 
+function managedOptions(
+  entry: ManagedSettingEntry | undefined,
+  labels: Record<string, string>,
+): Array<{ label: string; value: string }> {
+  return (entry?.allowed_values ?? []).map((value) => ({
+    label: labels[value] ?? value,
+    value,
+  }));
+}
+
+function hydratePreferenceForm(): void {
+  themePreferenceValue.value = themePreferenceEntry.value?.value ?? "system";
+  onboardingChecklistValue.value =
+    onboardingChecklistEntry.value?.value ?? "visible";
+}
+
 function openRestartDialog(): void {
   restartMessage.value = "";
   restartError.value = "";
@@ -129,6 +195,41 @@ async function confirmRestartContainer(): Promise<void> {
     restartError.value = exc instanceof Error ? exc.message : "Container restart failed";
   }
 }
+
+function resetPreferenceForm(): void {
+  hydratePreferenceForm();
+  preferencesMessage.value = "";
+  preferencesError.value = "";
+}
+
+async function saveManagedPreferences(): Promise<void> {
+  preferencesMessage.value = "";
+  preferencesError.value = "";
+  const values: Record<string, string> = {};
+  if (themePreferenceValue.value !== (themePreferenceEntry.value?.value ?? "system")) {
+    values.theme_preference = themePreferenceValue.value;
+  }
+  if (
+    onboardingChecklistValue.value !==
+    (onboardingChecklistEntry.value?.value ?? "visible")
+  ) {
+    values.onboarding_checklist = onboardingChecklistValue.value;
+  }
+  if (!Object.keys(values).length) {
+    return;
+  }
+
+  try {
+    const response = await webui.updateManagedSettings(values);
+    preferencesMessage.value = `Preferences saved. Audit run #${response.audit_run_id}.`;
+    hydratePreferenceForm();
+  } catch (exc) {
+    preferencesError.value =
+      exc instanceof Error ? exc.message : "Preferences could not be saved";
+  }
+}
+
+watch(managedEntries, hydratePreferenceForm, { immediate: true });
 
 onMounted(() => {
   void webui.loadSettings();
@@ -198,6 +299,105 @@ onMounted(() => {
     </section>
 
     <OnboardingChecklist />
+
+    <section v-if="settings" class="section-panel">
+      <div class="section-heading">
+        <div class="settings-heading-main">
+          <p class="eyebrow">Managed preferences</p>
+          <h2>WebUI preferences</h2>
+          <p class="settings-section-copy">
+            Browser-facing preferences persisted in SQLite. Runtime configuration,
+            paths, and secrets stay controlled by server config.
+          </p>
+        </div>
+        <Save :size="20" class="section-heading-icon" />
+      </div>
+      <n-alert
+        v-if="preferencesMessage"
+        type="success"
+        :show-icon="false"
+        class="settings-action-alert"
+      >
+        {{ preferencesMessage }}
+      </n-alert>
+      <n-alert
+        v-if="preferencesError"
+        type="error"
+        :show-icon="false"
+        class="settings-action-alert"
+      >
+        {{ preferencesError }}
+      </n-alert>
+      <div class="settings-preference-list">
+        <div class="settings-preference-row">
+          <div>
+            <strong>Theme preference</strong>
+            <span>
+              Source:
+              {{ themePreferenceEntry?.source === "configured" ? "Configured" : "Default" }}
+            </span>
+          </div>
+          <n-select
+            v-model:value="themePreferenceValue"
+            :options="themePreferenceOptions"
+            :disabled="preferenceControlsDisabled"
+            aria-label="Theme preference"
+          />
+        </div>
+        <div class="settings-preference-row">
+          <div>
+            <strong>Onboarding checklist</strong>
+            <span>
+              Source:
+              {{
+                onboardingChecklistEntry?.source === "configured"
+                  ? "Configured"
+                  : "Default"
+              }}
+            </span>
+          </div>
+          <n-select
+            v-model:value="onboardingChecklistValue"
+            :options="onboardingChecklistOptions"
+            :disabled="preferenceControlsDisabled"
+            aria-label="Onboarding checklist"
+          />
+        </div>
+      </div>
+      <div class="settings-action-row settings-preference-actions">
+        <div>
+          <strong>No restart required</strong>
+          <span>Managed preferences do not alter updater runtime behavior.</span>
+        </div>
+        <div class="settings-button-group">
+          <n-button :disabled="webui.loading || !preferencesDirty" @click="resetPreferenceForm">
+            <template #icon>
+              <RotateCcw :size="16" />
+            </template>
+            Reset
+          </n-button>
+          <n-button
+            type="primary"
+            :disabled="preferenceSaveDisabled"
+            :loading="webui.loading"
+            @click="saveManagedPreferences"
+          >
+            <template #icon>
+              <Save :size="16" />
+            </template>
+            Save preferences
+          </n-button>
+        </div>
+      </div>
+      <n-alert
+        v-if="preferencesDisabledReason"
+        type="info"
+        :show-icon="false"
+        class="settings-action-alert"
+      >
+        {{ preferencesDisabledReason }}
+      </n-alert>
+    </section>
 
     <section class="section-panel">
       <div class="section-heading">

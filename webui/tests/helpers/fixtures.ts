@@ -183,6 +183,26 @@ export function settingsResponse(
       { name: "GITHUB_TOKEN", configured: true },
       { name: "DISCORD_RELEASES_WEBHOOK", configured: false },
     ],
+    managed: [
+      {
+        key: "theme_preference",
+        value: "system",
+        default_value: "system",
+        source: "default",
+        editable: true,
+        allowed_values: ["system", "light", "dark"],
+        restart_required: false,
+      },
+      {
+        key: "onboarding_checklist",
+        value: "visible",
+        default_value: "visible",
+        source: "default",
+        editable: true,
+        allowed_values: ["visible", "dismissed"],
+        restart_required: false,
+      },
+    ],
     ...overrides,
   };
 }

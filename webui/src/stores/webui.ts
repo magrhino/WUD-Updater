@@ -8,6 +8,7 @@ import {
   type ApplyJobLogResponse,
   type ApplyJobResponse,
   type DoctorResponse,
+  type ManagedSettingsUpdateResponse,
   type OnboardingChecklistResponse,
   type OnboardingDismissResponse,
   type PendingCleanupLine,
@@ -88,6 +89,37 @@ export const useWebuiStore = defineStore("webui", () => {
     await loadWithState(async () => {
       settings.value = await webApi.settings();
     });
+  }
+
+  async function updateManagedSettings(
+    values: Record<string, string>,
+  ): Promise<ManagedSettingsUpdateResponse> {
+    const auth = useAuthStore();
+    let response: ManagedSettingsUpdateResponse | null = null;
+    const reloadOnboarding = Object.prototype.hasOwnProperty.call(
+      values,
+      "onboarding_checklist",
+    );
+    await loadWithState(async () => {
+      response = await webApi.updateManagedSettings(values, await auth.ensureCsrf());
+      if (settings.value) {
+        settings.value = {
+          ...settings.value,
+          managed: response.managed,
+        };
+      }
+    });
+    if (response === null) {
+      throw new Error("Managed settings update did not return a response");
+    }
+    if (reloadOnboarding) {
+      try {
+        onboarding.value = await webApi.onboardingChecklist(await auth.ensureCsrf());
+      } catch {
+        // The preference save succeeded; the checklist can refresh on the next view load.
+      }
+    }
+    return response;
   }
 
   async function loadDoctor(): Promise<void> {
@@ -596,6 +628,7 @@ export const useWebuiStore = defineStore("webui", () => {
     warnings,
     loadStatus,
     loadSettings,
+    updateManagedSettings,
     loadDoctor,
     loadOnboarding,
     dismissOnboarding,

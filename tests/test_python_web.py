@@ -470,7 +470,9 @@ def test_settings_reports_effective_non_secret_configuration(
     serialized = json.dumps(body)
 
     assert response.status_code == 200
-    assert set(body) == {"updater", "webui", "secrets"}
+    managed = {entry["key"]: entry for entry in body["managed"]}
+
+    assert set(body) == {"updater", "webui", "secrets", "managed"}
     assert updater["DOCKER_BASE"]["value"] == str(tmp_path / "docker-root")
     assert updater["DOCKER_BASE"]["configured"] is True
     assert updater["DOCKER_BASE"]["source"] == "configured"
@@ -499,8 +501,191 @@ def test_settings_reports_effective_non_secret_configuration(
     assert secrets["DISCORD_RELEASES_WEBHOOK"]["configured"] is False
     assert secrets["DISCORD_WEBHOOK"]["configured"] is True
     assert secrets["ADMIN_WEBHOOK"]["configured"] is True
+    assert managed["theme_preference"] == {
+        "key": "theme_preference",
+        "value": "system",
+        "default_value": "system",
+        "source": "default",
+        "editable": True,
+        "allowed_values": ["system", "light", "dark"],
+        "restart_required": False,
+    }
+    assert managed["onboarding_checklist"] == {
+        "key": "onboarding_checklist",
+        "value": "visible",
+        "default_value": "visible",
+        "source": "default",
+        "editable": True,
+        "allowed_values": ["visible", "dismissed"],
+        "restart_required": False,
+    }
     for value in secret_values.values():
         assert value not in serialized
+
+
+def test_managed_settings_endpoint_enforces_auth_csrf_read_only_and_post(
+    tmp_path: Path,
+) -> None:
+    payload = {"values": {"theme_preference": "dark"}}
+    unauthenticated = _client(tmp_path, {"WUD_WEB_MUTATIONS_ENABLED": "true"})
+    read_only = _client(tmp_path, {"WUD_WEB_DEV_NO_AUTH": "true"})
+    mutating = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+        },
+    )
+
+    unauthenticated_response = unauthenticated.post(
+        "/api/v1/settings/managed",
+        json=payload,
+        headers=_csrf_headers(unauthenticated),
+    )
+    missing_csrf = mutating.post("/api/v1/settings/managed", json=payload)
+    read_only_response = read_only.post(
+        "/api/v1/settings/managed",
+        json=payload,
+        headers=_csrf_headers(read_only),
+    )
+    get_response = mutating.get("/api/v1/settings/managed")
+
+    assert unauthenticated_response.status_code == 403
+    assert unauthenticated_response.json()["detail"] == "setup required"
+    assert missing_csrf.status_code == 403
+    assert missing_csrf.json()["detail"] == "origin header is required"
+    assert read_only_response.status_code == 403
+    assert read_only_response.json()["detail"] == "mutations are disabled"
+    assert get_response.status_code == 405
+
+
+def test_managed_settings_rejects_uneditable_or_invalid_values_without_partial_write(
+    tmp_path: Path,
+) -> None:
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+        },
+    )
+    headers = _csrf_headers(client)
+
+    invalid_key = client.post(
+        "/api/v1/settings/managed",
+        json={"values": {"theme_preference": "dark", "WUD_WEB_TOKEN": "secret"}},
+        headers=headers,
+    )
+    path_key = client.post(
+        "/api/v1/settings/managed",
+        json={"values": {"DOCKER_BASE": "/tmp/docker"}},
+        headers=headers,
+    )
+    command_value = client.post(
+        "/api/v1/settings/managed",
+        json={"values": {"theme_preference": "dark; rm -rf /"}},
+        headers=headers,
+    )
+    empty_payload = client.post(
+        "/api/v1/settings/managed",
+        json={"values": {}},
+        headers=headers,
+    )
+    settings_response = client.get("/api/v1/settings")
+    managed = {entry["key"]: entry for entry in settings_response.json()["managed"]}
+
+    assert invalid_key.status_code == 422
+    assert invalid_key.json()["detail"] == "managed setting is not editable: WUD_WEB_TOKEN"
+    assert path_key.status_code == 422
+    assert path_key.json()["detail"] == "managed setting is not editable: DOCKER_BASE"
+    assert command_value.status_code == 422
+    assert command_value.json()["detail"] == (
+        "theme_preference must be one of: system, light, dark"
+    )
+    assert empty_payload.status_code == 422
+    assert empty_payload.json()["detail"] == "at least one managed setting is required"
+    assert managed["theme_preference"]["value"] == "system"
+    assert managed["theme_preference"]["source"] == "default"
+
+
+def test_managed_settings_persist_and_write_audit_records(tmp_path: Path) -> None:
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+        },
+    )
+    headers = _csrf_headers(client)
+
+    response = client.post(
+        "/api/v1/settings/managed",
+        json={
+            "values": {
+                "theme_preference": "dark",
+                "onboarding_checklist": "dismissed",
+            }
+        },
+        headers=headers,
+    )
+    body = response.json()
+    managed = {entry["key"]: entry for entry in body["managed"]}
+
+    assert response.status_code == 200
+    assert body["audit_run_id"]
+    assert managed["theme_preference"]["value"] == "dark"
+    assert managed["theme_preference"]["source"] == "configured"
+    assert managed["onboarding_checklist"]["value"] == "dismissed"
+    assert managed["onboarding_checklist"]["source"] == "configured"
+
+    db_path = tmp_path / "state" / "wud.sqlite"
+    with connect_db(db_path) as conn:
+        theme = conn.execute(
+            "SELECT value FROM web_settings WHERE key = 'ui.theme_preference'"
+        ).fetchone()
+        onboarding = conn.execute(
+            "SELECT value FROM web_settings WHERE key = 'onboarding_checklist_dismissed_at'"
+        ).fetchone()
+        run = conn.execute(
+            "SELECT * FROM update_runs WHERE id = ?",
+            (body["audit_run_id"],),
+        ).fetchone()
+        event = conn.execute(
+            "SELECT * FROM update_events WHERE run_id = ?",
+            (body["audit_run_id"],),
+        ).fetchone()
+
+    run_metadata = json.loads(run["metadata_json"])
+    event_metadata = json.loads(event["metadata_json"])
+    assert theme["value"] == "dark"
+    assert onboarding["value"]
+    assert run["mode"] == "web-settings"
+    assert run_metadata["operation"] == "update_managed_settings"
+    assert run_metadata["target"] == {
+        "keys": ["onboarding_checklist", "theme_preference"]
+    }
+    assert event_metadata["before"] == {
+        "theme_preference": "system",
+        "onboarding_checklist": "visible",
+    }
+    assert event_metadata["after"] == {
+        "theme_preference": "dark",
+        "onboarding_checklist": "dismissed",
+    }
+
+    reset = client.post(
+        "/api/v1/settings/managed",
+        json={"values": {"onboarding_checklist": "visible"}},
+        headers=headers,
+    )
+    reset_managed = {entry["key"]: entry for entry in reset.json()["managed"]}
+    assert reset.status_code == 200
+    assert reset_managed["onboarding_checklist"]["value"] == "visible"
+    with connect_db(db_path) as conn:
+        onboarding_row = conn.execute(
+            "SELECT value FROM web_settings WHERE key = 'onboarding_checklist_dismissed_at'"
+        ).fetchone()
+    assert onboarding_row is None
 
 
 def test_doctor_endpoint_enforces_auth_csrf_and_post(

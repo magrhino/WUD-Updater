@@ -201,6 +201,16 @@ After sign-in, open the WebUI Settings page to review the effective non-secret
 configuration, safety status, secret presence, and first-run checklist for the
 running process.
 
+The Settings page separates runtime configuration from managed UI preferences.
+Runtime values come from command-line overrides for the running command, then
+process or generated environment config, then code defaults. SQLite-backed
+managed preferences are limited to allowlisted non-secret WebUI preferences,
+such as theme preference and onboarding checklist state, and do not override
+CLI arguments, environment variables, paths, secrets, Docker commands, or
+updater behavior. Browser saves for managed preferences still require
+authentication, CSRF/Origin validation, audit records, and
+`WUD_WEB_MUTATIONS_ENABLED=true`.
+
 For containerized TrueNAS status checks, use
 [`docs/examples/docker-compose.truenas.yml`](examples/docker-compose.truenas.yml).
 That variant builds the helper image with the official TrueNAS API client so a

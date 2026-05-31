@@ -302,10 +302,28 @@ export interface SecretSettingStatus {
   configured: boolean;
 }
 
+export type ManagedSettingSource = "configured" | "default";
+
+export interface ManagedSettingEntry {
+  key: string;
+  value: string;
+  default_value: string;
+  source: ManagedSettingSource;
+  editable: boolean;
+  allowed_values: string[];
+  restart_required: boolean;
+}
+
 export interface SettingsResponse {
   updater: SettingsEntry[];
   webui: SettingsEntry[];
   secrets: SecretSettingStatus[];
+  managed: ManagedSettingEntry[];
+}
+
+export interface ManagedSettingsUpdateResponse {
+  managed: ManagedSettingEntry[];
+  audit_run_id: number;
 }
 
 export type DoctorCheckStatus = "PASS" | "WARN" | "FAIL";
@@ -625,6 +643,12 @@ const liveWebApi = {
     }),
   status: () => apiRequest<StatusResponse>("/status"),
   settings: () => apiRequest<SettingsResponse>("/settings"),
+  updateManagedSettings: (values: Record<string, string>, csrfToken: string) =>
+    apiRequest<ManagedSettingsUpdateResponse>("/settings/managed", {
+      method: "POST",
+      headers: { "x-wud-csrf-token": csrfToken },
+      body: JSON.stringify({ values }),
+    }),
   doctor: (csrfToken: string) =>
     apiRequest<DoctorResponse>("/doctor", {
       method: "POST",

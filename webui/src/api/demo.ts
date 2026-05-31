@@ -5,6 +5,7 @@ import type {
   ContainerRestartResponse,
   CsrfResponse,
   DoctorResponse,
+  ManagedSettingsUpdateResponse,
   OnboardingChecklistResponse,
   OnboardingDismissResponse,
   PendingGroupedItem,
@@ -422,6 +423,9 @@ class DemoApiState {
   tagExclusions = clone(INITIAL_TAG_EXCLUSIONS);
   runs = clone(INITIAL_RUNS);
   jobs = new Map<string, DemoJobRecord>();
+  themePreference = "system";
+  themePreferenceConfigured = false;
+  onboardingDismissedAt = "";
   nextJob = 1;
   nextRun = 4;
   nextAudit = 100;
@@ -535,6 +539,26 @@ class DemoApiState {
         { name: "DISCORD_WEBHOOK", configured: false },
         { name: "ADMIN_WEBHOOK", configured: false },
       ],
+      managed: [
+        {
+          key: "theme_preference",
+          value: this.themePreference,
+          default_value: "system",
+          source: this.themePreferenceConfigured ? "configured" : "default",
+          editable: true,
+          allowed_values: ["system", "light", "dark"],
+          restart_required: false,
+        },
+        {
+          key: "onboarding_checklist",
+          value: this.onboardingDismissedAt ? "dismissed" : "visible",
+          default_value: "visible",
+          source: this.onboardingDismissedAt ? "configured" : "default",
+          editable: true,
+          allowed_values: ["visible", "dismissed"],
+          restart_required: false,
+        },
+      ],
     };
   }
 
@@ -597,6 +621,15 @@ class DemoApiState {
   }
 
   onboardingChecklist(): OnboardingChecklistResponse {
+    if (this.onboardingDismissedAt) {
+      return {
+        dismissed: true,
+        dismissed_at: this.onboardingDismissedAt,
+        all_passed: false,
+        visible: false,
+        items: [],
+      };
+    }
     return {
       dismissed: false,
       dismissed_at: "",
@@ -664,9 +697,39 @@ class DemoApiState {
   }
 
   dismissOnboarding(): OnboardingDismissResponse {
+    this.onboardingDismissedAt = new Date("2026-05-31T00:00:00.000Z").toISOString();
     return {
       dismissed: true,
-      dismissed_at: new Date("2026-05-31T00:00:00.000Z").toISOString(),
+      dismissed_at: this.onboardingDismissedAt,
+    };
+  }
+
+  updateManagedSettings(
+    values: Record<string, string>,
+  ): ManagedSettingsUpdateResponse {
+    for (const [key, value] of Object.entries(values)) {
+      if (key === "theme_preference") {
+        if (!["system", "light", "dark"].includes(value)) {
+          throw new Error("theme_preference must be system, light, or dark");
+        }
+        this.themePreference = value;
+        this.themePreferenceConfigured = true;
+      } else if (key === "onboarding_checklist") {
+        if (!["visible", "dismissed"].includes(value)) {
+          throw new Error("onboarding_checklist must be visible or dismissed");
+        }
+        this.onboardingDismissedAt =
+          value === "dismissed"
+            ? this.onboardingDismissedAt ||
+              new Date("2026-05-31T00:00:00.000Z").toISOString()
+            : "";
+      } else {
+        throw new Error(`managed setting is not editable: ${key}`);
+      }
+    }
+    return {
+      managed: this.settings().managed,
+      audit_run_id: this.nextAudit++,
     };
   }
 
@@ -1205,6 +1268,10 @@ export function createDemoWebApi(): WebApi {
     logout: async (_csrfToken: string) => state.session(),
     status: async () => state.status(),
     settings: async () => state.settings(),
+    updateManagedSettings: async (
+      values: Record<string, string>,
+      _csrfToken: string,
+    ) => state.updateManagedSettings(values),
     doctor: async (_csrfToken: string) => state.doctor(),
     onboardingChecklist: async (_csrfToken: string) => state.onboardingChecklist(),
     dismissOnboarding: async (_csrfToken: string) => state.dismissOnboarding(),
