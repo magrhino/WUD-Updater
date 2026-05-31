@@ -264,6 +264,58 @@ describe("webui store", () => {
     expect(webui.settings?.secrets[1]?.configured).toBe(true);
   });
 
+  it("passes csrf from auth store to managed settings updates", async () => {
+    const updatedSettings = settingsResponse({
+      managed: [
+        {
+          key: "theme_preference",
+          value: "dark",
+          default_value: "system",
+          source: "configured",
+          editable: true,
+          allowed_values: ["system", "light", "dark"],
+          restart_required: false,
+        },
+        {
+          key: "onboarding_checklist",
+          value: "visible",
+          default_value: "visible",
+          source: "default",
+          editable: true,
+          allowed_values: ["visible", "dismissed"],
+          restart_required: false,
+        },
+      ],
+    });
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        jsonResponse({ managed: updatedSettings.managed, audit_run_id: 44 }),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+    const auth = useAuthStore();
+    const ensureCsrf = vi
+      .spyOn(auth, "ensureCsrf")
+      .mockResolvedValue("csrf-settings");
+    const webui = useWebuiStore();
+    webui.settings = settingsResponse();
+
+    const response = await webui.updateManagedSettings({
+      theme_preference: "dark",
+    });
+
+    expect(response.audit_run_id).toBe(44);
+    expect(ensureCsrf).toHaveBeenCalledTimes(1);
+    expect(webui.settings?.managed[0]?.value).toBe("dark");
+    expect(fetchMock.mock.calls[0][0]).toBe("/api/v1/settings/managed");
+    expect((fetchMock.mock.calls[0][1] as RequestInit).method).toBe("POST");
+    expect(
+      ((fetchMock.mock.calls[0][1] as RequestInit).headers as Headers).get(
+        "x-wud-csrf-token",
+      ),
+    ).toBe("csrf-settings");
+  });
+
   it("surfaces backend errors and always clears loading state", async () => {
     const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ detail: "db missing" }, 503));
     vi.stubGlobal("fetch", fetchMock);

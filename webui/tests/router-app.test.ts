@@ -10,7 +10,7 @@ import { useAuthStore } from "../src/stores/auth";
 import { useWebuiStore } from "../src/stores/webui";
 import SetupView from "../src/views/SetupView.vue";
 import { themeStorageKey } from "../src/theme";
-import { authSession, statusResponse } from "./helpers/fixtures";
+import { authSession, settingsResponse, statusResponse } from "./helpers/fixtures";
 import { mountWithApp } from "./helpers/mount";
 
 describe("router auth guard", () => {
@@ -213,6 +213,43 @@ describe("app shell", () => {
     expect(themeButton().attributes("aria-label")).toContain("System theme");
   });
 
+  it("hydrates configured managed theme preference after authentication", async () => {
+    const pinia = createPinia();
+    setActivePinia(pinia);
+    const auth = useAuthStore();
+    auth.session = authSession({ mutations_enabled: true });
+    const webui = useWebuiStore();
+    webui.settings = settingsResponse({
+      managed: [
+        {
+          key: "theme_preference",
+          value: "dark",
+          default_value: "system",
+          source: "configured",
+          editable: true,
+          allowed_values: ["system", "light", "dark"],
+          restart_required: false,
+        },
+        settingsResponse().managed[1]!,
+      ],
+    });
+    vi.spyOn(webui, "loadDashboard").mockResolvedValue();
+    const router = createWudRouter(createMemoryHistory());
+    await router.push("/");
+    await router.isReady();
+
+    const wrapper = mountWithApp(App, { pinia, router });
+    await nextTick();
+
+    expect(window.localStorage.getItem(themeStorageKey)).toBe("dark");
+    expect(document.documentElement.dataset.theme).toBe("dark");
+    expect(
+      wrapper.findAll("button").some((button) =>
+        button.attributes("aria-label")?.includes("Dark theme"),
+      ),
+    ).toBe(true);
+  });
+
   it("shows settings navigation and refreshes the settings route", async () => {
     const pinia = createPinia();
     setActivePinia(pinia);
@@ -229,6 +266,7 @@ describe("app shell", () => {
     const wrapper = mountWithApp(App, { pinia, router });
 
     expect(wrapper.text()).toContain("Settings");
+    loadSettings.mockClear();
     await wrapper.find('button[aria-label="Refresh current view"]').trigger("click");
     expect(loadSettings).toHaveBeenCalledTimes(1);
     expect(loadOnboarding).toHaveBeenCalledTimes(1);

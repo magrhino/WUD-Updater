@@ -84,6 +84,10 @@ server's `WUD_TIMEZONE` value, for example `America/Chicago`, and default to
 After admin setup, Settings shows a first-run checklist for WUD output sharing,
 Docker and Compose access, script sync, persistence, browser exposure, and
 mutation mode.
+Settings can also persist allowlisted WebUI-only preferences, such as theme and
+onboarding checklist state, when browser mutations are explicitly enabled.
+Those preferences do not override CLI flags, environment config, paths, secrets,
+Docker commands, or updater behavior.
 
 If the admin password is lost or an operator needs to rotate access, issue a
 new one-time recovery link from the host or container:

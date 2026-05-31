@@ -416,6 +416,39 @@ a {
   gap: 6px;
 }
 
+.settings-preference-list {
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.settings-preference-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(220px, 280px);
+  align-items: center;
+  gap: 14px;
+  padding: 12px;
+  border: 1px solid var(--color-border-subtle);
+  background: var(--color-panel-tint);
+}
+
+.settings-preference-row > div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.settings-preference-row strong,
+.settings-preference-row span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.settings-preference-row span {
+  color: var(--color-muted-text);
+  font-size: 0.86rem;
+}
+
 .settings-action-row {
   display: flex;
   align-items: center;
@@ -454,6 +487,17 @@ a {
 
 .settings-action-alert {
   margin-top: 12px;
+}
+
+.settings-preference-actions {
+  align-items: end;
+}
+
+.settings-button-group {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
 }
 
 .settings-dialog-copy {
@@ -1786,6 +1830,10 @@ body .n-switch:focus-within {
     gap: 7px;
   }
 
+  .settings-preference-row {
+    grid-template-columns: 1fr;
+  }
+
   .doctor-check-head,
   .doctor-suggestion,
   .onboarding-suggestion {
@@ -1818,6 +1866,10 @@ body .n-switch:focus-within {
 
   .settings-action-row .n-button {
     justify-self: start;
+  }
+
+  .settings-button-group {
+    justify-content: flex-start;
   }
 
   .settings-overview-icon {

@@ -67,6 +67,9 @@ const appVersionTitle = computed(() =>
     ? `Open ${appVersionLabel.value} release notes`
     : "Open WUD-Updater releases",
 );
+const managedThemePreference = computed(() =>
+  webui.settings?.managed.find((entry) => entry.key === "theme_preference"),
+);
 const themePreferenceIcon = computed(() => {
   if (themePreference.value === "dark") {
     return Moon;
@@ -103,6 +106,24 @@ watch(
   (visible) => {
     if (visible && webui.status === null) {
       void webui.loadStatus().catch(() => undefined);
+    }
+    if (visible && webui.settings === null) {
+      void webui.loadSettings().catch(() => undefined);
+    }
+  },
+  { immediate: true },
+);
+
+watch(
+  managedThemePreference,
+  (entry) => {
+    if (
+      auth.authenticated &&
+      entry?.source === "configured" &&
+      (entry.value === "system" || entry.value === "light" || entry.value === "dark") &&
+      themePreference.value !== entry.value
+    ) {
+      themePreference.value = entry.value;
     }
   },
   { immediate: true },

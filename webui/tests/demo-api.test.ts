@@ -33,6 +33,23 @@ describe("demo web API", () => {
       secrets: expect.arrayContaining([
         { name: "GITHUB_TOKEN", configured: false },
       ]),
+      managed: expect.arrayContaining([
+        expect.objectContaining({
+          key: "theme_preference",
+          value: "system",
+        }),
+      ]),
+    });
+    await expect(
+      api.updateManagedSettings({ theme_preference: "dark" }, "csrf"),
+    ).resolves.toMatchObject({
+      audit_run_id: expect.any(Number),
+      managed: expect.arrayContaining([
+        expect.objectContaining({
+          key: "theme_preference",
+          value: "dark",
+        }),
+      ]),
     });
     await expect(api.onboardingChecklist("csrf")).resolves.toMatchObject({
       visible: true,

@@ -1431,6 +1431,80 @@ describe("mutating WebUI views", () => {
     ).toBe(true);
   });
 
+  it("disables managed preference saves in read-only settings", async () => {
+    const { pinia, webui } = setupStores(false);
+    webui.settings = settingsResponse();
+    webui.onboarding = onboardingChecklistResponse({ visible: false });
+    vi.spyOn(webui, "loadSettings").mockResolvedValue();
+    const updateManagedSettings = vi
+      .spyOn(webui, "updateManagedSettings")
+      .mockResolvedValue({
+        managed: settingsResponse().managed,
+        audit_run_id: 77,
+      });
+
+    const wrapper = mountWithApp(SettingsView, { pinia });
+    await flushPromises();
+
+    expect(wrapper.text()).toContain("WebUI preferences");
+    expect(wrapper.text()).toContain("Read-only mode is active");
+    const saveButton = wrapper
+      .findAll("button")
+      .find((button) => button.text().includes("Save preferences"));
+    expect(saveButton?.attributes("disabled")).toBeDefined();
+    for (const select of wrapper.findAll("select")) {
+      expect(select.attributes("disabled")).toBeDefined();
+    }
+    await saveButton?.trigger("click");
+    expect(updateManagedSettings).not.toHaveBeenCalled();
+  });
+
+  it("saves managed preference changes through the store", async () => {
+    const { pinia, webui } = setupStores(true);
+    webui.settings = settingsResponse({
+      webui: settingsResponse().webui.map((entry) =>
+        entry.name === "WUD_WEB_MUTATIONS_ENABLED"
+          ? { ...entry, value: "true", configured: true, source: "configured" as const }
+          : entry,
+      ),
+    });
+    webui.onboarding = onboardingChecklistResponse({ visible: false });
+    vi.spyOn(webui, "loadSettings").mockResolvedValue();
+    const updateManagedSettings = vi
+      .spyOn(webui, "updateManagedSettings")
+      .mockResolvedValue({
+        managed: settingsResponse({
+          managed: [
+            {
+              key: "theme_preference",
+              value: "dark",
+              default_value: "system",
+              source: "configured",
+              editable: true,
+              allowed_values: ["system", "light", "dark"],
+              restart_required: false,
+            },
+            settingsResponse().managed[1]!,
+          ],
+        }).managed,
+        audit_run_id: 77,
+      });
+
+    const wrapper = mountWithApp(SettingsView, { pinia });
+    await flushPromises();
+    await wrapper.findAll("select")[0].setValue("dark");
+    const saveButton = wrapper
+      .findAll("button")
+      .find((button) => button.text().includes("Save preferences"));
+    await saveButton?.trigger("click");
+    await flushPromises();
+
+    expect(updateManagedSettings).toHaveBeenCalledWith({
+      theme_preference: "dark",
+    });
+    expect(wrapper.text()).toContain("Preferences saved. Audit run #77.");
+  });
+
   it("requires warning confirmation before restarting the WebUI container", async () => {
     const { pinia, webui } = setupStores(true);
     webui.settings = settingsResponse({
