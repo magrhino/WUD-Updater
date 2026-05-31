@@ -4,6 +4,13 @@ All notable changes to WUD-Updater are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com) and versions follow
 [Semantic Versioning](https://semver.org).
 
+## [0.27.1](https://github.com/magrhino/WUD-Updater/compare/v0.27.0...v0.27.1) (2026-05-31)
+
+
+### Bug Fixes
+
+* **auth:** throttle failed webui logins ([#138](https://github.com/magrhino/WUD-Updater/issues/138)) ([405fee4](https://github.com/magrhino/WUD-Updater/commit/405fee47236b42fea501acf1d586ce8ae28a2229))
+
 ## [0.27.0](https://github.com/magrhino/WUD-Updater/compare/v0.26.0...v0.27.0) (2026-05-31)
 
 
