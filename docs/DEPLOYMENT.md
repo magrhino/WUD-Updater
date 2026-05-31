@@ -197,6 +197,9 @@ least 12 characters, then sign in at `http://127.0.0.1:8080`. See
 [`docs/wiki/webui-container.md`](wiki/webui-container.md) for reverse-proxy,
 LAN exposure, login, and mutation notes.
 
+After sign-in, open the WebUI Settings page to review the effective non-secret
+configuration, safety status, and secret presence for the running process.
+
 For containerized TrueNAS status checks, use
 [`docs/examples/docker-compose.truenas.yml`](examples/docker-compose.truenas.yml).
 That variant builds the helper image with the official TrueNAS API client so a

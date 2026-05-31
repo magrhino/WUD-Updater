@@ -42,7 +42,15 @@ from pydantic import BaseModel, Field
 
 from . import __version__
 from .command import CommandRunner
-from .config import ConfigError, UpdaterConfig, load_config
+from .config import (
+    DEFAULT_LOCK_TIMEOUT,
+    DEFAULT_MAX_WAIT,
+    DEFAULT_TIMEZONE,
+    DEFAULT_UPDATE_MODE,
+    ConfigError,
+    UpdaterConfig,
+    load_config,
+)
 from .db import (
     DatabaseError,
     SCHEMA_VERSION,
@@ -116,6 +124,7 @@ LineNumber = Annotated[int, Field(ge=1)]
 PlanStatus = Literal["ready", "empty", "blocked"]
 PendingGroupingStatus = Literal["ready", "unavailable"]
 ApplyJobStatus = Literal["queued", "running", "success", "failure"]
+SettingsEntrySource = Literal["configured", "default", "derived", "request"]
 ServicePolicyUpdateMode = Literal["", "pause", "stop", "live"]
 AutoUpdateDay = Literal["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
 SnoozeState = Literal["active", "expired", "all"]
@@ -336,6 +345,25 @@ class StatusResponse(BaseModel):
     auto_update_scheduler_enabled: bool
     static_spa_available: bool
     warnings: list[str] = Field(default_factory=list)
+
+
+class SettingsEntry(BaseModel):
+    name: str
+    value: str
+    default_value: str
+    configured: bool
+    source: SettingsEntrySource
+
+
+class SecretSettingStatus(BaseModel):
+    name: str
+    configured: bool
+
+
+class SettingsResponse(BaseModel):
+    updater: list[SettingsEntry] = Field(default_factory=list)
+    webui: list[SettingsEntry] = Field(default_factory=list)
+    secrets: list[SecretSettingStatus] = Field(default_factory=list)
 
 
 class CsrfResponse(BaseModel):
@@ -874,6 +902,12 @@ def create_app(
         response_model=StatusResponse,
     )
     router.add_api_route(
+        "/settings",
+        api_settings,
+        methods=["GET"],
+        response_model=SettingsResponse,
+    )
+    router.add_api_route(
         "/pending",
         api_pending,
         methods=["GET"],
@@ -1287,6 +1321,15 @@ def api_status(request: Request) -> StatusResponse:
         auto_update_scheduler_enabled=settings.mutations_enabled,
         static_spa_available=_static_spa_available(settings),
         warnings=warnings,
+    )
+
+
+def api_settings(request: Request) -> SettingsResponse:
+    settings = _settings(request)
+    return SettingsResponse(
+        updater=_updater_settings_entries(settings),
+        webui=_webui_settings_entries(settings, request),
+        secrets=_secret_settings(settings),
     )
 
 
@@ -5363,6 +5406,208 @@ def _resolve_static_dir(configured: str | Path | None) -> Path | None:
         if (candidate / "index.html").is_file():
             return candidate
     return None
+
+
+def _updater_settings_entries(settings: WebSettings) -> list[SettingsEntry]:
+    config = settings.config
+    return [
+        _config_setting_entry(settings, "DOCKER_BASE", str(config.docker_base)),
+        _settings_entry(
+            "HOST_DOCKER_BASE",
+            "" if settings.host_docker_base is None else str(settings.host_docker_base),
+            "",
+            _env_configured(settings, "HOST_DOCKER_BASE"),
+        ),
+        _config_setting_entry(settings, "WUD_OUT_FILE", str(config.wud_out_file)),
+        _config_setting_entry(settings, "WUD_LOG_DIR", str(config.log_dir)),
+        _config_setting_entry(settings, "WUD_DB_PATH", str(config.db_path)),
+        _config_setting_entry(settings, "WUD_UPDATE_MODE", config.update_mode),
+        _config_setting_entry(settings, "WUD_MAX_WAIT", str(config.max_wait)),
+        _config_setting_entry(settings, "WUD_LOCK_TIMEOUT", str(config.lock_timeout)),
+        _config_setting_entry(settings, "WUD_TIMEZONE", config.timezone_name),
+    ]
+
+
+def _webui_settings_entries(
+    settings: WebSettings,
+    request: Request,
+) -> list[SettingsEntry]:
+    env = _settings_env(settings)
+    bind_host = env.get("WUD_WEB_HOST", DEFAULT_WEB_HOST)
+    default_allowed_hosts = _parse_allowed_hosts(
+        "",
+        public_origin=settings.public_origin,
+        bind_host=bind_host,
+    )
+    default_static_settings = replace(settings, static_dir=_resolve_static_dir(None))
+    default_secure_settings = replace(settings, secure_cookies="auto")
+    return [
+        _settings_entry(
+            "WUD_WEB_AUTH_REQUIRED",
+            _format_bool(settings.auth_required),
+            "true",
+            False,
+            source="derived",
+        ),
+        _settings_entry(
+            "WUD_WEB_DEV_NO_AUTH",
+            _format_bool(settings.dev_no_auth),
+            "false",
+            _env_configured(settings, "WUD_WEB_DEV_NO_AUTH"),
+        ),
+        _settings_entry(
+            "WUD_WEB_PUBLIC_ORIGIN",
+            settings.public_origin,
+            "",
+            _env_configured(settings, "WUD_WEB_PUBLIC_ORIGIN"),
+        ),
+        _settings_entry(
+            "WUD_WEB_ALLOWED_ORIGINS",
+            _format_sequence(sorted(settings.allowed_origins)),
+            "",
+            _env_configured(settings, "WUD_WEB_ALLOWED_ORIGINS"),
+        ),
+        _settings_entry(
+            "WUD_WEB_ALLOWED_HOSTS",
+            _format_sequence(sorted(settings.allowed_hosts)),
+            _format_sequence(sorted(default_allowed_hosts)),
+            _env_configured(settings, "WUD_WEB_ALLOWED_HOSTS"),
+            source="derived",
+        ),
+        _settings_entry(
+            "WUD_WEB_TRUSTED_PROXIES",
+            _format_sequence(str(network) for network in settings.trusted_proxies),
+            "",
+            _env_configured(settings, "WUD_WEB_TRUSTED_PROXIES"),
+        ),
+        _settings_entry(
+            "WUD_WEB_SECURE_COOKIES",
+            settings.secure_cookies,
+            "auto",
+            _env_configured(settings, "WUD_WEB_SECURE_COOKIES"),
+        ),
+        _settings_entry(
+            "WUD_WEB_SECURE_COOKIES_EFFECTIVE",
+            _format_bool(_secure_cookie(settings, request)),
+            _format_bool(_secure_cookie(default_secure_settings, request)),
+            False,
+            source="request",
+        ),
+        _settings_entry(
+            "WUD_WEB_STATIC_SPA_AVAILABLE",
+            _format_bool(_static_spa_available(settings)),
+            _format_bool(_static_spa_available(default_static_settings)),
+            _env_configured(settings, "WUD_WEB_STATIC_DIR"),
+            source="derived",
+        ),
+        _settings_entry(
+            "WUD_WEB_MUTATIONS_ENABLED",
+            _format_bool(settings.mutations_enabled),
+            "false",
+            _env_configured(settings, "WUD_WEB_MUTATIONS_ENABLED"),
+        ),
+        _settings_entry(
+            "WUD_WEB_AUTO_UPDATE_SCHEDULER_ENABLED",
+            _format_bool(settings.mutations_enabled),
+            "false",
+            False,
+            source="derived",
+        ),
+    ]
+
+
+def _secret_settings(settings: WebSettings) -> list[SecretSettingStatus]:
+    env = _settings_env(settings)
+    return [
+        SecretSettingStatus(
+            name=name,
+            configured=bool(settings.auth_token.strip())
+            if name == "WUD_WEB_TOKEN"
+            else bool(env.get(name, "").strip()),
+        )
+        for name in SENSITIVE_ENV_KEYS
+    ]
+
+
+def _config_setting_entry(
+    settings: WebSettings,
+    name: str,
+    value: str,
+) -> SettingsEntry:
+    configured = _env_configured(settings, name)
+    return _settings_entry(
+        name,
+        value,
+        _config_default_value(settings, name),
+        configured,
+    )
+
+
+def _settings_entry(
+    name: str,
+    value: str,
+    default_value: str,
+    configured: bool,
+    *,
+    source: SettingsEntrySource | None = None,
+) -> SettingsEntry:
+    return SettingsEntry(
+        name=name,
+        value=value,
+        default_value=default_value,
+        configured=configured,
+        source="configured" if configured else source or "default",
+    )
+
+
+def _config_default_value(settings: WebSettings, name: str) -> str:
+    env = dict(_settings_env(settings))
+    env.pop(name, None)
+    try:
+        config = load_config(env)
+    except ConfigError:
+        return _static_config_default(name)
+    return _config_value(config, name)
+
+
+def _static_config_default(name: str) -> str:
+    defaults = {
+        "WUD_UPDATE_MODE": DEFAULT_UPDATE_MODE,
+        "WUD_MAX_WAIT": str(DEFAULT_MAX_WAIT),
+        "WUD_LOCK_TIMEOUT": str(DEFAULT_LOCK_TIMEOUT),
+        "WUD_TIMEZONE": DEFAULT_TIMEZONE,
+    }
+    return defaults.get(name, "")
+
+
+def _config_value(config: UpdaterConfig, name: str) -> str:
+    values = {
+        "DOCKER_BASE": str(config.docker_base),
+        "WUD_OUT_FILE": str(config.wud_out_file),
+        "WUD_LOG_DIR": str(config.log_dir),
+        "WUD_DB_PATH": str(config.db_path),
+        "WUD_UPDATE_MODE": config.update_mode,
+        "WUD_MAX_WAIT": str(config.max_wait),
+        "WUD_LOCK_TIMEOUT": str(config.lock_timeout),
+        "WUD_TIMEZONE": config.timezone_name,
+    }
+    return values.get(name, "")
+
+
+def _settings_env(settings: WebSettings) -> Mapping[str, str]:
+    return settings.command_env or {}
+
+
+def _env_configured(settings: WebSettings, name: str) -> bool:
+    return bool(_settings_env(settings).get(name, "").strip())
+
+
+def _format_bool(value: bool) -> str:
+    return "true" if value else "false"
+
+
+def _format_sequence(values: Sequence[str] | Iterator[str]) -> str:
+    return ", ".join(item for item in values if item)
 
 
 def _parse_host_docker_base(

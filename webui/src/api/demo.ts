@@ -20,6 +20,8 @@ import type {
   RunLogResponse,
   RunSummary,
   ServicePolicyRecord,
+  SettingsEntrySource,
+  SettingsResponse,
   SetupStatusResponse,
   SnoozeRecord,
   SnoozeState,
@@ -462,6 +464,66 @@ class DemoApiState {
       auto_update_scheduler_enabled: true,
       static_spa_available: true,
       warnings: ["Static demo mode uses in-browser fixture data only."],
+    };
+  }
+
+  settings(): SettingsResponse {
+    return {
+      updater: [
+        settingEntry("DOCKER_BASE", DEMO_DOCKER_BASE, DEMO_DOCKER_BASE, false),
+        settingEntry("HOST_DOCKER_BASE", DEMO_DOCKER_BASE, "", true),
+        settingEntry("WUD_OUT_FILE", DEMO_SOURCE_FILE, DEMO_SOURCE_FILE, false),
+        settingEntry("WUD_LOG_DIR", DEMO_LOG_DIR, DEMO_LOG_DIR, false),
+        settingEntry("WUD_DB_PATH", DEMO_DB_PATH, DEMO_DB_PATH, false),
+        settingEntry("WUD_UPDATE_MODE", "stop", "stop", false),
+        settingEntry("WUD_MAX_WAIT", "180", "180", false),
+        settingEntry("WUD_LOCK_TIMEOUT", "30", "30", false),
+        settingEntry("WUD_TIMEZONE", "UTC", "UTC", false),
+      ],
+      webui: [
+        settingEntry("WUD_WEB_AUTH_REQUIRED", "false", "true", false, "derived"),
+        settingEntry("WUD_WEB_DEV_NO_AUTH", "true", "false", true),
+        settingEntry("WUD_WEB_PUBLIC_ORIGIN", "", "", false),
+        settingEntry("WUD_WEB_ALLOWED_ORIGINS", "", "", false),
+        settingEntry(
+          "WUD_WEB_ALLOWED_HOSTS",
+          "127.0.0.1, localhost",
+          "127.0.0.1, localhost",
+          false,
+          "derived",
+        ),
+        settingEntry("WUD_WEB_TRUSTED_PROXIES", "", "", false),
+        settingEntry("WUD_WEB_SECURE_COOKIES", "auto", "auto", false),
+        settingEntry(
+          "WUD_WEB_SECURE_COOKIES_EFFECTIVE",
+          "false",
+          "false",
+          false,
+          "request",
+        ),
+        settingEntry(
+          "WUD_WEB_STATIC_SPA_AVAILABLE",
+          "true",
+          "true",
+          false,
+          "derived",
+        ),
+        settingEntry("WUD_WEB_MUTATIONS_ENABLED", "true", "false", true),
+        settingEntry(
+          "WUD_WEB_AUTO_UPDATE_SCHEDULER_ENABLED",
+          "true",
+          "false",
+          false,
+          "derived",
+        ),
+      ],
+      secrets: [
+        { name: "WUD_WEB_TOKEN", configured: false },
+        { name: "GITHUB_TOKEN", configured: false },
+        { name: "DISCORD_RELEASES_WEBHOOK", configured: false },
+        { name: "DISCORD_WEBHOOK", configured: false },
+        { name: "ADMIN_WEBHOOK", configured: false },
+      ],
     };
   }
 
@@ -999,6 +1061,7 @@ export function createDemoWebApi(): WebApi {
       state.session(),
     logout: async (_csrfToken: string) => state.session(),
     status: async () => state.status(),
+    settings: async () => state.settings(),
     pending: async () => state.pendingResponse(),
     cleanupPending: async (
       cleanupId: string,
@@ -1581,6 +1644,22 @@ function releaseNote(options: {
     ],
     refreshed_at: "2026-05-28T12:00:00+00:00",
     error: "",
+  };
+}
+
+function settingEntry(
+  name: string,
+  value: string,
+  defaultValue: string,
+  configured: boolean,
+  source: SettingsEntrySource = configured ? "configured" : "default",
+): SettingsResponse["updater"][number] {
+  return {
+    name,
+    value,
+    default_value: defaultValue,
+    configured,
+    source,
   };
 }
 

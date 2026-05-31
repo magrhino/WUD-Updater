@@ -163,4 +163,23 @@ describe("app shell", () => {
     expect(document.documentElement.dataset.theme).toBe("light");
     expect(themeButton().attributes("aria-label")).toContain("System theme");
   });
+
+  it("shows settings navigation and refreshes the settings route", async () => {
+    const pinia = createPinia();
+    setActivePinia(pinia);
+    const auth = useAuthStore();
+    auth.session = authSession({ mutations_enabled: false });
+    const webui = useWebuiStore();
+    vi.spyOn(webui, "loadStatus").mockResolvedValue();
+    const loadSettings = vi.spyOn(webui, "loadSettings").mockResolvedValue();
+    const router = createWudRouter(createMemoryHistory());
+    await router.push("/settings");
+    await router.isReady();
+
+    const wrapper = mountWithApp(App, { pinia, router });
+
+    expect(wrapper.text()).toContain("Settings");
+    await wrapper.find('button[aria-label="Refresh current view"]').trigger("click");
+    expect(loadSettings).toHaveBeenCalledTimes(1);
+  });
 });

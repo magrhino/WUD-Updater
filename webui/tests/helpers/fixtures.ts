@@ -11,6 +11,7 @@ import type {
   ReleaseNotesResponse,
   RunSummary,
   ServicePolicyRecord,
+  SettingsResponse,
   SnoozeRecord,
   StatusResponse,
   StateOperationResponse,
@@ -50,6 +51,128 @@ export function statusResponse(
     auto_update_scheduler_enabled: false,
     static_spa_available: true,
     warnings: [],
+    ...overrides,
+  };
+}
+
+export function settingsResponse(
+  overrides: Partial<SettingsResponse> = {},
+): SettingsResponse {
+  return {
+    updater: [
+      {
+        name: "DOCKER_BASE",
+        value: "/srv/docker",
+        default_value: "/srv/docker",
+        configured: true,
+        source: "configured",
+      },
+      {
+        name: "HOST_DOCKER_BASE",
+        value: "/srv/docker",
+        default_value: "",
+        configured: true,
+        source: "configured",
+      },
+      {
+        name: "WUD_OUT_FILE",
+        value: "/out/images.todo",
+        default_value: "/srv/docker/wud/out/images.todo",
+        configured: true,
+        source: "configured",
+      },
+      {
+        name: "WUD_LOG_DIR",
+        value: "/logs",
+        default_value: "./logs",
+        configured: true,
+        source: "configured",
+      },
+      {
+        name: "WUD_DB_PATH",
+        value: "/logs/wud-updater.sqlite",
+        default_value: "/logs/wud-updater.sqlite",
+        configured: true,
+        source: "configured",
+      },
+      {
+        name: "WUD_UPDATE_MODE",
+        value: "stop",
+        default_value: "stop",
+        configured: false,
+        source: "default",
+      },
+      {
+        name: "WUD_MAX_WAIT",
+        value: "180",
+        default_value: "180",
+        configured: false,
+        source: "default",
+      },
+      {
+        name: "WUD_LOCK_TIMEOUT",
+        value: "30",
+        default_value: "30",
+        configured: false,
+        source: "default",
+      },
+      {
+        name: "WUD_TIMEZONE",
+        value: "UTC",
+        default_value: "UTC",
+        configured: false,
+        source: "default",
+      },
+    ],
+    webui: [
+      {
+        name: "WUD_WEB_AUTH_REQUIRED",
+        value: "true",
+        default_value: "true",
+        configured: false,
+        source: "derived",
+      },
+      {
+        name: "WUD_WEB_DEV_NO_AUTH",
+        value: "false",
+        default_value: "false",
+        configured: false,
+        source: "default",
+      },
+      {
+        name: "WUD_WEB_PUBLIC_ORIGIN",
+        value: "https://wud.example.test",
+        default_value: "",
+        configured: true,
+        source: "configured",
+      },
+      {
+        name: "WUD_WEB_ALLOWED_HOSTS",
+        value: "127.0.0.1, localhost, wud.example.test",
+        default_value: "127.0.0.1, localhost, wud.example.test",
+        configured: false,
+        source: "derived",
+      },
+      {
+        name: "WUD_WEB_SECURE_COOKIES_EFFECTIVE",
+        value: "true",
+        default_value: "true",
+        configured: false,
+        source: "request",
+      },
+      {
+        name: "WUD_WEB_MUTATIONS_ENABLED",
+        value: "false",
+        default_value: "false",
+        configured: false,
+        source: "default",
+      },
+    ],
+    secrets: [
+      { name: "WUD_WEB_TOKEN", configured: false },
+      { name: "GITHUB_TOKEN", configured: true },
+      { name: "DISCORD_RELEASES_WEBHOOK", configured: false },
+    ],
     ...overrides,
   };
 }

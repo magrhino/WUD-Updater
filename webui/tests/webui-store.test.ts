@@ -12,6 +12,7 @@ import {
   pendingResponse,
   releaseNotesResponse,
   planResponse,
+  settingsResponse,
   statusResponse,
   stateOperationResponse,
 } from "./helpers/fixtures";
@@ -176,6 +177,17 @@ describe("webui store", () => {
 
     expect(fetchMock.mock.calls[0][0]).toBe("/api/v1/status");
     expect(webui.status?.version).toBe("0.24.2");
+  });
+
+  it("loads read-only settings", async () => {
+    const fetchMock = mockFetch(settingsResponse());
+    const webui = useWebuiStore();
+
+    await webui.loadSettings();
+
+    expect(fetchMock.mock.calls[0][0]).toBe("/api/v1/settings");
+    expect(webui.settings?.updater[0]?.name).toBe("DOCKER_BASE");
+    expect(webui.settings?.secrets[1]?.configured).toBe(true);
   });
 
   it("surfaces backend errors and always clears loading state", async () => {

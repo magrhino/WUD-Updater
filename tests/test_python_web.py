@@ -301,6 +301,17 @@ def test_api_rejects_unauthenticated_requests_without_dev_bypass(
     assert response.json()["detail"] == "setup required"
 
 
+def test_settings_rejects_unauthenticated_requests_without_dev_bypass(
+    tmp_path: Path,
+) -> None:
+    client = _client(tmp_path)
+
+    response = client.get("/api/v1/settings")
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == "setup required"
+
+
 def test_api_accepts_bearer_token(tmp_path: Path) -> None:
     client = _client(tmp_path, {"WUD_WEB_TOKEN": "secret"})
     _setup_admin(client)
@@ -313,6 +324,73 @@ def test_api_accepts_bearer_token(tmp_path: Path) -> None:
 
     assert response.status_code == 200
     assert response.json()["auth_required"] is True
+
+
+def test_settings_reports_effective_non_secret_configuration(
+    tmp_path: Path,
+) -> None:
+    secret_values = {
+        "WUD_WEB_TOKEN": "web-token-secret",
+        "GITHUB_TOKEN": "github-token-secret",
+        "DISCORD_WEBHOOK": "discord-webhook-secret",
+        "ADMIN_WEBHOOK": "admin-webhook-secret",
+    }
+    client = _client(
+        tmp_path,
+        {
+            "DOCKER_BASE": str(tmp_path / "docker-root"),
+            "HOST_DOCKER_BASE": str(tmp_path / "docker-root"),
+            "WUD_OUT_FILE": str(tmp_path / "state" / "custom.todo"),
+            "WUD_LOG_DIR": str(tmp_path / "state" / "custom-logs"),
+            "WUD_MAX_WAIT": "240",
+            "WUD_WEB_PUBLIC_ORIGIN": "https://wud.example.test",
+            "WUD_WEB_ALLOWED_ORIGINS": "http://testserver",
+            "WUD_WEB_ALLOWED_HOSTS": "testserver,wud.example.test,updates.example.test",
+            "WUD_WEB_TRUSTED_PROXIES": "127.0.0.1/32",
+            "WUD_WEB_SECURE_COOKIES": "false",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+            **secret_values,
+        },
+    )
+    _setup_admin(client)
+
+    response = client.get("/api/v1/settings")
+    body = response.json()
+    updater = {entry["name"]: entry for entry in body["updater"]}
+    webui = {entry["name"]: entry for entry in body["webui"]}
+    secrets = {entry["name"]: entry for entry in body["secrets"]}
+    serialized = json.dumps(body)
+
+    assert response.status_code == 200
+    assert set(body) == {"updater", "webui", "secrets"}
+    assert updater["DOCKER_BASE"]["value"] == str(tmp_path / "docker-root")
+    assert updater["DOCKER_BASE"]["configured"] is True
+    assert updater["DOCKER_BASE"]["source"] == "configured"
+    assert updater["WUD_OUT_FILE"]["default_value"] == str(
+        tmp_path / "docker-root" / "wud" / "out" / "images.todo"
+    )
+    assert updater["WUD_MAX_WAIT"]["value"] == "240"
+    assert updater["WUD_MAX_WAIT"]["source"] == "configured"
+    assert updater["WUD_LOCK_TIMEOUT"] == {
+        "name": "WUD_LOCK_TIMEOUT",
+        "value": "30",
+        "default_value": "30",
+        "configured": False,
+        "source": "default",
+    }
+    assert webui["WUD_WEB_PUBLIC_ORIGIN"]["value"] == "https://wud.example.test"
+    assert webui["WUD_WEB_MUTATIONS_ENABLED"]["value"] == "true"
+    assert webui["WUD_WEB_SECURE_COOKIES"]["value"] == "false"
+    assert webui["WUD_WEB_SECURE_COOKIES_EFFECTIVE"]["value"] == "false"
+    assert webui["WUD_WEB_SECURE_COOKIES_EFFECTIVE"]["source"] == "request"
+    assert webui["WUD_WEB_AUTO_UPDATE_SCHEDULER_ENABLED"]["value"] == "true"
+    assert secrets["WUD_WEB_TOKEN"]["configured"] is True
+    assert secrets["GITHUB_TOKEN"]["configured"] is True
+    assert secrets["DISCORD_RELEASES_WEBHOOK"]["configured"] is False
+    assert secrets["DISCORD_WEBHOOK"]["configured"] is True
+    assert secrets["ADMIN_WEBHOOK"]["configured"] is True
+    for value in secret_values.values():
+        assert value not in serialized
 
 
 def test_csrf_endpoint_sets_double_submit_cookie(tmp_path: Path) -> None:

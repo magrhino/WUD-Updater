@@ -23,6 +23,17 @@ describe("demo web API", () => {
       pending_count: 7,
       mutations_enabled: true,
     });
+    await expect(api.settings()).resolves.toMatchObject({
+      updater: expect.arrayContaining([
+        expect.objectContaining({
+          name: "DOCKER_BASE",
+          value: "demo/docker",
+        }),
+      ]),
+      secrets: expect.arrayContaining([
+        { name: "GITHUB_TOKEN", configured: false },
+      ]),
+    });
 
     const pending = await api.pending();
     expect(pending.count).toBe(7);
