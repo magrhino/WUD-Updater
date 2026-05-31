@@ -111,6 +111,17 @@ describe("demo web API", () => {
           item.diagnostic?.code === "unmatched",
       ),
     ).toBe(true);
+
+    await expect(api.updateTargets()).resolves.toMatchObject({
+      status: "ready",
+      count: 4,
+      items: expect.arrayContaining([
+        expect.objectContaining({
+          service_key: "media/radarr",
+          image_repo: "lscr.io/linuxserver/radarr",
+        }),
+      ]),
+    });
   });
 
   it("creates plans from the current fixture state", async () => {

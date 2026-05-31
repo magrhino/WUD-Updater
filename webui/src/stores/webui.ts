@@ -34,6 +34,7 @@ import {
   type TagExclusionScope,
   type TagExclusionStatus,
   type TagExclusionStatusFilter,
+  type UpdateTargetsResponse,
   webApi,
 } from "../api/client";
 import { useAuthStore } from "./auth";
@@ -53,6 +54,7 @@ export const useWebuiStore = defineStore("webui", () => {
   const doctor = ref<DoctorResponse | null>(null);
   const onboarding = ref<OnboardingChecklistResponse | null>(null);
   const pending = ref<PendingResponse | null>(null);
+  const updateTargets = ref<UpdateTargetsResponse | null>(null);
   const releaseNotes = ref<ReleaseNotesResponse | null>(null);
   const plan = ref<PlanResponse | null>(null);
   const pendingCleanup = ref<PendingCleanupResponse | null>(null);
@@ -192,6 +194,12 @@ export const useWebuiStore = defineStore("webui", () => {
         pendingCleanup.value = null;
       }
       pending.value = await webApi.pending();
+    });
+  }
+
+  async function loadUpdateTargets(): Promise<void> {
+    await loadWithState(async () => {
+      updateTargets.value = await webApi.updateTargets();
     });
   }
 
@@ -605,6 +613,7 @@ export const useWebuiStore = defineStore("webui", () => {
     doctor,
     onboarding,
     pending,
+    updateTargets,
     pendingCleanup,
     pendingRemovalPlan,
     releaseNotes,
@@ -634,6 +643,7 @@ export const useWebuiStore = defineStore("webui", () => {
     dismissOnboarding,
     loadDashboard,
     loadPending,
+    loadUpdateTargets,
     loadReleaseNotes,
     refreshReleaseNotes,
     createPlan,

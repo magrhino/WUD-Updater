@@ -41,6 +41,7 @@ describe("webApi", () => {
       webApi.onboardingChecklist("csrf"),
       webApi.dismissOnboarding("csrf"),
       webApi.pending(),
+      webApi.updateTargets(),
       webApi.cleanupPending("cleanup", [{ line_no: 1, raw: "repo/app:1.0" }], "csrf"),
       webApi.createRemovalPlan([1], "csrf"),
       webApi.removeSelectedPending("removal", [{ line_no: 1, raw: "repo/app:1.0" }], "csrf"),
@@ -59,7 +60,7 @@ describe("webApi", () => {
       webApi.runLog(1),
     ]);
 
-    expect(fetchMock).toHaveBeenCalledTimes(29);
+    expect(fetchMock).toHaveBeenCalledTimes(30);
     for (const call of fetchMock.mock.calls) {
       expect(requestInit(call).credentials).toBe("include");
     }

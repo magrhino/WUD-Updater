@@ -7,7 +7,6 @@ import {
   NButton,
   NForm,
   NFormItem,
-  NInput,
   NModal,
   NSelect,
   NTag,
@@ -19,11 +18,19 @@ import type {
   TagExclusionStatus,
   TagExclusionStatusFilter,
 } from "../api/client";
+import { useUpdateTargetOptions } from "../composables/useUpdateTargetOptions";
 import { useAuthStore } from "../stores/auth";
 import { useWebuiStore } from "../stores/webui";
 
 const webui = useWebuiStore();
 const auth = useAuthStore();
+const {
+  imageRepoOptions,
+  serviceKeyOptions,
+  tagOptionsForImageRepo,
+  targetForImageRepo,
+  targetForServiceKey,
+} = useUpdateTargetOptions();
 const breakpoints = useBreakpoints({ managementDesktop: 1120 });
 const useManagementCards = breakpoints.smaller("managementDesktop");
 const statusFilter = ref<TagExclusionStatusFilter>("active");
@@ -56,6 +63,9 @@ const statusFilterOptions = [
 
 const mutationsEnabled = computed(
   () => auth.session?.mutations_enabled === true,
+);
+const tagOptions = computed(() =>
+  tagOptionsForImageRepo(exclusionForm.imageRepo.trim()),
 );
 const saveDisabled = computed(
   () =>
@@ -90,6 +100,26 @@ function targetLabel(
   rule: Pick<TagExclusionRuleRecord, "scope" | "service_key" | "image_repo">,
 ): string {
   return rule.scope === "service" ? rule.service_key : rule.image_repo;
+}
+
+function applyImageRepoSelection(value: string | number | null): void {
+  const imageRepo = value === null ? "" : String(value);
+  const target = targetForImageRepo(imageRepo);
+  if (!target) {
+    return;
+  }
+  if (exclusionForm.scope === "service" && !exclusionForm.serviceKey.trim()) {
+    exclusionForm.serviceKey = target.service_key;
+  }
+}
+
+function applyServiceSelection(value: string | number | null): void {
+  const serviceKey = value === null ? "" : String(value);
+  const target = targetForServiceKey(serviceKey);
+  if (!target) {
+    return;
+  }
+  exclusionForm.imageRepo = target.image_repo;
 }
 
 function openSaveConfirm(): void {
@@ -138,6 +168,7 @@ async function confirmStatusChange(): Promise<void> {
 }
 
 onMounted(() => {
+  void webui.loadUpdateTargets();
   void webui.loadTagExclusions(statusFilter.value);
 });
 
@@ -175,10 +206,15 @@ watch(statusFilter, (nextFilter) => {
           required
           feedback="Required. Use the repository name without a tag."
         >
-          <n-input
+          <n-select
             v-model:value="exclusionForm.imageRepo"
+            filterable
+            tag
+            clearable
+            :options="imageRepoOptions"
             placeholder="repo/app"
             :disabled="webui.loading"
+            @update:value="applyImageRepoSelection"
           />
         </n-form-item>
         <n-form-item
@@ -187,10 +223,15 @@ watch(statusFilter, (nextFilter) => {
           required
           feedback="Required for service-scoped exclusions. Use stack/service."
         >
-          <n-input
+          <n-select
             v-model:value="exclusionForm.serviceKey"
+            filterable
+            tag
+            clearable
+            :options="serviceKeyOptions"
             placeholder="stack/service"
             :disabled="webui.loading"
+            @update:value="applyServiceSelection"
           />
         </n-form-item>
         <n-form-item
@@ -198,8 +239,12 @@ watch(statusFilter, (nextFilter) => {
           required
           feedback="Required. Match the tag to exclude."
         >
-          <n-input
+          <n-select
             v-model:value="exclusionForm.tag"
+            filterable
+            tag
+            clearable
+            :options="tagOptions"
             placeholder="2.0"
             :disabled="webui.loading"
           />

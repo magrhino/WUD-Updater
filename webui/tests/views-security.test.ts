@@ -34,6 +34,8 @@ import {
   snooze,
   statusResponse,
   tagExclusion,
+  updateTarget,
+  updateTargetsResponse,
 } from "./helpers/fixtures";
 import { mountWithApp } from "./helpers/mount";
 
@@ -1277,6 +1279,8 @@ describe("mutating WebUI views", () => {
   it("disables policy mutations in read-only mode", async () => {
     const { pinia, webui } = setupStores(false);
     webui.servicePolicies = [servicePolicy()];
+    webui.updateTargets = updateTargetsResponse();
+    vi.spyOn(webui, "loadUpdateTargets").mockResolvedValue();
     vi.spyOn(webui, "loadServicePolicies").mockResolvedValue();
     const deletePolicy = vi.spyOn(webui, "deleteServicePolicy");
     const wrapper = mountWithApp(PoliciesView, { pinia });
@@ -1300,7 +1304,9 @@ describe("mutating WebUI views", () => {
     const { pinia, webui } = setupStores(true);
     webui.status = null;
     webui.servicePolicies = [servicePolicy()];
+    webui.updateTargets = updateTargetsResponse();
     vi.spyOn(webui, "loadStatus").mockResolvedValue();
+    vi.spyOn(webui, "loadUpdateTargets").mockResolvedValue();
     vi.spyOn(webui, "loadServicePolicies").mockResolvedValue();
     const wrapper = mountWithApp(PoliciesView, { pinia });
     await flushPromises();
@@ -1345,6 +1351,8 @@ describe("mutating WebUI views", () => {
         auto_update_days: ["mon", "fri"],
       }),
     ];
+    webui.updateTargets = updateTargetsResponse();
+    vi.spyOn(webui, "loadUpdateTargets").mockResolvedValue();
     vi.spyOn(webui, "loadServicePolicies").mockResolvedValue();
     const upsertPolicy = vi
       .spyOn(webui, "upsertServicePolicy")
@@ -1377,9 +1385,36 @@ describe("mutating WebUI views", () => {
     );
   });
 
+  it("offers discovered services and image repositories on management forms", async () => {
+    const { pinia, webui } = setupStores(true);
+    webui.updateTargets = updateTargetsResponse([
+      updateTarget({
+        service_key: "media/radarr",
+        service: "radarr",
+        image: "lscr.io/linuxserver/radarr:5.21.1",
+        image_repo: "lscr.io/linuxserver/radarr",
+        current_tag: "5.21.1",
+      }),
+    ]);
+    webui.tagExclusions = [];
+    vi.spyOn(webui, "loadUpdateTargets").mockResolvedValue();
+    vi.spyOn(webui, "loadTagExclusions").mockResolvedValue();
+    const wrapper = mountWithApp(TagExclusionsView, { pinia });
+    await flushPromises();
+
+    expect(wrapper.text()).toContain("lscr.io/linuxserver/radarr");
+
+    await wrapper.findAll("select")[1]?.setValue("lscr.io/linuxserver/radarr");
+    await nextTick();
+
+    expect(wrapper.findAll("select")[2]?.text()).toContain("5.21.1");
+  });
+
   it("disables snooze mutations in read-only mode", async () => {
     const { pinia, webui } = setupStores(false);
     webui.snoozes = [snooze()];
+    webui.updateTargets = updateTargetsResponse();
+    vi.spyOn(webui, "loadUpdateTargets").mockResolvedValue();
     vi.spyOn(webui, "loadSnoozes").mockResolvedValue();
     const deleteSnooze = vi.spyOn(webui, "deleteSnooze");
     const wrapper = mountWithApp(SnoozesView, { pinia });
@@ -1401,6 +1436,8 @@ describe("mutating WebUI views", () => {
   it("disables tag exclusion mutations in read-only mode", async () => {
     const { pinia, webui } = setupStores(false);
     webui.tagExclusions = [tagExclusion()];
+    webui.updateTargets = updateTargetsResponse();
+    vi.spyOn(webui, "loadUpdateTargets").mockResolvedValue();
     vi.spyOn(webui, "loadTagExclusions").mockResolvedValue();
     const setStatus = vi.spyOn(webui, "setTagExclusionStatus");
     const wrapper = mountWithApp(TagExclusionsView, { pinia });

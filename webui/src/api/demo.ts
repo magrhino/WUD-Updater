@@ -36,6 +36,8 @@ import type {
   TagExclusionRuleRecord,
   TagExclusionStatusFilter,
   TagOverrideRequest,
+  UpdateTargetItem,
+  UpdateTargetsResponse,
   WebApi,
 } from "./client";
 
@@ -320,6 +322,53 @@ const INITIAL_TAG_EXCLUSIONS: TagExclusionRuleRecord[] = [
     created_at: "2026-05-28T12:00:00+00:00",
     updated_at: "2026-05-28T12:00:00+00:00",
     metadata: { source: "demo" },
+  },
+];
+
+const DEMO_UPDATE_TARGETS: UpdateTargetItem[] = [
+  {
+    service_key: "data/postgres",
+    stack: "data",
+    service: "postgres",
+    image: "postgres:16",
+    image_repo: "postgres",
+    current_tag: "16",
+    directory: `${DEMO_DOCKER_BASE}/data`,
+    compose_file: "docker-compose.yml",
+    project_directory: "",
+  },
+  {
+    service_key: "home/home-assistant",
+    stack: "home",
+    service: "home-assistant",
+    image: "ghcr.io/home-assistant/home-assistant:2026.5.1",
+    image_repo: "ghcr.io/home-assistant/home-assistant",
+    current_tag: "2026.5.1",
+    directory: `${DEMO_DOCKER_BASE}/home`,
+    compose_file: "docker-compose.yml",
+    project_directory: "",
+  },
+  {
+    service_key: "media/radarr",
+    stack: "media",
+    service: "radarr",
+    image: "lscr.io/linuxserver/radarr:5.21.1",
+    image_repo: "lscr.io/linuxserver/radarr",
+    current_tag: "5.21.1",
+    directory: `${DEMO_DOCKER_BASE}/media`,
+    compose_file: "docker-compose.yml",
+    project_directory: "",
+  },
+  {
+    service_key: "media/wud-updater",
+    stack: "media",
+    service: "wud-updater",
+    image: "ghcr.io/magrhino/wud-updater:v0.25.0",
+    image_repo: "ghcr.io/magrhino/wud-updater",
+    current_tag: "v0.25.0",
+    directory: `${DEMO_DOCKER_BASE}/media`,
+    compose_file: "docker-compose.yml",
+    project_directory: "",
   },
 ];
 
@@ -749,6 +798,15 @@ class DemoApiState {
           .map(stripDemoFields),
         warnings: [],
       },
+      warnings: [],
+    };
+  }
+
+  updateTargets(): UpdateTargetsResponse {
+    return {
+      status: "ready",
+      count: DEMO_UPDATE_TARGETS.length,
+      items: clone(DEMO_UPDATE_TARGETS),
       warnings: [],
     };
   }
@@ -1276,6 +1334,7 @@ export function createDemoWebApi(): WebApi {
     onboardingChecklist: async (_csrfToken: string) => state.onboardingChecklist(),
     dismissOnboarding: async (_csrfToken: string) => state.dismissOnboarding(),
     pending: async () => state.pendingResponse(),
+    updateTargets: async () => state.updateTargets(),
     cleanupPending: async (
       cleanupId: string,
       lines: PendingCleanupLine[],

@@ -19,6 +19,8 @@ import type {
   StatusResponse,
   StateOperationResponse,
   TagExclusionRuleRecord,
+  UpdateTargetItem,
+  UpdateTargetsResponse,
 } from "../../src/api/client";
 
 export function authSession(
@@ -380,6 +382,34 @@ export function pendingResponse(items = [pendingItem()]): PendingResponse {
     count: items.length,
     items,
     grouping: pendingGrouping(groupedItems),
+    warnings: [],
+  };
+}
+
+export function updateTarget(
+  overrides: Partial<UpdateTargetItem> = {},
+): UpdateTargetItem {
+  return {
+    service_key: "media/app",
+    stack: "media",
+    service: "app",
+    image: "repo/app:1.0",
+    image_repo: "repo/app",
+    current_tag: "1.0",
+    directory: "/docker/media",
+    compose_file: "docker-compose.yml",
+    project_directory: "/docker/media",
+    ...overrides,
+  };
+}
+
+export function updateTargetsResponse(
+  items = [updateTarget()],
+): UpdateTargetsResponse {
+  return {
+    status: "ready",
+    count: items.length,
+    items,
     warnings: [],
   };
 }
