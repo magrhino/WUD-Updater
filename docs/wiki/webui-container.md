@@ -6,12 +6,13 @@ starts in read-only mode.
 
 ## Start The WebUI
 
-Review the stack path in
-[`docs/examples/docker-compose.webui.yml`](../examples/docker-compose.webui.yml),
-then start the service:
+Copy the env example, review `HOST_DOCKER_BASE`, then start the service:
 
 ```bash
-docker compose -f docs/examples/docker-compose.webui.yml up -d
+WEBUI_ENV="$HOME/.config/wud-updater/webui.env"
+mkdir -p "$HOME/.config/wud-updater"
+test -f "$WEBUI_ENV" || cp docs/examples/webui.env.example "$WEBUI_ENV"
+docker compose --env-file "$WEBUI_ENV" -f docs/examples/docker-compose.webui.yml up -d
 ```
 
 The example publishes `127.0.0.1:8080:8080`, so the browser entrypoint is:
@@ -33,7 +34,7 @@ On first start, the WebUI creates a one-time setup claim and prints a setup URL
 to the server logs. Read it with:
 
 ```bash
-docker compose -f docs/examples/docker-compose.webui.yml logs wud-updater
+docker compose --env-file "$WEBUI_ENV" -f docs/examples/docker-compose.webui.yml logs wud-updater
 ```
 
 Open the `/#/setup?claim=...` URL, create the first admin username, and choose a
@@ -42,9 +43,9 @@ password with at least 12 characters. After setup succeeds, return to
 
 The setup claim, password hash, sessions, update runs, managed tag exclusions,
 and audit records are stored in SQLite at `WUD_DB_PATH`. The example sets that
-path to `/logs/wud-updater.sqlite`, backed by `./logs` on the Compose host.
-Keep that directory when recreating the container, or the WebUI will require
-setup again and previous run history will be lost.
+path to `/logs/wud-updater.sqlite`, backed by `WEBUI_LOG_DIR` on the Compose
+host. Keep that directory when recreating the container, or the WebUI will
+require setup again and previous run history will be lost.
 
 ## Admin Recovery
 
@@ -59,7 +60,7 @@ For the Compose example, run the command through the WebUI container so it uses
 the mounted SQLite database:
 
 ```bash
-docker compose -f docs/examples/docker-compose.webui.yml run --rm wud-updater web reset-admin --user admin
+docker compose --env-file "$WEBUI_ENV" -f docs/examples/docker-compose.webui.yml run --rm wud-updater web reset-admin --user admin
 ```
 
 The command prints a single `/#/reset-admin?claim=...` link. Opening that link
@@ -71,13 +72,12 @@ local audit history without storing or printing the raw recovery claim.
 
 For a local workstation, keep the default loopback port binding. For LAN or
 reverse-proxy exposure, change the port binding intentionally and set the
-browser-visible origin and accepted hosts:
+browser-visible origin and accepted hosts in the env file:
 
-```yaml
-environment:
-  WUD_WEB_PUBLIC_ORIGIN: "https://wud.example.test"
-  WUD_WEB_ALLOWED_HOSTS: "wud.example.test,127.0.0.1,localhost"
-  WUD_WEB_TRUSTED_PROXIES: "127.0.0.1/32"
+```dotenv
+WUD_WEB_PUBLIC_ORIGIN=https://wud.example.test
+WUD_WEB_ALLOWED_HOSTS=wud.example.test,127.0.0.1,localhost
+WUD_WEB_TRUSTED_PROXIES=127.0.0.1/32
 ```
 
 If TLS terminates at a reverse proxy, keep `WUD_WEB_SECURE_COOKIES=auto` unless
@@ -92,10 +92,9 @@ and logs without enabling browser-initiated Docker mutations.
 
 To apply updates from the browser, set:
 
-```yaml
-environment:
-  WUD_WEB_MUTATIONS_ENABLED: "true"
-  WUD_TIMEZONE: "America/Chicago"
+```dotenv
+WUD_WEB_MUTATIONS_ENABLED=true
+WUD_TIMEZONE=America/Chicago
 ```
 
 Mutation requests still require the normal authenticated browser session, CSRF

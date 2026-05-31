@@ -45,7 +45,7 @@ Container checks require Docker:
 
 ```bash
 docker compose -f docs/examples/docker-compose.example.yml config
-docker compose -f docs/examples/docker-compose.webui.yml config
+docker compose --env-file docs/examples/webui.env.example -f docs/examples/docker-compose.webui.yml config
 docker compose -f docs/examples/docker-compose.hardened.yml config
 docker compose -f docs/examples/docker-compose.truenas.yml config
 docker compose -f docs/examples/docker-compose.build.yml config

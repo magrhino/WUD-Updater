@@ -175,13 +175,22 @@ For a long-running WebUI container, use
 [`docs/examples/docker-compose.webui.yml`](examples/docker-compose.webui.yml).
 That variant runs `wud-updater web`, serves the packaged SPA on
 `127.0.0.1:8080`, persists SQLite state in `/logs/wud-updater.sqlite`, and keeps
-browser mutations disabled unless `WUD_WEB_MUTATIONS_ENABLED=true` is set. Start
-it and read the one-time setup link from the service logs:
+browser mutations disabled unless `WUD_WEB_MUTATIONS_ENABLED=true` is set. Copy
+the WebUI env example, review `HOST_DOCKER_BASE`, then start it and read the
+one-time setup link from the service logs:
 
 ```bash
-docker compose -f docs/examples/docker-compose.webui.yml up -d
-docker compose -f docs/examples/docker-compose.webui.yml logs wud-updater
+WEBUI_ENV="$HOME/.config/wud-updater/webui.env"
+mkdir -p "$HOME/.config/wud-updater"
+test -f "$WEBUI_ENV" || cp docs/examples/webui.env.example "$WEBUI_ENV"
+docker compose --env-file "$WEBUI_ENV" -f docs/examples/docker-compose.webui.yml up -d
+docker compose --env-file "$WEBUI_ENV" -f docs/examples/docker-compose.webui.yml logs wud-updater
 ```
+
+The env file keeps first-run defaults in one place. `WEBUI_HTTP_BIND` controls
+the host-side published address and defaults to loopback, `WEBUI_LOG_DIR`
+persists logs plus SQLite state, and `HOST_DOCKER_BASE` must match the
+daemon-visible root that contains your Compose stack directories.
 
 Open the setup link, create the first admin username and a password with at
 least 12 characters, then sign in at `http://127.0.0.1:8080`. See

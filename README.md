@@ -56,12 +56,15 @@ checks without storing a TrueNAS API key. The helper is only used when
 
 ### WebUI Container
 
-For a long-running local WebUI, start from
-`docs/examples/docker-compose.webui.yml`:
+For a long-running local WebUI, copy the WebUI Compose env example, review
+`HOST_DOCKER_BASE`, then start from `docs/examples/docker-compose.webui.yml`:
 
 ```bash
-docker compose -f docs/examples/docker-compose.webui.yml up -d
-docker compose -f docs/examples/docker-compose.webui.yml logs wud-updater
+WEBUI_ENV="$HOME/.config/wud-updater/webui.env"
+mkdir -p "$HOME/.config/wud-updater"
+test -f "$WEBUI_ENV" || cp docs/examples/webui.env.example "$WEBUI_ENV"
+docker compose --env-file "$WEBUI_ENV" -f docs/examples/docker-compose.webui.yml up -d
+docker compose --env-file "$WEBUI_ENV" -f docs/examples/docker-compose.webui.yml logs wud-updater
 ```
 
 Open the one-time `/#/setup?claim=...` link printed in the logs, create the
@@ -77,7 +80,7 @@ new one-time recovery link from the host or container:
 
 ```bash
 wud-updater web reset-admin --user admin
-docker compose -f docs/examples/docker-compose.webui.yml run --rm wud-updater web reset-admin --user admin
+docker compose --env-file "$WEBUI_ENV" -f docs/examples/docker-compose.webui.yml run --rm wud-updater web reset-admin --user admin
 ```
 
 The reset command uses the configured `WUD_DB_PATH`, revokes existing sessions
