@@ -517,7 +517,8 @@ def test_doctor_endpoint_enforces_auth_csrf_and_post(
     assert auth_response.json()["detail"] == "setup required"
     assert missing_csrf.status_code == 403
     assert missing_csrf.json()["detail"] == "origin header is required"
-    assert get_response.status_code == 404
+    assert get_response.status_code == 405
+    assert get_response.headers["allow"] == "POST"
 
 
 def test_doctor_endpoint_returns_structured_redacted_results(

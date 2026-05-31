@@ -947,6 +947,11 @@ def create_app(
         response_model=DoctorResponse,
     )
     router.add_api_route(
+        "/doctor",
+        api_doctor_method_not_allowed,
+        methods=["GET"],
+    )
+    router.add_api_route(
         "/pending",
         api_pending,
         methods=["GET"],
@@ -1375,6 +1380,14 @@ def api_settings(request: Request) -> SettingsResponse:
 def api_doctor(request: Request) -> DoctorResponse:
     settings = _settings(request)
     return _doctor_response(settings, _web_doctor_result(settings, request))
+
+
+def api_doctor_method_not_allowed() -> JSONResponse:
+    return JSONResponse(
+        {"detail": "method not allowed"},
+        status_code=405,
+        headers={"Allow": "POST"},
+    )
 
 
 def api_pending(request: Request) -> PendingResponse:
