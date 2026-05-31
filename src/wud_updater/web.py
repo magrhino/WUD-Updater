@@ -765,6 +765,7 @@ def create_app(
     app.state.web_apply_jobs = {}
     app.state.web_login_throttle_lock = Lock()
     app.state.web_login_throttle = {}
+    app.state.web_login_lockdown_until = 0.0
     app.state.web_auto_update_started_at = datetime.now(timezone.utc)
     app.state.web_auto_update_stop = Event()
     app.state.web_auto_update_thread = None
@@ -4653,6 +4654,8 @@ def _login_throttle_blocked(
         throttle: dict[tuple[str, str], LoginThrottleEntry] = (
             request.app.state.web_login_throttle
         )
+        if _login_lockdown_active(request, now):
+            return True
         _prune_login_throttle(throttle, now)
         entry = throttle.get(key)
         return entry is not None and entry.locked_until > now
@@ -4669,9 +4672,14 @@ def _record_login_failure(
         throttle: dict[tuple[str, str], LoginThrottleEntry] = (
             request.app.state.web_login_throttle
         )
+        if _login_lockdown_active(request, now):
+            return
         _prune_login_throttle(throttle, now)
         entry = throttle.get(key)
         if entry is None:
+            if len(throttle) >= LOGIN_THROTTLE_MAX_ENTRIES:
+                _enter_login_lockdown(request, throttle, now)
+                return
             entry = LoginThrottleEntry(
                 failures=1,
                 first_failed_at=now,
@@ -4683,7 +4691,6 @@ def _record_login_failure(
             entry.last_failed_at = now
         if entry.failures >= LOGIN_THROTTLE_MAX_FAILURES:
             entry.locked_until = now + LOGIN_THROTTLE_COOLDOWN_SECONDS
-        _evict_login_throttle_entries(throttle)
 
 
 def _clear_login_throttle(
@@ -4716,15 +4723,24 @@ def _prune_login_throttle(
             throttle.pop(key, None)
 
 
-def _evict_login_throttle_entries(
+def _login_lockdown_active(request: Request, now: float) -> bool:
+    lockdown_until = float(request.app.state.web_login_lockdown_until)
+    if lockdown_until > now:
+        return True
+    if lockdown_until:
+        request.app.state.web_login_lockdown_until = 0.0
+    return False
+
+
+def _enter_login_lockdown(
+    request: Request,
     throttle: dict[tuple[str, str], LoginThrottleEntry],
+    now: float,
 ) -> None:
-    overflow = len(throttle) - LOGIN_THROTTLE_MAX_ENTRIES
-    if overflow <= 0:
-        return
-    oldest = sorted(throttle.items(), key=lambda item: item[1].last_failed_at)
-    for key, _entry in oldest[:overflow]:
-        throttle.pop(key, None)
+    throttle.clear()
+    request.app.state.web_login_lockdown_until = (
+        now + LOGIN_THROTTLE_COOLDOWN_SECONDS
+    )
 
 
 def _create_web_session(
