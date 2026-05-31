@@ -1433,8 +1433,22 @@ def api_doctor_method_not_allowed() -> JSONResponse:
 
 def api_onboarding_checklist(request: Request) -> OnboardingChecklistResponse:
     settings = _settings(request)
+    dismissed_at = _onboarding_dismissed_at(settings)
+    if dismissed_at:
+        return OnboardingChecklistResponse(
+            dismissed=True,
+            dismissed_at=dismissed_at,
+            all_passed=False,
+            visible=False,
+            items=[],
+        )
     result = _web_doctor_result(settings, request)
-    return _onboarding_checklist_response(settings, request, result)
+    return _onboarding_checklist_response(
+        settings,
+        request,
+        result,
+        dismissed_at=dismissed_at,
+    )
 
 
 def api_onboarding_dismiss(request: Request) -> OnboardingDismissResponse:
@@ -2292,6 +2306,7 @@ ONBOARDING_REQUIRED_KEYS = frozenset(
         "compose-discovery",
         "persistence",
         "browser-access",
+        "mutation-mode",
     }
 )
 ONBOARDING_STATUS_RANK: Mapping[DoctorCheckStatus, int] = {
@@ -2306,10 +2321,11 @@ def _onboarding_checklist_response(
     settings: WebSettings,
     request: Request,
     result: DoctorDataResult,
+    *,
+    dismissed_at: str,
 ) -> OnboardingChecklistResponse:
     doctor = _doctor_response(settings, result)
     checks = doctor.checks
-    dismissed_at = _onboarding_dismissed_at(settings)
     items = [
         _onboarding_admin_item(settings),
         _onboarding_item_from_checks(

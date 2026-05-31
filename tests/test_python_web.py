@@ -654,6 +654,32 @@ def test_onboarding_dismissal_persists_in_sqlite(
     assert after.json()["dismissed_at"] == dismiss.json()["dismissed_at"]
 
 
+def test_onboarding_checklist_skips_doctor_after_dismissal(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    client = _doctor_client(tmp_path)
+    dismiss = client.post(
+        "/api/v1/onboarding/dismiss",
+        headers=_csrf_headers(client),
+    )
+
+    def fail_doctor(*_args, **_kwargs):
+        raise AssertionError("dismissed onboarding should not run doctor")
+
+    monkeypatch.setattr(web_module, "_web_doctor_result", fail_doctor)
+    after = client.post(
+        "/api/v1/onboarding/checklist",
+        headers=_csrf_headers(client),
+    )
+
+    assert dismiss.status_code == 200
+    assert after.status_code == 200
+    assert after.json()["dismissed"] is True
+    assert after.json()["visible"] is False
+    assert after.json()["items"] == []
+
+
 def test_onboarding_checklist_hides_when_required_items_pass(
     tmp_path: Path,
 ) -> None:
@@ -682,6 +708,32 @@ def test_onboarding_checklist_hides_when_required_items_pass(
     assert body["all_passed"] is True
     assert body["visible"] is False
     assert set(required.values()) == {"PASS"}
+
+
+def test_onboarding_checklist_stays_visible_when_mutations_enabled(
+    tmp_path: Path,
+) -> None:
+    client = _doctor_client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "false",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+            "WUD_WEB_PUBLIC_ORIGIN": "http://testserver",
+        },
+    )
+    _setup_admin(client)
+
+    response = client.post(
+        "/api/v1/onboarding/checklist",
+        headers=_csrf_headers(client),
+    )
+    body = response.json()
+    items = {item["key"]: item for item in body["items"]}
+
+    assert response.status_code == 200
+    assert items["mutation-mode"]["status"] == "WARN"
+    assert body["all_passed"] is False
+    assert body["visible"] is True
 
 
 def test_csrf_endpoint_sets_double_submit_cookie(tmp_path: Path) -> None:
