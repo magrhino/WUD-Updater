@@ -265,8 +265,9 @@ export const naiveStubs: Record<string, Component> = {
   NSelect: {
     props: {
       disabled: Boolean,
+      multiple: Boolean,
       options: Array,
-      value: [String, Number],
+      value: [String, Number, Array],
     },
     emits: ["update:value"],
     setup(props, { emit }) {
@@ -275,9 +276,17 @@ export const naiveStubs: Record<string, Component> = {
           "select",
           {
             disabled: props.disabled,
-            value: props.value ?? "",
-            onChange: (event: Event) =>
-              emit("update:value", (event.target as HTMLSelectElement).value),
+            multiple: props.multiple,
+            value: props.value ?? (props.multiple ? [] : ""),
+            onChange: (event: Event) => {
+              const select = event.target as HTMLSelectElement;
+              emit(
+                "update:value",
+                props.multiple
+                  ? Array.from(select.selectedOptions).map((option) => option.value)
+                  : select.value,
+              );
+            },
           },
           (props.options as { label: string; value: string | number }[] | undefined)?.map(
             (option) =>

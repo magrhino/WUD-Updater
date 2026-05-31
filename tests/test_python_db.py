@@ -49,6 +49,7 @@ class DatabaseTests(unittest.TestCase):
                     "update_events",
                     "snoozes",
                     "service_policy",
+                    "auto_update_schedule_runs",
                     "known_images",
                     "pending_updates",
                     "release_note_cache",
@@ -98,7 +99,7 @@ class DatabaseTests(unittest.TestCase):
                 """
             ).fetchall()
 
-        self.assertEqual([row[0] for row in rows], [1, 2, 3, 4, 5])
+        self.assertEqual([row[0] for row in rows], [1, 2, 3, 4, 5, 6])
 
     def test_init_db_accepts_matching_version_zero_table(self) -> None:
         with sqlite3.connect(":memory:") as conn:
@@ -199,11 +200,74 @@ class DatabaseTests(unittest.TestCase):
 
         self.assertEqual(version, SCHEMA_VERSION)
         self.assertEqual(run[0], "success")
-        self.assertEqual(migration_versions, [1, 2, 3, 4, 5])
+        self.assertEqual(migration_versions, [1, 2, 3, 4, 5, 6])
+
+    def test_init_db_migrates_v5_schema_and_preserves_policy_rows(self) -> None:
+        with sqlite3.connect(":memory:") as conn:
+            conn.row_factory = sqlite3.Row
+            conn.executescript(V5_SCHEMA_SQL)
+            conn.execute("PRAGMA user_version = 5")
+            conn.execute(
+                """
+                INSERT INTO service_policy (
+                    service_key,
+                    update_mode,
+                    auto_update,
+                    snooze_default_seconds,
+                    created_at,
+                    updated_at,
+                    metadata_json
+                )
+                VALUES (
+                    'stack/app',
+                    'live',
+                    0,
+                    3600,
+                    '2026-05-28T12:00:00+00:00',
+                    '2026-05-28T12:00:00+00:00',
+                    '{"source":"test"}'
+                )
+                """
+            )
+
+            init_db(conn)
+            version = conn.execute("PRAGMA user_version").fetchone()[0]
+            policy = conn.execute(
+                """
+                SELECT *
+                FROM service_policy
+                WHERE service_key = 'stack/app'
+                """
+            ).fetchone()
+            schedule_table = conn.execute(
+                """
+                SELECT name
+                FROM sqlite_master
+                WHERE type = 'table'
+                  AND name = 'auto_update_schedule_runs'
+                """
+            ).fetchone()
+            migration_versions = [
+                row[0]
+                for row in conn.execute(
+                    """
+                    SELECT version
+                    FROM schema_migrations
+                    ORDER BY version
+                    """
+                )
+            ]
+
+        self.assertEqual(version, SCHEMA_VERSION)
+        self.assertIsNotNone(schedule_table)
+        self.assertEqual(policy["update_mode"], "live")
+        self.assertEqual(policy["auto_update"], 0)
+        self.assertIsNone(policy["auto_update_time"])
+        self.assertEqual(policy["auto_update_days_json"], "[]")
+        self.assertEqual(migration_versions, [1, 2, 3, 4, 5, 6])
 
     def test_init_db_rejects_malformed_existing_pending_updates(self) -> None:
         with sqlite3.connect(":memory:") as conn:
-            conn.executescript(V1_SCHEMA_SQL)
             conn.execute(
                 """
                 CREATE TABLE pending_updates (
@@ -595,6 +659,69 @@ CREATE TABLE tag_exclusion_rules (
     updated_at TEXT NOT NULL,
     metadata_json TEXT NOT NULL DEFAULT '{}',
     UNIQUE (scope, image_repo, service_key, match_type, tag)
+);
+"""
+)
+
+V4_SCHEMA_SQL = (
+    V3_SCHEMA_SQL
+    + """
+CREATE TABLE schema_migrations (
+    version INTEGER PRIMARY KEY,
+    name TEXT NOT NULL,
+    applied_at TEXT NOT NULL
+);
+
+CREATE TABLE web_users (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    username TEXT NOT NULL UNIQUE,
+    password_hash TEXT NOT NULL,
+    role TEXT NOT NULL DEFAULT 'admin',
+    created_at TEXT NOT NULL,
+    password_updated_at TEXT NOT NULL,
+    disabled_at TEXT
+);
+
+CREATE TABLE web_sessions (
+    id_hash TEXT PRIMARY KEY,
+    user_id INTEGER NOT NULL,
+    created_at TEXT NOT NULL,
+    last_seen_at TEXT NOT NULL,
+    expires_at TEXT NOT NULL,
+    user_agent_hash TEXT NOT NULL DEFAULT '',
+    revoked_at TEXT,
+    FOREIGN KEY (user_id) REFERENCES web_users(id) ON DELETE CASCADE
+);
+
+CREATE TABLE web_settings (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+"""
+)
+
+V5_SCHEMA_SQL = (
+    V4_SCHEMA_SQL
+    + """
+CREATE TABLE release_note_cache (
+    cache_key TEXT PRIMARY KEY,
+    provider TEXT NOT NULL,
+    image_repo TEXT NOT NULL DEFAULT '',
+    upstream_repo TEXT NOT NULL DEFAULT '',
+    current_tag TEXT NOT NULL DEFAULT '',
+    target_tag TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL,
+    release_tag TEXT NOT NULL DEFAULT '',
+    title TEXT NOT NULL DEFAULT '',
+    published_at TEXT NOT NULL DEFAULT '',
+    breaking INTEGER NOT NULL DEFAULT 0,
+    breaking_reasons_json TEXT NOT NULL DEFAULT '[]',
+    links_json TEXT NOT NULL DEFAULT '[]',
+    error TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    metadata_json TEXT NOT NULL DEFAULT '{}'
 );
 """
 )

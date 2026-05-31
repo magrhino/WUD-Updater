@@ -14,6 +14,7 @@ dependencies = [
     "pydantic>=2,<3",
     "rich>=13.7,<16",
     "ruamel.yaml>=0.18.13,<0.20",
+    "tzdata>=2024.1",
     "uvicorn>=0.32,<1",
 ]
 

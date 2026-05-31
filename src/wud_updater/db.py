@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 
-SCHEMA_VERSION = 5
+SCHEMA_VERSION = 6
 
 ColumnSchema = tuple[str, str, int, str | None, int]
 
@@ -56,6 +56,18 @@ EXPECTED_SCHEMA: dict[str, tuple[ColumnSchema, ...]] = {
         ("update_mode", "TEXT", 1, "''", 0),
         ("auto_update", "INTEGER", 1, "1", 0),
         ("snooze_default_seconds", "INTEGER", 0, None, 0),
+        ("created_at", "TEXT", 1, None, 0),
+        ("updated_at", "TEXT", 1, None, 0),
+        ("metadata_json", "TEXT", 1, "'{}'", 0),
+        ("auto_update_time", "TEXT", 0, None, 0),
+        ("auto_update_days_json", "TEXT", 1, "'[]'", 0),
+    ),
+    "auto_update_schedule_runs": (
+        ("schedule_key", "TEXT", 0, None, 1),
+        ("service_key", "TEXT", 1, None, 0),
+        ("scheduled_for", "TEXT", 1, None, 0),
+        ("run_id", "INTEGER", 0, None, 0),
+        ("status", "TEXT", 1, None, 0),
         ("created_at", "TEXT", 1, None, 0),
         ("updated_at", "TEXT", 1, None, 0),
         ("metadata_json", "TEXT", 1, "'{}'", 0),
@@ -146,9 +158,22 @@ WEB_SCHEMA_TABLES = frozenset(
     {"schema_migrations", "web_users", "web_sessions", "web_settings"}
 )
 
+EXPECTED_SCHEMA_V5 = {
+    name: (
+        tuple(
+            column
+            for column in columns
+            if name != "service_policy"
+            or column[0] not in {"auto_update_time", "auto_update_days_json"}
+        )
+    )
+    for name, columns in EXPECTED_SCHEMA.items()
+    if name != "auto_update_schedule_runs"
+}
+
 EXPECTED_SCHEMA_V4 = {
     name: columns
-    for name, columns in EXPECTED_SCHEMA.items()
+    for name, columns in EXPECTED_SCHEMA_V5.items()
     if name != "release_note_cache"
 }
 
@@ -200,11 +225,19 @@ def init_db(conn: sqlite3.Connection) -> None:
         _backfill_schema_migrations(conn, SCHEMA_VERSION)
         _validate_schema(conn)
         return
+    if version == 5:
+        _validate_schema(conn, expected_schema=EXPECTED_SCHEMA_V5)
+        _ensure_schema_migrations(conn)
+        _backfill_schema_migrations(conn, 5)
+        _migrate_v5_to_v6(conn)
+        _validate_schema(conn)
+        return
     if version == 4:
         _validate_schema(conn, expected_schema=EXPECTED_SCHEMA_V4)
         _ensure_schema_migrations(conn)
         _backfill_schema_migrations(conn, 4)
         _migrate_v4_to_v5(conn)
+        _migrate_v5_to_v6(conn)
         _validate_schema(conn)
         return
     if version == 3:
@@ -213,6 +246,7 @@ def init_db(conn: sqlite3.Connection) -> None:
         _backfill_schema_migrations(conn, 3)
         _migrate_v3_to_v4(conn)
         _migrate_v4_to_v5(conn)
+        _migrate_v5_to_v6(conn)
         _validate_schema(conn)
         return
     if version == 2:
@@ -222,6 +256,7 @@ def init_db(conn: sqlite3.Connection) -> None:
         _migrate_v2_to_v3(conn)
         _migrate_v3_to_v4(conn)
         _migrate_v4_to_v5(conn)
+        _migrate_v5_to_v6(conn)
         _validate_schema(conn)
         return
     if version == 1:
@@ -232,6 +267,7 @@ def init_db(conn: sqlite3.Connection) -> None:
         _migrate_v2_to_v3(conn)
         _migrate_v3_to_v4(conn)
         _migrate_v4_to_v5(conn)
+        _migrate_v5_to_v6(conn)
         _validate_schema(conn)
         return
     if version != 0:
@@ -292,7 +328,21 @@ def init_db(conn: sqlite3.Connection) -> None:
                 snooze_default_seconds INTEGER,
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL,
-                metadata_json TEXT NOT NULL DEFAULT '{}'
+                metadata_json TEXT NOT NULL DEFAULT '{}',
+                auto_update_time TEXT,
+                auto_update_days_json TEXT NOT NULL DEFAULT '[]'
+            );
+
+            CREATE TABLE IF NOT EXISTS auto_update_schedule_runs (
+                schedule_key TEXT PRIMARY KEY,
+                service_key TEXT NOT NULL,
+                scheduled_for TEXT NOT NULL,
+                run_id INTEGER,
+                status TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                metadata_json TEXT NOT NULL DEFAULT '{}',
+                FOREIGN KEY (run_id) REFERENCES update_runs(id) ON DELETE SET NULL
             );
 
             CREATE TABLE IF NOT EXISTS known_images (
@@ -334,6 +384,8 @@ def init_db(conn: sqlite3.Connection) -> None:
                 ON pending_updates (status);
             CREATE INDEX IF NOT EXISTS idx_pending_updates_service_key_status
                 ON pending_updates (service_key, status);
+            CREATE INDEX IF NOT EXISTS idx_auto_update_schedule_runs_service
+                ON auto_update_schedule_runs (service_key, scheduled_for);
 
             CREATE TABLE IF NOT EXISTS release_note_cache (
                 cache_key TEXT PRIMARY KEY,
@@ -905,6 +957,7 @@ MIGRATION_NAMES = {
     3: "add tag exclusion rules",
     4: "add web auth state",
     5: "add release note cache",
+    6: "add auto update schedules",
 }
 
 
@@ -1129,3 +1182,47 @@ def _migrate_v4_to_v5(conn: sqlite3.Connection) -> None:
         )
         conn.execute("PRAGMA user_version = 5")
     _record_schema_migration(conn, 5)
+
+
+def _migrate_v5_to_v6(conn: sqlite3.Connection) -> None:
+    _validate_table_columns(
+        conn,
+        "service_policy",
+        EXPECTED_SCHEMA_V5["service_policy"],
+    )
+    object_type = _sqlite_object_type(conn, "auto_update_schedule_runs")
+    if object_type is not None:
+        if object_type != "table":
+            raise DatabaseError(
+                f"Expected auto_update_schedule_runs to be a table, found {object_type}"
+            )
+        _validate_table_columns(
+            conn,
+            "auto_update_schedule_runs",
+            EXPECTED_SCHEMA["auto_update_schedule_runs"],
+        )
+    with conn:
+        conn.executescript(
+            """
+            ALTER TABLE service_policy
+                ADD COLUMN auto_update_time TEXT;
+            ALTER TABLE service_policy
+                ADD COLUMN auto_update_days_json TEXT NOT NULL DEFAULT '[]';
+
+            CREATE TABLE IF NOT EXISTS auto_update_schedule_runs (
+                schedule_key TEXT PRIMARY KEY,
+                service_key TEXT NOT NULL,
+                scheduled_for TEXT NOT NULL,
+                run_id INTEGER,
+                status TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                metadata_json TEXT NOT NULL DEFAULT '{}',
+                FOREIGN KEY (run_id) REFERENCES update_runs(id) ON DELETE SET NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_auto_update_schedule_runs_service
+                ON auto_update_schedule_runs (service_key, scheduled_for);
+            """
+        )
+        conn.execute("PRAGMA user_version = 6")
+    _record_schema_migration(conn, 6)

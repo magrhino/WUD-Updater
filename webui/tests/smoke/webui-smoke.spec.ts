@@ -322,6 +322,8 @@ async function fulfillApi(
       dev_auth_bypass: false,
       setup_required: false,
       mutations_enabled: state.mutationsEnabled,
+      timezone: "UTC",
+      auto_update_scheduler_enabled: state.mutationsEnabled,
       static_spa_available: true,
       warnings: [],
     });

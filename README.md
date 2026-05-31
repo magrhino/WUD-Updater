@@ -68,7 +68,9 @@ Open the one-time `/#/setup?claim=...` link printed in the logs, create the
 first admin username and a password with at least 12 characters, then sign in at
 `http://127.0.0.1:8080`. The example keeps browser access bound to loopback and
 leaves WebUI mutations disabled unless you explicitly set
-`WUD_WEB_MUTATIONS_ENABLED=true`.
+`WUD_WEB_MUTATIONS_ENABLED=true`. Scheduled service-policy auto updates use the
+server's `WUD_TIMEZONE` value, for example `America/Chicago`, and default to
+`UTC`.
 
 If the admin password is lost or an operator needs to rotate access, issue a
 new one-time recovery link from the host or container:
