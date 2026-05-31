@@ -577,12 +577,15 @@ def _resolve_web_values(
         return web_bind, public_origin, allowed_hosts, trusted_proxies
 
     if web_exposure == "lan":
-        if not allowed_hosts:
+        allowed_hosts = allowed_hosts.strip()
+        while not allowed_hosts:
             if non_interactive:
                 raise InitConfigError(
                     "--allowed-hosts is required for --web-exposure lan"
                 )
-            allowed_hosts = prompter.text("Allowed WebUI hostnames/IPs")
+            allowed_hosts = prompter.text("Allowed WebUI hostnames/IPs").strip()
+            if not allowed_hosts:
+                print("Allowed WebUI hostnames/IPs is required.", file=prompter.stream)
         return web_bind, public_origin, allowed_hosts, trusted_proxies
 
     if not public_origin:

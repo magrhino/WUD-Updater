@@ -12,6 +12,7 @@ from ruamel.yaml import YAML
 
 from wud_updater.init_config import (
     InitConfigError,
+    InitPrompter,
     answers_from_namespace,
     generate_files,
     run_init,
@@ -86,6 +87,43 @@ class InitConfigTests(unittest.TestCase):
                 ),
                 environ=self._env(),
             )
+
+        with self.assertRaisesRegex(InitConfigError, "--allowed-hosts"):
+            answers_from_namespace(
+                self._args(
+                    profile="webui",
+                    stack_root=str(self.root / "docker"),
+                    web_exposure="lan",
+                    allowed_hosts="   ",
+                ),
+                environ=self._env(),
+            )
+
+    def test_webui_lan_interactive_reprompts_for_allowed_hosts(self) -> None:
+        replies = iter(["", "wud.lan,192.168.1.20"])
+        stream = StringIO()
+
+        answers = answers_from_namespace(
+            self._args(
+                profile="webui",
+                config_file=str(self.root / "webui.env"),
+                stack_root=str(self.root / "docker"),
+                log_dir=str(self.root / "logs"),
+                uid="1000",
+                gid="1000",
+                web_exposure="lan",
+                non_interactive=False,
+                no_doctor=True,
+            ),
+            environ=self._env(),
+            prompter=InitPrompter(
+                input_func=lambda _prompt: next(replies),
+                stream=stream,
+            ),
+        )
+
+        self.assertEqual(answers.allowed_hosts, "wud.lan,192.168.1.20")
+        self.assertIn("Allowed WebUI hostnames/IPs is required.", stream.getvalue())
 
     def test_webui_lan_env_can_enable_mutations_explicitly(self) -> None:
         answers = answers_from_namespace(
