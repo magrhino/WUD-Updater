@@ -1928,12 +1928,12 @@ def _auto_update_tick(
                     "auto_update_scheduled_for": selection.scheduled_for.isoformat(),
                     "timezone": settings.config.timezone_name,
                 },
+                auto_update_selection=selection,
+                auto_update_conn=conn,
             )
         except Exception:
             wud_lock.close()
             raise
-
-        _record_auto_update_schedule_runs(conn, selection, response.job_id)
         return response
 
 
@@ -2113,6 +2113,50 @@ def _record_auto_update_schedule_runs(
             )
 
 
+def _safe_update_auto_update_schedule_runs(
+    settings: WebSettings,
+    schedule_keys: Sequence[str],
+    *,
+    status: ApplyJobStatus,
+    run_id: int | None,
+) -> None:
+    if not schedule_keys:
+        return
+    try:
+        _update_auto_update_schedule_runs(
+            settings,
+            schedule_keys,
+            status=status,
+            run_id=run_id,
+        )
+    except Exception:
+        LOGGER.exception("failed to update auto update schedule run status")
+
+
+def _update_auto_update_schedule_runs(
+    settings: WebSettings,
+    schedule_keys: Sequence[str],
+    *,
+    status: ApplyJobStatus,
+    run_id: int | None,
+) -> None:
+    now = utc_timestamp()
+    with connect_db(settings.config.db_path) as conn:
+        init_db(conn)
+        with conn:
+            for schedule_key in schedule_keys:
+                conn.execute(
+                    """
+                    UPDATE auto_update_schedule_runs
+                    SET run_id = ?,
+                        status = ?,
+                        updated_at = ?
+                    WHERE schedule_key = ?
+                    """,
+                    (run_id, status, now, schedule_key),
+                )
+
+
 def _build_web_plan(
     settings: WebSettings,
     payload: PlanRequest,
@@ -2202,6 +2246,8 @@ def _submit_apply_job_state(
     wud_lock: DirectoryLock,
     update_mode_override: str | None = None,
     metadata_extra: Mapping[str, Any] | None = None,
+    auto_update_selection: AutoUpdateSelection | None = None,
+    auto_update_conn: sqlite3.Connection | None = None,
 ) -> ApplyJobResponse:
     apply_condition: Condition = state.web_apply_condition
     jobs: dict[str, WebApplyJob] = state.web_apply_jobs
@@ -2214,6 +2260,12 @@ def _submit_apply_job_state(
             status="queued",
             selected_line_numbers=tuple(plan.selected_line_numbers),
         )
+        if auto_update_selection is not None and auto_update_conn is not None:
+            _record_auto_update_schedule_runs(
+                auto_update_conn,
+                auto_update_selection,
+                job.id,
+            )
         jobs[job.id] = job
         response = _apply_job_response(job)
         apply_condition.notify_all()
@@ -2230,6 +2282,7 @@ def _submit_apply_job_state(
             wud_lock,
             update_mode_override,
             metadata_extra,
+            () if auto_update_selection is None else auto_update_selection.schedule_keys,
         )
         return response
 
@@ -2344,6 +2397,7 @@ def _run_apply_job(
     wud_lock: DirectoryLock,
     update_mode_override: str | None = None,
     metadata_extra: Mapping[str, Any] | None = None,
+    auto_update_schedule_keys: tuple[str, ...] = (),
 ) -> None:
     _update_apply_job(
         jobs,
@@ -2377,26 +2431,40 @@ def _run_apply_job(
             log_file=str(runner.log_file),
         )
         status_code = runner.run()
+        job_status: ApplyJobStatus = "success" if status_code == 0 else "failure"
         _update_apply_job(
             jobs,
             apply_condition,
             job_id,
-            status="success" if status_code == 0 else "failure",
+            status=job_status,
             run_id=runner.audit_run_id,
             log_file=str(runner.log_file),
             finished_at=utc_timestamp(),
             error="" if status_code == 0 else f"updater exited with status {status_code}",
         )
+        _safe_update_auto_update_schedule_runs(
+            settings,
+            auto_update_schedule_keys,
+            status=job_status,
+            run_id=runner.audit_run_id,
+        )
     except Exception as exc:
+        run_id = None if runner is None else runner.audit_run_id
         _update_apply_job(
             jobs,
             apply_condition,
             job_id,
             status="failure",
-            run_id=None if runner is None else runner.audit_run_id,
+            run_id=run_id,
             log_file="" if runner is None else str(runner.log_file),
             finished_at=utc_timestamp(),
             error=str(exc),
+        )
+        _safe_update_auto_update_schedule_runs(
+            settings,
+            auto_update_schedule_keys,
+            status="failure",
+            run_id=run_id,
         )
     finally:
         wud_lock.close()

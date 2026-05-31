@@ -1,7 +1,11 @@
 from __future__ import annotations
 
+import os
 import unittest
 from pathlib import Path
+from unittest.mock import patch
+from zoneinfo import ZoneInfo, reset_tzpath
+import zoneinfo
 
 from wud_updater.config import ConfigError, load_config
 
@@ -151,6 +155,22 @@ class LoadConfigTests(unittest.TestCase):
     def test_timezone_is_validated(self) -> None:
         with self.assertRaisesRegex(ConfigError, "WUD_TIMEZONE"):
             load_config({"WUD_TIMEZONE": "Mars/Base"}, home="/home/wud")
+
+    def test_timezone_uses_tzdata_when_system_paths_are_empty(self) -> None:
+        original_tzpath = zoneinfo.TZPATH
+        try:
+            with patch.dict(os.environ, {"PYTHONTZPATH": ""}):
+                ZoneInfo.clear_cache()
+                reset_tzpath()
+                config = load_config(
+                    {"WUD_TIMEZONE": "America/Chicago"},
+                    home="/home/wud",
+                )
+        finally:
+            reset_tzpath(original_tzpath)
+            ZoneInfo.clear_cache()
+
+        self.assertEqual(config.timezone_name, "America/Chicago")
 
 
 if __name__ == "__main__":

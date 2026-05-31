@@ -1794,13 +1794,89 @@ def test_auto_update_scheduler_applies_due_policy_at_configured_local_time(
     assert schedule_rows[0]["schedule_key"] == (
         "stack/app|2026-05-30|09:30|America/Chicago"
     )
-    assert schedule_rows[0]["status"] == "queued"
+    assert schedule_rows[0]["status"] == "success"
+    assert schedule_rows[0]["run_id"] == job["run_id"]
+    assert datetime.fromisoformat(schedule_rows[0]["updated_at"]) >= datetime.fromisoformat(
+        schedule_rows[0]["created_at"]
+    )
     assert detail["metadata"]["source"] == "webui-auto"
     assert detail["metadata"]["actor_type"] == "scheduler"
     assert detail["metadata"]["auto_update_service_keys"] == ["stack/app"]
     assert detail["metadata"]["auto_update_scheduled_for"] == (
         "2026-05-30T14:30:00+00:00"
     )
+
+
+def test_auto_update_scheduler_records_failed_policy_run(
+    tmp_path: Path,
+) -> None:
+    fake_env, fake_root = _fake_docker_env(tmp_path)
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+            "WUD_TIMEZONE": "America/Chicago",
+            **fake_env,
+        },
+    )
+    wud_file = tmp_path / "state" / "images.todo"
+    original = "repo/app:latest\n"
+    wud_file.write_text(original, encoding="utf-8")
+    _make_fake_stack(
+        tmp_path,
+        fake_root,
+        "stack",
+        [("app", "repo/app:latest", "cid-app")],
+    )
+    (fake_root / "stacks" / "stack" / "pull_fail").write_text("", encoding="utf-8")
+    policy = client.post(
+        "/api/v1/state/operations",
+        json={
+            "kind": "upsert_service_policy",
+            "service_key": "stack/app",
+            "update_mode": "live",
+            "auto_update": True,
+            "auto_update_time": "09:30",
+            "auto_update_days": ["sat"],
+        },
+        headers=_csrf_headers(client),
+    )
+
+    now = datetime(2026, 5, 30, 14, 30, tzinfo=timezone.utc)
+    client.app.state.web_auto_update_started_at = now - timedelta(minutes=30)
+    response = web_module._auto_update_tick(
+        client.app,
+        client.app.state.web_settings,
+        now=now,
+    )
+    assert response is not None
+    job = _wait_apply_job(client, response.job_id)
+
+    assert policy.status_code == 200
+    assert job["status"] == "failure"
+    assert job["run_id"]
+    assert wud_file.read_text(encoding="utf-8") == original
+    with connect_db(tmp_path / "state" / "wud.sqlite") as conn:
+        schedule_rows = conn.execute(
+            """
+            SELECT *
+            FROM auto_update_schedule_runs
+            ORDER BY schedule_key
+            """
+        ).fetchall()
+        detail = client.get(f"/api/v1/runs/{job['run_id']}").json()
+
+    assert len(schedule_rows) == 1
+    assert schedule_rows[0]["schedule_key"] == (
+        "stack/app|2026-05-30|09:30|America/Chicago"
+    )
+    assert schedule_rows[0]["status"] == "failure"
+    assert schedule_rows[0]["run_id"] == job["run_id"]
+    assert datetime.fromisoformat(schedule_rows[0]["updated_at"]) >= datetime.fromisoformat(
+        schedule_rows[0]["created_at"]
+    )
+    assert detail["status"] == "failure"
 
 
 def test_auto_update_scheduler_skips_tag_updates_without_mutation(

@@ -13,7 +13,7 @@ import { useWebuiStore } from "../stores/webui";
 
 const webui = useWebuiStore();
 const auth = useAuthStore();
-const breakpoints = useBreakpoints({ managementDesktop: 1120 });
+const breakpoints = useBreakpoints({ managementDesktop: 1200 });
 const useManagementCards = breakpoints.smaller("managementDesktop");
 const showSaveConfirm = ref(false);
 const showDeleteConfirm = ref(false);
@@ -53,8 +53,13 @@ const weekdayOptions = Object.entries(dayLabels).map(([value, label]) => ({
 const mutationsEnabled = computed(
   () => auth.session?.mutations_enabled === true,
 );
-const timezoneLabel = computed(() => webui.status?.timezone ?? "UTC");
-const scheduleFeedback = computed(() => `Server timezone: ${timezoneLabel.value}`);
+const timezoneKnown = computed(() => webui.status !== null);
+const timezoneLabel = computed(() => webui.status?.timezone ?? "loading");
+const scheduleFeedback = computed(() =>
+  timezoneKnown.value
+    ? `Server timezone: ${timezoneLabel.value}`
+    : "Server timezone is loading.",
+);
 const autoUpdateScheduleValid = computed(
   () =>
     !policyForm.autoUpdate ||
@@ -77,6 +82,7 @@ const saveDisabled = computed(
     !mutationsEnabled.value ||
     !policyForm.serviceKey.trim() ||
     !autoUpdateScheduleValid.value ||
+    (policyForm.autoUpdate && !timezoneKnown.value) ||
     webui.loading,
 );
 

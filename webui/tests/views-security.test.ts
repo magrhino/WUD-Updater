@@ -1,5 +1,6 @@
 import { createPinia, setActivePinia } from "pinia";
 import { flushPromises } from "@vue/test-utils";
+import { nextTick } from "vue";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ApiError, webApi } from "../src/api/client";
@@ -1157,6 +1158,87 @@ describe("mutating WebUI views", () => {
     expect(deleteButton?.attributes("disabled")).toBeDefined();
     await deleteButton?.trigger("click");
     expect(deletePolicy).not.toHaveBeenCalled();
+  });
+
+  it("does not assume UTC while policy schedule timezone is loading", async () => {
+    const { pinia, webui } = setupStores(true);
+    webui.status = null;
+    webui.servicePolicies = [servicePolicy()];
+    vi.spyOn(webui, "loadStatus").mockResolvedValue();
+    vi.spyOn(webui, "loadServicePolicies").mockResolvedValue();
+    const wrapper = mountWithApp(PoliciesView, { pinia });
+    await flushPromises();
+
+    await wrapper
+      .findAll("button")
+      .find((button) => button.text().includes("Edit"))
+      ?.trigger("click");
+    await flushPromises();
+
+    const saveButton = wrapper
+      .findAll("button")
+      .find((button) => button.text().includes("Save policy"));
+    expect(wrapper.text()).toContain("Update time (loading)");
+    expect(wrapper.text()).not.toContain("Update time (UTC)");
+    expect(saveButton?.attributes("disabled")).toBeDefined();
+
+    webui.status = statusResponse({
+      mutations_enabled: true,
+      timezone: "America/Chicago",
+    });
+    await nextTick();
+
+    expect(wrapper.text()).toContain("Update time (America/Chicago)");
+    expect(
+      wrapper
+        .findAll("button")
+        .find((button) => button.text().includes("Save policy"))
+        ?.attributes("disabled"),
+    ).toBeUndefined();
+  });
+
+  it("saves scheduled policy fields after server timezone is known", async () => {
+    const { pinia, webui } = setupStores(true);
+    webui.status = statusResponse({
+      mutations_enabled: true,
+      timezone: "America/Chicago",
+    });
+    webui.servicePolicies = [
+      servicePolicy({
+        auto_update_time: "09:30",
+        auto_update_days: ["mon", "fri"],
+      }),
+    ];
+    vi.spyOn(webui, "loadServicePolicies").mockResolvedValue();
+    const upsertPolicy = vi
+      .spyOn(webui, "upsertServicePolicy")
+      .mockResolvedValue();
+    const wrapper = mountWithApp(PoliciesView, { pinia });
+    await flushPromises();
+
+    await wrapper
+      .findAll("button")
+      .find((button) => button.text().includes("Edit"))
+      ?.trigger("click");
+    await flushPromises();
+    await wrapper.find("form").trigger("submit");
+    await flushPromises();
+    await wrapper
+      .find('[role="dialog"]')
+      .findAll("button")
+      .find((button) => button.text().includes("Save policy"))
+      ?.trigger("click");
+    await flushPromises();
+
+    expect(wrapper.text()).toContain("Update time (America/Chicago)");
+    expect(upsertPolicy).toHaveBeenCalledWith(
+      "media/app",
+      "stop",
+      true,
+      null,
+      "09:30",
+      ["mon", "fri"],
+    );
   });
 
   it("disables snooze mutations in read-only mode", async () => {
