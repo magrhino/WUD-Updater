@@ -316,6 +316,48 @@ describe("webui store", () => {
     ).toBe("csrf-settings");
   });
 
+  it("keeps managed settings saves successful when onboarding refresh fails", async () => {
+    const updatedSettings = settingsResponse({
+      managed: [
+        settingsResponse().managed[0]!,
+        {
+          key: "onboarding_checklist",
+          value: "dismissed",
+          default_value: "visible",
+          source: "configured",
+          editable: true,
+          allowed_values: ["visible", "dismissed"],
+          restart_required: false,
+        },
+      ],
+    });
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        jsonResponse({ managed: updatedSettings.managed, audit_run_id: 45 }),
+      )
+      .mockResolvedValueOnce(jsonResponse({ detail: "doctor unavailable" }, 503));
+    vi.stubGlobal("fetch", fetchMock);
+    const auth = useAuthStore();
+    vi.spyOn(auth, "ensureCsrf").mockResolvedValue("csrf-settings");
+    const webui = useWebuiStore();
+    webui.settings = settingsResponse();
+    webui.onboarding = onboardingChecklistResponse({ visible: true });
+
+    const response = await webui.updateManagedSettings({
+      onboarding_checklist: "dismissed",
+    });
+
+    expect(response.audit_run_id).toBe(45);
+    expect(webui.settings?.managed[1]?.value).toBe("dismissed");
+    expect(webui.onboarding?.visible).toBe(true);
+    expect(webui.error).toBe("");
+    expect(fetchMock.mock.calls.map((call) => call[0])).toEqual([
+      "/api/v1/settings/managed",
+      "/api/v1/onboarding/checklist",
+    ]);
+  });
+
   it("surfaces backend errors and always clears loading state", async () => {
     const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ detail: "db missing" }, 503));
     vi.stubGlobal("fetch", fetchMock);

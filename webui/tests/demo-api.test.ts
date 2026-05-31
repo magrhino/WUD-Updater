@@ -51,6 +51,17 @@ describe("demo web API", () => {
         }),
       ]),
     });
+    await expect(
+      api.updateManagedSettings({ theme_preference: "system" }, "csrf"),
+    ).resolves.toMatchObject({
+      managed: expect.arrayContaining([
+        expect.objectContaining({
+          key: "theme_preference",
+          value: "system",
+          source: "configured",
+        }),
+      ]),
+    });
     await expect(api.onboardingChecklist("csrf")).resolves.toMatchObject({
       visible: true,
       items: expect.arrayContaining([

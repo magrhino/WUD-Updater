@@ -113,7 +113,11 @@ export const useWebuiStore = defineStore("webui", () => {
       throw new Error("Managed settings update did not return a response");
     }
     if (reloadOnboarding) {
-      await loadOnboarding();
+      try {
+        onboarding.value = await webApi.onboardingChecklist(await auth.ensureCsrf());
+      } catch {
+        // The preference save succeeded; the checklist can refresh on the next view load.
+      }
     }
     return response;
   }

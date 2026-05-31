@@ -424,6 +424,7 @@ class DemoApiState {
   runs = clone(INITIAL_RUNS);
   jobs = new Map<string, DemoJobRecord>();
   themePreference = "system";
+  themePreferenceConfigured = false;
   onboardingDismissedAt = "";
   nextJob = 1;
   nextRun = 4;
@@ -543,7 +544,7 @@ class DemoApiState {
           key: "theme_preference",
           value: this.themePreference,
           default_value: "system",
-          source: this.themePreference === "system" ? "default" : "configured",
+          source: this.themePreferenceConfigured ? "configured" : "default",
           editable: true,
           allowed_values: ["system", "light", "dark"],
           restart_required: false,
@@ -712,6 +713,7 @@ class DemoApiState {
           throw new Error("theme_preference must be system, light, or dark");
         }
         this.themePreference = value;
+        this.themePreferenceConfigured = true;
       } else if (key === "onboarding_checklist") {
         if (!["visible", "dismissed"].includes(value)) {
           throw new Error("onboarding_checklist must be visible or dismissed");
