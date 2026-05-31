@@ -883,6 +883,23 @@ describe("mutating WebUI views", () => {
     expect(wrapper.find('[role="table"]').exists()).toBe(true);
   });
 
+  it("renders a clear queue state when no pending updates remain", () => {
+    const { pinia, webui } = setupStores(true);
+    webui.pending = pendingResponse([]);
+    webui.runs = [runSummary({ id: 42 })];
+    mockPendingLifecycle(webui);
+    const wrapper = mountWithApp(PendingView, { pinia });
+
+    const clearState = wrapper.find(".clear-queue-state");
+    expect(clearState.exists()).toBe(true);
+    expect(clearState.text()).toContain("Update queue is clear");
+    expect(clearState.text()).toContain(
+      "images.todo has no updates waiting for review.",
+    );
+    expect(clearState.text()).toContain("Review latest run #42");
+    expect(clearState.find(".clear-queue-mark").exists()).toBe(true);
+  });
+
   it("renders release-note links with breaking cues", () => {
     const { pinia, webui } = setupStores(false);
     webui.pending = pendingResponse();

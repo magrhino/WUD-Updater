@@ -73,7 +73,17 @@ onMounted(() => {
         </div>
         <RouterLink to="/pending" class="text-link">View pending</RouterLink>
       </div>
-      <div v-if="!webui.pending?.items.length" class="empty-state">No pending updates.</div>
+      <div
+        v-if="!webui.pending?.items.length"
+        class="empty-state clear-queue-state clear-queue-state-compact"
+        role="status"
+      >
+        <span class="clear-queue-mark" aria-hidden="true">
+          <CheckCircle2 :size="24" />
+        </span>
+        <strong>Queue clear</strong>
+        <span>No pending updates are waiting for review.</span>
+      </div>
       <div v-else class="compact-list">
         <div v-for="item in webui.pending.items.slice(0, 5)" :key="item.line_no" class="list-row">
           <span>#{{ item.line_no }}</span>

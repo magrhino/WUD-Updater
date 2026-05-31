@@ -1099,6 +1099,19 @@ a {
   border-color: var(--color-border-hover);
 }
 
+.apply-job-panel-success {
+  border-color: color-mix(
+    in srgb,
+    var(--color-border) 64%,
+    var(--color-operational-teal) 36%
+  );
+  background: color-mix(
+    in srgb,
+    var(--color-surface) 94%,
+    var(--color-operational-teal) 6%
+  );
+}
+
 .apply-job-panel:focus-visible,
 .apply-job-modal h2:focus-visible {
   outline: 2px solid var(--color-border-hover);
@@ -1107,6 +1120,34 @@ a {
 
 .apply-job-heading {
   align-items: center;
+}
+
+.apply-job-heading-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.apply-job-heading-title h2 {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.apply-job-complete-mark {
+  display: inline-grid;
+  flex: 0 0 auto;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border-radius: 999px;
+  color: var(--color-operational-teal);
+  background: color-mix(
+    in srgb,
+    var(--color-surface) 82%,
+    var(--color-operational-teal) 18%
+  );
+  animation: apply-complete-pop 240ms var(--ease-out-quint);
 }
 
 .apply-job-summary {
@@ -1205,6 +1246,16 @@ a {
 
   100% {
     transform: translateX(340%);
+  }
+}
+
+@keyframes apply-complete-pop {
+  0% {
+    transform: scale(0.88);
+  }
+
+  100% {
+    transform: scale(1);
   }
 }
 
@@ -1627,6 +1678,84 @@ body .n-switch:focus-within {
   border-radius: 8px;
   color: var(--color-muted-text);
   background: var(--color-surface);
+}
+
+.clear-queue-state {
+  align-content: center;
+  gap: 8px;
+  justify-items: center;
+  padding: 18px;
+  border-color: color-mix(
+    in srgb,
+    var(--color-border-dashed) 70%,
+    var(--color-operational-teal) 30%
+  );
+  background: color-mix(
+    in srgb,
+    var(--color-surface) 92%,
+    var(--color-operational-teal) 8%
+  );
+  color: var(--color-text-secondary);
+  text-align: center;
+}
+
+.clear-queue-state-compact {
+  min-height: 132px;
+}
+
+.clear-queue-state strong {
+  color: var(--color-ink);
+  font-size: 0.98rem;
+}
+
+.clear-queue-state span:not(.clear-queue-mark) {
+  max-width: 52ch;
+  line-height: 1.45;
+}
+
+.clear-queue-state .text-link {
+  margin-top: 2px;
+}
+
+.clear-queue-mark {
+  position: relative;
+  display: grid;
+  width: 40px;
+  height: 40px;
+  place-items: center;
+  border-radius: 999px;
+  color: var(--color-operational-teal);
+  background: color-mix(
+    in srgb,
+    var(--color-surface) 82%,
+    var(--color-operational-teal) 18%
+  );
+}
+
+.clear-queue-mark::after {
+  content: "";
+  position: absolute;
+  inset: -5px;
+  border: 1px solid color-mix(
+    in srgb,
+    var(--color-operational-teal) 46%,
+    transparent
+  );
+  border-radius: inherit;
+  opacity: 0;
+  animation: clear-queue-ring 850ms var(--ease-out-quint) 1;
+}
+
+@keyframes clear-queue-ring {
+  0% {
+    opacity: 0.55;
+    transform: scale(0.84);
+  }
+
+  100% {
+    opacity: 0;
+    transform: scale(1.08);
+  }
 }
 
 .data-surface {
