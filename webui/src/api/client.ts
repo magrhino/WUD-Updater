@@ -308,6 +308,31 @@ export interface SettingsResponse {
   secrets: SecretSettingStatus[];
 }
 
+export type DoctorCheckStatus = "PASS" | "WARN" | "FAIL";
+
+export interface DoctorSuggestion {
+  label: string;
+  description: string;
+  snippet: string;
+}
+
+export interface DoctorCheck {
+  status: DoctorCheckStatus;
+  code: string;
+  category: string;
+  name: string;
+  detail: string;
+  target: string;
+  suggestions: DoctorSuggestion[];
+}
+
+export interface DoctorResponse {
+  ok: boolean;
+  failures: number;
+  warnings: number;
+  checks: DoctorCheck[];
+}
+
 export interface AuthSessionResponse {
   authenticated: boolean;
   setup_required: boolean;
@@ -566,6 +591,11 @@ const liveWebApi = {
     }),
   status: () => apiRequest<StatusResponse>("/status"),
   settings: () => apiRequest<SettingsResponse>("/settings"),
+  doctor: (csrfToken: string) =>
+    apiRequest<DoctorResponse>("/doctor", {
+      method: "POST",
+      headers: { "x-wud-csrf-token": csrfToken },
+    }),
   pending: () => apiRequest<PendingResponse>("/pending"),
   cleanupPending: (
     cleanupId: string,

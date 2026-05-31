@@ -3,6 +3,7 @@ import type {
   ApplyJobResponse,
   AuthSessionResponse,
   CsrfResponse,
+  DoctorResponse,
   PendingGroupedItem,
   PendingCleanupLine,
   PendingCleanupResponse,
@@ -523,6 +524,64 @@ class DemoApiState {
         { name: "DISCORD_RELEASES_WEBHOOK", configured: false },
         { name: "DISCORD_WEBHOOK", configured: false },
         { name: "ADMIN_WEBHOOK", configured: false },
+      ],
+    };
+  }
+
+  doctor(): DoctorResponse {
+    return {
+      ok: true,
+      failures: 0,
+      warnings: 4,
+      checks: [
+        doctorCheck("PASS", "docker-cli", "docker", "Docker CLI", "Docker version 28.0.0"),
+        doctorCheck(
+          "PASS",
+          "docker-daemon-info",
+          "docker",
+          "Docker daemon info",
+          "Docker Root Dir: /var/lib/docker",
+        ),
+        doctorCheck(
+          "PASS",
+          "compose-discovery",
+          "compose",
+          "Compose discovery",
+          "3 stack(s) rendered",
+        ),
+        doctorCheck(
+          "WARN",
+          "webui-authentication",
+          "webui",
+          "WebUI authentication",
+          "static demo mode bypasses authentication",
+        ),
+        doctorCheck(
+          "WARN",
+          "webui-public-origin",
+          "webui",
+          "WebUI public origin",
+          "not configured in demo mode",
+          {
+            label: "Set reverse proxy origin",
+            description: "Set this in real reverse-proxy deployments.",
+            snippet: "WUD_WEB_PUBLIC_ORIGIN=https://wud.example.test",
+          },
+        ),
+        doctorCheck(
+          "WARN",
+          "webui-mutation-gate",
+          "webui",
+          "WebUI mutation gate",
+          "demo mode enables in-browser apply fixtures",
+        ),
+        doctorCheck(
+          "WARN",
+          "truenas-status-helper",
+          "truenas",
+          "TrueNAS status helper",
+          "TRUENAS_STATUS_CHECK is disabled",
+        ),
       ],
     };
   }
@@ -1062,6 +1121,7 @@ export function createDemoWebApi(): WebApi {
     logout: async (_csrfToken: string) => state.session(),
     status: async () => state.status(),
     settings: async () => state.settings(),
+    doctor: async (_csrfToken: string) => state.doctor(),
     pending: async () => state.pendingResponse(),
     cleanupPending: async (
       cleanupId: string,
@@ -1660,6 +1720,25 @@ function settingEntry(
     default_value: defaultValue,
     configured,
     source,
+  };
+}
+
+function doctorCheck(
+  status: DoctorResponse["checks"][number]["status"],
+  code: string,
+  category: string,
+  name: string,
+  detail: string,
+  suggestion?: DoctorResponse["checks"][number]["suggestions"][number],
+): DoctorResponse["checks"][number] {
+  return {
+    status,
+    code,
+    category,
+    name,
+    detail,
+    target: "",
+    suggestions: suggestion ? [suggestion] : [],
   };
 }
 

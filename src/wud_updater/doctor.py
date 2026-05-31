@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import errno
 import os
+import re
 import shutil
 import socket
 import stat
@@ -51,10 +52,42 @@ class DoctorOptions:
 
 
 @dataclass(frozen=True)
+class DoctorSuggestion:
+    label: str
+    description: str = ""
+    snippet: str = ""
+
+
+@dataclass(frozen=True)
 class DoctorCheck:
     status: str
     name: str
     detail: str = ""
+    code: str = ""
+    category: str = ""
+    target: str = ""
+    suggestions: tuple[DoctorSuggestion, ...] = ()
+
+
+@dataclass(frozen=True)
+class DoctorResult:
+    checks: tuple[DoctorCheck, ...]
+
+    @property
+    def failures(self) -> int:
+        return sum(1 for check in self.checks if check.status == "FAIL")
+
+    @property
+    def warnings(self) -> int:
+        return sum(1 for check in self.checks if check.status == "WARN")
+
+    @property
+    def ok(self) -> bool:
+        return self.failures == 0
+
+    @property
+    def exit_code(self) -> int:
+        return 0 if self.ok else 1
 
 
 class DoctorConfigError(RuntimeError):
@@ -76,14 +109,19 @@ class Doctor:
         self.compose = compose or ComposeCli(runner=self.runner)
         self.checks: list[DoctorCheck] = []
 
-    def run(self) -> int:
+    def run_result(self) -> DoctorResult:
+        self.checks = []
         self._check_runtime()
         self._check_docker_access()
         self._check_paths()
         self._check_compose()
         self._check_truenas()
-        self._print_results()
-        return 1 if any(check.status == "FAIL" for check in self.checks) else 0
+        return DoctorResult(checks=tuple(self.checks))
+
+    def run(self) -> int:
+        result = self.run_result()
+        _print_result(result)
+        return result.exit_code
 
     def _check_runtime(self) -> None:
         version = (
@@ -573,19 +611,28 @@ class Doctor:
                 "helper-only path(s): " + ", ".join(unsafe),
             )
 
-    def _record(self, status: str, name: str, detail: str = "") -> None:
-        self.checks.append(DoctorCheck(status=status, name=name, detail=detail))
-
-    def _print_results(self) -> None:
-        print("WUD-Updater doctor")
-        for check in self.checks:
-            if check.detail:
-                print(f"[{check.status}] {check.name}: {check.detail}")
-            else:
-                print(f"[{check.status}] {check.name}")
-        failures = sum(1 for check in self.checks if check.status == "FAIL")
-        warnings = sum(1 for check in self.checks if check.status == "WARN")
-        print(f"Result: {failures} failure(s), {warnings} warning(s)")
+    def _record(
+        self,
+        status: str,
+        name: str,
+        detail: str = "",
+        *,
+        code: str = "",
+        category: str = "",
+        target: str = "",
+        suggestions: Sequence[DoctorSuggestion] = (),
+    ) -> None:
+        self.checks.append(
+            DoctorCheck(
+                status=status,
+                name=name,
+                detail=detail,
+                code=code or _check_code(name),
+                category=category or _check_category(name),
+                target=target,
+                suggestions=tuple(suggestions) or _suggestions_for(status, name),
+            )
+        )
 
 
 def run_doctor_from_namespace(
@@ -594,15 +641,212 @@ def run_doctor_from_namespace(
     repo_root: str | Path,
     environ: Mapping[str, str] | None = None,
 ) -> int:
+    result = doctor_result_from_namespace(args, repo_root=repo_root, environ=environ)
+    _print_result(result)
+    return result.exit_code
+
+
+def doctor_result_from_namespace(
+    args: argparse.Namespace,
+    *,
+    repo_root: str | Path,
+    environ: Mapping[str, str] | None = None,
+) -> DoctorResult:
     env = load_configured_environ(environ)
     try:
         options = options_from_namespace(args, repo_root=repo_root, environ=env)
     except DoctorConfigError as exc:
-        print("WUD-Updater doctor")
-        print(f"[FAIL] configuration: {exc}")
-        print("Result: 1 failure(s), 0 warning(s)")
-        return 1
-    return Doctor(options, environ=env).run()
+        return DoctorResult(
+            checks=(
+                DoctorCheck(
+                    status="FAIL",
+                    name="configuration",
+                    detail=str(exc),
+                    code="configuration",
+                    category="configuration",
+                    suggestions=(
+                        DoctorSuggestion(
+                            label="Fix environment value",
+                            description=(
+                                "Set the reported variable to one of the accepted "
+                                "values before running doctor again."
+                            ),
+                        ),
+                    ),
+                ),
+            )
+        )
+    return Doctor(options, environ=env).run_result()
+
+
+def render_doctor_text(result: DoctorResult) -> str:
+    lines = ["WUD-Updater doctor"]
+    for check in result.checks:
+        if check.detail:
+            lines.append(f"[{check.status}] {check.name}: {check.detail}")
+        else:
+            lines.append(f"[{check.status}] {check.name}")
+    lines.append(f"Result: {result.failures} failure(s), {result.warnings} warning(s)")
+    return "\n".join(lines) + "\n"
+
+
+def _print_result(result: DoctorResult) -> None:
+    print(render_doctor_text(result), end="")
+
+
+def _check_code(name: str) -> str:
+    code = re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")
+    return code or "check"
+
+
+def _check_category(name: str) -> str:
+    if name.startswith("python ") or name in {"sudo", "updater executable"}:
+        return "runtime"
+    if name.startswith("docker "):
+        return "docker"
+    if name.startswith("compose ") or name.startswith("bind mount path safety"):
+        return "compose"
+    if (
+        name.startswith("WUD_")
+        or name.startswith("DOCKER_BASE")
+        or name.startswith("HOST_DOCKER_BASE")
+        or name == "packaged WUD scripts"
+    ):
+        return "paths"
+    if name.startswith("TrueNAS"):
+        return "truenas"
+    if name == "configuration":
+        return "configuration"
+    return "general"
+
+
+def _suggestions_for(status: str, name: str) -> tuple[DoctorSuggestion, ...]:
+    if status == "PASS":
+        return ()
+    if name in {"docker cli", "docker compose plugin"}:
+        return (
+            DoctorSuggestion(
+                label="Install Docker tooling",
+                description=(
+                    "Install Docker CLI and the Compose plugin in the WebUI "
+                    "container or host environment."
+                ),
+            ),
+        )
+    if name.startswith("docker daemon") or name in {
+        "docker socket",
+        "docker container listing",
+        "docker endpoint",
+    }:
+        return (
+            DoctorSuggestion(
+                label="Wire Docker access",
+                description=(
+                    "Mount the Docker socket or set DOCKER_HOST to a reachable "
+                    "Docker endpoint."
+                ),
+                snippet="DOCKER_HOST=unix:///var/run/docker.sock",
+            ),
+        )
+    if name.startswith("DOCKER_BASE"):
+        return (
+            DoctorSuggestion(
+                label="Set stack root",
+                description=(
+                    "Point DOCKER_BASE at the container-visible directory "
+                    "containing Compose stacks."
+                ),
+                snippet="DOCKER_BASE=/srv/docker",
+            ),
+        )
+    if name.startswith("HOST_DOCKER_BASE"):
+        return (
+            DoctorSuggestion(
+                label="Set host stack root",
+                description=(
+                    "Set HOST_DOCKER_BASE to the host path that maps to "
+                    "DOCKER_BASE."
+                ),
+                snippet="HOST_DOCKER_BASE=/srv/docker",
+            ),
+        )
+    if name.startswith("WUD_OUT_FILE"):
+        return (
+            DoctorSuggestion(
+                label="Share WUD output",
+                description=(
+                    "Mount the WUD output directory and point WUD_OUT_FILE at "
+                    "the shared pending file."
+                ),
+                snippet="WUD_OUT_FILE=/out/images.todo",
+            ),
+        )
+    if name.startswith("WUD_LOG_DIR"):
+        return (
+            DoctorSuggestion(
+                label="Persist logs",
+                description=(
+                    "Mount a writable log directory for updater logs and WebUI "
+                    "database state."
+                ),
+                snippet="WUD_LOG_DIR=/logs",
+            ),
+        )
+    if name in {"packaged WUD scripts", "WUD script sync"}:
+        return (
+            DoctorSuggestion(
+                label="Check script sync",
+                description=(
+                    "Verify the packaged WUD scripts are executable and "
+                    "WUD_SCRIPTS_DIR points at a managed writable directory."
+                ),
+                snippet="WUD_SYNC_SCRIPTS=true\nWUD_SCRIPTS_DIR=/managed-wud",
+            ),
+        )
+    if name.startswith("compose "):
+        return (
+            DoctorSuggestion(
+                label="Check Compose rendering",
+                description=(
+                    "Run Docker Compose config for the failing stack and fix "
+                    "missing files, environment, or path mappings."
+                ),
+                snippet="docker compose -f compose.yml config",
+            ),
+        )
+    if name.startswith("bind mount path safety"):
+        return (
+            DoctorSuggestion(
+                label="Use host-visible bind sources",
+                description=(
+                    "Replace helper-only bind paths with paths visible to the "
+                    "host Docker daemon."
+                ),
+            ),
+        )
+    if name.startswith("TrueNAS status helper"):
+        return (
+            DoctorSuggestion(
+                label="Enable optional TrueNAS check",
+                description=(
+                    "Enable this only when TrueNAS update status should be "
+                    "included."
+                ),
+                snippet="TRUENAS_STATUS_CHECK=true",
+            ),
+        )
+    if name == "sudo":
+        return (
+            DoctorSuggestion(
+                label="Disable sudo if not needed",
+                description=(
+                    "Set WUD_UPDATER_USE_SUDO=false when the updater can run "
+                    "directly."
+                ),
+                snippet="WUD_UPDATER_USE_SUDO=false",
+            ),
+        )
+    return ()
 
 
 def options_from_namespace(

@@ -18,6 +18,7 @@ from dataclasses import asdict, dataclass, replace
 from datetime import datetime, time as datetime_time, timedelta, timezone
 from pathlib import Path
 from threading import Condition, Event, Lock, Thread
+from types import SimpleNamespace
 from typing import Annotated, Any, Literal
 from urllib.parse import quote, urlencode, urlsplit
 from zoneinfo import ZoneInfo
@@ -61,6 +62,14 @@ from .db import (
 )
 from .db import _user_version as db_user_version
 from .db import _validate_schema as validate_db_schema
+from .doctor import (
+    Doctor,
+    DoctorCheck as DoctorDataCheck,
+    DoctorConfigError,
+    DoctorResult as DoctorDataResult,
+    DoctorSuggestion as DoctorDataSuggestion,
+    options_from_namespace as doctor_options_from_namespace,
+)
 from .docker_cli import DockerCli
 from .images import image_tag, repo_key, tag_value_valid
 from .locks import DirectoryLock, WudLockError
@@ -123,6 +132,7 @@ PASSWORD_HASHER = PasswordHasher()
 LineNumber = Annotated[int, Field(ge=1)]
 PlanStatus = Literal["ready", "empty", "blocked"]
 PendingGroupingStatus = Literal["ready", "unavailable"]
+DoctorCheckStatus = Literal["PASS", "WARN", "FAIL"]
 ApplyJobStatus = Literal["queued", "running", "success", "failure"]
 SettingsEntrySource = Literal["configured", "default", "derived", "request"]
 ServicePolicyUpdateMode = Literal["", "pause", "stop", "live"]
@@ -364,6 +374,29 @@ class SettingsResponse(BaseModel):
     updater: list[SettingsEntry] = Field(default_factory=list)
     webui: list[SettingsEntry] = Field(default_factory=list)
     secrets: list[SecretSettingStatus] = Field(default_factory=list)
+
+
+class DoctorSuggestionResponse(BaseModel):
+    label: str
+    description: str = ""
+    snippet: str = ""
+
+
+class DoctorCheckResponse(BaseModel):
+    status: DoctorCheckStatus
+    code: str
+    category: str
+    name: str
+    detail: str = ""
+    target: str = ""
+    suggestions: list[DoctorSuggestionResponse] = Field(default_factory=list)
+
+
+class DoctorResponse(BaseModel):
+    ok: bool
+    failures: int
+    warnings: int
+    checks: list[DoctorCheckResponse] = Field(default_factory=list)
 
 
 class CsrfResponse(BaseModel):
@@ -908,6 +941,12 @@ def create_app(
         response_model=SettingsResponse,
     )
     router.add_api_route(
+        "/doctor",
+        api_doctor,
+        methods=["POST"],
+        response_model=DoctorResponse,
+    )
+    router.add_api_route(
         "/pending",
         api_pending,
         methods=["GET"],
@@ -1331,6 +1370,11 @@ def api_settings(request: Request) -> SettingsResponse:
         webui=_webui_settings_entries(settings, request),
         secrets=_secret_settings(settings),
     )
+
+
+def api_doctor(request: Request) -> DoctorResponse:
+    settings = _settings(request)
+    return _doctor_response(settings, _web_doctor_result(settings, request))
 
 
 def api_pending(request: Request) -> PendingResponse:
@@ -1900,6 +1944,263 @@ def api_run_log(
 
 def _settings(request: Request) -> WebSettings:
     return request.app.state.web_settings
+
+
+def _web_doctor_result(settings: WebSettings, request: Request) -> DoctorDataResult:
+    env = _doctor_command_env(settings)
+    args = SimpleNamespace(
+        base=str(settings.config.docker_base),
+        file=str(settings.config.wud_out_file),
+        log_dir=str(settings.config.log_dir),
+        scripts_dir=env.get("WUD_SCRIPTS_DIR", ""),
+        no_color=True,
+    )
+    try:
+        options = doctor_options_from_namespace(
+            args,
+            repo_root=Path(__file__).resolve().parents[2],
+            environ=env,
+        )
+        result = Doctor(options, environ=env).run_result()
+    except DoctorConfigError as exc:
+        result = DoctorDataResult(
+            checks=(
+                DoctorDataCheck(
+                    status="FAIL",
+                    name="configuration",
+                    detail=str(exc),
+                    code="configuration",
+                    category="configuration",
+                    suggestions=(
+                        DoctorDataSuggestion(
+                            label="Fix environment value",
+                            description=(
+                                "Set the reported variable to an accepted value "
+                                "before running doctor again."
+                            ),
+                        ),
+                    ),
+                ),
+            )
+        )
+    return DoctorDataResult(
+        checks=(*result.checks, *_web_doctor_checks(settings, request))
+    )
+
+
+def _doctor_command_env(settings: WebSettings) -> dict[str, str]:
+    env = dict(settings.command_env or {})
+    env["DOCKER_BASE"] = str(settings.config.docker_base)
+    env["WUD_OUT_FILE"] = str(settings.config.wud_out_file)
+    env["WUD_LOG_DIR"] = str(settings.config.log_dir)
+    return env
+
+
+def _web_doctor_checks(
+    settings: WebSettings,
+    request: Request,
+) -> tuple[DoctorDataCheck, ...]:
+    checks: list[DoctorDataCheck] = []
+    db_ready, db_warning = _database_ready(settings)
+    checks.append(
+        _web_doctor_check(
+            "PASS" if db_ready else "FAIL",
+            "WebUI database",
+            str(settings.config.db_path) if db_ready else db_warning,
+            code="webui-database",
+            suggestions=()
+            if db_ready
+            else (
+                DoctorDataSuggestion(
+                    label="Persist WebUI database",
+                    description=(
+                        "Mount a writable persistent directory and set WUD_DB_PATH "
+                        "inside it."
+                    ),
+                    snippet="WUD_DB_PATH=/logs/wud-updater.sqlite",
+                ),
+            ),
+        )
+    )
+    checks.append(
+        _web_doctor_check(
+            "WARN" if settings.dev_no_auth else "PASS",
+            "WebUI authentication",
+            "development auth bypass is enabled"
+            if settings.dev_no_auth
+            else "authentication is required",
+            code="webui-authentication",
+            suggestions=()
+            if not settings.dev_no_auth
+            else (
+                DoctorDataSuggestion(
+                    label="Require browser authentication",
+                    description=(
+                        "Disable the local development auth bypass before exposing "
+                        "the WebUI."
+                    ),
+                    snippet="WUD_WEB_DEV_NO_AUTH=false",
+                ),
+            ),
+        )
+    )
+    checks.append(
+        _web_doctor_check(
+            "WARN" if settings.mutations_enabled else "PASS",
+            "WebUI mutation gate",
+            "browser mutations are enabled"
+            if settings.mutations_enabled
+            else "browser mutations are disabled",
+            code="webui-mutation-gate",
+            suggestions=()
+            if not settings.mutations_enabled
+            else (
+                DoctorDataSuggestion(
+                    label="Return to read-only mode",
+                    description=(
+                        "Leave browser mutations disabled unless this deployment "
+                        "is intentionally allowed to apply updates."
+                    ),
+                    snippet="WUD_WEB_MUTATIONS_ENABLED=false",
+                ),
+            ),
+        )
+    )
+    checks.append(
+        _web_doctor_check(
+            "PASS" if settings.allowed_hosts else "FAIL",
+            "WebUI allowed hosts",
+            _format_sequence(sorted(settings.allowed_hosts)) or "none configured",
+            code="webui-allowed-hosts",
+            suggestions=()
+            if settings.allowed_hosts
+            else (
+                DoctorDataSuggestion(
+                    label="Configure allowed hosts",
+                    description=(
+                        "Set the hostnames clients use to reach the WebUI."
+                    ),
+                    snippet="WUD_WEB_ALLOWED_HOSTS=localhost,127.0.0.1",
+                ),
+            ),
+        )
+    )
+    effective_origin = _effective_origin(request, settings)
+    checks.append(
+        _web_doctor_check(
+            "PASS" if settings.public_origin else "WARN",
+            "WebUI public origin",
+            settings.public_origin
+            if settings.public_origin
+            else f"derived from request as {effective_origin}",
+            code="webui-public-origin",
+            suggestions=()
+            if settings.public_origin
+            else (
+                DoctorDataSuggestion(
+                    label="Set reverse proxy origin",
+                    description=(
+                        "Set WUD_WEB_PUBLIC_ORIGIN when the WebUI is served "
+                        "behind a reverse proxy."
+                    ),
+                    snippet="WUD_WEB_PUBLIC_ORIGIN=https://wud.example.test",
+                ),
+            ),
+        )
+    )
+    secure_cookie = _secure_cookie(settings, request)
+    checks.append(
+        _web_doctor_check(
+            "PASS" if secure_cookie else "WARN",
+            "WebUI secure cookies",
+            f"{settings.secure_cookies} mode resolves to {_format_bool(secure_cookie)}",
+            code="webui-secure-cookies",
+            suggestions=()
+            if secure_cookie
+            else (
+                DoctorDataSuggestion(
+                    label="Use HTTPS public origin",
+                    description=(
+                        "Set a HTTPS public origin or force secure cookies for "
+                        "reverse-proxy deployments."
+                    ),
+                    snippet="WUD_WEB_PUBLIC_ORIGIN=https://wud.example.test",
+                ),
+            ),
+        )
+    )
+    checks.append(
+        _web_doctor_check(
+            "PASS",
+            "WebUI trusted proxies",
+            _format_sequence(str(network) for network in settings.trusted_proxies)
+            or "not configured",
+            code="webui-trusted-proxies",
+        )
+    )
+    static_available = _static_spa_available(settings)
+    checks.append(
+        _web_doctor_check(
+            "PASS" if static_available else "WARN",
+            "WebUI static SPA",
+            "static assets are available"
+            if static_available
+            else "static assets are not mounted; API-only mode is active",
+            code="webui-static-spa",
+        )
+    )
+    return tuple(checks)
+
+
+def _web_doctor_check(
+    status: DoctorCheckStatus,
+    name: str,
+    detail: str,
+    *,
+    code: str,
+    suggestions: Sequence[DoctorDataSuggestion] = (),
+) -> DoctorDataCheck:
+    return DoctorDataCheck(
+        status=status,
+        name=name,
+        detail=detail,
+        code=code,
+        category="webui",
+        suggestions=tuple(suggestions),
+    )
+
+
+def _doctor_response(
+    settings: WebSettings,
+    result: DoctorDataResult,
+) -> DoctorResponse:
+    return DoctorResponse(
+        ok=result.ok,
+        failures=result.failures,
+        warnings=result.warnings,
+        checks=[
+            DoctorCheckResponse(
+                status=check.status,  # type: ignore[arg-type]
+                code=check.code,
+                category=check.category,
+                name=check.name,
+                detail=_redact_sensitive_text(settings, check.detail),
+                target=_redact_sensitive_text(settings, check.target),
+                suggestions=[
+                    DoctorSuggestionResponse(
+                        label=suggestion.label,
+                        description=_redact_sensitive_text(
+                            settings,
+                            suggestion.description,
+                        ),
+                        snippet=_redact_sensitive_text(settings, suggestion.snippet),
+                    )
+                    for suggestion in check.suggestions
+                ],
+            )
+            for check in result.checks
+        ],
+    )
 
 
 def _cleanup_payload_lines(

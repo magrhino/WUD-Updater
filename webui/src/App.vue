@@ -13,6 +13,7 @@ import {
   RefreshCw,
   Settings2,
   SlidersHorizontal,
+  Stethoscope,
   Sun,
   Tags,
 } from "@lucide/vue";
@@ -94,6 +95,7 @@ const navItems = [
   { to: "/snoozes", label: "Snoozes", icon: BellOff },
   { to: "/tag-exclusions", label: "Exclusions", icon: Tags },
   { to: "/settings", label: "Settings", icon: SlidersHorizontal },
+  { to: "/doctor", label: "Doctor", icon: Stethoscope },
 ];
 
 watch(
@@ -121,6 +123,8 @@ async function refreshCurrentView(): Promise<void> {
     await webui.loadTagExclusions(webui.tagExclusionStatusFilter);
   } else if (route.name === "settings") {
     await webui.loadSettings();
+  } else if (route.name === "doctor") {
+    await webui.loadDoctor();
   } else if (route.name === "run-detail") {
     await webui.loadRunDetail(Number(route.params.id));
   } else if (route.name === "run-log") {

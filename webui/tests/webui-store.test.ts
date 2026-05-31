@@ -9,6 +9,7 @@ import {
 import {
   applyJobLogResponse,
   applyJobResponse,
+  doctorResponse,
   pendingResponse,
   releaseNotesResponse,
   planResponse,
@@ -50,6 +51,25 @@ describe("webui store", () => {
         "x-wud-csrf-token",
       ),
     ).toBe("csrf-plan");
+  });
+
+  it("passes csrf from auth store to doctor checks", async () => {
+    const fetchMock = mockFetch(doctorResponse());
+    const auth = useAuthStore();
+    const ensureCsrf = vi.spyOn(auth, "ensureCsrf").mockResolvedValue("csrf-doctor");
+    const webui = useWebuiStore();
+
+    await webui.loadDoctor();
+
+    expect(ensureCsrf).toHaveBeenCalledTimes(1);
+    expect(webui.doctor?.failures).toBe(1);
+    expect(fetchMock.mock.calls[0][0]).toBe("/api/v1/doctor");
+    expect((fetchMock.mock.calls[0][1] as RequestInit).method).toBe("POST");
+    expect(
+      ((fetchMock.mock.calls[0][1] as RequestInit).headers as Headers).get(
+        "x-wud-csrf-token",
+      ),
+    ).toBe("csrf-doctor");
   });
 
   it("passes csrf from auth store to pending cleanup", async () => {

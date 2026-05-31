@@ -7,6 +7,7 @@ import re
 import sqlite3
 import stat
 import time
+from collections.abc import Mapping
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -63,6 +64,34 @@ def _client(
     return TestClient(create_app(environ=values))
 
 
+def _doctor_client(
+    tmp_path: Path,
+    env: dict[str, str] | None = None,
+) -> TestClient:
+    values = _web_env(
+        tmp_path,
+        {
+            "DOCKER_HOST": "tcp://docker:2375",
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_SYNC_SCRIPTS": "true",
+            "WUD_SCRIPTS_DIR": str(tmp_path / "managed-wud"),
+            "WUD_APP_DIR": str(tmp_path / "app"),
+            "WUD_UPDATER": str(tmp_path / "app" / "bin" / "docker-update-from-wud"),
+            "WUD_UPDATER_USE_SUDO": "false",
+            "TRUENAS_STATUS_CHECK": "false",
+            **(env or {}),
+        },
+    )
+    fake_bin = tmp_path / "fake-bin"
+    fake_bin.mkdir()
+    values["PATH"] = f"{fake_bin}:{os.environ.get('PATH', '')}"
+    _write_doctor_fake_docker(fake_bin / "docker")
+    _write_doctor_files(values)
+    with connect_db(Path(values["WUD_DB_PATH"])) as conn:
+        init_db(conn)
+    return TestClient(create_app(environ=values))
+
+
 def _csrf_headers(client: TestClient) -> dict[str, str]:
     response = client.get("/api/v1/auth/csrf")
     assert response.status_code == 200
@@ -85,6 +114,84 @@ def _setup_admin(
         headers=_csrf_headers(client),
     )
     assert response.status_code == 200
+
+
+def _write_doctor_fake_docker(path: Path) -> None:
+    path.write_text(
+        """#!/usr/bin/env bash
+set -euo pipefail
+case "${1:-}" in
+  --version)
+    printf 'Docker version 28.0.0\\n'
+    exit 0
+    ;;
+  version)
+    printf 'Server: Docker Engine 28.0.0\\n'
+    exit 0
+    ;;
+  info)
+    if [[ -n "${FAKE_DOCKER_INFO_SECRET:-}" ]]; then
+      printf 'info failed: %s\\n' "$FAKE_DOCKER_INFO_SECRET" >&2
+      exit 17
+    fi
+    printf 'Docker Root Dir: /var/lib/docker\\n'
+    exit 0
+    ;;
+  ps)
+    printf 'CONTAINER ID   IMAGE\\n'
+    exit 0
+    ;;
+  compose)
+    if [[ "${2:-}" == "version" ]]; then
+      printf 'Docker Compose version v2.30.0\\n'
+      exit 0
+    fi
+    for arg in "$@"; do
+      if [[ "$arg" == "json" ]]; then
+        printf '{"services":{"app":{"image":"repo/app:latest"}}}\\n'
+        exit 0
+      fi
+    done
+    printf 'name: app\\n'
+    exit 0
+    ;;
+esac
+printf 'unexpected docker args: %s\\n' "$*" >&2
+exit 2
+""",
+        encoding="utf-8",
+    )
+    path.chmod(0o755)
+
+
+def _write_doctor_files(env: Mapping[str, str]) -> None:
+    docker_base = Path(env["DOCKER_BASE"])
+    stack = docker_base / "app"
+    stack.mkdir(parents=True)
+    (stack / "compose.yml").write_text(
+        "services:\n  app:\n    image: repo/app:latest\n",
+        encoding="utf-8",
+    )
+    Path(env["WUD_LOG_DIR"]).mkdir(parents=True, exist_ok=True)
+    Path(env["WUD_OUT_FILE"]).parent.mkdir(parents=True, exist_ok=True)
+    Path(env["WUD_SCRIPTS_DIR"]).mkdir(parents=True, exist_ok=True)
+    app_dir = Path(env["WUD_APP_DIR"])
+    packaged_scripts = app_dir / "wud"
+    packaged_scripts.mkdir(parents=True)
+    for name in (
+        "on-update.sh",
+        "append-updates.sh",
+        "release-notes-to-discord.sh",
+        "github-release-embed.sh",
+        "tag-manager.sh",
+    ):
+        script = packaged_scripts / name
+        script.write_text("#!/usr/bin/env sh\nexit 0\n", encoding="utf-8")
+        script.chmod(0o755)
+    updater = Path(env["WUD_UPDATER"])
+    updater.parent.mkdir(parents=True, exist_ok=True)
+    updater.write_text("#!/usr/bin/env bash\nexit 0\n", encoding="utf-8")
+    updater.chmod(0o755)
 
 
 def _contains_key(value: object, target: str) -> bool:
@@ -391,6 +498,56 @@ def test_settings_reports_effective_non_secret_configuration(
     assert secrets["ADMIN_WEBHOOK"]["configured"] is True
     for value in secret_values.values():
         assert value not in serialized
+
+
+def test_doctor_endpoint_enforces_auth_csrf_and_post(
+    tmp_path: Path,
+) -> None:
+    unauthenticated = _client(tmp_path)
+    doctor = _doctor_client(tmp_path)
+
+    auth_response = unauthenticated.post(
+        "/api/v1/doctor",
+        headers=_csrf_headers(unauthenticated),
+    )
+    missing_csrf = doctor.post("/api/v1/doctor")
+    get_response = doctor.get("/api/v1/doctor")
+
+    assert auth_response.status_code == 403
+    assert auth_response.json()["detail"] == "setup required"
+    assert missing_csrf.status_code == 403
+    assert missing_csrf.json()["detail"] == "origin header is required"
+    assert get_response.status_code == 404
+
+
+def test_doctor_endpoint_returns_structured_redacted_results(
+    tmp_path: Path,
+) -> None:
+    secret = "github-token-secret"
+    client = _doctor_client(
+        tmp_path,
+        {
+            "GITHUB_TOKEN": secret,
+            "FAKE_DOCKER_INFO_SECRET": secret,
+        },
+    )
+
+    response = client.post("/api/v1/doctor", headers=_csrf_headers(client))
+    body = response.json()
+    checks = {check["code"]: check for check in body["checks"]}
+    serialized = json.dumps(body)
+
+    assert response.status_code == 200
+    assert body["ok"] is False
+    assert body["failures"] >= 1
+    assert body["warnings"] >= 1
+    assert checks["docker-daemon-info"]["status"] == "FAIL"
+    assert checks["docker-daemon-info"]["detail"] == "exit 17: info failed: <redacted>"
+    assert checks["docker-daemon-info"]["suggestions"]
+    assert checks["webui-database"]["status"] == "PASS"
+    assert checks["webui-authentication"]["status"] == "WARN"
+    assert secret not in serialized
+    assert "<redacted>" in serialized
 
 
 def test_csrf_endpoint_sets_double_submit_cookie(tmp_path: Path) -> None:

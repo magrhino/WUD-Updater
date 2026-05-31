@@ -2,6 +2,7 @@ import type {
   ApplyJobLogResponse,
   ApplyJobResponse,
   AuthSessionResponse,
+  DoctorResponse,
   PendingGroupedItem,
   PendingGrouping,
   PendingItem,
@@ -172,6 +173,52 @@ export function settingsResponse(
       { name: "WUD_WEB_TOKEN", configured: false },
       { name: "GITHUB_TOKEN", configured: true },
       { name: "DISCORD_RELEASES_WEBHOOK", configured: false },
+    ],
+    ...overrides,
+  };
+}
+
+export function doctorResponse(
+  overrides: Partial<DoctorResponse> = {},
+): DoctorResponse {
+  return {
+    ok: false,
+    failures: 1,
+    warnings: 1,
+    checks: [
+      {
+        status: "FAIL",
+        code: "docker-daemon-info",
+        category: "docker",
+        name: "Docker daemon info",
+        detail: "exit 17: permission denied",
+        target: "",
+        suggestions: [
+          {
+            label: "Wire Docker access",
+            description: "Mount the Docker socket or configure DOCKER_HOST.",
+            snippet: "DOCKER_HOST=unix:///var/run/docker.sock",
+          },
+        ],
+      },
+      {
+        status: "WARN",
+        code: "webui-public-origin",
+        category: "webui",
+        name: "WebUI public origin",
+        detail: "derived from request as http://testserver",
+        target: "",
+        suggestions: [],
+      },
+      {
+        status: "PASS",
+        code: "webui-database",
+        category: "webui",
+        name: "WebUI database",
+        detail: "/logs/wud-updater.sqlite",
+        target: "",
+        suggestions: [],
+      },
     ],
     ...overrides,
   };

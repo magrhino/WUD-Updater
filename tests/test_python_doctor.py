@@ -8,7 +8,7 @@ from contextlib import redirect_stdout
 from io import StringIO
 from pathlib import Path
 
-from wud_updater.doctor import run_doctor_from_namespace
+from wud_updater.doctor import doctor_result_from_namespace, run_doctor_from_namespace
 
 
 class DoctorTests(unittest.TestCase):
@@ -58,6 +58,24 @@ class DoctorTests(unittest.TestCase):
         self.assertEqual(status, 1, stdout)
         self.assertIn("[FAIL] compose discovery: no compose stacks found", stdout)
 
+    def test_doctor_result_includes_structured_checks(self) -> None:
+        for path in self.stack_dir.iterdir():
+            path.unlink()
+
+        result = self._run_doctor_result()
+
+        self.assertFalse(result.ok)
+        self.assertEqual(result.exit_code, 1)
+        self.assertEqual(result.failures, 1)
+        compose = next(
+            check for check in result.checks if check.name == "compose discovery"
+        )
+        self.assertEqual(compose.status, "FAIL")
+        self.assertEqual(compose.code, "compose-discovery")
+        self.assertEqual(compose.category, "compose")
+        self.assertTrue(compose.suggestions)
+        self.assertIn("docker compose", compose.suggestions[0].snippet)
+
     def test_doctor_fails_when_compose_config_cannot_render(self) -> None:
         status, stdout = self._run_doctor(
             {"FAKE_DOCKER_CONFIG_FAIL": "1"},
@@ -97,6 +115,32 @@ class DoctorTests(unittest.TestCase):
         self,
         env_overrides: dict[str, str] | None = None,
     ) -> tuple[int, str]:
+        env = self._doctor_env(env_overrides)
+
+        stdout = StringIO()
+        args = self._doctor_args()
+        with redirect_stdout(stdout):
+            status = run_doctor_from_namespace(
+                args,
+                repo_root=self.root,
+                environ=env,
+            )
+        return status, stdout.getvalue()
+
+    def _run_doctor_result(
+        self,
+        env_overrides: dict[str, str] | None = None,
+    ):
+        return doctor_result_from_namespace(
+            self._doctor_args(),
+            repo_root=self.root,
+            environ=self._doctor_env(env_overrides),
+        )
+
+    def _doctor_env(
+        self,
+        env_overrides: dict[str, str] | None = None,
+    ) -> dict[str, str]:
         env = {
             "PATH": f"{self.fake_bin}:{os.environ.get('PATH', '')}",
             "DOCKER_HOST": "tcp://docker:2375",
@@ -113,22 +157,16 @@ class DoctorTests(unittest.TestCase):
         }
         if env_overrides is not None:
             env.update(env_overrides)
+        return env
 
-        stdout = StringIO()
-        args = argparse.Namespace(
+    def _doctor_args(self) -> argparse.Namespace:
+        return argparse.Namespace(
             base=None,
             file=None,
             log_dir=None,
             scripts_dir=None,
             no_color=True,
         )
-        with redirect_stdout(stdout):
-            status = run_doctor_from_namespace(
-                args,
-                repo_root=self.root,
-                environ=env,
-            )
-        return status, stdout.getvalue()
 
     def _write_docker(self) -> None:
         docker = self.fake_bin / "docker"
