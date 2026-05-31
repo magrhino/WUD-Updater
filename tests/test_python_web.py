@@ -638,7 +638,7 @@ def test_login_throttle_entry_cap_does_not_evict_locked_user(
     assert unlocked_response.json()["authenticated"] is True
 
 
-def test_login_throttle_entry_cap_enters_global_lockdown(
+def test_login_throttle_entry_cap_evicts_unlocked_entries_without_global_lockout(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
@@ -658,21 +658,63 @@ def test_login_throttle_entry_cap_enters_global_lockdown(
         web_module._record_login_failure(request, settings, f"filler-{index}")
     web_module._record_login_failure(request, settings, "overflow")
 
-    assert app.state.web_login_throttle == {}
-    assert (
-        app.state.web_login_lockdown_until
-        == now + web_module.LOGIN_THROTTLE_COOLDOWN_SECONDS
-    )
+    throttle = app.state.web_login_throttle
+    assert len(throttle) == web_module.LOGIN_THROTTLE_MAX_ENTRIES
+    assert ("filler-0", "203.0.113.10") not in throttle
+    assert ("overflow", "203.0.113.10") in throttle
 
     client = TestClient(app, client=("203.0.113.10", 50000))
     headers = _csrf_headers(client)
-    locked_response = client.post(
+    response = client.post(
         "/api/v1/auth/login",
         json={"username": "admin", "password": "correct horse battery staple"},
         headers=headers,
     )
 
-    _assert_generic_auth_failed(locked_response)
+    assert response.status_code == 200
+    assert response.json()["authenticated"] is True
+
+
+def test_login_throttle_entry_cap_drops_new_entries_when_all_entries_locked(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    now = 1_000.0
+    monkeypatch.setattr(web_module.time, "monotonic", lambda: now)
+    monkeypatch.setattr(web_module, "LOGIN_THROTTLE_MAX_ENTRIES", 2)
+    monkeypatch.setattr(web_module, "LOGIN_THROTTLE_MAX_FAILURES", 1)
+    app = create_app(environ=_web_env(tmp_path))
+    setup_client = TestClient(app)
+    _setup_admin(setup_client)
+    settings = app.state.web_settings
+
+    for index in range(web_module.LOGIN_THROTTLE_MAX_ENTRIES):
+        request = SimpleNamespace(
+            app=app,
+            client=SimpleNamespace(host=f"203.0.113.{index + 10}"),
+            headers={},
+        )
+        web_module._record_login_failure(request, settings, f"filler-{index}")
+    overflow_request = SimpleNamespace(
+        app=app,
+        client=SimpleNamespace(host="203.0.113.99"),
+        headers={},
+    )
+    web_module._record_login_failure(overflow_request, settings, "overflow")
+
+    throttle = app.state.web_login_throttle
+    assert len(throttle) == web_module.LOGIN_THROTTLE_MAX_ENTRIES
+    assert ("overflow", "203.0.113.99") not in throttle
+
+    client = TestClient(app, client=("203.0.113.99", 50000))
+    response = client.post(
+        "/api/v1/auth/login",
+        json={"username": "admin", "password": "correct horse battery staple"},
+        headers=_csrf_headers(client),
+    )
+
+    assert response.status_code == 200
+    assert response.json()["authenticated"] is True
 
 
 def test_login_throttle_is_scoped_by_username_and_client_address(

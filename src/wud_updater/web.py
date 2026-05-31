@@ -765,7 +765,6 @@ def create_app(
     app.state.web_apply_jobs = {}
     app.state.web_login_throttle_lock = Lock()
     app.state.web_login_throttle = {}
-    app.state.web_login_lockdown_until = 0.0
     app.state.web_auto_update_started_at = datetime.now(timezone.utc)
     app.state.web_auto_update_stop = Event()
     app.state.web_auto_update_thread = None
@@ -4654,8 +4653,6 @@ def _login_throttle_blocked(
         throttle: dict[tuple[str, str], LoginThrottleEntry] = (
             request.app.state.web_login_throttle
         )
-        if _login_lockdown_active(request, now):
-            return True
         _prune_login_throttle(throttle, now)
         entry = throttle.get(key)
         return entry is not None and entry.locked_until > now
@@ -4672,13 +4669,13 @@ def _record_login_failure(
         throttle: dict[tuple[str, str], LoginThrottleEntry] = (
             request.app.state.web_login_throttle
         )
-        if _login_lockdown_active(request, now):
-            return
         _prune_login_throttle(throttle, now)
         entry = throttle.get(key)
         if entry is None:
-            if len(throttle) >= LOGIN_THROTTLE_MAX_ENTRIES:
-                _enter_login_lockdown(request, throttle, now)
+            if (
+                len(throttle) >= LOGIN_THROTTLE_MAX_ENTRIES
+                and not _evict_login_throttle_entry(throttle, now)
+            ):
                 return
             entry = LoginThrottleEntry(
                 failures=1,
@@ -4723,24 +4720,23 @@ def _prune_login_throttle(
             throttle.pop(key, None)
 
 
-def _login_lockdown_active(request: Request, now: float) -> bool:
-    lockdown_until = float(request.app.state.web_login_lockdown_until)
-    if lockdown_until > now:
-        return True
-    if lockdown_until:
-        request.app.state.web_login_lockdown_until = 0.0
-    return False
-
-
-def _enter_login_lockdown(
-    request: Request,
+def _evict_login_throttle_entry(
     throttle: dict[tuple[str, str], LoginThrottleEntry],
     now: float,
-) -> None:
-    throttle.clear()
-    request.app.state.web_login_lockdown_until = (
-        now + LOGIN_THROTTLE_COOLDOWN_SECONDS
+) -> bool:
+    evictable = [
+        (key, entry)
+        for key, entry in throttle.items()
+        if entry.locked_until <= now
+    ]
+    if not evictable:
+        return False
+    key, _entry = min(
+        evictable,
+        key=lambda item: (item[1].last_failed_at, item[1].first_failed_at),
     )
+    throttle.pop(key, None)
+    return True
 
 
 def _create_web_session(
