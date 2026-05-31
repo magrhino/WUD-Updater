@@ -4,6 +4,18 @@ All notable changes to WUD-Updater are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com) and versions follow
 [Semantic Versioning](https://semver.org).
 
+## [0.28.0](https://github.com/magrhino/WUD-Updater/compare/v0.27.1...v0.28.0) (2026-05-31)
+
+
+### Features
+
+* **webui:** Polish the settings page for clearer runtime configuration ([#140](https://github.com/magrhino/WUD-Updater/issues/140)) ([550851c](https://github.com/magrhino/WUD-Updater/commit/550851c7c147a57ba8c266e6b323eca23110275a))
+
+
+### Documentation
+
+* **webui:** streamline compose env defaults ([285036b](https://github.com/magrhino/WUD-Updater/commit/285036bbd1d3eba5ea1b435cb5fe112221949c7a))
+
 ## [0.27.1](https://github.com/magrhino/WUD-Updater/compare/v0.27.0...v0.27.1) (2026-05-31)
 
 
