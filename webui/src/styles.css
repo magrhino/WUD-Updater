@@ -416,6 +416,51 @@ a {
   gap: 6px;
 }
 
+.settings-action-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--color-border-subtle);
+}
+
+.settings-action-row > div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.settings-action-row strong,
+.settings-action-row span,
+.settings-action-row code,
+.settings-dialog-copy code {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.settings-action-row span,
+.settings-dialog-copy {
+  color: var(--color-muted-text);
+}
+
+.settings-action-row code,
+.settings-dialog-copy code {
+  color: var(--color-code-text);
+  font-family: var(--font-mono);
+  font-size: 0.84rem;
+}
+
+.settings-action-alert {
+  margin-top: 12px;
+}
+
+.settings-dialog-copy {
+  margin: 0;
+  line-height: 1.45;
+}
+
 .doctor-check-list {
   display: grid;
   gap: 10px;
@@ -1764,6 +1809,15 @@ body .n-switch:focus-within {
 
   .settings-heading-meta {
     justify-content: flex-start;
+  }
+
+  .settings-action-row {
+    display: grid;
+    align-items: start;
+  }
+
+  .settings-action-row .n-button {
+    justify-self: start;
   }
 
   .settings-overview-icon {

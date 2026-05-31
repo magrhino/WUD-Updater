@@ -469,6 +469,11 @@ def _write_demo_stacks(docker_base: Path, fake_docker_root: Path) -> None:
         _write_compose_file(stack_dir / "docker-compose.yml", services)
         _write_fake_stack_state(fake_docker_root, stack_name, services, containers)
 
+    (fake_docker_root / "containers" / "demo-wud-updater.summary").write_text(
+        "/demo-wud-updater|running|healthy|0|0\n",
+        encoding="utf-8",
+    )
+
     for container_name, image in DEMO_UNMATCHED_CONTAINERS:
         (fake_docker_root / "containers" / f"{container_name}.summary").write_text(
             f"/{container_name}|running|healthy|0|0\n",

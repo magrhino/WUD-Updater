@@ -170,6 +170,13 @@ export function settingsResponse(
         configured: false,
         source: "default",
       },
+      {
+        name: "WUD_WEB_RESTART_CONTAINER",
+        value: "wud-updater",
+        default_value: "",
+        configured: false,
+        source: "derived",
+      },
     ],
     secrets: [
       { name: "WUD_WEB_TOKEN", configured: false },

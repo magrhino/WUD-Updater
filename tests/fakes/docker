@@ -488,6 +488,32 @@ ps_cmd(){
   fi
 }
 
+restart_cmd(){
+  local timeout="" container=""
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --time|-t)
+        timeout="${2:-}"
+        shift 2
+        ;;
+      *)
+        container="$1"
+        shift
+        ;;
+    esac
+  done
+  if [[ -n "$timeout" ]]; then
+    log_call "restart --time $timeout $container"
+  else
+    log_call "restart $container"
+  fi
+  if [[ -f "$ROOT/restart_fail" ]]; then
+    cat "$ROOT/restart_fail" >&2
+    return 22
+  fi
+  printf '%s\n' "$container"
+}
+
 main(){
   local cmd="${1:-}"
   shift || true
@@ -497,6 +523,7 @@ main(){
     manifest) manifest_cmd "$@" ;;
     inspect) inspect_cmd "$@" ;;
     ps) ps_cmd "$@" ;;
+    restart) restart_cmd "$@" ;;
     *) return 1 ;;
   esac
 }

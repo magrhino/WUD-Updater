@@ -188,6 +188,31 @@ describe("webui store", () => {
     ).toBe("csrf-state");
   });
 
+  it("passes csrf from auth store to container restart", async () => {
+    const fetchMock = mockFetch({
+      status: "scheduled",
+      audit_run_id: 42,
+      container: "wud-updater",
+    });
+    const auth = useAuthStore();
+    const ensureCsrf = vi.spyOn(auth, "ensureCsrf").mockResolvedValue("csrf-restart");
+    const webui = useWebuiStore();
+
+    const response = await webui.restartContainer();
+
+    expect(ensureCsrf).toHaveBeenCalledTimes(1);
+    expect(response.container).toBe("wud-updater");
+    expect(fetchMock.mock.calls[0][0]).toBe("/api/v1/container/restart");
+    expect(JSON.parse(String((fetchMock.mock.calls[0][1] as RequestInit).body))).toEqual({
+      confirmation: "restart_container",
+    });
+    expect(
+      ((fetchMock.mock.calls[0][1] as RequestInit).headers as Headers).get(
+        "x-wud-csrf-token",
+      ),
+    ).toBe("csrf-restart");
+  });
+
   it("passes csrf from auth store to release-note refresh", async () => {
     const fetchMock = mockFetch(releaseNotesResponse());
     const auth = useAuthStore();

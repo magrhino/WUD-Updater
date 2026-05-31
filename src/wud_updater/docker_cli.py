@@ -10,6 +10,7 @@ from .command import CommandError, CommandResult, CommandRunner
 DEFAULT_CONTAINER_FORMAT = "{{.Names}}\t{{.Image}}"
 IMAGE_ID_FORMAT = "{{.Id}}"
 IMAGE_DIGESTS_FORMAT = "{{range .RepoDigests}}{{println .}}{{end}}"
+CONTAINER_ID_FORMAT = "{{.Id}}"
 
 
 @dataclass(frozen=True)
@@ -110,6 +111,26 @@ class DockerCli:
             return self.inspect(target, fmt)
         except CommandError:
             return []
+
+    def container_id(self, container: str) -> str:
+        return _first_nonblank(self.inspect(container, CONTAINER_ID_FORMAT))
+
+    def restart_container(
+        self,
+        container: str,
+        *,
+        timeout_seconds: int = 10,
+    ) -> CommandResult:
+        return self.runner.run(
+            [
+                self.executable,
+                "restart",
+                "--time",
+                str(timeout_seconds),
+                container,
+            ],
+            check=True,
+        )
 
 
 def _nonblank_lines(lines: list[str]) -> list[str]:
