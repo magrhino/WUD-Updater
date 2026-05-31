@@ -32,6 +32,17 @@ export default defineConfig(({ command, mode }) => {
     build: {
       chunkSizeWarningLimit: 700,
       rolldownOptions: {
+        onLog(level, log, defaultHandler) {
+          const source = log.id ?? log.loc?.file ?? "";
+          if (
+            level === "warn" &&
+            log.code === "INVALID_ANNOTATION" &&
+            /@vueuse[\\/]core[\\/]dist[\\/]index\.js/.test(source)
+          ) {
+            return;
+          }
+          defaultHandler(level, log);
+        },
         output: {
           codeSplitting: {
             groups: [
