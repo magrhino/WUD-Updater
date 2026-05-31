@@ -57,7 +57,7 @@ async function submit(): Promise<void> {
   submitting.value = true;
   try {
     await auth.claimSetup(claim.value, username.value, password.value);
-    await router.replace({ name: "dashboard" });
+    await router.replace({ name: "settings", query: { onboarding: "1" } });
   } finally {
     submitting.value = false;
   }

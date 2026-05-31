@@ -1,4 +1,5 @@
 import { createPinia, setActivePinia } from "pinia";
+import { flushPromises } from "@vue/test-utils";
 import { createMemoryHistory } from "vue-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { nextTick } from "vue";
@@ -7,6 +8,7 @@ import App from "../src/App.vue";
 import { createWudRouter } from "../src/router";
 import { useAuthStore } from "../src/stores/auth";
 import { useWebuiStore } from "../src/stores/webui";
+import SetupView from "../src/views/SetupView.vue";
 import { themeStorageKey } from "../src/theme";
 import { authSession, statusResponse } from "./helpers/fixtures";
 import { mountWithApp } from "./helpers/mount";
@@ -76,6 +78,53 @@ describe("router auth guard", () => {
 
     expect(router.currentRoute.value.name).toBe("reset-admin");
     expect(router.currentRoute.value.query.claim).toBe("recovery");
+  });
+
+  it("routes first admin setup success to Settings onboarding", async () => {
+    const pinia = createPinia();
+    setActivePinia(pinia);
+    const auth = useAuthStore();
+    auth.session = authSession({
+      authenticated: false,
+      setup_required: true,
+      username: null,
+    });
+    auth.setupStatus = {
+      setup_required: true,
+      claim_required: true,
+      authenticated: false,
+      auth_required: true,
+      dev_auth_bypass: false,
+      mutations_enabled: false,
+      password_min_length: 12,
+    };
+    vi.spyOn(auth, "loadSetupStatus").mockResolvedValue();
+    vi.spyOn(auth, "claimSetup").mockImplementation(async () => {
+      auth.session = authSession({ authenticated: true, setup_required: false });
+      auth.setupStatus = null;
+    });
+    const router = createWudRouter(createMemoryHistory());
+    await router.push("/setup?claim=claim");
+    await router.isReady();
+    const replace = vi.spyOn(router, "replace").mockResolvedValue(undefined);
+    const wrapper = mountWithApp(SetupView, { pinia, router });
+
+    const inputs = wrapper.findAll("input");
+    await inputs[0].setValue("admin");
+    await inputs[1].setValue("correct horse battery staple");
+    await inputs[2].setValue("correct horse battery staple");
+    await wrapper.find("form").trigger("submit");
+    await flushPromises();
+
+    expect(auth.claimSetup).toHaveBeenCalledWith(
+      "claim",
+      "admin",
+      "correct horse battery staple",
+    );
+    expect(replace).toHaveBeenCalledWith({
+      name: "settings",
+      query: { onboarding: "1" },
+    });
   });
 });
 
@@ -172,6 +221,7 @@ describe("app shell", () => {
     const webui = useWebuiStore();
     vi.spyOn(webui, "loadStatus").mockResolvedValue();
     const loadSettings = vi.spyOn(webui, "loadSettings").mockResolvedValue();
+    const loadOnboarding = vi.spyOn(webui, "loadOnboarding").mockResolvedValue();
     const router = createWudRouter(createMemoryHistory());
     await router.push("/settings");
     await router.isReady();
@@ -181,5 +231,6 @@ describe("app shell", () => {
     expect(wrapper.text()).toContain("Settings");
     await wrapper.find('button[aria-label="Refresh current view"]').trigger("click");
     expect(loadSettings).toHaveBeenCalledTimes(1);
+    expect(loadOnboarding).toHaveBeenCalledTimes(1);
   });
 });

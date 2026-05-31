@@ -40,6 +40,10 @@ docker compose --env-file "$WEBUI_ENV" -f docs/examples/docker-compose.webui.yml
 Open the `/#/setup?claim=...` URL, create the first admin username, and choose a
 password with at least 12 characters. After setup succeeds, return to
 `http://127.0.0.1:8080` and sign in with that username and password.
+The WebUI opens Settings with a first-run checklist after admin setup. Keep the
+checklist visible until Docker access, WUD output sharing, Compose discovery,
+script sync, persistence, browser exposure, and mutation mode match the
+deployment you intended, or dismiss it once those checks are understood.
 
 The setup claim, password hash, sessions, update runs, managed tag exclusions,
 and audit records are stored in SQLite at `WUD_DB_PATH`. The example sets that

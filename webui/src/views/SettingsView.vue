@@ -8,6 +8,7 @@ import {
 } from "@lucide/vue";
 
 import type { SecretSettingStatus, SettingsEntry } from "../api/client";
+import OnboardingChecklist from "../components/OnboardingChecklist.vue";
 import { useWebuiStore } from "../stores/webui";
 
 const webui = useWebuiStore();
@@ -98,6 +99,8 @@ onMounted(() => {
     <n-alert v-if="webui.error" type="error" :show-icon="false">
       {{ webui.error }}
     </n-alert>
+
+    <OnboardingChecklist />
 
     <section class="section-panel">
       <div class="section-heading">

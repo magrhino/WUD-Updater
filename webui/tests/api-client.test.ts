@@ -37,6 +37,8 @@ describe("webApi", () => {
       webApi.logout("csrf"),
       webApi.status(),
       webApi.settings(),
+      webApi.onboardingChecklist("csrf"),
+      webApi.dismissOnboarding("csrf"),
       webApi.pending(),
       webApi.cleanupPending("cleanup", [{ line_no: 1, raw: "repo/app:1.0" }], "csrf"),
       webApi.createRemovalPlan([1], "csrf"),
@@ -55,7 +57,7 @@ describe("webApi", () => {
       webApi.runLog(1),
     ]);
 
-    expect(fetchMock).toHaveBeenCalledTimes(25);
+    expect(fetchMock).toHaveBeenCalledTimes(27);
     for (const call of fetchMock.mock.calls) {
       expect(requestInit(call).credentials).toBe("include");
     }
@@ -72,6 +74,8 @@ describe("webApi", () => {
     await webApi.resetAdminClaim("claim", "admin", "password", "csrf-token");
     await webApi.login("admin", "password", "csrf-token");
     await webApi.logout("csrf-token");
+    await webApi.onboardingChecklist("csrf-token");
+    await webApi.dismissOnboarding("csrf-token");
     await webApi.cleanupPending(
       "cleanup",
       [{ line_no: 1, raw: "repo/app:1.0" }],

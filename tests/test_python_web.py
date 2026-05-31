@@ -551,6 +551,139 @@ def test_doctor_endpoint_returns_structured_redacted_results(
     assert "<redacted>" in serialized
 
 
+def test_onboarding_endpoints_enforce_auth_csrf_and_post(
+    tmp_path: Path,
+) -> None:
+    unauthenticated = _client(tmp_path)
+    post_setup = _client(tmp_path)
+    client = _doctor_client(tmp_path)
+
+    auth_response = unauthenticated.post(
+        "/api/v1/onboarding/checklist",
+        headers=_csrf_headers(unauthenticated),
+    )
+    _setup_admin(post_setup)
+    post_setup.cookies.clear()
+    post_setup_auth_response = post_setup.post(
+        "/api/v1/onboarding/checklist",
+        headers=_csrf_headers(post_setup),
+    )
+    missing_csrf = client.post("/api/v1/onboarding/checklist")
+    dismiss_missing_csrf = client.post("/api/v1/onboarding/dismiss")
+    get_response = client.get("/api/v1/onboarding/checklist")
+
+    assert auth_response.status_code == 403
+    assert auth_response.json()["detail"] == "setup required"
+    assert post_setup_auth_response.status_code == 401
+    assert post_setup_auth_response.json()["detail"] == "authentication required"
+    assert missing_csrf.status_code == 403
+    assert missing_csrf.json()["detail"] == "origin header is required"
+    assert dismiss_missing_csrf.status_code == 403
+    assert dismiss_missing_csrf.json()["detail"] == "origin header is required"
+    assert get_response.status_code == 404
+
+
+def test_onboarding_checklist_returns_redacted_setup_items(
+    tmp_path: Path,
+) -> None:
+    secret = "github-token-secret"
+    client = _doctor_client(
+        tmp_path,
+        {
+            "GITHUB_TOKEN": secret,
+            "FAKE_DOCKER_INFO_SECRET": secret,
+        },
+    )
+
+    response = client.post(
+        "/api/v1/onboarding/checklist",
+        headers=_csrf_headers(client),
+    )
+    body = response.json()
+    items = {item["key"]: item for item in body["items"]}
+    serialized = json.dumps(body)
+
+    assert response.status_code == 200
+    assert body["dismissed"] is False
+    assert body["visible"] is True
+    assert body["all_passed"] is False
+    assert {
+        "admin-setup",
+        "wud-output",
+        "wud-scripts",
+        "docker-access",
+        "compose-discovery",
+        "persistence",
+        "browser-access",
+        "mutation-mode",
+    }.issubset(items)
+    assert items["docker-access"]["status"] == "FAIL"
+    assert items["docker-access"]["suggestions"]
+    assert "docker-daemon-info" in items["docker-access"]["check_codes"]
+    assert items["mutation-mode"]["status"] == "PASS"
+    assert secret not in serialized
+    assert "<redacted>" in serialized
+
+
+def test_onboarding_dismissal_persists_in_sqlite(
+    tmp_path: Path,
+) -> None:
+    client = _doctor_client(tmp_path)
+
+    before = client.post(
+        "/api/v1/onboarding/checklist",
+        headers=_csrf_headers(client),
+    )
+    dismiss = client.post(
+        "/api/v1/onboarding/dismiss",
+        headers=_csrf_headers(client),
+    )
+    after = client.post(
+        "/api/v1/onboarding/checklist",
+        headers=_csrf_headers(client),
+    )
+
+    assert before.status_code == 200
+    assert before.json()["visible"] is True
+    assert dismiss.status_code == 200
+    assert dismiss.json()["dismissed"] is True
+    assert dismiss.json()["dismissed_at"]
+    assert after.status_code == 200
+    assert after.json()["dismissed"] is True
+    assert after.json()["visible"] is False
+    assert after.json()["dismissed_at"] == dismiss.json()["dismissed_at"]
+
+
+def test_onboarding_checklist_hides_when_required_items_pass(
+    tmp_path: Path,
+) -> None:
+    client = _doctor_client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "false",
+            "WUD_WEB_PUBLIC_ORIGIN": "http://testserver",
+        },
+    )
+    _setup_admin(client)
+
+    response = client.post(
+        "/api/v1/onboarding/checklist",
+        headers=_csrf_headers(client),
+    )
+    body = response.json()
+    required = {
+        item["key"]: item["status"]
+        for item in body["items"]
+        if item["key"] != "mutation-mode"
+    }
+
+    assert response.status_code == 200
+    assert body["dismissed"] is False
+    assert body["all_passed"] is True
+    assert body["visible"] is False
+    assert set(required.values()) == {"PASS"}
+
+
 def test_csrf_endpoint_sets_double_submit_cookie(tmp_path: Path) -> None:
     client = _client(tmp_path)
 

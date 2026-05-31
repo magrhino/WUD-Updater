@@ -122,7 +122,7 @@ async function refreshCurrentView(): Promise<void> {
   } else if (route.name === "tag-exclusions") {
     await webui.loadTagExclusions(webui.tagExclusionStatusFilter);
   } else if (route.name === "settings") {
-    await webui.loadSettings();
+    await Promise.all([webui.loadSettings(), webui.loadOnboarding()]);
   } else if (route.name === "doctor") {
     await webui.loadDoctor();
   } else if (route.name === "run-detail") {

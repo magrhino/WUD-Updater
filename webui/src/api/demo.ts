@@ -4,6 +4,8 @@ import type {
   AuthSessionResponse,
   CsrfResponse,
   DoctorResponse,
+  OnboardingChecklistResponse,
+  OnboardingDismissResponse,
   PendingGroupedItem,
   PendingCleanupLine,
   PendingCleanupResponse,
@@ -586,6 +588,80 @@ class DemoApiState {
     };
   }
 
+  onboardingChecklist(): OnboardingChecklistResponse {
+    return {
+      dismissed: false,
+      dismissed_at: "",
+      all_passed: false,
+      visible: true,
+      items: [
+        {
+          key: "admin-setup",
+          title: "Admin setup",
+          status: "WARN",
+          detail:
+            "Static demo mode bypasses authentication; real deployments create an admin during first run.",
+          check_codes: ["webui-authentication"],
+          suggestions: [],
+          docs: [
+            {
+              label: "First login",
+              url: "https://github.com/magrhino/WUD-Updater/blob/main/docs/wiki/webui-container.md#first-login",
+            },
+          ],
+        },
+        {
+          key: "wud-output",
+          title: "Shared WUD output file",
+          status: "PASS",
+          detail:
+            "Demo fixture data includes a shared pending-update file path.",
+          check_codes: ["wud-out-file"],
+          suggestions: [],
+          docs: [],
+        },
+        {
+          key: "docker-access",
+          title: "Docker daemon access",
+          status: "PASS",
+          detail: "Demo mode uses sanitized fixture Docker state.",
+          check_codes: ["docker-daemon-info"],
+          suggestions: [],
+          docs: [],
+        },
+        {
+          key: "mutation-mode",
+          title: "Browser mutation mode",
+          status: "WARN",
+          detail:
+            "Demo mode enables in-browser apply fixtures; real deployments require server-side enablement.",
+          check_codes: ["webui-mutation-gate"],
+          suggestions: [
+            {
+              label: "Return to read-only mode",
+              description:
+                "Leave browser mutations disabled unless this deployment is intentionally allowed to apply updates.",
+              snippet: "WUD_WEB_MUTATIONS_ENABLED=false",
+            },
+          ],
+          docs: [
+            {
+              label: "Read-only and mutations",
+              url: "https://github.com/magrhino/WUD-Updater/blob/main/docs/wiki/webui-container.md#read-only-and-mutations",
+            },
+          ],
+        },
+      ],
+    };
+  }
+
+  dismissOnboarding(): OnboardingDismissResponse {
+    return {
+      dismissed: true,
+      dismissed_at: new Date("2026-05-31T00:00:00.000Z").toISOString(),
+    };
+  }
+
   pendingResponse(): PendingResponse {
     return {
       source_file: DEMO_SOURCE_FILE,
@@ -1122,6 +1198,8 @@ export function createDemoWebApi(): WebApi {
     status: async () => state.status(),
     settings: async () => state.settings(),
     doctor: async (_csrfToken: string) => state.doctor(),
+    onboardingChecklist: async (_csrfToken: string) => state.onboardingChecklist(),
+    dismissOnboarding: async (_csrfToken: string) => state.dismissOnboarding(),
     pending: async () => state.pendingResponse(),
     cleanupPending: async (
       cleanupId: string,
