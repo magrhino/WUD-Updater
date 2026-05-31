@@ -7,6 +7,7 @@ import {
   type AutoUpdateDay,
   type ApplyJobLogResponse,
   type ApplyJobResponse,
+  type DoctorResponse,
   type PendingCleanupLine,
   type PendingCleanupResponse,
   type PendingRemovalPlanResponse,
@@ -45,6 +46,7 @@ const TERMINAL_APPLY_JOB_STATUSES = new Set<ApplyJobResponse["status"]>([
 export const useWebuiStore = defineStore("webui", () => {
   const status = ref<StatusResponse | null>(null);
   const settings = ref<SettingsResponse | null>(null);
+  const doctor = ref<DoctorResponse | null>(null);
   const pending = ref<PendingResponse | null>(null);
   const releaseNotes = ref<ReleaseNotesResponse | null>(null);
   const plan = ref<PlanResponse | null>(null);
@@ -81,6 +83,13 @@ export const useWebuiStore = defineStore("webui", () => {
   async function loadSettings(): Promise<void> {
     await loadWithState(async () => {
       settings.value = await webApi.settings();
+    });
+  }
+
+  async function loadDoctor(): Promise<void> {
+    const auth = useAuthStore();
+    await loadWithState(async () => {
+      doctor.value = await webApi.doctor(await auth.ensureCsrf());
     });
   }
 
@@ -518,6 +527,7 @@ export const useWebuiStore = defineStore("webui", () => {
   return {
     status,
     settings,
+    doctor,
     pending,
     pendingCleanup,
     pendingRemovalPlan,
@@ -542,6 +552,7 @@ export const useWebuiStore = defineStore("webui", () => {
     warnings,
     loadStatus,
     loadSettings,
+    loadDoctor,
     loadDashboard,
     loadPending,
     loadReleaseNotes,

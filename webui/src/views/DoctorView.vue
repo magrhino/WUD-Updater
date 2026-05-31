@@ -1,0 +1,246 @@
+<script setup lang="ts">
+import { computed, onMounted, ref, type Component } from "vue";
+import { useClipboard } from "@vueuse/core";
+import {
+  AlertTriangle,
+  CheckCircle2,
+  Copy,
+  RefreshCw,
+  Stethoscope,
+  XCircle,
+} from "@lucide/vue";
+
+import type { DoctorCheck, DoctorCheckStatus } from "../api/client";
+import { useWebuiStore } from "../stores/webui";
+
+const webui = useWebuiStore();
+const copiedSnippet = ref("");
+const { copy, copied, isSupported } = useClipboard({ legacy: true });
+
+const doctor = computed(() => webui.doctor);
+const checks = computed(() => doctor.value?.checks ?? []);
+const passCount = computed(
+  () => checks.value.filter((check) => check.status === "PASS").length,
+);
+const groupedChecks = computed(() => {
+  const groups = new Map<string, DoctorCheck[]>();
+  for (const check of checks.value) {
+    const key = check.category || "general";
+    groups.set(key, [...(groups.get(key) ?? []), check]);
+  }
+  return [...groups.entries()].sort(([left], [right]) => {
+    return categoryRank(left) - categoryRank(right) || left.localeCompare(right);
+  });
+});
+
+onMounted(() => {
+  if (webui.doctor === null) {
+    void webui.loadDoctor().catch(() => undefined);
+  }
+});
+
+async function refreshDoctor(): Promise<void> {
+  await webui.loadDoctor();
+}
+
+async function copySuggestion(snippet: string): Promise<void> {
+  if (!snippet.trim()) {
+    return;
+  }
+  await copy(snippet);
+  copiedSnippet.value = snippet;
+}
+
+function categoryRank(category: string): number {
+  const order = [
+    "configuration",
+    "runtime",
+    "docker",
+    "paths",
+    "compose",
+    "webui",
+    "truenas",
+    "general",
+  ];
+  const index = order.indexOf(category);
+  return index === -1 ? order.length : index;
+}
+
+function categoryLabel(category: string): string {
+  if (category === "webui") {
+    return "WebUI";
+  }
+  if (category === "truenas") {
+    return "TrueNAS";
+  }
+  return category
+    .split("-")
+    .filter(Boolean)
+    .map((part) => part[0]?.toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+function statusLabel(status: DoctorCheckStatus): string {
+  if (status === "PASS") {
+    return "Pass";
+  }
+  if (status === "WARN") {
+    return "Warn";
+  }
+  return "Fail";
+}
+
+function statusTagType(
+  status: DoctorCheckStatus,
+): "success" | "warning" | "error" {
+  if (status === "PASS") {
+    return "success";
+  }
+  if (status === "WARN") {
+    return "warning";
+  }
+  return "error";
+}
+
+function statusIcon(status: DoctorCheckStatus): Component {
+  if (status === "PASS") {
+    return CheckCircle2;
+  }
+  if (status === "WARN") {
+    return AlertTriangle;
+  }
+  return XCircle;
+}
+</script>
+
+<template>
+  <section class="content-stack">
+    <n-alert v-if="webui.error" type="error" :show-icon="false">
+      {{ webui.error }}
+    </n-alert>
+
+    <section class="section-panel">
+      <div class="section-heading">
+        <div class="settings-heading-main">
+          <p class="eyebrow">Deployment checks</p>
+          <h2>Doctor results</h2>
+          <p class="settings-section-copy">
+            Docker access, mounted paths, Compose rendering, database readiness, and
+            browser safety checks from the same doctor logic used by the CLI.
+          </p>
+        </div>
+        <div class="settings-heading-meta">
+          <n-tag v-if="doctor" size="small" :type="doctor.ok ? 'success' : 'error'">
+            {{
+              doctor.ok
+                ? "No failures"
+                : `${doctor.failures} failure${doctor.failures === 1 ? "" : "s"}`
+            }}
+          </n-tag>
+          <n-button
+            quaternary
+            :loading="webui.loading"
+            title="Refresh doctor results"
+            @click="refreshDoctor"
+          >
+            <template #icon>
+              <RefreshCw :size="17" />
+            </template>
+            Refresh
+          </n-button>
+          <Stethoscope :size="20" class="section-heading-icon" />
+        </div>
+      </div>
+
+      <div v-if="!doctor && webui.loading" class="settings-loading" aria-busy="true">
+        <span class="sr-only">Loading doctor results.</span>
+        <span aria-hidden="true" class="settings-skeleton-row"></span>
+        <span aria-hidden="true" class="settings-skeleton-row"></span>
+        <span aria-hidden="true" class="settings-skeleton-row"></span>
+      </div>
+      <div v-else-if="doctor" class="settings-summary-grid" aria-label="Doctor summary">
+        <div class="settings-summary-item">
+          <span>Failures</span>
+          <strong>{{ doctor.failures }}</strong>
+        </div>
+        <div class="settings-summary-item">
+          <span>Warnings</span>
+          <strong>{{ doctor.warnings }}</strong>
+        </div>
+        <div class="settings-summary-item">
+          <span>Passing checks</span>
+          <strong>{{ passCount }}</strong>
+        </div>
+        <div class="settings-summary-item">
+          <span>Total checks</span>
+          <strong>{{ checks.length }}</strong>
+        </div>
+      </div>
+    </section>
+
+    <div v-if="doctor && !checks.length" class="empty-state">No doctor checks reported.</div>
+
+    <section
+      v-for="[category, groupChecks] in groupedChecks"
+      :key="category"
+      class="section-panel"
+    >
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">{{ categoryLabel(category) }}</p>
+          <h2>{{ groupChecks.length }} check{{ groupChecks.length === 1 ? "" : "s" }}</h2>
+        </div>
+      </div>
+
+      <div class="doctor-check-list">
+        <article
+          v-for="check in groupChecks"
+          :key="check.code"
+          class="doctor-check-row"
+          :class="`status-${check.status.toLowerCase()}`"
+        >
+          <div class="doctor-check-head">
+            <div class="doctor-check-title">
+              <component :is="statusIcon(check.status)" :size="18" aria-hidden="true" />
+              <div>
+                <strong>{{ check.name }}</strong>
+                <code>{{ check.code }}</code>
+              </div>
+            </div>
+            <n-tag size="small" :type="statusTagType(check.status)">
+              {{ statusLabel(check.status) }}
+            </n-tag>
+          </div>
+
+          <p v-if="check.detail" class="doctor-check-detail">{{ check.detail }}</p>
+
+          <div v-if="check.suggestions.length" class="doctor-suggestion-list">
+            <div
+              v-for="suggestion in check.suggestions"
+              :key="`${check.code}-${suggestion.label}`"
+              class="doctor-suggestion"
+            >
+              <div>
+                <strong>{{ suggestion.label }}</strong>
+                <span v-if="suggestion.description">{{ suggestion.description }}</span>
+                <code v-if="suggestion.snippet">{{ suggestion.snippet }}</code>
+              </div>
+              <n-button
+                v-if="suggestion.snippet"
+                quaternary
+                :disabled="!isSupported"
+                :title="`Copy ${suggestion.label}`"
+                @click="copySuggestion(suggestion.snippet)"
+              >
+                <template #icon>
+                  <Copy :size="16" />
+                </template>
+                {{ copied && copiedSnippet === suggestion.snippet ? "Copied" : "Copy" }}
+              </n-button>
+            </div>
+          </div>
+        </article>
+      </div>
+    </section>
+  </section>
+</template>

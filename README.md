@@ -144,6 +144,10 @@ when `WUD_WEB_TOKEN` is set, but that token is not used for browser login and
 does not bypass first-run setup. `WUD_WEB_DEV_NO_AUTH=true` is only for local
 development and tests.
 
+The authenticated WebUI also includes a Doctor page that renders structured
+doctor checks for Docker access, mounted paths, Compose rendering, WebUI
+database readiness, and browser safety settings without exposing secret values.
+
 ## Documentation
 
 | Topic | Where |

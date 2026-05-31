@@ -293,6 +293,11 @@ environment variables:
 docker compose -f docs/examples/docker-compose.example.yml run --rm wud-updater doctor
 ```
 
+The authenticated WebUI Doctor page runs the same checks from the browser and
+adds WebUI database, auth, host/origin, secure-cookie, static asset, and mutation
+gate checks. The browser route is read-only for Docker workloads, but it uses the
+same short-lived writable-directory permission probes as the CLI.
+
 Doctor mode is read-only except for short-lived permission probe files that it
 creates and removes in writable runtime directories. It checks:
 
