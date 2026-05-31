@@ -116,6 +116,7 @@ TERMINAL_APPLY_JOB_STATUSES = frozenset({"success", "failure"})
 JOB_STREAM_HEARTBEAT_SECONDS = 15.0
 JOB_STREAM_LOG_POLL_SECONDS = 1.0
 AUTO_UPDATE_POLL_SECONDS = 60.0
+AUTO_UPDATE_GRACE_SECONDS = 300
 AUTO_UPDATE_DAYS = ("mon", "tue", "wed", "thu", "fri", "sat", "sun")
 LOGGER = logging.getLogger(__name__)
 
@@ -130,6 +131,10 @@ class ReadOnlyDatabaseMissing(RuntimeError):
 
 class WebAdminResetError(RuntimeError):
     """Raised when local admin recovery cannot be issued."""
+
+
+class AutoUpdateScheduleReservationError(RuntimeError):
+    """Raised when an automatic update schedule slot was already claimed."""
 
 
 @dataclass(frozen=True)
@@ -1876,6 +1881,85 @@ def _auto_update_tick(
     started_at = app.state.web_auto_update_started_at
     if not isinstance(started_at, datetime):
         started_at = now_utc
+    started_at_utc = started_at.astimezone(timezone.utc)
+
+    with connect_db(settings.config.db_path) as conn:
+        init_db(conn)
+        candidate = _auto_update_candidate(
+            conn,
+            settings,
+            now_utc=now_utc,
+            started_at=started_at_utc,
+        )
+    if candidate is None:
+        return None
+    wud_lock = _acquire_apply_wud_lock(settings)
+    lock_transferred = False
+    start_event: Event | None = None
+    try:
+        locked_now_utc = now_utc if now is not None else datetime.now(timezone.utc)
+        locked_now_utc = locked_now_utc.astimezone(timezone.utc)
+        with connect_db(settings.config.db_path) as conn:
+            init_db(conn)
+            candidate = _auto_update_candidate(
+                conn,
+                settings,
+                now_utc=locked_now_utc,
+                started_at=started_at_utc,
+            )
+            if candidate is None:
+                return None
+            selection, plan = candidate
+            with _immediate_transaction(conn):
+                _reserve_auto_update_schedule_runs(conn, settings, selection)
+                start_event = Event()
+                response = _submit_apply_job_state(
+                    app.state,
+                    settings,
+                    plan,
+                    allow_tag_updates=False,
+                    tag_overrides=(),
+                    wud_lock=wud_lock,
+                    update_mode_override=selection.update_mode,
+                    metadata_extra={
+                        "source": "webui-auto",
+                        "actor_type": "scheduler",
+                        "auto_update_service_keys": list(selection.service_keys),
+                        "auto_update_schedule_keys": list(selection.schedule_keys),
+                        "auto_update_scheduled_for": selection.scheduled_for.isoformat(),
+                        "timezone": settings.config.timezone_name,
+                    },
+                    auto_update_schedule_keys=selection.schedule_keys,
+                    start_event=start_event,
+                )
+                lock_transferred = True
+                _queue_auto_update_schedule_runs(
+                    conn,
+                    settings,
+                    selection,
+                    response.job_id,
+                )
+        if start_event is not None:
+            start_event.set()
+        return response
+    except AutoUpdateScheduleReservationError:
+        return None
+    except Exception:
+        if lock_transferred and start_event is not None:
+            start_event.set()
+        raise
+    finally:
+        if not lock_transferred:
+            wud_lock.close()
+
+
+def _auto_update_candidate(
+    conn: sqlite3.Connection,
+    settings: WebSettings,
+    *,
+    now_utc: datetime,
+    started_at: datetime,
+) -> tuple[AutoUpdateSelection, DryRunPlan] | None:
     try:
         parsed = parse_wud_file(settings.config.wud_out_file)
     except FileNotFoundError:
@@ -1890,51 +1974,24 @@ def _auto_update_tick(
     if grouping.status != "ready":
         return None
 
-    with connect_db(settings.config.db_path) as conn:
-        init_db(conn)
-        policies = _due_auto_update_policies(
-            conn,
-            settings,
-            now_utc=now_utc,
-            started_at=started_at.astimezone(timezone.utc),
-        )
-        selection = _auto_update_selection(settings, grouping, policies)
-        if selection is None:
-            return None
+    policies = _due_auto_update_policies(
+        conn,
+        settings,
+        now_utc=now_utc,
+        started_at=started_at,
+    )
+    selection = _auto_update_selection(settings, grouping, policies)
+    if selection is None:
+        return None
 
-        plan = _build_web_plan(
-            settings,
-            PlanRequest(line_numbers=list(selection.line_numbers)),
-            update_mode_override=selection.update_mode,
-        )
-        if not _plan_can_apply(plan, settings):
-            return None
-
-        wud_lock = _acquire_apply_wud_lock(settings)
-        try:
-            response = _submit_apply_job_state(
-                app.state,
-                settings,
-                plan,
-                allow_tag_updates=False,
-                tag_overrides=(),
-                wud_lock=wud_lock,
-                update_mode_override=selection.update_mode,
-                metadata_extra={
-                    "source": "webui-auto",
-                    "actor_type": "scheduler",
-                    "auto_update_service_keys": list(selection.service_keys),
-                    "auto_update_schedule_keys": list(selection.schedule_keys),
-                    "auto_update_scheduled_for": selection.scheduled_for.isoformat(),
-                    "timezone": settings.config.timezone_name,
-                },
-                auto_update_selection=selection,
-                auto_update_conn=conn,
-            )
-        except Exception:
-            wud_lock.close()
-            raise
-        return response
+    plan = _build_web_plan(
+        settings,
+        PlanRequest(line_numbers=list(selection.line_numbers)),
+        update_mode_override=selection.update_mode,
+    )
+    if not _plan_can_apply(plan, settings):
+        return None
+    return selection, plan
 
 
 def _due_auto_update_policies(
@@ -1969,7 +2026,10 @@ def _due_auto_update_policies(
             continue
         scheduled_local = datetime.combine(local_now.date(), parsed_time, tzinfo=tz)
         scheduled_for = scheduled_local.astimezone(timezone.utc)
-        if scheduled_for < started_at or scheduled_for > now_utc:
+        window_end = scheduled_for + timedelta(seconds=AUTO_UPDATE_GRACE_SECONDS)
+        if now_utc < scheduled_for or now_utc >= window_end:
+            continue
+        if started_at >= window_end:
             continue
         service_key = str(row["service_key"])
         if active_snooze(conn, service_key=service_key, now=now_text) is not None:
@@ -2071,26 +2131,40 @@ def _auto_update_schedule_recorded(conn: sqlite3.Connection, schedule_key: str) 
     return row is not None
 
 
-def _record_auto_update_schedule_runs(
-    conn: sqlite3.Connection,
+def _auto_update_schedule_metadata(
+    settings: WebSettings,
     selection: AutoUpdateSelection,
-    job_id: str,
+    *,
+    job_id: str = "",
+    status: str = "reserved",
+) -> dict[str, Any]:
+    metadata: dict[str, Any] = {
+        "source": "webui-auto",
+        "line_numbers": list(selection.line_numbers),
+        "service_keys": list(selection.service_keys),
+        "scheduled_for": selection.scheduled_for.isoformat(),
+        "timezone": settings.config.timezone_name,
+        "update_mode": selection.update_mode,
+        "status": status,
+    }
+    if job_id:
+        metadata["job_id"] = job_id
+    return metadata
+
+
+def _reserve_auto_update_schedule_runs(
+    conn: sqlite3.Connection,
+    settings: WebSettings,
+    selection: AutoUpdateSelection,
 ) -> None:
     now = utc_timestamp()
-    metadata = _json_object(
-        {
-            "source": "webui-auto",
-            "job_id": job_id,
-            "line_numbers": list(selection.line_numbers),
-            "update_mode": selection.update_mode,
-        }
-    )
-    with conn:
-        for schedule_key in selection.schedule_keys:
-            service_key = schedule_key.split("|", 1)[0]
+    metadata = _json_object(_auto_update_schedule_metadata(settings, selection))
+    for schedule_key in selection.schedule_keys:
+        service_key = schedule_key.split("|", 1)[0]
+        try:
             conn.execute(
                 """
-                INSERT OR IGNORE INTO auto_update_schedule_runs (
+                INSERT INTO auto_update_schedule_runs (
                     schedule_key,
                     service_key,
                     scheduled_for,
@@ -2100,7 +2174,7 @@ def _record_auto_update_schedule_runs(
                     updated_at,
                     metadata_json
                 )
-                VALUES (?, ?, ?, NULL, 'queued', ?, ?, ?)
+                VALUES (?, ?, ?, NULL, 'reserved', ?, ?, ?)
                 """,
                 (
                     schedule_key,
@@ -2111,6 +2185,36 @@ def _record_auto_update_schedule_runs(
                     metadata,
                 ),
             )
+        except sqlite3.IntegrityError as exc:
+            raise AutoUpdateScheduleReservationError(schedule_key) from exc
+
+
+def _queue_auto_update_schedule_runs(
+    conn: sqlite3.Connection,
+    settings: WebSettings,
+    selection: AutoUpdateSelection,
+    job_id: str,
+) -> None:
+    now = utc_timestamp()
+    metadata = _json_object(
+        _auto_update_schedule_metadata(
+            settings,
+            selection,
+            job_id=job_id,
+            status="queued",
+        )
+    )
+    for schedule_key in selection.schedule_keys:
+        conn.execute(
+            """
+            UPDATE auto_update_schedule_runs
+            SET status = 'queued',
+                updated_at = ?,
+                metadata_json = ?
+            WHERE schedule_key = ?
+            """,
+            (now, metadata, schedule_key),
+        )
 
 
 def _safe_update_auto_update_schedule_runs(
@@ -2119,6 +2223,7 @@ def _safe_update_auto_update_schedule_runs(
     *,
     status: ApplyJobStatus,
     run_id: int | None,
+    error: str = "",
 ) -> None:
     if not schedule_keys:
         return
@@ -2128,6 +2233,7 @@ def _safe_update_auto_update_schedule_runs(
             schedule_keys,
             status=status,
             run_id=run_id,
+            error=error,
         )
     except Exception:
         LOGGER.exception("failed to update auto update schedule run status")
@@ -2139,22 +2245,56 @@ def _update_auto_update_schedule_runs(
     *,
     status: ApplyJobStatus,
     run_id: int | None,
+    error: str = "",
 ) -> None:
     now = utc_timestamp()
     with connect_db(settings.config.db_path) as conn:
         init_db(conn)
         with conn:
             for schedule_key in schedule_keys:
+                metadata = _auto_update_schedule_row_metadata(conn, schedule_key)
+                metadata["status"] = status
+                if run_id is None:
+                    metadata.pop("run_id", None)
+                else:
+                    metadata["run_id"] = run_id
+                if error:
+                    metadata["error"] = error
+                else:
+                    metadata.pop("error", None)
                 conn.execute(
                     """
                     UPDATE auto_update_schedule_runs
                     SET run_id = ?,
                         status = ?,
-                        updated_at = ?
+                        updated_at = ?,
+                        metadata_json = ?
                     WHERE schedule_key = ?
                     """,
-                    (run_id, status, now, schedule_key),
+                    (run_id, status, now, _json_object(metadata), schedule_key),
                 )
+
+
+def _auto_update_schedule_row_metadata(
+    conn: sqlite3.Connection,
+    schedule_key: str,
+) -> dict[str, Any]:
+    row = conn.execute(
+        """
+        SELECT metadata_json
+        FROM auto_update_schedule_runs
+        WHERE schedule_key = ?
+        LIMIT 1
+        """,
+        (schedule_key,),
+    ).fetchone()
+    if row is None:
+        return {}
+    try:
+        metadata = json.loads(str(row["metadata_json"] or "{}"))
+    except json.JSONDecodeError:
+        return {}
+    return metadata if isinstance(metadata, dict) else {}
 
 
 def _build_web_plan(
@@ -2246,8 +2386,8 @@ def _submit_apply_job_state(
     wud_lock: DirectoryLock,
     update_mode_override: str | None = None,
     metadata_extra: Mapping[str, Any] | None = None,
-    auto_update_selection: AutoUpdateSelection | None = None,
-    auto_update_conn: sqlite3.Connection | None = None,
+    auto_update_schedule_keys: tuple[str, ...] = (),
+    start_event: Event | None = None,
 ) -> ApplyJobResponse:
     apply_condition: Condition = state.web_apply_condition
     jobs: dict[str, WebApplyJob] = state.web_apply_jobs
@@ -2260,12 +2400,6 @@ def _submit_apply_job_state(
             status="queued",
             selected_line_numbers=tuple(plan.selected_line_numbers),
         )
-        if auto_update_selection is not None and auto_update_conn is not None:
-            _record_auto_update_schedule_runs(
-                auto_update_conn,
-                auto_update_selection,
-                job.id,
-            )
         jobs[job.id] = job
         response = _apply_job_response(job)
         apply_condition.notify_all()
@@ -2282,7 +2416,8 @@ def _submit_apply_job_state(
             wud_lock,
             update_mode_override,
             metadata_extra,
-            () if auto_update_selection is None else auto_update_selection.schedule_keys,
+            auto_update_schedule_keys,
+            start_event,
         )
         return response
 
@@ -2398,7 +2533,10 @@ def _run_apply_job(
     update_mode_override: str | None = None,
     metadata_extra: Mapping[str, Any] | None = None,
     auto_update_schedule_keys: tuple[str, ...] = (),
+    start_event: Event | None = None,
 ) -> None:
+    if start_event is not None:
+        start_event.wait()
     _update_apply_job(
         jobs,
         apply_condition,
@@ -2447,6 +2585,7 @@ def _run_apply_job(
             auto_update_schedule_keys,
             status=job_status,
             run_id=runner.audit_run_id,
+            error="" if status_code == 0 else f"updater exited with status {status_code}",
         )
     except Exception as exc:
         run_id = None if runner is None else runner.audit_run_id
@@ -2465,6 +2604,7 @@ def _run_apply_job(
             auto_update_schedule_keys,
             status="failure",
             run_id=run_id,
+            error=str(exc),
         )
     finally:
         wud_lock.close()
