@@ -4,6 +4,16 @@ All notable changes to WUD-Updater are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com) and versions follow
 [Semantic Versioning](https://semver.org).
 
+## [0.30.0](https://github.com/magrhino/WUD-Updater/compare/v0.29.0...v0.30.0) (2026-05-31)
+
+
+### Features
+
+* **cli:** add init configuration wizard ([#147](https://github.com/magrhino/WUD-Updater/issues/147)) ([9e31e17](https://github.com/magrhino/WUD-Updater/commit/9e31e177fb56fa8c852f0762ea5fc930e52d2b3e))
+* **webui:** add first-run onboarding checklist ([#145](https://github.com/magrhino/WUD-Updater/issues/145)) ([8743e21](https://github.com/magrhino/WUD-Updater/commit/8743e21dc13f10c4e2faee20f786ffcb6b5d2b58))
+* **webui:** Add managed WebUI preferences to Settings ([#149](https://github.com/magrhino/WUD-Updater/issues/149)) ([8845c6e](https://github.com/magrhino/WUD-Updater/commit/8845c6eeb04b11f1900ecc1663106ea5db8776b8))
+* **webui:** Add restart path setting to the WebUI ([#148](https://github.com/magrhino/WUD-Updater/issues/148)) ([2f1ec82](https://github.com/magrhino/WUD-Updater/commit/2f1ec823840a4c348861974657ec0bfdd0c49de7))
+
 ## [0.29.0](https://github.com/magrhino/WUD-Updater/compare/v0.28.0...v0.29.0) (2026-05-31)
 
 
