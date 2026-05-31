@@ -102,8 +102,13 @@ function targetLabel(
   return rule.scope === "service" ? rule.service_key : rule.image_repo;
 }
 
+function selectText(value: string | number | null): string {
+  return value === null ? "" : String(value);
+}
+
 function applyImageRepoSelection(value: string | number | null): void {
-  const imageRepo = value === null ? "" : String(value);
+  const imageRepo = selectText(value);
+  exclusionForm.imageRepo = imageRepo;
   const target = targetForImageRepo(imageRepo);
   if (!target) {
     return;
@@ -114,12 +119,17 @@ function applyImageRepoSelection(value: string | number | null): void {
 }
 
 function applyServiceSelection(value: string | number | null): void {
-  const serviceKey = value === null ? "" : String(value);
+  const serviceKey = selectText(value);
+  exclusionForm.serviceKey = serviceKey;
   const target = targetForServiceKey(serviceKey);
   if (!target) {
     return;
   }
   exclusionForm.imageRepo = target.image_repo;
+}
+
+function setTagValue(value: string | number | null): void {
+  exclusionForm.tag = selectText(value);
 }
 
 function openSaveConfirm(): void {
@@ -207,7 +217,7 @@ watch(statusFilter, (nextFilter) => {
           feedback="Required. Use the repository name without a tag."
         >
           <n-select
-            v-model:value="exclusionForm.imageRepo"
+            :value="exclusionForm.imageRepo"
             filterable
             tag
             clearable
@@ -224,7 +234,7 @@ watch(statusFilter, (nextFilter) => {
           feedback="Required for service-scoped exclusions. Use stack/service."
         >
           <n-select
-            v-model:value="exclusionForm.serviceKey"
+            :value="exclusionForm.serviceKey"
             filterable
             tag
             clearable
@@ -240,13 +250,14 @@ watch(statusFilter, (nextFilter) => {
           feedback="Required. Match the tag to exclude."
         >
           <n-select
-            v-model:value="exclusionForm.tag"
+            :value="exclusionForm.tag"
             filterable
             tag
             clearable
             :options="tagOptions"
             placeholder="2.0"
             :disabled="webui.loading"
+            @update:value="setTagValue"
           />
         </n-form-item>
         <n-form-item label="Status">

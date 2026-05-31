@@ -2142,7 +2142,7 @@ def test_update_targets_endpoint_lists_compose_service_images_without_mutation(
         fake_root,
         "stack",
         [
-            ("app", "repo/app:1.0", "cid-app"),
+            ("app", "ghcr.io/acme/app:1.0", "cid-app"),
             ("db", "postgres:16@sha256:abc", "cid-db"),
         ],
     )
@@ -2158,7 +2158,7 @@ def test_update_targets_endpoint_lists_compose_service_images_without_mutation(
         (item["service_key"], item["image"], item["image_repo"], item["current_tag"])
         for item in body["items"]
     ] == [
-        ("stack/app", "repo/app:1.0", "repo/app", "1.0"),
+        ("stack/app", "ghcr.io/acme/app:1.0", "acme/app", "1.0"),
         ("stack/db", "postgres:16@sha256:abc", "postgres", "16"),
     ]
     assert all(item["compose_file"] == "docker-compose.yml" for item in body["items"])

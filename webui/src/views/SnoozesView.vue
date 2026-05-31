@@ -65,6 +65,10 @@ function resetSnoozeForm(): void {
   snoozeForm.reason = "";
 }
 
+function setSnoozeServiceKey(value: string | number | null): void {
+  snoozeForm.serviceKey = value === null ? "" : String(value);
+}
+
 function statusLabel(snooze: SnoozeRecord): string {
   return snooze.active ? "active" : "expired";
 }
@@ -138,13 +142,14 @@ watch(snoozeState, (nextState) => {
           feedback="Required to create a snooze. Use stack/service."
         >
           <n-select
-            v-model:value="snoozeForm.serviceKey"
+            :value="snoozeForm.serviceKey"
             filterable
             tag
             clearable
             :options="serviceKeyOptions"
             placeholder="stack/service"
             :disabled="webui.loading"
+            @update:value="setSnoozeServiceKey"
           />
         </n-form-item>
         <n-form-item

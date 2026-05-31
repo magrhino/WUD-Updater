@@ -118,6 +118,10 @@ function resetPolicyForm(): void {
   policyForm.snoozeDefaultSeconds = null;
 }
 
+function setPolicyServiceKey(value: string | number | null): void {
+  policyForm.serviceKey = value === null ? "" : String(value);
+}
+
 function modeLabel(mode: string): string {
   return mode || "default";
 }
@@ -221,13 +225,14 @@ onMounted(() => {
           feedback="Required to save a policy. Use stack/service."
         >
           <n-select
-            v-model:value="policyForm.serviceKey"
+            :value="policyForm.serviceKey"
             filterable
             tag
             clearable
             :options="serviceKeyOptions"
             placeholder="stack/service"
             :disabled="webui.loading"
+            @update:value="setPolicyServiceKey"
           />
         </n-form-item>
         <n-form-item label="Update mode">

@@ -118,7 +118,7 @@ describe("demo web API", () => {
       items: expect.arrayContaining([
         expect.objectContaining({
           service_key: "media/radarr",
-          image_repo: "lscr.io/linuxserver/radarr",
+          image_repo: "linuxserver/radarr",
         }),
       ]),
     });
@@ -402,7 +402,7 @@ describe("demo web API", () => {
     );
     expect(await api.tagExclusions("active")).toContainEqual(
       expect.objectContaining({
-        image_repo: "ghcr.io/magrhino/wud-updater",
+        image_repo: "magrhino/wud-updater",
         service_key: "media/wud-updater",
       }),
     );

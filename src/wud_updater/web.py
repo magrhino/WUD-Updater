@@ -74,7 +74,7 @@ from .doctor import (
     options_from_namespace as doctor_options_from_namespace,
 )
 from .docker_cli import DockerCli
-from .images import image_repo_ref, image_tag, repo_key, tag_value_valid
+from .images import image_tag, repo_key, tag_value_valid
 from .locks import DirectoryLock, WudLockError
 from .plans import (
     DryRunPlan,
@@ -4320,7 +4320,7 @@ def _update_targets_response(settings: WebSettings) -> UpdateTargetsResponse:
                     stack=stack.name,
                     service=pair.service,
                     image=pair.image,
-                    image_repo=image_repo_ref(pair.image),
+                    image_repo=repo_key(pair.image),
                     current_tag=image_tag(pair.image),
                     directory=str(stack.directory),
                     compose_file=stack.file,
