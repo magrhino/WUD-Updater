@@ -2509,6 +2509,34 @@ def test_container_restart_endpoint_requires_configured_target(tmp_path: Path) -
     assert response.json()["detail"] == "container restart target is not configured"
 
 
+def test_container_restart_endpoint_rejects_active_apply_job(tmp_path: Path) -> None:
+    fake_env, fake_root = _fake_docker_env(tmp_path)
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+            "WUD_WEB_RESTART_CONTAINER": "wud-updater",
+            **fake_env,
+        },
+    )
+    client.app.state.web_apply_jobs["job-active"] = web_module.WebApplyJob(
+        id="job-active",
+        status="running",
+        selected_line_numbers=(1,),
+    )
+
+    response = client.post(
+        "/api/v1/container/restart",
+        json={"confirmation": "restart_container"},
+        headers=_csrf_headers(client),
+    )
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == "an apply job is already running"
+    assert _fake_docker_calls(fake_root) == ""
+
+
 def test_container_restart_endpoint_schedules_docker_restart_and_audit(
     tmp_path: Path,
 ) -> None:
@@ -2543,13 +2571,70 @@ def test_container_restart_endpoint_schedules_docker_restart_and_audit(
 
     with connect_db(tmp_path / "state" / "wud.sqlite") as conn:
         row = conn.execute(
-            "SELECT mode, metadata_json FROM update_runs WHERE id = ?",
+            "SELECT mode, status, finished_at, metadata_json FROM update_runs WHERE id = ?",
+            (body["audit_run_id"],),
+        ).fetchone()
+        event = conn.execute(
+            "SELECT status, metadata_json FROM update_events WHERE run_id = ?",
             (body["audit_run_id"],),
         ).fetchone()
     assert row["mode"] == "web-container-restart"
+    assert row["status"] == "success"
+    assert row["finished_at"]
+    assert event["status"] == "success"
     metadata = json.loads(row["metadata_json"])
     assert metadata["operation"] == "restart_container"
     assert metadata["target"] == {"container": "wud-updater"}
+    assert metadata["status"] == "success"
+    assert json.loads(event["metadata_json"]) == metadata
+
+
+def test_container_restart_endpoint_marks_audit_failed_when_restart_fails(
+    tmp_path: Path,
+) -> None:
+    fake_env, fake_root = _fake_docker_env(tmp_path)
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+            "WUD_WEB_RESTART_CONTAINER": "wud-updater",
+            **fake_env,
+        },
+    )
+    (fake_root / "containers" / "wud-updater.summary").write_text(
+        "/wud-updater|running|healthy|0|0\n",
+        encoding="utf-8",
+    )
+    (fake_root / "restart_fail").write_text("restart failed\n", encoding="utf-8")
+
+    response = client.post(
+        "/api/v1/container/restart",
+        json={"confirmation": "restart_container"},
+        headers=_csrf_headers(client),
+    )
+
+    assert response.status_code == 202
+    audit_run_id = response.json()["audit_run_id"]
+    assert "restart --time 10 wud-updater" in _fake_docker_calls(fake_root)
+
+    with connect_db(tmp_path / "state" / "wud.sqlite") as conn:
+        row = conn.execute(
+            "SELECT status, finished_at, metadata_json FROM update_runs WHERE id = ?",
+            (audit_run_id,),
+        ).fetchone()
+        event = conn.execute(
+            "SELECT status, metadata_json FROM update_events WHERE run_id = ?",
+            (audit_run_id,),
+        ).fetchone()
+
+    assert row["status"] == "failure"
+    assert row["finished_at"]
+    assert event["status"] == "failure"
+    metadata = json.loads(row["metadata_json"])
+    assert metadata["status"] == "failure"
+    assert "error" in metadata
+    assert json.loads(event["metadata_json"]) == metadata
 
 
 def test_state_operations_write_rows_and_audit_entries(tmp_path: Path) -> None:

@@ -1885,6 +1885,8 @@ def api_restart_container(
     settings = _settings(request)
     if not settings.mutations_enabled:
         raise HTTPException(status_code=403, detail="mutations are disabled")
+    if _active_apply_job_exists(request):
+        raise HTTPException(status_code=409, detail="an apply job is already running")
     container = settings.restart_container.strip()
     if not container:
         raise HTTPException(
@@ -1933,7 +1935,12 @@ def api_restart_container(
             ),
         ) from exc
 
-    background_tasks.add_task(_restart_container_task, settings, container)
+    background_tasks.add_task(
+        _restart_container_task,
+        settings,
+        container,
+        audit_run_id,
+    )
     return ContainerRestartResponse(
         status="scheduled",
         audit_run_id=audit_run_id,
@@ -4957,7 +4964,11 @@ def _valid_tag(value: str) -> str:
     return tag
 
 
-def _restart_container_task(settings: WebSettings, container: str) -> None:
+def _restart_container_task(
+    settings: WebSettings,
+    container: str,
+    audit_run_id: int,
+) -> None:
     try:
         DockerCli(runner=CommandRunner(env=settings.command_env)).restart_container(
             container,
@@ -4970,6 +4981,19 @@ def _restart_container_task(settings: WebSettings, container: str) -> None:
             container,
             _redact_sensitive_text(settings, detail),
         )
+        _safe_update_container_restart_audit(
+            settings,
+            audit_run_id,
+            status="failure",
+            error=_redact_sensitive_text(settings, detail),
+        )
+        return
+
+    _safe_update_container_restart_audit(
+        settings,
+        audit_run_id,
+        status="success",
+    )
 
 
 def _insert_container_restart_audit(
@@ -4987,6 +5011,7 @@ def _insert_container_restart_audit(
         "resource_type": "container",
         "resource_id": container,
         "target": {"container": container},
+        "status": "scheduled",
     }
     cursor = conn.execute(
         """
@@ -5000,10 +5025,9 @@ def _insert_container_restart_audit(
             log_file,
             metadata_json
         )
-        VALUES (?, ?, 'success', 0, 'web-container-restart', ?, '', ?)
+        VALUES (?, NULL, 'scheduled', 0, 'web-container-restart', ?, '', ?)
         """,
         (
-            now,
             now,
             str(settings.config.wud_out_file),
             _json_object(metadata),
@@ -5022,7 +5046,7 @@ def _insert_container_restart_audit(
             status,
             metadata_json
         )
-        VALUES (?, ?, 'wud-updater', '', '', ?, 'success', ?)
+        VALUES (?, ?, 'wud-updater', '', '', ?, 'scheduled', ?)
         """,
         (
             run_id,
@@ -5032,6 +5056,86 @@ def _insert_container_restart_audit(
         ),
     )
     return run_id
+
+
+def _safe_update_container_restart_audit(
+    settings: WebSettings,
+    run_id: int,
+    *,
+    status: Literal["success", "failure"],
+    error: str = "",
+) -> None:
+    try:
+        _update_container_restart_audit(
+            settings,
+            run_id,
+            status=status,
+            error=error,
+        )
+    except (OSError, sqlite3.Error, DatabaseError):
+        LOGGER.exception("failed to update WebUI container restart audit")
+
+
+def _update_container_restart_audit(
+    settings: WebSettings,
+    run_id: int,
+    *,
+    status: Literal["success", "failure"],
+    error: str = "",
+) -> None:
+    now = utc_timestamp()
+    with connect_db(settings.config.db_path) as conn:
+        init_db(conn)
+        with conn:
+            metadata = _container_restart_audit_metadata(conn, run_id)
+            metadata["status"] = status
+            if error:
+                metadata["error"] = error
+            else:
+                metadata.pop("error", None)
+            metadata_json = _json_object(metadata)
+            conn.execute(
+                """
+                UPDATE update_runs
+                SET finished_at = ?,
+                    status = ?,
+                    metadata_json = ?
+                WHERE id = ?
+                  AND mode = 'web-container-restart'
+                """,
+                (now, status, metadata_json, run_id),
+            )
+            conn.execute(
+                """
+                UPDATE update_events
+                SET status = ?,
+                    metadata_json = ?
+                WHERE run_id = ?
+                """,
+                (status, metadata_json, run_id),
+            )
+
+
+def _container_restart_audit_metadata(
+    conn: sqlite3.Connection,
+    run_id: int,
+) -> dict[str, Any]:
+    row = conn.execute(
+        """
+        SELECT metadata_json
+        FROM update_runs
+        WHERE id = ?
+          AND mode = 'web-container-restart'
+        """,
+        (run_id,),
+    ).fetchone()
+    if row is None:
+        return {}
+    try:
+        metadata = json.loads(str(row["metadata_json"] or "{}"))
+    except json.JSONDecodeError:
+        return {}
+    return metadata if isinstance(metadata, dict) else {}
 
 
 def _insert_state_audit(
