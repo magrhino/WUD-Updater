@@ -675,7 +675,7 @@ def test_login_throttle_entry_cap_evicts_unlocked_entries_without_global_lockout
     assert response.json()["authenticated"] is True
 
 
-def test_login_throttle_entry_cap_drops_new_entries_when_all_entries_locked(
+def test_login_throttle_entry_cap_records_client_overflow_when_all_entries_locked(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
@@ -686,35 +686,119 @@ def test_login_throttle_entry_cap_drops_new_entries_when_all_entries_locked(
     app = create_app(environ=_web_env(tmp_path))
     setup_client = TestClient(app)
     _setup_admin(setup_client)
-    settings = app.state.web_settings
+    client = TestClient(app, client=("203.0.113.99", 50000))
+    headers = _csrf_headers(client)
 
     for index in range(web_module.LOGIN_THROTTLE_MAX_ENTRIES):
+        _assert_generic_auth_failed(
+            client.post(
+                "/api/v1/auth/login",
+                json={"username": f"filler-{index}", "password": "wrong"},
+                headers=headers,
+            )
+        )
+    _assert_generic_auth_failed(
+        client.post(
+            "/api/v1/auth/login",
+            json={"username": "overflow", "password": "wrong"},
+            headers=headers,
+        )
+    )
+    locked_response = client.post(
+        "/api/v1/auth/login",
+        json={"username": "admin", "password": "correct horse battery staple"},
+        headers=headers,
+    )
+
+    throttle = app.state.web_login_throttle
+    client_throttle = app.state.web_login_client_throttle
+    assert len(throttle) == web_module.LOGIN_THROTTLE_MAX_ENTRIES
+    assert ("overflow", "203.0.113.99") not in throttle
+    assert client_throttle["203.0.113.99"].locked_until > now
+    _assert_generic_auth_failed(locked_response)
+
+    now += web_module.LOGIN_THROTTLE_COOLDOWN_SECONDS + 0.1
+    unlocked_response = client.post(
+        "/api/v1/auth/login",
+        json={"username": "admin", "password": "correct horse battery staple"},
+        headers=headers,
+    )
+
+    assert unlocked_response.status_code == 200
+    assert unlocked_response.json()["authenticated"] is True
+
+
+def test_login_throttle_client_overflow_does_not_lock_out_other_clients(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(web_module.time, "monotonic", lambda: 1_000.0)
+    monkeypatch.setattr(web_module, "LOGIN_THROTTLE_MAX_ENTRIES", 2)
+    monkeypatch.setattr(web_module, "LOGIN_THROTTLE_MAX_FAILURES", 1)
+    app = create_app(environ=_web_env(tmp_path))
+    setup_client = TestClient(app)
+    _setup_admin(setup_client)
+    abusive_client = TestClient(app, client=("203.0.113.99", 50000))
+    other_client = TestClient(app, client=("203.0.113.100", 50000))
+    abusive_headers = _csrf_headers(abusive_client)
+    other_headers = _csrf_headers(other_client)
+
+    for username in ("filler-0", "filler-1", "overflow"):
+        _assert_generic_auth_failed(
+            abusive_client.post(
+                "/api/v1/auth/login",
+                json={"username": username, "password": "wrong"},
+                headers=abusive_headers,
+            )
+        )
+    abusive_login = abusive_client.post(
+        "/api/v1/auth/login",
+        json={"username": "admin", "password": "correct horse battery staple"},
+        headers=abusive_headers,
+    )
+    other_login = other_client.post(
+        "/api/v1/auth/login",
+        json={"username": "admin", "password": "correct horse battery staple"},
+        headers=other_headers,
+    )
+
+    _assert_generic_auth_failed(abusive_login)
+    assert other_login.status_code == 200
+    assert other_login.json()["authenticated"] is True
+
+
+def test_login_throttle_client_overflow_cap_evicts_oldest_client(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(web_module.time, "monotonic", lambda: 1_000.0)
+    monkeypatch.setattr(web_module, "LOGIN_THROTTLE_MAX_ENTRIES", 1)
+    monkeypatch.setattr(web_module, "LOGIN_THROTTLE_MAX_FAILURES", 1)
+    monkeypatch.setattr(web_module, "LOGIN_THROTTLE_MAX_CLIENT_ENTRIES", 2)
+    app = create_app(environ=_web_env(tmp_path))
+    setup_client = TestClient(app)
+    _setup_admin(setup_client)
+    settings = app.state.web_settings
+    seed_request = SimpleNamespace(
+        app=app,
+        client=SimpleNamespace(host="203.0.113.9"),
+        headers={},
+    )
+    web_module._record_login_failure(seed_request, settings, "seed")
+
+    for index in range(3):
         request = SimpleNamespace(
             app=app,
             client=SimpleNamespace(host=f"203.0.113.{index + 10}"),
             headers={},
         )
-        web_module._record_login_failure(request, settings, f"filler-{index}")
-    overflow_request = SimpleNamespace(
-        app=app,
-        client=SimpleNamespace(host="203.0.113.99"),
-        headers={},
-    )
-    web_module._record_login_failure(overflow_request, settings, "overflow")
+        web_module._record_login_failure(request, settings, f"overflow-{index}")
 
-    throttle = app.state.web_login_throttle
-    assert len(throttle) == web_module.LOGIN_THROTTLE_MAX_ENTRIES
-    assert ("overflow", "203.0.113.99") not in throttle
-
-    client = TestClient(app, client=("203.0.113.99", 50000))
-    response = client.post(
-        "/api/v1/auth/login",
-        json={"username": "admin", "password": "correct horse battery staple"},
-        headers=_csrf_headers(client),
-    )
-
-    assert response.status_code == 200
-    assert response.json()["authenticated"] is True
+    client_throttle = app.state.web_login_client_throttle
+    assert len(client_throttle) == web_module.LOGIN_THROTTLE_MAX_CLIENT_ENTRIES
+    assert "203.0.113.10" not in client_throttle
+    assert "203.0.113.11" in client_throttle
+    assert "203.0.113.12" in client_throttle
 
 
 def test_login_throttle_is_scoped_by_username_and_client_address(
@@ -795,6 +879,37 @@ def test_login_throttle_uses_trusted_forwarded_client_address(
     )
 
     assert different_forwarded_address.status_code == 200
+
+
+def test_login_throttle_ignores_untrusted_forwarded_client_address(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(web_module.time, "monotonic", lambda: 1_000.0)
+    app = create_app(environ=_web_env(tmp_path))
+    setup_client = TestClient(app, client=("203.0.113.10", 50000))
+    _setup_admin(setup_client)
+    client = TestClient(app, client=("203.0.113.10", 50000))
+    headers = _csrf_headers(client)
+
+    for index in range(web_module.LOGIN_THROTTLE_MAX_FAILURES):
+        _assert_generic_auth_failed(
+            client.post(
+                "/api/v1/auth/login",
+                json={"username": "admin", "password": "wrong"},
+                headers={
+                    **headers,
+                    "X-Forwarded-For": f"198.51.100.{index + 10}",
+                },
+            )
+        )
+    locked_response = client.post(
+        "/api/v1/auth/login",
+        json={"username": "admin", "password": "correct horse battery staple"},
+        headers={**headers, "X-Forwarded-For": "198.51.100.99"},
+    )
+
+    _assert_generic_auth_failed(locked_response)
 
 
 def test_successful_login_clears_failed_login_throttle(

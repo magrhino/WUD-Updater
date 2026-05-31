@@ -90,6 +90,7 @@ PASSWORD_MIN_LENGTH = 12
 LOGIN_THROTTLE_MAX_FAILURES = 5
 LOGIN_THROTTLE_COOLDOWN_SECONDS = 60.0
 LOGIN_THROTTLE_MAX_ENTRIES = 1024
+LOGIN_THROTTLE_MAX_CLIENT_ENTRIES = 1024
 SAFE_METHODS = frozenset({"GET", "HEAD", "OPTIONS", "TRACE"})
 TRUE_VALUES = frozenset({"1", "true", "yes", "on"})
 FALSE_VALUES = frozenset({"", "0", "false", "no", "off"})
@@ -765,6 +766,7 @@ def create_app(
     app.state.web_apply_jobs = {}
     app.state.web_login_throttle_lock = Lock()
     app.state.web_login_throttle = {}
+    app.state.web_login_client_throttle = {}
     app.state.web_auto_update_started_at = datetime.now(timezone.utc)
     app.state.web_auto_update_stop = Event()
     app.state.web_auto_update_thread = None
@@ -4647,15 +4649,24 @@ def _login_throttle_blocked(
     settings: WebSettings,
     username: str,
 ) -> bool:
-    key = _login_throttle_key(request, settings, username)
+    client_address = _request_client_address(request, settings)
+    key = _login_throttle_key(username, client_address)
     now = time.monotonic()
     with request.app.state.web_login_throttle_lock:
         throttle: dict[tuple[str, str], LoginThrottleEntry] = (
             request.app.state.web_login_throttle
         )
+        client_throttle: dict[str, LoginThrottleEntry] = (
+            request.app.state.web_login_client_throttle
+        )
         _prune_login_throttle(throttle, now)
+        _prune_login_throttle(client_throttle, now)
         entry = throttle.get(key)
-        return entry is not None and entry.locked_until > now
+        client_entry = client_throttle.get(client_address)
+        return (
+            (entry is not None and entry.locked_until > now)
+            or (client_entry is not None and client_entry.locked_until > now)
+        )
 
 
 def _record_login_failure(
@@ -4663,20 +4674,28 @@ def _record_login_failure(
     settings: WebSettings,
     username: str,
 ) -> None:
-    key = _login_throttle_key(request, settings, username)
+    client_address = _request_client_address(request, settings)
+    key = _login_throttle_key(username, client_address)
     now = time.monotonic()
     with request.app.state.web_login_throttle_lock:
         throttle: dict[tuple[str, str], LoginThrottleEntry] = (
             request.app.state.web_login_throttle
         )
+        client_throttle: dict[str, LoginThrottleEntry] = (
+            request.app.state.web_login_client_throttle
+        )
         _prune_login_throttle(throttle, now)
+        _prune_login_throttle(client_throttle, now)
         entry = throttle.get(key)
         if entry is None:
-            if (
-                len(throttle) >= LOGIN_THROTTLE_MAX_ENTRIES
-                and not _evict_login_throttle_entry(throttle, now)
-            ):
-                return
+            if len(throttle) >= LOGIN_THROTTLE_MAX_ENTRIES:
+                _record_login_client_failure(
+                    client_throttle,
+                    client_address,
+                    now,
+                )
+                if not _evict_login_throttle_entry(throttle, now):
+                    return
             entry = LoginThrottleEntry(
                 failures=1,
                 first_failed_at=now,
@@ -4695,24 +4714,47 @@ def _clear_login_throttle(
     settings: WebSettings,
     username: str,
 ) -> None:
-    key = _login_throttle_key(request, settings, username)
+    client_address = _request_client_address(request, settings)
+    key = _login_throttle_key(username, client_address)
     with request.app.state.web_login_throttle_lock:
         request.app.state.web_login_throttle.pop(key, None)
+        request.app.state.web_login_client_throttle.pop(client_address, None)
 
 
 def _login_throttle_key(
-    request: Request,
-    settings: WebSettings,
     username: str,
+    client_address: str,
 ) -> tuple[str, str]:
     return (
         _normalize_username(username).casefold(),
-        _request_client_address(request, settings),
+        client_address,
     )
 
 
+def _record_login_client_failure(
+    throttle: dict[str, LoginThrottleEntry],
+    client_address: str,
+    now: float,
+) -> None:
+    entry = throttle.get(client_address)
+    if entry is None:
+        if len(throttle) >= LOGIN_THROTTLE_MAX_CLIENT_ENTRIES:
+            _evict_login_throttle_entry(throttle, now, preserve_locked=False)
+        entry = LoginThrottleEntry(
+            failures=1,
+            first_failed_at=now,
+            last_failed_at=now,
+        )
+        throttle[client_address] = entry
+    else:
+        entry.failures += 1
+        entry.last_failed_at = now
+    if entry.failures >= LOGIN_THROTTLE_MAX_FAILURES:
+        entry.locked_until = now + LOGIN_THROTTLE_COOLDOWN_SECONDS
+
+
 def _prune_login_throttle(
-    throttle: dict[tuple[str, str], LoginThrottleEntry],
+    throttle: dict[Any, LoginThrottleEntry],
     now: float,
 ) -> None:
     for key, entry in list(throttle.items()):
@@ -4721,13 +4763,15 @@ def _prune_login_throttle(
 
 
 def _evict_login_throttle_entry(
-    throttle: dict[tuple[str, str], LoginThrottleEntry],
+    throttle: dict[Any, LoginThrottleEntry],
     now: float,
+    *,
+    preserve_locked: bool = True,
 ) -> bool:
     evictable = [
         (key, entry)
         for key, entry in throttle.items()
-        if entry.locked_until <= now
+        if not preserve_locked or entry.locked_until <= now
     ]
     if not evictable:
         return False
