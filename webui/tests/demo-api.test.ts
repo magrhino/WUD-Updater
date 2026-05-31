@@ -20,17 +20,27 @@ describe("demo web API", () => {
     await expect(api.status()).resolves.toMatchObject({
       wud_file: "demo/out/images.todo",
       db_path: "demo/logs/wud-updater.sqlite",
-      pending_count: 4,
+      pending_count: 7,
       mutations_enabled: true,
     });
 
     const pending = await api.pending();
-    expect(pending.count).toBe(4);
+    expect(pending.count).toBe(7);
     expect(pending.source_file).toBe("demo/out/images.todo");
     expect(pending.grouping.groups.map((group) => group.name)).toEqual([
       "data",
       "home",
       "media",
+    ]);
+    expect(pending.grouping.unmatched.map((item) => item.line_no)).toEqual([
+      6,
+      7,
+      8,
+    ]);
+    expect(pending.grouping.unmatched.map((item) => item.repo)).toEqual([
+      "gethomepage/homepage",
+      "vaultwarden/server",
+      "containrrr/watchtower",
     ]);
     expect(pending.source_file.startsWith("/")).toBe(false);
     expect(pending.grouping.groups.every((group) => !group.directory.startsWith("/"))).toBe(
@@ -41,6 +51,15 @@ describe("demo web API", () => {
         group.items.map((item) => item.diagnostic),
       ),
     ).toEqual([null, null, null, null]);
+    expect(
+      pending.grouping.unmatched.every(
+        (item) =>
+          item.action === "unmatched" &&
+          item.compose_images.length === 0 &&
+          item.services.length === 0 &&
+          item.diagnostic?.code === "unmatched",
+      ),
+    ).toBe(true);
   });
 
   it("creates plans from the current fixture state", async () => {
@@ -67,10 +86,67 @@ describe("demo web API", () => {
     expect(plan.issues).toEqual([]);
   });
 
+  it("blocks unmatched fixture lines and previews cleanup", async () => {
+    const api = createDemoWebApi();
+
+    const plan = await api.createPlan([6], true, [], "csrf");
+
+    expect(plan.status).toBe("blocked");
+    expect(plan.can_apply).toBe(false);
+    expect(plan.summary).toMatchObject({
+      target_count: 1,
+      matched_target_count: 0,
+      stack_count: 0,
+      service_count: 0,
+      skipped_count: 1,
+      issue_count: 1,
+    });
+    expect(plan.targets[0]).toMatchObject({
+      line_no: 6,
+      matched: false,
+      action: "unmatched",
+    });
+    expect(plan.skipped).toEqual([
+      {
+        line_no: 6,
+        raw: "ghcr.io/gethomepage/homepage:v0.9.12 tag=v0.10.9",
+        image: "ghcr.io/gethomepage/homepage:v0.9.12",
+        desired_tag: "v0.10.9",
+        reason: "unmatched",
+      },
+    ]);
+    expect(plan.issues[0]).toMatchObject({
+      severity: "error",
+      code: "unmatched",
+      line_no: 6,
+    });
+    expect(plan.cleanup).toMatchObject({
+      cleanup_id: "demo-cleanup",
+      can_remove_unmatched: true,
+      items: [
+        {
+          line_no: 6,
+          raw: "ghcr.io/gethomepage/homepage:v0.9.12 tag=v0.10.9",
+          reason: "unmatched",
+        },
+      ],
+    });
+  });
+
   it("removes exact pending lines through demo cleanup", async () => {
     const api = createDemoWebApi();
     const pending = await api.pending();
-    const line = pending.items[0];
+    const line = pending.grouping.unmatched[0];
+    const matchedLine = pending.items.find((item) => item.line_no === 2);
+
+    expect(matchedLine).toBeDefined();
+    await expect(
+      api.cleanupPending(
+        "demo-cleanup",
+        [{ line_no: matchedLine?.line_no ?? 0, raw: matchedLine?.raw ?? "" }],
+        "csrf",
+      ),
+    ).rejects.toThrow("cleanup is stale");
 
     const cleanup = await api.cleanupPending(
       "demo-cleanup",
@@ -84,7 +160,9 @@ describe("demo web API", () => {
       removed_count: 1,
       removed: [{ line_no: line.line_no, raw: line.raw, reason: "unmatched" }],
     });
-    expect((await api.pending()).count).toBe(3);
+    const refreshed = await api.pending();
+    expect(refreshed.count).toBe(6);
+    expect(refreshed.grouping.unmatched.map((item) => item.line_no)).toEqual([7, 8]);
     await expect(api.runDetail(cleanup.audit_run_id)).resolves.toMatchObject({
       id: cleanup.audit_run_id,
       mode: "web-pending-cleanup",
@@ -129,7 +207,7 @@ describe("demo web API", () => {
 
     expect(jobs.map((item) => item.status)).toEqual(["running", "success"]);
     expect(logs.at(-1)?.content).toContain("Done. See log");
-    expect((await api.pending()).count).toBe(3);
+    expect((await api.pending()).count).toBe(6);
     expect((await api.runs())[0]).toMatchObject({
       id: 4,
       status: "success",

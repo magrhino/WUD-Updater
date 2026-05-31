@@ -34,6 +34,9 @@ PENDING_LINES = (
     "lscr.io/linuxserver/radarr:5.21.1 tag=5.22.4",
     "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
     "ghcr.io/magrhino/wud-updater:v0.16.0 tag=v0.16.1",
+    "ghcr.io/gethomepage/homepage:v0.9.12 tag=v0.10.9",
+    "vaultwarden/server:1.31.0 tag=1.32.0",
+    "containrrr/watchtower:1.7.1 tag=1.7.2",
 )
 
 DEMO_STACKS = (
@@ -56,6 +59,12 @@ DEMO_STACKS = (
             ("postgres", "postgres:16"),
         ),
     },
+)
+
+DEMO_UNMATCHED_CONTAINERS = (
+    ("homepage", "ghcr.io/gethomepage/homepage:v0.9.12"),
+    ("vaultwarden", "vaultwarden/server:1.31.0"),
+    ("watchtower", "containrrr/watchtower:1.7.1"),
 )
 
 DEMO_PULL_TARGETS = (
@@ -451,6 +460,14 @@ def _write_demo_stacks(docker_base: Path, fake_docker_root: Path) -> None:
         (stack_dir / ".fake-docker-id").write_text(f"{stack_name}\n", encoding="utf-8")
         _write_compose_file(stack_dir / "docker-compose.yml", services)
         _write_fake_stack_state(fake_docker_root, stack_name, services, containers)
+
+    for container_name, image in DEMO_UNMATCHED_CONTAINERS:
+        (fake_docker_root / "containers" / f"{container_name}.summary").write_text(
+            f"/{container_name}|running|healthy|0|0\n",
+            encoding="utf-8",
+        )
+        containers.append(f"{container_name}\t{image}\n")
+        _write_fake_image_state(fake_docker_root, image)
 
     for image, image_id, digest in DEMO_PULL_TARGETS:
         _write_fake_image_after_pull(

@@ -36,6 +36,16 @@ class WebuiDemoStateTests(unittest.TestCase):
             )
 
             self.assertIn("home-assistant", wud_file.read_text(encoding="utf-8"))
+            self.assertIn("gethomepage/homepage", wud_file.read_text(encoding="utf-8"))
+            containers = (fake_docker_root / "containers.tsv").read_text(
+                encoding="utf-8"
+            )
+            self.assertIn(
+                "homepage\tghcr.io/gethomepage/homepage:v0.9.12",
+                containers,
+            )
+            self.assertIn("vaultwarden\tvaultwarden/server:1.31.0", containers)
+            self.assertIn("watchtower\tcontainrrr/watchtower:1.7.1", containers)
             self.assertEqual(
                 logs,
                 ["demo-dry-run.log", "demo-failed.log", "demo-success.log"],
@@ -56,6 +66,9 @@ class WebuiDemoStateTests(unittest.TestCase):
             )
             self.assertTrue((fake_docker_root / "calls.log").exists())
             self.assertTrue((fake_docker_root / "containers.tsv").exists())
+            self.assertTrue(
+                (fake_docker_root / "containers" / "homepage.summary").exists()
+            )
             self.assertTrue(
                 (
                     fake_docker_root

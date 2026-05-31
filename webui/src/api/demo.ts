@@ -8,6 +8,7 @@ import type {
   PendingCleanupResponse,
   PendingUpdateRecord,
   PendingResponse,
+  PlanCleanupItem,
   PlanLine,
   PlanResponse,
   PlanStack,
@@ -78,8 +79,19 @@ const DEMO_STACKS: Record<DemoStackName, DemoStack> = {
 };
 
 type DemoPendingItem = PendingGroupedItem & {
-  stack: DemoStackName;
+  stack: DemoStackName | "";
   service: string;
+};
+
+const GENERIC_UNMATCHED_DIAGNOSTIC: NonNullable<PendingGroupedItem["diagnostic"]> = {
+  code: "unmatched",
+  message: "No Compose stack matched this WUD entry.",
+  hint: "Confirm this image is still managed by an active Compose stack, or remove the stale WUD entry.",
+  stack: "",
+  service: "",
+  compose_file: "",
+  found_files: [],
+  details: {},
 };
 
 const INITIAL_PENDING: DemoPendingItem[] = [
@@ -165,6 +177,66 @@ const INITIAL_PENDING: DemoPendingItem[] = [
     diagnostic: null,
     stack: "media",
     service: "wud-updater",
+  },
+  {
+    line_no: 6,
+    raw: "ghcr.io/gethomepage/homepage:v0.9.12 tag=v0.10.9",
+    image: "ghcr.io/gethomepage/homepage:v0.9.12",
+    key: "gethomepage/homepage:v0.9.12",
+    repo: "gethomepage/homepage",
+    current_tag: "v0.9.12",
+    has_tag: true,
+    allow_repo: false,
+    digest: "",
+    desired_tag: "v0.10.9",
+    resolved_image: "ghcr.io/gethomepage/homepage:v0.9.12",
+    target_image: "ghcr.io/gethomepage/homepage:v0.10.9",
+    compose_images: [],
+    services: [],
+    action: "unmatched",
+    diagnostic: { ...GENERIC_UNMATCHED_DIAGNOSTIC },
+    stack: "",
+    service: "homepage",
+  },
+  {
+    line_no: 7,
+    raw: "vaultwarden/server:1.31.0 tag=1.32.0",
+    image: "vaultwarden/server:1.31.0",
+    key: "vaultwarden/server:1.31.0",
+    repo: "vaultwarden/server",
+    current_tag: "1.31.0",
+    has_tag: true,
+    allow_repo: false,
+    digest: "",
+    desired_tag: "1.32.0",
+    resolved_image: "vaultwarden/server:1.31.0",
+    target_image: "vaultwarden/server:1.32.0",
+    compose_images: [],
+    services: [],
+    action: "unmatched",
+    diagnostic: { ...GENERIC_UNMATCHED_DIAGNOSTIC },
+    stack: "",
+    service: "vaultwarden",
+  },
+  {
+    line_no: 8,
+    raw: "containrrr/watchtower:1.7.1 tag=1.7.2",
+    image: "containrrr/watchtower:1.7.1",
+    key: "containrrr/watchtower:1.7.1",
+    repo: "containrrr/watchtower",
+    current_tag: "1.7.1",
+    has_tag: true,
+    allow_repo: false,
+    digest: "",
+    desired_tag: "1.7.2",
+    resolved_image: "containrrr/watchtower:1.7.1",
+    target_image: "containrrr/watchtower:1.7.2",
+    compose_images: [],
+    services: [],
+    action: "unmatched",
+    diagnostic: { ...GENERIC_UNMATCHED_DIAGNOSTIC },
+    stack: "",
+    service: "watchtower",
   },
 ];
 
@@ -397,7 +469,9 @@ class DemoApiState {
         groups: (Object.keys(DEMO_STACKS) as DemoStackName[])
           .map((name) => this.stackGroup(name))
           .filter((group) => group.items.length > 0),
-        unmatched: [],
+        unmatched: this.pending
+          .filter(isUnmatchedDemoItem)
+          .map(stripDemoFields),
         warnings: [],
       },
       warnings: [],
@@ -424,42 +498,19 @@ class DemoApiState {
     const selected = this.pending
       .filter((item) => requested.has(item.line_no))
       .map((item) => applyTagOverride(item, tagOverrides));
-    const tagUpdateCount = selected.filter((item) => item.action === "tag-update").length;
+    const matchedSelected = selected.filter(isMatchedDemoItem);
+    const unmatchedSelected = selected.filter(isUnmatchedDemoItem);
+    const tagUpdateCount = matchedSelected.filter(
+      (item) => item.action === "tag-update",
+    ).length;
     const blockedTagUpdates = tagUpdateCount > 0 && !allowTagUpdates;
+    const unmatchedIssues = unmatchedSelected.map((item) => unmatchedIssue(item));
     const stacks = (Object.keys(DEMO_STACKS) as DemoStackName[])
-      .map((name) => planStack(name, selected))
+      .map((name) => planStack(name, matchedSelected))
       .filter((stack) => stack.lines.length > 0);
-
-    return {
-      plan_id: `demo-plan-${Date.now()}`,
-      dry_run: true,
-      can_apply: selected.length > 0 && !blockedTagUpdates,
-      status: selected.length === 0 ? "empty" : blockedTagUpdates ? "blocked" : "ready",
-      source_file: DEMO_SOURCE_FILE,
-      mode: "stop",
-      max_wait: 180,
-      selected_line_numbers: selected.map((item) => item.line_no),
-      summary: {
-        target_count: selected.length,
-        matched_target_count: selected.length,
-        stack_count: stacks.length,
-        service_count: selected.length,
-        skipped_count: 0,
-        issue_count: blockedTagUpdates ? 1 : 0,
-      },
-      targets: selected.map((item) => ({
-        line_no: item.line_no,
-        raw: item.raw,
-        image: item.image,
-        resolved_image: item.resolved_image,
-        digest: item.digest,
-        desired_tag: item.desired_tag,
-        matched: true,
-        action: item.action,
-      })),
-      stacks,
-      skipped: [],
-      issues: blockedTagUpdates
+    const issues = [
+      ...unmatchedIssues,
+      ...(blockedTagUpdates
         ? [
             {
               severity: "error",
@@ -472,11 +523,50 @@ class DemoApiState {
               details: {},
             },
           ]
-        : [],
+        : []),
+    ];
+    const cleanupItems = unmatchedSelected.map(planCleanupItem);
+
+    return {
+      plan_id: `demo-plan-${Date.now()}`,
+      dry_run: true,
+      can_apply: matchedSelected.length > 0 && issues.length === 0,
+      status: selected.length === 0 ? "empty" : issues.length > 0 ? "blocked" : "ready",
+      source_file: DEMO_SOURCE_FILE,
+      mode: "stop",
+      max_wait: 180,
+      selected_line_numbers: selected.map((item) => item.line_no),
+      summary: {
+        target_count: selected.length,
+        matched_target_count: matchedSelected.length,
+        stack_count: stacks.length,
+        service_count: matchedSelected.length,
+        skipped_count: unmatchedSelected.length,
+        issue_count: issues.length,
+      },
+      targets: selected.map((item) => ({
+        line_no: item.line_no,
+        raw: item.raw,
+        image: item.image,
+        resolved_image: item.resolved_image,
+        digest: item.digest,
+        desired_tag: item.desired_tag,
+        matched: isMatchedDemoItem(item),
+        action: item.action,
+      })),
+      stacks,
+      skipped: unmatchedSelected.map((item) => ({
+        line_no: item.line_no,
+        raw: item.raw,
+        image: item.image,
+        desired_tag: item.desired_tag,
+        reason: "unmatched",
+      })),
+      issues,
       cleanup: {
-        cleanup_id: "",
-        can_remove_unmatched: false,
-        items: [],
+        cleanup_id: cleanupItems.length > 0 ? "demo-cleanup" : "",
+        can_remove_unmatched: cleanupItems.length > 0,
+        items: cleanupItems,
       },
     };
   }
@@ -486,8 +576,8 @@ class DemoApiState {
     lines: PendingCleanupLine[],
   ): PendingCleanupResponse {
     const requested = new Set(lines.map((line) => cleanupLineKey(line)));
-    const removed = this.pending.filter((item) =>
-      requested.has(cleanupLineKey(item)),
+    const removed = this.pending.filter(
+      (item) => isUnmatchedDemoItem(item) && requested.has(cleanupLineKey(item)),
     );
     if (removed.length === 0 || removed.length !== requested.size) {
       throw new Error("cleanup is stale");
@@ -553,18 +643,23 @@ class DemoApiState {
     if (!record || record.completed || !record.plan) {
       return record ?? null;
     }
+    if (!record.plan.can_apply) {
+      record.completed = true;
+      return record;
+    }
 
     const startedAt = "2026-05-30T20:12:26+00:00";
     const finishedAt = "2026-05-30T20:12:28+00:00";
     const logFile = `${DEMO_LOG_DIR}/update-from-wud-v2-demo-${record.job.job_id}.log`;
-    const selectedItems = this.pending.filter((item) =>
-      record.lineNumbers.includes(item.line_no),
+    const selectedItems = this.pending.filter(
+      (item) => isMatchedDemoItem(item) && record.lineNumbers.includes(item.line_no),
     );
     const runId = this.nextRun++;
     const logContent = this.applyLog(record.plan, startedAt, finishedAt, logFile);
+    const selectedKeys = new Set(selectedItems.map((item) => cleanupLineKey(item)));
 
     this.pending = this.pending.filter(
-      (item) => !record.lineNumbers.includes(item.line_no),
+      (item) => !selectedKeys.has(cleanupLineKey(item)),
     );
     record.completed = true;
     record.job = {
@@ -908,6 +1003,13 @@ class DemoJobStream extends EventTarget {
       this.queue(() => this.onerror?.(new Event("error")), 0);
       return;
     }
+    if (record.job.status === "failure" || record.plan?.can_apply === false) {
+      this.queue(() => {
+        this.emit("job", record.job);
+        this.close();
+      }, 0);
+      return;
+    }
     this.queue(() => {
       record.job = {
         ...record.job,
@@ -964,6 +1066,48 @@ function cleanupLineKey(line: PendingCleanupLine): string {
   return `${line.line_no}\u0000${line.raw}`;
 }
 
+function isMatchedDemoItem(
+  item: DemoPendingItem,
+): item is DemoPendingItem & { stack: DemoStackName } {
+  return item.stack !== "";
+}
+
+function isUnmatchedDemoItem(
+  item: DemoPendingItem,
+): item is DemoPendingItem & { stack: "" } {
+  return item.stack === "";
+}
+
+function unmatchedIssue(item: DemoPendingItem) {
+  const diagnostic = item.diagnostic ?? GENERIC_UNMATCHED_DIAGNOSTIC;
+  return {
+    severity: "error",
+    code: diagnostic.code,
+    message: diagnostic.message,
+    line_no: item.line_no,
+    stack: diagnostic.stack,
+    service: diagnostic.service,
+    hint: diagnostic.hint,
+    details: diagnostic.details,
+  };
+}
+
+function planCleanupItem(item: DemoPendingItem): PlanCleanupItem {
+  return {
+    line_no: item.line_no,
+    raw: item.raw,
+    image: item.image,
+    desired_tag: item.desired_tag,
+    digest: item.digest,
+    reason: "unmatched",
+    diagnostic: item.diagnostic,
+  };
+}
+
+function demoServiceKey(item: DemoPendingItem): string {
+  return item.stack ? `${item.stack}/${item.service}` : item.service;
+}
+
 function applyTagOverride(
   item: DemoPendingItem,
   tagOverrides: TagOverrideRequest[],
@@ -973,11 +1117,12 @@ function applyTagOverride(
     return clone(item);
   }
   const targetImage = rewriteTag(item.resolved_image, override.tag);
+  const action = isUnmatchedDemoItem(item) ? "unmatched" : "tag-update";
   return {
     ...clone(item),
     desired_tag: override.tag,
     target_image: targetImage,
-    action: "tag-update",
+    action,
   };
 }
 
@@ -1070,7 +1215,7 @@ function runFromApply(
       item.line_no,
       runId,
       item.raw,
-      `${item.stack}/${item.service}`,
+      demoServiceKey(item),
       "success",
       index + runId * 100,
     ),
@@ -1131,7 +1276,7 @@ function runFromCleanup(
       item.line_no,
       runId,
       item.raw,
-      `${item.stack}/${item.service}`,
+      demoServiceKey(item),
       "resolved",
       index + runId * 100,
       "removed-unmatched",
