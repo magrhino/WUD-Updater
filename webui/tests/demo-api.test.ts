@@ -185,6 +185,61 @@ describe("demo web API", () => {
     ).rejects.toThrow("cleanup is stale");
   });
 
+  it("removes selected matched pending lines through demo removal", async () => {
+    const api = createDemoWebApi();
+    const pending = await api.pending();
+    const matchedLine = pending.items.find((item) => item.line_no === 2);
+
+    expect(matchedLine).toBeDefined();
+    const plan = await api.createRemovalPlan([matchedLine?.line_no ?? 0], "csrf");
+    expect(plan).toMatchObject({
+      removal_id: "demo-removal",
+      can_remove: true,
+      selected_line_numbers: [matchedLine?.line_no],
+      lines: [{ line_no: matchedLine?.line_no, raw: matchedLine?.raw }],
+    });
+
+    const removal = await api.removeSelectedPending(
+      plan.removal_id,
+      [{ line_no: matchedLine?.line_no ?? 0, raw: matchedLine?.raw ?? "" }],
+      "csrf",
+    );
+
+    expect(removal).toMatchObject({
+      status: "success",
+      audit_run_id: 4,
+      removed_count: 1,
+      removed: [
+        { line_no: matchedLine?.line_no, raw: matchedLine?.raw, reason: "selected" },
+      ],
+    });
+    const refreshed = await api.pending();
+    expect(refreshed.count).toBe(6);
+    expect(refreshed.items.some((item) => item.line_no === matchedLine?.line_no)).toBe(
+      false,
+    );
+    await expect(api.runDetail(removal.audit_run_id)).resolves.toMatchObject({
+      id: removal.audit_run_id,
+      mode: "web-pending-removal",
+      metadata: { operation: "remove_selected_pending" },
+      pending_updates: [
+        {
+          line_no: matchedLine?.line_no,
+          status: "resolved",
+          status_reason: "removed-selected",
+        },
+      ],
+      events: [{ status: "success" }],
+    });
+    await expect(
+      api.removeSelectedPending(
+        plan.removal_id,
+        [{ line_no: matchedLine?.line_no ?? 0, raw: matchedLine?.raw ?? "" }],
+        "csrf",
+      ),
+    ).rejects.toThrow("removal is stale");
+  });
+
   it("streams apply jobs and updates pending state and run history", async () => {
     vi.useFakeTimers();
     const api = createDemoWebApi();

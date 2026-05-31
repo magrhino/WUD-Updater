@@ -533,6 +533,32 @@ class PendingCleanupResponse(BaseModel):
     removed: list[PendingCleanupRemovedLine] = Field(default_factory=list)
 
 
+class PendingRemovalPlanRequest(BaseModel):
+    line_numbers: list[LineNumber] = Field(min_length=1)
+
+
+class PendingRemovalPlanLine(BaseModel):
+    line_no: int
+    raw: str
+    image: str
+    desired_tag: str = ""
+    digest: str = ""
+
+
+class PendingRemovalPlanResponse(BaseModel):
+    removal_id: str
+    source_file: str
+    can_remove: bool
+    selected_line_numbers: list[int] = Field(default_factory=list)
+    lines: list[PendingRemovalPlanLine] = Field(default_factory=list)
+
+
+class PendingRemovalRequest(BaseModel):
+    removal_id: str = Field(min_length=1)
+    lines: list[PendingCleanupLine] = Field(min_length=1)
+    confirmation: Literal["remove_selected"]
+
+
 class ApplyPlanRequest(BaseModel):
     plan_id: str = Field(min_length=1)
     line_numbers: list[LineNumber] = Field(min_length=1)
@@ -780,6 +806,18 @@ def create_app(
     router.add_api_route(
         "/pending/cleanup",
         api_pending_cleanup,
+        methods=["POST"],
+        response_model=PendingCleanupResponse,
+    )
+    router.add_api_route(
+        "/pending/removal-plan",
+        api_pending_removal_plan,
+        methods=["POST"],
+        response_model=PendingRemovalPlanResponse,
+    )
+    router.add_api_route(
+        "/pending/removal",
+        api_pending_removal,
         methods=["POST"],
         response_model=PendingCleanupResponse,
     )
@@ -1257,6 +1295,103 @@ def api_pending_cleanup(
         wud_lock.close()
 
 
+def api_pending_removal_plan(
+    payload: PendingRemovalPlanRequest,
+    request: Request,
+) -> PendingRemovalPlanResponse:
+    settings = _settings(request)
+    try:
+        parsed = parse_wud_file(settings.config.wud_out_file)
+        return _pending_removal_plan(settings, payload.line_numbers, parsed=parsed)
+    except PlanInputError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="WUD file not found") from exc
+    except OSError as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=f"could not create removal plan: {exc}",
+        ) from exc
+
+
+def api_pending_removal(
+    payload: PendingRemovalRequest,
+    request: Request,
+) -> PendingCleanupResponse:
+    settings = _settings(request)
+    if not settings.mutations_enabled:
+        raise HTTPException(status_code=403, detail="mutations are disabled")
+    if _active_apply_job_exists(request):
+        raise HTTPException(status_code=409, detail="an apply job is already running")
+
+    payload_lines = _removal_payload_lines(payload)
+    wud_lock = _acquire_apply_wud_lock(settings)
+    try:
+        try:
+            parsed = parse_wud_file(settings.config.wud_out_file)
+            plan = _pending_removal_plan(
+                settings,
+                [line.line_no for line in payload_lines],
+                parsed=parsed,
+            )
+        except (PlanInputError, FileNotFoundError) as exc:
+            raise HTTPException(status_code=409, detail="removal is stale") from exc
+        except OSError as exc:
+            raise HTTPException(
+                status_code=500,
+                detail=f"could not revalidate removal: {exc}",
+            ) from exc
+
+        removed = _validated_removal_lines(payload, payload_lines, plan)
+        try:
+            with connect_db(settings.config.db_path) as conn:
+                init_db(conn)
+                with _immediate_transaction(conn):
+                    audit_run_id = _insert_pending_removal_audit(
+                        conn,
+                        settings,
+                        request,
+                        removed,
+                    )
+                    try:
+                        remove_lines_before_run(
+                            settings.config.wud_out_file,
+                            parsed,
+                            [item.line_no for item in removed],
+                            lock=wud_lock,
+                            owner=_owner_config(settings),
+                        )
+                    except OSError as exc:
+                        raise HTTPException(
+                            status_code=500,
+                            detail=f"could not remove pending lines: {exc}",
+                        ) from exc
+        except HTTPException:
+            raise
+        except (OSError, sqlite3.Error, DatabaseError) as exc:
+            raise HTTPException(
+                status_code=500,
+                detail=f"could not record removal audit: {exc}",
+            ) from exc
+
+        return PendingCleanupResponse(
+            status="success",
+            audit_run_id=audit_run_id,
+            removed_count=len(removed),
+            removed=[
+                PendingCleanupRemovedLine(
+                    line_no=item.line_no,
+                    raw=item.raw,
+                    image=item.image,
+                    reason="selected",
+                )
+                for item in removed
+            ],
+        )
+    finally:
+        wud_lock.close()
+
+
 def api_release_notes(request: Request) -> ReleaseNotesResponse:
     settings = _settings(request)
     exists, parsed = _parse_pending_file(settings)
@@ -1657,6 +1792,27 @@ def _cleanup_payload_lines(
     return tuple(lines)
 
 
+def _removal_payload_lines(
+    payload: PendingRemovalRequest,
+) -> tuple[PendingCleanupLine, ...]:
+    seen: set[int] = set()
+    lines: list[PendingCleanupLine] = []
+    for line in payload.lines:
+        if line.line_no in seen:
+            raise HTTPException(
+                status_code=422,
+                detail=f"removal line {line.line_no} was provided more than once",
+            )
+        if not line.raw:
+            raise HTTPException(
+                status_code=422,
+                detail=f"removal line {line.line_no} raw value is required",
+            )
+        seen.add(line.line_no)
+        lines.append(line)
+    return tuple(lines)
+
+
 def _validated_cleanup_lines(
     payload: PendingCleanupRequest,
     payload_lines: Sequence[PendingCleanupLine],
@@ -1671,6 +1827,97 @@ def _validated_cleanup_lines(
     available = {(item.line_no, item.raw): item for item in cleanup.items}
     if requested != set(available):
         raise HTTPException(status_code=409, detail="cleanup is stale")
+    return tuple(available[key] for key in sorted(available))
+
+
+def _pending_removal_plan(
+    settings: WebSettings,
+    line_numbers: Sequence[int],
+    *,
+    parsed: ParsedWudFile,
+) -> PendingRemovalPlanResponse:
+    selected = _selected_removal_line_numbers(line_numbers)
+    targets_by_line = {target.line_no: target for target in parsed.targets}
+    missing = [line_no for line_no in selected if line_no not in targets_by_line]
+    if missing:
+        raise PlanInputError(
+            "line_numbers include non-pending line(s): "
+            + ", ".join(str(line_no) for line_no in missing)
+        )
+
+    lines = [
+        PendingRemovalPlanLine(
+            line_no=target.line_no,
+            raw=target.raw,
+            image=target.first,
+            desired_tag=target.desired_tag,
+            digest=target.digest,
+        )
+        for target in (targets_by_line[line_no] for line_no in selected)
+    ]
+    return PendingRemovalPlanResponse(
+        removal_id=_pending_removal_id(settings, lines),
+        source_file=str(settings.config.wud_out_file),
+        can_remove=settings.mutations_enabled and bool(lines),
+        selected_line_numbers=list(selected),
+        lines=lines,
+    )
+
+
+def _selected_removal_line_numbers(line_numbers: Sequence[int]) -> tuple[int, ...]:
+    seen: set[int] = set()
+    selected: list[int] = []
+    for line_no in line_numbers:
+        if line_no in seen:
+            raise PlanInputError(
+                f"line_numbers line {line_no} was provided more than once"
+            )
+        seen.add(line_no)
+        selected.append(line_no)
+    return tuple(sorted(selected))
+
+
+def _pending_removal_id(
+    settings: WebSettings,
+    lines: Sequence[PendingRemovalPlanLine],
+) -> str:
+    payload = {
+        "version": 1,
+        "source_file": str(settings.config.wud_out_file),
+        "lines": [
+            {
+                "line_no": item.line_no,
+                "raw": item.raw,
+                "image": item.image,
+                "desired_tag": item.desired_tag,
+                "digest": item.digest,
+            }
+            for item in lines
+        ],
+    }
+    canonical = json.dumps(
+        payload,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=True,
+    )
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def _validated_removal_lines(
+    payload: PendingRemovalRequest,
+    payload_lines: Sequence[PendingCleanupLine],
+    plan: PendingRemovalPlanResponse,
+) -> tuple[PendingRemovalPlanLine, ...]:
+    if not plan.lines or not plan.removal_id:
+        raise HTTPException(status_code=409, detail="removal is stale")
+    if not secrets.compare_digest(plan.removal_id, payload.removal_id):
+        raise HTTPException(status_code=409, detail="removal is stale")
+
+    requested = {(line.line_no, line.raw) for line in payload_lines}
+    available = {(item.line_no, item.raw): item for item in plan.lines}
+    if requested != set(available):
+        raise HTTPException(status_code=409, detail="removal is stale")
     return tuple(available[key] for key in sorted(available))
 
 
@@ -1782,6 +2029,104 @@ def _insert_pending_cleanup_audit(
                     else item.image
                 ),
                 "" if item.diagnostic is None else item.diagnostic.stack,
+                item.image,
+                _json_object(item_metadata),
+            ),
+        )
+    return run_id
+
+
+def _insert_pending_removal_audit(
+    conn: sqlite3.Connection,
+    settings: WebSettings,
+    request: Request,
+    removed: Sequence[PendingRemovalPlanLine],
+) -> int:
+    now = utc_timestamp()
+    metadata = {
+        "source": "webui",
+        "operation": "remove_selected_pending",
+        "actor_type": _state_actor_type(settings, request),
+        "line_numbers": [item.line_no for item in removed],
+    }
+    cursor = conn.execute(
+        """
+        INSERT INTO update_runs (
+            started_at,
+            finished_at,
+            status,
+            dry_run,
+            mode,
+            wud_file,
+            log_file,
+            metadata_json
+        )
+        VALUES (?, ?, 'success', 0, 'web-pending-removal', ?, '', ?)
+        """,
+        (
+            now,
+            now,
+            str(settings.config.wud_out_file),
+            _json_object(metadata),
+        ),
+    )
+    run_id = int(cursor.lastrowid)
+    for item in removed:
+        item_metadata = {
+            "source": "webui",
+            "operation": "remove_selected_pending",
+            "reason": "selected",
+        }
+        conn.execute(
+            """
+            INSERT INTO pending_updates (
+                run_id,
+                line_no,
+                raw,
+                image,
+                target_digest,
+                desired_tag,
+                service_key,
+                stack_name,
+                service_name,
+                status,
+                status_reason,
+                created_at,
+                updated_at,
+                metadata_json
+            )
+            VALUES (?, ?, ?, ?, ?, ?, '', '', '', 'resolved', 'removed-selected', ?, ?, ?)
+            """,
+            (
+                run_id,
+                item.line_no,
+                item.raw,
+                item.image,
+                item.digest,
+                item.desired_tag,
+                now,
+                now,
+                _json_object(item_metadata),
+            ),
+        )
+        conn.execute(
+            """
+            INSERT INTO update_events (
+                run_id,
+                created_at,
+                service_name,
+                stack_name,
+                image,
+                target_image,
+                status,
+                metadata_json
+            )
+            VALUES (?, ?, ?, '', ?, '', 'success', ?)
+            """,
+            (
+                run_id,
+                now,
+                item.image,
                 item.image,
                 _json_object(item_metadata),
             ),

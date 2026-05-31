@@ -10,6 +10,7 @@ import {
   type ApplyJobResponse,
   type PendingGroupedItem,
   type PendingItem,
+  type PendingRemovalPlanLine,
   type PendingStackGroup,
   type PlanCleanupItem,
   type PlanAction,
@@ -29,6 +30,7 @@ const selectedLineNumbers = ref<number[]>([]);
 const tagOverrides = ref<Record<number, string>>({});
 const showPreflightModal = ref(false);
 const showCleanupModal = ref(false);
+const showRemovalModal = ref(false);
 const showApplyJobModal = ref(false);
 const jobEventSource = ref<EventSource | null>(null);
 const applyJobPanelRef = ref<HTMLElement | null>(null);
@@ -166,6 +168,18 @@ const updateSelectedDisabled = computed(
     webui.loading ||
     Boolean(selectedTagOverrideError.value),
 );
+const removeSelectedDisabled = computed(
+  () =>
+    selectedLineNumbers.value.length === 0 ||
+    webui.loading ||
+    !auth.session?.mutations_enabled,
+);
+const removeSelectedDisabledMessage = computed(() => {
+  if (!selectedLineNumbers.value.length || auth.session?.mutations_enabled) {
+    return "";
+  }
+  return "Read-only mode is active. Set WUD_WEB_MUTATIONS_ENABLED=true on the server to remove selected entries.";
+});
 const planAlertType = computed(() => {
   if (webui.plan?.status === "blocked") {
     return "error";
@@ -268,6 +282,16 @@ const pendingCleanupMessage = computed(() => {
   }
   return `${pluralize(webui.pendingCleanup.removed_count, "pending entry", "pending entries")} removed from ${pendingSourceLabel.value}.`;
 });
+const removalItems = computed(() => webui.pendingRemovalPlan?.lines ?? []);
+const removalButtonLabel = computed(() =>
+  `Remove ${pluralize(selectedLineNumbers.value.length, "selected entry", "selected entries")}`,
+);
+const removalConfirmButtonLabel = computed(() =>
+  `Remove ${pluralize(removalItems.value.length, "selected entry", "selected entries")}`,
+);
+const removalDisabled = computed(
+  () => !webui.pendingRemovalPlan?.can_remove || webui.loading,
+);
 const mutationDisabledMessage = computed(() => {
   if (!webui.plan || webui.plan.status !== "ready" || webui.plan.can_apply) {
     return "";
@@ -580,6 +604,7 @@ function lineNumbersHaveTagUpdates(lineNumbers: number[]): boolean {
 function clearPreflight(): void {
   showPreflightModal.value = false;
   showCleanupModal.value = false;
+  showRemovalModal.value = false;
   updateIntent.value = null;
   webui.clearPlan();
 }
@@ -735,6 +760,48 @@ function openCleanupModal(): void {
 
 function closeCleanupModal(): void {
   showCleanupModal.value = false;
+}
+
+async function startSelectedRemoval(): Promise<void> {
+  const lineNumbers = uniqueSorted(selectedLineNumbers.value);
+  if (lineNumbers.length === 0 || removeSelectedDisabled.value) {
+    return;
+  }
+  selectedLineNumbers.value = lineNumbers;
+  try {
+    await webui.createRemovalPlan(lineNumbers);
+  } catch {
+    showRemovalModal.value = false;
+    return;
+  }
+  if (webui.pendingRemovalPlan?.lines.length) {
+    showRemovalModal.value = true;
+  }
+}
+
+function closeRemovalModal(): void {
+  showRemovalModal.value = false;
+  webui.clearPlan();
+}
+
+async function confirmSelectedRemoval(): Promise<void> {
+  const removal = webui.pendingRemovalPlan;
+  if (!removal?.removal_id || removalDisabled.value || !removal.lines.length) {
+    return;
+  }
+  const result = await webui.removeSelectedPending(
+    removal.removal_id,
+    removal.lines.map((item) => ({ line_no: item.line_no, raw: item.raw })),
+  );
+  const removedLines = new Set(result.removed.map((item) => item.line_no));
+  selectedLineNumbers.value = selectedLineNumbers.value.filter(
+    (lineNo) => !removedLines.has(lineNo),
+  );
+  showRemovalModal.value = false;
+  await Promise.all([
+    loadPendingAndReleaseNotes({ preserveCleanup: true }),
+    webui.loadRuns(),
+  ]);
 }
 
 async function confirmCleanup(): Promise<void> {
@@ -1001,6 +1068,10 @@ function unmatchedDiagnosticHint(item: PendingGroupedItem): string {
 }
 
 function cleanupLineLabel(item: PlanCleanupItem): string {
+  return `#${item.line_no} ${item.image}`;
+}
+
+function removalLineLabel(item: PendingRemovalPlanLine): string {
   return `#${item.line_no} ${item.image}`;
 }
 
@@ -1339,6 +1410,9 @@ watch(
           <template v-if="lineNumbersHaveTagUpdates(selectedLineNumbers)">
             Tag rewrites are confirmed before apply.
           </template>
+          <template v-if="removeSelectedDisabledMessage">
+            {{ removeSelectedDisabledMessage }}
+          </template>
         </span>
       </div>
       <div class="inline-actions pending-actions">
@@ -1347,6 +1421,19 @@ watch(
             <X :size="16" />
           </template>
           Clear selection
+        </n-button>
+        <n-button
+          type="warning"
+          size="small"
+          secondary
+          :disabled="removeSelectedDisabled"
+          :loading="webui.loading"
+          @click="startSelectedRemoval"
+        >
+          <template #icon>
+            <Trash2 :size="16" />
+          </template>
+          {{ removalButtonLabel }}
         </n-button>
         <n-button
           type="primary"
@@ -2025,6 +2112,70 @@ watch(
               <Trash2 :size="16" />
             </template>
             {{ cleanupButtonLabel }}
+          </n-button>
+        </div>
+      </section>
+    </n-modal>
+
+    <n-modal
+      v-if="webui.pendingRemovalPlan"
+      v-model:show="showRemovalModal"
+      :mask-closable="false"
+    >
+      <section
+        class="preflight-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="removal-modal-title"
+      >
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Pending removal</p>
+            <h2 id="removal-modal-title">Remove selected entries</h2>
+            <p class="preflight-summary-text">
+              These lines will be removed from {{ pendingSourceLabel }} without running Docker updates.
+            </p>
+          </div>
+          <n-tag type="warning">{{ pluralize(removalItems.length, "entry", "entries") }}</n-tag>
+        </div>
+
+        <n-alert class="preflight-block" type="warning">
+          This only edits {{ pendingSourceLabel }}. Containers, images, and Compose services are not deleted or updated, and WUD may add these entries again if the updates still exist.
+        </n-alert>
+
+        <section class="preflight-impact preflight-block" aria-labelledby="removal-lines-title">
+          <div class="preflight-impact-heading">
+            <strong id="removal-lines-title">Source lines</strong>
+            <n-tag size="small">{{ pluralize(removalItems.length, "line") }}</n-tag>
+          </div>
+          <div class="compact-list">
+            <div
+              v-for="item in removalItems"
+              :key="`removal-confirm-${item.line_no}`"
+              class="list-row plan-line-row"
+            >
+              <span>Line</span>
+              <strong>{{ removalLineLabel(item) }}</strong>
+              <em><code>{{ item.raw }}</code></em>
+            </div>
+          </div>
+        </section>
+
+        <div class="preflight-footer">
+          <n-button size="small" quaternary @click="closeRemovalModal">
+            Cancel
+          </n-button>
+          <n-button
+            type="warning"
+            size="small"
+            :disabled="removalDisabled"
+            :loading="webui.loading"
+            @click="confirmSelectedRemoval"
+          >
+            <template #icon>
+              <Trash2 :size="16" />
+            </template>
+            {{ removalConfirmButtonLabel }}
           </n-button>
         </div>
       </section>

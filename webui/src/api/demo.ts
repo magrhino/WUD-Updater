@@ -6,6 +6,7 @@ import type {
   PendingGroupedItem,
   PendingCleanupLine,
   PendingCleanupResponse,
+  PendingRemovalPlanResponse,
   PendingUpdateRecord,
   PendingResponse,
   PlanCleanupItem,
@@ -601,6 +602,63 @@ class DemoApiState {
     };
   }
 
+  createRemovalPlan(lineNumbers: number[]): PendingRemovalPlanResponse {
+    const requested = new Set(lineNumbers);
+    const lines = this.pending
+      .filter((item) => requested.has(item.line_no))
+      .sort((left, right) => left.line_no - right.line_no)
+      .map((item) => ({
+        line_no: item.line_no,
+        raw: item.raw,
+        image: item.image,
+        desired_tag: item.desired_tag,
+        digest: item.digest,
+      }));
+    if (lines.length === 0 || lines.length !== requested.size) {
+      throw new Error("removal is stale");
+    }
+    return {
+      removal_id: "demo-removal",
+      source_file: DEMO_SOURCE_FILE,
+      can_remove: true,
+      selected_line_numbers: lines.map((item) => item.line_no),
+      lines,
+    };
+  }
+
+  removeSelectedPending(
+    removalId: string,
+    lines: PendingCleanupLine[],
+  ): PendingCleanupResponse {
+    if (removalId !== "demo-removal") {
+      throw new Error("removal is stale");
+    }
+    const requested = new Set(lines.map((line) => cleanupLineKey(line)));
+    const removed = this.pending.filter((item) =>
+      requested.has(cleanupLineKey(item)),
+    );
+    if (removed.length === 0 || removed.length !== requested.size) {
+      throw new Error("removal is stale");
+    }
+
+    this.pending = this.pending.filter(
+      (item) => !requested.has(cleanupLineKey(item)),
+    );
+    const runId = this.nextRun++;
+    this.runs.unshift(runFromRemoval(runId, removed));
+    return {
+      status: "success",
+      audit_run_id: runId,
+      removed_count: removed.length,
+      removed: removed.map((item) => ({
+        line_no: item.line_no,
+        raw: item.raw,
+        image: item.image,
+        reason: "selected",
+      })),
+    };
+  }
+
   createJob(
     planId: string,
     lineNumbers: number[],
@@ -933,6 +991,13 @@ export function createDemoWebApi(): WebApi {
       lines: PendingCleanupLine[],
       _csrfToken: string,
     ) => state.cleanupPending(cleanupId, lines),
+    createRemovalPlan: async (lineNumbers: number[], _csrfToken: string) =>
+      state.createRemovalPlan(lineNumbers),
+    removeSelectedPending: async (
+      removalId: string,
+      lines: PendingCleanupLine[],
+      _csrfToken: string,
+    ) => state.removeSelectedPending(removalId, lines),
     releaseNotes: async () => state.releaseNotes(),
     refreshReleaseNotes: async (_csrfToken: string) => state.releaseNotes(),
     servicePolicies: async () => state.servicePolicies(),
@@ -1305,6 +1370,68 @@ function runFromCleanup(
       log_file: logFile,
       exists: true,
       content: "Removed unmatched pending demo entries.\n",
+      truncated: false,
+      max_bytes: 262_144,
+    },
+  };
+}
+
+function runFromRemoval(
+  runId: number,
+  removedItems: DemoPendingItem[],
+): DemoRunFixture {
+  const startedAt = "2026-05-30T20:12:26+00:00";
+  const finishedAt = "2026-05-30T20:12:26+00:00";
+  const logFile = "";
+  const summary: RunSummary = {
+    id: runId,
+    started_at: startedAt,
+    finished_at: finishedAt,
+    status: "success",
+    dry_run: false,
+    mode: "web-pending-removal",
+    wud_file: DEMO_SOURCE_FILE,
+    log_file: logFile,
+    metadata: {
+      source: "demo",
+      operation: "remove_selected_pending",
+      line_numbers: removedItems.map((item) => item.line_no),
+    },
+  };
+  const pending_updates = removedItems.map((item, index) =>
+    pendingRecord(
+      item.line_no,
+      runId,
+      item.raw,
+      demoServiceKey(item),
+      "resolved",
+      index + runId * 100,
+      "removed-selected",
+    ),
+  );
+  const events = removedItems.map((item, index) =>
+    runEvent(
+      index + runId * 1000,
+      runId,
+      item.service,
+      item.stack,
+      item.image,
+      "",
+      "success",
+    ),
+  );
+  return {
+    summary,
+    detail: {
+      ...summary,
+      pending_updates,
+      events,
+    },
+    log: {
+      run_id: runId,
+      log_file: logFile,
+      exists: true,
+      content: "Removed selected pending demo entries.\n",
       truncated: false,
       max_bytes: 262_144,
     },
