@@ -87,6 +87,9 @@ MAX_LOG_TAIL_BYTES = 1_048_576
 SESSION_MAX_AGE_SECONDS = 86_400
 SETUP_CLAIM_MAX_AGE_SECONDS = 86_400
 PASSWORD_MIN_LENGTH = 12
+LOGIN_THROTTLE_MAX_FAILURES = 5
+LOGIN_THROTTLE_COOLDOWN_SECONDS = 60.0
+LOGIN_THROTTLE_MAX_ENTRIES = 1024
 SAFE_METHODS = frozenset({"GET", "HEAD", "OPTIONS", "TRACE"})
 TRUE_VALUES = frozenset({"1", "true", "yes", "on"})
 FALSE_VALUES = frozenset({"", "0", "false", "no", "off"})
@@ -100,6 +103,13 @@ RESET_ADMIN_CLAIM_HASH_KEY = "reset_admin_claim_hash"
 RESET_ADMIN_CLAIM_EXPIRES_KEY = "reset_admin_claim_expires_at"
 RESET_ADMIN_CLAIM_USER_ID_KEY = "reset_admin_claim_user_id"
 DEFAULT_ALLOWED_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
+SENSITIVE_ENV_KEYS = (
+    "WUD_WEB_TOKEN",
+    "GITHUB_TOKEN",
+    "DISCORD_RELEASES_WEBHOOK",
+    "DISCORD_WEBHOOK",
+    "ADMIN_WEBHOOK",
+)
 PASSWORD_HASHER = PasswordHasher()
 LineNumber = Annotated[int, Field(ge=1)]
 PlanStatus = Literal["ready", "empty", "blocked"]
@@ -168,6 +178,14 @@ class WebApplyJob:
     started_at: str | None = None
     finished_at: str | None = None
     error: str = ""
+
+
+@dataclass
+class LoginThrottleEntry:
+    failures: int
+    first_failed_at: float
+    last_failed_at: float
+    locked_until: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -745,6 +763,8 @@ def create_app(
     app.state.web_apply_lock = Lock()
     app.state.web_apply_condition = Condition(app.state.web_apply_lock)
     app.state.web_apply_jobs = {}
+    app.state.web_login_throttle_lock = Lock()
+    app.state.web_login_throttle = {}
     app.state.web_auto_update_started_at = datetime.now(timezone.utc)
     app.state.web_auto_update_stop = Event()
     app.state.web_auto_update_thread = None
@@ -1160,13 +1180,14 @@ def api_auth_login(
         )
     if _setup_required(settings):
         raise HTTPException(status_code=403, detail="setup required")
+    username = _normalize_username(payload.username)
+    if _login_throttle_blocked(request, settings, username):
+        raise _auth_failed()
     user = _verify_web_user(settings, payload.username, payload.password)
     if user is None:
-        raise HTTPException(
-            status_code=401,
-            detail="authentication required",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
+        _record_login_failure(request, settings, username)
+        raise _auth_failed()
+    _clear_login_throttle(request, settings, username)
     session_id = _create_web_session(settings, user_id=int(user["id"]), request=request)
     _set_session_cookie(response, session_id, request, settings)
     return _auth_session_response(
@@ -1476,7 +1497,11 @@ def api_release_notes(request: Request) -> ReleaseNotesResponse:
     except (OSError, sqlite3.Error, DatabaseError) as exc:
         raise HTTPException(
             status_code=500,
-            detail=f"could not read release-note cache: {exc}",
+            detail=_safe_exception_detail(
+                settings,
+                "could not read release-note cache",
+                exc,
+            ),
         ) from exc
     return _release_notes_response(settings, items, warnings)
 
@@ -1500,11 +1525,16 @@ def api_refresh_release_notes(request: Request) -> ReleaseNotesResponse:
                 parsed.targets,
                 settings.command_env or {},
                 source_resolver=_release_note_source_resolver(settings),
+                redact_error=lambda value: _redact_sensitive_text(settings, value),
             )
     except (OSError, sqlite3.Error, DatabaseError) as exc:
         raise HTTPException(
             status_code=500,
-            detail=f"could not refresh release-note metadata: {exc}",
+            detail=_safe_exception_detail(
+                settings,
+                "could not refresh release-note metadata",
+                exc,
+            ),
         ) from exc
     return _release_notes_response(settings, items, warnings)
 
@@ -3217,11 +3247,16 @@ def _release_notes_response(
     items: list[Any],
     warnings: list[str],
 ) -> ReleaseNotesResponse:
+    redacted_items: list[ReleaseNoteInfo] = []
+    for item in items:
+        data = asdict(item)
+        data["error"] = _redact_sensitive_text(settings, str(data.get("error", "")))
+        redacted_items.append(ReleaseNoteInfo.model_validate(data))
     return ReleaseNotesResponse(
         source_file=str(settings.config.wud_out_file),
         count=len(items),
-        items=[ReleaseNoteInfo.model_validate(asdict(item)) for item in items],
-        warnings=warnings,
+        items=redacted_items,
+        warnings=[_redact_sensitive_text(settings, warning) for warning in warnings],
     )
 
 
@@ -4222,6 +4257,65 @@ def _strip_validation_inputs(value: Any) -> Any:
     return value
 
 
+def _redact_sensitive_text(
+    settings: WebSettings,
+    value: str,
+    extra_secrets: Sequence[str] = (),
+) -> str:
+    redacted = value
+    for secret in _sensitive_redaction_values(settings, extra_secrets):
+        redacted = redacted.replace(secret, "<redacted>")
+    return redacted
+
+
+def _sensitive_redaction_values(
+    settings: WebSettings,
+    extra_secrets: Sequence[str],
+) -> list[str]:
+    values: list[str] = []
+    env = settings.command_env or {}
+    values.extend(extra_secrets)
+    values.append(settings.auth_token)
+    values.extend(env.get(key, "") for key in SENSITIVE_ENV_KEYS)
+
+    expanded: list[str] = []
+    for value in values:
+        if value:
+            expanded.append(value)
+            expanded.extend(_secret_url_fragments(value))
+
+    seen: set[str] = set()
+    result: list[str] = []
+    for value in sorted(expanded, key=len, reverse=True):
+        if len(value) < 4 or value in seen:
+            continue
+        seen.add(value)
+        result.append(value)
+    return result
+
+
+def _secret_url_fragments(value: str) -> list[str]:
+    parsed = urlsplit(value)
+    if not parsed.scheme or not parsed.netloc:
+        return []
+    fragments: list[str] = []
+    path = parsed.path.strip("/")
+    if len(path) >= 8:
+        fragments.append(path)
+    fragments.extend(segment for segment in path.split("/") if len(segment) >= 8)
+    if parsed.query and len(parsed.query) >= 8:
+        fragments.append(parsed.query)
+    return fragments
+
+
+def _safe_exception_detail(
+    settings: WebSettings,
+    message: str,
+    exc: BaseException,
+) -> str:
+    return f"{message}: {_redact_sensitive_text(settings, str(exc))}"
+
+
 def _prepare_web_auth_state(settings: WebSettings) -> str:
     with connect_db(settings.config.db_path) as conn:
         init_db(conn)
@@ -4251,7 +4345,11 @@ def _setup_required(settings: WebSettings) -> bool:
     except (OSError, sqlite3.Error, DatabaseError) as exc:
         raise HTTPException(
             status_code=500,
-            detail=f"could not read web auth state: {exc}",
+            detail=_safe_exception_detail(
+                settings,
+                "could not read web auth state",
+                exc,
+            ),
         ) from exc
 
 
@@ -4300,7 +4398,7 @@ def _claim_initial_admin(
     except (OSError, sqlite3.Error, DatabaseError) as exc:
         raise HTTPException(
             status_code=500,
-            detail=f"could not complete setup: {exc}",
+            detail=_safe_exception_detail(settings, "could not complete setup", exc),
         ) from exc
 
 
@@ -4464,7 +4562,11 @@ def _redeem_admin_recovery_claim(
     except (OSError, sqlite3.Error, DatabaseError) as exc:
         raise HTTPException(
             status_code=500,
-            detail=f"could not reset admin password: {exc}",
+            detail=_safe_exception_detail(
+                settings,
+                "could not reset admin password",
+                exc,
+            ),
         ) from exc
 
 
@@ -4524,8 +4626,105 @@ def _verify_web_user(
     except (OSError, sqlite3.Error, DatabaseError) as exc:
         raise HTTPException(
             status_code=500,
-            detail=f"could not verify credentials: {exc}",
+            detail=_safe_exception_detail(
+                settings,
+                "could not verify credentials",
+                exc,
+            ),
         ) from exc
+
+
+def _auth_failed() -> HTTPException:
+    return HTTPException(
+        status_code=401,
+        detail="authentication required",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+
+
+def _login_throttle_blocked(
+    request: Request,
+    settings: WebSettings,
+    username: str,
+) -> bool:
+    key = _login_throttle_key(request, settings, username)
+    now = time.monotonic()
+    with request.app.state.web_login_throttle_lock:
+        throttle: dict[tuple[str, str], LoginThrottleEntry] = (
+            request.app.state.web_login_throttle
+        )
+        _prune_login_throttle(throttle, now)
+        entry = throttle.get(key)
+        return entry is not None and entry.locked_until > now
+
+
+def _record_login_failure(
+    request: Request,
+    settings: WebSettings,
+    username: str,
+) -> None:
+    key = _login_throttle_key(request, settings, username)
+    now = time.monotonic()
+    with request.app.state.web_login_throttle_lock:
+        throttle: dict[tuple[str, str], LoginThrottleEntry] = (
+            request.app.state.web_login_throttle
+        )
+        _prune_login_throttle(throttle, now)
+        entry = throttle.get(key)
+        if entry is None:
+            entry = LoginThrottleEntry(
+                failures=1,
+                first_failed_at=now,
+                last_failed_at=now,
+            )
+            throttle[key] = entry
+        else:
+            entry.failures += 1
+            entry.last_failed_at = now
+        if entry.failures >= LOGIN_THROTTLE_MAX_FAILURES:
+            entry.locked_until = now + LOGIN_THROTTLE_COOLDOWN_SECONDS
+        _evict_login_throttle_entries(throttle)
+
+
+def _clear_login_throttle(
+    request: Request,
+    settings: WebSettings,
+    username: str,
+) -> None:
+    key = _login_throttle_key(request, settings, username)
+    with request.app.state.web_login_throttle_lock:
+        request.app.state.web_login_throttle.pop(key, None)
+
+
+def _login_throttle_key(
+    request: Request,
+    settings: WebSettings,
+    username: str,
+) -> tuple[str, str]:
+    return (
+        _normalize_username(username).casefold(),
+        _request_client_address(request, settings),
+    )
+
+
+def _prune_login_throttle(
+    throttle: dict[tuple[str, str], LoginThrottleEntry],
+    now: float,
+) -> None:
+    for key, entry in list(throttle.items()):
+        if now - entry.last_failed_at >= LOGIN_THROTTLE_COOLDOWN_SECONDS:
+            throttle.pop(key, None)
+
+
+def _evict_login_throttle_entries(
+    throttle: dict[tuple[str, str], LoginThrottleEntry],
+) -> None:
+    overflow = len(throttle) - LOGIN_THROTTLE_MAX_ENTRIES
+    if overflow <= 0:
+        return
+    oldest = sorted(throttle.items(), key=lambda item: item[1].last_failed_at)
+    for key, _entry in oldest[:overflow]:
+        throttle.pop(key, None)
 
 
 def _create_web_session(
@@ -4565,7 +4764,11 @@ def _create_web_session(
     except (OSError, sqlite3.Error, DatabaseError) as exc:
         raise HTTPException(
             status_code=500,
-            detail=f"could not create session: {exc}",
+            detail=_safe_exception_detail(
+                settings,
+                "could not create session",
+                exc,
+            ),
         ) from exc
     return session_id
 
@@ -4995,6 +5198,58 @@ def _trusted_forwarded_origin(request: Request, settings: WebSettings) -> str:
     if proto and host:
         return _normalize_origin(f"{proto}://{host}")
     return ""
+
+
+def _request_client_address(request: Request, settings: WebSettings) -> str:
+    forwarded = _trusted_forwarded_client_address(request, settings)
+    if forwarded:
+        return forwarded
+    if request.client is None:
+        return ""
+    return request.client.host
+
+
+def _trusted_forwarded_client_address(
+    request: Request,
+    settings: WebSettings,
+) -> str:
+    if not _client_is_trusted_proxy(request, settings):
+        return ""
+    forwarded = _client_address_from_forwarded_header(
+        request.headers.get("forwarded", "")
+    )
+    if forwarded:
+        return forwarded
+    forwarded_for = request.headers.get("x-forwarded-for", "").split(",", 1)[0]
+    return _normalize_forwarded_client_address(forwarded_for)
+
+
+def _client_address_from_forwarded_header(value: str) -> str:
+    if not value:
+        return ""
+    first = value.split(",", 1)[0]
+    for segment in first.split(";"):
+        key, separator, raw = segment.strip().partition("=")
+        if separator and key.lower() == "for":
+            return _normalize_forwarded_client_address(raw)
+    return ""
+
+
+def _normalize_forwarded_client_address(value: str) -> str:
+    raw = value.strip().strip('"')
+    if not raw or raw.lower() == "unknown":
+        return ""
+    if raw.startswith("["):
+        host, separator, _port = raw[1:].partition("]")
+        return host if separator else raw
+    host, separator, port = raw.rpartition(":")
+    if separator and port.isdigit():
+        try:
+            ipaddress.ip_address(host)
+        except ValueError:
+            return raw
+        return host
+    return raw
 
 
 def _origin_from_forwarded_header(value: str) -> str:

@@ -25,6 +25,7 @@ from wud_updater.db import (
     insert_update_run,
 )
 from wud_updater.locks import DirectoryLock, WudLockError, lock_dir_for
+from wud_updater.release_notes import ReleaseNoteInfo as ReleaseNoteData
 from wud_updater.web import create_app
 
 
@@ -94,6 +95,12 @@ def _contains_key(value: object, target: str) -> bool:
     if isinstance(value, list):
         return any(_contains_key(item, target) for item in value)
     return False
+
+
+def _assert_generic_auth_failed(response) -> None:
+    assert response.status_code == 401
+    assert response.json() == {"detail": "authentication required"}
+    assert response.headers["www-authenticate"] == "Bearer"
 
 
 def _insert_run(tmp_path: Path, *, log_file: str = "") -> int:
@@ -546,6 +553,199 @@ def test_login_rejects_wrong_password(tmp_path: Path) -> None:
     assert client.cookies.get("wud_session") is None
 
 
+def test_login_throttle_locks_after_repeated_failures_and_expires(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    now = 1_000.0
+    monkeypatch.setattr(web_module.time, "monotonic", lambda: now)
+    app = create_app(environ=_web_env(tmp_path))
+    setup_client = TestClient(app)
+    _setup_admin(setup_client)
+    client = TestClient(app)
+    headers = _csrf_headers(client)
+
+    for _index in range(web_module.LOGIN_THROTTLE_MAX_FAILURES):
+        response = client.post(
+            "/api/v1/auth/login",
+            json={"username": "admin", "password": "wrong"},
+            headers=headers,
+        )
+        _assert_generic_auth_failed(response)
+
+    locked_response = client.post(
+        "/api/v1/auth/login",
+        json={"username": "admin", "password": "correct horse battery staple"},
+        headers=headers,
+    )
+    now += web_module.LOGIN_THROTTLE_COOLDOWN_SECONDS + 0.1
+    unlocked_response = client.post(
+        "/api/v1/auth/login",
+        json={"username": "admin", "password": "correct horse battery staple"},
+        headers=headers,
+    )
+
+    _assert_generic_auth_failed(locked_response)
+    assert client.cookies.get("wud_session") is not None
+    assert unlocked_response.status_code == 200
+    assert unlocked_response.json()["authenticated"] is True
+
+
+def test_login_throttle_is_scoped_by_username_and_client_address(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(web_module.time, "monotonic", lambda: 1_000.0)
+    app = create_app(environ=_web_env(tmp_path))
+    setup_client = TestClient(app)
+    _setup_admin(setup_client)
+    client_a = TestClient(app, client=("203.0.113.10", 50000))
+    client_b = TestClient(app, client=("203.0.113.11", 50000))
+    headers_a = _csrf_headers(client_a)
+    headers_b = _csrf_headers(client_b)
+
+    for _index in range(web_module.LOGIN_THROTTLE_MAX_FAILURES):
+        _assert_generic_auth_failed(
+            client_a.post(
+                "/api/v1/auth/login",
+                json={"username": "missing", "password": "wrong"},
+                headers=headers_a,
+            )
+        )
+    same_address_different_user = client_a.post(
+        "/api/v1/auth/login",
+        json={"username": "admin", "password": "correct horse battery staple"},
+        headers=headers_a,
+    )
+
+    for _index in range(web_module.LOGIN_THROTTLE_MAX_FAILURES):
+        _assert_generic_auth_failed(
+            client_a.post(
+                "/api/v1/auth/login",
+                json={"username": "admin", "password": "wrong"},
+                headers=headers_a,
+            )
+        )
+    different_address_same_user = client_b.post(
+        "/api/v1/auth/login",
+        json={"username": "admin", "password": "correct horse battery staple"},
+        headers=headers_b,
+    )
+
+    assert same_address_different_user.status_code == 200
+    assert different_address_same_user.status_code == 200
+
+
+def test_login_throttle_uses_trusted_forwarded_client_address(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(web_module.time, "monotonic", lambda: 1_000.0)
+    app = create_app(
+        environ=_web_env(
+            tmp_path,
+            {"WUD_WEB_TRUSTED_PROXIES": "10.0.0.1/32"},
+        )
+    )
+    setup_client = TestClient(app, client=("10.0.0.1", 50000))
+    _setup_admin(setup_client)
+    proxy_client = TestClient(app, client=("10.0.0.1", 50000))
+    headers = _csrf_headers(proxy_client)
+    forwarded_a = {**headers, "X-Forwarded-For": "198.51.100.10"}
+    forwarded_b = {**headers, "X-Forwarded-For": "198.51.100.11"}
+
+    for _index in range(web_module.LOGIN_THROTTLE_MAX_FAILURES):
+        _assert_generic_auth_failed(
+            proxy_client.post(
+                "/api/v1/auth/login",
+                json={"username": "admin", "password": "wrong"},
+                headers=forwarded_a,
+            )
+        )
+    different_forwarded_address = proxy_client.post(
+        "/api/v1/auth/login",
+        json={"username": "admin", "password": "correct horse battery staple"},
+        headers=forwarded_b,
+    )
+
+    assert different_forwarded_address.status_code == 200
+
+
+def test_successful_login_clears_failed_login_throttle(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(web_module.time, "monotonic", lambda: 1_000.0)
+    app = create_app(environ=_web_env(tmp_path))
+    setup_client = TestClient(app)
+    _setup_admin(setup_client)
+    client = TestClient(app)
+    headers = _csrf_headers(client)
+
+    for _index in range(web_module.LOGIN_THROTTLE_MAX_FAILURES - 1):
+        _assert_generic_auth_failed(
+            client.post(
+                "/api/v1/auth/login",
+                json={"username": "admin", "password": "wrong"},
+                headers=headers,
+            )
+        )
+    first_success = client.post(
+        "/api/v1/auth/login",
+        json={"username": "admin", "password": "correct horse battery staple"},
+        headers=headers,
+    )
+    one_failure_after_success = client.post(
+        "/api/v1/auth/login",
+        json={"username": "admin", "password": "wrong"},
+        headers=headers,
+    )
+    second_success = client.post(
+        "/api/v1/auth/login",
+        json={"username": "admin", "password": "correct horse battery staple"},
+        headers=headers,
+    )
+
+    assert first_success.status_code == 200
+    _assert_generic_auth_failed(one_failure_after_success)
+    assert second_success.status_code == 200
+
+
+def test_login_failures_use_same_generic_response(tmp_path: Path) -> None:
+    setup_client = _client(tmp_path)
+    _setup_admin(setup_client)
+    client = _client(tmp_path)
+    headers = _csrf_headers(client)
+
+    unknown_user = client.post(
+        "/api/v1/auth/login",
+        json={"username": "missing", "password": "wrong"},
+        headers=headers,
+    )
+    wrong_password = client.post(
+        "/api/v1/auth/login",
+        json={"username": "admin", "password": "wrong"},
+        headers=headers,
+    )
+    for _index in range(web_module.LOGIN_THROTTLE_MAX_FAILURES - 1):
+        _assert_generic_auth_failed(
+            client.post(
+                "/api/v1/auth/login",
+                json={"username": "admin", "password": "wrong"},
+                headers=headers,
+            )
+        )
+    throttled = client.post(
+        "/api/v1/auth/login",
+        json={"username": "admin", "password": "correct horse battery staple"},
+        headers=headers,
+    )
+
+    _assert_generic_auth_failed(unknown_user)
+    _assert_generic_auth_failed(wrong_password)
+    _assert_generic_auth_failed(throttled)
+
+
 def test_login_requires_csrf_origin_headers(tmp_path: Path) -> None:
     setup_client = _client(tmp_path)
     _setup_admin(setup_client)
@@ -558,6 +758,91 @@ def test_login_requires_csrf_origin_headers(tmp_path: Path) -> None:
 
     assert response.status_code == 403
     assert response.json()["detail"] == "origin header is required"
+
+
+def test_auth_error_responses_do_not_leak_submitted_secrets_or_tokens(
+    tmp_path: Path,
+    caplog,
+) -> None:
+    web_token = "web-token-secret-value"
+    setup_claim = "submitted-setup-claim-secret"
+    setup_password = "submitted-setup-password"
+    login_password = "submitted-login-password"
+    reset_claim = "submitted-reset-claim-secret"
+    reset_password = "submitted-reset-password"
+    client = _client(tmp_path, {"WUD_WEB_TOKEN": web_token})
+
+    with caplog.at_level(logging.DEBUG):
+        invalid_setup = client.post(
+            "/api/v1/setup/claim",
+            json={
+                "claim": setup_claim,
+                "username": "admin",
+                "password": setup_password,
+            },
+            headers=_csrf_headers(client),
+        )
+        _setup_admin(client)
+        csrf_headers = _csrf_headers(client)
+        csrf_token = csrf_headers["x-wud-csrf-token"]
+        invalid_token_login = client.post(
+            "/api/v1/auth/login",
+            json={"token": web_token},
+            headers=csrf_headers,
+        )
+        bad_login = client.post(
+            "/api/v1/auth/login",
+            json={"username": "admin", "password": login_password},
+            headers=csrf_headers,
+        )
+        good_login = client.post(
+            "/api/v1/auth/login",
+            json={
+                "username": "admin",
+                "password": "correct horse battery staple",
+            },
+            headers=csrf_headers,
+        )
+        session_cookie = client.cookies.get("wud_session")
+        invalid_reset = client.post(
+            "/api/v1/auth/reset-admin/claim",
+            json={
+                "claim": reset_claim,
+                "username": "admin",
+                "password": reset_password,
+            },
+            headers=_csrf_headers(client),
+        )
+
+    assert invalid_setup.status_code == 403
+    assert invalid_token_login.status_code == 422
+    _assert_generic_auth_failed(bad_login)
+    assert good_login.status_code == 200
+    assert session_cookie
+    assert invalid_reset.status_code == 403
+
+    response_text = "\n".join(
+        response.text
+        for response in (
+            invalid_setup,
+            invalid_token_login,
+            bad_login,
+            good_login,
+            invalid_reset,
+        )
+    )
+    for secret in (
+        setup_claim,
+        setup_password,
+        web_token,
+        login_password,
+        session_cookie,
+        csrf_token,
+        reset_claim,
+        reset_password,
+    ):
+        assert secret not in response_text
+        assert secret not in caplog.text
 
 
 def test_session_endpoint_reports_cookie_auth_state(tmp_path: Path) -> None:
@@ -1227,6 +1512,76 @@ def test_release_notes_refresh_works_when_mutations_are_disabled(
     body = response.json()
     assert body["items"][0]["status"] == "unsupported"
     assert body["items"][0]["error"] == "no supported GitHub release source found"
+
+
+def test_release_note_error_metadata_redacts_configured_secrets(
+    tmp_path: Path,
+    monkeypatch,
+    caplog,
+) -> None:
+    github_token = "github-token-secret-value"
+    release_webhook = "https://discord.test/fail/release-secret-token"
+    admin_webhook = "https://discord.test/fail/admin-secret-token"
+    wud_file = tmp_path / "state" / "images.todo"
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "GITHUB_TOKEN": github_token,
+            "DISCORD_RELEASES_WEBHOOK": release_webhook,
+            "ADMIN_WEBHOOK": admin_webhook,
+        },
+    )
+    wud_file.write_text("ghcr.io/acme/app:1.0.0 tag=2.0.0\n", encoding="utf-8")
+
+    def fake_refresh_release_notes(
+        _conn,
+        _targets,
+        _environ,
+        *,
+        redact_error=None,
+        **_kwargs,
+    ):
+        error = (
+            f"request failed with {github_token} via {release_webhook} "
+            f"and {admin_webhook}"
+        )
+        if redact_error is not None:
+            error = redact_error(error)
+        return [
+            ReleaseNoteData(
+                line_no=1,
+                status="error",
+                provider="github",
+                image_repo="acme/app",
+                upstream_repo="acme/app",
+                error=error,
+            )
+        ]
+
+    monkeypatch.setattr(
+        web_module,
+        "refresh_release_notes",
+        fake_refresh_release_notes,
+    )
+
+    with caplog.at_level(logging.DEBUG):
+        response = client.post(
+            "/api/v1/release-notes/refresh",
+            headers=_csrf_headers(client),
+        )
+
+    assert response.status_code == 200
+    assert "<redacted>" in response.text
+    for secret in (
+        github_token,
+        release_webhook,
+        "release-secret-token",
+        admin_webhook,
+        "admin-secret-token",
+    ):
+        assert secret not in response.text
+        assert secret not in caplog.text
 
 
 def test_state_read_endpoints_return_empty_without_creating_missing_database(
