@@ -74,6 +74,27 @@ function pendingResponse() {
   };
 }
 
+function updateTargetsResponse() {
+  return {
+    status: "ready",
+    count: 1,
+    warnings: [],
+    items: [
+      {
+        service_key: "media/app",
+        stack: "media",
+        service: "app",
+        image: "repo/app:1.0",
+        image_repo: "repo/app",
+        current_tag: "1.0",
+        directory: "/docker/media",
+        compose_file: "docker-compose.yml",
+        project_directory: "/docker/media",
+      },
+    ],
+  };
+}
+
 function releaseNotesResponse() {
   return {
     source_file: "/out/images.todo",
@@ -331,6 +352,10 @@ async function fulfillApi(
   }
   if (path === "/api/v1/pending") {
     await json(route, pendingResponse());
+    return;
+  }
+  if (path === "/api/v1/update-targets") {
+    await json(route, updateTargetsResponse());
     return;
   }
   if (path === "/api/v1/release-notes") {

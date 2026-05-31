@@ -45,6 +45,7 @@ from pydantic import BaseModel, Field
 
 from . import __version__
 from .command import CommandError, CommandRunner
+from .compose import ComposeCli, ComposeDiscoveryError
 from .config import (
     DEFAULT_LOCK_TIMEOUT,
     DEFAULT_MAX_WAIT,
@@ -313,6 +314,28 @@ class PendingResponse(BaseModel):
     grouping: PendingGrouping = Field(
         default_factory=lambda: PendingGrouping(status="unavailable")
     )
+    warnings: list[str] = Field(default_factory=list)
+
+
+UpdateTargetsStatus = Literal["ready", "unavailable"]
+
+
+class UpdateTargetItem(BaseModel):
+    service_key: str
+    stack: str
+    service: str
+    image: str
+    image_repo: str
+    current_tag: str
+    directory: str
+    compose_file: str
+    project_directory: str
+
+
+class UpdateTargetsResponse(BaseModel):
+    status: UpdateTargetsStatus
+    count: int
+    items: list[UpdateTargetItem] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
 
 
@@ -1060,6 +1083,12 @@ def create_app(
         response_model=PendingResponse,
     )
     router.add_api_route(
+        "/update-targets",
+        api_update_targets,
+        methods=["GET"],
+        response_model=UpdateTargetsResponse,
+    )
+    router.add_api_route(
         "/pending/cleanup",
         api_pending_cleanup,
         methods=["POST"],
@@ -1589,6 +1618,10 @@ def api_onboarding_dismiss(request: Request) -> OnboardingDismissResponse:
 
 def api_pending(request: Request) -> PendingResponse:
     return _pending_response(_settings(request))
+
+
+def api_update_targets(request: Request) -> UpdateTargetsResponse:
+    return _update_targets_response(_settings(request))
 
 
 def api_pending_cleanup(
@@ -4253,6 +4286,53 @@ def _pending_grouped_item(item: Any) -> PendingGroupedItem:
         diagnostic=(
             None if item.diagnostic is None else PendingDiagnostic.model_validate(asdict(item.diagnostic))
         ),
+    )
+
+
+def _update_targets_response(settings: WebSettings) -> UpdateTargetsResponse:
+    runner = (
+        CommandRunner(env=settings.command_env)
+        if settings.command_env is not None
+        else CommandRunner()
+    )
+    compose = ComposeCli(runner=runner)
+    try:
+        stacks = compose.discover_stacks(
+            settings.config.docker_base,
+            project_base=settings.host_docker_base,
+        )
+    except ComposeDiscoveryError as exc:
+        return UpdateTargetsResponse(
+            status="unavailable",
+            count=0,
+            warnings=[str(exc)],
+        )
+
+    items: list[UpdateTargetItem] = []
+    for stack in stacks:
+        project_directory = (
+            "" if stack.project_directory is None else str(stack.project_directory)
+        )
+        for pair in stack.service_images:
+            items.append(
+                UpdateTargetItem(
+                    service_key=f"{stack.name}/{pair.service}",
+                    stack=stack.name,
+                    service=pair.service,
+                    image=pair.image,
+                    image_repo=repo_key(pair.image),
+                    current_tag=image_tag(pair.image),
+                    directory=str(stack.directory),
+                    compose_file=stack.file,
+                    project_directory=project_directory,
+                )
+            )
+
+    return UpdateTargetsResponse(
+        status="ready",
+        count=len(items),
+        items=items,
+        warnings=[],
     )
 
 

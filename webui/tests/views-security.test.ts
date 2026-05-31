@@ -34,8 +34,10 @@ import {
   snooze,
   statusResponse,
   tagExclusion,
+  updateTarget,
+  updateTargetsResponse,
 } from "./helpers/fixtures";
-import { mountWithApp } from "./helpers/mount";
+import { mountWithApp, naiveStubs } from "./helpers/mount";
 
 function setupStores(mutationsEnabled: boolean) {
   const pinia = createPinia();
@@ -49,6 +51,18 @@ function setupStores(mutationsEnabled: boolean) {
 
 function buttonByText(wrapperText: string, text: string) {
   return wrapperText.includes(text);
+}
+
+function emitSelectValue(
+  wrapper: ReturnType<typeof mountWithApp>,
+  index: number,
+  value: string | number | null,
+): void {
+  const select = wrapper.findAllComponents(naiveStubs.NSelect)[index];
+  if (!select) {
+    throw new Error(`Missing select at index ${index}`);
+  }
+  select.vm.$emit("update:value", value);
 }
 
 function mockPendingLifecycle(webui: ReturnType<typeof useWebuiStore>) {
@@ -1277,6 +1291,8 @@ describe("mutating WebUI views", () => {
   it("disables policy mutations in read-only mode", async () => {
     const { pinia, webui } = setupStores(false);
     webui.servicePolicies = [servicePolicy()];
+    webui.updateTargets = updateTargetsResponse();
+    vi.spyOn(webui, "loadUpdateTargets").mockResolvedValue();
     vi.spyOn(webui, "loadServicePolicies").mockResolvedValue();
     const deletePolicy = vi.spyOn(webui, "deleteServicePolicy");
     const wrapper = mountWithApp(PoliciesView, { pinia });
@@ -1300,7 +1316,9 @@ describe("mutating WebUI views", () => {
     const { pinia, webui } = setupStores(true);
     webui.status = null;
     webui.servicePolicies = [servicePolicy()];
+    webui.updateTargets = updateTargetsResponse();
     vi.spyOn(webui, "loadStatus").mockResolvedValue();
+    vi.spyOn(webui, "loadUpdateTargets").mockResolvedValue();
     vi.spyOn(webui, "loadServicePolicies").mockResolvedValue();
     const wrapper = mountWithApp(PoliciesView, { pinia });
     await flushPromises();
@@ -1345,6 +1363,8 @@ describe("mutating WebUI views", () => {
         auto_update_days: ["mon", "fri"],
       }),
     ];
+    webui.updateTargets = updateTargetsResponse();
+    vi.spyOn(webui, "loadUpdateTargets").mockResolvedValue();
     vi.spyOn(webui, "loadServicePolicies").mockResolvedValue();
     const upsertPolicy = vi
       .spyOn(webui, "upsertServicePolicy")
@@ -1377,9 +1397,99 @@ describe("mutating WebUI views", () => {
     );
   });
 
+  it("offers discovered services and image repositories on management forms", async () => {
+    const { pinia, webui } = setupStores(true);
+    webui.updateTargets = updateTargetsResponse([
+      updateTarget({
+        service_key: "media/radarr",
+        service: "radarr",
+        image: "lscr.io/linuxserver/radarr:5.21.1",
+        image_repo: "linuxserver/radarr",
+        current_tag: "5.21.1",
+      }),
+    ]);
+    webui.tagExclusions = [];
+    vi.spyOn(webui, "loadUpdateTargets").mockResolvedValue();
+    vi.spyOn(webui, "loadTagExclusions").mockResolvedValue();
+    const wrapper = mountWithApp(TagExclusionsView, { pinia });
+    await flushPromises();
+
+    expect(wrapper.text()).toContain("linuxserver/radarr");
+
+    await wrapper.findAll("select")[1]?.setValue("linuxserver/radarr");
+    await nextTick();
+
+    expect(wrapper.findAll("select")[2]?.text()).toContain("5.21.1");
+  });
+
+  it("keeps clearable management selects string-safe", async () => {
+    {
+      const { pinia, webui } = setupStores(true);
+      webui.servicePolicies = [servicePolicy()];
+      webui.updateTargets = updateTargetsResponse();
+      vi.spyOn(webui, "loadUpdateTargets").mockResolvedValue();
+      vi.spyOn(webui, "loadServicePolicies").mockResolvedValue();
+      const wrapper = mountWithApp(PoliciesView, { pinia });
+      await flushPromises();
+
+      emitSelectValue(wrapper, 0, null);
+      await nextTick();
+
+      expect(
+        wrapper
+          .findAll("button")
+          .find((button) => button.text().includes("Save policy"))
+          ?.attributes("disabled"),
+      ).toBeDefined();
+    }
+
+    {
+      const { pinia, webui } = setupStores(true);
+      webui.snoozes = [];
+      webui.updateTargets = updateTargetsResponse();
+      vi.spyOn(webui, "loadUpdateTargets").mockResolvedValue();
+      vi.spyOn(webui, "loadSnoozes").mockResolvedValue();
+      const wrapper = mountWithApp(SnoozesView, { pinia });
+      await flushPromises();
+
+      emitSelectValue(wrapper, 0, null);
+      await nextTick();
+
+      expect(
+        wrapper
+          .findAll("button")
+          .find((button) => button.text().includes("Create snooze"))
+          ?.attributes("disabled"),
+      ).toBeDefined();
+    }
+
+    {
+      const { pinia, webui } = setupStores(true);
+      webui.tagExclusions = [];
+      webui.updateTargets = updateTargetsResponse();
+      vi.spyOn(webui, "loadUpdateTargets").mockResolvedValue();
+      vi.spyOn(webui, "loadTagExclusions").mockResolvedValue();
+      const wrapper = mountWithApp(TagExclusionsView, { pinia });
+      await flushPromises();
+
+      emitSelectValue(wrapper, 1, null);
+      emitSelectValue(wrapper, 2, null);
+      await nextTick();
+
+      expect(
+        wrapper
+          .findAll("button")
+          .find((button) => button.text().includes("Save rule"))
+          ?.attributes("disabled"),
+      ).toBeDefined();
+    }
+  });
+
   it("disables snooze mutations in read-only mode", async () => {
     const { pinia, webui } = setupStores(false);
     webui.snoozes = [snooze()];
+    webui.updateTargets = updateTargetsResponse();
+    vi.spyOn(webui, "loadUpdateTargets").mockResolvedValue();
     vi.spyOn(webui, "loadSnoozes").mockResolvedValue();
     const deleteSnooze = vi.spyOn(webui, "deleteSnooze");
     const wrapper = mountWithApp(SnoozesView, { pinia });
@@ -1401,6 +1511,8 @@ describe("mutating WebUI views", () => {
   it("disables tag exclusion mutations in read-only mode", async () => {
     const { pinia, webui } = setupStores(false);
     webui.tagExclusions = [tagExclusion()];
+    webui.updateTargets = updateTargetsResponse();
+    vi.spyOn(webui, "loadUpdateTargets").mockResolvedValue();
     vi.spyOn(webui, "loadTagExclusions").mockResolvedValue();
     const setStatus = vi.spyOn(webui, "setTagExclusionStatus");
     const wrapper = mountWithApp(TagExclusionsView, { pinia });

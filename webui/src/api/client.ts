@@ -62,6 +62,27 @@ export interface PendingResponse {
   warnings: string[];
 }
 
+export type UpdateTargetsStatus = "ready" | "unavailable";
+
+export interface UpdateTargetItem {
+  service_key: string;
+  stack: string;
+  service: string;
+  image: string;
+  image_repo: string;
+  current_tag: string;
+  directory: string;
+  compose_file: string;
+  project_directory: string;
+}
+
+export interface UpdateTargetsResponse {
+  status: UpdateTargetsStatus;
+  count: number;
+  items: UpdateTargetItem[];
+  warnings: string[];
+}
+
 export interface ReleaseNoteLink {
   label: string;
   url: string;
@@ -665,6 +686,7 @@ const liveWebApi = {
       headers: { "x-wud-csrf-token": csrfToken },
     }),
   pending: () => apiRequest<PendingResponse>("/pending"),
+  updateTargets: () => apiRequest<UpdateTargetsResponse>("/update-targets"),
   cleanupPending: (
     cleanupId: string,
     lines: PendingCleanupLine[],

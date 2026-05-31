@@ -36,6 +36,8 @@ import type {
   TagExclusionRuleRecord,
   TagExclusionStatusFilter,
   TagOverrideRequest,
+  UpdateTargetItem,
+  UpdateTargetsResponse,
   WebApi,
 } from "./client";
 
@@ -298,7 +300,7 @@ const INITIAL_TAG_EXCLUSIONS: TagExclusionRuleRecord[] = [
   {
     id: 1,
     scope: "image_repo",
-    image_repo: "ghcr.io/home-assistant/home-assistant",
+    image_repo: "home-assistant/home-assistant",
     service_key: "",
     match_type: "exact",
     tag: "2026.5.3",
@@ -311,7 +313,7 @@ const INITIAL_TAG_EXCLUSIONS: TagExclusionRuleRecord[] = [
   {
     id: 2,
     scope: "service",
-    image_repo: "lscr.io/linuxserver/radarr",
+    image_repo: "linuxserver/radarr",
     service_key: "media/radarr",
     match_type: "exact",
     tag: "5.22.4",
@@ -320,6 +322,53 @@ const INITIAL_TAG_EXCLUSIONS: TagExclusionRuleRecord[] = [
     created_at: "2026-05-28T12:00:00+00:00",
     updated_at: "2026-05-28T12:00:00+00:00",
     metadata: { source: "demo" },
+  },
+];
+
+const DEMO_UPDATE_TARGETS: UpdateTargetItem[] = [
+  {
+    service_key: "data/postgres",
+    stack: "data",
+    service: "postgres",
+    image: "postgres:16",
+    image_repo: "postgres",
+    current_tag: "16",
+    directory: `${DEMO_DOCKER_BASE}/data`,
+    compose_file: "docker-compose.yml",
+    project_directory: "",
+  },
+  {
+    service_key: "home/home-assistant",
+    stack: "home",
+    service: "home-assistant",
+    image: "ghcr.io/home-assistant/home-assistant:2026.5.1",
+    image_repo: "home-assistant/home-assistant",
+    current_tag: "2026.5.1",
+    directory: `${DEMO_DOCKER_BASE}/home`,
+    compose_file: "docker-compose.yml",
+    project_directory: "",
+  },
+  {
+    service_key: "media/radarr",
+    stack: "media",
+    service: "radarr",
+    image: "lscr.io/linuxserver/radarr:5.21.1",
+    image_repo: "linuxserver/radarr",
+    current_tag: "5.21.1",
+    directory: `${DEMO_DOCKER_BASE}/media`,
+    compose_file: "docker-compose.yml",
+    project_directory: "",
+  },
+  {
+    service_key: "media/wud-updater",
+    stack: "media",
+    service: "wud-updater",
+    image: "ghcr.io/magrhino/wud-updater:v0.25.0",
+    image_repo: "magrhino/wud-updater",
+    current_tag: "v0.25.0",
+    directory: `${DEMO_DOCKER_BASE}/media`,
+    compose_file: "docker-compose.yml",
+    project_directory: "",
   },
 ];
 
@@ -753,6 +802,15 @@ class DemoApiState {
     };
   }
 
+  updateTargets(): UpdateTargetsResponse {
+    return {
+      status: "ready",
+      count: DEMO_UPDATE_TARGETS.length,
+      items: clone(DEMO_UPDATE_TARGETS),
+      warnings: [],
+    };
+  }
+
   releaseNotes(): ReleaseNotesResponse {
     const activeLines = new Set(this.pending.map((item) => item.line_no));
     const items = INITIAL_RELEASE_NOTES.filter((item) => activeLines.has(item.line_no));
@@ -1112,16 +1170,17 @@ class DemoApiState {
     }
 
     if (operation.kind === "upsert_tag_exclusion") {
+      const imageRepo = repoKey(operation.image_repo);
       const key = (rule: TagExclusionRuleRecord) =>
         rule.scope === operation.scope &&
-        rule.image_repo === operation.image_repo &&
+        rule.image_repo === imageRepo &&
         rule.service_key === (operation.service_key ?? "") &&
         rule.tag === operation.tag;
       const existing = this.tagExclusions.find(key);
       const rule: TagExclusionRuleRecord = {
         id: existing?.id ?? this.nextTagExclusion++,
         scope: operation.scope,
-        image_repo: operation.image_repo,
+        image_repo: imageRepo,
         service_key: operation.service_key ?? "",
         match_type: operation.match_type ?? "exact",
         tag: operation.tag,
@@ -1276,6 +1335,7 @@ export function createDemoWebApi(): WebApi {
     onboardingChecklist: async (_csrfToken: string) => state.onboardingChecklist(),
     dismissOnboarding: async (_csrfToken: string) => state.dismissOnboarding(),
     pending: async () => state.pendingResponse(),
+    updateTargets: async () => state.updateTargets(),
     cleanupPending: async (
       cleanupId: string,
       lines: PendingCleanupLine[],
@@ -1908,6 +1968,26 @@ function rewriteTag(image: string, tag: string): string {
     return `${digestless.slice(0, colon)}:${tag}`;
   }
   return `${digestless}:${tag}`;
+}
+
+function repoKey(image: string): string {
+  const digestless = image.trim().split("@sha256:")[0] ?? image.trim();
+  const firstSlash = digestless.indexOf("/");
+  const withoutRegistry =
+    firstSlash === -1 || !isRegistryPrefix(digestless.slice(0, firstSlash))
+      ? digestless
+      : digestless.slice(firstSlash + 1);
+  const lastSlash = withoutRegistry.lastIndexOf("/");
+  const lastSegment = withoutRegistry.slice(lastSlash + 1);
+  const tagSeparator = lastSegment.lastIndexOf(":");
+  if (tagSeparator === -1) {
+    return withoutRegistry;
+  }
+  return `${withoutRegistry.slice(0, lastSlash + 1)}${lastSegment.slice(0, tagSeparator)}`;
+}
+
+function isRegistryPrefix(value: string): boolean {
+  return value.includes(".") || value.includes(":") || value === "localhost";
 }
 
 function upsertBy<T>(items: T[], next: T, matches: (item: T) => boolean): T[] {

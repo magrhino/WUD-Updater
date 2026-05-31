@@ -18,6 +18,7 @@ import {
   settingsResponse,
   statusResponse,
   stateOperationResponse,
+  updateTargetsResponse,
 } from "./helpers/fixtures";
 
 function jsonResponse(body: unknown, status = 200): Response {
@@ -163,6 +164,16 @@ describe("webui store", () => {
     await webui.loadPending();
 
     expect(webui.pendingCleanup).toBeNull();
+  });
+
+  it("loads update targets for management selectors", async () => {
+    const fetchMock = mockFetch(updateTargetsResponse());
+    const webui = useWebuiStore();
+
+    await webui.loadUpdateTargets();
+
+    expect(webui.updateTargets?.items[0]?.service_key).toBe("media/app");
+    expect(fetchMock.mock.calls[0][0]).toBe("/api/v1/update-targets");
   });
 
   it("passes csrf from auth store to state operations", async () => {

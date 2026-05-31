@@ -14,11 +14,13 @@ import {
 } from "naive-ui";
 
 import type { SnoozeRecord, SnoozeState } from "../api/client";
+import { useUpdateTargetOptions } from "../composables/useUpdateTargetOptions";
 import { useAuthStore } from "../stores/auth";
 import { useWebuiStore } from "../stores/webui";
 
 const webui = useWebuiStore();
 const auth = useAuthStore();
+const { serviceKeyOptions } = useUpdateTargetOptions();
 const breakpoints = useBreakpoints({ managementDesktop: 1120 });
 const useManagementCards = breakpoints.smaller("managementDesktop");
 const snoozeState = ref<SnoozeState>("active");
@@ -63,6 +65,10 @@ function resetSnoozeForm(): void {
   snoozeForm.reason = "";
 }
 
+function setSnoozeServiceKey(value: string | number | null): void {
+  snoozeForm.serviceKey = value === null ? "" : String(value);
+}
+
 function statusLabel(snooze: SnoozeRecord): string {
   return snooze.active ? "active" : "expired";
 }
@@ -104,6 +110,7 @@ async function confirmDelete(): Promise<void> {
 }
 
 onMounted(() => {
+  void webui.loadUpdateTargets();
   void webui.loadSnoozes(snoozeState.value);
 });
 
@@ -134,10 +141,15 @@ watch(snoozeState, (nextState) => {
           required
           feedback="Required to create a snooze. Use stack/service."
         >
-          <n-input
-            v-model:value="snoozeForm.serviceKey"
+          <n-select
+            :value="snoozeForm.serviceKey"
+            filterable
+            tag
+            clearable
+            :options="serviceKeyOptions"
             placeholder="stack/service"
             :disabled="webui.loading"
+            @update:value="setSnoozeServiceKey"
           />
         </n-form-item>
         <n-form-item

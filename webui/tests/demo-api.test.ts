@@ -111,6 +111,17 @@ describe("demo web API", () => {
           item.diagnostic?.code === "unmatched",
       ),
     ).toBe(true);
+
+    await expect(api.updateTargets()).resolves.toMatchObject({
+      status: "ready",
+      count: 4,
+      items: expect.arrayContaining([
+        expect.objectContaining({
+          service_key: "media/radarr",
+          image_repo: "linuxserver/radarr",
+        }),
+      ]),
+    });
   });
 
   it("creates plans from the current fixture state", async () => {
@@ -391,7 +402,7 @@ describe("demo web API", () => {
     );
     expect(await api.tagExclusions("active")).toContainEqual(
       expect.objectContaining({
-        image_repo: "ghcr.io/magrhino/wud-updater",
+        image_repo: "magrhino/wud-updater",
         service_key: "media/wud-updater",
       }),
     );
