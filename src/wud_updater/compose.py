@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from .command import CommandError, CommandResult, CommandRunner
+from .config import format_compose_ignore_paths
 
 
 COMPOSE_FILENAMES = frozenset(
@@ -222,11 +223,16 @@ class ComposeCli:
         docker_base: str | Path,
         *,
         project_base: str | Path | None = None,
+        ignore_paths: Sequence[str | Path] = (),
     ) -> tuple[ComposeStack, ...]:
         docker_base_path = Path(docker_base)
         project_base_path = Path(project_base) if project_base is not None else None
+        normalized_ignore_paths = normalize_compose_ignore_paths(ignore_paths)
         stacks: list[ComposeStack] = []
-        for compose_file in _compose_files_under(docker_base_path):
+        for compose_file in _compose_files_under(
+            docker_base_path,
+            ignore_paths=normalized_ignore_paths,
+        ):
             directory = compose_file.parent
             file_name = compose_file.name
             project_directory = _validated_project_directory_for_stack(
@@ -262,7 +268,10 @@ class ComposeCli:
             )
         if not stacks:
             raise ComposeDiscoveryError(
-                f"No compose stacks found under {docker_base_path} outside ./old."
+                compose_discovery_message(
+                    docker_base_path,
+                    ignore_paths=normalized_ignore_paths,
+                )
             )
         return tuple(stacks)
 
@@ -545,8 +554,45 @@ class ComposeDiscoveryError(RuntimeError):
     """Raised when no usable compose stacks are found."""
 
 
-def _compose_files_under(docker_base: str | Path) -> list[Path]:
+def normalize_compose_ignore_paths(
+    ignore_paths: Sequence[str | Path] = (),
+) -> tuple[Path, ...]:
+    normalized: list[Path] = []
+    seen: set[tuple[str, ...]] = set()
+    for ignore_path in ignore_paths:
+        path = Path(ignore_path)
+        parts = path.parts
+        if path.is_absolute() or not parts or any(part in {"", ".", ".."} for part in parts):
+            raise ValueError("compose ignore paths must be relative paths")
+        if parts not in seen:
+            seen.add(parts)
+            normalized.append(path)
+    return tuple(normalized)
+
+
+def compose_discovery_message(
+    docker_base: str | Path,
+    *,
+    ignore_paths: Sequence[str | Path] = (),
+) -> str:
+    normalized_ignore_paths = normalize_compose_ignore_paths(ignore_paths)
+    message = f"No compose stacks found under {Path(docker_base)}."
+    if normalized_ignore_paths:
+        message = (
+            f"{message} Ignored paths: "
+            f"{format_compose_ignore_paths(normalized_ignore_paths)}."
+        )
+    return message
+
+
+def _compose_files_under(
+    docker_base: str | Path,
+    *,
+    ignore_paths: Sequence[str | Path] = (),
+) -> list[Path]:
     base = Path(docker_base)
+    normalized_ignore_paths = normalize_compose_ignore_paths(ignore_paths)
+    ignore_path_parts = tuple(path.parts for path in normalized_ignore_paths)
     files: list[Path] = []
     pending = [base]
     while pending:
@@ -561,17 +607,39 @@ def _compose_files_under(docker_base: str | Path) -> list[Path]:
                 continue
             if path.is_file() and path.name in COMPOSE_FILENAMES:
                 files.append(path)
-            if len(relative.parts) >= 3 or path.name == "old":
+            if len(relative.parts) >= 3 or _ignored_compose_path(
+                path,
+                relative,
+                ignore_path_parts,
+            ):
                 continue
             if path.is_dir():
                 pending.append(path)
     return sorted(files)
 
 
-def compose_files_under(docker_base: str | Path) -> tuple[Path, ...]:
+def compose_files_under(
+    docker_base: str | Path,
+    *,
+    ignore_paths: Sequence[str | Path] = (),
+) -> tuple[Path, ...]:
     """Return compose files discovered with the updater's stack search rules."""
 
-    return tuple(_compose_files_under(docker_base))
+    return tuple(_compose_files_under(docker_base, ignore_paths=ignore_paths))
+
+
+def _ignored_compose_path(
+    path: Path,
+    relative: Path,
+    ignore_path_parts: tuple[tuple[str, ...], ...],
+) -> bool:
+    relative_parts = relative.parts
+    for ignored_parts in ignore_path_parts:
+        if len(ignored_parts) == 1 and path.name == ignored_parts[0]:
+            return True
+        if len(ignored_parts) > 1 and relative_parts[: len(ignored_parts)] == ignored_parts:
+            return True
+    return False
 
 
 def _service_args(services: Sequence[str] | None) -> tuple[str, ...]:

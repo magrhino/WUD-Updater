@@ -84,10 +84,17 @@ server's `WUD_TIMEZONE` value, for example `America/Chicago`, and default to
 After admin setup, Settings shows a first-run checklist for WUD output sharing,
 Docker and Compose access, script sync, persistence, browser exposure, and
 mutation mode.
-Settings can also persist allowlisted WebUI-only preferences, such as theme and
-onboarding checklist state, when browser mutations are explicitly enabled.
-Those preferences do not override CLI flags, environment config, paths, secrets,
-Docker commands, or updater behavior.
+Settings can also persist allowlisted managed preferences, such as theme,
+onboarding checklist state, and compose discovery ignore paths, when browser
+mutations are explicitly enabled. Those preferences do not override CLI flags,
+environment config, paths, secrets, or Docker commands.
+
+Compose discovery ignores no archive directories by default. Set
+`WUD_COMPOSE_IGNORE_PATHS=old` to keep the legacy `old/` archive behavior, or
+set a comma-separated list such as `old,archive/disabled`. When
+`WUD_COMPOSE_IGNORE_PATHS` is set in the server environment, Settings shows the
+effective value as read-only; unset the environment variable to manage compose
+ignore paths from the WebUI.
 
 If the admin password is lost or an operator needs to rotate access, issue a
 new one-time recovery link from the host or container:

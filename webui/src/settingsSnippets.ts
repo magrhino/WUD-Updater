@@ -16,7 +16,13 @@ export function sanitizedSettingsEntries(
   settings: SettingsResponse,
 ): SettingsEntry[] {
   return [...settings.updater, ...settings.webui].filter(
-    (entry) => !SANITIZED_SNIPPET_ENTRY_EXCLUSIONS.has(entry.name),
+    (entry) =>
+      !SANITIZED_SNIPPET_ENTRY_EXCLUSIONS.has(entry.name) &&
+      !(
+        entry.name === "WUD_COMPOSE_IGNORE_PATHS" &&
+        !entry.configured &&
+        !entry.value
+      ),
   );
 }
 

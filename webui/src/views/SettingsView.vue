@@ -13,7 +13,7 @@ import {
   ShieldCheck,
   SlidersHorizontal,
 } from "@lucide/vue";
-import { NAlert, NButton, NModal, NSelect, NTag } from "naive-ui";
+import { NAlert, NButton, NInput, NModal, NSelect, NTag } from "naive-ui";
 
 import type {
   ManagedSettingEntry,
@@ -41,6 +41,7 @@ const BEHAVIOR_ENTRY_NAMES = new Set([
   "WUD_MAX_WAIT",
   "WUD_LOCK_TIMEOUT",
   "WUD_TIMEZONE",
+  "WUD_COMPOSE_IGNORE_PATHS",
 ]);
 const THEME_PREFERENCE_LABELS: Record<string, string> = {
   system: "System theme",
@@ -85,6 +86,7 @@ const restartMessage = ref("");
 const restartError = ref("");
 const themePreferenceValue = ref("system");
 const onboardingChecklistValue = ref("visible");
+const composeIgnorePathsValue = ref("");
 const preferencesMessage = ref("");
 const preferencesError = ref("");
 const compactSettingsLayout = useMediaQuery("(max-width: 560px)");
@@ -121,6 +123,9 @@ const themePreferenceEntry = computed(() =>
 );
 const onboardingChecklistEntry = computed(() =>
   managedEntries.value.find((entry) => entry.key === "onboarding_checklist"),
+);
+const composeIgnorePathsEntry = computed(() =>
+  managedEntries.value.find((entry) => entry.key === "compose_ignore_paths"),
 );
 const restartContainerTarget = computed(() => restartContainerEntry.value?.value ?? "");
 const mutationsEnabled = computed(() => auth.session?.mutations_enabled === true);
@@ -159,11 +164,16 @@ const preferencesDisabledReason = computed(() => {
 const preferenceControlsDisabled = computed(
   () => webui.loading || preferencesDisabledReason.value !== "",
 );
+const composeIgnorePathsEditable = computed(
+  () => composeIgnorePathsEntry.value?.editable === true,
+);
 const preferencesDirty = computed(
   () =>
     themePreferenceValue.value !== (themePreferenceEntry.value?.value ?? "system") ||
     onboardingChecklistValue.value !==
-      (onboardingChecklistEntry.value?.value ?? "visible"),
+      (onboardingChecklistEntry.value?.value ?? "visible") ||
+    (composeIgnorePathsEditable.value &&
+      composeIgnorePathsValue.value !== (composeIgnorePathsEntry.value?.value ?? "")),
 );
 const preferenceSaveDisabled = computed(
   () => preferenceControlsDisabled.value || !preferencesDirty.value,
@@ -240,6 +250,7 @@ function hydratePreferenceForm(): void {
   themePreferenceValue.value = themePreferenceEntry.value?.value ?? "system";
   onboardingChecklistValue.value =
     onboardingChecklistEntry.value?.value ?? "visible";
+  composeIgnorePathsValue.value = composeIgnorePathsEntry.value?.value ?? "";
 }
 
 function openRestartDialog(): void {
@@ -292,6 +303,12 @@ async function saveManagedPreferences(): Promise<void> {
     (onboardingChecklistEntry.value?.value ?? "visible")
   ) {
     values.onboarding_checklist = onboardingChecklistValue.value;
+  }
+  if (
+    composeIgnorePathsEditable.value &&
+    composeIgnorePathsValue.value !== (composeIgnorePathsEntry.value?.value ?? "")
+  ) {
+    values.compose_ignore_paths = composeIgnorePathsValue.value;
   }
   if (!Object.keys(values).length) {
     return;
@@ -598,6 +615,37 @@ onMounted(() => {
           </div>
           <div class="settings-preference-row">
             <div>
+              <strong>Compose ignore paths</strong>
+              <span>
+                Source:
+                {{
+                  composeIgnorePathsEntry?.source === "configured"
+                    ? "Configured"
+                    : "Default"
+                }}
+              </span>
+            </div>
+            <div class="settings-preference-controls settings-textarea-controls">
+              <n-input
+                v-model:value="composeIgnorePathsValue"
+                type="textarea"
+                :autosize="{ minRows: 2, maxRows: 4 }"
+                :disabled="preferenceControlsDisabled || !composeIgnorePathsEditable"
+                placeholder="old, archive/disabled"
+                aria-label="Compose ignore paths"
+              />
+              <n-alert
+                v-if="composeIgnorePathsEntry?.disabled_reason"
+                type="info"
+                :show-icon="false"
+                class="settings-action-alert"
+              >
+                {{ composeIgnorePathsEntry.disabled_reason }}
+              </n-alert>
+            </div>
+          </div>
+          <div class="settings-preference-row">
+            <div>
               <strong>Core update tour</strong>
               <span>
                 State: {{ coreUpdateTourStatusLabel }}. Step:
@@ -629,7 +677,7 @@ onMounted(() => {
         <div class="settings-action-row settings-preference-actions">
           <div>
             <strong>No restart required</strong>
-            <span>Managed preferences do not alter updater runtime behavior.</span>
+            <span>Managed values apply to new WebUI requests immediately.</span>
           </div>
           <div class="settings-button-group">
             <n-button :disabled="webui.loading || !preferencesDirty" @click="resetPreferenceForm">

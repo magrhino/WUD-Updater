@@ -154,6 +154,15 @@ can resolve to helper-only paths that the host Docker daemon cannot create. Set
 `WUD_OUT_FILE` to the todo file shared with WUD. Set `WUD_LOG_DIR` to the
 mounted log directory used by the updater.
 
+Compose discovery does not skip archive directories by default. To exclude
+archived stacks without moving `DOCKER_BASE`, set `WUD_COMPOSE_IGNORE_PATHS` to
+a comma-separated list of relative directory names or paths, for example
+`old,archive/disabled`. A single component such as `old` matches any directory
+with that name under `DOCKER_BASE`; a multi-component value such as
+`archive/disabled` matches that relative path and its descendants. Existing
+deployments that relied on the legacy skipped `old/` directory should set
+`WUD_COMPOSE_IGNORE_PATHS=old`.
+
 Existing deployments that mount stacks at a helper-only path can keep that
 layout only if the daemon-visible host root is also readable inside the helper.
 For example, with `/srv/docker:/host/docker`, either switch to

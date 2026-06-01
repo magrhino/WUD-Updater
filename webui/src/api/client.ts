@@ -333,6 +333,7 @@ export interface ManagedSettingEntry {
   editable: boolean;
   allowed_values: string[];
   restart_required: boolean;
+  disabled_reason: string;
 }
 
 export interface SettingsResponse {

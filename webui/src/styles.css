@@ -757,6 +757,15 @@ a {
   min-width: 180px;
 }
 
+.settings-preference-row > .settings-textarea-controls {
+  align-items: stretch;
+  flex-direction: column;
+}
+
+.settings-textarea-controls .n-input {
+  width: 100%;
+}
+
 .settings-action-row {
   display: flex;
   align-items: center;

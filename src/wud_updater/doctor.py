@@ -16,7 +16,8 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from .command import CommandResult, CommandRunner
-from .compose import ComposeCli, compose_files_under
+from .compose import ComposeCli, compose_discovery_message, compose_files_under
+from .config import COMPOSE_IGNORE_PATHS_ENV, ConfigError, parse_compose_ignore_paths
 from .updates import (
     DEFAULT_TRUENAS_STATUS_TIMEOUT,
     TRUENAS_MIDDLEWARE_MOUNT,
@@ -49,6 +50,7 @@ class DoctorOptions:
     updater_use_sudo: bool = True
     truenas_status_check: bool = False
     truenas_status_timeout: str = DEFAULT_TRUENAS_STATUS_TIMEOUT
+    compose_ignore_paths: tuple[Path, ...] = ()
     no_color: bool = False
 
 
@@ -181,12 +183,19 @@ class Doctor:
         self._check_script_sync()
 
     def _check_compose(self) -> None:
-        compose_files = compose_files_under(self.options.docker_base)
+        compose_files = compose_files_under(
+            self.options.docker_base,
+            ignore_paths=self.options.compose_ignore_paths,
+        )
         if not compose_files:
+            discovery_message = compose_discovery_message(
+                self.options.docker_base,
+                ignore_paths=self.options.compose_ignore_paths,
+            )
             self._record(
                 "FAIL",
                 "compose discovery",
-                f"no compose stacks found under {self.options.docker_base} outside ./old",
+                discovery_message[:1].lower() + discovery_message[1:],
             )
             return
 
@@ -882,6 +891,12 @@ def options_from_namespace(
     packaged_scripts_dir = _default_packaged_scripts_dir(app_dir, repo_path)
     host_docker_base = environ.get("HOST_DOCKER_BASE") or ""
     updater = environ.get("WUD_UPDATER") or _default_updater(repo_path)
+    try:
+        compose_ignore_paths = parse_compose_ignore_paths(
+            environ.get(COMPOSE_IGNORE_PATHS_ENV)
+        )
+    except ConfigError as exc:
+        raise DoctorConfigError(str(exc)) from exc
 
     return DoctorOptions(
         docker_base=docker_base,
@@ -911,6 +926,7 @@ def options_from_namespace(
         truenas_status_timeout=(
             environ.get("TRUENAS_STATUS_TIMEOUT") or DEFAULT_TRUENAS_STATUS_TIMEOUT
         ),
+        compose_ignore_paths=compose_ignore_paths,
         no_color=bool(getattr(args, "no_color", False)),
     )
 

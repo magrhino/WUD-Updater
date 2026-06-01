@@ -25,6 +25,7 @@ class LoadConfigTests(unittest.TestCase):
         self.assertEqual(config.max_wait, 180)
         self.assertEqual(config.lock_timeout, 30)
         self.assertEqual(config.timezone_name, "UTC")
+        self.assertEqual(config.compose_ignore_paths, ())
         self.assertIsNone(config.out_uid)
         self.assertIsNone(config.out_gid)
 
@@ -39,6 +40,7 @@ class LoadConfigTests(unittest.TestCase):
                 "WUD_MAX_WAIT": "7",
                 "WUD_LOCK_TIMEOUT": "2",
                 "WUD_TIMEZONE": "America/Chicago",
+                "WUD_COMPOSE_IGNORE_PATHS": "old, archive/disabled,old",
                 "OUT_UID": "1000",
                 "OUT_GID": "1001",
             },
@@ -53,6 +55,10 @@ class LoadConfigTests(unittest.TestCase):
         self.assertEqual(config.max_wait, 7)
         self.assertEqual(config.lock_timeout, 2)
         self.assertEqual(config.timezone_name, "America/Chicago")
+        self.assertEqual(
+            config.compose_ignore_paths,
+            (Path("old"), Path("archive/disabled")),
+        )
         self.assertEqual(config.out_uid, 1000)
         self.assertEqual(config.out_gid, 1001)
 
@@ -68,6 +74,7 @@ class LoadConfigTests(unittest.TestCase):
                 "WUD_MAX_WAIT": "",
                 "WUD_LOCK_TIMEOUT": "",
                 "WUD_TIMEZONE": "",
+                "WUD_COMPOSE_IGNORE_PATHS": "",
             },
             home="/home/wud",
         )
@@ -83,6 +90,7 @@ class LoadConfigTests(unittest.TestCase):
         self.assertEqual(config.max_wait, 180)
         self.assertEqual(config.lock_timeout, 30)
         self.assertEqual(config.timezone_name, "UTC")
+        self.assertEqual(config.compose_ignore_paths, ())
 
     def test_db_path_defaults_under_configured_log_dir(self) -> None:
         config = load_config({"WUD_LOG_DIR": "/srv/logs"}, home="/home/wud")
@@ -155,6 +163,21 @@ class LoadConfigTests(unittest.TestCase):
     def test_timezone_is_validated(self) -> None:
         with self.assertRaisesRegex(ConfigError, "WUD_TIMEZONE"):
             load_config({"WUD_TIMEZONE": "Mars/Base"}, home="/home/wud")
+
+    def test_compose_ignore_paths_are_validated(self) -> None:
+        invalid_cases = (
+            ("/old", "relative paths"),
+            ("old,,archive", "non-empty"),
+            ("old,", "non-empty"),
+            ("archive//old", "empty"),
+            (".", r"'\.'"),
+            ("archive/../old", r"'\.\.'"),
+        )
+
+        for value, error in invalid_cases:
+            with self.subTest(value=value):
+                with self.assertRaisesRegex(ConfigError, error):
+                    load_config({"WUD_COMPOSE_IGNORE_PATHS": value}, home="/home/wud")
 
     def test_timezone_uses_tzdata_when_system_paths_are_empty(self) -> None:
         original_tzpath = zoneinfo.TZPATH

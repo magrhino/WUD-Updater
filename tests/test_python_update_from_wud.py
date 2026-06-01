@@ -102,8 +102,14 @@ class PythonUpdateFromWudTests(unittest.TestCase):
             check=False,
         )
 
-    def make_stack(self, stack_id: str, services: list[tuple[str, str, str | None]]) -> Path:
-        directory = self.base / stack_id
+    def make_stack(
+        self,
+        stack_id: str,
+        services: list[tuple[str, str, str | None]],
+        *,
+        parent: Path | None = None,
+    ) -> Path:
+        directory = (parent or self.base) / stack_id
         directory.mkdir(parents=True, exist_ok=True)
         (directory / ".fake-docker-id").write_text(f"{stack_id}\n", encoding="utf-8")
         stack_state = self.fake_root / "stacks" / stack_id
@@ -242,6 +248,28 @@ class PythonUpdateFromWudTests(unittest.TestCase):
         self.assertEqual(known[0]["image"], "repo/app:latest")
         self.assertEqual(known[0]["image_id"], "new-app")
         self.assertTrue(known[0]["digest"].endswith("@sha256:new-app"))
+
+    def test_python_updates_honors_configured_compose_ignore_paths(self) -> None:
+        self.wud_file.write_text("repo/ignored:latest\n", encoding="utf-8")
+        self.make_stack("active", [("app", "repo/app:latest", "cid-app")])
+        self.make_stack(
+            "ignored",
+            [("app", "repo/ignored:latest", "cid-ignored")],
+            parent=self.base / "old",
+        )
+        self.set_image_state("repo/ignored:latest", "old", "sha256:old")
+        self.set_image_after_pull("repo/ignored:latest", "new", "sha256:new")
+        self.env["WUD_COMPOSE_IGNORE_PATHS"] = "old"
+
+        result = self.run_python("--yes")
+
+        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+        self.assertEqual(
+            self.wud_file.read_text(encoding="utf-8"),
+            "repo/ignored:latest\n",
+        )
+        self.assertNotRegex(self.calls(), r"repo/ignored")
+        self.assertNotRegex(self.calls(), r"compose -f .* pull")
 
     def test_remove_lines_before_run_records_discarded_audit_entries(self) -> None:
         self.wud_file.write_text(

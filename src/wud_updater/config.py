@@ -14,6 +14,7 @@ DEFAULT_MAX_WAIT = 180
 DEFAULT_LOCK_TIMEOUT = 30
 DEFAULT_LOG_DIR = "./logs"
 DEFAULT_TIMEZONE = "UTC"
+COMPOSE_IGNORE_PATHS_ENV = "WUD_COMPOSE_IGNORE_PATHS"
 VALID_UPDATE_MODES = frozenset({"pause", "stop", "live"})
 
 
@@ -31,6 +32,7 @@ class UpdaterConfig:
     max_wait: int
     lock_timeout: int
     timezone_name: str
+    compose_ignore_paths: tuple[Path, ...]
     out_uid: int | None
     out_gid: int | None
 
@@ -68,6 +70,41 @@ def _parse_timezone_name(value: str | None) -> str:
             "WUD_TIMEZONE must be an IANA timezone name such as America/Chicago"
         ) from exc
     return name
+
+
+def parse_compose_ignore_paths(
+    value: str | None,
+    *,
+    name: str = COMPOSE_IGNORE_PATHS_ENV,
+) -> tuple[Path, ...]:
+    if value is None or value == "":
+        return ()
+
+    paths: list[Path] = []
+    seen: set[tuple[str, ...]] = set()
+    for raw_item in value.split(","):
+        item = raw_item.strip()
+        if not item:
+            raise ConfigError(
+                f"{name} must be a comma-separated list of non-empty relative paths"
+            )
+        if item.startswith("/"):
+            raise ConfigError(f"{name} entries must be relative paths")
+
+        parts = tuple(item.split("/"))
+        if any(part in {"", ".", ".."} for part in parts):
+            raise ConfigError(
+                f"{name} entries cannot contain empty, '.', or '..' path components"
+            )
+
+        if parts not in seen:
+            seen.add(parts)
+            paths.append(Path(*parts))
+    return tuple(paths)
+
+
+def format_compose_ignore_paths(paths: tuple[Path, ...]) -> str:
+    return ", ".join(path.as_posix() for path in paths)
 
 
 def _env_or_default(env: Mapping[str, str], name: str, default: str) -> str:
@@ -121,6 +158,9 @@ def load_config(
         DEFAULT_LOCK_TIMEOUT,
     )
     timezone_name = _parse_timezone_name(env.get("WUD_TIMEZONE"))
+    compose_ignore_paths = parse_compose_ignore_paths(
+        env.get(COMPOSE_IGNORE_PATHS_ENV)
+    )
 
     out_uid = _parse_optional_numeric_id("OUT_UID", env.get("OUT_UID"))
     out_gid_value = env.get("OUT_GID") or env.get("OUT_GUID")
@@ -137,6 +177,7 @@ def load_config(
         max_wait=max_wait,
         lock_timeout=lock_timeout,
         timezone_name=timezone_name,
+        compose_ignore_paths=compose_ignore_paths,
         out_uid=out_uid,
         out_gid=out_gid,
     )

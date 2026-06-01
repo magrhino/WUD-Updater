@@ -478,6 +478,8 @@ class DemoApiState {
   themePreference = "system";
   themePreferenceConfigured = false;
   onboardingDismissedAt = "";
+  composeIgnorePaths = "";
+  composeIgnorePathsConfigured = false;
   coreUpdateTour: CoreUpdateTourResponse = {
     status: "not_started",
     step: "dashboard",
@@ -544,6 +546,7 @@ class DemoApiState {
         settingEntry("WUD_MAX_WAIT", "180", "180", false),
         settingEntry("WUD_LOCK_TIMEOUT", "30", "30", false),
         settingEntry("WUD_TIMEZONE", "UTC", "UTC", false),
+        settingEntry("WUD_COMPOSE_IGNORE_PATHS", "", "", false),
       ],
       webui: [
         settingEntry("WUD_WEB_AUTH_REQUIRED", "false", "true", false, "derived"),
@@ -605,6 +608,7 @@ class DemoApiState {
           editable: true,
           allowed_values: ["system", "light", "dark"],
           restart_required: false,
+          disabled_reason: "",
         },
         {
           key: "onboarding_checklist",
@@ -614,6 +618,17 @@ class DemoApiState {
           editable: true,
           allowed_values: ["visible", "dismissed"],
           restart_required: false,
+          disabled_reason: "",
+        },
+        {
+          key: "compose_ignore_paths",
+          value: this.composeIgnorePaths,
+          default_value: "",
+          source: this.composeIgnorePathsConfigured ? "configured" : "default",
+          editable: true,
+          allowed_values: [],
+          restart_required: false,
+          disabled_reason: "",
         },
       ],
     };
@@ -792,6 +807,9 @@ class DemoApiState {
             ? this.onboardingDismissedAt ||
               new Date("2026-05-31T00:00:00.000Z").toISOString()
             : "";
+      } else if (key === "compose_ignore_paths") {
+        this.composeIgnorePaths = normalizeDemoComposeIgnorePaths(value);
+        this.composeIgnorePathsConfigured = this.composeIgnorePaths !== "";
       } else {
         throw new Error(`managed setting is not editable: ${key}`);
       }
@@ -1965,6 +1983,33 @@ function settingEntry(
     configured,
     source,
   };
+}
+
+function normalizeDemoComposeIgnorePaths(value: string): string {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return "";
+  }
+  const paths: string[] = [];
+  const seen = new Set<string>();
+  for (const rawItem of trimmed.split(",")) {
+    const item = rawItem.trim();
+    const parts = item.split("/");
+    if (
+      !item ||
+      item.startsWith("/") ||
+      parts.some((part) => part === "" || part === "." || part === "..")
+    ) {
+      throw new Error(
+        "compose_ignore_paths entries must be non-empty relative paths",
+      );
+    }
+    if (!seen.has(item)) {
+      seen.add(item);
+      paths.push(item);
+    }
+  }
+  return paths.join(", ");
 }
 
 function doctorCheck(
