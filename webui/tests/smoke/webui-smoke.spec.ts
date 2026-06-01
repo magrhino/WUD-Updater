@@ -556,15 +556,13 @@ test("mutation-enabled pending flow applies and links to run details", async ({
     .getByRole("button", { name: /Apply 1 update/ })
     .click();
 
-  const applyDialog = page.getByRole("dialog").filter({
-    hasText: "Apply complete",
-  });
+  const applyPanel = page.locator(".apply-job-panel");
   await expect(
-    applyDialog.getByRole("heading", { name: "Apply complete" }),
+    applyPanel.getByRole("heading", { name: "Apply complete" }),
   ).toBeVisible();
-  await expect(applyDialog.getByText("docker-update-from-wud-v2")).toBeVisible();
-  await expect(applyDialog.getByRole("link", { name: "Details" })).toBeVisible();
-  await expect(applyDialog.getByRole("link", { name: "Log" })).toBeVisible();
+  await expect(applyPanel.getByText("docker-update-from-wud-v2")).toBeVisible();
+  await expect(applyPanel.getByRole("link", { name: "Details" })).toBeVisible();
+  await expect(applyPanel.getByRole("link", { name: "Log" })).toBeVisible();
   expect(state.calls.some((call) => call.path === "/api/v1/jobs")).toBe(true);
   expect(
     state.calls.some((call) =>
@@ -572,7 +570,7 @@ test("mutation-enabled pending flow applies and links to run details", async ({
     ),
   ).toBe(true);
 
-  await applyDialog.getByRole("link", { name: "Details" }).click();
+  await applyPanel.getByRole("link", { name: "Details" }).click();
   await expect(page.getByRole("heading", { name: "#7" })).toBeVisible();
   await expect(page.getByText("Pending records")).toBeVisible();
 

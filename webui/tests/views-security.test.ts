@@ -1086,25 +1086,34 @@ describe("mutating WebUI views", () => {
     expect(jobStream.observed).toBe(true);
     await flushPromises();
 
-    expect(wrapper.find('[role="dialog"]').text()).toContain("Applying 1 update");
-    expect(wrapper.find('[role="dialog"]').text()).toContain("Current status");
-    expect(wrapper.find('[role="dialog"]').text()).toContain("Queued to start");
-    const modalStatus = wrapper.find("#apply-job-modal-status").element;
-    const modalProgress = wrapper.find(
-      '[aria-labelledby="apply-job-modal-progress-title"]',
+    expect(wrapper.find('[role="dialog"]').exists()).toBe(false);
+    const applyPanel = wrapper.find(".apply-job-panel");
+    expect(applyPanel.text()).toContain("Applying 1 update");
+    expect(applyPanel.text()).toContain("Current status");
+    expect(applyPanel.text()).toContain("Queued to start");
+    expect(applyPanel.text()).toContain("Latest log line");
+    expect(applyPanel.text()).toContain("Details");
+    const panel = applyPanel.element;
+    const panelStatus = wrapper.find("#apply-job-panel-status").element;
+    const panelLatestLog = wrapper.find(
+      '[aria-labelledby="apply-job-latest-log-title"]',
     ).element;
-    const modalImpact = wrapper.find(
-      '[aria-labelledby="apply-job-modal-impact-title"]',
+    const panelProgress = wrapper.find(
+      '[aria-labelledby="apply-job-progress-title"]',
     ).element;
-    expect(focus.mock.contexts).toContain(modalStatus);
+    const panelDetails = wrapper.find(".apply-job-details").element;
+    expect(focus.mock.contexts).toContain(panel);
     expect(
-      Boolean(modalStatus.compareDocumentPosition(modalProgress) & Node.DOCUMENT_POSITION_FOLLOWING),
+      Boolean(panelStatus.compareDocumentPosition(panelLatestLog) & Node.DOCUMENT_POSITION_FOLLOWING),
     ).toBe(true);
     expect(
-      Boolean(modalProgress.compareDocumentPosition(modalImpact) & Node.DOCUMENT_POSITION_FOLLOWING),
+      Boolean(panelLatestLog.compareDocumentPosition(panelProgress) & Node.DOCUMENT_POSITION_FOLLOWING),
     ).toBe(true);
-    expect(wrapper.find(".apply-job-panel").text()).toContain("Applying 1 update");
-    expect(wrapper.find(".apply-job-panel").text()).toContain("repo/app:1.0");
+    expect(
+      Boolean(panelProgress.compareDocumentPosition(panelDetails) & Node.DOCUMENT_POSITION_FOLLOWING),
+    ).toBe(true);
+    expect(wrapper.find(".apply-job-details").attributes("open")).toBeUndefined();
+    expect(applyPanel.text()).toContain("repo/app:1.0");
 
     jobStream.emitProgress({
       job_id: "job-test",
@@ -1122,8 +1131,8 @@ describe("mutating WebUI views", () => {
     expect(wrapper.find(".apply-job-panel").text()).toContain("Pull images");
     expect(wrapper.find(".apply-job-panel").text()).toContain("Running");
     expect(wrapper.find(".apply-job-panel").text()).toContain("media");
-    expect(wrapper.find('[role="dialog"]').text()).toContain("Running: Pull images");
-    expect(wrapper.find('[role="dialog"]').text()).toContain("media / calibre / lines 1");
+    expect(wrapper.find(".apply-job-panel").text()).toContain("Running: Pull images");
+    expect(wrapper.find(".apply-job-panel").text()).toContain("media / calibre / lines 1");
 
     jobStream.emitLog(
       applyJobLogResponse({
@@ -1132,8 +1141,6 @@ describe("mutating WebUI views", () => {
     );
     await flushPromises();
 
-    expect(wrapper.find('[role="dialog"]').text()).toContain("Live log");
-    expect(wrapper.find('[role="dialog"]').text()).toContain("docker-update-from-wud-v2");
     expect(wrapper.find(".apply-job-panel").text()).toContain("docker-update-from-wud-v2");
 
     jobStream.emitJob(applyJobResponse({ status: "success", run_id: 10 }));
@@ -1146,7 +1153,8 @@ describe("mutating WebUI views", () => {
     expect(wrapper.find(".apply-job-panel").text()).toContain("Apply complete");
     expect(wrapper.find(".apply-job-panel").text()).toContain("repo/app:1.0");
     expect(wrapper.find(".apply-job-panel").text()).toContain("#10");
-    expect(wrapper.find('[role="dialog"]').text()).toContain("Update complete");
+    expect(wrapper.find(".apply-job-panel").text()).toContain("Update complete");
+    expect(wrapper.find(".apply-job-details").attributes("open")).toBe("");
   });
 
   it("keeps an earlier phase failure visible after a later same-phase success", async () => {
@@ -1207,7 +1215,7 @@ describe("mutating WebUI views", () => {
     expect(wrapper.find(".apply-job-panel").text()).toContain(
       "media / calibre / lines 1",
     );
-    expect(wrapper.find('[role="dialog"]').text()).toContain("Pull images failed");
+    expect(wrapper.find(".apply-job-panel").text()).toContain("Pull images failed");
 
     jobStream.emitJob(
       applyJobResponse({
@@ -1218,9 +1226,9 @@ describe("mutating WebUI views", () => {
     );
     await flushPromises();
 
-    expect(wrapper.find('[role="dialog"]').text()).toContain("Failed: Pull images");
-    expect(wrapper.find('[role="dialog"]').text()).toContain("[media] Pull failed.");
-    expect(wrapper.find('[role="dialog"]').text()).toContain(
+    expect(wrapper.find(".apply-job-panel").text()).toContain("Failed: Pull images");
+    expect(wrapper.find(".apply-job-panel").text()).toContain("[media] Pull failed.");
+    expect(wrapper.find(".apply-job-panel").text()).toContain(
       "media / calibre / lines 1",
     );
   });
@@ -1274,7 +1282,6 @@ describe("mutating WebUI views", () => {
     expect(loadRuns).toHaveBeenCalled();
     expect(jobStream.close).toHaveBeenCalled();
     expect(wrapper.find(".apply-job-panel").text()).toContain("fallback run log");
-    expect(wrapper.find('[role="dialog"]').text()).toContain("fallback run log");
   });
 
   it("loads the persisted run log for already-terminal apply job state", async () => {
@@ -1337,7 +1344,6 @@ describe("mutating WebUI views", () => {
       ?.trigger("click");
     await flushPromises();
 
-    expect(wrapper.find('[role="dialog"]').text()).toContain("Applying 1 update");
     expect(wrapper.find(".apply-job-panel").text()).toContain("running");
     expect(wrapper.find(".apply-job-panel").text()).toContain("repo/app:1.0");
 

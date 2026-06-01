@@ -1255,7 +1255,6 @@ a {
 }
 
 .apply-job-panel:focus-visible,
-.apply-job-modal h2:focus-visible,
 .apply-job-now:focus-visible {
   outline: 2px solid var(--color-border-hover);
   outline-offset: 3px;
@@ -1366,6 +1365,61 @@ a {
   font-style: normal;
   line-height: 1.35;
   overflow-wrap: anywhere;
+}
+
+.apply-job-latest-log {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 7px;
+  background: var(--color-surface);
+}
+
+.apply-job-latest-log span {
+  color: var(--color-muted-text);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.apply-job-latest-log code {
+  color: var(--color-code-text);
+  font-size: 0.82rem;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.apply-job-details {
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 7px;
+  background: var(--color-panel-tint);
+}
+
+.apply-job-details summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+  cursor: pointer;
+  list-style: none;
+}
+
+.apply-job-details summary::-webkit-details-marker {
+  display: none;
+}
+
+.apply-job-details summary span {
+  color: var(--color-ink);
+  font-weight: 700;
+}
+
+.apply-job-details[open] summary {
+  margin-bottom: 10px;
 }
 
 .apply-job-grid {
@@ -1537,10 +1591,6 @@ a {
   max-height: 260px;
   padding: 12px;
   border-color: transparent;
-}
-
-.apply-job-modal {
-  width: min(760px, calc(100vw - 32px));
 }
 
 @keyframes apply-job-progress {
