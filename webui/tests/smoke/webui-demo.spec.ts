@@ -27,14 +27,20 @@ test("static demo renders current pending state and completes apply flow", async
     .getByRole("button", { name: /Apply 1 update/ })
     .click();
 
-  const applyDialog = page.getByRole("dialog").filter({
-    hasText: "Apply complete",
-  });
-  await expect(applyDialog.getByRole("heading", { name: "Apply complete" })).toBeVisible();
-  await expect(applyDialog.getByText("docker-update-from-wud-v2")).toBeVisible();
+  const applyPanel = page.locator(".apply-job-panel");
+  await expect(applyPanel.getByRole("heading", { name: "Apply complete" })).toBeVisible();
+  await expect(applyPanel.locator(".apply-job-latest-log code")).toContainText(
+    "Done. See log",
+  );
+  await expect(applyPanel.locator(".apply-job-log-viewer")).toBeHidden();
+  await applyPanel.getByRole("button", { name: "Show output" }).click();
+  await expect(applyPanel.locator(".apply-job-log-viewer")).toBeVisible();
+  await expect(applyPanel.locator(".apply-job-log-viewer")).toContainText(
+    "docker-update-from-wud-v2",
+  );
   await expect(page.getByText("6 pending updates")).toBeVisible();
 
-  await applyDialog.getByRole("link", { name: "Details" }).click();
+  await applyPanel.getByRole("link", { name: "Details" }).click();
   await expect(page.getByRole("heading", { name: "#4" })).toBeVisible();
   await expect(page.getByText("Pending records")).toBeVisible();
 

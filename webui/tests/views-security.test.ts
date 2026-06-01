@@ -114,6 +114,7 @@ function mockApplyJobStream() {
   const close = vi.fn();
   let jobListener: ((event: MessageEvent<string>) => void) | null = null;
   let logListener: ((event: MessageEvent<string>) => void) | null = null;
+  let progressListener: ((event: MessageEvent<string>) => void) | null = null;
   vi.spyOn(webApi, "openJobStream").mockReturnValue({
     addEventListener: vi.fn((type: string, listener: EventListener) => {
       if (type === "job") {
@@ -121,6 +122,9 @@ function mockApplyJobStream() {
       }
       if (type === "log") {
         logListener = listener as (event: MessageEvent<string>) => void;
+      }
+      if (type === "progress") {
+        progressListener = listener as (event: MessageEvent<string>) => void;
       }
     }),
     close,
@@ -153,6 +157,15 @@ function mockApplyJobStream() {
         }),
       );
     },
+    emitProgress(
+      progress: ReturnType<typeof applyJobResponse>["progress"][number],
+    ): void {
+      progressListener?.(
+        new MessageEvent("progress", {
+          data: JSON.stringify(progress),
+        }),
+      );
+    },
     emitInvalidLog(): void {
       logListener?.(
         new MessageEvent("log", {
@@ -161,7 +174,11 @@ function mockApplyJobStream() {
       );
     },
     get observed(): boolean {
-      return jobListener !== null && logListener !== null;
+      return (
+        jobListener !== null &&
+        logListener !== null &&
+        progressListener !== null
+      );
     },
   };
 }
@@ -902,6 +919,118 @@ describe("mutating WebUI views", () => {
     expect(wrapper.find('[role="table"]').exists()).toBe(true);
   });
 
+  it("shows a pending loading skeleton before queue data is available", () => {
+    const { pinia, webui } = setupStores(true);
+    webui.pending = null;
+    webui.loading = true;
+    mockPendingLifecycle(webui);
+    const wrapper = mountWithApp(PendingView, { pinia });
+
+    expect(wrapper.text()).toContain("Loading pending updates");
+    expect(wrapper.find(".pending-loading-state").exists()).toBe(true);
+    expect(wrapper.find(".selection-toolbar").exists()).toBe(false);
+  });
+
+  it("keeps failed pending loads recoverable without showing stale selection controls", async () => {
+    const { pinia, webui } = setupStores(true);
+    webui.pending = null;
+    const loadPending = vi
+      .spyOn(webui, "loadPending")
+      .mockImplementationOnce(async () => {
+        webui.setError("Network request failed");
+        throw new Error("Network request failed");
+      })
+      .mockImplementationOnce(async () => {
+        webui.setError("");
+        webui.pending = pendingResponse();
+      });
+    vi.spyOn(webui, "loadReleaseNotes").mockResolvedValue();
+    vi.spyOn(webui, "refreshReleaseNotes").mockResolvedValue();
+    const wrapper = mountWithApp(PendingView, { pinia });
+
+    await flushPromises();
+
+    expect(wrapper.text()).toContain("Pending updates unavailable");
+    expect(wrapper.text()).toContain("Pending updates did not load");
+    expect(wrapper.text()).toContain("Network request failed");
+    expect(wrapper.find(".selection-toolbar").exists()).toBe(false);
+
+    await wrapper
+      .findAll("button")
+      .find((button) => button.text().includes("Retry pending load"))
+      ?.trigger("click");
+    await flushPromises();
+
+    expect(loadPending).toHaveBeenCalledTimes(2);
+    expect(wrapper.text()).toContain("1 pending update");
+    expect(wrapper.find(".selection-toolbar").exists()).toBe(true);
+  });
+
+  it("deduplicates malformed pending line keys before selecting all stack updates", async () => {
+    const itemOne = pendingGroupedItem({
+      line_no: 1,
+      image: "repo/app:1.0",
+      repo: "repo/app",
+    });
+    const itemTwo = pendingGroupedItem({
+      line_no: 2,
+      image: "repo/worker:1.0",
+      repo: "repo/worker",
+    });
+    const { pinia, webui } = setupStores(true);
+    webui.pending = {
+      ...pendingResponse([itemOne, itemTwo]),
+      grouping: {
+        ...pendingGrouping([itemOne, itemTwo]),
+        groups: [
+          {
+            ...pendingGrouping([itemOne, itemTwo]).groups[0],
+            line_numbers: [1, 1, 2],
+            items: [itemOne, itemTwo],
+          },
+        ],
+      },
+    };
+    mockPendingLifecycle(webui);
+    const wrapper = mountWithApp(PendingView, { pinia });
+
+    await wrapper
+      .findAll("button")
+      .find((button) => button.text().includes("Select all stack updates"))
+      ?.trigger("click");
+    await nextTick();
+
+    expect(wrapper.text()).toContain("2 selected");
+    expect(wrapper.text()).not.toContain("3 selected");
+  });
+
+  it("wraps long pending values in the fallback table", () => {
+    const longImage =
+      "registry.example.test/selfhosted/very-long-namespace-with-extra-segments/service-name-that-keeps-going:2026.06.01-build-with-extra-metadata";
+    const { pinia, webui } = setupStores(true);
+    webui.pending = {
+      ...pendingResponse([
+        pendingItem({
+          image: longImage,
+          repo: "registry.example.test/selfhosted/very-long-namespace-with-extra-segments/service-name-that-keeps-going",
+        }),
+      ]),
+      grouping: {
+        status: "unavailable",
+        groups: [],
+        unmatched: [],
+        warnings: [],
+      },
+    };
+    mockPendingLifecycle(webui);
+    const wrapper = mountWithApp(PendingView, { pinia });
+
+    const wrappedValues = wrapper.findAll(".pending-table-value");
+    expect(wrappedValues.length).toBeGreaterThanOrEqual(2);
+    expect(wrappedValues[0].text()).toContain(longImage);
+    expect(wrappedValues[0].attributes("title")).toBe(longImage);
+  });
+
   it("renders a clear queue state when no pending updates remain", () => {
     const { pinia, webui } = setupStores(true);
     webui.pending = pendingResponse([]);
@@ -1028,8 +1157,12 @@ describe("mutating WebUI views", () => {
   it("creates an apply job only after explicit confirmation", async () => {
     const { pinia, webui } = setupStores(true);
     webui.pending = pendingResponse();
+    let pendingRefreshRemovesSelection = false;
     const loadPending = vi.spyOn(webui, "loadPending").mockImplementation(async () => {
       webui.plan = null;
+      if (pendingRefreshRemovesSelection) {
+        webui.pending = pendingResponse([]);
+      }
     });
     const loadReleaseNotes = vi.spyOn(webui, "loadReleaseNotes").mockResolvedValue();
     const refreshReleaseNotes = vi
@@ -1044,6 +1177,9 @@ describe("mutating WebUI views", () => {
       webui.setApplyJob(job);
       return job;
     });
+    const focus = vi
+      .spyOn(HTMLElement.prototype, "focus")
+      .mockImplementation(() => undefined);
     const jobStream = mockApplyJobStream();
     const wrapper = mountWithApp(PendingView, { pinia });
 
@@ -1066,9 +1202,53 @@ describe("mutating WebUI views", () => {
     expect(jobStream.observed).toBe(true);
     await flushPromises();
 
-    expect(wrapper.find('[role="dialog"]').text()).toContain("Applying 1 update");
-    expect(wrapper.find(".apply-job-panel").text()).toContain("Applying 1 update");
-    expect(wrapper.find(".apply-job-panel").text()).toContain("repo/app:1.0");
+    expect(wrapper.find('[role="dialog"]').exists()).toBe(false);
+    const applyPanel = wrapper.find(".apply-job-panel");
+    expect(applyPanel.text()).toContain("Applying 1 update");
+    expect(applyPanel.text()).toContain("Current status");
+    expect(applyPanel.text()).toContain("Queued to start");
+    expect(applyPanel.text()).toContain("Latest log line");
+    expect(applyPanel.text()).toContain("Applied scope");
+    const panel = applyPanel.element;
+    const panelStatus = wrapper.find("#apply-job-panel-status").element;
+    const panelLatestLog = wrapper.find(
+      '[aria-labelledby="apply-job-latest-log-title"]',
+    ).element;
+    const panelProgress = wrapper.find(
+      '[aria-labelledby="apply-job-progress-title"]',
+    ).element;
+    const panelDetails = wrapper.find(".apply-job-details").element;
+    expect(focus.mock.contexts).toContain(panel);
+    expect(
+      Boolean(panelStatus.compareDocumentPosition(panelLatestLog) & Node.DOCUMENT_POSITION_FOLLOWING),
+    ).toBe(true);
+    expect(
+      Boolean(panelLatestLog.compareDocumentPosition(panelProgress) & Node.DOCUMENT_POSITION_FOLLOWING),
+    ).toBe(true);
+    expect(
+      Boolean(panelProgress.compareDocumentPosition(panelDetails) & Node.DOCUMENT_POSITION_FOLLOWING),
+    ).toBe(true);
+    expect(wrapper.find(".apply-job-details").attributes("open")).toBeUndefined();
+    expect(applyPanel.text()).toContain("repo/app:1.0");
+
+    jobStream.emitProgress({
+      job_id: "job-test",
+      phase: "pull",
+      status: "running",
+      message: "[media] Pulling selected image updates.",
+      created_at: "2026-05-28T12:00:01+00:00",
+      stack: "media",
+      services: ["calibre"],
+      line_numbers: [1],
+    });
+    await flushPromises();
+
+    expect(wrapper.find(".apply-job-panel").text()).toContain("Update progress");
+    expect(wrapper.find(".apply-job-panel").text()).toContain("Pull images");
+    expect(wrapper.find(".apply-job-panel").text()).toContain("Running");
+    expect(wrapper.find(".apply-job-panel").text()).toContain("media");
+    expect(wrapper.find(".apply-job-panel").text()).toContain("Running: Pull images");
+    expect(wrapper.find(".apply-job-panel").text()).toContain("media / calibre / lines 1");
 
     jobStream.emitLog(
       applyJobLogResponse({
@@ -1077,10 +1257,9 @@ describe("mutating WebUI views", () => {
     );
     await flushPromises();
 
-    expect(wrapper.find('[role="dialog"]').text()).toContain("Live log");
-    expect(wrapper.find('[role="dialog"]').text()).toContain("docker-update-from-wud-v2");
     expect(wrapper.find(".apply-job-panel").text()).toContain("docker-update-from-wud-v2");
 
+    pendingRefreshRemovesSelection = true;
     jobStream.emitJob(applyJobResponse({ status: "success", run_id: 10 }));
     await flushPromises();
 
@@ -1091,6 +1270,104 @@ describe("mutating WebUI views", () => {
     expect(wrapper.find(".apply-job-panel").text()).toContain("Apply complete");
     expect(wrapper.find(".apply-job-panel").text()).toContain("repo/app:1.0");
     expect(wrapper.find(".apply-job-panel").text()).toContain("#10");
+    expect(wrapper.find(".apply-job-panel").text()).toContain("Update complete");
+    expect(wrapper.find(".apply-job-details").attributes("open")).toBe("");
+    expect(wrapper.find(".apply-job-live-log-body").attributes("style")).toContain(
+      "display: none",
+    );
+    const showOutputButton = wrapper
+      .findAll("button")
+      .find((button) => button.text().includes("Show output"));
+    if (!showOutputButton) {
+      throw new Error("Missing completed live log toggle");
+    }
+    expect(showOutputButton.attributes("aria-expanded")).toBe("false");
+    await showOutputButton.trigger("click");
+    await nextTick();
+    expect(
+      wrapper.find(".apply-job-live-log-body").attributes("style") ?? "",
+    ).not.toContain("display: none");
+    expect(wrapper.find(".apply-job-log-viewer").text()).toContain(
+      "docker-update-from-wud-v2",
+    );
+    expect(showOutputButton.attributes("aria-expanded")).toBe("true");
+    expect(wrapper.find(".batch-action-bar").exists()).toBe(false);
+  });
+
+  it("keeps an earlier phase failure visible after a later same-phase success", async () => {
+    const { pinia, webui } = setupStores(true);
+    webui.pending = pendingResponse();
+    mockPendingLifecycle(webui);
+    vi.spyOn(webui, "loadRuns").mockResolvedValue();
+    vi.spyOn(webui, "createPlan").mockImplementation(async () => {
+      webui.plan = planResponse();
+    });
+    vi.spyOn(webui, "createJob").mockImplementation(async () => {
+      const job = applyJobResponse();
+      webui.setApplyJob(job);
+      return job;
+    });
+    const jobStream = mockApplyJobStream();
+    const wrapper = mountWithApp(PendingView, { pinia });
+
+    await wrapper
+      .findAll("button")
+      .find((button) => button.text().includes("Preview media plan"))
+      ?.trigger("click");
+    await flushPromises();
+    await wrapper
+      .find('[role="dialog"]')
+      .findAll("button")
+      .find((button) => button.text().includes("Apply 1 update"))
+      ?.trigger("click");
+    await flushPromises();
+
+    const failedPull = {
+      job_id: "job-test",
+      phase: "pull",
+      status: "failure" as const,
+      message: "[media] Pull failed.",
+      created_at: "2026-05-28T12:00:02+00:00",
+      stack: "media",
+      services: ["calibre"],
+      line_numbers: [1],
+    };
+    const laterPullSuccess = {
+      job_id: "job-test",
+      phase: "pull",
+      status: "success" as const,
+      message: "[infra] Images pulled and verified.",
+      created_at: "2026-05-28T12:00:03+00:00",
+      stack: "infra",
+      services: ["watchtower"],
+      line_numbers: [2],
+    };
+
+    jobStream.emitProgress(failedPull);
+    jobStream.emitProgress(laterPullSuccess);
+    await flushPromises();
+
+    expect(wrapper.find(".apply-job-panel").text()).toContain("Pull images failed");
+    expect(wrapper.find(".apply-job-panel").text()).toContain("[media] Pull failed.");
+    expect(wrapper.find(".apply-job-panel").text()).toContain(
+      "media / calibre / lines 1",
+    );
+    expect(wrapper.find(".apply-job-panel").text()).toContain("Pull images failed");
+
+    jobStream.emitJob(
+      applyJobResponse({
+        status: "failure",
+        error: "updater exited with status 1",
+        progress: [failedPull, laterPullSuccess],
+      }),
+    );
+    await flushPromises();
+
+    expect(wrapper.find(".apply-job-panel").text()).toContain("Failed: Pull images");
+    expect(wrapper.find(".apply-job-panel").text()).toContain("[media] Pull failed.");
+    expect(wrapper.find(".apply-job-panel").text()).toContain(
+      "media / calibre / lines 1",
+    );
   });
 
   it("loads the persisted run log when the job stream ends without live log content", async () => {
@@ -1142,7 +1419,22 @@ describe("mutating WebUI views", () => {
     expect(loadRuns).toHaveBeenCalled();
     expect(jobStream.close).toHaveBeenCalled();
     expect(wrapper.find(".apply-job-panel").text()).toContain("fallback run log");
-    expect(wrapper.find('[role="dialog"]').text()).toContain("fallback run log");
+    expect(wrapper.find(".apply-job-live-log-body").attributes("style")).toContain(
+      "display: none",
+    );
+
+    const showOutputButton = wrapper
+      .findAll("button")
+      .find((button) => button.text().includes("Show output"));
+    if (!showOutputButton) {
+      throw new Error("Missing completed live log toggle");
+    }
+    await showOutputButton.trigger("click");
+    await nextTick();
+    expect(
+      wrapper.find(".apply-job-live-log-body").attributes("style") ?? "",
+    ).not.toContain("display: none");
+    expect(wrapper.find(".apply-job-log-viewer").text()).toContain("fallback run log");
   });
 
   it("loads the persisted run log for already-terminal apply job state", async () => {
@@ -1170,6 +1462,24 @@ describe("mutating WebUI views", () => {
 
     expect(runLog).toHaveBeenCalledWith(10, 65_536);
     expect(wrapper.find(".apply-job-panel").text()).toContain(
+      "existing terminal run log",
+    );
+    expect(wrapper.find(".apply-job-live-log-body").attributes("style")).toContain(
+      "display: none",
+    );
+
+    const showOutputButton = wrapper
+      .findAll("button")
+      .find((button) => button.text().includes("Show output"));
+    if (!showOutputButton) {
+      throw new Error("Missing completed live log toggle");
+    }
+    await showOutputButton.trigger("click");
+    await nextTick();
+    expect(
+      wrapper.find(".apply-job-live-log-body").attributes("style") ?? "",
+    ).not.toContain("display: none");
+    expect(wrapper.find(".apply-job-log-viewer").text()).toContain(
       "existing terminal run log",
     );
   });
@@ -1205,7 +1515,6 @@ describe("mutating WebUI views", () => {
       ?.trigger("click");
     await flushPromises();
 
-    expect(wrapper.find('[role="dialog"]').text()).toContain("Applying 1 update");
     expect(wrapper.find(".apply-job-panel").text()).toContain("running");
     expect(wrapper.find(".apply-job-panel").text()).toContain("repo/app:1.0");
 

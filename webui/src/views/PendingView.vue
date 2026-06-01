@@ -5,6 +5,8 @@ import {
   AlertTriangle,
   Check,
   CheckCircle2,
+  ChevronDown,
+  ChevronUp,
   ExternalLink,
   Play,
   Trash2,
@@ -25,6 +27,7 @@ import {
 import {
   webApi,
   type ApplyJobLogResponse,
+  type ApplyJobProgressEvent,
   type ApplyJobResponse,
   type PendingGroupedItem,
   type PendingItem,
@@ -50,12 +53,10 @@ const tagOverrides = ref<Record<number, string>>({});
 const showPreflightModal = ref(false);
 const showCleanupModal = ref(false);
 const showRemovalModal = ref(false);
-const showApplyJobModal = ref(false);
 const jobEventSource = ref<EventSource | null>(null);
 const applyJobPanelRef = ref<HTMLElement | null>(null);
-const applyJobModalTitleRef = ref<HTMLElement | null>(null);
 const applyJobPanelLogRef = ref<HTMLElement | null>(null);
-const applyJobModalLogRef = ref<HTMLElement | null>(null);
+const applyJobLiveLogExpanded = ref(true);
 const applyJobRunLogFallbackRunId = ref<number | null>(null);
 const terminalJobStatuses = new Set<ApplyJobResponse["status"]>([
   "success",
@@ -88,14 +89,73 @@ type ApplyJobPlanSnapshot = {
   lines: ApplyJobSnapshotLine[];
 };
 
+type ApplyJobProgressPhase = {
+  key: string;
+  label: string;
+  waitingMessage: string;
+};
+
+type ApplyJobProgressStep = ApplyJobProgressPhase & {
+  status: "pending" | ApplyJobProgressEvent["status"];
+  statusLabel: string;
+  message: string;
+  detail: string;
+  event: ApplyJobProgressEvent | null;
+};
+
+const applyJobProgressPhases: ApplyJobProgressPhase[] = [
+  {
+    key: "preflight",
+    label: "Preflight",
+    waitingMessage: "Waiting to validate the pending file and Compose state.",
+  },
+  {
+    key: "pull",
+    label: "Pull images",
+    waitingMessage: "Waiting for image pulls to begin.",
+  },
+  {
+    key: "recreate",
+    label: "Recreate",
+    waitingMessage: "Waiting to recreate selected services.",
+  },
+  {
+    key: "health",
+    label: "Health wait",
+    waitingMessage: "Waiting for container health checks.",
+  },
+  {
+    key: "cleanup",
+    label: "Cleanup",
+    waitingMessage: "Waiting to reconcile the pending file.",
+  },
+  {
+    key: "completion",
+    label: "Complete",
+    waitingMessage: "Waiting for the updater result.",
+  },
+];
+
 const updateIntent = ref<UpdateIntent | null>(null);
 const applyJobSnapshot = ref<ApplyJobPlanSnapshot | null>(null);
 
 const columns = computed<DataTableColumns<PendingItem>>(() => [
   { type: "selection", width: 48 },
   { title: "Line", key: "line_no", width: 80 },
-  { title: "Image", key: "image", minWidth: 240 },
-  { title: "Repository", key: "repo", minWidth: 200 },
+  {
+    title: "Image",
+    key: "image",
+    minWidth: 240,
+    render: (row) =>
+      h("code", { class: "pending-table-value", title: row.image }, row.image),
+  },
+  {
+    title: "Repository",
+    key: "repo",
+    minWidth: 200,
+    render: (row) =>
+      h("span", { class: "pending-table-value", title: row.repo }, row.repo),
+  },
   {
     title: "Current tag",
     key: "current_tag",
@@ -138,7 +198,7 @@ const columns = computed<DataTableColumns<PendingItem>>(() => [
 ]);
 
 const allLineNumbers = computed(
-  () => webui.pending?.items.map((item) => item.line_no) ?? [],
+  () => uniqueSorted(webui.pending?.items.map((item) => item.line_no) ?? []),
 );
 const groupingReady = computed(
   () => webui.pending?.grouping.status === "ready",
@@ -151,6 +211,20 @@ const unmatchedItems = computed(() =>
 );
 const stackLineNumbers = computed(() =>
   uniqueSorted(stackGroups.value.flatMap((group) => group.line_numbers)),
+);
+const pendingLoaded = computed(() => webui.pending !== null);
+const pendingLoadFailed = computed(
+  () => !pendingLoaded.value && !webui.loading && Boolean(webui.error),
+);
+const pendingLoading = computed(
+  () => !pendingLoaded.value && !pendingLoadFailed.value,
+);
+const pendingHeadingText = computed(() =>
+  webui.pending
+    ? pluralize(webui.pending.count, "pending update")
+    : pendingLoadFailed.value
+      ? "Pending updates unavailable"
+      : "Loading pending updates",
 );
 const selectableLineNumbers = computed(() =>
   groupingReady.value ? stackLineNumbers.value : allLineNumbers.value,
@@ -450,6 +524,25 @@ const applyJobLogText = computed(() => webui.applyJobLog?.content ?? "");
 const applyJobLogTitle = computed(
   () => webui.applyJobLog?.log_file || webui.applyJob?.log_file || "Live log",
 );
+const applyJobLiveLogVisible = computed(
+  () => applyJobActive.value || applyJobLiveLogExpanded.value,
+);
+const applyJobLiveLogToggleLabel = computed(() =>
+  applyJobLiveLogExpanded.value ? "Hide live log output" : "Show live log output",
+);
+const applyJobLatestLogLine = computed(() => {
+  const lines = applyJobLogText.value
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  return lines.at(-1) ?? "";
+});
+const applyJobLatestLogMessage = computed(() => {
+  if (applyJobLatestLogLine.value) {
+    return applyJobLatestLogLine.value;
+  }
+  return applyJobActive.value ? "Waiting for log output." : "No log output captured.";
+});
 const applyJobLogEmptyMessage = computed(() =>
   applyJobActive.value ? "Waiting for log output." : "No live log was captured.",
 );
@@ -460,9 +553,193 @@ const applyJobLogWaiting = computed(() => {
   }
   return !log.exists && !log.content;
 });
+const displayApplyJobProgressByPhase = computed(() => {
+  const displayEvents = new Map<string, ApplyJobProgressEvent>();
+  for (const event of webui.applyJob?.progress ?? []) {
+    displayEvents.set(
+      event.phase,
+      displayProgressEvent(displayEvents.get(event.phase) ?? null, event),
+    );
+  }
+  return displayEvents;
+});
+const applyJobProgressSteps = computed<ApplyJobProgressStep[]>(() =>
+  applyJobProgressPhases.map((phase) => {
+    const event = displayApplyJobProgressByPhase.value.get(phase.key) ?? null;
+    const status = event?.status ?? "pending";
+    return {
+      ...phase,
+      status,
+      statusLabel: progressStatusLabel(status),
+      message: event?.message || phase.waitingMessage,
+      detail: progressEventDetail(event),
+      event,
+    };
+  }),
+);
+const applyJobProgressSummary = computed(() => {
+  const progress = webui.applyJob?.progress ?? [];
+  if (!progress.length) {
+    return applyJobActive.value ? "Starting" : "No progress events";
+  }
+  const failed = applyJobProgressSteps.value.find((step) => step.status === "failure");
+  if (failed) {
+    return `${failed.label} failed`;
+  }
+  const running = applyJobProgressSteps.value.find((step) => step.status === "running");
+  if (running) {
+    return running.label;
+  }
+  const complete = displayApplyJobProgressByPhase.value.get("completion");
+  if (complete?.status === "success") {
+    return "Complete";
+  }
+  return `${progress.length} updates`;
+});
+const applyJobCurrentStep = computed<ApplyJobProgressStep | null>(() => {
+  const failed = applyJobProgressSteps.value.find((step) => step.status === "failure");
+  if (failed) {
+    return failed;
+  }
+  const running = applyJobProgressSteps.value.find((step) => step.status === "running");
+  if (running) {
+    return running;
+  }
+  const completion = displayApplyJobProgressByPhase.value.get("completion");
+  if (completion?.status === "success") {
+    return (
+      applyJobProgressSteps.value.find((step) => step.key === "completion") ?? null
+    );
+  }
+  return [...applyJobProgressSteps.value].reverse().find((step) => step.event) ?? null;
+});
+const applyJobNowTitle = computed(() => {
+  if (!webui.applyJob) {
+    return "";
+  }
+  const step = applyJobCurrentStep.value;
+  if (webui.applyJob.status === "failure") {
+    return step ? `Failed: ${step.label}` : "Apply failed";
+  }
+  if (webui.applyJob.status === "success") {
+    return "Update complete";
+  }
+  if (step?.status === "running") {
+    return `Running: ${step.label}`;
+  }
+  if (step?.status === "success") {
+    return `Completed: ${step.label}`;
+  }
+  if (webui.applyJob.status === "queued") {
+    return "Queued to start";
+  }
+  return "Starting updater";
+});
+const applyJobNowMessage = computed(() => {
+  if (!webui.applyJob) {
+    return "";
+  }
+  if (webui.applyJob.status === "failure" && webui.applyJob.error) {
+    return webui.applyJob.error;
+  }
+  return applyJobCurrentStep.value?.message || applyJobStatusMessage.value;
+});
+const applyJobNowDetail = computed(() =>
+  applyJobCurrentStep.value?.detail || applyJobImpactLabel.value,
+);
+const applyJobNowDescriptionIds = computed(() =>
+  applyJobNowDetail.value
+    ? "apply-job-now-message apply-job-now-detail"
+    : "apply-job-now-message",
+);
+const applyJobNowStatusLabel = computed(() => {
+  if (webui.applyJob?.status === "success") {
+    return "Complete";
+  }
+  if (webui.applyJob?.status === "failure") {
+    return "Failed";
+  }
+  return applyJobProgressSummary.value;
+});
+const applyJobPanelStatusLabel = computed(() => {
+  if (webui.applyJob?.status === "queued") {
+    return "Queued";
+  }
+  if (webui.applyJob?.status === "running") {
+    return "Running";
+  }
+  if (webui.applyJob?.status === "success") {
+    return "Complete";
+  }
+  if (webui.applyJob?.status === "failure") {
+    return "Failed";
+  }
+  return "Job";
+});
 
 function rowKey(row: PendingItem): number {
   return row.line_no;
+}
+
+function progressStatusLabel(status: ApplyJobProgressStep["status"]): string {
+  if (status === "running") {
+    return "Running";
+  }
+  if (status === "success") {
+    return "Done";
+  }
+  if (status === "failure") {
+    return "Failed";
+  }
+  if (status === "skipped") {
+    return "Skipped";
+  }
+  return "Waiting";
+}
+
+function progressTagType(
+  status: ApplyJobProgressStep["status"],
+): "default" | "success" | "warning" | "error" {
+  if (status === "success") {
+    return "success";
+  }
+  if (status === "running") {
+    return "warning";
+  }
+  if (status === "failure") {
+    return "error";
+  }
+  return "default";
+}
+
+function displayProgressEvent(
+  current: ApplyJobProgressEvent | null,
+  next: ApplyJobProgressEvent,
+): ApplyJobProgressEvent {
+  if (!current || current.status !== "failure") {
+    return next;
+  }
+  if (next.status === "failure") {
+    return next;
+  }
+  return current;
+}
+
+function progressEventDetail(event: ApplyJobProgressEvent | null): string {
+  if (!event) {
+    return "";
+  }
+  const parts = [];
+  if (event.stack) {
+    parts.push(event.stack);
+  }
+  if (event.services.length) {
+    parts.push(event.services.join(", "));
+  }
+  if (event.line_numbers.length) {
+    parts.push(`lines ${event.line_numbers.join(", ")}`);
+  }
+  return parts.join(" / ");
 }
 
 function displayValue(value: string): string {
@@ -649,10 +926,9 @@ function updateTagOverride(item: PendingItem, value: string): void {
 }
 
 function updateCheckedRowKeys(keys: DataTableRowKey[]): void {
-  selectedLineNumbers.value = keys
-    .map((key) => Number(key))
-    .filter((key) => Number.isFinite(key))
-    .sort((left, right) => left - right);
+  selectedLineNumbers.value = uniqueSorted(
+    keys.map((key) => Number(key)).filter((key) => Number.isFinite(key)),
+  );
   clearPreflight();
 }
 
@@ -866,10 +1142,9 @@ async function confirmApply(): Promise<void> {
   );
   applyJobSnapshot.value = snapshot;
   subscribeApplyJob(job.job_id);
-  showApplyJobModal.value = true;
   showPreflightModal.value = false;
   updateIntent.value = null;
-  await focusApplyJobModal();
+  await focusApplyJobPanel();
 }
 
 function subscribeApplyJob(jobId: string): void {
@@ -878,6 +1153,9 @@ function subscribeApplyJob(jobId: string): void {
   jobEventSource.value = source;
   source.addEventListener("job", (event) => {
     void handleJobEvent(event as MessageEvent<string>);
+  });
+  source.addEventListener("progress", (event) => {
+    handleJobProgressEvent(event as MessageEvent<string>);
   });
   source.addEventListener("log", (event) => {
     void handleJobLogEvent(event as MessageEvent<string>);
@@ -909,6 +1187,28 @@ async function handleJobEvent(event: MessageEvent<string>): Promise<void> {
   await refreshAfterTerminalJob();
 }
 
+function handleJobProgressEvent(event: MessageEvent<string>): void {
+  let progress: ApplyJobProgressEvent;
+  try {
+    progress = JSON.parse(event.data) as ApplyJobProgressEvent;
+  } catch {
+    webui.setError("Job progress stream returned invalid data.");
+    return;
+  }
+  const job = webui.applyJob;
+  if (!job || job.job_id !== progress.job_id) {
+    return;
+  }
+  const progressEvents = job.progress ?? [];
+  if (progressEvents.some((item) => progressEventKey(item) === progressEventKey(progress))) {
+    return;
+  }
+  webui.setApplyJob({
+    ...job,
+    progress: [...progressEvents, progress],
+  });
+}
+
 async function loadTerminalApplyJobLogIfMissing(
   job: ApplyJobResponse | null = webui.applyJob,
 ): Promise<void> {
@@ -933,20 +1233,26 @@ async function handleJobLogEvent(event: MessageEvent<string>): Promise<void> {
     return;
   }
   const panelShouldScroll = shouldAutoScrollLog(applyJobPanelLogRef.value);
-  const modalShouldScroll = shouldAutoScrollLog(applyJobModalLogRef.value);
   webui.setApplyJobLog(log);
   await nextTick();
   if (panelShouldScroll) {
     scrollLogToBottom(applyJobPanelLogRef.value);
-  }
-  if (modalShouldScroll) {
-    scrollLogToBottom(applyJobModalLogRef.value);
   }
 }
 
 function closeJobStream(): void {
   jobEventSource.value?.close();
   jobEventSource.value = null;
+}
+
+function progressEventKey(event: ApplyJobProgressEvent): string {
+  return [
+    event.created_at,
+    event.phase,
+    event.status,
+    event.stack,
+    event.message,
+  ].join("\u0000");
 }
 
 async function recoverOrRefreshApplyJob(jobId: string): Promise<void> {
@@ -1015,27 +1321,17 @@ function createApplyJobSnapshot(): ApplyJobPlanSnapshot | null {
   };
 }
 
-async function focusApplyJobModal(): Promise<void> {
-  await nextTick();
-  applyJobModalTitleRef.value?.focus({ preventScroll: true });
-}
-
 async function focusApplyJobPanel(): Promise<void> {
   await nextTick();
   const panel = applyJobPanelRef.value;
   if (!panel) {
     return;
   }
-  panel.scrollIntoView({
+  panel.scrollIntoView?.({
     block: "start",
     behavior: prefersReducedMotion() ? "auto" : "smooth",
   });
   panel.focus({ preventScroll: true });
-}
-
-function closeApplyJobModal(): void {
-  showApplyJobModal.value = false;
-  void focusApplyJobPanel();
 }
 
 function shouldAutoScrollLog(element: HTMLElement | null): boolean {
@@ -1174,8 +1470,12 @@ async function loadPendingAndReleaseNotes(
   void webui.refreshReleaseNotes().catch(() => undefined);
 }
 
+async function retryPendingLoad(): Promise<void> {
+  await loadPendingAndReleaseNotes().catch(() => undefined);
+}
+
 onMounted(() => {
-  void loadPendingAndReleaseNotes();
+  void retryPendingLoad();
   void reconnectObservedApplyJob();
 });
 
@@ -1183,12 +1483,17 @@ watch(
   () => webui.pending?.items ?? [],
   (items) => {
     const next: Record<number, string> = {};
+    const pendingLineNumbers = new Set<number>();
     for (const item of items) {
+      pendingLineNumbers.add(item.line_no);
       if (item.desired_tag) {
         next[item.line_no] = tagOverrides.value[item.line_no] ?? item.desired_tag;
       }
     }
     tagOverrides.value = next;
+    selectedLineNumbers.value = uniqueSorted(
+      selectedLineNumbers.value.filter((lineNo) => pendingLineNumbers.has(lineNo)),
+    );
   },
   { immediate: true },
 );
@@ -1198,18 +1503,19 @@ onUnmounted(() => {
 });
 
 watch(
-  () => webui.applyJob?.job_id ?? "",
-  (jobId) => {
-    if (!jobId) {
-      showApplyJobModal.value = false;
-    }
-  },
-);
-
-watch(
   () => [webui.applyJob?.status, webui.applyJob?.run_id] as const,
   () => {
     void loadTerminalApplyJobLogIfMissing();
+  },
+  { immediate: true },
+);
+
+watch(
+  () => webui.applyJob?.status,
+  (status) => {
+    applyJobLiveLogExpanded.value = status
+      ? !terminalJobStatuses.has(status)
+      : true;
   },
   { immediate: true },
 );
@@ -1285,109 +1591,194 @@ watch(
             {{ applyJobStatusMessage }}
           </p>
         </div>
-        <n-tag :type="applyJobAlertType">{{ webui.applyJob.status }}</n-tag>
+        <n-tag :type="applyJobAlertType">{{ applyJobPanelStatusLabel }}</n-tag>
       </div>
 
       <div v-if="applyJobActive" class="apply-job-progress" aria-hidden="true">
         <span />
       </div>
 
-      <div class="apply-job-grid">
-        <div class="compact-list">
-          <div class="list-row">
-            <span>Updates</span>
-            <strong>{{ applyJobUpdateLabel }}</strong>
-            <em>{{ applyJobStartedLabel }}</em>
-          </div>
-          <div v-if="applyJobImpactLabel" class="list-row">
-            <span>Impact</span>
-            <strong>{{ applyJobImpactLabel }}</strong>
-            <em>{{ applyJobSnapshot?.sourceFile }}</em>
-          </div>
-          <div v-if="webui.applyJob.run_id" class="list-row">
-            <span>Run</span>
-            <strong>#{{ webui.applyJob.run_id }}</strong>
-            <em class="inline-actions">
-              <RouterLink
-                class="text-link"
-                :to="{ name: 'run-detail', params: { id: webui.applyJob.run_id } }"
-              >
-                Details
-              </RouterLink>
-              <RouterLink
-                class="text-link"
-                :to="{ name: 'run-log', params: { id: webui.applyJob.run_id } }"
-              >
-                Log
-              </RouterLink>
-            </em>
-          </div>
+      <section
+        id="apply-job-panel-status"
+        class="apply-job-now"
+        :class="{
+          'apply-job-now-success': webui.applyJob.status === 'success',
+          'apply-job-now-failure': webui.applyJob.status === 'failure',
+        }"
+        role="status"
+        aria-live="polite"
+        aria-atomic="true"
+        tabindex="-1"
+        aria-labelledby="apply-job-now-title"
+        :aria-describedby="applyJobNowDescriptionIds"
+      >
+        <div class="apply-job-now-copy">
+          <span>Current status</span>
+          <strong id="apply-job-now-title">{{ applyJobNowTitle }}</strong>
+          <em id="apply-job-now-message">{{ applyJobNowMessage }}</em>
+          <small v-if="applyJobNowDetail" id="apply-job-now-detail">
+            {{ applyJobNowDetail }}
+          </small>
         </div>
+        <n-tag size="small" :type="applyJobAlertType">{{ applyJobNowStatusLabel }}</n-tag>
+      </section>
 
-        <section
-          class="apply-job-impact"
-          aria-labelledby="apply-job-impact-title"
-        >
-          <div class="apply-job-impact-heading">
-            <strong id="apply-job-impact-title">Services and images</strong>
-            <n-tag size="small">{{ pluralize(applyJobSnapshotLines.length, "service") }}</n-tag>
-          </div>
-          <div v-if="applyJobSnapshotLines.length" class="compact-list">
-            <div
-              v-for="line in applyJobSnapshotLines"
-              :key="line.key"
-              class="list-row plan-line-row"
-            >
-              <span>#{{ line.lineNo }}</span>
-              <strong>{{ line.serviceLabel }}</strong>
-              <em>
-                <span v-if="line.tagRewriteLabel" class="tag-rewrite-detail">
-                  <n-tag size="small" type="warning">Tag rewrite</n-tag>
-                  {{ line.tagRewriteLabel }}
-                </span>
-                <template v-else>
-                  <code>{{ line.composeImage }}</code>
-                  <span aria-hidden="true"> -> </span>
-                  <code>{{ line.targetImage }}</code>
-                </template>
+      <section class="apply-job-latest-log" aria-labelledby="apply-job-latest-log-title">
+        <span id="apply-job-latest-log-title">Latest log line</span>
+        <code>{{ applyJobLatestLogMessage }}</code>
+      </section>
+
+      <section class="apply-job-progress-steps" aria-labelledby="apply-job-progress-title">
+        <div class="apply-job-impact-heading">
+          <strong id="apply-job-progress-title">Update progress</strong>
+          <n-tag size="small">{{ applyJobProgressSummary }}</n-tag>
+        </div>
+        <ol class="apply-progress-list">
+          <li
+            v-for="step in applyJobProgressSteps"
+            :key="step.key"
+            class="apply-progress-step"
+            :class="`apply-progress-step-${step.status}`"
+          >
+            <span class="apply-progress-icon" aria-hidden="true">
+              <Check v-if="step.status === 'success'" :size="14" />
+              <X v-else-if="step.status === 'failure'" :size="14" />
+              <Play v-else-if="step.status === 'running'" :size="14" />
+            </span>
+            <span class="apply-progress-copy">
+              <strong>{{ step.label }}</strong>
+              <span>{{ step.message }}</span>
+              <em v-if="step.detail">{{ step.detail }}</em>
+            </span>
+            <n-tag size="small" :type="progressTagType(step.status)">
+              {{ step.statusLabel }}
+            </n-tag>
+          </li>
+        </ol>
+      </section>
+
+      <details class="apply-job-details" :open="!applyJobActive">
+        <summary>
+          <span>Applied scope</span>
+          <n-tag size="small">{{ applyJobImpactLabel || applyJobUpdateLabel }}</n-tag>
+        </summary>
+        <div class="apply-job-grid">
+          <div class="compact-list">
+            <div class="list-row">
+              <span>Updates</span>
+              <strong>{{ applyJobUpdateLabel }}</strong>
+              <em>{{ applyJobStartedLabel }}</em>
+            </div>
+            <div v-if="applyJobImpactLabel" class="list-row">
+              <span>Impact</span>
+              <strong>{{ applyJobImpactLabel }}</strong>
+              <em>{{ applyJobSnapshot?.sourceFile }}</em>
+            </div>
+            <div v-if="webui.applyJob.run_id" class="list-row">
+              <span>Run</span>
+              <strong>#{{ webui.applyJob.run_id }}</strong>
+              <em class="inline-actions">
+                <RouterLink
+                  class="text-link"
+                  :to="{ name: 'run-detail', params: { id: webui.applyJob.run_id } }"
+                >
+                  Details
+                </RouterLink>
+                <RouterLink
+                  class="text-link"
+                  :to="{ name: 'run-log', params: { id: webui.applyJob.run_id } }"
+                >
+                  Log
+                </RouterLink>
               </em>
             </div>
           </div>
-          <div v-else class="empty-state">
-            Plan details are unavailable after page reload.
-          </div>
-        </section>
-      </div>
+
+          <section
+            class="apply-job-impact"
+            aria-labelledby="apply-job-impact-title"
+          >
+            <div class="apply-job-impact-heading">
+              <strong id="apply-job-impact-title">Services and images</strong>
+              <n-tag size="small">{{ pluralize(applyJobSnapshotLines.length, "service") }}</n-tag>
+            </div>
+            <div v-if="applyJobSnapshotLines.length" class="compact-list">
+              <div
+                v-for="line in applyJobSnapshotLines"
+                :key="line.key"
+                class="list-row plan-line-row"
+              >
+                <span>#{{ line.lineNo }}</span>
+                <strong>{{ line.serviceLabel }}</strong>
+                <em>
+                  <span v-if="line.tagRewriteLabel" class="tag-rewrite-detail">
+                    <n-tag size="small" type="warning">Tag rewrite</n-tag>
+                    {{ line.tagRewriteLabel }}
+                  </span>
+                  <template v-else>
+                    <code>{{ line.composeImage }}</code>
+                    <span aria-hidden="true"> -> </span>
+                    <code>{{ line.targetImage }}</code>
+                  </template>
+                </em>
+              </div>
+            </div>
+            <div v-else class="empty-state">
+              Plan details are unavailable after page reload.
+            </div>
+          </section>
+        </div>
+      </details>
 
       <section class="apply-job-live-log" aria-labelledby="apply-job-log-title">
-        <div class="apply-job-impact-heading">
-          <strong id="apply-job-log-title">Live log</strong>
-          <span class="apply-job-log-path">{{ applyJobLogTitle }}</span>
+        <div class="apply-job-impact-heading apply-job-live-log-heading">
+          <div class="apply-job-log-heading-copy">
+            <strong id="apply-job-log-title">Live log</strong>
+            <span class="apply-job-log-note">Raw command output</span>
+            <span class="apply-job-log-path">{{ applyJobLogTitle }}</span>
+          </div>
+          <n-button
+            v-show="!applyJobActive"
+            class="apply-job-log-toggle"
+            size="small"
+            secondary
+            :aria-expanded="applyJobLiveLogExpanded"
+            :title="applyJobLiveLogToggleLabel"
+            @click="applyJobLiveLogExpanded = !applyJobLiveLogExpanded"
+          >
+            <template #icon>
+              <ChevronUp v-if="applyJobLiveLogExpanded" :size="16" />
+              <ChevronDown v-else :size="16" />
+            </template>
+            {{ applyJobLiveLogExpanded ? "Hide output" : "Show output" }}
+          </n-button>
         </div>
-        <n-alert
-          v-if="webui.applyJobLog?.truncated"
-          class="preflight-block"
-          type="warning"
-          :show-icon="false"
-        >
-          Showing the last {{ webui.applyJobLog.max_bytes }} bytes.
-        </n-alert>
-        <n-alert
-          v-if="webui.applyJobLog?.error"
-          class="preflight-block"
-          type="warning"
-          :show-icon="false"
-        >
-          Live log unavailable: {{ webui.applyJobLog.error }}
-        </n-alert>
-        <div v-if="applyJobLogWaiting" class="empty-state">
-          {{ applyJobLogEmptyMessage }}
+        <div v-show="applyJobLiveLogVisible" class="apply-job-live-log-body">
+          <n-alert
+            v-if="webui.applyJobLog?.truncated"
+            class="preflight-block"
+            type="warning"
+            :show-icon="false"
+          >
+            Showing the last {{ webui.applyJobLog.max_bytes }} bytes.
+          </n-alert>
+          <n-alert
+            v-if="webui.applyJobLog?.error"
+            class="preflight-block"
+            type="warning"
+            :show-icon="false"
+          >
+            Live log unavailable: {{ webui.applyJobLog.error }}
+          </n-alert>
+          <div v-if="applyJobLogWaiting" class="empty-state">
+            {{ applyJobLogEmptyMessage }}
+          </div>
+          <pre
+            v-else-if="!webui.applyJobLog?.error"
+            ref="applyJobPanelLogRef"
+            class="log-viewer apply-job-log-viewer"
+          >{{ applyJobLogText }}</pre>
         </div>
-        <pre
-          v-else-if="!webui.applyJobLog?.error"
-          ref="applyJobPanelLogRef"
-          class="log-viewer apply-job-log-viewer"
-        >{{ applyJobLogText }}</pre>
       </section>
 
       <n-alert
@@ -1404,7 +1795,7 @@ watch(
         <p class="eyebrow value-eyebrow pending-source" :title="pendingSourceFile">
           {{ pendingSourceDisplay }}
         </p>
-        <h2>{{ webui.pending?.count ?? 0 }} pending updates</h2>
+        <h2>{{ pendingHeadingText }}</h2>
       </div>
       <n-tag size="small" :type="mutationStateType">{{ mutationStateLabel }}</n-tag>
     </div>
@@ -1417,8 +1808,10 @@ watch(
       next-step="pending_preflight"
     >
       <div class="core-tour-facts">
-        <span>{{ pluralize(stackGroups.length, "stack") }} matched</span>
-        <span>{{ pluralize(unmatchedItems.length, "item") }} needs review</span>
+        <span v-if="pendingLoaded">{{ pluralize(stackGroups.length, "stack") }} matched</span>
+        <span v-else>Loading stack matches</span>
+        <span v-if="pendingLoaded">{{ pluralize(unmatchedItems.length, "item") }} needs review</span>
+        <span v-else>Waiting for pending file</span>
         <span>{{ mutationStateLabel }}</span>
       </div>
     </CoreUpdateTourPanel>
@@ -1441,7 +1834,7 @@ watch(
       next-to="/runs"
     />
 
-    <div class="selection-toolbar">
+    <div v-if="pendingLoaded" class="selection-toolbar">
       <div class="selection-summary">
         <strong>{{ selectedLineNumbers.length }} selected</strong>
         <span v-if="groupingReady">
@@ -1467,7 +1860,7 @@ watch(
       </div>
     </div>
 
-    <div v-if="selectedLineNumbers.length" class="batch-action-bar">
+    <div v-if="pendingLoaded && selectedLineNumbers.length" class="batch-action-bar">
       <div class="selection-summary">
         <strong>{{ batchSummaryLabel }}</strong>
         <span>
@@ -1929,6 +2322,31 @@ watch(
       </div>
     </template>
 
+    <section
+      v-else-if="pendingLoading"
+      class="pending-loading-state"
+      role="status"
+      aria-live="polite"
+      aria-label="Loading pending updates"
+    >
+      <span aria-hidden="true" class="settings-skeleton-row"></span>
+      <span aria-hidden="true" class="settings-skeleton-row"></span>
+      <span aria-hidden="true" class="settings-skeleton-row"></span>
+    </section>
+
+    <div
+      v-else-if="pendingLoadFailed"
+      class="empty-state pending-error-state"
+      role="alert"
+      aria-live="assertive"
+    >
+      <strong>Pending updates did not load</strong>
+      <span>Check the WebUI API connection, then try again.</span>
+      <n-button size="small" secondary :loading="webui.loading" @click="retryPendingLoad">
+        Retry pending load
+      </n-button>
+    </div>
+
     <n-modal
       v-if="webui.plan"
       v-model:show="showPreflightModal"
@@ -2305,161 +2723,6 @@ watch(
               <Trash2 :size="16" />
             </template>
             {{ removalConfirmButtonLabel }}
-          </n-button>
-        </div>
-      </section>
-    </n-modal>
-
-    <n-modal
-      v-if="webui.applyJob"
-      v-model:show="showApplyJobModal"
-      :mask-closable="false"
-    >
-      <section
-        class="preflight-modal apply-job-modal"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="apply-job-modal-title"
-      >
-        <div class="section-heading apply-job-heading">
-          <div>
-            <p class="eyebrow">Apply job</p>
-            <div class="apply-job-heading-title">
-              <span
-                v-if="applyJobSucceeded"
-                class="apply-job-complete-mark"
-                aria-hidden="true"
-              >
-                <CheckCircle2 :size="18" />
-              </span>
-              <h2
-                id="apply-job-modal-title"
-                ref="applyJobModalTitleRef"
-                tabindex="-1"
-              >
-                {{ applyJobTitle }}
-              </h2>
-            </div>
-            <p class="apply-job-summary" role="status" aria-live="polite">
-              {{ applyJobStatusMessage }}
-            </p>
-          </div>
-          <n-tag :type="applyJobAlertType">{{ webui.applyJob.status }}</n-tag>
-        </div>
-
-        <div v-if="applyJobActive" class="apply-job-progress" aria-hidden="true">
-          <span />
-        </div>
-
-        <div class="apply-job-grid">
-          <div class="compact-list">
-            <div class="list-row">
-              <span>Updates</span>
-              <strong>{{ applyJobUpdateLabel }}</strong>
-              <em>{{ applyJobStartedLabel }}</em>
-            </div>
-            <div v-if="applyJobImpactLabel" class="list-row">
-              <span>Impact</span>
-              <strong>{{ applyJobImpactLabel }}</strong>
-              <em>{{ applyJobSnapshot?.sourceFile }}</em>
-            </div>
-            <div v-if="webui.applyJob.run_id" class="list-row">
-              <span>Run</span>
-              <strong>#{{ webui.applyJob.run_id }}</strong>
-              <em class="inline-actions">
-                <RouterLink
-                  class="text-link"
-                  :to="{ name: 'run-detail', params: { id: webui.applyJob.run_id } }"
-                >
-                  Details
-                </RouterLink>
-                <RouterLink
-                  class="text-link"
-                  :to="{ name: 'run-log', params: { id: webui.applyJob.run_id } }"
-                >
-                  Log
-                </RouterLink>
-              </em>
-            </div>
-          </div>
-
-          <section
-            class="apply-job-impact"
-            aria-labelledby="apply-job-modal-impact-title"
-          >
-            <div class="apply-job-impact-heading">
-              <strong id="apply-job-modal-impact-title">Services and images</strong>
-              <n-tag size="small">{{ pluralize(applyJobSnapshotLines.length, "service") }}</n-tag>
-            </div>
-            <div v-if="applyJobSnapshotLines.length" class="compact-list">
-              <div
-                v-for="line in applyJobSnapshotLines"
-                :key="line.key"
-                class="list-row plan-line-row"
-              >
-                <span>#{{ line.lineNo }}</span>
-                <strong>{{ line.serviceLabel }}</strong>
-                <em>
-                  <span v-if="line.tagRewriteLabel" class="tag-rewrite-detail">
-                    <n-tag size="small" type="warning">Tag rewrite</n-tag>
-                    {{ line.tagRewriteLabel }}
-                  </span>
-                  <template v-else>
-                    <code>{{ line.composeImage }}</code>
-                    <span aria-hidden="true"> -> </span>
-                    <code>{{ line.targetImage }}</code>
-                  </template>
-                </em>
-              </div>
-            </div>
-            <div v-else class="empty-state">
-              Plan details are unavailable after page reload.
-            </div>
-          </section>
-        </div>
-
-        <section class="apply-job-live-log" aria-labelledby="apply-job-modal-log-title">
-          <div class="apply-job-impact-heading">
-            <strong id="apply-job-modal-log-title">Live log</strong>
-            <span class="apply-job-log-path">{{ applyJobLogTitle }}</span>
-          </div>
-          <n-alert
-            v-if="webui.applyJobLog?.truncated"
-            class="preflight-block"
-            type="warning"
-            :show-icon="false"
-          >
-            Showing the last {{ webui.applyJobLog.max_bytes }} bytes.
-          </n-alert>
-          <n-alert
-            v-if="webui.applyJobLog?.error"
-            class="preflight-block"
-            type="warning"
-            :show-icon="false"
-          >
-            Live log unavailable: {{ webui.applyJobLog.error }}
-          </n-alert>
-          <div v-if="applyJobLogWaiting" class="empty-state">
-            {{ applyJobLogEmptyMessage }}
-          </div>
-          <pre
-            v-else-if="!webui.applyJobLog?.error"
-            ref="applyJobModalLogRef"
-            class="log-viewer apply-job-log-viewer"
-          >{{ applyJobLogText }}</pre>
-        </section>
-
-        <n-alert
-          v-if="webui.applyJob.error"
-          class="preflight-block"
-          type="error"
-        >
-          {{ webui.applyJob.error }}
-        </n-alert>
-
-        <div class="preflight-footer">
-          <n-button size="small" quaternary @click="closeApplyJobModal">
-            {{ applyJobActive ? "View on page" : "Close" }}
           </n-button>
         </div>
       </section>
