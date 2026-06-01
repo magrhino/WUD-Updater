@@ -4,6 +4,14 @@ All notable changes to WUD-Updater are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com) and versions follow
 [Semantic Versioning](https://semver.org).
 
+## [0.31.2](https://github.com/magrhino/WUD-Updater/compare/v0.31.1...v0.31.2) (2026-06-01)
+
+
+### Bug Fixes
+
+* **ui:** improve login autofill handling ([9f37755](https://github.com/magrhino/WUD-Updater/commit/9f37755f4a947ad47277bd16408ac2f55d1a39a1))
+* **webui:** Recover GitHub release links from running GHCR containers ([#159](https://github.com/magrhino/WUD-Updater/issues/159)) ([4de5ea7](https://github.com/magrhino/WUD-Updater/commit/4de5ea77b138fd4039ca62a9bb12bc8e388758be))
+
 ## [0.31.1](https://github.com/magrhino/WUD-Updater/compare/v0.31.0...v0.31.1) (2026-06-01)
 
 
