@@ -1538,8 +1538,11 @@ watch(
                 :aria-label="`Select stack ${group.name}`"
                 @update:checked="toggleStack(group, Boolean($event))"
               >
-                <span class="sr-only">Select stack </span>
-                <strong :title="group.directory">{{ group.name }}</strong>
+                <span class="stack-checkbox-label">
+                  <span class="sr-only">Select stack </span>
+                  <span class="stack-checkbox-kicker" aria-hidden="true">Stack</span>
+                  <strong :title="group.directory">{{ group.name }}</strong>
+                </span>
               </n-checkbox>
               <div class="stack-identity" aria-label="Stack impact">
                 <span>

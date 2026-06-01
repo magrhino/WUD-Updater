@@ -1473,6 +1473,57 @@ a {
   overflow-wrap: anywhere;
 }
 
+.stack-title-block .n-checkbox__label {
+  padding-inline: 6px 0;
+}
+
+.stack-checkbox-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  box-sizing: border-box;
+  min-height: 30px;
+  padding: 5px 10px;
+  border: 1px solid
+    color-mix(
+      in srgb,
+      var(--color-border-hover) 42%,
+      var(--color-border-subtle)
+    );
+  border-radius: 7px;
+  background: color-mix(
+    in srgb,
+    var(--color-surface) 94%,
+    var(--color-action-blue) 6%
+  );
+  color: var(--color-text-secondary);
+  font-size: 0.875rem;
+  line-height: 1.35;
+  transition:
+    border-color var(--motion-base) var(--ease-out-quart),
+    background-color var(--motion-base) var(--ease-out-quart);
+}
+
+.stack-title-block .n-checkbox:hover .stack-checkbox-label {
+  border-color: var(--color-border-hover);
+  background: color-mix(
+    in srgb,
+    var(--color-surface) 90%,
+    var(--color-action-blue) 10%
+  );
+}
+
+.stack-checkbox-label strong {
+  color: var(--color-ink);
+}
+
+.stack-checkbox-kicker {
+  color: var(--color-muted-text);
+  font-size: 0.76rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
 .stack-path {
   color: var(--color-muted-text);
   font-size: 0.82rem;
