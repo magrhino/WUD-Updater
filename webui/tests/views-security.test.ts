@@ -1149,6 +1149,82 @@ describe("mutating WebUI views", () => {
     expect(wrapper.find('[role="dialog"]').text()).toContain("Update complete");
   });
 
+  it("keeps an earlier phase failure visible after a later same-phase success", async () => {
+    const { pinia, webui } = setupStores(true);
+    webui.pending = pendingResponse();
+    mockPendingLifecycle(webui);
+    vi.spyOn(webui, "loadRuns").mockResolvedValue();
+    vi.spyOn(webui, "createPlan").mockImplementation(async () => {
+      webui.plan = planResponse();
+    });
+    vi.spyOn(webui, "createJob").mockImplementation(async () => {
+      const job = applyJobResponse();
+      webui.setApplyJob(job);
+      return job;
+    });
+    const jobStream = mockApplyJobStream();
+    const wrapper = mountWithApp(PendingView, { pinia });
+
+    await wrapper
+      .findAll("button")
+      .find((button) => button.text().includes("Preview media plan"))
+      ?.trigger("click");
+    await flushPromises();
+    await wrapper
+      .find('[role="dialog"]')
+      .findAll("button")
+      .find((button) => button.text().includes("Apply 1 update"))
+      ?.trigger("click");
+    await flushPromises();
+
+    const failedPull = {
+      job_id: "job-test",
+      phase: "pull",
+      status: "failure" as const,
+      message: "[media] Pull failed.",
+      created_at: "2026-05-28T12:00:02+00:00",
+      stack: "media",
+      services: ["calibre"],
+      line_numbers: [1],
+    };
+    const laterPullSuccess = {
+      job_id: "job-test",
+      phase: "pull",
+      status: "success" as const,
+      message: "[infra] Images pulled and verified.",
+      created_at: "2026-05-28T12:00:03+00:00",
+      stack: "infra",
+      services: ["watchtower"],
+      line_numbers: [2],
+    };
+
+    jobStream.emitProgress(failedPull);
+    jobStream.emitProgress(laterPullSuccess);
+    await flushPromises();
+
+    expect(wrapper.find(".apply-job-panel").text()).toContain("Pull images failed");
+    expect(wrapper.find(".apply-job-panel").text()).toContain("[media] Pull failed.");
+    expect(wrapper.find(".apply-job-panel").text()).toContain(
+      "media / calibre / lines 1",
+    );
+    expect(wrapper.find('[role="dialog"]').text()).toContain("Pull images failed");
+
+    jobStream.emitJob(
+      applyJobResponse({
+        status: "failure",
+        error: "updater exited with status 1",
+        progress: [failedPull, laterPullSuccess],
+      }),
+    );
+    await flushPromises();
+
+    expect(wrapper.find('[role="dialog"]').text()).toContain("Failed: Pull images");
+    expect(wrapper.find('[role="dialog"]').text()).toContain("[media] Pull failed.");
+    expect(wrapper.find('[role="dialog"]').text()).toContain(
+      "media / calibre / lines 1",
+    );
+  });
+
   it("loads the persisted run log when the job stream ends without live log content", async () => {
     const { pinia, webui } = setupStores(true);
     webui.pending = pendingResponse();

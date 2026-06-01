@@ -508,16 +508,19 @@ const applyJobLogWaiting = computed(() => {
   }
   return !log.exists && !log.content;
 });
-const latestApplyJobProgressByPhase = computed(() => {
-  const latest = new Map<string, ApplyJobProgressEvent>();
+const displayApplyJobProgressByPhase = computed(() => {
+  const displayEvents = new Map<string, ApplyJobProgressEvent>();
   for (const event of webui.applyJob?.progress ?? []) {
-    latest.set(event.phase, event);
+    displayEvents.set(
+      event.phase,
+      displayProgressEvent(displayEvents.get(event.phase) ?? null, event),
+    );
   }
-  return latest;
+  return displayEvents;
 });
 const applyJobProgressSteps = computed<ApplyJobProgressStep[]>(() =>
   applyJobProgressPhases.map((phase) => {
-    const event = latestApplyJobProgressByPhase.value.get(phase.key) ?? null;
+    const event = displayApplyJobProgressByPhase.value.get(phase.key) ?? null;
     const status = event?.status ?? "pending";
     return {
       ...phase,
@@ -541,7 +544,7 @@ const applyJobProgressSummary = computed(() => {
   if (running) {
     return running.label;
   }
-  const complete = latestApplyJobProgressByPhase.value.get("completion");
+  const complete = displayApplyJobProgressByPhase.value.get("completion");
   if (complete?.status === "success") {
     return "Complete";
   }
@@ -556,7 +559,7 @@ const applyJobCurrentStep = computed<ApplyJobProgressStep | null>(() => {
   if (running) {
     return running;
   }
-  const completion = latestApplyJobProgressByPhase.value.get("completion");
+  const completion = displayApplyJobProgressByPhase.value.get("completion");
   if (completion?.status === "success") {
     return (
       applyJobProgressSteps.value.find((step) => step.key === "completion") ?? null
@@ -631,6 +634,19 @@ function progressStatusLabel(status: ApplyJobProgressStep["status"]): string {
     return "Skipped";
   }
   return "Waiting";
+}
+
+function displayProgressEvent(
+  current: ApplyJobProgressEvent | null,
+  next: ApplyJobProgressEvent,
+): ApplyJobProgressEvent {
+  if (!current || current.status !== "failure") {
+    return next;
+  }
+  if (next.status === "failure") {
+    return next;
+  }
+  return current;
 }
 
 function progressEventDetail(event: ApplyJobProgressEvent | null): string {
