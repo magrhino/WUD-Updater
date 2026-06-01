@@ -13,10 +13,22 @@ const username = ref("");
 const password = ref("");
 const submitting = ref(false);
 
-async function submit(): Promise<void> {
+async function submit(event: Event): Promise<void> {
+  const form =
+    event.currentTarget instanceof HTMLFormElement
+      ? event.currentTarget
+      : event.target instanceof HTMLFormElement
+        ? event.target
+        : null;
+  const formData = form ? new FormData(form) : null;
+  const submittedUsername = String(formData?.get("username") ?? username.value);
+  const submittedPassword = String(formData?.get("password") ?? password.value);
+
+  username.value = submittedUsername;
+  password.value = submittedPassword;
   submitting.value = true;
   try {
-    await auth.login(username.value, password.value);
+    await auth.login(submittedUsername, submittedPassword);
     const redirect = typeof route.query.redirect === "string" ? route.query.redirect : "/";
     await router.replace(redirect);
   } finally {
@@ -43,26 +55,35 @@ async function submit(): Promise<void> {
       </n-alert>
 
       <n-form @submit.prevent="submit">
-        <n-form-item label="Username">
+        <n-form-item label="Username" :label-props="{ for: 'login-username' }">
           <n-input
             v-model:value="username"
-            autocomplete="username"
             autofocus
+            :input-props="{
+              id: 'login-username',
+              name: 'username',
+              autocomplete: 'username',
+              required: true,
+            }"
           />
         </n-form-item>
-        <n-form-item label="Password">
+        <n-form-item label="Password" :label-props="{ for: 'login-password' }">
           <n-input
             v-model:value="password"
             type="password"
             show-password-on="click"
-            autocomplete="current-password"
+            :input-props="{
+              id: 'login-password',
+              name: 'password',
+              autocomplete: 'current-password',
+              required: true,
+            }"
           />
         </n-form-item>
         <n-button
           attr-type="submit"
           type="primary"
           block
-          :disabled="!username || !password"
           :loading="submitting || auth.loading"
         >
           <template #icon>

@@ -504,6 +504,32 @@ test("unauthenticated protected routes redirect to login", async ({ page }) => {
   await expect(page.getByRole("heading", { name: "Sign in" })).toBeVisible();
 });
 
+test("login from a protected route uses native credential fields and returns there", async ({
+  page,
+}) => {
+  const state = createState();
+  await installApiFixtures(page, state);
+
+  await page.goto("/#/pending");
+  await expect(page.getByRole("heading", { name: "Sign in" })).toBeVisible();
+
+  const username = page.locator('input[name="username"]');
+  const password = page.locator('input[name="password"]');
+  await expect(username).toHaveAttribute("id", "login-username");
+  await expect(username).toHaveAttribute("autocomplete", "username");
+  await expect(password).toHaveAttribute("id", "login-password");
+  await expect(password).toHaveAttribute("autocomplete", "current-password");
+  await expect(page.locator('label[for="login-username"]')).toHaveText("Username");
+  await expect(page.locator('label[for="login-password"]')).toHaveText("Password");
+
+  await username.fill("admin");
+  await password.fill("password");
+  await page.getByRole("button", { name: /Sign in/ }).click();
+
+  await expect(page.getByRole("heading", { name: "Pending updates" })).toBeVisible();
+  expect(state.calls.filter((call) => call.path === "/api/v1/auth/session")).toHaveLength(1);
+});
+
 test("login requests csrf and does not store secrets in browser storage", async ({ page }) => {
   const state = createState();
   await installApiFixtures(page, state);
