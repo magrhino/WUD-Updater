@@ -69,6 +69,56 @@ class CliTests(unittest.TestCase):
         self.assertEqual(status, 1)
         self.assertIn("--max-wait must be an integer number of seconds", stderr)
 
+    def test_update_from_wud_uses_environment_defaults(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="wud-python-cli.") as tmpdir:
+            root = Path(tmpdir)
+            base = root / "env-base"
+            wud_file = root / "env-images.todo"
+            log_dir = root / "env-logs"
+            base.mkdir()
+            wud_file.write_text("", encoding="utf-8")
+
+            env = {
+                "DOCKER_BASE": str(base),
+                "WUD_OUT_FILE": str(wud_file),
+                "WUD_LOG_DIR": str(log_dir),
+                "WUD_UPDATE_MODE": "live",
+                "WUD_MAX_WAIT": "0",
+                "WUD_UPDATER_BANNER": "false",
+                "WUD_UPDATER_RELEASE_CHECK": "false",
+                "PATH": os.environ.get("PATH", ""),
+            }
+            with mock.patch.dict(os.environ, env, clear=True):
+                status, stdout, stderr = self._run_main(
+                    [
+                        "update-from-wud",
+                        "--dry-run",
+                        "--yes",
+                        "--no-color",
+                    ]
+                )
+
+        self.assertEqual(status, 0)
+        self.assertIn(f"Base    : {base}", stdout)
+        self.assertIn(f"WUD file: {wud_file}", stdout)
+        self.assertIn(f"Log file: {log_dir}", stdout)
+        self.assertIn("Mode    : live", stdout)
+        self.assertIn("MaxWait : 0s", stdout)
+        self.assertEqual(stderr, "")
+
+    def test_update_from_wud_rejects_invalid_environment_max_wait(self) -> None:
+        env = {
+            "WUD_MAX_WAIT": "not-a-number",
+            "WUD_UPDATER_BANNER": "false",
+            "WUD_UPDATER_RELEASE_CHECK": "false",
+            "PATH": os.environ.get("PATH", ""),
+        }
+        with mock.patch.dict(os.environ, env, clear=True):
+            status, _stdout, stderr = self._run_main(["update-from-wud"])
+
+        self.assertEqual(status, 1)
+        self.assertIn("WUD_MAX_WAIT must be an integer number of seconds", stderr)
+
     def test_update_from_wud_uses_environment_log_dir(self) -> None:
         with tempfile.TemporaryDirectory(prefix="wud-python-cli.") as tmpdir:
             root = Path(tmpdir)

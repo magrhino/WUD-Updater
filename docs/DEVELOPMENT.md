@@ -121,7 +121,8 @@ Useful WebUI development variables:
 | `WUD_WEB_MUTATIONS_ENABLED` | Set to `true` only when testing browser-initiated plan/apply flows; default is read-only. |
 | `WUD_WEB_DEV_BACKEND_PORT` | Backend port used by `webui/scripts/dev-server.mjs` and the Vite proxy; default `8080`. |
 | `WUD_WEB_DEV_FRONTEND_PORT` | Vite frontend port used by the dev-server wrapper; default `5173`. |
-| `VITE_WUD_BACKEND_URL` | Backend URL exported by the dev-server wrapper for frontend experiments; the checked-in SPA currently uses same-origin `/api` requests through the Vite proxy. |
+| `VITE_WUD_API_PREFIX` | Optional live API prefix or URL for custom reverse proxies; defaults to `<app base>/api/v1`. A preloaded `window.WUD_API_PREFIX` value overrides it at runtime. |
+| `VITE_WUD_BACKEND_URL` | Backend URL exported by the dev-server wrapper for frontend experiments; the Vite proxy forwards the same-origin API prefix. |
 | `WUD_WEB_HOST` / `WUD_WEB_PORT` | Host and port used when running `wud-updater web` manually. |
 | `WUD_WEB_STATIC_DIR` | Optional built SPA directory override for manual backend testing. |
 | `WUD_WEB_DEV_NO_AUTH` | Development-only auth bypass used by tests and the local demo wrapper. |
