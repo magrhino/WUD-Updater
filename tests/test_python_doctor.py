@@ -62,6 +62,7 @@ class DoctorTests(unittest.TestCase):
 
         self.assertEqual(status, 1, stdout)
         self.assertIn("[FAIL] compose discovery: no compose stacks found", stdout)
+        self.assertIn("Ignored paths: old", stdout)
         self.assertNotIn("./old", stdout)
 
     def test_doctor_reports_configured_compose_ignore_paths(self) -> None:

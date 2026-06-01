@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from .command import CommandError, CommandResult, CommandRunner
-from .config import format_compose_ignore_paths
+from .config import DEFAULT_COMPOSE_IGNORE_PATHS, format_compose_ignore_paths
 
 
 COMPOSE_FILENAMES = frozenset(
@@ -223,7 +223,7 @@ class ComposeCli:
         docker_base: str | Path,
         *,
         project_base: str | Path | None = None,
-        ignore_paths: Sequence[str | Path] = (),
+        ignore_paths: Sequence[str | Path] | None = None,
     ) -> tuple[ComposeStack, ...]:
         docker_base_path = Path(docker_base)
         project_base_path = Path(project_base) if project_base is not None else None
@@ -555,14 +555,21 @@ class ComposeDiscoveryError(RuntimeError):
 
 
 def normalize_compose_ignore_paths(
-    ignore_paths: Sequence[str | Path] = (),
+    ignore_paths: Sequence[str | Path] | None = None,
 ) -> tuple[Path, ...]:
+    if ignore_paths is None:
+        return DEFAULT_COMPOSE_IGNORE_PATHS
+
     normalized: list[Path] = []
     seen: set[tuple[str, ...]] = set()
     for ignore_path in ignore_paths:
         path = Path(ignore_path)
         parts = path.parts
-        if path.is_absolute() or not parts or any(part in {"", ".", ".."} for part in parts):
+        if (
+            path.is_absolute()
+            or not parts
+            or any(part in {"", ".", ".."} for part in parts)
+        ):
             raise ValueError("compose ignore paths must be relative paths")
         if parts not in seen:
             seen.add(parts)
@@ -573,7 +580,7 @@ def normalize_compose_ignore_paths(
 def compose_discovery_message(
     docker_base: str | Path,
     *,
-    ignore_paths: Sequence[str | Path] = (),
+    ignore_paths: Sequence[str | Path] | None = None,
 ) -> str:
     normalized_ignore_paths = normalize_compose_ignore_paths(ignore_paths)
     message = f"No compose stacks found under {Path(docker_base)}."
@@ -588,7 +595,7 @@ def compose_discovery_message(
 def _compose_files_under(
     docker_base: str | Path,
     *,
-    ignore_paths: Sequence[str | Path] = (),
+    ignore_paths: Sequence[str | Path] | None = None,
 ) -> list[Path]:
     base = Path(docker_base)
     normalized_ignore_paths = normalize_compose_ignore_paths(ignore_paths)
@@ -621,7 +628,7 @@ def _compose_files_under(
 def compose_files_under(
     docker_base: str | Path,
     *,
-    ignore_paths: Sequence[str | Path] = (),
+    ignore_paths: Sequence[str | Path] | None = None,
 ) -> tuple[Path, ...]:
     """Return compose files discovered with the updater's stack search rules."""
 

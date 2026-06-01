@@ -15,6 +15,7 @@ DEFAULT_LOCK_TIMEOUT = 30
 DEFAULT_LOG_DIR = "./logs"
 DEFAULT_TIMEZONE = "UTC"
 COMPOSE_IGNORE_PATHS_ENV = "WUD_COMPOSE_IGNORE_PATHS"
+DEFAULT_COMPOSE_IGNORE_PATHS = (Path("old"),)
 VALID_UPDATE_MODES = frozenset({"pause", "stop", "live"})
 
 
@@ -76,8 +77,11 @@ def parse_compose_ignore_paths(
     value: str | None,
     *,
     name: str = COMPOSE_IGNORE_PATHS_ENV,
+    default: tuple[Path, ...] = DEFAULT_COMPOSE_IGNORE_PATHS,
 ) -> tuple[Path, ...]:
-    if value is None or value == "":
+    if value is None:
+        return default
+    if value == "":
         return ()
 
     paths: list[Path] = []

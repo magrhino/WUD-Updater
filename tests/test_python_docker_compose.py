@@ -280,9 +280,9 @@ class ComposeCliTests(FakeDockerCase):
         stacks = self.compose.discover_stacks(self.base)
 
         by_directory = {item.directory: item for item in stacks}
-        self.assertEqual(len(stacks), 2)
+        self.assertEqual(len(stacks), 1)
         self.assertIn(stack, by_directory)
-        self.assertIn(archived, by_directory)
+        self.assertNotIn(archived, by_directory)
         self.assertEqual(by_directory[stack].file, "docker-compose.yml")
         self.assertEqual(by_directory[stack].name, "stack")
         self.assertEqual(
@@ -308,6 +308,18 @@ class ComposeCliTests(FakeDockerCase):
         stacks = self.compose.discover_stacks(self.base, ignore_paths=("old",))
 
         self.assertEqual([item.directory for item in stacks], [stack])
+
+    def test_discover_stacks_can_disable_default_ignore(self) -> None:
+        stack = self.make_stack("stack", [("app", "repo/app:latest", "cid-app")])
+        archived = self.make_stack(
+            "archived",
+            [("app", "repo/archived:latest", "cid-archived")],
+            parent=self.base / "old",
+        )
+
+        stacks = self.compose.discover_stacks(self.base, ignore_paths=())
+
+        self.assertEqual({item.directory for item in stacks}, {stack, archived})
 
     def test_discover_stacks_skips_configured_non_default_ignore(self) -> None:
         stack = self.make_stack("stack", [("app", "repo/app:latest", "cid-app")])

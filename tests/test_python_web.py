@@ -525,8 +525,8 @@ def test_settings_reports_effective_non_secret_configuration(
     }
     assert managed["compose_ignore_paths"] == {
         "key": "compose_ignore_paths",
-        "value": "",
-        "default_value": "",
+        "value": "old",
+        "default_value": "old",
         "source": "default",
         "editable": True,
         "allowed_values": [],
@@ -725,7 +725,7 @@ def test_managed_settings_persist_and_write_audit_records(tmp_path: Path) -> Non
     assert event_metadata["before"] == {
         "theme_preference": "system",
         "onboarding_checklist": "visible",
-        "compose_ignore_paths": "",
+        "compose_ignore_paths": "old",
     }
     assert event_metadata["after"] == {
         "theme_preference": "dark",
@@ -2368,6 +2368,44 @@ def test_pending_endpoint_honors_webui_managed_compose_ignore_paths(
     assert grouping["status"] == "ready"
     assert grouping["groups"] == []
     assert [item["line_no"] for item in grouping["unmatched"]] == [1]
+
+
+def test_pending_endpoint_allows_empty_webui_managed_compose_ignore_paths(
+    tmp_path: Path,
+) -> None:
+    fake_env, fake_root = _fake_docker_env(tmp_path)
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+            **fake_env,
+        },
+    )
+    headers = _csrf_headers(client)
+    settings_update = client.post(
+        "/api/v1/settings/managed",
+        json={"values": {"compose_ignore_paths": ""}},
+        headers=headers,
+    )
+    assert settings_update.status_code == 200
+    wud_file = tmp_path / "state" / "images.todo"
+    wud_file.write_text("repo/archived:latest\n", encoding="utf-8")
+    _make_fake_stack(
+        tmp_path,
+        fake_root,
+        "archived",
+        [("app", "repo/archived:latest", "cid-archived")],
+        parent=tmp_path / "docker" / "old",
+    )
+
+    response = client.get("/api/v1/pending")
+
+    assert response.status_code == 200
+    grouping = response.json()["grouping"]
+    assert grouping["status"] == "ready"
+    assert len(grouping["groups"]) == 1
+    assert grouping["groups"][0]["items"][0]["line_no"] == 1
 
 
 def test_update_targets_endpoint_lists_compose_service_images_without_mutation(

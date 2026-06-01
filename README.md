@@ -89,9 +89,10 @@ onboarding checklist state, and compose discovery ignore paths, when browser
 mutations are explicitly enabled. Those preferences do not override CLI flags,
 environment config, paths, secrets, or Docker commands.
 
-Compose discovery ignores no archive directories by default. Set
-`WUD_COMPOSE_IGNORE_PATHS=old` to keep the legacy `old/` archive behavior, or
-set a comma-separated list such as `old,archive/disabled`. When
+Compose discovery ignores `old/` by default for backward compatibility. Set
+`WUD_COMPOSE_IGNORE_PATHS` to a comma-separated list such as
+`old,archive/disabled` to override the ignored paths, or set it to an empty
+value to disable archive ignores. When
 `WUD_COMPOSE_IGNORE_PATHS` is set in the server environment, Settings shows the
 effective value as read-only; unset the environment variable to manage compose
 ignore paths from the WebUI.

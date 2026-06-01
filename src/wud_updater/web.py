@@ -48,6 +48,7 @@ from .command import CommandError, CommandRunner
 from .compose import ComposeCli, ComposeDiscoveryError
 from .config import (
     COMPOSE_IGNORE_PATHS_ENV,
+    DEFAULT_COMPOSE_IGNORE_PATHS,
     DEFAULT_LOCK_TIMEOUT,
     DEFAULT_MAX_WAIT,
     DEFAULT_TIMEZONE,
@@ -2365,7 +2366,7 @@ def _stored_compose_ignore_paths(settings: WebSettings) -> tuple[Path, ...]:
         with closing(_connect_readonly_db(settings)) as conn:
             value = _web_setting(conn, MANAGED_COMPOSE_IGNORE_PATHS_DB_KEY)
     except ReadOnlyDatabaseMissing:
-        return ()
+        return DEFAULT_COMPOSE_IGNORE_PATHS
     except (OSError, sqlite3.Error, DatabaseError) as exc:
         raise HTTPException(
             status_code=500,
@@ -6983,12 +6984,16 @@ def _managed_settings_entries_from_values(
         compose_ignore_paths = settings.config.compose_ignore_paths
         compose_configured = True
     else:
-        compose_value = values.get(MANAGED_COMPOSE_IGNORE_PATHS_DB_KEY, "")
+        compose_configured = MANAGED_COMPOSE_IGNORE_PATHS_DB_KEY in values
+        compose_value = (
+            values.get(MANAGED_COMPOSE_IGNORE_PATHS_DB_KEY, "")
+            if compose_configured
+            else None
+        )
         compose_ignore_paths = parse_compose_ignore_paths(
             compose_value,
             name=MANAGED_COMPOSE_IGNORE_PATHS_KEY,
         )
-        compose_configured = bool(compose_value)
     return [
         ManagedSettingEntry(
             key=MANAGED_THEME_PREFERENCE_KEY,
@@ -7011,7 +7016,7 @@ def _managed_settings_entries_from_values(
         ManagedSettingEntry(
             key=MANAGED_COMPOSE_IGNORE_PATHS_KEY,
             value=format_compose_ignore_paths(compose_ignore_paths),
-            default_value="",
+            default_value=format_compose_ignore_paths(DEFAULT_COMPOSE_IGNORE_PATHS),
             source="configured" if compose_configured else "default",
             editable=not compose_disabled_reason,
             allowed_values=[],
@@ -7087,10 +7092,7 @@ def _apply_managed_setting_updates(
             else:
                 _delete_web_setting(conn, ONBOARDING_DISMISSED_AT_KEY)
         elif key == MANAGED_COMPOSE_IGNORE_PATHS_KEY:
-            if value:
-                _set_web_setting(conn, MANAGED_COMPOSE_IGNORE_PATHS_DB_KEY, value)
-            else:
-                _delete_web_setting(conn, MANAGED_COMPOSE_IGNORE_PATHS_DB_KEY)
+            _set_web_setting(conn, MANAGED_COMPOSE_IGNORE_PATHS_DB_KEY, value)
 
 
 def _managed_settings_audit_values(
@@ -7279,7 +7281,9 @@ def _static_config_default(name: str) -> str:
         "WUD_MAX_WAIT": str(DEFAULT_MAX_WAIT),
         "WUD_LOCK_TIMEOUT": str(DEFAULT_LOCK_TIMEOUT),
         "WUD_TIMEZONE": DEFAULT_TIMEZONE,
-        COMPOSE_IGNORE_PATHS_ENV: "",
+        COMPOSE_IGNORE_PATHS_ENV: format_compose_ignore_paths(
+            DEFAULT_COMPOSE_IGNORE_PATHS
+        ),
     }
     return defaults.get(name, "")
 

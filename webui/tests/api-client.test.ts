@@ -1,6 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { ApiError, webApi, type StateOperation } from "../src/api/client";
+import {
+  ApiError,
+  apiPrefixFromBasePath,
+  normalizeApiPrefix,
+  webApi,
+  type StateOperation,
+} from "../src/api/client";
 
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -20,6 +26,43 @@ function requestInit(call: unknown[]): RequestInit {
 }
 
 describe("webApi", () => {
+  it("builds API prefixes from the app base path", () => {
+    expect(apiPrefixFromBasePath("/")).toBe("/api/v1");
+    expect(apiPrefixFromBasePath("/wud/")).toBe("/wud/api/v1");
+    expect(apiPrefixFromBasePath("wud")).toBe("/wud/api/v1");
+  });
+
+  it("normalizes configured API prefixes", () => {
+    expect(normalizeApiPrefix("/wud/api/v1/")).toBe("/wud/api/v1");
+    expect(normalizeApiPrefix("wud/api/v1")).toBe("/wud/api/v1");
+    expect(normalizeApiPrefix("https://example.test/wud/api/v1/")).toBe(
+      "https://example.test/wud/api/v1",
+    );
+  });
+
+  it("uses a configured API prefix for fetch requests", async () => {
+    vi.resetModules();
+    const fetchMock = mockFetch({});
+    const globals = globalThis as typeof globalThis & { WUD_API_PREFIX?: string };
+    const originalApiPrefix = globals.WUD_API_PREFIX;
+    globals.WUD_API_PREFIX = "/wud/api/v1/";
+
+    try {
+      const { webApi: configuredWebApi } = await import("../src/api/client");
+
+      await configuredWebApi.status();
+
+      expect(fetchMock.mock.calls[0][0]).toBe("/wud/api/v1/status");
+    } finally {
+      if (originalApiPrefix === undefined) {
+        delete globals.WUD_API_PREFIX;
+      } else {
+        globals.WUD_API_PREFIX = originalApiPrefix;
+      }
+      vi.resetModules();
+    }
+  });
+
   it("uses same-origin credentials for every fetch request", async () => {
     const fetchMock = mockFetch([]);
     const operation: StateOperation = {

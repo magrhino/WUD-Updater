@@ -25,7 +25,7 @@ class LoadConfigTests(unittest.TestCase):
         self.assertEqual(config.max_wait, 180)
         self.assertEqual(config.lock_timeout, 30)
         self.assertEqual(config.timezone_name, "UTC")
-        self.assertEqual(config.compose_ignore_paths, ())
+        self.assertEqual(config.compose_ignore_paths, (Path("old"),))
         self.assertIsNone(config.out_uid)
         self.assertIsNone(config.out_gid)
 

@@ -478,7 +478,7 @@ class DemoApiState {
   themePreference = "system";
   themePreferenceConfigured = false;
   onboardingDismissedAt = "";
-  composeIgnorePaths = "";
+  composeIgnorePaths = "old";
   composeIgnorePathsConfigured = false;
   coreUpdateTour: CoreUpdateTourResponse = {
     status: "not_started",
@@ -546,7 +546,7 @@ class DemoApiState {
         settingEntry("WUD_MAX_WAIT", "180", "180", false),
         settingEntry("WUD_LOCK_TIMEOUT", "30", "30", false),
         settingEntry("WUD_TIMEZONE", "UTC", "UTC", false),
-        settingEntry("WUD_COMPOSE_IGNORE_PATHS", "", "", false),
+        settingEntry("WUD_COMPOSE_IGNORE_PATHS", "old", "old", false),
       ],
       webui: [
         settingEntry("WUD_WEB_AUTH_REQUIRED", "false", "true", false, "derived"),
@@ -623,7 +623,7 @@ class DemoApiState {
         {
           key: "compose_ignore_paths",
           value: this.composeIgnorePaths,
-          default_value: "",
+          default_value: "old",
           source: this.composeIgnorePathsConfigured ? "configured" : "default",
           editable: true,
           allowed_values: [],
@@ -809,7 +809,7 @@ class DemoApiState {
             : "";
       } else if (key === "compose_ignore_paths") {
         this.composeIgnorePaths = normalizeDemoComposeIgnorePaths(value);
-        this.composeIgnorePathsConfigured = this.composeIgnorePaths !== "";
+        this.composeIgnorePathsConfigured = true;
       } else {
         throw new Error(`managed setting is not editable: ${key}`);
       }

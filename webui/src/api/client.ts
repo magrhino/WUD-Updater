@@ -611,7 +611,58 @@ export class ApiError extends Error {
   }
 }
 
-const API_PREFIX = "/api/v1";
+type WudApiGlobal = typeof globalThis & {
+  WUD_API_PREFIX?: string;
+};
+
+const API_VERSION_PATH = "api/v1";
+
+export function normalizeApiPrefix(value: string | undefined): string {
+  const trimmed = (value ?? "").trim();
+  if (!trimmed) {
+    return "/api/v1";
+  }
+  const withoutTrailingSlash = trimmed.replace(/\/+$/, "");
+  if (
+    withoutTrailingSlash.startsWith("/") ||
+    /^https?:\/\//i.test(withoutTrailingSlash)
+  ) {
+    return withoutTrailingSlash;
+  }
+  return `/${withoutTrailingSlash}`;
+}
+
+export function apiPrefixFromBasePath(basePath: string): string {
+  const normalizedBasePath = basePath.trim().replace(/\/+$/, "");
+  if (!normalizedBasePath || normalizedBasePath === "/") {
+    return "/api/v1";
+  }
+  const rootedBasePath = normalizedBasePath.startsWith("/")
+    ? normalizedBasePath
+    : `/${normalizedBasePath}`;
+  return `${rootedBasePath}/${API_VERSION_PATH}`;
+}
+
+function currentDocumentBasePath(): string {
+  if (typeof document === "undefined") {
+    return "/";
+  }
+  const basePath = new URL(document.baseURI).pathname;
+  if (basePath.endsWith("/")) {
+    return basePath;
+  }
+  return basePath.slice(0, basePath.lastIndexOf("/") + 1) || "/";
+}
+
+function defaultApiPrefix(): string {
+  return apiPrefixFromBasePath(currentDocumentBasePath());
+}
+
+const API_PREFIX = normalizeApiPrefix(
+  (globalThis as WudApiGlobal).WUD_API_PREFIX ??
+    import.meta.env.VITE_WUD_API_PREFIX ??
+    defaultApiPrefix(),
+);
 export const LIVE_JOB_LOG_TAIL_BYTES = 65_536;
 
 async function apiRequest<T>(
