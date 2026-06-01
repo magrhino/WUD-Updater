@@ -2545,12 +2545,18 @@ def run_update_from_wud(
         return 1
 
 
-def options_from_namespace(args: object, *, environ: Mapping[str, str] | None = None) -> UpdaterOptions:
+def options_from_namespace(
+    args: object, *, environ: Mapping[str, str] | None = None
+) -> UpdaterOptions:
     env = os.environ if environ is None else environ
     home = env.get("HOME") or str(Path.home())
-    docker_base_label = str(getattr(args, "base", None) or f"{home}/docker")
+    docker_base_label = str(
+        getattr(args, "base", None) or env.get("DOCKER_BASE") or f"{home}/docker"
+    )
     wud_file_label = str(
-        getattr(args, "file", None) or f"{docker_base_label}/wud/out/images.todo"
+        getattr(args, "file", None)
+        or env.get("WUD_OUT_FILE")
+        or f"{docker_base_label}/wud/out/images.todo"
     )
     log_dir_label = str(
         getattr(args, "log_dir", None) or env.get("WUD_LOG_DIR") or "./logs"
@@ -2568,16 +2574,26 @@ def options_from_namespace(args: object, *, environ: Mapping[str, str] | None = 
             raise UpdaterError(
                 "DOCKER_BASE must be an absolute path when HOST_DOCKER_BASE is set"
             )
-    max_wait = parse_seconds(getattr(args, "max_wait", None), "--max-wait")
+    max_wait_value = getattr(args, "max_wait", None)
+    max_wait_label = "--max-wait"
+    if max_wait_value is None:
+        max_wait_value = env.get("WUD_MAX_WAIT")
+        max_wait_label = "WUD_MAX_WAIT"
+    max_wait = parse_seconds(max_wait_value, max_wait_label)
     tag_overrides = parse_tag_overrides(getattr(args, "tag_override", None) or ())
     allow_tag_updates = bool(getattr(args, "allow_tag_updates", False))
     if tag_overrides and not allow_tag_updates:
         raise UpdaterError("--tag-override requires --allow-tag-updates")
+    mode = (
+        getattr(args, "mode", None)
+        or env.get("WUD_UPDATE_MODE")
+        or DEFAULT_UPDATE_MODE
+    )
     return UpdaterOptions(
         docker_base=docker_base,
         wud_file=wud_file,
         log_dir=log_dir,
-        mode=getattr(args, "mode", None) or DEFAULT_UPDATE_MODE,
+        mode=mode,
         max_wait=max_wait,
         dry_run=bool(getattr(args, "dry_run", False)),
         assume_yes=bool(getattr(args, "yes", False)),

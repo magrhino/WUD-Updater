@@ -15,8 +15,8 @@ Then add concise bullets for the concrete changes, touched areas, operational im
 
 - [ ] Tests added or updated
 - [ ] `README.md` or `docs/` updated if install, deployment, config, or user-facing behavior changed
-- [ ] `template.env` updated if environment variables or example config changed
-- [ ] `CHANGELOG.md` updated in ## [Unreleased] section
+- [ ] `docs/examples/template.env` or `docs/examples/webui.env.example` updated if environment variables or example config changed
+- [ ] Release Please/changelog impact considered; no manual `CHANGELOG.md` edit needed outside release prep
 
 ## Test plan
 
