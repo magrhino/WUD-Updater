@@ -200,10 +200,11 @@ export const naiveStubs: Record<string, Component> = {
   NFormItem: {
     props: {
       label: String,
+      labelProps: Object,
     },
     setup(props, { slots }) {
       return () =>
-        h("label", [
+        h("label", props.labelProps as Record<string, unknown> | undefined, [
           props.label ? h("span", props.label) : null,
           slots.default?.(),
         ]);
