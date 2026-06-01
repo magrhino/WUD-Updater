@@ -77,8 +77,8 @@ from .doctor import (
     DoctorSuggestion as DoctorDataSuggestion,
     options_from_namespace as doctor_options_from_namespace,
 )
-from .docker_cli import DockerCli
-from .images import image_tag, repo_key, tag_value_valid
+from .docker_cli import ContainerImage, DockerCli
+from .images import image_matches_resolved_target, image_tag, repo_key, tag_value_valid
 from .locks import DirectoryLock, WudLockError
 from .plans import (
     DryRunPlan,
@@ -94,6 +94,8 @@ from .release_notes import (
     OCI_SOURCE_LABEL,
     ReleaseNoteSourceResolver,
     cached_release_notes,
+    github_repo_from_ghcr_image,
+    github_repo_from_source,
     refresh_release_notes,
     release_note_placeholders,
 )
@@ -4584,23 +4586,52 @@ def _release_notes_response(
 
 def _release_note_source_resolver(settings: WebSettings) -> ReleaseNoteSourceResolver:
     docker = DockerCli(runner=CommandRunner(env=settings.command_env))
-    cache: dict[str, str] = {}
+    label_cache: dict[str, tuple[str, CommandError | None]] = {}
+    container_images: list[ContainerImage] | None = None
+
+    def source_label(image: str) -> tuple[str, CommandError | None]:
+        if image not in label_cache:
+            value, error = docker.try_image_label(image, OCI_SOURCE_LABEL)
+            label_cache[image] = (value, error)
+        return label_cache[image]
+
+    def running_images() -> list[ContainerImage]:
+        nonlocal container_images
+        if container_images is None:
+            container_images = docker.try_container_images()
+        return container_images
 
     def resolve(target: WudTarget) -> str:
-        if target.first not in cache:
-            value, error = docker.try_image_label(target.first, OCI_SOURCE_LABEL)
-            if error is not None:
-                LOGGER.error(
-                    "WebUI release-note fallback: Docker inspect failed for %s; "
-                    "cannot read %s, so GitHub release links may be unavailable. "
-                    "Command: %s. stderr: %s",
-                    target.first,
-                    OCI_SOURCE_LABEL,
-                    error.result.display,
-                    error.result.stderr.strip() or "<empty>",
-                )
-            cache[target.first] = value
-        return cache[target.first]
+        value, error = source_label(target.first)
+        if github_repo_from_source(value):
+            return value
+
+        repo = github_repo_from_ghcr_image(target.first)
+        if repo:
+            return f"https://github.com/{repo}"
+
+        for container in running_images():
+            if container.name != target.first and not image_matches_resolved_target(
+                container.image,
+                target.first,
+                target.allow_repo,
+            ):
+                continue
+            matched_repo = github_repo_from_ghcr_image(container.image)
+            if matched_repo:
+                return f"https://github.com/{matched_repo}"
+
+        if error is not None:
+            LOGGER.error(
+                "WebUI release-note fallback: Docker inspect failed for %s; "
+                "cannot read %s, so GitHub release links may be unavailable. "
+                "Command: %s. stderr: %s",
+                target.first,
+                OCI_SOURCE_LABEL,
+                error.result.display,
+                error.result.stderr.strip() or "<empty>",
+            )
+        return value
 
     return resolve
 
