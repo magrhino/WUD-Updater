@@ -1413,12 +1413,17 @@ watch(
   () => webui.pending?.items ?? [],
   (items) => {
     const next: Record<number, string> = {};
+    const pendingLineNumbers = new Set<number>();
     for (const item of items) {
+      pendingLineNumbers.add(item.line_no);
       if (item.desired_tag) {
         next[item.line_no] = tagOverrides.value[item.line_no] ?? item.desired_tag;
       }
     }
     tagOverrides.value = next;
+    selectedLineNumbers.value = selectedLineNumbers.value.filter((lineNo) =>
+      pendingLineNumbers.has(lineNo),
+    );
   },
   { immediate: true },
 );

@@ -1045,8 +1045,12 @@ describe("mutating WebUI views", () => {
   it("creates an apply job only after explicit confirmation", async () => {
     const { pinia, webui } = setupStores(true);
     webui.pending = pendingResponse();
+    let pendingRefreshRemovesSelection = false;
     const loadPending = vi.spyOn(webui, "loadPending").mockImplementation(async () => {
       webui.plan = null;
+      if (pendingRefreshRemovesSelection) {
+        webui.pending = pendingResponse([]);
+      }
     });
     const loadReleaseNotes = vi.spyOn(webui, "loadReleaseNotes").mockResolvedValue();
     const refreshReleaseNotes = vi
@@ -1143,6 +1147,7 @@ describe("mutating WebUI views", () => {
 
     expect(wrapper.find(".apply-job-panel").text()).toContain("docker-update-from-wud-v2");
 
+    pendingRefreshRemovesSelection = true;
     jobStream.emitJob(applyJobResponse({ status: "success", run_id: 10 }));
     await flushPromises();
 
@@ -1155,6 +1160,7 @@ describe("mutating WebUI views", () => {
     expect(wrapper.find(".apply-job-panel").text()).toContain("#10");
     expect(wrapper.find(".apply-job-panel").text()).toContain("Update complete");
     expect(wrapper.find(".apply-job-details").attributes("open")).toBe("");
+    expect(wrapper.find(".batch-action-bar").exists()).toBe(false);
   });
 
   it("keeps an earlier phase failure visible after a later same-phase success", async () => {
