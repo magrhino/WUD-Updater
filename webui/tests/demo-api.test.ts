@@ -323,6 +323,7 @@ describe("demo web API", () => {
     const api = createDemoWebApi();
     const jobs: ApplyJobResponse[] = [];
     const logs: ApplyJobLogResponse[] = [];
+    const progress: ApplyJobResponse["progress"] = [];
 
     const job = await api.createJob("demo-plan", [2], true, [], "csrf");
     const source = api.openJobStream(job.job_id);
@@ -334,11 +335,18 @@ describe("demo web API", () => {
         JSON.parse((event as MessageEvent<string>).data) as ApplyJobLogResponse,
       );
     });
+    source.addEventListener("progress", (event) => {
+      progress.push(
+        JSON.parse((event as MessageEvent<string>).data) as ApplyJobResponse["progress"][number],
+      );
+    });
 
     await vi.advanceTimersByTimeAsync(200);
     source.close();
 
     expect(jobs.map((item) => item.status)).toEqual(["running", "success"]);
+    expect(progress.map((item) => item.phase)).toContain("completion");
+    expect(jobs.at(-1)?.progress.at(-1)?.status).toBe("success");
     expect(logs.at(-1)?.content).toContain("Done. See log");
     expect((await api.pending()).count).toBe(6);
     expect((await api.runs())[0]).toMatchObject({

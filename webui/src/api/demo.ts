@@ -1,5 +1,6 @@
 import type {
   ApplyJobLogResponse,
+  ApplyJobProgressEvent,
   ApplyJobResponse,
   AuthSessionResponse,
   ContainerRestartResponse,
@@ -1046,6 +1047,7 @@ class DemoApiState {
       finished_at: null,
       error: plan.can_apply ? "" : "Demo plan is not applyable.",
       selected_line_numbers: plan.selected_line_numbers,
+      progress: [],
     };
     const log: ApplyJobLogResponse = {
       job_id: jobId,
@@ -1108,6 +1110,38 @@ class DemoApiState {
       runFromApply(runId, selectedItems, record.plan, startedAt, finishedAt, logFile, logContent),
     );
     return record;
+  }
+
+  appendJobProgress(
+    jobId: string,
+    phase: string,
+    status: ApplyJobProgressEvent["status"],
+    message: string,
+    options: {
+      stack?: string;
+      services?: string[];
+      lineNumbers?: number[];
+    } = {},
+  ): ApplyJobProgressEvent | null {
+    const record = this.jobs.get(jobId);
+    if (!record) {
+      return null;
+    }
+    const event: ApplyJobProgressEvent = {
+      job_id: jobId,
+      phase,
+      status,
+      message,
+      created_at: nowIso(),
+      stack: options.stack ?? "",
+      services: options.services ?? [],
+      line_numbers: options.lineNumbers ?? record.lineNumbers,
+    };
+    record.job = {
+      ...record.job,
+      progress: [...record.job.progress, event],
+    };
+    return clone(event);
   }
 
   servicePolicies(): ServicePolicyRecord[] {
@@ -1475,6 +1509,11 @@ class DemoJobStream extends EventTarget {
       return;
     }
     this.queue(() => {
+      this.emitProgress(
+        "preflight",
+        "success",
+        "Demo preflight checks passed.",
+      );
       record.job = {
         ...record.job,
         status: "running",
@@ -1486,9 +1525,20 @@ class DemoJobStream extends EventTarget {
           "[2026-05-30T20:12:26+00:00] [INFO] docker-update-from-wud-v2\n",
       };
       this.emit("job", record.job);
+      this.emitProgress(
+        "pull",
+        "running",
+        "Pulling selected demo images.",
+      );
       this.emit("log", record.log);
     }, 40);
     this.queue(() => {
+      this.emitProgress("pull", "success", "Images pulled and verified.");
+      this.emitProgress("recreate", "running", "Recreating selected services.");
+      this.emitProgress("recreate", "success", "Services were recreated.");
+      this.emitProgress("health", "success", "Demo services reported healthy.");
+      this.emitProgress("cleanup", "success", "Pending entries were reconciled.");
+      this.emitProgress("completion", "success", "Updater completed successfully.");
       const completed = this.state.completeJob(this.jobId);
       if (!completed) {
         this.onerror?.(new Event("error"));
@@ -1510,6 +1560,23 @@ class DemoJobStream extends EventTarget {
         data: JSON.stringify(data),
       }),
     );
+  }
+
+  private emitProgress(
+    phase: string,
+    status: ApplyJobProgressEvent["status"],
+    message: string,
+  ): void {
+    const record = this.state.jobs.get(this.jobId);
+    const stack = record?.plan?.stacks[0];
+    const event = this.state.appendJobProgress(this.jobId, phase, status, message, {
+      stack: stack?.name,
+      services: stack?.services,
+      lineNumbers: record?.lineNumbers,
+    });
+    if (event) {
+      this.emit("progress", event);
+    }
   }
 }
 

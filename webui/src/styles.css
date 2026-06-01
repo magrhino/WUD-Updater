@@ -1339,6 +1339,117 @@ a {
   margin-top: 0;
 }
 
+.apply-job-progress-steps {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 7px;
+  background: var(--color-surface);
+}
+
+.apply-progress-list {
+  display: grid;
+  gap: 6px;
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+.apply-progress-step {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  min-height: 48px;
+  padding: 8px 10px;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 7px;
+  background: var(--color-panel-tint);
+}
+
+.apply-progress-step-running {
+  border-color: color-mix(
+    in srgb,
+    var(--color-border-hover) 58%,
+    var(--color-operational-teal) 42%
+  );
+  background: color-mix(
+    in srgb,
+    var(--color-surface) 92%,
+    var(--color-operational-teal) 8%
+  );
+}
+
+.apply-progress-step-success,
+.apply-progress-step-skipped {
+  background: var(--color-surface);
+}
+
+.apply-progress-step-failure {
+  border-color: color-mix(
+    in srgb,
+    var(--color-border) 52%,
+    var(--color-error) 48%
+  );
+  background: color-mix(
+    in srgb,
+    var(--color-surface) 90%,
+    var(--color-error) 10%
+  );
+}
+
+.apply-progress-icon {
+  display: inline-grid;
+  width: 24px;
+  height: 24px;
+  place-items: center;
+  border: 1px solid var(--color-border-dashed);
+  border-radius: 999px;
+  color: var(--color-muted-text);
+  background: var(--color-surface);
+}
+
+.apply-progress-step-running .apply-progress-icon {
+  border-color: var(--color-operational-teal);
+  color: var(--color-operational-teal);
+}
+
+.apply-progress-step-success .apply-progress-icon {
+  border-color: color-mix(
+    in srgb,
+    var(--color-operational-teal) 64%,
+    var(--color-border) 36%
+  );
+  color: var(--color-operational-teal);
+}
+
+.apply-progress-step-failure .apply-progress-icon {
+  border-color: var(--color-error);
+  color: var(--color-error);
+}
+
+.apply-progress-copy {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.apply-progress-copy strong {
+  color: var(--color-ink);
+  font-size: 0.9rem;
+}
+
+.apply-progress-copy span,
+.apply-progress-copy em {
+  color: var(--color-muted-text);
+  font-size: 0.82rem;
+  font-style: normal;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
 .apply-job-impact-heading {
   display: flex;
   flex-wrap: wrap;
@@ -1364,6 +1475,11 @@ a {
   font-family: var(--font-mono);
   font-size: 0.78rem;
   overflow-wrap: anywhere;
+}
+
+.apply-job-log-note {
+  color: var(--color-muted-text);
+  font-size: 0.82rem;
 }
 
 .apply-job-log-viewer {
@@ -2403,6 +2519,16 @@ body .n-switch:focus-within {
 
   .list-row {
     grid-template-columns: 1fr;
+  }
+
+  .apply-progress-step {
+    grid-template-columns: 24px minmax(0, 1fr);
+    align-items: start;
+  }
+
+  .apply-progress-step > .n-tag {
+    grid-column: 2;
+    width: fit-content;
   }
 
   .settings-row {

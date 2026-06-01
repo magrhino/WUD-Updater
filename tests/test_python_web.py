@@ -368,6 +368,10 @@ def _sse_log_events(content: str) -> list[dict[str, object]]:
     return _sse_events(content, "log")
 
 
+def _sse_progress_events(content: str) -> list[dict[str, object]]:
+    return _sse_events(content, "progress")
+
+
 def test_healthz_is_unauthenticated_before_setup(tmp_path: Path) -> None:
     client = _client(tmp_path)
 
@@ -5586,6 +5590,7 @@ def test_job_stream_emits_initial_and_terminal_status(tmp_path: Path) -> None:
 
     events = _sse_job_events(content)
     log_events = _sse_log_events(content)
+    progress_events = _sse_progress_events(content)
     assert response.status_code == 200
     assert response.headers["content-type"].startswith("text/event-stream")
     assert len(events) >= 2
@@ -5593,6 +5598,19 @@ def test_job_stream_emits_initial_and_terminal_status(tmp_path: Path) -> None:
     assert events[0]["status"] in {"queued", "running"}
     assert events[-1]["status"] == "success"
     assert events[-1]["selected_line_numbers"] == [1]
+    assert events[-1]["progress"]
+    assert progress_events
+    assert progress_events[0]["job_id"] == apply_response.json()["job_id"]
+    assert {event["phase"] for event in progress_events} >= {
+        "preflight",
+        "pull",
+        "recreate",
+        "health",
+        "cleanup",
+        "completion",
+    }
+    assert progress_events[-1]["phase"] == "completion"
+    assert progress_events[-1]["status"] == "success"
     assert log_events
     assert log_events[0]["job_id"] == apply_response.json()["job_id"]
     assert log_events[0]["max_bytes"] == 65_536

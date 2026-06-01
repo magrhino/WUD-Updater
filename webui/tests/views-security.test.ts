@@ -114,6 +114,7 @@ function mockApplyJobStream() {
   const close = vi.fn();
   let jobListener: ((event: MessageEvent<string>) => void) | null = null;
   let logListener: ((event: MessageEvent<string>) => void) | null = null;
+  let progressListener: ((event: MessageEvent<string>) => void) | null = null;
   vi.spyOn(webApi, "openJobStream").mockReturnValue({
     addEventListener: vi.fn((type: string, listener: EventListener) => {
       if (type === "job") {
@@ -121,6 +122,9 @@ function mockApplyJobStream() {
       }
       if (type === "log") {
         logListener = listener as (event: MessageEvent<string>) => void;
+      }
+      if (type === "progress") {
+        progressListener = listener as (event: MessageEvent<string>) => void;
       }
     }),
     close,
@@ -153,6 +157,15 @@ function mockApplyJobStream() {
         }),
       );
     },
+    emitProgress(
+      progress: ReturnType<typeof applyJobResponse>["progress"][number],
+    ): void {
+      progressListener?.(
+        new MessageEvent("progress", {
+          data: JSON.stringify(progress),
+        }),
+      );
+    },
     emitInvalidLog(): void {
       logListener?.(
         new MessageEvent("log", {
@@ -161,7 +174,11 @@ function mockApplyJobStream() {
       );
     },
     get observed(): boolean {
-      return jobListener !== null && logListener !== null;
+      return (
+        jobListener !== null &&
+        logListener !== null &&
+        progressListener !== null
+      );
     },
   };
 }
@@ -1069,6 +1086,23 @@ describe("mutating WebUI views", () => {
     expect(wrapper.find('[role="dialog"]').text()).toContain("Applying 1 update");
     expect(wrapper.find(".apply-job-panel").text()).toContain("Applying 1 update");
     expect(wrapper.find(".apply-job-panel").text()).toContain("repo/app:1.0");
+
+    jobStream.emitProgress({
+      job_id: "job-test",
+      phase: "pull",
+      status: "running",
+      message: "[media] Pulling selected image updates.",
+      created_at: "2026-05-28T12:00:01+00:00",
+      stack: "media",
+      services: ["calibre"],
+      line_numbers: [1],
+    });
+    await flushPromises();
+
+    expect(wrapper.find(".apply-job-panel").text()).toContain("Update progress");
+    expect(wrapper.find(".apply-job-panel").text()).toContain("Pull images");
+    expect(wrapper.find(".apply-job-panel").text()).toContain("Running");
+    expect(wrapper.find(".apply-job-panel").text()).toContain("media");
 
     jobStream.emitLog(
       applyJobLogResponse({

@@ -25,6 +25,7 @@ import {
 import {
   webApi,
   type ApplyJobLogResponse,
+  type ApplyJobProgressEvent,
   type ApplyJobResponse,
   type PendingGroupedItem,
   type PendingItem,
@@ -87,6 +88,53 @@ type ApplyJobPlanSnapshot = {
   sourceFile: string;
   lines: ApplyJobSnapshotLine[];
 };
+
+type ApplyJobProgressPhase = {
+  key: string;
+  label: string;
+  waitingMessage: string;
+};
+
+type ApplyJobProgressStep = ApplyJobProgressPhase & {
+  status: "pending" | ApplyJobProgressEvent["status"];
+  statusLabel: string;
+  message: string;
+  detail: string;
+  event: ApplyJobProgressEvent | null;
+};
+
+const applyJobProgressPhases: ApplyJobProgressPhase[] = [
+  {
+    key: "preflight",
+    label: "Preflight",
+    waitingMessage: "Waiting to validate the pending file and Compose state.",
+  },
+  {
+    key: "pull",
+    label: "Pull images",
+    waitingMessage: "Waiting for image pulls to begin.",
+  },
+  {
+    key: "recreate",
+    label: "Recreate",
+    waitingMessage: "Waiting to recreate selected services.",
+  },
+  {
+    key: "health",
+    label: "Health wait",
+    waitingMessage: "Waiting for container health checks.",
+  },
+  {
+    key: "cleanup",
+    label: "Cleanup",
+    waitingMessage: "Waiting to reconcile the pending file.",
+  },
+  {
+    key: "completion",
+    label: "Complete",
+    waitingMessage: "Waiting for the updater result.",
+  },
+];
 
 const updateIntent = ref<UpdateIntent | null>(null);
 const applyJobSnapshot = ref<ApplyJobPlanSnapshot | null>(null);
@@ -460,9 +508,81 @@ const applyJobLogWaiting = computed(() => {
   }
   return !log.exists && !log.content;
 });
+const latestApplyJobProgressByPhase = computed(() => {
+  const latest = new Map<string, ApplyJobProgressEvent>();
+  for (const event of webui.applyJob?.progress ?? []) {
+    latest.set(event.phase, event);
+  }
+  return latest;
+});
+const applyJobProgressSteps = computed<ApplyJobProgressStep[]>(() =>
+  applyJobProgressPhases.map((phase) => {
+    const event = latestApplyJobProgressByPhase.value.get(phase.key) ?? null;
+    const status = event?.status ?? "pending";
+    return {
+      ...phase,
+      status,
+      statusLabel: progressStatusLabel(status),
+      message: event?.message || phase.waitingMessage,
+      detail: progressEventDetail(event),
+      event,
+    };
+  }),
+);
+const applyJobProgressSummary = computed(() => {
+  if (!webui.applyJob?.progress.length) {
+    return applyJobActive.value ? "Starting" : "No progress events";
+  }
+  const failed = applyJobProgressSteps.value.find((step) => step.status === "failure");
+  if (failed) {
+    return `${failed.label} failed`;
+  }
+  const running = applyJobProgressSteps.value.find((step) => step.status === "running");
+  if (running) {
+    return running.label;
+  }
+  const complete = latestApplyJobProgressByPhase.value.get("completion");
+  if (complete?.status === "success") {
+    return "Complete";
+  }
+  return `${webui.applyJob.progress.length} updates`;
+});
 
 function rowKey(row: PendingItem): number {
   return row.line_no;
+}
+
+function progressStatusLabel(status: ApplyJobProgressStep["status"]): string {
+  if (status === "running") {
+    return "Running";
+  }
+  if (status === "success") {
+    return "Done";
+  }
+  if (status === "failure") {
+    return "Failed";
+  }
+  if (status === "skipped") {
+    return "Skipped";
+  }
+  return "Waiting";
+}
+
+function progressEventDetail(event: ApplyJobProgressEvent | null): string {
+  if (!event) {
+    return "";
+  }
+  const parts = [];
+  if (event.stack) {
+    parts.push(event.stack);
+  }
+  if (event.services.length) {
+    parts.push(event.services.join(", "));
+  }
+  if (event.line_numbers.length) {
+    parts.push(`lines ${event.line_numbers.join(", ")}`);
+  }
+  return parts.join(" / ");
 }
 
 function displayValue(value: string): string {
@@ -879,6 +999,9 @@ function subscribeApplyJob(jobId: string): void {
   source.addEventListener("job", (event) => {
     void handleJobEvent(event as MessageEvent<string>);
   });
+  source.addEventListener("progress", (event) => {
+    handleJobProgressEvent(event as MessageEvent<string>);
+  });
   source.addEventListener("log", (event) => {
     void handleJobLogEvent(event as MessageEvent<string>);
   });
@@ -907,6 +1030,27 @@ async function handleJobEvent(event: MessageEvent<string>): Promise<void> {
   await loadTerminalApplyJobLogIfMissing(job);
   closeJobStream();
   await refreshAfterTerminalJob();
+}
+
+function handleJobProgressEvent(event: MessageEvent<string>): void {
+  let progress: ApplyJobProgressEvent;
+  try {
+    progress = JSON.parse(event.data) as ApplyJobProgressEvent;
+  } catch {
+    webui.setError("Job progress stream returned invalid data.");
+    return;
+  }
+  const job = webui.applyJob;
+  if (!job || job.job_id !== progress.job_id) {
+    return;
+  }
+  if (job.progress.some((item) => progressEventKey(item) === progressEventKey(progress))) {
+    return;
+  }
+  webui.setApplyJob({
+    ...job,
+    progress: [...job.progress, progress],
+  });
 }
 
 async function loadTerminalApplyJobLogIfMissing(
@@ -947,6 +1091,16 @@ async function handleJobLogEvent(event: MessageEvent<string>): Promise<void> {
 function closeJobStream(): void {
   jobEventSource.value?.close();
   jobEventSource.value = null;
+}
+
+function progressEventKey(event: ApplyJobProgressEvent): string {
+  return [
+    event.created_at,
+    event.phase,
+    event.status,
+    event.stack,
+    event.message,
+  ].join("\u0000");
 }
 
 async function recoverOrRefreshApplyJob(jobId: string): Promise<void> {
@@ -1359,9 +1513,39 @@ watch(
         </section>
       </div>
 
+      <section class="apply-job-progress-steps" aria-labelledby="apply-job-progress-title">
+        <div class="apply-job-impact-heading">
+          <strong id="apply-job-progress-title">Update progress</strong>
+          <n-tag size="small">{{ applyJobProgressSummary }}</n-tag>
+        </div>
+        <ol class="apply-progress-list">
+          <li
+            v-for="step in applyJobProgressSteps"
+            :key="step.key"
+            class="apply-progress-step"
+            :class="`apply-progress-step-${step.status}`"
+          >
+            <span class="apply-progress-icon" aria-hidden="true">
+              <Check v-if="step.status === 'success'" :size="14" />
+              <X v-else-if="step.status === 'failure'" :size="14" />
+              <Play v-else-if="step.status === 'running'" :size="14" />
+            </span>
+            <span class="apply-progress-copy">
+              <strong>{{ step.label }}</strong>
+              <span>{{ step.message }}</span>
+              <em v-if="step.detail">{{ step.detail }}</em>
+            </span>
+            <n-tag size="small" :type="step.status === 'failure' ? 'error' : 'default'">
+              {{ step.statusLabel }}
+            </n-tag>
+          </li>
+        </ol>
+      </section>
+
       <section class="apply-job-live-log" aria-labelledby="apply-job-log-title">
         <div class="apply-job-impact-heading">
           <strong id="apply-job-log-title">Live log</strong>
+          <span class="apply-job-log-note">Raw command output</span>
           <span class="apply-job-log-path">{{ applyJobLogTitle }}</span>
         </div>
         <n-alert
@@ -2415,9 +2599,42 @@ watch(
           </section>
         </div>
 
+        <section
+          class="apply-job-progress-steps"
+          aria-labelledby="apply-job-modal-progress-title"
+        >
+          <div class="apply-job-impact-heading">
+            <strong id="apply-job-modal-progress-title">Update progress</strong>
+            <n-tag size="small">{{ applyJobProgressSummary }}</n-tag>
+          </div>
+          <ol class="apply-progress-list">
+            <li
+              v-for="step in applyJobProgressSteps"
+              :key="step.key"
+              class="apply-progress-step"
+              :class="`apply-progress-step-${step.status}`"
+            >
+              <span class="apply-progress-icon" aria-hidden="true">
+                <Check v-if="step.status === 'success'" :size="14" />
+                <X v-else-if="step.status === 'failure'" :size="14" />
+                <Play v-else-if="step.status === 'running'" :size="14" />
+              </span>
+              <span class="apply-progress-copy">
+                <strong>{{ step.label }}</strong>
+                <span>{{ step.message }}</span>
+                <em v-if="step.detail">{{ step.detail }}</em>
+              </span>
+              <n-tag size="small" :type="step.status === 'failure' ? 'error' : 'default'">
+                {{ step.statusLabel }}
+              </n-tag>
+            </li>
+          </ol>
+        </section>
+
         <section class="apply-job-live-log" aria-labelledby="apply-job-modal-log-title">
           <div class="apply-job-impact-heading">
             <strong id="apply-job-modal-log-title">Live log</strong>
+            <span class="apply-job-log-note">Raw command output</span>
             <span class="apply-job-log-path">{{ applyJobLogTitle }}</span>
           </div>
           <n-alert

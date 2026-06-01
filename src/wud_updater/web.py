@@ -97,7 +97,13 @@ from .release_notes import (
     refresh_release_notes,
     release_note_placeholders,
 )
-from .updater import TagOverride, UpdateFromWudRunner, UpdaterOptions, js_regex_escape
+from .updater import (
+    TagOverride,
+    UpdaterProgressEvent,
+    UpdateFromWudRunner,
+    UpdaterOptions,
+    js_regex_escape,
+)
 from .file_ops import OwnerConfig
 from .wud_file import ParsedWudFile, WudTarget, parse_wud_file, remove_lines_before_run
 
@@ -165,6 +171,7 @@ PlanStatus = Literal["ready", "empty", "blocked"]
 PendingGroupingStatus = Literal["ready", "unavailable"]
 DoctorCheckStatus = Literal["PASS", "WARN", "FAIL"]
 ApplyJobStatus = Literal["queued", "running", "success", "failure"]
+ApplyJobProgressStatus = Literal["running", "success", "failure", "skipped"]
 SettingsEntrySource = Literal["configured", "default", "derived", "request"]
 ManagedSettingSource = Literal["configured", "default"]
 ServicePolicyUpdateMode = Literal["", "pause", "stop", "live"]
@@ -188,6 +195,7 @@ TagExclusionMatchType = Literal["exact"]
 TagExclusionStatus = Literal["active", "disabled"]
 TagExclusionStatusFilter = Literal["active", "disabled", "all"]
 TERMINAL_APPLY_JOB_STATUSES = frozenset({"success", "failure"})
+APPLY_JOB_PROGRESS_STATUSES = frozenset({"running", "success", "failure", "skipped"})
 JOB_STREAM_HEARTBEAT_SECONDS = 15.0
 JOB_STREAM_LOG_POLL_SECONDS = 1.0
 AUTO_UPDATE_POLL_SECONDS = 60.0
@@ -234,6 +242,17 @@ class WebSettings:
 
 
 @dataclass
+class WebApplyJobProgressEvent:
+    phase: str
+    status: ApplyJobProgressStatus
+    message: str
+    created_at: str
+    stack: str = ""
+    services: tuple[str, ...] = ()
+    line_numbers: tuple[int, ...] = ()
+
+
+@dataclass
 class WebApplyJob:
     id: str
     status: ApplyJobStatus
@@ -244,6 +263,7 @@ class WebApplyJob:
     started_at: str | None = None
     finished_at: str | None = None
     error: str = ""
+    progress: tuple[WebApplyJobProgressEvent, ...] = ()
 
 
 @dataclass
@@ -821,6 +841,18 @@ class ApplyJobResponse(BaseModel):
     finished_at: str | None = None
     error: str = ""
     selected_line_numbers: list[int] = Field(default_factory=list)
+    progress: list["ApplyJobProgressEvent"] = Field(default_factory=list)
+
+
+class ApplyJobProgressEvent(BaseModel):
+    job_id: str
+    phase: str
+    status: ApplyJobProgressStatus
+    message: str
+    created_at: str
+    stack: str = ""
+    services: list[str] = Field(default_factory=list)
+    line_numbers: list[int] = Field(default_factory=list)
 
 
 class ApplyJobLogResponse(BaseModel):
@@ -4129,16 +4161,21 @@ def _apply_job_stream(
     last_log_signature: tuple[object, ...] | None = None
     terminal_log_emitted = False
     last_heartbeat = time.monotonic()
+    last_progress_count = 0
 
     while True:
         job_snapshot: ApplyJobResponse
         response: ApplyJobResponse | None = None
+        progress_events: list[ApplyJobProgressEvent] = []
         terminal = False
         with apply_condition:
             job = jobs.get(job_id)
             if job is None:
                 return
-            if job.version == last_version:
+            if (
+                job.version == last_version
+                and len(job.progress) == last_progress_count
+            ):
                 apply_condition.wait(timeout=JOB_STREAM_LOG_POLL_SECONDS)
                 job = jobs.get(job_id)
                 if job is None:
@@ -4147,6 +4184,9 @@ def _apply_job_stream(
             if job.version != last_version:
                 response = job_snapshot
                 last_version = job.version
+            if len(job.progress) > last_progress_count:
+                progress_events = job_snapshot.progress[last_progress_count:]
+                last_progress_count = len(job.progress)
             terminal = job.status in TERMINAL_APPLY_JOB_STATUSES
 
         log_event = ""
@@ -4174,6 +4214,11 @@ def _apply_job_stream(
 
         if terminal and log_event:
             yield log_event
+
+        for progress_event in progress_events:
+            yield _sse_job_progress_event(progress_event)
+        if progress_events:
+            last_heartbeat = time.monotonic()
 
         if response is not None:
             yield _sse_job_event(response)
@@ -4234,6 +4279,12 @@ def _run_apply_job(
             options,
             environ=apply_env,
             command_runner=CommandRunner(env=apply_env),
+            progress_callback=lambda event: _append_apply_job_progress(
+                jobs,
+                apply_condition,
+                job_id,
+                event,
+            ),
         )
         _update_apply_job(
             jobs,
@@ -4262,6 +4313,16 @@ def _run_apply_job(
         )
     except Exception as exc:
         run_id = None if runner is None else runner.audit_run_id
+        _append_apply_job_progress(
+            jobs,
+            apply_condition,
+            job_id,
+            UpdaterProgressEvent(
+                phase="completion",
+                status="failure",
+                message=str(exc),
+            ),
+        )
         _safe_update_auto_update_schedule_runs(
             settings,
             auto_update_schedule_keys,
@@ -4296,6 +4357,36 @@ def _update_apply_job(
         for key, value in changes.items():
             setattr(job, key, value)
         job.version += 1
+        apply_condition.notify_all()
+
+
+def _append_apply_job_progress(
+    jobs: dict[str, WebApplyJob],
+    apply_condition: Condition,
+    job_id: str,
+    event: UpdaterProgressEvent,
+) -> None:
+    with apply_condition:
+        job = jobs.get(job_id)
+        if job is None:
+            return
+        status = (
+            event.status
+            if event.status in APPLY_JOB_PROGRESS_STATUSES
+            else "running"
+        )
+        job.progress = (
+            *job.progress,
+            WebApplyJobProgressEvent(
+                phase=event.phase,
+                status=cast(ApplyJobProgressStatus, status),
+                message=event.message,
+                created_at=utc_timestamp(),
+                stack=event.stack,
+                services=event.services,
+                line_numbers=event.line_numbers,
+            ),
+        )
         apply_condition.notify_all()
 
 
@@ -4363,6 +4454,19 @@ def _apply_job_response(job: WebApplyJob) -> ApplyJobResponse:
         finished_at=job.finished_at,
         error=job.error,
         selected_line_numbers=list(job.selected_line_numbers),
+        progress=[
+            ApplyJobProgressEvent(
+                job_id=job.id,
+                phase=event.phase,
+                status=event.status,
+                message=event.message,
+                created_at=event.created_at,
+                stack=event.stack,
+                services=list(event.services),
+                line_numbers=list(event.line_numbers),
+            )
+            for event in job.progress
+        ],
     )
 
 
@@ -4373,6 +4477,15 @@ def _sse_job_event(job: ApplyJobResponse) -> str:
         separators=(",", ":"),
     )
     return f"event: job\ndata: {payload}\n\n"
+
+
+def _sse_job_progress_event(progress: ApplyJobProgressEvent) -> str:
+    payload = json.dumps(
+        jsonable_encoder(progress),
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    return f"event: progress\ndata: {payload}\n\n"
 
 
 def _apply_job_log_response(

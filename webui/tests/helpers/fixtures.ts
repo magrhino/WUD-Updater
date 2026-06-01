@@ -536,6 +536,7 @@ export function applyJobResponse(
     finished_at: null,
     error: "",
     selected_line_numbers: [1],
+    progress: [],
     ...overrides,
   };
 }

@@ -11,7 +11,7 @@ import sqlite3
 import sys
 import tempfile
 import time
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, replace
 from datetime import datetime
 from io import StringIO
@@ -212,6 +212,16 @@ class FailureRecord:
     wud_restored: bool | None = None
 
 
+@dataclass(frozen=True)
+class UpdaterProgressEvent:
+    phase: str
+    status: str
+    message: str
+    stack: str = ""
+    services: tuple[str, ...] = ()
+    line_numbers: tuple[int, ...] = ()
+
+
 class Logger:
     def __init__(
         self,
@@ -261,6 +271,7 @@ class UpdateFromWudRunner:
         *,
         environ: Mapping[str, str] | None = None,
         command_runner: CommandRunner | None = None,
+        progress_callback: Callable[[UpdaterProgressEvent], None] | None = None,
     ) -> None:
         self.options = options
         self.environ = os.environ if environ is None else environ
@@ -278,6 +289,7 @@ class UpdateFromWudRunner:
         self.audit_conn: sqlite3.Connection | None = None
         self.audit_run_id: int | None = None
         self.audit_db_path: Path | None = None
+        self.progress_callback = progress_callback
 
     def run(self) -> int:
         opts = self.options
@@ -296,6 +308,11 @@ class UpdateFromWudRunner:
 
         try:
             self._print_header()
+            self._progress(
+                "preflight",
+                "running",
+                "Checking pending entries, Compose stacks, and update safety.",
+            )
             if not opts.wud_file.is_file():
                 raise UpdaterError(f"List file not found: {opts.wud_file}")
 
@@ -308,6 +325,8 @@ class UpdateFromWudRunner:
 
             if not parsed.targets and not excluded_tags.targets:
                 self.log.info("Nothing to do; list is empty.")
+                self._progress("preflight", "success", "Pending list is empty.")
+                self._progress("completion", "success", "No updates were pending.")
                 return 0
 
             if parsed.targets:
@@ -344,12 +363,28 @@ class UpdateFromWudRunner:
                         "failure" if exclusion_failures else "success"
                     )
                 self.log.info("No stacks matched the list; nothing to do.")
+                self._progress(
+                    "preflight",
+                    "failure" if exclusion_failures else "success",
+                    "No Compose stacks matched the selected pending entries.",
+                )
+                self._progress(
+                    "completion",
+                    "failure" if exclusion_failures else "success",
+                    "Updater finished without matching a stack.",
+                )
                 return 1 if exclusion_failures else 0
 
             if matches:
                 self._print_plan(matches)
 
             if not self._validate_tag_update_plan(matches):
+                self._progress(
+                    "preflight",
+                    "failure",
+                    "Tag update plan validation failed.",
+                    matches=matches,
+                )
                 return 1
             preflight_matches = _unique_matches(
                 (
@@ -370,6 +405,12 @@ class UpdateFromWudRunner:
                         parsed,
                         [match.target.line_no for match in preflight_matches],
                     )
+                    self._progress(
+                        "preflight",
+                        "failure",
+                        "Compose runtime port preflight failed.",
+                        matches=preflight_matches,
+                    )
                     return self._finish_preflight_failure(
                         audit_parsed,
                         preflight_matches,
@@ -381,14 +422,33 @@ class UpdateFromWudRunner:
                         "Dry-run only; reported container bind-mount path issue without mutating."
                     )
                 else:
+                    self._progress(
+                        "preflight",
+                        "failure",
+                        "Compose bind-mount preflight failed.",
+                        matches=matches,
+                    )
                     return self._finish_preflight_failure(parsed, matches, skipped_tags)
             if not self._validate_tag_manifests(matches):
+                self._progress(
+                    "preflight",
+                    "failure",
+                    "Target image manifest validation failed.",
+                    matches=matches,
+                )
                 return 1
 
+            self._progress(
+                "preflight",
+                "success",
+                "Preflight checks passed.",
+                matches=matches,
+            )
             if opts.dry_run:
                 self.log.info(
                     "Dry-run only; no pull, restart, health wait, or cleanup performed."
                 )
+                self._progress("completion", "success", "Dry run completed.")
                 return 0
 
             self._confirm_before_mutation()
@@ -429,6 +489,12 @@ class UpdateFromWudRunner:
                 stack_matches = [match for match in matches if match.stack.index == stack.index]
                 stack_statuses[stack.index] = self._update_stack(stack, stack_matches)
 
+            self._progress(
+                "cleanup",
+                "running",
+                "Reconciling pending entries after the update attempt.",
+                matches=matches,
+            )
             failed_lines = _failed_line_numbers(matches, stack_statuses)
             failed_lines.extend(
                 sorted(
@@ -451,9 +517,21 @@ class UpdateFromWudRunner:
                 self._mark_failed_lines_restored(failed_lines)
                 self._mark_failed_pending(matches, stack_statuses, failed_lines)
                 self.log.warn(f"Restored failed WUD entries in {opts.wud_file}")
+                self._progress(
+                    "cleanup",
+                    "failure",
+                    "Restored failed entries to the pending file.",
+                    matches=matches,
+                )
             else:
                 self._mark_failed_lines_restored(())
                 self.log.info("Successful WUD entries were removed before update.")
+                self._progress(
+                    "cleanup",
+                    "success",
+                    "Pending entries were reconciled.",
+                    matches=matches,
+                )
             self._mark_successful_pending(matches, stack_statuses)
             self._mark_successful_tag_exclusions(exclusion_updates, exclusion_statuses)
             self._record_update_events(matches, stack_statuses)
@@ -476,10 +554,22 @@ class UpdateFromWudRunner:
                     )
                 else:
                     self.log.error(f"Completed with {fail_count} failure(s). See log: {self.log_file}")
+                self._progress(
+                    "completion",
+                    "failure",
+                    f"Updater completed with {fail_count} failure(s).",
+                    matches=matches,
+                )
                 return 1
 
             self._finish_audit_run("success")
             self.log.info(f"Done. See log: {self.log_file}")
+            self._progress(
+                "completion",
+                "success",
+                "Updater completed successfully.",
+                matches=matches,
+            )
             return 0
         except (CommandError, ComposeDiscoveryError, LineSpecError, OwnerConfigError, WudLockError) as exc:
             self._finish_audit_run("failure", best_effort=True)
@@ -726,6 +816,30 @@ class UpdateFromWudRunner:
                 failures.append((first_match.target, "compose-label-unsupported"))
 
         return _unique_tag_exclusion_updates(updates), failures
+
+    def _progress(
+        self,
+        phase: str,
+        status: str,
+        message: str,
+        *,
+        stack: str = "",
+        services: Sequence[str] | None = (),
+        matches: Sequence[Match] = (),
+    ) -> None:
+        if self.progress_callback is None:
+            return
+        line_numbers = tuple(sorted({match.target.line_no for match in matches}))
+        self.progress_callback(
+            UpdaterProgressEvent(
+                phase=phase,
+                status=status,
+                message=message,
+                stack=stack,
+                services=tuple(services or ()),
+                line_numbers=line_numbers,
+            )
+        )
 
     def _tag_exclusion_repo_updates(
         self,
@@ -1084,6 +1198,14 @@ class UpdateFromWudRunner:
             current_stack = refreshed
             images = tuple(current_stack.images)
 
+        self._progress(
+            "pull",
+            "running",
+            f"[{stack.name}] Pulling selected image updates.",
+            stack=stack.name,
+            services=pull_services,
+            matches=matches,
+        )
         try:
             self.compose.pull(
                 stack.directory,
@@ -1114,6 +1236,14 @@ class UpdateFromWudRunner:
                 command_error=exc,
                 health_details=self._capture_health_details(stack, pull_services),
             )
+            self._progress(
+                "pull",
+                "failure",
+                f"[{stack.name}] Pull failed.",
+                stack=stack.name,
+                services=pull_services,
+                matches=matches,
+            )
             return StackStatus("failure", "pull-failed")
 
         after = self._image_state(images)
@@ -1138,7 +1268,23 @@ class UpdateFromWudRunner:
                 services=pull_services,
                 health_details=self._capture_health_details(stack, pull_services),
             )
+            self._progress(
+                "pull",
+                "failure",
+                f"[{stack.name}] Pulled images did not reach the expected digest.",
+                stack=stack.name,
+                services=pull_services,
+                matches=matches,
+            )
             return StackStatus("failure", "expected-digest-not-reached")
+        self._progress(
+            "pull",
+            "success",
+            f"[{stack.name}] Images pulled and verified.",
+            stack=stack.name,
+            services=pull_services,
+            matches=matches,
+        )
 
         changes = _updated_images(before, after)
         update_needed = bool(applied_tags or changes)
@@ -1148,8 +1294,32 @@ class UpdateFromWudRunner:
 
         if not update_needed:
             self.log.info(f"[{stack.name}] All images up to date, skipping restart")
+            self._progress(
+                "recreate",
+                "skipped",
+                f"[{stack.name}] Images are already current; recreate was skipped.",
+                stack=stack.name,
+                services=services,
+                matches=matches,
+            )
+            self._progress(
+                "health",
+                "skipped",
+                f"[{stack.name}] Health wait was skipped because no containers changed.",
+                stack=stack.name,
+                services=services,
+                matches=matches,
+            )
             return StackStatus("success", "already-current")
 
+        self._progress(
+            "recreate",
+            "running",
+            f"[{stack.name}] Recreating selected containers.",
+            stack=stack.name,
+            services=services,
+            matches=matches,
+        )
         down_failed = False
         down_error: CommandError | None = None
         down_phase = "stop"
@@ -1249,7 +1419,23 @@ class UpdateFromWudRunner:
                 command_error=up_result.command_error,
                 health_details=up_result.health_details,
             )
+            self._progress(
+                "recreate",
+                "failure",
+                f"[{stack.name}] Compose up failed.",
+                stack=stack.name,
+                services=services,
+                matches=matches,
+            )
             return StackStatus("failure", "up-or-health-failed")
+        self._progress(
+            "recreate",
+            "success",
+            f"[{stack.name}] Containers were recreated.",
+            stack=stack.name,
+            services=services,
+            matches=matches,
+        )
 
         if opts.mode == "pause":
             self.log.warn(f"[{stack.name}] Unpausing before health check")
@@ -1286,7 +1472,17 @@ class UpdateFromWudRunner:
                 return StackStatus("failure", "unpause-failed")
             up_result = UpResult(up_result.ok, False, up_result.command_error, up_result.health_details)
 
-        if up_result.wait_handled or self._wait_for_health(stack, services):
+        if up_result.wait_handled:
+            self._progress(
+                "health",
+                "success",
+                f"[{stack.name}] Compose reported healthy containers.",
+                stack=stack.name,
+                services=services,
+                matches=matches,
+            )
+
+        if up_result.wait_handled or self._wait_for_health(stack, services, matches):
             self.log.info(f"[{stack.name}] Healthy")
             if down_failed:
                 if applied_tags and compose_backup is not None:
@@ -1312,6 +1508,14 @@ class UpdateFromWudRunner:
                     health_details=self._capture_health_details(stack, services),
                     note="Compose up recovery succeeded, but the earlier stop command failed.",
                 )
+                self._progress(
+                    "recreate",
+                    "failure",
+                    f"[{stack.name}] Stop failed before recreate.",
+                    stack=stack.name,
+                    services=services,
+                    matches=matches,
+                )
                 return StackStatus("failure", "down-failed")
             return StackStatus("success", "updated")
 
@@ -1336,6 +1540,14 @@ class UpdateFromWudRunner:
             reason="health-failed",
             services=services,
             health_details=health_details,
+        )
+        self._progress(
+            "health",
+            "failure",
+            f"[{stack.name}] Health wait failed.",
+            stack=stack.name,
+            services=services,
+            matches=matches,
         )
         return StackStatus("failure", "health-failed")
 
@@ -1393,8 +1605,17 @@ class UpdateFromWudRunner:
         self,
         stack: ComposeStack,
         services: Sequence[str] | None,
+        matches: Sequence[Match] = (),
     ) -> bool:
         start = time.monotonic()
+        self._progress(
+            "health",
+            "running",
+            f"[{stack.name}] Waiting up to {self.options.max_wait}s for health.",
+            stack=stack.name,
+            services=services,
+            matches=matches,
+        )
         if self.options.max_wait > 0:
             time.sleep(2)
 
@@ -1414,6 +1635,14 @@ class UpdateFromWudRunner:
             elapsed = int(time.monotonic() - start)
             if ok:
                 self.log.plain("INFO", f"[{stack.name}] Health wait succeeded in {elapsed}s")
+                self._progress(
+                    "health",
+                    "success",
+                    f"[{stack.name}] Health wait succeeded in {elapsed}s.",
+                    stack=stack.name,
+                    services=services,
+                    matches=matches,
+                )
                 return True
             if elapsed >= self.options.max_wait:
                 self.log.error(f"[{stack.name}] Failed health gate after {elapsed}s")
@@ -1423,6 +1652,14 @@ class UpdateFromWudRunner:
                         f"[{stack.name}] Health blocker: docker compose ps -q returned no containers",
                     )
                 self._log_health_details(stack, services)
+                self._progress(
+                    "health",
+                    "failure",
+                    f"[{stack.name}] Failed health gate after {elapsed}s.",
+                    stack=stack.name,
+                    services=services,
+                    matches=matches,
+                )
                 return False
             time.sleep(2)
 

@@ -268,6 +268,18 @@ export interface PendingRemovalPlanResponse {
 }
 
 export type ApplyJobStatus = "queued" | "running" | "success" | "failure";
+export type ApplyJobProgressStatus = "running" | "success" | "failure" | "skipped";
+
+export interface ApplyJobProgressEvent {
+  job_id: string;
+  phase: string;
+  status: ApplyJobProgressStatus;
+  message: string;
+  created_at: string;
+  stack: string;
+  services: string[];
+  line_numbers: number[];
+}
 
 export interface ApplyJobResponse {
   job_id: string;
@@ -278,6 +290,7 @@ export interface ApplyJobResponse {
   finished_at: string | null;
   error: string;
   selected_line_numbers: number[];
+  progress: ApplyJobProgressEvent[];
 }
 
 export interface ApplyJobLogResponse {
