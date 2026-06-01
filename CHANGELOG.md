@@ -4,6 +4,14 @@ All notable changes to WUD-Updater are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com) and versions follow
 [Semantic Versioning](https://semver.org).
 
+## [0.31.3](https://github.com/magrhino/WUD-Updater/compare/v0.31.2...v0.31.3) (2026-06-01)
+
+
+### Bug Fixes
+
+* **webui:** clarify stack names on pending page ([4fa5fa8](https://github.com/magrhino/WUD-Updater/commit/4fa5fa83f16a6a3a76f57522e5170371ffa84737))
+* **webui:** Collapse completed live logs behind a toggle ([#172](https://github.com/magrhino/WUD-Updater/issues/172)) ([98fe6ae](https://github.com/magrhino/WUD-Updater/commit/98fe6ae831045ea118b7b88fc42b258f1b940403))
+
 ## [0.31.2](https://github.com/magrhino/WUD-Updater/compare/v0.31.1...v0.31.2) (2026-06-01)
 
 
