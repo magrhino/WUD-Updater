@@ -4,6 +4,19 @@ All notable changes to WUD-Updater are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com) and versions follow
 [Semantic Versioning](https://semver.org).
 
+## [0.31.0](https://github.com/magrhino/WUD-Updater/compare/v0.30.0...v0.31.0) (2026-06-01)
+
+
+### Features
+
+* **ui:** Add onboarding tour and relaunch controls to the WebUI ([#153](https://github.com/magrhino/WUD-Updater/issues/153)) ([b145167](https://github.com/magrhino/WUD-Updater/commit/b145167ff463b48e72f5a6718843941a404f497e))
+* **ui:** Polish WebUI with clearer empty and completion states ([#150](https://github.com/magrhino/WUD-Updater/issues/150)) ([a49e1f2](https://github.com/magrhino/WUD-Updater/commit/a49e1f2883fc63a83a2a67384472308593ac7089))
+
+
+### Bug Fixes
+
+* **webui:** Add shared update-target helpers for management forms ([#152](https://github.com/magrhino/WUD-Updater/issues/152)) ([8461eea](https://github.com/magrhino/WUD-Updater/commit/8461eea806585fe9311372aabc9bbc67770c90b5))
+
 ## [0.30.0](https://github.com/magrhino/WUD-Updater/compare/v0.29.0...v0.30.0) (2026-05-31)
 
 
