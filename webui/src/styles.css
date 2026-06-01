@@ -1227,7 +1227,7 @@ a {
 
 .apply-job-panel {
   display: grid;
-  gap: 12px;
+  gap: 10px;
   scroll-margin-top: 88px;
 }
 
@@ -1241,13 +1241,13 @@ a {
 .apply-job-panel-success {
   border-color: color-mix(
     in srgb,
-    var(--color-border) 64%,
-    var(--color-operational-teal) 36%
+    var(--color-border) 72%,
+    var(--color-operational-teal) 28%
   );
   background: color-mix(
     in srgb,
-    var(--color-surface) 94%,
-    var(--color-operational-teal) 6%
+    var(--color-surface) 97%,
+    var(--color-operational-teal) 3%
   );
 }
 
@@ -1335,6 +1335,32 @@ a {
   );
 }
 
+.apply-job-now-success {
+  border-color: color-mix(
+    in srgb,
+    var(--color-border-hover) 70%,
+    var(--color-operational-teal) 30%
+  );
+  background: color-mix(
+    in srgb,
+    var(--color-surface) 96%,
+    var(--color-operational-teal) 4%
+  );
+}
+
+.apply-job-now-failure {
+  border-color: color-mix(
+    in srgb,
+    var(--color-border) 54%,
+    var(--color-error) 46%
+  );
+  background: color-mix(
+    in srgb,
+    var(--color-surface) 90%,
+    var(--color-error) 10%
+  );
+}
+
 .apply-job-now-copy {
   display: grid;
   gap: 3px;
@@ -1390,10 +1416,7 @@ a {
 
 .apply-job-details {
   min-width: 0;
-  padding: 12px;
-  border: 1px solid var(--color-border-subtle);
-  border-radius: 7px;
-  background: var(--color-panel-tint);
+  padding: 2px 0 0;
 }
 
 .apply-job-details summary {
@@ -1410,13 +1433,30 @@ a {
   display: none;
 }
 
+.apply-job-details summary::before {
+  content: "";
+  flex: 0 0 auto;
+  width: 0;
+  height: 0;
+  border-top: 4px solid transparent;
+  border-bottom: 4px solid transparent;
+  border-left: 5px solid var(--color-action-blue);
+  transition: transform var(--motion-base) var(--ease-out-quart);
+}
+
 .apply-job-details summary span {
+  flex: 1 1 auto;
+  min-width: 0;
   color: var(--color-ink);
   font-weight: 700;
 }
 
+.apply-job-details[open] summary::before {
+  transform: rotate(90deg);
+}
+
 .apply-job-details[open] summary {
-  margin-bottom: 10px;
+  margin-bottom: 8px;
 }
 
 .apply-job-grid {
@@ -1442,9 +1482,9 @@ a {
 
 .apply-job-progress-steps {
   display: grid;
-  gap: 8px;
+  gap: 10px;
   min-width: 0;
-  padding: 12px;
+  padding: 10px;
   border: 1px solid var(--color-border-subtle);
   border-radius: 7px;
   background: var(--color-surface);
@@ -1452,7 +1492,8 @@ a {
 
 .apply-progress-list {
   display: grid;
-  gap: 6px;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 8px;
   padding: 0;
   margin: 0;
   list-style: none;
@@ -1460,11 +1501,11 @@ a {
 
 .apply-progress-step {
   display: grid;
-  grid-template-columns: 24px minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 10px;
-  min-height: 48px;
-  padding: 8px 10px;
+  grid-template-columns: 22px minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 8px;
+  min-height: 0;
+  padding: 8px;
   border: 1px solid var(--color-border-subtle);
   border-radius: 7px;
   background: var(--color-panel-tint);
@@ -1503,8 +1544,8 @@ a {
 
 .apply-progress-icon {
   display: inline-grid;
-  width: 24px;
-  height: 24px;
+  width: 22px;
+  height: 22px;
   place-items: center;
   border: 1px solid var(--color-border-dashed);
   border-radius: 999px;
@@ -1539,13 +1580,14 @@ a {
 
 .apply-progress-copy strong {
   color: var(--color-ink);
-  font-size: 0.9rem;
+  font-size: 0.88rem;
+  line-height: 1.25;
 }
 
 .apply-progress-copy span,
 .apply-progress-copy em {
   color: var(--color-muted-text);
-  font-size: 0.82rem;
+  font-size: 0.8rem;
   font-style: normal;
   line-height: 1.35;
   overflow-wrap: anywhere;
@@ -1985,6 +2027,7 @@ a {
 .list-row.linked:focus-visible,
 .mobile-card.linked:focus-visible,
 .stack-details summary:focus-visible,
+.apply-job-details summary:focus-visible,
 .preflight-details summary:focus-visible,
 body .n-button:focus-visible,
 body .n-checkbox:focus-within,
@@ -2635,14 +2678,8 @@ body .n-switch:focus-within {
     grid-template-columns: 1fr;
   }
 
-  .apply-progress-step {
-    grid-template-columns: 24px minmax(0, 1fr);
-    align-items: start;
-  }
-
-  .apply-progress-step > .n-tag {
-    grid-column: 2;
-    width: fit-content;
+  .apply-progress-list {
+    grid-template-columns: 1fr;
   }
 
   .apply-job-now {
@@ -2784,6 +2821,7 @@ body .n-switch:focus-within {
   .stack-title-block .n-checkbox,
   .pending-update-main .n-checkbox,
   .stack-details summary,
+  .apply-job-details summary,
   .preflight-details summary {
     min-height: 44px;
   }

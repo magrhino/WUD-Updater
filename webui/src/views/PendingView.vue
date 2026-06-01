@@ -635,6 +635,21 @@ const applyJobNowStatusLabel = computed(() => {
   }
   return applyJobProgressSummary.value;
 });
+const applyJobPanelStatusLabel = computed(() => {
+  if (webui.applyJob?.status === "queued") {
+    return "Queued";
+  }
+  if (webui.applyJob?.status === "running") {
+    return "Running";
+  }
+  if (webui.applyJob?.status === "success") {
+    return "Complete";
+  }
+  if (webui.applyJob?.status === "failure") {
+    return "Failed";
+  }
+  return "Job";
+});
 
 function rowKey(row: PendingItem): number {
   return row.line_no;
@@ -654,6 +669,21 @@ function progressStatusLabel(status: ApplyJobProgressStep["status"]): string {
     return "Skipped";
   }
   return "Waiting";
+}
+
+function progressTagType(
+  status: ApplyJobProgressStep["status"],
+): "default" | "success" | "warning" | "error" {
+  if (status === "success") {
+    return "success";
+  }
+  if (status === "running") {
+    return "warning";
+  }
+  if (status === "failure") {
+    return "error";
+  }
+  return "default";
 }
 
 function displayProgressEvent(
@@ -1532,7 +1562,7 @@ watch(
             {{ applyJobStatusMessage }}
           </p>
         </div>
-        <n-tag :type="applyJobAlertType">{{ webui.applyJob.status }}</n-tag>
+        <n-tag :type="applyJobAlertType">{{ applyJobPanelStatusLabel }}</n-tag>
       </div>
 
       <div v-if="applyJobActive" class="apply-job-progress" aria-hidden="true">
@@ -1542,6 +1572,10 @@ watch(
       <section
         id="apply-job-panel-status"
         class="apply-job-now"
+        :class="{
+          'apply-job-now-success': webui.applyJob.status === 'success',
+          'apply-job-now-failure': webui.applyJob.status === 'failure',
+        }"
         role="status"
         aria-live="polite"
         aria-atomic="true"
@@ -1587,7 +1621,7 @@ watch(
               <span>{{ step.message }}</span>
               <em v-if="step.detail">{{ step.detail }}</em>
             </span>
-            <n-tag size="small" :type="step.status === 'failure' ? 'error' : 'default'">
+            <n-tag size="small" :type="progressTagType(step.status)">
               {{ step.statusLabel }}
             </n-tag>
           </li>
@@ -1596,7 +1630,7 @@ watch(
 
       <details class="apply-job-details" :open="!applyJobActive">
         <summary>
-          <span>Details</span>
+          <span>Applied scope</span>
           <n-tag size="small">{{ applyJobImpactLabel || applyJobUpdateLabel }}</n-tag>
         </summary>
         <div class="apply-job-grid">

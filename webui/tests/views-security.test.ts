@@ -1096,7 +1096,7 @@ describe("mutating WebUI views", () => {
     expect(applyPanel.text()).toContain("Current status");
     expect(applyPanel.text()).toContain("Queued to start");
     expect(applyPanel.text()).toContain("Latest log line");
-    expect(applyPanel.text()).toContain("Details");
+    expect(applyPanel.text()).toContain("Applied scope");
     const panel = applyPanel.element;
     const panelStatus = wrapper.find("#apply-job-panel-status").element;
     const panelLatestLog = wrapper.find(
