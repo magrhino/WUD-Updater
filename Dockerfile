@@ -1,4 +1,4 @@
-FROM node:26-bookworm-slim AS webui-build
+FROM node:26-bookworm-slim@sha256:e89172f5e6154ba212269866bf3fbadbca8eb7901e10c0eccf08f2147bfae505 AS webui-build
 
 WORKDIR /webui
 
@@ -9,7 +9,7 @@ COPY webui/ /webui/
 RUN npm run build
 
 
-FROM python:3.14.5-slim-bookworm
+FROM python:3.14.5-slim-bookworm@sha256:a9bee15510a364124aa24692899d269835683b883de42f7ebec8c293cf679ccb
 
 ARG TRUENAS_API_CLIENT_REF=""
 
