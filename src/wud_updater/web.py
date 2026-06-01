@@ -20,7 +20,7 @@ from datetime import datetime, time as datetime_time, timedelta, timezone
 from pathlib import Path
 from threading import Condition, Event, Lock, Thread
 from types import SimpleNamespace
-from typing import Annotated, Any, Literal
+from typing import Annotated, Any, Literal, cast
 from urllib.parse import quote, urlencode, urlsplit
 from zoneinfo import ZoneInfo
 
@@ -124,11 +124,26 @@ RESET_ADMIN_CLAIM_HASH_KEY = "reset_admin_claim_hash"
 RESET_ADMIN_CLAIM_EXPIRES_KEY = "reset_admin_claim_expires_at"
 RESET_ADMIN_CLAIM_USER_ID_KEY = "reset_admin_claim_user_id"
 ONBOARDING_DISMISSED_AT_KEY = "onboarding_checklist_dismissed_at"
+CORE_UPDATE_TOUR_KEY = "onboarding_core_update_tour"
 MANAGED_THEME_PREFERENCE_KEY = "theme_preference"
 MANAGED_THEME_PREFERENCE_DB_KEY = "ui.theme_preference"
 MANAGED_ONBOARDING_CHECKLIST_KEY = "onboarding_checklist"
 THEME_PREFERENCE_VALUES = ("system", "light", "dark")
 ONBOARDING_CHECKLIST_VALUES = ("visible", "dismissed")
+CORE_UPDATE_TOUR_STATUS_VALUES = (
+    "not_started",
+    "in_progress",
+    "completed",
+    "dismissed",
+)
+CORE_UPDATE_TOUR_STEP_VALUES = (
+    "dashboard",
+    "pending_select",
+    "pending_preflight",
+    "pending_apply",
+    "runs_history",
+)
+DEFAULT_CORE_UPDATE_TOUR_STEP = "dashboard"
 DEFAULT_ALLOWED_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
 SENSITIVE_ENV_KEYS = (
     "WUD_WEB_TOKEN",
@@ -148,6 +163,19 @@ SettingsEntrySource = Literal["configured", "default", "derived", "request"]
 ManagedSettingSource = Literal["configured", "default"]
 ServicePolicyUpdateMode = Literal["", "pause", "stop", "live"]
 AutoUpdateDay = Literal["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
+CoreUpdateTourStatus = Literal[
+    "not_started",
+    "in_progress",
+    "completed",
+    "dismissed",
+]
+CoreUpdateTourStep = Literal[
+    "dashboard",
+    "pending_select",
+    "pending_preflight",
+    "pending_apply",
+    "runs_history",
+]
 SnoozeState = Literal["active", "expired", "all"]
 TagExclusionScope = Literal["image_repo", "service"]
 TagExclusionMatchType = Literal["exact"]
@@ -479,6 +507,17 @@ class OnboardingChecklistResponse(BaseModel):
 class OnboardingDismissResponse(BaseModel):
     dismissed: bool
     dismissed_at: str
+
+
+class CoreUpdateTourResponse(BaseModel):
+    status: CoreUpdateTourStatus
+    step: CoreUpdateTourStep
+    updated_at: str = ""
+
+
+class CoreUpdateTourUpdateRequest(BaseModel):
+    status: CoreUpdateTourStatus
+    step: CoreUpdateTourStep = DEFAULT_CORE_UPDATE_TOUR_STEP
 
 
 class CsrfResponse(BaseModel):
@@ -1077,6 +1116,18 @@ def create_app(
         methods=["GET"],
     )
     router.add_api_route(
+        "/onboarding/core-update-tour",
+        api_core_update_tour,
+        methods=["GET"],
+        response_model=CoreUpdateTourResponse,
+    )
+    router.add_api_route(
+        "/onboarding/core-update-tour",
+        api_update_core_update_tour,
+        methods=["POST"],
+        response_model=CoreUpdateTourResponse,
+    )
+    router.add_api_route(
         "/pending",
         api_pending,
         methods=["GET"],
@@ -1614,6 +1665,35 @@ def api_onboarding_dismiss(request: Request) -> OnboardingDismissResponse:
             ),
         ) from exc
     return OnboardingDismissResponse(dismissed=True, dismissed_at=dismissed_at)
+
+
+def api_core_update_tour(request: Request) -> CoreUpdateTourResponse:
+    return _core_update_tour_response(_settings(request))
+
+
+def api_update_core_update_tour(
+    payload: CoreUpdateTourUpdateRequest,
+    request: Request,
+) -> CoreUpdateTourResponse:
+    settings = _settings(request)
+    try:
+        with connect_db(settings.config.db_path) as conn:
+            init_db(conn)
+            with conn:
+                return _set_core_update_tour_state(
+                    conn,
+                    status=payload.status,
+                    step=payload.step,
+                )
+    except (OSError, sqlite3.Error, DatabaseError) as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=_safe_exception_detail(
+                settings,
+                "could not update core update tour",
+                exc,
+            ),
+        ) from exc
 
 
 def api_pending(request: Request) -> PendingResponse:
@@ -2878,6 +2958,85 @@ def _browser_access_docs() -> list[OnboardingDocLink]:
 
 def _onboarding_doc(label: str, url: str) -> OnboardingDocLink:
     return OnboardingDocLink(label=label, url=url)
+
+
+def _core_update_tour_response(settings: WebSettings) -> CoreUpdateTourResponse:
+    try:
+        with closing(_connect_readonly_db(settings)) as conn:
+            return _core_update_tour_response_from_conn(conn)
+    except ReadOnlyDatabaseMissing:
+        return _default_core_update_tour_response()
+    except (OSError, sqlite3.Error, DatabaseError) as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=_safe_exception_detail(
+                settings,
+                "could not read core update tour state",
+                exc,
+            ),
+        ) from exc
+
+
+def _core_update_tour_response_from_conn(
+    conn: sqlite3.Connection,
+) -> CoreUpdateTourResponse:
+    row = conn.execute(
+        """
+        SELECT value, updated_at
+        FROM web_settings
+        WHERE key = ?
+        LIMIT 1
+        """,
+        (CORE_UPDATE_TOUR_KEY,),
+    ).fetchone()
+    if row is None:
+        return _default_core_update_tour_response()
+    return _core_update_tour_response_from_value(
+        str(row["value"]),
+        str(row["updated_at"] or ""),
+    )
+
+
+def _default_core_update_tour_response() -> CoreUpdateTourResponse:
+    return CoreUpdateTourResponse(
+        status="not_started",
+        step=DEFAULT_CORE_UPDATE_TOUR_STEP,
+        updated_at="",
+    )
+
+
+def _core_update_tour_response_from_value(
+    raw_value: str,
+    updated_at: str,
+) -> CoreUpdateTourResponse:
+    try:
+        decoded = json.loads(raw_value) if raw_value else {}
+    except json.JSONDecodeError:
+        decoded = {}
+    if not isinstance(decoded, Mapping):
+        decoded = {}
+    status = str(decoded.get("status", ""))
+    step = str(decoded.get("step", ""))
+    if status not in CORE_UPDATE_TOUR_STATUS_VALUES:
+        status = "not_started"
+    if step not in CORE_UPDATE_TOUR_STEP_VALUES:
+        step = DEFAULT_CORE_UPDATE_TOUR_STEP
+    return CoreUpdateTourResponse(
+        status=cast(CoreUpdateTourStatus, status),
+        step=cast(CoreUpdateTourStep, step),
+        updated_at=updated_at,
+    )
+
+
+def _set_core_update_tour_state(
+    conn: sqlite3.Connection,
+    *,
+    status: CoreUpdateTourStatus,
+    step: CoreUpdateTourStep,
+) -> CoreUpdateTourResponse:
+    value = json.dumps({"status": status, "step": step}, sort_keys=True)
+    _set_web_setting(conn, CORE_UPDATE_TOUR_KEY, value)
+    return _core_update_tour_response_from_conn(conn)
 
 
 def _loopback_only_browser_access(settings: WebSettings) -> bool:

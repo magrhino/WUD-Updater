@@ -74,6 +74,22 @@ describe("demo web API", () => {
     await expect(api.dismissOnboarding("csrf")).resolves.toMatchObject({
       dismissed: true,
     });
+    await expect(api.onboardingChecklist("csrf")).resolves.toMatchObject({
+      visible: false,
+    });
+    await expect(
+      api.updateManagedSettings({ onboarding_checklist: "visible" }, "csrf"),
+    ).resolves.toMatchObject({
+      managed: expect.arrayContaining([
+        expect.objectContaining({
+          key: "onboarding_checklist",
+          value: "visible",
+        }),
+      ]),
+    });
+    await expect(api.onboardingChecklist("csrf")).resolves.toMatchObject({
+      visible: true,
+    });
 
     const pending = await api.pending();
     expect(pending.count).toBe(7);

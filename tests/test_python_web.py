@@ -928,6 +928,105 @@ def test_onboarding_checklist_stays_visible_when_mutations_enabled(
     assert body["visible"] is True
 
 
+def test_core_update_tour_endpoint_enforces_auth_csrf_and_post(
+    tmp_path: Path,
+) -> None:
+    unauthenticated_root = tmp_path / "unauthenticated"
+    post_setup_root = tmp_path / "post-setup"
+    read_only_root = tmp_path / "read-only"
+    unauthenticated_root.mkdir()
+    post_setup_root.mkdir()
+    read_only_root.mkdir()
+    unauthenticated = _client(unauthenticated_root)
+    post_setup = _client(post_setup_root)
+    read_only = _client(
+        read_only_root,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "false",
+        },
+    )
+
+    auth_response = unauthenticated.get("/api/v1/onboarding/core-update-tour")
+    _setup_admin(post_setup)
+    post_setup.cookies.clear()
+    post_setup_auth_response = post_setup.get("/api/v1/onboarding/core-update-tour")
+    missing_csrf = read_only.post(
+        "/api/v1/onboarding/core-update-tour",
+        json={"status": "in_progress", "step": "dashboard"},
+    )
+    origin_without_csrf = read_only.post(
+        "/api/v1/onboarding/core-update-tour",
+        json={"status": "in_progress", "step": "dashboard"},
+        headers={"Origin": "http://testserver"},
+    )
+    csrf_headers = _csrf_headers(read_only)
+    bad_origin = read_only.post(
+        "/api/v1/onboarding/core-update-tour",
+        json={"status": "in_progress", "step": "dashboard"},
+        headers={**csrf_headers, "Origin": "http://evil.example"},
+    )
+    bad_host = read_only.post(
+        "/api/v1/onboarding/core-update-tour",
+        json={"status": "in_progress", "step": "dashboard"},
+        headers={**csrf_headers, "Host": "evil.test"},
+    )
+    get_response = read_only.get("/api/v1/onboarding/core-update-tour")
+
+    assert auth_response.status_code == 403
+    assert auth_response.json()["detail"] == "setup required"
+    assert post_setup_auth_response.status_code == 401
+    assert post_setup_auth_response.json()["detail"] == "authentication required"
+    assert missing_csrf.status_code == 403
+    assert missing_csrf.json()["detail"] == "origin header is required"
+    assert origin_without_csrf.status_code == 403
+    assert origin_without_csrf.json()["detail"] == "csrf token is required"
+    assert bad_origin.status_code == 403
+    assert bad_origin.json()["detail"] == "origin is not allowed"
+    assert bad_host.status_code == 400
+    assert bad_host.json()["detail"] == "host is not allowed"
+    assert get_response.status_code == 200
+    assert get_response.json() == {
+        "status": "not_started",
+        "step": "dashboard",
+        "updated_at": "",
+    }
+    assert not (read_only_root / "state" / "wud.sqlite").exists()
+
+
+def test_core_update_tour_persists_in_read_only_mode(tmp_path: Path) -> None:
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "false",
+        },
+    )
+    db_path = tmp_path / "state" / "wud.sqlite"
+
+    before = client.get("/api/v1/onboarding/core-update-tour")
+    update = client.post(
+        "/api/v1/onboarding/core-update-tour",
+        json={"status": "in_progress", "step": "pending_preflight"},
+        headers=_csrf_headers(client),
+    )
+    after = client.get("/api/v1/onboarding/core-update-tour")
+
+    assert before.status_code == 200
+    assert before.json()["status"] == "not_started"
+    assert update.status_code == 200
+    assert update.json()["status"] == "in_progress"
+    assert update.json()["step"] == "pending_preflight"
+    assert update.json()["updated_at"]
+    assert after.json() == update.json()
+    with connect_db(db_path) as conn:
+        row = conn.execute(
+            "SELECT value FROM web_settings WHERE key = 'onboarding_core_update_tour'"
+        ).fetchone()
+    stored = json.loads(row["value"])
+    assert stored == {"status": "in_progress", "step": "pending_preflight"}
+
+
 def test_csrf_endpoint_sets_double_submit_cookie(tmp_path: Path) -> None:
     client = _client(tmp_path)
 

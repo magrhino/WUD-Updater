@@ -1,9 +1,12 @@
 import { createPinia, setActivePinia } from "pinia";
 import { flushPromises } from "@vue/test-utils";
 import { nextTick } from "vue";
+import { createMemoryHistory } from "vue-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ApiError, webApi } from "../src/api/client";
+import { createWudRouter } from "../src/router";
+import DashboardView from "../src/views/DashboardView.vue";
 import DoctorView from "../src/views/DoctorView.vue";
 import PendingView from "../src/views/PendingView.vue";
 import PoliciesView from "../src/views/PoliciesView.vue";
@@ -19,6 +22,7 @@ import {
   applyJobLogResponse,
   applyJobResponse,
   authSession,
+  coreUpdateTourResponse,
   doctorResponse,
   onboardingChecklistResponse,
   pendingGroupedItem,
@@ -46,6 +50,7 @@ function setupStores(mutationsEnabled: boolean) {
   auth.session = authSession({ mutations_enabled: mutationsEnabled });
   const webui = useWebuiStore();
   webui.status = statusResponse({ mutations_enabled: mutationsEnabled });
+  webui.coreUpdateTour = coreUpdateTourResponse();
   return { pinia, auth, webui };
 }
 
@@ -1580,11 +1585,16 @@ describe("mutating WebUI views", () => {
     const saveButton = wrapper
       .findAll("button")
       .find((button) => button.text().includes("Save preferences"));
+    const relaunchButton = wrapper
+      .findAll("button")
+      .find((button) => button.text().includes("Relaunch onboarding"));
     expect(saveButton?.attributes("disabled")).toBeDefined();
+    expect(relaunchButton?.attributes("disabled")).toBeDefined();
     for (const select of wrapper.findAll("select")) {
       expect(select.attributes("disabled")).toBeDefined();
     }
     await saveButton?.trigger("click");
+    await relaunchButton?.trigger("click");
     expect(updateManagedSettings).not.toHaveBeenCalled();
   });
 
@@ -1632,6 +1642,53 @@ describe("mutating WebUI views", () => {
       theme_preference: "dark",
     });
     expect(wrapper.text()).toContain("Preferences saved. Audit run #77.");
+  });
+
+  it("relaunches the onboarding checklist from settings", async () => {
+    const { pinia, webui } = setupStores(true);
+    const visibleOnboardingEntry = settingsResponse().managed[1]!;
+    const dismissedOnboardingEntry = {
+      ...visibleOnboardingEntry,
+      value: "dismissed",
+      source: "configured" as const,
+    };
+    const visibleSettings = settingsResponse({
+      managed: [settingsResponse().managed[0]!, visibleOnboardingEntry],
+    });
+    webui.settings = settingsResponse({
+      managed: [settingsResponse().managed[0]!, dismissedOnboardingEntry],
+    });
+    webui.onboarding = onboardingChecklistResponse({
+      dismissed: true,
+      dismissed_at: "2026-05-31T00:00:00+00:00",
+      visible: false,
+      items: [],
+    });
+    vi.spyOn(webui, "loadSettings").mockResolvedValue();
+    const updateManagedSettings = vi
+      .spyOn(webui, "updateManagedSettings")
+      .mockImplementation(async (values) => {
+        webui.settings = visibleSettings;
+        webui.onboarding = onboardingChecklistResponse();
+        return {
+          managed: visibleSettings.managed,
+          audit_run_id: 88,
+        };
+      });
+
+    const wrapper = mountWithApp(SettingsView, { pinia });
+    await flushPromises();
+    const relaunchButton = wrapper
+      .findAll("button")
+      .find((button) => button.text().includes("Relaunch onboarding"));
+    await relaunchButton?.trigger("click");
+    await flushPromises();
+
+    expect(updateManagedSettings).toHaveBeenCalledWith({
+      onboarding_checklist: "visible",
+    });
+    expect(wrapper.text()).toContain("Onboarding checklist relaunched. Audit run #88.");
+    expect(wrapper.text()).toContain("Setup checklist");
   });
 
   it("requires warning confirmation before restarting the WebUI container", async () => {
@@ -1751,6 +1808,234 @@ describe("mutating WebUI views", () => {
         'a[href="https://github.com/magrhino/WUD-Updater/blob/main/docs/DEPLOYMENT.md#requirements"]',
       ).exists(),
     ).toBe(true);
+  });
+
+  it("starts the core update tour once setup has no failing checks", async () => {
+    const { pinia, webui } = setupStores(true);
+    webui.settings = settingsResponse();
+    webui.onboarding = onboardingChecklistResponse({
+      items: [
+        {
+          key: "admin-setup",
+          title: "Admin setup",
+          status: "PASS",
+          detail: "The first admin account exists.",
+          check_codes: ["webui-authentication"],
+          suggestions: [],
+          docs: [],
+        },
+        {
+          key: "mutation-mode",
+          title: "Browser mutation mode",
+          status: "WARN",
+          detail: "Browser apply controls are server-side enabled.",
+          check_codes: ["webui-mutation-gate"],
+          suggestions: [],
+          docs: [],
+        },
+      ],
+    });
+    vi.spyOn(webui, "loadSettings").mockResolvedValue();
+    vi.spyOn(webui, "loadOnboarding").mockResolvedValue();
+    const updateCoreUpdateTour = vi
+      .spyOn(webui, "updateCoreUpdateTour")
+      .mockResolvedValue(
+        coreUpdateTourResponse({
+          status: "in_progress",
+          step: "dashboard",
+        }),
+      );
+
+    const wrapper = mountWithApp(SettingsView, { pinia });
+    await flushPromises();
+
+    expect(wrapper.text()).toContain("Setup is ready for the update tour");
+    const startButton = wrapper
+      .findAll("button")
+      .find((button) => button.text().includes("Start update tour"));
+    await startButton?.trigger("click");
+    await flushPromises();
+
+    expect(updateCoreUpdateTour).toHaveBeenCalledWith("in_progress", "dashboard");
+  });
+
+  it("focuses the setup checklist once onboarding deep link data renders", async () => {
+    const { pinia, webui } = setupStores(false);
+    webui.settings = null;
+    webui.onboarding = null;
+    const scrollIntoView = vi.fn();
+    Object.defineProperty(Element.prototype, "scrollIntoView", {
+      configurable: true,
+      value: scrollIntoView,
+    });
+    const focus = vi
+      .spyOn(HTMLElement.prototype, "focus")
+      .mockImplementation(() => undefined);
+    vi.spyOn(webui, "loadSettings").mockImplementation(async () => {
+      webui.settings = settingsResponse();
+    });
+    const loadOnboarding = vi.spyOn(webui, "loadOnboarding").mockResolvedValue();
+    const router = createWudRouter(createMemoryHistory());
+    await router.push("/settings?onboarding=1");
+    await router.isReady();
+
+    const wrapper = mountWithApp(SettingsView, { pinia, router });
+    document.body.appendChild(wrapper.element);
+    await flushPromises();
+    webui.onboarding = onboardingChecklistResponse();
+    await nextTick();
+    await flushPromises();
+
+    expect(loadOnboarding).toHaveBeenCalled();
+    expect(wrapper.find("#onboarding-checklist").exists()).toBe(true);
+    expect(scrollIntoView).toHaveBeenCalled();
+    expect(focus).toHaveBeenCalled();
+  });
+
+  it("replays and dismisses the core update tour from settings", async () => {
+    const { pinia, webui } = setupStores(true);
+    webui.settings = settingsResponse();
+    webui.onboarding = onboardingChecklistResponse({ visible: false });
+    webui.coreUpdateTour = coreUpdateTourResponse({
+      status: "completed",
+      step: "runs_history",
+      updated_at: "2026-05-31T00:00:00+00:00",
+    });
+    vi.spyOn(webui, "loadSettings").mockResolvedValue();
+    const updateCoreUpdateTour = vi
+      .spyOn(webui, "updateCoreUpdateTour")
+      .mockResolvedValue(
+        coreUpdateTourResponse({
+          status: "dismissed",
+          step: "runs_history",
+        }),
+      );
+
+    const wrapper = mountWithApp(SettingsView, { pinia });
+    await flushPromises();
+
+    expect(wrapper.text()).toContain("Core update tour");
+    expect(wrapper.text()).toContain("State: Completed. Step: History.");
+    const replayButton = wrapper
+      .findAll("button")
+      .find((button) => button.text().includes("Replay tour"));
+    await replayButton?.trigger("click");
+    await flushPromises();
+
+    expect(updateCoreUpdateTour).toHaveBeenCalledWith("in_progress", "dashboard");
+    const dismissButton = wrapper
+      .findAll("button")
+      .find((button) => button.text().includes("Dismiss tour"));
+    await dismissButton?.trigger("click");
+    await flushPromises();
+
+    expect(updateCoreUpdateTour).toHaveBeenCalledWith("dismissed", "runs_history");
+  });
+
+  it("shows the dashboard step of the core update tour", async () => {
+    const { pinia, webui } = setupStores(true);
+    webui.status = statusResponse({
+      pending_count: 2,
+      db_ready: true,
+      mutations_enabled: true,
+    });
+    webui.pending = pendingResponse();
+    webui.coreUpdateTour = coreUpdateTourResponse({
+      status: "in_progress",
+      step: "dashboard",
+    });
+    vi.spyOn(webui, "loadDashboard").mockResolvedValue();
+    const updateCoreUpdateTour = vi
+      .spyOn(webui, "updateCoreUpdateTour")
+      .mockResolvedValue(
+        coreUpdateTourResponse({
+          status: "in_progress",
+          step: "pending_select",
+        }),
+      );
+
+    const wrapper = mountWithApp(DashboardView, { pinia });
+    await flushPromises();
+
+    expect(wrapper.text()).toContain("Start from current state");
+    expect(wrapper.text()).toContain("Pending: 2");
+    const nextButton = wrapper
+      .findAll("button")
+      .find((button) => button.text().includes("Open pending updates"));
+    await nextButton?.trigger("click");
+    await flushPromises();
+
+    expect(updateCoreUpdateTour).toHaveBeenCalledWith(
+      "in_progress",
+      "pending_select",
+    );
+  });
+
+  it("closes the preflight modal before showing apply tour guidance", async () => {
+    const { pinia, webui } = setupStores(true);
+    webui.pending = pendingResponse();
+    webui.releaseNotes = releaseNotesResponse([]);
+    webui.coreUpdateTour = coreUpdateTourResponse({
+      status: "in_progress",
+      step: "pending_preflight",
+    });
+    mockPendingLifecycle(webui);
+    vi.spyOn(webui, "createPlan").mockImplementation(async () => {
+      webui.plan = planResponse({ can_apply: true });
+    });
+    const updateCoreUpdateTour = vi
+      .spyOn(webui, "updateCoreUpdateTour")
+      .mockImplementation(async (status, step) => {
+        const response = coreUpdateTourResponse({ status, step });
+        webui.coreUpdateTour = response;
+        return response;
+      });
+
+    const wrapper = mountWithApp(PendingView, { pinia });
+    await wrapper
+      .find('input[aria-label="Select stack media"]')
+      .setValue(true);
+    await wrapper
+      .findAll("button")
+      .find((button) => button.text().includes("Preview selected plan"))
+      ?.trigger("click");
+    await flushPromises();
+
+    expect(wrapper.find('[role="dialog"]').exists()).toBe(true);
+    await wrapper
+      .findAll("button")
+      .find((button) => button.text().includes("Continue to apply guidance"))
+      ?.trigger("click");
+    await flushPromises();
+
+    expect(updateCoreUpdateTour).toHaveBeenCalledWith(
+      "in_progress",
+      "pending_apply",
+    );
+    expect(wrapper.find('[role="dialog"]').exists()).toBe(false);
+    expect(wrapper.text()).toContain("Apply only after the plan is clear");
+  });
+
+  it("shows read-only pending tour guidance and the empty queue fallback", async () => {
+    const { pinia, webui } = setupStores(false);
+    webui.pending = pendingResponse([]);
+    webui.releaseNotes = releaseNotesResponse([]);
+    webui.coreUpdateTour = coreUpdateTourResponse({
+      status: "in_progress",
+      step: "pending_apply",
+    });
+    mockPendingLifecycle(webui);
+    vi.spyOn(webui, "loadRuns").mockResolvedValue();
+
+    const wrapper = mountWithApp(PendingView, { pinia });
+    await flushPromises();
+    const text = wrapper.text();
+
+    expect(text).toContain("Apply only after the plan is clear");
+    expect(text).toContain("Read-only mode keeps Apply disabled");
+    expect(text).toContain("Update queue is clear");
+    expect(text).toContain("New WUD entries will appear here");
+    expect(text).toContain("Open setup checklist");
   });
 
   it("renders doctor results with redacted details and copyable suggestions", async () => {

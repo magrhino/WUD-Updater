@@ -4,6 +4,7 @@ import { RouterLink } from "vue-router";
 import { breakpointsTailwind, useBreakpoints } from "@vueuse/core";
 import { NAlert, NDataTable, NTag, type DataTableColumns } from "naive-ui";
 
+import CoreUpdateTourPanel from "../components/CoreUpdateTourPanel.vue";
 import type { RunSummary } from "../api/client";
 import { useWebuiStore } from "../stores/webui";
 
@@ -43,6 +44,19 @@ onMounted(() => {
         <h2>{{ webui.runs.length }} recent runs</h2>
       </div>
     </div>
+
+    <CoreUpdateTourPanel
+      step="runs_history"
+      title="Verify the run afterward"
+      detail="History records each preview, apply, cleanup, and settings action. Open a run to inspect metadata, then use the log link when command output matters."
+      complete
+      next-label="Finish tour"
+    >
+      <div class="core-tour-facts">
+        <span>{{ webui.runs.length }} recent runs</span>
+        <span>Details and logs stay linked from each run</span>
+      </div>
+    </CoreUpdateTourPanel>
 
     <n-data-table
       v-if="!isMobile"

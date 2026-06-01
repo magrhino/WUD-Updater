@@ -37,6 +37,7 @@ import {
   type ReleaseNoteInfo,
   type TagOverrideRequest,
 } from "../api/client";
+import CoreUpdateTourPanel from "../components/CoreUpdateTourPanel.vue";
 import { useAuthStore } from "../stores/auth";
 import { useWebuiStore } from "../stores/webui";
 
@@ -176,6 +177,11 @@ const mutationStateLabel = computed(() =>
 );
 const mutationStateType = computed(() =>
   auth.session?.mutations_enabled ? "warning" : "success",
+);
+const pendingApplyTourDetail = computed(() =>
+  auth.session?.mutations_enabled
+    ? "Apply starts a server-side job, streams the live log, and writes a run record you can verify afterward."
+    : "Read-only mode keeps Apply disabled. You can still preview impact now, then enable browser mutations server-side when you are ready to apply.",
 );
 const selectedTagOverrideError = computed(() => {
   return tagOverrideErrorForLines(selectedLineNumbers.value);
@@ -1403,6 +1409,38 @@ watch(
       <n-tag size="small" :type="mutationStateType">{{ mutationStateLabel }}</n-tag>
     </div>
 
+    <CoreUpdateTourPanel
+      step="pending_select"
+      title="Select the update scope"
+      detail="Choose one stack or selected lines before previewing. Stack groups are the safest default because they keep related services together."
+      next-label="Show preflight guidance"
+      next-step="pending_preflight"
+    >
+      <div class="core-tour-facts">
+        <span>{{ pluralize(stackGroups.length, "stack") }} matched</span>
+        <span>{{ pluralize(unmatchedItems.length, "item") }} needs review</span>
+        <span>{{ mutationStateLabel }}</span>
+      </div>
+    </CoreUpdateTourPanel>
+
+    <CoreUpdateTourPanel
+      step="pending_preflight"
+      title="Preview before anything changes"
+      detail="Open a preview to see affected services, image targets, tag rewrites, skipped lines, and any blocking issues. Creating a plan does not pull, restart, or edit Docker state."
+      next-label="Continue to apply guidance"
+      next-step="pending_apply"
+      :show="!showPreflightModal"
+    />
+
+    <CoreUpdateTourPanel
+      step="pending_apply"
+      title="Apply only after the plan is clear"
+      :detail="pendingApplyTourDetail"
+      next-label="Open run history"
+      next-step="runs_history"
+      next-to="/runs"
+    />
+
     <div class="selection-toolbar">
       <div class="selection-summary">
         <strong>{{ selectedLineNumbers.length }} selected</strong>
@@ -1730,6 +1768,16 @@ watch(
           </span>
           <strong>Update queue is clear</strong>
           <span>{{ pendingSourceLabel }} has no updates waiting for review.</span>
+          <span v-if="webui.coreUpdateTour?.status === 'in_progress'">
+            New WUD entries will appear here for stack selection and preflight review.
+          </span>
+          <RouterLink
+            v-if="webui.coreUpdateTour?.status === 'in_progress'"
+            class="text-link"
+            to="/settings"
+          >
+            Open setup checklist
+          </RouterLink>
           <RouterLink
             v-if="latestRun"
             class="text-link"
@@ -1757,6 +1805,16 @@ watch(
         </span>
         <strong>Update queue is clear</strong>
         <span>{{ pendingSourceLabel }} has no updates waiting for review.</span>
+        <span v-if="webui.coreUpdateTour?.status === 'in_progress'">
+          New WUD entries will appear here for stack selection and preflight review.
+        </span>
+        <RouterLink
+          v-if="webui.coreUpdateTour?.status === 'in_progress'"
+          class="text-link"
+          to="/settings"
+        >
+          Open setup checklist
+        </RouterLink>
         <RouterLink
           v-if="latestRun"
           class="text-link"
@@ -1909,6 +1967,15 @@ watch(
             <strong>{{ webui.plan.summary.issue_count }}</strong>
           </div>
         </div>
+
+        <CoreUpdateTourPanel
+          step="pending_preflight"
+          title="Read the plan like a checklist"
+          detail="Matched services and images show what will change. Issues block apply, tag rewrites are called out, and cleanup actions only edit the pending file after confirmation."
+          next-label="Continue to apply guidance"
+          next-step="pending_apply"
+          @advanced="closePreflightModal"
+        />
 
         <n-alert
           v-if="mutationDisabledMessage"

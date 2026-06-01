@@ -2,6 +2,7 @@ import type {
   ApplyJobLogResponse,
   ApplyJobResponse,
   AuthSessionResponse,
+  CoreUpdateTourResponse,
   DoctorResponse,
   OnboardingChecklistResponse,
   OnboardingDismissResponse,
@@ -313,6 +314,17 @@ export function onboardingDismissResponse(
   return {
     dismissed: true,
     dismissed_at: "2026-05-31T00:00:00+00:00",
+    ...overrides,
+  };
+}
+
+export function coreUpdateTourResponse(
+  overrides: Partial<CoreUpdateTourResponse> = {},
+): CoreUpdateTourResponse {
+  return {
+    status: "not_started",
+    step: "dashboard",
+    updated_at: "",
     ...overrides,
   };
 }

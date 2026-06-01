@@ -400,6 +400,25 @@ export interface OnboardingDismissResponse {
   dismissed_at: string;
 }
 
+export type CoreUpdateTourStatus =
+  | "not_started"
+  | "in_progress"
+  | "completed"
+  | "dismissed";
+
+export type CoreUpdateTourStep =
+  | "dashboard"
+  | "pending_select"
+  | "pending_preflight"
+  | "pending_apply"
+  | "runs_history";
+
+export interface CoreUpdateTourResponse {
+  status: CoreUpdateTourStatus;
+  step: CoreUpdateTourStep;
+  updated_at: string;
+}
+
 export interface AuthSessionResponse {
   authenticated: boolean;
   setup_required: boolean;
@@ -684,6 +703,18 @@ const liveWebApi = {
     apiRequest<OnboardingDismissResponse>("/onboarding/dismiss", {
       method: "POST",
       headers: { "x-wud-csrf-token": csrfToken },
+    }),
+  coreUpdateTour: () =>
+    apiRequest<CoreUpdateTourResponse>("/onboarding/core-update-tour"),
+  updateCoreUpdateTour: (
+    status: CoreUpdateTourStatus,
+    step: CoreUpdateTourStep,
+    csrfToken: string,
+  ) =>
+    apiRequest<CoreUpdateTourResponse>("/onboarding/core-update-tour", {
+      method: "POST",
+      headers: { "x-wud-csrf-token": csrfToken },
+      body: JSON.stringify({ status, step }),
     }),
   pending: () => apiRequest<PendingResponse>("/pending"),
   updateTargets: () => apiRequest<UpdateTargetsResponse>("/update-targets"),
