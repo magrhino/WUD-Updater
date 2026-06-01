@@ -1255,7 +1255,8 @@ a {
 }
 
 .apply-job-panel:focus-visible,
-.apply-job-modal h2:focus-visible {
+.apply-job-modal h2:focus-visible,
+.apply-job-now:focus-visible {
   outline: 2px solid var(--color-border-hover);
   outline-offset: 3px;
 }
@@ -1316,6 +1317,55 @@ a {
   border-radius: inherit;
   background: var(--color-operational-teal);
   animation: apply-job-progress 1.35s ease-in-out infinite;
+}
+
+.apply-job-now {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid color-mix(
+    in srgb,
+    var(--color-border-hover) 62%,
+    var(--color-operational-teal) 38%
+  );
+  border-radius: 7px;
+  background: color-mix(
+    in srgb,
+    var(--color-surface) 92%,
+    var(--color-operational-teal) 8%
+  );
+}
+
+.apply-job-now-copy {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.apply-job-now-copy span {
+  color: var(--color-muted-text);
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.apply-job-now-copy strong {
+  color: var(--color-ink);
+  font-size: 1rem;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.apply-job-now-copy em,
+.apply-job-now-copy small {
+  color: var(--color-text-secondary);
+  font-size: 0.86rem;
+  font-style: normal;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
 }
 
 .apply-job-grid {
@@ -2528,6 +2578,14 @@ body .n-switch:focus-within {
 
   .apply-progress-step > .n-tag {
     grid-column: 2;
+    width: fit-content;
+  }
+
+  .apply-job-now {
+    grid-template-columns: 1fr;
+  }
+
+  .apply-job-now > .n-tag {
     width: fit-content;
   }
 

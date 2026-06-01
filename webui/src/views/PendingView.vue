@@ -54,7 +54,7 @@ const showRemovalModal = ref(false);
 const showApplyJobModal = ref(false);
 const jobEventSource = ref<EventSource | null>(null);
 const applyJobPanelRef = ref<HTMLElement | null>(null);
-const applyJobModalTitleRef = ref<HTMLElement | null>(null);
+const applyJobModalStatusRef = ref<HTMLElement | null>(null);
 const applyJobPanelLogRef = ref<HTMLElement | null>(null);
 const applyJobModalLogRef = ref<HTMLElement | null>(null);
 const applyJobRunLogFallbackRunId = ref<number | null>(null);
@@ -546,6 +546,71 @@ const applyJobProgressSummary = computed(() => {
     return "Complete";
   }
   return `${webui.applyJob.progress.length} updates`;
+});
+const applyJobCurrentStep = computed<ApplyJobProgressStep | null>(() => {
+  const failed = applyJobProgressSteps.value.find((step) => step.status === "failure");
+  if (failed) {
+    return failed;
+  }
+  const running = applyJobProgressSteps.value.find((step) => step.status === "running");
+  if (running) {
+    return running;
+  }
+  const completion = latestApplyJobProgressByPhase.value.get("completion");
+  if (completion?.status === "success") {
+    return (
+      applyJobProgressSteps.value.find((step) => step.key === "completion") ?? null
+    );
+  }
+  return [...applyJobProgressSteps.value].reverse().find((step) => step.event) ?? null;
+});
+const applyJobNowTitle = computed(() => {
+  if (!webui.applyJob) {
+    return "";
+  }
+  const step = applyJobCurrentStep.value;
+  if (webui.applyJob.status === "failure") {
+    return step ? `Failed: ${step.label}` : "Apply failed";
+  }
+  if (webui.applyJob.status === "success") {
+    return "Update complete";
+  }
+  if (step?.status === "running") {
+    return `Running: ${step.label}`;
+  }
+  if (step?.status === "success") {
+    return `Completed: ${step.label}`;
+  }
+  if (webui.applyJob.status === "queued") {
+    return "Queued to start";
+  }
+  return "Starting updater";
+});
+const applyJobNowMessage = computed(() => {
+  if (!webui.applyJob) {
+    return "";
+  }
+  if (webui.applyJob.status === "failure" && webui.applyJob.error) {
+    return webui.applyJob.error;
+  }
+  return applyJobCurrentStep.value?.message || applyJobStatusMessage.value;
+});
+const applyJobNowDetail = computed(() =>
+  applyJobCurrentStep.value?.detail || applyJobImpactLabel.value,
+);
+const applyJobNowDescriptionIds = computed(() =>
+  applyJobNowDetail.value
+    ? "apply-job-now-message apply-job-now-detail"
+    : "apply-job-now-message",
+);
+const applyJobNowStatusLabel = computed(() => {
+  if (webui.applyJob?.status === "success") {
+    return "Complete";
+  }
+  if (webui.applyJob?.status === "failure") {
+    return "Failed";
+  }
+  return applyJobProgressSummary.value;
 });
 
 function rowKey(row: PendingItem): number {
@@ -1171,7 +1236,10 @@ function createApplyJobSnapshot(): ApplyJobPlanSnapshot | null {
 
 async function focusApplyJobModal(): Promise<void> {
   await nextTick();
-  applyJobModalTitleRef.value?.focus({ preventScroll: true });
+  const focusStatus = () =>
+    applyJobModalStatusRef.value?.focus({ preventScroll: true });
+  focusStatus();
+  window.setTimeout(focusStatus, 0);
 }
 
 async function focusApplyJobPanel(): Promise<void> {
@@ -2494,9 +2562,10 @@ watch(
     <n-modal
       v-if="webui.applyJob"
       v-model:show="showApplyJobModal"
+      :auto-focus="false"
       :mask-closable="false"
     >
-      <section
+      <div
         class="preflight-modal apply-job-modal"
         role="dialog"
         aria-modal="true"
@@ -2515,13 +2584,12 @@ watch(
               </span>
               <h2
                 id="apply-job-modal-title"
-                ref="applyJobModalTitleRef"
                 tabindex="-1"
               >
                 {{ applyJobTitle }}
               </h2>
             </div>
-            <p class="apply-job-summary" role="status" aria-live="polite">
+            <p class="apply-job-summary">
               {{ applyJobStatusMessage }}
             </p>
           </div>
@@ -2531,6 +2599,60 @@ watch(
         <div v-if="applyJobActive" class="apply-job-progress" aria-hidden="true">
           <span />
         </div>
+
+        <section
+          id="apply-job-modal-status"
+          ref="applyJobModalStatusRef"
+          class="apply-job-now"
+          role="status"
+          aria-live="polite"
+          aria-atomic="true"
+          tabindex="-1"
+          aria-labelledby="apply-job-now-title"
+          :aria-describedby="applyJobNowDescriptionIds"
+        >
+          <div class="apply-job-now-copy">
+            <span>Current status</span>
+            <strong id="apply-job-now-title">{{ applyJobNowTitle }}</strong>
+            <em id="apply-job-now-message">{{ applyJobNowMessage }}</em>
+            <small v-if="applyJobNowDetail" id="apply-job-now-detail">
+              {{ applyJobNowDetail }}
+            </small>
+          </div>
+          <n-tag size="small" :type="applyJobAlertType">{{ applyJobNowStatusLabel }}</n-tag>
+        </section>
+
+        <section
+          class="apply-job-progress-steps"
+          aria-labelledby="apply-job-modal-progress-title"
+        >
+          <div class="apply-job-impact-heading">
+            <strong id="apply-job-modal-progress-title">Update progress</strong>
+            <n-tag size="small">{{ applyJobProgressSummary }}</n-tag>
+          </div>
+          <ol class="apply-progress-list">
+            <li
+              v-for="step in applyJobProgressSteps"
+              :key="step.key"
+              class="apply-progress-step"
+              :class="`apply-progress-step-${step.status}`"
+            >
+              <span class="apply-progress-icon" aria-hidden="true">
+                <Check v-if="step.status === 'success'" :size="14" />
+                <X v-else-if="step.status === 'failure'" :size="14" />
+                <Play v-else-if="step.status === 'running'" :size="14" />
+              </span>
+              <span class="apply-progress-copy">
+                <strong>{{ step.label }}</strong>
+                <span>{{ step.message }}</span>
+                <em v-if="step.detail">{{ step.detail }}</em>
+              </span>
+              <n-tag size="small" :type="step.status === 'failure' ? 'error' : 'default'">
+                {{ step.statusLabel }}
+              </n-tag>
+            </li>
+          </ol>
+        </section>
 
         <div class="apply-job-grid">
           <div class="compact-list">
@@ -2599,38 +2721,6 @@ watch(
           </section>
         </div>
 
-        <section
-          class="apply-job-progress-steps"
-          aria-labelledby="apply-job-modal-progress-title"
-        >
-          <div class="apply-job-impact-heading">
-            <strong id="apply-job-modal-progress-title">Update progress</strong>
-            <n-tag size="small">{{ applyJobProgressSummary }}</n-tag>
-          </div>
-          <ol class="apply-progress-list">
-            <li
-              v-for="step in applyJobProgressSteps"
-              :key="step.key"
-              class="apply-progress-step"
-              :class="`apply-progress-step-${step.status}`"
-            >
-              <span class="apply-progress-icon" aria-hidden="true">
-                <Check v-if="step.status === 'success'" :size="14" />
-                <X v-else-if="step.status === 'failure'" :size="14" />
-                <Play v-else-if="step.status === 'running'" :size="14" />
-              </span>
-              <span class="apply-progress-copy">
-                <strong>{{ step.label }}</strong>
-                <span>{{ step.message }}</span>
-                <em v-if="step.detail">{{ step.detail }}</em>
-              </span>
-              <n-tag size="small" :type="step.status === 'failure' ? 'error' : 'default'">
-                {{ step.statusLabel }}
-              </n-tag>
-            </li>
-          </ol>
-        </section>
-
         <section class="apply-job-live-log" aria-labelledby="apply-job-modal-log-title">
           <div class="apply-job-impact-heading">
             <strong id="apply-job-modal-log-title">Live log</strong>
@@ -2676,7 +2766,7 @@ watch(
             {{ applyJobActive ? "View on page" : "Close" }}
           </n-button>
         </div>
-      </section>
+      </div>
     </n-modal>
   </section>
 </template>

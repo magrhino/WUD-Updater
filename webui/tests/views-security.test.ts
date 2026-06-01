@@ -1061,6 +1061,9 @@ describe("mutating WebUI views", () => {
       webui.setApplyJob(job);
       return job;
     });
+    const focus = vi
+      .spyOn(HTMLElement.prototype, "focus")
+      .mockImplementation(() => undefined);
     const jobStream = mockApplyJobStream();
     const wrapper = mountWithApp(PendingView, { pinia });
 
@@ -1084,6 +1087,22 @@ describe("mutating WebUI views", () => {
     await flushPromises();
 
     expect(wrapper.find('[role="dialog"]').text()).toContain("Applying 1 update");
+    expect(wrapper.find('[role="dialog"]').text()).toContain("Current status");
+    expect(wrapper.find('[role="dialog"]').text()).toContain("Queued to start");
+    const modalStatus = wrapper.find("#apply-job-modal-status").element;
+    const modalProgress = wrapper.find(
+      '[aria-labelledby="apply-job-modal-progress-title"]',
+    ).element;
+    const modalImpact = wrapper.find(
+      '[aria-labelledby="apply-job-modal-impact-title"]',
+    ).element;
+    expect(focus.mock.contexts).toContain(modalStatus);
+    expect(
+      Boolean(modalStatus.compareDocumentPosition(modalProgress) & Node.DOCUMENT_POSITION_FOLLOWING),
+    ).toBe(true);
+    expect(
+      Boolean(modalProgress.compareDocumentPosition(modalImpact) & Node.DOCUMENT_POSITION_FOLLOWING),
+    ).toBe(true);
     expect(wrapper.find(".apply-job-panel").text()).toContain("Applying 1 update");
     expect(wrapper.find(".apply-job-panel").text()).toContain("repo/app:1.0");
 
@@ -1103,6 +1122,8 @@ describe("mutating WebUI views", () => {
     expect(wrapper.find(".apply-job-panel").text()).toContain("Pull images");
     expect(wrapper.find(".apply-job-panel").text()).toContain("Running");
     expect(wrapper.find(".apply-job-panel").text()).toContain("media");
+    expect(wrapper.find('[role="dialog"]').text()).toContain("Running: Pull images");
+    expect(wrapper.find('[role="dialog"]').text()).toContain("media / calibre / lines 1");
 
     jobStream.emitLog(
       applyJobLogResponse({
@@ -1125,6 +1146,7 @@ describe("mutating WebUI views", () => {
     expect(wrapper.find(".apply-job-panel").text()).toContain("Apply complete");
     expect(wrapper.find(".apply-job-panel").text()).toContain("repo/app:1.0");
     expect(wrapper.find(".apply-job-panel").text()).toContain("#10");
+    expect(wrapper.find('[role="dialog"]').text()).toContain("Update complete");
   });
 
   it("loads the persisted run log when the job stream ends without live log content", async () => {
