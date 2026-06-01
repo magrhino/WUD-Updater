@@ -26,6 +26,9 @@ const props = withDefaults(
     show: true,
   },
 );
+const emit = defineEmits<{
+  (event: "advanced"): void;
+}>();
 
 const webui = useWebuiStore();
 const router = useRouter();
@@ -47,6 +50,7 @@ async function advanceTour(): Promise<void> {
   const nextStatus = props.complete ? "completed" : "in_progress";
   const nextStep = props.nextStep ?? props.step;
   await webui.updateCoreUpdateTour(nextStatus, nextStep);
+  emit("advanced");
   if (props.nextTo) {
     await router?.push(props.nextTo);
   }

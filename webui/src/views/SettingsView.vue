@@ -187,6 +187,12 @@ const coreUpdateTourStepLabel = computed(() => {
   const step = webui.coreUpdateTour?.step ?? "dashboard";
   return CORE_UPDATE_TOUR_STEP_LABELS[step] ?? step;
 });
+const shouldFocusOnboardingChecklist = computed(
+  () =>
+    route?.query.onboarding === "1" &&
+    settings.value !== null &&
+    webui.onboarding?.visible === true,
+);
 
 function displayValue(value: string): string {
   return value || "unset";
@@ -345,17 +351,22 @@ async function focusOnboardingChecklist(): Promise<void> {
 }
 
 watch(managedEntries, hydratePreferenceForm, { immediate: true });
+watch(
+  shouldFocusOnboardingChecklist,
+  (shouldFocus) => {
+    if (shouldFocus) {
+      void focusOnboardingChecklist();
+    }
+  },
+  { immediate: true, flush: "post" },
+);
 
 onMounted(() => {
   const loads = [webui.loadSettings()];
   if (webui.coreUpdateTour === null) {
     loads.push(webui.loadCoreUpdateTour());
   }
-  void Promise.all(loads).finally(() => {
-    if (route?.query.onboarding === "1") {
-      void focusOnboardingChecklist();
-    }
-  });
+  void Promise.all(loads);
 });
 </script>
 

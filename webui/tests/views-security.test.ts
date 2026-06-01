@@ -1,9 +1,11 @@
 import { createPinia, setActivePinia } from "pinia";
 import { flushPromises } from "@vue/test-utils";
 import { nextTick } from "vue";
+import { createMemoryHistory } from "vue-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ApiError, webApi } from "../src/api/client";
+import { createWudRouter } from "../src/router";
 import DashboardView from "../src/views/DashboardView.vue";
 import DoctorView from "../src/views/DoctorView.vue";
 import PendingView from "../src/views/PendingView.vue";
@@ -1805,6 +1807,39 @@ describe("mutating WebUI views", () => {
     expect(updateCoreUpdateTour).toHaveBeenCalledWith("in_progress", "dashboard");
   });
 
+  it("focuses the setup checklist once onboarding deep link data renders", async () => {
+    const { pinia, webui } = setupStores(false);
+    webui.settings = null;
+    webui.onboarding = null;
+    const scrollIntoView = vi.fn();
+    Object.defineProperty(Element.prototype, "scrollIntoView", {
+      configurable: true,
+      value: scrollIntoView,
+    });
+    const focus = vi
+      .spyOn(HTMLElement.prototype, "focus")
+      .mockImplementation(() => undefined);
+    vi.spyOn(webui, "loadSettings").mockImplementation(async () => {
+      webui.settings = settingsResponse();
+    });
+    const loadOnboarding = vi.spyOn(webui, "loadOnboarding").mockResolvedValue();
+    const router = createWudRouter(createMemoryHistory());
+    await router.push("/settings?onboarding=1");
+    await router.isReady();
+
+    const wrapper = mountWithApp(SettingsView, { pinia, router });
+    document.body.appendChild(wrapper.element);
+    await flushPromises();
+    webui.onboarding = onboardingChecklistResponse();
+    await nextTick();
+    await flushPromises();
+
+    expect(loadOnboarding).toHaveBeenCalled();
+    expect(wrapper.find("#onboarding-checklist").exists()).toBe(true);
+    expect(scrollIntoView).toHaveBeenCalled();
+    expect(focus).toHaveBeenCalled();
+  });
+
   it("replays and dismisses the core update tour from settings", async () => {
     const { pinia, webui } = setupStores(true);
     webui.settings = settingsResponse();
@@ -1882,6 +1917,51 @@ describe("mutating WebUI views", () => {
       "in_progress",
       "pending_select",
     );
+  });
+
+  it("closes the preflight modal before showing apply tour guidance", async () => {
+    const { pinia, webui } = setupStores(true);
+    webui.pending = pendingResponse();
+    webui.releaseNotes = releaseNotesResponse([]);
+    webui.coreUpdateTour = coreUpdateTourResponse({
+      status: "in_progress",
+      step: "pending_preflight",
+    });
+    mockPendingLifecycle(webui);
+    vi.spyOn(webui, "createPlan").mockImplementation(async () => {
+      webui.plan = planResponse({ can_apply: true });
+    });
+    const updateCoreUpdateTour = vi
+      .spyOn(webui, "updateCoreUpdateTour")
+      .mockImplementation(async (status, step) => {
+        const response = coreUpdateTourResponse({ status, step });
+        webui.coreUpdateTour = response;
+        return response;
+      });
+
+    const wrapper = mountWithApp(PendingView, { pinia });
+    await wrapper
+      .find('input[aria-label="Select stack media"]')
+      .setValue(true);
+    await wrapper
+      .findAll("button")
+      .find((button) => button.text().includes("Preview selected plan"))
+      ?.trigger("click");
+    await flushPromises();
+
+    expect(wrapper.find('[role="dialog"]').exists()).toBe(true);
+    await wrapper
+      .findAll("button")
+      .find((button) => button.text().includes("Continue to apply guidance"))
+      ?.trigger("click");
+    await flushPromises();
+
+    expect(updateCoreUpdateTour).toHaveBeenCalledWith(
+      "in_progress",
+      "pending_apply",
+    );
+    expect(wrapper.find('[role="dialog"]').exists()).toBe(false);
+    expect(wrapper.text()).toContain("Apply only after the plan is clear");
   });
 
   it("shows read-only pending tour guidance and the empty queue fallback", async () => {

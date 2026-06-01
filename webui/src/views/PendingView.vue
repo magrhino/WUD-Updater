@@ -1974,6 +1974,7 @@ watch(
           detail="Matched services and images show what will change. Issues block apply, tag rewrites are called out, and cleanup actions only edit the pending file after confirmation."
           next-label="Continue to apply guidance"
           next-step="pending_apply"
+          @advanced="closePreflightModal"
         />
 
         <n-alert
