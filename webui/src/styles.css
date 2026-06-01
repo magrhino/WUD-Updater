@@ -478,7 +478,7 @@ a {
 
 .settings-risk-facts {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(104px, 1fr));
   gap: 8px;
   margin-top: 14px;
   padding: 10px;
@@ -806,6 +806,15 @@ a {
   margin-top: 12px;
 }
 
+.settings-actions-grid .settings-action-row {
+  flex-wrap: wrap;
+  align-items: flex-start;
+}
+
+.settings-actions-grid .settings-action-row > div {
+  flex: 1 1 180px;
+}
+
 .settings-preference-actions {
   align-items: end;
 }
@@ -930,8 +939,14 @@ a {
   align-items: flex-start;
 }
 
+.onboarding-heading .settings-heading-main {
+  flex: 1 1 240px;
+}
+
 .onboarding-actions {
+  flex: 0 1 430px;
   max-width: 100%;
+  min-width: min(100%, 240px);
 }
 
 .onboarding-next-action,
