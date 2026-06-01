@@ -745,6 +745,18 @@ a {
   font-size: 0.86rem;
 }
 
+.settings-preference-row > .settings-preference-controls {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.settings-preference-controls .n-select {
+  flex: 1 1 180px;
+  min-width: 180px;
+}
+
 .settings-action-row {
   display: flex;
   align-items: center;
@@ -2446,6 +2458,10 @@ body .n-switch:focus-within {
   }
 
   .settings-button-group {
+    justify-content: flex-start;
+  }
+
+  .settings-preference-row > .settings-preference-controls {
     justify-content: flex-start;
   }
 

@@ -1585,11 +1585,16 @@ describe("mutating WebUI views", () => {
     const saveButton = wrapper
       .findAll("button")
       .find((button) => button.text().includes("Save preferences"));
+    const relaunchButton = wrapper
+      .findAll("button")
+      .find((button) => button.text().includes("Relaunch onboarding"));
     expect(saveButton?.attributes("disabled")).toBeDefined();
+    expect(relaunchButton?.attributes("disabled")).toBeDefined();
     for (const select of wrapper.findAll("select")) {
       expect(select.attributes("disabled")).toBeDefined();
     }
     await saveButton?.trigger("click");
+    await relaunchButton?.trigger("click");
     expect(updateManagedSettings).not.toHaveBeenCalled();
   });
 
@@ -1637,6 +1642,53 @@ describe("mutating WebUI views", () => {
       theme_preference: "dark",
     });
     expect(wrapper.text()).toContain("Preferences saved. Audit run #77.");
+  });
+
+  it("relaunches the onboarding checklist from settings", async () => {
+    const { pinia, webui } = setupStores(true);
+    const visibleOnboardingEntry = settingsResponse().managed[1]!;
+    const dismissedOnboardingEntry = {
+      ...visibleOnboardingEntry,
+      value: "dismissed",
+      source: "configured" as const,
+    };
+    const visibleSettings = settingsResponse({
+      managed: [settingsResponse().managed[0]!, visibleOnboardingEntry],
+    });
+    webui.settings = settingsResponse({
+      managed: [settingsResponse().managed[0]!, dismissedOnboardingEntry],
+    });
+    webui.onboarding = onboardingChecklistResponse({
+      dismissed: true,
+      dismissed_at: "2026-05-31T00:00:00+00:00",
+      visible: false,
+      items: [],
+    });
+    vi.spyOn(webui, "loadSettings").mockResolvedValue();
+    const updateManagedSettings = vi
+      .spyOn(webui, "updateManagedSettings")
+      .mockImplementation(async (values) => {
+        webui.settings = visibleSettings;
+        webui.onboarding = onboardingChecklistResponse();
+        return {
+          managed: visibleSettings.managed,
+          audit_run_id: 88,
+        };
+      });
+
+    const wrapper = mountWithApp(SettingsView, { pinia });
+    await flushPromises();
+    const relaunchButton = wrapper
+      .findAll("button")
+      .find((button) => button.text().includes("Relaunch onboarding"));
+    await relaunchButton?.trigger("click");
+    await flushPromises();
+
+    expect(updateManagedSettings).toHaveBeenCalledWith({
+      onboarding_checklist: "visible",
+    });
+    expect(wrapper.text()).toContain("Onboarding checklist relaunched. Audit run #88.");
+    expect(wrapper.text()).toContain("Setup checklist");
   });
 
   it("requires warning confirmation before restarting the WebUI container", async () => {

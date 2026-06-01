@@ -307,6 +307,26 @@ async function saveManagedPreferences(): Promise<void> {
   }
 }
 
+async function relaunchOnboardingChecklist(): Promise<void> {
+  preferencesMessage.value = "";
+  preferencesError.value = "";
+  try {
+    const response = await webui.updateManagedSettings({
+      onboarding_checklist: "visible",
+    });
+    hydratePreferenceForm();
+    if (webui.onboarding?.visible === true) {
+      preferencesMessage.value = `Onboarding checklist relaunched. Audit run #${response.audit_run_id}.`;
+      await focusOnboardingChecklist();
+    } else {
+      preferencesMessage.value = `Onboarding checklist marked visible. Audit run #${response.audit_run_id}.`;
+    }
+  } catch (exc) {
+    preferencesError.value =
+      exc instanceof Error ? exc.message : "Onboarding checklist could not be relaunched";
+  }
+}
+
 async function replayCoreUpdateTour(): Promise<void> {
   preferencesMessage.value = "";
   preferencesError.value = "";
@@ -556,12 +576,25 @@ onMounted(() => {
                 }}
               </span>
             </div>
-            <n-select
-              v-model:value="onboardingChecklistValue"
-              :options="onboardingChecklistOptions"
-              :disabled="preferenceControlsDisabled"
-              aria-label="Onboarding checklist"
-            />
+            <div class="settings-preference-controls">
+              <n-select
+                v-model:value="onboardingChecklistValue"
+                :options="onboardingChecklistOptions"
+                :disabled="preferenceControlsDisabled"
+                aria-label="Onboarding checklist"
+              />
+              <n-button
+                size="small"
+                :disabled="preferenceControlsDisabled"
+                :loading="webui.loading"
+                @click="relaunchOnboardingChecklist"
+              >
+                <template #icon>
+                  <RotateCcw :size="16" />
+                </template>
+                Relaunch onboarding
+              </n-button>
+            </div>
           </div>
           <div class="settings-preference-row">
             <div>
