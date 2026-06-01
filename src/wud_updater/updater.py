@@ -1678,6 +1678,14 @@ class UpdateFromWudRunner:
         force_recreate: bool = False,
         no_deps: bool = True,
     ) -> StackStatus:
+        self._progress(
+            _tag_update_failure_progress_phase(phase),
+            "failure",
+            _tag_update_failure_progress_message(stack.name, phase, reason),
+            stack=stack.name,
+            services=services,
+            matches=matches,
+        )
         if failure_health is None:
             failure_health = self._capture_health_details(stack, services)
         self.log.warn(f"[{stack.name}] Restoring compose file after failed tag update.")
@@ -3475,6 +3483,30 @@ def _stack_level_scope_message(scope: UpdateScope) -> str:
         "Could not map every matched image to a compose service; "
         "using stack-level pull/recreate"
     )
+
+
+def _tag_update_failure_progress_phase(phase: str) -> str:
+    if phase in {"pull", "digest"}:
+        return "pull"
+    if phase in {"up", "stop", "down", "unpause"}:
+        return "recreate"
+    if phase == "health":
+        return "health"
+    return "preflight"
+
+
+def _tag_update_failure_progress_message(stack_name: str, phase: str, reason: str) -> str:
+    if phase == "pull":
+        return f"[{stack_name}] Pull failed after tag rewrite."
+    if phase == "digest":
+        return (
+            f"[{stack_name}] Pulled image did not reach the expected digest after tag rewrite."
+        )
+    if phase in {"up", "stop", "down", "unpause"}:
+        return f"[{stack_name}] Compose {phase} failed after tag rewrite."
+    if phase == "health":
+        return f"[{stack_name}] Health wait failed after tag rewrite."
+    return f"[{stack_name}] Tag update failed before pull: {reason}."
 
 
 def _scope_plan_label(scope: UpdateScope) -> str:

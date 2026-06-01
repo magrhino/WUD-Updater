@@ -2173,6 +2173,61 @@ class PythonUpdateFromWudTests(unittest.TestCase):
         self.assertIn("manifest inspect repo/app:3.0", calls)
         self.assertRegex(calls, r"compose -f docker-compose.yml pull app")
 
+    def test_tag_update_pull_rollback_reports_pull_progress_failure(self) -> None:
+        self.wud_file.write_text("repo/app:1.0 tag=2.0\n", encoding="utf-8")
+        stack_dir = self.make_stack("app", [("app", "repo/app:1.0", "cid-app")])
+        self.set_image_state("repo/app:1.0", "old", "sha256:old")
+        (self.fake_root / "stacks" / "app" / "pull_fail").write_text(
+            "",
+            encoding="utf-8",
+        )
+        progress = []
+        options = UpdaterOptions(
+            docker_base=self.base,
+            wud_file=self.wud_file,
+            log_dir=self.log_dir,
+            max_wait=0,
+            assume_yes=True,
+            allow_tag_updates=True,
+            no_color=True,
+        )
+        runner = UpdateFromWudRunner(
+            options,
+            environ=self.env,
+            command_runner=CommandRunner(env=self.env),
+            progress_callback=progress.append,
+        )
+        stdout = StringIO()
+        stderr = StringIO()
+
+        with redirect_stdout(stdout), redirect_stderr(stderr):
+            status = runner.run()
+
+        self.assertEqual(status, 1, stderr.getvalue() + stdout.getvalue())
+        self.assertEqual(
+            self.wud_file.read_text(encoding="utf-8"),
+            "repo/app:1.0 tag=2.0\n",
+        )
+        self.assertIn(
+            "image: repo/app:1.0",
+            (stack_dir / "docker-compose.yml").read_text(encoding="utf-8"),
+        )
+        pull_failures = [
+            event
+            for event in progress
+            if event.phase == "pull" and event.status == "failure"
+        ]
+        self.assertEqual(len(pull_failures), 1)
+        self.assertEqual(pull_failures[0].stack, "app")
+        self.assertEqual(pull_failures[0].services, ("app",))
+        self.assertEqual(pull_failures[0].line_numbers, (1,))
+        self.assertIn("Pull failed after tag rewrite", pull_failures[0].message)
+        event_keys = [(event.phase, event.status) for event in progress]
+        self.assertLess(
+            event_keys.index(("pull", "failure")),
+            event_keys.index(("completion", "failure")),
+        )
+
     def test_tag_update_with_digest_checks_rewritten_tag(self) -> None:
         self.wud_file.write_text(
             "repo/app:1.0@sha256:good tag=2.0\n",
