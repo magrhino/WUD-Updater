@@ -77,7 +77,7 @@ from .doctor import (
     DoctorSuggestion as DoctorDataSuggestion,
     options_from_namespace as doctor_options_from_namespace,
 )
-from .docker_cli import DockerCli
+from .docker_cli import ContainerImage, DockerCli
 from .images import image_matches_resolved_target, image_tag, repo_key, tag_value_valid
 from .locks import DirectoryLock, WudLockError
 from .plans import (
@@ -4587,7 +4587,7 @@ def _release_notes_response(
 def _release_note_source_resolver(settings: WebSettings) -> ReleaseNoteSourceResolver:
     docker = DockerCli(runner=CommandRunner(env=settings.command_env))
     label_cache: dict[str, tuple[str, CommandError | None]] = {}
-    container_images: list[str] | None = None
+    container_images: list[ContainerImage] | None = None
 
     def source_label(image: str) -> tuple[str, CommandError | None]:
         if image not in label_cache:
@@ -4595,10 +4595,10 @@ def _release_note_source_resolver(settings: WebSettings) -> ReleaseNoteSourceRes
             label_cache[image] = (value, error)
         return label_cache[image]
 
-    def running_images() -> list[str]:
+    def running_images() -> list[ContainerImage]:
         nonlocal container_images
         if container_images is None:
-            container_images = [item.image for item in docker.try_container_images()]
+            container_images = docker.try_container_images()
         return container_images
 
     def resolve(target: WudTarget) -> str:
@@ -4610,10 +4610,14 @@ def _release_note_source_resolver(settings: WebSettings) -> ReleaseNoteSourceRes
         if repo:
             return f"https://github.com/{repo}"
 
-        for image in running_images():
-            if not image_matches_resolved_target(image, target.first, target.allow_repo):
+        for container in running_images():
+            if container.name != target.first and not image_matches_resolved_target(
+                container.image,
+                target.first,
+                target.allow_repo,
+            ):
                 continue
-            matched_repo = github_repo_from_ghcr_image(image)
+            matched_repo = github_repo_from_ghcr_image(container.image)
             if matched_repo:
                 return f"https://github.com/{matched_repo}"
 
