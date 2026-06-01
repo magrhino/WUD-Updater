@@ -13,6 +13,7 @@ import {
 } from "@lucide/vue";
 import { NAlert } from "naive-ui";
 
+import CoreUpdateTourPanel from "../components/CoreUpdateTourPanel.vue";
 import { useWebuiStore } from "../stores/webui";
 
 const webui = useWebuiStore();
@@ -40,6 +41,21 @@ onMounted(() => {
         {{ warning }}
       </n-alert>
     </div>
+
+    <CoreUpdateTourPanel
+      step="dashboard"
+      title="Start from current state"
+      detail="Use the dashboard to confirm the queue, database, last run, and overall status before choosing updates."
+      next-label="Open pending updates"
+      next-step="pending_select"
+      next-to="/pending"
+    >
+      <div class="core-tour-facts">
+        <span>Pending: {{ webui.status?.pending_count ?? webui.pending?.count ?? 0 }}</span>
+        <span>Database: {{ webui.status?.db_ready ? "ready" : "missing" }}</span>
+        <span>Mutations: {{ webui.status?.mutations_enabled ? "enabled" : "read-only" }}</span>
+      </div>
+    </CoreUpdateTourPanel>
 
     <div class="metric-grid">
       <article class="metric-card">

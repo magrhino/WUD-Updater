@@ -9,6 +9,7 @@ import {
 import {
   applyJobLogResponse,
   applyJobResponse,
+  coreUpdateTourResponse,
   doctorResponse,
   onboardingChecklistResponse,
   onboardingDismissResponse,
@@ -100,6 +101,51 @@ describe("webui store", () => {
         ((call[1] as RequestInit).headers as Headers).get("x-wud-csrf-token"),
       ).toBe("csrf-onboarding");
     }
+  });
+
+  it("loads and updates the server-managed core update tour", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse(coreUpdateTourResponse()))
+      .mockResolvedValueOnce(
+        jsonResponse(
+          coreUpdateTourResponse({
+            status: "in_progress",
+            step: "pending_select",
+            updated_at: "2026-05-31T00:00:00+00:00",
+          }),
+        ),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+    const auth = useAuthStore();
+    const ensureCsrf = vi
+      .spyOn(auth, "ensureCsrf")
+      .mockResolvedValue("csrf-tour");
+    const webui = useWebuiStore();
+
+    await webui.loadCoreUpdateTour();
+    await webui.updateCoreUpdateTour("in_progress", "pending_select");
+
+    expect(ensureCsrf).toHaveBeenCalledTimes(1);
+    expect(webui.coreUpdateTour?.status).toBe("in_progress");
+    expect(webui.coreUpdateTour?.step).toBe("pending_select");
+    expect(fetchMock.mock.calls[0][0]).toBe(
+      "/api/v1/onboarding/core-update-tour",
+    );
+    expect(fetchMock.mock.calls[1][0]).toBe(
+      "/api/v1/onboarding/core-update-tour",
+    );
+    expect((fetchMock.mock.calls[0][1] as RequestInit).method).toBeUndefined();
+    expect((fetchMock.mock.calls[1][1] as RequestInit).method).toBe("POST");
+    expect(JSON.parse(String((fetchMock.mock.calls[1][1] as RequestInit).body))).toEqual({
+      status: "in_progress",
+      step: "pending_select",
+    });
+    expect(
+      ((fetchMock.mock.calls[1][1] as RequestInit).headers as Headers).get(
+        "x-wud-csrf-token",
+      ),
+    ).toBe("csrf-tour");
   });
 
   it("passes csrf from auth store to pending cleanup", async () => {

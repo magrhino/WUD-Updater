@@ -913,6 +913,112 @@ a {
   max-width: 100%;
 }
 
+.onboarding-next-action,
+.core-tour-panel {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  min-width: 0;
+  margin-top: 14px;
+  padding: 12px;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 7px;
+  background: var(--color-panel-tint);
+}
+
+.onboarding-next-action.is-ready,
+.core-tour-panel {
+  border-color: color-mix(in srgb, var(--color-border) 74%, var(--color-action-blue) 26%);
+  background: color-mix(in srgb, var(--color-surface) 92%, var(--color-action-blue) 8%);
+}
+
+.onboarding-next-main,
+.core-tour-main {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  min-width: 0;
+}
+
+.onboarding-next-main > svg {
+  flex: 0 0 auto;
+  margin-top: 2px;
+  color: var(--color-warning);
+}
+
+.onboarding-next-action.is-ready .onboarding-next-main > svg {
+  color: var(--color-action-blue);
+}
+
+.onboarding-next-main > div,
+.core-tour-main > div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.onboarding-next-main strong,
+.onboarding-next-main span,
+.core-tour-main h2,
+.core-tour-main p,
+.core-tour-facts span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.onboarding-next-main span,
+.core-tour-main p {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: 0.9rem;
+  line-height: 1.45;
+}
+
+.core-tour-main {
+  flex: 1 1 auto;
+}
+
+.core-tour-main > .n-tag {
+  flex: 0 0 auto;
+  margin-top: 1px;
+}
+
+.core-tour-main h2 {
+  margin: 0;
+  color: var(--color-ink);
+  font-size: 1rem;
+  line-height: 1.25;
+}
+
+.core-tour-actions {
+  display: flex;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.core-tour-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.core-tour-facts span {
+  display: inline-flex;
+  min-height: 24px;
+  align-items: center;
+  padding: 0 8px;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 999px;
+  background: var(--color-surface);
+  color: var(--color-text-secondary);
+  font-size: 0.8rem;
+  line-height: 1.2;
+}
+
 .onboarding-check-list {
   display: grid;
   gap: 10px;
@@ -2301,8 +2407,14 @@ body .n-switch:focus-within {
 
   .doctor-check-head,
   .doctor-suggestion,
-  .onboarding-suggestion {
+  .onboarding-suggestion,
+  .onboarding-next-action,
+  .core-tour-panel {
     display: grid;
+  }
+
+  .core-tour-actions {
+    justify-content: flex-start;
   }
 
   .settings-table-head {

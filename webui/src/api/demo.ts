@@ -3,6 +3,9 @@ import type {
   ApplyJobResponse,
   AuthSessionResponse,
   ContainerRestartResponse,
+  CoreUpdateTourResponse,
+  CoreUpdateTourStatus,
+  CoreUpdateTourStep,
   CsrfResponse,
   DoctorResponse,
   ManagedSettingsUpdateResponse,
@@ -475,6 +478,11 @@ class DemoApiState {
   themePreference = "system";
   themePreferenceConfigured = false;
   onboardingDismissedAt = "";
+  coreUpdateTour: CoreUpdateTourResponse = {
+    status: "not_started",
+    step: "dashboard",
+    updated_at: "",
+  };
   nextJob = 1;
   nextRun = 4;
   nextAudit = 100;
@@ -751,6 +759,18 @@ class DemoApiState {
       dismissed: true,
       dismissed_at: this.onboardingDismissedAt,
     };
+  }
+
+  updateCoreUpdateTour(
+    status: CoreUpdateTourStatus,
+    step: CoreUpdateTourStep,
+  ): CoreUpdateTourResponse {
+    this.coreUpdateTour = {
+      status,
+      step,
+      updated_at: new Date("2026-05-31T00:00:00.000Z").toISOString(),
+    };
+    return this.coreUpdateTour;
   }
 
   updateManagedSettings(
@@ -1334,6 +1354,12 @@ export function createDemoWebApi(): WebApi {
     doctor: async (_csrfToken: string) => state.doctor(),
     onboardingChecklist: async (_csrfToken: string) => state.onboardingChecklist(),
     dismissOnboarding: async (_csrfToken: string) => state.dismissOnboarding(),
+    coreUpdateTour: async () => state.coreUpdateTour,
+    updateCoreUpdateTour: async (
+      status: CoreUpdateTourStatus,
+      step: CoreUpdateTourStep,
+      _csrfToken: string,
+    ) => state.updateCoreUpdateTour(status, step),
     pending: async () => state.pendingResponse(),
     updateTargets: async () => state.updateTargets(),
     cleanupPending: async (

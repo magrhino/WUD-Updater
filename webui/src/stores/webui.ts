@@ -8,6 +8,9 @@ import {
   type ApplyJobLogResponse,
   type ApplyJobResponse,
   type DoctorResponse,
+  type CoreUpdateTourResponse,
+  type CoreUpdateTourStatus,
+  type CoreUpdateTourStep,
   type ManagedSettingsUpdateResponse,
   type OnboardingChecklistResponse,
   type OnboardingDismissResponse,
@@ -53,6 +56,7 @@ export const useWebuiStore = defineStore("webui", () => {
   const settings = ref<SettingsResponse | null>(null);
   const doctor = ref<DoctorResponse | null>(null);
   const onboarding = ref<OnboardingChecklistResponse | null>(null);
+  const coreUpdateTour = ref<CoreUpdateTourResponse | null>(null);
   const pending = ref<PendingResponse | null>(null);
   const updateTargets = ref<UpdateTargetsResponse | null>(null);
   const releaseNotes = ref<ReleaseNotesResponse | null>(null);
@@ -154,6 +158,32 @@ export const useWebuiStore = defineStore("webui", () => {
     });
     if (response === null) {
       throw new Error("Onboarding dismiss did not return a response");
+    }
+    return response;
+  }
+
+  async function loadCoreUpdateTour(): Promise<void> {
+    await loadWithState(async () => {
+      coreUpdateTour.value = await webApi.coreUpdateTour();
+    });
+  }
+
+  async function updateCoreUpdateTour(
+    status: CoreUpdateTourStatus,
+    step: CoreUpdateTourStep,
+  ): Promise<CoreUpdateTourResponse> {
+    const auth = useAuthStore();
+    let response: CoreUpdateTourResponse | null = null;
+    await loadWithState(async () => {
+      response = await webApi.updateCoreUpdateTour(
+        status,
+        step,
+        await auth.ensureCsrf(),
+      );
+      coreUpdateTour.value = response;
+    });
+    if (response === null) {
+      throw new Error("Core update tour update did not return a response");
     }
     return response;
   }
@@ -612,6 +642,7 @@ export const useWebuiStore = defineStore("webui", () => {
     settings,
     doctor,
     onboarding,
+    coreUpdateTour,
     pending,
     updateTargets,
     pendingCleanup,
@@ -641,6 +672,8 @@ export const useWebuiStore = defineStore("webui", () => {
     loadDoctor,
     loadOnboarding,
     dismissOnboarding,
+    loadCoreUpdateTour,
+    updateCoreUpdateTour,
     loadDashboard,
     loadPending,
     loadUpdateTargets,

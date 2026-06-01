@@ -10,7 +10,12 @@ import { useAuthStore } from "../src/stores/auth";
 import { useWebuiStore } from "../src/stores/webui";
 import SetupView from "../src/views/SetupView.vue";
 import { themeStorageKey } from "../src/theme";
-import { authSession, settingsResponse, statusResponse } from "./helpers/fixtures";
+import {
+  authSession,
+  coreUpdateTourResponse,
+  settingsResponse,
+  statusResponse,
+} from "./helpers/fixtures";
 import { mountWithApp } from "./helpers/mount";
 
 describe("router auth guard", () => {
@@ -140,6 +145,7 @@ describe("app shell", () => {
     auth.session = authSession({ mutations_enabled: true });
     const webui = useWebuiStore();
     webui.status = statusResponse({ version: "0.24.2" });
+    webui.coreUpdateTour = coreUpdateTourResponse();
     vi.spyOn(webui, "loadDashboard").mockResolvedValue();
     const router = createWudRouter(createMemoryHistory());
     await router.push("/");
@@ -170,6 +176,7 @@ describe("app shell", () => {
     const auth = useAuthStore();
     auth.session = authSession({ mutations_enabled: false });
     const webui = useWebuiStore();
+    webui.coreUpdateTour = coreUpdateTourResponse();
     vi.spyOn(webui, "loadDashboard").mockResolvedValue();
     const router = createWudRouter(createMemoryHistory());
     await router.push("/");
@@ -219,6 +226,7 @@ describe("app shell", () => {
     const auth = useAuthStore();
     auth.session = authSession({ mutations_enabled: true });
     const webui = useWebuiStore();
+    webui.coreUpdateTour = coreUpdateTourResponse();
     webui.settings = settingsResponse({
       managed: [
         {
@@ -259,6 +267,9 @@ describe("app shell", () => {
     vi.spyOn(webui, "loadStatus").mockResolvedValue();
     const loadSettings = vi.spyOn(webui, "loadSettings").mockResolvedValue();
     const loadOnboarding = vi.spyOn(webui, "loadOnboarding").mockResolvedValue();
+    const loadCoreUpdateTour = vi
+      .spyOn(webui, "loadCoreUpdateTour")
+      .mockResolvedValue();
     const router = createWudRouter(createMemoryHistory());
     await router.push("/settings");
     await router.isReady();
@@ -267,8 +278,10 @@ describe("app shell", () => {
 
     expect(wrapper.text()).toContain("Settings");
     loadSettings.mockClear();
+    loadCoreUpdateTour.mockClear();
     await wrapper.find('button[aria-label="Refresh current view"]').trigger("click");
     expect(loadSettings).toHaveBeenCalledTimes(1);
     expect(loadOnboarding).toHaveBeenCalledTimes(1);
+    expect(loadCoreUpdateTour).toHaveBeenCalledTimes(1);
   });
 });

@@ -1,11 +1,14 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, type Component } from "vue";
 import { useClipboard } from "@vueuse/core";
+import { useRouter } from "vue-router";
 import {
+  ArrowRight,
   AlertTriangle,
   CheckCircle2,
   Copy,
   ExternalLink,
+  Map,
   RefreshCw,
   XCircle,
   X,
@@ -16,9 +19,17 @@ import type { DoctorCheckStatus, OnboardingChecklistItem } from "../api/client";
 import { useWebuiStore } from "../stores/webui";
 
 const webui = useWebuiStore();
+const router = useRouter();
 const copiedSnippet = ref("");
 const dismissing = ref(false);
 const { copy, copied, isSupported } = useClipboard({ legacy: true });
+const tourRouteByStep = {
+  dashboard: "dashboard",
+  pending_select: "pending",
+  pending_preflight: "pending",
+  pending_apply: "pending",
+  runs_history: "runs",
+} as const;
 
 const onboarding = computed(() => webui.onboarding);
 const visible = computed(() => onboarding.value?.visible === true);
@@ -32,10 +43,46 @@ const warningItems = computed(
 const passingItems = computed(
   () => items.value.filter((item) => item.status === "PASS").length,
 );
+const firstFailingItem = computed(
+  () => items.value.find((item) => item.status === "FAIL") ?? null,
+);
+const firstWarningItem = computed(
+  () =>
+    items.value.find((item) => item.status === "WARN" && item.key !== "mutation-mode") ??
+    null,
+);
+const canStartUpdateTour = computed(() => failingItems.value === 0);
+const tourStep = computed(() =>
+  webui.coreUpdateTour?.status === "in_progress"
+    ? webui.coreUpdateTour.step
+    : "dashboard",
+);
+const tourActionLabel = computed(() =>
+  webui.coreUpdateTour?.status === "in_progress"
+    ? "Resume update tour"
+    : "Start update tour",
+);
+const nextActionTitle = computed(() =>
+  firstFailingItem.value
+    ? `Next: fix ${firstFailingItem.value.title.toLowerCase()}`
+    : firstWarningItem.value
+      ? "Setup has warnings, update tour is available"
+    : "Setup is ready for the update tour",
+);
+const nextActionDetail = computed(() =>
+  firstFailingItem.value
+    ? firstFailingItem.value.detail
+    : firstWarningItem.value
+      ? `${firstWarningItem.value.detail} You can still follow the tour while resolving this warning.`
+    : "Use the core update tour to review pending updates, preview a plan, apply only when browser mutations are enabled, and verify the run log.",
+);
 
 onMounted(() => {
   if (webui.onboarding === null) {
     void refreshOnboarding().catch(() => undefined);
+  }
+  if (webui.coreUpdateTour === null) {
+    void webui.loadCoreUpdateTour().catch(() => undefined);
   }
 });
 
@@ -58,6 +105,11 @@ async function copySuggestion(snippet: string): Promise<void> {
   }
   await copy(snippet);
   copiedSnippet.value = snippet;
+}
+
+async function startUpdateTour(): Promise<void> {
+  await webui.updateCoreUpdateTour("in_progress", tourStep.value);
+  await router?.push({ name: tourRouteByStep[tourStep.value] });
 }
 
 function statusIcon(status: DoctorCheckStatus): Component {
@@ -98,7 +150,12 @@ function itemKey(item: OnboardingChecklistItem): string {
 </script>
 
 <template>
-  <section v-if="visible" class="section-panel onboarding-panel">
+  <section
+    v-if="visible"
+    id="onboarding-checklist"
+    class="section-panel onboarding-panel"
+    tabindex="-1"
+  >
     <div class="section-heading onboarding-heading">
       <div class="settings-heading-main">
         <p class="eyebrow">First run</p>
@@ -141,6 +198,47 @@ function itemKey(item: OnboardingChecklistItem): string {
           Dismiss
         </n-button>
       </div>
+    </div>
+
+    <div
+      class="onboarding-next-action"
+      :class="{ 'is-ready': canStartUpdateTour }"
+    >
+      <div class="onboarding-next-main">
+        <component
+          :is="canStartUpdateTour ? Map : AlertTriangle"
+          :size="18"
+          aria-hidden="true"
+        />
+        <div>
+          <strong>{{ nextActionTitle }}</strong>
+          <span>{{ nextActionDetail }}</span>
+        </div>
+      </div>
+      <n-button
+        v-if="canStartUpdateTour"
+        type="primary"
+        size="small"
+        :loading="webui.loading"
+        @click="startUpdateTour"
+      >
+        <template #icon>
+          <ArrowRight :size="16" />
+        </template>
+        {{ tourActionLabel }}
+      </n-button>
+      <n-button
+        v-else
+        size="small"
+        secondary
+        :loading="webui.loading"
+        @click="refreshOnboarding"
+      >
+        <template #icon>
+          <RefreshCw :size="16" />
+        </template>
+        Recheck setup
+      </n-button>
     </div>
 
     <div class="onboarding-check-list">

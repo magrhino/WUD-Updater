@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from "vue";
+import { computed, nextTick, onMounted, ref, watch } from "vue";
 import { useMediaQuery } from "@vueuse/core";
+import { useRoute, useRouter } from "vue-router";
 import {
   AlertTriangle,
   ChevronDown,
@@ -25,6 +26,8 @@ import { useWebuiStore } from "../stores/webui";
 
 const auth = useAuthStore();
 const webui = useWebuiStore();
+const route = useRoute();
+const router = useRouter();
 
 const PATH_ENTRY_NAMES = new Set([
   "DOCKER_BASE",
@@ -47,6 +50,19 @@ const THEME_PREFERENCE_LABELS: Record<string, string> = {
 const ONBOARDING_CHECKLIST_LABELS: Record<string, string> = {
   visible: "Visible",
   dismissed: "Dismissed",
+};
+const CORE_UPDATE_TOUR_STATUS_LABELS: Record<string, string> = {
+  not_started: "Not started",
+  in_progress: "In progress",
+  completed: "Completed",
+  dismissed: "Dismissed",
+};
+const CORE_UPDATE_TOUR_STEP_LABELS: Record<string, string> = {
+  dashboard: "Dashboard",
+  pending_select: "Pending selection",
+  pending_preflight: "Preflight",
+  pending_apply: "Apply guidance",
+  runs_history: "History",
 };
 const SETTINGS_SECTION_LINKS = [
   { id: "settings-actions", label: "Actions" },
@@ -163,6 +179,14 @@ const themePreferenceOptions = computed(() =>
 const onboardingChecklistOptions = computed(() =>
   managedOptions(onboardingChecklistEntry.value, ONBOARDING_CHECKLIST_LABELS),
 );
+const coreUpdateTourStatusLabel = computed(() => {
+  const status = webui.coreUpdateTour?.status ?? "not_started";
+  return CORE_UPDATE_TOUR_STATUS_LABELS[status] ?? status;
+});
+const coreUpdateTourStepLabel = computed(() => {
+  const step = webui.coreUpdateTour?.step ?? "dashboard";
+  return CORE_UPDATE_TOUR_STEP_LABELS[step] ?? step;
+});
 
 function displayValue(value: string): string {
   return value || "unset";
@@ -277,10 +301,61 @@ async function saveManagedPreferences(): Promise<void> {
   }
 }
 
+async function replayCoreUpdateTour(): Promise<void> {
+  preferencesMessage.value = "";
+  preferencesError.value = "";
+  try {
+    await webui.updateCoreUpdateTour("in_progress", "dashboard");
+    await router?.push({ name: "dashboard" });
+  } catch (exc) {
+    preferencesError.value =
+      exc instanceof Error ? exc.message : "Core update tour could not be started";
+  }
+}
+
+async function dismissCoreUpdateTour(): Promise<void> {
+  preferencesMessage.value = "";
+  preferencesError.value = "";
+  try {
+    await webui.updateCoreUpdateTour(
+      "dismissed",
+      webui.coreUpdateTour?.step ?? "dashboard",
+    );
+    preferencesMessage.value = "Core update tour dismissed.";
+  } catch (exc) {
+    preferencesError.value =
+      exc instanceof Error ? exc.message : "Core update tour could not be dismissed";
+  }
+}
+
+async function focusOnboardingChecklist(): Promise<void> {
+  if (typeof document === "undefined") {
+    return;
+  }
+  await nextTick();
+  const target = document.getElementById("onboarding-checklist");
+  if (!target) {
+    return;
+  }
+  const reducedMotion =
+    typeof window !== "undefined" &&
+    window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  target.scrollIntoView({ behavior: reducedMotion ? "auto" : "smooth", block: "start" });
+  target.focus({ preventScroll: true });
+}
+
 watch(managedEntries, hydratePreferenceForm, { immediate: true });
 
 onMounted(() => {
-  void webui.loadSettings();
+  const loads = [webui.loadSettings()];
+  if (webui.coreUpdateTour === null) {
+    loads.push(webui.loadCoreUpdateTour());
+  }
+  void Promise.all(loads).finally(() => {
+    if (route?.query.onboarding === "1") {
+      void focusOnboardingChecklist();
+    }
+  });
 });
 </script>
 
@@ -476,6 +551,35 @@ onMounted(() => {
               :disabled="preferenceControlsDisabled"
               aria-label="Onboarding checklist"
             />
+          </div>
+          <div class="settings-preference-row">
+            <div>
+              <strong>Core update tour</strong>
+              <span>
+                State: {{ coreUpdateTourStatusLabel }}. Step:
+                {{ coreUpdateTourStepLabel }}.
+              </span>
+            </div>
+            <div class="settings-button-group">
+              <n-button
+                size="small"
+                :loading="webui.loading"
+                @click="dismissCoreUpdateTour"
+              >
+                Dismiss tour
+              </n-button>
+              <n-button
+                size="small"
+                type="primary"
+                :loading="webui.loading"
+                @click="replayCoreUpdateTour"
+              >
+                <template #icon>
+                  <RotateCcw :size="16" />
+                </template>
+                Replay tour
+              </n-button>
+            </div>
           </div>
         </div>
         <div class="settings-action-row settings-preference-actions">
