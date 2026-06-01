@@ -232,7 +232,7 @@ def release_note_contexts(
             )
             continue
 
-        source_repo = _github_source_repo(
+        source_repo = github_repo_from_source(
             source_resolver(target) if source_resolver is not None else ""
         )
         if source_repo:
@@ -248,7 +248,7 @@ def release_note_contexts(
             )
             continue
 
-        ghcr_repo = _ghcr_repo(target.first)
+        ghcr_repo = github_repo_from_ghcr_image(target.first)
         if ghcr_repo:
             contexts.append(
                 _context(
@@ -726,12 +726,16 @@ def _lsio_repo(repo: str) -> str:
     return f"linuxserver/docker-{name}"
 
 
-def _ghcr_repo(image: str) -> str:
+def github_repo_from_ghcr_image(image: str) -> str:
     repo = image_repo_ref(image)
     registry, sep, candidate = repo.partition("/")
     if registry.lower() != "ghcr.io" or not sep:
         return ""
     return candidate if _github_repo_valid(candidate) else ""
+
+
+def github_repo_from_source(source: str) -> str:
+    return _github_source_repo(source)
 
 
 def _github_source_repo(source: str) -> str:

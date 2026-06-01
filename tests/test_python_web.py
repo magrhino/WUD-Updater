@@ -2609,6 +2609,41 @@ def test_release_notes_get_uses_docker_source_label_without_creating_database(
     assert not db_path.exists()
 
 
+def test_release_notes_get_recovers_ghcr_repo_from_running_image(
+    tmp_path: Path,
+) -> None:
+    wud_file = tmp_path / "state" / "images.todo"
+    db_path = tmp_path / "state" / "wud.sqlite"
+    docker_env, fake_root = _fake_docker_env(tmp_path)
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            **docker_env,
+        },
+    )
+    image = "advplyr/audiobookshelf:latest"
+    wud_file.write_text(f"{image}\n", encoding="utf-8")
+    (fake_root / "containers.tsv").write_text(
+        "audiobookshelf\tghcr.io/advplyr/audiobookshelf:latest\n",
+        encoding="utf-8",
+    )
+
+    response = client.get("/api/v1/release-notes")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["count"] == 1
+    assert body["items"][0]["status"] == "missing"
+    assert body["items"][0]["provider"] == "github"
+    assert body["items"][0]["image_repo"] == "advplyr/audiobookshelf"
+    assert body["items"][0]["upstream_repo"] == "advplyr/audiobookshelf"
+    calls = _fake_docker_calls(fake_root)
+    assert f"image inspect {image}" in calls
+    assert "ps --format" in calls
+    assert not db_path.exists()
+
+
 def test_release_notes_get_logs_when_docker_source_label_inspect_fails(
     tmp_path: Path,
     caplog,
