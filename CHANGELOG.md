@@ -4,6 +4,13 @@ All notable changes to WUD-Updater are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com) and versions follow
 [Semantic Versioning](https://semver.org).
 
+## [0.31.1](https://github.com/magrhino/WUD-Updater/compare/v0.31.0...v0.31.1) (2026-06-01)
+
+
+### Bug Fixes
+
+* **config:** honor updater and WebUI env defaults ([#154](https://github.com/magrhino/WUD-Updater/issues/154)) ([930380c](https://github.com/magrhino/WUD-Updater/commit/930380cc16b4c60788036a37ea646967b0af1d36))
+
 ## [0.31.0](https://github.com/magrhino/WUD-Updater/compare/v0.30.0...v0.31.0) (2026-06-01)
 
 
