@@ -275,6 +275,7 @@ class _PlanBuilder:
             stacks = self.compose.discover_stacks(
                 self.config.docker_base,
                 project_base=self.host_docker_base,
+                ignore_paths=self.config.compose_ignore_paths,
             )
         except ComposeDiscoveryError as exc:
             issues.append(
@@ -941,6 +942,7 @@ def build_unmatched_cleanup(
         stacks = compose.discover_stacks(
             config.docker_base,
             project_base=host_docker_base,
+            ignore_paths=config.compose_ignore_paths,
         )
     except ComposeDiscoveryError:
         return DryRunPlanCleanup()
@@ -982,6 +984,7 @@ def resolve_pending_groups(
         stacks = compose.discover_stacks(
             config.docker_base,
             project_base=host_docker_base,
+            ignore_paths=config.compose_ignore_paths,
         )
     except ComposeDiscoveryError as exc:
         return PendingGroupingResult(

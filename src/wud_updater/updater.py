@@ -31,7 +31,13 @@ from .compose import (
     ComposeStack,
     ServiceImage,
 )
-from .config import DEFAULT_MAX_WAIT, DEFAULT_UPDATE_MODE
+from .config import (
+    COMPOSE_IGNORE_PATHS_ENV,
+    ConfigError,
+    DEFAULT_MAX_WAIT,
+    DEFAULT_UPDATE_MODE,
+    parse_compose_ignore_paths,
+)
 from .db import (
     DatabaseError,
     active_tag_exclusion_rules,
@@ -103,6 +109,7 @@ class UpdaterOptions:
     tag_overrides: tuple["TagOverride", ...] = ()
     exclude_tag_lines: str = ""
     recreate_excluded_services: bool = False
+    compose_ignore_paths: tuple[Path, ...] = ()
     db_path: Path | None = None
     docker_base_label: str | None = None
     host_docker_base: Path | None = None
@@ -309,6 +316,7 @@ class UpdateFromWudRunner:
             stacks = self.compose.discover_stacks(
                 opts.docker_base,
                 project_base=opts.host_docker_base,
+                ignore_paths=opts.compose_ignore_paths,
             )
             exclusion_matches, invalid_exclusions = self._build_tag_exclusion_matches(
                 excluded_tags,
@@ -2589,6 +2597,12 @@ def options_from_namespace(
         or env.get("WUD_UPDATE_MODE")
         or DEFAULT_UPDATE_MODE
     )
+    try:
+        compose_ignore_paths = parse_compose_ignore_paths(
+            env.get(COMPOSE_IGNORE_PATHS_ENV)
+        )
+    except ConfigError as exc:
+        raise UpdaterError(str(exc)) from exc
     return UpdaterOptions(
         docker_base=docker_base,
         wud_file=wud_file,
@@ -2606,6 +2620,7 @@ def options_from_namespace(
         recreate_excluded_services=bool(
             getattr(args, "recreate_excluded_services", False)
         ),
+        compose_ignore_paths=compose_ignore_paths,
         db_path=db_path,
         docker_base_label=docker_base_label,
         host_docker_base=host_docker_base,

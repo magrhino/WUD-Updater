@@ -62,6 +62,15 @@ class DoctorTests(unittest.TestCase):
 
         self.assertEqual(status, 1, stdout)
         self.assertIn("[FAIL] compose discovery: no compose stacks found", stdout)
+        self.assertIn("Ignored paths: old", stdout)
+        self.assertNotIn("./old", stdout)
+
+    def test_doctor_reports_configured_compose_ignore_paths(self) -> None:
+        status, stdout = self._run_doctor({"WUD_COMPOSE_IGNORE_PATHS": "app"})
+
+        self.assertEqual(status, 1, stdout)
+        self.assertIn("Ignored paths: app", stdout)
+        self.assertNotIn("./old", stdout)
 
     def test_doctor_result_includes_structured_checks(self) -> None:
         for path in self.stack_dir.iterdir():

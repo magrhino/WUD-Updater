@@ -47,13 +47,17 @@ from . import __version__
 from .command import CommandError, CommandRunner
 from .compose import ComposeCli, ComposeDiscoveryError
 from .config import (
+    COMPOSE_IGNORE_PATHS_ENV,
+    DEFAULT_COMPOSE_IGNORE_PATHS,
     DEFAULT_LOCK_TIMEOUT,
     DEFAULT_MAX_WAIT,
     DEFAULT_TIMEZONE,
     DEFAULT_UPDATE_MODE,
     ConfigError,
     UpdaterConfig,
+    format_compose_ignore_paths,
     load_config,
+    parse_compose_ignore_paths,
 )
 from .db import (
     DatabaseError,
@@ -128,6 +132,8 @@ CORE_UPDATE_TOUR_KEY = "onboarding_core_update_tour"
 MANAGED_THEME_PREFERENCE_KEY = "theme_preference"
 MANAGED_THEME_PREFERENCE_DB_KEY = "ui.theme_preference"
 MANAGED_ONBOARDING_CHECKLIST_KEY = "onboarding_checklist"
+MANAGED_COMPOSE_IGNORE_PATHS_KEY = "compose_ignore_paths"
+MANAGED_COMPOSE_IGNORE_PATHS_DB_KEY = "compose.ignore_paths"
 THEME_PREFERENCE_VALUES = ("system", "light", "dark")
 ONBOARDING_CHECKLIST_VALUES = ("visible", "dismissed")
 CORE_UPDATE_TOUR_STATUS_VALUES = (
@@ -440,6 +446,7 @@ class ManagedSettingEntry(BaseModel):
     editable: bool
     allowed_values: list[str] = Field(default_factory=list)
     restart_required: bool
+    disabled_reason: str = ""
 
 
 class ManagedSettingsUpdateRequest(BaseModel):
@@ -1581,14 +1588,14 @@ def api_update_managed_settings(
     if not settings.mutations_enabled:
         raise HTTPException(status_code=403, detail="mutations are disabled")
 
-    updates = _validated_managed_setting_updates(payload)
+    updates = _validated_managed_setting_updates(payload, settings)
     try:
         with connect_db(settings.config.db_path) as conn:
             init_db(conn)
             with conn:
-                before = _managed_settings_entries_from_conn(conn)
+                before = _managed_settings_entries_from_conn(conn, settings)
                 _apply_managed_setting_updates(conn, updates)
-                after = _managed_settings_entries_from_conn(conn)
+                after = _managed_settings_entries_from_conn(conn, settings)
                 audit_run_id = _insert_managed_settings_audit(
                     conn,
                     settings,
@@ -1720,7 +1727,7 @@ def api_pending_cleanup(
         try:
             parsed = parse_wud_file(settings.config.wud_out_file)
             cleanup = build_unmatched_cleanup(
-                settings.config,
+                _effective_config(settings),
                 line_numbers=[line.line_no for line in payload_lines],
                 parsed=parsed,
                 host_docker_base=settings.host_docker_base,
@@ -2341,6 +2348,60 @@ def _settings(request: Request) -> WebSettings:
     return request.app.state.web_settings
 
 
+def _effective_config(settings: WebSettings) -> UpdaterConfig:
+    return replace(
+        settings.config,
+        compose_ignore_paths=_effective_compose_ignore_paths(settings),
+    )
+
+
+def _effective_compose_ignore_paths(settings: WebSettings) -> tuple[Path, ...]:
+    if _compose_ignore_env_configured(settings):
+        return settings.config.compose_ignore_paths
+    return _stored_compose_ignore_paths(settings)
+
+
+def _stored_compose_ignore_paths(settings: WebSettings) -> tuple[Path, ...]:
+    try:
+        with closing(_connect_readonly_db(settings)) as conn:
+            value = _web_setting(conn, MANAGED_COMPOSE_IGNORE_PATHS_DB_KEY)
+    except ReadOnlyDatabaseMissing:
+        return DEFAULT_COMPOSE_IGNORE_PATHS
+    except (OSError, sqlite3.Error, DatabaseError) as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=_safe_exception_detail(
+                settings,
+                "could not read compose ignore paths",
+                exc,
+            ),
+        ) from exc
+
+    try:
+        return parse_compose_ignore_paths(
+            value,
+            name=MANAGED_COMPOSE_IGNORE_PATHS_KEY,
+        )
+    except ConfigError as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=f"stored {MANAGED_COMPOSE_IGNORE_PATHS_KEY} is invalid: {exc}",
+        ) from exc
+
+
+def _compose_ignore_env_configured(settings: WebSettings) -> bool:
+    return COMPOSE_IGNORE_PATHS_ENV in _settings_env(settings)
+
+
+def _compose_ignore_paths_disabled_reason(settings: WebSettings) -> str:
+    if not _compose_ignore_env_configured(settings):
+        return ""
+    return (
+        f"{COMPOSE_IGNORE_PATHS_ENV} is configured in the server environment. "
+        "Unset it to manage compose ignore paths in the WebUI."
+    )
+
+
 def _web_doctor_result(settings: WebSettings, request: Request) -> DoctorDataResult:
     env = _doctor_command_env(settings)
     args = SimpleNamespace(
@@ -2384,10 +2445,14 @@ def _web_doctor_result(settings: WebSettings, request: Request) -> DoctorDataRes
 
 
 def _doctor_command_env(settings: WebSettings) -> dict[str, str]:
+    config = _effective_config(settings)
     env = dict(settings.command_env or {})
-    env["DOCKER_BASE"] = str(settings.config.docker_base)
-    env["WUD_OUT_FILE"] = str(settings.config.wud_out_file)
-    env["WUD_LOG_DIR"] = str(settings.config.log_dir)
+    env["DOCKER_BASE"] = str(config.docker_base)
+    env["WUD_OUT_FILE"] = str(config.wud_out_file)
+    env["WUD_LOG_DIR"] = str(config.log_dir)
+    env[COMPOSE_IGNORE_PATHS_ENV] = format_compose_ignore_paths(
+        config.compose_ignore_paths
+    )
     return env
 
 
@@ -3547,7 +3612,7 @@ def _auto_update_candidate(
         return None
 
     grouping = resolve_pending_groups(
-        settings.config,
+        _effective_config(settings),
         parsed,
         host_docker_base=settings.host_docker_base,
         environ=settings.command_env,
@@ -3910,10 +3975,11 @@ def _build_web_plan(
     *,
     update_mode_override: str | None = None,
 ) -> DryRunPlan:
+    base_config = _effective_config(settings)
     config = (
-        settings.config
+        base_config
         if update_mode_override is None
-        else replace(settings.config, update_mode=update_mode_override)
+        else replace(base_config, update_mode=update_mode_override)
     )
     return build_dry_run_plan(
         config,
@@ -4256,7 +4322,7 @@ def _apply_options(
         sort_keys=True,
         separators=(",", ":"),
     )
-    config = settings.config
+    config = _effective_config(settings)
     host_docker_base_label = (
         None if settings.host_docker_base is None else str(settings.host_docker_base)
     )
@@ -4272,6 +4338,7 @@ def _apply_options(
         tag_overrides=tag_overrides,
         only_lines=line_spec,
         remove_lines_before_run=line_spec,
+        compose_ignore_paths=config.compose_ignore_paths,
         db_path=config.db_path,
         docker_base_label=str(config.docker_base),
         host_docker_base=settings.host_docker_base,
@@ -4400,7 +4467,7 @@ def _pending_grouping_response(
     parsed: ParsedWudFile,
 ) -> PendingGrouping:
     grouping = resolve_pending_groups(
-        settings.config,
+        _effective_config(settings),
         parsed,
         host_docker_base=settings.host_docker_base,
         environ=settings.command_env,
@@ -4449,6 +4516,7 @@ def _pending_grouped_item(item: Any) -> PendingGroupedItem:
 
 
 def _update_targets_response(settings: WebSettings) -> UpdateTargetsResponse:
+    config = _effective_config(settings)
     runner = (
         CommandRunner(env=settings.command_env)
         if settings.command_env is not None
@@ -4457,8 +4525,9 @@ def _update_targets_response(settings: WebSettings) -> UpdateTargetsResponse:
     compose = ComposeCli(runner=runner)
     try:
         stacks = compose.discover_stacks(
-            settings.config.docker_base,
+            config.docker_base,
             project_base=settings.host_docker_base,
+            ignore_paths=config.compose_ignore_paths,
         )
     except ComposeDiscoveryError as exc:
         return UpdateTargetsResponse(
@@ -6874,13 +6943,17 @@ def _managed_settings_entries(settings: WebSettings) -> list[ManagedSettingEntry
                 exc,
             ),
         ) from exc
-    return _managed_settings_entries_from_values(values)
+    return _managed_settings_entries_from_values(values, settings)
 
 
 def _managed_settings_entries_from_conn(
     conn: sqlite3.Connection,
+    settings: WebSettings,
 ) -> list[ManagedSettingEntry]:
-    return _managed_settings_entries_from_values(_managed_settings_db_values(conn))
+    return _managed_settings_entries_from_values(
+        _managed_settings_db_values(conn),
+        settings,
+    )
 
 
 def _managed_settings_db_values(conn: sqlite3.Connection) -> dict[str, str]:
@@ -6888,19 +6961,39 @@ def _managed_settings_db_values(conn: sqlite3.Connection) -> dict[str, str]:
         """
         SELECT key, value
         FROM web_settings
-        WHERE key IN (?, ?)
+        WHERE key IN (?, ?, ?)
         """,
-        (MANAGED_THEME_PREFERENCE_DB_KEY, ONBOARDING_DISMISSED_AT_KEY),
+        (
+            MANAGED_THEME_PREFERENCE_DB_KEY,
+            ONBOARDING_DISMISSED_AT_KEY,
+            MANAGED_COMPOSE_IGNORE_PATHS_DB_KEY,
+        ),
     ).fetchall()
     return {str(row["key"]): str(row["value"]) for row in rows}
 
 
 def _managed_settings_entries_from_values(
     values: Mapping[str, str],
+    settings: WebSettings,
 ) -> list[ManagedSettingEntry]:
     theme_value = values.get(MANAGED_THEME_PREFERENCE_DB_KEY, "")
     theme_configured = theme_value in THEME_PREFERENCE_VALUES
     onboarding_dismissed_at = values.get(ONBOARDING_DISMISSED_AT_KEY, "")
+    compose_disabled_reason = _compose_ignore_paths_disabled_reason(settings)
+    if _compose_ignore_env_configured(settings):
+        compose_ignore_paths = settings.config.compose_ignore_paths
+        compose_configured = True
+    else:
+        compose_configured = MANAGED_COMPOSE_IGNORE_PATHS_DB_KEY in values
+        compose_value = (
+            values.get(MANAGED_COMPOSE_IGNORE_PATHS_DB_KEY, "")
+            if compose_configured
+            else None
+        )
+        compose_ignore_paths = parse_compose_ignore_paths(
+            compose_value,
+            name=MANAGED_COMPOSE_IGNORE_PATHS_KEY,
+        )
     return [
         ManagedSettingEntry(
             key=MANAGED_THEME_PREFERENCE_KEY,
@@ -6920,11 +7013,22 @@ def _managed_settings_entries_from_values(
             allowed_values=list(ONBOARDING_CHECKLIST_VALUES),
             restart_required=False,
         ),
+        ManagedSettingEntry(
+            key=MANAGED_COMPOSE_IGNORE_PATHS_KEY,
+            value=format_compose_ignore_paths(compose_ignore_paths),
+            default_value=format_compose_ignore_paths(DEFAULT_COMPOSE_IGNORE_PATHS),
+            source="configured" if compose_configured else "default",
+            editable=not compose_disabled_reason,
+            allowed_values=[],
+            restart_required=False,
+            disabled_reason=compose_disabled_reason,
+        ),
     ]
 
 
 def _validated_managed_setting_updates(
     payload: ManagedSettingsUpdateRequest,
+    settings: WebSettings,
 ) -> dict[str, str]:
     if not payload.values:
         raise HTTPException(
@@ -6938,6 +7042,22 @@ def _validated_managed_setting_updates(
     }
     updates: dict[str, str] = {}
     for key, raw_value in payload.values.items():
+        if key == MANAGED_COMPOSE_IGNORE_PATHS_KEY:
+            if _compose_ignore_env_configured(settings):
+                raise HTTPException(
+                    status_code=422,
+                    detail=_compose_ignore_paths_disabled_reason(settings),
+                )
+            try:
+                updates[key] = format_compose_ignore_paths(
+                    parse_compose_ignore_paths(
+                        raw_value.strip(),
+                        name=MANAGED_COMPOSE_IGNORE_PATHS_KEY,
+                    )
+                )
+            except ConfigError as exc:
+                raise HTTPException(status_code=422, detail=str(exc)) from exc
+            continue
         if key not in allowed_values:
             raise HTTPException(
                 status_code=422,
@@ -6971,6 +7091,8 @@ def _apply_managed_setting_updates(
                 )
             else:
                 _delete_web_setting(conn, ONBOARDING_DISMISSED_AT_KEY)
+        elif key == MANAGED_COMPOSE_IGNORE_PATHS_KEY:
+            _set_web_setting(conn, MANAGED_COMPOSE_IGNORE_PATHS_DB_KEY, value)
 
 
 def _managed_settings_audit_values(
@@ -6996,6 +7118,11 @@ def _updater_settings_entries(settings: WebSettings) -> list[SettingsEntry]:
         _config_setting_entry(settings, "WUD_MAX_WAIT", str(config.max_wait)),
         _config_setting_entry(settings, "WUD_LOCK_TIMEOUT", str(config.lock_timeout)),
         _config_setting_entry(settings, "WUD_TIMEZONE", config.timezone_name),
+        _config_setting_entry(
+            settings,
+            COMPOSE_IGNORE_PATHS_ENV,
+            format_compose_ignore_paths(config.compose_ignore_paths),
+        ),
     ]
 
 
@@ -7154,6 +7281,9 @@ def _static_config_default(name: str) -> str:
         "WUD_MAX_WAIT": str(DEFAULT_MAX_WAIT),
         "WUD_LOCK_TIMEOUT": str(DEFAULT_LOCK_TIMEOUT),
         "WUD_TIMEZONE": DEFAULT_TIMEZONE,
+        COMPOSE_IGNORE_PATHS_ENV: format_compose_ignore_paths(
+            DEFAULT_COMPOSE_IGNORE_PATHS
+        ),
     }
     return defaults.get(name, "")
 
@@ -7168,6 +7298,9 @@ def _config_value(config: UpdaterConfig, name: str) -> str:
         "WUD_MAX_WAIT": str(config.max_wait),
         "WUD_LOCK_TIMEOUT": str(config.lock_timeout),
         "WUD_TIMEZONE": config.timezone_name,
+        COMPOSE_IGNORE_PATHS_ENV: format_compose_ignore_paths(
+            config.compose_ignore_paths
+        ),
     }
     return values.get(name, "")
 
@@ -7177,6 +7310,8 @@ def _settings_env(settings: WebSettings) -> Mapping[str, str]:
 
 
 def _env_configured(settings: WebSettings, name: str) -> bool:
+    if name == COMPOSE_IGNORE_PATHS_ENV:
+        return name in _settings_env(settings)
     return bool(_settings_env(settings).get(name, "").strip())
 
 

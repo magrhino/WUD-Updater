@@ -254,7 +254,7 @@ class ComposeCliTests(FakeDockerCase):
                 ("db", "repo/db:latest", "cid-db"),
             ],
         )
-        self.make_stack(
+        archived = self.make_stack(
             "ignored",
             [("app", "repo/ignored:latest", "cid-ignored")],
             parent=self.base / "old",
@@ -279,19 +279,79 @@ class ComposeCliTests(FakeDockerCase):
 
         stacks = self.compose.discover_stacks(self.base)
 
+        by_directory = {item.directory: item for item in stacks}
         self.assertEqual(len(stacks), 1)
-        self.assertEqual(stacks[0].index, 1)
-        self.assertEqual(stacks[0].directory, stack)
-        self.assertEqual(stacks[0].file, "docker-compose.yml")
-        self.assertEqual(stacks[0].name, "stack")
-        self.assertEqual(stacks[0].images, ("repo/app:latest", "repo/db:latest"))
+        self.assertIn(stack, by_directory)
+        self.assertNotIn(archived, by_directory)
+        self.assertEqual(by_directory[stack].file, "docker-compose.yml")
+        self.assertEqual(by_directory[stack].name, "stack")
         self.assertEqual(
-            stacks[0].service_images,
+            by_directory[stack].images,
+            ("repo/app:latest", "repo/db:latest"),
+        )
+        self.assertEqual(
+            by_directory[stack].service_images,
             (
                 ServiceImage(service="app", image="repo/app:latest"),
                 ServiceImage(service="db", image="repo/db:latest"),
             ),
         )
+
+    def test_discover_stacks_skips_configured_single_component_ignore(self) -> None:
+        stack = self.make_stack("stack", [("app", "repo/app:latest", "cid-app")])
+        self.make_stack(
+            "ignored",
+            [("app", "repo/ignored:latest", "cid-ignored")],
+            parent=self.base / "old",
+        )
+
+        stacks = self.compose.discover_stacks(self.base, ignore_paths=("old",))
+
+        self.assertEqual([item.directory for item in stacks], [stack])
+
+    def test_discover_stacks_can_disable_default_ignore(self) -> None:
+        stack = self.make_stack("stack", [("app", "repo/app:latest", "cid-app")])
+        archived = self.make_stack(
+            "archived",
+            [("app", "repo/archived:latest", "cid-archived")],
+            parent=self.base / "old",
+        )
+
+        stacks = self.compose.discover_stacks(self.base, ignore_paths=())
+
+        self.assertEqual({item.directory for item in stacks}, {stack, archived})
+
+    def test_discover_stacks_skips_configured_non_default_ignore(self) -> None:
+        stack = self.make_stack("stack", [("app", "repo/app:latest", "cid-app")])
+        self.make_stack(
+            "ignored",
+            [("app", "repo/ignored:latest", "cid-ignored")],
+            parent=self.base / "archive",
+        )
+
+        stacks = self.compose.discover_stacks(self.base, ignore_paths=("archive",))
+
+        self.assertEqual([item.directory for item in stacks], [stack])
+
+    def test_discover_stacks_matches_multi_component_ignore_from_base(self) -> None:
+        stack = self.make_stack("stack", [("app", "repo/app:latest", "cid-app")])
+        keep = self.make_stack(
+            "old-stacks",
+            [("app", "repo/keep:latest", "cid-keep")],
+            parent=self.base / "other",
+        )
+        self.make_stack(
+            "old-stacks",
+            [("app", "repo/ignored:latest", "cid-ignored")],
+            parent=self.base / "archive",
+        )
+
+        stacks = self.compose.discover_stacks(
+            self.base,
+            ignore_paths=("archive/old-stacks",),
+        )
+
+        self.assertEqual({item.directory for item in stacks}, {stack, keep})
 
     def test_discover_stacks_maps_project_base_to_stack_project_directory(self) -> None:
         stack = self.make_stack("stack", [("app", "repo/app:latest", "cid-app")])

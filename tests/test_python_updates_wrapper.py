@@ -455,6 +455,26 @@ class PythonUpdatesWrapperTests(unittest.TestCase):
         )
         self.assertIn(f"HOST_DOCKER_BASE={host_base}", updater_log)
 
+    def test_yes_preserves_compose_ignore_paths_through_sudo_env(self) -> None:
+        self.wud_file.write_text("repo/app:latest\n", encoding="utf-8")
+
+        result = self.run_updates(
+            "--yes",
+            env_overrides={"WUD_COMPOSE_IGNORE_PATHS": "old,archive/disabled"},
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+        sudo_log = self.sudo_log.read_text(encoding="utf-8")
+        updater_log = self.updater_log.read_text(encoding="utf-8")
+        self.assertIn(
+            f"env WUD_COMPOSE_IGNORE_PATHS=old,archive/disabled {self.updater}",
+            sudo_log,
+        )
+        self.assertIn(
+            "WUD_COMPOSE_IGNORE_PATHS=old,archive/disabled",
+            updater_log,
+        )
+
     def test_no_updater_sudo_flag_invokes_updater_directly(self) -> None:
         self.wud_file.write_text("repo/app:latest\n", encoding="utf-8")
 
@@ -1253,7 +1273,7 @@ while (($#)); do
       ;;
   esac
 done
-printf 'OUT_UID=%s OUT_GID=%s WUD_LOCK_TIMEOUT=%s WUD_LOCK_HELD_BY_PARENT=%s WUD_DB_PATH=%s HOST_DOCKER_BASE=%s\\n' "${OUT_UID:-}" "${OUT_GID:-}" "${WUD_LOCK_TIMEOUT:-}" "${WUD_LOCK_HELD_BY_PARENT:-}" "${WUD_DB_PATH:-}" "${HOST_DOCKER_BASE:-}" >> "${FAKE_UPDATER_LOG:?FAKE_UPDATER_LOG is required}"
+printf 'OUT_UID=%s OUT_GID=%s WUD_LOCK_TIMEOUT=%s WUD_LOCK_HELD_BY_PARENT=%s WUD_DB_PATH=%s HOST_DOCKER_BASE=%s WUD_COMPOSE_IGNORE_PATHS=%s\\n' "${OUT_UID:-}" "${OUT_GID:-}" "${WUD_LOCK_TIMEOUT:-}" "${WUD_LOCK_HELD_BY_PARENT:-}" "${WUD_DB_PATH:-}" "${HOST_DOCKER_BASE:-}" "${WUD_COMPOSE_IGNORE_PATHS:-}" >> "${FAKE_UPDATER_LOG:?FAKE_UPDATER_LOG is required}"
 if [[ "${FAKE_UPDATER_ASSERT_LOCK:-}" = "1" ]]; then
   if [[ "${WUD_LOCK_HELD_BY_PARENT:-}" != "1" ]]; then
     printf 'missing WUD_LOCK_HELD_BY_PARENT\\n' >> "$FAKE_UPDATER_LOG"

@@ -16,6 +16,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from .banner import print_startup_banner
+from .config import COMPOSE_IGNORE_PATHS_ENV
 from .images import image_has_tag, image_with_tag, tag_value_valid
 from .self_update import (
     ReleaseSelfUpdate,
@@ -863,6 +864,10 @@ class UpdatesRunner:
             updater_env.append(f"WUD_DB_PATH={self.environ['WUD_DB_PATH']}")
         if self.options.use_sudo and self.environ.get("HOST_DOCKER_BASE"):
             updater_env.append(f"HOST_DOCKER_BASE={self.environ['HOST_DOCKER_BASE']}")
+        if self.options.use_sudo and COMPOSE_IGNORE_PATHS_ENV in self.environ:
+            updater_env.append(
+                f"{COMPOSE_IGNORE_PATHS_ENV}={self.environ[COMPOSE_IGNORE_PATHS_ENV]}"
+            )
         if self.options.lock_timeout:
             updater_env.append(f"WUD_LOCK_TIMEOUT={self.options.lock_timeout}")
         if self.lock.held:

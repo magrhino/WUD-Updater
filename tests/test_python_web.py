@@ -252,8 +252,10 @@ def _make_fake_stack(
     fake_root: Path,
     stack_id: str,
     services: list[tuple[str, str, str | None]],
+    *,
+    parent: Path | None = None,
 ) -> Path:
-    directory = tmp_path / "docker" / stack_id
+    directory = (parent or tmp_path / "docker") / stack_id
     directory.mkdir(parents=True, exist_ok=True)
     (directory / ".fake-docker-id").write_text(f"{stack_id}\n", encoding="utf-8")
     stack_state = fake_root / "stacks" / stack_id
@@ -509,6 +511,7 @@ def test_settings_reports_effective_non_secret_configuration(
         "editable": True,
         "allowed_values": ["system", "light", "dark"],
         "restart_required": False,
+        "disabled_reason": "",
     }
     assert managed["onboarding_checklist"] == {
         "key": "onboarding_checklist",
@@ -518,6 +521,17 @@ def test_settings_reports_effective_non_secret_configuration(
         "editable": True,
         "allowed_values": ["visible", "dismissed"],
         "restart_required": False,
+        "disabled_reason": "",
+    }
+    assert managed["compose_ignore_paths"] == {
+        "key": "compose_ignore_paths",
+        "value": "old",
+        "default_value": "old",
+        "source": "default",
+        "editable": True,
+        "allowed_values": [],
+        "restart_required": False,
+        "disabled_reason": "",
     }
     for value in secret_values.values():
         assert value not in serialized
@@ -586,6 +600,11 @@ def test_managed_settings_rejects_uneditable_or_invalid_values_without_partial_w
         json={"values": {"theme_preference": "dark; rm -rf /"}},
         headers=headers,
     )
+    invalid_compose_ignore = client.post(
+        "/api/v1/settings/managed",
+        json={"values": {"compose_ignore_paths": "old,,archive"}},
+        headers=headers,
+    )
     empty_payload = client.post(
         "/api/v1/settings/managed",
         json={"values": {}},
@@ -602,10 +621,42 @@ def test_managed_settings_rejects_uneditable_or_invalid_values_without_partial_w
     assert command_value.json()["detail"] == (
         "theme_preference must be one of: system, light, dark"
     )
+    assert invalid_compose_ignore.status_code == 422
+    assert "non-empty relative paths" in invalid_compose_ignore.json()["detail"]
     assert empty_payload.status_code == 422
     assert empty_payload.json()["detail"] == "at least one managed setting is required"
     assert managed["theme_preference"]["value"] == "system"
     assert managed["theme_preference"]["source"] == "default"
+
+
+def test_managed_compose_ignore_paths_env_guard_disables_webui_edit(
+    tmp_path: Path,
+) -> None:
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+            "WUD_COMPOSE_IGNORE_PATHS": "old",
+        },
+    )
+    headers = _csrf_headers(client)
+
+    settings_response = client.get("/api/v1/settings")
+    managed = {entry["key"]: entry for entry in settings_response.json()["managed"]}
+    response = client.post(
+        "/api/v1/settings/managed",
+        json={"values": {"compose_ignore_paths": "archive"}},
+        headers=headers,
+    )
+
+    assert managed["compose_ignore_paths"]["value"] == "old"
+    assert managed["compose_ignore_paths"]["editable"] is False
+    assert "Unset it to manage compose ignore paths" in managed[
+        "compose_ignore_paths"
+    ]["disabled_reason"]
+    assert response.status_code == 422
+    assert response.json()["detail"] == managed["compose_ignore_paths"]["disabled_reason"]
 
 
 def test_managed_settings_persist_and_write_audit_records(tmp_path: Path) -> None:
@@ -624,6 +675,7 @@ def test_managed_settings_persist_and_write_audit_records(tmp_path: Path) -> Non
             "values": {
                 "theme_preference": "dark",
                 "onboarding_checklist": "dismissed",
+                "compose_ignore_paths": "old, archive/disabled",
             }
         },
         headers=headers,
@@ -637,6 +689,8 @@ def test_managed_settings_persist_and_write_audit_records(tmp_path: Path) -> Non
     assert managed["theme_preference"]["source"] == "configured"
     assert managed["onboarding_checklist"]["value"] == "dismissed"
     assert managed["onboarding_checklist"]["source"] == "configured"
+    assert managed["compose_ignore_paths"]["value"] == "old, archive/disabled"
+    assert managed["compose_ignore_paths"]["source"] == "configured"
 
     db_path = tmp_path / "state" / "wud.sqlite"
     with connect_db(db_path) as conn:
@@ -645,6 +699,9 @@ def test_managed_settings_persist_and_write_audit_records(tmp_path: Path) -> Non
         ).fetchone()
         onboarding = conn.execute(
             "SELECT value FROM web_settings WHERE key = 'onboarding_checklist_dismissed_at'"
+        ).fetchone()
+        compose_ignore_paths = conn.execute(
+            "SELECT value FROM web_settings WHERE key = 'compose.ignore_paths'"
         ).fetchone()
         run = conn.execute(
             "SELECT * FROM update_runs WHERE id = ?",
@@ -659,18 +716,21 @@ def test_managed_settings_persist_and_write_audit_records(tmp_path: Path) -> Non
     event_metadata = json.loads(event["metadata_json"])
     assert theme["value"] == "dark"
     assert onboarding["value"]
+    assert compose_ignore_paths["value"] == "old, archive/disabled"
     assert run["mode"] == "web-settings"
     assert run_metadata["operation"] == "update_managed_settings"
     assert run_metadata["target"] == {
-        "keys": ["onboarding_checklist", "theme_preference"]
+        "keys": ["compose_ignore_paths", "onboarding_checklist", "theme_preference"]
     }
     assert event_metadata["before"] == {
         "theme_preference": "system",
         "onboarding_checklist": "visible",
+        "compose_ignore_paths": "old",
     }
     assert event_metadata["after"] == {
         "theme_preference": "dark",
         "onboarding_checklist": "dismissed",
+        "compose_ignore_paths": "old, archive/disabled",
     }
 
     reset = client.post(
@@ -2229,6 +2289,123 @@ def test_pending_endpoint_groups_items_by_compose_stack_without_mutation(
         == compose_before
     )
     _assert_pending_grouping_did_not_mutate(_fake_docker_calls(fake_root))
+
+
+def test_pending_endpoint_honors_env_compose_ignore_paths(tmp_path: Path) -> None:
+    fake_env, fake_root = _fake_docker_env(tmp_path)
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_COMPOSE_IGNORE_PATHS": "old",
+            **fake_env,
+        },
+    )
+    wud_file = tmp_path / "state" / "images.todo"
+    wud_file.write_text("repo/ignored:latest\n", encoding="utf-8")
+    _make_fake_stack(
+        tmp_path,
+        fake_root,
+        "active",
+        [("app", "repo/app:latest", "cid-app")],
+    )
+    _make_fake_stack(
+        tmp_path,
+        fake_root,
+        "ignored",
+        [("app", "repo/ignored:latest", "cid-ignored")],
+        parent=tmp_path / "docker" / "old",
+    )
+
+    response = client.get("/api/v1/pending")
+
+    assert response.status_code == 200
+    grouping = response.json()["grouping"]
+    assert grouping["status"] == "ready"
+    assert grouping["groups"] == []
+    assert [item["line_no"] for item in grouping["unmatched"]] == [1]
+
+
+def test_pending_endpoint_honors_webui_managed_compose_ignore_paths(
+    tmp_path: Path,
+) -> None:
+    fake_env, fake_root = _fake_docker_env(tmp_path)
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+            **fake_env,
+        },
+    )
+    headers = _csrf_headers(client)
+    settings_update = client.post(
+        "/api/v1/settings/managed",
+        json={"values": {"compose_ignore_paths": "old"}},
+        headers=headers,
+    )
+    assert settings_update.status_code == 200
+    wud_file = tmp_path / "state" / "images.todo"
+    wud_file.write_text("repo/ignored:latest\n", encoding="utf-8")
+    _make_fake_stack(
+        tmp_path,
+        fake_root,
+        "active",
+        [("app", "repo/app:latest", "cid-app")],
+    )
+    _make_fake_stack(
+        tmp_path,
+        fake_root,
+        "ignored",
+        [("app", "repo/ignored:latest", "cid-ignored")],
+        parent=tmp_path / "docker" / "old",
+    )
+
+    response = client.get("/api/v1/pending")
+
+    assert response.status_code == 200
+    grouping = response.json()["grouping"]
+    assert grouping["status"] == "ready"
+    assert grouping["groups"] == []
+    assert [item["line_no"] for item in grouping["unmatched"]] == [1]
+
+
+def test_pending_endpoint_allows_empty_webui_managed_compose_ignore_paths(
+    tmp_path: Path,
+) -> None:
+    fake_env, fake_root = _fake_docker_env(tmp_path)
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+            **fake_env,
+        },
+    )
+    headers = _csrf_headers(client)
+    settings_update = client.post(
+        "/api/v1/settings/managed",
+        json={"values": {"compose_ignore_paths": ""}},
+        headers=headers,
+    )
+    assert settings_update.status_code == 200
+    wud_file = tmp_path / "state" / "images.todo"
+    wud_file.write_text("repo/archived:latest\n", encoding="utf-8")
+    _make_fake_stack(
+        tmp_path,
+        fake_root,
+        "archived",
+        [("app", "repo/archived:latest", "cid-archived")],
+        parent=tmp_path / "docker" / "old",
+    )
+
+    response = client.get("/api/v1/pending")
+
+    assert response.status_code == 200
+    grouping = response.json()["grouping"]
+    assert grouping["status"] == "ready"
+    assert len(grouping["groups"]) == 1
+    assert grouping["groups"][0]["items"][0]["line_no"] == 1
 
 
 def test_update_targets_endpoint_lists_compose_service_images_without_mutation(
