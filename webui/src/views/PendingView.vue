@@ -142,8 +142,20 @@ const applyJobSnapshot = ref<ApplyJobPlanSnapshot | null>(null);
 const columns = computed<DataTableColumns<PendingItem>>(() => [
   { type: "selection", width: 48 },
   { title: "Line", key: "line_no", width: 80 },
-  { title: "Image", key: "image", minWidth: 240 },
-  { title: "Repository", key: "repo", minWidth: 200 },
+  {
+    title: "Image",
+    key: "image",
+    minWidth: 240,
+    render: (row) =>
+      h("code", { class: "pending-table-value", title: row.image }, row.image),
+  },
+  {
+    title: "Repository",
+    key: "repo",
+    minWidth: 200,
+    render: (row) =>
+      h("span", { class: "pending-table-value", title: row.repo }, row.repo),
+  },
   {
     title: "Current tag",
     key: "current_tag",
@@ -186,7 +198,7 @@ const columns = computed<DataTableColumns<PendingItem>>(() => [
 ]);
 
 const allLineNumbers = computed(
-  () => webui.pending?.items.map((item) => item.line_no) ?? [],
+  () => uniqueSorted(webui.pending?.items.map((item) => item.line_no) ?? []),
 );
 const groupingReady = computed(
   () => webui.pending?.grouping.status === "ready",
@@ -199,6 +211,20 @@ const unmatchedItems = computed(() =>
 );
 const stackLineNumbers = computed(() =>
   uniqueSorted(stackGroups.value.flatMap((group) => group.line_numbers)),
+);
+const pendingLoaded = computed(() => webui.pending !== null);
+const pendingLoadFailed = computed(
+  () => !pendingLoaded.value && !webui.loading && Boolean(webui.error),
+);
+const pendingLoading = computed(
+  () => !pendingLoaded.value && !pendingLoadFailed.value,
+);
+const pendingHeadingText = computed(() =>
+  webui.pending
+    ? pluralize(webui.pending.count, "pending update")
+    : pendingLoadFailed.value
+      ? "Pending updates unavailable"
+      : "Loading pending updates",
 );
 const selectableLineNumbers = computed(() =>
   groupingReady.value ? stackLineNumbers.value : allLineNumbers.value,
@@ -900,10 +926,9 @@ function updateTagOverride(item: PendingItem, value: string): void {
 }
 
 function updateCheckedRowKeys(keys: DataTableRowKey[]): void {
-  selectedLineNumbers.value = keys
-    .map((key) => Number(key))
-    .filter((key) => Number.isFinite(key))
-    .sort((left, right) => left - right);
+  selectedLineNumbers.value = uniqueSorted(
+    keys.map((key) => Number(key)).filter((key) => Number.isFinite(key)),
+  );
   clearPreflight();
 }
 
@@ -1445,8 +1470,12 @@ async function loadPendingAndReleaseNotes(
   void webui.refreshReleaseNotes().catch(() => undefined);
 }
 
+async function retryPendingLoad(): Promise<void> {
+  await loadPendingAndReleaseNotes().catch(() => undefined);
+}
+
 onMounted(() => {
-  void loadPendingAndReleaseNotes();
+  void retryPendingLoad();
   void reconnectObservedApplyJob();
 });
 
@@ -1462,8 +1491,8 @@ watch(
       }
     }
     tagOverrides.value = next;
-    selectedLineNumbers.value = selectedLineNumbers.value.filter((lineNo) =>
-      pendingLineNumbers.has(lineNo),
+    selectedLineNumbers.value = uniqueSorted(
+      selectedLineNumbers.value.filter((lineNo) => pendingLineNumbers.has(lineNo)),
     );
   },
   { immediate: true },
@@ -1766,7 +1795,7 @@ watch(
         <p class="eyebrow value-eyebrow pending-source" :title="pendingSourceFile">
           {{ pendingSourceDisplay }}
         </p>
-        <h2>{{ webui.pending?.count ?? 0 }} pending updates</h2>
+        <h2>{{ pendingHeadingText }}</h2>
       </div>
       <n-tag size="small" :type="mutationStateType">{{ mutationStateLabel }}</n-tag>
     </div>
@@ -1779,8 +1808,10 @@ watch(
       next-step="pending_preflight"
     >
       <div class="core-tour-facts">
-        <span>{{ pluralize(stackGroups.length, "stack") }} matched</span>
-        <span>{{ pluralize(unmatchedItems.length, "item") }} needs review</span>
+        <span v-if="pendingLoaded">{{ pluralize(stackGroups.length, "stack") }} matched</span>
+        <span v-else>Loading stack matches</span>
+        <span v-if="pendingLoaded">{{ pluralize(unmatchedItems.length, "item") }} needs review</span>
+        <span v-else>Waiting for pending file</span>
         <span>{{ mutationStateLabel }}</span>
       </div>
     </CoreUpdateTourPanel>
@@ -1803,7 +1834,7 @@ watch(
       next-to="/runs"
     />
 
-    <div class="selection-toolbar">
+    <div v-if="pendingLoaded" class="selection-toolbar">
       <div class="selection-summary">
         <strong>{{ selectedLineNumbers.length }} selected</strong>
         <span v-if="groupingReady">
@@ -1829,7 +1860,7 @@ watch(
       </div>
     </div>
 
-    <div v-if="selectedLineNumbers.length" class="batch-action-bar">
+    <div v-if="pendingLoaded && selectedLineNumbers.length" class="batch-action-bar">
       <div class="selection-summary">
         <strong>{{ batchSummaryLabel }}</strong>
         <span>
@@ -2287,6 +2318,31 @@ watch(
         </article>
       </div>
     </template>
+
+    <section
+      v-else-if="pendingLoading"
+      class="pending-loading-state"
+      role="status"
+      aria-live="polite"
+      aria-label="Loading pending updates"
+    >
+      <span aria-hidden="true" class="settings-skeleton-row"></span>
+      <span aria-hidden="true" class="settings-skeleton-row"></span>
+      <span aria-hidden="true" class="settings-skeleton-row"></span>
+    </section>
+
+    <div
+      v-else-if="pendingLoadFailed"
+      class="empty-state pending-error-state"
+      role="alert"
+      aria-live="assertive"
+    >
+      <strong>Pending updates did not load</strong>
+      <span>Check the WebUI API connection, then try again.</span>
+      <n-button size="small" secondary :loading="webui.loading" @click="retryPendingLoad">
+        Retry pending load
+      </n-button>
+    </div>
 
     <n-modal
       v-if="webui.plan"

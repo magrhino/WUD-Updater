@@ -919,6 +919,118 @@ describe("mutating WebUI views", () => {
     expect(wrapper.find('[role="table"]').exists()).toBe(true);
   });
 
+  it("shows a pending loading skeleton before queue data is available", () => {
+    const { pinia, webui } = setupStores(true);
+    webui.pending = null;
+    webui.loading = true;
+    mockPendingLifecycle(webui);
+    const wrapper = mountWithApp(PendingView, { pinia });
+
+    expect(wrapper.text()).toContain("Loading pending updates");
+    expect(wrapper.find(".pending-loading-state").exists()).toBe(true);
+    expect(wrapper.find(".selection-toolbar").exists()).toBe(false);
+  });
+
+  it("keeps failed pending loads recoverable without showing stale selection controls", async () => {
+    const { pinia, webui } = setupStores(true);
+    webui.pending = null;
+    const loadPending = vi
+      .spyOn(webui, "loadPending")
+      .mockImplementationOnce(async () => {
+        webui.setError("Network request failed");
+        throw new Error("Network request failed");
+      })
+      .mockImplementationOnce(async () => {
+        webui.setError("");
+        webui.pending = pendingResponse();
+      });
+    vi.spyOn(webui, "loadReleaseNotes").mockResolvedValue();
+    vi.spyOn(webui, "refreshReleaseNotes").mockResolvedValue();
+    const wrapper = mountWithApp(PendingView, { pinia });
+
+    await flushPromises();
+
+    expect(wrapper.text()).toContain("Pending updates unavailable");
+    expect(wrapper.text()).toContain("Pending updates did not load");
+    expect(wrapper.text()).toContain("Network request failed");
+    expect(wrapper.find(".selection-toolbar").exists()).toBe(false);
+
+    await wrapper
+      .findAll("button")
+      .find((button) => button.text().includes("Retry pending load"))
+      ?.trigger("click");
+    await flushPromises();
+
+    expect(loadPending).toHaveBeenCalledTimes(2);
+    expect(wrapper.text()).toContain("1 pending update");
+    expect(wrapper.find(".selection-toolbar").exists()).toBe(true);
+  });
+
+  it("deduplicates malformed pending line keys before selecting all stack updates", async () => {
+    const itemOne = pendingGroupedItem({
+      line_no: 1,
+      image: "repo/app:1.0",
+      repo: "repo/app",
+    });
+    const itemTwo = pendingGroupedItem({
+      line_no: 2,
+      image: "repo/worker:1.0",
+      repo: "repo/worker",
+    });
+    const { pinia, webui } = setupStores(true);
+    webui.pending = {
+      ...pendingResponse([itemOne, itemTwo]),
+      grouping: {
+        ...pendingGrouping([itemOne, itemTwo]),
+        groups: [
+          {
+            ...pendingGrouping([itemOne, itemTwo]).groups[0],
+            line_numbers: [1, 1, 2],
+            items: [itemOne, itemTwo],
+          },
+        ],
+      },
+    };
+    mockPendingLifecycle(webui);
+    const wrapper = mountWithApp(PendingView, { pinia });
+
+    await wrapper
+      .findAll("button")
+      .find((button) => button.text().includes("Select all stack updates"))
+      ?.trigger("click");
+    await nextTick();
+
+    expect(wrapper.text()).toContain("2 selected");
+    expect(wrapper.text()).not.toContain("3 selected");
+  });
+
+  it("wraps long pending values in the fallback table", () => {
+    const longImage =
+      "registry.example.test/selfhosted/very-long-namespace-with-extra-segments/service-name-that-keeps-going:2026.06.01-build-with-extra-metadata";
+    const { pinia, webui } = setupStores(true);
+    webui.pending = {
+      ...pendingResponse([
+        pendingItem({
+          image: longImage,
+          repo: "registry.example.test/selfhosted/very-long-namespace-with-extra-segments/service-name-that-keeps-going",
+        }),
+      ]),
+      grouping: {
+        status: "unavailable",
+        groups: [],
+        unmatched: [],
+        warnings: [],
+      },
+    };
+    mockPendingLifecycle(webui);
+    const wrapper = mountWithApp(PendingView, { pinia });
+
+    const wrappedValues = wrapper.findAll(".pending-table-value");
+    expect(wrappedValues.length).toBeGreaterThanOrEqual(2);
+    expect(wrappedValues[0].text()).toContain(longImage);
+    expect(wrappedValues[0].attributes("title")).toBe(longImage);
+  });
+
   it("renders a clear queue state when no pending updates remain", () => {
     const { pinia, webui } = setupStores(true);
     webui.pending = pendingResponse([]);

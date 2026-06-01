@@ -297,6 +297,10 @@ a {
   gap: 16px;
 }
 
+.section-heading > div {
+  min-width: 0;
+}
+
 .section-heading-icon {
   flex: 0 0 auto;
   margin-top: 3px;
@@ -1223,6 +1227,26 @@ a {
   border-radius: 8px;
   background: var(--color-surface);
   box-shadow: var(--shadow-panel-lift);
+}
+
+.pending-loading-state {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: var(--color-surface);
+  box-shadow: var(--shadow-panel-lift);
+}
+
+.pending-loading-state .settings-skeleton-row {
+  min-height: 48px;
+}
+
+.pending-error-state {
+  gap: 8px;
+  padding: 18px;
+  text-align: center;
 }
 
 .apply-job-panel {
@@ -2184,6 +2208,21 @@ body .n-switch:focus-within {
   background: var(--color-surface);
 }
 
+.pending-table-value {
+  display: inline-block;
+  min-width: 0;
+  max-width: 100%;
+  color: var(--color-code-text);
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+code.pending-table-value {
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
+}
+
 .management-form {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -2469,6 +2508,12 @@ body .n-switch:focus-within {
 
 .preflight-impact .compact-list {
   margin-top: 0;
+}
+
+.preflight-impact .compact-list,
+.preflight-details .compact-list {
+  max-height: min(44vh, 420px);
+  overflow: auto;
 }
 
 .preflight-impact-heading {
