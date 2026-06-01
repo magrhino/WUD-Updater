@@ -560,7 +560,16 @@ test("mutation-enabled pending flow applies and links to run details", async ({
   await expect(
     applyPanel.getByRole("heading", { name: "Apply complete" }),
   ).toBeVisible();
-  await expect(applyPanel.getByText("docker-update-from-wud-v2")).toBeVisible();
+  await expect(applyPanel.locator(".apply-job-latest-log code")).toContainText(
+    "docker-update-from-wud-v2",
+  );
+  await expect(applyPanel.locator(".apply-job-log-viewer")).toBeHidden();
+  await expect(applyPanel.getByRole("button", { name: "Show output" })).toBeVisible();
+  await applyPanel.getByRole("button", { name: "Show output" }).click();
+  await expect(applyPanel.locator(".apply-job-log-viewer")).toBeVisible();
+  await expect(applyPanel.locator(".apply-job-log-viewer")).toContainText(
+    "docker-update-from-wud-v2",
+  );
   await expect(applyPanel.getByRole("link", { name: "Details" })).toBeVisible();
   await expect(applyPanel.getByRole("link", { name: "Log" })).toBeVisible();
   expect(state.calls.some((call) => call.path === "/api/v1/jobs")).toBe(true);

@@ -1569,6 +1569,17 @@ a {
   background: var(--color-panel-tint);
 }
 
+.apply-job-live-log-heading {
+  align-items: flex-start;
+}
+
+.apply-job-log-heading-copy {
+  display: grid;
+  flex: 1 1 220px;
+  gap: 3px;
+  min-width: 0;
+}
+
 .apply-job-log-path {
   min-width: 0;
   max-width: 100%;
@@ -1581,6 +1592,16 @@ a {
 .apply-job-log-note {
   color: var(--color-muted-text);
   font-size: 0.82rem;
+}
+
+.apply-job-log-toggle {
+  flex: 0 0 auto;
+}
+
+.apply-job-live-log-body {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
 }
 
 .apply-job-log-viewer {

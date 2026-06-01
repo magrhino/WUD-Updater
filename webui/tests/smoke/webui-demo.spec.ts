@@ -29,7 +29,15 @@ test("static demo renders current pending state and completes apply flow", async
 
   const applyPanel = page.locator(".apply-job-panel");
   await expect(applyPanel.getByRole("heading", { name: "Apply complete" })).toBeVisible();
-  await expect(applyPanel.getByText("docker-update-from-wud-v2")).toBeVisible();
+  await expect(applyPanel.locator(".apply-job-latest-log code")).toContainText(
+    "Done. See log",
+  );
+  await expect(applyPanel.locator(".apply-job-log-viewer")).toBeHidden();
+  await applyPanel.getByRole("button", { name: "Show output" }).click();
+  await expect(applyPanel.locator(".apply-job-log-viewer")).toBeVisible();
+  await expect(applyPanel.locator(".apply-job-log-viewer")).toContainText(
+    "docker-update-from-wud-v2",
+  );
   await expect(page.getByText("6 pending updates")).toBeVisible();
 
   await applyPanel.getByRole("link", { name: "Details" }).click();

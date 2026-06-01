@@ -5,6 +5,8 @@ import {
   AlertTriangle,
   Check,
   CheckCircle2,
+  ChevronDown,
+  ChevronUp,
   ExternalLink,
   Play,
   Trash2,
@@ -54,6 +56,7 @@ const showRemovalModal = ref(false);
 const jobEventSource = ref<EventSource | null>(null);
 const applyJobPanelRef = ref<HTMLElement | null>(null);
 const applyJobPanelLogRef = ref<HTMLElement | null>(null);
+const applyJobLiveLogExpanded = ref(true);
 const applyJobRunLogFallbackRunId = ref<number | null>(null);
 const terminalJobStatuses = new Set<ApplyJobResponse["status"]>([
   "success",
@@ -495,6 +498,12 @@ const applyJobLogText = computed(() => webui.applyJobLog?.content ?? "");
 const applyJobLogTitle = computed(
   () => webui.applyJobLog?.log_file || webui.applyJob?.log_file || "Live log",
 );
+const applyJobLiveLogVisible = computed(
+  () => applyJobActive.value || applyJobLiveLogExpanded.value,
+);
+const applyJobLiveLogToggleLabel = computed(() =>
+  applyJobLiveLogExpanded.value ? "Hide live log output" : "Show live log output",
+);
 const applyJobLatestLogLine = computed(() => {
   const lines = applyJobLogText.value
     .split(/\r?\n/)
@@ -543,7 +552,8 @@ const applyJobProgressSteps = computed<ApplyJobProgressStep[]>(() =>
   }),
 );
 const applyJobProgressSummary = computed(() => {
-  if (!webui.applyJob?.progress.length) {
+  const progress = webui.applyJob?.progress ?? [];
+  if (!progress.length) {
     return applyJobActive.value ? "Starting" : "No progress events";
   }
   const failed = applyJobProgressSteps.value.find((step) => step.status === "failure");
@@ -558,7 +568,7 @@ const applyJobProgressSummary = computed(() => {
   if (complete?.status === "success") {
     return "Complete";
   }
-  return `${webui.applyJob.progress.length} updates`;
+  return `${progress.length} updates`;
 });
 const applyJobCurrentStep = computed<ApplyJobProgressStep | null>(() => {
   const failed = applyJobProgressSteps.value.find((step) => step.status === "failure");
@@ -1134,12 +1144,13 @@ function handleJobProgressEvent(event: MessageEvent<string>): void {
   if (!job || job.job_id !== progress.job_id) {
     return;
   }
-  if (job.progress.some((item) => progressEventKey(item) === progressEventKey(progress))) {
+  const progressEvents = job.progress ?? [];
+  if (progressEvents.some((item) => progressEventKey(item) === progressEventKey(progress))) {
     return;
   }
   webui.setApplyJob({
     ...job,
-    progress: [...job.progress, progress],
+    progress: [...progressEvents, progress],
   });
 }
 
@@ -1439,6 +1450,16 @@ watch(
   },
   { immediate: true },
 );
+
+watch(
+  () => webui.applyJob?.status,
+  (status) => {
+    applyJobLiveLogExpanded.value = status
+      ? !terminalJobStatuses.has(status)
+      : true;
+  },
+  { immediate: true },
+);
 </script>
 
 <template>
@@ -1647,35 +1668,54 @@ watch(
       </details>
 
       <section class="apply-job-live-log" aria-labelledby="apply-job-log-title">
-        <div class="apply-job-impact-heading">
-          <strong id="apply-job-log-title">Live log</strong>
-          <span class="apply-job-log-note">Raw command output</span>
-          <span class="apply-job-log-path">{{ applyJobLogTitle }}</span>
+        <div class="apply-job-impact-heading apply-job-live-log-heading">
+          <div class="apply-job-log-heading-copy">
+            <strong id="apply-job-log-title">Live log</strong>
+            <span class="apply-job-log-note">Raw command output</span>
+            <span class="apply-job-log-path">{{ applyJobLogTitle }}</span>
+          </div>
+          <n-button
+            v-show="!applyJobActive"
+            class="apply-job-log-toggle"
+            size="small"
+            secondary
+            :aria-expanded="applyJobLiveLogExpanded"
+            :title="applyJobLiveLogToggleLabel"
+            @click="applyJobLiveLogExpanded = !applyJobLiveLogExpanded"
+          >
+            <template #icon>
+              <ChevronUp v-if="applyJobLiveLogExpanded" :size="16" />
+              <ChevronDown v-else :size="16" />
+            </template>
+            {{ applyJobLiveLogExpanded ? "Hide output" : "Show output" }}
+          </n-button>
         </div>
-        <n-alert
-          v-if="webui.applyJobLog?.truncated"
-          class="preflight-block"
-          type="warning"
-          :show-icon="false"
-        >
-          Showing the last {{ webui.applyJobLog.max_bytes }} bytes.
-        </n-alert>
-        <n-alert
-          v-if="webui.applyJobLog?.error"
-          class="preflight-block"
-          type="warning"
-          :show-icon="false"
-        >
-          Live log unavailable: {{ webui.applyJobLog.error }}
-        </n-alert>
-        <div v-if="applyJobLogWaiting" class="empty-state">
-          {{ applyJobLogEmptyMessage }}
+        <div v-show="applyJobLiveLogVisible" class="apply-job-live-log-body">
+          <n-alert
+            v-if="webui.applyJobLog?.truncated"
+            class="preflight-block"
+            type="warning"
+            :show-icon="false"
+          >
+            Showing the last {{ webui.applyJobLog.max_bytes }} bytes.
+          </n-alert>
+          <n-alert
+            v-if="webui.applyJobLog?.error"
+            class="preflight-block"
+            type="warning"
+            :show-icon="false"
+          >
+            Live log unavailable: {{ webui.applyJobLog.error }}
+          </n-alert>
+          <div v-if="applyJobLogWaiting" class="empty-state">
+            {{ applyJobLogEmptyMessage }}
+          </div>
+          <pre
+            v-else-if="!webui.applyJobLog?.error"
+            ref="applyJobPanelLogRef"
+            class="log-viewer apply-job-log-viewer"
+          >{{ applyJobLogText }}</pre>
         </div>
-        <pre
-          v-else-if="!webui.applyJobLog?.error"
-          ref="applyJobPanelLogRef"
-          class="log-viewer apply-job-log-viewer"
-        >{{ applyJobLogText }}</pre>
       </section>
 
       <n-alert

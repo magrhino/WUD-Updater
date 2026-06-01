@@ -1160,6 +1160,25 @@ describe("mutating WebUI views", () => {
     expect(wrapper.find(".apply-job-panel").text()).toContain("#10");
     expect(wrapper.find(".apply-job-panel").text()).toContain("Update complete");
     expect(wrapper.find(".apply-job-details").attributes("open")).toBe("");
+    expect(wrapper.find(".apply-job-live-log-body").attributes("style")).toContain(
+      "display: none",
+    );
+    const showOutputButton = wrapper
+      .findAll("button")
+      .find((button) => button.text().includes("Show output"));
+    if (!showOutputButton) {
+      throw new Error("Missing completed live log toggle");
+    }
+    expect(showOutputButton.attributes("aria-expanded")).toBe("false");
+    await showOutputButton.trigger("click");
+    await nextTick();
+    expect(
+      wrapper.find(".apply-job-live-log-body").attributes("style") ?? "",
+    ).not.toContain("display: none");
+    expect(wrapper.find(".apply-job-log-viewer").text()).toContain(
+      "docker-update-from-wud-v2",
+    );
+    expect(showOutputButton.attributes("aria-expanded")).toBe("true");
     expect(wrapper.find(".batch-action-bar").exists()).toBe(false);
   });
 
@@ -1288,6 +1307,22 @@ describe("mutating WebUI views", () => {
     expect(loadRuns).toHaveBeenCalled();
     expect(jobStream.close).toHaveBeenCalled();
     expect(wrapper.find(".apply-job-panel").text()).toContain("fallback run log");
+    expect(wrapper.find(".apply-job-live-log-body").attributes("style")).toContain(
+      "display: none",
+    );
+
+    const showOutputButton = wrapper
+      .findAll("button")
+      .find((button) => button.text().includes("Show output"));
+    if (!showOutputButton) {
+      throw new Error("Missing completed live log toggle");
+    }
+    await showOutputButton.trigger("click");
+    await nextTick();
+    expect(
+      wrapper.find(".apply-job-live-log-body").attributes("style") ?? "",
+    ).not.toContain("display: none");
+    expect(wrapper.find(".apply-job-log-viewer").text()).toContain("fallback run log");
   });
 
   it("loads the persisted run log for already-terminal apply job state", async () => {
@@ -1315,6 +1350,24 @@ describe("mutating WebUI views", () => {
 
     expect(runLog).toHaveBeenCalledWith(10, 65_536);
     expect(wrapper.find(".apply-job-panel").text()).toContain(
+      "existing terminal run log",
+    );
+    expect(wrapper.find(".apply-job-live-log-body").attributes("style")).toContain(
+      "display: none",
+    );
+
+    const showOutputButton = wrapper
+      .findAll("button")
+      .find((button) => button.text().includes("Show output"));
+    if (!showOutputButton) {
+      throw new Error("Missing completed live log toggle");
+    }
+    await showOutputButton.trigger("click");
+    await nextTick();
+    expect(
+      wrapper.find(".apply-job-live-log-body").attributes("style") ?? "",
+    ).not.toContain("display: none");
+    expect(wrapper.find(".apply-job-log-viewer").text()).toContain(
       "existing terminal run log",
     );
   });
