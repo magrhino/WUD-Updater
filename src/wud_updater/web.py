@@ -73,6 +73,7 @@ from .doctor import (
     Doctor,
     DoctorCheck as DoctorDataCheck,
     DoctorConfigError,
+    DoctorOptions as DoctorDataOptions,
     DoctorResult as DoctorDataResult,
     DoctorSuggestion as DoctorDataSuggestion,
     options_from_namespace as doctor_options_from_namespace,
@@ -508,6 +509,28 @@ class DoctorResponse(BaseModel):
     failures: int
     warnings: int
     checks: list[DoctorCheckResponse] = Field(default_factory=list)
+
+
+class ReadyResponse(BaseModel):
+    ok: bool
+    version: str
+    checks: list[DoctorCheckResponse] = Field(default_factory=list)
+
+
+READINESS_DOCKER_ENDPOINT_CODES = frozenset({"docker-endpoint", "docker-socket"})
+READINESS_REQUIRED_CODES = frozenset(
+    {
+        "docker-daemon-version",
+        "docker-daemon-info",
+        "docker-container-listing",
+        "wud-out-file-directory",
+        "wud-out-file",
+        "webui-database",
+    }
+)
+READINESS_INCLUDED_CODES = (
+    READINESS_DOCKER_ENDPOINT_CODES | READINESS_REQUIRED_CODES | {"configuration"}
+)
 
 
 class OnboardingDocLink(BaseModel):
@@ -1047,6 +1070,12 @@ def create_app(
         methods=["GET"],
         response_model=HealthResponse,
     )
+    app.add_api_route(
+        "/readyz",
+        api_readyz,
+        methods=["GET"],
+        response_model=ReadyResponse,
+    )
 
     setup_router = APIRouter(prefix="/api/v1/setup")
     setup_router.add_api_route(
@@ -1133,6 +1162,12 @@ def create_app(
         "/doctor",
         api_doctor_method_not_allowed,
         methods=["GET"],
+    )
+    router.add_api_route(
+        "/ready",
+        api_ready,
+        methods=["GET"],
+        response_model=ReadyResponse,
     )
     router.add_api_route(
         "/onboarding/checklist",
@@ -1578,6 +1613,10 @@ def api_healthz() -> HealthResponse:
     return HealthResponse(ok=True, version=__version__)
 
 
+def api_readyz(request: Request, response: Response) -> ReadyResponse:
+    return _ready_response(_settings(request), response)
+
+
 def api_status(request: Request) -> StatusResponse:
     settings = _settings(request)
     pending = _pending_response(settings, include_grouping=False)
@@ -1654,6 +1693,10 @@ def api_update_managed_settings(
 def api_doctor(request: Request) -> DoctorResponse:
     settings = _settings(request)
     return _doctor_response(settings, _web_doctor_result(settings, request))
+
+
+def api_ready(request: Request, response: Response) -> ReadyResponse:
+    return _ready_response(_settings(request), response)
 
 
 def api_doctor_method_not_allowed() -> JSONResponse:
@@ -2436,7 +2479,46 @@ def _compose_ignore_paths_disabled_reason(settings: WebSettings) -> str:
     )
 
 
-def _web_doctor_result(settings: WebSettings, request: Request) -> DoctorDataResult:
+def _ready_response(
+    settings: WebSettings,
+    response: Response,
+) -> ReadyResponse:
+    doctor = _doctor_response(settings, _web_readiness_result(settings))
+    checks = [
+        check for check in doctor.checks if check.code in READINESS_INCLUDED_CODES
+    ]
+    missing = _missing_readiness_checks(checks)
+    if missing:
+        checks.append(
+            DoctorCheckResponse(
+                status="FAIL",
+                code="readiness-missing-checks",
+                category="webui",
+                name="readiness checks",
+                detail="missing required check(s): " + ", ".join(missing),
+            )
+        )
+    ok = all(check.status != "FAIL" for check in checks)
+    if not ok:
+        response.status_code = 503
+    return ReadyResponse(ok=ok, version=__version__, checks=checks)
+
+
+def _missing_readiness_checks(checks: Sequence[DoctorCheckResponse]) -> list[str]:
+    present = {check.code for check in checks}
+    missing = [
+        code.replace("-", " ")
+        for code in sorted(READINESS_REQUIRED_CODES)
+        if code not in present
+    ]
+    if not present.intersection(READINESS_DOCKER_ENDPOINT_CODES):
+        missing.insert(0, "docker socket or endpoint")
+    return missing
+
+
+def _web_doctor_options_and_env(
+    settings: WebSettings,
+) -> tuple[DoctorDataOptions, dict[str, str]]:
     env = _doctor_command_env(settings)
     args = SimpleNamespace(
         base=str(settings.config.docker_base),
@@ -2445,36 +2527,60 @@ def _web_doctor_result(settings: WebSettings, request: Request) -> DoctorDataRes
         scripts_dir=env.get("WUD_SCRIPTS_DIR", ""),
         no_color=True,
     )
-    try:
-        options = doctor_options_from_namespace(
+    return (
+        doctor_options_from_namespace(
             args,
             repo_root=Path(__file__).resolve().parents[2],
             environ=env,
-        )
-        result = Doctor(options, environ=env).run_result()
-    except DoctorConfigError as exc:
-        result = DoctorDataResult(
-            checks=(
-                DoctorDataCheck(
-                    status="FAIL",
-                    name="configuration",
-                    detail=str(exc),
-                    code="configuration",
-                    category="configuration",
-                    suggestions=(
-                        DoctorDataSuggestion(
-                            label="Fix environment value",
-                            description=(
-                                "Set the reported variable to an accepted value "
-                                "before running doctor again."
-                            ),
+        ),
+        env,
+    )
+
+
+def _doctor_configuration_result(exc: DoctorConfigError) -> DoctorDataResult:
+    return DoctorDataResult(
+        checks=(
+            DoctorDataCheck(
+                status="FAIL",
+                name="configuration",
+                detail=str(exc),
+                code="configuration",
+                category="configuration",
+                suggestions=(
+                    DoctorDataSuggestion(
+                        label="Fix environment value",
+                        description=(
+                            "Set the reported variable to an accepted value "
+                            "before running doctor again."
                         ),
                     ),
                 ),
-            )
+            ),
         )
+    )
+
+
+def _web_doctor_result(settings: WebSettings, request: Request) -> DoctorDataResult:
+    try:
+        options, env = _web_doctor_options_and_env(settings)
+        result = Doctor(options, environ=env).run_result()
+    except DoctorConfigError as exc:
+        result = _doctor_configuration_result(exc)
     return DoctorDataResult(
         checks=(*result.checks, *_web_doctor_checks(settings, request))
+    )
+
+
+def _web_readiness_result(
+    settings: WebSettings,
+) -> DoctorDataResult:
+    try:
+        options, env = _web_doctor_options_and_env(settings)
+        result = Doctor(options, environ=env).run_readiness_result()
+    except DoctorConfigError as exc:
+        result = _doctor_configuration_result(exc)
+    return DoctorDataResult(
+        checks=(*result.checks, _web_database_doctor_check(settings))
     )
 
 
@@ -2495,27 +2601,7 @@ def _web_doctor_checks(
     request: Request,
 ) -> tuple[DoctorDataCheck, ...]:
     checks: list[DoctorDataCheck] = []
-    db_ready, db_warning = _database_ready(settings)
-    checks.append(
-        _web_doctor_check(
-            "PASS" if db_ready else "FAIL",
-            "WebUI database",
-            str(settings.config.db_path) if db_ready else db_warning,
-            code="webui-database",
-            suggestions=()
-            if db_ready
-            else (
-                DoctorDataSuggestion(
-                    label="Persist WebUI database",
-                    description=(
-                        "Mount a writable persistent directory and set WUD_DB_PATH "
-                        "inside it."
-                    ),
-                    snippet="WUD_DB_PATH=/logs/wud-updater.sqlite",
-                ),
-            ),
-        )
-    )
+    checks.append(_web_database_doctor_check(settings))
     checks.append(
         _web_doctor_check(
             "WARN" if settings.dev_no_auth else "PASS",
@@ -2644,6 +2730,28 @@ def _web_doctor_checks(
         )
     )
     return tuple(checks)
+
+
+def _web_database_doctor_check(settings: WebSettings) -> DoctorDataCheck:
+    db_ready, db_warning = _database_ready(settings)
+    return _web_doctor_check(
+        "PASS" if db_ready else "FAIL",
+        "WebUI database",
+        str(settings.config.db_path) if db_ready else db_warning,
+        code="webui-database",
+        suggestions=()
+        if db_ready
+        else (
+            DoctorDataSuggestion(
+                label="Persist WebUI database",
+                description=(
+                    "Mount a writable persistent directory and set WUD_DB_PATH "
+                    "inside it."
+                ),
+                snippet="WUD_DB_PATH=/logs/wud-updater.sqlite",
+            ),
+        ),
+    )
 
 
 def _web_doctor_check(

@@ -121,6 +121,12 @@ class Doctor:
         self._check_truenas()
         return DoctorResult(checks=tuple(self.checks))
 
+    def run_readiness_result(self) -> DoctorResult:
+        self.checks = []
+        self._check_docker_access()
+        self._check_wud_file()
+        return DoctorResult(checks=tuple(self.checks))
+
     def run(self) -> int:
         result = self.run_result()
         _print_result(result)

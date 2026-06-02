@@ -321,6 +321,42 @@ class InitConfigTests(unittest.TestCase):
         self.assertIn("${WEBUI_LOG_DIR:-./logs}:/logs", service["volumes"])
         self.assertIn("wud-scripts:/managed-wud", service["volumes"])
 
+    def test_webui_compose_override_yaml_contains_readyz_healthcheck(self) -> None:
+        override_file = self.root / "override.yml"
+        answers = answers_from_namespace(
+            self._args(
+                profile="webui",
+                compose_override=str(override_file),
+                stack_root=str(self.root / "docker"),
+                no_doctor=True,
+            ),
+            environ=self._env(),
+        )
+
+        run_init(answers, repo_root=self.root, environ=self._env())
+
+        parsed = YAML(typ="safe").load(override_file.read_text(encoding="utf-8"))
+        service = parsed["services"]["wud-updater"]
+        self.assertEqual(
+            service["ports"],
+            [
+                "${WEBUI_HTTP_BIND:-127.0.0.1}:${WUD_WEB_PORT:-8080}:${WUD_WEB_PORT:-8080}"
+            ],
+        )
+        self.assertEqual(
+            service["healthcheck"]["test"],
+            [
+                "CMD",
+                "curl",
+                "-fsS",
+                "http://127.0.0.1:${WUD_WEB_PORT:-8080}/readyz",
+            ],
+        )
+        self.assertEqual(service["healthcheck"]["interval"], "30s")
+        self.assertEqual(service["healthcheck"]["timeout"], "5s")
+        self.assertEqual(service["healthcheck"]["retries"], 3)
+        self.assertEqual(service["healthcheck"]["start_period"], "10s")
+
     def test_host_doctor_status_becomes_command_status(self) -> None:
         with mock.patch(
             "wud_updater.init_config.run_doctor_from_namespace",

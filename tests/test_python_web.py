@@ -403,6 +403,95 @@ def test_healthz_response_shape_is_minimal(tmp_path: Path) -> None:
     assert sensitive_keys.isdisjoint(body)
 
 
+def test_readyz_is_unauthenticated_and_reports_local_readiness(
+    tmp_path: Path,
+) -> None:
+    client = _doctor_client(tmp_path)
+
+    response = client.get("/readyz")
+    body = response.json()
+    codes = {check["code"] for check in body["checks"]}
+
+    assert response.status_code == 200
+    assert body["ok"] is True
+    assert set(body) == {"ok", "version", "checks"}
+    assert {
+        "docker-endpoint",
+        "docker-daemon-version",
+        "docker-daemon-info",
+        "docker-container-listing",
+        "wud-out-file-directory",
+        "wud-out-file",
+        "webui-database",
+    }.issubset(codes)
+    sensitive_keys = {
+        "wud_file",
+        "db_path",
+        "pending_count",
+        "auth_required",
+        "dev_auth_bypass",
+        "setup_required",
+        "mutations_enabled",
+        "public_origin",
+        "trusted_proxies",
+    }
+    assert sensitive_keys.isdisjoint(body)
+
+
+def test_ready_api_requires_auth_and_returns_local_readiness(
+    tmp_path: Path,
+) -> None:
+    unauthenticated = _client(tmp_path)
+    client = _doctor_client(tmp_path)
+
+    auth_response = unauthenticated.get("/api/v1/ready")
+    ready_response = client.get("/api/v1/ready")
+
+    assert auth_response.status_code == 403
+    assert auth_response.json()["detail"] == "setup required"
+    assert ready_response.status_code == 200
+    assert ready_response.json()["ok"] is True
+
+
+def test_readyz_fails_when_required_local_check_fails(
+    tmp_path: Path,
+) -> None:
+    secret = "docker-info-secret"
+    client = _doctor_client(
+        tmp_path,
+        {
+            "GITHUB_TOKEN": secret,
+            "FAKE_DOCKER_INFO_SECRET": secret,
+        },
+    )
+
+    response = client.get("/readyz")
+    body = response.json()
+    checks = {check["code"]: check for check in body["checks"]}
+
+    assert response.status_code == 503
+    assert body["ok"] is False
+    assert checks["docker-daemon-info"]["status"] == "FAIL"
+    assert checks["docker-daemon-info"]["detail"] == "exit 17: info failed: <redacted>"
+    assert secret not in json.dumps(body)
+
+
+def test_readyz_fails_when_required_checks_are_missing(
+    tmp_path: Path,
+) -> None:
+    client = _doctor_client(tmp_path, {"WUD_UPDATER_USE_SUDO": "treu"})
+
+    response = client.get("/readyz")
+    body = response.json()
+    checks = {check["code"]: check for check in body["checks"]}
+
+    assert response.status_code == 503
+    assert body["ok"] is False
+    assert checks["configuration"]["status"] == "FAIL"
+    assert checks["readiness-missing-checks"]["status"] == "FAIL"
+    assert "docker socket or endpoint" in checks["readiness-missing-checks"]["detail"]
+
+
 def test_api_rejects_unauthenticated_requests_without_dev_bypass(
     tmp_path: Path,
 ) -> None:
