@@ -8,6 +8,7 @@ from wud_updater.digest_verifier import (
     ManifestDocument,
     ManifestLookupError,
     parse_ghcr_image,
+    parse_registry_image,
 )
 
 
@@ -35,25 +36,29 @@ class FakeDocker:
 class StaticResolver:
     def __init__(
         self,
-        documents: Mapping[tuple[str, str], ManifestDocument],
+        documents: Mapping[tuple[str, str, str], ManifestDocument],
     ) -> None:
         self.documents = dict(documents)
-        self.calls: list[tuple[str, str]] = []
+        self.calls: list[tuple[str, str, str]] = []
 
-    def fetch(self, repo: str, reference: str) -> ManifestDocument:
-        self.calls.append((repo, reference))
+    def fetch(self, image: object, reference: str) -> ManifestDocument:
+        registry = getattr(image, "registry")
+        repo = getattr(image, "repo")
+        self.calls.append((registry, repo, reference))
         try:
-            return self.documents[(repo, reference)]
+            return self.documents[(registry, repo, reference)]
         except KeyError as exc:
-            raise ManifestLookupError(f"missing {repo}@{reference}") from exc
+            raise ManifestLookupError(f"missing {registry}/{repo}@{reference}") from exc
 
 
 class FailingResolver:
     def __init__(self) -> None:
-        self.calls: list[tuple[str, str]] = []
+        self.calls: list[tuple[str, str, str]] = []
 
-    def fetch(self, repo: str, reference: str) -> ManifestDocument:
-        self.calls.append((repo, reference))
+    def fetch(self, image: object, reference: str) -> ManifestDocument:
+        registry = getattr(image, "registry")
+        repo = getattr(image, "repo")
+        self.calls.append((registry, repo, reference))
         raise ManifestLookupError("primary unavailable")
 
 
@@ -101,6 +106,31 @@ def manifest_doc(
 
 
 class DigestVerifierTests(unittest.TestCase):
+    def test_parse_registry_image_supports_docker_hub_and_explicit_registries(self) -> None:
+        alpine = parse_registry_image("alpine:3.20")
+        self.assertIsNotNone(alpine)
+        assert alpine is not None
+        self.assertEqual(alpine.registry, "docker.io")
+        self.assertEqual(alpine.http_registry, "registry-1.docker.io")
+        self.assertEqual(alpine.repo, "library/alpine")
+        self.assertEqual(alpine.tag, "3.20")
+
+        docker = parse_registry_image("docker.io/library/alpine:3.20")
+        self.assertIsNotNone(docker)
+        assert docker is not None
+        self.assertEqual(docker.registry, "docker.io")
+        self.assertEqual(docker.http_registry, "registry-1.docker.io")
+        self.assertEqual(docker.repo, "library/alpine")
+        self.assertEqual(docker.tag, "3.20")
+
+        quay = parse_registry_image("quay.io/prometheus/busybox:latest")
+        self.assertIsNotNone(quay)
+        assert quay is not None
+        self.assertEqual(quay.registry, "quay.io")
+        self.assertEqual(quay.http_registry, "quay.io")
+        self.assertEqual(quay.repo, "prometheus/busybox")
+        self.assertEqual(quay.tag, "latest")
+
     def test_parse_ghcr_image_requires_tagged_ghcr_reference(self) -> None:
         parsed = parse_ghcr_image("ghcr.io/acme/app:latest@sha256:old")
 
@@ -115,8 +145,8 @@ class DigestVerifierTests(unittest.TestCase):
         expected = "sha256:child"
         resolver = StaticResolver(
             {
-                ("acme/app", "latest"): index_doc("sha256:index", (expected,)),
-                ("acme/app", expected): manifest_doc(expected, "sha256:config"),
+                ("ghcr.io", "acme/app", "latest"): index_doc("sha256:index", (expected,)),
+                ("ghcr.io", "acme/app", expected): manifest_doc(expected, "sha256:config"),
             }
         )
         verifier = DigestVerifier(
@@ -137,8 +167,8 @@ class DigestVerifierTests(unittest.TestCase):
         child = "sha256:child"
         resolver = StaticResolver(
             {
-                ("acme/app", "latest"): index_doc(expected, (child,)),
-                ("acme/app", child): manifest_doc(child, "sha256:config"),
+                ("ghcr.io", "acme/app", "latest"): index_doc(expected, (child,)),
+                ("ghcr.io", "acme/app", child): manifest_doc(child, "sha256:config"),
             }
         )
         verifier = DigestVerifier(
@@ -157,8 +187,11 @@ class DigestVerifierTests(unittest.TestCase):
     def test_stale_digest_fails_when_absent_from_current_index(self) -> None:
         resolver = StaticResolver(
             {
-                ("acme/app", "latest"): index_doc("sha256:index", ("sha256:child",)),
-                ("acme/app", "sha256:stale"): manifest_doc(
+                ("ghcr.io", "acme/app", "latest"): index_doc(
+                    "sha256:index",
+                    ("sha256:child",),
+                ),
+                ("ghcr.io", "acme/app", "sha256:stale"): manifest_doc(
                     "sha256:stale",
                     "sha256:config",
                 ),
@@ -180,8 +213,8 @@ class DigestVerifierTests(unittest.TestCase):
         expected = "sha256:child"
         resolver = StaticResolver(
             {
-                ("acme/app", "latest"): index_doc("sha256:index", (expected,)),
-                ("acme/app", expected): manifest_doc(expected, "sha256:config"),
+                ("ghcr.io", "acme/app", "latest"): index_doc("sha256:index", (expected,)),
+                ("ghcr.io", "acme/app", expected): manifest_doc(expected, "sha256:config"),
             }
         )
         verifier = DigestVerifier(
@@ -202,12 +235,12 @@ class DigestVerifierTests(unittest.TestCase):
         primary = FailingResolver()
         fallback = StaticResolver(
             {
-                ("acme/app", "latest"): index_doc(
+                ("ghcr.io", "acme/app", "latest"): index_doc(
                     "sha256:index",
                     (expected,),
                     source="fallback",
                 ),
-                ("acme/app", expected): manifest_doc(
+                ("ghcr.io", "acme/app", expected): manifest_doc(
                     expected,
                     "sha256:config",
                     source="fallback",
@@ -225,9 +258,80 @@ class DigestVerifierTests(unittest.TestCase):
         self.assertTrue(result.ok)
         self.assertEqual(result.source, "fallback")
         self.assertGreaterEqual(len(primary.calls), 1)
-        self.assertIn(("acme/app", "latest"), fallback.calls)
+        self.assertIn(("ghcr.io", "acme/app", "latest"), fallback.calls)
 
-    def test_non_ghcr_digest_mismatch_keeps_existing_behavior(self) -> None:
+    def test_non_ghcr_platform_child_digest_matches_local_config_digest(self) -> None:
+        expected = "sha256:child"
+        resolver = StaticResolver(
+            {
+                ("quay.io", "acme/app", "latest"): index_doc("sha256:index", (expected,)),
+                ("quay.io", "acme/app", expected): manifest_doc(expected, "sha256:config"),
+            }
+        )
+        verifier = DigestVerifier(
+            FakeDocker(image_id="sha256:config"),
+            primary_resolver=resolver,
+            fallback_resolver=resolver,
+        )
+
+        result = verifier.verify("quay.io/acme/app:latest", expected)
+
+        self.assertTrue(result.ok)
+        self.assertEqual(result.status, "verified")
+        self.assertEqual(result.reason, "registry-platform-manifest-match")
+        self.assertEqual(result.matched_child_digest, expected)
+        self.assertEqual(result.expected_config_digest, "sha256:config")
+
+    def test_non_ghcr_current_index_digest_matches_local_platform_child(self) -> None:
+        expected = "sha256:index"
+        child = "sha256:child"
+        resolver = StaticResolver(
+            {
+                ("quay.io", "acme/app", "latest"): index_doc(expected, (child,)),
+                ("quay.io", "acme/app", child): manifest_doc(child, "sha256:config"),
+            }
+        )
+        verifier = DigestVerifier(
+            FakeDocker(image_id="sha256:config"),
+            primary_resolver=resolver,
+            fallback_resolver=resolver,
+        )
+
+        result = verifier.verify("quay.io/acme/app:latest", expected)
+
+        self.assertTrue(result.ok)
+        self.assertEqual(result.status, "verified")
+        self.assertEqual(result.reason, "registry-index-manifest-match")
+        self.assertEqual(result.tag_digest, expected)
+        self.assertEqual(result.matched_child_digest, child)
+
+    def test_non_ghcr_stale_digest_fails_when_registry_proves_current_index(self) -> None:
+        resolver = StaticResolver(
+            {
+                ("quay.io", "acme/app", "latest"): index_doc(
+                    "sha256:index",
+                    ("sha256:child",),
+                ),
+                ("quay.io", "acme/app", "sha256:stale"): manifest_doc(
+                    "sha256:stale",
+                    "sha256:config",
+                ),
+            }
+        )
+        verifier = DigestVerifier(
+            FakeDocker(image_id="sha256:config"),
+            primary_resolver=resolver,
+            fallback_resolver=resolver,
+        )
+
+        result = verifier.verify("quay.io/acme/app:latest", "sha256:stale")
+
+        self.assertFalse(result.ok)
+        self.assertEqual(result.status, "failed")
+        self.assertEqual(result.reason, "stale-digest")
+        self.assertEqual(result.tag_digest, "sha256:index")
+
+    def test_non_ghcr_manifest_unavailable_is_untrusted(self) -> None:
         verifier = DigestVerifier(
             FakeDocker(
                 image_id="sha256:config",
@@ -240,8 +344,26 @@ class DigestVerifierTests(unittest.TestCase):
         result = verifier.verify("docker.io/acme/app:latest", "sha256:expected")
 
         self.assertFalse(result.ok)
-        self.assertEqual(result.reason, "repo-digest-mismatch")
+        self.assertEqual(result.status, "untrusted")
+        self.assertEqual(result.reason, "manifest-unavailable-untrusted")
         self.assertEqual(result.seen_repo_digests, ("docker.io/acme/app@sha256:other",))
+
+    def test_ghcr_manifest_unavailable_fails_closed(self) -> None:
+        verifier = DigestVerifier(
+            FakeDocker(
+                image_id="sha256:config",
+                repo_digests=("ghcr.io/acme/app@sha256:other",),
+            ),
+            primary_resolver=FailingResolver(),
+            fallback_resolver=FailingResolver(),
+        )
+
+        result = verifier.verify("ghcr.io/acme/app:latest", "sha256:expected")
+
+        self.assertFalse(result.ok)
+        self.assertEqual(result.status, "failed")
+        self.assertEqual(result.reason, "manifest-unavailable")
+        self.assertEqual(result.seen_repo_digests, ("ghcr.io/acme/app@sha256:other",))
 
 
 if __name__ == "__main__":

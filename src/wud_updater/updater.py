@@ -2200,6 +2200,12 @@ class UpdateFromWudRunner:
                 digest_result = self.digest_verifier.verify(image, expected)
                 if digest_result.ok:
                     break
+            if digest_result is not None and digest_result.status == "untrusted":
+                self.log.warn(
+                    f"[{stack.name}] Digest verification was inconclusive for line {line_no} ({target}): wanted {expected}"
+                )
+                self._log_digest_untrusted(stack.name, digest_result)
+                continue
             if digest_result is None or not digest_result.ok:
                 ok = False
                 self.log.error(
@@ -2214,6 +2220,17 @@ class UpdateFromWudRunner:
                     )
         return ok
 
+    def _log_digest_untrusted(
+        self,
+        stack_name: str,
+        result: DigestCheckResult,
+    ) -> None:
+        self.log.plain(
+            "WARN",
+            f"[{stack_name}] Digest verification reason: {result.reason}",
+        )
+        self._log_digest_details("WARN", stack_name, result)
+
     def _log_digest_mismatch(
         self,
         stack_name: str,
@@ -2223,40 +2240,48 @@ class UpdateFromWudRunner:
             "ERROR",
             f"[{stack_name}] Digest verification reason: {result.reason}",
         )
+        self._log_digest_details("ERROR", stack_name, result)
+
+    def _log_digest_details(
+        self,
+        level: str,
+        stack_name: str,
+        result: DigestCheckResult,
+    ) -> None:
         if result.local_image_id:
             self.log.plain(
-                "ERROR",
+                level,
                 f"[{stack_name}] Local image id: {result.local_image_id}",
             )
         if result.seen_repo_digests:
             for digest in result.seen_repo_digests:
                 self.log.plain(
-                    "ERROR",
+                    level,
                     f"[{stack_name}] RepoDigest seen: {digest}",
                 )
         if result.tag_digest:
             self.log.plain(
-                "ERROR",
+                level,
                 f"[{stack_name}] Current tag digest: {result.tag_digest}",
             )
         if result.matched_child_digest:
             self.log.plain(
-                "ERROR",
+                level,
                 f"[{stack_name}] Matched platform digest: {result.matched_child_digest}",
             )
         if result.expected_config_digest:
             self.log.plain(
-                "ERROR",
+                level,
                 f"[{stack_name}] Expected config digest: {result.expected_config_digest}",
             )
         if result.source:
             self.log.plain(
-                "ERROR",
+                level,
                 f"[{stack_name}] Digest verification source: {result.source}",
             )
         if result.error:
             self.log.plain(
-                "ERROR",
+                level,
                 f"[{stack_name}] Digest verification error: {sanitize_stream(result.error)}",
             )
 

@@ -384,21 +384,85 @@ class PythonUpdateFromWudTests(unittest.TestCase):
             ],
         )
 
-    def test_digest_mismatch_restores_line_and_skips_recreate(self) -> None:
-        self.wud_file.write_text("repo/app@sha256:good\n", encoding="utf-8")
-        self.make_stack("app", [("app", "repo/app:latest", "cid-app")])
-        self.set_image_state("repo/app:latest", "old", "sha256:old")
-        self.set_image_after_pull("repo/app:latest", "new", "sha256:bad")
+    def test_non_ghcr_manifest_unavailable_warns_and_allows_update(self) -> None:
+        self.wud_file.write_text("quay.io/acme/app:latest@sha256:good\n", encoding="utf-8")
+        self.make_stack("app", [("app", "quay.io/acme/app:latest", "cid-app")])
+        self.set_image_state("quay.io/acme/app:latest", "old", "sha256:old")
+        self.set_image_after_pull("quay.io/acme/app:latest", "new", "sha256:bad")
+        self.set_manifest_failure("quay.io/acme/app:latest", "manifest unavailable")
 
-        result = self.run_python("--yes")
+        status, stdout, stderr = self.run_direct()
 
-        self.assertEqual(result.returncode, 1, result.stderr + result.stdout)
+        self.assertEqual(status, 0, stderr + stdout)
+        self.assertEqual(self.wud_file.read_text(encoding="utf-8"), "")
+        self.assertRegex(self.calls(), r"compose -f docker-compose.yml up -d .* app")
+        pending = self.db_rows("SELECT * FROM pending_updates")
+        runs = self.db_rows("SELECT * FROM update_runs")
+        self.assertEqual(runs[0]["status"], "success")
+        self.assertEqual(pending[0]["status"], "resolved")
+        self.assertEqual(pending[0]["status_reason"], "updated")
+        log_text = sorted(self.log_dir.glob("update-from-wud-v2-*.log"))[-1].read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("Digest verification was inconclusive", log_text)
+        self.assertIn("Digest verification reason: manifest-unavailable-untrusted", log_text)
+
+    def test_non_ghcr_platform_digest_allows_registry_verification(self) -> None:
+        self.wud_file.write_text("acme/app:latest@sha256:child\n", encoding="utf-8")
+        self.make_stack("app", [("app", "quay.io/acme/app:latest", "cid-app")])
+        self.set_image_state("quay.io/acme/app:latest", "sha256:old", "sha256:old-index")
+        self.set_image_after_pull(
+            "quay.io/acme/app:latest",
+            "sha256:config",
+            "sha256:index",
+        )
+        self.set_manifest_stdout(
+            "quay.io/acme/app:latest",
+            manifest_index("sha256:child"),
+        )
+        self.set_manifest_stdout(
+            "quay.io/acme/app@sha256:child",
+            manifest_image("sha256:config"),
+        )
+
+        status, stdout, stderr = self.run_direct()
+
+        self.assertEqual(status, 0, stderr + stdout)
+        self.assertEqual(self.wud_file.read_text(encoding="utf-8"), "")
+        calls = self.calls()
+        self.assertIn("manifest inspect quay.io/acme/app:latest", calls)
+        self.assertIn("manifest inspect quay.io/acme/app@sha256:child", calls)
+        self.assertRegex(calls, r"compose -f docker-compose.yml up -d .* app")
+
+    def test_non_ghcr_stale_digest_restores_line_and_skips_recreate(self) -> None:
+        self.wud_file.write_text("quay.io/acme/app:latest@sha256:stale\n", encoding="utf-8")
+        self.make_stack("app", [("app", "quay.io/acme/app:latest", "cid-app")])
+        self.set_image_state("quay.io/acme/app:latest", "sha256:old", "sha256:old-index")
+        self.set_image_after_pull(
+            "quay.io/acme/app:latest",
+            "sha256:config",
+            "sha256:index",
+        )
+        self.set_manifest_stdout(
+            "quay.io/acme/app:latest",
+            manifest_index("sha256:child"),
+        )
+        self.set_manifest_stdout(
+            "quay.io/acme/app@sha256:stale",
+            manifest_image("sha256:config"),
+        )
+
+        status, stdout, stderr = self.run_direct()
+
+        self.assertEqual(status, 1, stderr + stdout)
         self.assertEqual(
             self.wud_file.read_text(encoding="utf-8"),
-            "repo/app@sha256:good\n",
+            "quay.io/acme/app:latest@sha256:stale\n",
         )
-        self.assertNotRegex(self.calls(), r"compose -f .* up -d")
-        self.assertNotIn("manifest inspect", self.calls())
+        calls = self.calls()
+        self.assertIn("manifest inspect quay.io/acme/app:latest", calls)
+        self.assertIn("manifest inspect quay.io/acme/app@sha256:stale", calls)
+        self.assertNotRegex(calls, r"compose -f .* up -d")
         pending = self.db_rows("SELECT * FROM pending_updates")
         runs = self.db_rows("SELECT * FROM update_runs")
         self.assertEqual(runs[0]["status"], "failure")
