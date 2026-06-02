@@ -1,14 +1,51 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
+
+const demoBasePath = process.env.PLAYWRIGHT_WEBUI_DEMO_BASE_PATH ?? "";
+const browserFailures = new WeakMap<Page, string[]>();
 
 test.skip(
   process.env.PLAYWRIGHT_WEBUI_DEMO !== "true",
   "demo smoke tests require the static demo Vite server",
 );
 
+test.beforeEach(({ page }) => {
+  const failures: string[] = [];
+  browserFailures.set(page, failures);
+
+  page.on("pageerror", (error) => {
+    failures.push(`page error: ${error.message}`);
+  });
+
+  page.on("console", (message) => {
+    if (message.type() === "error") {
+      failures.push(`console error: ${message.text()}`);
+    }
+  });
+
+  page.on("requestfailed", (request) => {
+    const url = request.url();
+    if (/^https?:\/\//i.test(url)) {
+      failures.push(
+        `request failed: ${request.method()} ${url}: ${
+          request.failure()?.errorText ?? "unknown failure"
+        }`,
+      );
+    }
+  });
+});
+
+test.afterEach(({ page }) => {
+  expect(browserFailures.get(page) ?? []).toEqual([]);
+});
+
+function demoRoute(path: string) {
+  return `${demoBasePath}${path}`;
+}
+
 test("static demo renders current pending state and completes apply flow", async ({
   page,
 }) => {
-  await page.goto("/#/pending");
+  await page.goto(demoRoute("/#/pending"));
 
   await expect(
     page.getByRole("heading", { name: "Pending updates", exact: true }),
@@ -51,7 +88,7 @@ test("static demo renders current pending state and completes apply flow", async
 
 test("static demo mobile layout stays within the viewport", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto("/#/pending");
+  await page.goto(demoRoute("/#/pending"));
 
   await expect(
     page.getByRole("heading", { name: "Pending updates", exact: true }),

@@ -2,7 +2,7 @@ import { defineConfig, loadEnv, type PluginOption } from "vite";
 import vue from "@vitejs/plugin-vue";
 import vueDevTools from "vite-plugin-vue-devtools";
 
-export default defineConfig(({ command, mode }) => {
+export default defineConfig(({ command, mode, isPreview }) => {
   const plugins: PluginOption[] = [vue()];
   const devEnv = loadEnv(mode, ".", "WUD_WEB_DEV_");
   const viteEnv = loadEnv(mode, ".", "VITE_");
@@ -14,7 +14,7 @@ export default defineConfig(({ command, mode }) => {
 
   return {
     base:
-      command === "build" && demoMode
+      (command === "build" || isPreview) && demoMode
         ? (viteEnv.VITE_WUD_PAGES_BASE ?? "/WUD-Updater/")
         : "/",
     plugins,

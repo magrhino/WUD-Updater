@@ -45,8 +45,11 @@ jobs:
       - name: Install frontend dependencies
         run: npm --prefix webui ci
 
-      - name: Build static demo
-        run: npm --prefix webui run build:demo
+      - name: Install Chromium
+        run: npm --prefix webui exec playwright install chromium
+
+      - name: Build, validate, and smoke-test static demo
+        run: npm --prefix webui run test:smoke:demo
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@56afc609e74202658d3ffba0e8f6dda462b719fa # v3.0.1
