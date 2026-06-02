@@ -1613,7 +1613,9 @@ def api_healthz() -> HealthResponse:
     return HealthResponse(ok=True, version=__version__)
 
 
-def api_readyz(request: Request, response: Response) -> ReadyResponse:
+def api_readyz(request: Request, response: Response) -> ReadyResponse | Response:
+    if not _raw_client_is_loopback(request):
+        return Response(status_code=404)
     return _ready_response(_settings(request), response)
 
 
@@ -7147,6 +7149,15 @@ def _client_is_trusted_proxy(request: Request, settings: WebSettings) -> bool:
     except ValueError:
         return False
     return any(address in network for network in settings.trusted_proxies)
+
+
+def _raw_client_is_loopback(request: Request) -> bool:
+    if request.client is None:
+        return False
+    try:
+        return ipaddress.ip_address(request.client.host).is_loopback
+    except ValueError:
+        return False
 
 
 def _forbidden(detail: str) -> JSONResponse:

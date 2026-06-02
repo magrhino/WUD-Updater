@@ -67,6 +67,8 @@ def _client(
 def _doctor_client(
     tmp_path: Path,
     env: dict[str, str] | None = None,
+    *,
+    client: tuple[str, int] | None = None,
 ) -> TestClient:
     values = _web_env(
         tmp_path,
@@ -89,7 +91,10 @@ def _doctor_client(
     _write_doctor_files(values)
     with connect_db(Path(values["WUD_DB_PATH"])) as conn:
         init_db(conn)
-    return TestClient(create_app(environ=values))
+    app = create_app(environ=values)
+    if client is None:
+        return TestClient(app)
+    return TestClient(app, client=client)
 
 
 def _csrf_headers(client: TestClient) -> dict[str, str]:
@@ -406,7 +411,7 @@ def test_healthz_response_shape_is_minimal(tmp_path: Path) -> None:
 def test_readyz_is_unauthenticated_and_reports_local_readiness(
     tmp_path: Path,
 ) -> None:
-    client = _doctor_client(tmp_path)
+    client = _doctor_client(tmp_path, client=("127.0.0.1", 50000))
 
     response = client.get("/readyz")
     body = response.json()
@@ -438,11 +443,37 @@ def test_readyz_is_unauthenticated_and_reports_local_readiness(
     assert sensitive_keys.isdisjoint(body)
 
 
+def test_readyz_rejects_non_loopback_client(
+    tmp_path: Path,
+) -> None:
+    client = _doctor_client(tmp_path, client=("203.0.113.10", 50000))
+
+    response = client.get("/readyz")
+
+    assert response.status_code == 404
+    assert response.content == b""
+
+
+def test_readyz_ignores_forwarded_loopback_from_trusted_proxy(
+    tmp_path: Path,
+) -> None:
+    client = _doctor_client(
+        tmp_path,
+        {"WUD_WEB_TRUSTED_PROXIES": "203.0.113.10/32"},
+        client=("203.0.113.10", 50000),
+    )
+
+    response = client.get("/readyz", headers={"X-Forwarded-For": "127.0.0.1"})
+
+    assert response.status_code == 404
+    assert response.content == b""
+
+
 def test_ready_api_requires_auth_and_returns_local_readiness(
     tmp_path: Path,
 ) -> None:
     unauthenticated = _client(tmp_path)
-    client = _doctor_client(tmp_path)
+    client = _doctor_client(tmp_path, client=("203.0.113.10", 50000))
 
     auth_response = unauthenticated.get("/api/v1/ready")
     ready_response = client.get("/api/v1/ready")
@@ -450,7 +481,11 @@ def test_ready_api_requires_auth_and_returns_local_readiness(
     assert auth_response.status_code == 403
     assert auth_response.json()["detail"] == "setup required"
     assert ready_response.status_code == 200
-    assert ready_response.json()["ok"] is True
+    body = ready_response.json()
+    codes = {check["code"] for check in body["checks"]}
+    assert body["ok"] is True
+    assert "docker-daemon-info" in codes
+    assert "webui-database" in codes
 
 
 def test_readyz_fails_when_required_local_check_fails(
@@ -463,6 +498,7 @@ def test_readyz_fails_when_required_local_check_fails(
             "GITHUB_TOKEN": secret,
             "FAKE_DOCKER_INFO_SECRET": secret,
         },
+        client=("127.0.0.1", 50000),
     )
 
     response = client.get("/readyz")
@@ -479,7 +515,11 @@ def test_readyz_fails_when_required_local_check_fails(
 def test_readyz_fails_when_required_checks_are_missing(
     tmp_path: Path,
 ) -> None:
-    client = _doctor_client(tmp_path, {"WUD_UPDATER_USE_SUDO": "treu"})
+    client = _doctor_client(
+        tmp_path,
+        {"WUD_UPDATER_USE_SUDO": "treu"},
+        client=("127.0.0.1", 50000),
+    )
 
     response = client.get("/readyz")
     body = response.json()
