@@ -4,6 +4,13 @@ All notable changes to WUD-Updater are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com) and versions follow
 [Semantic Versioning](https://semver.org).
 
+## [0.31.5](https://github.com/magrhino/WUD-Updater/compare/v0.31.4...v0.31.5) (2026-06-02)
+
+
+### Bug Fixes
+
+* **ui:** harden static demo artifact tests ([28183c6](https://github.com/magrhino/WUD-Updater/commit/28183c67ef658d601a713a2c95809c81303adc5d))
+
 ## [0.31.4](https://github.com/magrhino/WUD-Updater/compare/v0.31.3...v0.31.4) (2026-06-02)
 
 
