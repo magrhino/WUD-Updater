@@ -4,6 +4,13 @@ All notable changes to WUD-Updater are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com) and versions follow
 [Semantic Versioning](https://semver.org).
 
+## [0.31.4](https://github.com/magrhino/WUD-Updater/compare/v0.31.3...v0.31.4) (2026-06-02)
+
+
+### Bug Fixes
+
+* **verification:** Verify GHCR digests before applying WUD updates ([#174](https://github.com/magrhino/WUD-Updater/issues/174)) ([bab9707](https://github.com/magrhino/WUD-Updater/commit/bab97078512f5b45cc77e1a944e151566c0b2592))
+
 ## [0.31.3](https://github.com/magrhino/WUD-Updater/compare/v0.31.2...v0.31.3) (2026-06-01)
 
 
