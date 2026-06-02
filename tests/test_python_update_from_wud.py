@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import re
 import sqlite3
@@ -18,6 +19,13 @@ from wud_updater.compose import (
     ComposeStack,
     ServiceImage,
 )
+from wud_updater.digest_verifier import (
+    DigestVerifier,
+    DockerManifestResolver,
+    ManifestDocument,
+    ManifestLookupError,
+)
+from wud_updater.docker_cli import DockerCli
 from wud_updater.file_ops import OwnerConfig
 from wud_updater.updater import (
     ComposeTagRewriteError,
@@ -33,6 +41,38 @@ from wud_updater.updater import (
     merge_wud_exclude_regex,
     prepare_log_file,
 )
+
+
+MANIFEST_INDEX_TYPE = "application/vnd.oci.image.index.v1+json"
+MANIFEST_IMAGE_TYPE = "application/vnd.oci.image.manifest.v1+json"
+
+
+class FailingManifestResolver:
+    def fetch(self, repo: str, reference: str) -> ManifestDocument:
+        raise ManifestLookupError("primary unavailable in fake Docker tests")
+
+
+def manifest_index(*children: str) -> dict[str, object]:
+    return {
+        "schemaVersion": 2,
+        "mediaType": MANIFEST_INDEX_TYPE,
+        "manifests": [
+            {
+                "mediaType": MANIFEST_IMAGE_TYPE,
+                "digest": child,
+                "platform": {"os": "linux", "architecture": "amd64"},
+            }
+            for child in children
+        ],
+    }
+
+
+def manifest_image(config_digest: str) -> dict[str, object]:
+    return {
+        "schemaVersion": 2,
+        "mediaType": MANIFEST_IMAGE_TYPE,
+        "config": {"digest": config_digest},
+    }
 
 
 class PythonUpdateFromWudTests(unittest.TestCase):
@@ -178,6 +218,47 @@ class PythonUpdateFromWudTests(unittest.TestCase):
             encoding="utf-8",
         )
 
+    def set_manifest_stdout(self, image: str, payload: object) -> None:
+        safe = safe_name(image)
+        (self.fake_root / "manifests" / f"{safe}.stdout").write_text(
+            json.dumps(payload),
+            encoding="utf-8",
+        )
+
+    def run_direct(
+        self,
+        *,
+        assume_yes: bool = True,
+        allow_tag_updates: bool = False,
+    ) -> tuple[int, str, str]:
+        command_runner = CommandRunner(env=self.env)
+        docker = DockerCli(runner=command_runner)
+        options = UpdaterOptions(
+            docker_base=self.base,
+            wud_file=self.wud_file,
+            log_dir=self.log_dir,
+            max_wait=0,
+            assume_yes=assume_yes,
+            allow_tag_updates=allow_tag_updates,
+            no_color=True,
+            db_path=self.db_path,
+        )
+        runner = UpdateFromWudRunner(
+            options,
+            environ=self.env,
+            command_runner=command_runner,
+            digest_verifier=DigestVerifier(
+                docker,
+                primary_resolver=FailingManifestResolver(),
+                fallback_resolver=DockerManifestResolver(docker),
+            ),
+        )
+        stdout = StringIO()
+        stderr = StringIO()
+        with redirect_stdout(stdout), redirect_stderr(stderr):
+            status = runner.run()
+        return status, stdout.getvalue(), stderr.getvalue()
+
     def calls(self) -> str:
         return (self.fake_root / "calls.log").read_text(encoding="utf-8")
 
@@ -303,25 +384,151 @@ class PythonUpdateFromWudTests(unittest.TestCase):
             ],
         )
 
-    def test_digest_mismatch_restores_line_and_skips_recreate(self) -> None:
-        self.wud_file.write_text("repo/app@sha256:good\n", encoding="utf-8")
-        self.make_stack("app", [("app", "repo/app:latest", "cid-app")])
-        self.set_image_state("repo/app:latest", "old", "sha256:old")
-        self.set_image_after_pull("repo/app:latest", "new", "sha256:bad")
+    def test_non_ghcr_manifest_unavailable_warns_and_allows_update(self) -> None:
+        self.wud_file.write_text("quay.io/acme/app:latest@sha256:good\n", encoding="utf-8")
+        self.make_stack("app", [("app", "quay.io/acme/app:latest", "cid-app")])
+        self.set_image_state("quay.io/acme/app:latest", "old", "sha256:old")
+        self.set_image_after_pull("quay.io/acme/app:latest", "new", "sha256:bad")
+        self.set_manifest_failure("quay.io/acme/app:latest", "manifest unavailable")
 
-        result = self.run_python("--yes")
+        status, stdout, stderr = self.run_direct()
 
-        self.assertEqual(result.returncode, 1, result.stderr + result.stdout)
+        self.assertEqual(status, 0, stderr + stdout)
+        self.assertEqual(self.wud_file.read_text(encoding="utf-8"), "")
+        self.assertRegex(self.calls(), r"compose -f docker-compose.yml up -d .* app")
+        pending = self.db_rows("SELECT * FROM pending_updates")
+        runs = self.db_rows("SELECT * FROM update_runs")
+        self.assertEqual(runs[0]["status"], "success")
+        self.assertEqual(pending[0]["status"], "resolved")
+        self.assertEqual(pending[0]["status_reason"], "updated")
+        log_text = sorted(self.log_dir.glob("update-from-wud-v2-*.log"))[-1].read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("Digest verification was inconclusive", log_text)
+        self.assertIn("Digest verification reason: manifest-unavailable-untrusted", log_text)
+
+    def test_non_ghcr_platform_digest_allows_registry_verification(self) -> None:
+        self.wud_file.write_text("acme/app:latest@sha256:child\n", encoding="utf-8")
+        self.make_stack("app", [("app", "quay.io/acme/app:latest", "cid-app")])
+        self.set_image_state("quay.io/acme/app:latest", "sha256:old", "sha256:old-index")
+        self.set_image_after_pull(
+            "quay.io/acme/app:latest",
+            "sha256:config",
+            "sha256:index",
+        )
+        self.set_manifest_stdout(
+            "quay.io/acme/app:latest",
+            manifest_index("sha256:child"),
+        )
+        self.set_manifest_stdout(
+            "quay.io/acme/app@sha256:child",
+            manifest_image("sha256:config"),
+        )
+
+        status, stdout, stderr = self.run_direct()
+
+        self.assertEqual(status, 0, stderr + stdout)
+        self.assertEqual(self.wud_file.read_text(encoding="utf-8"), "")
+        calls = self.calls()
+        self.assertIn("manifest inspect quay.io/acme/app:latest", calls)
+        self.assertIn("manifest inspect quay.io/acme/app@sha256:child", calls)
+        self.assertRegex(calls, r"compose -f docker-compose.yml up -d .* app")
+
+    def test_non_ghcr_stale_digest_restores_line_and_skips_recreate(self) -> None:
+        self.wud_file.write_text("quay.io/acme/app:latest@sha256:stale\n", encoding="utf-8")
+        self.make_stack("app", [("app", "quay.io/acme/app:latest", "cid-app")])
+        self.set_image_state("quay.io/acme/app:latest", "sha256:old", "sha256:old-index")
+        self.set_image_after_pull(
+            "quay.io/acme/app:latest",
+            "sha256:config",
+            "sha256:index",
+        )
+        self.set_manifest_stdout(
+            "quay.io/acme/app:latest",
+            manifest_index("sha256:child"),
+        )
+        self.set_manifest_stdout(
+            "quay.io/acme/app@sha256:stale",
+            manifest_image("sha256:config"),
+        )
+
+        status, stdout, stderr = self.run_direct()
+
+        self.assertEqual(status, 1, stderr + stdout)
         self.assertEqual(
             self.wud_file.read_text(encoding="utf-8"),
-            "repo/app@sha256:good\n",
+            "quay.io/acme/app:latest@sha256:stale\n",
         )
-        self.assertNotRegex(self.calls(), r"compose -f .* up -d")
+        calls = self.calls()
+        self.assertIn("manifest inspect quay.io/acme/app:latest", calls)
+        self.assertIn("manifest inspect quay.io/acme/app@sha256:stale", calls)
+        self.assertNotRegex(calls, r"compose -f .* up -d")
         pending = self.db_rows("SELECT * FROM pending_updates")
         runs = self.db_rows("SELECT * FROM update_runs")
         self.assertEqual(runs[0]["status"], "failure")
         self.assertEqual(pending[0]["status"], "failed")
         self.assertEqual(pending[0]["status_reason"], "expected-digest-not-reached")
+
+    def test_ghcr_platform_digest_allows_registryless_wud_line(self) -> None:
+        self.wud_file.write_text("acme/app:latest@sha256:child\n", encoding="utf-8")
+        self.make_stack("app", [("app", "ghcr.io/acme/app:latest", "cid-app")])
+        self.set_image_state("ghcr.io/acme/app:latest", "sha256:old", "sha256:old-index")
+        self.set_image_after_pull(
+            "ghcr.io/acme/app:latest",
+            "sha256:config",
+            "sha256:index",
+        )
+        self.set_manifest_stdout(
+            "ghcr.io/acme/app:latest",
+            manifest_index("sha256:child"),
+        )
+        self.set_manifest_stdout(
+            "ghcr.io/acme/app@sha256:child",
+            manifest_image("sha256:config"),
+        )
+
+        status, stdout, stderr = self.run_direct()
+
+        self.assertEqual(status, 0, stderr + stdout)
+        self.assertEqual(self.wud_file.read_text(encoding="utf-8"), "")
+        calls = self.calls()
+        self.assertIn("manifest inspect ghcr.io/acme/app:latest", calls)
+        self.assertIn("manifest inspect ghcr.io/acme/app@sha256:child", calls)
+        self.assertRegex(calls, r"compose -f docker-compose.yml up -d .* app")
+
+    def test_ghcr_stale_digest_restores_line_and_skips_recreate(self) -> None:
+        self.wud_file.write_text("acme/app:latest@sha256:stale\n", encoding="utf-8")
+        self.make_stack("app", [("app", "ghcr.io/acme/app:latest", "cid-app")])
+        self.set_image_state("ghcr.io/acme/app:latest", "sha256:old", "sha256:old-index")
+        self.set_image_after_pull(
+            "ghcr.io/acme/app:latest",
+            "sha256:config",
+            "sha256:index",
+        )
+        self.set_manifest_stdout(
+            "ghcr.io/acme/app:latest",
+            manifest_index("sha256:child"),
+        )
+        self.set_manifest_stdout(
+            "ghcr.io/acme/app@sha256:stale",
+            manifest_image("sha256:config"),
+        )
+
+        status, stdout, stderr = self.run_direct()
+
+        self.assertEqual(status, 1, stderr + stdout)
+        self.assertEqual(
+            self.wud_file.read_text(encoding="utf-8"),
+            "acme/app:latest@sha256:stale\n",
+        )
+        calls = self.calls()
+        self.assertIn("manifest inspect ghcr.io/acme/app:latest", calls)
+        self.assertIn("manifest inspect ghcr.io/acme/app@sha256:stale", calls)
+        self.assertNotRegex(calls, r"compose -f .* up -d")
+        log_text = sorted(self.log_dir.glob("update-from-wud-v2-*.log"))[-1].read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("Digest verification reason: stale-digest", log_text)
 
     def test_multi_stack_failure_keeps_failure_reason_in_pending_audit(self) -> None:
         self.wud_file.write_text("repo/app:latest\n", encoding="utf-8")
@@ -2245,6 +2452,39 @@ class PythonUpdateFromWudTests(unittest.TestCase):
             "image: repo/app:2.0",
             (stack_dir / "docker-compose.yml").read_text(encoding="utf-8"),
         )
+
+    def test_ghcr_tag_update_with_digest_checks_rewritten_tag(self) -> None:
+        self.wud_file.write_text(
+            "acme/app:1.0@sha256:child tag=2.0\n",
+            encoding="utf-8",
+        )
+        stack_dir = self.make_stack("app", [("app", "ghcr.io/acme/app:1.0", "cid-app")])
+        self.set_image_state("ghcr.io/acme/app:1.0", "sha256:old", "sha256:old-index")
+        self.set_image_after_pull(
+            "ghcr.io/acme/app:2.0",
+            "sha256:config",
+            "sha256:index",
+        )
+        self.set_manifest_stdout(
+            "ghcr.io/acme/app:2.0",
+            manifest_index("sha256:child"),
+        )
+        self.set_manifest_stdout(
+            "ghcr.io/acme/app@sha256:child",
+            manifest_image("sha256:config"),
+        )
+
+        status, stdout, stderr = self.run_direct(allow_tag_updates=True)
+
+        self.assertEqual(status, 0, stderr + stdout)
+        self.assertEqual(self.wud_file.read_text(encoding="utf-8"), "")
+        self.assertIn(
+            "image: ghcr.io/acme/app:2.0",
+            (stack_dir / "docker-compose.yml").read_text(encoding="utf-8"),
+        )
+        calls = self.calls()
+        self.assertIn("manifest inspect ghcr.io/acme/app:2.0", calls)
+        self.assertIn("manifest inspect ghcr.io/acme/app@sha256:child", calls)
 
     def test_tag_backup_failure_restores_line_without_traceback(self) -> None:
         self.wud_file.write_text("repo/app:1.0 tag=2.0\n", encoding="utf-8")

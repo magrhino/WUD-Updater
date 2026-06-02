@@ -51,6 +51,7 @@ from .db import (
     upsert_known_image,
     utc_timestamp as db_utc_timestamp,
 )
+from .digest_verifier import DigestCheckResult, DigestVerifier
 from .docker_cli import DockerCli
 from .file_ops import OwnerConfig, OwnerConfigError, apply_configured_owner
 from .images import (
@@ -271,6 +272,7 @@ class UpdateFromWudRunner:
         *,
         environ: Mapping[str, str] | None = None,
         command_runner: CommandRunner | None = None,
+        digest_verifier: DigestVerifier | None = None,
         progress_callback: Callable[[UpdaterProgressEvent], None] | None = None,
     ) -> None:
         self.options = options
@@ -278,6 +280,7 @@ class UpdateFromWudRunner:
         self.owner = OwnerConfig.from_env(self.environ)
         self.command_runner = command_runner or CommandRunner()
         self.docker = DockerCli(runner=self.command_runner)
+        self.digest_verifier = digest_verifier or DigestVerifier(self.docker)
         self.compose = ComposeCli(runner=self.command_runner)
         self.log_file = prepare_log_file(options.log_dir, self.owner)
         self.log = Logger(
@@ -2189,25 +2192,98 @@ class UpdateFromWudRunner:
         }
         for line_no, target, expected_image, allow_repo, expected in sorted(requirements):
             matched = False
-            digest_ok = False
+            digest_result: DigestCheckResult | None = None
             for image in images:
                 if not image_matches_resolved_target(image, expected_image, allow_repo):
                     continue
                 matched = True
-                if self.docker.image_has_digest(image, expected):
-                    digest_ok = True
+                digest_result = self.digest_verifier.verify(image, expected)
+                if digest_result.ok:
                     break
-            if not digest_ok:
+            if digest_result is not None and digest_result.status == "untrusted":
+                self.log.warn(
+                    f"[{stack.name}] Digest verification was inconclusive for line {line_no} ({target}): wanted {expected}"
+                )
+                self._log_digest_untrusted(stack.name, digest_result)
+                continue
+            if digest_result is None or not digest_result.ok:
                 ok = False
                 self.log.error(
                     f"[{stack.name}] Expected digest not reached for line {line_no} ({target}): wanted {expected}"
                 )
+                if digest_result is not None:
+                    self._log_digest_mismatch(stack.name, digest_result)
                 if not matched:
                     self.log.plain(
                         "ERROR",
                         f"[{stack.name}] No compose image matched line {line_no} while checking expected digest",
                     )
         return ok
+
+    def _log_digest_untrusted(
+        self,
+        stack_name: str,
+        result: DigestCheckResult,
+    ) -> None:
+        self.log.plain(
+            "WARN",
+            f"[{stack_name}] Digest verification reason: {result.reason}",
+        )
+        self._log_digest_details("WARN", stack_name, result)
+
+    def _log_digest_mismatch(
+        self,
+        stack_name: str,
+        result: DigestCheckResult,
+    ) -> None:
+        self.log.plain(
+            "ERROR",
+            f"[{stack_name}] Digest verification reason: {result.reason}",
+        )
+        self._log_digest_details("ERROR", stack_name, result)
+
+    def _log_digest_details(
+        self,
+        level: str,
+        stack_name: str,
+        result: DigestCheckResult,
+    ) -> None:
+        if result.local_image_id:
+            self.log.plain(
+                level,
+                f"[{stack_name}] Local image id: {result.local_image_id}",
+            )
+        if result.seen_repo_digests:
+            for digest in result.seen_repo_digests:
+                self.log.plain(
+                    level,
+                    f"[{stack_name}] RepoDigest seen: {digest}",
+                )
+        if result.tag_digest:
+            self.log.plain(
+                level,
+                f"[{stack_name}] Current tag digest: {result.tag_digest}",
+            )
+        if result.matched_child_digest:
+            self.log.plain(
+                level,
+                f"[{stack_name}] Matched platform digest: {result.matched_child_digest}",
+            )
+        if result.expected_config_digest:
+            self.log.plain(
+                level,
+                f"[{stack_name}] Expected config digest: {result.expected_config_digest}",
+            )
+        if result.source:
+            self.log.plain(
+                level,
+                f"[{stack_name}] Digest verification source: {result.source}",
+            )
+        if result.error:
+            self.log.plain(
+                level,
+                f"[{stack_name}] Digest verification error: {sanitize_stream(result.error)}",
+            )
 
     def _tag_updates(self, matches: Sequence[Match]) -> tuple[TagUpdate, ...]:
         services_by_update: dict[tuple[str, str, str], set[str]] = {}

@@ -31,7 +31,8 @@ repo/app:1.0 tag=2.0
 
 Digest-pinned references use the `image@sha256:...` form. The updater validates
 that the pulled image resolves to the requested digest before treating the update
-as successful.
+as successful. See [Digest Verification](digest-verification.md) for registry
+trust behavior and live verification notes.
 
 Tag updates use a `tag=<new-tag>` token after a tagged source image. They stay
 pending unless the updater is run with `--allow-tag-updates`.
