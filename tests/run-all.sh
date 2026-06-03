@@ -101,7 +101,7 @@ EOF
     tests/test_python_wud_parsing.py \
     webui/scripts/seed_demo_state.py
 
-  run "$python_bin" -m pytest tests/test_python_*.py
+  run "$python_bin" -m pytest
 }
 
 run_shell_checks() {
