@@ -6314,6 +6314,63 @@ def test_run_log_endpoint_rejects_logs_outside_configured_dir(
     assert response.json()["detail"] == "log file is outside WUD_LOG_DIR"
 
 
+def test_diagnostics_support_bundle_returns_semantically_redacted_payload(
+    tmp_path: Path,
+) -> None:
+    secret = "github-token-secret"
+    client = _doctor_client(
+        tmp_path,
+        {
+            "GITHUB_TOKEN": secret,
+            "FAKE_DOCKER_INFO_SECRET": secret,
+        },
+    )
+    wud_file = tmp_path / "state" / "images.todo"
+    wud_file.write_text("repo/app:latest\n", encoding="utf-8")
+    log_file = tmp_path / "state" / "logs" / "run.log"
+    log_file.write_text(
+        (
+            f"checking {tmp_path / 'docker' / 'app' / 'compose.yml'}\n"
+            f"wud file {wud_file}\n"
+            f"log file {log_file}\n"
+            f"secret {secret}\n"
+        ),
+        encoding="utf-8",
+    )
+    _insert_run(tmp_path, log_file="run.log")
+
+    response = client.get("/api/v1/diagnostics/support-bundle")
+    body = response.json()
+    serialized = json.dumps(body)
+    doctor_codes = {check["code"] for check in body["doctor_result"]["checks"]}
+
+    assert response.status_code == 200
+    assert str(tmp_path) not in serialized
+    assert secret not in serialized
+    assert "<redacted>" in serialized
+    assert "<DOCKER_BASE>/app/compose.yml" in serialized
+    assert "<WUD_OUT_FILE>" in serialized
+    assert "<WUD_LOG_DIR>/run.log" in serialized
+    assert "wud-out-file" in doctor_codes
+    assert "compose-discovery" in doctor_codes
+    assert body["pending_summary"]["source_file"] == "<WUD_OUT_FILE>"
+    assert body["log_tail"]["exists"] is True
+
+
+def test_diagnostics_support_bundle_rejects_log_file_outside_configured_dir(
+    tmp_path: Path,
+) -> None:
+    outside = tmp_path / "outside.log"
+    outside.write_text("secret", encoding="utf-8")
+    _insert_run(tmp_path, log_file=str(outside))
+    client = _client(tmp_path, {"WUD_WEB_DEV_NO_AUTH": "true"})
+
+    response = client.get("/api/v1/diagnostics/support-bundle")
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == "log file is outside WUD_LOG_DIR"
+
+
 def test_run_log_endpoint_returns_not_found_for_unknown_run(tmp_path: Path) -> None:
     client = _client(tmp_path, {"WUD_WEB_DEV_NO_AUTH": "true"})
 
