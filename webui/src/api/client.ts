@@ -528,6 +528,7 @@ export interface DiagnosticsSupportBundleResponse {
   doctor_result: DoctorResponse;
   pending_summary: PendingResponse;
   last_run_status: RunSummary | null;
+  diagnostics_warnings: string[];
   discovery_warnings: string[];
   log_tail: LogTail | null;
 }

@@ -6371,6 +6371,34 @@ def test_diagnostics_support_bundle_rejects_log_file_outside_configured_dir(
     assert response.json()["detail"] == "log file is outside WUD_LOG_DIR"
 
 
+def test_diagnostics_support_bundle_reports_last_run_metadata_errors(
+    tmp_path: Path,
+) -> None:
+    run_id = _insert_run(tmp_path, log_file="run.log")
+    db_path = tmp_path / "state" / "wud.sqlite"
+    with connect_db(db_path) as conn:
+        with conn:
+            conn.execute(
+                """
+                UPDATE update_runs
+                SET metadata_json = ?
+                WHERE id = ?
+                """,
+                ("not-json", run_id),
+            )
+    client = _client(tmp_path, {"WUD_WEB_DEV_NO_AUTH": "true"})
+
+    response = client.get("/api/v1/diagnostics/support-bundle")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["last_run_status"] is None
+    assert body["log_tail"] is None
+    assert body["diagnostics_warnings"] == [
+        "last run status unavailable: invalid metadata JSON in database"
+    ]
+
+
 def test_run_log_endpoint_returns_not_found_for_unknown_run(tmp_path: Path) -> None:
     client = _client(tmp_path, {"WUD_WEB_DEV_NO_AUTH": "true"})
 

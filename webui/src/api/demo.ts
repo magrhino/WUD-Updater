@@ -1420,6 +1420,7 @@ export function createDemoWebApi(): WebApi {
       doctor_result: await state.doctor(),
       pending_summary: await state.pendingResponse(),
       last_run_status: null,
+      diagnostics_warnings: [],
       discovery_warnings: [],
       log_tail: null,
     }),

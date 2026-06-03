@@ -678,6 +678,7 @@ class DiagnosticsSupportBundleResponse(BaseModel):
     doctor_result: DoctorResponse
     pending_summary: PendingResponse
     last_run_status: RunSummary | None
+    diagnostics_warnings: list[str] = Field(default_factory=list)
     discovery_warnings: list[str] = Field(default_factory=list)
     log_tail: LogTail | None
 
@@ -1816,6 +1817,7 @@ def api_diagnostics_support_bundle(request: Request) -> DiagnosticsSupportBundle
             ui.raw = ""
 
     last_run = None
+    diagnostics_warnings: list[str] = []
     try:
         with closing(_connect_readonly_db(settings)) as conn:
             rows = conn.execute(
@@ -1828,8 +1830,12 @@ def api_diagnostics_support_bundle(request: Request) -> DiagnosticsSupportBundle
             ).fetchall()
             if rows:
                 last_run = _run_summary_from_row(rows[0])
-    except Exception:
-        pass
+    except ReadOnlyDatabaseMissing as exc:
+        diagnostics_warnings.append(f"last run status unavailable: {exc}")
+    except HTTPException as exc:
+        diagnostics_warnings.append(f"last run status unavailable: {exc.detail}")
+    except (OSError, sqlite3.Error, DatabaseError) as exc:
+        diagnostics_warnings.append(f"last run status unavailable: {exc}")
 
     discovery_warnings = list(pending.warnings)
 
@@ -1847,6 +1853,7 @@ def api_diagnostics_support_bundle(request: Request) -> DiagnosticsSupportBundle
         doctor_result=doctor_result,
         pending_summary=pending,
         last_run_status=last_run,
+        diagnostics_warnings=diagnostics_warnings,
         discovery_warnings=discovery_warnings,
         log_tail=log_tail,
     )
