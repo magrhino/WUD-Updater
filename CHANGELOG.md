@@ -4,6 +4,13 @@ All notable changes to WUD-Updater are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com) and versions follow
 [Semantic Versioning](https://semver.org).
 
+## [0.32.0](https://github.com/magrhino/WUD-Updater/compare/v0.31.5...v0.32.0) (2026-06-03)
+
+
+### Features
+
+* **ui:** add diagnostics support bundle ([#182](https://github.com/magrhino/WUD-Updater/issues/182)) ([88408d5](https://github.com/magrhino/WUD-Updater/commit/88408d582886f5726f53ab823a0f6c84d74d0010))
+
 ## [0.31.5](https://github.com/magrhino/WUD-Updater/compare/v0.31.4...v0.31.5) (2026-06-02)
 
 
