@@ -9,169 +9,201 @@ run(){
   "$@"
 }
 
-python_bin="${PYTHON_BIN:-}"
-if [ -z "$python_bin" ]; then
-  if [ -x "$REPO_ROOT/.venv/bin/python" ]; then
-    python_bin="$REPO_ROOT/.venv/bin/python"
-  elif command -v python3.14 >/dev/null 2>&1; then
-    python_bin="python3.14"
-  elif command -v python3.13 >/dev/null 2>&1; then
-    python_bin="python3.13"
-  elif command -v python3.12 >/dev/null 2>&1; then
-    python_bin="python3.12"
-  elif command -v python3.11 >/dev/null 2>&1; then
-    python_bin="python3.11"
-  elif command -v python3.10 >/dev/null 2>&1; then
-    python_bin="python3.10"
-  elif command -v python3 >/dev/null 2>&1; then
-    python_bin="python3"
-  else
-    cat >&2 <<'EOF'
+run_python_checks() {
+  python_bin="${PYTHON_BIN:-}"
+  if [ -z "$python_bin" ]; then
+    if [ -x "$REPO_ROOT/.venv/bin/python" ]; then
+      python_bin="$REPO_ROOT/.venv/bin/python"
+    elif command -v python3.14 >/dev/null 2>&1; then
+      python_bin="python3.14"
+    elif command -v python3.13 >/dev/null 2>&1; then
+      python_bin="python3.13"
+    elif command -v python3.12 >/dev/null 2>&1; then
+      python_bin="python3.12"
+    elif command -v python3.11 >/dev/null 2>&1; then
+      python_bin="python3.11"
+    elif command -v python3.10 >/dev/null 2>&1; then
+      python_bin="python3.10"
+    elif command -v python3 >/dev/null 2>&1; then
+      python_bin="python3"
+    else
+      cat >&2 <<'EOF'
 Python 3.10 or newer is required to run the Python package tests.
 EOF
-    exit 127
+      exit 127
+    fi
   fi
-fi
 
-run "$python_bin" -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 10) else "Python 3.10 or newer is required")'
+  run "$python_bin" -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 10) else "Python 3.10 or newer is required")'
 
-if ! command -v shellcheck >/dev/null 2>&1; then
-  cat >&2 <<'EOF'
-shellcheck is required to run the full test suite.
-Install it with your package manager, for example:
-  brew install shellcheck
-  sudo apt-get install shellcheck
-EOF
-  exit 127
-fi
-
-if ! command -v ruff >/dev/null 2>&1; then
-  cat >&2 <<EOF
+  if ! command -v ruff >/dev/null 2>&1; then
+    cat >&2 <<EOF
 ruff is required to run the full test suite.
 Install the Python development dependencies in a virtual environment, for example:
   $python_bin -m venv .venv
   . .venv/bin/activate
   python -m pip install -e '.[dev]'
 EOF
-  exit 127
-fi
+    exit 127
+  fi
 
-if ! "$python_bin" -c 'import pytest' >/dev/null 2>&1; then
-  cat >&2 <<EOF
+  if ! "$python_bin" -c 'import pytest' >/dev/null 2>&1; then
+    cat >&2 <<EOF
 pytest is required to run the full test suite.
 Install the Python development dependencies in a virtual environment, for example:
   $python_bin -m venv .venv
   . .venv/bin/activate
   python -m pip install -e '.[dev]'
 EOF
-  exit 127
+    exit 127
+  fi
+
+  run ruff check .
+
+  run "$python_bin" -m py_compile \
+    src/wud_updater/__init__.py \
+    src/wud_updater/banner.py \
+    src/wud_updater/cli.py \
+    src/wud_updater/command.py \
+    src/wud_updater/compose.py \
+    src/wud_updater/config.py \
+    src/wud_updater/db.py \
+    src/wud_updater/doctor.py \
+    src/wud_updater/docker_cli.py \
+    src/wud_updater/file_ops.py \
+    src/wud_updater/images.py \
+    src/wud_updater/init_config.py \
+    src/wud_updater/line_specs.py \
+    src/wud_updater/locks.py \
+    src/wud_updater/release_notes.py \
+    src/wud_updater/self_update.py \
+    src/wud_updater/terminal.py \
+    src/wud_updater/updates.py \
+    src/wud_updater/updater.py \
+    src/wud_updater/web.py \
+    src/wud_updater/wud_file.py \
+    tests/run-python-tests.py \
+    tests/test_python_banner.py \
+    tests/test_python_cli.py \
+    tests/test_python_config.py \
+    tests/test_python_db.py \
+    tests/test_python_doctor.py \
+    tests/test_python_docker_compose.py \
+    tests/test_python_init_config.py \
+    tests/test_python_release_notes.py \
+    tests/test_python_self_update.py \
+    tests/test_python_terminal.py \
+    tests/test_python_update_from_wud.py \
+    tests/test_python_updates_wrapper.py \
+    tests/test_python_web.py \
+    tests/test_python_webui_demo_state.py \
+    tests/test_python_wud_file_ops.py \
+    tests/test_python_wud_parsing.py \
+    webui/scripts/seed_demo_state.py
+
+  run "$python_bin" -m pytest tests/test_python_*.py
+}
+
+run_shell_checks() {
+  if ! command -v shellcheck >/dev/null 2>&1; then
+    cat >&2 <<'EOF'
+shellcheck is required to run the full test suite.
+Install it with your package manager, for example:
+  brew install shellcheck
+  sudo apt-get install shellcheck
+EOF
+    exit 127
+  fi
+
+  run bash -n \
+    entrypoint.sh \
+    install.sh \
+    bin/updates \
+    bin/docker-update-from-wud \
+    wud/http.sh \
+    wud/release-notes-to-discord.sh \
+    wud/github-release-embed.sh \
+    wud/tag-manager.sh \
+    tests/run-all.sh \
+    tests/test-docker-update-from-wud.sh \
+    tests/container-build.sh \
+    tests/e2e-docker-compose.sh \
+    tests/test-entrypoint.sh \
+    tests/test-github-release-embed.sh \
+    tests/test-release-notes-to-discord.sh \
+    tests/test-tag-manager.sh \
+    tests/test-wud-append-updates.sh \
+    tests/test-install.sh \
+    tests/test-updates-wrapper.sh \
+    tests/fakes/docker
+
+  run sh -n \
+    wud/on-update.sh \
+    wud/append-updates.sh
+
+  run shellcheck \
+    entrypoint.sh \
+    install.sh \
+    bin/updates \
+    bin/docker-update-from-wud \
+    wud/on-update.sh \
+    wud/append-updates.sh \
+    wud/http.sh \
+    wud/release-notes-to-discord.sh \
+    wud/github-release-embed.sh \
+    wud/tag-manager.sh \
+    tests/run-all.sh \
+    tests/test-docker-update-from-wud.sh \
+    tests/container-build.sh \
+    tests/e2e-docker-compose.sh \
+    tests/test-entrypoint.sh \
+    tests/test-github-release-embed.sh \
+    tests/test-release-notes-to-discord.sh \
+    tests/test-tag-manager.sh \
+    tests/test-wud-append-updates.sh \
+    tests/test-install.sh \
+    tests/test-updates-wrapper.sh \
+    tests/fakes/docker
+
+  for test_script in tests/test-*.sh; do
+    run "$test_script"
+  done
+}
+
+run_webui_checks() {
+  if command -v npm >/dev/null 2>&1 && [[ -f webui/package-lock.json ]]; then
+    run node --check webui/scripts/dev-server.mjs
+    run npm --prefix webui ci
+    run npm --prefix webui run typecheck
+    run npm --prefix webui run test
+    run npm --prefix webui run build
+  else
+    printf '==> skipping webui npm checks; npm or webui/package-lock.json not found\n'
+  fi
+}
+
+MODE="--all"
+if [ $# -gt 0 ]; then
+  MODE="$1"
 fi
 
-run bash -n \
-  entrypoint.sh \
-  install.sh \
-  bin/updates \
-  bin/docker-update-from-wud \
-  wud/http.sh \
-  wud/release-notes-to-discord.sh \
-  wud/github-release-embed.sh \
-  wud/tag-manager.sh \
-  tests/run-all.sh \
-  tests/test-docker-update-from-wud.sh \
-  tests/container-build.sh \
-  tests/e2e-docker-compose.sh \
-  tests/test-entrypoint.sh \
-  tests/test-github-release-embed.sh \
-  tests/test-release-notes-to-discord.sh \
-  tests/test-tag-manager.sh \
-  tests/test-wud-append-updates.sh \
-  tests/test-install.sh \
-  tests/test-updates-wrapper.sh \
-  tests/fakes/docker
-
-run sh -n \
-  wud/on-update.sh \
-  wud/append-updates.sh
-
-run shellcheck \
-  entrypoint.sh \
-  install.sh \
-  bin/updates \
-  bin/docker-update-from-wud \
-  wud/on-update.sh \
-  wud/append-updates.sh \
-  wud/http.sh \
-  wud/release-notes-to-discord.sh \
-  wud/github-release-embed.sh \
-  wud/tag-manager.sh \
-  tests/run-all.sh \
-  tests/test-docker-update-from-wud.sh \
-  tests/container-build.sh \
-  tests/e2e-docker-compose.sh \
-  tests/test-entrypoint.sh \
-  tests/test-github-release-embed.sh \
-  tests/test-release-notes-to-discord.sh \
-  tests/test-tag-manager.sh \
-  tests/test-wud-append-updates.sh \
-  tests/test-install.sh \
-  tests/test-updates-wrapper.sh \
-  tests/fakes/docker
-
-run ruff check .
-
-run "$python_bin" -m py_compile \
-  src/wud_updater/__init__.py \
-  src/wud_updater/banner.py \
-  src/wud_updater/cli.py \
-  src/wud_updater/command.py \
-  src/wud_updater/compose.py \
-  src/wud_updater/config.py \
-  src/wud_updater/db.py \
-  src/wud_updater/doctor.py \
-  src/wud_updater/docker_cli.py \
-  src/wud_updater/file_ops.py \
-  src/wud_updater/images.py \
-  src/wud_updater/init_config.py \
-  src/wud_updater/line_specs.py \
-  src/wud_updater/locks.py \
-  src/wud_updater/release_notes.py \
-  src/wud_updater/self_update.py \
-  src/wud_updater/terminal.py \
-  src/wud_updater/updates.py \
-  src/wud_updater/updater.py \
-  src/wud_updater/web.py \
-  src/wud_updater/wud_file.py \
-  tests/run-python-tests.py \
-  tests/test_python_banner.py \
-  tests/test_python_cli.py \
-  tests/test_python_config.py \
-  tests/test_python_db.py \
-  tests/test_python_doctor.py \
-  tests/test_python_docker_compose.py \
-  tests/test_python_init_config.py \
-  tests/test_python_release_notes.py \
-  tests/test_python_self_update.py \
-  tests/test_python_terminal.py \
-  tests/test_python_update_from_wud.py \
-  tests/test_python_updates_wrapper.py \
-  tests/test_python_web.py \
-  tests/test_python_webui_demo_state.py \
-  tests/test_python_wud_file_ops.py \
-  tests/test_python_wud_parsing.py \
-  webui/scripts/seed_demo_state.py
-
-run "$python_bin" -m pytest tests/test_python_*.py
-
-if command -v npm >/dev/null 2>&1 && [[ -f webui/package-lock.json ]]; then
-  run node --check webui/scripts/dev-server.mjs
-  run npm --prefix webui ci
-  run npm --prefix webui run typecheck
-  run npm --prefix webui run test
-  run npm --prefix webui run build
-else
-  printf '==> skipping webui npm checks; npm or webui/package-lock.json not found\n'
-fi
-
-for test_script in tests/test-*.sh; do
-  run "$test_script"
-done
+case "$MODE" in
+  --python)
+    run_python_checks
+    ;;
+  --shell)
+    run_shell_checks
+    ;;
+  --webui)
+    run_webui_checks
+    ;;
+  --all)
+    run_python_checks
+    run_shell_checks
+    run_webui_checks
+    ;;
+  *)
+    echo "Usage: $0 [--python | --shell | --webui | --all]" >&2
+    exit 1
+    ;;
+esac
