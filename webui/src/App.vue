@@ -100,6 +100,28 @@ const selfUpdateVisible = computed(
 const selfUpdateButtonDisabled = computed(
   () => webui.loading || !(webui.selfUpdate?.can_update ?? false),
 );
+const selfUpdateStrategy = computed(
+  () => webui.selfUpdate?.strategy ?? "pull_image",
+);
+const selfUpdateConfirmDisabled = computed(
+  () =>
+    selfUpdateButtonDisabled.value ||
+    (selfUpdateStrategy.value === "prepare_tag_update" &&
+      webui.selfUpdatePlan === null),
+);
+const selfUpdateActionLabel = computed(() =>
+  selfUpdateStrategy.value === "prepare_tag_update"
+    ? "Prepare tag update"
+    : "Pull image",
+);
+const selfUpdateActionTitle = computed(() => {
+  if (selfUpdateDisabledReason.value) {
+    return selfUpdateDisabledReason.value;
+  }
+  return selfUpdateStrategy.value === "prepare_tag_update"
+    ? "Review release notes and prepare tag update"
+    : "Review release notes and pull image";
+});
 const selfUpdateDisabledReason = computed(
   () => webui.selfUpdate?.disabled_reason ?? "",
 );
@@ -122,6 +144,10 @@ const selfUpdateReleasesUrl = computed(() => {
     ? `${RELEASES_URL}/tag/${latest}`
     : RELEASES_URL;
 });
+const selfUpdatePlanStack = computed(() => webui.selfUpdatePlan?.plan.stacks[0]);
+const selfUpdatePlanTagUpdates = computed(
+  () => selfUpdatePlanStack.value?.tag_updates ?? [],
+);
 const navItems = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard },
   { to: "/pending", label: "Pending", icon: ListChecks },
@@ -198,6 +224,16 @@ async function refreshCurrentView(): Promise<void> {
 async function handleLogout(): Promise<void> {
   await auth.logout();
   await router.replace({ name: "login" });
+}
+
+async function openSelfUpdateDialog(): Promise<void> {
+  selfUpdateDialogVisible.value = true;
+  if (
+    webui.selfUpdate?.strategy === "prepare_tag_update" &&
+    webui.selfUpdatePlan === null
+  ) {
+    await webui.planSelfUpdate().catch(() => undefined);
+  }
 }
 
 async function confirmSelfUpdate(): Promise<void> {
@@ -314,10 +350,10 @@ async function confirmSelfUpdate(): Promise<void> {
                 type="primary"
                 size="small"
                 :disabled="selfUpdateButtonDisabled"
-                :title="selfUpdateDisabledReason || 'Review release notes and pull image'"
-                @click="selfUpdateDialogVisible = true"
+                :title="selfUpdateActionTitle"
+                @click="openSelfUpdateDialog"
               >
-                Pull image
+                {{ selfUpdateActionLabel }}
               </n-button>
             </div>
           </section>
@@ -329,6 +365,14 @@ async function confirmSelfUpdate(): Promise<void> {
             :show-icon="false"
           >
             {{ webui.selfUpdateMessage }}
+          </n-alert>
+          <n-alert
+            v-if="webui.selfUpdateError"
+            class="self-update-message"
+            type="error"
+            :show-icon="false"
+          >
+            {{ webui.selfUpdateError }}
           </n-alert>
 
           <RouterView v-slot="routeSlot">
@@ -346,17 +390,25 @@ async function confirmSelfUpdate(): Promise<void> {
           v-model:show="selfUpdateDialogVisible"
           preset="dialog"
           title="Update WUD-Updater"
-          positive-text="Pull image"
+          :positive-text="selfUpdateActionLabel"
           negative-text="Cancel"
           :positive-button-props="{
             type: 'warning',
             loading: webui.loading,
-            disabled: selfUpdateButtonDisabled,
+            disabled: selfUpdateConfirmDisabled,
           }"
           @positive-click="confirmSelfUpdate"
         >
           <div class="self-update-modal">
-            <n-alert type="warning" :show-icon="false">
+            <n-alert
+              v-if="selfUpdateStrategy === 'prepare_tag_update'"
+              type="warning"
+              :show-icon="false"
+            >
+              This updates the Compose image tag and pulls the image. Recreate
+              the WUD-Updater container from outside the WebUI to run it.
+            </n-alert>
+            <n-alert v-else type="warning" :show-icon="false">
               This pulls the WUD-Updater image only. Recreate the container
               outside the WebUI to run the new version.
             </n-alert>
@@ -370,6 +422,42 @@ async function confirmSelfUpdate(): Promise<void> {
                 <span>Container</span>
                 <code>{{ webui.selfUpdate?.restart_container || "unavailable" }}</code>
               </div>
+            </div>
+
+            <div
+              v-if="selfUpdateStrategy === 'prepare_tag_update'"
+              class="self-update-plan"
+            >
+              <div class="self-update-notes-heading">
+                <strong>Compose tag update</strong>
+                <span v-if="webui.loading" class="self-update-disabled">
+                  Loading preview
+                </span>
+              </div>
+              <template v-if="selfUpdatePlanStack">
+                <div class="self-update-facts">
+                  <div>
+                    <span>Stack</span>
+                    <code>{{ selfUpdatePlanStack.name }}</code>
+                  </div>
+                  <div>
+                    <span>Services</span>
+                    <code>{{ selfUpdatePlanStack.services.join(", ") }}</code>
+                  </div>
+                </div>
+                <div class="self-update-tag-updates">
+                  <div
+                    v-for="item in selfUpdatePlanTagUpdates"
+                    :key="`${item.old_image}:${item.desired_tag}`"
+                  >
+                    <span>{{ item.old_image }}</span>
+                    <code>{{ item.new_image }}</code>
+                  </div>
+                </div>
+              </template>
+              <n-alert v-else type="info" :show-icon="false">
+                Generating Compose tag-update preview.
+              </n-alert>
             </div>
 
             <div class="self-update-notes-heading">

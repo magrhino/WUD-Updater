@@ -26,6 +26,8 @@ import {
   type RunSummary,
   type ServicePolicyRecord,
   type SelfUpdateApplyResponse,
+  type SelfUpdatePlanResponse,
+  type SelfUpdatePrepareResponse,
   type SelfUpdateResponse,
   type SettingsResponse,
   type ServicePolicyUpdateMode,
@@ -64,6 +66,7 @@ export const useWebuiStore = defineStore("webui", () => {
   const updateTargets = ref<UpdateTargetsResponse | null>(null);
   const releaseNotes = ref<ReleaseNotesResponse | null>(null);
   const selfUpdate = ref<SelfUpdateResponse | null>(null);
+  const selfUpdatePlan = ref<SelfUpdatePlanResponse | null>(null);
   const selfUpdateMessage = ref("");
   const selfUpdateError = ref("");
   const plan = ref<PlanResponse | null>(null);
@@ -101,33 +104,76 @@ export const useWebuiStore = defineStore("webui", () => {
     selfUpdateError.value = "";
     try {
       selfUpdate.value = await webApi.selfUpdate();
+      selfUpdatePlan.value = null;
     } catch (exc) {
       selfUpdateError.value = errorMessage(exc);
       throw exc;
     }
   }
 
-  async function applySelfUpdate(): Promise<SelfUpdateApplyResponse> {
+  async function planSelfUpdate(): Promise<SelfUpdatePlanResponse> {
+    const auth = useAuthStore();
+    selfUpdateError.value = "";
+    let response: SelfUpdatePlanResponse | null = null;
+    try {
+      await loadWithState(async () => {
+        response = await webApi.planSelfUpdate(await auth.ensureCsrf());
+        selfUpdatePlan.value = response;
+      });
+    } catch (exc) {
+      selfUpdateError.value = errorMessage(exc);
+      throw exc;
+    }
+    if (response === null) {
+      throw new Error("Self-update plan did not return a response");
+    }
+    return response;
+  }
+
+  async function applySelfUpdate(): Promise<
+    SelfUpdateApplyResponse | SelfUpdatePrepareResponse
+  > {
     const auth = useAuthStore();
     selfUpdateMessage.value = "";
     selfUpdateError.value = "";
-    let response: SelfUpdateApplyResponse | null = null;
-    await loadWithState(async () => {
-      if (selfUpdate.value === null) {
-        throw new Error("Self-update status has not been loaded");
-      }
-      response = await webApi.applySelfUpdate(
-        await auth.ensureCsrf(),
-        selfUpdate.value,
-      );
-      selfUpdateMessage.value =
-        "Image pulled. Recreate the WUD-Updater container to run the new version. Tagged deployments are recommended for predictable updates.";
-      try {
-        selfUpdate.value = await webApi.selfUpdate();
-      } catch {
-        // Keep the pull success visible even if the follow-up status check fails.
-      }
-    });
+    let response: SelfUpdateApplyResponse | SelfUpdatePrepareResponse | null = null;
+    try {
+      await loadWithState(async () => {
+        if (selfUpdate.value === null) {
+          throw new Error("Self-update status has not been loaded");
+        }
+        if (selfUpdate.value.strategy === "prepare_tag_update") {
+          const plan = selfUpdatePlan.value;
+          if (plan === null) {
+            throw new Error(
+              "Self-update tag update preview must be loaded before applying",
+            );
+          }
+          const csrfToken = await auth.ensureCsrf();
+          response = await webApi.prepareSelfUpdate(
+            csrfToken,
+            selfUpdate.value,
+            plan,
+          );
+          selfUpdateMessage.value =
+            "Tag updated and image pulled. Recreate the WUD-Updater container from outside the WebUI to run the new version. Tagged deployments are recommended for predictable updates.";
+        } else {
+          const csrfToken = await auth.ensureCsrf();
+          response = await webApi.applySelfUpdate(csrfToken, selfUpdate.value);
+          selfUpdateMessage.value =
+            "Image pulled. Recreate the WUD-Updater container to run the new version. Tagged deployments are recommended for predictable updates.";
+        }
+        try {
+          selfUpdate.value = await webApi.selfUpdate();
+          selfUpdatePlan.value = null;
+        } catch {
+          // Keep the success visible even if the follow-up status check fails.
+        }
+      });
+    } catch (exc) {
+      selfUpdateError.value = errorMessage(exc);
+      throw exc;
+    }
     if (response === null) {
       throw new Error("Self-update did not return a response");
     }
@@ -703,6 +749,7 @@ export const useWebuiStore = defineStore("webui", () => {
     pendingRemovalPlan,
     releaseNotes,
     selfUpdate,
+    selfUpdatePlan,
     selfUpdateMessage,
     selfUpdateError,
     plan,
@@ -725,6 +772,7 @@ export const useWebuiStore = defineStore("webui", () => {
     warnings,
     loadStatus,
     loadSelfUpdate,
+    planSelfUpdate,
     applySelfUpdate,
     loadSettings,
     updateManagedSettings,

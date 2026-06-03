@@ -9,8 +9,10 @@ import logging
 import os
 import re
 import secrets
+import shutil
 import sqlite3
 import sys
+import tempfile
 import time
 import urllib.error
 import urllib.request
@@ -118,11 +120,15 @@ from .release_notes import (
 )
 from .self_update import current_container_image, release_self_update_target
 from .updater import (
+    ComposeTagRewriteError,
     TagOverride,
+    TagUpdate,
     UpdaterProgressEvent,
     UpdateFromWudRunner,
     UpdaterOptions,
+    apply_compose_tag_updates,
     js_regex_escape,
+    _backup_compose,
 )
 from .file_ops import OwnerConfig
 from .wud_file import ParsedWudFile, WudTarget, parse_wud_file, remove_lines_before_run
@@ -135,6 +141,7 @@ DEFAULT_LOG_TAIL_BYTES = 262_144
 DEFAULT_JOB_LOG_TAIL_BYTES = 65_536
 SELF_UPDATE_RELEASE_NOTES_CAP = 10
 SELF_UPDATE_RELEASES_URL = "https://api.github.com/repos/magrhino/WUD-Updater/releases"
+SELF_UPDATE_PLAN_TTL_SECONDS = 30 * 60
 MAX_LOG_TAIL_BYTES = 1_048_576
 SESSION_MAX_AGE_SECONDS = 86_400
 SETUP_CLAIM_MAX_AGE_SECONDS = 86_400
@@ -195,6 +202,8 @@ DoctorCheckStatus = Literal["PASS", "WARN", "FAIL"]
 ApplyJobStatus = Literal["queued", "running", "success", "failure"]
 ApplyJobProgressStatus = Literal["running", "success", "failure", "skipped"]
 SelfUpdateStatus = Literal["available", "up_to_date", "disabled", "unavailable"]
+SelfUpdateStrategy = Literal["pull_image", "prepare_tag_update"]
+SelfUpdateAuditStatus = Literal["image_pulled", "tag_prepared", "failure"]
 SettingsEntrySource = Literal["configured", "default", "derived", "request"]
 ManagedSettingSource = Literal["configured", "default"]
 ServicePolicyUpdateMode = Literal["", "pause", "stop", "live"]
@@ -287,6 +296,19 @@ class WebApplyJob:
     finished_at: str | None = None
     error: str = ""
     progress: tuple[WebApplyJobProgressEvent, ...] = ()
+
+
+@dataclass(frozen=True)
+class WebSelfUpdatePlan:
+    plan_id: str
+    created_at: float
+    wud_file: Path
+    current_tag: str
+    latest_tag: str
+    current_image: str
+    target_spec: str
+    target_image: str
+    restart_container: str
 
 
 @dataclass
@@ -1043,6 +1065,7 @@ class SelfUpdateReleaseNote(BaseModel):
 
 class SelfUpdateResponse(BaseModel):
     status: SelfUpdateStatus
+    strategy: SelfUpdateStrategy = "pull_image"
     current_tag: str
     latest_tag: str
     current_image: str
@@ -1053,11 +1076,36 @@ class SelfUpdateResponse(BaseModel):
     release_notes_cap: int = SELF_UPDATE_RELEASE_NOTES_CAP
     can_update: bool = False
     disabled_reason: str = ""
+    external_recreate_required: bool = False
     warnings: list[str] = Field(default_factory=list)
 
 
 class SelfUpdateRequest(BaseModel):
     confirmation: Literal["pull_image"]
+    current_tag: str
+    latest_tag: str
+    target_image: str
+    restart_container: str
+
+
+class SelfUpdatePlanResponse(BaseModel):
+    strategy: Literal["prepare_tag_update"]
+    plan: PlanResponse
+    current_tag: str
+    latest_tag: str
+    current_image: str
+    target_image: str
+    restart_container: str
+    external_recreate_required: bool = True
+    warning: str = (
+        "This updates the Compose image tag and pulls the image. Recreate the "
+        "WUD-Updater container from outside the WebUI to run it."
+    )
+
+
+class SelfUpdatePrepareRequest(BaseModel):
+    confirmation: Literal["prepare_tag_update"]
+    plan_id: str = Field(min_length=1)
     current_tag: str
     latest_tag: str
     target_image: str
@@ -1071,6 +1119,16 @@ class SelfUpdateApplyResponse(BaseModel):
     latest_tag: str
     target_image: str
     container: str
+
+
+class SelfUpdatePrepareResponse(BaseModel):
+    status: Literal["tag_prepared"]
+    audit_run_id: int
+    current_tag: str
+    latest_tag: str
+    target_image: str
+    container: str
+    external_recreate_required: bool = True
 
 
 def create_app(
@@ -1095,6 +1153,7 @@ def create_app(
     app.state.web_apply_condition = Condition(app.state.web_apply_lock)
     app.state.web_apply_jobs = {}
     app.state.web_self_update_running = False
+    app.state.web_self_update_plans = {}
     app.state.web_login_throttle_lock = Lock()
     app.state.web_login_throttle = {}
     app.state.web_login_client_throttle = {}
@@ -1355,6 +1414,18 @@ def create_app(
         api_self_update,
         methods=["GET"],
         response_model=SelfUpdateResponse,
+    )
+    router.add_api_route(
+        "/self-update/plan",
+        api_plan_self_update,
+        methods=["POST"],
+        response_model=SelfUpdatePlanResponse,
+    )
+    router.add_api_route(
+        "/self-update/prepare",
+        api_prepare_self_update,
+        methods=["POST"],
+        response_model=SelfUpdatePrepareResponse,
     )
     router.add_api_route(
         "/self-update",
@@ -2315,6 +2386,56 @@ def api_self_update(request: Request) -> SelfUpdateResponse:
     return _self_update_response(_settings(request))
 
 
+def api_plan_self_update(request: Request) -> SelfUpdatePlanResponse:
+    settings = _settings(request)
+    if not settings.mutations_enabled:
+        raise HTTPException(status_code=403, detail="mutations are disabled")
+    active_error = _active_mutation_error(request)
+    if active_error:
+        raise HTTPException(status_code=409, detail=active_error)
+
+    status = _self_update_response(settings)
+    if not status.can_update:
+        detail = status.disabled_reason or "self-update is not available"
+        raise HTTPException(status_code=409, detail=detail)
+    if status.strategy != "prepare_tag_update":
+        raise HTTPException(
+            status_code=409,
+            detail="self-update target does not require tag update preparation",
+        )
+
+    try:
+        plan, cached = _build_self_update_tag_plan(settings, status)
+    except PlanInputError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except OSError as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=_safe_exception_detail(
+                settings,
+                "could not create self-update tag plan",
+                exc,
+            ),
+        ) from exc
+
+    plan_response = _plan_response(plan, settings)
+    try:
+        _validate_self_update_prepare_plan(plan_response)
+    except HTTPException:
+        _delete_self_update_plan_file(cached)
+        raise
+    _cache_self_update_plan(request.app.state, cached)
+    return SelfUpdatePlanResponse(
+        strategy="prepare_tag_update",
+        plan=plan_response,
+        current_tag=status.current_tag,
+        latest_tag=status.latest_tag,
+        current_image=status.current_image,
+        target_image=status.target_image,
+        restart_container=status.restart_container,
+    )
+
+
 def api_apply_self_update(
     payload: SelfUpdateRequest,
     request: Request,
@@ -2332,6 +2453,11 @@ def api_apply_self_update(
         if not status.can_update:
             detail = status.disabled_reason or "self-update is not available"
             raise HTTPException(status_code=409, detail=detail)
+        if status.strategy != "pull_image":
+            raise HTTPException(
+                status_code=409,
+                detail="self-update target requires tag update preparation",
+            )
         if _self_update_confirmation_stale(payload, status):
             raise HTTPException(status_code=409, detail="self-update target is stale")
         docker = DockerCli(runner=CommandRunner(env=settings.command_env))
@@ -2410,6 +2536,134 @@ def api_apply_self_update(
         latest_tag=status.latest_tag,
         target_image=status.target_image,
         container=status.restart_container,
+    )
+
+
+def api_prepare_self_update(
+    payload: SelfUpdatePrepareRequest,
+    request: Request,
+) -> SelfUpdatePrepareResponse:
+    _ = payload.confirmation
+    settings = _settings(request)
+    if not settings.mutations_enabled:
+        raise HTTPException(status_code=403, detail="mutations are disabled")
+    reservation_error = _reserve_self_update(request.app.state)
+    if reservation_error:
+        raise HTTPException(status_code=409, detail=reservation_error)
+
+    audit_run_id: int | None = None
+    status: SelfUpdateResponse | None = None
+    try:
+        status = _self_update_response(settings)
+        if not status.can_update:
+            detail = status.disabled_reason or "self-update is not available"
+            raise HTTPException(status_code=409, detail=detail)
+        if status.strategy != "prepare_tag_update":
+            raise HTTPException(
+                status_code=409,
+                detail="self-update target does not require tag update preparation",
+            )
+        if _self_update_confirmation_stale(payload, status):
+            raise HTTPException(status_code=409, detail="self-update target is stale")
+
+        cached = _require_self_update_cached_plan(
+            request.app.state,
+            payload.plan_id,
+        )
+        if _self_update_cached_plan_stale(cached, status):
+            raise HTTPException(status_code=409, detail="self-update plan is stale")
+        try:
+            plan = _rebuild_self_update_cached_plan(settings, cached)
+        except (PlanInputError, PlanFileMissing, OSError) as exc:
+            raise HTTPException(
+                status_code=409,
+                detail="self-update plan is stale",
+            ) from exc
+        if plan.plan_id != payload.plan_id:
+            raise HTTPException(status_code=409, detail="self-update plan is stale")
+        plan_response = _plan_response(plan, settings)
+        _validate_self_update_prepare_plan(plan_response)
+
+        docker = DockerCli(runner=CommandRunner(env=settings.command_env))
+        try:
+            container_id = docker.container_id(status.restart_container)
+        except CommandError as exc:
+            raise HTTPException(
+                status_code=500,
+                detail=_safe_exception_detail(
+                    settings,
+                    "could not inspect restart container",
+                    exc,
+                ),
+            ) from exc
+        if not container_id:
+            raise HTTPException(
+                status_code=500,
+                detail="could not inspect restart container",
+            )
+
+        try:
+            with connect_db(settings.config.db_path) as conn:
+                init_db(conn)
+                with _immediate_transaction(conn):
+                    audit_run_id = _insert_self_update_audit(
+                        conn,
+                        settings,
+                        request,
+                        status=status,
+                    )
+        except (OSError, sqlite3.Error, DatabaseError) as exc:
+            raise HTTPException(
+                status_code=500,
+                detail=_safe_exception_detail(
+                    settings,
+                    "could not record self-update audit",
+                    exc,
+                ),
+            ) from exc
+
+        try:
+            metadata = _prepare_self_update_tag_update(settings, plan_response)
+        except (CommandError, ComposeTagRewriteError, OSError, RuntimeError) as exc:
+            detail = _redact_sensitive_text(settings, str(exc))
+            LOGGER.error(
+                "WebUI self-update tag prepare failed for %s -> %s: %s",
+                status.current_image,
+                status.target_image,
+                detail,
+            )
+            _safe_update_self_update_audit(
+                settings,
+                audit_run_id,
+                status="failure",
+                error=detail,
+            )
+            raise HTTPException(
+                status_code=500,
+                detail=_safe_exception_detail(
+                    settings,
+                    "could not prepare self-update tag update",
+                    exc,
+                ),
+            ) from exc
+        _safe_update_self_update_audit(
+            settings,
+            audit_run_id,
+            status="tag_prepared",
+            metadata_extra=metadata,
+        )
+    finally:
+        _release_self_update(request.app.state)
+        _remove_self_update_cached_plan(request.app.state, payload.plan_id)
+
+    return SelfUpdatePrepareResponse(
+        status="tag_prepared",
+        audit_run_id=audit_run_id,
+        current_tag=status.current_tag,
+        latest_tag=status.latest_tag,
+        target_image=status.target_image,
+        container=status.restart_container,
+        external_recreate_required=True,
     )
 
 
@@ -4400,6 +4654,170 @@ def _build_web_plan(
     )
 
 
+def _build_self_update_tag_plan(
+    settings: WebSettings,
+    status: SelfUpdateResponse,
+) -> tuple[DryRunPlan, WebSelfUpdatePlan]:
+    target_spec = release_self_update_target(
+        status.current_image,
+        status.current_tag,
+        status.latest_tag,
+    )
+    if not _self_update_requires_tag_rewrite(target_spec):
+        raise PlanInputError("self-update target does not require a tag update")
+    wud_file = _write_self_update_tag_plan_file(settings, target_spec)
+    try:
+        plan = _build_self_update_plan_from_file(settings, wud_file)
+    except Exception:
+        _delete_self_update_plan_file_path(wud_file)
+        raise
+    cached = WebSelfUpdatePlan(
+        plan_id=plan.plan_id,
+        created_at=time.monotonic(),
+        wud_file=wud_file,
+        current_tag=status.current_tag,
+        latest_tag=status.latest_tag,
+        current_image=status.current_image,
+        target_spec=target_spec,
+        target_image=status.target_image,
+        restart_container=status.restart_container,
+    )
+    return plan, cached
+
+
+def _rebuild_self_update_cached_plan(
+    settings: WebSettings,
+    cached: WebSelfUpdatePlan,
+) -> DryRunPlan:
+    if not cached.wud_file.is_file():
+        raise PlanFileMissing(str(cached.wud_file))
+    return _build_self_update_plan_from_file(settings, cached.wud_file)
+
+
+def _build_self_update_plan_from_file(
+    settings: WebSettings,
+    wud_file: Path,
+) -> DryRunPlan:
+    config = replace(_effective_config(settings), wud_out_file=wud_file)
+    return build_dry_run_plan(
+        config,
+        line_numbers=(1,),
+        allow_tag_updates=True,
+        tag_overrides=(),
+        host_docker_base=settings.host_docker_base,
+        environ=settings.command_env,
+    )
+
+
+def _write_self_update_tag_plan_file(settings: WebSettings, target_spec: str) -> Path:
+    parent = settings.config.wud_out_file.parent
+    parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp_name = tempfile.mkstemp(
+        prefix=".self-update-plan.",
+        suffix=".todo",
+        dir=str(parent),
+    )
+    path = Path(tmp_name)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8", newline="") as file:
+            file.write(f"{target_spec}\n")
+    except Exception:
+        _delete_self_update_plan_file_path(path)
+        raise
+    return path
+
+
+def _validate_self_update_prepare_plan(plan: PlanResponse) -> None:
+    if plan.status != "ready" or not plan.can_apply:
+        detail = "self-update tag update plan is not ready"
+        for issue in plan.issues:
+            if issue.severity == "error":
+                detail = issue.message
+                break
+        else:
+            if plan.skipped:
+                detail = plan.skipped[0].reason
+        raise HTTPException(status_code=409, detail=detail)
+    if len(plan.stacks) != 1:
+        raise HTTPException(
+            status_code=409,
+            detail="self-update tag update must match exactly one Compose stack",
+        )
+    stack = plan.stacks[0]
+    if not stack.tag_updates:
+        raise HTTPException(
+            status_code=409,
+            detail="self-update tag update plan has no Compose tag update",
+        )
+    if not stack.services:
+        raise HTTPException(
+            status_code=409,
+            detail="self-update tag update must match at least one Compose service",
+        )
+
+
+def _prepare_self_update_tag_update(
+    settings: WebSettings,
+    plan: PlanResponse,
+) -> dict[str, Any]:
+    _validate_self_update_prepare_plan(plan)
+    stack = plan.stacks[0]
+    compose_path = Path(stack.directory) / stack.compose_file
+    updates = tuple(
+        TagUpdate(
+            old_image=item.old_image,
+            desired_tag=item.desired_tag,
+            new_image=item.new_image,
+            services=tuple(item.services),
+        )
+        for item in stack.tag_updates
+    )
+    if not updates:
+        raise RuntimeError("self-update tag update plan has no Compose tag update")
+
+    backup = _backup_compose(compose_path)
+    restore_error = ""
+    try:
+        applied = apply_compose_tag_updates(compose_path, updates)
+        if not applied:
+            raise RuntimeError("no Compose image lines were rewritten")
+        compose = ComposeCli(runner=CommandRunner(env=settings.command_env))
+        pull_services = tuple(stack.pull_services) or tuple(stack.services) or None
+        compose.pull(
+            stack.directory,
+            stack.compose_file,
+            pull_services,
+            project_directory=stack.project_directory or None,
+        )
+    except Exception as exc:
+        try:
+            shutil.copy2(backup, compose_path)
+        except OSError as restore_exc:
+            restore_error = f"; compose rollback failed: {restore_exc}"
+        raise RuntimeError(f"{exc}{restore_error}") from exc
+    finally:
+        _delete_self_update_plan_file_path(backup)
+
+    return {
+        "strategy": "prepare_tag_update",
+        "external_recreate_required": True,
+        "stack": stack.name,
+        "compose_file": stack.compose_file,
+        "services": list(stack.services),
+        "pull_services": list(stack.pull_services),
+        "tag_updates": [
+            {
+                "old_image": item.old_image,
+                "desired_tag": item.desired_tag,
+                "new_image": item.new_image,
+                "services": list(item.services),
+                "replacements": item.replacements,
+            }
+            for item in applied
+        ],
+    }
+
+
 def _tag_overrides_from_payload(
     payload: PlanRequest | ApplyPlanRequest,
 ) -> tuple[TagOverride, ...]:
@@ -4546,6 +4964,76 @@ def _release_self_update(state: Any) -> None:
     apply_lock: Lock = state.web_apply_lock
     with apply_lock:
         state.web_self_update_running = False
+
+
+def _cache_self_update_plan(state: Any, cached: WebSelfUpdatePlan) -> None:
+    apply_lock: Lock = state.web_apply_lock
+    with apply_lock:
+        _prune_self_update_plan_cache_unlocked(state)
+        plans: dict[str, WebSelfUpdatePlan] = state.web_self_update_plans
+        plans[cached.plan_id] = cached
+
+
+def _require_self_update_cached_plan(
+    state: Any,
+    plan_id: str,
+) -> WebSelfUpdatePlan:
+    apply_lock: Lock = state.web_apply_lock
+    with apply_lock:
+        _prune_self_update_plan_cache_unlocked(state)
+        plans: dict[str, WebSelfUpdatePlan] = state.web_self_update_plans
+        cached = plans.get(plan_id)
+    if cached is None:
+        raise HTTPException(status_code=409, detail="self-update plan is stale")
+    return cached
+
+
+def _remove_self_update_cached_plan(state: Any, plan_id: str) -> None:
+    apply_lock: Lock = state.web_apply_lock
+    with apply_lock:
+        plans: dict[str, WebSelfUpdatePlan] = state.web_self_update_plans
+        cached = plans.pop(plan_id, None)
+    if cached is not None:
+        _delete_self_update_plan_file(cached)
+
+
+def _prune_self_update_plan_cache_unlocked(state: Any) -> None:
+    now = time.monotonic()
+    plans: dict[str, WebSelfUpdatePlan] = state.web_self_update_plans
+    expired = [
+        plan_id
+        for plan_id, cached in plans.items()
+        if now - cached.created_at > SELF_UPDATE_PLAN_TTL_SECONDS
+    ]
+    for plan_id in expired:
+        cached = plans.pop(plan_id)
+        _delete_self_update_plan_file(cached)
+
+
+def _delete_self_update_plan_file(cached: WebSelfUpdatePlan) -> None:
+    _delete_self_update_plan_file_path(cached.wud_file)
+
+
+def _delete_self_update_plan_file_path(path: Path) -> None:
+    try:
+        path.unlink()
+    except FileNotFoundError:
+        pass
+    except OSError:
+        LOGGER.warning("failed to remove self-update temporary plan file: %s", path)
+
+
+def _self_update_cached_plan_stale(
+    cached: WebSelfUpdatePlan,
+    status: SelfUpdateResponse,
+) -> bool:
+    return (
+        cached.current_tag != status.current_tag
+        or cached.latest_tag != status.latest_tag
+        or cached.current_image != status.current_image
+        or cached.target_image != status.target_image
+        or cached.restart_container != status.restart_container
+    )
 
 
 def _require_apply_job(job_id: str, request: Request) -> WebApplyJob:
@@ -5785,6 +6273,7 @@ def _self_update_response(settings: WebSettings) -> SelfUpdateResponse:
     if not release_check_enabled(env):
         return SelfUpdateResponse(
             status="disabled",
+            strategy="pull_image",
             current_tag=local_tag,
             latest_tag="",
             current_image=current_image,
@@ -5797,6 +6286,7 @@ def _self_update_response(settings: WebSettings) -> SelfUpdateResponse:
     if latest_tag is None:
         return SelfUpdateResponse(
             status="unavailable",
+            strategy="pull_image",
             current_tag=local_tag,
             latest_tag="",
             current_image=current_image,
@@ -5809,6 +6299,7 @@ def _self_update_response(settings: WebSettings) -> SelfUpdateResponse:
     if not release_update_available(local_tag, latest_tag):
         return SelfUpdateResponse(
             status="up_to_date",
+            strategy="pull_image",
             current_tag=local_tag,
             latest_tag=latest_tag,
             current_image=current_image,
@@ -5818,6 +6309,11 @@ def _self_update_response(settings: WebSettings) -> SelfUpdateResponse:
 
     target_spec = release_self_update_target(current_image, local_tag, latest_tag)
     target_image = _self_update_pull_image(target_spec)
+    strategy: SelfUpdateStrategy = (
+        "prepare_tag_update"
+        if _self_update_requires_tag_rewrite(target_spec)
+        else "pull_image"
+    )
     release_notes, truncated, note_warnings = _fetch_self_update_release_notes(
         local_tag,
         latest_tag,
@@ -5833,6 +6329,7 @@ def _self_update_response(settings: WebSettings) -> SelfUpdateResponse:
     )
     return SelfUpdateResponse(
         status="available",
+        strategy=strategy,
         current_tag=local_tag,
         latest_tag=latest_tag,
         current_image=current_image,
@@ -5843,6 +6340,7 @@ def _self_update_response(settings: WebSettings) -> SelfUpdateResponse:
         release_notes_cap=SELF_UPDATE_RELEASE_NOTES_CAP,
         can_update=disabled_reason == "",
         disabled_reason=disabled_reason,
+        external_recreate_required=strategy == "prepare_tag_update",
         warnings=warnings,
     )
 
@@ -5884,6 +6382,7 @@ def _demo_self_update_response(
     ]
     return SelfUpdateResponse(
         status="available",
+        strategy="pull_image",
         current_tag=demo_current_tag,
         latest_tag=latest_tag,
         current_image=current_image,
@@ -5894,6 +6393,7 @@ def _demo_self_update_response(
         release_notes_cap=SELF_UPDATE_RELEASE_NOTES_CAP,
         can_update=disabled_reason == "",
         disabled_reason=disabled_reason,
+        external_recreate_required=False,
     )
 
 
@@ -5913,12 +6413,6 @@ def _self_update_disabled_reason(
         return "container restart target is not configured"
     if not target_image:
         return "self-update image target could not be determined"
-    if _self_update_requires_tag_rewrite(target_spec):
-        return (
-            "Pinned image tags need the CLI updater path or an external Compose "
-            "tag update and container recreate. The WebUI only pulls floating "
-            "self-update tags."
-        )
     try:
         _validate_restart_container_target(restart_container)
     except WebConfigError as exc:
@@ -5927,7 +6421,7 @@ def _self_update_disabled_reason(
 
 
 def _self_update_confirmation_stale(
-    payload: SelfUpdateRequest,
+    payload: SelfUpdateRequest | SelfUpdatePrepareRequest,
     status: SelfUpdateResponse,
 ) -> bool:
     return (
@@ -6286,6 +6780,8 @@ def _insert_self_update_audit(
         "latest_tag": status.latest_tag,
         "current_image": status.current_image,
         "target_image": status.target_image,
+        "strategy": status.strategy,
+        "external_recreate_required": status.external_recreate_required,
         "target": {
             "container": status.restart_container,
             "image": status.target_image,
@@ -6429,8 +6925,9 @@ def _safe_update_self_update_audit(
     settings: WebSettings,
     run_id: int,
     *,
-    status: Literal["image_pulled", "failure"],
+    status: SelfUpdateAuditStatus,
     error: str = "",
+    metadata_extra: Mapping[str, Any] | None = None,
 ) -> None:
     try:
         _update_self_update_audit(
@@ -6438,6 +6935,7 @@ def _safe_update_self_update_audit(
             run_id,
             status=status,
             error=error,
+            metadata_extra=metadata_extra,
         )
     except (OSError, sqlite3.Error, DatabaseError):
         LOGGER.exception("failed to update WebUI self-update audit")
@@ -6447,8 +6945,9 @@ def _update_self_update_audit(
     settings: WebSettings,
     run_id: int,
     *,
-    status: Literal["image_pulled", "failure"],
+    status: SelfUpdateAuditStatus,
     error: str = "",
+    metadata_extra: Mapping[str, Any] | None = None,
 ) -> None:
     now = utc_timestamp()
     with connect_db(settings.config.db_path) as conn:
@@ -6456,6 +6955,8 @@ def _update_self_update_audit(
         with conn:
             metadata = _self_update_audit_metadata(conn, run_id)
             metadata["status"] = status
+            if metadata_extra:
+                metadata.update(metadata_extra)
             if error:
                 metadata["error"] = error
             else:

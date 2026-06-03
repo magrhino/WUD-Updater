@@ -636,6 +636,7 @@ export type SelfUpdateStatus =
   | "up_to_date"
   | "disabled"
   | "unavailable";
+export type SelfUpdateStrategy = "pull_image" | "prepare_tag_update";
 
 export interface SelfUpdateReleaseNote {
   tag: string;
@@ -650,6 +651,7 @@ export interface SelfUpdateReleaseNote {
 
 export interface SelfUpdateResponse {
   status: SelfUpdateStatus;
+  strategy: SelfUpdateStrategy;
   current_tag: string;
   latest_tag: string;
   current_image: string;
@@ -660,6 +662,7 @@ export interface SelfUpdateResponse {
   release_notes_cap: number;
   can_update: boolean;
   disabled_reason: string;
+  external_recreate_required: boolean;
   warnings: string[];
 }
 
@@ -672,8 +675,39 @@ export interface SelfUpdateApplyResponse {
   container: string;
 }
 
+export interface SelfUpdatePlanResponse {
+  strategy: "prepare_tag_update";
+  plan: PlanResponse;
+  current_tag: string;
+  latest_tag: string;
+  current_image: string;
+  target_image: string;
+  restart_container: string;
+  external_recreate_required: boolean;
+  warning: string;
+}
+
+export interface SelfUpdatePrepareResponse {
+  status: "tag_prepared";
+  audit_run_id: number;
+  current_tag: string;
+  latest_tag: string;
+  target_image: string;
+  container: string;
+  external_recreate_required: boolean;
+}
+
 export interface SelfUpdateRequest {
   confirmation: "pull_image";
+  current_tag: string;
+  latest_tag: string;
+  target_image: string;
+  restart_container: string;
+}
+
+export interface SelfUpdatePrepareRequest {
+  confirmation: "prepare_tag_update";
+  plan_id: string;
   current_tag: string;
   latest_tag: string;
   target_image: string;
@@ -905,6 +939,11 @@ const liveWebApi = {
       body: JSON.stringify(operation),
     }),
   selfUpdate: () => apiRequest<SelfUpdateResponse>("/self-update"),
+  planSelfUpdate: (csrfToken: string) =>
+    apiRequest<SelfUpdatePlanResponse>("/self-update/plan", {
+      method: "POST",
+      headers: { "x-wud-csrf-token": csrfToken },
+    }),
   applySelfUpdate: (csrfToken: string, update: SelfUpdateResponse) =>
     apiRequest<SelfUpdateApplyResponse>("/self-update", {
       method: "POST",
@@ -916,6 +955,23 @@ const liveWebApi = {
         target_image: update.target_image,
         restart_container: update.restart_container,
       } satisfies SelfUpdateRequest),
+    }),
+  prepareSelfUpdate: (
+    csrfToken: string,
+    update: SelfUpdateResponse,
+    plan: SelfUpdatePlanResponse,
+  ) =>
+    apiRequest<SelfUpdatePrepareResponse>("/self-update/prepare", {
+      method: "POST",
+      headers: { "x-wud-csrf-token": csrfToken },
+      body: JSON.stringify({
+        confirmation: "prepare_tag_update",
+        plan_id: plan.plan.plan_id,
+        current_tag: update.current_tag,
+        latest_tag: update.latest_tag,
+        target_image: update.target_image,
+        restart_container: update.restart_container,
+      } satisfies SelfUpdatePrepareRequest),
     }),
   restartContainer: (csrfToken: string) =>
     apiRequest<ContainerRestartResponse>("/container/restart", {
