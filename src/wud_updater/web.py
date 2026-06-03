@@ -1841,11 +1841,14 @@ def api_diagnostics_support_bundle(request: Request) -> DiagnosticsSupportBundle
 
     log_tail = None
     if last_run and last_run.log_file:
-        log_path = _safe_log_path(settings, last_run.log_file)
-        if log_path is None:
-            log_tail = LogTail(exists=False, content="", truncated=False)
-        else:
-            log_tail = _read_log_tail(log_path, DEFAULT_JOB_LOG_TAIL_BYTES)
+        try:
+            log_path = _safe_log_path(settings, last_run.log_file)
+            if log_path is None:
+                log_tail = LogTail(exists=False, content="", truncated=False)
+            else:
+                log_tail = _read_log_tail(log_path, DEFAULT_JOB_LOG_TAIL_BYTES)
+        except HTTPException as exc:
+            diagnostics_warnings.append(f"log tail unavailable: {exc.detail}")
 
     bundle = DiagnosticsSupportBundleResponse(
         wud_updater_version=version,

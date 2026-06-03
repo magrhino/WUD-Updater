@@ -6357,7 +6357,7 @@ def test_diagnostics_support_bundle_returns_semantically_redacted_payload(
     assert body["log_tail"]["exists"] is True
 
 
-def test_diagnostics_support_bundle_rejects_log_file_outside_configured_dir(
+def test_diagnostics_support_bundle_warns_for_log_file_outside_configured_dir(
     tmp_path: Path,
 ) -> None:
     outside = tmp_path / "outside.log"
@@ -6366,9 +6366,13 @@ def test_diagnostics_support_bundle_rejects_log_file_outside_configured_dir(
     client = _client(tmp_path, {"WUD_WEB_DEV_NO_AUTH": "true"})
 
     response = client.get("/api/v1/diagnostics/support-bundle")
+    body = response.json()
 
-    assert response.status_code == 403
-    assert response.json()["detail"] == "log file is outside WUD_LOG_DIR"
+    assert response.status_code == 200
+    assert body["log_tail"] is None
+    assert body["diagnostics_warnings"] == [
+        "log tail unavailable: log file is outside WUD_LOG_DIR"
+    ]
 
 
 def test_diagnostics_support_bundle_reports_last_run_metadata_errors(
