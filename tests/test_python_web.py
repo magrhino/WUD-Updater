@@ -110,11 +110,11 @@ def _self_update_payload(
     *,
     current_tag: str = "v0.24.2",
     latest_tag: str = "v0.25.0",
-    target_image: str = "ghcr.io/magrhino/wud-updater:v0.25.0",
+    target_image: str = "ghcr.io/magrhino/wud-updater:latest",
     restart_container: str = "wud-updater",
 ) -> dict[str, str]:
     return {
-        "confirmation": "pull_image_and_restart",
+        "confirmation": "pull_image",
         "current_tag": current_tag,
         "latest_tag": latest_tag,
         "target_image": target_image,
@@ -3274,11 +3274,44 @@ def test_self_update_get_can_use_local_demo_fixture(tmp_path: Path) -> None:
     assert body["status"] == "available"
     assert body["current_tag"] == "v0.25.0"
     assert body["latest_tag"] == "v0.26.0"
-    assert body["target_image"] == "ghcr.io/magrhino/wud-updater:v0.26.0"
+    assert body["target_image"] == "ghcr.io/magrhino/wud-updater:latest"
     assert body["restart_container"] == "demo-wud-updater"
     assert body["can_update"] is True
     assert body["release_notes_truncated"] is True
     assert len(body["release_notes"]) == 10
+
+
+def test_self_update_get_disables_pinned_tag_rewrite_targets(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(web_module, "current_tag", lambda: "v0.24.2")
+    monkeypatch.setattr(web_module, "fetch_latest_release_tag", lambda: "v0.25.0")
+    monkeypatch.setattr(
+        web_module,
+        "current_container_image",
+        lambda _env: "ghcr.io/magrhino/wud-updater:v0.24.2",
+    )
+    monkeypatch.setattr(
+        web_module,
+        "_fetch_self_update_release_notes",
+        lambda *_args, **_kwargs: ([], False, []),
+    )
+    response = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+            "WUD_WEB_RESTART_CONTAINER": "wud-updater",
+        },
+    ).get("/api/v1/self-update")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "available"
+    assert body["target_image"] == "ghcr.io/magrhino/wud-updater:v0.25.0"
+    assert body["can_update"] is False
+    assert "Pinned image tags need the CLI updater path" in body["disabled_reason"]
 
 
 def test_self_update_release_notes_are_between_versions_and_capped(
@@ -3391,6 +3424,11 @@ def test_self_update_endpoint_rejects_stale_confirmation(
     monkeypatch.setattr(web_module, "fetch_latest_release_tag", lambda: "v0.25.0")
     monkeypatch.setattr(
         web_module,
+        "current_container_image",
+        lambda _env: "ghcr.io/magrhino/wud-updater:latest",
+    )
+    monkeypatch.setattr(
+        web_module,
         "_fetch_self_update_release_notes",
         lambda *_args, **_kwargs: ([], False, []),
     )
@@ -3415,13 +3453,18 @@ def test_self_update_endpoint_rejects_stale_confirmation(
     assert _fake_docker_calls(fake_root) == ""
 
 
-def test_self_update_endpoint_pulls_image_restarts_container_and_audits(
+def test_self_update_endpoint_pulls_image_and_audits(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
     fake_env, fake_root = _fake_docker_env(tmp_path)
     monkeypatch.setattr(web_module, "current_tag", lambda: "v0.24.2")
     monkeypatch.setattr(web_module, "fetch_latest_release_tag", lambda: "v0.25.0")
+    monkeypatch.setattr(
+        web_module,
+        "current_container_image",
+        lambda _env: "ghcr.io/magrhino/wud-updater:latest",
+    )
     monkeypatch.setattr(
         web_module,
         "_fetch_self_update_release_notes",
@@ -3447,13 +3490,14 @@ def test_self_update_endpoint_pulls_image_restarts_container_and_audits(
         headers=_csrf_headers(client),
     )
 
-    assert response.status_code == 202
+    assert response.status_code == 200
     body = response.json()
-    assert body["target_image"] == "ghcr.io/magrhino/wud-updater:v0.25.0"
+    assert body["status"] == "image_pulled"
+    assert body["target_image"] == "ghcr.io/magrhino/wud-updater:latest"
     assert body["container"] == "wud-updater"
     calls = _fake_docker_calls(fake_root)
-    assert "pull ghcr.io/magrhino/wud-updater:v0.25.0" in calls
-    assert "restart --time 10 wud-updater" in calls
+    assert "pull ghcr.io/magrhino/wud-updater:latest" in calls
+    assert "restart --time 10 wud-updater" not in calls
     assert client.app.state.web_self_update_running is False
 
     with connect_db(tmp_path / "state" / "wud.sqlite") as conn:
@@ -3466,16 +3510,17 @@ def test_self_update_endpoint_pulls_image_restarts_container_and_audits(
             (body["audit_run_id"],),
         ).fetchone()
     assert row["mode"] == "web-self-update"
-    assert row["status"] == "success"
+    assert row["status"] == "image_pulled"
     assert row["finished_at"]
-    assert event["status"] == "success"
+    assert event["status"] == "image_pulled"
     metadata = json.loads(row["metadata_json"])
     assert metadata["operation"] == "self_update"
     assert metadata["current_tag"] == "v0.24.2"
     assert metadata["latest_tag"] == "v0.25.0"
+    assert metadata["status"] == "image_pulled"
     assert metadata["target"] == {
         "container": "wud-updater",
-        "image": "ghcr.io/magrhino/wud-updater:v0.25.0",
+        "image": "ghcr.io/magrhino/wud-updater:latest",
     }
 
 
@@ -3486,6 +3531,11 @@ def test_self_update_endpoint_inspects_restart_container_before_pull(
     fake_env, fake_root = _fake_docker_env(tmp_path)
     monkeypatch.setattr(web_module, "current_tag", lambda: "v0.24.2")
     monkeypatch.setattr(web_module, "fetch_latest_release_tag", lambda: "v0.25.0")
+    monkeypatch.setattr(
+        web_module,
+        "current_container_image",
+        lambda _env: "ghcr.io/magrhino/wud-updater:latest",
+    )
     monkeypatch.setattr(
         web_module,
         "_fetch_self_update_release_notes",
@@ -3511,7 +3561,7 @@ def test_self_update_endpoint_inspects_restart_container_before_pull(
     assert response.json()["detail"].startswith("could not inspect restart container")
     calls = _fake_docker_calls(fake_root)
     assert "inspect missing-wud-updater" in calls
-    assert "pull ghcr.io/magrhino/wud-updater:v0.25.0" not in calls
+    assert "pull ghcr.io/magrhino/wud-updater:latest" not in calls
     assert client.app.state.web_self_update_running is False
     try:
         with connect_db(tmp_path / "state" / "wud.sqlite") as conn:
@@ -3533,6 +3583,11 @@ def test_self_update_endpoint_marks_audit_failed_when_pull_fails(
     (fake_root / "pull_fail").write_text("pull failed\n", encoding="utf-8")
     monkeypatch.setattr(web_module, "current_tag", lambda: "v0.24.2")
     monkeypatch.setattr(web_module, "fetch_latest_release_tag", lambda: "v0.25.0")
+    monkeypatch.setattr(
+        web_module,
+        "current_container_image",
+        lambda _env: "ghcr.io/magrhino/wud-updater:latest",
+    )
     monkeypatch.setattr(
         web_module,
         "_fetch_self_update_release_notes",
@@ -3558,77 +3613,22 @@ def test_self_update_endpoint_marks_audit_failed_when_pull_fails(
         headers=_csrf_headers(client),
     )
 
-    assert response.status_code == 202
-    audit_run_id = response.json()["audit_run_id"]
+    assert response.status_code == 500
+    assert response.json()["detail"].startswith("could not pull self-update image")
     calls = _fake_docker_calls(fake_root)
-    assert "pull ghcr.io/magrhino/wud-updater:v0.25.0" in calls
+    assert "pull ghcr.io/magrhino/wud-updater:latest" in calls
     assert "restart --time 10 wud-updater" not in calls
     assert client.app.state.web_self_update_running is False
 
     with connect_db(tmp_path / "state" / "wud.sqlite") as conn:
         row = conn.execute(
-            "SELECT status, finished_at, metadata_json FROM update_runs WHERE id = ?",
-            (audit_run_id,),
+            "SELECT status, finished_at, metadata_json FROM update_runs WHERE mode = 'web-self-update'",
         ).fetchone()
     assert row["status"] == "failure"
     assert row["finished_at"]
     metadata = json.loads(row["metadata_json"])
     assert metadata["status"] == "failure"
-    assert "docker pull ghcr.io/magrhino/wud-updater:v0.25.0" in metadata["error"]
-
-
-def test_self_update_task_marks_audit_success_before_restart(
-    tmp_path: Path,
-    monkeypatch,
-) -> None:
-    client = _client(tmp_path, {"WUD_WEB_DEV_NO_AUTH": "true"})
-    settings = client.app.state.web_settings
-    state = SimpleNamespace(web_apply_lock=Lock(), web_self_update_running=True)
-    docker_calls: list[str] = []
-    audit_updates: list[tuple[str, str]] = []
-
-    class FakeDocker:
-        def __init__(self, **_kwargs: object) -> None:
-            pass
-
-        def pull_image(self, image: str) -> None:
-            docker_calls.append(f"pull {image}")
-
-        def restart_container(self, container: str, *, timeout_seconds: int) -> None:
-            docker_calls.append(f"restart {container} {timeout_seconds}")
-            raise SystemExit(0)
-
-    def audit_update(
-        _settings: web_module.WebSettings,
-        _run_id: int,
-        *,
-        status: str,
-        error: str = "",
-    ) -> None:
-        audit_updates.append((status, error))
-
-    monkeypatch.setattr(web_module, "DockerCli", FakeDocker)
-    monkeypatch.setattr(web_module, "_safe_update_self_update_audit", audit_update)
-
-    try:
-        web_module._self_update_task(
-            state,
-            settings,
-            "ghcr.io/magrhino/wud-updater:v0.25.0",
-            "wud-updater",
-            77,
-        )
-    except SystemExit:
-        pass
-    else:
-        raise AssertionError("restart should simulate the WebUI process exiting")
-
-    assert docker_calls == [
-        "pull ghcr.io/magrhino/wud-updater:v0.25.0",
-        "restart wud-updater 10",
-    ]
-    assert audit_updates == [("success", "")]
-    assert state.web_self_update_running is False
+    assert "docker pull ghcr.io/magrhino/wud-updater:latest" in metadata["error"]
 
 
 def test_self_update_endpoint_rejects_active_self_update(

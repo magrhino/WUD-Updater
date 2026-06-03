@@ -219,8 +219,8 @@ export function selfUpdateResponse(
     status: "available",
     current_tag: "v0.24.2",
     latest_tag: "v0.25.0",
-    current_image: "ghcr.io/magrhino/wud-updater:v0.24.2",
-    target_image: "ghcr.io/magrhino/wud-updater:v0.25.0",
+    current_image: "ghcr.io/magrhino/wud-updater:latest",
+    target_image: "ghcr.io/magrhino/wud-updater:latest",
     restart_container: "wud-updater",
     release_notes: [
       {
@@ -228,7 +228,7 @@ export function selfUpdateResponse(
         title: "v0.25.0",
         published_at: "2026-06-01T00:00:00Z",
         url: "https://github.com/magrhino/WUD-Updater/releases/tag/v0.25.0",
-        body: "Adds self-update review and restart support.",
+        body: "Adds self-update review and image pull support.",
         body_truncated: false,
         breaking: false,
         breaking_reasons: [],
@@ -247,11 +247,11 @@ export function selfUpdateApplyResponse(
   overrides: Partial<SelfUpdateApplyResponse> = {},
 ): SelfUpdateApplyResponse {
   return {
-    status: "scheduled",
+    status: "image_pulled",
     audit_run_id: 77,
     current_tag: "v0.24.2",
     latest_tag: "v0.25.0",
-    target_image: "ghcr.io/magrhino/wud-updater:v0.25.0",
+    target_image: "ghcr.io/magrhino/wud-updater:latest",
     container: "wud-updater",
     ...overrides,
   };

@@ -284,10 +284,10 @@ describe("app shell", () => {
 
     const text = wrapper.text();
     expect(text).toContain("Update available: v0.24.2 -> v0.25.0");
-    expect(text).toContain("ghcr.io/magrhino/wud-updater:v0.25.0");
+    expect(text).toContain("ghcr.io/magrhino/wud-updater:latest");
     const updateButton = wrapper
       .findAll("button")
-      .find((button) => button.text().includes("Update"));
+      .find((button) => button.text().includes("Pull image"));
     await updateButton?.trigger("click");
     await flushPromises();
 
@@ -300,7 +300,7 @@ describe("app shell", () => {
 
     const confirmButton = dialog
       .findAll("button")
-      .find((button) => button.text().includes("Pull image and restart container"));
+      .find((button) => button.text().includes("Pull image"));
     await confirmButton?.trigger("click");
     await flushPromises();
 

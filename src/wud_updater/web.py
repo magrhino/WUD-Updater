@@ -1057,7 +1057,7 @@ class SelfUpdateResponse(BaseModel):
 
 
 class SelfUpdateRequest(BaseModel):
-    confirmation: Literal["pull_image_and_restart"]
+    confirmation: Literal["pull_image"]
     current_tag: str
     latest_tag: str
     target_image: str
@@ -1065,7 +1065,7 @@ class SelfUpdateRequest(BaseModel):
 
 
 class SelfUpdateApplyResponse(BaseModel):
-    status: Literal["scheduled"]
+    status: Literal["image_pulled"]
     audit_run_id: int
     current_tag: str
     latest_tag: str
@@ -1361,7 +1361,6 @@ def create_app(
         api_apply_self_update,
         methods=["POST"],
         response_model=SelfUpdateApplyResponse,
-        status_code=202,
     )
     router.add_api_route(
         "/container/restart",
@@ -2319,7 +2318,6 @@ def api_self_update(request: Request) -> SelfUpdateResponse:
 def api_apply_self_update(
     payload: SelfUpdateRequest,
     request: Request,
-    background_tasks: BackgroundTasks,
 ) -> SelfUpdateApplyResponse:
     _ = payload.confirmation
     settings = _settings(request)
@@ -2373,20 +2371,40 @@ def api_apply_self_update(
                     exc,
                 )
             ) from exc
-    except Exception:
+        try:
+            docker.pull_image(status.target_image)
+        except CommandError as exc:
+            detail = exc.result.stderr.strip() or str(exc)
+            LOGGER.error(
+                "WebUI self-update image pull failed for %s -> %s: %s",
+                status.target_image,
+                status.restart_container,
+                _redact_sensitive_text(settings, detail),
+            )
+            _safe_update_self_update_audit(
+                settings,
+                audit_run_id,
+                status="failure",
+                error=_redact_sensitive_text(settings, detail),
+            )
+            raise HTTPException(
+                status_code=500,
+                detail=_safe_exception_detail(
+                    settings,
+                    "could not pull self-update image",
+                    exc,
+                ),
+            ) from exc
+        _safe_update_self_update_audit(
+            settings,
+            audit_run_id,
+            status="image_pulled",
+        )
+    finally:
         _release_self_update(request.app.state)
-        raise
 
-    background_tasks.add_task(
-        _self_update_task,
-        request.app.state,
-        settings,
-        status.target_image,
-        status.restart_container,
-        audit_run_id,
-    )
     return SelfUpdateApplyResponse(
-        status="scheduled",
+        status="image_pulled",
         audit_run_id=audit_run_id,
         current_tag=status.current_tag,
         latest_tag=status.latest_tag,
@@ -5809,6 +5827,7 @@ def _self_update_response(settings: WebSettings) -> SelfUpdateResponse:
     warnings.extend(note_warnings)
     disabled_reason = _self_update_disabled_reason(
         settings,
+        target_spec=target_spec,
         target_image=target_image,
         restart_container=container,
     )
@@ -5836,10 +5855,11 @@ def _demo_self_update_response(
 ) -> SelfUpdateResponse:
     demo_current_tag = "v0.25.0"
     latest_tag = "v0.26.0"
-    current_image = current_image or "ghcr.io/magrhino/wud-updater:v0.25.0"
-    target_image = "ghcr.io/magrhino/wud-updater:v0.26.0"
+    current_image = current_image or "ghcr.io/magrhino/wud-updater:latest"
+    target_image = "ghcr.io/magrhino/wud-updater:latest"
     disabled_reason = _self_update_disabled_reason(
         settings,
+        target_spec="ghcr.io/magrhino/wud-updater:latest",
         target_image=target_image,
         restart_container=restart_container,
     )
@@ -5851,13 +5871,13 @@ def _demo_self_update_response(
             url=f"https://github.com/magrhino/WUD-Updater/releases/tag/v0.{minor}.0",
             body=(
                 "Adds the WebUI self-update banner, release-note review, "
-                "image pull, and restart confirmation flow."
+                "and image pull flow."
                 if minor == 26
                 else "Demo release note for the capped self-update history list."
             ),
             breaking=minor == 26,
             breaking_reasons=(
-                ["Review WebUI restart behavior."] if minor == 26 else []
+                ["Review external container recreate steps."] if minor == 26 else []
             ),
         )
         for minor, day in zip(range(26, 16, -1), range(28, 18, -1), strict=True)
@@ -5880,6 +5900,7 @@ def _demo_self_update_response(
 def _self_update_disabled_reason(
     settings: WebSettings,
     *,
+    target_spec: str = "",
     target_image: str,
     restart_container: str,
 ) -> str:
@@ -5892,6 +5913,12 @@ def _self_update_disabled_reason(
         return "container restart target is not configured"
     if not target_image:
         return "self-update image target could not be determined"
+    if _self_update_requires_tag_rewrite(target_spec):
+        return (
+            "Pinned image tags need the CLI updater path or an external Compose "
+            "tag update and container recreate. The WebUI only pulls floating "
+            "self-update tags."
+        )
     try:
         _validate_restart_container_target(restart_container)
     except WebConfigError as exc:
@@ -5923,6 +5950,11 @@ def _self_update_pull_image(target: str) -> str:
     if desired_tag and image_has_tag(image) and tag_value_valid(desired_tag):
         return image_with_tag(image, desired_tag)
     return image
+
+
+def _self_update_requires_tag_rewrite(target: str) -> bool:
+    parts = target.strip().split()
+    return any(token.startswith("tag=") for token in parts[1:])
 
 
 def _fetch_self_update_release_notes(
@@ -6140,55 +6172,6 @@ def _valid_tag(value: str) -> str:
     if not tag_value_valid(tag):
         raise HTTPException(status_code=422, detail=f"tag is invalid: {tag}")
     return tag
-
-
-def _self_update_task(
-    state: Any,
-    settings: WebSettings,
-    target_image: str,
-    container: str,
-    audit_run_id: int,
-) -> None:
-    docker = DockerCli(runner=CommandRunner(env=settings.command_env))
-    try:
-        docker.pull_image(target_image)
-    except CommandError as exc:
-        detail = exc.result.stderr.strip() or str(exc)
-        LOGGER.error(
-            "WebUI self-update failed for %s -> %s: %s",
-            target_image,
-            container,
-            _redact_sensitive_text(settings, detail),
-        )
-        _safe_update_self_update_audit(
-            settings,
-            audit_run_id,
-            status="failure",
-            error=_redact_sensitive_text(settings, detail),
-        )
-        _release_self_update(state)
-        return
-
-    _safe_update_self_update_audit(settings, audit_run_id, status="success")
-    try:
-        docker.restart_container(container, timeout_seconds=10)
-    except CommandError as exc:
-        detail = exc.result.stderr.strip() or str(exc)
-        LOGGER.error(
-            "WebUI self-update failed for %s -> %s: %s",
-            target_image,
-            container,
-            _redact_sensitive_text(settings, detail),
-        )
-        _safe_update_self_update_audit(
-            settings,
-            audit_run_id,
-            status="failure",
-            error=_redact_sensitive_text(settings, detail),
-        )
-        return
-    finally:
-        _release_self_update(state)
 
 
 def _restart_container_task(
@@ -6446,7 +6429,7 @@ def _safe_update_self_update_audit(
     settings: WebSettings,
     run_id: int,
     *,
-    status: Literal["success", "failure"],
+    status: Literal["image_pulled", "failure"],
     error: str = "",
 ) -> None:
     try:
@@ -6464,7 +6447,7 @@ def _update_self_update_audit(
     settings: WebSettings,
     run_id: int,
     *,
-    status: Literal["success", "failure"],
+    status: Literal["image_pulled", "failure"],
     error: str = "",
 ) -> None:
     now = utc_timestamp()

@@ -869,8 +869,8 @@ class DemoApiState {
       status: "available",
       current_tag: `v${DEMO_VERSION}`,
       latest_tag: DEMO_LATEST_VERSION,
-      current_image: "ghcr.io/magrhino/wud-updater:v0.25.0",
-      target_image: "ghcr.io/magrhino/wud-updater:v0.26.0",
+      current_image: "ghcr.io/magrhino/wud-updater:latest",
+      target_image: "ghcr.io/magrhino/wud-updater:latest",
       restart_container: "demo-wud-updater",
       release_notes: Array.from({ length: 10 }, (_, index) => {
         const patch = 26 - index;
@@ -882,11 +882,11 @@ class DemoApiState {
           url: `https://github.com/magrhino/WUD-Updater/releases/tag/${tag}`,
           body:
             index === 0
-              ? "Adds the WebUI self-update banner, release-note review, image pull, and restart confirmation flow."
+              ? "Adds the WebUI self-update banner, release-note review, and image pull flow."
               : "Demo release note for the capped self-update history list.",
           body_truncated: false,
           breaking: index === 0,
-          breaking_reasons: index === 0 ? ["Review WebUI restart behavior."] : [],
+          breaking_reasons: index === 0 ? ["Review external container recreate steps."] : [],
         };
       }),
       release_notes_truncated: true,
@@ -1479,11 +1479,11 @@ export function createDemoWebApi(): WebApi {
       _csrfToken: string,
       _update: SelfUpdateResponse,
     ): Promise<SelfUpdateApplyResponse> => ({
-      status: "scheduled",
+      status: "image_pulled",
       audit_run_id: 9002,
       current_tag: `v${DEMO_VERSION}`,
       latest_tag: DEMO_LATEST_VERSION,
-      target_image: "ghcr.io/magrhino/wud-updater:v0.26.0",
+      target_image: "ghcr.io/magrhino/wud-updater:latest",
       container: "demo-wud-updater",
     }),
     servicePolicies: async () => state.servicePolicies(),

@@ -31,8 +31,8 @@ function selfUpdateStatus(): SelfUpdateResponse {
     status: "available",
     current_tag: "v0.24.2",
     latest_tag: "v0.25.0",
-    current_image: "ghcr.io/magrhino/wud-updater:v0.24.2",
-    target_image: "ghcr.io/magrhino/wud-updater:v0.25.0",
+    current_image: "ghcr.io/magrhino/wud-updater:latest",
+    target_image: "ghcr.io/magrhino/wud-updater:latest",
     restart_container: "wud-updater",
     release_notes: [],
     release_notes_truncated: false,
@@ -224,10 +224,10 @@ describe("webApi", () => {
       step: "pending_preflight",
     });
     expect(JSON.parse(String(requestInit(fetchMock.mock.calls[5]).body))).toEqual({
-      confirmation: "pull_image_and_restart",
+      confirmation: "pull_image",
       current_tag: "v0.24.2",
       latest_tag: "v0.25.0",
-      target_image: "ghcr.io/magrhino/wud-updater:v0.25.0",
+      target_image: "ghcr.io/magrhino/wud-updater:latest",
       restart_container: "wud-updater",
     });
     expect(JSON.parse(String(requestInit(fetchMock.mock.calls[6]).body))).toEqual({

@@ -339,13 +339,15 @@ describe("webui store", () => {
 
     expect(ensureCsrf).toHaveBeenCalledTimes(1);
     expect(response.container).toBe("wud-updater");
-    expect(webui.selfUpdateMessage).toContain("Self-update requested");
+    expect(webui.selfUpdateMessage).toBe(
+      "Image pulled. Recreate the WUD-Updater container to run the new version. Tagged deployments are recommended for predictable updates.",
+    );
     expect(fetchMock.mock.calls[0][0]).toBe("/api/v1/self-update");
     expect(JSON.parse(String((fetchMock.mock.calls[0][1] as RequestInit).body))).toEqual({
-      confirmation: "pull_image_and_restart",
+      confirmation: "pull_image",
       current_tag: "v0.24.2",
       latest_tag: "v0.25.0",
-      target_image: "ghcr.io/magrhino/wud-updater:v0.25.0",
+      target_image: "ghcr.io/magrhino/wud-updater:latest",
       restart_container: "wud-updater",
     });
     expect(

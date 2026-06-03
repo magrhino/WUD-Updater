@@ -664,7 +664,7 @@ export interface SelfUpdateResponse {
 }
 
 export interface SelfUpdateApplyResponse {
-  status: "scheduled";
+  status: "image_pulled";
   audit_run_id: number;
   current_tag: string;
   latest_tag: string;
@@ -673,7 +673,7 @@ export interface SelfUpdateApplyResponse {
 }
 
 export interface SelfUpdateRequest {
-  confirmation: "pull_image_and_restart";
+  confirmation: "pull_image";
   current_tag: string;
   latest_tag: string;
   target_image: string;
@@ -910,7 +910,7 @@ const liveWebApi = {
       method: "POST",
       headers: { "x-wud-csrf-token": csrfToken },
       body: JSON.stringify({
-        confirmation: "pull_image_and_restart",
+        confirmation: "pull_image",
         current_tag: update.current_tag,
         latest_tag: update.latest_tag,
         target_image: update.target_image,

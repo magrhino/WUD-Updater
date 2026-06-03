@@ -314,10 +314,10 @@ async function confirmSelfUpdate(): Promise<void> {
                 type="primary"
                 size="small"
                 :disabled="selfUpdateButtonDisabled"
-                :title="selfUpdateDisabledReason || 'Review release notes and update'"
+                :title="selfUpdateDisabledReason || 'Review release notes and pull image'"
                 @click="selfUpdateDialogVisible = true"
               >
-                Update
+                Pull image
               </n-button>
             </div>
           </section>
@@ -346,7 +346,7 @@ async function confirmSelfUpdate(): Promise<void> {
           v-model:show="selfUpdateDialogVisible"
           preset="dialog"
           title="Update WUD-Updater"
-          positive-text="Pull image and restart container"
+          positive-text="Pull image"
           negative-text="Cancel"
           :positive-button-props="{
             type: 'warning',
@@ -357,8 +357,8 @@ async function confirmSelfUpdate(): Promise<void> {
         >
           <div class="self-update-modal">
             <n-alert type="warning" :show-icon="false">
-              This pulls the WUD-Updater image and restarts the WebUI container.
-              The page may disconnect while Docker brings it back.
+              This pulls the WUD-Updater image only. Recreate the container
+              outside the WebUI to run the new version.
             </n-alert>
 
             <div class="self-update-facts">

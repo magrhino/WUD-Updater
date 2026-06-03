@@ -120,11 +120,12 @@ export const useWebuiStore = defineStore("webui", () => {
         await auth.ensureCsrf(),
         selfUpdate.value,
       );
-      selfUpdateMessage.value = `Self-update requested for ${response.container}. The WebUI may disconnect while the container restarts.`;
+      selfUpdateMessage.value =
+        "Image pulled. Recreate the WUD-Updater container to run the new version. Tagged deployments are recommended for predictable updates.";
       try {
         selfUpdate.value = await webApi.selfUpdate();
       } catch {
-        // The request may have restarted the server before the follow-up check returns.
+        // Keep the pull success visible even if the follow-up status check fails.
       }
     });
     if (response === null) {
