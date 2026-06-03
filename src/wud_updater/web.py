@@ -2325,6 +2325,23 @@ def api_apply_self_update(
     if not status.can_update:
         detail = status.disabled_reason or "self-update is not available"
         raise HTTPException(status_code=409, detail=detail)
+    docker = DockerCli(runner=CommandRunner(env=settings.command_env))
+    try:
+        container_id = docker.container_id(status.restart_container)
+    except CommandError as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=_safe_exception_detail(
+                settings,
+                "could not inspect restart container",
+                exc,
+            ),
+        ) from exc
+    if not container_id:
+        raise HTTPException(
+            status_code=500,
+            detail="could not inspect restart container",
+        )
 
     try:
         with connect_db(settings.config.db_path) as conn:

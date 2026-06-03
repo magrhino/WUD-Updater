@@ -3425,6 +3425,46 @@ def test_self_update_endpoint_pulls_image_restarts_container_and_audits(
     }
 
 
+def test_self_update_endpoint_inspects_restart_container_before_pull(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    fake_env, fake_root = _fake_docker_env(tmp_path)
+    monkeypatch.setattr(web_module, "current_tag", lambda: "v0.24.2")
+    monkeypatch.setattr(web_module, "fetch_latest_release_tag", lambda: "v0.25.0")
+    monkeypatch.setattr(
+        web_module,
+        "_fetch_self_update_release_notes",
+        lambda *_args, **_kwargs: ([], False, []),
+    )
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+            "WUD_WEB_RESTART_CONTAINER": "missing-wud-updater",
+            **fake_env,
+        },
+    )
+
+    response = client.post(
+        "/api/v1/self-update",
+        json={"confirmation": "pull_image_and_restart"},
+        headers=_csrf_headers(client),
+    )
+
+    assert response.status_code == 500
+    assert response.json()["detail"] == "could not inspect restart container"
+    calls = _fake_docker_calls(fake_root)
+    assert "inspect missing-wud-updater" in calls
+    assert "pull ghcr.io/magrhino/wud-updater:v0.25.0" not in calls
+    with connect_db(tmp_path / "state" / "wud.sqlite") as conn:
+        row = conn.execute(
+            "SELECT id FROM update_runs WHERE mode = 'web-self-update'",
+        ).fetchone()
+    assert row is None
+
+
 def test_self_update_endpoint_marks_audit_failed_when_pull_fails(
     tmp_path: Path,
     monkeypatch,
