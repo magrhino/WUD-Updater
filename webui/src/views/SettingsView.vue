@@ -1,11 +1,14 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, ref, watch } from "vue";
-import { useMediaQuery } from "@vueuse/core";
+import { useClipboard, useMediaQuery } from "@vueuse/core";
 import { useRoute, useRouter } from "vue-router";
 import {
   AlertTriangle,
   ChevronDown,
+  Copy,
+  Download,
   ExternalLink,
+  FileJson,
   KeyRound,
   RefreshCw,
   RotateCcw,
@@ -13,7 +16,7 @@ import {
   ShieldCheck,
   SlidersHorizontal,
 } from "@lucide/vue";
-import { NAlert, NButton, NInput, NModal, NSelect, NTag } from "naive-ui";
+import { NAlert, NButton, NButtonGroup, NInput, NModal, NSelect, NTag } from "naive-ui";
 
 import type {
   ManagedSettingEntry,
@@ -73,6 +76,7 @@ const SETTINGS_SECTION_LINKS = [
   { id: "settings-behavior", label: "Behavior" },
   { id: "settings-webui", label: "WebUI safety" },
   { id: "settings-secrets", label: "Secrets" },
+  { id: "settings-diagnostics", label: "Diagnostics" },
   { id: "settings-docs", label: "Docs" },
 ] as const;
 
@@ -385,6 +389,50 @@ async function focusOnboardingChecklist(): Promise<void> {
     window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   target.scrollIntoView({ behavior: reducedMotion ? "auto" : "smooth", block: "start" });
   target.focus({ preventScroll: true });
+}
+
+const { copy, isSupported: isClipboardSupported } = useClipboard();
+const diagnosticsDownloading = ref(false);
+const diagnosticsMessage = ref("");
+const diagnosticsError = ref("");
+
+async function loadSupportBundleText(): Promise<string | null> {
+  diagnosticsMessage.value = "";
+  diagnosticsError.value = "";
+  diagnosticsDownloading.value = true;
+  try {
+    const bundle = await webui.diagnosticsSupportBundle();
+    return JSON.stringify(bundle, null, 2);
+  } catch (exc) {
+    diagnosticsError.value = exc instanceof Error ? exc.message : "Failed to load support bundle";
+    return null;
+  } finally {
+    diagnosticsDownloading.value = false;
+  }
+}
+
+async function copySupportBundle(): Promise<void> {
+  const text = await loadSupportBundleText();
+  if (text !== null) {
+    await copy(text);
+    // Since copied is a ref updated by useClipboard asynchronously,
+    // we just assume success if it didn't throw and set a generic message.
+    diagnosticsMessage.value = "Diagnostics copied to clipboard.";
+  }
+}
+
+async function downloadSupportBundle(): Promise<void> {
+  const text = await loadSupportBundleText();
+  if (text !== null) {
+    const blob = new Blob([text], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "wud-updater-diagnostics.json";
+    a.click();
+    URL.revokeObjectURL(url);
+    diagnosticsMessage.value = "Diagnostics downloaded successfully.";
+  }
 }
 
 watch(managedEntries, hydratePreferenceForm, { immediate: true });
@@ -930,6 +978,61 @@ onMounted(() => {
       </div>
       <div v-else class="empty-state">No secret settings reported.</div>
     </details>
+
+    <section id="settings-diagnostics" class="section-panel">
+      <div class="section-heading">
+        <div class="settings-heading-main">
+          <p class="eyebrow">Diagnostics</p>
+          <h2>Support Bundle</h2>
+          <p class="settings-section-copy">
+            Generate a redacted support bundle containing application settings, update state, and recent logs for troubleshooting. Raw environment variables, private paths, and secrets are automatically scrubbed.
+          </p>
+        </div>
+        <FileJson :size="20" class="section-heading-icon" />
+      </div>
+      <n-alert
+        v-if="diagnosticsMessage"
+        type="success"
+        :show-icon="false"
+        class="settings-action-alert"
+      >
+        {{ diagnosticsMessage }}
+      </n-alert>
+      <n-alert
+        v-if="diagnosticsError"
+        type="error"
+        :show-icon="false"
+        class="settings-action-alert"
+      >
+        {{ diagnosticsError }}
+      </n-alert>
+      <div class="settings-action-row">
+        <n-button-group>
+          <n-button
+            secondary
+            type="primary"
+            :loading="diagnosticsDownloading"
+            @click="downloadSupportBundle"
+          >
+            <template #icon>
+              <Download :size="16" />
+            </template>
+            Download support bundle
+          </n-button>
+          <n-button
+            secondary
+            v-if="isClipboardSupported"
+            :loading="diagnosticsDownloading"
+            @click="copySupportBundle"
+          >
+            <template #icon>
+              <Copy :size="16" />
+            </template>
+            Copy
+          </n-button>
+        </n-button-group>
+      </div>
+    </section>
 
     <section id="settings-docs" class="section-panel">
       <div class="section-heading">

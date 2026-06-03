@@ -516,6 +516,23 @@ export interface RunLogResponse {
   max_bytes: number;
 }
 
+export interface LogTail {
+  exists: boolean;
+  content: string;
+  truncated: boolean;
+}
+
+export interface DiagnosticsSupportBundleResponse {
+  wud_updater_version: string;
+  settings: SettingsResponse;
+  doctor_result: DoctorResponse;
+  pending_summary: PendingResponse;
+  last_run_status: RunSummary | null;
+  diagnostics_warnings: string[];
+  discovery_warnings: string[];
+  log_tail: LogTail | null;
+}
+
 export type ServicePolicyUpdateMode = "" | "pause" | "stop" | "live";
 export type AutoUpdateDay = "mon" | "tue" | "wed" | "thu" | "fri" | "sat" | "sun";
 export type SnoozeState = "active" | "expired" | "all";
@@ -783,6 +800,8 @@ const liveWebApi = {
     }),
   pending: () => apiRequest<PendingResponse>("/pending"),
   updateTargets: () => apiRequest<UpdateTargetsResponse>("/update-targets"),
+  diagnosticsSupportBundle: () =>
+    apiRequest<DiagnosticsSupportBundleResponse>("/diagnostics/support-bundle"),
   cleanupPending: (
     cleanupId: string,
     lines: PendingCleanupLine[],

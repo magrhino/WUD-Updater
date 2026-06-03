@@ -672,6 +672,17 @@ class RunLogResponse(BaseModel):
     max_bytes: int
 
 
+class DiagnosticsSupportBundleResponse(BaseModel):
+    wud_updater_version: str
+    settings: SettingsResponse
+    doctor_result: DoctorResponse
+    pending_summary: PendingResponse
+    last_run_status: RunSummary | None
+    diagnostics_warnings: list[str] = Field(default_factory=list)
+    discovery_warnings: list[str] = Field(default_factory=list)
+    log_tail: LogTail | None
+
+
 class TagOverrideRequest(BaseModel):
     line_no: LineNumber
     tag: str = Field(min_length=1, max_length=128)
@@ -1258,6 +1269,12 @@ def create_app(
         response_model=list[SnoozeRecord],
     )
     router.add_api_route(
+        "/diagnostics/support-bundle",
+        api_diagnostics_support_bundle,
+        methods=["GET"],
+        response_model=DiagnosticsSupportBundleResponse,
+    )
+    router.add_api_route(
         "/tag-exclusions",
         api_tag_exclusions,
         methods=["GET"],
@@ -1780,6 +1797,72 @@ def api_update_core_update_tour(
                 exc,
             ),
         ) from exc
+
+
+def api_diagnostics_support_bundle(request: Request) -> DiagnosticsSupportBundleResponse:
+    settings = _settings(request)
+
+    version = __version__
+    settings_resp = api_settings(request)
+    doctor_result = api_doctor(request)
+
+    pending = _pending_response(settings, include_grouping=True)
+    for item in pending.items:
+        item.raw = ""
+    if pending.grouping:
+        for group in pending.grouping.groups:
+            for gi in group.items:
+                gi.raw = ""
+        for ui in pending.grouping.unmatched:
+            ui.raw = ""
+
+    last_run = None
+    diagnostics_warnings: list[str] = []
+    try:
+        with closing(_connect_readonly_db(settings)) as conn:
+            rows = conn.execute(
+                """
+                SELECT *
+                FROM update_runs
+                ORDER BY id DESC
+                LIMIT 1
+                """
+            ).fetchall()
+            if rows:
+                last_run = _run_summary_from_row(rows[0])
+    except ReadOnlyDatabaseMissing as exc:
+        diagnostics_warnings.append(f"last run status unavailable: {exc}")
+    except HTTPException as exc:
+        diagnostics_warnings.append(f"last run status unavailable: {exc.detail}")
+    except (OSError, sqlite3.Error, DatabaseError) as exc:
+        diagnostics_warnings.append(f"last run status unavailable: {exc}")
+
+    discovery_warnings = list(pending.warnings)
+
+    log_tail = None
+    if last_run and last_run.log_file:
+        try:
+            log_path = _safe_log_path(settings, last_run.log_file)
+            if log_path is None:
+                log_tail = LogTail(exists=False, content="", truncated=False)
+            else:
+                log_tail = _read_log_tail(log_path, DEFAULT_JOB_LOG_TAIL_BYTES)
+        except HTTPException as exc:
+            diagnostics_warnings.append(f"log tail unavailable: {exc.detail}")
+
+    bundle = DiagnosticsSupportBundleResponse(
+        wud_updater_version=version,
+        settings=settings_resp,
+        doctor_result=doctor_result,
+        pending_summary=pending,
+        last_run_status=last_run,
+        diagnostics_warnings=diagnostics_warnings,
+        discovery_warnings=discovery_warnings,
+        log_tail=log_tail,
+    )
+    return DiagnosticsSupportBundleResponse.model_validate(
+        _sanitize_support_bundle_value(settings, bundle.model_dump(mode="json"))
+    )
 
 
 def api_pending(request: Request) -> PendingResponse:
@@ -6085,6 +6168,64 @@ def _redact_sensitive_text(
     for secret in _sensitive_redaction_values(settings, extra_secrets):
         redacted = redacted.replace(secret, "<redacted>")
     return redacted
+
+
+def _sanitize_support_bundle_value(settings: WebSettings, value: Any) -> Any:
+    if isinstance(value, dict):
+        return {
+            str(key): _sanitize_support_bundle_value(settings, item)
+            for key, item in value.items()
+        }
+    if isinstance(value, list):
+        return [_sanitize_support_bundle_value(settings, item) for item in value]
+    if isinstance(value, str):
+        return _sanitize_support_bundle_text(settings, value)
+    return value
+
+
+def _sanitize_support_bundle_text(settings: WebSettings, value: str) -> str:
+    replacements = _support_bundle_path_replacements(settings)
+    redacted = _redact_sensitive_text(settings, value)
+    for source, target in replacements:
+        redacted = redacted.replace(source, target)
+    return _redact_unknown_absolute_paths(redacted)
+
+
+def _support_bundle_path_replacements(settings: WebSettings) -> list[tuple[str, str]]:
+    config = settings.config
+    exact_paths: list[tuple[Path, str]] = [
+        (config.wud_out_file, "<WUD_OUT_FILE>"),
+        (config.log_dir, "<WUD_LOG_DIR>"),
+        (config.db_path, "<WUD_DB_PATH>"),
+    ]
+    root_paths: list[tuple[Path, str]] = [(config.docker_base, "<DOCKER_BASE>")]
+    if settings.host_docker_base is not None:
+        root_paths.append((settings.host_docker_base, "<HOST_DOCKER_BASE>"))
+
+    replacements: list[tuple[str, str]] = []
+    seen: set[str] = set()
+    for path, label in (*exact_paths, *root_paths):
+        text = str(path)
+        if text and text not in seen:
+            seen.add(text)
+            replacements.append((text, label))
+
+    for root, label in root_paths:
+        root_text = str(root).rstrip("/")
+        if not root_text or root_text in seen:
+            continue
+        seen.add(root_text)
+        replacements.append((root_text, label))
+
+    return sorted(replacements, key=lambda item: len(item[0]), reverse=True)
+
+
+def _redact_unknown_absolute_paths(value: str) -> str:
+    return re.sub(
+        r"(?<![:/<>\w-])/(?:[^\s\"'`,;)\]}]+)",
+        "<absolute-path-redacted>",
+        value,
+    )
 
 
 def _sensitive_redaction_values(

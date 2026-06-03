@@ -11,6 +11,7 @@ import {
   type CoreUpdateTourResponse,
   type CoreUpdateTourStatus,
   type CoreUpdateTourStep,
+  type DiagnosticsSupportBundleResponse,
   type ManagedSettingsUpdateResponse,
   type OnboardingChecklistResponse,
   type OnboardingDismissResponse,
@@ -537,6 +538,17 @@ export const useWebuiStore = defineStore("webui", () => {
     return response;
   }
 
+  async function diagnosticsSupportBundle(): Promise<DiagnosticsSupportBundleResponse> {
+    let response: DiagnosticsSupportBundleResponse | null = null;
+    await loadWithState(async () => {
+      response = await webApi.diagnosticsSupportBundle();
+    });
+    if (response === null) {
+      throw new Error("Diagnostics support bundle did not return a response");
+    }
+    return response;
+  }
+
   async function upsertServicePolicy(
     serviceKey: string,
     updateMode: ServicePolicyUpdateMode,
@@ -699,6 +711,7 @@ export const useWebuiStore = defineStore("webui", () => {
     loadTagExclusions,
     stateOperation,
     restartContainer,
+    diagnosticsSupportBundle,
     upsertServicePolicy,
     deleteServicePolicy,
     createSnooze,
