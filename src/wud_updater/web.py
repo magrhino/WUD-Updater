@@ -1090,6 +1090,7 @@ def create_app(
     app.state.web_apply_lock = Lock()
     app.state.web_apply_condition = Condition(app.state.web_apply_lock)
     app.state.web_apply_jobs = {}
+    app.state.web_self_update_running = False
     app.state.web_login_throttle_lock = Lock()
     app.state.web_login_throttle = {}
     app.state.web_login_client_throttle = {}
@@ -2318,53 +2319,59 @@ def api_apply_self_update(
     settings = _settings(request)
     if not settings.mutations_enabled:
         raise HTTPException(status_code=403, detail="mutations are disabled")
-    if _active_apply_job_exists(request):
-        raise HTTPException(status_code=409, detail="an apply job is already running")
-
-    status = _self_update_response(settings)
-    if not status.can_update:
-        detail = status.disabled_reason or "self-update is not available"
-        raise HTTPException(status_code=409, detail=detail)
-    docker = DockerCli(runner=CommandRunner(env=settings.command_env))
-    try:
-        container_id = docker.container_id(status.restart_container)
-    except CommandError as exc:
-        raise HTTPException(
-            status_code=500,
-            detail=_safe_exception_detail(
-                settings,
-                "could not inspect restart container",
-                exc,
-            ),
-        ) from exc
-    if not container_id:
-        raise HTTPException(
-            status_code=500,
-            detail="could not inspect restart container",
-        )
+    reservation_error = _reserve_self_update(request.app.state)
+    if reservation_error:
+        raise HTTPException(status_code=409, detail=reservation_error)
 
     try:
-        with connect_db(settings.config.db_path) as conn:
-            init_db(conn)
-            with _immediate_transaction(conn):
-                audit_run_id = _insert_self_update_audit(
-                    conn,
+        status = _self_update_response(settings)
+        if not status.can_update:
+            detail = status.disabled_reason or "self-update is not available"
+            raise HTTPException(status_code=409, detail=detail)
+        docker = DockerCli(runner=CommandRunner(env=settings.command_env))
+        try:
+            container_id = docker.container_id(status.restart_container)
+        except CommandError as exc:
+            raise HTTPException(
+                status_code=500,
+                detail=_safe_exception_detail(
                     settings,
-                    request,
-                    status=status,
+                    "could not inspect restart container",
+                    exc,
+                ),
+            ) from exc
+        if not container_id:
+            raise HTTPException(
+                status_code=500,
+                detail="could not inspect restart container",
+            )
+
+        try:
+            with connect_db(settings.config.db_path) as conn:
+                init_db(conn)
+                with _immediate_transaction(conn):
+                    audit_run_id = _insert_self_update_audit(
+                        conn,
+                        settings,
+                        request,
+                        status=status,
+                    )
+        except (OSError, sqlite3.Error, DatabaseError) as exc:
+            raise HTTPException(
+                status_code=500,
+                detail=_safe_exception_detail(
+                    settings,
+                    "could not record self-update audit",
+                    exc,
                 )
-    except (OSError, sqlite3.Error, DatabaseError) as exc:
-        raise HTTPException(
-            status_code=500,
-            detail=_safe_exception_detail(
-                settings,
-                "could not record self-update audit",
-                exc,
-            ),
-        ) from exc
+            ) from exc
+    except Exception:
+        _release_self_update(request.app.state)
+        raise
 
     background_tasks.add_task(
         _self_update_task,
+        request.app.state,
         settings,
         status.target_image,
         status.restart_container,
@@ -4480,6 +4487,24 @@ def _active_apply_job_exists_in_state(state: Any) -> bool:
         return any(job.status in {"queued", "running"} for job in jobs.values())
 
 
+def _reserve_self_update(state: Any) -> str:
+    apply_lock: Lock = state.web_apply_lock
+    jobs: dict[str, WebApplyJob] = state.web_apply_jobs
+    with apply_lock:
+        if any(job.status in {"queued", "running"} for job in jobs.values()):
+            return "an apply job is already running"
+        if bool(getattr(state, "web_self_update_running", False)):
+            return "self-update is already running"
+        state.web_self_update_running = True
+    return ""
+
+
+def _release_self_update(state: Any) -> None:
+    apply_lock: Lock = state.web_apply_lock
+    with apply_lock:
+        state.web_self_update_running = False
+
+
 def _require_apply_job(job_id: str, request: Request) -> WebApplyJob:
     apply_lock: Lock = request.app.state.web_apply_lock
     jobs: dict[str, WebApplyJob] = request.app.state.web_apply_jobs
@@ -6081,6 +6106,7 @@ def _valid_tag(value: str) -> str:
 
 
 def _self_update_task(
+    state: Any,
     settings: WebSettings,
     target_image: str,
     container: str,
@@ -6105,8 +6131,10 @@ def _self_update_task(
             error=_redact_sensitive_text(settings, detail),
         )
         return
-
-    _safe_update_self_update_audit(settings, audit_run_id, status="success")
+    else:
+        _safe_update_self_update_audit(settings, audit_run_id, status="success")
+    finally:
+        _release_self_update(state)
 
 
 def _restart_container_task(
