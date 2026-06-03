@@ -88,8 +88,8 @@ Use the shell already used by the target script.
 | container image build | `docker build -t wud-updater:local .` |
 | Python dev dependency install | Check for `.venv/bin/python` first and activate it when present; otherwise run `python3 -m venv .venv`, `. .venv/bin/activate`, then `python -m pip install -e '.[dev]'` |
 | Python lint | `ruff check .` |
-| Python syntax check | `python3 -m py_compile src/wud_updater/*.py tests/run-python-tests.py tests/test_python_*.py` |
-| Python tests | `python3 tests/run-python-tests.py` |
+| Python syntax check | `python3 -m py_compile src/wud_updater/*.py tests/test_python_*.py` |
+| Python tests | `python -m pytest tests/test_python_*.py` |
 | Live digest verification probe | `tests/live-digest-verification.py alpine:3.20 quay.io/prometheus/busybox:latest` |
 | WebUI dependency install | `npm --prefix webui ci` |
 | WebUI typecheck | `npm --prefix webui run typecheck` |
@@ -114,7 +114,7 @@ Use the shell already used by the target script.
 - Host wrapper change: run `tests/test-updates-wrapper.sh`; fake `sudo` and configured updater commands rather than invoking real system mutation.
 - Container packaging change: run `bash -n entrypoint.sh`, ShellCheck through `tests/run-all.sh`, `tests/test-entrypoint.sh`, and `tests/container-build.sh` when Docker is available. Run `tests/e2e-docker-compose.sh` when Docker socket, updater handoff, WUD script sync, or real Compose update behavior changes. The container build test validates Compose config, including the TrueNAS API example, builds the image, and smoke-runs the default non-mutating command; the Docker E2E test uses a local registry and real Compose stack to verify update and callback wiring.
 - Release-note behavior change: syntax-check the touched scripts, run ShellCheck, run `tests/test-release-notes-to-discord.sh`, and avoid live Discord/GitHub calls unless explicitly requested or needed. For wrapper compatibility changes, cover `wud/github-release-embed.sh` and `wud/tag-manager.sh` legacy invocation paths. For WebUI release-note metadata changes, also run Python release-note/cache tests and relevant WebUI tests.
-- Python updater/config change: run `ruff check .`, Python syntax check, `tests/run-python-tests.py`, and `tests/run-all.sh` when practical.
+- Python updater/config change: run `ruff check .`, Python syntax check, `tests/run-all.sh --python`, and `tests/run-all.sh` when practical.
 - Rich terminal rendering change: create or update focused tests that exercise the Rich-enabled path for the touched surface, using mocks when local Rich is unavailable; run `python3 -m unittest tests.test_python_terminal` plus Python syntax checks before broader suites.
 - WebUI frontend change: run `npm --prefix webui ci`, `npm --prefix webui run typecheck`, `npm --prefix webui run test`, `npm --prefix webui run build`, and `tests/test_python_web.py` when API contracts or auth assumptions are involved. Run `npm --prefix webui run build:demo` and `npm --prefix webui run test:smoke:demo` when public static demo behavior changes. Run `npm --prefix webui exec playwright install chromium` and `npm --prefix webui run test:smoke` when browser auth, read-only mutation UX, routing, or smoke fixtures change. For local dev/demo changes, also run the focused demo seeder test and `node --check webui/scripts/dev-server.mjs`. Run `tests/container-build.sh` when packaged static assets, Dockerfile behavior, WebUI Compose examples, or container startup changes.
 - GitHub Actions workflow change: run `actionlint` when available; if not installed, inspect the touched workflow YAML and report that local actionlint was not available. For release workflow changes, also inspect tag, permission, and GHCR image-tag behavior.

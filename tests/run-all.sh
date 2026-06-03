@@ -82,7 +82,6 @@ EOF
     src/wud_updater/updater.py \
     src/wud_updater/web.py \
     src/wud_updater/wud_file.py \
-    tests/run-python-tests.py \
     tests/test_python_banner.py \
     tests/test_python_cli.py \
     tests/test_python_config.py \
