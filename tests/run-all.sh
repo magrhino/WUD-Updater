@@ -160,9 +160,7 @@ run "$python_bin" -m py_compile \
   tests/test_python_wud_parsing.py \
   webui/scripts/seed_demo_state.py
 
-run "$python_bin" tests/run-python-tests.py
-
-run "$python_bin" -m pytest tests/test_python_web.py
+run "$python_bin" -m pytest tests/test_python_*.py
 
 if command -v npm >/dev/null 2>&1 && [[ -f webui/package-lock.json ]]; then
   run node --check webui/scripts/dev-server.mjs
