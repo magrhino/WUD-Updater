@@ -182,11 +182,18 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Set up Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: "3.x"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
       - name: Install Python dev dependencies
         shell: bash
         run: |
           set -euo pipefail
-          python3 -m venv .venv
+          python -m venv .venv
           . .venv/bin/activate
           python -m pip install -e '.[dev]'
           echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
@@ -224,6 +231,22 @@ jobs:
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: "3.x"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - name: Install Python dev dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m venv .venv
+          . .venv/bin/activate
+          python -m pip install -e '.[dev]'
+          echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
 
       - name: Install ShellCheck
         shell: bash
@@ -427,11 +450,18 @@ jobs:
             brew install shellcheck
           fi
 
+      - name: Set up Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: "3.x"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
       - name: Install Python dev dependencies
         shell: bash
         run: |
           set -euo pipefail
-          python3 -m venv .venv
+          python -m venv .venv
           . .venv/bin/activate
           python -m pip install -e '.[dev]'
           echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
