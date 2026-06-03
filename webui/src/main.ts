@@ -7,6 +7,8 @@ import {
   NConfigProvider,
   NMessageProvider,
   NModal,
+  NTabPane,
+  NTabs,
   NTag,
   NTooltip,
 } from "naive-ui";
@@ -23,6 +25,8 @@ const naive = create({
     NConfigProvider,
     NMessageProvider,
     NModal,
+    NTabPane,
+    NTabs,
     NTag,
     NTooltip,
   ],

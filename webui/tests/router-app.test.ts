@@ -295,10 +295,20 @@ describe("app shell", () => {
 
     const dialog = wrapper.find('[role="dialog"]');
     expect(dialog.text()).toContain("Update WUD-Updater");
+    expect(dialog.text()).toContain("Update Plan");
+    expect(dialog.text()).toContain("Release Notes");
+    expect(dialog.text()).not.toContain("Adds self-update review");
+    expect(applySelfUpdate).not.toHaveBeenCalled();
+
+    const notesTab = dialog
+      .findAll("button")
+      .find((button) => button.text().includes("Release Notes"));
+    await notesTab?.trigger("click");
+    await flushPromises();
+
     expect(dialog.text()).toContain("Release notes");
     expect(dialog.text()).toContain("Cap 10");
     expect(dialog.text()).toContain("Adds self-update review");
-    expect(applySelfUpdate).not.toHaveBeenCalled();
 
     const confirmButton = dialog
       .findAll("button")
