@@ -171,12 +171,19 @@ EOF
 }
 
 run_webui_checks() {
+  local required="${1:-false}"
+
   if command -v npm >/dev/null 2>&1 && [[ -f webui/package-lock.json ]]; then
     run node --check webui/scripts/dev-server.mjs
     run npm --prefix webui ci
     run npm --prefix webui run typecheck
     run npm --prefix webui run test
     run npm --prefix webui run build
+  elif [[ "$required" == true ]]; then
+    cat >&2 <<'EOF'
+npm and webui/package-lock.json are required to run WebUI checks.
+EOF
+    exit 127
   else
     printf '==> skipping webui npm checks; npm or webui/package-lock.json not found\n'
   fi
@@ -195,12 +202,12 @@ case "$MODE" in
     run_shell_checks
     ;;
   --webui)
-    run_webui_checks
+    run_webui_checks true
     ;;
   --all)
     run_python_checks
     run_shell_checks
-    run_webui_checks
+    run_webui_checks false
     ;;
   *)
     echo "Usage: $0 [--python | --shell | --webui | --all]" >&2
