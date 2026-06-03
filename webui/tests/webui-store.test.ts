@@ -333,6 +333,7 @@ describe("webui store", () => {
       .spyOn(auth, "ensureCsrf")
       .mockResolvedValue("csrf-self-update");
     const webui = useWebuiStore();
+    webui.selfUpdate = selfUpdateResponse();
 
     const response = await webui.applySelfUpdate();
 
@@ -342,6 +343,10 @@ describe("webui store", () => {
     expect(fetchMock.mock.calls[0][0]).toBe("/api/v1/self-update");
     expect(JSON.parse(String((fetchMock.mock.calls[0][1] as RequestInit).body))).toEqual({
       confirmation: "pull_image_and_restart",
+      current_tag: "v0.24.2",
+      latest_tag: "v0.25.0",
+      target_image: "ghcr.io/magrhino/wud-updater:v0.25.0",
+      restart_container: "wud-updater",
     });
     expect(
       ((fetchMock.mock.calls[0][1] as RequestInit).headers as Headers).get(

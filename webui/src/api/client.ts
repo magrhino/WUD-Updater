@@ -672,6 +672,14 @@ export interface SelfUpdateApplyResponse {
   container: string;
 }
 
+export interface SelfUpdateRequest {
+  confirmation: "pull_image_and_restart";
+  current_tag: string;
+  latest_tag: string;
+  target_image: string;
+  restart_container: string;
+}
+
 export class ApiError extends Error {
   constructor(
     readonly status: number,
@@ -897,11 +905,17 @@ const liveWebApi = {
       body: JSON.stringify(operation),
     }),
   selfUpdate: () => apiRequest<SelfUpdateResponse>("/self-update"),
-  applySelfUpdate: (csrfToken: string) =>
+  applySelfUpdate: (csrfToken: string, update: SelfUpdateResponse) =>
     apiRequest<SelfUpdateApplyResponse>("/self-update", {
       method: "POST",
       headers: { "x-wud-csrf-token": csrfToken },
-      body: JSON.stringify({ confirmation: "pull_image_and_restart" }),
+      body: JSON.stringify({
+        confirmation: "pull_image_and_restart",
+        current_tag: update.current_tag,
+        latest_tag: update.latest_tag,
+        target_image: update.target_image,
+        restart_container: update.restart_container,
+      } satisfies SelfUpdateRequest),
     }),
   restartContainer: (csrfToken: string) =>
     apiRequest<ContainerRestartResponse>("/container/restart", {

@@ -106,6 +106,22 @@ def _csrf_headers(client: TestClient) -> dict[str, str]:
     }
 
 
+def _self_update_payload(
+    *,
+    current_tag: str = "v0.24.2",
+    latest_tag: str = "v0.25.0",
+    target_image: str = "ghcr.io/magrhino/wud-updater:v0.25.0",
+    restart_container: str = "wud-updater",
+) -> dict[str, str]:
+    return {
+        "confirmation": "pull_image_and_restart",
+        "current_tag": current_tag,
+        "latest_tag": latest_tag,
+        "target_image": target_image,
+        "restart_container": restart_container,
+    }
+
+
 def _setup_admin(
     client: TestClient,
     *,
@@ -3316,7 +3332,7 @@ def test_self_update_endpoint_enforces_auth_csrf_read_only_and_active_job(
         "_fetch_self_update_release_notes",
         lambda *_args, **_kwargs: ([], False, []),
     )
-    payload = {"confirmation": "pull_image_and_restart"}
+    payload = _self_update_payload()
     unauthenticated = _client(tmp_path, {"WUD_WEB_MUTATIONS_ENABLED": "true"})
     read_only = _client(
         tmp_path,
@@ -3366,6 +3382,39 @@ def test_self_update_endpoint_enforces_auth_csrf_read_only_and_active_job(
     assert active_job.json()["detail"] == "an apply job is already running"
 
 
+def test_self_update_endpoint_rejects_stale_confirmation(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    fake_env, fake_root = _fake_docker_env(tmp_path)
+    monkeypatch.setattr(web_module, "current_tag", lambda: "v0.24.2")
+    monkeypatch.setattr(web_module, "fetch_latest_release_tag", lambda: "v0.25.0")
+    monkeypatch.setattr(
+        web_module,
+        "_fetch_self_update_release_notes",
+        lambda *_args, **_kwargs: ([], False, []),
+    )
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+            "WUD_WEB_RESTART_CONTAINER": "wud-updater",
+            **fake_env,
+        },
+    )
+
+    response = client.post(
+        "/api/v1/self-update",
+        json=_self_update_payload(latest_tag="v0.24.9"),
+        headers=_csrf_headers(client),
+    )
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == "self-update target is stale"
+    assert _fake_docker_calls(fake_root) == ""
+
+
 def test_self_update_endpoint_pulls_image_restarts_container_and_audits(
     tmp_path: Path,
     monkeypatch,
@@ -3394,7 +3443,7 @@ def test_self_update_endpoint_pulls_image_restarts_container_and_audits(
 
     response = client.post(
         "/api/v1/self-update",
-        json={"confirmation": "pull_image_and_restart"},
+        json=_self_update_payload(),
         headers=_csrf_headers(client),
     )
 
@@ -3454,7 +3503,7 @@ def test_self_update_endpoint_inspects_restart_container_before_pull(
 
     response = client.post(
         "/api/v1/self-update",
-        json={"confirmation": "pull_image_and_restart"},
+        json=_self_update_payload(restart_container="missing-wud-updater"),
         headers=_csrf_headers(client),
     )
 
@@ -3505,7 +3554,7 @@ def test_self_update_endpoint_marks_audit_failed_when_pull_fails(
 
     response = client.post(
         "/api/v1/self-update",
-        json={"confirmation": "pull_image_and_restart"},
+        json=_self_update_payload(),
         headers=_csrf_headers(client),
     )
 
@@ -3528,6 +3577,60 @@ def test_self_update_endpoint_marks_audit_failed_when_pull_fails(
     assert "docker pull ghcr.io/magrhino/wud-updater:v0.25.0" in metadata["error"]
 
 
+def test_self_update_task_marks_audit_success_before_restart(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    client = _client(tmp_path, {"WUD_WEB_DEV_NO_AUTH": "true"})
+    settings = client.app.state.web_settings
+    state = SimpleNamespace(web_apply_lock=Lock(), web_self_update_running=True)
+    docker_calls: list[str] = []
+    audit_updates: list[tuple[str, str]] = []
+
+    class FakeDocker:
+        def __init__(self, **_kwargs: object) -> None:
+            pass
+
+        def pull_image(self, image: str) -> None:
+            docker_calls.append(f"pull {image}")
+
+        def restart_container(self, container: str, *, timeout_seconds: int) -> None:
+            docker_calls.append(f"restart {container} {timeout_seconds}")
+            raise SystemExit(0)
+
+    def audit_update(
+        _settings: web_module.WebSettings,
+        _run_id: int,
+        *,
+        status: str,
+        error: str = "",
+    ) -> None:
+        audit_updates.append((status, error))
+
+    monkeypatch.setattr(web_module, "DockerCli", FakeDocker)
+    monkeypatch.setattr(web_module, "_safe_update_self_update_audit", audit_update)
+
+    try:
+        web_module._self_update_task(
+            state,
+            settings,
+            "ghcr.io/magrhino/wud-updater:v0.25.0",
+            "wud-updater",
+            77,
+        )
+    except SystemExit:
+        pass
+    else:
+        raise AssertionError("restart should simulate the WebUI process exiting")
+
+    assert docker_calls == [
+        "pull ghcr.io/magrhino/wud-updater:v0.25.0",
+        "restart wud-updater 10",
+    ]
+    assert audit_updates == [("success", "")]
+    assert state.web_self_update_running is False
+
+
 def test_self_update_endpoint_rejects_active_self_update(
     tmp_path: Path,
     monkeypatch,
@@ -3548,7 +3651,7 @@ def test_self_update_endpoint_rejects_active_self_update(
 
     response = client.post(
         "/api/v1/self-update",
-        json={"confirmation": "pull_image_and_restart"},
+        json=_self_update_payload(),
         headers=_csrf_headers(client),
     )
 
@@ -5836,6 +5939,48 @@ def test_apply_endpoint_rejects_stale_plan_without_mutation(tmp_path: Path) -> N
     assert plan["can_apply"] is True
     assert response.status_code == 409
     assert response.json()["detail"] == "plan is stale"
+    assert " pull " not in _fake_docker_calls(fake_root)
+
+
+def test_apply_endpoint_rejects_active_self_update(tmp_path: Path) -> None:
+    fake_env, fake_root = _fake_docker_env(tmp_path)
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+            **fake_env,
+        },
+    )
+    wud_file = tmp_path / "state" / "images.todo"
+    wud_file.write_text("repo/app:latest\n", encoding="utf-8")
+    _make_fake_stack(
+        tmp_path,
+        fake_root,
+        "stack",
+        [("app", "repo/app:latest", "cid-app")],
+    )
+    headers = _csrf_headers(client)
+    plan = client.post(
+        "/api/v1/plans",
+        json={"line_numbers": [1]},
+        headers=headers,
+    ).json()
+    client.app.state.web_self_update_running = True
+
+    response = client.post(
+        "/api/v1/jobs",
+        json={
+            "plan_id": plan["plan_id"],
+            "line_numbers": [1],
+            "confirmation": "apply",
+        },
+        headers=headers,
+    )
+
+    assert plan["can_apply"] is True
+    assert response.status_code == 409
+    assert response.json()["detail"] == "self-update is already running"
     assert " pull " not in _fake_docker_calls(fake_root)
 
 

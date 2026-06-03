@@ -5,6 +5,7 @@ import {
   apiPrefixFromBasePath,
   normalizeApiPrefix,
   webApi,
+  type SelfUpdateResponse,
   type StateOperation,
 } from "../src/api/client";
 
@@ -23,6 +24,23 @@ function mockFetch(body: unknown = {}): ReturnType<typeof vi.fn> {
 
 function requestInit(call: unknown[]): RequestInit {
   return call[1] as RequestInit;
+}
+
+function selfUpdateStatus(): SelfUpdateResponse {
+  return {
+    status: "available",
+    current_tag: "v0.24.2",
+    latest_tag: "v0.25.0",
+    current_image: "ghcr.io/magrhino/wud-updater:v0.24.2",
+    target_image: "ghcr.io/magrhino/wud-updater:v0.25.0",
+    restart_container: "wud-updater",
+    release_notes: [],
+    release_notes_truncated: false,
+    release_notes_cap: 10,
+    can_update: true,
+    disabled_reason: "",
+    warnings: [],
+  };
 }
 
 describe("webApi", () => {
@@ -95,7 +113,7 @@ describe("webApi", () => {
       webApi.tagExclusions("active"),
       webApi.stateOperation(operation, "csrf"),
       webApi.selfUpdate(),
-      webApi.applySelfUpdate("csrf"),
+      webApi.applySelfUpdate("csrf", selfUpdateStatus()),
       webApi.restartContainer("csrf"),
       webApi.createPlan([1], true, [{ line_no: 1, tag: "1.1" }], "csrf"),
       webApi.createJob("plan", [1], true, [{ line_no: 1, tag: "1.1" }], "csrf"),
@@ -144,7 +162,7 @@ describe("webApi", () => {
       "csrf-token",
     );
     await webApi.stateOperation(operation, "csrf-token");
-    await webApi.applySelfUpdate("csrf-token");
+    await webApi.applySelfUpdate("csrf-token", selfUpdateStatus());
     await webApi.restartContainer("csrf-token");
     await webApi.createPlan([1], false, [], "csrf-token");
     await webApi.createJob("plan", [1], false, [], "csrf-token");
@@ -176,7 +194,7 @@ describe("webApi", () => {
       "csrf",
     );
     await webApi.updateCoreUpdateTour("in_progress", "pending_preflight", "csrf");
-    await webApi.applySelfUpdate("csrf");
+    await webApi.applySelfUpdate("csrf", selfUpdateStatus());
     await webApi.restartContainer("csrf");
     await webApi.createPlan([4], true, tagOverrides, "csrf");
     await webApi.createJob("plan-id", [4], true, tagOverrides, "csrf");
@@ -207,6 +225,10 @@ describe("webApi", () => {
     });
     expect(JSON.parse(String(requestInit(fetchMock.mock.calls[5]).body))).toEqual({
       confirmation: "pull_image_and_restart",
+      current_tag: "v0.24.2",
+      latest_tag: "v0.25.0",
+      target_image: "ghcr.io/magrhino/wud-updater:v0.25.0",
+      restart_container: "wud-updater",
     });
     expect(JSON.parse(String(requestInit(fetchMock.mock.calls[6]).body))).toEqual({
       confirmation: "restart_container",

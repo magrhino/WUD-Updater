@@ -113,7 +113,13 @@ export const useWebuiStore = defineStore("webui", () => {
     selfUpdateError.value = "";
     let response: SelfUpdateApplyResponse | null = null;
     await loadWithState(async () => {
-      response = await webApi.applySelfUpdate(await auth.ensureCsrf());
+      if (selfUpdate.value === null) {
+        throw new Error("Self-update status has not been loaded");
+      }
+      response = await webApi.applySelfUpdate(
+        await auth.ensureCsrf(),
+        selfUpdate.value,
+      );
       selfUpdateMessage.value = `Self-update requested for ${response.container}. The WebUI may disconnect while the container restarts.`;
       try {
         selfUpdate.value = await webApi.selfUpdate();

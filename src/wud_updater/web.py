@@ -1058,6 +1058,10 @@ class SelfUpdateResponse(BaseModel):
 
 class SelfUpdateRequest(BaseModel):
     confirmation: Literal["pull_image_and_restart"]
+    current_tag: str
+    latest_tag: str
+    target_image: str
+    restart_container: str
 
 
 class SelfUpdateApplyResponse(BaseModel):
@@ -1953,8 +1957,9 @@ def api_pending_cleanup(
     settings = _settings(request)
     if not settings.mutations_enabled:
         raise HTTPException(status_code=403, detail="mutations are disabled")
-    if _active_apply_job_exists(request):
-        raise HTTPException(status_code=409, detail="an apply job is already running")
+    active_error = _active_mutation_error(request)
+    if active_error:
+        raise HTTPException(status_code=409, detail=active_error)
 
     payload_lines = _cleanup_payload_lines(payload)
     wud_lock = _acquire_apply_wud_lock(settings)
@@ -2052,8 +2057,9 @@ def api_pending_removal(
     settings = _settings(request)
     if not settings.mutations_enabled:
         raise HTTPException(status_code=403, detail="mutations are disabled")
-    if _active_apply_job_exists(request):
-        raise HTTPException(status_code=409, detail="an apply job is already running")
+    active_error = _active_mutation_error(request)
+    if active_error:
+        raise HTTPException(status_code=409, detail=active_error)
 
     payload_lines = _removal_payload_lines(payload)
     wud_lock = _acquire_apply_wud_lock(settings)
@@ -2328,6 +2334,8 @@ def api_apply_self_update(
         if not status.can_update:
             detail = status.disabled_reason or "self-update is not available"
             raise HTTPException(status_code=409, detail=detail)
+        if _self_update_confirmation_stale(payload, status):
+            raise HTTPException(status_code=409, detail="self-update target is stale")
         docker = DockerCli(runner=CommandRunner(env=settings.command_env))
         try:
             container_id = docker.container_id(status.restart_container)
@@ -2396,8 +2404,9 @@ def api_restart_container(
     settings = _settings(request)
     if not settings.mutations_enabled:
         raise HTTPException(status_code=403, detail="mutations are disabled")
-    if _active_apply_job_exists(request):
-        raise HTTPException(status_code=409, detail="an apply job is already running")
+    active_error = _active_mutation_error(request)
+    if active_error:
+        raise HTTPException(status_code=409, detail=active_error)
     container = settings.restart_container.strip()
     if not container:
         raise HTTPException(
@@ -2479,8 +2488,9 @@ def api_create_job(payload: ApplyPlanRequest, request: Request) -> ApplyJobRespo
     settings = _settings(request)
     if not settings.mutations_enabled:
         raise HTTPException(status_code=403, detail="mutations are disabled")
-    if _active_apply_job_exists(request):
-        raise HTTPException(status_code=409, detail="an apply job is already running")
+    active_error = _active_mutation_error(request)
+    if active_error:
+        raise HTTPException(status_code=409, detail=active_error)
     wud_lock = _acquire_apply_wud_lock(settings)
     try:
         try:
@@ -4447,8 +4457,9 @@ def _submit_apply_job_state(
     jobs: dict[str, WebApplyJob] = state.web_apply_jobs
     executor: ThreadPoolExecutor = state.web_apply_executor
     with apply_condition:
-        if any(job.status in {"queued", "running"} for job in jobs.values()):
-            raise HTTPException(status_code=409, detail="an apply job is already running")
+        active_error = _active_mutation_error_unlocked(state)
+        if active_error:
+            raise HTTPException(status_code=409, detail=active_error)
         job = WebApplyJob(
             id=secrets.token_urlsafe(18),
             status="queued",
@@ -4481,20 +4492,34 @@ def _active_apply_job_exists(request: Request) -> bool:
 
 
 def _active_apply_job_exists_in_state(state: Any) -> bool:
+    return _active_mutation_error_in_state(state) != ""
+
+
+def _active_mutation_error(request: Request) -> str:
+    return _active_mutation_error_in_state(request.app.state)
+
+
+def _active_mutation_error_in_state(state: Any) -> str:
     apply_lock: Lock = state.web_apply_lock
-    jobs: dict[str, WebApplyJob] = state.web_apply_jobs
     with apply_lock:
-        return any(job.status in {"queued", "running"} for job in jobs.values())
+        return _active_mutation_error_unlocked(state)
+
+
+def _active_mutation_error_unlocked(state: Any) -> str:
+    jobs: dict[str, WebApplyJob] = state.web_apply_jobs
+    if any(job.status in {"queued", "running"} for job in jobs.values()):
+        return "an apply job is already running"
+    if bool(getattr(state, "web_self_update_running", False)):
+        return "self-update is already running"
+    return ""
 
 
 def _reserve_self_update(state: Any) -> str:
     apply_lock: Lock = state.web_apply_lock
-    jobs: dict[str, WebApplyJob] = state.web_apply_jobs
     with apply_lock:
-        if any(job.status in {"queued", "running"} for job in jobs.values()):
-            return "an apply job is already running"
-        if bool(getattr(state, "web_self_update_running", False)):
-            return "self-update is already running"
+        active_error = _active_mutation_error_unlocked(state)
+        if active_error:
+            return active_error
         state.web_self_update_running = True
     return ""
 
@@ -5874,6 +5899,18 @@ def _self_update_disabled_reason(
     return ""
 
 
+def _self_update_confirmation_stale(
+    payload: SelfUpdateRequest,
+    status: SelfUpdateResponse,
+) -> bool:
+    return (
+        payload.current_tag != status.current_tag
+        or payload.latest_tag != status.latest_tag
+        or payload.target_image != status.target_image
+        or payload.restart_container != status.restart_container
+    )
+
+
 def _self_update_pull_image(target: str) -> str:
     parts = target.strip().split()
     if not parts:
@@ -6115,6 +6152,25 @@ def _self_update_task(
     docker = DockerCli(runner=CommandRunner(env=settings.command_env))
     try:
         docker.pull_image(target_image)
+    except CommandError as exc:
+        detail = exc.result.stderr.strip() or str(exc)
+        LOGGER.error(
+            "WebUI self-update failed for %s -> %s: %s",
+            target_image,
+            container,
+            _redact_sensitive_text(settings, detail),
+        )
+        _safe_update_self_update_audit(
+            settings,
+            audit_run_id,
+            status="failure",
+            error=_redact_sensitive_text(settings, detail),
+        )
+        _release_self_update(state)
+        return
+
+    _safe_update_self_update_audit(settings, audit_run_id, status="success")
+    try:
         docker.restart_container(container, timeout_seconds=10)
     except CommandError as exc:
         detail = exc.result.stderr.strip() or str(exc)
@@ -6131,8 +6187,6 @@ def _self_update_task(
             error=_redact_sensitive_text(settings, detail),
         )
         return
-    else:
-        _safe_update_self_update_audit(settings, audit_run_id, status="success")
     finally:
         _release_self_update(state)
 

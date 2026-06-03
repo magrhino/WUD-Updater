@@ -1475,7 +1475,10 @@ export function createDemoWebApi(): WebApi {
     releaseNotes: async () => state.releaseNotes(),
     refreshReleaseNotes: async (_csrfToken: string) => state.releaseNotes(),
     selfUpdate: async () => state.selfUpdate(),
-    applySelfUpdate: async (_csrfToken: string): Promise<SelfUpdateApplyResponse> => ({
+    applySelfUpdate: async (
+      _csrfToken: string,
+      _update: SelfUpdateResponse,
+    ): Promise<SelfUpdateApplyResponse> => ({
       status: "scheduled",
       audit_run_id: 9002,
       current_tag: `v${DEMO_VERSION}`,
