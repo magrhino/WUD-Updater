@@ -12,6 +12,8 @@ import secrets
 import sqlite3
 import sys
 import time
+import urllib.error
+import urllib.request
 from concurrent.futures import ThreadPoolExecutor
 from collections.abc import Awaitable, Callable, Iterator, Mapping, Sequence
 from contextlib import closing, contextmanager
@@ -44,6 +46,12 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from . import __version__
+from .banner import (
+    current_tag,
+    fetch_latest_release_tag,
+    release_check_enabled,
+    release_update_available,
+)
 from .command import CommandError, CommandRunner
 from .compose import ComposeCli, ComposeDiscoveryError
 from .config import (
@@ -79,7 +87,14 @@ from .doctor import (
     options_from_namespace as doctor_options_from_namespace,
 )
 from .docker_cli import ContainerImage, DockerCli
-from .images import image_matches_resolved_target, image_tag, repo_key, tag_value_valid
+from .images import (
+    image_has_tag,
+    image_matches_resolved_target,
+    image_tag,
+    image_with_tag,
+    repo_key,
+    tag_value_valid,
+)
 from .locks import DirectoryLock, WudLockError
 from .plans import (
     DryRunPlan,
@@ -95,11 +110,13 @@ from .release_notes import (
     OCI_SOURCE_LABEL,
     ReleaseNoteSourceResolver,
     cached_release_notes,
+    detect_breaking,
     github_repo_from_ghcr_image,
     github_repo_from_source,
     refresh_release_notes,
     release_note_placeholders,
 )
+from .self_update import current_container_image, release_self_update_target
 from .updater import (
     TagOverride,
     UpdaterProgressEvent,
@@ -116,6 +133,8 @@ DEFAULT_WEB_PORT = 8080
 DEFAULT_RUN_LIMIT = 50
 DEFAULT_LOG_TAIL_BYTES = 262_144
 DEFAULT_JOB_LOG_TAIL_BYTES = 65_536
+SELF_UPDATE_RELEASE_NOTES_CAP = 10
+SELF_UPDATE_RELEASES_URL = "https://api.github.com/repos/magrhino/WUD-Updater/releases"
 MAX_LOG_TAIL_BYTES = 1_048_576
 SESSION_MAX_AGE_SECONDS = 86_400
 SETUP_CLAIM_MAX_AGE_SECONDS = 86_400
@@ -175,6 +194,7 @@ PendingGroupingStatus = Literal["ready", "unavailable"]
 DoctorCheckStatus = Literal["PASS", "WARN", "FAIL"]
 ApplyJobStatus = Literal["queued", "running", "success", "failure"]
 ApplyJobProgressStatus = Literal["running", "success", "failure", "skipped"]
+SelfUpdateStatus = Literal["available", "up_to_date", "disabled", "unavailable"]
 SettingsEntrySource = Literal["configured", "default", "derived", "request"]
 ManagedSettingSource = Literal["configured", "default"]
 ServicePolicyUpdateMode = Literal["", "pause", "stop", "live"]
@@ -1010,6 +1030,45 @@ class ContainerRestartResponse(BaseModel):
     container: str
 
 
+class SelfUpdateReleaseNote(BaseModel):
+    tag: str
+    title: str
+    published_at: str
+    url: str
+    body: str = ""
+    body_truncated: bool = False
+    breaking: bool = False
+    breaking_reasons: list[str] = Field(default_factory=list)
+
+
+class SelfUpdateResponse(BaseModel):
+    status: SelfUpdateStatus
+    current_tag: str
+    latest_tag: str
+    current_image: str
+    target_image: str
+    restart_container: str
+    release_notes: list[SelfUpdateReleaseNote] = Field(default_factory=list)
+    release_notes_truncated: bool = False
+    release_notes_cap: int = SELF_UPDATE_RELEASE_NOTES_CAP
+    can_update: bool = False
+    disabled_reason: str = ""
+    warnings: list[str] = Field(default_factory=list)
+
+
+class SelfUpdateRequest(BaseModel):
+    confirmation: Literal["pull_image_and_restart"]
+
+
+class SelfUpdateApplyResponse(BaseModel):
+    status: Literal["scheduled"]
+    audit_run_id: int
+    current_tag: str
+    latest_tag: str
+    target_image: str
+    container: str
+
+
 def create_app(
     settings: WebSettings | None = None,
     *,
@@ -1285,6 +1344,19 @@ def create_app(
         api_state_operation,
         methods=["POST"],
         response_model=StateOperationResponse,
+    )
+    router.add_api_route(
+        "/self-update",
+        api_self_update,
+        methods=["GET"],
+        response_model=SelfUpdateResponse,
+    )
+    router.add_api_route(
+        "/self-update",
+        api_apply_self_update,
+        methods=["POST"],
+        response_model=SelfUpdateApplyResponse,
+        status_code=202,
     )
     router.add_api_route(
         "/container/restart",
@@ -2231,6 +2303,64 @@ def api_state_operation(
             status_code=500,
             detail=f"could not update database: {exc}",
         ) from exc
+
+
+def api_self_update(request: Request) -> SelfUpdateResponse:
+    return _self_update_response(_settings(request))
+
+
+def api_apply_self_update(
+    payload: SelfUpdateRequest,
+    request: Request,
+    background_tasks: BackgroundTasks,
+) -> SelfUpdateApplyResponse:
+    _ = payload.confirmation
+    settings = _settings(request)
+    if not settings.mutations_enabled:
+        raise HTTPException(status_code=403, detail="mutations are disabled")
+    if _active_apply_job_exists(request):
+        raise HTTPException(status_code=409, detail="an apply job is already running")
+
+    status = _self_update_response(settings)
+    if not status.can_update:
+        detail = status.disabled_reason or "self-update is not available"
+        raise HTTPException(status_code=409, detail=detail)
+
+    try:
+        with connect_db(settings.config.db_path) as conn:
+            init_db(conn)
+            with _immediate_transaction(conn):
+                audit_run_id = _insert_self_update_audit(
+                    conn,
+                    settings,
+                    request,
+                    status=status,
+                )
+    except (OSError, sqlite3.Error, DatabaseError) as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=_safe_exception_detail(
+                settings,
+                "could not record self-update audit",
+                exc,
+            ),
+        ) from exc
+
+    background_tasks.add_task(
+        _self_update_task,
+        settings,
+        status.target_image,
+        status.restart_container,
+        audit_run_id,
+    )
+    return SelfUpdateApplyResponse(
+        status="scheduled",
+        audit_run_id=audit_run_id,
+        current_tag=status.current_tag,
+        latest_tag=status.latest_tag,
+        target_image=status.target_image,
+        container=status.restart_container,
+    )
 
 
 def api_restart_container(
@@ -5553,6 +5683,255 @@ def _set_tag_exclusion_status(
     )
 
 
+def _self_update_response(settings: WebSettings) -> SelfUpdateResponse:
+    env = settings.command_env or {}
+    local_tag = current_tag()
+    container = settings.restart_container.strip()
+    current_image = current_container_image(env)
+    warnings: list[str] = []
+
+    if _parse_bool(env.get("WUD_WEB_DEMO_SELF_UPDATE"), default=False):
+        return _demo_self_update_response(
+            settings,
+            current_image=current_image,
+            restart_container=container,
+        )
+
+    if not release_check_enabled(env):
+        return SelfUpdateResponse(
+            status="disabled",
+            current_tag=local_tag,
+            latest_tag="",
+            current_image=current_image,
+            target_image="",
+            restart_container=container,
+            disabled_reason="release checks are disabled",
+        )
+
+    latest_tag = fetch_latest_release_tag()
+    if latest_tag is None:
+        return SelfUpdateResponse(
+            status="unavailable",
+            current_tag=local_tag,
+            latest_tag="",
+            current_image=current_image,
+            target_image="",
+            restart_container=container,
+            disabled_reason="latest release could not be checked",
+            warnings=["latest WUD-Updater release could not be checked"],
+        )
+
+    if not release_update_available(local_tag, latest_tag):
+        return SelfUpdateResponse(
+            status="up_to_date",
+            current_tag=local_tag,
+            latest_tag=latest_tag,
+            current_image=current_image,
+            target_image="",
+            restart_container=container,
+        )
+
+    target_spec = release_self_update_target(current_image, local_tag, latest_tag)
+    target_image = _self_update_pull_image(target_spec)
+    release_notes, truncated, note_warnings = _fetch_self_update_release_notes(
+        local_tag,
+        latest_tag,
+        env,
+        cap=SELF_UPDATE_RELEASE_NOTES_CAP,
+    )
+    warnings.extend(note_warnings)
+    disabled_reason = _self_update_disabled_reason(
+        settings,
+        target_image=target_image,
+        restart_container=container,
+    )
+    return SelfUpdateResponse(
+        status="available",
+        current_tag=local_tag,
+        latest_tag=latest_tag,
+        current_image=current_image,
+        target_image=target_image,
+        restart_container=container,
+        release_notes=release_notes,
+        release_notes_truncated=truncated,
+        release_notes_cap=SELF_UPDATE_RELEASE_NOTES_CAP,
+        can_update=disabled_reason == "",
+        disabled_reason=disabled_reason,
+        warnings=warnings,
+    )
+
+
+def _demo_self_update_response(
+    settings: WebSettings,
+    *,
+    current_image: str,
+    restart_container: str,
+) -> SelfUpdateResponse:
+    demo_current_tag = "v0.25.0"
+    latest_tag = "v0.26.0"
+    current_image = current_image or "ghcr.io/magrhino/wud-updater:v0.25.0"
+    target_image = "ghcr.io/magrhino/wud-updater:v0.26.0"
+    disabled_reason = _self_update_disabled_reason(
+        settings,
+        target_image=target_image,
+        restart_container=restart_container,
+    )
+    notes = [
+        SelfUpdateReleaseNote(
+            tag=f"v0.{minor}.0",
+            title=f"v0.{minor}.0 demo release",
+            published_at=f"2026-05-{day:02d}T12:00:00Z",
+            url=f"https://github.com/magrhino/WUD-Updater/releases/tag/v0.{minor}.0",
+            body=(
+                "Adds the WebUI self-update banner, release-note review, "
+                "image pull, and restart confirmation flow."
+                if minor == 26
+                else "Demo release note for the capped self-update history list."
+            ),
+            breaking=minor == 26,
+            breaking_reasons=(
+                ["Review WebUI restart behavior."] if minor == 26 else []
+            ),
+        )
+        for minor, day in zip(range(26, 16, -1), range(28, 18, -1), strict=True)
+    ]
+    return SelfUpdateResponse(
+        status="available",
+        current_tag=demo_current_tag,
+        latest_tag=latest_tag,
+        current_image=current_image,
+        target_image=target_image,
+        restart_container=restart_container,
+        release_notes=notes,
+        release_notes_truncated=True,
+        release_notes_cap=SELF_UPDATE_RELEASE_NOTES_CAP,
+        can_update=disabled_reason == "",
+        disabled_reason=disabled_reason,
+    )
+
+
+def _self_update_disabled_reason(
+    settings: WebSettings,
+    *,
+    target_image: str,
+    restart_container: str,
+) -> str:
+    if not settings.mutations_enabled:
+        return (
+            "Read-only mode is active. Set WUD_WEB_MUTATIONS_ENABLED=true on "
+            "the server to update the WebUI container."
+        )
+    if not restart_container:
+        return "container restart target is not configured"
+    if not target_image:
+        return "self-update image target could not be determined"
+    try:
+        _validate_restart_container_target(restart_container)
+    except WebConfigError as exc:
+        return str(exc)
+    return ""
+
+
+def _self_update_pull_image(target: str) -> str:
+    parts = target.strip().split()
+    if not parts:
+        return ""
+    image = parts[0]
+    desired_tag = ""
+    for token in parts[1:]:
+        if token.startswith("tag="):
+            desired_tag = token.removeprefix("tag=")
+    if desired_tag and image_has_tag(image) and tag_value_valid(desired_tag):
+        return image_with_tag(image, desired_tag)
+    return image
+
+
+def _fetch_self_update_release_notes(
+    current: str,
+    latest: str,
+    environ: Mapping[str, str],
+    *,
+    cap: int,
+) -> tuple[list[SelfUpdateReleaseNote], bool, list[str]]:
+    request = urllib.request.Request(
+        SELF_UPDATE_RELEASES_URL,
+        headers={
+            "Accept": "application/vnd.github+json",
+            "User-Agent": f"wud-updater-webui/{__version__}",
+            **(
+                {"Authorization": f"Bearer {environ['GITHUB_TOKEN']}"}
+                if environ.get("GITHUB_TOKEN")
+                else {}
+            ),
+        },
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=6.0) as response:
+            payload = response.read(262_144)
+        data = json.loads(payload.decode("utf-8"))
+    except (OSError, urllib.error.URLError, json.JSONDecodeError) as exc:
+        return [], False, [f"self-update release notes unavailable: {exc}"]
+    if not isinstance(data, list):
+        return [], False, ["self-update release notes unavailable: invalid response"]
+
+    matched: list[SelfUpdateReleaseNote] = []
+    for item in data:
+        if not isinstance(item, dict):
+            continue
+        tag = item.get("tag_name")
+        if not isinstance(tag, str):
+            continue
+        normalized_tag = _normalize_self_update_tag(tag)
+        if not _self_update_tag_between(normalized_tag, current, latest):
+            continue
+        body = str(item.get("body") or "")
+        body_truncated = len(body) > 6000
+        if body_truncated:
+            body = body[:6000].rstrip()
+        breaking, reasons = detect_breaking(body, current, normalized_tag)
+        matched.append(
+            SelfUpdateReleaseNote(
+                tag=normalized_tag,
+                title=str(item.get("name") or normalized_tag),
+                published_at=str(item.get("published_at") or ""),
+                url=str(item.get("html_url") or ""),
+                body=body,
+                body_truncated=body_truncated,
+                breaking=breaking,
+                breaking_reasons=reasons,
+            )
+        )
+
+    matched.sort(
+        key=lambda note: _self_update_semver_key(note.tag) or (0, 0, 0),
+        reverse=True,
+    )
+    return matched[:cap], len(matched) > cap, []
+
+
+def _self_update_tag_between(tag: str, current: str, latest: str) -> bool:
+    tag_key = _self_update_semver_key(tag)
+    current_key = _self_update_semver_key(current)
+    latest_key = _self_update_semver_key(latest)
+    if tag_key is None or current_key is None or latest_key is None:
+        return False
+    return current_key < tag_key <= latest_key
+
+
+def _self_update_semver_key(tag: str) -> tuple[int, int, int] | None:
+    match = re.match(r"^v?([0-9]+)\.([0-9]+)\.([0-9]+)(?:[-+].*)?$", tag.strip())
+    if not match:
+        return None
+    return tuple(int(part) for part in match.groups())
+
+
+def _normalize_self_update_tag(tag: str) -> str:
+    normalized = tag.strip()
+    if not normalized:
+        return ""
+    return normalized if normalized.startswith("v") else f"v{normalized}"
+
+
 def _service_policy_row(
     conn: sqlite3.Connection,
     service_key: str,
@@ -5684,6 +6063,35 @@ def _valid_tag(value: str) -> str:
     return tag
 
 
+def _self_update_task(
+    settings: WebSettings,
+    target_image: str,
+    container: str,
+    audit_run_id: int,
+) -> None:
+    docker = DockerCli(runner=CommandRunner(env=settings.command_env))
+    try:
+        docker.pull_image(target_image)
+        docker.restart_container(container, timeout_seconds=10)
+    except CommandError as exc:
+        detail = exc.result.stderr.strip() or str(exc)
+        LOGGER.error(
+            "WebUI self-update failed for %s -> %s: %s",
+            target_image,
+            container,
+            _redact_sensitive_text(settings, detail),
+        )
+        _safe_update_self_update_audit(
+            settings,
+            audit_run_id,
+            status="failure",
+            error=_redact_sensitive_text(settings, detail),
+        )
+        return
+
+    _safe_update_self_update_audit(settings, audit_run_id, status="success")
+
+
 def _restart_container_task(
     settings: WebSettings,
     container: str,
@@ -5778,6 +6186,76 @@ def _insert_container_restart_audit(
     return run_id
 
 
+def _insert_self_update_audit(
+    conn: sqlite3.Connection,
+    settings: WebSettings,
+    request: Request,
+    *,
+    status: SelfUpdateResponse,
+) -> int:
+    now = utc_timestamp()
+    metadata = {
+        "source": "webui",
+        "operation": "self_update",
+        "actor_type": _state_actor_type(settings, request),
+        "resource_type": "container",
+        "resource_id": status.restart_container,
+        "current_tag": status.current_tag,
+        "latest_tag": status.latest_tag,
+        "current_image": status.current_image,
+        "target_image": status.target_image,
+        "target": {
+            "container": status.restart_container,
+            "image": status.target_image,
+        },
+        "status": "scheduled",
+    }
+    cursor = conn.execute(
+        """
+        INSERT INTO update_runs (
+            started_at,
+            finished_at,
+            status,
+            dry_run,
+            mode,
+            wud_file,
+            log_file,
+            metadata_json
+        )
+        VALUES (?, NULL, 'scheduled', 0, 'web-self-update', ?, '', ?)
+        """,
+        (
+            now,
+            str(settings.config.wud_out_file),
+            _json_object(metadata),
+        ),
+    )
+    run_id = int(cursor.lastrowid)
+    conn.execute(
+        """
+        INSERT INTO update_events (
+            run_id,
+            created_at,
+            service_name,
+            stack_name,
+            image,
+            target_image,
+            status,
+            metadata_json
+        )
+        VALUES (?, ?, 'wud-updater', 'webui', ?, ?, 'scheduled', ?)
+        """,
+        (
+            run_id,
+            now,
+            status.current_image,
+            status.target_image,
+            _json_object(metadata),
+        ),
+    )
+    return run_id
+
+
 def _insert_managed_settings_audit(
     conn: sqlite3.Connection,
     settings: WebSettings,
@@ -5863,6 +6341,86 @@ def _safe_update_container_restart_audit(
         )
     except (OSError, sqlite3.Error, DatabaseError):
         LOGGER.exception("failed to update WebUI container restart audit")
+
+
+def _safe_update_self_update_audit(
+    settings: WebSettings,
+    run_id: int,
+    *,
+    status: Literal["success", "failure"],
+    error: str = "",
+) -> None:
+    try:
+        _update_self_update_audit(
+            settings,
+            run_id,
+            status=status,
+            error=error,
+        )
+    except (OSError, sqlite3.Error, DatabaseError):
+        LOGGER.exception("failed to update WebUI self-update audit")
+
+
+def _update_self_update_audit(
+    settings: WebSettings,
+    run_id: int,
+    *,
+    status: Literal["success", "failure"],
+    error: str = "",
+) -> None:
+    now = utc_timestamp()
+    with connect_db(settings.config.db_path) as conn:
+        init_db(conn)
+        with conn:
+            metadata = _self_update_audit_metadata(conn, run_id)
+            metadata["status"] = status
+            if error:
+                metadata["error"] = error
+            else:
+                metadata.pop("error", None)
+            metadata_json = _json_object(metadata)
+            conn.execute(
+                """
+                UPDATE update_runs
+                SET finished_at = ?,
+                    status = ?,
+                    metadata_json = ?
+                WHERE id = ?
+                  AND mode = 'web-self-update'
+                """,
+                (now, status, metadata_json, run_id),
+            )
+            conn.execute(
+                """
+                UPDATE update_events
+                SET status = ?,
+                    metadata_json = ?
+                WHERE run_id = ?
+                """,
+                (status, metadata_json, run_id),
+            )
+
+
+def _self_update_audit_metadata(
+    conn: sqlite3.Connection,
+    run_id: int,
+) -> dict[str, Any]:
+    row = conn.execute(
+        """
+        SELECT metadata_json
+        FROM update_runs
+        WHERE id = ?
+          AND mode = 'web-self-update'
+        """,
+        (run_id,),
+    ).fetchone()
+    if row is None:
+        return {}
+    try:
+        metadata = json.loads(str(row["metadata_json"] or "{}"))
+    except json.JSONDecodeError:
+        return {}
+    return metadata if isinstance(metadata, dict) else {}
 
 
 def _update_container_restart_audit(

@@ -1,10 +1,13 @@
 <script setup lang="ts">
-import { computed, watch } from "vue";
+import { computed, ref, watch } from "vue";
 import { RouterLink, RouterView, useRoute, useRouter } from "vue-router";
 import {
   Activity,
+  AlertTriangle,
   BellOff,
   Clock3,
+  ExternalLink,
+  Info,
   LayoutDashboard,
   ListChecks,
   LogOut,
@@ -37,6 +40,7 @@ const {
 
 const RELEASES_URL = "https://github.com/magrhino/WUD-Updater/releases";
 const VERSION_RELEASE_RE = /^v?\d+\.\d+/;
+const selfUpdateDialogVisible = ref(false);
 
 const showShell = computed(
   () => route.name !== "login" && route.name !== "setup" && auth.authenticated,
@@ -90,6 +94,34 @@ const themeButtonAriaLabel = computed(
       nextPreference.value
     ].toLowerCase()}.`,
 );
+const selfUpdateVisible = computed(
+  () => showShell.value && webui.selfUpdate?.status === "available",
+);
+const selfUpdateButtonDisabled = computed(
+  () => webui.loading || !(webui.selfUpdate?.can_update ?? false),
+);
+const selfUpdateDisabledReason = computed(
+  () => webui.selfUpdate?.disabled_reason ?? "",
+);
+const selfUpdateFacts = computed(() => {
+  const update = webui.selfUpdate;
+  if (!update) {
+    return "";
+  }
+  const image = update.target_image || "image unavailable";
+  const container = update.restart_container || "restart target unavailable";
+  return `${image} -> ${container}`;
+});
+const selfUpdateReleaseCapTitle = computed(() => {
+  const cap = webui.selfUpdate?.release_notes_cap ?? 10;
+  return `Showing the newest ${cap} matching releases between the running version and latest version. Open GitHub releases for older notes.`;
+});
+const selfUpdateReleasesUrl = computed(() => {
+  const latest = webui.selfUpdate?.latest_tag;
+  return latest
+    ? `${RELEASES_URL}/tag/${latest}`
+    : RELEASES_URL;
+});
 const navItems = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard },
   { to: "/pending", label: "Pending", icon: ListChecks },
@@ -112,6 +144,9 @@ watch(
     }
     if (visible && webui.coreUpdateTour === null) {
       void webui.loadCoreUpdateTour().catch(() => undefined);
+    }
+    if (visible && webui.selfUpdate === null) {
+      void webui.loadSelfUpdate().catch(() => undefined);
     }
   },
   { immediate: true },
@@ -163,6 +198,11 @@ async function refreshCurrentView(): Promise<void> {
 async function handleLogout(): Promise<void> {
   await auth.logout();
   await router.replace({ name: "login" });
+}
+
+async function confirmSelfUpdate(): Promise<void> {
+  await webui.applySelfUpdate();
+  selfUpdateDialogVisible.value = false;
 }
 </script>
 
@@ -248,6 +288,49 @@ async function handleLogout(): Promise<void> {
             </div>
           </header>
 
+          <section
+            v-if="selfUpdateVisible"
+            class="self-update-banner"
+            aria-label="WUD-Updater self-update"
+          >
+            <div class="self-update-banner-main">
+              <AlertTriangle :size="20" aria-hidden="true" />
+              <div>
+                <strong>
+                  Update available:
+                  {{ webui.selfUpdate?.current_tag }} -> {{ webui.selfUpdate?.latest_tag }}
+                </strong>
+                <span>{{ selfUpdateFacts }}</span>
+              </div>
+            </div>
+            <div class="self-update-banner-actions">
+              <span
+                v-if="selfUpdateDisabledReason"
+                class="self-update-disabled"
+              >
+                {{ selfUpdateDisabledReason }}
+              </span>
+              <n-button
+                type="primary"
+                size="small"
+                :disabled="selfUpdateButtonDisabled"
+                :title="selfUpdateDisabledReason || 'Review release notes and update'"
+                @click="selfUpdateDialogVisible = true"
+              >
+                Update
+              </n-button>
+            </div>
+          </section>
+
+          <n-alert
+            v-if="webui.selfUpdateMessage"
+            class="self-update-message"
+            type="success"
+            :show-icon="false"
+          >
+            {{ webui.selfUpdateMessage }}
+          </n-alert>
+
           <RouterView v-slot="routeSlot">
             <Transition name="route-shift" mode="out-in">
               <component
@@ -258,6 +341,98 @@ async function handleLogout(): Promise<void> {
             </Transition>
           </RouterView>
         </main>
+
+        <n-modal
+          v-model:show="selfUpdateDialogVisible"
+          preset="dialog"
+          title="Update WUD-Updater"
+          positive-text="Pull image and restart container"
+          negative-text="Cancel"
+          :positive-button-props="{
+            type: 'warning',
+            loading: webui.loading,
+            disabled: selfUpdateButtonDisabled,
+          }"
+          @positive-click="confirmSelfUpdate"
+        >
+          <div class="self-update-modal">
+            <n-alert type="warning" :show-icon="false">
+              This pulls the WUD-Updater image and restarts the WebUI container.
+              The page may disconnect while Docker brings it back.
+            </n-alert>
+
+            <div class="self-update-facts">
+              <div>
+                <span>Image</span>
+                <code>{{ webui.selfUpdate?.target_image || "unavailable" }}</code>
+              </div>
+              <div>
+                <span>Container</span>
+                <code>{{ webui.selfUpdate?.restart_container || "unavailable" }}</code>
+              </div>
+            </div>
+
+            <div class="self-update-notes-heading">
+              <strong>Release notes</strong>
+              <n-tooltip trigger="hover">
+                <template #trigger>
+                  <span
+                    class="self-update-cap"
+                    tabindex="0"
+                    :title="selfUpdateReleaseCapTitle"
+                  >
+                    <Info :size="14" aria-hidden="true" />
+                    Cap {{ webui.selfUpdate?.release_notes_cap ?? 10 }}
+                  </span>
+                </template>
+                {{ selfUpdateReleaseCapTitle }}
+              </n-tooltip>
+            </div>
+
+            <div
+              v-if="webui.selfUpdate?.release_notes.length"
+              class="self-update-notes"
+            >
+              <article
+                v-for="note in webui.selfUpdate.release_notes"
+                :key="note.tag"
+                class="self-update-note"
+              >
+                <div class="self-update-note-title">
+                  <a
+                    :href="note.url"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    {{ note.title || note.tag }}
+                    <ExternalLink :size="14" aria-hidden="true" />
+                  </a>
+                  <span>{{ note.published_at || note.tag }}</span>
+                </div>
+                <n-tag v-if="note.breaking" type="warning" size="small">
+                  Review required
+                </n-tag>
+                <p>{{ note.body || "No release-note body was published." }}</p>
+                <small v-if="note.body_truncated">
+                  Release note body truncated in the WebUI. Open GitHub for the full text.
+                </small>
+              </article>
+            </div>
+            <p v-else class="self-update-empty-notes">
+              Release notes are unavailable from the WebUI. Open GitHub releases before updating.
+            </p>
+
+            <a
+              class="text-link self-update-github-link"
+              :href="selfUpdateReleasesUrl"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              Open GitHub releases
+              <ExternalLink :size="14" aria-hidden="true" />
+            </a>
+          </div>
+        </n-modal>
       </div>
     </n-message-provider>
   </n-config-provider>

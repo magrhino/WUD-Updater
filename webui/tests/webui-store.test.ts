@@ -16,6 +16,8 @@ import {
   pendingResponse,
   releaseNotesResponse,
   planResponse,
+  selfUpdateApplyResponse,
+  selfUpdateResponse,
   settingsResponse,
   statusResponse,
   stateOperationResponse,
@@ -308,6 +310,44 @@ describe("webui store", () => {
 
     expect(fetchMock.mock.calls[0][0]).toBe("/api/v1/status");
     expect(webui.status?.version).toBe("0.24.2");
+  });
+
+  it("loads self-update status for the shell banner", async () => {
+    const fetchMock = mockFetch(selfUpdateResponse());
+    const webui = useWebuiStore();
+
+    await webui.loadSelfUpdate();
+
+    expect(fetchMock.mock.calls[0][0]).toBe("/api/v1/self-update");
+    expect(webui.selfUpdate?.latest_tag).toBe("v0.25.0");
+  });
+
+  it("passes csrf from auth store to self-update apply", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse(selfUpdateApplyResponse()))
+      .mockResolvedValueOnce(jsonResponse(selfUpdateResponse()));
+    vi.stubGlobal("fetch", fetchMock);
+    const auth = useAuthStore();
+    const ensureCsrf = vi
+      .spyOn(auth, "ensureCsrf")
+      .mockResolvedValue("csrf-self-update");
+    const webui = useWebuiStore();
+
+    const response = await webui.applySelfUpdate();
+
+    expect(ensureCsrf).toHaveBeenCalledTimes(1);
+    expect(response.container).toBe("wud-updater");
+    expect(webui.selfUpdateMessage).toContain("Self-update requested");
+    expect(fetchMock.mock.calls[0][0]).toBe("/api/v1/self-update");
+    expect(JSON.parse(String((fetchMock.mock.calls[0][1] as RequestInit).body))).toEqual({
+      confirmation: "pull_image_and_restart",
+    });
+    expect(
+      ((fetchMock.mock.calls[0][1] as RequestInit).headers as Headers).get(
+        "x-wud-csrf-token",
+      ),
+    ).toBe("csrf-self-update");
   });
 
   it("loads read-only settings", async () => {

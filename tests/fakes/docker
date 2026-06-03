@@ -514,6 +514,17 @@ restart_cmd(){
   printf '%s\n' "$container"
 }
 
+pull_cmd(){
+  local image="${1:-}"
+  log_call "pull $image"
+  if [[ -f "$ROOT/pull_fail" ]]; then
+    cat "$ROOT/pull_fail" >&2
+    return 23
+  fi
+  apply_image_after_pull "$image"
+  printf '%s\n' "$image"
+}
+
 main(){
   local cmd="${1:-}"
   shift || true
@@ -523,6 +534,7 @@ main(){
     manifest) manifest_cmd "$@" ;;
     inspect) inspect_cmd "$@" ;;
     ps) ps_cmd "$@" ;;
+    pull) pull_cmd "$@" ;;
     restart) restart_cmd "$@" ;;
     *) return 1 ;;
   esac

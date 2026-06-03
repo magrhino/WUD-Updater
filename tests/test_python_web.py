@@ -3187,6 +3187,291 @@ def test_container_restart_endpoint_enforces_auth_csrf_read_only_and_post(
     assert get_response.status_code == 405
 
 
+def test_self_update_get_reports_available_up_to_date_disabled_and_unavailable(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(web_module, "current_tag", lambda: "v0.24.2")
+    monkeypatch.setattr(
+        web_module,
+        "_fetch_self_update_release_notes",
+        lambda *_args, **_kwargs: ([], False, []),
+    )
+    monkeypatch.setattr(web_module, "fetch_latest_release_tag", lambda: "v0.25.0")
+    available = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_RESTART_CONTAINER": "wud-updater",
+        },
+    ).get("/api/v1/self-update")
+
+    assert available.status_code == 200
+    body = available.json()
+    assert body["status"] == "available"
+    assert body["current_tag"] == "v0.24.2"
+    assert body["latest_tag"] == "v0.25.0"
+    assert body["target_image"] == "ghcr.io/magrhino/wud-updater:v0.25.0"
+    assert body["can_update"] is False
+    assert "Read-only mode" in body["disabled_reason"]
+
+    monkeypatch.setattr(web_module, "fetch_latest_release_tag", lambda: "v0.24.2")
+    up_to_date = _client(
+        tmp_path,
+        {"WUD_WEB_DEV_NO_AUTH": "true"},
+    ).get("/api/v1/self-update")
+    assert up_to_date.json()["status"] == "up_to_date"
+
+    disabled = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_UPDATER_RELEASE_CHECK": "false",
+        },
+    ).get("/api/v1/self-update")
+    assert disabled.json()["status"] == "disabled"
+
+    monkeypatch.setattr(web_module, "fetch_latest_release_tag", lambda: None)
+    unavailable = _client(
+        tmp_path,
+        {"WUD_WEB_DEV_NO_AUTH": "true"},
+    ).get("/api/v1/self-update")
+    assert unavailable.json()["status"] == "unavailable"
+    assert unavailable.json()["warnings"]
+
+
+def test_self_update_get_can_use_local_demo_fixture(tmp_path: Path) -> None:
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+            "WUD_WEB_RESTART_CONTAINER": "demo-wud-updater",
+            "WUD_WEB_DEMO_SELF_UPDATE": "true",
+        },
+    )
+
+    response = client.get("/api/v1/self-update")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "available"
+    assert body["current_tag"] == "v0.25.0"
+    assert body["latest_tag"] == "v0.26.0"
+    assert body["target_image"] == "ghcr.io/magrhino/wud-updater:v0.26.0"
+    assert body["restart_container"] == "demo-wud-updater"
+    assert body["can_update"] is True
+    assert body["release_notes_truncated"] is True
+    assert len(body["release_notes"]) == 10
+
+
+def test_self_update_release_notes_are_between_versions_and_capped(
+    monkeypatch,
+) -> None:
+    class FakeResponse:
+        def __enter__(self) -> "FakeResponse":
+            return self
+
+        def __exit__(self, *_args: object) -> None:
+            return None
+
+        def read(self, _limit: int) -> bytes:
+            releases = [
+                {
+                    "tag_name": f"v0.{minor}.0",
+                    "name": f"v0.{minor}.0",
+                    "html_url": f"https://example.test/v0.{minor}.0",
+                    "body": "Routine update",
+                    "published_at": f"2026-05-{minor:02d}T00:00:00Z",
+                }
+                for minor in range(10, 25)
+            ]
+            return json.dumps(releases).encode("utf-8")
+
+    monkeypatch.setattr(web_module.urllib.request, "urlopen", lambda *_args, **_kwargs: FakeResponse())
+
+    notes, truncated, warnings = web_module._fetch_self_update_release_notes(
+        "v0.12.0",
+        "v0.24.0",
+        {},
+        cap=10,
+    )
+
+    assert warnings == []
+    assert truncated is True
+    assert len(notes) == 10
+    assert notes[0].tag == "v0.24.0"
+    assert notes[-1].tag == "v0.15.0"
+    assert all(note.tag not in {"v0.12.0", "v0.11.0"} for note in notes)
+
+
+def test_self_update_endpoint_enforces_auth_csrf_read_only_and_active_job(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(web_module, "current_tag", lambda: "v0.24.2")
+    monkeypatch.setattr(web_module, "fetch_latest_release_tag", lambda: "v0.25.0")
+    monkeypatch.setattr(
+        web_module,
+        "_fetch_self_update_release_notes",
+        lambda *_args, **_kwargs: ([], False, []),
+    )
+    payload = {"confirmation": "pull_image_and_restart"}
+    unauthenticated = _client(tmp_path, {"WUD_WEB_MUTATIONS_ENABLED": "true"})
+    read_only = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_RESTART_CONTAINER": "wud-updater",
+        },
+    )
+    mutating = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+            "WUD_WEB_RESTART_CONTAINER": "wud-updater",
+        },
+    )
+    mutating.app.state.web_apply_jobs["job-active"] = web_module.WebApplyJob(
+        id="job-active",
+        status="running",
+        selected_line_numbers=(1,),
+    )
+
+    unauthenticated_response = unauthenticated.post(
+        "/api/v1/self-update",
+        json=payload,
+        headers=_csrf_headers(unauthenticated),
+    )
+    missing_csrf = mutating.post("/api/v1/self-update", json=payload)
+    read_only_response = read_only.post(
+        "/api/v1/self-update",
+        json=payload,
+        headers=_csrf_headers(read_only),
+    )
+    active_job = mutating.post(
+        "/api/v1/self-update",
+        json=payload,
+        headers=_csrf_headers(mutating),
+    )
+
+    assert unauthenticated_response.status_code == 403
+    assert unauthenticated_response.json()["detail"] == "setup required"
+    assert missing_csrf.status_code == 403
+    assert missing_csrf.json()["detail"] == "origin header is required"
+    assert read_only_response.status_code == 403
+    assert read_only_response.json()["detail"] == "mutations are disabled"
+    assert active_job.status_code == 409
+    assert active_job.json()["detail"] == "an apply job is already running"
+
+
+def test_self_update_endpoint_pulls_image_restarts_container_and_audits(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    fake_env, fake_root = _fake_docker_env(tmp_path)
+    monkeypatch.setattr(web_module, "current_tag", lambda: "v0.24.2")
+    monkeypatch.setattr(web_module, "fetch_latest_release_tag", lambda: "v0.25.0")
+    monkeypatch.setattr(
+        web_module,
+        "_fetch_self_update_release_notes",
+        lambda *_args, **_kwargs: ([], False, []),
+    )
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+            "WUD_WEB_RESTART_CONTAINER": "wud-updater",
+            **fake_env,
+        },
+    )
+
+    response = client.post(
+        "/api/v1/self-update",
+        json={"confirmation": "pull_image_and_restart"},
+        headers=_csrf_headers(client),
+    )
+
+    assert response.status_code == 202
+    body = response.json()
+    assert body["target_image"] == "ghcr.io/magrhino/wud-updater:v0.25.0"
+    assert body["container"] == "wud-updater"
+    calls = _fake_docker_calls(fake_root)
+    assert "pull ghcr.io/magrhino/wud-updater:v0.25.0" in calls
+    assert "restart --time 10 wud-updater" in calls
+
+    with connect_db(tmp_path / "state" / "wud.sqlite") as conn:
+        row = conn.execute(
+            "SELECT mode, status, finished_at, metadata_json FROM update_runs WHERE id = ?",
+            (body["audit_run_id"],),
+        ).fetchone()
+        event = conn.execute(
+            "SELECT status, metadata_json FROM update_events WHERE run_id = ?",
+            (body["audit_run_id"],),
+        ).fetchone()
+    assert row["mode"] == "web-self-update"
+    assert row["status"] == "success"
+    assert row["finished_at"]
+    assert event["status"] == "success"
+    metadata = json.loads(row["metadata_json"])
+    assert metadata["operation"] == "self_update"
+    assert metadata["current_tag"] == "v0.24.2"
+    assert metadata["latest_tag"] == "v0.25.0"
+    assert metadata["target"] == {
+        "container": "wud-updater",
+        "image": "ghcr.io/magrhino/wud-updater:v0.25.0",
+    }
+
+
+def test_self_update_endpoint_marks_audit_failed_when_pull_fails(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    fake_env, fake_root = _fake_docker_env(tmp_path)
+    (fake_root / "pull_fail").write_text("pull failed\n", encoding="utf-8")
+    monkeypatch.setattr(web_module, "current_tag", lambda: "v0.24.2")
+    monkeypatch.setattr(web_module, "fetch_latest_release_tag", lambda: "v0.25.0")
+    monkeypatch.setattr(
+        web_module,
+        "_fetch_self_update_release_notes",
+        lambda *_args, **_kwargs: ([], False, []),
+    )
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+            "WUD_WEB_RESTART_CONTAINER": "wud-updater",
+            **fake_env,
+        },
+    )
+
+    response = client.post(
+        "/api/v1/self-update",
+        json={"confirmation": "pull_image_and_restart"},
+        headers=_csrf_headers(client),
+    )
+
+    assert response.status_code == 202
+    audit_run_id = response.json()["audit_run_id"]
+    calls = _fake_docker_calls(fake_root)
+    assert "pull ghcr.io/magrhino/wud-updater:v0.25.0" in calls
+    assert "restart --time 10 wud-updater" not in calls
+
+    with connect_db(tmp_path / "state" / "wud.sqlite") as conn:
+        row = conn.execute(
+            "SELECT status, finished_at, metadata_json FROM update_runs WHERE id = ?",
+            (audit_run_id,),
+        ).fetchone()
+    assert row["status"] == "failure"
+    assert row["finished_at"]
+    metadata = json.loads(row["metadata_json"])
+    assert metadata["status"] == "failure"
+    assert "docker pull ghcr.io/magrhino/wud-updater:v0.25.0" in metadata["error"]
+
+
 def test_container_restart_endpoint_requires_configured_target(tmp_path: Path) -> None:
     client = _client(
         tmp_path,

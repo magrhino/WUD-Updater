@@ -631,6 +631,47 @@ export interface ContainerRestartResponse {
   container: string;
 }
 
+export type SelfUpdateStatus =
+  | "available"
+  | "up_to_date"
+  | "disabled"
+  | "unavailable";
+
+export interface SelfUpdateReleaseNote {
+  tag: string;
+  title: string;
+  published_at: string;
+  url: string;
+  body: string;
+  body_truncated: boolean;
+  breaking: boolean;
+  breaking_reasons: string[];
+}
+
+export interface SelfUpdateResponse {
+  status: SelfUpdateStatus;
+  current_tag: string;
+  latest_tag: string;
+  current_image: string;
+  target_image: string;
+  restart_container: string;
+  release_notes: SelfUpdateReleaseNote[];
+  release_notes_truncated: boolean;
+  release_notes_cap: number;
+  can_update: boolean;
+  disabled_reason: string;
+  warnings: string[];
+}
+
+export interface SelfUpdateApplyResponse {
+  status: "scheduled";
+  audit_run_id: number;
+  current_tag: string;
+  latest_tag: string;
+  target_image: string;
+  container: string;
+}
+
 export class ApiError extends Error {
   constructor(
     readonly status: number,
@@ -854,6 +895,13 @@ const liveWebApi = {
       method: "POST",
       headers: { "x-wud-csrf-token": csrfToken },
       body: JSON.stringify(operation),
+    }),
+  selfUpdate: () => apiRequest<SelfUpdateResponse>("/self-update"),
+  applySelfUpdate: (csrfToken: string) =>
+    apiRequest<SelfUpdateApplyResponse>("/self-update", {
+      method: "POST",
+      headers: { "x-wud-csrf-token": csrfToken },
+      body: JSON.stringify({ confirmation: "pull_image_and_restart" }),
     }),
   restartContainer: (csrfToken: string) =>
     apiRequest<ContainerRestartResponse>("/container/restart", {

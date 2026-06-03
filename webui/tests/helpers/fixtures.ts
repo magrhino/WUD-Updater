@@ -15,6 +15,8 @@ import type {
   ReleaseNotesResponse,
   RunSummary,
   ServicePolicyRecord,
+  SelfUpdateApplyResponse,
+  SelfUpdateResponse,
   SettingsResponse,
   SnoozeRecord,
   StatusResponse,
@@ -206,6 +208,51 @@ export function settingsResponse(
         restart_required: false,
       },
     ],
+    ...overrides,
+  };
+}
+
+export function selfUpdateResponse(
+  overrides: Partial<SelfUpdateResponse> = {},
+): SelfUpdateResponse {
+  return {
+    status: "available",
+    current_tag: "v0.24.2",
+    latest_tag: "v0.25.0",
+    current_image: "ghcr.io/magrhino/wud-updater:v0.24.2",
+    target_image: "ghcr.io/magrhino/wud-updater:v0.25.0",
+    restart_container: "wud-updater",
+    release_notes: [
+      {
+        tag: "v0.25.0",
+        title: "v0.25.0",
+        published_at: "2026-06-01T00:00:00Z",
+        url: "https://github.com/magrhino/WUD-Updater/releases/tag/v0.25.0",
+        body: "Adds self-update review and restart support.",
+        body_truncated: false,
+        breaking: false,
+        breaking_reasons: [],
+      },
+    ],
+    release_notes_truncated: false,
+    release_notes_cap: 10,
+    can_update: true,
+    disabled_reason: "",
+    warnings: [],
+    ...overrides,
+  };
+}
+
+export function selfUpdateApplyResponse(
+  overrides: Partial<SelfUpdateApplyResponse> = {},
+): SelfUpdateApplyResponse {
+  return {
+    status: "scheduled",
+    audit_run_id: 77,
+    current_tag: "v0.24.2",
+    latest_tag: "v0.25.0",
+    target_image: "ghcr.io/magrhino/wud-updater:v0.25.0",
+    container: "wud-updater",
     ...overrides,
   };
 }

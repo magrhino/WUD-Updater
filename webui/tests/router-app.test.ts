@@ -13,6 +13,8 @@ import { themeStorageKey } from "../src/theme";
 import {
   authSession,
   coreUpdateTourResponse,
+  selfUpdateApplyResponse,
+  selfUpdateResponse,
   settingsResponse,
   statusResponse,
 } from "./helpers/fixtures";
@@ -256,6 +258,53 @@ describe("app shell", () => {
         button.attributes("aria-label")?.includes("Dark theme"),
       ),
     ).toBe(true);
+  });
+
+  it("shows self-update banner and confirms release notes before applying", async () => {
+    const pinia = createPinia();
+    setActivePinia(pinia);
+    const auth = useAuthStore();
+    auth.session = authSession({ mutations_enabled: true });
+    const webui = useWebuiStore();
+    webui.status = statusResponse({ version: "0.24.2" });
+    webui.coreUpdateTour = coreUpdateTourResponse();
+    webui.selfUpdate = selfUpdateResponse({
+      release_notes_truncated: true,
+    });
+    vi.spyOn(webui, "loadDashboard").mockResolvedValue();
+    const applySelfUpdate = vi
+      .spyOn(webui, "applySelfUpdate")
+      .mockResolvedValue(selfUpdateApplyResponse());
+    const router = createWudRouter(createMemoryHistory());
+    await router.push("/");
+    await router.isReady();
+
+    const wrapper = mountWithApp(App, { pinia, router });
+    await flushPromises();
+
+    const text = wrapper.text();
+    expect(text).toContain("Update available: v0.24.2 -> v0.25.0");
+    expect(text).toContain("ghcr.io/magrhino/wud-updater:v0.25.0");
+    const updateButton = wrapper
+      .findAll("button")
+      .find((button) => button.text().includes("Update"));
+    await updateButton?.trigger("click");
+    await flushPromises();
+
+    const dialog = wrapper.find('[role="dialog"]');
+    expect(dialog.text()).toContain("Update WUD-Updater");
+    expect(dialog.text()).toContain("Release notes");
+    expect(dialog.text()).toContain("Cap 10");
+    expect(dialog.text()).toContain("Adds self-update review");
+    expect(applySelfUpdate).not.toHaveBeenCalled();
+
+    const confirmButton = dialog
+      .findAll("button")
+      .find((button) => button.text().includes("Pull image and restart container"));
+    await confirmButton?.trigger("click");
+    await flushPromises();
+
+    expect(applySelfUpdate).toHaveBeenCalledTimes(1);
   });
 
   it("shows settings navigation and refreshes the settings route", async () => {

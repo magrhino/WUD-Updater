@@ -315,6 +315,11 @@ export const naiveStubs: Record<string, Component> = {
     },
   },
   NTag: passthrough("span"),
+  NTooltip: {
+    setup(_, { slots }) {
+      return () => h("span", [slots.trigger?.(), slots.default?.()]);
+    },
+  },
 };
 
 Object.assign(naiveStubs, {
@@ -332,6 +337,7 @@ Object.assign(naiveStubs, {
   Select: naiveStubs.NSelect,
   Switch: naiveStubs.NSwitch,
   Tag: naiveStubs.NTag,
+  Tooltip: naiveStubs.NTooltip,
 });
 
 export function mountWithApp(component: Component, options: MountOptions = {}): VueWrapper {

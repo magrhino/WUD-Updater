@@ -25,6 +25,8 @@ import {
   type RunLogResponse,
   type RunSummary,
   type ServicePolicyRecord,
+  type SelfUpdateApplyResponse,
+  type SelfUpdateResponse,
   type SettingsResponse,
   type ServicePolicyUpdateMode,
   type SnoozeRecord,
@@ -61,6 +63,9 @@ export const useWebuiStore = defineStore("webui", () => {
   const pending = ref<PendingResponse | null>(null);
   const updateTargets = ref<UpdateTargetsResponse | null>(null);
   const releaseNotes = ref<ReleaseNotesResponse | null>(null);
+  const selfUpdate = ref<SelfUpdateResponse | null>(null);
+  const selfUpdateMessage = ref("");
+  const selfUpdateError = ref("");
   const plan = ref<PlanResponse | null>(null);
   const pendingCleanup = ref<PendingCleanupResponse | null>(null);
   const pendingRemovalPlan = ref<PendingRemovalPlanResponse | null>(null);
@@ -90,6 +95,36 @@ export const useWebuiStore = defineStore("webui", () => {
     await loadWithState(async () => {
       status.value = await webApi.status();
     });
+  }
+
+  async function loadSelfUpdate(): Promise<void> {
+    selfUpdateError.value = "";
+    try {
+      selfUpdate.value = await webApi.selfUpdate();
+    } catch (exc) {
+      selfUpdateError.value = errorMessage(exc);
+      throw exc;
+    }
+  }
+
+  async function applySelfUpdate(): Promise<SelfUpdateApplyResponse> {
+    const auth = useAuthStore();
+    selfUpdateMessage.value = "";
+    selfUpdateError.value = "";
+    let response: SelfUpdateApplyResponse | null = null;
+    await loadWithState(async () => {
+      response = await webApi.applySelfUpdate(await auth.ensureCsrf());
+      selfUpdateMessage.value = `Self-update requested for ${response.container}. The WebUI may disconnect while the container restarts.`;
+      try {
+        selfUpdate.value = await webApi.selfUpdate();
+      } catch {
+        // The request may have restarted the server before the follow-up check returns.
+      }
+    });
+    if (response === null) {
+      throw new Error("Self-update did not return a response");
+    }
+    return response;
   }
 
   async function loadSettings(): Promise<void> {
@@ -660,6 +695,9 @@ export const useWebuiStore = defineStore("webui", () => {
     pendingCleanup,
     pendingRemovalPlan,
     releaseNotes,
+    selfUpdate,
+    selfUpdateMessage,
+    selfUpdateError,
     plan,
     applyJob,
     applyJobLog,
@@ -679,6 +717,8 @@ export const useWebuiStore = defineStore("webui", () => {
     error,
     warnings,
     loadStatus,
+    loadSelfUpdate,
+    applySelfUpdate,
     loadSettings,
     updateManagedSettings,
     loadDoctor,

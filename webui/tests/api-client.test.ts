@@ -94,6 +94,8 @@ describe("webApi", () => {
       webApi.snoozes("active"),
       webApi.tagExclusions("active"),
       webApi.stateOperation(operation, "csrf"),
+      webApi.selfUpdate(),
+      webApi.applySelfUpdate("csrf"),
       webApi.restartContainer("csrf"),
       webApi.createPlan([1], true, [{ line_no: 1, tag: "1.1" }], "csrf"),
       webApi.createJob("plan", [1], true, [{ line_no: 1, tag: "1.1" }], "csrf"),
@@ -105,7 +107,7 @@ describe("webApi", () => {
       webApi.runLog(1),
     ]);
 
-    expect(fetchMock).toHaveBeenCalledTimes(32);
+    expect(fetchMock).toHaveBeenCalledTimes(34);
     for (const call of fetchMock.mock.calls) {
       expect(requestInit(call).credentials).toBe("include");
     }
@@ -142,6 +144,7 @@ describe("webApi", () => {
       "csrf-token",
     );
     await webApi.stateOperation(operation, "csrf-token");
+    await webApi.applySelfUpdate("csrf-token");
     await webApi.restartContainer("csrf-token");
     await webApi.createPlan([1], false, [], "csrf-token");
     await webApi.createJob("plan", [1], false, [], "csrf-token");
@@ -173,6 +176,7 @@ describe("webApi", () => {
       "csrf",
     );
     await webApi.updateCoreUpdateTour("in_progress", "pending_preflight", "csrf");
+    await webApi.applySelfUpdate("csrf");
     await webApi.restartContainer("csrf");
     await webApi.createPlan([4], true, tagOverrides, "csrf");
     await webApi.createJob("plan-id", [4], true, tagOverrides, "csrf");
@@ -202,21 +206,24 @@ describe("webApi", () => {
       step: "pending_preflight",
     });
     expect(JSON.parse(String(requestInit(fetchMock.mock.calls[5]).body))).toEqual({
-      confirmation: "restart_container",
+      confirmation: "pull_image_and_restart",
     });
     expect(JSON.parse(String(requestInit(fetchMock.mock.calls[6]).body))).toEqual({
+      confirmation: "restart_container",
+    });
+    expect(JSON.parse(String(requestInit(fetchMock.mock.calls[7]).body))).toEqual({
       line_numbers: [4],
       allow_tag_updates: true,
       tag_overrides: tagOverrides,
     });
-    expect(JSON.parse(String(requestInit(fetchMock.mock.calls[7]).body))).toEqual({
+    expect(JSON.parse(String(requestInit(fetchMock.mock.calls[8]).body))).toEqual({
       plan_id: "plan-id",
       line_numbers: [4],
       allow_tag_updates: true,
       tag_overrides: tagOverrides,
       confirmation: "apply",
     });
-    expect(JSON.parse(String(requestInit(fetchMock.mock.calls[8]).body))).toEqual({
+    expect(JSON.parse(String(requestInit(fetchMock.mock.calls[9]).body))).toEqual({
       plan_id: "plan-id",
       line_numbers: [4],
       allow_tag_updates: true,

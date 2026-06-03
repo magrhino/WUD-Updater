@@ -29,6 +29,8 @@ import type {
   RunLogResponse,
   RunSummary,
   ServicePolicyRecord,
+  SelfUpdateApplyResponse,
+  SelfUpdateResponse,
   SettingsEntrySource,
   SettingsResponse,
   SetupStatusResponse,
@@ -46,6 +48,7 @@ import type {
 } from "./client";
 
 const DEMO_VERSION = "0.25.0";
+const DEMO_LATEST_VERSION = "v0.26.0";
 const DEMO_SOURCE_FILE = "demo/out/images.todo";
 const DEMO_DB_PATH = "demo/logs/wud-updater.sqlite";
 const DEMO_LOG_DIR = "demo/logs";
@@ -861,6 +864,39 @@ class DemoApiState {
     };
   }
 
+  selfUpdate(): SelfUpdateResponse {
+    return {
+      status: "available",
+      current_tag: `v${DEMO_VERSION}`,
+      latest_tag: DEMO_LATEST_VERSION,
+      current_image: "ghcr.io/magrhino/wud-updater:v0.25.0",
+      target_image: "ghcr.io/magrhino/wud-updater:v0.26.0",
+      restart_container: "demo-wud-updater",
+      release_notes: Array.from({ length: 10 }, (_, index) => {
+        const patch = 26 - index;
+        const tag = `v0.${patch}.0`;
+        return {
+          tag,
+          title: `${tag} demo release`,
+          published_at: `2026-05-${String(28 - index).padStart(2, "0")}T12:00:00Z`,
+          url: `https://github.com/magrhino/WUD-Updater/releases/tag/${tag}`,
+          body:
+            index === 0
+              ? "Adds the WebUI self-update banner, release-note review, image pull, and restart confirmation flow."
+              : "Demo release note for the capped self-update history list.",
+          body_truncated: false,
+          breaking: index === 0,
+          breaking_reasons: index === 0 ? ["Review WebUI restart behavior."] : [],
+        };
+      }),
+      release_notes_truncated: true,
+      release_notes_cap: 10,
+      can_update: true,
+      disabled_reason: "",
+      warnings: [],
+    };
+  }
+
   createPlan(
     lineNumbers: number[],
     allowTagUpdates: boolean,
@@ -1438,6 +1474,15 @@ export function createDemoWebApi(): WebApi {
     ) => state.removeSelectedPending(removalId, lines),
     releaseNotes: async () => state.releaseNotes(),
     refreshReleaseNotes: async (_csrfToken: string) => state.releaseNotes(),
+    selfUpdate: async () => state.selfUpdate(),
+    applySelfUpdate: async (_csrfToken: string): Promise<SelfUpdateApplyResponse> => ({
+      status: "scheduled",
+      audit_run_id: 9002,
+      current_tag: `v${DEMO_VERSION}`,
+      latest_tag: DEMO_LATEST_VERSION,
+      target_image: "ghcr.io/magrhino/wud-updater:v0.26.0",
+      container: "demo-wud-updater",
+    }),
     servicePolicies: async () => state.servicePolicies(),
     snoozes: async (snoozeState: SnoozeState = "active") =>
       state.snoozeRecords(snoozeState),
