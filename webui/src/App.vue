@@ -3,7 +3,7 @@ import { computed, ref, watch } from "vue";
 import { RouterLink, RouterView, useRoute, useRouter } from "vue-router";
 import {
   Activity,
-  AlertTriangle,
+  ArrowUpCircle,
   BellOff,
   Clock3,
   ExternalLink,
@@ -289,7 +289,6 @@ async function confirmSelfUpdate(): Promise<void> {
         <main class="main-panel">
           <header v-if="showShell" class="topbar">
             <div>
-              <p class="eyebrow">WebUI</p>
               <h1>{{ String(route.meta.title ?? route.name ?? "Dashboard") }}</h1>
             </div>
             <div class="topbar-actions">
@@ -330,11 +329,11 @@ async function confirmSelfUpdate(): Promise<void> {
             aria-label="WUD-Updater self-update"
           >
             <div class="self-update-banner-main">
-              <AlertTriangle :size="20" aria-hidden="true" />
+              <ArrowUpCircle :size="20" aria-hidden="true" />
               <div>
                 <strong>
                   Update available:
-                  {{ webui.selfUpdate?.current_tag }} -> {{ webui.selfUpdate?.latest_tag }}
+                  {{ webui.selfUpdate?.current_tag }} &rarr; {{ webui.selfUpdate?.latest_tag }}
                 </strong>
                 <span>{{ selfUpdateFacts }}</span>
               </div>
@@ -362,7 +361,6 @@ async function confirmSelfUpdate(): Promise<void> {
             v-if="webui.selfUpdateMessage"
             class="self-update-message"
             type="success"
-            :show-icon="false"
           >
             {{ webui.selfUpdateMessage }}
           </n-alert>
@@ -370,7 +368,6 @@ async function confirmSelfUpdate(): Promise<void> {
             v-if="webui.selfUpdateError"
             class="self-update-message"
             type="error"
-            :show-icon="false"
           >
             {{ webui.selfUpdateError }}
           </n-alert>
@@ -403,12 +400,11 @@ async function confirmSelfUpdate(): Promise<void> {
             <n-alert
               v-if="selfUpdateStrategy === 'prepare_tag_update'"
               type="warning"
-              :show-icon="false"
             >
               This updates the Compose image tag and pulls the image. Recreate
               the WUD-Updater container from outside the WebUI to run it.
             </n-alert>
-            <n-alert v-else type="warning" :show-icon="false">
+            <n-alert v-else type="warning">
               This pulls the WUD-Updater image only. Recreate the container
               outside the WebUI to run the new version.
             </n-alert>
@@ -454,12 +450,12 @@ async function confirmSelfUpdate(): Promise<void> {
                           v-for="item in selfUpdatePlanTagUpdates"
                           :key="`${item.old_image}:${item.desired_tag}`"
                         >
-                          <span>{{ item.old_image }}</span>
+                          <span>{{ item.old_image }} &rarr;</span>
                           <code>{{ item.new_image }}</code>
                         </div>
                       </div>
                     </template>
-                    <n-alert v-else type="info" :show-icon="false">
+                    <n-alert v-else type="info">
                       Generating Compose tag-update preview.
                     </n-alert>
                   </div>
