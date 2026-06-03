@@ -413,112 +413,123 @@ async function confirmSelfUpdate(): Promise<void> {
               outside the WebUI to run the new version.
             </n-alert>
 
-            <div class="self-update-facts">
-              <div>
-                <span>Image</span>
-                <code>{{ webui.selfUpdate?.target_image || "unavailable" }}</code>
-              </div>
-              <div>
-                <span>Container</span>
-                <code>{{ webui.selfUpdate?.restart_container || "unavailable" }}</code>
-              </div>
-            </div>
+            <n-tabs type="segment" animated>
+              <n-tab-pane name="overview" tab="Update Plan">
+                <div style="display: grid; gap: 14px; margin-top: 14px;">
+                  <div class="self-update-facts">
+                    <div>
+                      <span>Image</span>
+                      <code>{{ webui.selfUpdate?.target_image || "unavailable" }}</code>
+                    </div>
+                    <div>
+                      <span>Container</span>
+                      <code>{{ webui.selfUpdate?.restart_container || "unavailable" }}</code>
+                    </div>
+                  </div>
 
-            <div
-              v-if="selfUpdateStrategy === 'prepare_tag_update'"
-              class="self-update-plan"
-            >
-              <div class="self-update-notes-heading">
-                <strong>Compose tag update</strong>
-                <span v-if="webui.loading" class="self-update-disabled">
-                  Loading preview
-                </span>
-              </div>
-              <template v-if="selfUpdatePlanStack">
-                <div class="self-update-facts">
-                  <div>
-                    <span>Stack</span>
-                    <code>{{ selfUpdatePlanStack.name }}</code>
-                  </div>
-                  <div>
-                    <span>Services</span>
-                    <code>{{ selfUpdatePlanStack.services.join(", ") }}</code>
-                  </div>
-                </div>
-                <div class="self-update-tag-updates">
                   <div
-                    v-for="item in selfUpdatePlanTagUpdates"
-                    :key="`${item.old_image}:${item.desired_tag}`"
+                    v-if="selfUpdateStrategy === 'prepare_tag_update'"
+                    class="self-update-plan"
+                    style="display: grid; gap: 14px;"
                   >
-                    <span>{{ item.old_image }}</span>
-                    <code>{{ item.new_image }}</code>
+                    <div class="self-update-notes-heading">
+                      <strong>Compose tag update</strong>
+                      <span v-if="webui.loading" class="self-update-disabled">
+                        Loading preview
+                      </span>
+                    </div>
+                    <template v-if="selfUpdatePlanStack">
+                      <div class="self-update-facts">
+                        <div>
+                          <span>Stack</span>
+                          <code>{{ selfUpdatePlanStack.name }}</code>
+                        </div>
+                        <div>
+                          <span>Services</span>
+                          <code>{{ selfUpdatePlanStack.services.join(", ") }}</code>
+                        </div>
+                      </div>
+                      <div class="self-update-tag-updates">
+                        <div
+                          v-for="item in selfUpdatePlanTagUpdates"
+                          :key="`${item.old_image}:${item.desired_tag}`"
+                        >
+                          <span>{{ item.old_image }}</span>
+                          <code>{{ item.new_image }}</code>
+                        </div>
+                      </div>
+                    </template>
+                    <n-alert v-else type="info" :show-icon="false">
+                      Generating Compose tag-update preview.
+                    </n-alert>
                   </div>
                 </div>
-              </template>
-              <n-alert v-else type="info" :show-icon="false">
-                Generating Compose tag-update preview.
-              </n-alert>
-            </div>
+              </n-tab-pane>
 
-            <div class="self-update-notes-heading">
-              <strong>Release notes</strong>
-              <n-tooltip trigger="hover">
-                <template #trigger>
-                  <span
-                    class="self-update-cap"
-                    tabindex="0"
-                    :title="selfUpdateReleaseCapTitle"
+              <n-tab-pane name="notes" tab="Release Notes">
+                <div style="display: grid; gap: 14px; margin-top: 14px;">
+                  <div class="self-update-notes-heading">
+                    <strong>Release notes</strong>
+                    <n-tooltip trigger="hover">
+                      <template #trigger>
+                        <span
+                          class="self-update-cap"
+                          tabindex="0"
+                          :title="selfUpdateReleaseCapTitle"
+                        >
+                          <Info :size="14" aria-hidden="true" />
+                          Cap {{ webui.selfUpdate?.release_notes_cap ?? 10 }}
+                        </span>
+                      </template>
+                      {{ selfUpdateReleaseCapTitle }}
+                    </n-tooltip>
+                  </div>
+
+                  <div
+                    v-if="webui.selfUpdate?.release_notes.length"
+                    class="self-update-notes"
                   >
-                    <Info :size="14" aria-hidden="true" />
-                    Cap {{ webui.selfUpdate?.release_notes_cap ?? 10 }}
-                  </span>
-                </template>
-                {{ selfUpdateReleaseCapTitle }}
-              </n-tooltip>
-            </div>
+                    <article
+                      v-for="note in webui.selfUpdate.release_notes"
+                      :key="note.tag"
+                      class="self-update-note"
+                    >
+                      <div class="self-update-note-title">
+                        <a
+                          :href="note.url"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                        >
+                          {{ note.title || note.tag }}
+                          <ExternalLink :size="14" aria-hidden="true" />
+                        </a>
+                        <span>{{ note.published_at || note.tag }}</span>
+                      </div>
+                      <n-tag v-if="note.breaking" type="warning" size="small">
+                        Review required
+                      </n-tag>
+                      <p>{{ note.body || "No release-note body was published." }}</p>
+                      <small v-if="note.body_truncated">
+                        Release note body truncated in the WebUI. Open GitHub for the full text.
+                      </small>
+                    </article>
+                  </div>
+                  <p v-else class="self-update-empty-notes">
+                    Release notes are unavailable from the WebUI. Open GitHub releases before updating.
+                  </p>
 
-            <div
-              v-if="webui.selfUpdate?.release_notes.length"
-              class="self-update-notes"
-            >
-              <article
-                v-for="note in webui.selfUpdate.release_notes"
-                :key="note.tag"
-                class="self-update-note"
-              >
-                <div class="self-update-note-title">
                   <a
-                    :href="note.url"
+                    class="text-link self-update-github-link"
+                    :href="selfUpdateReleasesUrl"
                     target="_blank"
                     rel="noopener noreferrer"
                   >
-                    {{ note.title || note.tag }}
+                    Open GitHub releases
                     <ExternalLink :size="14" aria-hidden="true" />
                   </a>
-                  <span>{{ note.published_at || note.tag }}</span>
                 </div>
-                <n-tag v-if="note.breaking" type="warning" size="small">
-                  Review required
-                </n-tag>
-                <p>{{ note.body || "No release-note body was published." }}</p>
-                <small v-if="note.body_truncated">
-                  Release note body truncated in the WebUI. Open GitHub for the full text.
-                </small>
-              </article>
-            </div>
-            <p v-else class="self-update-empty-notes">
-              Release notes are unavailable from the WebUI. Open GitHub releases before updating.
-            </p>
-
-            <a
-              class="text-link self-update-github-link"
-              :href="selfUpdateReleasesUrl"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              Open GitHub releases
-              <ExternalLink :size="14" aria-hidden="true" />
-            </a>
+              </n-tab-pane>
+            </n-tabs>
           </div>
         </n-modal>
       </div>
