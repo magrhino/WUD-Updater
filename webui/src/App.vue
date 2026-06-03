@@ -413,7 +413,7 @@ async function confirmSelfUpdate(): Promise<void> {
               outside the WebUI to run the new version.
             </n-alert>
 
-            <n-tabs type="segment" animated>
+            <n-tabs type="line" animated>
               <n-tab-pane name="overview" tab="Update Plan">
                 <div style="display: grid; gap: 14px; margin-top: 14px;">
                   <div class="self-update-facts">
