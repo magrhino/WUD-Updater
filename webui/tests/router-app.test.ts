@@ -13,6 +13,10 @@ import { themeStorageKey } from "../src/theme";
 import {
   authSession,
   coreUpdateTourResponse,
+  selfUpdateApplyResponse,
+  selfUpdatePlanResponse,
+  selfUpdatePrepareResponse,
+  selfUpdateResponse,
   settingsResponse,
   statusResponse,
 } from "./helpers/fixtures";
@@ -256,6 +260,172 @@ describe("app shell", () => {
         button.attributes("aria-label")?.includes("Dark theme"),
       ),
     ).toBe(true);
+  });
+
+  it("shows self-update banner and confirms release notes before applying", async () => {
+    const pinia = createPinia();
+    setActivePinia(pinia);
+    const auth = useAuthStore();
+    auth.session = authSession({ mutations_enabled: true });
+    const webui = useWebuiStore();
+    webui.status = statusResponse({ version: "0.24.2" });
+    webui.coreUpdateTour = coreUpdateTourResponse();
+    webui.selfUpdate = selfUpdateResponse({
+      release_notes_truncated: true,
+    });
+    vi.spyOn(webui, "loadDashboard").mockResolvedValue();
+    const applySelfUpdate = vi
+      .spyOn(webui, "applySelfUpdate")
+      .mockResolvedValue(selfUpdateApplyResponse());
+    const router = createWudRouter(createMemoryHistory());
+    await router.push("/");
+    await router.isReady();
+
+    const wrapper = mountWithApp(App, { pinia, router });
+    await flushPromises();
+
+    const text = wrapper.text();
+    expect(text).toContain("Update available: v0.24.2 → v0.25.0");
+    expect(text).toContain("ghcr.io/magrhino/wud-updater:latest");
+    const updateButton = wrapper
+      .findAll("button")
+      .find((button) => button.text().includes("Pull image"));
+    await updateButton?.trigger("click");
+    await flushPromises();
+
+    const dialog = wrapper.find('[role="dialog"]');
+    expect(dialog.text()).toContain("Update WUD-Updater");
+    expect(dialog.text()).toContain("Update Plan");
+    expect(dialog.text()).toContain("Release Notes");
+    expect(dialog.text()).not.toContain("Adds self-update review");
+    expect(applySelfUpdate).not.toHaveBeenCalled();
+
+    const notesTab = dialog
+      .findAll("button")
+      .find((button) => button.text().includes("Release Notes"));
+    await notesTab?.trigger("click");
+    await flushPromises();
+
+    expect(dialog.text()).toContain("Release notes");
+    expect(dialog.text()).toContain("Cap 10");
+    expect(dialog.text()).toContain("Adds self-update review");
+
+    const confirmButton = dialog
+      .findAll("button")
+      .find((button) => button.text().includes("Pull image"));
+    await confirmButton?.trigger("click");
+    await flushPromises();
+
+    expect(applySelfUpdate).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows pinned self-update tag prepare preview before applying", async () => {
+    const pinia = createPinia();
+    setActivePinia(pinia);
+    const auth = useAuthStore();
+    auth.session = authSession({ mutations_enabled: true });
+    const webui = useWebuiStore();
+    webui.status = statusResponse({ version: "0.24.2" });
+    webui.coreUpdateTour = coreUpdateTourResponse();
+    webui.selfUpdate = selfUpdateResponse({
+      strategy: "prepare_tag_update",
+      current_image: "ghcr.io/magrhino/wud-updater:v0.24.2",
+      target_image: "ghcr.io/magrhino/wud-updater:v0.25.0",
+      external_recreate_required: true,
+    });
+    vi.spyOn(webui, "loadDashboard").mockResolvedValue();
+    const planSelfUpdate = vi
+      .spyOn(webui, "planSelfUpdate")
+      .mockImplementation(async () => {
+        const plan = selfUpdatePlanResponse();
+        webui.selfUpdatePlan = plan;
+        return plan;
+      });
+    const applySelfUpdate = vi
+      .spyOn(webui, "applySelfUpdate")
+      .mockResolvedValue(selfUpdatePrepareResponse());
+    const router = createWudRouter(createMemoryHistory());
+    await router.push("/");
+    await router.isReady();
+
+    const wrapper = mountWithApp(App, { pinia, router });
+    await flushPromises();
+
+    const updateButton = wrapper
+      .findAll("button")
+      .find((button) => button.text().includes("Prepare tag update"));
+    await updateButton?.trigger("click");
+    await flushPromises();
+
+    const dialog = wrapper.find('[role="dialog"]');
+    expect(planSelfUpdate).toHaveBeenCalledTimes(1);
+    expect(dialog.text()).toContain("This updates the Compose image tag");
+    expect(dialog.text()).toContain("Compose tag update");
+    expect(dialog.text()).toContain("wud-updater");
+    expect(dialog.text()).toContain("ghcr.io/magrhino/wud-updater:v0.25.0");
+
+    const confirmButton = dialog
+      .findAll("button")
+      .find((button) => button.text().includes("Prepare tag update"));
+    await confirmButton?.trigger("click");
+    await flushPromises();
+
+    expect(applySelfUpdate).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps pinned self-update confirmation disabled until preview loads", async () => {
+    const pinia = createPinia();
+    setActivePinia(pinia);
+    const auth = useAuthStore();
+    auth.session = authSession({ mutations_enabled: true });
+    const webui = useWebuiStore();
+    webui.status = statusResponse({ version: "0.24.2" });
+    webui.coreUpdateTour = coreUpdateTourResponse();
+    webui.selfUpdate = selfUpdateResponse({
+      strategy: "prepare_tag_update",
+      current_image: "ghcr.io/magrhino/wud-updater:v0.24.2",
+      target_image: "ghcr.io/magrhino/wud-updater:v0.25.0",
+      external_recreate_required: true,
+    });
+    vi.spyOn(webui, "loadDashboard").mockResolvedValue();
+    let resolvePlan: (plan: ReturnType<typeof selfUpdatePlanResponse>) => void;
+    const planPromise = new Promise<ReturnType<typeof selfUpdatePlanResponse>>(
+      (resolve) => {
+        resolvePlan = resolve;
+      },
+    );
+    vi.spyOn(webui, "planSelfUpdate").mockImplementation(async () => {
+      const plan = await planPromise;
+      webui.selfUpdatePlan = plan;
+      return plan;
+    });
+    const applySelfUpdate = vi
+      .spyOn(webui, "applySelfUpdate")
+      .mockResolvedValue(selfUpdatePrepareResponse());
+    const router = createWudRouter(createMemoryHistory());
+    await router.push("/");
+    await router.isReady();
+
+    const wrapper = mountWithApp(App, { pinia, router });
+    await flushPromises();
+
+    const updateButton = wrapper
+      .findAll("button")
+      .find((button) => button.text().includes("Prepare tag update"));
+    await updateButton?.trigger("click");
+    await flushPromises();
+
+    const dialog = wrapper.find('[role="dialog"]');
+    const confirmButton = dialog
+      .findAll("button")
+      .find((button) => button.text().includes("Prepare tag update"));
+    expect(confirmButton?.attributes("disabled")).toBeDefined();
+    await confirmButton?.trigger("click");
+    expect(applySelfUpdate).not.toHaveBeenCalled();
+
+    resolvePlan!(selfUpdatePlanResponse());
+    await flushPromises();
+    expect(confirmButton?.attributes("disabled")).toBeUndefined();
   });
 
   it("shows settings navigation and refreshes the settings route", async () => {

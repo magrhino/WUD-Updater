@@ -5,6 +5,8 @@ import {
   apiPrefixFromBasePath,
   normalizeApiPrefix,
   webApi,
+  type SelfUpdatePlanResponse,
+  type SelfUpdateResponse,
   type StateOperation,
 } from "../src/api/client";
 
@@ -23,6 +25,66 @@ function mockFetch(body: unknown = {}): ReturnType<typeof vi.fn> {
 
 function requestInit(call: unknown[]): RequestInit {
   return call[1] as RequestInit;
+}
+
+function selfUpdateStatus(): SelfUpdateResponse {
+  return {
+    status: "available",
+    strategy: "pull_image",
+    current_tag: "v0.24.2",
+    latest_tag: "v0.25.0",
+    current_image: "ghcr.io/magrhino/wud-updater:latest",
+    target_image: "ghcr.io/magrhino/wud-updater:latest",
+    restart_container: "wud-updater",
+    release_notes: [],
+    release_notes_truncated: false,
+    release_notes_cap: 10,
+    can_update: true,
+    disabled_reason: "",
+    external_recreate_required: false,
+    warnings: [],
+  };
+}
+
+function selfUpdatePlanStatus(): SelfUpdatePlanResponse {
+  return {
+    strategy: "prepare_tag_update",
+    plan: {
+      plan_id: "self-plan",
+      dry_run: true,
+      can_apply: true,
+      status: "ready",
+      source_file: "/out/self-update.todo",
+      mode: "stop",
+      max_wait: 120,
+      selected_line_numbers: [1],
+      summary: {
+        target_count: 1,
+        matched_target_count: 1,
+        stack_count: 1,
+        service_count: 1,
+        skipped_count: 0,
+        issue_count: 0,
+      },
+      targets: [],
+      stacks: [],
+      skipped: [],
+      issues: [],
+      cleanup: {
+        cleanup_id: "",
+        can_remove_unmatched: false,
+        items: [],
+      },
+    },
+    current_tag: "v0.24.2",
+    latest_tag: "v0.25.0",
+    current_image: "ghcr.io/magrhino/wud-updater:v0.24.2",
+    target_image: "ghcr.io/magrhino/wud-updater:v0.25.0",
+    restart_container: "wud-updater",
+    external_recreate_required: true,
+    warning:
+      "This updates the Compose image tag and pulls the image. Recreate the WUD-Updater container from outside the WebUI to run it.",
+  };
 }
 
 describe("webApi", () => {
@@ -94,6 +156,10 @@ describe("webApi", () => {
       webApi.snoozes("active"),
       webApi.tagExclusions("active"),
       webApi.stateOperation(operation, "csrf"),
+      webApi.selfUpdate(),
+      webApi.planSelfUpdate("csrf"),
+      webApi.applySelfUpdate("csrf", selfUpdateStatus()),
+      webApi.prepareSelfUpdate("csrf", selfUpdateStatus(), selfUpdatePlanStatus()),
       webApi.restartContainer("csrf"),
       webApi.createPlan([1], true, [{ line_no: 1, tag: "1.1" }], "csrf"),
       webApi.createJob("plan", [1], true, [{ line_no: 1, tag: "1.1" }], "csrf"),
@@ -105,7 +171,7 @@ describe("webApi", () => {
       webApi.runLog(1),
     ]);
 
-    expect(fetchMock).toHaveBeenCalledTimes(32);
+    expect(fetchMock).toHaveBeenCalledTimes(36);
     for (const call of fetchMock.mock.calls) {
       expect(requestInit(call).credentials).toBe("include");
     }
@@ -142,6 +208,13 @@ describe("webApi", () => {
       "csrf-token",
     );
     await webApi.stateOperation(operation, "csrf-token");
+    await webApi.planSelfUpdate("csrf-token");
+    await webApi.applySelfUpdate("csrf-token", selfUpdateStatus());
+    await webApi.prepareSelfUpdate(
+      "csrf-token",
+      selfUpdateStatus(),
+      selfUpdatePlanStatus(),
+    );
     await webApi.restartContainer("csrf-token");
     await webApi.createPlan([1], false, [], "csrf-token");
     await webApi.createJob("plan", [1], false, [], "csrf-token");
@@ -173,6 +246,9 @@ describe("webApi", () => {
       "csrf",
     );
     await webApi.updateCoreUpdateTour("in_progress", "pending_preflight", "csrf");
+    await webApi.planSelfUpdate("csrf");
+    await webApi.applySelfUpdate("csrf", selfUpdateStatus());
+    await webApi.prepareSelfUpdate("csrf", selfUpdateStatus(), selfUpdatePlanStatus());
     await webApi.restartContainer("csrf");
     await webApi.createPlan([4], true, tagOverrides, "csrf");
     await webApi.createJob("plan-id", [4], true, tagOverrides, "csrf");
@@ -201,22 +277,38 @@ describe("webApi", () => {
       status: "in_progress",
       step: "pending_preflight",
     });
-    expect(JSON.parse(String(requestInit(fetchMock.mock.calls[5]).body))).toEqual({
+    expect(requestInit(fetchMock.mock.calls[5]).body).toBeUndefined();
+    expect(JSON.parse(String(requestInit(fetchMock.mock.calls[6]).body))).toEqual({
+      confirmation: "pull_image",
+      current_tag: "v0.24.2",
+      latest_tag: "v0.25.0",
+      target_image: "ghcr.io/magrhino/wud-updater:latest",
+      restart_container: "wud-updater",
+    });
+    expect(JSON.parse(String(requestInit(fetchMock.mock.calls[7]).body))).toEqual({
+      confirmation: "prepare_tag_update",
+      plan_id: "self-plan",
+      current_tag: "v0.24.2",
+      latest_tag: "v0.25.0",
+      target_image: "ghcr.io/magrhino/wud-updater:latest",
+      restart_container: "wud-updater",
+    });
+    expect(JSON.parse(String(requestInit(fetchMock.mock.calls[8]).body))).toEqual({
       confirmation: "restart_container",
     });
-    expect(JSON.parse(String(requestInit(fetchMock.mock.calls[6]).body))).toEqual({
+    expect(JSON.parse(String(requestInit(fetchMock.mock.calls[9]).body))).toEqual({
       line_numbers: [4],
       allow_tag_updates: true,
       tag_overrides: tagOverrides,
     });
-    expect(JSON.parse(String(requestInit(fetchMock.mock.calls[7]).body))).toEqual({
+    expect(JSON.parse(String(requestInit(fetchMock.mock.calls[10]).body))).toEqual({
       plan_id: "plan-id",
       line_numbers: [4],
       allow_tag_updates: true,
       tag_overrides: tagOverrides,
       confirmation: "apply",
     });
-    expect(JSON.parse(String(requestInit(fetchMock.mock.calls[8]).body))).toEqual({
+    expect(JSON.parse(String(requestInit(fetchMock.mock.calls[11]).body))).toEqual({
       plan_id: "plan-id",
       line_numbers: [4],
       allow_tag_updates: true,

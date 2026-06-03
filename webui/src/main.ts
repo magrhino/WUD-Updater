@@ -2,10 +2,15 @@ import { createApp } from "vue";
 import { createPinia } from "pinia";
 import {
   create,
+  NAlert,
   NButton,
   NConfigProvider,
   NMessageProvider,
+  NModal,
+  NTabPane,
+  NTabs,
   NTag,
+  NTooltip,
 } from "naive-ui";
 
 import App from "./App.vue";
@@ -15,10 +20,15 @@ import "./styles.css";
 
 const naive = create({
   components: [
+    NAlert,
     NButton,
     NConfigProvider,
     NMessageProvider,
+    NModal,
+    NTabPane,
+    NTabs,
     NTag,
+    NTooltip,
   ],
 });
 

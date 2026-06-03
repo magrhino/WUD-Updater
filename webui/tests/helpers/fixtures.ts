@@ -15,6 +15,10 @@ import type {
   ReleaseNotesResponse,
   RunSummary,
   ServicePolicyRecord,
+  SelfUpdateApplyResponse,
+  SelfUpdatePlanResponse,
+  SelfUpdatePrepareResponse,
+  SelfUpdateResponse,
   SettingsResponse,
   SnoozeRecord,
   StatusResponse,
@@ -206,6 +210,125 @@ export function settingsResponse(
         restart_required: false,
       },
     ],
+    ...overrides,
+  };
+}
+
+export function selfUpdateResponse(
+  overrides: Partial<SelfUpdateResponse> = {},
+): SelfUpdateResponse {
+  return {
+    status: "available",
+    strategy: "pull_image",
+    current_tag: "v0.24.2",
+    latest_tag: "v0.25.0",
+    current_image: "ghcr.io/magrhino/wud-updater:latest",
+    target_image: "ghcr.io/magrhino/wud-updater:latest",
+    restart_container: "wud-updater",
+    release_notes: [
+      {
+        tag: "v0.25.0",
+        title: "v0.25.0",
+        published_at: "2026-06-01T00:00:00Z",
+        url: "https://github.com/magrhino/WUD-Updater/releases/tag/v0.25.0",
+        body: "Adds self-update review and image pull support.",
+        body_truncated: false,
+        breaking: false,
+        breaking_reasons: [],
+      },
+    ],
+    release_notes_truncated: false,
+    release_notes_cap: 10,
+    can_update: true,
+    disabled_reason: "",
+    external_recreate_required: false,
+    warnings: [],
+    ...overrides,
+  };
+}
+
+export function selfUpdateApplyResponse(
+  overrides: Partial<SelfUpdateApplyResponse> = {},
+): SelfUpdateApplyResponse {
+  return {
+    status: "image_pulled",
+    audit_run_id: 77,
+    current_tag: "v0.24.2",
+    latest_tag: "v0.25.0",
+    target_image: "ghcr.io/magrhino/wud-updater:latest",
+    container: "wud-updater",
+    ...overrides,
+  };
+}
+
+export function selfUpdatePlanResponse(
+  overrides: Partial<SelfUpdatePlanResponse> = {},
+): SelfUpdatePlanResponse {
+  return {
+    strategy: "prepare_tag_update",
+    plan: planResponse({
+      plan_id: "self-update-plan-test",
+      stacks: [
+        {
+          name: "media",
+          directory: "/docker/media",
+          compose_file: "docker-compose.yml",
+          project_directory: "/docker/media",
+          services_label: "wud-updater",
+          services: ["wud-updater"],
+          pull_services: ["wud-updater"],
+          stop_services: ["wud-updater"],
+          force_recreate: true,
+          up_no_deps: true,
+          tag_updates: [
+            {
+              old_image: "ghcr.io/magrhino/wud-updater:v0.24.2",
+              desired_tag: "v0.25.0",
+              new_image: "ghcr.io/magrhino/wud-updater:v0.25.0",
+              services: ["wud-updater"],
+            },
+          ],
+          actions: [],
+          lines: [
+            {
+              line_no: 1,
+              raw: "ghcr.io/magrhino/wud-updater:v0.24.2 tag=v0.25.0",
+              image: "ghcr.io/magrhino/wud-updater:v0.24.2",
+              resolved_image: "ghcr.io/magrhino/wud-updater:v0.24.2",
+              compose_image: "ghcr.io/magrhino/wud-updater:v0.24.2",
+              target_image: "ghcr.io/magrhino/wud-updater:v0.25.0",
+              service: "wud-updater",
+              digest: "",
+              desired_tag: "v0.25.0",
+              action: "tag-update",
+            },
+          ],
+        },
+      ],
+    }),
+    current_tag: "v0.24.2",
+    latest_tag: "v0.25.0",
+    current_image: "ghcr.io/magrhino/wud-updater:v0.24.2",
+    target_image: "ghcr.io/magrhino/wud-updater:v0.25.0",
+    restart_container: "wud-updater",
+    external_recreate_required: true,
+    warning:
+      "This updates the Compose image tag and pulls the image. Recreate the WUD-Updater container from outside the WebUI to run it.",
+    ...overrides,
+  };
+}
+
+export function selfUpdatePrepareResponse(
+  overrides: Partial<SelfUpdatePrepareResponse> = {},
+): SelfUpdatePrepareResponse {
+  return {
+    status: "tag_prepared",
+    audit_run_id: 78,
+    current_tag: "v0.24.2",
+    latest_tag: "v0.25.0",
+    target_image: "ghcr.io/magrhino/wud-updater:v0.25.0",
+    container: "wud-updater",
+    external_recreate_required: true,
     ...overrides,
   };
 }

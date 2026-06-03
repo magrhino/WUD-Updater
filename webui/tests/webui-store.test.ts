@@ -16,6 +16,10 @@ import {
   pendingResponse,
   releaseNotesResponse,
   planResponse,
+  selfUpdateApplyResponse,
+  selfUpdatePlanResponse,
+  selfUpdatePrepareResponse,
+  selfUpdateResponse,
   settingsResponse,
   statusResponse,
   stateOperationResponse,
@@ -308,6 +312,133 @@ describe("webui store", () => {
 
     expect(fetchMock.mock.calls[0][0]).toBe("/api/v1/status");
     expect(webui.status?.version).toBe("0.24.2");
+  });
+
+  it("loads self-update status for the shell banner", async () => {
+    const fetchMock = mockFetch(selfUpdateResponse());
+    const webui = useWebuiStore();
+
+    await webui.loadSelfUpdate();
+
+    expect(fetchMock.mock.calls[0][0]).toBe("/api/v1/self-update");
+    expect(webui.selfUpdate?.latest_tag).toBe("v0.25.0");
+  });
+
+  it("loads self-update tag prepare plan", async () => {
+    const fetchMock = mockFetch(selfUpdatePlanResponse());
+    const auth = useAuthStore();
+    const ensureCsrf = vi.spyOn(auth, "ensureCsrf").mockResolvedValue("csrf-plan");
+    const webui = useWebuiStore();
+
+    const response = await webui.planSelfUpdate();
+
+    expect(ensureCsrf).toHaveBeenCalledTimes(1);
+    expect(fetchMock.mock.calls[0][0]).toBe("/api/v1/self-update/plan");
+    expect(webui.selfUpdatePlan?.plan.plan_id).toBe("self-update-plan-test");
+    expect(response.external_recreate_required).toBe(true);
+    expect(
+      ((fetchMock.mock.calls[0][1] as RequestInit).headers as Headers).get(
+        "x-wud-csrf-token",
+      ),
+    ).toBe("csrf-plan");
+  });
+
+  it("passes csrf from auth store to self-update apply", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse(selfUpdateApplyResponse()))
+      .mockResolvedValueOnce(jsonResponse(selfUpdateResponse()));
+    vi.stubGlobal("fetch", fetchMock);
+    const auth = useAuthStore();
+    const ensureCsrf = vi
+      .spyOn(auth, "ensureCsrf")
+      .mockResolvedValue("csrf-self-update");
+    const webui = useWebuiStore();
+    webui.selfUpdate = selfUpdateResponse();
+
+    const response = await webui.applySelfUpdate();
+
+    expect(ensureCsrf).toHaveBeenCalledTimes(1);
+    expect(response.container).toBe("wud-updater");
+    expect(webui.selfUpdateMessage).toBe(
+      "Image pulled. Recreate the WUD-Updater container to run the new version. Tagged deployments are recommended for predictable updates.",
+    );
+    expect(fetchMock.mock.calls[0][0]).toBe("/api/v1/self-update");
+    expect(JSON.parse(String((fetchMock.mock.calls[0][1] as RequestInit).body))).toEqual({
+      confirmation: "pull_image",
+      current_tag: "v0.24.2",
+      latest_tag: "v0.25.0",
+      target_image: "ghcr.io/magrhino/wud-updater:latest",
+      restart_container: "wud-updater",
+    });
+    expect(
+      ((fetchMock.mock.calls[0][1] as RequestInit).headers as Headers).get(
+        "x-wud-csrf-token",
+      ),
+    ).toBe("csrf-self-update");
+  });
+
+  it("prepares pinned self-update tags from cached plan", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse(selfUpdatePrepareResponse()))
+      .mockResolvedValueOnce(jsonResponse(selfUpdateResponse({ strategy: "prepare_tag_update" })));
+    vi.stubGlobal("fetch", fetchMock);
+    const auth = useAuthStore();
+    const ensureCsrf = vi
+      .spyOn(auth, "ensureCsrf")
+      .mockResolvedValue("csrf-self-update");
+    const webui = useWebuiStore();
+    webui.selfUpdate = selfUpdateResponse({
+      strategy: "prepare_tag_update",
+      current_image: "ghcr.io/magrhino/wud-updater:v0.24.2",
+      target_image: "ghcr.io/magrhino/wud-updater:v0.25.0",
+      external_recreate_required: true,
+    });
+    webui.selfUpdatePlan = selfUpdatePlanResponse();
+
+    const response = await webui.applySelfUpdate();
+
+    expect(ensureCsrf).toHaveBeenCalledTimes(1);
+    expect(response.status).toBe("tag_prepared");
+    expect(webui.selfUpdateMessage).toBe(
+      "Tag updated and image pulled. Recreate the WUD-Updater container from outside the WebUI to run the new version. Tagged deployments are recommended for predictable updates.",
+    );
+    expect(fetchMock.mock.calls[0][0]).toBe("/api/v1/self-update/prepare");
+    expect(JSON.parse(String((fetchMock.mock.calls[0][1] as RequestInit).body))).toEqual({
+      confirmation: "prepare_tag_update",
+      plan_id: "self-update-plan-test",
+      current_tag: "v0.24.2",
+      latest_tag: "v0.25.0",
+      target_image: "ghcr.io/magrhino/wud-updater:v0.25.0",
+      restart_container: "wud-updater",
+    });
+  });
+
+  it("requires a loaded self-update tag prepare plan before applying", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    const auth = useAuthStore();
+    const ensureCsrf = vi
+      .spyOn(auth, "ensureCsrf")
+      .mockResolvedValue("csrf-self-update");
+    const webui = useWebuiStore();
+    webui.selfUpdate = selfUpdateResponse({
+      strategy: "prepare_tag_update",
+      current_image: "ghcr.io/magrhino/wud-updater:v0.24.2",
+      target_image: "ghcr.io/magrhino/wud-updater:v0.25.0",
+      external_recreate_required: true,
+    });
+
+    await expect(webui.applySelfUpdate()).rejects.toThrow(
+      "Self-update tag update preview must be loaded before applying",
+    );
+
+    expect(ensureCsrf).not.toHaveBeenCalled();
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(webui.selfUpdateError).toBe(
+      "Self-update tag update preview must be loaded before applying",
+    );
   });
 
   it("loads read-only settings", async () => {

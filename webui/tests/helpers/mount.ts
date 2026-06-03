@@ -1,4 +1,4 @@
-import { h, type Component, type VNodeChild } from "vue";
+import { h, inject, provide, ref, type Component, type Ref, type VNodeChild } from "vue";
 import { mount, type VueWrapper } from "@vue/test-utils";
 import { createPinia, setActivePinia, type Pinia } from "pinia";
 import type { Router } from "vue-router";
@@ -14,11 +14,17 @@ type DataTableColumn = {
   render?: (row: Record<string, unknown>) => VNodeChild;
 };
 
+type TabsState = {
+  activeName: Ref<string | undefined>;
+};
+
 const passthrough = (tag: string) => ({
   setup(_: unknown, { slots }: { slots: Record<string, () => unknown> }) {
     return () => h(tag, [slots.default?.()]);
   },
 });
+
+const tabsInjectionKey = Symbol("tabs");
 
 function callUpdateValue(listener: unknown, value: string): void {
   if (typeof listener === "function") {
@@ -241,8 +247,14 @@ export const naiveStubs: Record<string, Component> = {
     },
     emits: ["positive-click", "update:show"],
     setup(props, { emit, slots }) {
-      return () =>
-        props.show
+      return () => {
+        const positiveButtonProps = props.positiveButtonProps as
+          | { disabled?: boolean; loading?: boolean }
+          | undefined;
+        const positiveDisabled = Boolean(
+          positiveButtonProps?.disabled || positiveButtonProps?.loading,
+        );
+        return props.show
           ? h("div", { role: "dialog" }, [
               props.title ? h("h2", props.title) : null,
               slots.default?.(),
@@ -250,17 +262,17 @@ export const naiveStubs: Record<string, Component> = {
                 ? h(
                     "button",
                     {
-                      disabled: Boolean(
-                        (props.positiveButtonProps as { loading?: boolean } | undefined)
-                          ?.loading,
-                      ),
-                      onClick: () => emit("positive-click"),
+                      disabled: positiveDisabled,
+                      onClick: positiveDisabled
+                        ? undefined
+                        : () => emit("positive-click"),
                     },
                     props.positiveText,
                   )
                 : null,
             ])
           : null;
+      };
     },
   },
   NSelect: {
@@ -314,7 +326,66 @@ export const naiveStubs: Record<string, Component> = {
         });
     },
   },
+  NTabPane: {
+    props: {
+      name: String,
+      tab: String,
+    },
+    setup(props, { slots }) {
+      const tabsState = inject<TabsState | null>(tabsInjectionKey, null);
+      if (tabsState && !tabsState.activeName.value) {
+        tabsState.activeName.value = props.name;
+      }
+      return () =>
+        !tabsState || tabsState.activeName.value === props.name
+          ? h(
+              "div",
+              {
+                role: "tabpanel",
+                "data-tab-pane": props.name,
+              },
+              [slots.default?.()],
+            )
+          : null;
+    },
+  },
+  NTabs: {
+    setup(_, { slots }) {
+      const tabsState: TabsState = { activeName: ref() };
+      provide(tabsInjectionKey, tabsState);
+      return () => {
+        const panes = slots.default?.() ?? [];
+        return h("div", [
+          h(
+            "div",
+            { role: "tablist" },
+            panes.map((pane) => {
+              const name = String(pane.props?.name ?? "");
+              return h(
+                "button",
+                {
+                  role: "tab",
+                  type: "button",
+                  "aria-selected": String(tabsState.activeName.value === name),
+                  onClick: () => {
+                    tabsState.activeName.value = name;
+                  },
+                },
+                String(pane.props?.tab ?? name),
+              );
+            }),
+          ),
+          panes,
+        ]);
+      };
+    },
+  },
   NTag: passthrough("span"),
+  NTooltip: {
+    setup(_, { slots }) {
+      return () => h("span", [slots.trigger?.(), slots.default?.()]);
+    },
+  },
 };
 
 Object.assign(naiveStubs, {
@@ -331,7 +402,10 @@ Object.assign(naiveStubs, {
   Modal: naiveStubs.NModal,
   Select: naiveStubs.NSelect,
   Switch: naiveStubs.NSwitch,
+  TabPane: naiveStubs.NTabPane,
+  Tabs: naiveStubs.NTabs,
   Tag: naiveStubs.NTag,
+  Tooltip: naiveStubs.NTooltip,
 });
 
 export function mountWithApp(component: Component, options: MountOptions = {}): VueWrapper {

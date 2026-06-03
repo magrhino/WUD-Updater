@@ -29,6 +29,10 @@ import type {
   RunLogResponse,
   RunSummary,
   ServicePolicyRecord,
+  SelfUpdateApplyResponse,
+  SelfUpdatePlanResponse,
+  SelfUpdatePrepareResponse,
+  SelfUpdateResponse,
   SettingsEntrySource,
   SettingsResponse,
   SetupStatusResponse,
@@ -46,6 +50,7 @@ import type {
 } from "./client";
 
 const DEMO_VERSION = "0.25.0";
+const DEMO_LATEST_VERSION = "v0.26.0";
 const DEMO_SOURCE_FILE = "demo/out/images.todo";
 const DEMO_DB_PATH = "demo/logs/wud-updater.sqlite";
 const DEMO_LOG_DIR = "demo/logs";
@@ -861,6 +866,114 @@ class DemoApiState {
     };
   }
 
+  selfUpdate(): SelfUpdateResponse {
+    return {
+      status: "available",
+      strategy: "pull_image",
+      current_tag: `v${DEMO_VERSION}`,
+      latest_tag: DEMO_LATEST_VERSION,
+      current_image: "ghcr.io/magrhino/wud-updater:latest",
+      target_image: "ghcr.io/magrhino/wud-updater:latest",
+      restart_container: "demo-wud-updater",
+      release_notes: Array.from({ length: 10 }, (_, index) => {
+        const patch = 26 - index;
+        const tag = `v0.${patch}.0`;
+        return {
+          tag,
+          title: `${tag} demo release`,
+          published_at: `2026-05-${String(28 - index).padStart(2, "0")}T12:00:00Z`,
+          url: `https://github.com/magrhino/WUD-Updater/releases/tag/${tag}`,
+          body:
+            index === 0
+              ? "Adds the WebUI self-update banner, release-note review, and image pull flow."
+              : "Demo release note for the capped self-update history list.",
+          body_truncated: false,
+          breaking: index === 0,
+          breaking_reasons: index === 0 ? ["Review external container recreate steps."] : [],
+        };
+      }),
+      release_notes_truncated: true,
+      release_notes_cap: 10,
+      can_update: true,
+      disabled_reason: "",
+      external_recreate_required: false,
+      warnings: [],
+    };
+  }
+
+  selfUpdatePlan(): SelfUpdatePlanResponse {
+    const item: DemoPendingItem = {
+      line_no: 1,
+      raw: "ghcr.io/magrhino/wud-updater:v0.25.0 tag=v0.26.0",
+      image: "ghcr.io/magrhino/wud-updater:v0.25.0",
+      key: "ghcr.io/magrhino/wud-updater",
+      repo: "ghcr.io/magrhino/wud-updater",
+      current_tag: "v0.25.0",
+      has_tag: true,
+      allow_repo: false,
+      digest: "",
+      desired_tag: "v0.26.0",
+      resolved_image: "ghcr.io/magrhino/wud-updater:v0.25.0",
+      target_image: "ghcr.io/magrhino/wud-updater:v0.26.0",
+      compose_images: ["ghcr.io/magrhino/wud-updater:v0.25.0"],
+      services: ["wud-updater"],
+      service: "wud-updater",
+      stack: "media",
+      action: "tag-update",
+      diagnostic: null,
+    };
+    const plan: PlanResponse = {
+      plan_id: "demo-self-update-plan",
+      dry_run: true,
+      can_apply: true,
+      status: "ready",
+      source_file: DEMO_SOURCE_FILE,
+      mode: "stop",
+      max_wait: 180,
+      selected_line_numbers: [1],
+      summary: {
+        target_count: 1,
+        matched_target_count: 1,
+        stack_count: 1,
+        service_count: 1,
+        skipped_count: 0,
+        issue_count: 0,
+      },
+      targets: [
+        {
+          line_no: item.line_no,
+          raw: item.raw,
+          image: item.image,
+          resolved_image: item.resolved_image,
+          digest: item.digest,
+          desired_tag: item.desired_tag,
+          matched: true,
+          action: item.action,
+        },
+      ],
+      stacks: [planStack("media", [item])],
+      skipped: [],
+      issues: [],
+      cleanup: {
+        cleanup_id: "",
+        can_remove_unmatched: false,
+        items: [],
+      },
+    };
+    return {
+      strategy: "prepare_tag_update",
+      plan,
+      current_tag: "v0.25.0",
+      latest_tag: "v0.26.0",
+      current_image: "ghcr.io/magrhino/wud-updater:v0.25.0",
+      target_image: "ghcr.io/magrhino/wud-updater:v0.26.0",
+      restart_container: "demo-wud-updater",
+      external_recreate_required: true,
+      warning:
+        "This updates the Compose image tag and pulls the image. Recreate the WUD-Updater container from outside the WebUI to run it.",
+    };
+  }
+
   createPlan(
     lineNumbers: number[],
     allowTagUpdates: boolean,
@@ -1438,6 +1551,32 @@ export function createDemoWebApi(): WebApi {
     ) => state.removeSelectedPending(removalId, lines),
     releaseNotes: async () => state.releaseNotes(),
     refreshReleaseNotes: async (_csrfToken: string) => state.releaseNotes(),
+    selfUpdate: async () => state.selfUpdate(),
+    planSelfUpdate: async (_csrfToken: string) => state.selfUpdatePlan(),
+    applySelfUpdate: async (
+      _csrfToken: string,
+      _update: SelfUpdateResponse,
+    ): Promise<SelfUpdateApplyResponse> => ({
+      status: "image_pulled",
+      audit_run_id: 9002,
+      current_tag: `v${DEMO_VERSION}`,
+      latest_tag: DEMO_LATEST_VERSION,
+      target_image: "ghcr.io/magrhino/wud-updater:latest",
+      container: "demo-wud-updater",
+    }),
+    prepareSelfUpdate: async (
+      _csrfToken: string,
+      _update: SelfUpdateResponse,
+      _plan: SelfUpdatePlanResponse,
+    ): Promise<SelfUpdatePrepareResponse> => ({
+      status: "tag_prepared",
+      audit_run_id: 9003,
+      current_tag: "v0.25.0",
+      latest_tag: "v0.26.0",
+      target_image: "ghcr.io/magrhino/wud-updater:v0.26.0",
+      container: "demo-wud-updater",
+      external_recreate_required: true,
+    }),
     servicePolicies: async () => state.servicePolicies(),
     snoozes: async (snoozeState: SnoozeState = "active") =>
       state.snoozeRecords(snoozeState),
