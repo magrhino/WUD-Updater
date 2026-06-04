@@ -4,6 +4,7 @@ import { RouterLink } from "vue-router";
 import { breakpointsTailwind, useBreakpoints } from "@vueuse/core";
 import { NAlert, NDataTable, NTag, type DataTableColumns } from "naive-ui";
 
+import HistoryViewTabs from "../components/HistoryViewTabs.vue";
 import type { RunSummary } from "../api/client";
 import { useWebuiStore } from "../stores/webui";
 
@@ -103,6 +104,8 @@ onMounted(() => {
         <h2>Audit log</h2>
       </div>
     </div>
+
+    <HistoryViewTabs />
 
     <n-alert type="info" :show-icon="false" style="margin-bottom: 16px;">
       Shows matching operator actions from the 50 most recent runs.

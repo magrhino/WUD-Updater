@@ -5,6 +5,7 @@ import { breakpointsTailwind, useBreakpoints } from "@vueuse/core";
 import { NAlert, NDataTable, NTag, type DataTableColumns } from "naive-ui";
 
 import CoreUpdateTourPanel from "../components/CoreUpdateTourPanel.vue";
+import HistoryViewTabs from "../components/HistoryViewTabs.vue";
 import type { RunSummary } from "../api/client";
 import { useWebuiStore } from "../stores/webui";
 
@@ -70,6 +71,8 @@ onMounted(() => {
         <h2>{{ webui.runs.length }} recent runs</h2>
       </div>
     </div>
+
+    <HistoryViewTabs />
 
     <CoreUpdateTourPanel
       step="runs_history"

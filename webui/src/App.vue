@@ -1,12 +1,11 @@
 <script setup lang="ts">
-import { computed, ref, watch } from "vue";
+import { computed, ref, watch, type Component } from "vue";
 import { RouterLink, RouterView, useRoute, useRouter } from "vue-router";
 import {
   Activity,
   ArrowUpCircle,
   BellOff,
   Clock3,
-  ClipboardList,
   ExternalLink,
   Info,
   LayoutDashboard,
@@ -149,17 +148,71 @@ const selfUpdatePlanStack = computed(() => webui.selfUpdatePlan?.plan.stacks[0])
 const selfUpdatePlanTagUpdates = computed(
   () => selfUpdatePlanStack.value?.tag_updates ?? [],
 );
-const navItems = [
-  { to: "/", label: "Dashboard", icon: LayoutDashboard },
-  { to: "/pending", label: "Pending", icon: ListChecks },
-  { to: "/runs", label: "History", icon: Clock3 },
-  { to: "/audit", label: "Audit log", icon: ClipboardList },
-  { to: "/policies", label: "Policies", icon: Settings2 },
-  { to: "/snoozes", label: "Snoozes", icon: BellOff },
-  { to: "/tag-exclusions", label: "Exclusions", icon: Tags },
-  { to: "/settings", label: "Settings", icon: SlidersHorizontal },
-  { to: "/doctor", label: "Doctor", icon: Stethoscope },
+
+type NavItem = {
+  to: string;
+  label: string;
+  icon: Component;
+  activeRouteNames: string[];
+};
+
+const navItems: NavItem[] = [
+  {
+    to: "/",
+    label: "Dashboard",
+    icon: LayoutDashboard,
+    activeRouteNames: ["dashboard"],
+  },
+  {
+    to: "/pending",
+    label: "Pending",
+    icon: ListChecks,
+    activeRouteNames: ["pending"],
+  },
+  {
+    to: "/runs",
+    label: "History",
+    icon: Clock3,
+    activeRouteNames: ["runs", "audit", "run-detail", "run-log"],
+  },
+  {
+    to: "/policies",
+    label: "Policies",
+    icon: Settings2,
+    activeRouteNames: ["policies"],
+  },
+  {
+    to: "/snoozes",
+    label: "Snoozes",
+    icon: BellOff,
+    activeRouteNames: ["snoozes"],
+  },
+  {
+    to: "/tag-exclusions",
+    label: "Exclusions",
+    icon: Tags,
+    activeRouteNames: ["tag-exclusions"],
+  },
+  {
+    to: "/settings",
+    label: "Settings",
+    icon: SlidersHorizontal,
+    activeRouteNames: ["settings"],
+  },
+  {
+    to: "/doctor",
+    label: "Doctor",
+    icon: Stethoscope,
+    activeRouteNames: ["doctor"],
+  },
 ];
+
+function isNavItemActive(item: NavItem): boolean {
+  return (
+    typeof route.name === "string" &&
+    item.activeRouteNames.includes(route.name)
+  );
+}
 
 watch(
   showShell,
@@ -259,9 +312,11 @@ async function confirmSelfUpdate(): Promise<void> {
               v-for="item in navItems"
               :key="item.to"
               class="nav-item"
+              :class="{ 'nav-item-active': isNavItemActive(item) }"
               :to="item.to"
               :title="item.label"
               :aria-label="item.label"
+              :aria-current="isNavItemActive(item) ? 'page' : undefined"
             >
               <component :is="item.icon" :size="18" />
               <span>{{ item.label }}</span>

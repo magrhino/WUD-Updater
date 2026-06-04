@@ -471,7 +471,12 @@ describe("app shell", () => {
     const wrapper = mountWithApp(App, { pinia, router });
     await flushPromises();
 
-    expect(wrapper.text()).toContain("Audit log");
+    const navItems = wrapper.findAll(".nav-item");
+    const historyItem = navItems.find((item) => item.text().includes("History"));
+    expect(historyItem?.classes()).toContain("nav-item-active");
+    expect(historyItem?.attributes("aria-current")).toBe("page");
+    expect(navItems.some((item) => item.text().includes("Audit log"))).toBe(false);
+    expect(wrapper.find("h1").text()).toBe("History");
     loadRuns.mockClear();
     await wrapper.find('button[aria-label="Refresh current view"]').trigger("click");
     expect(loadRuns).toHaveBeenCalledTimes(1);

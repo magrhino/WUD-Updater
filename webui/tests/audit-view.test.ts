@@ -65,6 +65,8 @@ describe("AuditView", () => {
 
     const wrapper = mountWithApp(AuditView, { pinia, router });
 
+    expect(wrapper.find(".history-view-tab.active").text()).toBe("Audit log");
+    expect(wrapper.text()).toContain("All runs");
     expect(wrapper.text()).toContain("#11");
     expect(wrapper.text()).toContain("cli-service");
     expect(wrapper.text()).not.toContain("#12");
