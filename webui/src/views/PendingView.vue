@@ -942,8 +942,28 @@ function getPendingGroupedItem(lineNo: number): PendingGroupedItem | undefined {
   return webui.pending.grouping.unmatched.find((i) => i.line_no === lineNo);
 }
 
+function pendingServiceKeys(row: PendingItem): string[] {
+  if (!webui.pending?.grouping) return [];
+  const keys: string[] = [];
+  for (const group of webui.pending.grouping.groups) {
+    const item = group.items.find((i) => i.line_no === row.line_no);
+    if (!item) continue;
+    for (const service of item.services) {
+      keys.push(`${group.name}/${service}`);
+    }
+  }
+  const unmatched = webui.pending.grouping.unmatched.find(
+    (item) => item.line_no === row.line_no,
+  );
+  if (unmatched?.diagnostic?.stack && unmatched.diagnostic.service) {
+    keys.push(`${unmatched.diagnostic.stack}/${unmatched.diagnostic.service}`);
+  }
+  return [...new Set(keys)];
+}
+
 function renderRiskBadges(row: PendingItem) {
   const groupedItem = getPendingGroupedItem(row.line_no);
+  const serviceKeys = pendingServiceKeys(row);
   const badges: ReturnType<typeof h>[] = [];
   const makeBadge = (label: string, type: "default" | "error" | "info" | "success" | "warning") => {
     return h(NTag, { size: "small", type, class: "safety-badge" }, () => label);
@@ -982,15 +1002,14 @@ function renderRiskBadges(row: PendingItem) {
   }
 
   const note = releaseNoteFor(row);
-  const status = releaseNoteStatus(note);
-  if (status === "Error" || status === "Unsupported") {
+  if (note?.status === "error" || note?.status === "unsupported") {
     badges.push(makeBadge("No release notes", "warning"));
   }
-  
-  if (webui.snoozes.some((s) => s.service_key === row.key)) {
+
+  if (webui.snoozes.some((s) => serviceKeys.includes(s.service_key))) {
     badges.push(makeBadge("Snoozed", "default"));
   }
-  const policy = webui.servicePolicies.find((p) => p.service_key === row.key);
+  const policy = webui.servicePolicies.find((p) => serviceKeys.includes(p.service_key));
   if (policy?.auto_update) {
     badges.push(makeBadge("Auto-update", "success"));
   }
@@ -2352,7 +2371,7 @@ watch(
                     </n-alert>
                   </div>
                   <span
-                    v-else
+                    v-if="!releaseNoteFor(item)?.links.length"
                     class="release-notes-muted"
                     :title="releaseNoteReason(releaseNoteFor(item)) || undefined"
                   >
