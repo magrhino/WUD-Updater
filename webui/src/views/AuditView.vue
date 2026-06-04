@@ -24,6 +24,10 @@ const WEB_AUDIT_MODES = new Set([
 ]);
 
 const auditRuns = computed(() => webui.runs.filter(isAuditRun));
+const auditCountLabel = computed(() => {
+  const count = auditRuns.value.length;
+  return `${count} operator ${count === 1 ? "action" : "actions"}`;
+});
 
 function metadataSource(run: RunSummary): string {
   const source = run.metadata?.source;
@@ -57,6 +61,38 @@ function formatAction(run: RunSummary): string {
   }
 }
 
+function sourceLabel(run: RunSummary): string {
+  const source = metadataSource(run);
+  if (source === "webui") return "WebUI";
+  if (source === "cli" || (!source && CLI_UPDATE_MODES.has(run.mode))) return "CLI";
+  if (run.mode.startsWith("web-")) return "WebUI";
+  return source || "System";
+}
+
+function finishLabel(run: RunSummary): string {
+  return run.finished_at ?? "Running";
+}
+
+function statusTagType(status: string): "success" | "warning" | "error" | "default" {
+  switch (status.toLowerCase()) {
+    case "success":
+      return "success";
+    case "running":
+    case "queued":
+      return "warning";
+    case "failed":
+    case "failure":
+    case "error":
+      return "error";
+    default:
+      return "default";
+  }
+}
+
+function actionTagType(run: RunSummary): "info" | "warning" | "default" {
+  return run.dry_run ? "info" : CLI_UPDATE_MODES.has(run.mode) ? "warning" : "default";
+}
+
 function formatTarget(run: RunSummary): string {
   if (run.metadata && run.metadata.resource_id) {
     return String(run.metadata.resource_id);
@@ -84,7 +120,20 @@ const columns = computed<DataTableColumns<RunSummary>>(() => [
   { title: "Started", key: "started_at", minWidth: 180 },
   { title: "Action", key: "mode", minWidth: 180, render: (row) => formatAction(row) },
   { title: "Target", key: "target", minWidth: 150, render: (row) => formatTarget(row) },
-  { title: "Status", key: "status", minWidth: 100 },
+  {
+    title: "Source",
+    key: "source",
+    minWidth: 100,
+    render: (row) => sourceLabel(row),
+  },
+  {
+    title: "Status",
+    key: "status",
+    minWidth: 110,
+    render: (row) =>
+      h(NTag, { class: "audit-status-tag", size: "small", type: statusTagType(row.status) }, () => row.status),
+  },
+  { title: "Finished", key: "finished_at", minWidth: 180, render: (row) => finishLabel(row) },
 ]);
 
 onMounted(() => {
@@ -101,18 +150,18 @@ onMounted(() => {
     <div class="section-heading">
       <div>
         <p class="eyebrow">Operator Actions</p>
-        <h2>Audit log</h2>
+        <h2>{{ auditCountLabel }}</h2>
       </div>
     </div>
 
     <HistoryViewTabs />
 
-    <n-alert type="info" :show-icon="false" style="margin-bottom: 16px;">
-      Shows matching operator actions from the 50 most recent runs.
+    <n-alert type="info" :show-icon="false">
+      Shows matching operator actions from the 50 most recent runs. Open a run to inspect metadata and logs.
     </n-alert>
 
     <n-data-table
-      v-if="!isMobile"
+      v-if="!isMobile && (webui.loading || auditRuns.length)"
       :columns="columns"
       :data="auditRuns"
       :loading="webui.loading"
@@ -120,6 +169,7 @@ onMounted(() => {
       size="small"
       class="data-surface"
     />
+    <div v-else-if="!isMobile" class="empty-state">No operator actions recorded recently.</div>
 
     <div v-else class="mobile-list">
       <RouterLink
@@ -129,19 +179,35 @@ onMounted(() => {
         class="mobile-card linked"
       >
         <div class="mobile-card-title">
-          <strong>#{{ run.id }} {{ run.status }}</strong>
-          <n-tag size="small" :type="run.dry_run ? 'info' : 'warning'">
+          <strong>#{{ run.id }}</strong>
+          <n-tag size="small" :type="actionTagType(run)">
             {{ formatAction(run) }}
           </n-tag>
         </div>
         <dl>
           <div>
+            <dt>Status</dt>
+            <dd class="audit-status-value">
+              <n-tag class="audit-status-tag" size="small" :type="statusTagType(run.status)">
+                {{ run.status }}
+              </n-tag>
+            </dd>
+          </div>
+          <div>
             <dt>Target</dt>
             <dd>{{ formatTarget(run) }}</dd>
           </div>
           <div>
+            <dt>Source</dt>
+            <dd>{{ sourceLabel(run) }}</dd>
+          </div>
+          <div>
             <dt>Started</dt>
             <dd>{{ run.started_at }}</dd>
+          </div>
+          <div>
+            <dt>Finished</dt>
+            <dd>{{ finishLabel(run) }}</dd>
           </div>
         </dl>
       </RouterLink>
