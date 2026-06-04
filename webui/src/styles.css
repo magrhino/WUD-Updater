@@ -2338,6 +2338,28 @@ a {
   overflow-wrap: anywhere;
 }
 
+.risk-badges-container {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.risk-badges-muted {
+  color: var(--color-muted-text);
+  font-size: 0.82rem;
+}
+
+.safety-badge {
+  font-weight: 600;
+}
+
+.pending-update-diagnostic {
+  margin-top: 8px;
+  width: 100%;
+}
+
 .icon-link {
   display: inline-flex;
   align-items: center;

@@ -1672,7 +1672,7 @@ def _pending_grouping_items(
                 resolved_image=resolved,
                 compose_images=compose_images,
                 services=services,
-                action=_target_action_name(target),
+                action=_target_action_name(target, services),
             )
         )
     return tuple(items)
@@ -1718,8 +1718,10 @@ def _pending_target_image(
     return image_with_tag(base_image, target.desired_tag)
 
 
-def _target_action_name(target: WudTarget) -> str:
-    return "tag-update" if target.desired_tag else "update"
+def _target_action_name(target: WudTarget, services: Sequence[str] = ()) -> str:
+    if target.desired_tag:
+        return "tag-update"
+    return "recreate_service" if services else "recreate_stack"
 
 
 def _pending_services_label(services: Sequence[str]) -> str:

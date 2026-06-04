@@ -2385,7 +2385,7 @@ def test_pending_endpoint_reads_wud_file_without_mutation(tmp_path: Path) -> Non
     assert body["grouping"]["groups"] == []
     assert [item["line_no"] for item in body["grouping"]["unmatched"]] == [2, 3]
     assert body["grouping"]["unmatched"][0]["action"] == "tag-update"
-    assert body["grouping"]["unmatched"][1]["action"] == "update"
+    assert body["grouping"]["unmatched"][1]["action"] == "recreate_stack"
     assert body["grouping"]["warnings"]
     assert wud_file.read_text(encoding="utf-8") == original
 
@@ -2432,7 +2432,7 @@ def test_pending_endpoint_groups_items_by_compose_stack_without_mutation(
     assert group["items"][0]["compose_images"] == ["repo/app:latest"]
     assert group["items"][0]["resolved_image"] == "repo/app:latest"
     assert group["items"][0]["target_image"] == "repo/app:latest"
-    assert group["items"][0]["action"] == "update"
+    assert group["items"][0]["action"] == "recreate_service"
     assert wud_file.read_text(encoding="utf-8") == original
     assert (
         (compose_dir / "docker-compose.yml").read_text(encoding="utf-8")

@@ -202,6 +202,12 @@ const columns = computed<DataTableColumns<PendingItem>>(() => [
         : displayValue(""),
   },
   {
+    title: "Safety cues",
+    key: "safety_cues",
+    minWidth: 200,
+    render: (row) => renderRiskBadges(row),
+  },
+  {
     title: "Release notes",
     key: "release_notes",
     minWidth: 220,
@@ -927,6 +933,72 @@ function renderReleaseNotes(row: PendingItem) {
   ]);
 }
 
+function getPendingGroupedItem(lineNo: number): PendingGroupedItem | undefined {
+  if (!webui.pending?.grouping) return undefined;
+  for (const group of webui.pending.grouping.groups) {
+    const found = group.items.find((i) => i.line_no === lineNo);
+    if (found) return found;
+  }
+  return webui.pending.grouping.unmatched.find((i) => i.line_no === lineNo);
+}
+
+function renderRiskBadges(row: PendingItem) {
+  const groupedItem = getPendingGroupedItem(row.line_no);
+  const badges: ReturnType<typeof h>[] = [];
+  const makeBadge = (label: string, type: "default" | "error" | "info" | "success" | "warning") => {
+    return h(NTag, { size: "small", type, class: "safety-badge" }, () => label);
+  };
+
+  const parseVersion = (tag: string) => {
+    const m = tag.match(/^v?(\d+)\.(\d+)(?:\.(\d+))?/);
+    if (!m) return null;
+    return {
+      major: parseInt(m[1]!, 10),
+      minor: parseInt(m[2]!, 10),
+      patch: m[3] ? parseInt(m[3]!, 10) : 0,
+    };
+  };
+
+  if (row.current_tag && row.desired_tag && row.current_tag !== row.desired_tag) {
+    const c = parseVersion(row.current_tag);
+    const d = parseVersion(row.desired_tag);
+    if (c && d) {
+      if (c.major !== d.major) badges.push(makeBadge("Major bump", "error"));
+      else if (c.minor !== d.minor) badges.push(makeBadge("Minor bump", "warning"));
+      else if (c.patch !== d.patch) badges.push(makeBadge("Patch bump", "info"));
+    }
+  }
+
+  if (!row.desired_tag && row.digest && row.current_tag && row.current_tag !== "latest") {
+    badges.push(makeBadge("Digest-only", "info"));
+  }
+
+  if (row.desired_tag === "latest" || (!row.desired_tag && row.current_tag === "latest")) {
+    badges.push(makeBadge("Mutable latest", "warning"));
+  }
+
+  if (groupedItem?.action === "recreate_stack") {
+    badges.push(makeBadge("Stack restart", "warning"));
+  }
+
+  const note = releaseNoteFor(row);
+  const status = releaseNoteStatus(note);
+  if (status === "Error" || status === "Unsupported") {
+    badges.push(makeBadge("No release notes", "warning"));
+  }
+  
+  if (webui.snoozes.some((s) => s.service_key === row.key)) {
+    badges.push(makeBadge("Snoozed", "default"));
+  }
+  const policy = webui.servicePolicies.find((p) => p.service_key === row.key);
+  if (policy?.auto_update) {
+    badges.push(makeBadge("Auto-update", "success"));
+  }
+
+  if (badges.length === 0) return h("span", { class: "risk-badges-muted" }, "None");
+  return h("div", { class: "risk-badges-container" }, badges);
+}
+
 function breakingCue(note: ReleaseNoteInfo) {
   return h(
     "span",
@@ -1512,6 +1584,7 @@ function issueLabel(issue: PlanIssue): string {
 function issueHint(issue: PlanIssue): string {
   return issue.hint || "";
 }
+
 
 function staleDiagnosticLabel(item: DiagnosticItem): string {
   switch (item.diagnostic?.code) {
@@ -2273,6 +2346,11 @@ watch(
                       Possible breaking change
                     </span>
                   </div>
+                  <div v-if="item.diagnostic" class="pending-update-diagnostic">
+                    <n-alert type="warning" :title="item.diagnostic.message">
+                      {{ item.diagnostic.hint }}
+                    </n-alert>
+                  </div>
                   <span
                     v-else
                     class="release-notes-muted"
@@ -2349,6 +2427,11 @@ watch(
                 <div class="pending-update-meta">
                   <span>Pending file line #{{ item.line_no }}</span>
                   <span>{{ staleDiagnosticDetail(item) }}</span>
+                </div>
+                <div v-if="item.diagnostic" class="pending-update-diagnostic">
+                  <n-alert type="warning" :title="item.diagnostic.message">
+                    {{ item.diagnostic.hint }}
+                  </n-alert>
                 </div>
                 <div v-if="item.desired_tag" class="pending-update-tag">
                   <span>New tag</span>
