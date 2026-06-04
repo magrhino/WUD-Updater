@@ -1,6 +1,7 @@
 import type {
   ApplyJobLogResponse,
   ApplyJobResponse,
+  ApplyPreflightResponse,
   AuthSessionResponse,
   CoreUpdateTourResponse,
   DoctorResponse,
@@ -587,6 +588,80 @@ export function releaseNotesResponse(
   };
 }
 
+export function applyPreflightResponse(
+  overrides: Partial<ApplyPreflightResponse> = {},
+): ApplyPreflightResponse {
+  return {
+    ok: true,
+    failures: 0,
+    warnings: 0,
+    checks: [
+      {
+        status: "PASS",
+        code: "docker-reachable",
+        label: "Docker reachable",
+        detail: "",
+        source_check_codes: [
+          "docker-socket",
+          "docker-daemon-version",
+          "docker-daemon-info",
+          "docker-container-listing",
+        ],
+      },
+      {
+        status: "PASS",
+        code: "compose-renders",
+        label: "Compose renders",
+        detail: "",
+        source_check_codes: ["compose-discovery"],
+      },
+      {
+        status: "PASS",
+        code: "wud-file-writable",
+        label: "WUD file writable",
+        detail: "",
+        source_check_codes: ["wud-out-file-directory", "wud-out-file"],
+      },
+      {
+        status: "PASS",
+        code: "database-ready",
+        label: "Database ready",
+        detail: "",
+        source_check_codes: ["webui-database"],
+      },
+      {
+        status: "PASS",
+        code: "logs-writable",
+        label: "Logs writable",
+        detail: "",
+        source_check_codes: ["wud-log-dir"],
+      },
+      {
+        status: "PASS",
+        code: "mutations-enabled",
+        label: "Mutations enabled",
+        detail: "",
+        source_check_codes: ["webui-mutation-gate"],
+      },
+      {
+        status: "PASS",
+        code: "bind-mounts-safe",
+        label: "Bind mounts safe",
+        detail: "",
+        source_check_codes: ["bind-mount-path-invalid"],
+      },
+      {
+        status: "PASS",
+        code: "selected-services-matched",
+        label: "Selected services matched",
+        detail: "",
+        source_check_codes: ["selected-services"],
+      },
+    ],
+    ...overrides,
+  };
+}
+
 export function planResponse(overrides: Partial<PlanResponse> = {}): PlanResponse {
   return {
     plan_id: "plan-test",
@@ -643,6 +718,7 @@ export function planResponse(overrides: Partial<PlanResponse> = {}): PlanRespons
       can_remove_unmatched: false,
       items: [],
     },
+    apply_preflight: applyPreflightResponse(),
     ...overrides,
   };
 }

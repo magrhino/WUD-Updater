@@ -189,6 +189,12 @@ function planResponse(overrides: Record<string, unknown> = {}) {
       can_remove_unmatched: false,
       items: [],
     },
+    apply_preflight: {
+      ok: true,
+      failures: 0,
+      warnings: 0,
+      checks: [],
+    },
     ...overrides,
   };
 }

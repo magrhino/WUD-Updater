@@ -75,6 +75,12 @@ function selfUpdatePlanStatus(): SelfUpdatePlanResponse {
         can_remove_unmatched: false,
         items: [],
       },
+      apply_preflight: {
+        ok: true,
+        failures: 0,
+        warnings: 0,
+        checks: [],
+      },
     },
     current_tag: "v0.24.2",
     latest_tag: "v0.25.0",

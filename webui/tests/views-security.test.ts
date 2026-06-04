@@ -19,6 +19,7 @@ import {
   useWebuiStore,
 } from "../src/stores/webui";
 import {
+  applyPreflightResponse,
   applyJobLogResponse,
   applyJobResponse,
   authSession,
@@ -52,6 +53,23 @@ function setupStores(mutationsEnabled: boolean) {
   webui.status = statusResponse({ mutations_enabled: mutationsEnabled });
   webui.coreUpdateTour = coreUpdateTourResponse();
   return { pinia, auth, webui };
+}
+
+function failedApplyPreflight(code: string, detail: string) {
+  const base = applyPreflightResponse();
+  return applyPreflightResponse({
+    ok: false,
+    failures: 1,
+    checks: base.checks.map((check) =>
+      check.code === code
+        ? {
+            ...check,
+            status: "FAIL" as const,
+            detail,
+          }
+        : check,
+    ),
+  });
 }
 
 function buttonByText(wrapperText: string, text: string) {
@@ -193,7 +211,13 @@ describe("mutating WebUI views", () => {
     webui.pending = pendingResponse();
     mockPendingLifecycle(webui);
     const createPlan = vi.spyOn(webui, "createPlan").mockImplementation(async () => {
-      webui.plan = planResponse({ can_apply: false });
+      webui.plan = planResponse({
+        can_apply: false,
+        apply_preflight: failedApplyPreflight(
+          "mutations-enabled",
+          "Set WUD_WEB_MUTATIONS_ENABLED=true on the server to apply updates.",
+        ),
+      });
     });
     const createJob = vi.spyOn(webui, "createJob");
     const wrapper = mountWithApp(PendingView, { pinia });
@@ -209,11 +233,11 @@ describe("mutating WebUI views", () => {
 
     expect(wrapper.text()).toContain("Read-only mode is active");
     expect(createPlan).toHaveBeenCalledWith([1], true, []);
-    expect(
-      wrapper
-        .findAll("button")
-        .some((button) => button.text().includes("Apply 1 update")),
-    ).toBe(false);
+    const applyButton = wrapper
+      .findAll("button")
+      .find((button) => button.text().includes("Apply 1 update"));
+    expect(applyButton?.exists()).toBe(true);
+    expect(applyButton?.attributes("disabled")).toBeDefined();
     expect(createJob).not.toHaveBeenCalled();
   });
 
@@ -870,11 +894,19 @@ describe("mutating WebUI views", () => {
     await flushPromises();
 
     const dialog = wrapper.find('[role="dialog"]');
+    const readiness = dialog.find(".apply-readiness");
     const impact = dialog.find(".preflight-impact");
     expect(dialog.find("#preflight-modal-title").text()).toBe("Review media plan");
     expect(dialog.find(".preflight-impact-text").text()).toBe(
       "radarr, wud-updater",
     );
+    expect(readiness.exists()).toBe(true);
+    expect(readiness.text()).toContain("Apply readiness");
+    expect(readiness.text()).toContain("Ready");
+    expect(readiness.text()).toContain("Docker reachable");
+    expect(readiness.text()).toContain("Selected services matched");
+    expect(readiness.findAll(".apply-readiness-row")).toHaveLength(8);
+    expect(readiness.text()).not.toContain("docker-daemon-info");
     expect(impact.exists()).toBe(true);
     expect(impact.text()).toContain("Services and images");
     expect(impact.text()).toContain("radarr");
@@ -897,6 +929,46 @@ describe("mutating WebUI views", () => {
         .findAll("details.preflight-details")
         .some((details) => details.text().includes("Source lines")),
     ).toBe(true);
+  });
+
+  it("shows failed apply readiness and disables apply", async () => {
+    const { pinia, webui } = setupStores(true);
+    webui.pending = pendingResponse();
+    mockPendingLifecycle(webui);
+    vi.spyOn(webui, "createPlan").mockImplementation(async () => {
+      webui.plan = planResponse({
+        can_apply: false,
+        apply_preflight: failedApplyPreflight(
+          "logs-writable",
+          "/logs is not a directory",
+        ),
+      });
+    });
+    const createJob = vi.spyOn(webui, "createJob");
+    const wrapper = mountWithApp(PendingView, { pinia });
+
+    await wrapper
+      .findAll("button")
+      .find((button) => button.text().includes("Preview media plan"))
+      ?.trigger("click");
+    await flushPromises();
+
+    const dialog = wrapper.find('[role="dialog"]');
+    const readiness = dialog.find(".apply-readiness");
+    expect(readiness.exists()).toBe(true);
+    expect(readiness.text()).toContain("Blocked");
+    expect(readiness.text()).toContain("Logs writable");
+    expect(readiness.text()).toContain("/logs is not a directory");
+    expect(readiness.text()).not.toContain("docker-daemon-info");
+    expect(dialog.text()).toContain("Fix the failed apply readiness check");
+
+    const applyButton = dialog
+      .findAll("button")
+      .find((button) => button.text().includes("Apply 1 update"));
+    expect(applyButton?.attributes("disabled")).toBeDefined();
+    await applyButton?.trigger("click");
+
+    expect(createJob).not.toHaveBeenCalled();
   });
 
   it("falls back to pending file order when grouping is unavailable", () => {

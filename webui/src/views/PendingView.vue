@@ -11,6 +11,7 @@ import {
   Play,
   Trash2,
   X,
+  XCircle,
 } from "@lucide/vue";
 import {
   NAlert,
@@ -29,6 +30,8 @@ import {
   type ApplyJobLogResponse,
   type ApplyJobProgressEvent,
   type ApplyJobResponse,
+  type ApplyPreflightCheck,
+  type ApplyPreflightStatus,
   type PendingGroupedItem,
   type PendingItem,
   type PendingRemovalPlanLine,
@@ -348,9 +351,36 @@ const preflightServiceImpactLabel = computed(() => {
     4,
   );
 });
-const applyAvailable = computed(
-  () => webui.plan?.status === "ready" && webui.plan.can_apply,
-);
+const applyPreflight = computed(() => webui.plan?.apply_preflight ?? null);
+const applyReadinessStatusLabel = computed(() => {
+  if (!applyPreflight.value) {
+    return "";
+  }
+  if (!applyPreflight.value.ok) {
+    return "Blocked";
+  }
+  return applyPreflight.value.warnings > 0 ? "Warnings" : "Ready";
+});
+const applyReadinessStatusType = computed<"success" | "warning" | "error">(() => {
+  if (!applyPreflight.value?.ok) {
+    return "error";
+  }
+  return applyPreflight.value.warnings > 0 ? "warning" : "success";
+});
+const applyReadinessSummary = computed(() => {
+  if (!applyPreflight.value) {
+    return "";
+  }
+  if (applyPreflight.value.failures > 0) {
+    return `${pluralize(applyPreflight.value.failures, "failed check")} must be fixed before applying.`;
+  }
+  if (applyPreflight.value.warnings > 0) {
+    return `${pluralize(applyPreflight.value.warnings, "warning")} to review before applying.`;
+  }
+  return "Required resources are reachable for this apply.";
+});
+const applyVisible = computed(() => webui.plan?.status === "ready");
+const applyAvailable = computed(() => applyVisible.value && !!webui.plan?.can_apply);
 const applyDisabled = computed(() => !applyAvailable.value || webui.loading);
 const applyButtonLabel = computed(() =>
   webui.plan?.selected_line_numbers.length
@@ -396,6 +426,9 @@ const mutationDisabledMessage = computed(() => {
   }
   if (!auth.session?.mutations_enabled) {
     return "Read-only mode is active. Set WUD_WEB_MUTATIONS_ENABLED=true on the server to apply updates.";
+  }
+  if (!webui.plan.apply_preflight.ok) {
+    return "Fix the failed apply readiness check before applying updates.";
   }
   return "This plan cannot be applied.";
 });
@@ -1363,6 +1396,32 @@ function actionCommand(action: PlanAction): string {
 
 function issueType(issue: PlanIssue): "error" | "warning" | "info" {
   return issue.severity === "error" ? "error" : "warning";
+}
+
+function applyPreflightCheckType(
+  status: ApplyPreflightStatus,
+): "success" | "warning" | "error" {
+  if (status === "PASS") {
+    return "success";
+  }
+  if (status === "WARN") {
+    return "warning";
+  }
+  return "error";
+}
+
+function applyPreflightCheckLabel(status: ApplyPreflightStatus): string {
+  if (status === "PASS") {
+    return "Pass";
+  }
+  if (status === "WARN") {
+    return "Warn";
+  }
+  return "Fail";
+}
+
+function applyPreflightCheckDetail(check: ApplyPreflightCheck): string {
+  return check.status === "PASS" ? "" : check.detail;
 }
 
 function issueLabel(issue: PlanIssue): string {
@@ -2389,6 +2448,52 @@ watch(
           </div>
         </div>
 
+        <section
+          v-if="applyPreflight"
+          class="apply-readiness preflight-block"
+          aria-labelledby="apply-readiness-title"
+        >
+          <div class="apply-readiness-heading">
+            <div>
+              <strong id="apply-readiness-title">Apply readiness</strong>
+              <span>{{ applyReadinessSummary }}</span>
+            </div>
+            <n-tag size="small" :type="applyReadinessStatusType">
+              {{ applyReadinessStatusLabel }}
+            </n-tag>
+          </div>
+          <div class="apply-readiness-list">
+            <div
+              v-for="check in applyPreflight.checks"
+              :key="check.code"
+              class="apply-readiness-row"
+              :class="`status-${check.status.toLowerCase()}`"
+            >
+              <CheckCircle2
+                v-if="check.status === 'PASS'"
+                :size="16"
+                aria-hidden="true"
+              />
+              <AlertTriangle
+                v-else-if="check.status === 'WARN'"
+                :size="16"
+                aria-hidden="true"
+              />
+              <XCircle v-else :size="16" aria-hidden="true" />
+              <strong>{{ check.label }}</strong>
+              <n-tag size="small" :type="applyPreflightCheckType(check.status)">
+                {{ applyPreflightCheckLabel(check.status) }}
+              </n-tag>
+              <span
+                v-if="applyPreflightCheckDetail(check)"
+                class="apply-readiness-detail"
+              >
+                {{ applyPreflightCheckDetail(check) }}
+              </span>
+            </div>
+          </div>
+        </section>
+
         <CoreUpdateTourPanel
           step="pending_preflight"
           title="Read the plan like a checklist"
@@ -2584,7 +2689,7 @@ watch(
             {{ cleanupButtonLabel }}
           </n-button>
           <n-button
-            v-if="applyAvailable"
+            v-if="applyVisible"
             type="primary"
             size="small"
             :disabled="applyDisabled"

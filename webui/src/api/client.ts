@@ -212,6 +212,23 @@ export interface PlanCleanup {
   items: PlanCleanupItem[];
 }
 
+export type ApplyPreflightStatus = "PASS" | "WARN" | "FAIL";
+
+export interface ApplyPreflightCheck {
+  status: ApplyPreflightStatus;
+  code: string;
+  label: string;
+  detail: string;
+  source_check_codes: string[];
+}
+
+export interface ApplyPreflightResponse {
+  ok: boolean;
+  failures: number;
+  warnings: number;
+  checks: ApplyPreflightCheck[];
+}
+
 export interface TagOverrideRequest {
   line_no: number;
   tag: string;
@@ -232,6 +249,7 @@ export interface PlanResponse {
   skipped: PlanSkipped[];
   issues: PlanIssue[];
   cleanup: PlanCleanup;
+  apply_preflight: ApplyPreflightResponse;
 }
 
 export interface PendingCleanupLine {
