@@ -2279,6 +2279,7 @@ body .n-switch:focus-within {
 
 .compact-list {
   display: grid;
+  grid-auto-rows: max-content;
   gap: 8px;
   margin-top: 14px;
 }
@@ -2645,14 +2646,39 @@ code.pending-table-value {
 }
 
 .plan-line-row {
+  align-items: start;
   grid-template-columns: minmax(56px, auto) minmax(120px, 0.7fr) minmax(0, 2fr);
 }
 
+.plan-line-row > span,
+.plan-line-row > strong,
+.plan-line-row > em {
+  padding-block: 2px;
+}
+
 .plan-line-row em {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 4px;
+  display: block;
+  max-width: 100%;
+  line-height: 1.45;
+}
+
+.plan-line-row em > span[aria-hidden="true"] {
+  margin: 0 4px;
+}
+
+.plan-line-row code {
+  color: var(--color-code-text);
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+.plan-line-row .tag-rewrite-detail {
+  max-width: 100%;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+  vertical-align: middle;
 }
 
 .preflight-modal {
