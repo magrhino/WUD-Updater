@@ -140,6 +140,10 @@ function actionRuns(): RunSummary[] {
     { mode: "service-policy-deleted", dryRun: false },
     { mode: "tag-exclusion-upserted", dryRun: false },
     { mode: "tag-exclusion-status", dryRun: false },
+    { mode: "web-auth", dryRun: false },
+    { mode: "web-state", dryRun: false },
+    { mode: "web-pending-cleanup", dryRun: false },
+    { mode: "web-pending-removal", dryRun: false },
     { mode: "web-settings", dryRun: false },
     { mode: "container-restart", dryRun: false },
     { mode: "", dryRun: false },
@@ -161,6 +165,7 @@ function actionRuns(): RunSummary[] {
       id,
       dry_run: item.dryRun,
       mode: item.mode,
+      finished_at: id === 1 ? "2026-05-28T12:10:00+00:00" : null,
       events,
     });
   });
@@ -200,6 +205,7 @@ describe("RunsView", () => {
     expect(rows[0].text()).toContain("CLI (dry run)");
     expect(rows[0].text()).toContain("5");
     expect(rows[0].text()).toContain("alpha, beta, service, +1 more");
+    expect(rows[0].text()).toContain("2026-05-28T12:10:00+00:00");
     expect(rows[1].text()).toContain("CLI");
     expect(rows[1].text()).not.toContain("dry run");
     expect(rows[2].text()).toContain("Apply");
@@ -215,6 +221,10 @@ describe("RunsView", () => {
       "Policy removed",
       "Tag exclusion saved",
       "Tag exclusion status changed",
+      "Web auth",
+      "Web state",
+      "Pending cleanup",
+      "Pending removal",
       "Settings changed",
       "Container restarted",
       "Unknown",

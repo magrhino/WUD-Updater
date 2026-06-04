@@ -26,6 +26,10 @@ function formatAction(run: RunSummary): string {
     case "service-policy-deleted": return "Policy removed";
     case "tag-exclusion-upserted": return "Tag exclusion saved";
     case "tag-exclusion-status": return "Tag exclusion status changed";
+    case "web-auth": return "Web auth";
+    case "web-state": return "Web state";
+    case "web-pending-cleanup": return "Pending cleanup";
+    case "web-pending-removal": return "Pending removal";
     case "web-settings": return "Settings changed";
     case "container-restart": return "Container restarted";
     default: return mode;
@@ -52,6 +56,7 @@ const columns = computed<DataTableColumns<RunSummary>>(() => [
   { title: "Updates", key: "updates", minWidth: 90, render: (row) => row.events?.length || 0 },
   { title: "Services", key: "services", minWidth: 140, render: (row) => formatServices(row) },
   { title: "Started", key: "started_at", minWidth: 180 },
+  { title: "Finished", key: "finished_at", minWidth: 180, render: (row) => row.finished_at ?? "Running" },
 ]);
 
 onMounted(() => {

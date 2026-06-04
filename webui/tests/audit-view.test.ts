@@ -1,4 +1,6 @@
 import { createPinia, setActivePinia } from "pinia";
+import { flushPromises } from "@vue/test-utils";
+import { nextTick } from "vue";
 import { createMemoryHistory } from "vue-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -27,9 +29,31 @@ function event(serviceName: string) {
   };
 }
 
+function mockMediaQueries(matches: (query: string) => boolean): void {
+  window.matchMedia = vi.fn().mockImplementation((query: string) => ({
+    matches: matches(query),
+    media: query,
+    onchange: null,
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+    addListener: vi.fn(),
+    removeListener: vi.fn(),
+    dispatchEvent: vi.fn(),
+  }));
+}
+
+function mockDesktopViewport(): void {
+  mockMediaQueries((query) => query.includes("min-width"));
+}
+
+function mockMobileViewport(): void {
+  mockMediaQueries((query) => query.includes("max-width"));
+}
+
 describe("AuditView", () => {
   beforeEach(() => {
     setActivePinia(createPinia());
+    mockDesktopViewport();
   });
 
   it("shows operator runs and excludes scheduled automation", async () => {
@@ -73,5 +97,36 @@ describe("AuditView", () => {
     expect(wrapper.text()).not.toContain("auto-service");
     expect(wrapper.text()).toContain("#13");
     expect(wrapper.text()).toContain("policy-service");
+  });
+
+  it("hides the mobile empty state while audit runs are loading", async () => {
+    mockMobileViewport();
+    const pinia = createPinia();
+    setActivePinia(pinia);
+    const auth = useAuthStore();
+    auth.session = authSession({ authenticated: true });
+    const webui = useWebuiStore();
+    webui.runs = [];
+    let resolveRuns: () => void = () => undefined;
+    vi.spyOn(webui, "loadRuns").mockReturnValue(
+      new Promise<void>((resolve) => {
+        resolveRuns = resolve;
+      }),
+    );
+    const router = createWudRouter(createMemoryHistory());
+    await router.push("/audit");
+    await router.isReady();
+
+    const wrapper = mountWithApp(AuditView, { pinia, router });
+    await nextTick();
+
+    expect(wrapper.find(".empty-state").exists()).toBe(false);
+
+    resolveRuns();
+    await flushPromises();
+
+    expect(wrapper.find(".empty-state").text()).toBe(
+      "No operator actions recorded recently.",
+    );
   });
 });

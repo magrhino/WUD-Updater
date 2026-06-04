@@ -7374,6 +7374,62 @@ def test_runs_endpoints_read_existing_sqlite_state(tmp_path: Path) -> None:
     assert detail["events"][0]["service_name"] == "web"
 
 
+def test_runs_endpoints_sanitize_run_and_event_metadata(tmp_path: Path) -> None:
+    client = _client(tmp_path, {"WUD_WEB_DEV_NO_AUTH": "true"})
+    db_path = tmp_path / "state" / "wud.sqlite"
+    wud_file = tmp_path / "state" / "images.todo"
+    log_file = tmp_path / "state" / "logs" / "run.log"
+    compose_file = tmp_path / "docker" / "media" / "compose.yml"
+    with connect_db(db_path) as conn:
+        init_db(conn)
+        run_id = insert_update_run(
+            conn,
+            started_at="2026-05-27T12:00:00+00:00",
+            status="success",
+            dry_run=False,
+            mode="web-settings",
+            wud_file=str(wud_file),
+            log_file=str(log_file),
+            metadata_json=json.dumps(
+                {
+                    "source": "webui",
+                    "path": str(wud_file),
+                    "nested": {"stack": str(compose_file.parent)},
+                }
+            ),
+        )
+        insert_update_event(
+            conn,
+            run_id=run_id,
+            service_name="settings",
+            stack_name="webui",
+            image="managed-settings",
+            status="success",
+            metadata_json=json.dumps(
+                {
+                    "operation": "update_managed_settings",
+                    "before": {"compose_file": str(compose_file)},
+                }
+            ),
+        )
+
+    runs_response = client.get("/api/v1/runs")
+    detail_response = client.get(f"/api/v1/runs/{run_id}")
+
+    assert runs_response.status_code == 200
+    assert detail_response.status_code == 200
+    run = runs_response.json()[0]
+    detail = detail_response.json()
+
+    for payload in (run, detail):
+        assert payload["metadata"]["path"] == "<WUD_OUT_FILE>"
+        assert payload["metadata"]["nested"]["stack"] == "<DOCKER_BASE>/media"
+        assert (
+            payload["events"][0]["metadata"]["before"]["compose_file"]
+            == "<DOCKER_BASE>/media/compose.yml"
+        )
+
+
 def test_run_log_endpoint_tails_configured_log_file(tmp_path: Path) -> None:
     log_dir = tmp_path / "state" / "logs"
     log_dir.mkdir(parents=True)

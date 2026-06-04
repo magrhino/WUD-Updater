@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, h, onMounted } from "vue";
+import { computed, h, onMounted, ref } from "vue";
 import { RouterLink } from "vue-router";
 import { breakpointsTailwind, useBreakpoints } from "@vueuse/core";
 import { NAlert, NDataTable, NTag, type DataTableColumns } from "naive-ui";
@@ -11,6 +11,7 @@ import { useWebuiStore } from "../stores/webui";
 const webui = useWebuiStore();
 const breakpoints = useBreakpoints(breakpointsTailwind);
 const isMobile = breakpoints.smaller("md");
+const isLoadingRuns = ref(false);
 
 const CLI_UPDATE_MODES = new Set(["pause", "stop", "live"]);
 const WEB_AUDIT_MODES = new Set([
@@ -136,8 +137,17 @@ const columns = computed<DataTableColumns<RunSummary>>(() => [
   { title: "Finished", key: "finished_at", minWidth: 180, render: (row) => finishLabel(row) },
 ]);
 
+async function loadAuditRuns(): Promise<void> {
+  isLoadingRuns.value = true;
+  try {
+    await webui.loadRuns();
+  } finally {
+    isLoadingRuns.value = false;
+  }
+}
+
 onMounted(() => {
-  void webui.loadRuns();
+  void loadAuditRuns().catch(() => undefined);
 });
 </script>
 
@@ -161,10 +171,10 @@ onMounted(() => {
     </n-alert>
 
     <n-data-table
-      v-if="!isMobile && (webui.loading || auditRuns.length)"
+      v-if="!isMobile && (isLoadingRuns || auditRuns.length)"
       :columns="columns"
       :data="auditRuns"
-      :loading="webui.loading"
+      :loading="isLoadingRuns"
       :pagination="{ pageSize: 15 }"
       size="small"
       class="data-surface"
@@ -211,7 +221,9 @@ onMounted(() => {
           </div>
         </dl>
       </RouterLink>
-      <div v-if="!auditRuns.length" class="empty-state">No operator actions recorded recently.</div>
+      <div v-if="!isLoadingRuns && !auditRuns.length" class="empty-state">
+        No operator actions recorded recently.
+      </div>
     </div>
   </section>
 </template>

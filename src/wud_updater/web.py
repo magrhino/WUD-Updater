@@ -2887,7 +2887,10 @@ def api_runs(request: Request) -> list[RunSummary]:
             detail=f"could not read database: {exc}",
         ) from exc
     return [
-        _run_summary_from_row(row, events=events_by_run.get(row["id"], []))
+        _sanitize_run_summary(
+            settings,
+            _run_summary_from_row(row, events=events_by_run.get(row["id"], [])),
+        )
         for row in rows
     ]
 
@@ -2932,11 +2935,15 @@ def api_run_detail(run_id: int, request: Request) -> RunDetail:
             detail=f"could not read database: {exc}",
         ) from exc
 
-    summary = _run_summary_from_row(run, events=[_event_from_row(row) for row in events])
-    return RunDetail(
+    summary = _run_summary_from_row(
+        run,
+        events=[_event_from_row(row) for row in events],
+    )
+    detail = RunDetail(
         **summary.model_dump(),
         pending_updates=[_pending_update_from_row(row) for row in pending],
     )
+    return _sanitize_run_detail(settings, detail)
 
 
 def api_run_log(
@@ -6115,6 +6122,35 @@ def _event_from_row(row: sqlite3.Row) -> RunEventRecord:
         status=str(row["status"]),
         metadata=_metadata_from_row(row),
     )
+
+
+def _sanitize_run_summary(settings: WebSettings, run: RunSummary) -> RunSummary:
+    payload = run.model_dump(mode="json")
+    payload["metadata"] = _sanitize_support_bundle_value(settings, payload["metadata"])
+    payload["events"] = [
+        _sanitize_run_event(settings, event).model_dump(mode="json")
+        for event in run.events
+    ]
+    return RunSummary.model_validate(payload)
+
+
+def _sanitize_run_detail(settings: WebSettings, run: RunDetail) -> RunDetail:
+    payload = run.model_dump(mode="json")
+    payload["metadata"] = _sanitize_support_bundle_value(settings, payload["metadata"])
+    payload["events"] = [
+        _sanitize_run_event(settings, event).model_dump(mode="json")
+        for event in run.events
+    ]
+    return RunDetail.model_validate(payload)
+
+
+def _sanitize_run_event(
+    settings: WebSettings,
+    event: RunEventRecord,
+) -> RunEventRecord:
+    payload = event.model_dump(mode="json")
+    payload["metadata"] = _sanitize_support_bundle_value(settings, payload["metadata"])
+    return RunEventRecord.model_validate(payload)
 
 
 def _auto_update_days_from_row(row: sqlite3.Row) -> tuple[str, ...]:
