@@ -35,7 +35,7 @@ watch(runId, () => {
         <p class="eyebrow">Run detail</p>
         <h2>#{{ runId }}</h2>
       </div>
-      <RouterLink :to="`/runs/${runId}/log`" class="icon-link">
+      <RouterLink v-if="run?.log_file" :to="`/runs/${runId}/log`" class="icon-link">
         <FileText :size="17" />
         View log
       </RouterLink>
@@ -87,10 +87,16 @@ watch(runId, () => {
         </div>
         <div v-if="!run.events.length" class="empty-state">No events recorded.</div>
         <div v-else class="compact-list">
-          <div v-for="event in run.events" :key="event.id" class="list-row">
-            <span>{{ event.service_name || event.stack_name || "service" }}</span>
-            <strong>{{ event.status }}</strong>
-            <em>{{ event.image }}</em>
+          <div v-for="event in run.events" :key="event.id" class="list-row" style="flex-direction: column; align-items: flex-start; gap: 4px;">
+            <div style="display: flex; gap: 8px; width: 100%;">
+              <span>{{ event.service_name || event.stack_name || "service" }}</span>
+              <strong>{{ event.status }}</strong>
+              <em>{{ event.image }}</em>
+            </div>
+            <div style="font-size: 0.85em; color: var(--text-muted); display: flex; flex-direction: column; gap: 2px;">
+              <span v-if="event.old_digest || event.new_digest">Digest: {{ event.old_digest ? event.old_digest.substring(0, 15) + '...' : 'none' }} -> {{ event.new_digest ? event.new_digest.substring(0, 15) + '...' : 'none' }}</span>
+              <span v-if="event.old_image_id || event.new_image_id">Image ID: {{ event.old_image_id ? event.old_image_id.substring(0, 15) + '...' : 'none' }} -> {{ event.new_image_id ? event.new_image_id.substring(0, 15) + '...' : 'none' }}</span>
+            </div>
           </div>
         </div>
       </section>

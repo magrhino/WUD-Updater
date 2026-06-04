@@ -7337,12 +7337,36 @@ def test_runs_endpoints_read_existing_sqlite_state(tmp_path: Path) -> None:
             image="nginx:1.25",
             status="success",
         )
+        run_id_2 = insert_update_run(
+            conn,
+            started_at="2026-05-27T13:00:00+00:00",
+            status="success",
+            dry_run=False,
+            mode="auto-update",
+            wud_file="/out/images.todo",
+            log_file="/logs/run2.log",
+        )
+        insert_update_event(
+            conn,
+            run_id=run_id_2,
+            service_name="db",
+            image="postgres:15",
+            status="success",
+        )
 
     runs_response = client.get("/api/v1/runs")
     detail_response = client.get(f"/api/v1/runs/{run_id}")
 
     assert runs_response.status_code == 200
-    assert runs_response.json()[0]["id"] == run_id
+    runs_data = runs_response.json()
+    assert len(runs_data) == 2
+
+    # Verify the batched event mapping works correctly
+    run_2 = next(r for r in runs_data if r["id"] == run_id_2)
+    assert run_2["events"][0]["service_name"] == "db"
+    run_1 = next(r for r in runs_data if r["id"] == run_id)
+    assert run_1["events"][0]["service_name"] == "web"
+
     assert detail_response.status_code == 200
     detail = detail_response.json()
     assert detail["metadata"] == {"source": "test"}

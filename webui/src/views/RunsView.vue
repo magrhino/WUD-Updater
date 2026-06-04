@@ -12,6 +12,32 @@ const webui = useWebuiStore();
 const breakpoints = useBreakpoints(breakpointsTailwind);
 const isMobile = breakpoints.smaller("md");
 
+function formatAction(run: RunSummary): string {
+  const mode = run.mode || "Unknown";
+  switch (mode) {
+    case "cli": return run.dry_run ? "CLI (dry run)" : "CLI";
+    case "apply": return "Apply";
+    case "auto-update": return "Auto update";
+    case "cleanup": return "Cleanup";
+    case "snooze-created": return "Snooze created";
+    case "snooze-removed": return "Snooze removed";
+    case "service-policy-upserted": return "Policy changed";
+    case "service-policy-deleted": return "Policy removed";
+    case "tag-exclusion-upserted": return "Tag exclusion saved";
+    case "tag-exclusion-status": return "Tag exclusion status changed";
+    case "web-settings": return "Settings changed";
+    case "container-restart": return "Container restarted";
+    default: return mode;
+  }
+}
+
+function formatServices(run: RunSummary): string {
+  if (!run.events || !run.events.length) return "-";
+  const names = Array.from(new Set(run.events.map(e => e.service_name || e.stack_name || "service")));
+  if (names.length <= 3) return names.join(", ");
+  return `${names.slice(0, 3).join(", ")}, +${names.length - 3} more`;
+}
+
 const columns = computed<DataTableColumns<RunSummary>>(() => [
   {
     title: "Run",
@@ -20,11 +46,11 @@ const columns = computed<DataTableColumns<RunSummary>>(() => [
     render: (row) =>
       h(RouterLink, { to: `/runs/${row.id}`, class: "text-link" }, () => `#${row.id}`),
   },
-  { title: "Status", key: "status", minWidth: 120 },
-  { title: "Mode", key: "mode", minWidth: 100 },
-  { title: "Dry run", key: "dry_run", minWidth: 100, render: (row) => (row.dry_run ? "Yes" : "No") },
-  { title: "Started", key: "started_at", minWidth: 220 },
-  { title: "Finished", key: "finished_at", minWidth: 220 },
+  { title: "Status", key: "status", minWidth: 100 },
+  { title: "Action", key: "mode", minWidth: 140, render: (row) => formatAction(row) },
+  { title: "Updates", key: "updates", minWidth: 90, render: (row) => row.events?.length || 0 },
+  { title: "Services", key: "services", minWidth: 140, render: (row) => formatServices(row) },
+  { title: "Started", key: "started_at", minWidth: 180 },
 ]);
 
 onMounted(() => {
@@ -78,13 +104,13 @@ onMounted(() => {
         <div class="mobile-card-title">
           <strong>#{{ run.id }} {{ run.status }}</strong>
           <n-tag size="small" :type="run.dry_run ? 'info' : 'warning'">
-            {{ run.dry_run ? "Dry run" : "Apply" }}
+            {{ formatAction(run) }}
           </n-tag>
         </div>
         <dl>
-          <div>
-            <dt>Mode</dt>
-            <dd>{{ run.mode }}</dd>
+          <div v-if="run.events && run.events.length">
+            <dt>Updates</dt>
+            <dd>{{ run.events.length }} ({{ formatServices(run) }})</dd>
           </div>
           <div>
             <dt>Started</dt>

@@ -138,6 +138,14 @@ describe("demo web API", () => {
         }),
       ]),
     });
+
+    const runs = await api.runs();
+    const seededRun = runs.find((run) => run.id === 1);
+    expect(seededRun?.events).toHaveLength(2);
+    expect(seededRun?.events.map((event) => event.service_name)).toEqual([
+      "sonarr",
+      "redis",
+    ]);
   });
 
   it("creates plans from the current fixture state", async () => {
@@ -254,6 +262,16 @@ describe("demo web API", () => {
       ],
       events: [{ status: "success" }],
     });
+
+    const cleanupSummary = (await api.runs()).find(
+      (run) => run.id === cleanup.audit_run_id,
+    );
+    const cleanupDetail = await api.runDetail(cleanup.audit_run_id);
+    expect(cleanupSummary?.events).toHaveLength(cleanupDetail.events.length);
+    expect(cleanupSummary?.events[0]).toMatchObject({
+      service_name: cleanupDetail.events[0]?.service_name,
+      status: cleanupDetail.events[0]?.status,
+    });
     await expect(
       api.cleanupPending(
         "demo-cleanup",
@@ -309,6 +327,16 @@ describe("demo web API", () => {
       ],
       events: [{ status: "success" }],
     });
+
+    const removalSummary = (await api.runs()).find(
+      (run) => run.id === removal.audit_run_id,
+    );
+    const removalDetail = await api.runDetail(removal.audit_run_id);
+    expect(removalSummary?.events).toHaveLength(removalDetail.events.length);
+    expect(removalSummary?.events[0]).toMatchObject({
+      service_name: removalDetail.events[0]?.service_name,
+      status: removalDetail.events[0]?.status,
+    });
     await expect(
       api.removeSelectedPending(
         plan.removal_id,
@@ -357,6 +385,14 @@ describe("demo web API", () => {
     await expect(api.runDetail(4)).resolves.toMatchObject({
       id: 4,
       pending_updates: [{ service_key: "home/home-assistant" }],
+    });
+
+    const applySummary = (await api.runs()).find((run) => run.id === 4);
+    const applyDetail = await api.runDetail(4);
+    expect(applySummary?.events).toHaveLength(applyDetail.events.length);
+    expect(applySummary?.events[0]).toMatchObject({
+      service_name: applyDetail.events[0]?.service_name,
+      status: applyDetail.events[0]?.status,
     });
   });
 

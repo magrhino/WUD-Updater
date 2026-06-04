@@ -1891,17 +1891,6 @@ function runFromApply(
   logFile: string,
   logContent: string,
 ): DemoRunFixture {
-  const summary: RunSummary = {
-    id: runId,
-    started_at: startedAt,
-    finished_at: finishedAt,
-    status: "success",
-    dry_run: false,
-    mode: plan.mode,
-    wud_file: DEMO_SOURCE_FILE,
-    log_file: logFile,
-    metadata: { source: "demo", summary: `updated ${selectedItems.length} services` },
-  };
   const pending_updates = selectedItems.map((item, index) =>
     pendingRecord(
       item.line_no,
@@ -1923,6 +1912,18 @@ function runFromApply(
       "success",
     ),
   );
+  const summary: RunSummary = {
+    id: runId,
+    started_at: startedAt,
+    finished_at: finishedAt,
+    status: "success",
+    dry_run: false,
+    mode: plan.mode,
+    wud_file: DEMO_SOURCE_FILE,
+    log_file: logFile,
+    metadata: { source: "demo", summary: `updated ${selectedItems.length} services` },
+    events,
+  };
   return {
     summary,
     detail: {
@@ -1948,21 +1949,6 @@ function runFromCleanup(
   const startedAt = "2026-05-30T20:12:26+00:00";
   const finishedAt = "2026-05-30T20:12:26+00:00";
   const logFile = "";
-  const summary: RunSummary = {
-    id: runId,
-    started_at: startedAt,
-    finished_at: finishedAt,
-    status: "success",
-    dry_run: false,
-    mode: "web-pending-cleanup",
-    wud_file: DEMO_SOURCE_FILE,
-    log_file: logFile,
-    metadata: {
-      source: "demo",
-      operation: "remove_unmatched_pending",
-      line_numbers: removedItems.map((item) => item.line_no),
-    },
-  };
   const pending_updates = removedItems.map((item, index) =>
     pendingRecord(
       item.line_no,
@@ -1985,6 +1971,22 @@ function runFromCleanup(
       "success",
     ),
   );
+  const summary: RunSummary = {
+    id: runId,
+    started_at: startedAt,
+    finished_at: finishedAt,
+    status: "success",
+    dry_run: false,
+    mode: "web-pending-cleanup",
+    wud_file: DEMO_SOURCE_FILE,
+    log_file: logFile,
+    metadata: {
+      source: "demo",
+      operation: "remove_unmatched_pending",
+      line_numbers: removedItems.map((item) => item.line_no),
+    },
+    events,
+  };
   return {
     summary,
     detail: {
@@ -2010,21 +2012,6 @@ function runFromRemoval(
   const startedAt = "2026-05-30T20:12:26+00:00";
   const finishedAt = "2026-05-30T20:12:26+00:00";
   const logFile = "";
-  const summary: RunSummary = {
-    id: runId,
-    started_at: startedAt,
-    finished_at: finishedAt,
-    status: "success",
-    dry_run: false,
-    mode: "web-pending-removal",
-    wud_file: DEMO_SOURCE_FILE,
-    log_file: logFile,
-    metadata: {
-      source: "demo",
-      operation: "remove_selected_pending",
-      line_numbers: removedItems.map((item) => item.line_no),
-    },
-  };
   const pending_updates = removedItems.map((item, index) =>
     pendingRecord(
       item.line_no,
@@ -2047,6 +2034,22 @@ function runFromRemoval(
       "success",
     ),
   );
+  const summary: RunSummary = {
+    id: runId,
+    started_at: startedAt,
+    finished_at: finishedAt,
+    status: "success",
+    dry_run: false,
+    mode: "web-pending-removal",
+    wud_file: DEMO_SOURCE_FILE,
+    log_file: logFile,
+    metadata: {
+      source: "demo",
+      operation: "remove_selected_pending",
+      line_numbers: removedItems.map((item) => item.line_no),
+    },
+    events,
+  };
   return {
     summary,
     detail: {
@@ -2088,6 +2091,7 @@ function demoRun(options: {
     wud_file: DEMO_SOURCE_FILE,
     log_file: options.logFile,
     metadata: { source: "demo", summary: options.summary },
+    events: options.events,
   };
   return {
     summary,
