@@ -33,6 +33,11 @@ line-length = 88
 src = ["src", "tests"]
 target-version = "py310"
 
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_python_*.py"]
+pythonpath = ["src"]
+
 [tool.setuptools]
 package-dir = {"" = "src"}
 

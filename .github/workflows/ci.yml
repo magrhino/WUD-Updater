@@ -151,10 +151,119 @@ jobs:
             printf 'workflows=%s\n' "$workflows"
           } >> "$GITHUB_OUTPUT"
 
-  linux-tests:
-    name: linux tests
+  python-tests:
+    name: python tests
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 15
+    if: >-
+      ${{
+        github.event_name == 'workflow_dispatch' ||
+        !(
+          (github.event_name == 'pull_request' && contains(github.event.pull_request.title, '[skip ci]')) ||
+          (github.event_name == 'push' && (
+            startsWith(github.event.head_commit.message, 'docs:') ||
+            startsWith(github.event.head_commit.message, 'docs(') ||
+            startsWith(github.event.head_commit.message, 'docs!:') ||
+            startsWith(github.event.head_commit.message, 'chore:') ||
+            startsWith(github.event.head_commit.message, 'chore(') ||
+            startsWith(github.event.head_commit.message, 'chore!:')
+          ))
+        )
+      }}
+
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
+        with:
+          egress-policy: audit
+
+      - name: Check out repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: "3.x"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - name: Install Python dev dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m venv .venv
+          . .venv/bin/activate
+          python -m pip install -e '.[dev]'
+          echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
+
+      - name: Run tests
+        run: tests/run-all.sh --python
+
+  shell-tests:
+    name: shell tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    if: >-
+      ${{
+        github.event_name == 'workflow_dispatch' ||
+        !(
+          (github.event_name == 'pull_request' && contains(github.event.pull_request.title, '[skip ci]')) ||
+          (github.event_name == 'push' && (
+            startsWith(github.event.head_commit.message, 'docs:') ||
+            startsWith(github.event.head_commit.message, 'docs(') ||
+            startsWith(github.event.head_commit.message, 'docs!:') ||
+            startsWith(github.event.head_commit.message, 'chore:') ||
+            startsWith(github.event.head_commit.message, 'chore(') ||
+            startsWith(github.event.head_commit.message, 'chore!:')
+          ))
+        )
+      }}
+
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
+        with:
+          egress-policy: audit
+
+      - name: Check out repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: "3.x"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - name: Install Python dev dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m venv .venv
+          . .venv/bin/activate
+          python -m pip install -e '.[dev]'
+          echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
+
+      - name: Install ShellCheck
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! command -v shellcheck >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y shellcheck
+          fi
+
+      - name: Run tests
+        run: tests/run-all.sh --shell
+
+  webui-checks:
+    name: webui checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
     if: >-
       ${{
         github.event_name == 'workflow_dispatch' ||
@@ -189,26 +298,8 @@ jobs:
           cache: npm
           cache-dependency-path: webui/package-lock.json
 
-      - name: Install ShellCheck
-        shell: bash
-        run: |
-          set -euo pipefail
-          if ! command -v shellcheck >/dev/null 2>&1; then
-            sudo apt-get update
-            sudo apt-get install -y shellcheck
-          fi
-
-      - name: Install Python dev dependencies
-        shell: bash
-        run: |
-          set -euo pipefail
-          python3 -m venv .venv
-          . .venv/bin/activate
-          python -m pip install -e '.[dev]'
-          echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
-
       - name: Run tests
-        run: tests/run-all.sh
+        run: tests/run-all.sh --webui
 
   webui-smoke:
     name: webui smoke
@@ -359,11 +450,18 @@ jobs:
             brew install shellcheck
           fi
 
+      - name: Set up Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: "3.x"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
       - name: Install Python dev dependencies
         shell: bash
         run: |
           set -euo pipefail
-          python3 -m venv .venv
+          python -m venv .venv
           . .venv/bin/activate
           python -m pip install -e '.[dev]'
           echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
