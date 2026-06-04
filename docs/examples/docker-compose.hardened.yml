@@ -1,3 +1,11 @@
+# This example is a more secure version of the docker-compose.webui.yml
+# example that uses a socket proxy to give the WUD-Updater container access
+# to a limited subset of the Docker API instead of mounting the raw Docker
+# socket. This minimizes the attack surface and potential damage if the
+# WUD-Updater container is compromised, while still allowing it to manage
+# WUD helper containers and perform updates. Please see the documentation
+# and comments in this file for more details on the security features and
+# best practices when running WUD-Updater.
 services:
   socket-proxy-wud-updater:
     image: lscr.io/linuxserver/socket-proxy:latest
@@ -16,8 +24,8 @@ services:
       INFO: "1"
       PING: "1"
       VERSION: "1"
-      # Required for docker compose pull/stop/up and image pulls. Keep the
-      # helper command on --dry-run until you are ready for these mutations.
+      # Required for docker compose pull/stop/up and image pulls. The WebUI
+      # keeps browser mutations disabled unless WUD_WEB_MUTATIONS_ENABLED=true.
       POST: "1"
       AUTH: "0"
       BUILD: "0"
@@ -74,6 +82,7 @@ services:
     image: ghcr.io/magrhino/wud-updater:latest
     restart: unless-stopped
     networks:
+      - wud-updater-egress
       - wud-updater-socket
     depends_on:
       - socket-proxy-wud-updater
@@ -83,30 +92,48 @@ services:
       DOCKER_BASE: ${HOST_DOCKER_BASE:-/srv/docker}
       WUD_OUT_FILE: /out/images.todo
       WUD_LOG_DIR: /logs
+      WUD_DB_PATH: /logs/wud-updater.sqlite
+      WUD_TIMEZONE: "${WUD_TIMEZONE:-UTC}"
       WUD_SYNC_SCRIPTS: "true"
       WUD_SCRIPTS_DIR: /managed-wud
-      # The Python wrapper avoids sudo inside the read-only helper container.
+      WUD_WEB_HOST: 0.0.0.0
+      WUD_WEB_PORT: "${WUD_WEB_PORT:-8080}"
+      WUD_WEB_MUTATIONS_ENABLED: "${WUD_WEB_MUTATIONS_ENABLED:-false}"
+      WUD_WEB_PUBLIC_ORIGIN: "${WUD_WEB_PUBLIC_ORIGIN:-}"
+      WUD_WEB_ALLOWED_HOSTS: "${WUD_WEB_ALLOWED_HOSTS:-}"
+      WUD_WEB_TRUSTED_PROXIES: "${WUD_WEB_TRUSTED_PROXIES:-}"
+      WUD_WEB_SECURE_COOKIES: "${WUD_WEB_SECURE_COOKIES:-auto}"
+      # The Python wrapper avoids sudo inside the read-only WebUI container.
       WUD_UPDATER_USE_SUDO: "false"
       HOME: /tmp
-      OUT_UID: "1000"
-      OUT_GID: "1000"
+      OUT_UID: "${OUT_UID:-1000}"
+      OUT_GID: "${OUT_GID:-1000}"
+      GITHUB_TOKEN: "${GITHUB_TOKEN:-}"
+    ports:
+      - "${WEBUI_HTTP_BIND:-127.0.0.1}:${WUD_WEB_PORT:-8080}:${WUD_WEB_PORT:-8080}"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:${WUD_WEB_PORT:-8080}/readyz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
     volumes:
       # Keep this path aligned with DOCKER_BASE. It is writable because the
       # updater may rewrite Compose image tags when --allow-tag-updates is used.
       - ${HOST_DOCKER_BASE:-/srv/docker}:${HOST_DOCKER_BASE:-/srv/docker}
-      # Updater logs are kept outside the Docker stack root.
-      - ./logs:/logs
+      # WebUI logs and SQLite state are kept outside the Docker stack root.
+      - ${WEBUI_LOG_DIR:-./logs}:/logs
       # Startup sync copies this repo's WUD callback scripts here for WUD.
       - wud-scripts:/managed-wud
       - wud-out:/out
-    command: ["updates", "--dry-run"]
+    command: ["web"]
     read_only: true
     tmpfs:
       - /tmp
     cap_drop:
       - ALL
     cap_add:
-      # The helper runs without sudo, but still needs to write logs, preserve
+      # The WebUI runs without sudo, but still needs to write logs, preserve
       # todo-file ownership, and optionally rewrite bind-mounted Compose files.
       - CHOWN
       - DAC_OVERRIDE

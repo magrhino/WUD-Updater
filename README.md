@@ -1,187 +1,90 @@
 # WUD-Updater
 
-Small helper commands for applying Docker image updates reported by What's Up
-Docker (WUD), with optional TrueNAS status checks and Discord release-note
-notifications.
+WUD-Updater turns image update notices from What's Up Docker (WUD) into a
+reviewable Docker Compose update workflow. The recommended deployment is the
+long-running WebUI container, which provides a local browser dashboard,
+read-only safety defaults, Doctor checks, run history, logs, diagnostics, and an
+optional plan-first apply flow.
 
-## What It Does
+## Web Deployment
 
-- WUD calls `/wud/on-update.sh` when an image update is available.
-- The WUD-side scripts append pending image targets to `/out/images.todo`.
-- The host command `updates` shows pending Docker updates and can optionally
-  show TrueNAS update status and active alerts.
-- When approved, `docker-update-from-wud` pulls matching Docker Compose services
-  or stack-scoped service images, recreates containers, waits for health, and
-  removes successfully processed lines from the WUD file.
-- Interactive tag prompts can apply, change, skip, or durably exclude selected
-  proposed exact tags through the native `wud.tag.exclude` Compose label.
-- A Compose service can opt into full-stack recreation by running with the label
-  `WUD-UPDATER-RECREATE-STACK=true`.
+The WebUI container serves the FastAPI backend and packaged Vue SPA from the
+same image. WUD records pending image updates into a shared todo file, and the
+WebUI reads that file to show pending updates and prepare apply plans.
 
-## Quick Start
-
-Generate a local first-run config when you want a guided path instead of
-copying the examples by hand:
-
-```bash
-wud-updater init --profile webui --stack-root /srv/docker --non-interactive
+```text
+WUD detects an image update
+-> /wud/on-update.sh records it in /out/images.todo
+-> the WebUI shows pending updates, checks readiness, and builds an apply plan
+-> approved plans run docker-update-from-wud and clean successful todo lines
 ```
 
-### Container First
+The WebUI deployment starts read-only. Browser-initiated Docker mutations stay
+disabled unless `WUD_WEB_MUTATIONS_ENABLED=true` is set intentionally.
 
-Review `docs/examples/docker-compose.example.yml`, especially the host Docker
-stack path mounted at the same absolute path inside the helper. This matters
-when Compose files use relative bind mounts such as `./config:/config`. Then
-run doctor and the non-mutating default command:
+### Start The WebUI
 
-If you keep an existing helper-only mount such as `/srv/docker:/host/docker`,
-either switch to `/srv/docker:/srv/docker`, or add a second `/srv/docker:/srv/docker`
-mount and set `HOST_DOCKER_BASE=/srv/docker`. Compose reads project-relative
-files such as `.env`, `env_file`, build contexts, and relative bind mounts from
-the `HOST_DOCKER_BASE` path, so that path must also be readable inside the helper.
+If the `wud-updater` CLI is available, generate first-run hardened WebUI config
+instead of downloading the env template:
 
 ```bash
-docker compose -f docs/examples/docker-compose.example.yml run --rm wud-updater doctor
-docker compose -f docs/examples/docker-compose.example.yml run --rm wud-updater
+wud-updater init --profile hardened --stack-root /srv/docker --non-interactive
 ```
 
-Apply all pending entries through the wrapper:
+That writes a hardened env file and Compose override under
+`$HOME/.config/wud-updater/`. Use them with the hardened Compose example before
+starting the service.
+
+To start without the CLI, download the published hardened WebUI Compose example
+plus an env template in your deployment directory:
 
 ```bash
-docker compose -f docs/examples/docker-compose.example.yml run --rm wud-updater updates --yes
+curl -fsSL \
+  -o docker-compose.yml https://raw.githubusercontent.com/magrhino/WUD-Updater/main/docs/examples/docker-compose.hardened.yml \
+  -o .env https://raw.githubusercontent.com/magrhino/WUD-Updater/main/docs/examples/webui.env.example
 ```
 
-For a socket-proxy deployment that avoids mounting the raw Docker socket into
-WUD or WUD-Updater, start from
-`docs/examples/docker-compose.hardened.yml`.
-
-For containerized TrueNAS status checks, start from
-`docs/examples/docker-compose.truenas.yml`. It builds a version-matched
-TrueNAS client and uses an opt-in short-lived helper container for local status
-checks without storing a TrueNAS API key. The helper is only used when
-`TRUENAS_STATUS_CHECK=true` is set there.
-
-### WebUI Container
-
-For a long-running local WebUI, copy the WebUI Compose env example, review
-`HOST_DOCKER_BASE`, then start from `docs/examples/docker-compose.webui.yml`:
+Review `.env` before starting: set `HOST_DOCKER_BASE` to your Compose stack
+root, then keep loopback-only browser access or set the WebUI network variables
+for LAN or reverse-proxy exposure. Start the service, then read the one-time
+setup link from the logs:
 
 ```bash
-WEBUI_ENV="$HOME/.config/wud-updater/webui.env"
-mkdir -p "$HOME/.config/wud-updater"
-test -f "$WEBUI_ENV" || cp docs/examples/webui.env.example "$WEBUI_ENV"
-docker compose --env-file "$WEBUI_ENV" -f docs/examples/docker-compose.webui.yml up -d
-docker compose --env-file "$WEBUI_ENV" -f docs/examples/docker-compose.webui.yml logs wud-updater
+docker compose up -d
+docker compose logs wud-updater
 ```
 
-Open the one-time `/#/setup?claim=...` link printed in the logs, create the
-first admin username and a password with at least 12 characters, then sign in at
-`http://127.0.0.1:8080`. The example keeps browser access bound to loopback and
-leaves WebUI mutations disabled unless you explicitly set
-`WUD_WEB_MUTATIONS_ENABLED=true`. Scheduled service-policy auto updates use the
-server's `WUD_TIMEZONE` value, for example `America/Chicago`, and default to
-`UTC`.
-After admin setup, Settings shows a first-run checklist for WUD output sharing,
-Docker and Compose access, script sync, persistence, browser exposure, and
-mutation mode.
-Settings can also persist allowlisted managed preferences, such as theme,
-onboarding checklist state, and compose discovery ignore paths, when browser
-mutations are explicitly enabled. Those preferences do not override CLI flags,
-environment config, paths, secrets, or Docker commands.
+Open the printed `/#/setup?claim=...` link, create the first admin username and
+a password with at least 12 characters, then sign in at
+`http://127.0.0.1:8080`. The example binds browser access to loopback by
+default.
 
-Compose discovery ignores `old/` by default for backward compatibility. Set
-`WUD_COMPOSE_IGNORE_PATHS` to a comma-separated list such as
-`old,archive/disabled` to override the ignored paths, or set it to an empty
-value to disable archive ignores. When
-`WUD_COMPOSE_IGNORE_PATHS` is set in the server environment, Settings shows the
-effective value as read-only; unset the environment variable to manage compose
-ignore paths from the WebUI.
+See [WebUI container deployment](docs/DEPLOYMENT.md#webui-container) for the
+full Compose walkthrough and [WebUI container operations](docs/wiki/webui-container.md)
+for login, admin recovery, LAN or reverse-proxy exposure, SQLite persistence,
+managed preferences, and mutation mode.
 
-If the admin password is lost or an operator needs to rotate access, issue a
-new one-time recovery link from the host or container:
+## Other Deployment Paths
 
-```bash
-wud-updater web reset-admin --user admin
-docker compose --env-file "$WEBUI_ENV" -f docs/examples/docker-compose.webui.yml run --rm wud-updater web reset-admin --user admin
-```
+The WebUI container is recommended for new deployments. The non-web paths remain
+supported when you want a smaller command-runner workflow or host-installed
+commands:
 
-The reset command uses the configured `WUD_DB_PATH`, revokes existing sessions
-for that admin, invalidates the old password immediately, and prints only the
-new one-time recovery URL.
-
-### Host Install
-
-Install local commands and host-managed WUD script mounts:
-
-```bash
-./install.sh
-```
-
-The installer checks the host Python runtime used by the command wrappers. If
-required Python packages are missing from host Python and from the repo-local
-`.venv`, it creates `.venv` and installs the package there. The wrappers use
-that venv automatically when `PYTHON_BIN` is unset and host `python3` is missing
-runtime dependencies.
-
-Make sure the install bin directory is on your `PATH`, configure WUD to call
-`/wud/on-update.sh`, then review or apply pending updates:
-
-```bash
-updates --dry-run
-updates --yes
-```
-
-## Common Commands
-
-```bash
-updates
-updates --dry-run
-updates --no-self-update
-updates --yes --allow-tag-updates
-wud-updater doctor
-docker-update-from-wud --dry-run
-docker-update-from-wud --yes
-docker-update-from-wud --yes --allow-tag-updates
-docker-update-from-wud --yes --allow-tag-updates --tag-override 1=5.2.0
-docker-update-from-wud --yes --exclude-tag-lines 1
-wud-updater web
-wud-updater web reset-admin --user admin
-```
-
-The Python package also exposes the same tools through:
-
-```bash
-wud-updater doctor
-wud-updater init
-wud-updater init --profile webui --stack-root /srv/docker --non-interactive
-wud-updater updates --dry-run
-wud-updater update-from-wud --dry-run
-wud-updater web
-```
-
-`wud-updater web` starts the read-only `/api/v1/*` FastAPI service for the
-WebUI and serves the packaged Vue SPA when static assets are present. On first
-start, the server logs a one-time setup link for creating the first admin
-username and password. After setup, browser sessions use an HttpOnly cookie and
-CSRF protection. API clients can optionally send `Authorization: Bearer <token>`
-when `WUD_WEB_TOKEN` is set, but that token is not used for browser login and
-does not bypass first-run setup. `WUD_WEB_DEV_NO_AUTH=true` is only for local
-development and tests.
-
-The authenticated WebUI also includes a Doctor page that renders structured
-doctor checks for Docker access, mounted paths, Compose rendering, WebUI
-database readiness, and browser safety settings without exposing secret values.
+| Path | Use when | Docs |
+|---|---|---|
+| Docker script runner | You want short-lived `docker compose run` commands for `doctor`, dry runs, and applies without a persistent WebUI. | [Docker script runner](docs/DEPLOYMENT.md#docker-script-runner) |
+| Host install | You want `updates` and `docker-update-from-wud` on the host `PATH` with host-managed WUD script mounts. | [Host install](docs/DEPLOYMENT.md#host-install) |
 
 ## Documentation
 
 | Topic | Where |
 |---|---|
 | Public WebUI demo | [magrhino.github.io/WUD-Updater](https://magrhino.github.io/WUD-Updater/) |
-| Security policy and private vulnerability reporting | [SECURITY.md](SECURITY.md) |
-| Deployment, configuration, maintenance, and security notes | [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) |
+| Full deployment reference | [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) |
+| WebUI container deployment | [docs/DEPLOYMENT.md#webui-container](docs/DEPLOYMENT.md#webui-container) |
+| WebUI operations guide | [docs/wiki/webui-container.md](docs/wiki/webui-container.md) |
+| Docker script runner | [docs/DEPLOYMENT.md#docker-script-runner](docs/DEPLOYMENT.md#docker-script-runner) |
+| Host install | [docs/DEPLOYMENT.md#host-install](docs/DEPLOYMENT.md#host-install) |
 | Complete documentation index | [docs/README.md](docs/README.md) |
-| Docker Compose example | [docs/examples/docker-compose.example.yml](docs/examples/docker-compose.example.yml) |
-| Long-running WebUI Docker Compose example | [docs/examples/docker-compose.webui.yml](docs/examples/docker-compose.webui.yml) |
-| Hardened Docker Compose example | [docs/examples/docker-compose.hardened.yml](docs/examples/docker-compose.hardened.yml) |
-| TrueNAS status Docker Compose example | [docs/examples/docker-compose.truenas.yml](docs/examples/docker-compose.truenas.yml) |
+| Security policy and private vulnerability reporting | [SECURITY.md](SECURITY.md) |
 | Release notes | [CHANGELOG.md](CHANGELOG.md) |

@@ -21,7 +21,8 @@ tests/run-all.sh
 ```
 
 The suite runs Ruff, shell syntax checks, ShellCheck, Python syntax checks,
-Python unit tests, and updater behavior tests.
+Python unit tests (which generate an XML coverage report via `pytest-cov`),
+and updater behavior tests.
 
 ## Focused Checks
 
@@ -80,8 +81,9 @@ same Vue routes, stores, components, and theme as the real WebUI, but it never
 starts FastAPI, SQLite, fake Docker, or live Docker/Compose operations. Fixture
 paths are sanitized to `demo/...`, and reloads reset the in-browser demo state.
 
-Browser smoke tests use Playwright Chromium with mocked local API fixtures. Install
-the browser once before running them locally:
+Browser smoke tests use Playwright Chromium with mocked local API fixtures, and
+demo testing includes the `assert:demo-dist` pre-flight step to harden static
+artifact tests. Install the browser once before running them locally:
 
 ```bash
 npm --prefix webui exec playwright install chromium
@@ -146,9 +148,11 @@ wud-updater web --host 127.0.0.1 --port 8080 --static-dir webui/dist
 
 CI runs on pull requests targeting `main` and pushes to `main`. The default path
 is intentionally Linux-only to keep private repository Actions usage predictable.
-Pull requests with `[skip ci]` in the title skip CI jobs, and direct `docs:` or
-`chore:` commits to `main` skip CI and Release Please jobs. Merged Release
-Please PRs can still run the release automation needed to tag the release.
+The `python-tests` and `webui-checks` jobs generate coverage reports and upload
+them to Codecov. Pull requests with `[skip ci]` in the title skip CI jobs, and
+direct `docs:` or `chore:` commits to `main` skip CI and Release Please jobs.
+Merged Release Please PRs can still run the release automation needed to tag the
+release.
 
 Optional checks are available when broader coverage is useful:
 
@@ -159,6 +163,10 @@ Optional checks are available when broader coverage is useful:
   smoke test.
 - Manually dispatch CI with `run_webui_smoke=true`, or change files under
   `webui/`, to run the Playwright Chromium WebUI smoke tests.
+- Add the `ci:e2e` pull request label, or manually dispatch CI with
+  `run_e2e=true`, to run the Docker E2E test job (`docker-e2e`).
+- Manually dispatch CI with `run_webui_demo=true` to run the WebUI Demo test job
+  (`webui-demo`).
 - Workflow linting runs automatically when files under `.github/workflows/`
   change, and can also be run from manual CI dispatch.
 

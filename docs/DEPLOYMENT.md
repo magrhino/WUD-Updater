@@ -1,8 +1,9 @@
 # Deployment
 
 This is the canonical reference for running WUD-Updater through Docker Compose,
-as a container helper image, or through host-installed commands. For a short
-entrypoint, see the [README](../README.md).
+as a WebUI container, as a Docker script runner, or through host-installed
+commands. The WebUI container is the recommended deployment for new installs.
+For a short entrypoint, see the [README](../README.md).
 
 WUD-Updater controls the Docker daemon it is pointed at. Review the socket and
 stack-directory mounts before using any command without `--dry-run`.
@@ -26,10 +27,13 @@ are also published as `X.Y.Z`, `X.Y`, and `latest`. The same tags support
 `linux/amd64` and `linux/arm64`, and Docker selects the matching image for the
 host platform automatically.
 
-The image uses `python:3.14-slim-bookworm`, installs the Docker CLI with the
-Compose plugin, copies `bin/`, `src/`, and `wud/` into `/app`, and starts through
-`tini`. Run doctor first to validate Docker access, mounted paths, script
-permissions, and Compose rendering:
+The image uses a multi-stage Dockerfile that first compiles the frontend with a
+Node.js `webui-build` stage. The final stage uses `python:3.14.5-slim-bookworm`,
+installs the Docker CLI with the Compose plugin, copies `bin/`, `src/`, and `wud/`
+into `/app`, and packages the built SPA into `/app/src/wud_updater/web_static/`
+so the container natively serves the compiled WebUI without requiring static
+directory mounts. It starts through `tini`. Run doctor first to validate Docker
+access, mounted paths, script permissions, and Compose rendering:
 
 ```bash
 doctor
@@ -70,6 +74,8 @@ docker run --rm \
 - `curl` and `jq` are required for release-note helper scripts.
 
 ## Docker Compose
+
+### Docker Script Runner
 
 The repository example is at
 [`docs/examples/docker-compose.example.yml`](examples/docker-compose.example.yml).
@@ -174,19 +180,23 @@ That means relative bind mounts, `.env`, `env_file`, build contexts, and similar
 project-relative files must exist under `HOST_DOCKER_BASE` and be readable from
 inside the helper.
 
-For a socket-proxy deployment, use
+For a socket-proxy WebUI deployment, use
 [`docs/examples/docker-compose.hardened.yml`](examples/docker-compose.hardened.yml).
 That variant mounts `/var/run/docker.sock` only into a LinuxServer.io socket
-proxy sidecar, points WUD and the helper at `tcp://socket-proxy-wud-updater:2375`,
-and keeps the proxy on an internal Docker network.
+proxy sidecar, points WUD and the WebUI container at
+`tcp://socket-proxy-wud-updater:2375`, keeps the proxy on an internal Docker
+network, and keeps browser mutations disabled unless
+`WUD_WEB_MUTATIONS_ENABLED=true` is set.
+
+### WebUI Container
 
 For a long-running WebUI container, use
 [`docs/examples/docker-compose.webui.yml`](examples/docker-compose.webui.yml).
 That variant runs `wud-updater web`, serves the packaged SPA on
 `127.0.0.1:8080`, persists SQLite state in `/logs/wud-updater.sqlite`, and keeps
 browser mutations disabled unless `WUD_WEB_MUTATIONS_ENABLED=true` is set. Copy
-the WebUI env example, review `HOST_DOCKER_BASE`, then start it and read the
-one-time setup link from the service logs:
+the WebUI env example, review the stack path and browser exposure settings, then
+start it and read the one-time setup link from the service logs:
 
 ```bash
 WEBUI_ENV="$HOME/.config/wud-updater/webui.env"
@@ -196,10 +206,13 @@ docker compose --env-file "$WEBUI_ENV" -f docs/examples/docker-compose.webui.yml
 docker compose --env-file "$WEBUI_ENV" -f docs/examples/docker-compose.webui.yml logs wud-updater
 ```
 
-The env file keeps first-run defaults in one place. `WEBUI_HTTP_BIND` controls
-the host-side published address and defaults to loopback, `WEBUI_LOG_DIR`
-persists logs plus SQLite state, and `HOST_DOCKER_BASE` must match the
-daemon-visible root that contains your Compose stack directories.
+The env file keeps first-run defaults in one place. `HOST_DOCKER_BASE` must
+match the daemon-visible root that contains your Compose stack directories,
+`WEBUI_HTTP_BIND` controls the host-side published address and defaults to
+loopback, and `WEBUI_LOG_DIR` persists logs plus SQLite state. For LAN or
+reverse-proxy exposure, also review `WUD_WEB_PUBLIC_ORIGIN`,
+`WUD_WEB_ALLOWED_HOSTS`, `WUD_WEB_TRUSTED_PROXIES`, and
+`WUD_WEB_SECURE_COOKIES`.
 
 Open the setup link, create the first admin username and a password with at
 least 12 characters, then sign in at `http://127.0.0.1:8080`. See
@@ -209,6 +222,10 @@ LAN exposure, login, and mutation notes.
 After sign-in, open the WebUI Settings page to review the effective non-secret
 configuration, safety status, secret presence, and first-run checklist for the
 running process.
+
+The WebUI supports readiness endpoints for container healthchecks. The `/readyz`
+endpoint provides a no-auth, loopback-only healthcheck used by Docker Compose,
+while the `/api/v1/ready` endpoint requires authentication for API client checks.
 
 The Settings page separates runtime configuration from managed UI preferences.
 Runtime values come from command-line overrides for the running command, then
@@ -408,8 +425,7 @@ docker compose --env-file "$HOME/.config/wud-updater/webui.env" \
   -f docs/examples/docker-compose.webui.yml up -d
 ```
 
-Helper-only and hardened container setups also generate a Compose override by
-default:
+Helper-only container setup also generates a Compose override by default:
 
 ```bash
 wud-updater init --profile helper --stack-root /srv/docker --non-interactive
@@ -417,12 +433,20 @@ docker compose --env-file "$HOME/.config/wud-updater/helper.env" \
   -f docs/examples/docker-compose.example.yml \
   -f "$HOME/.config/wud-updater/docker-compose.helper.override.yml" \
   run --rm wud-updater doctor
+```
 
+Hardened WebUI setup can be checked with `doctor` before starting the WebUI:
+
+```bash
 wud-updater init --profile hardened --stack-root /srv/docker --non-interactive
 docker compose --env-file "$HOME/.config/wud-updater/hardened.env" \
   -f docs/examples/docker-compose.hardened.yml \
   -f "$HOME/.config/wud-updater/docker-compose.hardened.override.yml" \
   run --rm wud-updater doctor
+docker compose --env-file "$HOME/.config/wud-updater/hardened.env" \
+  -f docs/examples/docker-compose.hardened.yml \
+  -f "$HOME/.config/wud-updater/docker-compose.hardened.override.yml" \
+  up -d
 ```
 
 For LAN or reverse-proxy WebUI exposure, pass the browser-visible host values
@@ -486,7 +510,7 @@ Boolean examples use `true` and `false`; legacy aliases `1`, `0`, `yes`, `no`,
 | `WUD_UPDATER_PYTHON` | `true` | Set to `false` to use the temporary legacy Bash `updates` fallback. |
 | `WUD_UPDATER_USE_SUDO` | `true` | For the Python `updates` wrapper, set to `false` to disable sudo file fallbacks and run `WUD_UPDATER` directly. |
 | `WUD_UPDATER_BANNER` | `auto` | Startup banner mode: `auto` prints on TTY startup, `true` forces it, and `false` disables it. |
-| `WUD_UPDATER_RELEASE_CHECK` | `auto` | Latest-release check mode: `auto` or `true` lets startup banner and self-update release checks try GitHub briefly, and `false` disables the network check. |
+| `WUD_UPDATER_RELEASE_CHECK` | `auto` | Latest-release check mode: `auto` or `true` lets startup banner, WebUI self-update banner, and self-update release checks try GitHub briefly, and `false` disables the network check. |
 | `WUD_UPDATER_SELF_UPDATE` | enabled | Set to `false`, `0`, `no`, or `off` to disable the default `updates` self-update preflight. |
 | `PYTHON_BIN` | `python3`, with repo `.venv` fallback when unset | Python interpreter used by Python entrypoint wrappers. Set this to bypass automatic `.venv` fallback. |
 | `WUD_UPDATER_VENV` | Repo-local `.venv` | Optional installer and wrapper venv path for host runtime dependencies. |
@@ -558,12 +582,12 @@ put secrets in this repository.
 
 ## Security Notes
 
-Mounting `/var/run/docker.sock` gives the helper root-equivalent control over
+Mounting `/var/run/docker.sock` gives a container root-equivalent control over
 the host Docker daemon. Only run trusted images with that socket, and keep the
 stack, script, and output mounts scoped to the directories the updater needs.
-The hardened compose example reduces direct socket exposure by putting the raw
-socket behind a sidecar proxy, but `POST=1` is still required for Docker Compose
-pull/recreate operations.
+The hardened compose example reduces direct socket exposure for WUD and the
+WebUI by putting the raw socket behind a sidecar proxy, but `POST=1` is still
+required for Docker Compose pull/recreate operations.
 
 Secrets such as Discord webhooks and GitHub tokens must come from environment
 variables or host-local secret stores. The scripts redact webhook values in

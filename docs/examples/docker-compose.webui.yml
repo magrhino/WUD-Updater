@@ -1,3 +1,9 @@
+####### IMPORTANT NOTE #######
+# Unless you have a specific reason to use the less secure raw Docker socket,
+# you should use the hardened socket-proxy example instead of this one. The
+# socket-proxy example gives the WUD-Updater container access to a minimized
+# subset of the Docker API that is sufficient for managing WUD helper
+# containers, but does not give it full control over the host Docker daemon.
 services:
   wud:
     image: getwud/wud:latest
@@ -31,7 +37,7 @@ services:
     ports:
       - "${WEBUI_HTTP_BIND:-127.0.0.1}:${WUD_WEB_PORT:-8080}:${WUD_WEB_PORT:-8080}"
     healthcheck:
-      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:${WUD_WEB_PORT:-8080}/readyz"]
+      test: [ "CMD", "curl", "-fsS", "http://127.0.0.1:${WUD_WEB_PORT:-8080}/readyz" ]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -42,7 +48,7 @@ services:
       - ${WEBUI_LOG_DIR:-./logs}:/logs
       - wud-scripts:/managed-wud
       - wud-out:/out
-    command: ["web"]
+    command: [ "web" ]
 
 volumes:
   wud-scripts:

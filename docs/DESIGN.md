@@ -140,6 +140,7 @@ The interface rejects marketing-page performance. It should not use hero section
 - One sans family for labels, controls, headings, and data-adjacent UI.
 - Flat-by-default panels with 1px borders and small radius.
 - State expressed with text, icons, and labels, never color alone.
+- Explicit operator safety tools, such as the Apply Preflight Readiness Summary and Diagnostics Support Bundle.
 
 ## 2. Colors
 

@@ -1,3 +1,4 @@
+# You most likely want to run docker-compose.hardened.yml instead of this one, which has more secure defaults.
 services:
   wud:
     image: getwud/wud:latest
@@ -24,7 +25,7 @@ services:
       - ./logs:/logs
       - wud-scripts:/managed-wud
       - wud-out:/out
-    command: ["updates", "--dry-run"]
+    command: [ "updates", "--dry-run" ]
 
 volumes:
   wud-scripts:

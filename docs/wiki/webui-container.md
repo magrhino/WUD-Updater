@@ -6,7 +6,8 @@ starts in read-only mode.
 
 ## Start The WebUI
 
-Copy the env example, review `HOST_DOCKER_BASE`, then start the service:
+Copy the env example, review the Compose stack path and browser exposure
+settings, then start the service:
 
 ```bash
 WEBUI_ENV="$HOME/.config/wud-updater/webui.env"
