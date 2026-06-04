@@ -4870,7 +4870,7 @@ def _apply_preflight_response(
             settings,
             "compose-renders",
             "Compose renders",
-            _compose_render_checks(doctor_checks),
+            _compose_render_checks(doctor_checks, plan),
             missing_detail="Compose rendering readiness was not reported.",
         ),
         _doctor_apply_preflight_check(
@@ -4914,11 +4914,21 @@ def _doctor_checks_by_code(
 
 def _compose_render_checks(
     checks: Sequence[DoctorCheckResponse],
+    plan: DryRunPlan,
 ) -> list[DoctorCheckResponse]:
-    return [
+    render_checks = [
         check
         for check in checks
         if check.code == "compose-discovery" or check.code.startswith("compose-config")
+    ]
+    selected_compose_labels = {
+        f"compose config {Path(stack.directory) / stack.compose_file}"
+        for stack in plan.stacks
+    }
+    if not selected_compose_labels:
+        return render_checks
+    return [
+        check for check in render_checks if check.name in selected_compose_labels
     ]
 
 

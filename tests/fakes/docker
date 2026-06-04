@@ -301,6 +301,10 @@ compose_cmd(){
       printf 'Docker Compose version v2.30.0\n'
       ;;
     config)
+      if [[ -f "$ROOT/stacks/$id/config_fail" ]]; then
+        emit_failure_output "$id" config
+        return 16
+      fi
       case "${1:-}" in
         --format)
           if [[ "${2:-}" == "json" ]]; then

@@ -5334,6 +5334,57 @@ def test_plan_endpoint_returns_apply_preflight_summary(tmp_path: Path) -> None:
     assert {check["status"] for check in preflight["checks"]} == {"PASS"}
 
 
+def test_plan_apply_preflight_ignores_unselected_compose_render_failure(
+    tmp_path: Path,
+) -> None:
+    fake_env, fake_root = _fake_docker_env(tmp_path)
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+            "TRUENAS_STATUS_CHECK": "false",
+            **fake_env,
+        },
+    )
+    wud_file = tmp_path / "state" / "images.todo"
+    wud_file.write_text("repo/app:latest\n", encoding="utf-8")
+    _make_fake_stack(
+        tmp_path,
+        fake_root,
+        "selected",
+        [("app", "repo/app:latest", "cid-app")],
+    )
+    _make_fake_stack(
+        tmp_path,
+        fake_root,
+        "broken",
+        [("ignored", "repo/ignored:latest", "cid-ignored")],
+    )
+    (fake_root / "stacks" / "broken" / "config_fail").write_text(
+        "",
+        encoding="utf-8",
+    )
+    (fake_root / "stacks" / "broken" / "config_stderr").write_text(
+        "broken compose config\n",
+        encoding="utf-8",
+    )
+
+    response = client.post(
+        "/api/v1/plans",
+        json={"line_numbers": [1]},
+        headers=_csrf_headers(client),
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    checks = {check["code"]: check for check in body["apply_preflight"]["checks"]}
+    assert body["status"] == "ready"
+    assert body["can_apply"] is True
+    assert checks["compose-renders"]["status"] == "PASS"
+    assert "broken compose config" not in json.dumps(body["apply_preflight"])
+
+
 def test_plan_endpoint_returns_unmatched_cleanup_preview(
     tmp_path: Path,
 ) -> None:
