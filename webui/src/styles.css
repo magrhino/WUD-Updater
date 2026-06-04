@@ -2761,6 +2761,32 @@ code.pending-table-value {
   font-size: 0.84rem;
 }
 
+.apply-readiness-passed {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  min-width: 0;
+  color: var(--color-text-secondary);
+  font-size: 0.84rem;
+  line-height: 1.45;
+}
+
+.apply-readiness-passed > svg {
+  flex: 0 0 auto;
+  margin-top: 1px;
+  color: var(--color-operational-teal);
+}
+
+.apply-readiness-passed p {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.apply-readiness-passed strong {
+  color: var(--color-ink);
+}
+
 .apply-readiness-list {
   display: grid;
   border-top: 1px solid var(--color-border-subtle);

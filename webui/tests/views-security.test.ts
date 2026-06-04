@@ -903,9 +903,11 @@ describe("mutating WebUI views", () => {
     expect(readiness.exists()).toBe(true);
     expect(readiness.text()).toContain("Apply readiness");
     expect(readiness.text()).toContain("Ready");
+    expect(readiness.text()).toContain("8 checks passed");
     expect(readiness.text()).toContain("Docker reachable");
     expect(readiness.text()).toContain("Selected services matched");
-    expect(readiness.findAll(".apply-readiness-row")).toHaveLength(8);
+    expect(readiness.find(".apply-readiness-passed").exists()).toBe(true);
+    expect(readiness.findAll(".apply-readiness-row")).toHaveLength(0);
     expect(readiness.text()).not.toContain("docker-daemon-info");
     expect(impact.exists()).toBe(true);
     expect(impact.text()).toContain("Services and images");
@@ -957,8 +959,11 @@ describe("mutating WebUI views", () => {
     const readiness = dialog.find(".apply-readiness");
     expect(readiness.exists()).toBe(true);
     expect(readiness.text()).toContain("Blocked");
+    expect(readiness.text()).toContain("7 checks passed");
     expect(readiness.text()).toContain("Logs writable");
     expect(readiness.text()).toContain("/logs is not a directory");
+    expect(readiness.find(".apply-readiness-passed").exists()).toBe(true);
+    expect(readiness.findAll(".apply-readiness-row")).toHaveLength(1);
     expect(readiness.text()).not.toContain("docker-daemon-info");
     expect(dialog.text()).toContain("Fix the failed apply readiness check");
 

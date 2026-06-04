@@ -352,6 +352,15 @@ const preflightServiceImpactLabel = computed(() => {
   );
 });
 const applyPreflight = computed(() => webui.plan?.apply_preflight ?? null);
+const applyPreflightPassedChecks = computed(() =>
+  applyPreflight.value?.checks.filter((check) => check.status === "PASS") ?? [],
+);
+const applyPreflightAttentionChecks = computed(() =>
+  applyPreflight.value?.checks.filter((check) => check.status !== "PASS") ?? [],
+);
+const applyPreflightPassedText = computed(() =>
+  applyPreflightPassedChecks.value.map((check) => check.label).join(", "),
+);
 const applyReadinessStatusLabel = computed(() => {
   if (!applyPreflight.value) {
     return "";
@@ -377,7 +386,7 @@ const applyReadinessSummary = computed(() => {
   if (applyPreflight.value.warnings > 0) {
     return `${pluralize(applyPreflight.value.warnings, "warning")} to review before applying.`;
   }
-  return "Required resources are reachable for this apply.";
+  return "Required resources are reachable.";
 });
 const applyVisible = computed(() => webui.plan?.status === "ready");
 const applyAvailable = computed(() => applyVisible.value && !!webui.plan?.can_apply);
@@ -2462,9 +2471,26 @@ watch(
               {{ applyReadinessStatusLabel }}
             </n-tag>
           </div>
-          <div class="apply-readiness-list">
+          <div
+            v-if="applyPreflightPassedChecks.length"
+            class="apply-readiness-passed"
+          >
+            <CheckCircle2 :size="16" aria-hidden="true" />
+            <p>
+              <strong>
+                {{ pluralize(applyPreflightPassedChecks.length, "check") }} passed:
+              </strong>
+              <span class="apply-readiness-pass-list">
+                {{ applyPreflightPassedText }}
+              </span>
+            </p>
+          </div>
+          <div
+            v-if="applyPreflightAttentionChecks.length"
+            class="apply-readiness-list"
+          >
             <div
-              v-for="check in applyPreflight.checks"
+              v-for="check in applyPreflightAttentionChecks"
               :key="check.code"
               class="apply-readiness-row"
               :class="`status-${check.status.toLowerCase()}`"
