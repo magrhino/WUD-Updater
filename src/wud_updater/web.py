@@ -559,6 +559,21 @@ class ReadyResponse(BaseModel):
     checks: list[DoctorCheckResponse] = Field(default_factory=list)
 
 
+class ApplyPreflightCheck(BaseModel):
+    status: DoctorCheckStatus
+    code: str
+    label: str
+    detail: str = ""
+    source_check_codes: list[str] = Field(default_factory=list)
+
+
+class ApplyPreflightResponse(BaseModel):
+    ok: bool
+    failures: int
+    warnings: int
+    checks: list[ApplyPreflightCheck] = Field(default_factory=list)
+
+
 READINESS_DOCKER_ENDPOINT_CODES = frozenset({"docker-endpoint", "docker-socket"})
 READINESS_REQUIRED_CODES = frozenset(
     {
@@ -849,6 +864,7 @@ class PlanResponse(BaseModel):
     skipped: list[PlanSkipped] = Field(default_factory=list)
     issues: list[PlanIssue] = Field(default_factory=list)
     cleanup: PlanCleanup = Field(default_factory=PlanCleanup)
+    apply_preflight: ApplyPreflightResponse
 
 
 class PendingCleanupLine(BaseModel):
@@ -2418,7 +2434,7 @@ def api_plan_self_update(request: Request) -> SelfUpdatePlanResponse:
             ),
         ) from exc
 
-    plan_response = _plan_response(plan, settings)
+    plan_response = _plan_response(plan, settings, request)
     try:
         _validate_self_update_prepare_plan(plan_response)
     except HTTPException:
@@ -2581,7 +2597,7 @@ def api_prepare_self_update(
             ) from exc
         if plan.plan_id != payload.plan_id:
             raise HTTPException(status_code=409, detail="self-update plan is stale")
-        plan_response = _plan_response(plan, settings)
+        plan_response = _plan_response(plan, settings, request)
         _validate_self_update_prepare_plan(plan_response)
 
         docker = DockerCli(runner=CommandRunner(env=settings.command_env))
@@ -2753,7 +2769,7 @@ def api_create_plan(payload: PlanRequest, request: Request) -> PlanResponse:
             status_code=500,
             detail=f"could not create plan: {exc}",
         ) from exc
-    return _plan_response(plan, settings)
+    return _plan_response(plan, settings, request)
 
 
 def api_create_job(payload: ApplyPlanRequest, request: Request) -> ApplyJobResponse:
@@ -2786,6 +2802,9 @@ def api_create_job(payload: ApplyPlanRequest, request: Request) -> ApplyJobRespo
             raise HTTPException(status_code=409, detail="plan is stale")
         if not _plan_can_apply(plan, settings):
             raise HTTPException(status_code=409, detail="plan is not ready to apply")
+        apply_preflight = _apply_preflight_response(settings, request, plan)
+        if not apply_preflight.ok:
+            raise HTTPException(status_code=409, detail="apply preflight failed")
         return _submit_apply_job(request, settings, plan, payload, wud_lock)
     except Exception:
         wud_lock.close()
@@ -4838,6 +4857,313 @@ def _tag_overrides_from_payload(
     return tuple(overrides)
 
 
+def _apply_preflight_response(
+    settings: WebSettings,
+    request: Request,
+    plan: DryRunPlan,
+) -> ApplyPreflightResponse:
+    doctor = _doctor_response(settings, _web_doctor_result(settings, request))
+    doctor_checks = doctor.checks
+    checks = [
+        _docker_reachable_apply_preflight_check(settings, doctor_checks),
+        _doctor_apply_preflight_check(
+            settings,
+            "compose-renders",
+            "Compose renders",
+            _compose_render_checks(doctor_checks, plan),
+            missing_detail="Compose rendering readiness was not reported.",
+        ),
+        _doctor_apply_preflight_check(
+            settings,
+            "wud-file-writable",
+            "WUD file writable",
+            _doctor_checks_by_code(
+                doctor_checks,
+                {"wud-out-file-directory", "wud-out-file"},
+            ),
+            missing_detail="WUD output file readiness was not reported.",
+        ),
+        _database_apply_preflight_check(settings),
+        _doctor_apply_preflight_check(
+            settings,
+            "logs-writable",
+            "Logs writable",
+            _doctor_checks_by_code(doctor_checks, {"wud-log-dir"}),
+            missing_detail="Log directory readiness was not reported.",
+        ),
+        _mutation_apply_preflight_check(settings),
+        _bind_mount_apply_preflight_check(settings, plan),
+        _selected_services_apply_preflight_check(settings, plan),
+    ]
+    failures = sum(1 for check in checks if check.status == "FAIL")
+    warnings = sum(1 for check in checks if check.status == "WARN")
+    return ApplyPreflightResponse(
+        ok=failures == 0,
+        failures=failures,
+        warnings=warnings,
+        checks=checks,
+    )
+
+
+def _doctor_checks_by_code(
+    checks: Sequence[DoctorCheckResponse],
+    codes: set[str] | frozenset[str],
+) -> list[DoctorCheckResponse]:
+    return [check for check in checks if check.code in codes]
+
+
+def _compose_render_checks(
+    checks: Sequence[DoctorCheckResponse],
+    plan: DryRunPlan,
+) -> list[DoctorCheckResponse]:
+    render_checks = [
+        check
+        for check in checks
+        if check.code == "compose-discovery" or check.code.startswith("compose-config")
+    ]
+    selected_compose_labels = {
+        f"compose config {Path(stack.directory) / stack.compose_file}"
+        for stack in plan.stacks
+    }
+    if not selected_compose_labels:
+        return render_checks
+    return [
+        check for check in render_checks if check.name in selected_compose_labels
+    ]
+
+
+def _docker_reachable_apply_preflight_check(
+    settings: WebSettings,
+    checks: Sequence[DoctorCheckResponse],
+) -> ApplyPreflightCheck:
+    source_checks = _doctor_checks_by_code(
+        checks,
+        {
+            "docker-endpoint",
+            "docker-socket",
+            "docker-daemon-version",
+            "docker-daemon-info",
+            "docker-container-listing",
+        },
+    )
+    present = {check.code for check in source_checks}
+    missing = [
+        code.replace("-", " ")
+        for code in (
+            "docker-daemon-version",
+            "docker-daemon-info",
+            "docker-container-listing",
+        )
+        if code not in present
+    ]
+    if not present.intersection({"docker-endpoint", "docker-socket"}):
+        missing.insert(0, "docker socket or endpoint")
+    missing_detail = (
+        "Missing Docker readiness check(s): " + ", ".join(missing) if missing else ""
+    )
+    if missing_detail:
+        return ApplyPreflightCheck(
+            status="FAIL",
+            code="docker-reachable",
+            label="Docker reachable",
+            detail=_redact_sensitive_text(settings, missing_detail),
+            source_check_codes=[check.code for check in source_checks],
+        )
+    return _doctor_apply_preflight_check(
+        settings,
+        "docker-reachable",
+        "Docker reachable",
+        source_checks,
+        missing_detail=missing_detail,
+    )
+
+
+def _doctor_apply_preflight_check(
+    settings: WebSettings,
+    code: str,
+    label: str,
+    source_checks: Sequence[DoctorCheckResponse],
+    *,
+    missing_detail: str,
+) -> ApplyPreflightCheck:
+    source_check_codes = [check.code for check in source_checks]
+    if not source_checks:
+        return ApplyPreflightCheck(
+            status="FAIL",
+            code=code,
+            label=label,
+            detail=_redact_sensitive_text(
+                settings,
+                missing_detail or "No readiness check was reported.",
+            ),
+            source_check_codes=source_check_codes,
+        )
+    status = _aggregate_apply_preflight_status(source_checks)
+    return ApplyPreflightCheck(
+        status=status,
+        code=code,
+        label=label,
+        detail=(
+            ""
+            if status == "PASS"
+            else _apply_preflight_check_detail(settings, source_checks, status)
+        ),
+        source_check_codes=source_check_codes,
+    )
+
+
+def _aggregate_apply_preflight_status(
+    checks: Sequence[DoctorCheckResponse],
+) -> DoctorCheckStatus:
+    if any(check.status == "FAIL" for check in checks):
+        return "FAIL"
+    if any(check.status == "WARN" for check in checks):
+        return "WARN"
+    return "PASS"
+
+
+def _apply_preflight_check_detail(
+    settings: WebSettings,
+    checks: Sequence[DoctorCheckResponse],
+    status: DoctorCheckStatus,
+) -> str:
+    problems = [check for check in checks if check.status == status]
+    if not problems and status == "WARN":
+        problems = [check for check in checks if check.status == "FAIL"]
+    if not problems:
+        return ""
+    first = problems[0]
+    detail = first.detail or first.name
+    if len(problems) > 1:
+        detail = f"{detail}; +{len(problems) - 1} more"
+    return _redact_sensitive_text(settings, detail)
+
+
+def _mutation_apply_preflight_check(settings: WebSettings) -> ApplyPreflightCheck:
+    if settings.mutations_enabled:
+        return ApplyPreflightCheck(
+            status="PASS",
+            code="mutations-enabled",
+            label="Mutations enabled",
+            source_check_codes=["webui-mutation-gate"],
+        )
+    return ApplyPreflightCheck(
+        status="FAIL",
+        code="mutations-enabled",
+        label="Mutations enabled",
+        detail="Set WUD_WEB_MUTATIONS_ENABLED=true on the server to apply updates.",
+        source_check_codes=["webui-mutation-gate"],
+    )
+
+
+def _database_apply_preflight_check(settings: WebSettings) -> ApplyPreflightCheck:
+    db_ready, db_warning = _database_ready(settings)
+    if db_ready:
+        return ApplyPreflightCheck(
+            status="PASS",
+            code="database-ready",
+            label="Database ready",
+            source_check_codes=["webui-database"],
+        )
+
+    path = settings.config.db_path
+    if str(path) != ":memory:" and not path.exists():
+        parent = path.parent
+        if parent.is_dir() and os.access(parent, os.W_OK | os.X_OK):
+            return ApplyPreflightCheck(
+                status="PASS",
+                code="database-ready",
+                label="Database ready",
+                source_check_codes=["webui-database"],
+            )
+
+    return ApplyPreflightCheck(
+        status="FAIL",
+        code="database-ready",
+        label="Database ready",
+        detail=_redact_sensitive_text(settings, db_warning),
+        source_check_codes=["webui-database"],
+    )
+
+
+def _bind_mount_apply_preflight_check(
+    settings: WebSettings,
+    plan: DryRunPlan,
+) -> ApplyPreflightCheck:
+    issues = [
+        issue for issue in plan.issues if issue.code == "bind-mount-path-invalid"
+    ]
+    if not issues:
+        return ApplyPreflightCheck(
+            status="PASS",
+            code="bind-mounts-safe",
+            label="Bind mounts safe",
+            source_check_codes=["bind-mount-path-invalid"],
+        )
+    return ApplyPreflightCheck(
+        status="FAIL",
+        code="bind-mounts-safe",
+        label="Bind mounts safe",
+        detail=_apply_preflight_issue_detail(settings, issues),
+        source_check_codes=["bind-mount-path-invalid"],
+    )
+
+
+def _selected_services_apply_preflight_check(
+    settings: WebSettings,
+    plan: DryRunPlan,
+) -> ApplyPreflightCheck:
+    if (
+        plan.status == "ready"
+        and not plan.skipped
+        and plan.summary.matched_target_count == plan.summary.target_count
+        and plan.summary.service_count > 0
+    ):
+        return ApplyPreflightCheck(
+            status="PASS",
+            code="selected-services-matched",
+            label="Selected services matched",
+            source_check_codes=["selected-services"],
+        )
+
+    detail = "Selected updates are not ready to apply."
+    if plan.status == "empty":
+        detail = "No selected services need changes."
+    elif plan.skipped:
+        detail = plan.skipped[0].reason
+    elif plan.issues:
+        detail = _apply_preflight_issue_detail(settings, plan.issues)
+    elif plan.summary.matched_target_count != plan.summary.target_count:
+        detail = (
+            f"{plan.summary.matched_target_count} of "
+            f"{plan.summary.target_count} selected target(s) matched services."
+        )
+
+    return ApplyPreflightCheck(
+        status="FAIL",
+        code="selected-services-matched",
+        label="Selected services matched",
+        detail=_redact_sensitive_text(settings, detail),
+        source_check_codes=["selected-services"],
+    )
+
+
+def _apply_preflight_issue_detail(
+    settings: WebSettings,
+    issues: Sequence[Any],
+) -> str:
+    if not issues:
+        return ""
+    first = issues[0]
+    detail = str(getattr(first, "message", "") or getattr(first, "reason", ""))
+    hint = str(getattr(first, "hint", "") or "")
+    if hint:
+        detail = f"{detail} {hint}".strip()
+    if len(issues) > 1:
+        detail = f"{detail}; +{len(issues) - 1} more"
+    return _redact_sensitive_text(settings, detail)
+
+
 def _plan_can_apply(plan: DryRunPlan, settings: WebSettings) -> bool:
     return (
         settings.mutations_enabled
@@ -5645,12 +5971,18 @@ def _release_note_source_resolver(settings: WebSettings) -> ReleaseNoteSourceRes
     return resolve
 
 
-def _plan_response(plan: DryRunPlan, settings: WebSettings) -> PlanResponse:
+def _plan_response(
+    plan: DryRunPlan,
+    settings: WebSettings,
+    request: Request,
+) -> PlanResponse:
+    apply_preflight = _apply_preflight_response(settings, request, plan)
     payload = asdict(plan)
-    payload["can_apply"] = _plan_can_apply(plan, settings)
+    payload["can_apply"] = _plan_can_apply(plan, settings) and apply_preflight.ok
     payload["cleanup"]["can_remove_unmatched"] = (
         settings.mutations_enabled and bool(plan.cleanup.items)
     )
+    payload["apply_preflight"] = apply_preflight.model_dump()
     return PlanResponse.model_validate(payload)
 
 

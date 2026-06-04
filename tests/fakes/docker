@@ -297,7 +297,14 @@ compose_cmd(){
   fi
 
   case "$cmd" in
+    version)
+      printf 'Docker Compose version v2.30.0\n'
+      ;;
     config)
+      if [[ -f "$ROOT/stacks/$id/config_fail" ]]; then
+        emit_failure_output "$id" config
+        return 16
+      fi
       case "${1:-}" in
         --format)
           if [[ "${2:-}" == "json" ]]; then
@@ -323,6 +330,9 @@ compose_cmd(){
           else
             return 1
           fi
+          ;;
+        "")
+          [[ -f "$file" ]] && cat "$file"
           ;;
         *)
           return 1
@@ -483,6 +493,8 @@ ps_cmd(){
   log_call "ps $*"
   if [[ "${1:-}" == "--format" ]]; then
     [[ -f "$ROOT/containers.tsv" ]] && cat "$ROOT/containers.tsv"
+  elif [[ $# -eq 0 ]]; then
+    printf 'CONTAINER ID   IMAGE\n'
   else
     return 1
   fi
@@ -529,6 +541,9 @@ main(){
   local cmd="${1:-}"
   shift || true
   case "$cmd" in
+    --version) printf 'Docker version 28.0.0\n' ;;
+    version) printf 'Server: Docker Engine 28.0.0\n' ;;
+    info) printf 'Docker Root Dir: /var/lib/docker\n' ;;
     compose) compose_cmd "$@" ;;
     image) image_cmd "$@" ;;
     manifest) manifest_cmd "$@" ;;

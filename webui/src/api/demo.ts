@@ -2,6 +2,7 @@ import type {
   ApplyJobLogResponse,
   ApplyJobProgressEvent,
   ApplyJobResponse,
+  ApplyPreflightResponse,
   AuthSessionResponse,
   ContainerRestartResponse,
   CoreUpdateTourResponse,
@@ -959,6 +960,7 @@ class DemoApiState {
         can_remove_unmatched: false,
         items: [],
       },
+      apply_preflight: demoApplyPreflight(),
     };
     return {
       strategy: "prepare_tag_update",
@@ -1012,11 +1014,14 @@ class DemoApiState {
     ];
     const cleanupItems = unmatchedSelected.map(planCleanupItem);
 
+    const canApply = matchedSelected.length > 0 && issues.length === 0;
+    const status = selected.length === 0 ? "empty" : issues.length > 0 ? "blocked" : "ready";
+
     return {
       plan_id: `demo-plan-${Date.now()}`,
       dry_run: true,
-      can_apply: matchedSelected.length > 0 && issues.length === 0,
-      status: selected.length === 0 ? "empty" : issues.length > 0 ? "blocked" : "ready",
+      can_apply: canApply,
+      status,
       source_file: DEMO_SOURCE_FILE,
       mode: "stop",
       max_wait: 180,
@@ -1053,6 +1058,13 @@ class DemoApiState {
         can_remove_unmatched: cleanupItems.length > 0,
         items: cleanupItems,
       },
+      apply_preflight: demoApplyPreflight({
+        selectedReady: canApply,
+        selectedDetail:
+          status === "empty"
+            ? "No selected services need changes."
+            : issues[0]?.message || "",
+      }),
     };
   }
 
@@ -2244,6 +2256,80 @@ function doctorCheck(
     detail,
     target: "",
     suggestions: suggestion ? [suggestion] : [],
+  };
+}
+
+function demoApplyPreflight(
+  options: { selectedReady?: boolean; selectedDetail?: string } = {},
+): ApplyPreflightResponse {
+  const selectedReady = options.selectedReady ?? true;
+  const checks: ApplyPreflightResponse["checks"] = [
+    {
+      status: "PASS",
+      code: "docker-reachable",
+      label: "Docker reachable",
+      detail: "",
+      source_check_codes: ["docker-daemon-info"],
+    },
+    {
+      status: "PASS",
+      code: "compose-renders",
+      label: "Compose renders",
+      detail: "",
+      source_check_codes: ["compose-discovery"],
+    },
+    {
+      status: "PASS",
+      code: "wud-file-writable",
+      label: "WUD file writable",
+      detail: "",
+      source_check_codes: ["wud-out-file"],
+    },
+    {
+      status: "PASS",
+      code: "database-ready",
+      label: "Database ready",
+      detail: "",
+      source_check_codes: ["webui-database"],
+    },
+    {
+      status: "PASS",
+      code: "logs-writable",
+      label: "Logs writable",
+      detail: "",
+      source_check_codes: ["wud-log-dir"],
+    },
+    {
+      status: "PASS",
+      code: "mutations-enabled",
+      label: "Mutations enabled",
+      detail: "",
+      source_check_codes: ["webui-mutation-gate"],
+    },
+    {
+      status: "PASS",
+      code: "bind-mounts-safe",
+      label: "Bind mounts safe",
+      detail: "",
+      source_check_codes: ["bind-mount-path-invalid"],
+    },
+    {
+      status: selectedReady ? "PASS" : "FAIL",
+      code: "selected-services-matched",
+      label: "Selected services matched",
+      detail: selectedReady
+        ? ""
+        : options.selectedDetail || "Selected updates are not ready to apply.",
+      source_check_codes: ["selected-services"],
+    },
+  ];
+  const failures = checks.filter((check) => check.status === "FAIL").length;
+  const warnings = checks.filter((check) => check.status === "WARN").length;
+  return {
+    ok: failures === 0,
+    failures,
+    warnings,
+    checks,
   };
 }
 

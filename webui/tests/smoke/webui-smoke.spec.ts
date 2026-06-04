@@ -189,6 +189,12 @@ function planResponse(overrides: Record<string, unknown> = {}) {
       can_remove_unmatched: false,
       items: [],
     },
+    apply_preflight: {
+      ok: true,
+      failures: 0,
+      warnings: 0,
+      checks: [],
+    },
     ...overrides,
   };
 }
@@ -558,7 +564,7 @@ test("read-only pending flow can preflight a stack but cannot apply", async ({ p
 
   await expect(page.getByText("Read-only mode is active").first()).toBeVisible();
   await expect(page.getByRole("heading", { name: "Review media plan" })).toBeVisible();
-  await expect(page.getByRole("button", { name: /Apply 1 update/ })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /Apply 1 update/ })).toBeDisabled();
   expect(state.calls.some((call) => call.path === "/api/v1/plans")).toBe(true);
   expect(state.calls.some((call) => call.path === "/api/v1/jobs")).toBe(false);
 });

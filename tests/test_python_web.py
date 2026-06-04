@@ -261,6 +261,7 @@ def _fake_docker_env(tmp_path: Path) -> tuple[dict[str, str], Path]:
     repo_root = Path(__file__).resolve().parents[1]
     return (
         {
+            "DOCKER_HOST": "tcp://docker:2375",
             "FAKE_DOCKER_ROOT": str(fake_root),
             "PATH": f"{repo_root / 'tests' / 'fakes'}:{os.environ['PATH']}",
         },
@@ -5287,6 +5288,103 @@ def test_plan_endpoint_returns_selected_dry_run_without_mutation(
     assert " up -d " not in calls
 
 
+def test_plan_endpoint_returns_apply_preflight_summary(tmp_path: Path) -> None:
+    fake_env, fake_root = _fake_docker_env(tmp_path)
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+            "TRUENAS_STATUS_CHECK": "false",
+            **fake_env,
+        },
+    )
+    wud_file = tmp_path / "state" / "images.todo"
+    wud_file.write_text("repo/app:latest\n", encoding="utf-8")
+    _make_fake_stack(
+        tmp_path,
+        fake_root,
+        "stack",
+        [("app", "repo/app:latest", "cid-app")],
+    )
+
+    response = client.post(
+        "/api/v1/plans",
+        json={"line_numbers": [1]},
+        headers=_csrf_headers(client),
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    preflight = body["apply_preflight"]
+    assert body["can_apply"] is True
+    assert preflight["ok"] is True
+    assert preflight["failures"] == 0
+    assert preflight["warnings"] == 0
+    assert [check["code"] for check in preflight["checks"]] == [
+        "docker-reachable",
+        "compose-renders",
+        "wud-file-writable",
+        "database-ready",
+        "logs-writable",
+        "mutations-enabled",
+        "bind-mounts-safe",
+        "selected-services-matched",
+    ]
+    assert {check["status"] for check in preflight["checks"]} == {"PASS"}
+
+
+def test_plan_apply_preflight_ignores_unselected_compose_render_failure(
+    tmp_path: Path,
+) -> None:
+    fake_env, fake_root = _fake_docker_env(tmp_path)
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+            "TRUENAS_STATUS_CHECK": "false",
+            **fake_env,
+        },
+    )
+    wud_file = tmp_path / "state" / "images.todo"
+    wud_file.write_text("repo/app:latest\n", encoding="utf-8")
+    _make_fake_stack(
+        tmp_path,
+        fake_root,
+        "selected",
+        [("app", "repo/app:latest", "cid-app")],
+    )
+    _make_fake_stack(
+        tmp_path,
+        fake_root,
+        "broken",
+        [("ignored", "repo/ignored:latest", "cid-ignored")],
+    )
+    (fake_root / "stacks" / "broken" / "config_fail").write_text(
+        "",
+        encoding="utf-8",
+    )
+    (fake_root / "stacks" / "broken" / "config_stderr").write_text(
+        "broken compose config\n",
+        encoding="utf-8",
+    )
+
+    response = client.post(
+        "/api/v1/plans",
+        json={"line_numbers": [1]},
+        headers=_csrf_headers(client),
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    checks = {check["code"]: check for check in body["apply_preflight"]["checks"]}
+    assert body["status"] == "ready"
+    assert body["can_apply"] is True
+    assert checks["compose-renders"]["status"] == "PASS"
+    assert "broken compose config" not in json.dumps(body["apply_preflight"])
+
+
 def test_plan_endpoint_returns_unmatched_cleanup_preview(
     tmp_path: Path,
 ) -> None:
@@ -5647,6 +5745,12 @@ def test_apply_endpoint_rejects_read_only_mode(tmp_path: Path) -> None:
     )
 
     assert plan["can_apply"] is False
+    preflight_checks = {
+        check["code"]: check for check in plan["apply_preflight"]["checks"]
+    }
+    assert plan["apply_preflight"]["ok"] is False
+    assert preflight_checks["mutations-enabled"]["status"] == "FAIL"
+    assert "WUD_WEB_MUTATIONS_ENABLED=true" in preflight_checks["mutations-enabled"]["detail"]
     assert response.status_code == 403
     assert response.json()["detail"] == "mutations are disabled"
     assert " pull " not in _fake_docker_calls(fake_root)
@@ -6443,6 +6547,62 @@ def test_apply_endpoint_rejects_empty_or_blocked_plan(tmp_path: Path) -> None:
     assert response.status_code == 409
     assert response.json()["detail"] == "plan is not ready to apply"
     assert " pull " not in _fake_docker_calls(fake_root)
+
+
+def test_apply_endpoint_rejects_failed_apply_preflight_without_mutation(
+    tmp_path: Path,
+) -> None:
+    fake_env, fake_root = _fake_docker_env(tmp_path)
+    secret = "github-token-secret"
+    log_dir = tmp_path / secret
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+            "GITHUB_TOKEN": secret,
+            "WUD_LOG_DIR": str(log_dir),
+            **fake_env,
+        },
+    )
+    wud_file = tmp_path / "state" / "images.todo"
+    wud_file.write_text("repo/app:latest\n", encoding="utf-8")
+    log_dir.write_text("not a directory\n", encoding="utf-8")
+    _make_fake_stack(
+        tmp_path,
+        fake_root,
+        "stack",
+        [("app", "repo/app:latest", "cid-app")],
+    )
+    headers = _csrf_headers(client)
+    plan = client.post(
+        "/api/v1/plans",
+        json={"line_numbers": [1]},
+        headers=headers,
+    ).json()
+
+    response = client.post(
+        "/api/v1/jobs",
+        json={
+            "plan_id": plan["plan_id"],
+            "line_numbers": [1],
+            "confirmation": "apply",
+        },
+        headers=headers,
+    )
+
+    checks = {check["code"]: check for check in plan["apply_preflight"]["checks"]}
+    assert plan["status"] == "ready"
+    assert plan["can_apply"] is False
+    assert checks["logs-writable"]["status"] == "FAIL"
+    assert "not a directory" in checks["logs-writable"]["detail"]
+    assert secret not in json.dumps(plan["apply_preflight"])
+    assert "<redacted>" in checks["logs-writable"]["detail"]
+    assert response.status_code == 409
+    assert response.json()["detail"] == "apply preflight failed"
+    calls = _fake_docker_calls(fake_root)
+    assert " pull " not in calls
+    assert " up -d " not in calls
 
 
 def test_apply_endpoint_runs_existing_updater_and_records_audit(
