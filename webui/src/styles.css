@@ -2709,6 +2709,18 @@ code.pending-table-value {
   line-height: 1.45;
 }
 
+.plan-line-heading {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.plan-line-heading > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
 .plan-line-row em > span[aria-hidden="true"] {
   margin: 0 4px;
 }

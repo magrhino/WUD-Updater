@@ -384,18 +384,13 @@ describe("mutating WebUI views", () => {
 
     expect(wrapper.text()).toContain("Stale pending entries");
     expect(wrapper.text()).toContain(
-      "These pending updates no longer match a discovered Compose service.",
+      "1 pending line needs review: Compose file missing.",
     );
-    expect(wrapper.text()).toContain("Preflight found");
-    expect(wrapper.text()).toContain("Running container old still matches this pending line.");
-    expect(wrapper.text()).toContain("Likely causes");
+    expect(wrapper.text()).toContain("Compose file missing");
     expect(wrapper.text()).toContain(
-      "The active Compose file was renamed to an archived or nonstandard filename.",
+      "Running container exists, but its Compose file is missing or archived.",
     );
-    expect(wrapper.text()).toContain("Recommended actions");
-    expect(wrapper.text()).toContain(
-      "Restore or rename the active Compose file to a supported Compose filename.",
-    );
+    expect(wrapper.text()).not.toContain("Preflight found");
 
     await wrapper
       .find('input[aria-label="Select update repo/old:latest"]')
@@ -409,13 +404,12 @@ describe("mutating WebUI views", () => {
     const dialog = wrapper.find('[role="dialog"]');
     expect(dialog.text()).toContain("Unmatched pending entries");
     expect(dialog.text()).toContain(
-      "These entries look stale because they no longer match discovered Compose services.",
+      "1 entry needs review: Compose file missing. Cleanup only removes WUD pending lines.",
     );
-    expect(dialog.text()).toContain("Running container old still matches this pending line.");
     expect(dialog.text()).toContain(
-      "Update Docker base or ignore paths if the stack moved.",
+      "Running container exists, but its Compose file is missing or archived.",
     );
-    expect(dialog.text()).toContain("docker-compose.archive.yml");
+    expect(dialog.text()).not.toContain("Preflight found");
     expect(dialog.text()).not.toContain("No Compose service matched repo/old:latest.");
     expect(dialog.find(".warning-list").exists()).toBe(false);
     expect(dialog.text()).toContain("Read-only mode is active");
@@ -750,7 +744,7 @@ describe("mutating WebUI views", () => {
       .find((button) => button.text().includes("Preview selected plan"))
       ?.trigger("click");
 
-    expect(wrapper.text()).toContain("Needs review");
+    expect(wrapper.text()).toContain("No Compose match");
     expect(createPlan).toHaveBeenCalledWith([1], true, []);
   });
 
