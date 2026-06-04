@@ -201,6 +201,11 @@ jobs:
       - name: Run tests
         run: tests/run-all.sh --python
 
+      - name: Upload results to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+
   shell-tests:
     name: shell tests
     runs-on: ubuntu-latest

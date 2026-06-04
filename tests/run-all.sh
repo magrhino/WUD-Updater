@@ -100,7 +100,7 @@ EOF
     tests/test_python_wud_parsing.py \
     webui/scripts/seed_demo_state.py
 
-  run "$python_bin" -m pytest
+  run "$python_bin" -m pytest --cov=wud_updater --cov-branch --cov-report=xml
 }
 
 run_shell_checks() {
