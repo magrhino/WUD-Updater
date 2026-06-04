@@ -4,6 +4,13 @@ All notable changes to WUD-Updater are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com) and versions follow
 [Semantic Versioning](https://semver.org).
 
+## [0.34.0](https://github.com/magrhino/WUD-Updater/compare/v0.33.0...v0.34.0) (2026-06-04)
+
+
+### Features
+
+* **webui:** [codex] add apply preflight readiness summary ([#189](https://github.com/magrhino/WUD-Updater/issues/189)) ([1b180cc](https://github.com/magrhino/WUD-Updater/commit/1b180cc6d23b7429a9269dcebf1f7c2e13ec0fed))
+
 ## [0.33.0](https://github.com/magrhino/WUD-Updater/compare/v0.32.0...v0.33.0) (2026-06-03)
 
 
