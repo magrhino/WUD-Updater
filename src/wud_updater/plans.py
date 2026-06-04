@@ -46,13 +46,58 @@ COMPOSE_WORKING_DIR_LABEL = "com.docker.compose.project.working_dir"
 COMPOSE_CONFIG_FILES_LABEL = "com.docker.compose.project.config_files"
 COMPOSE_SERVICE_LABEL = "com.docker.compose.service"
 UNMATCHED_HINT = (
-    "Restore or rename the active Compose file to a supported compose filename, "
-    "remove the stale WUD entry, or intentionally re-create the stack from an "
-    "active compose file."
+    "Preflight found a matching running container, but its Docker Compose "
+    "labels do not point to an active supported Compose file. Restore or "
+    "rename the active Compose file, update discovery settings if the stack "
+    "moved, or remove the stale WUD line."
+)
+GENERIC_UNMATCHED_MESSAGE = (
+    "This pending update no longer matches any discovered Compose service."
 )
 GENERIC_UNMATCHED_HINT = (
-    "Confirm this image is still managed by an active Compose stack, or remove "
-    "the stale WUD entry."
+    "Preflight did not find a matching Compose service or running Docker "
+    "container. Likely causes are service removal, image rename, or a tag "
+    "that was already applied."
+)
+GENERIC_UNMATCHED_FINDINGS = (
+    "No discovered Compose service matched this pending line.",
+    "No running Docker container matched this pending line.",
+)
+GENERIC_UNMATCHED_POSSIBLE_REASONS = (
+    "The Compose service was removed or renamed.",
+    "The Compose image name changed.",
+    "The update tag was already applied and WUD left the old pending line behind.",
+)
+GENERIC_UNMATCHED_RECOMMENDED_ACTIONS = (
+    "Remove the stale WUD line when the service is intentionally gone or already updated.",
+    "If the service should still be managed, update the WUD line or stack image to the current service/image name.",
+)
+COMPOSE_LABEL_UNDISCOVERED_HINT = (
+    "Preflight found a matching running container and active Compose labels, "
+    "but Compose discovery did not include that stack. Check Docker base and "
+    "ignored paths before removing the WUD line."
+)
+COMPOSE_LABEL_UNDISCOVERED_POSSIBLE_REASONS = (
+    "The stack moved outside the configured Docker base.",
+    "The stack is excluded by Compose ignore paths.",
+    "Compose discovery is pointed at a different project directory.",
+)
+COMPOSE_LABEL_UNDISCOVERED_RECOMMENDED_ACTIONS = (
+    "Update Docker base or ignore paths so discovery includes the stack.",
+    "Move the stack back under the discovered Docker base if it should be managed.",
+    "Remove the stale WUD line if the stack is intentionally unmanaged.",
+)
+MATCHING_CONTAINER_UNLABELED_HINT = (
+    "Preflight found a matching running container, but Docker did not report "
+    "Compose config labels for it. The line cannot be tied to a discovered stack."
+)
+MATCHING_CONTAINER_UNLABELED_POSSIBLE_REASONS = (
+    "The container is not managed by Docker Compose.",
+    "Compose labels are missing or unavailable on the running container.",
+)
+MATCHING_CONTAINER_UNLABELED_RECOMMENDED_ACTIONS = (
+    "Inspect the container source before removing the line.",
+    "Remove the stale WUD line if this container should not be managed by WUD-Updater.",
 )
 
 
@@ -433,7 +478,7 @@ class _PlanBuilder:
                 else (
                     diagnostic.message
                     if diagnostic is not None
-                    else "No Compose stack matched this WUD entry."
+                    else GENERIC_UNMATCHED_MESSAGE
                 )
             )
             issues.append(
@@ -1110,11 +1155,11 @@ def _unmatched_diagnostics(
                 config,
                 docker,
                 container.name,
+                container.image,
                 host_docker_base=host_docker_base,
             )
-            if diagnostic is not None:
-                diagnostics[target.line_no] = diagnostic
-                break
+            diagnostics[target.line_no] = diagnostic
+            break
     return diagnostics
 
 
@@ -1133,15 +1178,16 @@ def _compose_label_diagnostic(
     config: UpdaterConfig,
     docker: DockerCli,
     container_name: str,
+    container_image: str,
     *,
     host_docker_base: Path | None,
-) -> UnmatchedDiagnostic | None:
+) -> UnmatchedDiagnostic:
     working_dir = _container_label(docker, container_name, COMPOSE_WORKING_DIR_LABEL)
     config_files = _split_compose_config_files(
         _container_label(docker, container_name, COMPOSE_CONFIG_FILES_LABEL)
     )
     if not config_files:
-        return None
+        return _matching_container_unlabeled_diagnostic(container_name, container_image)
 
     project = _container_label(docker, container_name, COMPOSE_PROJECT_LABEL)
     service = _container_label(docker, container_name, COMPOSE_SERVICE_LABEL)
@@ -1162,7 +1208,13 @@ def _compose_label_diagnostic(
         for path in config_files
     )
     if any(path is not None and path.is_file() for path in local_paths):
-        return None
+        return _compose_label_undiscovered_diagnostic(
+            container_name,
+            container_image,
+            references,
+            stack=stack,
+            service=service,
+        )
 
     found_files = _nonstandard_compose_files(
         local_paths,
@@ -1181,10 +1233,40 @@ def _compose_label_diagnostic(
             "No active Compose file matched this WUD entry. Docker labels "
             f"reference {reference_label}, but the active compose file was not found."
         )
-    details = {
-        "referenced_compose_files": references,
-        "found_compose_files": found_files,
-    }
+    findings = (
+        f"Running container {container_name} still matches this pending line.",
+        f"Docker labels reference {_join_display_values(references)}.",
+        (
+            "The referenced Compose file was not found, but archived/nonstandard "
+            f"file(s) were found: {_join_display_values(found_files)}."
+            if found_files
+            else "The referenced Compose file was not found."
+        ),
+    )
+    possible_reasons = (
+        (
+            "The active Compose file was renamed to an archived or nonstandard filename.",
+            "The stack was moved or the Compose file path changed after the container was created.",
+        )
+        if found_files
+        else (
+            "The referenced Compose file was deleted or moved.",
+            "The stack path is no longer mounted or reachable from WUD-Updater.",
+            "The stack moved outside the configured Docker base.",
+        )
+    )
+    recommended_actions = (
+        "Restore or rename the active Compose file to a supported Compose filename.",
+        "Update Docker base or ignore paths if the stack moved.",
+        "Remove the stale WUD line if the stack is intentionally gone.",
+    )
+    details = _stale_pending_assistant_details(
+        preflight_findings=findings,
+        possible_reasons=possible_reasons,
+        recommended_actions=recommended_actions,
+        referenced_compose_files=references,
+        found_compose_files=found_files,
+    )
     return UnmatchedDiagnostic(
         code="compose-label-active-file-missing",
         message=message,
@@ -1197,12 +1279,92 @@ def _compose_label_diagnostic(
     )
 
 
+def _compose_label_undiscovered_diagnostic(
+    container_name: str,
+    container_image: str,
+    references: Sequence[str],
+    *,
+    stack: str,
+    service: str,
+) -> UnmatchedDiagnostic:
+    reference_label = _join_display_values(references)
+    findings = (
+        f"Running container {container_name} still matches this pending line.",
+        f"Docker labels reference active Compose file {reference_label}.",
+        "Compose discovery did not include that stack.",
+    )
+    return UnmatchedDiagnostic(
+        code="compose-label-undiscovered-active-file",
+        message=(
+            "A running container still matches this WUD entry and its Compose "
+            f"file exists, but Compose discovery did not include {reference_label}."
+        ),
+        hint=COMPOSE_LABEL_UNDISCOVERED_HINT,
+        stack=stack,
+        service=service,
+        compose_file=references[0] if references else "",
+        details=_stale_pending_assistant_details(
+            preflight_findings=findings,
+            possible_reasons=COMPOSE_LABEL_UNDISCOVERED_POSSIBLE_REASONS,
+            recommended_actions=COMPOSE_LABEL_UNDISCOVERED_RECOMMENDED_ACTIONS,
+            running_container=container_name,
+            running_image=container_image,
+            referenced_compose_files=references,
+        ),
+    )
+
+
+def _matching_container_unlabeled_diagnostic(
+    container_name: str,
+    container_image: str,
+) -> UnmatchedDiagnostic:
+    findings = (
+        f"Running container {container_name} still matches this pending line.",
+        "Docker did not report Compose config labels for that container.",
+    )
+    return UnmatchedDiagnostic(
+        code="matching-container-without-compose-labels",
+        message=(
+            "A running container still matches this WUD entry, but Docker did "
+            "not report Compose labels that tie it to a discovered stack."
+        ),
+        hint=MATCHING_CONTAINER_UNLABELED_HINT,
+        details=_stale_pending_assistant_details(
+            preflight_findings=findings,
+            possible_reasons=MATCHING_CONTAINER_UNLABELED_POSSIBLE_REASONS,
+            recommended_actions=MATCHING_CONTAINER_UNLABELED_RECOMMENDED_ACTIONS,
+            running_container=container_name,
+            running_image=container_image,
+        ),
+    )
+
+
 def _generic_unmatched_diagnostic() -> UnmatchedDiagnostic:
     return UnmatchedDiagnostic(
         code="unmatched",
-        message="No Compose stack matched this WUD entry.",
+        message=GENERIC_UNMATCHED_MESSAGE,
         hint=GENERIC_UNMATCHED_HINT,
+        details=_stale_pending_assistant_details(
+            preflight_findings=GENERIC_UNMATCHED_FINDINGS,
+            possible_reasons=GENERIC_UNMATCHED_POSSIBLE_REASONS,
+            recommended_actions=GENERIC_UNMATCHED_RECOMMENDED_ACTIONS,
+        ),
     )
+
+
+def _stale_pending_assistant_details(
+    *,
+    preflight_findings: Sequence[str],
+    possible_reasons: Sequence[str],
+    recommended_actions: Sequence[str],
+    **extra: object,
+) -> Mapping[str, object]:
+    return {
+        "preflight_findings": tuple(preflight_findings),
+        "possible_reasons": tuple(possible_reasons),
+        "recommended_actions": tuple(recommended_actions),
+        **extra,
+    }
 
 
 def _container_label(docker: DockerCli, container_name: str, label: str) -> str:

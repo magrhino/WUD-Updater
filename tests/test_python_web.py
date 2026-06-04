@@ -2615,10 +2615,22 @@ def test_pending_endpoint_reports_unmatched_grouping_items(tmp_path: Path) -> No
     assert grouping["unmatched"][0]["action"] == "unmatched"
     assert grouping["unmatched"][0]["services"] == []
     assert grouping["unmatched"][0]["compose_images"] == []
-    assert grouping["unmatched"][0]["diagnostic"]["code"] == "unmatched"
+    diagnostic = grouping["unmatched"][0]["diagnostic"]
+    assert diagnostic["code"] == "unmatched"
     assert (
-        grouping["unmatched"][0]["diagnostic"]["message"]
-        == "No Compose stack matched this WUD entry."
+        diagnostic["message"]
+        == "This pending update no longer matches any discovered Compose service."
+    )
+    assert "service removal" in diagnostic["hint"]
+    assert "image rename" in diagnostic["hint"]
+    assert "No running Docker container matched this pending line." in diagnostic[
+        "details"
+    ]["preflight_findings"]
+    assert "The Compose service was removed or renamed." in diagnostic["details"][
+        "possible_reasons"
+    ]
+    assert "Remove the stale WUD line" in " ".join(
+        diagnostic["details"]["recommended_actions"]
     )
     _assert_pending_grouping_did_not_mutate(_fake_docker_calls(fake_root))
 
@@ -2668,6 +2680,75 @@ def test_pending_endpoint_diagnoses_archived_compose_label_stale_entry(
     assert "homarr/docker-compose.archive.yml" in diagnostic["message"]
     assert str(tmp_path) not in diagnostic["message"]
     assert diagnostic["found_files"] == ["homarr/docker-compose.archive.yml"]
+    assert "Running container homarr still matches this pending line." in diagnostic[
+        "details"
+    ]["preflight_findings"]
+    assert (
+        "The active Compose file was renamed to an archived or nonstandard filename."
+        in diagnostic["details"]["possible_reasons"]
+    )
+    assert "Update Docker base or ignore paths if the stack moved." in diagnostic[
+        "details"
+    ]["recommended_actions"]
+
+
+def test_pending_endpoint_diagnoses_undiscovered_active_compose_label_entry(
+    tmp_path: Path,
+) -> None:
+    fake_env, fake_root = _fake_docker_env(tmp_path)
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_COMPOSE_IGNORE_PATHS": "old",
+            **fake_env,
+        },
+    )
+    wud_file = tmp_path / "state" / "images.todo"
+    wud_file.write_text("homarr-labs/homarr:latest\n", encoding="utf-8")
+    ignored_dir = _make_fake_stack(
+        tmp_path,
+        fake_root,
+        "homarr",
+        [("homarr", "ghcr.io/homarr-labs/homarr:latest", "cid-homarr")],
+        parent=tmp_path / "docker" / "old",
+    )
+    active_file = ignored_dir / "docker-compose.yml"
+    _make_fake_stack(
+        tmp_path,
+        fake_root,
+        "active",
+        [("app", "repo/app:latest", "cid-app")],
+    )
+    with (fake_root / "containers.tsv").open("a", encoding="utf-8") as file:
+        file.write("homarr\tghcr.io/homarr-labs/homarr:latest\n")
+    _write_fake_container_labels(
+        fake_root,
+        "homarr",
+        {
+            "com.docker.compose.project": "homarr",
+            "com.docker.compose.project.working_dir": str(ignored_dir),
+            "com.docker.compose.project.config_files": str(active_file),
+            "com.docker.compose.service": "homarr",
+        },
+    )
+
+    response = client.get("/api/v1/pending")
+
+    assert response.status_code == 200
+    diagnostic = response.json()["grouping"]["unmatched"][0]["diagnostic"]
+    assert diagnostic["code"] == "compose-label-undiscovered-active-file"
+    assert "old/homarr/docker-compose.yml" in diagnostic["message"]
+    assert str(tmp_path) not in diagnostic["message"]
+    assert "Compose discovery did not include that stack." in diagnostic["details"][
+        "preflight_findings"
+    ]
+    assert "The stack is excluded by Compose ignore paths." in diagnostic["details"][
+        "possible_reasons"
+    ]
+    assert "Update Docker base or ignore paths so discovery includes the stack." in (
+        diagnostic["details"]["recommended_actions"]
+    )
 
 
 def test_pending_endpoint_groups_tag_updates_without_allowing_tag_updates(
@@ -5443,7 +5524,16 @@ def test_plan_endpoint_returns_unmatched_cleanup_preview(
     assert body["cleanup"]["cleanup_id"]
     assert body["cleanup"]["items"][0]["line_no"] == 1
     assert body["cleanup"]["items"][0]["raw"] == "homarr-labs/homarr:latest"
-    assert body["cleanup"]["items"][0]["diagnostic"]["stack"] == "homarr"
+    cleanup_diagnostic = body["cleanup"]["items"][0]["diagnostic"]
+    assert cleanup_diagnostic["stack"] == "homarr"
+    assert (
+        "The active Compose file was renamed to an archived or nonstandard filename."
+        in cleanup_diagnostic["details"]["possible_reasons"]
+    )
+    assert (
+        "Update Docker base or ignore paths if the stack moved."
+        in cleanup_diagnostic["details"]["recommended_actions"]
+    )
     assert str(tmp_path) not in json.dumps(body["cleanup"])
     assert wud_file.read_text(encoding="utf-8") == "homarr-labs/homarr:latest\n"
 

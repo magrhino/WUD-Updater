@@ -32,6 +32,7 @@ import {
   type ApplyJobResponse,
   type ApplyPreflightCheck,
   type ApplyPreflightStatus,
+  type PendingDiagnostic,
   type PendingGroupedItem,
   type PendingItem,
   type PendingRemovalPlanLine,
@@ -90,6 +91,14 @@ type ApplyJobPlanSnapshot = {
   stackCount: number;
   sourceFile: string;
   lines: ApplyJobSnapshotLine[];
+};
+
+type AssistantDetailKey =
+  | "preflight_findings"
+  | "possible_reasons"
+  | "recommended_actions";
+type DiagnosticItem = {
+  diagnostic?: PendingDiagnostic | null;
 };
 
 type ApplyJobProgressPhase = {
@@ -398,6 +407,32 @@ const applyButtonLabel = computed(() =>
 );
 const cleanupItems = computed(() => webui.plan?.cleanup.items ?? []);
 const cleanupAvailable = computed(() => cleanupItems.value.length > 0);
+const visiblePlanIssues = computed(() => {
+  const issues = webui.plan?.issues ?? [];
+  if (!cleanupItems.value.length) {
+    return issues;
+  }
+  const cleanupKeys = new Set(cleanupItems.value.flatMap(cleanupIssueKeys));
+  return issues.filter((issue) => !issueHiddenByCleanupPreview(issue, cleanupKeys));
+});
+const unmatchedAssistantFindings = computed(() =>
+  assistantDetailList(unmatchedItems.value, "preflight_findings"),
+);
+const unmatchedAssistantReasons = computed(() =>
+  assistantDetailList(unmatchedItems.value, "possible_reasons"),
+);
+const unmatchedAssistantActions = computed(() =>
+  assistantDetailList(unmatchedItems.value, "recommended_actions"),
+);
+const cleanupAssistantFindings = computed(() =>
+  assistantDetailList(cleanupItems.value, "preflight_findings"),
+);
+const cleanupAssistantReasons = computed(() =>
+  assistantDetailList(cleanupItems.value, "possible_reasons"),
+);
+const cleanupAssistantActions = computed(() =>
+  assistantDetailList(cleanupItems.value, "recommended_actions"),
+);
 const cleanupButtonLabel = computed(() =>
   `Remove ${pluralize(cleanupItems.value.length, "unmatched entry", "unmatched entries")}`,
 );
@@ -1433,6 +1468,22 @@ function applyPreflightCheckDetail(check: ApplyPreflightCheck): string {
   return check.status === "PASS" ? "" : check.detail;
 }
 
+function cleanupIssueKeys(item: PlanCleanupItem): string[] {
+  return [item.reason, item.diagnostic?.code]
+    .filter((code): code is string => Boolean(code))
+    .map((code) => `${item.line_no}:${code}`);
+}
+
+function issueHiddenByCleanupPreview(
+  issue: PlanIssue,
+  cleanupKeys: ReadonlySet<string>,
+): boolean {
+  if (issue.line_no === null) {
+    return false;
+  }
+  return cleanupKeys.has(`${issue.line_no}:${issue.code}`);
+}
+
 function issueLabel(issue: PlanIssue): string {
   const target = [
     issue.line_no ? `line ${issue.line_no}` : "",
@@ -1449,11 +1500,46 @@ function issueHint(issue: PlanIssue): string {
 }
 
 function unmatchedDiagnosticMessage(item: PendingGroupedItem): string {
-  return item.diagnostic?.message || "No Compose stack matched this WUD entry.";
+  return (
+    item.diagnostic?.message ||
+    "This pending update no longer matches any discovered Compose service."
+  );
 }
 
 function unmatchedDiagnosticHint(item: PendingGroupedItem): string {
   return item.diagnostic?.hint || "";
+}
+
+function assistantDetailList(
+  items: DiagnosticItem[],
+  key: AssistantDetailKey,
+): string[] {
+  const values: string[] = [];
+  for (const item of items) {
+    for (const value of diagnosticDetailList(item.diagnostic, key)) {
+      if (!values.includes(value)) {
+        values.push(value);
+      }
+    }
+  }
+  return values;
+}
+
+function diagnosticDetailList(
+  diagnostic: PendingDiagnostic | null | undefined,
+  key: AssistantDetailKey,
+): string[] {
+  const value = diagnostic?.details?.[key];
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value.flatMap((entry) => {
+    if (typeof entry !== "string") {
+      return [];
+    }
+    const cleaned = entry.trim();
+    return cleaned ? [cleaned] : [];
+  });
 }
 
 function cleanupLineLabel(item: PlanCleanupItem): string {
@@ -2160,9 +2246,9 @@ watch(
         <article v-if="unmatchedItems.length" class="stack-card needs-review">
           <div class="stack-card-header">
             <div class="stack-title-block">
-              <strong>Needs review</strong>
+              <strong>Stale pending entries</strong>
               <span class="stack-path">
-                These pending updates are not matched to a Compose stack yet.
+                These pending updates no longer match a discovered Compose service.
               </span>
             </div>
             <div class="stack-card-side">
@@ -2171,6 +2257,39 @@ watch(
                   {{ pluralize(unmatchedItems.length, "item") }}
                 </n-tag>
               </div>
+            </div>
+          </div>
+          <div
+            v-if="
+              unmatchedAssistantFindings.length ||
+              unmatchedAssistantReasons.length ||
+              unmatchedAssistantActions.length
+            "
+            class="pending-assistant"
+          >
+            <div v-if="unmatchedAssistantFindings.length" class="pending-assistant-section">
+              <strong>Preflight found</strong>
+              <ul>
+                <li v-for="finding in unmatchedAssistantFindings" :key="finding">
+                  {{ finding }}
+                </li>
+              </ul>
+            </div>
+            <div v-if="unmatchedAssistantReasons.length" class="pending-assistant-section">
+              <strong>Likely causes</strong>
+              <ul>
+                <li v-for="reason in unmatchedAssistantReasons" :key="reason">
+                  {{ reason }}
+                </li>
+              </ul>
+            </div>
+            <div v-if="unmatchedAssistantActions.length" class="pending-assistant-section">
+              <strong>Recommended actions</strong>
+              <ul>
+                <li v-for="action in unmatchedAssistantActions" :key="action">
+                  {{ action }}
+                </li>
+              </ul>
             </div>
           </div>
           <details class="stack-details">
@@ -2562,6 +2681,43 @@ watch(
               {{ pluralize(cleanupItems.length, "entry", "entries") }}
             </n-tag>
           </div>
+          <p class="preflight-summary-text">
+            These entries look stale because they no longer match discovered Compose services.
+            Cleanup only removes WUD pending lines.
+          </p>
+          <div
+            v-if="
+              cleanupAssistantFindings.length ||
+              cleanupAssistantReasons.length ||
+              cleanupAssistantActions.length
+            "
+            class="pending-assistant"
+          >
+            <div v-if="cleanupAssistantFindings.length" class="pending-assistant-section">
+              <strong>Preflight found</strong>
+              <ul>
+                <li v-for="finding in cleanupAssistantFindings" :key="finding">
+                  {{ finding }}
+                </li>
+              </ul>
+            </div>
+            <div v-if="cleanupAssistantReasons.length" class="pending-assistant-section">
+              <strong>Likely causes</strong>
+              <ul>
+                <li v-for="reason in cleanupAssistantReasons" :key="reason">
+                  {{ reason }}
+                </li>
+              </ul>
+            </div>
+            <div v-if="cleanupAssistantActions.length" class="pending-assistant-section">
+              <strong>Recommended actions</strong>
+              <ul>
+                <li v-for="action in cleanupAssistantActions" :key="action">
+                  {{ action }}
+                </li>
+              </ul>
+            </div>
+          </div>
           <div class="compact-list">
             <div
               v-for="item in cleanupItems"
@@ -2611,9 +2767,9 @@ watch(
           <div v-else class="empty-state">No matched services.</div>
         </section>
 
-        <div v-if="webui.plan.issues.length" class="warning-list preflight-block">
+        <div v-if="visiblePlanIssues.length" class="warning-list preflight-block">
           <n-alert
-            v-for="issue in webui.plan.issues"
+            v-for="issue in visiblePlanIssues"
             :key="`${issue.code}-${issue.line_no ?? ''}-${issue.stack}-${issue.service}`"
             :type="issueType(issue)"
           >
@@ -2756,6 +2912,49 @@ watch(
         <n-alert class="preflight-block" type="warning">
           The server will re-read {{ pendingSourceLabel }} and reject the cleanup if any selected line changed or now matches an active Compose stack.
         </n-alert>
+        <n-alert class="preflight-block" type="warning">
+          This only edits {{ pendingSourceLabel }}. Containers, images, Compose services, and Compose files are not deleted or updated.
+        </n-alert>
+
+        <section
+          v-if="
+            cleanupAssistantFindings.length ||
+            cleanupAssistantReasons.length ||
+            cleanupAssistantActions.length
+          "
+          class="preflight-impact preflight-block"
+          aria-labelledby="cleanup-guidance-title"
+        >
+          <div class="preflight-impact-heading">
+            <strong id="cleanup-guidance-title">Stale entry guidance</strong>
+          </div>
+          <div class="pending-assistant">
+            <div v-if="cleanupAssistantFindings.length" class="pending-assistant-section">
+              <strong>Preflight found</strong>
+              <ul>
+                <li v-for="finding in cleanupAssistantFindings" :key="finding">
+                  {{ finding }}
+                </li>
+              </ul>
+            </div>
+            <div v-if="cleanupAssistantReasons.length" class="pending-assistant-section">
+              <strong>Likely causes</strong>
+              <ul>
+                <li v-for="reason in cleanupAssistantReasons" :key="reason">
+                  {{ reason }}
+                </li>
+              </ul>
+            </div>
+            <div v-if="cleanupAssistantActions.length" class="pending-assistant-section">
+              <strong>Recommended actions</strong>
+              <ul>
+                <li v-for="action in cleanupAssistantActions" :key="action">
+                  {{ action }}
+                </li>
+              </ul>
+            </div>
+          </div>
+        </section>
 
         <section class="preflight-impact preflight-block" aria-labelledby="cleanup-lines-title">
           <div class="preflight-impact-heading">
