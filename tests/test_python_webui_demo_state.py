@@ -130,10 +130,18 @@ class WebuiDemoStateTests(unittest.TestCase):
                     ORDER BY id
                     """
                 ).fetchall()
+                audit_modes = conn.execute(
+                    """
+                    SELECT mode
+                    FROM update_runs
+                    WHERE mode LIKE 'web-%'
+                    ORDER BY id
+                    """
+                ).fetchall()
 
-        self.assertEqual(run_count[0], 3)
+        self.assertEqual(run_count[0], 6)
         self.assertEqual(pending_count[0], 4)
-        self.assertEqual(event_count[0], 3)
+        self.assertEqual(event_count[0], 6)
         self.assertEqual(policy_count[0], 2)
         self.assertEqual(snooze_count[0], 2)
         self.assertEqual(tag_exclusion_count[0], 2)
@@ -144,6 +152,10 @@ class WebuiDemoStateTests(unittest.TestCase):
         self.assertEqual(versions[0][0], "success")
         self.assertEqual(versions[2][1], 1)
         self.assertTrue(versions[0][2].endswith("demo-success.log"))
+        self.assertEqual(
+            [row[0] for row in audit_modes],
+            ["web-auth", "web-state", "web-settings"],
+        )
 
 
 if __name__ == "__main__":

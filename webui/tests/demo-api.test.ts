@@ -146,6 +146,15 @@ describe("demo web API", () => {
       "sonarr",
       "redis",
     ]);
+    const seededAuditRuns = runs.filter((run) =>
+      ["web-auth", "web-settings", "web-state"].includes(run.mode),
+    );
+    expect(seededAuditRuns).toHaveLength(3);
+    expect(seededAuditRuns.map((run) => run.metadata.resource_id)).toEqual([
+      "webui_preferences",
+      "media/radarr",
+      "admin",
+    ]);
   });
 
   it("creates plans from the current fixture state", async () => {
@@ -242,7 +251,7 @@ describe("demo web API", () => {
 
     expect(cleanup).toMatchObject({
       status: "success",
-      audit_run_id: 4,
+      audit_run_id: 7,
       removed_count: 1,
       removed: [{ line_no: line.line_no, raw: line.raw, reason: "unmatched" }],
     });
@@ -303,7 +312,7 @@ describe("demo web API", () => {
 
     expect(removal).toMatchObject({
       status: "success",
-      audit_run_id: 4,
+      audit_run_id: 7,
       removed_count: 1,
       removed: [
         { line_no: matchedLine?.line_no, raw: matchedLine?.raw, reason: "selected" },
@@ -378,17 +387,17 @@ describe("demo web API", () => {
     expect(logs.at(-1)?.content).toContain("Done. See log");
     expect((await api.pending()).count).toBe(6);
     expect((await api.runs())[0]).toMatchObject({
-      id: 4,
+      id: 7,
       status: "success",
       wud_file: "demo/out/images.todo",
     });
-    await expect(api.runDetail(4)).resolves.toMatchObject({
-      id: 4,
+    await expect(api.runDetail(7)).resolves.toMatchObject({
+      id: 7,
       pending_updates: [{ service_key: "home/home-assistant" }],
     });
 
-    const applySummary = (await api.runs()).find((run) => run.id === 4);
-    const applyDetail = await api.runDetail(4);
+    const applySummary = (await api.runs()).find((run) => run.id === 7);
+    const applyDetail = await api.runDetail(7);
     expect(applySummary?.events).toHaveLength(applyDetail.events.length);
     expect(applySummary?.events[0]).toMatchObject({
       service_name: applyDetail.events[0]?.service_name,
