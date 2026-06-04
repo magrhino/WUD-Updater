@@ -454,4 +454,26 @@ describe("app shell", () => {
     expect(loadOnboarding).toHaveBeenCalledTimes(1);
     expect(loadCoreUpdateTour).toHaveBeenCalledTimes(1);
   });
+
+  it("refreshes the audit route from the shell", async () => {
+    const pinia = createPinia();
+    setActivePinia(pinia);
+    const auth = useAuthStore();
+    auth.session = authSession({ mutations_enabled: false });
+    const webui = useWebuiStore();
+    vi.spyOn(webui, "loadStatus").mockResolvedValue();
+    vi.spyOn(webui, "loadSettings").mockResolvedValue();
+    const loadRuns = vi.spyOn(webui, "loadRuns").mockResolvedValue();
+    const router = createWudRouter(createMemoryHistory());
+    await router.push("/audit");
+    await router.isReady();
+
+    const wrapper = mountWithApp(App, { pinia, router });
+    await flushPromises();
+
+    expect(wrapper.text()).toContain("Audit log");
+    loadRuns.mockClear();
+    await wrapper.find('button[aria-label="Refresh current view"]').trigger("click");
+    expect(loadRuns).toHaveBeenCalledTimes(1);
+  });
 });

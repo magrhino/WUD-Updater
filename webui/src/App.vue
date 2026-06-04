@@ -200,7 +200,7 @@ async function refreshCurrentView(): Promise<void> {
     await webui.loadDashboard();
   } else if (route.name === "pending") {
     await webui.loadPending();
-  } else if (route.name === "runs") {
+  } else if (route.name === "runs" || route.name === "audit") {
     await webui.loadRuns();
   } else if (route.name === "policies") {
     await webui.loadServicePolicies();
