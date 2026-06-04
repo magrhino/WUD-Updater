@@ -4,6 +4,19 @@ All notable changes to WUD-Updater are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com) and versions follow
 [Semantic Versioning](https://semver.org).
 
+## [0.34.1](https://github.com/magrhino/WUD-Updater/compare/v0.34.0...v0.34.1) (2026-06-04)
+
+
+### Bug Fixes
+
+* **webui:** change default port to 7417 ([f099195](https://github.com/magrhino/WUD-Updater/commit/f09919568d4db6a48ddee674f1f836c528d88bec))
+
+
+### Documentation
+
+* Update and clarify docs to suggest webui is preferred deployment ([cc34c08](https://github.com/magrhino/WUD-Updater/commit/cc34c08db0d9f4ed70ff52330e8009ede23358a3))
+* **webui:** clarify env examples for deployments ([7892792](https://github.com/magrhino/WUD-Updater/commit/7892792f8a8a8e50278daa0321ecf5d9113b594e))
+
 ## [0.34.0](https://github.com/magrhino/WUD-Updater/compare/v0.33.0...v0.34.0) (2026-06-04)
 
 
