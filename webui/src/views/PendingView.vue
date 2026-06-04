@@ -32,6 +32,7 @@ import {
   type ApplyJobResponse,
   type ApplyPreflightCheck,
   type ApplyPreflightStatus,
+  type PendingDiagnostic,
   type PendingGroupedItem,
   type PendingItem,
   type PendingRemovalPlanLine,
@@ -90,6 +91,14 @@ type ApplyJobPlanSnapshot = {
   stackCount: number;
   sourceFile: string;
   lines: ApplyJobSnapshotLine[];
+};
+
+type AssistantDetailKey =
+  | "preflight_findings"
+  | "possible_reasons"
+  | "recommended_actions";
+type DiagnosticItem = {
+  diagnostic?: PendingDiagnostic | null;
 };
 
 type ApplyJobProgressPhase = {
@@ -398,6 +407,38 @@ const applyButtonLabel = computed(() =>
 );
 const cleanupItems = computed(() => webui.plan?.cleanup.items ?? []);
 const cleanupAvailable = computed(() => cleanupItems.value.length > 0);
+const visiblePlanIssues = computed(() => {
+  const issues = webui.plan?.issues ?? [];
+  if (!cleanupItems.value.length) {
+    return issues;
+  }
+  const cleanupKeys = new Set(cleanupItems.value.flatMap(cleanupIssueKeys));
+  return issues.filter((issue) => !issueHiddenByCleanupPreview(issue, cleanupKeys));
+});
+const unmatchedReviewSummary = computed(() =>
+  staleReviewSummary(unmatchedItems.value, "pending line", "pending lines"),
+);
+const unmatchedReviewCountLabel = computed(() =>
+  reviewCountLabel(unmatchedItems.value.length, "item"),
+);
+const unmatchedIssueSummary = computed(() =>
+  staleIssueSummary(unmatchedItems.value),
+);
+const cleanupAssistantFindings = computed(() =>
+  assistantDetailList(cleanupItems.value, "preflight_findings"),
+);
+const cleanupAssistantReasons = computed(() =>
+  assistantDetailList(cleanupItems.value, "possible_reasons"),
+);
+const cleanupAssistantActions = computed(() =>
+  assistantDetailList(cleanupItems.value, "recommended_actions"),
+);
+const cleanupReviewSummary = computed(() => {
+  const summary = staleReviewSummary(cleanupItems.value, "entry", "entries");
+  return summary
+    ? `${summary} Cleanup only removes WUD pending lines.`
+    : "Cleanup only removes WUD pending lines.";
+});
 const cleanupButtonLabel = computed(() =>
   `Remove ${pluralize(cleanupItems.value.length, "unmatched entry", "unmatched entries")}`,
 );
@@ -1430,7 +1471,31 @@ function applyPreflightCheckLabel(status: ApplyPreflightStatus): string {
 }
 
 function applyPreflightCheckDetail(check: ApplyPreflightCheck): string {
-  return check.status === "PASS" ? "" : check.detail;
+  if (check.status === "PASS") {
+    return "";
+  }
+  if (check.code === "selected-services-matched" && check.detail === "unmatched") {
+    return cleanupItems.value.length
+      ? staleReviewSummary(cleanupItems.value, "entry", "entries")
+      : "Selected update is unmatched.";
+  }
+  return check.detail;
+}
+
+function cleanupIssueKeys(item: PlanCleanupItem): string[] {
+  return [item.reason, item.diagnostic?.code]
+    .filter((code): code is string => Boolean(code))
+    .map((code) => `${item.line_no}:${code}`);
+}
+
+function issueHiddenByCleanupPreview(
+  issue: PlanIssue,
+  cleanupKeys: ReadonlySet<string>,
+): boolean {
+  if (issue.line_no === null) {
+    return false;
+  }
+  return cleanupKeys.has(`${issue.line_no}:${issue.code}`);
 }
 
 function issueLabel(issue: PlanIssue): string {
@@ -1448,12 +1513,83 @@ function issueHint(issue: PlanIssue): string {
   return issue.hint || "";
 }
 
-function unmatchedDiagnosticMessage(item: PendingGroupedItem): string {
-  return item.diagnostic?.message || "No Compose stack matched this WUD entry.";
+function staleDiagnosticLabel(item: DiagnosticItem): string {
+  switch (item.diagnostic?.code) {
+    case "compose-label-active-file-missing":
+      return "Compose file missing";
+    case "compose-label-undiscovered-active-file":
+      return "Stack not discovered";
+    case "matching-container-without-compose-labels":
+      return "Missing Compose labels";
+    case "unmatched":
+      return "No Compose match";
+    default:
+      return item.diagnostic ? "Unmatched source" : "No Compose match";
+  }
 }
 
-function unmatchedDiagnosticHint(item: PendingGroupedItem): string {
-  return item.diagnostic?.hint || "";
+function staleDiagnosticDetail(item: DiagnosticItem): string {
+  switch (item.diagnostic?.code) {
+    case "compose-label-active-file-missing":
+      return "Running container exists, but its Compose file is missing or archived.";
+    case "compose-label-undiscovered-active-file":
+      return "Running container exists, but Compose discovery does not include its stack.";
+    case "matching-container-without-compose-labels":
+      return "Running container exists, but Docker did not report Compose labels.";
+    case "unmatched":
+      return "No discovered Compose service or running container matched this line.";
+    default:
+      return item.diagnostic?.message || "No discovered Compose service matched this line.";
+  }
+}
+
+function staleIssueSummary(items: DiagnosticItem[]): string {
+  return summarizeList(items.map(staleDiagnosticLabel), 2);
+}
+
+function staleReviewSummary(
+  items: DiagnosticItem[],
+  singular: string,
+  plural: string,
+): string {
+  if (!items.length) {
+    return "";
+  }
+  const count = reviewCountLabel(items.length, singular, plural);
+  const issue = staleIssueSummary(items);
+  return issue ? `${count}: ${issue}.` : `${count}.`;
+}
+
+function assistantDetailList(
+  items: DiagnosticItem[],
+  key: AssistantDetailKey,
+): string[] {
+  const values: string[] = [];
+  for (const item of items) {
+    for (const value of diagnosticDetailList(item.diagnostic, key)) {
+      if (!values.includes(value)) {
+        values.push(value);
+      }
+    }
+  }
+  return values;
+}
+
+function diagnosticDetailList(
+  diagnostic: PendingDiagnostic | null | undefined,
+  key: AssistantDetailKey,
+): string[] {
+  const value = diagnostic?.details?.[key];
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value.flatMap((entry) => {
+    if (typeof entry !== "string") {
+      return [];
+    }
+    const cleaned = entry.trim();
+    return cleaned ? [cleaned] : [];
+  });
 }
 
 function cleanupLineLabel(item: PlanCleanupItem): string {
@@ -1466,6 +1602,15 @@ function removalLineLabel(item: PendingRemovalPlanLine): string {
 
 function pluralize(count: number, singular: string, plural = `${singular}s`): string {
   return `${count} ${count === 1 ? singular : plural}`;
+}
+
+function reviewCountLabel(
+  count: number,
+  singular: string,
+  plural = `${singular}s`,
+): string {
+  const verb = count === 1 ? "needs" : "need";
+  return `${pluralize(count, singular, plural)} ${verb} review`;
 }
 
 function summarizeList(values: string[], limit = 3): string {
@@ -1878,7 +2023,7 @@ watch(
       <div class="core-tour-facts">
         <span v-if="pendingLoaded">{{ pluralize(stackGroups.length, "stack") }} matched</span>
         <span v-else>Loading stack matches</span>
-        <span v-if="pendingLoaded">{{ pluralize(unmatchedItems.length, "item") }} needs review</span>
+        <span v-if="pendingLoaded">{{ unmatchedReviewCountLabel }}</span>
         <span v-else>Waiting for pending file</span>
         <span>{{ mutationStateLabel }}</span>
       </div>
@@ -1908,7 +2053,7 @@ watch(
         <span v-if="groupingReady">
           {{ pluralize(stackGroups.length, "stack") }} available
           <template v-if="unmatchedItems.length">
-            - {{ pluralize(unmatchedItems.length, "item") }} needs review
+            - {{ unmatchedReviewCountLabel }}
           </template>
         </span>
         <span v-else>Pending file order</span>
@@ -2160,15 +2305,16 @@ watch(
         <article v-if="unmatchedItems.length" class="stack-card needs-review">
           <div class="stack-card-header">
             <div class="stack-title-block">
-              <strong>Needs review</strong>
-              <span class="stack-path">
-                These pending updates are not matched to a Compose stack yet.
-              </span>
+              <strong>Stale pending entries</strong>
+              <span class="stack-path">{{ unmatchedReviewSummary }}</span>
             </div>
             <div class="stack-card-side">
               <div class="stack-card-tags">
                 <n-tag size="small" type="warning">
                   {{ pluralize(unmatchedItems.length, "item") }}
+                </n-tag>
+                <n-tag v-if="unmatchedIssueSummary" size="small" type="warning">
+                  {{ unmatchedIssueSummary }}
                 </n-tag>
               </div>
             </div>
@@ -2191,7 +2337,9 @@ watch(
                     <span class="sr-only">Select update </span>
                     <strong>{{ item.repo }}</strong>
                   </n-checkbox>
-                  <n-tag size="small" type="warning">Needs review</n-tag>
+                  <n-tag size="small" type="warning">
+                    {{ staleDiagnosticLabel(item) }}
+                  </n-tag>
                 </div>
                 <div class="pending-update-detail">
                   <code>{{ item.image }}</code>
@@ -2200,10 +2348,7 @@ watch(
                 </div>
                 <div class="pending-update-meta">
                   <span>Pending file line #{{ item.line_no }}</span>
-                  <span>{{ unmatchedDiagnosticMessage(item) }}</span>
-                  <span v-if="unmatchedDiagnosticHint(item)">
-                    {{ unmatchedDiagnosticHint(item) }}
-                  </span>
+                  <span>{{ staleDiagnosticDetail(item) }}</span>
                 </div>
                 <div v-if="item.desired_tag" class="pending-update-tag">
                   <span>New tag</span>
@@ -2562,6 +2707,7 @@ watch(
               {{ pluralize(cleanupItems.length, "entry", "entries") }}
             </n-tag>
           </div>
+          <p class="preflight-summary-text">{{ cleanupReviewSummary }}</p>
           <div class="compact-list">
             <div
               v-for="item in cleanupItems"
@@ -2569,10 +2715,14 @@ watch(
               class="list-row plan-line-row"
             >
               <span>#{{ item.line_no }}</span>
-              <strong>{{ item.image }}</strong>
+              <strong class="plan-line-heading">
+                <span>{{ item.image }}</span>
+                <n-tag size="small" type="warning">
+                  {{ staleDiagnosticLabel(item) }}
+                </n-tag>
+              </strong>
               <em>
-                <span>{{ item.diagnostic?.message || item.reason }}</span>
-                <span v-if="item.diagnostic?.hint">{{ item.diagnostic.hint }}</span>
+                <span>{{ staleDiagnosticDetail(item) }}</span>
               </em>
             </div>
           </div>
@@ -2611,9 +2761,9 @@ watch(
           <div v-else class="empty-state">No matched services.</div>
         </section>
 
-        <div v-if="webui.plan.issues.length" class="warning-list preflight-block">
+        <div v-if="visiblePlanIssues.length" class="warning-list preflight-block">
           <n-alert
-            v-for="issue in webui.plan.issues"
+            v-for="issue in visiblePlanIssues"
             :key="`${issue.code}-${issue.line_no ?? ''}-${issue.stack}-${issue.service}`"
             :type="issueType(issue)"
           >
@@ -2756,6 +2906,49 @@ watch(
         <n-alert class="preflight-block" type="warning">
           The server will re-read {{ pendingSourceLabel }} and reject the cleanup if any selected line changed or now matches an active Compose stack.
         </n-alert>
+        <n-alert class="preflight-block" type="warning">
+          This only edits {{ pendingSourceLabel }}. Containers, images, Compose services, and Compose files are not deleted or updated.
+        </n-alert>
+
+        <section
+          v-if="
+            cleanupAssistantFindings.length ||
+            cleanupAssistantReasons.length ||
+            cleanupAssistantActions.length
+          "
+          class="preflight-impact preflight-block"
+          aria-labelledby="cleanup-guidance-title"
+        >
+          <div class="preflight-impact-heading">
+            <strong id="cleanup-guidance-title">Stale entry guidance</strong>
+          </div>
+          <div class="pending-assistant">
+            <div v-if="cleanupAssistantFindings.length" class="pending-assistant-section">
+              <strong>Preflight found</strong>
+              <ul>
+                <li v-for="finding in cleanupAssistantFindings" :key="finding">
+                  {{ finding }}
+                </li>
+              </ul>
+            </div>
+            <div v-if="cleanupAssistantReasons.length" class="pending-assistant-section">
+              <strong>Likely causes</strong>
+              <ul>
+                <li v-for="reason in cleanupAssistantReasons" :key="reason">
+                  {{ reason }}
+                </li>
+              </ul>
+            </div>
+            <div v-if="cleanupAssistantActions.length" class="pending-assistant-section">
+              <strong>Recommended actions</strong>
+              <ul>
+                <li v-for="action in cleanupAssistantActions" :key="action">
+                  {{ action }}
+                </li>
+              </ul>
+            </div>
+          </div>
+        </section>
 
         <section class="preflight-impact preflight-block" aria-labelledby="cleanup-lines-title">
           <div class="preflight-impact-heading">

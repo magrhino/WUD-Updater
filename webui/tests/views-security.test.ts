@@ -94,6 +94,21 @@ function mockPendingLifecycle(webui: ReturnType<typeof useWebuiStore>) {
   vi.spyOn(webui, "refreshReleaseNotes").mockResolvedValue();
 }
 
+const stalePendingPreflightFindings = [
+  "Running container old still matches this pending line.",
+  "Docker labels reference docker-compose.yml.",
+  "The referenced Compose file was not found, but archived/nonstandard file(s) were found: docker-compose.archive.yml.",
+];
+const stalePendingPossibleReasons = [
+  "The active Compose file was renamed to an archived or nonstandard filename.",
+  "The stack was moved or the Compose file path changed after the container was created.",
+];
+const stalePendingRecommendedActions = [
+  "Restore or rename the active Compose file to a supported Compose filename.",
+  "Update Docker base or ignore paths if the stack moved.",
+  "Remove the stale WUD line if the stack is intentionally gone.",
+];
+
 function unmatchedPendingItem() {
   return pendingGroupedItem({
     line_no: 1,
@@ -112,7 +127,11 @@ function unmatchedPendingItem() {
       service: "old",
       compose_file: "docker-compose.yml",
       found_files: ["docker-compose.archive.yml"],
-      details: {},
+      details: {
+        preflight_findings: stalePendingPreflightFindings,
+        possible_reasons: stalePendingPossibleReasons,
+        recommended_actions: stalePendingRecommendedActions,
+      },
     },
   });
 }
@@ -363,6 +382,16 @@ describe("mutating WebUI views", () => {
     const cleanupPending = vi.spyOn(webui, "cleanupPending");
     const wrapper = mountWithApp(PendingView, { pinia });
 
+    expect(wrapper.text()).toContain("Stale pending entries");
+    expect(wrapper.text()).toContain(
+      "1 pending line needs review: Compose file missing.",
+    );
+    expect(wrapper.text()).toContain("Compose file missing");
+    expect(wrapper.text()).toContain(
+      "Running container exists, but its Compose file is missing or archived.",
+    );
+    expect(wrapper.text()).not.toContain("Preflight found");
+
     await wrapper
       .find('input[aria-label="Select update repo/old:latest"]')
       .setValue(true);
@@ -374,7 +403,15 @@ describe("mutating WebUI views", () => {
 
     const dialog = wrapper.find('[role="dialog"]');
     expect(dialog.text()).toContain("Unmatched pending entries");
-    expect(dialog.text()).toContain("docker-compose.archive.yml");
+    expect(dialog.text()).toContain(
+      "1 entry needs review: Compose file missing. Cleanup only removes WUD pending lines.",
+    );
+    expect(dialog.text()).toContain(
+      "Running container exists, but its Compose file is missing or archived.",
+    );
+    expect(dialog.text()).not.toContain("Preflight found");
+    expect(dialog.text()).not.toContain("No Compose service matched repo/old:latest.");
+    expect(dialog.find(".warning-list").exists()).toBe(false);
     expect(dialog.text()).toContain("Read-only mode is active");
     const cleanupButton = dialog
       .findAll("button")
@@ -487,6 +524,14 @@ describe("mutating WebUI views", () => {
     const cleanupDialog = wrapper
       .findAll('[role="dialog"]')
       .find((dialog) => dialog.text().includes("Pending cleanup"));
+    expect(cleanupDialog?.text()).toContain("Stale entry guidance");
+    expect(cleanupDialog?.text()).toContain("Docker labels reference docker-compose.yml.");
+    expect(cleanupDialog?.text()).toContain(
+      "The stack was moved or the Compose file path changed after the container was created.",
+    );
+    expect(cleanupDialog?.text()).toContain(
+      "Containers, images, Compose services, and Compose files are not deleted or updated.",
+    );
     expect(cleanupDialog?.text()).toContain("Source lines");
     expect(cleanupDialog?.text()).toContain("#1 repo/old:latest");
     expect(cleanupDialog?.text()).toContain("repo/old:latest");
@@ -699,7 +744,7 @@ describe("mutating WebUI views", () => {
       .find((button) => button.text().includes("Preview selected plan"))
       ?.trigger("click");
 
-    expect(wrapper.text()).toContain("Needs review");
+    expect(wrapper.text()).toContain("No Compose match");
     expect(createPlan).toHaveBeenCalledWith([1], true, []);
   });
 

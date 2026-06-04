@@ -52,7 +52,7 @@ test("static demo renders current pending state and completes apply flow", async
   ).toBeVisible();
   await expect(page.getByText("7 pending updates")).toBeVisible();
   await expect(page.getByText("Mutations enabled")).toBeVisible();
-  await expect(page.getByText("3 items needs review")).toBeVisible();
+  await expect(page.getByText("3 items need review")).toBeVisible();
   await expect(
     page.getByTitle("ghcr.io/home-assistant/home-assistant:2026.5.1").first(),
   ).toBeVisible();

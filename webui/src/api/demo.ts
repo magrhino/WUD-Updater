@@ -103,15 +103,33 @@ type DemoPendingItem = PendingGroupedItem & {
   service: string;
 };
 
+const STALE_PENDING_PREFLIGHT_FINDINGS = [
+  "No discovered Compose service matched this pending line.",
+  "No running Docker container matched this pending line.",
+];
+const STALE_PENDING_POSSIBLE_REASONS = [
+  "The Compose service was removed or renamed.",
+  "The Compose image name changed.",
+  "The update tag was already applied and WUD left the old pending line behind.",
+];
+const STALE_PENDING_RECOMMENDED_ACTIONS = [
+  "Remove the stale WUD line when the service is intentionally gone or already updated.",
+  "If the service should still be managed, update the WUD line or stack image to the current service/image name.",
+];
+
 const GENERIC_UNMATCHED_DIAGNOSTIC: NonNullable<PendingGroupedItem["diagnostic"]> = {
   code: "unmatched",
-  message: "No Compose stack matched this WUD entry.",
-  hint: "Confirm this image is still managed by an active Compose stack, or remove the stale WUD entry.",
+  message: "This pending update no longer matches any discovered Compose service.",
+  hint: "Preflight did not find a matching Compose service or running Docker container. Likely causes are service removal, image rename, or a tag that was already applied.",
   stack: "",
   service: "",
   compose_file: "",
   found_files: [],
-  details: {},
+  details: {
+    preflight_findings: STALE_PENDING_PREFLIGHT_FINDINGS,
+    possible_reasons: STALE_PENDING_POSSIBLE_REASONS,
+    recommended_actions: STALE_PENDING_RECOMMENDED_ACTIONS,
+  },
 };
 
 const INITIAL_PENDING: DemoPendingItem[] = [

@@ -127,6 +127,17 @@ describe("demo web API", () => {
           item.diagnostic?.code === "unmatched",
       ),
     ).toBe(true);
+    expect(pending.grouping.unmatched[0]?.diagnostic).toMatchObject({
+      message: "This pending update no longer matches any discovered Compose service.",
+      details: {
+        possible_reasons: expect.arrayContaining([
+          "The Compose service was removed or renamed.",
+        ]),
+        recommended_actions: expect.arrayContaining([
+          "Remove the stale WUD line when the service is intentionally gone or already updated.",
+        ]),
+      },
+    });
 
     await expect(api.updateTargets()).resolves.toMatchObject({
       status: "ready",
@@ -206,6 +217,13 @@ describe("demo web API", () => {
           line_no: 6,
           raw: "ghcr.io/gethomepage/homepage:v0.9.12 tag=v0.10.9",
           reason: "unmatched",
+          diagnostic: {
+            details: {
+              possible_reasons: expect.arrayContaining([
+                "The update tag was already applied and WUD left the old pending line behind.",
+              ]),
+            },
+          },
         },
       ],
     });
