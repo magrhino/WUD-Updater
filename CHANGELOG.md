@@ -4,6 +4,13 @@ All notable changes to WUD-Updater are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com) and versions follow
 [Semantic Versioning](https://semver.org).
 
+## [0.34.2](https://github.com/magrhino/WUD-Updater/compare/v0.34.1...v0.34.2) (2026-06-04)
+
+
+### Bug Fixes
+
+* **webui:** Refine stale pending diagnostics in the WebUI ([#192](https://github.com/magrhino/WUD-Updater/issues/192)) ([8474f56](https://github.com/magrhino/WUD-Updater/commit/8474f5631aee1e59cd3171f49f8f4011b9bbef9f))
+
 ## [0.34.1](https://github.com/magrhino/WUD-Updater/compare/v0.34.0...v0.34.1) (2026-06-04)
 
 
