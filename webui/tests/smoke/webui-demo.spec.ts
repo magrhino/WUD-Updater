@@ -78,12 +78,25 @@ test("static demo renders current pending state and completes apply flow", async
   await expect(page.getByText("6 pending updates")).toBeVisible();
 
   await applyPanel.getByRole("link", { name: "Details" }).click();
-  await expect(page.getByRole("heading", { name: "#4" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "#7" })).toBeVisible();
   await expect(page.getByText("Pending records")).toBeVisible();
 
   await page.getByRole("link", { name: "View log" }).click();
-  await expect(page.getByRole("heading", { name: "#4 log" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "#7 log" })).toBeVisible();
   await expect(page.getByText("Done. See log")).toBeVisible();
+});
+
+test("static demo renders seeded audit log records", async ({ page }) => {
+  await page.goto(demoRoute("/#/audit"));
+
+  await expect(page.getByRole("heading", { name: "History", level: 1 })).toBeVisible();
+  await expect(page.getByRole("link", { name: "All runs" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Audit log" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "#6" })).toBeVisible();
+  await expect(page.getByText("Settings changed")).toBeVisible();
+  await expect(page.getByText("webui_preferences")).toBeVisible();
+  await expect(page.getByText("media/radarr")).toBeVisible();
+  await expect(page.getByText("admin")).toBeVisible();
 });
 
 test("static demo mobile layout stays within the viewport", async ({ page }) => {

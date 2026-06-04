@@ -149,6 +149,23 @@ describe("demo web API", () => {
         }),
       ]),
     });
+
+    const runs = await api.runs();
+    const seededRun = runs.find((run) => run.id === 1);
+    expect(seededRun?.events).toHaveLength(2);
+    expect(seededRun?.events.map((event) => event.service_name)).toEqual([
+      "sonarr",
+      "redis",
+    ]);
+    const seededAuditRuns = runs.filter((run) =>
+      ["web-auth", "web-settings", "web-state"].includes(run.mode),
+    );
+    expect(seededAuditRuns).toHaveLength(3);
+    expect(seededAuditRuns.map((run) => run.metadata.resource_id)).toEqual([
+      "webui_preferences",
+      "media/radarr",
+      "admin",
+    ]);
   });
 
   it("creates plans from the current fixture state", async () => {
@@ -252,7 +269,7 @@ describe("demo web API", () => {
 
     expect(cleanup).toMatchObject({
       status: "success",
-      audit_run_id: 4,
+      audit_run_id: 7,
       removed_count: 1,
       removed: [{ line_no: line.line_no, raw: line.raw, reason: "unmatched" }],
     });
@@ -271,6 +288,16 @@ describe("demo web API", () => {
         },
       ],
       events: [{ status: "success" }],
+    });
+
+    const cleanupSummary = (await api.runs()).find(
+      (run) => run.id === cleanup.audit_run_id,
+    );
+    const cleanupDetail = await api.runDetail(cleanup.audit_run_id);
+    expect(cleanupSummary?.events).toHaveLength(cleanupDetail.events.length);
+    expect(cleanupSummary?.events[0]).toMatchObject({
+      service_name: cleanupDetail.events[0]?.service_name,
+      status: cleanupDetail.events[0]?.status,
     });
     await expect(
       api.cleanupPending(
@@ -303,7 +330,7 @@ describe("demo web API", () => {
 
     expect(removal).toMatchObject({
       status: "success",
-      audit_run_id: 4,
+      audit_run_id: 7,
       removed_count: 1,
       removed: [
         { line_no: matchedLine?.line_no, raw: matchedLine?.raw, reason: "selected" },
@@ -326,6 +353,16 @@ describe("demo web API", () => {
         },
       ],
       events: [{ status: "success" }],
+    });
+
+    const removalSummary = (await api.runs()).find(
+      (run) => run.id === removal.audit_run_id,
+    );
+    const removalDetail = await api.runDetail(removal.audit_run_id);
+    expect(removalSummary?.events).toHaveLength(removalDetail.events.length);
+    expect(removalSummary?.events[0]).toMatchObject({
+      service_name: removalDetail.events[0]?.service_name,
+      status: removalDetail.events[0]?.status,
     });
     await expect(
       api.removeSelectedPending(
@@ -368,13 +405,21 @@ describe("demo web API", () => {
     expect(logs.at(-1)?.content).toContain("Done. See log");
     expect((await api.pending()).count).toBe(6);
     expect((await api.runs())[0]).toMatchObject({
-      id: 4,
+      id: 7,
       status: "success",
       wud_file: "demo/out/images.todo",
     });
-    await expect(api.runDetail(4)).resolves.toMatchObject({
-      id: 4,
+    await expect(api.runDetail(7)).resolves.toMatchObject({
+      id: 7,
       pending_updates: [{ service_key: "home/home-assistant" }],
+    });
+
+    const applySummary = (await api.runs()).find((run) => run.id === 7);
+    const applyDetail = await api.runDetail(7);
+    expect(applySummary?.events).toHaveLength(applyDetail.events.length);
+    expect(applySummary?.events[0]).toMatchObject({
+      service_name: applyDetail.events[0]?.service_name,
+      status: applyDetail.events[0]?.status,
     });
   });
 

@@ -429,6 +429,76 @@ const INITIAL_RELEASE_NOTES: ReleaseNoteInfo[] = [
 
 const INITIAL_RUNS: DemoRunFixture[] = [
   demoRun({
+    id: 6,
+    startedAt: "2026-05-30T20:20:00+00:00",
+    finishedAt: "2026-05-30T20:20:00+00:00",
+    status: "success",
+    dryRun: false,
+    mode: "web-settings",
+    logFile: "",
+    summary: "updated WebUI preferences",
+    metadata: {
+      source: "webui",
+      operation: "update_managed_settings",
+      actor_type: "browser",
+      resource_type: "managed_settings",
+      resource_id: "webui_preferences",
+      target: { keys: ["theme_preference"] },
+    },
+    logContent: "",
+    pending: [],
+    events: [
+      runEvent(60, 6, "settings", "webui", "managed-settings", "webui-preferences", "success"),
+    ],
+  }),
+  demoRun({
+    id: 5,
+    startedAt: "2026-05-30T19:50:00+00:00",
+    finishedAt: "2026-05-30T19:50:00+00:00",
+    status: "success",
+    dryRun: false,
+    mode: "web-state",
+    logFile: "",
+    summary: "saved service policy",
+    metadata: {
+      source: "webui",
+      operation: "upsert_service_policy",
+      actor_type: "browser",
+      resource_type: "service_policy",
+      resource_id: "media/radarr",
+      service_key: "media/radarr",
+      target: { service_key: "media/radarr" },
+    },
+    logContent: "",
+    pending: [],
+    events: [
+      runEvent(50, 5, "radarr", "media", "service-policy", "media/radarr", "success"),
+    ],
+  }),
+  demoRun({
+    id: 4,
+    startedAt: "2026-05-30T19:20:00+00:00",
+    finishedAt: "2026-05-30T19:20:00+00:00",
+    status: "success",
+    dryRun: false,
+    mode: "web-auth",
+    logFile: "",
+    summary: "reset admin credentials",
+    metadata: {
+      source: "webui",
+      operation: "reset_admin_password",
+      actor_type: "reset_claim",
+      resource_type: "web_user",
+      resource_id: "admin",
+      target: { username: "admin" },
+    },
+    logContent: "",
+    pending: [],
+    events: [
+      runEvent(40, 4, "admin", "webui", "web_user", "admin", "success"),
+    ],
+  }),
+  demoRun({
     id: 3,
     startedAt: "2026-05-27T22:45:00+00:00",
     finishedAt: "2026-05-27T22:45:12+00:00",
@@ -511,7 +581,7 @@ class DemoApiState {
     updated_at: "",
   };
   nextJob = 1;
-  nextRun = 4;
+  nextRun = 7;
   nextAudit = 100;
   nextSnooze = 3;
   nextTagExclusion = 3;
@@ -1909,17 +1979,6 @@ function runFromApply(
   logFile: string,
   logContent: string,
 ): DemoRunFixture {
-  const summary: RunSummary = {
-    id: runId,
-    started_at: startedAt,
-    finished_at: finishedAt,
-    status: "success",
-    dry_run: false,
-    mode: plan.mode,
-    wud_file: DEMO_SOURCE_FILE,
-    log_file: logFile,
-    metadata: { source: "demo", summary: `updated ${selectedItems.length} services` },
-  };
   const pending_updates = selectedItems.map((item, index) =>
     pendingRecord(
       item.line_no,
@@ -1941,6 +2000,18 @@ function runFromApply(
       "success",
     ),
   );
+  const summary: RunSummary = {
+    id: runId,
+    started_at: startedAt,
+    finished_at: finishedAt,
+    status: "success",
+    dry_run: false,
+    mode: plan.mode,
+    wud_file: DEMO_SOURCE_FILE,
+    log_file: logFile,
+    metadata: { source: "demo", summary: `updated ${selectedItems.length} services` },
+    events,
+  };
   return {
     summary,
     detail: {
@@ -1966,21 +2037,6 @@ function runFromCleanup(
   const startedAt = "2026-05-30T20:12:26+00:00";
   const finishedAt = "2026-05-30T20:12:26+00:00";
   const logFile = "";
-  const summary: RunSummary = {
-    id: runId,
-    started_at: startedAt,
-    finished_at: finishedAt,
-    status: "success",
-    dry_run: false,
-    mode: "web-pending-cleanup",
-    wud_file: DEMO_SOURCE_FILE,
-    log_file: logFile,
-    metadata: {
-      source: "demo",
-      operation: "remove_unmatched_pending",
-      line_numbers: removedItems.map((item) => item.line_no),
-    },
-  };
   const pending_updates = removedItems.map((item, index) =>
     pendingRecord(
       item.line_no,
@@ -2003,6 +2059,22 @@ function runFromCleanup(
       "success",
     ),
   );
+  const summary: RunSummary = {
+    id: runId,
+    started_at: startedAt,
+    finished_at: finishedAt,
+    status: "success",
+    dry_run: false,
+    mode: "web-pending-cleanup",
+    wud_file: DEMO_SOURCE_FILE,
+    log_file: logFile,
+    metadata: {
+      source: "demo",
+      operation: "remove_unmatched_pending",
+      line_numbers: removedItems.map((item) => item.line_no),
+    },
+    events,
+  };
   return {
     summary,
     detail: {
@@ -2028,21 +2100,6 @@ function runFromRemoval(
   const startedAt = "2026-05-30T20:12:26+00:00";
   const finishedAt = "2026-05-30T20:12:26+00:00";
   const logFile = "";
-  const summary: RunSummary = {
-    id: runId,
-    started_at: startedAt,
-    finished_at: finishedAt,
-    status: "success",
-    dry_run: false,
-    mode: "web-pending-removal",
-    wud_file: DEMO_SOURCE_FILE,
-    log_file: logFile,
-    metadata: {
-      source: "demo",
-      operation: "remove_selected_pending",
-      line_numbers: removedItems.map((item) => item.line_no),
-    },
-  };
   const pending_updates = removedItems.map((item, index) =>
     pendingRecord(
       item.line_no,
@@ -2065,6 +2122,22 @@ function runFromRemoval(
       "success",
     ),
   );
+  const summary: RunSummary = {
+    id: runId,
+    started_at: startedAt,
+    finished_at: finishedAt,
+    status: "success",
+    dry_run: false,
+    mode: "web-pending-removal",
+    wud_file: DEMO_SOURCE_FILE,
+    log_file: logFile,
+    metadata: {
+      source: "demo",
+      operation: "remove_selected_pending",
+      line_numbers: removedItems.map((item) => item.line_no),
+    },
+    events,
+  };
   return {
     summary,
     detail: {
@@ -2095,6 +2168,7 @@ function demoRun(options: {
   logContent: string;
   pending: ReturnType<typeof pendingRecord>[];
   events: RunEventRecord[];
+  metadata?: Record<string, unknown>;
 }): DemoRunFixture {
   const summary: RunSummary = {
     id: options.id,
@@ -2105,7 +2179,8 @@ function demoRun(options: {
     mode: options.mode,
     wud_file: DEMO_SOURCE_FILE,
     log_file: options.logFile,
-    metadata: { source: "demo", summary: options.summary },
+    metadata: options.metadata ?? { source: "demo", summary: options.summary },
+    events: options.events,
   };
   return {
     summary,

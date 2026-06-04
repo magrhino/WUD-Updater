@@ -474,6 +474,22 @@ export interface SetupStatusResponse {
   password_min_length: number;
 }
 
+export interface RunEventRecord {
+  id: number;
+  run_id: number;
+  created_at: string;
+  service_name: string;
+  stack_name: string;
+  image: string;
+  target_image: string;
+  old_image_id: string;
+  new_image_id: string;
+  old_digest: string;
+  new_digest: string;
+  status: string;
+  metadata: Record<string, unknown>;
+}
+
 export interface RunSummary {
   id: number;
   started_at: string;
@@ -484,6 +500,7 @@ export interface RunSummary {
   wud_file: string;
   log_file: string;
   metadata: Record<string, unknown>;
+  events: RunEventRecord[];
 }
 
 export interface PendingUpdateRecord {
@@ -504,25 +521,8 @@ export interface PendingUpdateRecord {
   metadata: Record<string, unknown>;
 }
 
-export interface RunEventRecord {
-  id: number;
-  run_id: number;
-  created_at: string;
-  service_name: string;
-  stack_name: string;
-  image: string;
-  target_image: string;
-  old_image_id: string;
-  new_image_id: string;
-  old_digest: string;
-  new_digest: string;
-  status: string;
-  metadata: Record<string, unknown>;
-}
-
 export interface RunDetail extends RunSummary {
   pending_updates: PendingUpdateRecord[];
-  events: RunEventRecord[];
 }
 
 export interface RunLogResponse {

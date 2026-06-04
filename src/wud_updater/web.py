@@ -669,6 +669,22 @@ class AuthSessionResponse(BaseModel):
     username: str | None = None
 
 
+class RunEventRecord(BaseModel):
+    id: int
+    run_id: int
+    created_at: str
+    service_name: str
+    stack_name: str
+    image: str
+    target_image: str
+    old_image_id: str
+    new_image_id: str
+    old_digest: str
+    new_digest: str
+    status: str
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
 class RunSummary(BaseModel):
     id: int
     started_at: str
@@ -679,6 +695,7 @@ class RunSummary(BaseModel):
     wud_file: str
     log_file: str
     metadata: dict[str, Any] = Field(default_factory=dict)
+    events: list[RunEventRecord] = Field(default_factory=list)
 
 
 class PendingUpdateRecord(BaseModel):
@@ -699,25 +716,8 @@ class PendingUpdateRecord(BaseModel):
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
-class RunEventRecord(BaseModel):
-    id: int
-    run_id: int
-    created_at: str
-    service_name: str
-    stack_name: str
-    image: str
-    target_image: str
-    old_image_id: str
-    new_image_id: str
-    old_digest: str
-    new_digest: str
-    status: str
-    metadata: dict[str, Any] = Field(default_factory=dict)
-
-
 class RunDetail(RunSummary):
     pending_updates: list[PendingUpdateRecord] = Field(default_factory=list)
-    events: list[RunEventRecord] = Field(default_factory=list)
 
 
 class RunLogResponse(BaseModel):
@@ -2862,6 +2862,23 @@ def api_runs(request: Request) -> list[RunSummary]:
                 """,
                 (DEFAULT_RUN_LIMIT,),
             ).fetchall()
+
+            run_ids = [row["id"] for row in rows]
+            events_by_run: dict[int, list[RunEventRecord]] = {}
+            if run_ids:
+                placeholders = ",".join("?" for _ in run_ids)
+                event_rows = conn.execute(
+                    f"""
+                    SELECT *
+                    FROM update_events
+                    WHERE run_id IN ({placeholders})
+                    ORDER BY id
+                    """,
+                    tuple(run_ids),
+                ).fetchall()
+                for e in event_rows:
+                    event = _event_from_row(e)
+                    events_by_run.setdefault(event.run_id, []).append(event)
     except ReadOnlyDatabaseMissing:
         return []
     except (OSError, sqlite3.Error, DatabaseError) as exc:
@@ -2869,7 +2886,13 @@ def api_runs(request: Request) -> list[RunSummary]:
             status_code=500,
             detail=f"could not read database: {exc}",
         ) from exc
-    return [_run_summary_from_row(row) for row in rows]
+    return [
+        _sanitize_run_summary(
+            settings,
+            _run_summary_from_row(row, events=events_by_run.get(row["id"], [])),
+        )
+        for row in rows
+    ]
 
 
 def api_run_detail(run_id: int, request: Request) -> RunDetail:
@@ -2912,12 +2935,15 @@ def api_run_detail(run_id: int, request: Request) -> RunDetail:
             detail=f"could not read database: {exc}",
         ) from exc
 
-    summary = _run_summary_from_row(run)
-    return RunDetail(
-        **summary.model_dump(),
-        pending_updates=[_pending_update_from_row(row) for row in pending],
+    summary = _run_summary_from_row(
+        run,
         events=[_event_from_row(row) for row in events],
     )
+    detail = RunDetail(
+        **summary.model_dump(),
+        pending_updates=[_pending_update_from_row(row) for row in pending],
+    )
+    return _sanitize_run_detail(settings, detail)
 
 
 def api_run_log(
@@ -6042,7 +6068,10 @@ def _validate_readonly_schema(conn: sqlite3.Connection) -> None:
     validate_db_schema(conn)
 
 
-def _run_summary_from_row(row: sqlite3.Row) -> RunSummary:
+def _run_summary_from_row(
+    row: sqlite3.Row,
+    events: list[RunEventRecord] | None = None,
+) -> RunSummary:
     return RunSummary(
         id=int(row["id"]),
         started_at=str(row["started_at"]),
@@ -6053,6 +6082,7 @@ def _run_summary_from_row(row: sqlite3.Row) -> RunSummary:
         wud_file=str(row["wud_file"]),
         log_file=str(row["log_file"]),
         metadata=_metadata_from_row(row),
+        events=events or [],
     )
 
 
@@ -6092,6 +6122,35 @@ def _event_from_row(row: sqlite3.Row) -> RunEventRecord:
         status=str(row["status"]),
         metadata=_metadata_from_row(row),
     )
+
+
+def _sanitize_run_summary(settings: WebSettings, run: RunSummary) -> RunSummary:
+    payload = run.model_dump(mode="json")
+    payload["metadata"] = _sanitize_support_bundle_value(settings, payload["metadata"])
+    payload["events"] = [
+        _sanitize_run_event(settings, event).model_dump(mode="json")
+        for event in run.events
+    ]
+    return RunSummary.model_validate(payload)
+
+
+def _sanitize_run_detail(settings: WebSettings, run: RunDetail) -> RunDetail:
+    payload = run.model_dump(mode="json")
+    payload["metadata"] = _sanitize_support_bundle_value(settings, payload["metadata"])
+    payload["events"] = [
+        _sanitize_run_event(settings, event).model_dump(mode="json")
+        for event in run.events
+    ]
+    return RunDetail.model_validate(payload)
+
+
+def _sanitize_run_event(
+    settings: WebSettings,
+    event: RunEventRecord,
+) -> RunEventRecord:
+    payload = event.model_dump(mode="json")
+    payload["metadata"] = _sanitize_support_bundle_value(settings, payload["metadata"])
+    return RunEventRecord.model_validate(payload)
 
 
 def _auto_update_days_from_row(row: sqlite3.Row) -> tuple[str, ...]:

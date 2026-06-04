@@ -266,6 +266,97 @@ RUNS = (
 [2026-05-27T22:45:12+00:00] Dry-run completed without mutation.
 """,
     },
+    {
+        "started_at": "2026-05-30T19:20:00+00:00",
+        "finished_at": "2026-05-30T19:20:00+00:00",
+        "status": "success",
+        "dry_run": False,
+        "mode": "web-auth",
+        "log": "",
+        "metadata": {
+            "source": "webui",
+            "operation": "reset_admin_password",
+            "actor_type": "reset_claim",
+            "resource_type": "web_user",
+            "resource_id": "admin",
+            "target": {"username": "admin"},
+        },
+        "pending": (),
+        "events": (
+            {
+                "service_name": "admin",
+                "stack_name": "webui",
+                "image": "web_user",
+                "target_image": "admin",
+                "status": "success",
+                "old_digest": "",
+                "new_digest": "",
+                "metadata": {"source": "webui"},
+            },
+        ),
+        "log_content": "",
+    },
+    {
+        "started_at": "2026-05-30T19:50:00+00:00",
+        "finished_at": "2026-05-30T19:50:00+00:00",
+        "status": "success",
+        "dry_run": False,
+        "mode": "web-state",
+        "log": "",
+        "metadata": {
+            "source": "webui",
+            "operation": "upsert_service_policy",
+            "actor_type": "browser",
+            "resource_type": "service_policy",
+            "resource_id": "media/radarr",
+            "service_key": "media/radarr",
+            "target": {"service_key": "media/radarr"},
+        },
+        "pending": (),
+        "events": (
+            {
+                "service_name": "radarr",
+                "stack_name": "media",
+                "image": "service-policy",
+                "target_image": "media/radarr",
+                "status": "success",
+                "old_digest": "",
+                "new_digest": "",
+                "metadata": {"source": "webui"},
+            },
+        ),
+        "log_content": "",
+    },
+    {
+        "started_at": "2026-05-30T20:20:00+00:00",
+        "finished_at": "2026-05-30T20:20:00+00:00",
+        "status": "success",
+        "dry_run": False,
+        "mode": "web-settings",
+        "log": "",
+        "metadata": {
+            "source": "webui",
+            "operation": "update_managed_settings",
+            "actor_type": "browser",
+            "resource_type": "managed_settings",
+            "resource_id": "webui_preferences",
+            "target": {"keys": ["theme_preference"]},
+        },
+        "pending": (),
+        "events": (
+            {
+                "service_name": "settings",
+                "stack_name": "webui",
+                "image": "managed-settings",
+                "target_image": "webui-preferences",
+                "status": "success",
+                "old_digest": "",
+                "new_digest": "",
+                "metadata": {"source": "webui"},
+            },
+        ),
+        "log_content": "",
+    },
 )
 
 
@@ -315,8 +406,13 @@ def seed_demo_state(root: Path) -> dict[str, Path]:
         init_db(conn)
         _write_demo_management_state(conn)
         for entry in RUNS:
-            log_file = log_dir / str(entry["log"])
-            log_file.write_text(str(entry["log_content"]), encoding="utf-8")
+            log_name = str(entry["log"])
+            if log_name:
+                log_file = log_dir / log_name
+                log_file.write_text(str(entry["log_content"]), encoding="utf-8")
+                log_file_label = str(log_file)
+            else:
+                log_file_label = ""
             run_id = insert_update_run(
                 conn,
                 started_at=str(entry["started_at"]),
@@ -324,7 +420,7 @@ def seed_demo_state(root: Path) -> dict[str, Path]:
                 dry_run=bool(entry["dry_run"]),
                 mode=str(entry["mode"]),
                 wud_file=str(wud_file),
-                log_file=str(log_file),
+                log_file=log_file_label,
                 metadata_json=json.dumps(entry["metadata"], sort_keys=True),
             )
             with conn:
@@ -365,7 +461,10 @@ def seed_demo_state(root: Path) -> dict[str, Path]:
                     status=str(event["status"]),
                     old_digest=str(event["old_digest"]),
                     new_digest=str(event["new_digest"]),
-                    metadata_json='{"source":"demo"}',
+                    metadata_json=json.dumps(
+                        event.get("metadata", {"source": "demo"}),
+                        sort_keys=True,
+                    ),
                 )
 
     return {

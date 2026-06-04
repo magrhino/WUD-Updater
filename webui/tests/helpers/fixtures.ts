@@ -766,6 +766,7 @@ export function runSummary(overrides: Partial<RunSummary> = {}): RunSummary {
     wud_file: "/out/images.todo",
     log_file: "",
     metadata: {},
+    events: [],
     ...overrides,
   };
 }

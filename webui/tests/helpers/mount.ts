@@ -420,8 +420,16 @@ export function mountWithApp(component: Component, options: MountOptions = {}): 
         ...naiveStubs,
         RouterLink: {
           props: { to: [String, Object] },
-          setup(_, { slots }) {
-            return () => h("a", { href: "#" }, [slots.default?.()]);
+          setup(props, { attrs, slots }) {
+            return () =>
+              h(
+                "a",
+                {
+                  ...attrs,
+                  href: typeof props.to === "string" ? props.to : "#",
+                },
+                [slots.default?.()],
+              );
           },
         },
         RouterView: passthrough("div"),
