@@ -12,7 +12,7 @@
     "assert:demo-dist": "node scripts/assert-demo-dist.mjs",
     "preview:demo": "vite preview --mode demo --host 127.0.0.1 --port 4173 --strictPort",
     "typecheck": "vue-tsc --noEmit",
-    "test": "NODE_OPTIONS=--no-experimental-webstorage vitest run",
+    "test": "NODE_OPTIONS=--no-experimental-webstorage vitest run --coverage",
     "test:watch": "NODE_OPTIONS=--no-experimental-webstorage vitest",
     "test:smoke": "playwright test",
     "test:smoke:demo": "npm run build:demo && npm run assert:demo-dist && PLAYWRIGHT_WEBUI_DEMO=true PLAYWRIGHT_WEBUI_DEMO_BASE_PATH=/WUD-Updater PLAYWRIGHT_BASE_URL=http://127.0.0.1:4173 PLAYWRIGHT_WEB_SERVER_COMMAND=\"npm run preview:demo\" playwright test tests/smoke/webui-demo.spec.ts"
@@ -28,6 +28,7 @@
   "devDependencies": {
     "@playwright/test": "^1.60.0",
     "@vitejs/plugin-vue": "^6.0.7",
+    "@vitest/coverage-v8": "^4.1.8",
     "@vue/test-utils": "^2.4.10",
     "jsdom": "^29.1.1",
     "typescript": "^6.0.3",
