@@ -98,7 +98,7 @@ both the FastAPI backend and Vite frontend through the checked-in wrapper:
 make webui-demo
 ```
 
-`make webui-demo` starts the backend on `127.0.0.1:8080`, the frontend on
+`make webui-demo` starts the backend on `127.0.0.1:7417`, the frontend on
 `127.0.0.1:5173`, sets `WUD_WEB_DEV_NO_AUTH=true`, enables
 `WUD_WEB_MUTATIONS_ENABLED=true` for this demo process, and allows the Vite
 origin for CSRF/Origin checks. The demo uses `local-dev/` for disposable Docker
@@ -124,7 +124,7 @@ Useful WebUI development variables:
 | `WUD_DB_PATH` | SQLite database path for WebUI setup state, sessions, run history, audit records, and managed tag exclusions. |
 | `WUD_TIMEZONE` | IANA timezone name used for WebUI auto-update policy schedules. Defaults to `UTC`. |
 | `WUD_WEB_MUTATIONS_ENABLED` | Set to `true` only when testing browser-initiated plan/apply flows; default is read-only. |
-| `WUD_WEB_DEV_BACKEND_PORT` | Backend port used by `webui/scripts/dev-server.mjs` and the Vite proxy; default `8080`. |
+| `WUD_WEB_DEV_BACKEND_PORT` | Backend port used by `webui/scripts/dev-server.mjs` and the Vite proxy; default `7417`. |
 | `WUD_WEB_DEV_FRONTEND_PORT` | Vite frontend port used by the dev-server wrapper; default `5173`. |
 | `VITE_WUD_API_PREFIX` | Optional live API prefix or URL for custom reverse proxies; defaults to `<app base>/api/v1`. A preloaded `window.WUD_API_PREFIX` value overrides it at runtime. |
 | `VITE_WUD_BACKEND_URL` | Backend URL exported by the dev-server wrapper for frontend experiments; the Vite proxy forwards the same-origin API prefix. |
@@ -141,7 +141,7 @@ For manual backend-only testing with a built SPA:
 
 ```bash
 npm --prefix webui run build
-wud-updater web --host 127.0.0.1 --port 8080 --static-dir webui/dist
+wud-updater web --host 127.0.0.1 --port 7417 --static-dir webui/dist
 ```
 
 ## CI

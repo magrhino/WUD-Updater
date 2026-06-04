@@ -25,7 +25,7 @@ services:
       WUD_SYNC_SCRIPTS: "true"
       WUD_SCRIPTS_DIR: /managed-wud
       WUD_WEB_HOST: 0.0.0.0
-      WUD_WEB_PORT: "${WUD_WEB_PORT:-8080}"
+      WUD_WEB_PORT: "${WUD_WEB_PORT:-7417}"
       WUD_WEB_MUTATIONS_ENABLED: "${WUD_WEB_MUTATIONS_ENABLED:-false}"
       WUD_WEB_PUBLIC_ORIGIN: "${WUD_WEB_PUBLIC_ORIGIN:-}"
       WUD_WEB_ALLOWED_HOSTS: "${WUD_WEB_ALLOWED_HOSTS:-}"
@@ -35,9 +35,9 @@ services:
       OUT_GID: "${OUT_GID:-1000}"
       GITHUB_TOKEN: "${GITHUB_TOKEN:-}"
     ports:
-      - "${WEBUI_HTTP_BIND:-127.0.0.1}:${WUD_WEB_PORT:-8080}:${WUD_WEB_PORT:-8080}"
+      - "${WEBUI_HTTP_BIND:-127.0.0.1}:${WUD_WEB_PORT:-7417}:${WUD_WEB_PORT:-7417}"
     healthcheck:
-      test: [ "CMD", "curl", "-fsS", "http://127.0.0.1:${WUD_WEB_PORT:-8080}/readyz" ]
+      test: [ "CMD", "curl", "-fsS", "http://127.0.0.1:${WUD_WEB_PORT:-7417}/readyz" ]
       interval: 30s
       timeout: 5s
       retries: 3

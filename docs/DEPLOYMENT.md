@@ -193,7 +193,7 @@ network, and keeps browser mutations disabled unless
 For a long-running WebUI container, use
 [`docs/examples/docker-compose.webui.yml`](examples/docker-compose.webui.yml).
 That variant runs `wud-updater web`, serves the packaged SPA on
-`127.0.0.1:8080`, persists SQLite state in `/logs/wud-updater.sqlite`, and keeps
+`127.0.0.1:7417`, persists SQLite state in `/logs/wud-updater.sqlite`, and keeps
 browser mutations disabled unless `WUD_WEB_MUTATIONS_ENABLED=true` is set. Copy
 the WebUI env example, review the stack path and browser exposure settings, then
 start it and read the one-time setup link from the service logs:
@@ -215,7 +215,7 @@ reverse-proxy exposure, also review `WUD_WEB_PUBLIC_ORIGIN`,
 `WUD_WEB_SECURE_COOKIES`.
 
 Open the setup link, create the first admin username and a password with at
-least 12 characters, then sign in at `http://127.0.0.1:8080`. See
+least 12 characters, then sign in at `http://127.0.0.1:7417`. See
 [`docs/wiki/webui-container.md`](wiki/webui-container.md) for reverse-proxy,
 LAN exposure, login, and mutation notes.
 
@@ -524,7 +524,7 @@ Boolean examples use `true` and `false`; legacy aliases `1`, `0`, `yes`, `no`,
 | `WUD_WEB_MUTATIONS_ENABLED` | `false` | Enables browser plan/apply update mutations and Settings container restart when set to `true`. Leave unset or `false` for read-only WebUI deployments. |
 | `WUD_WEB_RESTART_CONTAINER` | Docker `HOSTNAME` inside a container, otherwise unset | Optional Docker container name or ID restarted from Settings. Set this explicitly only when the auto-detected current container target is unavailable or wrong. |
 | `WUD_WEB_HOST` | `127.0.0.1` | Host passed to Uvicorn when running `wud-updater web`. |
-| `WUD_WEB_PORT` | `8080` | Port passed to Uvicorn when running `wud-updater web`. |
+| `WUD_WEB_PORT` | `7417` | Port passed to Uvicorn when running `wud-updater web`. |
 | `WUD_WEB_STATIC_DIR` | packaged SPA, auto-detected if present | Optional built SPA directory override. Backend tests and API startup do not require a frontend build. |
 | `WUD_WEB_UPSTREAM_MAP` | auto-detected | Optional LinuxServer.io image to upstream GitHub repository map used by WebUI release-note link metadata. |
 

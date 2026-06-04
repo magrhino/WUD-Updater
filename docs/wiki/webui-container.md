@@ -16,10 +16,10 @@ test -f "$WEBUI_ENV" || cp docs/examples/webui.env.example "$WEBUI_ENV"
 docker compose --env-file "$WEBUI_ENV" -f docs/examples/docker-compose.webui.yml up -d
 ```
 
-The example publishes `127.0.0.1:8080:8080`, so the browser entrypoint is:
+The example publishes `127.0.0.1:7417:7417`, so the browser entrypoint is:
 
 ```text
-http://127.0.0.1:8080
+http://127.0.0.1:7417
 ```
 
 The same stack also starts WUD and syncs packaged callback scripts into the
@@ -40,7 +40,7 @@ docker compose --env-file "$WEBUI_ENV" -f docs/examples/docker-compose.webui.yml
 
 Open the `/#/setup?claim=...` URL, create the first admin username, and choose a
 password with at least 12 characters. After setup succeeds, return to
-`http://127.0.0.1:8080` and sign in with that username and password.
+`http://127.0.0.1:7417` and sign in with that username and password.
 The WebUI opens Settings with a first-run checklist after admin setup. Keep the
 checklist visible until Docker access, WUD output sharing, Compose discovery,
 script sync, persistence, browser exposure, and mutation mode match the

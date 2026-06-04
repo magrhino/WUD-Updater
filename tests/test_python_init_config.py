@@ -72,7 +72,7 @@ class InitConfigTests(unittest.TestCase):
         content = config_file.read_text(encoding="utf-8")
         self.assertIn(f"HOST_DOCKER_BASE={self.root / 'docker'}", content)
         self.assertIn("WEBUI_HTTP_BIND=127.0.0.1", content)
-        self.assertIn("WUD_WEB_PORT=8080", content)
+        self.assertIn("WUD_WEB_PORT=7417", content)
         self.assertIn("WUD_WEB_MUTATIONS_ENABLED=false", content)
         self.assertIn("WUD_WEB_PUBLIC_ORIGIN=", content)
         self.assertIn("WUD_WEB_ALLOWED_HOSTS=", content)
@@ -340,7 +340,7 @@ class InitConfigTests(unittest.TestCase):
         self.assertEqual(
             service["ports"],
             [
-                "${WEBUI_HTTP_BIND:-127.0.0.1}:${WUD_WEB_PORT:-8080}:${WUD_WEB_PORT:-8080}"
+                "${WEBUI_HTTP_BIND:-127.0.0.1}:${WUD_WEB_PORT:-7417}:${WUD_WEB_PORT:-7417}"
             ],
         )
         self.assertEqual(
@@ -349,7 +349,7 @@ class InitConfigTests(unittest.TestCase):
                 "CMD",
                 "curl",
                 "-fsS",
-                "http://127.0.0.1:${WUD_WEB_PORT:-8080}/readyz",
+                "http://127.0.0.1:${WUD_WEB_PORT:-7417}/readyz",
             ],
         )
         self.assertEqual(service["healthcheck"]["interval"], "30s")

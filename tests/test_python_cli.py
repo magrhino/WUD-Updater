@@ -464,7 +464,7 @@ class CliTests(unittest.TestCase):
         self.assertEqual(stderr, "")
         self.assertRegex(
             stdout.strip(),
-            r"^http://127\.0\.0\.1:8080/#/reset-admin\?claim=.+&user=admin$",
+            r"^http://127\.0\.0\.1:7417/#/reset-admin\?claim=.+&user=admin$",
         )
 
     def test_web_reset_admin_missing_db_fails_without_recovery_link(self) -> None:

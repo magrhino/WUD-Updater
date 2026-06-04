@@ -135,7 +135,7 @@ from .wud_file import ParsedWudFile, WudTarget, parse_wud_file, remove_lines_bef
 
 
 DEFAULT_WEB_HOST = "127.0.0.1"
-DEFAULT_WEB_PORT = 8080
+DEFAULT_WEB_PORT = 7417
 DEFAULT_RUN_LIMIT = 50
 DEFAULT_LOG_TAIL_BYTES = 262_144
 DEFAULT_JOB_LOG_TAIL_BYTES = 65_536

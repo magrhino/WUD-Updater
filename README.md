@@ -56,7 +56,7 @@ docker compose logs wud-updater
 
 Open the printed `/#/setup?claim=...` link, create the first admin username and
 a password with at least 12 characters, then sign in at
-`http://127.0.0.1:8080`. The example binds browser access to loopback by
+`http://127.0.0.1:7417`. The example binds browser access to loopback by
 default.
 
 See [WebUI container deployment](docs/DEPLOYMENT.md#webui-container) for the

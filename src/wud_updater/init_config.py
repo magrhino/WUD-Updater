@@ -23,7 +23,7 @@ from .doctor import run_doctor_from_namespace
 
 PROFILES = ("host", "webui", "helper", "hardened")
 WEB_EXPOSURES = ("loopback", "lan", "reverse-proxy")
-DEFAULT_WEB_PORT = "8080"
+DEFAULT_WEB_PORT = "7417"
 DEFAULT_UID_GID = "1000"
 
 
@@ -333,14 +333,14 @@ def _compose_override_content(answers: InitAnswers) -> str:
     service["volumes"] = _compose_volumes(answers)
     if answers.profile == "webui":
         service["ports"] = [
-            "${WEBUI_HTTP_BIND:-127.0.0.1}:${WUD_WEB_PORT:-8080}:${WUD_WEB_PORT:-8080}"
+            "${WEBUI_HTTP_BIND:-127.0.0.1}:${WUD_WEB_PORT:-7417}:${WUD_WEB_PORT:-7417}"
         ]
         service["healthcheck"] = {
             "test": [
                 "CMD",
                 "curl",
                 "-fsS",
-                "http://127.0.0.1:${WUD_WEB_PORT:-8080}/readyz",
+                "http://127.0.0.1:${WUD_WEB_PORT:-7417}/readyz",
             ],
             "interval": "30s",
             "timeout": "5s",
@@ -369,7 +369,7 @@ def _compose_environment(answers: InitAnswers) -> dict[str, str]:
         environment.update(
             {
                 "WUD_WEB_HOST": "0.0.0.0",
-                "WUD_WEB_PORT": "${WUD_WEB_PORT:-8080}",
+                "WUD_WEB_PORT": "${WUD_WEB_PORT:-7417}",
                 "WUD_WEB_MUTATIONS_ENABLED": "${WUD_WEB_MUTATIONS_ENABLED:-false}",
                 "WUD_WEB_PUBLIC_ORIGIN": "${WUD_WEB_PUBLIC_ORIGIN:-}",
                 "WUD_WEB_ALLOWED_HOSTS": "${WUD_WEB_ALLOWED_HOSTS:-}",
