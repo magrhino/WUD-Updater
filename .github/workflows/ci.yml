@@ -205,6 +205,7 @@ jobs:
         uses: codecov/codecov-action@e79a6962e0d4c0c17b229090214935d2e33f8354 # v6.0.1
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
+          flags: python
 
   shell-tests:
     name: shell tests
@@ -305,6 +306,12 @@ jobs:
 
       - name: Run tests
         run: tests/run-all.sh --webui
+
+      - name: Upload results to Codecov
+        uses: codecov/codecov-action@e79a6962e0d4c0c17b229090214935d2e33f8354 # v6.0.1
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          flags: webui
 
   webui-smoke:
     name: webui smoke
