@@ -2539,17 +2539,8 @@ class UpdateFromWudRunner:
         images: Sequence[str],
     ) -> bool:
         ok = True
-        resolver = DockerManifestResolver(self.docker, verbose=True)
-        tag_verifier = DigestVerifier(
-            self.docker,
-            primary_resolver=resolver,
-            fallback_resolver=resolver,
-        )
         for update in updates:
-            current = tag_verifier.verify_tag_digest(
-                update.resolved_image,
-                update.planned_digest,
-            )
+            current = self._verify_digest_pin_update_target(update)
             if not current.ok:
                 ok = False
                 if current.reason == "stale-digest":
@@ -2755,6 +2746,21 @@ class UpdateFromWudRunner:
             fallback_resolver=resolver,
         )
         return _resolve_digest_pin_candidate(verifier, candidate)
+
+    def _verify_digest_pin_update_target(
+        self,
+        update: DigestPinUpdate,
+    ) -> DigestResolveResult:
+        resolver = DockerManifestResolver(self.docker, verbose=True)
+        verifier = DigestVerifier(
+            self.docker,
+            primary_resolver=resolver,
+            fallback_resolver=resolver,
+        )
+        return verifier.verify_tag_digest(
+            update.resolved_image,
+            update.planned_digest,
+        )
 
     def _validate_digest_pin_plan(self, matches: Sequence[Match]) -> bool:
         if not self.options.digest_pin_updates:
