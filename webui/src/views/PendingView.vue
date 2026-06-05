@@ -1732,13 +1732,13 @@ async function approveDigestPinLabelRewrite(issue: PlanIssue): Promise<void> {
     ...intent,
     digestPinLabelRewriteApprovals: [...approvalsByKey.values()],
   };
-  updateIntent.value = nextIntent;
   await webui.createPlan(
     nextIntent.lineNumbers,
     nextIntent.allowTagUpdates,
     nextIntent.tagOverrides,
     nextIntent.digestPinLabelRewriteApprovals,
   );
+  updateIntent.value = nextIntent;
   showPreflightModal.value = true;
 }
 
