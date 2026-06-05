@@ -448,6 +448,35 @@ class ComposeCliTests(FakeDockerCase):
             ),
         )
 
+    def test_service_image_pairs_reads_labels(self) -> None:
+        stack = self.base / "media"
+        stack.mkdir()
+        (stack / ".fake-docker-id").write_text("media\n", encoding="utf-8")
+        (stack / "docker-compose.yml").write_text(
+            "\n".join(
+                [
+                    "services:",
+                    "  app:",
+                    "    image: repo/app@sha256:old",
+                    "    labels:",
+                    "      - wud.tag.include=^latest$$",
+                    "",
+                ]
+            ),
+            encoding="utf-8",
+        )
+
+        self.assertEqual(
+            self.compose.service_image_pairs(stack, "docker-compose.yml"),
+            (
+                ServiceImage(
+                    service="app",
+                    image="repo/app@sha256:old",
+                    labels=(("wud.tag.include", "^latest$$"),),
+                ),
+            ),
+        )
+
     def test_service_bind_mounts_from_config_json_reads_bind_sources(self) -> None:
         config_json = json.dumps(
             {

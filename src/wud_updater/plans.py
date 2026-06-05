@@ -23,13 +23,18 @@ from .updater import (
     TagOverride,
     TagUpdate,
     UpdateScope,
+    UpdaterError,
     _container_bind_mount_path_issue,
+    _digest_pin_candidates,
+    _digest_pin_match_tag,
+    _digest_pin_resolve_error,
     _expand_network_mode_services,
     _label_value_is_true,
     _network_mode_providers,
     _ordered_unique,
+    _resolve_digest_pin_candidate,
     _scope_plan_label,
-    _services_for_image,
+    _services_for_target_match,
     _stacks_to_update,
     _update_services,
     digest_pin_update_from_values,
@@ -376,6 +381,7 @@ class _PlanBuilder:
                     stacks,
                     self.docker,
                     allow_tag_updates=True,
+                    digest_pin_updates=self.config.digest_pin_updates,
                 )
                 cleanup_diagnostics = _unmatched_diagnostics(
                     self.config,
@@ -480,6 +486,7 @@ class _PlanBuilder:
             stacks,
             self.docker,
             allow_tag_updates=self.allow_tag_updates,
+            digest_pin_updates=self.config.digest_pin_updates,
         )
 
     def _unmatched_issues(
@@ -607,7 +614,7 @@ class _PlanBuilder:
                 match for match in matches if match.stack.index == stack.index
             ]
             for match in stack_matches:
-                if match.target.desired_tag:
+                if _digest_pin_match_tag(match):
                     continue
                 issues.append(
                     DryRunPlanIssue(
@@ -630,16 +637,35 @@ class _PlanBuilder:
                 primary_resolver=resolver,
                 fallback_resolver=resolver,
             )
-            for update in _tag_updates(stack_matches):
-                result = verifier.resolve_tag_digest(update.new_image)
+            try:
+                candidates = _digest_pin_candidates(stack_matches)
+            except UpdaterError as exc:
+                issues.append(
+                    DryRunPlanIssue(
+                        severity="error",
+                        code="digest-pin-conflict",
+                        message=f"Digest-pin plan is not safe to apply: {exc}",
+                        stack=stack.name,
+                    )
+                )
+                candidates = ()
+            for candidate in candidates:
+                result = _resolve_digest_pin_candidate(verifier, candidate)
                 if not result.ok:
+                    code = (
+                        "digest-pin-digest-stale"
+                        if result.reason == "stale-digest"
+                        else "digest-pin-digest-unavailable"
+                    )
                     issues.append(
                         DryRunPlanIssue(
                             severity="error",
-                            code="digest-pin-digest-unavailable",
+                            code=code,
                             message=(
-                                "Could not resolve digest-pin target "
-                                f"{update.new_image}: {result.reason}"
+                                _digest_pin_resolve_error(
+                                    candidate.resolved_image,
+                                    result,
+                                )
                                 + (f" ({result.error})" if result.error else "")
                             ),
                             stack=stack.name,
@@ -648,10 +674,10 @@ class _PlanBuilder:
                     continue
                 stack_updates.append(
                     digest_pin_update_from_values(
-                        old_image=update.old_image,
-                        resolved_tag=update.desired_tag,
+                        old_image=candidate.old_image,
+                        resolved_tag=candidate.resolved_tag,
                         planned_digest=result.digest,
-                        services=update.services,
+                        services=candidate.services,
                     )
                 )
 
@@ -844,9 +870,8 @@ class _PlanBuilder:
             if key in seen:
                 continue
             seen.add(key)
-            digest_pin = digest_pins.get(
-                (match.compose_image, match.target.desired_tag)
-            )
+            digest_pin_tag = _digest_pin_match_tag(match)
+            digest_pin = digest_pins.get((match.compose_image, digest_pin_tag))
             if digest_pin is not None:
                 target_image = digest_pin.final_image
             else:
@@ -1157,6 +1182,7 @@ def build_unmatched_cleanup(
         stacks,
         docker,
         allow_tag_updates=True,
+        digest_pin_updates=config.digest_pin_updates,
     )
     diagnostics = _unmatched_diagnostics(
         config,
@@ -1206,6 +1232,7 @@ def resolve_pending_groups(
         stacks,
         docker,
         allow_tag_updates=True,
+        digest_pin_updates=config.digest_pin_updates,
     )
     diagnostics = _unmatched_diagnostics(
         config,
@@ -1243,6 +1270,7 @@ def _match_targets(
     docker: DockerCli,
     *,
     allow_tag_updates: bool,
+    digest_pin_updates: bool,
 ) -> tuple[list[Match], list[DryRunPlanSkipped]]:
     container_images = {item.name: item.image for item in docker.try_container_images()}
     matches: list[Match] = []
@@ -1261,9 +1289,16 @@ def _match_targets(
 
         for stack in stacks:
             for image in stack.images:
-                if not image_matches_resolved_target(image, resolved, allow_repo):
+                services = _services_for_target_match(
+                    stack.service_images,
+                    image,
+                    target,
+                    resolved,
+                    allow_repo,
+                    allow_digest_pin_rematch=digest_pin_updates,
+                )
+                if services is None:
                     continue
-                services = _services_for_image(stack.service_images, image)
                 if services:
                     for service in services:
                         key = (stack.index, target.line_no, resolved, image, service)

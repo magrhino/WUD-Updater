@@ -65,6 +65,7 @@ from .file_ops import OwnerConfig, OwnerConfigError, apply_configured_owner
 from .images import (
     image_has_tag,
     image_matches_resolved_target,
+    image_tag,
     image_with_digest,
     repo_key,
     normalize_digest,
@@ -168,6 +169,15 @@ class DigestPinUpdate:
     marker: str
     label_key: str
     label_value: str
+    services: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class DigestPinCandidate:
+    old_image: str
+    resolved_tag: str
+    resolved_image: str
+    planned_digest: str
     services: tuple[str, ...]
 
 
@@ -327,7 +337,7 @@ class UpdateFromWudRunner:
         self.audit_db_path: Path | None = None
         self.applied_digest_pins: dict[tuple[int, int, str], DigestPinUpdate] = {}
         self.digest_pin_update_cache: dict[
-            tuple[TagUpdate, ...],
+            tuple[DigestPinCandidate, ...],
             tuple[DigestPinUpdate, ...],
         ] = {}
         self.progress_callback = progress_callback
@@ -745,9 +755,16 @@ class UpdateFromWudRunner:
 
             for stack in stacks:
                 for image in stack.images:
-                    if not image_matches_resolved_target(image, resolved, allow_repo):
+                    services = _services_for_target_match(
+                        stack.service_images,
+                        image,
+                        target,
+                        resolved,
+                        allow_repo,
+                        allow_digest_pin_rematch=self.options.digest_pin_updates,
+                    )
+                    if services is None:
                         continue
-                    services = _services_for_image(stack.service_images, image)
                     if services:
                         for service in services:
                             key = (stack.index, target.line_no, resolved, image, service)
@@ -1161,12 +1178,16 @@ class UpdateFromWudRunner:
                 note=str(exc),
             )
             return StackStatus("failure", "compose-digest-pin-plan-failed")
+        digest_pin_tag_updates = _digest_pin_tag_materialization_updates(
+            digest_pin_updates
+        )
+        compose_tag_updates = (*tag_updates, *digest_pin_tag_updates)
         applied_tags: tuple[AppliedTagUpdate, ...] = ()
         applied_digest_pins: tuple[AppliedDigestPinUpdate, ...] = ()
         compose_backup: Path | None = None
         current_stack = stack
 
-        if tag_updates:
+        if compose_tag_updates:
             self.log.info(f"[{stack.name}] Applying compose tag update(s)")
             compose_path = stack.directory / stack.file
             try:
@@ -1185,7 +1206,10 @@ class UpdateFromWudRunner:
                 )
                 return StackStatus("failure", "compose-backup-failed")
             try:
-                applied_tags = apply_compose_tag_updates(compose_path, tag_updates)
+                applied_tags = apply_compose_tag_updates(
+                    compose_path,
+                    compose_tag_updates,
+                )
             except ComposeTagRewriteError as exc:
                 self.log.error(
                     f"[{stack.name}] Could not safely rewrite compose image tag(s): {exc}"
@@ -1370,6 +1394,22 @@ class UpdateFromWudRunner:
 
         if digest_pin_updates:
             compose_path = stack.directory / stack.file
+            if compose_backup is None:
+                try:
+                    compose_backup = _backup_compose(compose_path)
+                except OSError as exc:
+                    self.log.error(
+                        f"[{stack.name}] Could not back up compose file before digest-pin rewrite: {exc}"
+                    )
+                    self._record_failure(
+                        stack,
+                        matches,
+                        phase="compose-backup",
+                        reason="compose-backup-failed",
+                        services=pull_services,
+                        note=str(exc),
+                    )
+                    return StackStatus("failure", "compose-backup-failed")
             try:
                 applied_digest_pins = apply_compose_digest_pins(
                     compose_path,
@@ -1558,6 +1598,7 @@ class UpdateFromWudRunner:
         else:
             self.log.info(f"[{stack.name}] Bringing stack up")
 
+        compose_rewrite_applied = bool(applied_tags or applied_digest_pins)
         up_result = self._run_compose_up(
             stack,
             services,
@@ -1565,7 +1606,7 @@ class UpdateFromWudRunner:
             no_deps=scope.up_no_deps,
         )
         if not up_result.ok:
-            if applied_tags and compose_backup is not None:
+            if compose_rewrite_applied and compose_backup is not None:
                 failure_phase = "up"
                 failure_reason = "up-or-health-failed"
                 failure_error = up_result.command_error
@@ -1634,7 +1675,7 @@ class UpdateFromWudRunner:
                         project_directory=stack.project_directory,
                     )
             except CommandError as exc:
-                if applied_tags and compose_backup is not None:
+                if compose_rewrite_applied and compose_backup is not None:
                     return self._handle_tag_update_failure(
                         stack,
                         matches,
@@ -1672,7 +1713,7 @@ class UpdateFromWudRunner:
         if up_result.wait_handled or self._wait_for_health(stack, services, matches):
             self.log.info(f"[{stack.name}] Healthy")
             if down_failed:
-                if applied_tags and compose_backup is not None:
+                if compose_rewrite_applied and compose_backup is not None:
                     return self._handle_tag_update_failure(
                         stack,
                         matches,
@@ -1713,7 +1754,7 @@ class UpdateFromWudRunner:
             return StackStatus("success", "updated")
 
         health_details = self._capture_health_details(stack, services)
-        if applied_tags and compose_backup is not None:
+        if compose_rewrite_applied and compose_backup is not None:
             return self._handle_tag_update_failure(
                 stack,
                 matches,
@@ -2444,27 +2485,38 @@ class UpdateFromWudRunner:
         images: Sequence[str],
     ) -> bool:
         ok = True
+        resolver = DockerManifestResolver(self.docker, verbose=True)
+        tag_verifier = DigestVerifier(
+            self.docker,
+            primary_resolver=resolver,
+            fallback_resolver=resolver,
+        )
         for update in updates:
-            current = self._resolve_digest_pin(update.resolved_image)
+            current = tag_verifier.verify_tag_digest(
+                update.resolved_image,
+                update.planned_digest,
+            )
             if not current.ok:
                 ok = False
-                self.log.error(
-                    f"[{stack.name}] Could not re-resolve digest-pin target "
-                    f"{update.resolved_image}: {current.reason}"
-                )
-                if current.error:
+                if current.reason == "stale-digest":
+                    current_digest = normalize_digest(current.digest)
+                    suffix = f", current {current_digest}" if current_digest else ""
                     self.log.plain(
                         "ERROR",
-                        f"[{stack.name}] Digest resolution error: {sanitize_stream(current.error)}",
+                        f"[{stack.name}] Digest-pin target moved for "
+                        f"{update.resolved_image}: planned {update.planned_digest}"
+                        f"{suffix}",
                     )
-                continue
-            if normalize_digest(current.digest) != update.planned_digest:
-                ok = False
-                self.log.error(
-                    f"[{stack.name}] Digest-pin target moved for "
-                    f"{update.resolved_image}: planned {update.planned_digest}, "
-                    f"current {normalize_digest(current.digest)}"
-                )
+                else:
+                    self.log.error(
+                        f"[{stack.name}] Could not re-resolve digest-pin target "
+                        f"{update.resolved_image}: {current.reason}"
+                    )
+                    if current.error:
+                        self.log.plain(
+                            "ERROR",
+                            f"[{stack.name}] Digest resolution error: {sanitize_stream(current.error)}",
+                        )
                 continue
             matched = False
             digest_result: DigestCheckResult | None = None
@@ -2595,8 +2647,8 @@ class UpdateFromWudRunner:
     ) -> tuple[DigestPinUpdate, ...]:
         if not self.options.digest_pin_updates:
             return ()
-        tag_updates = self._tag_updates(matches)
-        cached = self.digest_pin_update_cache.get(tag_updates)
+        candidates = _digest_pin_candidates(matches)
+        cached = self.digest_pin_update_cache.get(candidates)
         if cached is not None:
             return cached
         planned = {
@@ -2604,28 +2656,29 @@ class UpdateFromWudRunner:
             for update in self.options.digest_pin_plan
         }
         updates: list[DigestPinUpdate] = []
-        for tag_update in tag_updates:
+        for candidate in candidates:
             planned_update = planned.get(
-                (tag_update.old_image, tag_update.desired_tag)
+                (candidate.old_image, candidate.resolved_tag)
             )
             if planned_update is not None:
-                updates.append(replace(planned_update, services=tag_update.services))
+                updates.append(replace(planned_update, services=candidate.services))
                 continue
-            resolved = self._resolve_digest_pin(tag_update.new_image)
+            resolved = self._resolve_digest_pin_candidate(candidate)
             if not resolved.ok:
                 raise UpdaterError(
-                    "Could not resolve digest-pin target for "
-                    f"{tag_update.new_image}: {resolved.reason}"
+                    _digest_pin_resolve_error(candidate.resolved_image, resolved)
                     + (f" ({resolved.error})" if resolved.error else "")
                 )
             updates.append(
-                _digest_pin_update_from_tag_update(
-                    tag_update,
-                    resolved.digest,
+                digest_pin_update_from_values(
+                    old_image=candidate.old_image,
+                    resolved_tag=candidate.resolved_tag,
+                    planned_digest=resolved.digest,
+                    services=candidate.services,
                 )
             )
         result = tuple(updates)
-        self.digest_pin_update_cache[tag_updates] = result
+        self.digest_pin_update_cache[candidates] = result
         return result
 
     def _resolve_digest_pin(self, image: str) -> DigestResolveResult:
@@ -2637,12 +2690,24 @@ class UpdateFromWudRunner:
         )
         return verifier.resolve_tag_digest(image)
 
+    def _resolve_digest_pin_candidate(
+        self,
+        candidate: DigestPinCandidate,
+    ) -> DigestResolveResult:
+        resolver = DockerManifestResolver(self.docker, verbose=True)
+        verifier = DigestVerifier(
+            self.docker,
+            primary_resolver=resolver,
+            fallback_resolver=resolver,
+        )
+        return _resolve_digest_pin_candidate(verifier, candidate)
+
     def _validate_digest_pin_plan(self, matches: Sequence[Match]) -> bool:
         if not self.options.digest_pin_updates:
             return True
         ok = True
         for match in matches:
-            if match.target.desired_tag:
+            if _digest_pin_match_tag(match):
                 continue
             ok = False
             self.log.error(
@@ -2996,9 +3061,10 @@ class UpdateFromWudRunner:
             for update in updates
         }
         for match in matches:
-            if not match.target.desired_tag:
+            resolved_tag = _digest_pin_match_tag(match)
+            if not resolved_tag:
                 continue
-            update = by_key.get((match.compose_image, match.target.desired_tag))
+            update = by_key.get((match.compose_image, resolved_tag))
             if update is None:
                 continue
             self.applied_digest_pins[
@@ -3255,9 +3321,10 @@ class UpdateFromWudRunner:
         }
         by_line: dict[int, DigestPinUpdate] = {}
         for match in matches:
-            if not match.target.desired_tag:
+            resolved_tag = _digest_pin_match_tag(match)
+            if not resolved_tag:
                 continue
-            update = by_key.get((match.compose_image, match.target.desired_tag))
+            update = by_key.get((match.compose_image, resolved_tag))
             if update is not None:
                 by_line.setdefault(match.target.line_no, update)
         return by_line
@@ -4090,6 +4157,57 @@ def _services_for_image(service_images: Sequence[ServiceImage], image: str) -> t
     return tuple(sorted({item.service for item in service_images if item.image == image}))
 
 
+def _services_for_target_match(
+    service_images: Sequence[ServiceImage],
+    image: str,
+    target: WudTarget,
+    resolved: str,
+    allow_repo: bool,
+    *,
+    allow_digest_pin_rematch: bool = False,
+) -> tuple[str, ...] | None:
+    if image_matches_resolved_target(image, resolved, allow_repo):
+        return _services_for_image(service_images, image)
+    if not allow_digest_pin_rematch:
+        return None
+    services = _digest_pin_rematch_services(service_images, image, target)
+    if services:
+        return services
+    return None
+
+
+def _digest_pin_rematch_services(
+    service_images: Sequence[ServiceImage],
+    image: str,
+    target: WudTarget,
+) -> tuple[str, ...]:
+    if not target.digest or not image_has_tag(target.first):
+        return ()
+    if image_has_tag(image) or repo_key(image) != target.repo:
+        return ()
+    tag = image_tag(target.first)
+    if not tag_value_valid(tag):
+        return ()
+    return tuple(
+        sorted(
+            item.service
+            for item in service_images
+            if item.image == image
+            and _exact_tag_include_matches(
+                _service_image_label_value(item, WUD_TAG_INCLUDE_LABEL),
+                tag,
+            )
+        )
+    )
+
+
+def _service_image_label_value(service_image: ServiceImage, key: str) -> str:
+    for label_key, label_value in service_image.labels:
+        if label_key == key:
+            return label_value
+    return ""
+
+
 def _network_mode_providers(service_images: Sequence[ServiceImage]) -> dict[str, str]:
     providers: dict[str, str] = {}
     for item in service_images:
@@ -4548,6 +4666,105 @@ def digest_pin_update_from_values(
         services=tuple(sorted(services)),
     )
     return _digest_pin_update_from_tag_update(tag_update, planned_digest)
+
+
+def _digest_pin_match_tag(match: Match) -> str:
+    if match.target.desired_tag:
+        return match.target.desired_tag
+    if not match.target.digest or not image_has_tag(match.target.first):
+        return ""
+    tag = image_tag(match.target.first)
+    return tag if tag_value_valid(tag) else ""
+
+
+def _digest_pin_candidates(
+    matches: Sequence[Match],
+) -> tuple[DigestPinCandidate, ...]:
+    services_by_key: dict[tuple[str, str, str], set[str]] = {}
+    digests_by_key: dict[tuple[str, str, str], set[str]] = {}
+    for match in matches:
+        resolved_tag = _digest_pin_match_tag(match)
+        if not resolved_tag:
+            continue
+        resolved_image = image_with_tag(match.compose_image, resolved_tag)
+        key = (match.compose_image, resolved_tag, resolved_image)
+        services_by_key.setdefault(key, set())
+        if match.service:
+            services_by_key[key].add(match.service)
+        if not match.target.desired_tag:
+            digests_by_key.setdefault(key, set()).add(
+                normalize_digest(match.target.digest)
+            )
+
+    candidates: list[DigestPinCandidate] = []
+    for key, services in sorted(services_by_key.items()):
+        old_image, resolved_tag, resolved_image = key
+        digests = sorted(digests_by_key.get(key, set()))
+        if len(digests) > 1:
+            raise UpdaterError(
+                "Conflicting digest-pin digests for "
+                f"{resolved_image}: {', '.join(digests)}"
+            )
+        candidates.append(
+            DigestPinCandidate(
+                old_image=old_image,
+                resolved_tag=resolved_tag,
+                resolved_image=resolved_image,
+                planned_digest=digests[0] if digests else "",
+                services=tuple(sorted(services)),
+            )
+        )
+    return tuple(candidates)
+
+
+def _digest_pin_tag_materialization_updates(
+    updates: Sequence[DigestPinUpdate],
+) -> tuple[TagUpdate, ...]:
+    tag_updates: list[TagUpdate] = []
+    for update in updates:
+        if (
+            update.old_image == update.resolved_image
+            or "@sha256:" not in update.old_image
+        ):
+            continue
+        tag_updates.append(
+            TagUpdate(
+                old_image=update.old_image,
+                desired_tag=update.resolved_tag,
+                new_image=update.resolved_image,
+                services=update.services,
+            )
+        )
+    return tuple(tag_updates)
+
+
+def _resolve_digest_pin_candidate(
+    verifier: DigestVerifier,
+    candidate: DigestPinCandidate,
+) -> DigestResolveResult:
+    if candidate.planned_digest:
+        return verifier.verify_tag_digest(
+            candidate.resolved_image,
+            candidate.planned_digest,
+        )
+    return verifier.resolve_tag_digest(candidate.resolved_image)
+
+
+def _digest_pin_resolve_error(
+    resolved_image: str,
+    result: DigestResolveResult,
+) -> str:
+    if result.reason == "stale-digest":
+        current = f", current {normalize_digest(result.digest)}" if result.digest else ""
+        return (
+            f"Digest-pin target moved for {resolved_image}: "
+            f"planned digest is no longer current{current}"
+        )
+    return f"Could not resolve digest-pin target for {resolved_image}: {result.reason}"
+
+
+def _exact_tag_include_matches(value: str, tag: str) -> bool:
+    return compose_unescape_dollars(value) == exact_tags_regex((tag,))
 
 
 def _digest_pin_update_from_tag_update(
