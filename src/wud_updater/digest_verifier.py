@@ -403,8 +403,13 @@ class DigestVerifier:
         self,
         image: RegistryImageRef,
     ) -> str:
+        resolver = (
+            self.primary_resolver
+            if isinstance(self.primary_resolver, RegistryHttpManifestResolver)
+            else RegistryHttpManifestResolver()
+        )
         try:
-            document = RegistryHttpManifestResolver().fetch(image, image.tag)
+            document = resolver.fetch(image, image.tag)
         except ManifestLookupError:
             return ""
         if not document.is_index():
