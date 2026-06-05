@@ -1550,9 +1550,10 @@ class PythonUpdateFromWudTests(unittest.TestCase):
         self.assertIn("wud.tag.include=^2\\.0$$", content)
         calls = self.calls()
         self.assertRegex(calls, r"manifest inspect --verbose docker.io/repo/app:2.0")
+        self.assertRegex(calls, r"manifest inspect docker.io/repo/app:2.0")
         self.assertEqual(
             calls.count("manifest inspect --verbose docker.io/repo/app:2.0"),
-            2,
+            1,
         )
         self.assertNotRegex(calls, r"(?m)^manifest inspect docker\.io/repo/app:2\.0$")
         self.assertRegex(calls, r"compose -f docker-compose.yml pull app")
