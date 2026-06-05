@@ -191,7 +191,7 @@ const INITIAL_PENDING: DemoPendingItem[] = [
       "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
     compose_images: ["postgres:16"],
     services: ["postgres"],
-    action: "update",
+    action: "recreate_stack",
     diagnostic: null,
     stack: "data",
     service: "postgres",

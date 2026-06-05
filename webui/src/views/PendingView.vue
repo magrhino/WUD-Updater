@@ -101,6 +101,12 @@ type DiagnosticItem = {
   diagnostic?: PendingDiagnostic | null;
 };
 
+type SafetyCue = {
+  key: string;
+  label: string;
+  type: "default" | "error" | "info" | "success" | "warning";
+};
+
 type ApplyJobProgressPhase = {
   key: string;
   label: string;
@@ -200,6 +206,12 @@ const columns = computed<DataTableColumns<PendingItem>>(() => [
       row.digest
         ? h("code", { class: "digest-value", title: row.digest }, displayDigest(row.digest))
         : displayValue(""),
+  },
+  {
+    title: "Safety cues",
+    key: "safety_cues",
+    minWidth: 200,
+    render: (row) => renderRiskBadges(row),
   },
   {
     title: "Release notes",
@@ -927,6 +939,105 @@ function renderReleaseNotes(row: PendingItem) {
   ]);
 }
 
+function getPendingGroupedItem(lineNo: number): PendingGroupedItem | undefined {
+  if (!webui.pending?.grouping) return undefined;
+  for (const group of webui.pending.grouping.groups) {
+    const found = group.items.find((i) => i.line_no === lineNo);
+    if (found) return found;
+  }
+  return webui.pending.grouping.unmatched.find((i) => i.line_no === lineNo);
+}
+
+function pendingServiceKeys(row: PendingItem): string[] {
+  if (!webui.pending?.grouping) return [];
+  const keys: string[] = [];
+  for (const group of webui.pending.grouping.groups) {
+    const item = group.items.find((i) => i.line_no === row.line_no);
+    if (!item) continue;
+    for (const service of item.services) {
+      keys.push(`${group.name}/${service}`);
+    }
+  }
+  const unmatched = webui.pending.grouping.unmatched.find(
+    (item) => item.line_no === row.line_no,
+  );
+  if (unmatched?.diagnostic?.stack && unmatched.diagnostic.service) {
+    keys.push(`${unmatched.diagnostic.stack}/${unmatched.diagnostic.service}`);
+  }
+  return [...new Set(keys)];
+}
+
+function riskCues(row: PendingItem): SafetyCue[] {
+  const groupedItem = getPendingGroupedItem(row.line_no);
+  const serviceKeys = pendingServiceKeys(row);
+  const cues: SafetyCue[] = [];
+  const addCue = (key: string, label: string, type: SafetyCue["type"]) => {
+    cues.push({ key, label, type });
+  };
+
+  const parseVersion = (tag: string) => {
+    const m = tag.match(/^v?(\d+)\.(\d+)(?:\.(\d+))?/);
+    if (!m) return null;
+    return {
+      major: parseInt(m[1]!, 10),
+      minor: parseInt(m[2]!, 10),
+      patch: m[3] ? parseInt(m[3]!, 10) : 0,
+    };
+  };
+
+  if (row.current_tag && row.desired_tag && row.current_tag !== row.desired_tag) {
+    const c = parseVersion(row.current_tag);
+    const d = parseVersion(row.desired_tag);
+    if (c && d) {
+      if (c.major !== d.major) addCue("major-bump", "Major bump", "error");
+      else if (c.minor !== d.minor) addCue("minor-bump", "Minor bump", "warning");
+      else if (c.patch !== d.patch) addCue("patch-bump", "Patch bump", "info");
+    }
+  }
+
+  if (!row.desired_tag && row.digest) {
+    addCue("digest-only", "Digest-only", "info");
+  }
+
+  if (row.desired_tag === "latest" || (!row.desired_tag && row.current_tag === "latest")) {
+    addCue("mutable-latest", "Mutable latest", "warning");
+  }
+
+  if (groupedItem?.action === "recreate_stack") {
+    addCue("stack-restart", "Stack restart", "warning");
+  }
+
+  const note = releaseNoteFor(row);
+  if (note?.breaking) {
+    addCue("possible-breaking", "Possible breaking", "warning");
+  }
+  if (
+    webui.releaseNotes &&
+    !webui.releaseNotesLoading &&
+    (!note?.links.length || note.status === "error" || note.status === "unsupported")
+  ) {
+    addCue("no-release-notes", "No release notes", "warning");
+  }
+
+  if (webui.snoozes.some((s) => serviceKeys.includes(s.service_key))) {
+    addCue("snoozed", "Snoozed", "default");
+  }
+  const policy = webui.servicePolicies.find((p) => serviceKeys.includes(p.service_key));
+  if (policy?.auto_update) {
+    addCue("auto-update", "Auto-update", "success");
+  }
+
+  return cues;
+}
+
+function renderRiskBadges(row: PendingItem) {
+  const badges = riskCues(row).map((cue) =>
+    h(NTag, { key: cue.key, size: "small", type: cue.type, class: "safety-badge" }, () => cue.label),
+  );
+  if (badges.length === 0) return h("span", { class: "risk-badges-muted" }, "None");
+  return h("div", { class: "risk-badges-container" }, badges);
+}
+
 function breakingCue(note: ReleaseNoteInfo) {
   return h(
     "span",
@@ -1513,6 +1624,7 @@ function issueHint(issue: PlanIssue): string {
   return issue.hint || "";
 }
 
+
 function staleDiagnosticLabel(item: DiagnosticItem): string {
   switch (item.diagnostic?.code) {
     case "compose-label-active-file-missing":
@@ -1651,7 +1763,31 @@ function groupChangeOverflowCount(group: PendingStackGroup): number {
 }
 
 function groupedItemActionLabel(item: PendingGroupedItem): string {
-  return item.action === "tag-update" ? "Tag update" : "Image update";
+  switch (item.action) {
+    case "tag-update":
+      return "Tag update";
+    case "recreate_service":
+      return "Recreate service";
+    case "recreate_stack":
+      return "Recreate stack";
+    case "unmatched":
+      return "Needs review";
+    default:
+      return "Image update";
+  }
+}
+
+function groupedItemActionTagType(item: PendingGroupedItem): SafetyCue["type"] {
+  switch (item.action) {
+    case "tag-update":
+    case "recreate_stack":
+    case "unmatched":
+      return "warning";
+    case "recreate_service":
+      return "info";
+    default:
+      return "default";
+  }
 }
 
 function groupedItemTagRewriteLabel(item: PendingGroupedItem): string {
@@ -1689,6 +1825,7 @@ async function retryPendingLoad(): Promise<void> {
 
 onMounted(() => {
   void retryPendingLoad();
+  void webui.loadPendingSafetyCues();
   void reconnectObservedApplyJob();
 });
 
@@ -2194,10 +2331,25 @@ watch(
               <span class="stack-change-target">
                 <n-tag
                   size="small"
-                  :type="item.action === 'tag-update' ? 'warning' : 'default'"
+                  :type="groupedItemActionTagType(item)"
                 >
                   {{ groupedItemActionLabel(item) }}
                 </n-tag>
+                <span
+                  v-if="riskCues(item).length"
+                  class="risk-badges-container stack-change-risk-cues"
+                  aria-label="Safety cues"
+                >
+                  <n-tag
+                    v-for="cue in riskCues(item)"
+                    :key="`${item.line_no}-${cue.key}`"
+                    size="small"
+                    :type="cue.type"
+                    class="safety-badge"
+                  >
+                    {{ cue.label }}
+                  </n-tag>
+                </span>
                 <code
                   class="stack-change-value"
                   data-label="Current"
@@ -2238,7 +2390,9 @@ watch(
                     <span class="sr-only">Select update </span>
                     <strong>{{ groupedItemServices(item) }}</strong>
                   </n-checkbox>
-                  <n-tag size="small">{{ groupedItemActionLabel(item) }}</n-tag>
+                  <n-tag size="small" :type="groupedItemActionTagType(item)">
+                    {{ groupedItemActionLabel(item) }}
+                  </n-tag>
                 </div>
                 <div class="pending-update-detail">
                   <code>{{ item.image }}</code>
@@ -2247,6 +2401,21 @@ watch(
                 </div>
                 <div class="pending-update-meta">
                   <span>Pending file line #{{ item.line_no }}</span>
+                  <span
+                    v-if="riskCues(item).length"
+                    class="risk-badges-container"
+                    aria-label="Safety cues"
+                  >
+                    <n-tag
+                      v-for="cue in riskCues(item)"
+                      :key="`${item.line_no}-${cue.key}`"
+                      size="small"
+                      :type="cue.type"
+                      class="safety-badge"
+                    >
+                      {{ cue.label }}
+                    </n-tag>
+                  </span>
                   <span v-if="groupedItemTagRewriteLabel(item)" class="tag-rewrite-detail">
                     <n-tag size="small" type="warning">Tag rewrite</n-tag>
                     {{ groupedItemTagRewriteLabel(item) }}
@@ -2273,8 +2442,13 @@ watch(
                       Possible breaking change
                     </span>
                   </div>
+                  <div v-if="item.diagnostic" class="pending-update-diagnostic">
+                    <n-alert type="warning" :title="item.diagnostic.message">
+                      {{ item.diagnostic.hint }}
+                    </n-alert>
+                  </div>
                   <span
-                    v-else
+                    v-if="!releaseNoteFor(item)?.links.length"
                     class="release-notes-muted"
                     :title="releaseNoteReason(releaseNoteFor(item)) || undefined"
                   >
@@ -2349,6 +2523,11 @@ watch(
                 <div class="pending-update-meta">
                   <span>Pending file line #{{ item.line_no }}</span>
                   <span>{{ staleDiagnosticDetail(item) }}</span>
+                </div>
+                <div v-if="item.diagnostic" class="pending-update-diagnostic">
+                  <n-alert type="warning" :title="item.diagnostic.message">
+                    {{ item.diagnostic.hint }}
+                  </n-alert>
                 </div>
                 <div v-if="item.desired_tag" class="pending-update-tag">
                   <span>New tag</span>
@@ -2489,6 +2668,23 @@ watch(
                   {{ displayDigest(item.digest) }}
                 </code>
                 <span v-else>None</span>
+              </dd>
+            </div>
+            <div>
+              <dt>Safety cues</dt>
+              <dd>
+                <div v-if="riskCues(item).length" class="risk-badges-container">
+                  <n-tag
+                    v-for="cue in riskCues(item)"
+                    :key="`${item.line_no}-${cue.key}`"
+                    size="small"
+                    :type="cue.type"
+                    class="safety-badge"
+                  >
+                    {{ cue.label }}
+                  </n-tag>
+                </div>
+                <span v-else class="risk-badges-muted">None</span>
               </dd>
             </div>
             <div>

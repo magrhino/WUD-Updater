@@ -2385,7 +2385,7 @@ def test_pending_endpoint_reads_wud_file_without_mutation(tmp_path: Path) -> Non
     assert body["grouping"]["groups"] == []
     assert [item["line_no"] for item in body["grouping"]["unmatched"]] == [2, 3]
     assert body["grouping"]["unmatched"][0]["action"] == "tag-update"
-    assert body["grouping"]["unmatched"][1]["action"] == "update"
+    assert body["grouping"]["unmatched"][1]["action"] == "recreate_stack"
     assert body["grouping"]["warnings"]
     assert wud_file.read_text(encoding="utf-8") == original
 
@@ -2432,12 +2432,43 @@ def test_pending_endpoint_groups_items_by_compose_stack_without_mutation(
     assert group["items"][0]["compose_images"] == ["repo/app:latest"]
     assert group["items"][0]["resolved_image"] == "repo/app:latest"
     assert group["items"][0]["target_image"] == "repo/app:latest"
-    assert group["items"][0]["action"] == "update"
+    assert group["items"][0]["action"] == "recreate_service"
     assert wud_file.read_text(encoding="utf-8") == original
     assert (
         (compose_dir / "docker-compose.yml").read_text(encoding="utf-8")
         == compose_before
     )
+    _assert_pending_grouping_did_not_mutate(_fake_docker_calls(fake_root))
+
+
+def test_pending_endpoint_marks_recreate_stack_label_action(
+    tmp_path: Path,
+) -> None:
+    fake_env, fake_root = _fake_docker_env(tmp_path)
+    client = _client(tmp_path, {"WUD_WEB_DEV_NO_AUTH": "true", **fake_env})
+    wud_file = tmp_path / "state" / "images.todo"
+    wud_file.write_text("repo/app:latest\n", encoding="utf-8")
+    _make_fake_stack(
+        tmp_path,
+        fake_root,
+        "stack",
+        [
+            ("app", "repo/app:latest", "cid-app"),
+            ("db", "repo/db:latest", "cid-db"),
+        ],
+    )
+    _write_fake_container_labels(
+        fake_root,
+        "cid-app",
+        {"WUD-UPDATER-RECREATE-STACK": "true"},
+    )
+
+    response = client.get("/api/v1/pending")
+
+    assert response.status_code == 200
+    group = response.json()["grouping"]["groups"][0]
+    assert group["items"][0]["services"] == ["app"]
+    assert group["items"][0]["action"] == "recreate_stack"
     _assert_pending_grouping_did_not_mutate(_fake_docker_calls(fake_root))
 
 

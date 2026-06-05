@@ -67,6 +67,12 @@ DEMO_UNMATCHED_CONTAINERS = (
     ("watchtower", "containrrr/watchtower:1.7.1"),
 )
 
+DEMO_CONTAINER_LABELS = {
+    "cid-data-postgres": {
+        "WUD-UPDATER-RECREATE-STACK": "true",
+    },
+}
+
 DEMO_PULL_TARGETS = (
     (
         "ghcr.io/home-assistant/home-assistant:2026.5.3",
@@ -568,6 +574,9 @@ def _write_demo_stacks(docker_base: Path, fake_docker_root: Path) -> None:
         _write_compose_file(stack_dir / "docker-compose.yml", services)
         _write_fake_stack_state(fake_docker_root, stack_name, services, containers)
 
+    for container_id, labels in DEMO_CONTAINER_LABELS.items():
+        _write_fake_container_labels(fake_docker_root, container_id, labels)
+
     (fake_docker_root / "containers" / "demo-wud-updater.summary").write_text(
         "/demo-wud-updater|running|healthy|0|0\n",
         encoding="utf-8",
@@ -640,6 +649,17 @@ def _write_fake_stack_state(
     (stack_state / "cids.txt").write_text("".join(cid_lines), encoding="utf-8")
     (stack_state / "service-images.tsv").write_text(
         "".join(service_image_rows),
+        encoding="utf-8",
+    )
+
+
+def _write_fake_container_labels(
+    fake_docker_root: Path,
+    container_id: str,
+    labels: dict[str, str],
+) -> None:
+    (fake_docker_root / "containers" / f"{container_id}.labels").write_text(
+        "".join(f"{key}={value}\n" for key, value in labels.items()),
         encoding="utf-8",
     )
 

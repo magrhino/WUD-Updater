@@ -88,10 +88,30 @@ function emitSelectValue(
   select.vm.$emit("update:value", value);
 }
 
+function mockMobileViewport(): () => void {
+  const originalMatchMedia = window.matchMedia;
+  window.matchMedia = vi.fn().mockImplementation((query: string) => ({
+    matches:
+      !query.includes("prefers-") &&
+      (query.includes("max-width") || query.includes("width <")),
+    media: query,
+    onchange: null,
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+    addListener: vi.fn(),
+    removeListener: vi.fn(),
+    dispatchEvent: vi.fn(),
+  }));
+  return () => {
+    window.matchMedia = originalMatchMedia;
+  };
+}
+
 function mockPendingLifecycle(webui: ReturnType<typeof useWebuiStore>) {
   vi.spyOn(webui, "loadPending").mockResolvedValue();
   vi.spyOn(webui, "loadReleaseNotes").mockResolvedValue();
   vi.spyOn(webui, "refreshReleaseNotes").mockResolvedValue();
+  vi.spyOn(webui, "loadPendingSafetyCues").mockResolvedValue();
 }
 
 const stalePendingPreflightFindings = [
@@ -816,34 +836,65 @@ describe("mutating WebUI views", () => {
       line_no: 1,
       image: "lscr.io/linuxserver/radarr:5.0",
       repo: "lscr.io/linuxserver/radarr",
+      current_tag: "5.0",
       desired_tag: "",
       target_image: "lscr.io/linuxserver/radarr:5.1",
       services: ["radarr"],
-      action: "update",
+      action: "recreate_service",
     });
     const updater = pendingGroupedItem({
       line_no: 2,
       image: "ghcr.io/example/wud-updater:1.0",
       repo: "ghcr.io/example/wud-updater",
-      desired_tag: "1.1",
-      target_image: "ghcr.io/example/wud-updater:1.1",
+      current_tag: "1.0",
+      desired_tag: "2.0",
+      target_image: "ghcr.io/example/wud-updater:2.0",
       services: ["wud-updater"],
     });
+    const stackItem = pendingGroupedItem({
+      line_no: 3,
+      image: "redis:latest@sha256:abc",
+      repo: "redis",
+      current_tag: "latest",
+      desired_tag: "",
+      digest: "sha256:abc",
+      target_image: "redis:latest@sha256:abc",
+      compose_images: ["redis:latest"],
+      services: [],
+      action: "recreate_stack",
+    });
     const { pinia, webui } = setupStores(true);
+    webui.releaseNotes = releaseNotesResponse([
+      releaseNoteInfo({
+        line_no: 1,
+        status: "error",
+        links: [],
+        error: "no supported GitHub release source found",
+      }),
+      releaseNoteInfo({
+        line_no: 2,
+        breaking: true,
+        breaking_reasons: ["Major version update."],
+      }),
+    ]);
+    webui.servicePolicies = [
+      servicePolicy({ service_key: "media/wud-updater", auto_update: true }),
+    ];
+    webui.snoozes = [snooze({ service_key: "media/radarr" })];
     webui.pending = {
       source_file: "/out/images.todo",
       exists: true,
-      count: 2,
-      items: [radarr, updater],
+      count: 3,
+      items: [radarr, updater, stackItem],
       grouping: {
-        ...pendingGrouping([radarr, updater]),
+        ...pendingGrouping([radarr, updater, stackItem]),
         groups: [
           {
-            ...pendingGrouping([radarr, updater]).groups[0],
+            ...pendingGrouping([radarr, updater, stackItem]).groups[0],
             services_label: "radarr, wud-updater",
             services: ["radarr", "wud-updater"],
-            line_numbers: [1, 2],
-            items: [radarr, updater],
+            line_numbers: [1, 2, 3],
+            items: [radarr, updater, stackItem],
           },
         ],
       },
@@ -858,13 +909,22 @@ describe("mutating WebUI views", () => {
     );
     const previewText = card.find(".stack-change-preview").text();
     expect(previewText).toContain("radarr");
-    expect(previewText).toContain("Image update");
+    expect(previewText).toContain("Recreate service");
+    expect(previewText).toContain("No release notes");
+    expect(previewText).toContain("Snoozed");
     expect(previewText).toContain("lscr.io/linuxserver/radarr:5.0");
     expect(previewText).toContain("lscr.io/linuxserver/radarr:5.1");
     expect(previewText).toContain("wud-updater");
     expect(previewText).toContain("Tag update");
+    expect(previewText).toContain("Major bump");
+    expect(previewText).toContain("Possible breaking");
+    expect(previewText).toContain("Auto-update");
     expect(previewText).toContain("ghcr.io/example/wud-updater:1.0");
-    expect(previewText).toContain("ghcr.io/example/wud-updater:1.1");
+    expect(previewText).toContain("ghcr.io/example/wud-updater:2.0");
+    expect(card.text()).toContain("Recreate stack");
+    expect(card.text()).toContain("Mutable latest");
+    expect(card.text()).toContain("Digest-only");
+    expect(card.text()).toContain("Stack restart");
     expect(card.find(".stack-card-tags").text()).not.toContain(
       "radarr, wud-updater",
     );
@@ -923,7 +983,7 @@ describe("mutating WebUI views", () => {
                 service: "wud-updater",
                 digest: "",
                 desired_tag: "",
-                action: "update",
+                action: "recreate_service",
               },
             ],
           },
@@ -1039,6 +1099,40 @@ describe("mutating WebUI views", () => {
       "Stack grouping is unavailable. Showing pending file order.",
     );
     expect(wrapper.find('[role="table"]').exists()).toBe(true);
+  });
+
+  it("shows safety cues in the mobile pending file order fallback", () => {
+    const restore = mockMobileViewport();
+    try {
+      const { pinia, webui } = setupStores(true);
+      webui.pending = {
+        ...pendingResponse([
+          pendingItem({
+            image: "redis:latest@sha256:abc",
+            repo: "redis",
+            current_tag: "latest",
+            desired_tag: "",
+            digest: "sha256:abc",
+          }),
+        ]),
+        grouping: {
+          status: "unavailable",
+          groups: [],
+          unmatched: [],
+          warnings: [],
+        },
+      };
+      mockPendingLifecycle(webui);
+      const wrapper = mountWithApp(PendingView, { pinia });
+      const card = wrapper.find(".mobile-card");
+
+      expect(wrapper.find('[role="table"]').exists()).toBe(false);
+      expect(card.text()).toContain("Safety cues");
+      expect(card.text()).toContain("Digest-only");
+      expect(card.text()).toContain("Mutable latest");
+    } finally {
+      restore();
+    }
   });
 
   it("shows a pending loading skeleton before queue data is available", () => {

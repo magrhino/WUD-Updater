@@ -303,6 +303,19 @@ export const useWebuiStore = defineStore("webui", () => {
     });
   }
 
+  async function loadPendingSafetyCues(): Promise<void> {
+    const [nextServicePolicies, nextSnoozes] = await Promise.allSettled([
+      webApi.servicePolicies(),
+      webApi.snoozes("active"),
+    ]);
+    if (nextServicePolicies.status === "fulfilled") {
+      servicePolicies.value = nextServicePolicies.value;
+    }
+    if (nextSnoozes.status === "fulfilled") {
+      snoozes.value = nextSnoozes.value;
+    }
+  }
+
   async function loadPending(
     options: { preserveCleanup?: boolean } = {},
   ): Promise<void> {
@@ -782,6 +795,7 @@ export const useWebuiStore = defineStore("webui", () => {
     loadCoreUpdateTour,
     updateCoreUpdateTour,
     loadDashboard,
+    loadPendingSafetyCues,
     loadPending,
     loadUpdateTargets,
     loadReleaseNotes,

@@ -76,6 +76,14 @@ class WebuiDemoStateTests(unittest.TestCase):
                     / "demo-wud-updater.summary"
                 ).exists()
             )
+            self.assertIn(
+                "WUD-UPDATER-RECREATE-STACK=true",
+                (
+                    fake_docker_root
+                    / "containers"
+                    / "cid-data-postgres.labels"
+                ).read_text(encoding="utf-8"),
+            )
             self.assertTrue(
                 (
                     fake_docker_root

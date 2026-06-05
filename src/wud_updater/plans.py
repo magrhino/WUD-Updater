@@ -1054,10 +1054,17 @@ def resolve_pending_groups(
         docker,
         host_docker_base=host_docker_base,
     )
+    scope_builder = _PlanBuilder(
+        config,
+        (),
+        allow_tag_updates=True,
+        host_docker_base=host_docker_base,
+        command_runner=runner,
+    )
     targets_by_line = {target.line_no: target for target in parsed.targets}
     return PendingGroupingResult(
         status="ready",
-        groups=_pending_stack_groups(matches),
+        groups=_pending_stack_groups(matches, scope_builder=scope_builder),
         unmatched=tuple(
             _pending_grouping_item(
                 targets_by_line[item.line_no],
@@ -1627,14 +1634,23 @@ def _parsed_for_selected_lines(
     )
 
 
-def _pending_stack_groups(matches: Sequence[Match]) -> tuple[PendingStackGroup, ...]:
+def _pending_stack_groups(
+    matches: Sequence[Match],
+    *,
+    scope_builder: _PlanBuilder | None = None,
+) -> tuple[PendingStackGroup, ...]:
     groups: list[PendingStackGroup] = []
     for stack in _stacks_to_update(matches):
         stack_matches = [match for match in matches if match.stack.index == stack.index]
         services = _ordered_unique(
             match.service for match in stack_matches if match.service
         )
-        items = _pending_grouping_items(stack_matches)
+        stack_action = ""
+        if scope_builder is not None:
+            scope = scope_builder._update_scope(stack, stack_matches)
+            if scope.services is None:
+                stack_action = "recreate_stack"
+        items = _pending_grouping_items(stack_matches, stack_action=stack_action)
         groups.append(
             PendingStackGroup(
                 name=stack.name,
@@ -1656,6 +1672,8 @@ def _pending_stack_groups(matches: Sequence[Match]) -> tuple[PendingStackGroup, 
 
 def _pending_grouping_items(
     matches: Sequence[Match],
+    *,
+    stack_action: str = "",
 ) -> tuple[PendingGroupingItem, ...]:
     items: list[PendingGroupingItem] = []
     for line_no in sorted({match.target.line_no for match in matches}):
@@ -1672,7 +1690,7 @@ def _pending_grouping_items(
                 resolved_image=resolved,
                 compose_images=compose_images,
                 services=services,
-                action=_target_action_name(target),
+                action=_target_action_name(target, services, stack_action=stack_action),
             )
         )
     return tuple(items)
@@ -1718,8 +1736,17 @@ def _pending_target_image(
     return image_with_tag(base_image, target.desired_tag)
 
 
-def _target_action_name(target: WudTarget) -> str:
-    return "tag-update" if target.desired_tag else "update"
+def _target_action_name(
+    target: WudTarget,
+    services: Sequence[str] = (),
+    *,
+    stack_action: str = "",
+) -> str:
+    if target.desired_tag:
+        return "tag-update"
+    if stack_action:
+        return stack_action
+    return "recreate_service" if services else "recreate_stack"
 
 
 def _pending_services_label(services: Sequence[str]) -> str:
