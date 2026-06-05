@@ -35,6 +35,8 @@ from wud_updater.digest_verifier import (
 from wud_updater.images import image_with_digest
 from wud_updater.updater import (
     ComposeTagRewriteError,
+    DigestPinLabelRewriteApproval,
+    DigestPinLabelRewriteApprovalRequired,
     DigestPinUpdate,
     TagExclusionUpdate,
     TagUpdate,
@@ -3961,6 +3963,163 @@ class RenderComposeDigestPinsTests(unittest.TestCase):
 
         self.assertIn("wud.tag.include", rendered)
         self.assertIn("2", rendered)
+
+    def test_plain_planned_tag_label_is_normalized(self) -> None:
+        compose_file = self.root / "compose.yml"
+        compose_file.write_text(
+            "services:\n"
+            "  app:\n"
+            "    labels:\n"
+            "    - wud.tag.include=latest\n"
+            "    image: repo/app:latest\n",
+            encoding="utf-8",
+        )
+
+        rendered, applied = render_compose_digest_pins(
+            compose_file,
+            (
+                digest_pin_update_from_values(
+                    old_image="repo/app:latest",
+                    resolved_tag="latest",
+                    planned_digest="sha256:pin",
+                    services=("app",),
+                ),
+            ),
+            stack_name="stack",
+        )
+
+        self.assertIn("wud.tag.include=^latest$$", rendered)
+        self.assertEqual(applied[0].label_rewrites[0].reason, "plain-tag-normalized")
+        self.assertEqual(applied[0].label_rewrites[0].current_label_value, "latest")
+
+    def test_plain_current_tag_label_is_normalized(self) -> None:
+        compose_file = self.root / "compose.yml"
+        compose_file.write_text(
+            "services:\n"
+            "  app:\n"
+            "    labels:\n"
+            "    - wud.tag.include=1.0\n"
+            "    image: repo/app:1.0\n",
+            encoding="utf-8",
+        )
+
+        rendered, applied = render_compose_digest_pins(
+            compose_file,
+            (
+                digest_pin_update_from_values(
+                    old_image="repo/app:1.0",
+                    resolved_tag="2.0",
+                    planned_digest="sha256:pin",
+                    services=("app",),
+                ),
+            ),
+            stack_name="stack",
+        )
+
+        self.assertIn("wud.tag.include=^2\\.0$$", rendered)
+        self.assertEqual(applied[0].label_rewrites[0].reason, "plain-tag-normalized")
+        self.assertEqual(applied[0].label_rewrites[0].current_label_value, "1.0")
+
+    def test_different_plain_tag_requires_approval(self) -> None:
+        compose_file = self.root / "compose.yml"
+        compose_file.write_text(
+            "services:\n"
+            "  app:\n"
+            "    labels:\n"
+            "    - wud.tag.include=stable\n"
+            "    image: repo/app:1.0\n",
+            encoding="utf-8",
+        )
+
+        with self.assertRaises(DigestPinLabelRewriteApprovalRequired) as raised:
+            render_compose_digest_pins(
+                compose_file,
+                (
+                    digest_pin_update_from_values(
+                        old_image="repo/app:1.0",
+                        resolved_tag="2.0",
+                        planned_digest="sha256:pin",
+                        services=("app",),
+                    ),
+                ),
+                stack_name="stack",
+            )
+
+        self.assertEqual(raised.exception.current_label_value, "stable")
+        self.assertEqual(raised.exception.proposed_label_value, "^2\\.0$$")
+
+    def test_custom_regex_succeeds_with_matching_approval(self) -> None:
+        compose_file = self.root / "compose.yml"
+        compose_file.write_text(
+            "services:\n"
+            "  app:\n"
+            "    labels:\n"
+            "    - wud.tag.include=^beta|^stable\n"
+            "    image: repo/app:1.0\n",
+            encoding="utf-8",
+        )
+
+        rendered, applied = render_compose_digest_pins(
+            compose_file,
+            (
+                digest_pin_update_from_values(
+                    old_image="repo/app:1.0",
+                    resolved_tag="2.0",
+                    planned_digest="sha256:pin",
+                    services=("app",),
+                ),
+            ),
+            label_rewrite_approvals=(
+                DigestPinLabelRewriteApproval(
+                    stack="stack",
+                    service="app",
+                    label_key="wud.tag.include",
+                    current_label_value="^beta|^stable",
+                    planned_tag="2.0",
+                    proposed_label_value="^2\\.0$$",
+                ),
+            ),
+            stack_name="stack",
+        )
+
+        self.assertIn("wud.tag.include=^2\\.0$$", rendered)
+        self.assertEqual(applied[0].label_rewrites[0].reason, "approved")
+        self.assertTrue(applied[0].label_rewrites[0].approved)
+
+    def test_custom_regex_rejects_stale_approval(self) -> None:
+        compose_file = self.root / "compose.yml"
+        compose_file.write_text(
+            "services:\n"
+            "  app:\n"
+            "    labels:\n"
+            "    - wud.tag.include=^beta|^stable\n"
+            "    image: repo/app:1.0\n",
+            encoding="utf-8",
+        )
+
+        with self.assertRaises(DigestPinLabelRewriteApprovalRequired):
+            render_compose_digest_pins(
+                compose_file,
+                (
+                    digest_pin_update_from_values(
+                        old_image="repo/app:1.0",
+                        resolved_tag="2.0",
+                        planned_digest="sha256:pin",
+                        services=("app",),
+                    ),
+                ),
+                label_rewrite_approvals=(
+                    DigestPinLabelRewriteApproval(
+                        stack="stack",
+                        service="app",
+                        label_key="wud.tag.include",
+                        current_label_value="^beta|^stable",
+                        planned_tag="2.0",
+                        proposed_label_value="^3\\.0$$",
+                    ),
+                ),
+                stack_name="stack",
+            )
 
     def test_service_without_labels_gets_labels_added(self) -> None:
         compose_file = self.root / "compose.yml"

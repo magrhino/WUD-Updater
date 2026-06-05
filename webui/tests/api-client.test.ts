@@ -167,9 +167,9 @@ describe("webApi", () => {
       webApi.applySelfUpdate("csrf", selfUpdateStatus()),
       webApi.prepareSelfUpdate("csrf", selfUpdateStatus(), selfUpdatePlanStatus()),
       webApi.restartContainer("csrf"),
-      webApi.createPlan([1], true, [{ line_no: 1, tag: "1.1" }], "csrf"),
-      webApi.createJob("plan", [1], true, [{ line_no: 1, tag: "1.1" }], "csrf"),
-      webApi.applyPlan("plan", [1], true, [{ line_no: 1, tag: "1.1" }], "csrf"),
+      webApi.createPlan([1], true, [{ line_no: 1, tag: "1.1" }], [], "csrf"),
+      webApi.createJob("plan", [1], true, [{ line_no: 1, tag: "1.1" }], [], "csrf"),
+      webApi.applyPlan("plan", [1], true, [{ line_no: 1, tag: "1.1" }], [], "csrf"),
       webApi.job("job"),
       webApi.applyJob("job"),
       webApi.runs(),
@@ -222,9 +222,9 @@ describe("webApi", () => {
       selfUpdatePlanStatus(),
     );
     await webApi.restartContainer("csrf-token");
-    await webApi.createPlan([1], false, [], "csrf-token");
-    await webApi.createJob("plan", [1], false, [], "csrf-token");
-    await webApi.applyPlan("plan", [1], false, [], "csrf-token");
+    await webApi.createPlan([1], false, [], [], "csrf-token");
+    await webApi.createJob("plan", [1], false, [], [], "csrf-token");
+    await webApi.applyPlan("plan", [1], false, [], [], "csrf-token");
 
     for (const call of fetchMock.mock.calls) {
       const headers = requestInit(call).headers as Headers;
@@ -256,9 +256,9 @@ describe("webApi", () => {
     await webApi.applySelfUpdate("csrf", selfUpdateStatus());
     await webApi.prepareSelfUpdate("csrf", selfUpdateStatus(), selfUpdatePlanStatus());
     await webApi.restartContainer("csrf");
-    await webApi.createPlan([4], true, tagOverrides, "csrf");
-    await webApi.createJob("plan-id", [4], true, tagOverrides, "csrf");
-    await webApi.applyPlan("plan-id", [4], true, tagOverrides, "csrf");
+    await webApi.createPlan([4], true, tagOverrides, [], "csrf");
+    await webApi.createJob("plan-id", [4], true, tagOverrides, [], "csrf");
+    await webApi.applyPlan("plan-id", [4], true, tagOverrides, [], "csrf");
 
     expect(JSON.parse(String(requestInit(fetchMock.mock.calls[0]).body))).toEqual({
       cleanup_id: "cleanup-id",
@@ -306,12 +306,14 @@ describe("webApi", () => {
       line_numbers: [4],
       allow_tag_updates: true,
       tag_overrides: tagOverrides,
+      digest_pin_label_rewrite_approvals: [],
     });
     expect(JSON.parse(String(requestInit(fetchMock.mock.calls[10]).body))).toEqual({
       plan_id: "plan-id",
       line_numbers: [4],
       allow_tag_updates: true,
       tag_overrides: tagOverrides,
+      digest_pin_label_rewrite_approvals: [],
       confirmation: "apply",
     });
     expect(JSON.parse(String(requestInit(fetchMock.mock.calls[11]).body))).toEqual({
@@ -319,6 +321,7 @@ describe("webApi", () => {
       line_numbers: [4],
       allow_tag_updates: true,
       tag_overrides: tagOverrides,
+      digest_pin_label_rewrite_approvals: [],
       confirmation: "apply",
     });
   });

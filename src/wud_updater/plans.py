@@ -16,6 +16,9 @@ from .docker_cli import DockerCli
 from .images import image_has_tag, image_matches_resolved_target, image_with_tag
 from .updater import (
     ComposeTagRewriteError,
+    DigestPinLabelRewrite,
+    DigestPinLabelRewriteApproval,
+    DigestPinLabelRewriteApprovalRequired,
     DigestPinUpdate,
     RECREATE_STACK_LABEL,
     RECREATE_STACK_LABEL_FORMAT,
@@ -180,6 +183,19 @@ class DryRunPlanDigestPinUpdate:
     label_key: str
     label_value: str
     services: tuple[str, ...]
+    label_rewrites: tuple["DryRunPlanDigestPinLabelRewrite", ...] = ()
+
+
+@dataclass(frozen=True)
+class DryRunPlanDigestPinLabelRewrite:
+    service: str
+    label_key: str
+    current_label_value: str
+    planned_tag: str
+    proposed_label_value: str
+    proposed_label_regex: str
+    approved: bool
+    reason: str
 
 
 @dataclass(frozen=True)
@@ -309,6 +325,7 @@ class _PlanBuilder:
     line_numbers: Sequence[int]
     allow_tag_updates: bool = False
     tag_overrides: Sequence[TagOverride] = ()
+    digest_pin_label_rewrite_approvals: Sequence[DigestPinLabelRewriteApproval] = ()
     host_docker_base: Path | None = None
     command_runner: CommandRunner | None = None
     docker: DockerCli = field(init=False)
@@ -317,6 +334,10 @@ class _PlanBuilder:
         init=False,
         default_factory=dict,
     )
+    digest_pin_label_rewrites_by_stack: dict[
+        int,
+        dict[tuple[str, str], tuple[DigestPinLabelRewrite, ...]],
+    ] = field(init=False, default_factory=dict)
 
     def __post_init__(self) -> None:
         runner = self.command_runner or CommandRunner()
@@ -437,6 +458,9 @@ class _PlanBuilder:
                 config=self.config,
                 allow_tag_updates=self.allow_tag_updates,
                 tag_overrides=self.tag_overrides,
+                digest_pin_label_rewrite_approvals=(
+                    self.digest_pin_label_rewrite_approvals
+                ),
                 host_docker_base=self.host_docker_base,
                 wud_file_hash=wud_file_hash,
             ),
@@ -605,6 +629,7 @@ class _PlanBuilder:
         matches: Sequence[Match],
     ) -> list[DryRunPlanIssue]:
         self.digest_pin_updates_by_stack = {}
+        self.digest_pin_label_rewrites_by_stack = {}
         if not self.config.digest_pin_updates:
             return []
 
@@ -683,9 +708,53 @@ class _PlanBuilder:
 
             if stack_updates:
                 try:
-                    render_compose_digest_pins(
+                    _rendered, applied = render_compose_digest_pins(
                         stack.directory / stack.file,
                         stack_updates,
+                        label_rewrite_approvals=(
+                            self.digest_pin_label_rewrite_approvals
+                        ),
+                        stack_name=stack.name,
+                    )
+                    self.digest_pin_label_rewrites_by_stack[stack.index] = {
+                        (item.old_image, item.resolved_tag): item.label_rewrites
+                        for item in applied
+                    }
+                except DigestPinLabelRewriteApprovalRequired as exc:
+                    issues.append(
+                        DryRunPlanIssue(
+                            severity="error",
+                            code="compose-digest-pin-label-rewrite-unapproved",
+                            message=(
+                                f'{stack.name} {exc.label_key} is '
+                                f'"{exc.current_label_value}"; approve replacing it '
+                                f'with "{exc.proposed_label_regex}" before pinning '
+                                "the digest."
+                            ),
+                            stack=stack.name,
+                            service=exc.service,
+                            hint=(
+                                "Approve the label rewrite to replace the current "
+                                "include rule with the exact planned tag, or edit "
+                                "the Compose label manually."
+                            ),
+                            details={
+                                "stack": stack.name,
+                                "service": exc.service,
+                                "compose_file": stack.file,
+                                "label_key": exc.label_key,
+                                "current_label_value": exc.current_label_value,
+                                "planned_tag": exc.planned_tag,
+                                "proposed_label_value": exc.proposed_label_value,
+                                "proposed_label_regex": exc.proposed_label_regex,
+                                "explanation": (
+                                    "WUD-Updater can only overwrite this include "
+                                    "rule after explicit approval because it is not "
+                                    "an empty label, an exact tag regex, or a plain "
+                                    "tag matching the current/planned update."
+                                ),
+                            },
+                        )
                     )
                 except ComposeTagRewriteError as exc:
                     issues.append(
@@ -696,6 +765,7 @@ class _PlanBuilder:
                             stack=stack.name,
                         )
                     )
+            self.digest_pin_label_rewrites_by_stack.setdefault(stack.index, {})
             self.digest_pin_updates_by_stack[stack.index] = tuple(stack_updates)
         return issues
 
@@ -778,6 +848,10 @@ class _PlanBuilder:
                 for update in tag_updates
             )
             digest_pin_updates = self.digest_pin_updates_by_stack.get(stack.index, ())
+            label_rewrites_by_update = self.digest_pin_label_rewrites_by_stack.get(
+                stack.index,
+                {},
+            )
             plan_digest_pin_updates = tuple(
                 DryRunPlanDigestPinUpdate(
                     source_image=update.old_image,
@@ -789,6 +863,22 @@ class _PlanBuilder:
                     label_key=update.label_key,
                     label_value=update.label_value,
                     services=update.services,
+                    label_rewrites=tuple(
+                        DryRunPlanDigestPinLabelRewrite(
+                            service=item.service,
+                            label_key=item.label_key,
+                            current_label_value=item.current_label_value,
+                            planned_tag=item.planned_tag,
+                            proposed_label_value=item.proposed_label_value,
+                            proposed_label_regex=item.proposed_label_regex,
+                            approved=item.approved,
+                            reason=item.reason,
+                        )
+                        for item in label_rewrites_by_update.get(
+                            (update.old_image, update.resolved_tag),
+                            (),
+                        )
+                    ),
                 )
                 for update in digest_pin_updates
             )
@@ -1138,6 +1228,9 @@ def build_dry_run_plan(
     line_numbers: Sequence[int],
     allow_tag_updates: bool = False,
     tag_overrides: Sequence[TagOverride] = (),
+    digest_pin_label_rewrite_approvals: Sequence[
+        DigestPinLabelRewriteApproval
+    ] = (),
     host_docker_base: Path | None = None,
     environ: Mapping[str, str] | None = None,
 ) -> DryRunPlan:
@@ -1147,6 +1240,7 @@ def build_dry_run_plan(
         line_numbers=line_numbers,
         allow_tag_updates=allow_tag_updates,
         tag_overrides=tag_overrides,
+        digest_pin_label_rewrite_approvals=digest_pin_label_rewrite_approvals,
         host_docker_base=host_docker_base,
         command_runner=runner,
     ).build()
@@ -1970,6 +2064,7 @@ def _plan_id(
     config: UpdaterConfig,
     allow_tag_updates: bool,
     tag_overrides: Sequence[TagOverride],
+    digest_pin_label_rewrite_approvals: Sequence[DigestPinLabelRewriteApproval],
     host_docker_base: Path | None,
     wud_file_hash: str,
 ) -> str:
@@ -1982,6 +2077,27 @@ def _plan_id(
         "tag_overrides": [
             {"line_no": item.line_no, "tag": item.tag}
             for item in sorted(tag_overrides, key=lambda item: item.line_no)
+        ],
+        "digest_pin_label_rewrite_approvals": [
+            {
+                "stack": item.stack,
+                "service": item.service,
+                "label_key": item.label_key,
+                "current_label_value": item.current_label_value,
+                "planned_tag": item.planned_tag,
+                "proposed_label_value": item.proposed_label_value,
+            }
+            for item in sorted(
+                digest_pin_label_rewrite_approvals,
+                key=lambda item: (
+                    item.stack,
+                    item.service,
+                    item.label_key,
+                    item.current_label_value,
+                    item.planned_tag,
+                    item.proposed_label_value,
+                ),
+            )
         ],
         "docker_base": str(config.docker_base),
         "host_docker_base": "" if host_docker_base is None else str(host_docker_base),

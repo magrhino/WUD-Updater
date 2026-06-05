@@ -5796,6 +5796,152 @@ def test_plan_apply_preflight_ignores_unselected_compose_render_failure(
     assert "broken compose config" not in json.dumps(body["apply_preflight"])
 
 
+def test_plan_endpoint_returns_digest_pin_label_rewrite_details(
+    tmp_path: Path,
+) -> None:
+    fake_env, fake_root = _fake_docker_env(tmp_path)
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+            "WUD_DIGEST_PIN_UPDATES": "true",
+            **fake_env,
+        },
+    )
+    wud_file = tmp_path / "state" / "images.todo"
+    wud_file.write_text("repo/app:1.0 tag=2.0\n", encoding="utf-8")
+    _write_fake_manifest(
+        fake_root,
+        "docker.io/repo/app:2.0",
+        _manifest_index_digest("sha256:index", "sha256:child"),
+    )
+    compose_dir = _make_fake_stack(
+        tmp_path,
+        fake_root,
+        "stack",
+        [("app", "repo/app:1.0", "cid-app")],
+    )
+    compose_file = compose_dir / "docker-compose.yml"
+    compose_file.write_text(
+        compose_file.read_text(encoding="utf-8").replace(
+            "  app:\n    image: repo/app:1.0\n",
+            "  app:\n"
+            "    labels:\n"
+            "      - wud.tag.include=^beta|^stable\n"
+            "    image: repo/app:1.0\n",
+        ),
+        encoding="utf-8",
+    )
+
+    response = client.post(
+        "/api/v1/plans",
+        json={"line_numbers": [1], "allow_tag_updates": True},
+        headers=_csrf_headers(client),
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    issue = next(
+        item
+        for item in body["issues"]
+        if item["code"] == "compose-digest-pin-label-rewrite-unapproved"
+    )
+    assert body["status"] == "blocked"
+    assert body["can_apply"] is False
+    assert issue["stack"] == "stack"
+    assert issue["service"] == "app"
+    assert issue["details"]["current_label_value"] == "^beta|^stable"
+    assert issue["details"]["planned_tag"] == "2.0"
+    assert issue["details"]["proposed_label_value"] == "^2\\.0$$"
+    assert issue["details"]["proposed_label_regex"] == "^2\\.0$"
+    assert issue["details"]["compose_file"] == "docker-compose.yml"
+
+
+def test_plan_endpoint_accepts_digest_pin_label_rewrite_approval(
+    tmp_path: Path,
+) -> None:
+    fake_env, fake_root = _fake_docker_env(tmp_path)
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+            "WUD_DIGEST_PIN_UPDATES": "true",
+            **fake_env,
+        },
+    )
+    wud_file = tmp_path / "state" / "images.todo"
+    wud_file.write_text("repo/app:1.0 tag=2.0\n", encoding="utf-8")
+    _write_fake_manifest(
+        fake_root,
+        "docker.io/repo/app:2.0",
+        _manifest_index_digest("sha256:index", "sha256:child"),
+    )
+    compose_dir = _make_fake_stack(
+        tmp_path,
+        fake_root,
+        "stack",
+        [("app", "repo/app:1.0", "cid-app")],
+    )
+    compose_file = compose_dir / "docker-compose.yml"
+    compose_file.write_text(
+        compose_file.read_text(encoding="utf-8").replace(
+            "  app:\n    image: repo/app:1.0\n",
+            "  app:\n"
+            "    labels:\n"
+            "      - wud.tag.include=^beta|^stable\n"
+            "    image: repo/app:1.0\n",
+        ),
+        encoding="utf-8",
+    )
+    headers = _csrf_headers(client)
+    initial = client.post(
+        "/api/v1/plans",
+        json={"line_numbers": [1], "allow_tag_updates": True},
+        headers=headers,
+    ).json()
+    issue = next(
+        item
+        for item in initial["issues"]
+        if item["code"] == "compose-digest-pin-label-rewrite-unapproved"
+    )
+    approval = {
+        "stack": issue["details"]["stack"],
+        "service": issue["details"]["service"],
+        "label_key": issue["details"]["label_key"],
+        "current_label_value": issue["details"]["current_label_value"],
+        "planned_tag": issue["details"]["planned_tag"],
+        "proposed_label_value": issue["details"]["proposed_label_value"],
+    }
+
+    response = client.post(
+        "/api/v1/plans",
+        json={
+            "line_numbers": [1],
+            "allow_tag_updates": True,
+            "digest_pin_label_rewrite_approvals": [approval],
+        },
+        headers=headers,
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "ready"
+    assert body["can_apply"] is True
+    assert not [
+        item
+        for item in body["issues"]
+        if item["code"] == "compose-digest-pin-label-rewrite-unapproved"
+    ]
+    rewrite = body["stacks"][0]["digest_pin_updates"][0]["label_rewrites"][0]
+    assert rewrite["current_label_value"] == "^beta|^stable"
+    assert rewrite["proposed_label_value"] == "^2\\.0$$"
+    assert rewrite["approved"] is True
+    assert rewrite["reason"] == "approved"
+    assert body["plan_id"] != initial["plan_id"]
+
+
 def test_plan_endpoint_returns_unmatched_cleanup_preview(
     tmp_path: Path,
 ) -> None:
@@ -7070,6 +7216,112 @@ def test_apply_endpoint_rejects_failed_apply_preflight_without_mutation(
     calls = _fake_docker_calls(fake_root)
     assert " pull " not in calls
     assert " up -d " not in calls
+
+
+def test_apply_endpoint_requires_and_uses_digest_pin_label_rewrite_approval(
+    tmp_path: Path,
+) -> None:
+    fake_env, fake_root = _fake_docker_env(tmp_path)
+    target_image = "repo/app:2.0"
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+            "WUD_DIGEST_PIN_UPDATES": "true",
+            **fake_env,
+        },
+    )
+    wud_file = tmp_path / "state" / "images.todo"
+    wud_file.write_text("repo/app:1.0 tag=2.0\n", encoding="utf-8")
+    _write_fake_manifest(
+        fake_root,
+        "docker.io/repo/app:2.0",
+        _manifest_index_digest("sha256:index", "sha256:child"),
+    )
+    _write_fake_image_after_pull(
+        fake_root,
+        target_image,
+        "sha256:config",
+        "sha256:index",
+    )
+    compose_dir = _make_fake_stack(
+        tmp_path,
+        fake_root,
+        "stack",
+        [("app", "repo/app:1.0", "cid-app")],
+    )
+    compose_file = compose_dir / "docker-compose.yml"
+    compose_file.write_text(
+        compose_file.read_text(encoding="utf-8").replace(
+            "  app:\n    image: repo/app:1.0\n",
+            "  app:\n"
+            "    labels:\n"
+            "      - wud.tag.include=^beta|^stable\n"
+            "    image: repo/app:1.0\n",
+        ),
+        encoding="utf-8",
+    )
+    headers = _csrf_headers(client)
+    initial = client.post(
+        "/api/v1/plans",
+        json={"line_numbers": [1], "allow_tag_updates": True},
+        headers=headers,
+    ).json()
+    issue = next(
+        item
+        for item in initial["issues"]
+        if item["code"] == "compose-digest-pin-label-rewrite-unapproved"
+    )
+    approval = {
+        "stack": issue["details"]["stack"],
+        "service": issue["details"]["service"],
+        "label_key": issue["details"]["label_key"],
+        "current_label_value": issue["details"]["current_label_value"],
+        "planned_tag": issue["details"]["planned_tag"],
+        "proposed_label_value": issue["details"]["proposed_label_value"],
+    }
+    plan = client.post(
+        "/api/v1/plans",
+        json={
+            "line_numbers": [1],
+            "allow_tag_updates": True,
+            "digest_pin_label_rewrite_approvals": [approval],
+        },
+        headers=headers,
+    ).json()
+
+    stale_apply = client.post(
+        "/api/v1/jobs",
+        json={
+            "plan_id": plan["plan_id"],
+            "line_numbers": [1],
+            "allow_tag_updates": True,
+            "confirmation": "apply",
+        },
+        headers=headers,
+    )
+    apply_response = client.post(
+        "/api/v1/jobs",
+        json={
+            "plan_id": plan["plan_id"],
+            "line_numbers": [1],
+            "allow_tag_updates": True,
+            "digest_pin_label_rewrite_approvals": [approval],
+            "confirmation": "apply",
+        },
+        headers=headers,
+    )
+    job = _wait_apply_job(client, apply_response.json()["job_id"])
+
+    assert stale_apply.status_code == 409
+    assert stale_apply.json()["detail"] == "plan is stale"
+    assert apply_response.status_code == 202
+    assert job["status"] == "success"
+    content = compose_file.read_text(encoding="utf-8")
+    assert "# wud-updater.resolved-tag=2.0" in content
+    assert "image: repo/app@sha256:index" in content
+    assert "wud.tag.include=^2\\.0$$" in content
 
 
 def test_apply_endpoint_runs_existing_updater_and_records_audit(

@@ -694,6 +694,7 @@ export function planResponse(overrides: Partial<PlanResponse> = {}): PlanRespons
         force_recreate: false,
         up_no_deps: true,
         tag_updates: [],
+        digest_pin_updates: [],
         actions: [{ kind: "pull", description: "pull app", cwd: "/docker/media", args: ["docker", "compose", "pull", "app"] }],
         lines: [
           {

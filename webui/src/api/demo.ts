@@ -9,6 +9,7 @@ import type {
   CoreUpdateTourStatus,
   CoreUpdateTourStep,
   CsrfResponse,
+  DigestPinLabelRewriteApprovalRequest,
   DoctorResponse,
   ManagedSettingsUpdateResponse,
   OnboardingChecklistResponse,
@@ -1088,6 +1089,7 @@ class DemoApiState {
     lineNumbers: number[],
     allowTagUpdates: boolean,
     tagOverrides: TagOverrideRequest[],
+    _digestPinLabelRewriteApprovals: DigestPinLabelRewriteApprovalRequest[] = [],
   ): PlanResponse {
     const requested = new Set(lineNumbers);
     const selected = this.pending
@@ -1269,8 +1271,14 @@ class DemoApiState {
     lineNumbers: number[],
     allowTagUpdates: boolean,
     tagOverrides: TagOverrideRequest[],
+    digestPinLabelRewriteApprovals: DigestPinLabelRewriteApprovalRequest[] = [],
   ): ApplyJobResponse {
-    const plan = this.createPlan(lineNumbers, allowTagUpdates, tagOverrides);
+    const plan = this.createPlan(
+      lineNumbers,
+      allowTagUpdates,
+      tagOverrides,
+      digestPinLabelRewriteApprovals,
+    );
     const jobId = `demo-job-${this.nextJob++}`;
     const job: ApplyJobResponse = {
       job_id: jobId,
@@ -1714,20 +1722,21 @@ export function createDemoWebApi(): WebApi {
       lineNumbers: number[],
       allowTagUpdates: boolean,
       tagOverrides: TagOverrideRequest[],
+      digestPinLabelRewriteApprovals: DigestPinLabelRewriteApprovalRequest[],
       _csrfToken: string,
-    ) => state.createPlan(lineNumbers, allowTagUpdates, tagOverrides),
+    ) =>
+      state.createPlan(
+        lineNumbers,
+        allowTagUpdates,
+        tagOverrides,
+        digestPinLabelRewriteApprovals,
+      ),
     createJob: async (
       planId: string,
       lineNumbers: number[],
       allowTagUpdates: boolean,
       tagOverrides: TagOverrideRequest[],
-      _csrfToken: string,
-    ) => state.createJob(planId, lineNumbers, allowTagUpdates, tagOverrides),
-    applyPlan: async (
-      planId: string,
-      lineNumbers: number[],
-      allowTagUpdates: boolean,
-      tagOverrides: TagOverrideRequest[],
+      digestPinLabelRewriteApprovals: DigestPinLabelRewriteApprovalRequest[],
       _csrfToken: string,
     ) =>
       state.createJob(
@@ -1735,6 +1744,22 @@ export function createDemoWebApi(): WebApi {
         lineNumbers,
         allowTagUpdates,
         tagOverrides,
+        digestPinLabelRewriteApprovals,
+      ),
+    applyPlan: async (
+      planId: string,
+      lineNumbers: number[],
+      allowTagUpdates: boolean,
+      tagOverrides: TagOverrideRequest[],
+      digestPinLabelRewriteApprovals: DigestPinLabelRewriteApprovalRequest[],
+      _csrfToken: string,
+    ) =>
+      state.createJob(
+        planId,
+        lineNumbers,
+        allowTagUpdates,
+        tagOverrides,
+        digestPinLabelRewriteApprovals,
       ),
     job: async (jobId: string) => clone(requireJob(state, jobId).job),
     applyJob: async (jobId: string) => clone(requireJob(state, jobId).job),

@@ -171,7 +171,7 @@ describe("demo web API", () => {
   it("creates plans from the current fixture state", async () => {
     const api = createDemoWebApi();
 
-    const plan = await api.createPlan([3, 5], true, [], "csrf");
+    const plan = await api.createPlan([3, 5], true, [], [], "csrf");
 
     expect(plan.status).toBe("ready");
     expect(plan.can_apply).toBe(true);
@@ -195,7 +195,7 @@ describe("demo web API", () => {
   it("blocks unmatched fixture lines and previews cleanup", async () => {
     const api = createDemoWebApi();
 
-    const plan = await api.createPlan([6], true, [], "csrf");
+    const plan = await api.createPlan([6], true, [], [], "csrf");
 
     expect(plan.status).toBe("blocked");
     expect(plan.can_apply).toBe(false);
@@ -380,7 +380,7 @@ describe("demo web API", () => {
     const logs: ApplyJobLogResponse[] = [];
     const progress: ApplyJobResponse["progress"] = [];
 
-    const job = await api.createJob("demo-plan", [2], true, [], "csrf");
+    const job = await api.createJob("demo-plan", [2], true, [], [], "csrf");
     const source = api.openJobStream(job.job_id);
     source.addEventListener("job", (event) => {
       jobs.push(JSON.parse((event as MessageEvent<string>).data) as ApplyJobResponse);

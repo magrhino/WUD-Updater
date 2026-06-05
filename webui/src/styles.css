@@ -2875,6 +2875,13 @@ code.pending-table-value {
   vertical-align: middle;
 }
 
+.digest-pin-approval-row em {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
 .preflight-modal {
   display: grid;
   gap: 14px;
