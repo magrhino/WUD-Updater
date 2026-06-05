@@ -452,6 +452,121 @@ describe("mutating WebUI views", () => {
     );
   });
 
+  it("does not reopen digest-pin approval preflight after close", async () => {
+    const { pinia, webui } = setupStores(true);
+    webui.pending = pendingResponse();
+    mockPendingLifecycle(webui);
+    let resolveSecondPlan: () => void = () => {};
+    const secondPlan = new Promise<void>((resolve) => {
+      resolveSecondPlan = resolve;
+    });
+    const approval = {
+      stack: "media",
+      service: "app",
+      label_key: "wud.tag.include",
+      current_label_value: "latest|stable",
+      planned_tag: "latest",
+      proposed_label_value: "^latest$$",
+    };
+    const issue = {
+      severity: "error",
+      code: "compose-digest-pin-label-rewrite-unapproved",
+      message:
+        'media wud.tag.include is "latest|stable"; approve replacing it with "^latest$" before pinning the digest.',
+      line_no: null,
+      stack: "media",
+      service: "app",
+      hint: "Approve the label rewrite.",
+      details: {
+        ...approval,
+        compose_file: "docker-compose.yml",
+        proposed_label_regex: "^latest$",
+        explanation:
+          "WUD-Updater can only overwrite this include rule after explicit approval.",
+      },
+    };
+    const createPlan = vi
+      .spyOn(webui, "createPlan")
+      .mockImplementation(async (_lines, _allow, _tags, approvals = []) => {
+        const base = planResponse();
+        if (approvals.length) {
+          await secondPlan;
+          webui.plan = planResponse({
+            stacks: [
+              {
+                ...base.stacks[0],
+                digest_pin_updates: [
+                  {
+                    source_image: "repo/app:latest",
+                    resolved_tag: "latest",
+                    planned_digest: "sha256:abc123",
+                    final_image: "repo/app@sha256:abc123",
+                    watch_tag: "latest",
+                    marker: "wud.updater.digest-pin.repo-app",
+                    label_key: "wud.tag.include",
+                    label_value: "^latest$$",
+                    services: ["app"],
+                    label_rewrites: [
+                      {
+                        service: "app",
+                        label_key: "wud.tag.include",
+                        current_label_value: "latest|stable",
+                        planned_tag: "latest",
+                        proposed_label_value: "^latest$$",
+                        proposed_label_regex: "^latest$",
+                        approved: true,
+                        reason: "approved",
+                      },
+                    ],
+                  },
+                ],
+              },
+            ],
+          });
+          return;
+        }
+        webui.plan = planResponse({
+          can_apply: false,
+          status: "blocked",
+          summary: {
+            ...base.summary,
+            issue_count: 1,
+          },
+          issues: [issue],
+          apply_preflight: failedApplyPreflight(
+            "selected-services-matched",
+            issue.message,
+          ),
+        });
+      });
+    const wrapper = mountWithApp(PendingView, { pinia });
+
+    await wrapper
+      .findAll("button")
+      .find((button) => button.text().includes("Preview media plan"))
+      ?.trigger("click");
+    await flushPromises();
+
+    await wrapper
+      .find('[role="dialog"]')
+      .findAll("button")
+      .find((button) => button.text().includes("Approve label rewrite"))
+      ?.trigger("click");
+    await wrapper
+      .find('[role="dialog"]')
+      .findAll("button")
+      .find((button) => button.text().includes("Close"))
+      ?.trigger("click");
+
+    expect(wrapper.find('[role="dialog"]').exists()).toBe(false);
+    resolveSecondPlan();
+    await flushPromises();
+
+    expect(createPlan).toHaveBeenNthCalledWith(1, [1], true, [], []);
+    expect(createPlan).toHaveBeenNthCalledWith(2, [1], true, [], [approval]);
+    expect(wrapper.find('[role="dialog"]').exists()).toBe(false);
+  });
+
   it("shows unmatched cleanup preview disabled in read-only mode", async () => {
     const item = unmatchedPendingItem();
     const { pinia, webui } = setupStores(false);

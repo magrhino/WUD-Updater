@@ -1738,6 +1738,9 @@ async function approveDigestPinLabelRewrite(issue: PlanIssue): Promise<void> {
     nextIntent.tagOverrides,
     nextIntent.digestPinLabelRewriteApprovals,
   );
+  if (updateIntent.value !== intent) {
+    return;
+  }
   updateIntent.value = nextIntent;
   showPreflightModal.value = true;
 }
