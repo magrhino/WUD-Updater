@@ -1,3 +1,5 @@
+FROM docker:cli AS docker-cli
+
 FROM node:26-bookworm-slim@sha256:79723b41edbedf595f62e943a9f8b0ba9af5b1e61045c5f8f59c2c02c1212a16 AS webui-build
 
 WORKDIR /webui
@@ -39,21 +41,15 @@ RUN set -eux; \
       tini \
       tzdata \
       util-linux; \
-    install -m 0755 -d /etc/apt/keyrings; \
-    curl -fsSL https://download.docker.com/linux/debian/gpg -o /etc/apt/keyrings/docker.asc; \
-    chmod a+r /etc/apt/keyrings/docker.asc; \
-    . /etc/os-release; \
-    echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/debian ${VERSION_CODENAME} stable" > /etc/apt/sources.list.d/docker.list; \
-    apt-get update; \
-    apt-get install -y --no-install-recommends \
-      docker-ce-cli \
-      docker-compose-plugin; \
     if [ -n "$TRUENAS_API_CLIENT_REF" ]; then \
       apt-get install -y --no-install-recommends git; \
       python -m pip install --no-cache-dir "git+https://github.com/truenas/api_client.git@${TRUENAS_API_CLIENT_REF}"; \
       apt-get purge -y --auto-remove git; \
     fi; \
     rm -rf /var/lib/apt/lists/*
+
+COPY --from=docker-cli /usr/local/bin/docker /usr/local/bin/
+COPY --from=docker-cli /usr/local/libexec/docker/cli-plugins/docker-compose /usr/local/libexec/docker/cli-plugins/docker-compose
 
 WORKDIR /app
 

@@ -95,14 +95,8 @@ jobs:
             sudo apt-get install -y shellcheck
           fi
 
-      - name: Install Python dev dependencies
-        shell: bash
-        run: |
-          set -euo pipefail
-          python3 -m venv .venv
-          . .venv/bin/activate
-          python -m pip install -e '.[dev]'
-          echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
+      - name: Set up Python environment
+        uses: ./.github/actions/setup-python-env
 
       - name: Run tests
         run: tests/run-all.sh
