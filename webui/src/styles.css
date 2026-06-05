@@ -1344,6 +1344,19 @@ a {
   line-height: 1.45;
 }
 
+.onboarding-check-code-group {
+  display: grid;
+  gap: 5px;
+}
+
+.onboarding-check-code-group > span,
+.onboarding-check-diagnostics summary {
+  color: var(--color-text-secondary);
+  font-size: 0.78rem;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
 .onboarding-check-codes,
 .onboarding-doc-links {
   display: flex;
@@ -1358,6 +1371,46 @@ a {
   font-family: var(--font-mono);
   font-size: 0.76rem;
   background: var(--color-panel-tint);
+}
+
+.onboarding-check-codes.is-primary code {
+  border: 1px solid var(--color-border-subtle);
+}
+
+.onboarding-check-row.status-fail .onboarding-check-codes.is-primary code {
+  border-color: color-mix(in srgb, var(--color-border) 58%, #a73535 42%);
+  background: color-mix(in srgb, var(--color-surface) 80%, #c65454 20%);
+}
+
+.onboarding-check-row.status-warn .onboarding-check-codes.is-primary code {
+  border-color: color-mix(in srgb, var(--color-border) 58%, #9a640c 42%);
+  background: color-mix(in srgb, var(--color-surface) 78%, #f6d57a 22%);
+}
+
+.onboarding-check-diagnostics {
+  display: grid;
+  gap: 7px;
+  margin-top: 2px;
+}
+
+.onboarding-check-diagnostics summary {
+  width: fit-content;
+  cursor: pointer;
+}
+
+.onboarding-check-diagnostics summary:hover,
+.onboarding-check-diagnostics summary:focus-visible {
+  color: var(--color-ink);
+}
+
+.onboarding-check-diagnostics summary:focus-visible {
+  outline: 2px solid var(--color-action-blue);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+.onboarding-check-diagnostics[open] .onboarding-check-codes {
+  padding-top: 2px;
 }
 
 .onboarding-check-help {

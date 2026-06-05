@@ -147,6 +147,41 @@ function statusTagType(
 function itemKey(item: OnboardingChecklistItem): string {
   return item.key;
 }
+
+function normalizedCode(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+}
+
+function primaryCheckCodes(item: OnboardingChecklistItem): string[] {
+  if (item.status === "PASS") {
+    return item.check_codes;
+  }
+  const detailCode = normalizedCode(item.detail);
+  return item.check_codes.filter((code) => detailCode.includes(code));
+}
+
+function diagnosticCheckCodes(item: OnboardingChecklistItem): string[] {
+  if (item.status === "PASS") {
+    return [];
+  }
+  const primary = new Set(primaryCheckCodes(item));
+  return item.check_codes.filter((code) => !primary.has(code));
+}
+
+function primaryCheckCodeLabel(item: OnboardingChecklistItem): string {
+  if (item.status === "WARN") {
+    return "Warning check codes";
+  }
+  if (item.status === "FAIL") {
+    return "Failed check codes";
+  }
+  return "Verified check codes";
+}
+
+function sourceCheckSummaryLabel(item: OnboardingChecklistItem): string {
+  const count = item.check_codes.length;
+  return `Source check codes (${count})`;
+}
 </script>
 
 <template>
@@ -258,11 +293,31 @@ function itemKey(item: OnboardingChecklistItem): string {
               </n-tag>
             </div>
             <p>{{ item.detail }}</p>
-            <div v-if="item.check_codes.length" class="onboarding-check-codes">
-              <code v-for="code in item.check_codes" :key="`${item.key}-${code}`">
-                {{ code }}
-              </code>
+            <div
+              v-if="primaryCheckCodes(item).length"
+              class="onboarding-check-code-group"
+            >
+              <span>{{ primaryCheckCodeLabel(item) }}</span>
+              <div class="onboarding-check-codes is-primary">
+                <code
+                  v-for="code in primaryCheckCodes(item)"
+                  :key="`${item.key}-${code}`"
+                >
+                  {{ code }}
+                </code>
+              </div>
             </div>
+            <details
+              v-if="diagnosticCheckCodes(item).length"
+              class="onboarding-check-diagnostics"
+            >
+              <summary>{{ sourceCheckSummaryLabel(item) }}</summary>
+              <div class="onboarding-check-codes">
+                <code v-for="code in item.check_codes" :key="`${item.key}-${code}`">
+                  {{ code }}
+                </code>
+              </div>
+            </details>
           </div>
         </div>
 

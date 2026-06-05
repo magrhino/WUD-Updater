@@ -2335,6 +2335,48 @@ describe("mutating WebUI views", () => {
     ).toBe(true);
   });
 
+  it("keeps non-actionable onboarding source checks out of the visible error chips", async () => {
+    const { pinia, webui } = setupStores(false);
+    webui.settings = settingsResponse();
+    webui.onboarding = onboardingChecklistResponse({
+      items: [
+        {
+          key: "compose-discovery",
+          title: "Compose stack discovery",
+          status: "FAIL",
+          detail:
+            "compose config /srv/docker/actual/docker-compose.yml: exit 1: additional properties 'labels' not allowed",
+          check_codes: [
+            "compose-config-srv-docker-actual-docker-compose-yml",
+            "compose-config-srv-docker-arr-docker-compose-yml",
+            "compose-config-srv-docker-backrest-docker-compose-yml",
+          ],
+          suggestions: [],
+          docs: [],
+        },
+      ],
+    });
+    vi.spyOn(webui, "loadSettings").mockResolvedValue();
+    vi.spyOn(webui, "loadOnboarding").mockResolvedValue();
+
+    const wrapper = mountWithApp(SettingsView, { pinia });
+    await flushPromises();
+    const row = wrapper.find(".onboarding-check-row.status-fail");
+    const primaryCodes = row.find(".onboarding-check-codes.is-primary");
+    const diagnostics = row.find(".onboarding-check-diagnostics");
+
+    expect(primaryCodes.text()).toContain(
+      "compose-config-srv-docker-actual-docker-compose-yml",
+    );
+    expect(primaryCodes.text()).not.toContain(
+      "compose-config-srv-docker-arr-docker-compose-yml",
+    );
+    expect(diagnostics.find("summary").text()).toContain("Source check codes (3)");
+    expect(diagnostics.text()).toContain(
+      "compose-config-srv-docker-arr-docker-compose-yml",
+    );
+  });
+
   it("starts the core update tour once setup has no failing checks", async () => {
     const { pinia, webui } = setupStores(true);
     webui.settings = settingsResponse();
