@@ -4207,6 +4207,233 @@ class RenderComposeDigestPinsTests(unittest.TestCase):
                 stack_name="stack",
             )
 
+    def test_label_already_matches_proposed_regex_produces_no_rewrite(self) -> None:
+        """When label equals the proposed regex, no rewrite is needed or recorded."""
+        compose_file = self.root / "compose.yml"
+        compose_file.write_text(
+            "services:\n"
+            "  app:\n"
+            "    labels:\n"
+            "    - wud.tag.include=^2\\.0$$\n"
+            "    image: repo/app:1.0\n",
+            encoding="utf-8",
+        )
+
+        rendered, applied = render_compose_digest_pins(
+            compose_file,
+            (
+                digest_pin_update_from_values(
+                    old_image="repo/app:1.0",
+                    resolved_tag="2.0",
+                    planned_digest="sha256:pin",
+                    services=("app",),
+                ),
+            ),
+            stack_name="stack",
+        )
+
+        self.assertEqual(applied[0].label_rewrites, ())
+        self.assertIn("wud.tag.include=^2\\.0$$", rendered)
+
+    def test_service_without_label_produces_no_rewrite(self) -> None:
+        """When service has no wud.tag.include label, no rewrite is needed."""
+        compose_file = self.root / "compose.yml"
+        compose_file.write_text(
+            "services:\n"
+            "  app:\n"
+            "    image: repo/app:1.0\n",
+            encoding="utf-8",
+        )
+
+        _, applied = render_compose_digest_pins(
+            compose_file,
+            (
+                digest_pin_update_from_values(
+                    old_image="repo/app:1.0",
+                    resolved_tag="2.0",
+                    planned_digest="sha256:pin",
+                    services=("app",),
+                ),
+            ),
+            stack_name="stack",
+        )
+
+        self.assertEqual(applied[0].label_rewrites, ())
+
+    def test_exact_regex_label_is_normalized_with_exact_regex_reason(self) -> None:
+        """A label that is already a simple exact-tag regex is normalized."""
+        compose_file = self.root / "compose.yml"
+        compose_file.write_text(
+            "services:\n"
+            "  app:\n"
+            "    labels:\n"
+            "    - wud.tag.include=^1\\.0$\n"
+            "    image: repo/app:1.0\n",
+            encoding="utf-8",
+        )
+
+        rendered, applied = render_compose_digest_pins(
+            compose_file,
+            (
+                digest_pin_update_from_values(
+                    old_image="repo/app:1.0",
+                    resolved_tag="2.0",
+                    planned_digest="sha256:pin",
+                    services=("app",),
+                ),
+            ),
+            stack_name="stack",
+        )
+
+        self.assertIn("wud.tag.include=^2\\.0$$", rendered)
+        self.assertEqual(applied[0].label_rewrites[0].reason, "exact-regex-normalized")
+        self.assertEqual(applied[0].label_rewrites[0].current_label_value, "^1\\.0$")
+        self.assertFalse(applied[0].label_rewrites[0].approved)
+
+    def test_approval_with_wrong_stack_does_not_approve(self) -> None:
+        """An approval for a different stack name does not grant approval."""
+        compose_file = self.root / "compose.yml"
+        compose_file.write_text(
+            "services:\n"
+            "  app:\n"
+            "    labels:\n"
+            "    - wud.tag.include=^custom|regex\n"
+            "    image: repo/app:1.0\n",
+            encoding="utf-8",
+        )
+
+        with self.assertRaises(DigestPinLabelRewriteApprovalRequired):
+            render_compose_digest_pins(
+                compose_file,
+                (
+                    digest_pin_update_from_values(
+                        old_image="repo/app:1.0",
+                        resolved_tag="2.0",
+                        planned_digest="sha256:pin",
+                        services=("app",),
+                    ),
+                ),
+                label_rewrite_approvals=(
+                    DigestPinLabelRewriteApproval(
+                        stack="other-stack",
+                        service="app",
+                        label_key="wud.tag.include",
+                        current_label_value="^custom|regex",
+                        planned_tag="2.0",
+                        proposed_label_value="^2\\.0$$",
+                    ),
+                ),
+                stack_name="stack",
+            )
+
+    def test_approval_with_wrong_service_does_not_approve(self) -> None:
+        """An approval for a different service name does not grant approval."""
+        compose_file = self.root / "compose.yml"
+        compose_file.write_text(
+            "services:\n"
+            "  app:\n"
+            "    labels:\n"
+            "    - wud.tag.include=^custom|regex\n"
+            "    image: repo/app:1.0\n",
+            encoding="utf-8",
+        )
+
+        with self.assertRaises(DigestPinLabelRewriteApprovalRequired):
+            render_compose_digest_pins(
+                compose_file,
+                (
+                    digest_pin_update_from_values(
+                        old_image="repo/app:1.0",
+                        resolved_tag="2.0",
+                        planned_digest="sha256:pin",
+                        services=("app",),
+                    ),
+                ),
+                label_rewrite_approvals=(
+                    DigestPinLabelRewriteApproval(
+                        stack="stack",
+                        service="other-service",
+                        label_key="wud.tag.include",
+                        current_label_value="^custom|regex",
+                        planned_tag="2.0",
+                        proposed_label_value="^2\\.0$$",
+                    ),
+                ),
+                stack_name="stack",
+            )
+
+    def test_approval_with_wrong_current_label_value_does_not_approve(self) -> None:
+        """An approval for a different current_label_value does not grant approval."""
+        compose_file = self.root / "compose.yml"
+        compose_file.write_text(
+            "services:\n"
+            "  app:\n"
+            "    labels:\n"
+            "    - wud.tag.include=^custom|regex\n"
+            "    image: repo/app:1.0\n",
+            encoding="utf-8",
+        )
+
+        with self.assertRaises(DigestPinLabelRewriteApprovalRequired):
+            render_compose_digest_pins(
+                compose_file,
+                (
+                    digest_pin_update_from_values(
+                        old_image="repo/app:1.0",
+                        resolved_tag="2.0",
+                        planned_digest="sha256:pin",
+                        services=("app",),
+                    ),
+                ),
+                label_rewrite_approvals=(
+                    DigestPinLabelRewriteApproval(
+                        stack="stack",
+                        service="app",
+                        label_key="wud.tag.include",
+                        current_label_value="^different|regex",
+                        planned_tag="2.0",
+                        proposed_label_value="^2\\.0$$",
+                    ),
+                ),
+                stack_name="stack",
+            )
+
+    def test_digest_pin_label_rewrite_approval_required_attributes(self) -> None:
+        """DigestPinLabelRewriteApprovalRequired stores all fields correctly."""
+        compose_file = self.root / "compose.yml"
+        compose_file.write_text(
+            "services:\n"
+            "  myservice:\n"
+            "    labels:\n"
+            "    - wud.tag.include=^custom.*regex\n"
+            "    image: repo/myimage:1.0\n",
+            encoding="utf-8",
+        )
+
+        with self.assertRaises(DigestPinLabelRewriteApprovalRequired) as raised:
+            render_compose_digest_pins(
+                compose_file,
+                (
+                    digest_pin_update_from_values(
+                        old_image="repo/myimage:1.0",
+                        resolved_tag="2.0",
+                        planned_digest="sha256:pin",
+                        services=("myservice",),
+                    ),
+                ),
+                stack_name="mystack",
+            )
+
+        exc = raised.exception
+        self.assertEqual(exc.service, "myservice")
+        self.assertEqual(exc.label_key, "wud.tag.include")
+        self.assertEqual(exc.current_label_value, "^custom.*regex")
+        self.assertEqual(exc.planned_tag, "2.0")
+        self.assertEqual(exc.proposed_label_value, "^2\\.0$$")
+        self.assertEqual(exc.proposed_label_regex, "^2\\.0$")
+        self.assertIn("myservice", str(exc))
+        self.assertIn("^custom.*regex", str(exc))
+
     def test_service_without_labels_gets_labels_added(self) -> None:
         compose_file = self.root / "compose.yml"
         compose_file.write_text(
