@@ -313,7 +313,7 @@ function sourceCheckSummaryLabel(item: OnboardingChecklistItem): string {
             >
               <summary>{{ sourceCheckSummaryLabel(item) }}</summary>
               <div class="onboarding-check-codes">
-                <code v-for="code in item.check_codes" :key="`${item.key}-${code}`">
+                <code v-for="code in diagnosticCheckCodes(item)" :key="`${item.key}-${code}`">
                   {{ code }}
                 </code>
               </div>
