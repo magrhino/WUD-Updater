@@ -19,27 +19,41 @@ from wud_updater.compose import (
     ComposeStack,
     ServiceImage,
 )
+from wud_updater.config import load_config
 from wud_updater.digest_verifier import (
     DigestVerifier,
+    DigestResolveResult,
     DockerManifestResolver,
     ManifestDocument,
     ManifestLookupError,
+    RegistryImageRef,
+    _payload_digest,
+    parse_registry_image,
 )
 from wud_updater.docker_cli import DockerCli
 from wud_updater.file_ops import OwnerConfig
+from wud_updater.plans import build_dry_run_plan
+from wud_updater.images import image_with_digest
 from wud_updater.updater import (
     ComposeTagRewriteError,
+    DIGEST_PIN_MARKER_PREFIX,
+    DigestPinUpdate,
     TagExclusionUpdate,
     TagUpdate,
     UpdaterError,
     UpdaterOptions,
     UpdateFromWudRunner,
+    WUD_TAG_INCLUDE_LABEL,
     _apply_sqlite_owner,
+    _is_simple_exact_tag_include,
+    apply_compose_digest_pins,
     apply_compose_tag_updates,
     apply_compose_tag_exclusions,
+    digest_pin_update_from_values,
     exact_tags_regex,
     merge_wud_exclude_regex,
     prepare_log_file,
+    render_compose_digest_pins,
 )
 
 
@@ -65,6 +79,12 @@ def manifest_index(*children: str) -> dict[str, object]:
             for child in children
         ],
     }
+
+
+def manifest_index_digest(digest: str, *children: str) -> dict[str, object]:
+    payload = manifest_index(*children)
+    payload["Descriptor"] = {"digest": digest}
+    return payload
 
 
 def manifest_image(config_digest: str) -> dict[str, object]:
@@ -230,6 +250,8 @@ class PythonUpdateFromWudTests(unittest.TestCase):
         *,
         assume_yes: bool = True,
         allow_tag_updates: bool = False,
+        digest_pin_updates: bool = False,
+        digest_pin_plan: tuple[DigestPinUpdate, ...] = (),
     ) -> tuple[int, str, str]:
         command_runner = CommandRunner(env=self.env)
         docker = DockerCli(runner=command_runner)
@@ -240,6 +262,8 @@ class PythonUpdateFromWudTests(unittest.TestCase):
             max_wait=0,
             assume_yes=assume_yes,
             allow_tag_updates=allow_tag_updates,
+            digest_pin_updates=digest_pin_updates,
+            digest_pin_plan=digest_pin_plan,
             no_color=True,
             db_path=self.db_path,
         )
@@ -1474,6 +1498,178 @@ class PythonUpdateFromWudTests(unittest.TestCase):
         self.assertRegex(calls, r"compose -f docker-compose.yml pull app")
         self.assertRegex(calls, r"compose -f docker-compose.yml up -d .* app")
 
+    def test_digest_pin_tag_update_writes_pinned_compose_and_metadata(self) -> None:
+        self.wud_file.write_text("repo/app:1.0 tag=2.0\n", encoding="utf-8")
+        stack_dir = self.make_stack("app", [("app", "repo/app:1.0", "cid-app")])
+        compose_file = stack_dir / "docker-compose.yml"
+        self.set_image_state("repo/app:1.0", "old", "sha256:old")
+        self.set_image_after_pull("repo/app:2.0", "new", "sha256:index")
+        self.set_image_state("repo/app@sha256:index", "new", "sha256:index")
+        self.set_manifest_stdout(
+            "docker.io/repo/app:2.0",
+            manifest_index_digest("sha256:index", "sha256:child"),
+        )
+
+        status, stdout, stderr = self.run_direct(
+            allow_tag_updates=True,
+            digest_pin_updates=True,
+        )
+
+        self.assertEqual(status, 0, stderr + stdout)
+        self.assertEqual(self.wud_file.read_text(encoding="utf-8"), "")
+        content = compose_file.read_text(encoding="utf-8")
+        self.assertIn("# wud-updater.resolved-tag=2.0", content)
+        self.assertIn("image: repo/app@sha256:index", content)
+        self.assertIn("wud.tag.include=^2\\.0$$", content)
+        calls = self.calls()
+        self.assertRegex(calls, r"manifest inspect --verbose docker.io/repo/app:2.0")
+        self.assertEqual(
+            calls.count("manifest inspect --verbose docker.io/repo/app:2.0"),
+            2,
+        )
+        self.assertRegex(calls, r"compose -f docker-compose.yml pull app")
+        events = self.db_rows("SELECT * FROM update_events")
+        known = self.db_rows("SELECT * FROM known_images")
+        self.assertEqual(events[0]["target_image"], "repo/app@sha256:index")
+        self.assertEqual(known[0]["image"], "repo/app@sha256:index")
+
+    def test_digest_pin_verification_matches_canonical_compose_image(self) -> None:
+        stack = ComposeStack(
+            index=1,
+            directory=self.root,
+            file="docker-compose.yml",
+            name="app",
+            images=("docker.io/repo/app:2.0",),
+            service_images=(ServiceImage("app", "docker.io/repo/app:2.0"),),
+        )
+        self.set_manifest_stdout(
+            "docker.io/repo/app:2.0",
+            manifest_index_digest("sha256:index", "sha256:child"),
+        )
+        self.set_image_state("docker.io/repo/app:2.0", "new", "sha256:index")
+        command_runner = CommandRunner(env=self.env)
+        docker = DockerCli(runner=command_runner)
+        runner = UpdateFromWudRunner(
+            UpdaterOptions(
+                docker_base=self.base,
+                wud_file=self.wud_file,
+                log_dir=self.log_dir,
+                max_wait=0,
+                digest_pin_updates=True,
+                no_color=True,
+            ),
+            environ=self.env,
+            command_runner=command_runner,
+            digest_verifier=DigestVerifier(
+                docker,
+                primary_resolver=FailingManifestResolver(),
+                fallback_resolver=DockerManifestResolver(docker),
+            ),
+        )
+
+        self.assertTrue(
+            runner._verify_digest_pin_updates(
+                stack,
+                (
+                    digest_pin_update_from_values(
+                        old_image="repo/app:1.0",
+                        resolved_tag="2.0",
+                        planned_digest="sha256:index",
+                        services=("app",),
+                    ),
+                ),
+                stack.images,
+            )
+        )
+
+    def test_digest_pin_plan_includes_digest_actions_and_hashes_digest(self) -> None:
+        self.wud_file.write_text("repo/app:1.0 tag=2.0\n", encoding="utf-8")
+        self.make_stack("app", [("app", "repo/app:1.0", "cid-app")])
+        self.set_manifest_stdout(
+            "docker.io/repo/app:2.0",
+            manifest_index_digest("sha256:first", "sha256:child"),
+        )
+        config = load_config(
+            {
+                "DOCKER_BASE": str(self.base),
+                "WUD_OUT_FILE": str(self.wud_file),
+                "WUD_LOG_DIR": str(self.log_dir),
+                "WUD_DIGEST_PIN_UPDATES": "true",
+            },
+            home=str(self.root),
+        )
+
+        plan = build_dry_run_plan(
+            config,
+            line_numbers=(1,),
+            allow_tag_updates=True,
+            environ=self.env,
+        )
+        self.set_manifest_stdout(
+            "docker.io/repo/app:2.0",
+            manifest_index_digest("sha256:second", "sha256:child"),
+        )
+        moved_plan = build_dry_run_plan(
+            config,
+            line_numbers=(1,),
+            allow_tag_updates=True,
+            environ=self.env,
+        )
+
+        self.assertEqual(plan.status, "ready")
+        self.assertTrue(plan.digest_pin_updates)
+        self.assertEqual(plan.stacks[0].lines[0].action, "digest-pin")
+        self.assertEqual(plan.stacks[0].lines[0].target_image, "repo/app@sha256:first")
+        self.assertEqual(
+            plan.stacks[0].digest_pin_updates[0].planned_digest,
+            "sha256:first",
+        )
+        self.assertIn(
+            "compose-digest-pin",
+            {action.kind for action in plan.stacks[0].actions},
+        )
+        self.assertNotEqual(plan.plan_id, moved_plan.plan_id)
+
+    def test_digest_pin_apply_rejects_moved_planned_digest(self) -> None:
+        self.wud_file.write_text("repo/app:1.0 tag=2.0\n", encoding="utf-8")
+        stack_dir = self.make_stack("app", [("app", "repo/app:1.0", "cid-app")])
+        compose_file = stack_dir / "docker-compose.yml"
+        self.set_image_state("repo/app:1.0", "old", "sha256:old")
+        self.set_image_after_pull("repo/app:2.0", "new", "sha256:moved")
+        self.set_manifest_stdout(
+            "docker.io/repo/app:2.0",
+            manifest_index_digest("sha256:moved", "sha256:child"),
+        )
+        planned = (
+            digest_pin_update_from_values(
+                old_image="repo/app:1.0",
+                resolved_tag="2.0",
+                planned_digest="sha256:planned",
+                services=("app",),
+            ),
+        )
+
+        status, stdout, stderr = self.run_direct(
+            allow_tag_updates=True,
+            digest_pin_updates=True,
+            digest_pin_plan=planned,
+        )
+
+        self.assertEqual(status, 1, stderr + stdout)
+        self.assertEqual(
+            self.wud_file.read_text(encoding="utf-8"),
+            "repo/app:1.0 tag=2.0\n",
+        )
+        content = compose_file.read_text(encoding="utf-8")
+        self.assertIn("image: repo/app:1.0", content)
+        self.assertNotIn("wud-updater.resolved-tag", content)
+        pending = self.db_rows("SELECT * FROM pending_updates")
+        self.assertEqual(pending[0]["status"], "failed")
+        self.assertEqual(
+            pending[0]["status_reason"],
+            "digest-pin-verification-failed",
+        )
+
     def test_network_mode_consumer_tag_update_stays_service_scoped(self) -> None:
         self.wud_file.write_text(
             "ghcr.io/linuxserver/qbittorrent:5.1.4 tag=5.2.0\n",
@@ -1727,6 +1923,87 @@ class PythonUpdateFromWudTests(unittest.TestCase):
                         old_image="repo/app:1.0",
                         desired_tag="2.0",
                         new_image="repo/app:2.0",
+                        services=("app",),
+                    ),
+                ),
+            )
+
+        self.assertEqual(compose_file.read_text(encoding="utf-8"), original)
+
+    def test_compose_digest_pin_writes_image_marker_and_include_label(self) -> None:
+        compose_file = self.root / "compose.yml"
+        compose_file.write_text(
+            "services:\n"
+            "  app:\n"
+            "    labels:\n"
+            "    - wud.tag.include=^1\\.0$$\n"
+            "    image: repo/app:1.0\n",
+            encoding="utf-8",
+        )
+
+        applied = apply_compose_digest_pins(
+            compose_file,
+            (
+                digest_pin_update_from_values(
+                    old_image="repo/app:1.0",
+                    resolved_tag="2.0",
+                    planned_digest="sha256:pin",
+                    services=("app",),
+                ),
+            ),
+        )
+
+        content = compose_file.read_text(encoding="utf-8")
+        self.assertEqual(applied[0].replacements, 1)
+        self.assertIn("# wud-updater.resolved-tag=2.0", content)
+        self.assertIn("image: repo/app@sha256:pin", content)
+        self.assertIn("wud.tag.include=^2\\.0$$", content)
+
+    def test_compose_digest_pin_rejects_custom_include_regex(self) -> None:
+        compose_file = self.root / "compose.yml"
+        original = (
+            "services:\n"
+            "  app:\n"
+            "    labels:\n"
+            "    - wud.tag.include=^beta|^stable\n"
+            "    image: repo/app:1.0\n"
+        )
+        compose_file.write_text(original, encoding="utf-8")
+
+        with self.assertRaisesRegex(ComposeTagRewriteError, "custom regex"):
+            apply_compose_digest_pins(
+                compose_file,
+                (
+                    digest_pin_update_from_values(
+                        old_image="repo/app:1.0",
+                        resolved_tag="2.0",
+                        planned_digest="sha256:pin",
+                        services=("app",),
+                    ),
+                ),
+            )
+
+        self.assertEqual(compose_file.read_text(encoding="utf-8"), original)
+
+    def test_compose_digest_pin_rejects_inherited_image_value(self) -> None:
+        compose_file = self.root / "compose.yml"
+        original = (
+            "x-template: &template\n"
+            "  image: repo/app:1.0\n"
+            "services:\n"
+            "  app:\n"
+            "    <<: *template\n"
+        )
+        compose_file.write_text(original, encoding="utf-8")
+
+        with self.assertRaisesRegex(ComposeTagRewriteError, "inherited"):
+            apply_compose_digest_pins(
+                compose_file,
+                (
+                    digest_pin_update_from_values(
+                        old_image="repo/app:1.0",
+                        resolved_tag="2.0",
+                        planned_digest="sha256:pin",
                         services=("app",),
                     ),
                 ),
@@ -2642,6 +2919,531 @@ class PythonUpdateFromWudTests(unittest.TestCase):
         self.assertIn("reason=health-failed", content)
         self.assertIn("repo/app:1.0 -> repo/app:2.0", content)
         self.assertIn("manual_review_required=no", content)
+
+
+class ImageWithDigestTests(unittest.TestCase):
+    """Tests for image_with_digest() added in this PR."""
+
+    def test_bare_image_gets_digest_pinned(self) -> None:
+        self.assertEqual(
+            image_with_digest("repo/app:1.0", "sha256:abc123"),
+            "repo/app@sha256:abc123",
+        )
+
+    def test_digest_normalized_without_prefix(self) -> None:
+        self.assertEqual(
+            image_with_digest("repo/app:1.0", "abc123"),
+            "repo/app@sha256:abc123",
+        )
+
+    def test_existing_digest_suffix_stripped_before_pinning(self) -> None:
+        self.assertEqual(
+            image_with_digest("repo/app@sha256:old", "sha256:new"),
+            "repo/app@sha256:new",
+        )
+
+    def test_registry_prefix_preserved(self) -> None:
+        result = image_with_digest("ghcr.io/owner/app:1.0", "sha256:abc")
+        self.assertEqual(result, "ghcr.io/owner/app@sha256:abc")
+
+    def test_nested_path_preserved(self) -> None:
+        result = image_with_digest("registry.example.com/org/team/app:2.0", "sha256:xyz")
+        self.assertEqual(result, "registry.example.com/org/team/app@sha256:xyz")
+
+    def test_tag_stripped_from_result(self) -> None:
+        result = image_with_digest("repo/app:latest", "sha256:digest")
+        self.assertNotIn("latest", result)
+        self.assertNotIn(":", result.split("@")[0])
+
+    def test_full_sha256_form_preserved(self) -> None:
+        digest = "sha256:" + "a" * 64
+        result = image_with_digest("repo/app:1.0", digest)
+        self.assertEqual(result, f"repo/app@{digest}")
+
+
+class PayloadDigestTests(unittest.TestCase):
+    """Tests for _payload_digest() added in this PR."""
+
+    def test_top_level_digest_field_returned(self) -> None:
+        payload = {"digest": "sha256:top"}
+        self.assertEqual(_payload_digest(payload), "sha256:top")
+
+    def test_descriptor_digest_returned_when_no_top_level(self) -> None:
+        payload = {"Descriptor": {"digest": "sha256:descriptor"}}
+        self.assertEqual(_payload_digest(payload), "sha256:descriptor")
+
+    def test_top_level_digest_takes_precedence_over_descriptor(self) -> None:
+        payload = {
+            "digest": "sha256:top",
+            "Descriptor": {"digest": "sha256:descriptor"},
+        }
+        self.assertEqual(_payload_digest(payload), "sha256:top")
+
+    def test_missing_digest_returns_empty_string(self) -> None:
+        self.assertEqual(_payload_digest({}), "")
+
+    def test_top_level_digest_without_sha256_prefix_returns_empty(self) -> None:
+        payload = {"digest": "md5:abc123"}
+        self.assertEqual(_payload_digest(payload), "")
+
+    def test_descriptor_digest_without_sha256_prefix_returns_empty(self) -> None:
+        payload = {"Descriptor": {"digest": "md5:abc123"}}
+        self.assertEqual(_payload_digest(payload), "")
+
+    def test_non_string_digest_field_returns_empty(self) -> None:
+        payload = {"digest": 12345}
+        self.assertEqual(_payload_digest(payload), "")
+
+    def test_descriptor_not_a_mapping_returns_empty(self) -> None:
+        payload = {"Descriptor": "sha256:notamapping"}
+        self.assertEqual(_payload_digest(payload), "")
+
+    def test_descriptor_without_digest_key_returns_empty(self) -> None:
+        payload = {"Descriptor": {"other": "value"}}
+        self.assertEqual(_payload_digest(payload), "")
+
+
+class DockerManifestResolverVerboseTests(unittest.TestCase):
+    """Tests for DockerManifestResolver verbose mode added in this PR."""
+
+    def _make_docker(self, payload: dict[str, object]) -> DockerCli:
+        runner = mock.MagicMock()
+        result = mock.MagicMock()
+        result.stdout = json.dumps(payload)
+        runner.capture.return_value = result
+        docker = DockerCli(runner=runner)
+        return docker
+
+    def test_verbose_false_uses_manifest_inspect(self) -> None:
+        docker = self._make_docker(manifest_index("sha256:child"))
+        resolver = DockerManifestResolver(docker, verbose=False)
+        image = parse_registry_image("docker.io/repo/app:1.0")
+        assert image is not None
+
+        doc = resolver.fetch(image, image.tag)
+
+        self.assertEqual(doc.source, "docker-manifest")
+        self.assertEqual(doc.digest, "")
+
+    def test_verbose_true_uses_manifest_inspect_verbose(self) -> None:
+        payload = manifest_index_digest("sha256:index", "sha256:child")
+        docker = self._make_docker(payload)
+        resolver = DockerManifestResolver(docker, verbose=True)
+        image = parse_registry_image("docker.io/repo/app:1.0")
+        assert image is not None
+
+        doc = resolver.fetch(image, image.tag)
+
+        self.assertEqual(doc.source, "docker-manifest-verbose")
+        self.assertEqual(doc.digest, "sha256:index")
+
+    def test_verbose_true_extracts_descriptor_digest(self) -> None:
+        payload = {"Descriptor": {"digest": "sha256:desc"}, "mediaType": ""}
+        docker = self._make_docker(payload)
+        resolver = DockerManifestResolver(docker, verbose=True)
+        image = parse_registry_image("docker.io/repo/app:2.0")
+        assert image is not None
+
+        doc = resolver.fetch(image, image.tag)
+
+        self.assertEqual(doc.digest, "sha256:desc")
+
+    def test_verbose_false_yields_empty_digest_even_if_descriptor_present(self) -> None:
+        payload = manifest_index_digest("sha256:index", "sha256:child")
+        docker = self._make_docker(payload)
+        resolver = DockerManifestResolver(docker, verbose=False)
+        image = parse_registry_image("docker.io/repo/app:1.0")
+        assert image is not None
+
+        doc = resolver.fetch(image, image.tag)
+
+        self.assertEqual(doc.digest, "")
+
+
+class DigestVerifierResolveTagTests(unittest.TestCase):
+    """Tests for DigestVerifier.resolve_tag_digest() added in this PR."""
+
+    def _make_verifier(
+        self,
+        payload: dict[str, object] | None = None,
+        *,
+        fail: bool = False,
+    ) -> DigestVerifier:
+        runner = mock.MagicMock()
+        docker = DockerCli(runner=runner)
+        if fail:
+            resolver: object = FailingManifestResolver()
+        else:
+            result = mock.MagicMock()
+            result.stdout = json.dumps(payload or {})
+            runner.capture.return_value = result
+            resolver = DockerManifestResolver(docker, verbose=True)
+        return DigestVerifier(
+            docker,
+            primary_resolver=resolver,
+            fallback_resolver=resolver,
+        )
+
+    def test_unsupported_reference_returns_untrusted_status(self) -> None:
+        verifier = self._make_verifier()
+        # Image without a tag cannot be parsed
+        result = verifier.resolve_tag_digest("repo/app")
+        self.assertFalse(result.ok)
+        self.assertEqual(result.status, "untrusted")
+        self.assertEqual(result.reason, "unsupported-image-reference")
+
+    def test_manifest_unavailable_returns_failure(self) -> None:
+        verifier = self._make_verifier(fail=True)
+        result = verifier.resolve_tag_digest("docker.io/repo/app:1.0")
+        self.assertFalse(result.ok)
+        self.assertIn(result.status, ("failed", "untrusted"))
+
+    def test_successful_resolution_returns_ok_with_digest(self) -> None:
+        payload = manifest_index_digest("sha256:resolved", "sha256:child")
+        verifier = self._make_verifier(payload)
+        result = verifier.resolve_tag_digest("docker.io/repo/app:1.0")
+        self.assertTrue(result.ok)
+        self.assertEqual(result.status, "resolved")
+        self.assertEqual(result.reason, "tag-digest-resolved")
+        self.assertEqual(result.digest, "sha256:resolved")
+
+    def test_missing_digest_returns_failure(self) -> None:
+        # Payload without a Descriptor or digest field
+        payload = {"schemaVersion": 2, "mediaType": "application/vnd.oci.image.index.v1+json", "manifests": []}
+        verifier = self._make_verifier(payload)
+        result = verifier.resolve_tag_digest("docker.io/repo/app:1.0")
+        self.assertFalse(result.ok)
+        self.assertEqual(result.reason, "manifest-digest-missing")
+
+    def test_ghcr_image_returns_failed_status_on_error(self) -> None:
+        verifier = self._make_verifier(fail=True)
+        result = verifier.resolve_tag_digest("ghcr.io/owner/app:1.0")
+        self.assertFalse(result.ok)
+        self.assertEqual(result.status, "failed")
+
+
+class IsSimpleExactTagIncludeTests(unittest.TestCase):
+    """Tests for _is_simple_exact_tag_include() added in this PR."""
+
+    def test_simple_numeric_tag(self) -> None:
+        self.assertTrue(_is_simple_exact_tag_include(r"^2\.0$"))
+
+    def test_simple_text_tag(self) -> None:
+        self.assertTrue(_is_simple_exact_tag_include("^latest$"))
+
+    def test_tag_with_hyphens_and_dots(self) -> None:
+        self.assertTrue(_is_simple_exact_tag_include(r"^1\.2\.3-beta$"))
+
+    def test_missing_caret_returns_false(self) -> None:
+        self.assertFalse(_is_simple_exact_tag_include("2.0$"))
+
+    def test_missing_dollar_returns_false(self) -> None:
+        self.assertFalse(_is_simple_exact_tag_include("^2.0"))
+
+    def test_too_short_returns_false(self) -> None:
+        self.assertFalse(_is_simple_exact_tag_include("^$"))
+        self.assertFalse(_is_simple_exact_tag_include("^a"))
+        self.assertFalse(_is_simple_exact_tag_include(""))
+
+    def test_pipe_alternation_returns_false(self) -> None:
+        self.assertFalse(_is_simple_exact_tag_include("^beta|^stable$"))
+
+    def test_dot_wildcard_returns_false(self) -> None:
+        # Unescaped dot is a metachar
+        self.assertFalse(_is_simple_exact_tag_include("^2.0$"))
+
+    def test_escaped_dot_returns_true(self) -> None:
+        self.assertTrue(_is_simple_exact_tag_include(r"^2\.0$"))
+
+    def test_escaped_caret_returns_false(self) -> None:
+        # An escaped caret is a valid char in the tag
+        # but '^' at the start must be an anchor not a tag char
+        # Actually testing: a valid tag can include a backslash-escaped metachar in middle
+        self.assertTrue(_is_simple_exact_tag_include(r"^2\.0$"))
+
+    def test_star_quantifier_returns_false(self) -> None:
+        self.assertFalse(_is_simple_exact_tag_include("^.*$"))
+
+    def test_plus_quantifier_returns_false(self) -> None:
+        self.assertFalse(_is_simple_exact_tag_include("^.+$"))
+
+    def test_character_class_returns_false(self) -> None:
+        self.assertFalse(_is_simple_exact_tag_include("^[0-9]+$"))
+
+    def test_empty_tag_body_returns_false(self) -> None:
+        # ^$ is too short but also invalid tag
+        self.assertFalse(_is_simple_exact_tag_include("^$"))
+
+    def test_trailing_backslash_returns_false(self) -> None:
+        # Backslash at the very end (before $) is incomplete escape
+        self.assertFalse(_is_simple_exact_tag_include("^2.0\\$"))
+
+
+class DigestPinUpdateFromValuesTests(unittest.TestCase):
+    """Tests for digest_pin_update_from_values() added in this PR."""
+
+    def test_basic_fields_set_correctly(self) -> None:
+        update = digest_pin_update_from_values(
+            old_image="repo/app:1.0",
+            resolved_tag="2.0",
+            planned_digest="sha256:abc",
+            services=("app",),
+        )
+
+        self.assertEqual(update.old_image, "repo/app:1.0")
+        self.assertEqual(update.resolved_tag, "2.0")
+        self.assertEqual(update.planned_digest, "sha256:abc")
+        self.assertEqual(update.final_image, "repo/app@sha256:abc")
+        self.assertEqual(update.resolved_image, "repo/app:2.0")
+        self.assertEqual(update.watch_tag, "2.0")
+        self.assertEqual(update.services, ("app",))
+
+    def test_marker_contains_resolved_tag(self) -> None:
+        update = digest_pin_update_from_values(
+            old_image="repo/app:1.0",
+            resolved_tag="2.0",
+            planned_digest="sha256:abc",
+            services=("app",),
+        )
+        self.assertEqual(update.marker, f"{DIGEST_PIN_MARKER_PREFIX}2.0")
+
+    def test_label_key_is_wud_tag_include(self) -> None:
+        update = digest_pin_update_from_values(
+            old_image="repo/app:1.0",
+            resolved_tag="2.0",
+            planned_digest="sha256:abc",
+            services=("app",),
+        )
+        self.assertEqual(update.label_key, WUD_TAG_INCLUDE_LABEL)
+
+    def test_label_value_contains_escaped_tag_regex(self) -> None:
+        update = digest_pin_update_from_values(
+            old_image="repo/app:1.0",
+            resolved_tag="2.0",
+            planned_digest="sha256:abc",
+            services=("app",),
+        )
+        # label_value is compose-dollar-escaped version of ^2\.0$
+        self.assertIn("2", update.label_value)
+        self.assertIn("0", update.label_value)
+
+    def test_digest_normalized_from_bare_hash(self) -> None:
+        update = digest_pin_update_from_values(
+            old_image="repo/app:1.0",
+            resolved_tag="2.0",
+            planned_digest="abc123",
+            services=("app",),
+        )
+        self.assertEqual(update.planned_digest, "sha256:abc123")
+        self.assertEqual(update.final_image, "repo/app@sha256:abc123")
+
+    def test_services_sorted(self) -> None:
+        update = digest_pin_update_from_values(
+            old_image="repo/app:1.0",
+            resolved_tag="2.0",
+            planned_digest="sha256:abc",
+            services=("svc-b", "svc-a"),
+        )
+        self.assertEqual(update.services, ("svc-a", "svc-b"))
+
+    def test_multiple_services(self) -> None:
+        update = digest_pin_update_from_values(
+            old_image="repo/app:1.0",
+            resolved_tag="2.0",
+            planned_digest="sha256:abc",
+            services=("svc1", "svc2", "svc3"),
+        )
+        self.assertEqual(len(update.services), 3)
+
+    def test_registry_image_preserved_in_final_image(self) -> None:
+        update = digest_pin_update_from_values(
+            old_image="ghcr.io/owner/app:1.0",
+            resolved_tag="2.0",
+            planned_digest="sha256:abc",
+            services=("app",),
+        )
+        self.assertEqual(update.final_image, "ghcr.io/owner/app@sha256:abc")
+
+
+class RenderComposeDigestPinsTests(unittest.TestCase):
+    """Tests for render_compose_digest_pins() added in this PR."""
+
+    def setUp(self) -> None:
+        self.tmp = tempfile.TemporaryDirectory(prefix="wud-digest-pin.")
+        self.root = Path(self.tmp.name)
+
+    def tearDown(self) -> None:
+        self.tmp.cleanup()
+
+    def _compose_file(self, content: str) -> Path:
+        path = self.root / "docker-compose.yml"
+        path.write_text(content, encoding="utf-8")
+        return path
+
+    def test_empty_updates_returns_original_content(self) -> None:
+        content = "services:\n  app:\n    image: repo/app:1.0\n"
+        path = self._compose_file(content)
+
+        rendered, applied = render_compose_digest_pins(path, ())
+
+        self.assertEqual(rendered, content)
+        self.assertEqual(applied, ())
+
+    def test_basic_pin_writes_digest_image_and_marker(self) -> None:
+        path = self._compose_file(
+            "services:\n  app:\n    image: repo/app:1.0\n"
+        )
+        update = digest_pin_update_from_values(
+            old_image="repo/app:1.0",
+            resolved_tag="2.0",
+            planned_digest="sha256:pin",
+            services=("app",),
+        )
+
+        rendered, applied = render_compose_digest_pins(path, (update,))
+
+        self.assertIn("repo/app@sha256:pin", rendered)
+        self.assertIn("# wud-updater.resolved-tag=2.0", rendered)
+        self.assertEqual(len(applied), 1)
+        self.assertEqual(applied[0].replacements, 1)
+
+    def test_label_written_to_compose_output(self) -> None:
+        path = self._compose_file(
+            "services:\n  app:\n    image: repo/app:1.0\n"
+        )
+        update = digest_pin_update_from_values(
+            old_image="repo/app:1.0",
+            resolved_tag="2.0",
+            planned_digest="sha256:pin",
+            services=("app",),
+        )
+
+        rendered, _applied = render_compose_digest_pins(path, (update,))
+
+        # The label should include the exact tag pattern
+        self.assertIn("wud.tag.include", rendered)
+        self.assertIn("2", rendered)
+
+    def test_rejects_unknown_service(self) -> None:
+        path = self._compose_file(
+            "services:\n  app:\n    image: repo/app:1.0\n"
+        )
+        update = digest_pin_update_from_values(
+            old_image="repo/app:1.0",
+            resolved_tag="2.0",
+            planned_digest="sha256:pin",
+            services=("nonexistent",),
+        )
+
+        with self.assertRaises(ComposeTagRewriteError):
+            render_compose_digest_pins(path, (update,))
+
+    def test_rejects_wrong_current_image(self) -> None:
+        path = self._compose_file(
+            "services:\n  app:\n    image: repo/other:3.0\n"
+        )
+        update = digest_pin_update_from_values(
+            old_image="repo/app:1.0",
+            resolved_tag="2.0",
+            planned_digest="sha256:pin",
+            services=("app",),
+        )
+
+        with self.assertRaises(ComposeTagRewriteError):
+            render_compose_digest_pins(path, (update,))
+
+    def test_returns_empty_when_no_replacements(self) -> None:
+        path = self._compose_file(
+            "services:\n  other:\n    image: repo/other:1.0\n"
+        )
+        update = digest_pin_update_from_values(
+            old_image="repo/app:1.0",
+            resolved_tag="2.0",
+            planned_digest="sha256:pin",
+            services=("other",),  # service exists but has wrong image
+        )
+
+        with self.assertRaises(ComposeTagRewriteError):
+            render_compose_digest_pins(path, (update,))
+
+    def test_accepts_resolved_image_as_current_image(self) -> None:
+        """After a tag update, current image may already be the resolved tag."""
+        path = self._compose_file(
+            "services:\n  app:\n    image: repo/app:2.0\n"
+        )
+        update = digest_pin_update_from_values(
+            old_image="repo/app:1.0",
+            resolved_tag="2.0",
+            planned_digest="sha256:pin",
+            services=("app",),
+        )
+
+        rendered, applied = render_compose_digest_pins(path, (update,))
+
+        self.assertIn("repo/app@sha256:pin", rendered)
+        self.assertEqual(applied[0].replacements, 1)
+
+    def test_invalid_yaml_raises_compose_error(self) -> None:
+        path = self._compose_file("services: [invalid: yaml: ::::")
+        update = digest_pin_update_from_values(
+            old_image="repo/app:1.0",
+            resolved_tag="2.0",
+            planned_digest="sha256:pin",
+            services=("app",),
+        )
+
+        with self.assertRaises(ComposeTagRewriteError):
+            render_compose_digest_pins(path, (update,))
+
+    def test_rejects_empty_services_list(self) -> None:
+        path = self._compose_file(
+            "services:\n  app:\n    image: repo/app:1.0\n"
+        )
+        # Manually build an update with no services
+        update = digest_pin_update_from_values(
+            old_image="repo/app:1.0",
+            resolved_tag="2.0",
+            planned_digest="sha256:pin",
+            services=(),
+        )
+
+        with self.assertRaises(ComposeTagRewriteError):
+            render_compose_digest_pins(path, (update,))
+
+    def test_replaces_existing_simple_include_label(self) -> None:
+        path = self._compose_file(
+            "services:\n"
+            "  app:\n"
+            "    labels:\n"
+            "    - wud.tag.include=^1\\.0$$\n"
+            "    image: repo/app:1.0\n"
+        )
+        update = digest_pin_update_from_values(
+            old_image="repo/app:1.0",
+            resolved_tag="2.0",
+            planned_digest="sha256:pin",
+            services=("app",),
+        )
+
+        rendered, applied = render_compose_digest_pins(path, (update,))
+
+        self.assertIn("2", rendered)
+        self.assertNotIn("^1", rendered)
+        self.assertEqual(applied[0].replacements, 1)
+
+    def test_original_compose_file_unchanged_after_render(self) -> None:
+        original = "services:\n  app:\n    image: repo/app:1.0\n"
+        path = self._compose_file(original)
+        update = digest_pin_update_from_values(
+            old_image="repo/app:1.0",
+            resolved_tag="2.0",
+            planned_digest="sha256:pin",
+            services=("app",),
+        )
+
+        render_compose_digest_pins(path, (update,))
+
+        self.assertEqual(path.read_text(encoding="utf-8"), original)
 
 
 def safe_name(value: str) -> str:
