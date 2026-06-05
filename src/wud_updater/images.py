@@ -96,6 +96,12 @@ def image_with_tag(image: str, tag: str) -> str:
     return f"{image_repo_ref(image)}:{tag}"
 
 
+def image_with_digest(image: str, digest: str) -> str:
+    """Return ``image`` pinned to ``digest`` on its repository reference."""
+
+    return f"{image_repo_ref(image)}@{normalize_digest(digest)}"
+
+
 def tag_value_valid(tag: str) -> bool:
     """Return whether ``tag`` is valid for the updater's tag rewrite option."""
 

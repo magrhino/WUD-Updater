@@ -53,6 +53,26 @@ known, and registry or Docker manifest errors.
 Untrusted non-GHCR results are logged as `WARN` entries with the same diagnostic
 fields. They do not mark the run failed by themselves.
 
+## Digest-Pin Tag Updates
+
+Set `WUD_DIGEST_PIN_UPDATES=true` to make approved tag updates write Compose
+images as `repo/app@sha256:<tag-or-index-digest>` instead of `repo/app:<tag>`.
+This mode is opt-in, still requires tag update approval, and only supports WUD
+lines with a safe resolved tag from WUD's callback `tag=<new-tag>` token or a
+manual tag override.
+
+During planning, the updater resolves the remote tag/index digest for the
+resolved tag and includes it in the plan ID. During apply, it temporarily writes
+the resolved tag, pulls with Compose, re-resolves the tag digest, verifies the
+pulled local image against the planned digest, and only then writes the final
+digest-pinned Compose reference.
+
+The final Compose edit also writes `# wud-updater.resolved-tag=<tag>`
+immediately above `image:` and sets `wud.tag.include` to an exact regex for that
+tag so WUD keeps watching the resolved tag. If the tag digest moves, cannot be
+resolved, cannot be verified locally, or the Compose metadata cannot be written
+safely, the update fails closed and the pending line is restored.
+
 ## Live Probe
 
 The repository includes a Docker-gated live probe for checking registry behavior

@@ -7,7 +7,7 @@ from unittest.mock import patch
 from zoneinfo import ZoneInfo, reset_tzpath
 import zoneinfo
 
-from wud_updater.config import ConfigError, load_config
+from wud_updater.config import ConfigError, load_config, parse_bool_env
 
 
 class LoadConfigTests(unittest.TestCase):
@@ -26,6 +26,7 @@ class LoadConfigTests(unittest.TestCase):
         self.assertEqual(config.lock_timeout, 30)
         self.assertEqual(config.timezone_name, "UTC")
         self.assertEqual(config.compose_ignore_paths, (Path("old"),))
+        self.assertFalse(config.digest_pin_updates)
         self.assertIsNone(config.out_uid)
         self.assertIsNone(config.out_gid)
 
@@ -41,6 +42,7 @@ class LoadConfigTests(unittest.TestCase):
                 "WUD_LOCK_TIMEOUT": "2",
                 "WUD_TIMEZONE": "America/Chicago",
                 "WUD_COMPOSE_IGNORE_PATHS": "old, archive/disabled,old",
+                "WUD_DIGEST_PIN_UPDATES": "true",
                 "OUT_UID": "1000",
                 "OUT_GID": "1001",
             },
@@ -59,6 +61,7 @@ class LoadConfigTests(unittest.TestCase):
             config.compose_ignore_paths,
             (Path("old"), Path("archive/disabled")),
         )
+        self.assertTrue(config.digest_pin_updates)
         self.assertEqual(config.out_uid, 1000)
         self.assertEqual(config.out_gid, 1001)
 
@@ -75,6 +78,7 @@ class LoadConfigTests(unittest.TestCase):
                 "WUD_LOCK_TIMEOUT": "",
                 "WUD_TIMEZONE": "",
                 "WUD_COMPOSE_IGNORE_PATHS": "",
+                "WUD_DIGEST_PIN_UPDATES": "",
             },
             home="/home/wud",
         )
@@ -91,6 +95,7 @@ class LoadConfigTests(unittest.TestCase):
         self.assertEqual(config.lock_timeout, 30)
         self.assertEqual(config.timezone_name, "UTC")
         self.assertEqual(config.compose_ignore_paths, ())
+        self.assertFalse(config.digest_pin_updates)
 
     def test_db_path_defaults_under_configured_log_dir(self) -> None:
         config = load_config({"WUD_LOG_DIR": "/srv/logs"}, home="/home/wud")
@@ -160,6 +165,21 @@ class LoadConfigTests(unittest.TestCase):
         with self.assertRaisesRegex(ConfigError, "WUD_UPDATE_MODE"):
             load_config({"WUD_UPDATE_MODE": "restart"}, home="/home/wud")
 
+    def test_digest_pin_updates_bool_is_validated(self) -> None:
+        true_config = load_config(
+            {"WUD_DIGEST_PIN_UPDATES": "yes"},
+            home="/home/wud",
+        )
+        false_config = load_config(
+            {"WUD_DIGEST_PIN_UPDATES": "off"},
+            home="/home/wud",
+        )
+
+        self.assertTrue(true_config.digest_pin_updates)
+        self.assertFalse(false_config.digest_pin_updates)
+        with self.assertRaisesRegex(ConfigError, "WUD_DIGEST_PIN_UPDATES"):
+            load_config({"WUD_DIGEST_PIN_UPDATES": "maybe"}, home="/home/wud")
+
     def test_timezone_is_validated(self) -> None:
         with self.assertRaisesRegex(ConfigError, "WUD_TIMEZONE"):
             load_config({"WUD_TIMEZONE": "Mars/Base"}, home="/home/wud")
@@ -194,6 +214,46 @@ class LoadConfigTests(unittest.TestCase):
             ZoneInfo.clear_cache()
 
         self.assertEqual(config.timezone_name, "America/Chicago")
+
+
+class ParseBoolEnvTests(unittest.TestCase):
+    def test_none_returns_default_false(self) -> None:
+        self.assertFalse(parse_bool_env("MY_VAR", None))
+
+    def test_empty_string_returns_default_false(self) -> None:
+        self.assertFalse(parse_bool_env("MY_VAR", ""))
+
+    def test_none_returns_supplied_default(self) -> None:
+        self.assertTrue(parse_bool_env("MY_VAR", None, default=True))
+
+    def test_truthy_values_return_true(self) -> None:
+        for value in ("1", "true", "yes", "on", "TRUE", "YES", "ON", "True", " true "):
+            with self.subTest(value=value):
+                self.assertTrue(parse_bool_env("MY_VAR", value))
+
+    def test_falsy_values_return_false(self) -> None:
+        for value in ("0", "false", "no", "off", "FALSE", "NO", "OFF", "False", " false "):
+            with self.subTest(value=value):
+                self.assertFalse(parse_bool_env("MY_VAR", value))
+
+    def test_invalid_value_raises_config_error(self) -> None:
+        invalid_values = ("maybe", "2", "tru", "enabled", "y", "n", "yes!")
+        for value in invalid_values:
+            with self.subTest(value=value):
+                with self.assertRaisesRegex(ConfigError, "MY_VAR must be true or false"):
+                    parse_bool_env("MY_VAR", value)
+
+    def test_error_message_includes_variable_name(self) -> None:
+        with self.assertRaisesRegex(ConfigError, "WUD_DIGEST_PIN_UPDATES"):
+            parse_bool_env("WUD_DIGEST_PIN_UPDATES", "invalid")
+
+    def test_whitespace_only_is_invalid(self) -> None:
+        with self.assertRaisesRegex(ConfigError, "MY_VAR must be true or false"):
+            parse_bool_env("MY_VAR", "   ")
+
+    def test_digit_one_and_zero_are_boolean(self) -> None:
+        self.assertTrue(parse_bool_env("X", "1"))
+        self.assertFalse(parse_bool_env("X", "0"))
 
 
 if __name__ == "__main__":

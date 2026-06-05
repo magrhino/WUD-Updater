@@ -85,6 +85,7 @@ commands:
 | WebUI operations guide | [docs/wiki/webui-container.md](docs/wiki/webui-container.md) |
 | Docker script runner | [docs/DEPLOYMENT.md#docker-script-runner](docs/DEPLOYMENT.md#docker-script-runner) |
 | Host install | [docs/DEPLOYMENT.md#host-install](docs/DEPLOYMENT.md#host-install) |
+| Digest verification and digest-pin updates | [docs/wiki/digest-verification.md](docs/wiki/digest-verification.md) |
 | Complete documentation index | [docs/README.md](docs/README.md) |
 | Security policy and private vulnerability reporting | [SECURITY.md](SECURITY.md) |
 | Release notes | [CHANGELOG.md](CHANGELOG.md) |

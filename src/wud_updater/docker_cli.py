@@ -100,6 +100,12 @@ class DockerCli:
             check=True,
         )
 
+    def manifest_inspect_verbose(self, image: str) -> CommandResult:
+        return self.runner.capture(
+            [self.executable, "manifest", "inspect", "--verbose", image],
+            check=True,
+        )
+
     def pull_image(self, image: str) -> CommandResult:
         return self.runner.run([self.executable, "pull", image], check=True)
 

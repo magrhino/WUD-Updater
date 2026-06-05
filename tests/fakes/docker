@@ -472,9 +472,19 @@ image_cmd(){
 }
 
 manifest_cmd(){
-  local subcmd="${1:-}" image="${2:-}" file
+  local subcmd="${1:-}" verbose=0 image file
   [[ "$subcmd" == "inspect" ]] || return 1
-  log_call "manifest inspect $image"
+  shift || true
+  if [[ "${1:-}" == "--verbose" ]]; then
+    verbose=1
+    shift
+  fi
+  image="${1:-}"
+  if [[ "$verbose" -eq 1 ]]; then
+    log_call "manifest inspect --verbose $image"
+  else
+    log_call "manifest inspect $image"
+  fi
   file="$(manifest_file "$image" fail)"
   if [[ -f "$file" ]]; then
     file="$(manifest_file "$image" stderr)"

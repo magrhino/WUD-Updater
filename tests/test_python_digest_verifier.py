@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import unittest
 from collections.abc import Mapping
+from unittest import mock
 
 from wud_updater.digest_verifier import (
     DigestVerifier,
     ManifestDocument,
     ManifestLookupError,
+    RegistryHttpManifestResolver,
     parse_ghcr_image,
     parse_registry_image,
 )
@@ -60,6 +62,20 @@ class FailingResolver:
         repo = getattr(image, "repo")
         self.calls.append((registry, repo, reference))
         raise ManifestLookupError("primary unavailable")
+
+
+class SequencedHttpResolver(RegistryHttpManifestResolver):
+    def __init__(self, documents: tuple[ManifestDocument, ...]) -> None:
+        self.documents = list(documents)
+        self.calls: list[tuple[str, str, str]] = []
+
+    def fetch(self, image: object, reference: str) -> ManifestDocument:
+        registry = getattr(image, "registry")
+        repo = getattr(image, "repo")
+        self.calls.append((registry, repo, reference))
+        if not self.documents:
+            raise ManifestLookupError("no more documents")
+        return self.documents.pop(0)
 
 
 def index_doc(
@@ -259,6 +275,35 @@ class DigestVerifierTests(unittest.TestCase):
         self.assertEqual(result.source, "fallback")
         self.assertGreaterEqual(len(primary.calls), 1)
         self.assertIn(("ghcr.io", "acme/app", "latest"), fallback.calls)
+
+    def test_resolve_tag_digest_reuses_primary_http_resolver_for_index_digest(self) -> None:
+        resolver = SequencedHttpResolver(
+            (
+                index_doc("", ("sha256:child",)),
+                index_doc("sha256:index", ("sha256:child",)),
+            )
+        )
+        verifier = DigestVerifier(
+            FakeDocker(),
+            primary_resolver=resolver,
+            fallback_resolver=FailingResolver(),
+        )
+
+        with mock.patch(
+            "wud_updater.digest_verifier.RegistryHttpManifestResolver.fetch",
+            side_effect=AssertionError("fresh HTTP resolver used"),
+        ):
+            result = verifier.resolve_tag_digest("ghcr.io/acme/app:latest")
+
+        self.assertTrue(result.ok)
+        self.assertEqual(result.digest, "sha256:index")
+        self.assertEqual(
+            resolver.calls,
+            [
+                ("ghcr.io", "acme/app", "latest"),
+                ("ghcr.io", "acme/app", "latest"),
+            ],
+        )
 
     def test_non_ghcr_platform_child_digest_matches_local_config_digest(self) -> None:
         expected = "sha256:child"

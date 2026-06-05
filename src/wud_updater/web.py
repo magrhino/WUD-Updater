@@ -59,14 +59,17 @@ from .compose import ComposeCli, ComposeDiscoveryError
 from .config import (
     COMPOSE_IGNORE_PATHS_ENV,
     DEFAULT_COMPOSE_IGNORE_PATHS,
+    DEFAULT_DIGEST_PIN_UPDATES,
     DEFAULT_LOCK_TIMEOUT,
     DEFAULT_MAX_WAIT,
     DEFAULT_TIMEZONE,
     DEFAULT_UPDATE_MODE,
+    DIGEST_PIN_UPDATES_ENV,
     ConfigError,
     UpdaterConfig,
     format_compose_ignore_paths,
     load_config,
+    parse_bool_env,
     parse_compose_ignore_paths,
 )
 from .db import (
@@ -88,12 +91,14 @@ from .doctor import (
     DoctorSuggestion as DoctorDataSuggestion,
     options_from_namespace as doctor_options_from_namespace,
 )
+from .digest_verifier import DigestVerifier, DockerManifestResolver
 from .docker_cli import ContainerImage, DockerCli
 from .images import (
     image_has_tag,
     image_matches_resolved_target,
     image_tag,
     image_with_tag,
+    normalize_digest,
     repo_key,
     tag_value_valid,
 )
@@ -121,12 +126,15 @@ from .release_notes import (
 from .self_update import current_container_image, release_self_update_target
 from .updater import (
     ComposeTagRewriteError,
+    DigestPinUpdate,
     TagOverride,
     TagUpdate,
     UpdaterProgressEvent,
     UpdateFromWudRunner,
     UpdaterOptions,
+    apply_compose_digest_pins,
     apply_compose_tag_updates,
+    digest_pin_update_from_values,
     js_regex_escape,
     _backup_compose,
 )
@@ -169,8 +177,11 @@ MANAGED_THEME_PREFERENCE_DB_KEY = "ui.theme_preference"
 MANAGED_ONBOARDING_CHECKLIST_KEY = "onboarding_checklist"
 MANAGED_COMPOSE_IGNORE_PATHS_KEY = "compose_ignore_paths"
 MANAGED_COMPOSE_IGNORE_PATHS_DB_KEY = "compose.ignore_paths"
+MANAGED_DIGEST_PIN_UPDATES_KEY = "digest_pin_updates"
+MANAGED_DIGEST_PIN_UPDATES_DB_KEY = "compose.digest_pin_updates"
 THEME_PREFERENCE_VALUES = ("system", "light", "dark")
 ONBOARDING_CHECKLIST_VALUES = ("visible", "dismissed")
+DIGEST_PIN_UPDATES_VALUES = ("false", "true")
 CORE_UPDATE_TOUR_STATUS_VALUES = (
     "not_started",
     "in_progress",
@@ -802,6 +813,18 @@ class PlanTagUpdate(BaseModel):
     services: list[str] = Field(default_factory=list)
 
 
+class PlanDigestPinUpdate(BaseModel):
+    source_image: str
+    resolved_tag: str
+    planned_digest: str
+    final_image: str
+    watch_tag: str
+    marker: str
+    label_key: str
+    label_value: str
+    services: list[str] = Field(default_factory=list)
+
+
 class PlanAction(BaseModel):
     kind: str
     description: str
@@ -821,6 +844,7 @@ class PlanStack(BaseModel):
     force_recreate: bool
     up_no_deps: bool
     tag_updates: list[PlanTagUpdate] = Field(default_factory=list)
+    digest_pin_updates: list[PlanDigestPinUpdate] = Field(default_factory=list)
     actions: list[PlanAction] = Field(default_factory=list)
     lines: list[PlanLine] = Field(default_factory=list)
 
@@ -857,6 +881,7 @@ class PlanResponse(BaseModel):
     source_file: str
     mode: str
     max_wait: int
+    digest_pin_updates: bool
     selected_line_numbers: list[int] = Field(default_factory=list)
     summary: PlanSummary
     targets: list[PlanTarget] = Field(default_factory=list)
@@ -2995,6 +3020,7 @@ def _effective_config(settings: WebSettings) -> UpdaterConfig:
     return replace(
         settings.config,
         compose_ignore_paths=_effective_compose_ignore_paths(settings),
+        digest_pin_updates=_effective_digest_pin_updates(settings),
     )
 
 
@@ -3042,6 +3068,53 @@ def _compose_ignore_paths_disabled_reason(settings: WebSettings) -> str:
     return (
         f"{COMPOSE_IGNORE_PATHS_ENV} is configured in the server environment. "
         "Unset it to manage compose ignore paths in the WebUI."
+    )
+
+
+def _effective_digest_pin_updates(settings: WebSettings) -> bool:
+    if _digest_pin_env_configured(settings):
+        return settings.config.digest_pin_updates
+    return _stored_digest_pin_updates(settings)
+
+
+def _stored_digest_pin_updates(settings: WebSettings) -> bool:
+    try:
+        with closing(_connect_readonly_db(settings)) as conn:
+            value = _web_setting(conn, MANAGED_DIGEST_PIN_UPDATES_DB_KEY)
+    except ReadOnlyDatabaseMissing:
+        return DEFAULT_DIGEST_PIN_UPDATES
+    except (OSError, sqlite3.Error, DatabaseError) as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=_safe_exception_detail(
+                settings,
+                "could not read digest-pin setting",
+                exc,
+            ),
+        ) from exc
+    try:
+        return parse_bool_env(
+            MANAGED_DIGEST_PIN_UPDATES_KEY,
+            value,
+            default=DEFAULT_DIGEST_PIN_UPDATES,
+        )
+    except ConfigError as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=f"stored {MANAGED_DIGEST_PIN_UPDATES_KEY} is invalid: {exc}",
+        ) from exc
+
+
+def _digest_pin_env_configured(settings: WebSettings) -> bool:
+    return DIGEST_PIN_UPDATES_ENV in _settings_env(settings)
+
+
+def _digest_pin_disabled_reason(settings: WebSettings) -> str:
+    if not _digest_pin_env_configured(settings):
+        return ""
+    return (
+        f"{DIGEST_PIN_UPDATES_ENV} is configured in the server environment. "
+        "Unset it to manage digest-pin updates in the WebUI."
     )
 
 
@@ -3159,6 +3232,7 @@ def _doctor_command_env(settings: WebSettings) -> dict[str, str]:
     env[COMPOSE_IGNORE_PATHS_ENV] = format_compose_ignore_paths(
         config.compose_ignore_paths
     )
+    env[DIGEST_PIN_UPDATES_ENV] = _format_bool(config.digest_pin_updates)
     return env
 
 
@@ -4801,6 +4875,48 @@ def _validate_self_update_prepare_plan(plan: PlanResponse) -> None:
         )
 
 
+def _verify_self_update_digest_pin_updates(
+    settings: WebSettings,
+    updates: Sequence[DigestPinUpdate],
+) -> None:
+    if not updates:
+        return
+
+    command_runner = CommandRunner(env=settings.command_env)
+    docker = DockerCli(runner=command_runner)
+    resolver = DockerManifestResolver(docker, verbose=True)
+    verifier = DigestVerifier(
+        docker,
+        primary_resolver=resolver,
+        fallback_resolver=resolver,
+    )
+    for update in updates:
+        current = verifier.resolve_tag_digest(update.resolved_image)
+        if not current.ok:
+            raise RuntimeError(
+                "could not re-resolve digest-pin target "
+                f"{update.resolved_image}: {current.reason}"
+                + (f" ({current.error})" if current.error else "")
+            )
+        current_digest = normalize_digest(current.digest)
+        if current_digest != update.planned_digest:
+            raise RuntimeError(
+                "digest-pin target moved for "
+                f"{update.resolved_image}: planned {update.planned_digest}, "
+                f"current {current_digest}"
+            )
+
+        digest_result = verifier.verify(update.resolved_image, update.planned_digest)
+        if not digest_result.ok:
+            detail = digest_result.reason
+            if digest_result.error:
+                detail = f"{detail} ({digest_result.error})"
+            raise RuntimeError(
+                "digest-pin target did not verify for "
+                f"{update.resolved_image}: wanted {update.planned_digest}; {detail}"
+            )
+
+
 def _prepare_self_update_tag_update(
     settings: WebSettings,
     plan: PlanResponse,
@@ -4819,9 +4935,19 @@ def _prepare_self_update_tag_update(
     )
     if not updates:
         raise RuntimeError("self-update tag update plan has no Compose tag update")
+    digest_pin_updates = tuple(
+        digest_pin_update_from_values(
+            old_image=item.source_image,
+            resolved_tag=item.resolved_tag,
+            planned_digest=item.planned_digest,
+            services=tuple(item.services),
+        )
+        for item in stack.digest_pin_updates
+    )
 
     backup = _backup_compose(compose_path)
     restore_error = ""
+    applied_digest_pins = ()
     try:
         applied = apply_compose_tag_updates(compose_path, updates)
         if not applied:
@@ -4834,6 +4960,14 @@ def _prepare_self_update_tag_update(
             pull_services,
             project_directory=stack.project_directory or None,
         )
+        if digest_pin_updates:
+            _verify_self_update_digest_pin_updates(settings, digest_pin_updates)
+            applied_digest_pins = apply_compose_digest_pins(
+                compose_path,
+                digest_pin_updates,
+            )
+            if not applied_digest_pins:
+                raise RuntimeError("no Compose image lines were digest-pinned")
     except Exception as exc:
         try:
             shutil.copy2(backup, compose_path)
@@ -4859,6 +4993,21 @@ def _prepare_self_update_tag_update(
                 "replacements": item.replacements,
             }
             for item in applied
+        ],
+        "digest_pin_updates": [
+            {
+                "source_image": item.old_image,
+                "resolved_tag": item.resolved_tag,
+                "planned_digest": item.planned_digest,
+                "final_image": item.final_image,
+                "watch_tag": item.watch_tag,
+                "marker": item.marker,
+                "label_key": item.label_key,
+                "label_value": item.label_value,
+                "services": list(item.services),
+                "replacements": item.replacements,
+            }
+            for item in applied_digest_pins
         ],
     }
 
@@ -5263,6 +5412,7 @@ def _submit_apply_job_state(
             tuple(plan.selected_line_numbers),
             allow_tag_updates,
             tag_overrides,
+            _digest_pin_updates_from_plan(plan),
             jobs,
             apply_condition,
             job.id,
@@ -5277,6 +5427,23 @@ def _submit_apply_job_state(
 
 def _active_apply_job_exists(request: Request) -> bool:
     return _active_apply_job_exists_in_state(request.app.state)
+
+
+def _digest_pin_updates_from_plan(
+    plan: DryRunPlan,
+) -> tuple[DigestPinUpdate, ...]:
+    updates: list[DigestPinUpdate] = []
+    for stack in plan.stacks:
+        for item in stack.digest_pin_updates:
+            updates.append(
+                digest_pin_update_from_values(
+                    old_image=item.source_image,
+                    resolved_tag=item.resolved_tag,
+                    planned_digest=item.planned_digest,
+                    services=tuple(item.services),
+                )
+            )
+    return tuple(updates)
 
 
 def _active_apply_job_exists_in_state(state: Any) -> bool:
@@ -5494,6 +5661,7 @@ def _run_apply_job(
     line_numbers: tuple[int, ...],
     allow_tag_updates: bool,
     tag_overrides: tuple[TagOverride, ...],
+    digest_pin_plan: tuple[DigestPinUpdate, ...],
     jobs: dict[str, WebApplyJob],
     apply_condition: Condition,
     job_id: str,
@@ -5519,6 +5687,7 @@ def _run_apply_job(
             line_numbers=line_numbers,
             allow_tag_updates=allow_tag_updates,
             tag_overrides=tag_overrides,
+            digest_pin_plan=digest_pin_plan,
             plan_id=plan_id,
             update_mode_override=update_mode_override,
             metadata_extra=metadata_extra,
@@ -5646,6 +5815,7 @@ def _apply_options(
     line_numbers: tuple[int, ...],
     allow_tag_updates: bool,
     tag_overrides: tuple[TagOverride, ...],
+    digest_pin_plan: tuple[DigestPinUpdate, ...] = (),
     plan_id: str,
     update_mode_override: str | None = None,
     metadata_extra: Mapping[str, Any] | None = None,
@@ -5676,7 +5846,9 @@ def _apply_options(
         dry_run=False,
         assume_yes=True,
         allow_tag_updates=allow_tag_updates,
+        digest_pin_updates=config.digest_pin_updates,
         tag_overrides=tag_overrides,
+        digest_pin_plan=digest_pin_plan,
         only_lines=line_spec,
         remove_lines_before_run=line_spec,
         compose_ignore_paths=config.compose_ignore_paths,
@@ -8897,12 +9069,13 @@ def _managed_settings_db_values(conn: sqlite3.Connection) -> dict[str, str]:
         """
         SELECT key, value
         FROM web_settings
-        WHERE key IN (?, ?, ?)
+        WHERE key IN (?, ?, ?, ?)
         """,
         (
             MANAGED_THEME_PREFERENCE_DB_KEY,
             ONBOARDING_DISMISSED_AT_KEY,
             MANAGED_COMPOSE_IGNORE_PATHS_DB_KEY,
+            MANAGED_DIGEST_PIN_UPDATES_DB_KEY,
         ),
     ).fetchall()
     return {str(row["key"]): str(row["value"]) for row in rows}
@@ -8916,6 +9089,7 @@ def _managed_settings_entries_from_values(
     theme_configured = theme_value in THEME_PREFERENCE_VALUES
     onboarding_dismissed_at = values.get(ONBOARDING_DISMISSED_AT_KEY, "")
     compose_disabled_reason = _compose_ignore_paths_disabled_reason(settings)
+    digest_disabled_reason = _digest_pin_disabled_reason(settings)
     if _compose_ignore_env_configured(settings):
         compose_ignore_paths = settings.config.compose_ignore_paths
         compose_configured = True
@@ -8929,6 +9103,16 @@ def _managed_settings_entries_from_values(
         compose_ignore_paths = parse_compose_ignore_paths(
             compose_value,
             name=MANAGED_COMPOSE_IGNORE_PATHS_KEY,
+        )
+    if _digest_pin_env_configured(settings):
+        digest_pin_updates = settings.config.digest_pin_updates
+        digest_configured = True
+    else:
+        digest_configured = MANAGED_DIGEST_PIN_UPDATES_DB_KEY in values
+        digest_pin_updates = parse_bool_env(
+            MANAGED_DIGEST_PIN_UPDATES_KEY,
+            values.get(MANAGED_DIGEST_PIN_UPDATES_DB_KEY, ""),
+            default=DEFAULT_DIGEST_PIN_UPDATES,
         )
     return [
         ManagedSettingEntry(
@@ -8959,6 +9143,16 @@ def _managed_settings_entries_from_values(
             restart_required=False,
             disabled_reason=compose_disabled_reason,
         ),
+        ManagedSettingEntry(
+            key=MANAGED_DIGEST_PIN_UPDATES_KEY,
+            value=_format_bool(digest_pin_updates),
+            default_value=_format_bool(DEFAULT_DIGEST_PIN_UPDATES),
+            source="configured" if digest_configured else "default",
+            editable=not digest_disabled_reason,
+            allowed_values=list(DIGEST_PIN_UPDATES_VALUES),
+            restart_required=False,
+            disabled_reason=digest_disabled_reason,
+        ),
     ]
 
 
@@ -8975,6 +9169,7 @@ def _validated_managed_setting_updates(
     allowed_values = {
         MANAGED_THEME_PREFERENCE_KEY: THEME_PREFERENCE_VALUES,
         MANAGED_ONBOARDING_CHECKLIST_KEY: ONBOARDING_CHECKLIST_VALUES,
+        MANAGED_DIGEST_PIN_UPDATES_KEY: DIGEST_PIN_UPDATES_VALUES,
     }
     updates: dict[str, str] = {}
     for key, raw_value in payload.values.items():
@@ -8994,6 +9189,11 @@ def _validated_managed_setting_updates(
             except ConfigError as exc:
                 raise HTTPException(status_code=422, detail=str(exc)) from exc
             continue
+        if key == MANAGED_DIGEST_PIN_UPDATES_KEY and _digest_pin_env_configured(settings):
+            raise HTTPException(
+                status_code=422,
+                detail=_digest_pin_disabled_reason(settings),
+            )
         if key not in allowed_values:
             raise HTTPException(
                 status_code=422,
@@ -9029,6 +9229,8 @@ def _apply_managed_setting_updates(
                 _delete_web_setting(conn, ONBOARDING_DISMISSED_AT_KEY)
         elif key == MANAGED_COMPOSE_IGNORE_PATHS_KEY:
             _set_web_setting(conn, MANAGED_COMPOSE_IGNORE_PATHS_DB_KEY, value)
+        elif key == MANAGED_DIGEST_PIN_UPDATES_KEY:
+            _set_web_setting(conn, MANAGED_DIGEST_PIN_UPDATES_DB_KEY, value)
 
 
 def _managed_settings_audit_values(
@@ -9058,6 +9260,11 @@ def _updater_settings_entries(settings: WebSettings) -> list[SettingsEntry]:
             settings,
             COMPOSE_IGNORE_PATHS_ENV,
             format_compose_ignore_paths(config.compose_ignore_paths),
+        ),
+        _config_setting_entry(
+            settings,
+            DIGEST_PIN_UPDATES_ENV,
+            _format_bool(config.digest_pin_updates),
         ),
     ]
 
@@ -9220,6 +9427,7 @@ def _static_config_default(name: str) -> str:
         COMPOSE_IGNORE_PATHS_ENV: format_compose_ignore_paths(
             DEFAULT_COMPOSE_IGNORE_PATHS
         ),
+        DIGEST_PIN_UPDATES_ENV: _format_bool(DEFAULT_DIGEST_PIN_UPDATES),
     }
     return defaults.get(name, "")
 
@@ -9237,6 +9445,7 @@ def _config_value(config: UpdaterConfig, name: str) -> str:
         COMPOSE_IGNORE_PATHS_ENV: format_compose_ignore_paths(
             config.compose_ignore_paths
         ),
+        DIGEST_PIN_UPDATES_ENV: _format_bool(config.digest_pin_updates),
     }
     return values.get(name, "")
 
@@ -9246,7 +9455,7 @@ def _settings_env(settings: WebSettings) -> Mapping[str, str]:
 
 
 def _env_configured(settings: WebSettings, name: str) -> bool:
-    if name == COMPOSE_IGNORE_PATHS_ENV:
+    if name in {COMPOSE_IGNORE_PATHS_ENV, DIGEST_PIN_UPDATES_ENV}:
         return name in _settings_env(settings)
     return bool(_settings_env(settings).get(name, "").strip())
 

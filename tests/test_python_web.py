@@ -345,6 +345,50 @@ def _fake_image_state_file(fake_root: Path, image: str, suffix: str) -> Path:
     return fake_root / "images" / f"{safe}.{suffix}"
 
 
+def _fake_manifest_file(fake_root: Path, image: str, suffix: str) -> Path:
+    safe = re.sub(r"[^A-Za-z0-9._-]", "_", image)
+    return fake_root / "manifests" / f"{safe}.{suffix}"
+
+
+def _write_fake_manifest(fake_root: Path, image: str, payload: object) -> None:
+    _fake_manifest_file(fake_root, image, "stdout").write_text(
+        json.dumps(payload),
+        encoding="utf-8",
+    )
+
+
+def _write_fake_image_after_pull(
+    fake_root: Path,
+    image: str,
+    image_id: str,
+    digest: str,
+) -> None:
+    _fake_image_state_file(fake_root, image, "after_id").write_text(
+        image_id,
+        encoding="utf-8",
+    )
+    _fake_image_state_file(fake_root, image, "after_digests").write_text(
+        f"{image}@{digest}\n",
+        encoding="utf-8",
+    )
+
+
+def _manifest_index_digest(digest: str, *children: str) -> dict[str, object]:
+    return {
+        "schemaVersion": 2,
+        "mediaType": "application/vnd.oci.image.index.v1+json",
+        "Descriptor": {"digest": digest},
+        "manifests": [
+            {
+                "mediaType": "application/vnd.oci.image.manifest.v1+json",
+                "digest": child,
+                "platform": {"os": "linux", "architecture": "amd64"},
+            }
+            for child in children
+        ],
+    }
+
+
 def _wait_apply_job(client: TestClient, job_id: str) -> dict[str, object]:
     deadline = time.time() + 5
     while time.time() < deadline:
@@ -683,6 +727,16 @@ def test_settings_reports_effective_non_secret_configuration(
         "restart_required": False,
         "disabled_reason": "",
     }
+    assert managed["digest_pin_updates"] == {
+        "key": "digest_pin_updates",
+        "value": "false",
+        "default_value": "false",
+        "source": "default",
+        "editable": True,
+        "allowed_values": ["false", "true"],
+        "restart_required": False,
+        "disabled_reason": "",
+    }
     for value in secret_values.values():
         assert value not in serialized
 
@@ -779,6 +833,36 @@ def test_managed_settings_rejects_uneditable_or_invalid_values_without_partial_w
     assert managed["theme_preference"]["source"] == "default"
 
 
+def test_managed_digest_pin_updates_env_guard_disables_webui_edit(
+    tmp_path: Path,
+) -> None:
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+            "WUD_DIGEST_PIN_UPDATES": "true",
+        },
+    )
+    headers = _csrf_headers(client)
+
+    settings_response = client.get("/api/v1/settings")
+    managed = {entry["key"]: entry for entry in settings_response.json()["managed"]}
+    response = client.post(
+        "/api/v1/settings/managed",
+        json={"values": {"digest_pin_updates": "false"}},
+        headers=headers,
+    )
+
+    assert managed["digest_pin_updates"]["value"] == "true"
+    assert managed["digest_pin_updates"]["editable"] is False
+    assert "Unset it to manage digest-pin updates" in managed[
+        "digest_pin_updates"
+    ]["disabled_reason"]
+    assert response.status_code == 422
+    assert response.json()["detail"] == managed["digest_pin_updates"]["disabled_reason"]
+
+
 def test_managed_compose_ignore_paths_env_guard_disables_webui_edit(
     tmp_path: Path,
 ) -> None:
@@ -826,6 +910,7 @@ def test_managed_settings_persist_and_write_audit_records(tmp_path: Path) -> Non
                 "theme_preference": "dark",
                 "onboarding_checklist": "dismissed",
                 "compose_ignore_paths": "old, archive/disabled",
+                "digest_pin_updates": "true",
             }
         },
         headers=headers,
@@ -841,6 +926,8 @@ def test_managed_settings_persist_and_write_audit_records(tmp_path: Path) -> Non
     assert managed["onboarding_checklist"]["source"] == "configured"
     assert managed["compose_ignore_paths"]["value"] == "old, archive/disabled"
     assert managed["compose_ignore_paths"]["source"] == "configured"
+    assert managed["digest_pin_updates"]["value"] == "true"
+    assert managed["digest_pin_updates"]["source"] == "configured"
 
     db_path = tmp_path / "state" / "wud.sqlite"
     with connect_db(db_path) as conn:
@@ -852,6 +939,9 @@ def test_managed_settings_persist_and_write_audit_records(tmp_path: Path) -> Non
         ).fetchone()
         compose_ignore_paths = conn.execute(
             "SELECT value FROM web_settings WHERE key = 'compose.ignore_paths'"
+        ).fetchone()
+        digest_pin_updates = conn.execute(
+            "SELECT value FROM web_settings WHERE key = 'compose.digest_pin_updates'"
         ).fetchone()
         run = conn.execute(
             "SELECT * FROM update_runs WHERE id = ?",
@@ -867,20 +957,28 @@ def test_managed_settings_persist_and_write_audit_records(tmp_path: Path) -> Non
     assert theme["value"] == "dark"
     assert onboarding["value"]
     assert compose_ignore_paths["value"] == "old, archive/disabled"
+    assert digest_pin_updates["value"] == "true"
     assert run["mode"] == "web-settings"
     assert run_metadata["operation"] == "update_managed_settings"
     assert run_metadata["target"] == {
-        "keys": ["compose_ignore_paths", "onboarding_checklist", "theme_preference"]
+        "keys": [
+            "compose_ignore_paths",
+            "digest_pin_updates",
+            "onboarding_checklist",
+            "theme_preference",
+        ]
     }
     assert event_metadata["before"] == {
         "theme_preference": "system",
         "onboarding_checklist": "visible",
         "compose_ignore_paths": "old",
+        "digest_pin_updates": "false",
     }
     assert event_metadata["after"] == {
         "theme_preference": "dark",
         "onboarding_checklist": "dismissed",
         "compose_ignore_paths": "old, archive/disabled",
+        "digest_pin_updates": "true",
     }
 
     reset = client.post(
@@ -3631,6 +3729,180 @@ def test_self_update_prepare_endpoint_rewrites_tag_pulls_and_audits(
     assert metadata["tag_updates"][0]["new_image"] == (
         "ghcr.io/magrhino/wud-updater:v0.25.0"
     )
+
+
+def test_self_update_prepare_endpoint_digest_pins_after_verification(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    fake_env, fake_root = _fake_docker_env(tmp_path)
+    target_image = "ghcr.io/magrhino/wud-updater:v0.25.0"
+    _write_fake_manifest(
+        fake_root,
+        target_image,
+        _manifest_index_digest("sha256:index", "sha256:child"),
+    )
+    _write_fake_image_after_pull(
+        fake_root,
+        target_image,
+        "sha256:config",
+        "sha256:index",
+    )
+    monkeypatch.setattr(web_module, "current_tag", lambda: "v0.24.2")
+    monkeypatch.setattr(web_module, "fetch_latest_release_tag", lambda: "v0.25.0")
+    monkeypatch.setattr(
+        web_module,
+        "current_container_image",
+        lambda _env: "ghcr.io/magrhino/wud-updater:v0.24.2",
+    )
+    monkeypatch.setattr(
+        web_module,
+        "_fetch_self_update_release_notes",
+        lambda *_args, **_kwargs: ([], False, []),
+    )
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+            "WUD_WEB_RESTART_CONTAINER": "wud-updater",
+            "WUD_DIGEST_PIN_UPDATES": "true",
+            **fake_env,
+        },
+    )
+    compose_dir = _make_fake_stack(
+        tmp_path,
+        fake_root,
+        "wud",
+        [
+            (
+                "wud-updater",
+                "ghcr.io/magrhino/wud-updater:v0.24.2",
+                "wud-updater",
+            ),
+        ],
+    )
+    plan = client.post(
+        "/api/v1/self-update/plan",
+        headers=_csrf_headers(client),
+    ).json()
+
+    response = client.post(
+        "/api/v1/self-update/prepare",
+        json={
+            "confirmation": "prepare_tag_update",
+            "plan_id": plan["plan"]["plan_id"],
+            "current_tag": "v0.24.2",
+            "latest_tag": "v0.25.0",
+            "target_image": target_image,
+            "restart_container": "wud-updater",
+        },
+        headers=_csrf_headers(client),
+    )
+
+    assert response.status_code == 200
+    content = (compose_dir / "docker-compose.yml").read_text(encoding="utf-8")
+    assert "# wud-updater.resolved-tag=v0.25.0" in content
+    assert "image: ghcr.io/magrhino/wud-updater@sha256:index" in content
+    assert "wud.tag.include=^v0\\.25\\.0$$" in content
+
+    body = response.json()
+    with connect_db(tmp_path / "state" / "wud.sqlite") as conn:
+        row = conn.execute(
+            "SELECT metadata_json FROM update_runs WHERE id = ?",
+            (body["audit_run_id"],),
+        ).fetchone()
+    metadata = json.loads(row["metadata_json"])
+    assert metadata["digest_pin_updates"][0]["final_image"] == (
+        "ghcr.io/magrhino/wud-updater@sha256:index"
+    )
+
+
+def test_self_update_prepare_endpoint_rejects_moved_digest_pin_after_pull(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    fake_env, fake_root = _fake_docker_env(tmp_path)
+    target_image = "ghcr.io/magrhino/wud-updater:v0.25.0"
+    _write_fake_manifest(
+        fake_root,
+        target_image,
+        _manifest_index_digest("sha256:planned", "sha256:child"),
+    )
+    _write_fake_image_after_pull(
+        fake_root,
+        target_image,
+        "sha256:config",
+        "sha256:planned",
+    )
+    monkeypatch.setattr(web_module, "current_tag", lambda: "v0.24.2")
+    monkeypatch.setattr(web_module, "fetch_latest_release_tag", lambda: "v0.25.0")
+    monkeypatch.setattr(
+        web_module,
+        "current_container_image",
+        lambda _env: "ghcr.io/magrhino/wud-updater:v0.24.2",
+    )
+    monkeypatch.setattr(
+        web_module,
+        "_fetch_self_update_release_notes",
+        lambda *_args, **_kwargs: ([], False, []),
+    )
+    original_pull = web_module.ComposeCli.pull
+
+    def moving_pull(self, *args, **kwargs):
+        result = original_pull(self, *args, **kwargs)
+        _write_fake_manifest(
+            fake_root,
+            target_image,
+            _manifest_index_digest("sha256:moved", "sha256:child"),
+        )
+        return result
+
+    monkeypatch.setattr(web_module.ComposeCli, "pull", moving_pull)
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+            "WUD_WEB_RESTART_CONTAINER": "wud-updater",
+            "WUD_DIGEST_PIN_UPDATES": "true",
+            **fake_env,
+        },
+    )
+    compose_dir = _make_fake_stack(
+        tmp_path,
+        fake_root,
+        "wud",
+        [
+            (
+                "wud-updater",
+                "ghcr.io/magrhino/wud-updater:v0.24.2",
+                "wud-updater",
+            ),
+        ],
+    )
+    compose_before = (compose_dir / "docker-compose.yml").read_text(encoding="utf-8")
+    plan = client.post(
+        "/api/v1/self-update/plan",
+        headers=_csrf_headers(client),
+    ).json()
+
+    response = client.post(
+        "/api/v1/self-update/prepare",
+        json={
+            "confirmation": "prepare_tag_update",
+            "plan_id": plan["plan"]["plan_id"],
+            "current_tag": "v0.24.2",
+            "latest_tag": "v0.25.0",
+            "target_image": target_image,
+            "restart_container": "wud-updater",
+        },
+        headers=_csrf_headers(client),
+    )
+
+    assert response.status_code == 500
+    assert (compose_dir / "docker-compose.yml").read_text(encoding="utf-8") == compose_before
+    assert client.app.state.web_self_update_running is False
 
 
 def test_self_update_prepare_endpoint_restores_compose_when_pull_fails(
@@ -7847,3 +8119,168 @@ def test_secure_cookie_auto_follows_effective_origin(tmp_path: Path) -> None:
 
     assert "Secure" not in http_response.headers["set-cookie"]
     assert "Secure" in https_response.headers["set-cookie"]
+
+
+def test_managed_digest_pin_updates_persists_true_and_reloads(
+    tmp_path: Path,
+) -> None:
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+        },
+    )
+    headers = _csrf_headers(client)
+
+    write_response = client.post(
+        "/api/v1/settings/managed",
+        json={"values": {"digest_pin_updates": "true"}},
+        headers=headers,
+    )
+    reload_response = client.get("/api/v1/settings")
+    managed = {entry["key"]: entry for entry in reload_response.json()["managed"]}
+
+    assert write_response.status_code == 200
+    write_managed = {entry["key"]: entry for entry in write_response.json()["managed"]}
+    assert write_managed["digest_pin_updates"]["value"] == "true"
+    assert write_managed["digest_pin_updates"]["source"] == "configured"
+    assert managed["digest_pin_updates"]["value"] == "true"
+    assert managed["digest_pin_updates"]["source"] == "configured"
+
+
+def test_managed_digest_pin_updates_can_be_reset_to_false(
+    tmp_path: Path,
+) -> None:
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+        },
+    )
+    headers = _csrf_headers(client)
+
+    initial_response = client.post(
+        "/api/v1/settings/managed",
+        json={"values": {"digest_pin_updates": "true"}},
+        headers=headers,
+    )
+    initial_managed = {
+        entry["key"]: entry for entry in initial_response.json()["managed"]
+    }
+
+    assert initial_response.status_code == 200
+    assert initial_managed["digest_pin_updates"]["value"] == "true"
+    assert initial_managed["digest_pin_updates"]["source"] == "configured"
+
+    reset_response = client.post(
+        "/api/v1/settings/managed",
+        json={"values": {"digest_pin_updates": "false"}},
+        headers=headers,
+    )
+    managed = {entry["key"]: entry for entry in reset_response.json()["managed"]}
+
+    assert reset_response.status_code == 200
+    assert managed["digest_pin_updates"]["value"] == "false"
+    assert managed["digest_pin_updates"]["source"] == "configured"
+
+
+def test_managed_digest_pin_updates_rejects_invalid_value(
+    tmp_path: Path,
+) -> None:
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+        },
+    )
+    headers = _csrf_headers(client)
+
+    response = client.post(
+        "/api/v1/settings/managed",
+        json={"values": {"digest_pin_updates": "maybe"}},
+        headers=headers,
+    )
+
+    assert response.status_code == 422
+    assert "maybe" in response.json()["detail"] or "digest_pin_updates" in response.json()["detail"]
+
+
+def test_digest_pin_updates_env_false_shows_as_not_editable(
+    tmp_path: Path,
+) -> None:
+    """When WUD_DIGEST_PIN_UPDATES=false is set in env, webui editing is disabled."""
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+            "WUD_DIGEST_PIN_UPDATES": "false",
+        },
+    )
+
+    settings_response = client.get("/api/v1/settings")
+    managed = {entry["key"]: entry for entry in settings_response.json()["managed"]}
+
+    assert managed["digest_pin_updates"]["value"] == "false"
+    assert managed["digest_pin_updates"]["editable"] is False
+    assert "WUD_DIGEST_PIN_UPDATES" in managed["digest_pin_updates"]["disabled_reason"]
+
+
+def test_updater_settings_entry_includes_digest_pin_updates(
+    tmp_path: Path,
+) -> None:
+    """WUD_DIGEST_PIN_UPDATES should appear in the updater settings section."""
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_DIGEST_PIN_UPDATES": "true",
+        },
+    )
+
+    response = client.get("/api/v1/settings")
+    body = response.json()
+    updater = {entry["name"]: entry for entry in body["updater"]}
+
+    assert "WUD_DIGEST_PIN_UPDATES" in updater
+    assert updater["WUD_DIGEST_PIN_UPDATES"]["value"] == "true"
+    assert updater["WUD_DIGEST_PIN_UPDATES"]["configured"] is True
+
+
+def test_updater_settings_entry_digest_pin_updates_default_is_false(
+    tmp_path: Path,
+) -> None:
+    """Without WUD_DIGEST_PIN_UPDATES in env, the updater settings entry shows false."""
+    client = _client(
+        tmp_path,
+        {"WUD_WEB_DEV_NO_AUTH": "true"},
+    )
+
+    response = client.get("/api/v1/settings")
+    body = response.json()
+    updater = {entry["name"]: entry for entry in body["updater"]}
+
+    assert "WUD_DIGEST_PIN_UPDATES" in updater
+    assert updater["WUD_DIGEST_PIN_UPDATES"]["value"] == "false"
+    assert updater["WUD_DIGEST_PIN_UPDATES"]["source"] == "default"
+    assert updater["WUD_DIGEST_PIN_UPDATES"]["configured"] is False
+
+
+def test_managed_digest_pin_default_value_is_false(
+    tmp_path: Path,
+) -> None:
+    """The digest_pin_updates managed setting defaults to false with no config."""
+    client = _client(tmp_path, {"WUD_WEB_DEV_NO_AUTH": "true"})
+
+    response = client.get("/api/v1/settings")
+    managed = {entry["key"]: entry for entry in response.json()["managed"]}
+
+    assert managed["digest_pin_updates"]["default_value"] == "false"
+    assert managed["digest_pin_updates"]["value"] == "false"
+    assert managed["digest_pin_updates"]["source"] == "default"
+    assert managed["digest_pin_updates"]["allowed_values"] == ["false", "true"]
+    assert managed["digest_pin_updates"]["editable"] is True
+    assert managed["digest_pin_updates"]["restart_required"] is False

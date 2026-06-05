@@ -16,7 +16,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from .banner import print_startup_banner
-from .config import COMPOSE_IGNORE_PATHS_ENV
+from .config import COMPOSE_IGNORE_PATHS_ENV, DIGEST_PIN_UPDATES_ENV
 from .images import image_has_tag, image_with_tag, tag_value_valid
 from .self_update import (
     ReleaseSelfUpdate,
@@ -867,6 +867,10 @@ class UpdatesRunner:
         if self.options.use_sudo and COMPOSE_IGNORE_PATHS_ENV in self.environ:
             updater_env.append(
                 f"{COMPOSE_IGNORE_PATHS_ENV}={self.environ[COMPOSE_IGNORE_PATHS_ENV]}"
+            )
+        if self.options.use_sudo and DIGEST_PIN_UPDATES_ENV in self.environ:
+            updater_env.append(
+                f"{DIGEST_PIN_UPDATES_ENV}={self.environ[DIGEST_PIN_UPDATES_ENV]}"
             )
         if self.options.lock_timeout:
             updater_env.append(f"WUD_LOCK_TIMEOUT={self.options.lock_timeout}")

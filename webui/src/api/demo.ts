@@ -575,6 +575,8 @@ class DemoApiState {
   onboardingDismissedAt = "";
   composeIgnorePaths = "old";
   composeIgnorePathsConfigured = false;
+  digestPinUpdates = "false";
+  digestPinUpdatesConfigured = false;
   coreUpdateTour: CoreUpdateTourResponse = {
     status: "not_started",
     step: "dashboard",
@@ -642,6 +644,7 @@ class DemoApiState {
         settingEntry("WUD_LOCK_TIMEOUT", "30", "30", false),
         settingEntry("WUD_TIMEZONE", "UTC", "UTC", false),
         settingEntry("WUD_COMPOSE_IGNORE_PATHS", "old", "old", false),
+        settingEntry("WUD_DIGEST_PIN_UPDATES", "false", "false", false),
       ],
       webui: [
         settingEntry("WUD_WEB_AUTH_REQUIRED", "false", "true", false, "derived"),
@@ -722,6 +725,16 @@ class DemoApiState {
           source: this.composeIgnorePathsConfigured ? "configured" : "default",
           editable: true,
           allowed_values: [],
+          restart_required: false,
+          disabled_reason: "",
+        },
+        {
+          key: "digest_pin_updates",
+          value: this.digestPinUpdates,
+          default_value: "false",
+          source: this.digestPinUpdatesConfigured ? "configured" : "default",
+          editable: true,
+          allowed_values: ["false", "true"],
           restart_required: false,
           disabled_reason: "",
         },
@@ -905,6 +918,12 @@ class DemoApiState {
       } else if (key === "compose_ignore_paths") {
         this.composeIgnorePaths = normalizeDemoComposeIgnorePaths(value);
         this.composeIgnorePathsConfigured = true;
+      } else if (key === "digest_pin_updates") {
+        if (!["false", "true"].includes(value)) {
+          throw new Error("digest_pin_updates must be false or true");
+        }
+        this.digestPinUpdates = value;
+        this.digestPinUpdatesConfigured = true;
       } else {
         throw new Error(`managed setting is not editable: ${key}`);
       }
@@ -1019,6 +1038,7 @@ class DemoApiState {
       source_file: DEMO_SOURCE_FILE,
       mode: "stop",
       max_wait: 180,
+      digest_pin_updates: false,
       selected_line_numbers: [1],
       summary: {
         target_count: 1,
@@ -1113,6 +1133,7 @@ class DemoApiState {
       source_file: DEMO_SOURCE_FILE,
       mode: "stop",
       max_wait: 180,
+      digest_pin_updates: false,
       selected_line_numbers: selected.map((item) => item.line_no),
       summary: {
         target_count: selected.length,
@@ -1941,6 +1962,7 @@ function planStack(name: DemoStackName, items: DemoPendingItem[]): PlanStack {
         new_image: line.target_image,
         services: [line.service],
       })),
+    digest_pin_updates: [],
     actions:
       lines.length > 0
         ? [

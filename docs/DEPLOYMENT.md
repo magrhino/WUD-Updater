@@ -104,6 +104,11 @@ For tag updates, keep the explicit opt-in:
 docker compose -f docs/examples/docker-compose.example.yml run --rm wud-updater docker-update-from-wud --yes --allow-tag-updates
 ```
 
+To write approved tag updates as digest-pinned Compose references, set
+`WUD_DIGEST_PIN_UPDATES=true` in the helper environment. The updater resolves the
+planned tag digest during dry run and applies `repo/app@sha256:<digest>` only
+after pull verification succeeds.
+
 To correct a bad WUD-proposed tag for one run, use the original WUD file line
 number:
 
@@ -392,6 +397,7 @@ Then run:
 updates --dry-run
 updates --yes
 updates --yes --allow-tag-updates
+WUD_DIGEST_PIN_UPDATES=true updates --yes --allow-tag-updates
 ```
 
 During interactive runs, `updates` prompts for selected tag updates and lets you
@@ -401,6 +407,9 @@ Compose and can optionally recreate affected services immediately. Automatic
 Compose tag rewrites and exclusion labels only support direct service `image:`
 values; image values provided through interpolation or inherited YAML snippets
 are left pending for manual review.
+With `WUD_DIGEST_PIN_UPDATES=true`, approved tag updates temporarily pull the
+resolved tag, then write the final digest-pinned image plus
+`# wud-updater.resolved-tag=<tag>` and an exact `wud.tag.include` label.
 
 ## Init Wizard
 
@@ -504,6 +513,7 @@ Boolean examples use `true` and `false`; legacy aliases `1`, `0`, `yes`, `no`,
 | `WUD_MAX_WAIT` | `180` | Seconds to wait for health after recreation. |
 | `WUD_LOCK_TIMEOUT` | `30` | Seconds to wait for the shared todo-file lock. |
 | `WUD_TIMEZONE` | `UTC` | IANA timezone name, such as `America/Chicago`, used for WebUI auto-update policy schedules. |
+| `WUD_DIGEST_PIN_UPDATES` | `false` | Opt-in digest-pin mode for approved tag updates. When `true`, supported tag updates resolve the planned tag/index digest and write Compose as `repo/app@sha256:<digest>` with `wud-updater.resolved-tag` and `wud.tag.include` metadata. Environment configuration overrides the managed WebUI setting. |
 | `OUT_UID` / `OUT_GID` | unset | Optional owner for rewritten todo files and updater logs. `OUT_GUID` is accepted as an alias for `OUT_GID`. |
 | `WUD_UPDATER` | Host: repo-local `bin/docker-update-from-wud`; image: `/app/bin/docker-update-from-wud` | Updater command invoked by `updates`. |
 | `WUD_UPDATER_CONFIG` | `$HOME/.config/wud-updater/env` | Host config file read by `updates`. |
