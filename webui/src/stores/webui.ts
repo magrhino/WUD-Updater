@@ -303,6 +303,19 @@ export const useWebuiStore = defineStore("webui", () => {
     });
   }
 
+  async function loadPendingSafetyCues(): Promise<void> {
+    try {
+      const [nextServicePolicies, nextSnoozes] = await Promise.all([
+        webApi.servicePolicies(),
+        webApi.snoozes("active"),
+      ]);
+      servicePolicies.value = nextServicePolicies;
+      snoozes.value = nextSnoozes;
+    } catch {
+      // Pending rows remain usable when optional cue sources are unavailable.
+    }
+  }
+
   async function loadPending(
     options: { preserveCleanup?: boolean } = {},
   ): Promise<void> {
@@ -782,6 +795,7 @@ export const useWebuiStore = defineStore("webui", () => {
     loadCoreUpdateTour,
     updateCoreUpdateTour,
     loadDashboard,
+    loadPendingSafetyCues,
     loadPending,
     loadUpdateTargets,
     loadReleaseNotes,

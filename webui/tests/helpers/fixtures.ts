@@ -479,7 +479,7 @@ export function pendingGroupedItem(
     target_image: item.desired_tag ? `${item.repo}:${item.desired_tag}` : item.image,
     compose_images: [item.image],
     services: ["app"],
-    action: item.desired_tag ? "tag-update" : "update",
+    action: item.desired_tag ? "tag-update" : "recreate_service",
     diagnostic: null,
     ...overrides,
   };
@@ -706,7 +706,7 @@ export function planResponse(overrides: Partial<PlanResponse> = {}): PlanRespons
             service: "app",
             digest: "",
             desired_tag: "1.1",
-            action: "update",
+            action: "tag-update",
           },
         ],
       },

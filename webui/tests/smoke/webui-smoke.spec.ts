@@ -177,7 +177,7 @@ function planResponse(overrides: Record<string, unknown> = {}) {
             service: "app",
             digest: "",
             desired_tag: "1.1",
-            action: "update",
+            action: "tag-update",
           },
         ],
       },

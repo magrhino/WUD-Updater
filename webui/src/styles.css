@@ -2355,6 +2355,10 @@ a {
   font-weight: 600;
 }
 
+.stack-change-risk-cues {
+  display: inline-flex;
+}
+
 .pending-update-diagnostic {
   margin-top: 8px;
   width: 100%;
