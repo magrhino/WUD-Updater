@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import sqlite3
+from contextlib import closing, contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Generator
 
 
 SCHEMA_VERSION = 6
@@ -213,6 +215,21 @@ def connect_db(path: str | Path) -> sqlite3.Connection:
     conn.execute("PRAGMA journal_mode = WAL")
     conn.execute("PRAGMA busy_timeout = 5000")
     return conn
+
+
+@contextmanager
+def open_db(path: str | Path) -> Generator[sqlite3.Connection, None, None]:
+    """Open a SQLite connection, yield it, and close it on exit.
+
+    Use this for request-scoped or test-scoped connections that should be
+    closed deterministically.  For long-lived connections that must survive
+    across multiple call-sites, use :func:`connect_db` directly.
+    """
+    conn = connect_db(path)
+    try:
+        yield conn
+    finally:
+        conn.close()
 
 
 def init_db(conn: sqlite3.Connection) -> None:
@@ -600,7 +617,7 @@ def active_snooze(
 ) -> sqlite3.Row | None:
     """Return the latest active snooze for a service, if one exists."""
 
-    cursor = conn.execute(
+    with closing(conn.execute(
         """
         SELECT *
         FROM snoozes
@@ -610,8 +627,8 @@ def active_snooze(
         LIMIT 1
         """,
         (service_key, now or utc_timestamp()),
-    )
-    return cursor.fetchone()
+    )) as cursor:
+        return cursor.fetchone()
 
 
 def insert_pending_update(
@@ -807,7 +824,7 @@ def upsert_tag_exclusion_rule(
                 metadata_json,
             ),
         )
-    row = conn.execute(
+    with closing(conn.execute(
         """
         SELECT id
         FROM tag_exclusion_rules
@@ -819,7 +836,8 @@ def upsert_tag_exclusion_rule(
         LIMIT 1
         """,
         (scope, image_repo, service_key, match_type, tag),
-    ).fetchone()
+    )) as cursor:
+        row = cursor.fetchone()
     return int(row["id"] if isinstance(row, sqlite3.Row) else row[0])
 
 
@@ -832,7 +850,7 @@ def active_tag_exclusion_rules(
 ) -> tuple[sqlite3.Row, ...]:
     """Return active exact exclusions for an image repo and optional service."""
 
-    cursor = conn.execute(
+    with closing(conn.execute(
         """
         SELECT *
         FROM tag_exclusion_rules
@@ -846,8 +864,8 @@ def active_tag_exclusion_rules(
         ORDER BY tag COLLATE BINARY
         """,
         (image_repo, match_type, service_key),
-    )
-    return tuple(cursor.fetchall())
+    )) as cursor:
+        return tuple(cursor.fetchall())
 
 
 def utc_timestamp() -> str:
@@ -857,8 +875,8 @@ def utc_timestamp() -> str:
 
 
 def _user_version(conn: sqlite3.Connection) -> int:
-    cursor = conn.execute("PRAGMA user_version")
-    row = cursor.fetchone()
+    with closing(conn.execute("PRAGMA user_version")) as cursor:
+        row = cursor.fetchone()
     return int(row[0])
 
 
@@ -913,21 +931,21 @@ def _table_columns(
     conn: sqlite3.Connection,
     table_name: str,
 ) -> tuple[ColumnSchema, ...]:
-    cursor = conn.execute(f"PRAGMA table_info({_quote_identifier(table_name)})")
-    return tuple(
-        (
-            str(row[1]),
-            str(row[2]).upper(),
-            int(row[3]),
-            None if row[4] is None else str(row[4]),
-            int(row[5]),
+    with closing(conn.execute(f"PRAGMA table_info({_quote_identifier(table_name)})")) as cursor:
+        return tuple(
+            (
+                str(row[1]),
+                str(row[2]).upper(),
+                int(row[3]),
+                None if row[4] is None else str(row[4]),
+                int(row[5]),
+            )
+            for row in cursor.fetchall()
         )
-        for row in cursor.fetchall()
-    )
 
 
 def _sqlite_object_type(conn: sqlite3.Connection, name: str) -> str | None:
-    row = conn.execute(
+    with closing(conn.execute(
         """
         SELECT type
         FROM sqlite_master
@@ -935,7 +953,8 @@ def _sqlite_object_type(conn: sqlite3.Connection, name: str) -> str | None:
         LIMIT 1
         """,
         (name,),
-    ).fetchone()
+    )) as cursor:
+        row = cursor.fetchone()
     if row is None:
         return None
     return str(row[0])

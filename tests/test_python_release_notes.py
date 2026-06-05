@@ -9,7 +9,7 @@ try:
 except ModuleNotFoundError:
     from test_python_db import V4_SCHEMA_SQL
 
-from wud_updater.db import SCHEMA_VERSION, connect_db, init_db
+from wud_updater.db import SCHEMA_VERSION, init_db, open_db
 from wud_updater.release_notes import (
     GitHubClient,
     detect_breaking,
@@ -48,7 +48,7 @@ class ReleaseNotesTests(unittest.TestCase):
                 }
             }[url]
         )
-        with connect_db(":memory:") as conn:
+        with open_db(":memory:") as conn:
             init_db(conn)
             items = refresh_release_notes(conn, parsed.targets, {}, client=client)
 
@@ -95,7 +95,7 @@ class ReleaseNotesTests(unittest.TestCase):
             }[url]
         )
 
-        with connect_db(":memory:") as conn:
+        with open_db(":memory:") as conn:
             init_db(conn)
             items = refresh_release_notes(
                 conn,
@@ -137,7 +137,7 @@ class ReleaseNotesTests(unittest.TestCase):
                 },
             }
             client = GitHubClient(fetch_json=lambda url: responses[url])
-            with connect_db(":memory:") as conn:
+            with open_db(":memory:") as conn:
                 init_db(conn)
                 items = refresh_release_notes(
                     conn,
@@ -177,12 +177,12 @@ class ReleaseNotesTests(unittest.TestCase):
     def test_v4_database_migrates_release_note_cache(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             db_path = Path(tmp) / "wud.sqlite"
-            with connect_db(db_path) as conn:
+            with open_db(db_path) as conn:
                 conn.executescript(V4_SCHEMA_SQL)
                 with conn:
                     conn.execute("PRAGMA user_version = 4")
 
-            with connect_db(db_path) as conn:
+            with open_db(db_path) as conn:
                 init_db(conn)
                 version = conn.execute("PRAGMA user_version").fetchone()[0]
                 row = conn.execute(

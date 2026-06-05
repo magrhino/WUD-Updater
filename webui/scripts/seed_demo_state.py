@@ -17,7 +17,7 @@ if str(SRC_ROOT) not in sys.path:
     sys.path.insert(0, str(SRC_ROOT))
 
 from wud_updater.db import (  # noqa: E402
-    connect_db,
+    open_db,
     init_db,
     insert_snooze,
     insert_pending_update,
@@ -408,7 +408,7 @@ def seed_demo_state(root: Path) -> dict[str, Path]:
     _reset_sqlite(db_path)
     _write_demo_stacks(docker_base, fake_docker_root)
 
-    with connect_db(db_path) as conn:
+    with open_db(db_path) as conn:
         init_db(conn)
         _write_demo_management_state(conn)
         for entry in RUNS:
