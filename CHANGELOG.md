@@ -4,6 +4,13 @@ All notable changes to WUD-Updater are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com) and versions follow
 [Semantic Versioning](https://semver.org).
 
+## [0.35.1](https://github.com/magrhino/WUD-Updater/compare/v0.35.0...v0.35.1) (2026-06-05)
+
+
+### Bug Fixes
+
+* **webui:** pending update safety cues ([#197](https://github.com/magrhino/WUD-Updater/issues/197)) ([bb62b12](https://github.com/magrhino/WUD-Updater/commit/bb62b123128662197e76b8d6f415e5d177cefd0c))
+
 ## [0.35.0](https://github.com/magrhino/WUD-Updater/compare/v0.34.2...v0.35.0) (2026-06-04)
 
 
