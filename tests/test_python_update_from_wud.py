@@ -1514,11 +1514,64 @@ class PythonUpdateFromWudTests(unittest.TestCase):
         self.assertIn("wud.tag.include=^2\\.0$$", content)
         calls = self.calls()
         self.assertRegex(calls, r"manifest inspect --verbose docker.io/repo/app:2.0")
+        self.assertEqual(
+            calls.count("manifest inspect --verbose docker.io/repo/app:2.0"),
+            2,
+        )
         self.assertRegex(calls, r"compose -f docker-compose.yml pull app")
         events = self.db_rows("SELECT * FROM update_events")
         known = self.db_rows("SELECT * FROM known_images")
         self.assertEqual(events[0]["target_image"], "repo/app@sha256:index")
         self.assertEqual(known[0]["image"], "repo/app@sha256:index")
+
+    def test_digest_pin_verification_matches_canonical_compose_image(self) -> None:
+        stack = ComposeStack(
+            index=1,
+            directory=self.root,
+            file="docker-compose.yml",
+            name="app",
+            images=("docker.io/repo/app:2.0",),
+            service_images=(ServiceImage("app", "docker.io/repo/app:2.0"),),
+        )
+        self.set_manifest_stdout(
+            "docker.io/repo/app:2.0",
+            manifest_index_digest("sha256:index", "sha256:child"),
+        )
+        self.set_image_state("docker.io/repo/app:2.0", "new", "sha256:index")
+        command_runner = CommandRunner(env=self.env)
+        docker = DockerCli(runner=command_runner)
+        runner = UpdateFromWudRunner(
+            UpdaterOptions(
+                docker_base=self.base,
+                wud_file=self.wud_file,
+                log_dir=self.log_dir,
+                max_wait=0,
+                digest_pin_updates=True,
+                no_color=True,
+            ),
+            environ=self.env,
+            command_runner=command_runner,
+            digest_verifier=DigestVerifier(
+                docker,
+                primary_resolver=FailingManifestResolver(),
+                fallback_resolver=DockerManifestResolver(docker),
+            ),
+        )
+
+        self.assertTrue(
+            runner._verify_digest_pin_updates(
+                stack,
+                (
+                    digest_pin_update_from_values(
+                        old_image="repo/app:1.0",
+                        resolved_tag="2.0",
+                        planned_digest="sha256:index",
+                        services=("app",),
+                    ),
+                ),
+                stack.images,
+            )
+        )
 
     def test_digest_pin_plan_includes_digest_actions_and_hashes_digest(self) -> None:
         self.wud_file.write_text("repo/app:1.0 tag=2.0\n", encoding="utf-8")

@@ -326,6 +326,10 @@ class UpdateFromWudRunner:
         self.audit_run_id: int | None = None
         self.audit_db_path: Path | None = None
         self.applied_digest_pins: dict[tuple[int, int, str], DigestPinUpdate] = {}
+        self.digest_pin_update_cache: dict[
+            tuple[TagUpdate, ...],
+            tuple[DigestPinUpdate, ...],
+        ] = {}
         self.progress_callback = progress_callback
 
     def run(self) -> int:
@@ -2465,7 +2469,11 @@ class UpdateFromWudRunner:
             matched = False
             digest_result: DigestCheckResult | None = None
             for image in images:
-                if image != update.resolved_image:
+                if not image_matches_resolved_target(
+                    image,
+                    update.resolved_image,
+                    False,
+                ):
                     continue
                 matched = True
                 digest_result = self.digest_verifier.verify(
@@ -2587,12 +2595,16 @@ class UpdateFromWudRunner:
     ) -> tuple[DigestPinUpdate, ...]:
         if not self.options.digest_pin_updates:
             return ()
+        tag_updates = self._tag_updates(matches)
+        cached = self.digest_pin_update_cache.get(tag_updates)
+        if cached is not None:
+            return cached
         planned = {
             (update.old_image, update.resolved_tag): update
             for update in self.options.digest_pin_plan
         }
         updates: list[DigestPinUpdate] = []
-        for tag_update in self._tag_updates(matches):
+        for tag_update in tag_updates:
             planned_update = planned.get(
                 (tag_update.old_image, tag_update.desired_tag)
             )
@@ -2612,7 +2624,9 @@ class UpdateFromWudRunner:
                     resolved.digest,
                 )
             )
-        return tuple(updates)
+        result = tuple(updates)
+        self.digest_pin_update_cache[tag_updates] = result
+        return result
 
     def _resolve_digest_pin(self, image: str) -> DigestResolveResult:
         resolver = DockerManifestResolver(self.docker, verbose=True)
