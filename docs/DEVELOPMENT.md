@@ -22,7 +22,9 @@ tests/run-all.sh
 
 The suite runs Ruff, shell syntax checks, ShellCheck, Python syntax checks,
 Python unit tests (which generate an XML coverage report via `pytest-cov`),
-and updater behavior tests.
+updater behavior tests, and WebUI type, unit, and build checks. The full
+entrypoint runs its Python, shell, and WebUI sections in parallel locally,
+matching CI's split validation jobs.
 
 ## Focused Checks
 
