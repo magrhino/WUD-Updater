@@ -575,6 +575,8 @@ class DemoApiState {
   onboardingDismissedAt = "";
   composeIgnorePaths = "old";
   composeIgnorePathsConfigured = false;
+  digestPinUpdates = "false";
+  digestPinUpdatesConfigured = false;
   coreUpdateTour: CoreUpdateTourResponse = {
     status: "not_started",
     step: "dashboard",
@@ -728,9 +730,9 @@ class DemoApiState {
         },
         {
           key: "digest_pin_updates",
-          value: "false",
+          value: this.digestPinUpdates,
           default_value: "false",
-          source: "default",
+          source: this.digestPinUpdatesConfigured ? "configured" : "default",
           editable: true,
           allowed_values: ["false", "true"],
           restart_required: false,
@@ -916,6 +918,12 @@ class DemoApiState {
       } else if (key === "compose_ignore_paths") {
         this.composeIgnorePaths = normalizeDemoComposeIgnorePaths(value);
         this.composeIgnorePathsConfigured = true;
+      } else if (key === "digest_pin_updates") {
+        if (!["false", "true"].includes(value)) {
+          throw new Error("digest_pin_updates must be false or true");
+        }
+        this.digestPinUpdates = value;
+        this.digestPinUpdatesConfigured = true;
       } else {
         throw new Error(`managed setting is not editable: ${key}`);
       }
