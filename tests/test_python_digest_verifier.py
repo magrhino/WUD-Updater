@@ -1,12 +1,17 @@
 from __future__ import annotations
 
+import json
 import unittest
 from collections.abc import Mapping
+from unittest.mock import MagicMock
 
+from wud_updater.command import CommandResult
 from wud_updater.digest_verifier import (
     DigestVerifier,
+    DockerManifestResolver,
     ManifestDocument,
     ManifestLookupError,
+    _payload_digest,
     parse_ghcr_image,
     parse_registry_image,
 )
@@ -364,6 +369,317 @@ class DigestVerifierTests(unittest.TestCase):
         self.assertEqual(result.status, "failed")
         self.assertEqual(result.reason, "manifest-unavailable")
         self.assertEqual(result.seen_repo_digests, ("ghcr.io/acme/app@sha256:other",))
+
+
+class PayloadDigestTests(unittest.TestCase):
+    def test_returns_top_level_digest_when_sha256_prefixed(self) -> None:
+        result = _payload_digest({"digest": "sha256:abc123"})
+
+        self.assertEqual(result, "sha256:abc123")
+
+    def test_returns_descriptor_digest_when_top_level_absent(self) -> None:
+        result = _payload_digest({"Descriptor": {"digest": "sha256:def456"}})
+
+        self.assertEqual(result, "sha256:def456")
+
+    def test_top_level_digest_takes_precedence_over_descriptor(self) -> None:
+        result = _payload_digest(
+            {
+                "digest": "sha256:top",
+                "Descriptor": {"digest": "sha256:inner"},
+            }
+        )
+
+        self.assertEqual(result, "sha256:top")
+
+    def test_returns_empty_string_when_top_level_digest_lacks_sha256_prefix(self) -> None:
+        result = _payload_digest({"digest": "md5:abc123"})
+
+        self.assertEqual(result, "")
+
+    def test_returns_descriptor_digest_when_top_level_not_sha256(self) -> None:
+        result = _payload_digest(
+            {
+                "digest": "md5:abc",
+                "Descriptor": {"digest": "sha256:fallback"},
+            }
+        )
+
+        self.assertEqual(result, "sha256:fallback")
+
+    def test_returns_empty_string_when_descriptor_digest_lacks_sha256_prefix(self) -> None:
+        result = _payload_digest({"Descriptor": {"digest": "md5:xyz"}})
+
+        self.assertEqual(result, "")
+
+    def test_returns_empty_string_for_empty_payload(self) -> None:
+        result = _payload_digest({})
+
+        self.assertEqual(result, "")
+
+    def test_returns_empty_string_when_digest_is_none(self) -> None:
+        result = _payload_digest({"digest": None})
+
+        self.assertEqual(result, "")
+
+    def test_returns_empty_string_when_descriptor_is_not_a_mapping(self) -> None:
+        result = _payload_digest({"Descriptor": "not-a-dict"})
+
+        self.assertEqual(result, "")
+
+    def test_returns_empty_string_when_descriptor_digest_is_none(self) -> None:
+        result = _payload_digest({"Descriptor": {"digest": None}})
+
+        self.assertEqual(result, "")
+
+
+def _make_docker_cli(stdout: str) -> MagicMock:
+    """Return a mocked DockerCli that returns ``stdout`` from manifest commands."""
+    cli = MagicMock()
+    cli.manifest_inspect.return_value = CommandResult(
+        args=(), cwd=None, returncode=0, stdout=stdout
+    )
+    cli.manifest_inspect_verbose.return_value = CommandResult(
+        args=(), cwd=None, returncode=0, stdout=stdout
+    )
+    return cli
+
+
+class DockerManifestResolverVerboseModeTests(unittest.TestCase):
+    def test_non_verbose_mode_sets_docker_manifest_source_and_empty_digest(self) -> None:
+        payload = {"mediaType": INDEX_TYPE, "schemaVersion": 2}
+        cli = _make_docker_cli(json.dumps(payload))
+        image = parse_registry_image("ghcr.io/acme/app:latest")
+        assert image is not None
+        resolver = DockerManifestResolver(cli, verbose=False)
+
+        doc = resolver.fetch(image, "latest")
+
+        self.assertEqual(doc.source, "docker-manifest")
+        self.assertEqual(doc.digest, "")
+        cli.manifest_inspect.assert_called_once()
+        cli.manifest_inspect_verbose.assert_not_called()
+
+    def test_verbose_mode_sets_verbose_source_and_extracts_digest_from_top_level(
+        self,
+    ) -> None:
+        payload = {
+            "mediaType": INDEX_TYPE,
+            "schemaVersion": 2,
+            "digest": "sha256:index-digest",
+        }
+        cli = _make_docker_cli(json.dumps(payload))
+        image = parse_registry_image("ghcr.io/acme/app:latest")
+        assert image is not None
+        resolver = DockerManifestResolver(cli, verbose=True)
+
+        doc = resolver.fetch(image, "latest")
+
+        self.assertEqual(doc.source, "docker-manifest-verbose")
+        self.assertEqual(doc.digest, "sha256:index-digest")
+        cli.manifest_inspect_verbose.assert_called_once()
+        cli.manifest_inspect.assert_not_called()
+
+    def test_verbose_mode_extracts_digest_from_descriptor(self) -> None:
+        payload = {
+            "mediaType": INDEX_TYPE,
+            "schemaVersion": 2,
+            "Descriptor": {"digest": "sha256:descriptor-digest"},
+        }
+        cli = _make_docker_cli(json.dumps(payload))
+        image = parse_registry_image("docker.io/repo/app:1.0")
+        assert image is not None
+        resolver = DockerManifestResolver(cli, verbose=True)
+
+        doc = resolver.fetch(image, "1.0")
+
+        self.assertEqual(doc.source, "docker-manifest-verbose")
+        self.assertEqual(doc.digest, "sha256:descriptor-digest")
+
+    def test_verbose_mode_returns_empty_digest_when_payload_has_no_digest(self) -> None:
+        payload = {"mediaType": INDEX_TYPE, "schemaVersion": 2}
+        cli = _make_docker_cli(json.dumps(payload))
+        image = parse_registry_image("ghcr.io/acme/app:latest")
+        assert image is not None
+        resolver = DockerManifestResolver(cli, verbose=True)
+
+        doc = resolver.fetch(image, "latest")
+
+        self.assertEqual(doc.source, "docker-manifest-verbose")
+        self.assertEqual(doc.digest, "")
+
+    def test_verbose_mode_propagates_media_type(self) -> None:
+        payload = {
+            "mediaType": INDEX_TYPE,
+            "schemaVersion": 2,
+            "digest": "sha256:abc",
+        }
+        cli = _make_docker_cli(json.dumps(payload))
+        image = parse_registry_image("ghcr.io/acme/app:latest")
+        assert image is not None
+        resolver = DockerManifestResolver(cli, verbose=True)
+
+        doc = resolver.fetch(image, "latest")
+
+        self.assertEqual(doc.media_type, INDEX_TYPE)
+
+
+class DigestVerifierResolveTagDigestTests(unittest.TestCase):
+    def test_returns_untrusted_for_unsupported_image_reference(self) -> None:
+        # An image reference without a tag (e.g. no colon) is not parseable
+        verifier = DigestVerifier(
+            FakeDocker(),
+            primary_resolver=FailingResolver(),
+            fallback_resolver=FailingResolver(),
+        )
+
+        # Empty string and tag-less bare names return None from parse_registry_image
+        result = verifier.resolve_tag_digest("")
+
+        self.assertFalse(result.ok)
+        self.assertEqual(result.status, "untrusted")
+        self.assertEqual(result.reason, "unsupported-image-reference")
+
+    def test_returns_ok_true_when_document_has_direct_digest(self) -> None:
+        expected_digest = "sha256:abc"
+        resolver = StaticResolver(
+            {
+                ("ghcr.io", "acme/app", "latest"): ManifestDocument(
+                    source="static",
+                    digest=expected_digest,
+                    media_type=INDEX_TYPE,
+                    payload={},
+                ),
+            }
+        )
+        verifier = DigestVerifier(
+            FakeDocker(),
+            primary_resolver=resolver,
+            fallback_resolver=resolver,
+        )
+
+        result = verifier.resolve_tag_digest("ghcr.io/acme/app:latest")
+
+        self.assertTrue(result.ok)
+        self.assertEqual(result.status, "resolved")
+        self.assertEqual(result.reason, "tag-digest-resolved")
+        self.assertEqual(result.digest, expected_digest)
+        self.assertEqual(result.source, "static")
+
+    def test_returns_ok_true_when_digest_comes_from_payload(self) -> None:
+        expected_digest = "sha256:from-payload"
+        resolver = StaticResolver(
+            {
+                ("ghcr.io", "acme/app", "v2.0"): ManifestDocument(
+                    source="static",
+                    digest="",
+                    media_type=INDEX_TYPE,
+                    payload={"digest": expected_digest},
+                ),
+            }
+        )
+        verifier = DigestVerifier(
+            FakeDocker(),
+            primary_resolver=resolver,
+            fallback_resolver=resolver,
+        )
+
+        result = verifier.resolve_tag_digest("ghcr.io/acme/app:v2.0")
+
+        self.assertTrue(result.ok)
+        self.assertEqual(result.digest, expected_digest)
+
+    def test_returns_ok_false_when_manifest_lookup_fails(self) -> None:
+        verifier = DigestVerifier(
+            FakeDocker(),
+            primary_resolver=FailingResolver(),
+            fallback_resolver=FailingResolver(),
+        )
+
+        result = verifier.resolve_tag_digest("ghcr.io/acme/app:latest")
+
+        self.assertFalse(result.ok)
+        self.assertEqual(result.status, "failed")
+        self.assertNotEqual(result.error, "")
+
+    def test_returns_failed_for_non_ghcr_manifest_lookup_error(self) -> None:
+        verifier = DigestVerifier(
+            FakeDocker(),
+            primary_resolver=FailingResolver(),
+            fallback_resolver=FailingResolver(),
+        )
+
+        result = verifier.resolve_tag_digest("quay.io/acme/app:latest")
+
+        self.assertFalse(result.ok)
+        self.assertEqual(result.status, "untrusted")
+
+    def test_returns_manifest_digest_missing_when_no_digest_available(self) -> None:
+        resolver = StaticResolver(
+            {
+                ("ghcr.io", "acme/app", "latest"): ManifestDocument(
+                    source="static",
+                    digest="",
+                    media_type=INDEX_TYPE,
+                    payload={},
+                ),
+            }
+        )
+        verifier = DigestVerifier(
+            FakeDocker(),
+            primary_resolver=resolver,
+            fallback_resolver=resolver,
+        )
+
+        result = verifier.resolve_tag_digest("ghcr.io/acme/app:latest")
+
+        self.assertFalse(result.ok)
+        self.assertEqual(result.reason, "manifest-digest-missing")
+        self.assertEqual(result.source, "static")
+
+    def test_returns_ok_true_for_docker_hub_image(self) -> None:
+        resolver = StaticResolver(
+            {
+                ("docker.io", "library/alpine", "3.20"): ManifestDocument(
+                    source="static",
+                    digest="sha256:alpine-index",
+                    media_type=INDEX_TYPE,
+                    payload={},
+                ),
+            }
+        )
+        verifier = DigestVerifier(
+            FakeDocker(),
+            primary_resolver=resolver,
+            fallback_resolver=resolver,
+        )
+
+        result = verifier.resolve_tag_digest("alpine:3.20")
+
+        self.assertTrue(result.ok)
+        self.assertEqual(result.digest, "sha256:alpine-index")
+
+    def test_direct_digest_takes_precedence_over_payload_digest(self) -> None:
+        resolver = StaticResolver(
+            {
+                ("ghcr.io", "acme/app", "latest"): ManifestDocument(
+                    source="static",
+                    digest="sha256:direct-wins",
+                    media_type=INDEX_TYPE,
+                    payload={"digest": "sha256:payload-loses"},
+                ),
+            }
+        )
+        verifier = DigestVerifier(
+            FakeDocker(),
+            primary_resolver=resolver,
+            fallback_resolver=resolver,
+        )
+
+        result = verifier.resolve_tag_digest("ghcr.io/acme/app:latest")
+
+        self.assertTrue(result.ok)
+        self.assertEqual(result.digest, "sha256:direct-wins")
 
 
 if __name__ == "__main__":
