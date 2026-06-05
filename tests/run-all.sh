@@ -188,6 +188,84 @@ EOF
   fi
 }
 
+replay_parallel_log() {
+  local label="$1"
+  local status="$2"
+  local log_file="$3"
+
+  printf '\n==> %s checks output\n' "$label"
+  if [[ -s "$log_file" ]]; then
+    sed 's/^/    /' "$log_file"
+  else
+    printf '    no output\n'
+  fi
+  if [[ "$status" -eq 0 ]]; then
+    printf '==> %s checks passed\n' "$label"
+  else
+    printf '==> %s checks failed with status %s\n' "$label" "$status"
+  fi
+}
+
+run_all_checks() {
+  local tmp_dir
+  local python_log shell_log webui_log
+  local python_pid shell_pid webui_pid
+  local python_status=0 shell_status=0 webui_status=0
+  local failed_sections=""
+
+  tmp_dir="$(mktemp -d "${TMPDIR:-/tmp}/wud-run-all.XXXXXX")"
+  python_log="$tmp_dir/python.log"
+  shell_log="$tmp_dir/shell.log"
+  webui_log="$tmp_dir/webui.log"
+
+  printf '==> running python, shell, and webui checks in parallel\n'
+
+  run_python_checks > "$python_log" 2>&1 &
+  python_pid=$!
+  run_shell_checks > "$shell_log" 2>&1 &
+  shell_pid=$!
+  run_webui_checks false > "$webui_log" 2>&1 &
+  webui_pid=$!
+
+  if wait "$python_pid"; then
+    python_status=0
+  else
+    python_status=$?
+  fi
+  if wait "$shell_pid"; then
+    shell_status=0
+  else
+    shell_status=$?
+  fi
+  if wait "$webui_pid"; then
+    webui_status=0
+  else
+    webui_status=$?
+  fi
+
+  replay_parallel_log "python" "$python_status" "$python_log"
+  replay_parallel_log "shell" "$shell_status" "$shell_log"
+  replay_parallel_log "webui" "$webui_status" "$webui_log"
+
+  rm -rf "$tmp_dir"
+
+  if [[ "$python_status" -ne 0 ]]; then
+    failed_sections="${failed_sections} python($python_status)"
+  fi
+  if [[ "$shell_status" -ne 0 ]]; then
+    failed_sections="${failed_sections} shell($shell_status)"
+  fi
+  if [[ "$webui_status" -ne 0 ]]; then
+    failed_sections="${failed_sections} webui($webui_status)"
+  fi
+  if [[ -n "$failed_sections" ]]; then
+    printf '\nFailed test section(s):%s\n' "$failed_sections" >&2
+    return 1
+  fi
+
+  printf '\n==> all test sections passed\n'
+}
+
 MODE="--all"
 if [ $# -gt 0 ]; then
   MODE="$1"
@@ -204,9 +282,7 @@ case "$MODE" in
     run_webui_checks true
     ;;
   --all)
-    run_python_checks
-    run_shell_checks
-    run_webui_checks false
+    run_all_checks
     ;;
   *)
     echo "Usage: $0 [--python | --shell | --webui | --all]" >&2
