@@ -29,6 +29,7 @@ class ServiceImage:
     service: str
     image: str
     network_mode: str = ""
+    labels: tuple[tuple[str, str], ...] = ()
 
 
 @dataclass(frozen=True)
@@ -728,9 +729,26 @@ def _service_image_pairs_from_config_json(config_json: str) -> tuple[ServiceImag
                     service=service,
                     image=image,
                     network_mode=network_mode_text,
+                    labels=_service_labels(config.get("labels")),
                 )
             )
     return tuple(sorted(pairs, key=lambda pair: (pair.service, pair.image)))
+
+
+def _service_labels(labels: object) -> tuple[tuple[str, str], ...]:
+    values: dict[str, str] = {}
+    if isinstance(labels, dict):
+        for key, value in labels.items():
+            if isinstance(key, str) and isinstance(value, str):
+                values[key] = value
+    elif isinstance(labels, list):
+        for item in labels:
+            if not isinstance(item, str):
+                continue
+            key, sep, value = item.partition("=")
+            if key:
+                values[key] = value if sep else ""
+    return tuple(sorted(values.items()))
 
 
 def _service_bind_mounts_from_config_json(config_json: str) -> tuple[ComposeBindMount, ...]:

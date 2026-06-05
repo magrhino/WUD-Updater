@@ -117,6 +117,24 @@ compose_config_json_from_file(){
       }
       return value
     }
+    function add_label(key, value) {
+      if (key == "") {
+        return
+      }
+      label_keys[++label_count] = key
+      label_values[label_count] = value
+    }
+    function add_label_string(value) {
+      key = value
+      label_value = ""
+      if (index(value, "=") > 0) {
+        key = value
+        sub(/=.*/, "", key)
+        label_value = value
+        sub(/^[^=]*=/, "", label_value)
+      }
+      add_label(key, label_value)
+    }
     function flush_service() {
       if (svc != "" && image != "") {
         if (found) {
@@ -136,11 +154,23 @@ compose_config_json_from_file(){
           }
           printf "]"
         }
+        if (label_count > 0) {
+          printf ",\"labels\":{"
+          for (i = 1; i <= label_count; i++) {
+            if (i > 1) {
+              printf ","
+            }
+            printf "\"%s\":\"%s\"", esc(label_keys[i]), esc(label_values[i])
+          }
+          printf "}"
+        }
         printf "}"
         found = 1
       }
       expose_count = 0
       in_expose = 0
+      label_count = 0
+      in_labels = 0
     }
     /^  [A-Za-z0-9_.-]+:/ {
       flush_service()
@@ -150,10 +180,18 @@ compose_config_json_from_file(){
       network_mode = ""
       expose_count = 0
       in_expose = 0
+      label_count = 0
+      in_labels = 0
       next
     }
     /^[[:space:]]+expose:[[:space:]]*$/ {
       in_expose = 1
+      in_labels = 0
+      next
+    }
+    /^[[:space:]]+labels:[[:space:]]*$/ {
+      in_expose = 0
+      in_labels = 1
       next
     }
     /^[[:space:]]+-[[:space:]]*/ {
@@ -161,19 +199,35 @@ compose_config_json_from_file(){
         expose[++expose_count] = scalar($0)
         next
       }
+      if (in_labels) {
+        add_label_string(scalar($0))
+        next
+      }
     }
     /^[[:space:]]+image:[[:space:]]*/ {
       in_expose = 0
+      in_labels = 0
       image = scalar($0)
       next
     }
     /^[[:space:]]+network_mode:[[:space:]]*/ {
       in_expose = 0
+      in_labels = 0
       network_mode = scalar($0)
       next
     }
+    /^      [A-Za-z0-9_.-]+:[[:space:]]*/ {
+      if (in_labels) {
+        label_key = $0
+        sub(/^[[:space:]]+/, "", label_key)
+        sub(/:.*/, "", label_key)
+        add_label(label_key, scalar($0))
+        next
+      }
+    }
     /^[[:space:]]+[A-Za-z0-9_.-]+:/ {
       in_expose = 0
+      in_labels = 0
     }
     END {
       flush_service()

@@ -1827,6 +1827,102 @@ class PythonUpdateFromWudTests(unittest.TestCase):
             "digest-pin-verification-failed",
         )
 
+    def test_digest_pin_apply_writes_tagged_digest_only_latest_child(self) -> None:
+        self.wud_file.write_text(
+            "repo/app:latest@sha256:child\n",
+            encoding="utf-8",
+        )
+        stack_dir = self.make_stack("app", [("app", "repo/app:latest", "cid-app")])
+        compose_file = stack_dir / "docker-compose.yml"
+        self.set_image_state("repo/app:latest", "sha256:old-config", "sha256:old")
+        self.set_image_after_pull(
+            "repo/app:latest",
+            "sha256:new-config",
+            "sha256:child",
+        )
+        self.set_image_state(
+            "repo/app@sha256:child",
+            "sha256:new-config",
+            "sha256:child",
+        )
+        self.set_manifest_stdout(
+            "docker.io/repo/app:latest",
+            manifest_index_digest("sha256:index", "sha256:child"),
+        )
+        self.set_manifest_stdout(
+            "docker.io/repo/app@sha256:child",
+            manifest_image("sha256:new-config"),
+        )
+
+        status, stdout, stderr = self.run_direct(digest_pin_updates=True)
+
+        self.assertEqual(status, 0, stderr + stdout)
+        self.assertEqual(self.wud_file.read_text(encoding="utf-8"), "")
+        content = compose_file.read_text(encoding="utf-8")
+        self.assertIn("# wud-updater.resolved-tag=latest", content)
+        self.assertIn("image: repo/app@sha256:child", content)
+        events = self.db_rows("SELECT * FROM update_events")
+        known = self.db_rows("SELECT * FROM known_images")
+        self.assertEqual(events[0]["target_image"], "repo/app@sha256:child")
+        self.assertEqual(known[0]["image"], "repo/app@sha256:child")
+
+    def test_digest_pin_apply_updates_existing_tagged_digest_pin(self) -> None:
+        self.wud_file.write_text(
+            "repo/app:latest@sha256:child\n",
+            encoding="utf-8",
+        )
+        stack_dir = self.make_stack("app", [("app", "repo/app@sha256:old", "cid-app")])
+        compose_file = stack_dir / "docker-compose.yml"
+        compose_file.write_text(
+            "\n".join(
+                [
+                    "services:",
+                    "  app:",
+                    "    # wud-updater.resolved-tag=latest",
+                    "    image: repo/app@sha256:old",
+                    "    labels:",
+                    "      - wud.tag.include=^latest$$",
+                    "",
+                ]
+            ),
+            encoding="utf-8",
+        )
+        self.set_image_state(
+            "repo/app@sha256:old",
+            "sha256:old-config",
+            "sha256:old",
+        )
+        self.set_image_after_pull(
+            "repo/app:latest",
+            "sha256:new-config",
+            "sha256:child",
+        )
+        self.set_image_state(
+            "repo/app@sha256:child",
+            "sha256:new-config",
+            "sha256:child",
+        )
+        self.set_manifest_stdout(
+            "docker.io/repo/app:latest",
+            manifest_index_digest("sha256:index", "sha256:child"),
+        )
+        self.set_manifest_stdout(
+            "docker.io/repo/app@sha256:child",
+            manifest_image("sha256:new-config"),
+        )
+
+        status, stdout, stderr = self.run_direct(digest_pin_updates=True)
+
+        self.assertEqual(status, 0, stderr + stdout)
+        self.assertEqual(self.wud_file.read_text(encoding="utf-8"), "")
+        content = compose_file.read_text(encoding="utf-8")
+        self.assertIn("# wud-updater.resolved-tag=latest", content)
+        self.assertIn("image: repo/app@sha256:child", content)
+        self.assertIn("wud.tag.include=^latest$$", content)
+        self.assertRegex(self.calls(), r"compose -f docker-compose.yml pull app")
+        events = self.db_rows("SELECT * FROM update_events")
+        self.assertEqual(events[0]["target_image"], "repo/app@sha256:child")
+
     def test_network_mode_consumer_tag_update_stays_service_scoped(self) -> None:
         self.wud_file.write_text(
             "ghcr.io/linuxserver/qbittorrent:5.1.4 tag=5.2.0\n",

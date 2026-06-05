@@ -34,7 +34,7 @@ from .updater import (
     _ordered_unique,
     _resolve_digest_pin_candidate,
     _scope_plan_label,
-    _services_for_image,
+    _services_for_target_match,
     _stacks_to_update,
     _update_services,
     digest_pin_update_from_values,
@@ -1284,9 +1284,15 @@ def _match_targets(
 
         for stack in stacks:
             for image in stack.images:
-                if not image_matches_resolved_target(image, resolved, allow_repo):
+                services = _services_for_target_match(
+                    stack.service_images,
+                    image,
+                    target,
+                    resolved,
+                    allow_repo,
+                )
+                if services is None:
                     continue
-                services = _services_for_image(stack.service_images, image)
                 if services:
                     for service in services:
                         key = (stack.index, target.line_no, resolved, image, service)
