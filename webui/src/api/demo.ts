@@ -642,6 +642,7 @@ class DemoApiState {
         settingEntry("WUD_LOCK_TIMEOUT", "30", "30", false),
         settingEntry("WUD_TIMEZONE", "UTC", "UTC", false),
         settingEntry("WUD_COMPOSE_IGNORE_PATHS", "old", "old", false),
+        settingEntry("WUD_DIGEST_PIN_UPDATES", "false", "false", false),
       ],
       webui: [
         settingEntry("WUD_WEB_AUTH_REQUIRED", "false", "true", false, "derived"),
@@ -722,6 +723,16 @@ class DemoApiState {
           source: this.composeIgnorePathsConfigured ? "configured" : "default",
           editable: true,
           allowed_values: [],
+          restart_required: false,
+          disabled_reason: "",
+        },
+        {
+          key: "digest_pin_updates",
+          value: "false",
+          default_value: "false",
+          source: "default",
+          editable: true,
+          allowed_values: ["false", "true"],
           restart_required: false,
           disabled_reason: "",
         },
@@ -1019,6 +1030,7 @@ class DemoApiState {
       source_file: DEMO_SOURCE_FILE,
       mode: "stop",
       max_wait: 180,
+      digest_pin_updates: false,
       selected_line_numbers: [1],
       summary: {
         target_count: 1,
@@ -1113,6 +1125,7 @@ class DemoApiState {
       source_file: DEMO_SOURCE_FILE,
       mode: "stop",
       max_wait: 180,
+      digest_pin_updates: false,
       selected_line_numbers: selected.map((item) => item.line_no),
       summary: {
         target_count: selected.length,
@@ -1941,6 +1954,7 @@ function planStack(name: DemoStackName, items: DemoPendingItem[]): PlanStack {
         new_image: line.target_image,
         services: [line.service],
       })),
+    digest_pin_updates: [],
     actions:
       lines.length > 0
         ? [

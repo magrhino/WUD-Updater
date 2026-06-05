@@ -34,9 +34,12 @@ from .compose import (
 from .config import (
     COMPOSE_IGNORE_PATHS_ENV,
     ConfigError,
+    DIGEST_PIN_UPDATES_ENV,
     DEFAULT_MAX_WAIT,
     DEFAULT_UPDATE_MODE,
+    DEFAULT_DIGEST_PIN_UPDATES,
     parse_compose_ignore_paths,
+    parse_bool_env,
 )
 from .db import (
     DatabaseError,
@@ -51,13 +54,20 @@ from .db import (
     upsert_known_image,
     utc_timestamp as db_utc_timestamp,
 )
-from .digest_verifier import DigestCheckResult, DigestVerifier
+from .digest_verifier import (
+    DigestCheckResult,
+    DigestResolveResult,
+    DigestVerifier,
+    DockerManifestResolver,
+)
 from .docker_cli import DockerCli
 from .file_ops import OwnerConfig, OwnerConfigError, apply_configured_owner
 from .images import (
     image_has_tag,
     image_matches_resolved_target,
+    image_with_digest,
     repo_key,
+    normalize_digest,
     image_with_tag,
     tag_value_valid,
 )
@@ -77,6 +87,8 @@ CONTAINER_SUMMARY_FORMAT = "{{.Name}}|{{.State.Status}}|{{if .State.Health}}{{.S
 HEALTH_LOG_FORMAT = "{{if .State.Health}}{{range .State.Health.Log}}{{println .Output}}{{end}}{{end}}"
 RECREATE_STACK_LABEL = "WUD-UPDATER-RECREATE-STACK"
 RECREATE_STACK_LABEL_FORMAT = f'{{{{ index .Config.Labels "{RECREATE_STACK_LABEL}" }}}}'
+DIGEST_PIN_MARKER_PREFIX = "wud-updater.resolved-tag="
+WUD_TAG_INCLUDE_LABEL = "wud.tag.include"
 VALID_MODES = frozenset({"pause", "stop", "live"})
 _SAFE_COMPONENT_RE = re.compile(r"[^A-Za-z0-9._-]")
 _CONTROL_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
@@ -104,6 +116,7 @@ class UpdaterOptions:
     dry_run: bool = False
     assume_yes: bool = False
     allow_tag_updates: bool = False
+    digest_pin_updates: bool = False
     no_color: bool = False
     only_lines: str = ""
     remove_lines_before_run: str = ""
@@ -118,6 +131,7 @@ class UpdaterOptions:
     wud_file_label: str | None = None
     log_dir_label: str | None = None
     metadata_json: str = "{}"
+    digest_pin_plan: tuple["DigestPinUpdate", ...] = ()
 
 
 @dataclass(frozen=True)
@@ -140,6 +154,20 @@ class TagUpdate:
     old_image: str
     desired_tag: str
     new_image: str
+    services: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class DigestPinUpdate:
+    old_image: str
+    resolved_tag: str
+    resolved_image: str
+    planned_digest: str
+    final_image: str
+    watch_tag: str
+    marker: str
+    label_key: str
+    label_value: str
     services: tuple[str, ...]
 
 
@@ -173,6 +201,11 @@ class AppliedTagExclusion:
 
 @dataclass(frozen=True)
 class AppliedTagUpdate(TagUpdate):
+    replacements: int
+
+
+@dataclass(frozen=True)
+class AppliedDigestPinUpdate(DigestPinUpdate):
     replacements: int
 
 
@@ -292,6 +325,7 @@ class UpdateFromWudRunner:
         self.audit_conn: sqlite3.Connection | None = None
         self.audit_run_id: int | None = None
         self.audit_db_path: Path | None = None
+        self.applied_digest_pins: dict[tuple[int, int, str], DigestPinUpdate] = {}
         self.progress_callback = progress_callback
 
     def run(self) -> int:
@@ -386,6 +420,14 @@ class UpdateFromWudRunner:
                     "preflight",
                     "failure",
                     "Tag update plan validation failed.",
+                    matches=matches,
+                )
+                return 1
+            if not self._validate_digest_pin_plan(matches):
+                self._progress(
+                    "preflight",
+                    "failure",
+                    "Digest-pin plan validation failed.",
                     matches=matches,
                 )
                 return 1
@@ -1102,7 +1144,21 @@ class UpdateFromWudRunner:
         images = tuple(stack.images)
         before = self._image_state(images)
         tag_updates = self._tag_updates(matches)
+        try:
+            digest_pin_updates = self._digest_pin_updates(matches)
+        except UpdaterError as exc:
+            self.log.error(f"[{stack.name}] {exc}")
+            self._record_failure(
+                stack,
+                matches,
+                phase="compose-digest-pin",
+                reason="compose-digest-pin-plan-failed",
+                services=pull_services,
+                note=str(exc),
+            )
+            return StackStatus("failure", "compose-digest-pin-plan-failed")
         applied_tags: tuple[AppliedTagUpdate, ...] = ()
+        applied_digest_pins: tuple[AppliedDigestPinUpdate, ...] = ()
         compose_backup: Path | None = None
         current_stack = stack
 
@@ -1280,6 +1336,130 @@ class UpdateFromWudRunner:
                 matches=matches,
             )
             return StackStatus("failure", "expected-digest-not-reached")
+
+        if digest_pin_updates and not self._verify_digest_pin_updates(
+            stack,
+            digest_pin_updates,
+            images,
+        ):
+            if applied_tags and compose_backup is not None:
+                return self._handle_tag_update_failure(
+                    stack,
+                    matches,
+                    services,
+                    applied_tags,
+                    compose_backup,
+                    "digest-pin-verification-failed",
+                    phase="digest",
+                    force_recreate=scope.force_recreate,
+                    no_deps=scope.up_no_deps,
+                )
+            self._record_failure(
+                stack,
+                matches,
+                phase="digest",
+                reason="digest-pin-verification-failed",
+                services=pull_services,
+                health_details=self._capture_health_details(stack, pull_services),
+            )
+            return StackStatus("failure", "digest-pin-verification-failed")
+
+        if digest_pin_updates:
+            compose_path = stack.directory / stack.file
+            try:
+                applied_digest_pins = apply_compose_digest_pins(
+                    compose_path,
+                    digest_pin_updates,
+                )
+            except ComposeTagRewriteError as exc:
+                self.log.error(
+                    f"[{stack.name}] Could not safely write digest-pinned compose image(s): {exc}"
+                )
+                if applied_tags and compose_backup is not None:
+                    return self._handle_tag_update_failure(
+                        stack,
+                        matches,
+                        services,
+                        applied_tags,
+                        compose_backup,
+                        "compose-digest-pin-failed",
+                        phase="compose-digest-pin",
+                        force_recreate=scope.force_recreate,
+                        no_deps=scope.up_no_deps,
+                    )
+                return StackStatus("failure", "compose-digest-pin-failed")
+            except OSError as exc:
+                self.log.error(
+                    f"[{stack.name}] Could not write digest-pinned compose image(s): {exc}"
+                )
+                if applied_tags and compose_backup is not None:
+                    return self._handle_tag_update_failure(
+                        stack,
+                        matches,
+                        services,
+                        applied_tags,
+                        compose_backup,
+                        "compose-digest-pin-failed",
+                        phase="compose-digest-pin",
+                        force_recreate=scope.force_recreate,
+                        no_deps=scope.up_no_deps,
+                    )
+                return StackStatus("failure", "compose-digest-pin-failed")
+            if not applied_digest_pins:
+                self.log.error(
+                    f"[{stack.name}] Could not write digest-pinned compose image(s); leaving WUD entry pending for manual review."
+                )
+                if applied_tags and compose_backup is not None:
+                    return self._handle_tag_update_failure(
+                        stack,
+                        matches,
+                        services,
+                        applied_tags,
+                        compose_backup,
+                        "compose-digest-pin-failed",
+                        phase="compose-digest-pin",
+                        force_recreate=scope.force_recreate,
+                        no_deps=scope.up_no_deps,
+                    )
+                return StackStatus("failure", "compose-digest-pin-failed")
+            for applied in applied_digest_pins:
+                self.log.info(
+                    f"[{stack.name}] Compose digest pinned: "
+                    f"{applied.old_image} -> {applied.final_image} "
+                    f"(resolved-tag={applied.resolved_tag})"
+                )
+            refreshed = self._refresh_stack_images(current_stack)
+            if refreshed is None:
+                return self._handle_tag_update_failure(
+                    stack,
+                    matches,
+                    services,
+                    applied_tags,
+                    compose_backup,
+                    "compose-digest-pin-refresh-failed",
+                    phase="compose-digest-pin",
+                    force_recreate=scope.force_recreate,
+                    no_deps=scope.up_no_deps,
+                )
+            if not self._validate_applied_digest_pins(
+                stack,
+                applied_digest_pins,
+                refreshed.service_images,
+            ):
+                return self._handle_tag_update_failure(
+                    stack,
+                    matches,
+                    services,
+                    applied_tags,
+                    compose_backup,
+                    "compose-digest-pin-validation-failed",
+                    phase="compose-digest-pin",
+                    force_recreate=scope.force_recreate,
+                    no_deps=scope.up_no_deps,
+                )
+            current_stack = refreshed
+            images = tuple(current_stack.images)
+            after = self._image_state(images)
         self._progress(
             "pull",
             "success",
@@ -1290,7 +1470,7 @@ class UpdateFromWudRunner:
         )
 
         changes = _updated_images(before, after)
-        update_needed = bool(applied_tags or changes)
+        update_needed = bool(applied_tags or applied_digest_pins or changes)
         for image, state in changes:
             target = state.digest if state.digest else state.image_id
             self.log.info(f"[{stack.name}] Image updated: {image} -> {target}")
@@ -1520,6 +1700,12 @@ class UpdateFromWudRunner:
                     matches=matches,
                 )
                 return StackStatus("failure", "down-failed")
+            if digest_pin_updates:
+                self._remember_applied_digest_pins(
+                    stack,
+                    matches,
+                    digest_pin_updates,
+                )
             return StackStatus("success", "updated")
 
         health_details = self._capture_health_details(stack, services)
@@ -2172,6 +2358,33 @@ class UpdateFromWudRunner:
                 )
         return ok
 
+    def _validate_applied_digest_pins(
+        self,
+        stack: ComposeStack,
+        applied_pins: Sequence[AppliedDigestPinUpdate],
+        service_images: Sequence[ServiceImage],
+    ) -> bool:
+        ok = True
+        image_by_service = {(item.service, item.image) for item in service_images}
+        for applied in applied_pins:
+            expected_replacements = len(applied.services)
+            if applied.replacements != expected_replacements:
+                ok = False
+                self.log.error(
+                    f"[{stack.name}] Compose digest-pin rewrite touched "
+                    f"{applied.replacements} image line(s) for {applied.old_image}, "
+                    f"expected {expected_replacements}."
+                )
+            for service in applied.services:
+                if (service, applied.final_image) in image_by_service:
+                    continue
+                ok = False
+                self.log.error(
+                    f"[{stack.name}] Compose service {service} did not resolve "
+                    f"to digest-pinned image {applied.final_image}."
+                )
+        return ok
+
     def _verify_expected_digests(
         self,
         stack: ComposeStack,
@@ -2218,6 +2431,68 @@ class UpdateFromWudRunner:
                         "ERROR",
                         f"[{stack.name}] No compose image matched line {line_no} while checking expected digest",
                     )
+        return ok
+
+    def _verify_digest_pin_updates(
+        self,
+        stack: ComposeStack,
+        updates: Sequence[DigestPinUpdate],
+        images: Sequence[str],
+    ) -> bool:
+        ok = True
+        for update in updates:
+            current = self._resolve_digest_pin(update.resolved_image)
+            if not current.ok:
+                ok = False
+                self.log.error(
+                    f"[{stack.name}] Could not re-resolve digest-pin target "
+                    f"{update.resolved_image}: {current.reason}"
+                )
+                if current.error:
+                    self.log.plain(
+                        "ERROR",
+                        f"[{stack.name}] Digest resolution error: {sanitize_stream(current.error)}",
+                    )
+                continue
+            if normalize_digest(current.digest) != update.planned_digest:
+                ok = False
+                self.log.error(
+                    f"[{stack.name}] Digest-pin target moved for "
+                    f"{update.resolved_image}: planned {update.planned_digest}, "
+                    f"current {normalize_digest(current.digest)}"
+                )
+                continue
+            matched = False
+            digest_result: DigestCheckResult | None = None
+            for image in images:
+                if image != update.resolved_image:
+                    continue
+                matched = True
+                digest_result = self.digest_verifier.verify(
+                    image,
+                    update.planned_digest,
+                )
+                if digest_result.ok:
+                    break
+            if digest_result is not None and digest_result.ok:
+                self.log.info(
+                    f"[{stack.name}] Verified digest-pin target: "
+                    f"{update.resolved_image} -> {update.planned_digest}"
+                )
+                continue
+            ok = False
+            self.log.error(
+                f"[{stack.name}] Digest-pin target did not verify for "
+                f"{update.resolved_image}: wanted {update.planned_digest}"
+            )
+            if digest_result is not None:
+                self._log_digest_mismatch(stack.name, digest_result)
+            if not matched:
+                self.log.plain(
+                    "ERROR",
+                    f"[{stack.name}] No compose image matched digest-pin target "
+                    f"{update.resolved_image}",
+                )
         return ok
 
     def _log_digest_untrusted(
@@ -2305,6 +2580,71 @@ class UpdateFromWudRunner:
                 services_by_update.items()
             )
         )
+
+    def _digest_pin_updates(
+        self,
+        matches: Sequence[Match],
+    ) -> tuple[DigestPinUpdate, ...]:
+        if not self.options.digest_pin_updates:
+            return ()
+        planned = {
+            (update.old_image, update.resolved_tag): update
+            for update in self.options.digest_pin_plan
+        }
+        updates: list[DigestPinUpdate] = []
+        for tag_update in self._tag_updates(matches):
+            planned_update = planned.get(
+                (tag_update.old_image, tag_update.desired_tag)
+            )
+            if planned_update is not None:
+                updates.append(replace(planned_update, services=tag_update.services))
+                continue
+            resolved = self._resolve_digest_pin(tag_update.new_image)
+            if not resolved.ok:
+                raise UpdaterError(
+                    "Could not resolve digest-pin target for "
+                    f"{tag_update.new_image}: {resolved.reason}"
+                    + (f" ({resolved.error})" if resolved.error else "")
+                )
+            updates.append(
+                _digest_pin_update_from_tag_update(
+                    tag_update,
+                    resolved.digest,
+                )
+            )
+        return tuple(updates)
+
+    def _resolve_digest_pin(self, image: str) -> DigestResolveResult:
+        resolver = DockerManifestResolver(self.docker, verbose=True)
+        verifier = DigestVerifier(
+            self.docker,
+            primary_resolver=resolver,
+            fallback_resolver=resolver,
+        )
+        return verifier.resolve_tag_digest(image)
+
+    def _validate_digest_pin_plan(self, matches: Sequence[Match]) -> bool:
+        if not self.options.digest_pin_updates:
+            return True
+        ok = True
+        for match in matches:
+            if match.target.desired_tag:
+                continue
+            ok = False
+            self.log.error(
+                f"[{match.stack.name}] Digest-pin updates require a safe resolved "
+                f"tag for line {match.target.line_no} ({match.target.first})."
+            )
+        try:
+            for stack in _stacks_to_update(matches):
+                stack_updates = self._digest_pin_updates(
+                    [match for match in matches if match.stack.index == stack.index]
+                )
+                render_compose_digest_pins(stack.directory / stack.file, stack_updates)
+        except (ComposeTagRewriteError, UpdaterError) as exc:
+            ok = False
+            self.log.error(f"Digest-pin plan is not safe to apply: {exc}")
+        return ok
 
     def _refresh_stack_images(self, stack: ComposeStack) -> ComposeStack | None:
         try:
@@ -2606,7 +2946,7 @@ class UpdateFromWudRunner:
                 service_name=match.service,
                 stack_name=match.stack.name,
                 image=match.compose_image,
-                target_image=_target_image_for_match(match),
+                target_image=self._target_image_for_match(match),
                 status=status.status,
                 metadata_json=json.dumps({"reason": status.reason}, sort_keys=True),
             )
@@ -2622,7 +2962,7 @@ class UpdateFromWudRunner:
             status = stack_statuses.get(match.stack.index)
             if status is None or status.status != "success":
                 continue
-            image = _target_image_for_match(match)
+            image = self._target_image_for_match(match)
             upsert_known_image(
                 self.audit_conn,
                 service_key=_service_key(match),
@@ -2630,6 +2970,34 @@ class UpdateFromWudRunner:
                 image_id=self.docker.image_id(image),
                 digest=self.docker.image_digest(image),
             )
+
+    def _remember_applied_digest_pins(
+        self,
+        stack: ComposeStack,
+        matches: Sequence[Match],
+        updates: Sequence[DigestPinUpdate],
+    ) -> None:
+        by_key = {
+            (update.old_image, update.resolved_tag): update
+            for update in updates
+        }
+        for match in matches:
+            if not match.target.desired_tag:
+                continue
+            update = by_key.get((match.compose_image, match.target.desired_tag))
+            if update is None:
+                continue
+            self.applied_digest_pins[
+                (stack.index, match.target.line_no, match.service)
+            ] = update
+
+    def _target_image_for_match(self, match: Match) -> str:
+        update = self.applied_digest_pins.get(
+            (match.stack.index, match.target.line_no, match.service)
+        )
+        if update is not None:
+            return update.final_image
+        return _target_image_for_match(match)
 
     def _mark_failed_lines_restored(self, failed_lines: Iterable[int]) -> None:
         restored = set(failed_lines)
@@ -2712,6 +3080,7 @@ class UpdateFromWudRunner:
         self.log.info(f"Dry-run : {_bool_text(opts.dry_run)}")
         self.log.info(f"Confirm : {_bool_text(opts.assume_yes)}")
         self.log.info(f"TagEdit : {_bool_text(opts.allow_tag_updates)}")
+        self.log.info(f"DigestP : {_bool_text(opts.digest_pin_updates)}")
         self.log.info(f"MaxWait : {opts.max_wait}s")
         if opts.only_lines:
             self.log.info(f"Only    : {opts.only_lines}")
@@ -2814,6 +3183,7 @@ class UpdateFromWudRunner:
                 scope = self._update_scope(stack, stack_matches)
                 services_label = _scope_plan_label(scope)
                 self.log.plain("INFO", f"      services: {services_label}")
+                digest_pins = self._digest_pin_plan_by_line(stack_matches)
 
                 plan_lines: list[str] = []
                 lines = {
@@ -2826,7 +3196,13 @@ class UpdateFromWudRunner:
                     for match in stack_matches
                 }
                 for line_no, target, resolved, desired_tag in sorted(lines):
-                    line = _plan_line(line_no, target, resolved, desired_tag)
+                    line = _plan_line(
+                        line_no,
+                        target,
+                        resolved,
+                        desired_tag,
+                        digest_pins.get(line_no),
+                    )
                     self.log.plain("INFO", f"      {line}")
                     plan_lines.append(line)
                 rows.append((stack.name, services_label, plan_lines))
@@ -2839,12 +3215,38 @@ class UpdateFromWudRunner:
             stack_matches = [match for match in matches if match.stack.index == stack.index]
             scope = self._update_scope(stack, stack_matches)
             self.log.info(f"      services: {_scope_plan_label(scope)}")
+            digest_pins = self._digest_pin_plan_by_line(stack_matches)
             lines = {
                 (match.target.line_no, match.target.first, match.resolved, match.target.desired_tag)
                 for match in stack_matches
             }
             for line_no, target, resolved, desired_tag in sorted(lines):
-                self.log.info(f"      {_plan_line(line_no, target, resolved, desired_tag)}")
+                self.log.info(
+                    f"      {_plan_line(line_no, target, resolved, desired_tag, digest_pins.get(line_no))}"
+                )
+
+    def _digest_pin_plan_by_line(
+        self,
+        matches: Sequence[Match],
+    ) -> dict[int, DigestPinUpdate]:
+        if not self.options.digest_pin_updates:
+            return {}
+        try:
+            updates = self._digest_pin_updates(matches)
+        except UpdaterError:
+            return {}
+        by_key = {
+            (update.old_image, update.resolved_tag): update
+            for update in updates
+        }
+        by_line: dict[int, DigestPinUpdate] = {}
+        for match in matches:
+            if not match.target.desired_tag:
+                continue
+            update = by_key.get((match.compose_image, match.target.desired_tag))
+            if update is not None:
+                by_line.setdefault(match.target.line_no, update)
+        return by_line
 
     def _confirm_before_mutation(self) -> None:
         if self.options.assume_yes:
@@ -2922,6 +3324,11 @@ def options_from_namespace(
         compose_ignore_paths = parse_compose_ignore_paths(
             env.get(COMPOSE_IGNORE_PATHS_ENV)
         )
+        digest_pin_updates = parse_bool_env(
+            DIGEST_PIN_UPDATES_ENV,
+            env.get(DIGEST_PIN_UPDATES_ENV),
+            default=DEFAULT_DIGEST_PIN_UPDATES,
+        )
     except ConfigError as exc:
         raise UpdaterError(str(exc)) from exc
     return UpdaterOptions(
@@ -2933,6 +3340,7 @@ def options_from_namespace(
         dry_run=bool(getattr(args, "dry_run", False)),
         assume_yes=bool(getattr(args, "yes", False)),
         allow_tag_updates=allow_tag_updates,
+        digest_pin_updates=digest_pin_updates,
         no_color=bool(getattr(args, "no_color", False)),
         only_lines=getattr(args, "only_lines", None) or "",
         remove_lines_before_run=getattr(args, "remove_lines_before_run", None) or "",
@@ -3167,6 +3575,151 @@ def apply_compose_tag_exclusions(
     return applied
 
 
+def apply_compose_digest_pins(
+    compose_path: Path,
+    updates: Sequence[DigestPinUpdate],
+) -> tuple[AppliedDigestPinUpdate, ...]:
+    """Write final digest-pinned images plus WUD watch metadata."""
+
+    rendered, applied = render_compose_digest_pins(compose_path, updates)
+    fd, tmp_name = tempfile.mkstemp(
+        prefix=f".{compose_path.name}.digest-pin.",
+        dir=str(compose_path.parent),
+    )
+    tmp_path: Path | None = Path(tmp_name)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8", newline="") as tmp:
+            tmp.write(rendered)
+        st = compose_path.stat()
+        os.chown(tmp_path, st.st_uid, st.st_gid)
+        os.chmod(tmp_path, st.st_mode & 0o7777)
+        os.replace(tmp_path, compose_path)
+        tmp_path = None
+    finally:
+        if tmp_path is not None:
+            try:
+                tmp_path.unlink()
+            except FileNotFoundError:
+                pass
+    return applied
+
+
+def render_compose_digest_pins(
+    compose_path: Path,
+    updates: Sequence[DigestPinUpdate],
+) -> tuple[str, tuple[AppliedDigestPinUpdate, ...]]:
+    """Return Compose YAML with digest-pin image and watch metadata applied."""
+
+    if not updates:
+        return compose_path.read_text(encoding="utf-8"), ()
+
+    source = compose_path.read_text(encoding="utf-8")
+    yaml = YAML(typ="rt")
+    yaml.preserve_quotes = True
+    try:
+        parsed = yaml.load(source)
+    except YAMLError as exc:
+        raise ComposeTagRewriteError(
+            f"Compose file YAML could not be parsed: {exc}"
+        ) from exc
+    if not isinstance(parsed, CommentedMap):
+        raise ComposeTagRewriteError("Compose file is not a YAML mapping.")
+    services = parsed.get("services")
+    if not isinstance(services, CommentedMap):
+        raise ComposeTagRewriteError("Compose file has no services mapping.")
+
+    line_offsets = _line_start_offsets(source)
+    counts = {id(update): 0 for update in updates}
+    seen_spans: set[tuple[int, int]] = set()
+
+    for update in updates:
+        if not update.services:
+            raise ComposeTagRewriteError(
+                f"No compose service was mapped for {update.old_image}."
+            )
+        for service in update.services:
+            service_config = _direct_service_config(services, service)
+            _reject_yaml_anchor_or_alias_service_config(
+                services,
+                service,
+                service_config,
+            )
+            if not _commented_map_has_direct_key(service_config, "image"):
+                raise ComposeTagRewriteError(
+                    f"Service {service} image is inherited and needs manual review."
+                )
+            _reject_yaml_anchor_or_alias_image_value(services, service, service_config)
+            current_image = service_config.get("image")
+            if current_image == update.resolved_image:
+                expected_image = update.resolved_image
+            elif current_image == update.old_image:
+                expected_image = update.old_image
+            else:
+                raise ComposeTagRewriteError(
+                    f"Service {service} image is {current_image}, expected "
+                    f"{update.old_image} or {update.resolved_image}."
+                )
+            span = _service_image_scalar_span(
+                services,
+                service,
+                expected_image,
+                source,
+                line_offsets,
+            )
+            if span in seen_spans:
+                raise ComposeTagRewriteError(
+                    f"Service {service} image for {update.old_image} was "
+                    "selected more than once."
+                )
+            seen_spans.add(span)
+
+            _materialize_inherited_service_labels(service_config, service)
+            labels = service_config.get("labels")
+            if labels is not None:
+                _reject_yaml_anchor_or_alias_labels(services, service, labels)
+            current_include = compose_unescape_dollars(
+                _get_service_label_value(service_config, update.label_key)
+            )
+            if current_include and not _is_simple_exact_tag_include(current_include):
+                raise ComposeTagRewriteError(
+                    f"Service {service} {update.label_key} contains a custom regex "
+                    "and needs manual review."
+                )
+            _set_service_label_value(
+                service_config,
+                update.label_key,
+                update.label_value,
+            )
+            service_config["image"] = update.final_image
+            service_config.yaml_set_comment_before_after_key(
+                "image",
+                before=update.marker,
+            )
+            counts[id(update)] += 1
+
+    output = StringIO()
+    yaml.dump(parsed, output)
+    applied = tuple(
+        AppliedDigestPinUpdate(
+            old_image=update.old_image,
+            resolved_tag=update.resolved_tag,
+            resolved_image=update.resolved_image,
+            planned_digest=update.planned_digest,
+            final_image=update.final_image,
+            watch_tag=update.watch_tag,
+            marker=update.marker,
+            label_key=update.label_key,
+            label_value=update.label_value,
+            services=update.services,
+            replacements=counts[id(update)],
+        )
+        for update in updates
+    )
+    if any(item.replacements < 1 for item in applied):
+        return "", ()
+    return output.getvalue(), applied
+
+
 def render_compose_tag_exclusions(
     compose_path: Path,
     updates: Sequence[TagExclusionUpdate],
@@ -3363,6 +3916,36 @@ def _service_image_scalar_span(
     return start, end
 
 
+def _direct_service_config(services: CommentedMap, service: str) -> CommentedMap:
+    service_config = services.get(service)
+    if not isinstance(service_config, CommentedMap):
+        raise ComposeTagRewriteError(
+            f"Service {service} is not a mapping with a direct image field."
+        )
+    return service_config
+
+
+def _reject_yaml_anchor_or_alias_image_value(
+    services: CommentedMap,
+    service: str,
+    service_config: CommentedMap,
+) -> None:
+    image_value = service_config.get("image")
+    anchor = getattr(image_value, "anchor", None)
+    if getattr(anchor, "value", None):
+        raise ComposeTagRewriteError(
+            f"Service {service} image uses YAML anchors or aliases and needs manual review."
+        )
+    for other_service, other_config in services.items():
+        if other_service == service or not isinstance(other_config, CommentedMap):
+            continue
+        other_image = other_config.get("image")
+        if other_image is image_value and getattr(image_value, "anchor", None) is not None:
+            raise ComposeTagRewriteError(
+                f"Service {service} image uses YAML anchors or aliases and needs manual review."
+            )
+
+
 def _get_service_label_value(service_config: CommentedMap, key: str) -> str:
     labels = service_config.get("labels")
     if labels is None:
@@ -3385,6 +3968,31 @@ def _get_service_label_value(service_config: CommentedMap, key: str) -> str:
                 return label_value
         return ""
     raise ComposeTagRewriteError("Service labels use unsupported YAML syntax.")
+
+
+def _is_simple_exact_tag_include(value: str) -> bool:
+    if len(value) < 3 or not value.startswith("^") or not value.endswith("$"):
+        return False
+    tag_chars: list[str] = []
+    index = 1
+    end = len(value) - 1
+    while index < end:
+        char = value[index]
+        if char == "\\":
+            index += 1
+            if index >= end:
+                return False
+            escaped = value[index]
+            if escaped not in "\\^$.*+?()[]{}|":
+                return False
+            tag_chars.append(escaped)
+            index += 1
+            continue
+        if char in "\\^$.*+?()[]{}|":
+            return False
+        tag_chars.append(char)
+        index += 1
+    return tag_value_valid("".join(tag_chars))
 
 
 def _reject_yaml_anchor_or_alias_service_config(
@@ -3562,7 +4170,7 @@ def _stack_level_scope_message(scope: UpdateScope) -> str:
 
 
 def _tag_update_failure_progress_phase(phase: str) -> str:
-    if phase in {"pull", "digest"}:
+    if phase in {"pull", "digest", "compose-digest-pin"}:
         return "pull"
     if phase in {"up", "stop", "down", "unpause"}:
         return "recreate"
@@ -3578,6 +4186,8 @@ def _tag_update_failure_progress_message(stack_name: str, phase: str, reason: st
         return (
             f"[{stack_name}] Pulled image did not reach the expected digest after tag rewrite."
         )
+    if phase == "compose-digest-pin":
+        return f"[{stack_name}] Compose digest-pin rewrite failed after pull."
     if phase in {"up", "stop", "down", "unpause"}:
         return f"[{stack_name}] Compose {phase} failed after tag rewrite."
     if phase == "health":
@@ -3638,7 +4248,13 @@ def _plan_line(
     target: str,
     resolved: str,
     desired_tag: str,
+    digest_pin: DigestPinUpdate | None = None,
 ) -> str:
+    if digest_pin is not None:
+        return (
+            f"line {line_no}: {resolved} -> {digest_pin.final_image} "
+            f"(digest pin tag={digest_pin.resolved_tag} digest={digest_pin.planned_digest})"
+        )
     if desired_tag:
         desired_image = image_with_tag(resolved, desired_tag)
         return f"line {line_no}: {resolved} -> {desired_image} (tag update)"
@@ -3902,6 +4518,42 @@ def _unique_tag_exclusion_updates(
         )
         unique.setdefault(key, update)
     return [unique[key] for key in sorted(unique)]
+
+
+def digest_pin_update_from_values(
+    *,
+    old_image: str,
+    resolved_tag: str,
+    planned_digest: str,
+    services: Sequence[str],
+) -> DigestPinUpdate:
+    tag_update = TagUpdate(
+        old_image=old_image,
+        desired_tag=resolved_tag,
+        new_image=image_with_tag(old_image, resolved_tag),
+        services=tuple(sorted(services)),
+    )
+    return _digest_pin_update_from_tag_update(tag_update, planned_digest)
+
+
+def _digest_pin_update_from_tag_update(
+    update: TagUpdate,
+    planned_digest: str,
+) -> DigestPinUpdate:
+    digest = normalize_digest(planned_digest)
+    watch_tag = update.desired_tag
+    return DigestPinUpdate(
+        old_image=update.old_image,
+        resolved_tag=update.desired_tag,
+        resolved_image=update.new_image,
+        planned_digest=digest,
+        final_image=image_with_digest(update.old_image, digest),
+        watch_tag=watch_tag,
+        marker=f"{DIGEST_PIN_MARKER_PREFIX}{watch_tag}",
+        label_key=WUD_TAG_INCLUDE_LABEL,
+        label_value=compose_escape_dollars(exact_tags_regex((watch_tag,))),
+        services=update.services,
+    )
 
 
 def _tag_exclusion_updates_by_stack(

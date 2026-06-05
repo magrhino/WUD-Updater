@@ -126,6 +126,7 @@ if [ -z "$out_gid" ] && [ -n "$out_guid" ]; then
   out_gid="$out_guid"
 fi
 lock_timeout="${WUD_LOCK_TIMEOUT:-}"
+digest_pin_updates="${WUD_DIGEST_PIN_UPDATES:-}"
 auto_run=0
 dry_run=0
 allow_tag_updates=0
@@ -821,6 +822,7 @@ run_updater() {
   fi
   [ -n "$db_path" ] && updater_env+=("WUD_DB_PATH=$db_path")
   [ -n "$host_docker_base" ] && updater_env+=("HOST_DOCKER_BASE=$host_docker_base")
+  [ -n "$digest_pin_updates" ] && updater_env+=("WUD_DIGEST_PIN_UPDATES=$digest_pin_updates")
   [ -n "$lock_timeout" ] && updater_env+=("WUD_LOCK_TIMEOUT=$lock_timeout")
   if [ "$wud_lock_held" -eq 1 ]; then
     updater_env+=("WUD_LOCK_HELD_BY_PARENT=1")

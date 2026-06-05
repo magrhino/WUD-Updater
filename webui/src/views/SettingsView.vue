@@ -45,6 +45,7 @@ const BEHAVIOR_ENTRY_NAMES = new Set([
   "WUD_LOCK_TIMEOUT",
   "WUD_TIMEZONE",
   "WUD_COMPOSE_IGNORE_PATHS",
+  "WUD_DIGEST_PIN_UPDATES",
 ]);
 const THEME_PREFERENCE_LABELS: Record<string, string> = {
   system: "System theme",
@@ -54,6 +55,10 @@ const THEME_PREFERENCE_LABELS: Record<string, string> = {
 const ONBOARDING_CHECKLIST_LABELS: Record<string, string> = {
   visible: "Visible",
   dismissed: "Dismissed",
+};
+const DIGEST_PIN_UPDATES_LABELS: Record<string, string> = {
+  false: "Disabled",
+  true: "Enabled",
 };
 const CORE_UPDATE_TOUR_STATUS_LABELS: Record<string, string> = {
   not_started: "Not started",
@@ -91,6 +96,7 @@ const restartError = ref("");
 const themePreferenceValue = ref("system");
 const onboardingChecklistValue = ref("visible");
 const composeIgnorePathsValue = ref("");
+const digestPinUpdatesValue = ref("false");
 const preferencesMessage = ref("");
 const preferencesError = ref("");
 const compactSettingsLayout = useMediaQuery("(max-width: 560px)");
@@ -130,6 +136,9 @@ const onboardingChecklistEntry = computed(() =>
 );
 const composeIgnorePathsEntry = computed(() =>
   managedEntries.value.find((entry) => entry.key === "compose_ignore_paths"),
+);
+const digestPinUpdatesEntry = computed(() =>
+  managedEntries.value.find((entry) => entry.key === "digest_pin_updates"),
 );
 const restartContainerTarget = computed(() => restartContainerEntry.value?.value ?? "");
 const mutationsEnabled = computed(() => auth.session?.mutations_enabled === true);
@@ -171,13 +180,18 @@ const preferenceControlsDisabled = computed(
 const composeIgnorePathsEditable = computed(
   () => composeIgnorePathsEntry.value?.editable === true,
 );
+const digestPinUpdatesEditable = computed(
+  () => digestPinUpdatesEntry.value?.editable === true,
+);
 const preferencesDirty = computed(
   () =>
     themePreferenceValue.value !== (themePreferenceEntry.value?.value ?? "system") ||
     onboardingChecklistValue.value !==
       (onboardingChecklistEntry.value?.value ?? "visible") ||
     (composeIgnorePathsEditable.value &&
-      composeIgnorePathsValue.value !== (composeIgnorePathsEntry.value?.value ?? "")),
+      composeIgnorePathsValue.value !== (composeIgnorePathsEntry.value?.value ?? "")) ||
+    (digestPinUpdatesEditable.value &&
+      digestPinUpdatesValue.value !== (digestPinUpdatesEntry.value?.value ?? "false")),
 );
 const preferenceSaveDisabled = computed(
   () => preferenceControlsDisabled.value || !preferencesDirty.value,
@@ -192,6 +206,9 @@ const themePreferenceOptions = computed(() =>
 );
 const onboardingChecklistOptions = computed(() =>
   managedOptions(onboardingChecklistEntry.value, ONBOARDING_CHECKLIST_LABELS),
+);
+const digestPinUpdatesOptions = computed(() =>
+  managedOptions(digestPinUpdatesEntry.value, DIGEST_PIN_UPDATES_LABELS),
 );
 const coreUpdateTourStatusLabel = computed(() => {
   const status = webui.coreUpdateTour?.status ?? "not_started";
@@ -255,6 +272,7 @@ function hydratePreferenceForm(): void {
   onboardingChecklistValue.value =
     onboardingChecklistEntry.value?.value ?? "visible";
   composeIgnorePathsValue.value = composeIgnorePathsEntry.value?.value ?? "";
+  digestPinUpdatesValue.value = digestPinUpdatesEntry.value?.value ?? "false";
 }
 
 function openRestartDialog(): void {
@@ -313,6 +331,12 @@ async function saveManagedPreferences(): Promise<void> {
     composeIgnorePathsValue.value !== (composeIgnorePathsEntry.value?.value ?? "")
   ) {
     values.compose_ignore_paths = composeIgnorePathsValue.value;
+  }
+  if (
+    digestPinUpdatesEditable.value &&
+    digestPinUpdatesValue.value !== (digestPinUpdatesEntry.value?.value ?? "false")
+  ) {
+    values.digest_pin_updates = digestPinUpdatesValue.value;
   }
   if (!Object.keys(values).length) {
     return;
@@ -689,6 +713,35 @@ onMounted(() => {
                 class="settings-action-alert"
               >
                 {{ composeIgnorePathsEntry.disabled_reason }}
+              </n-alert>
+            </div>
+          </div>
+          <div class="settings-preference-row">
+            <div>
+              <strong>Digest-pin updates</strong>
+              <span>
+                Source:
+                {{
+                  digestPinUpdatesEntry?.source === "configured"
+                    ? "Configured"
+                    : "Default"
+                }}
+              </span>
+            </div>
+            <div class="settings-preference-controls">
+              <n-select
+                v-model:value="digestPinUpdatesValue"
+                :options="digestPinUpdatesOptions"
+                :disabled="preferenceControlsDisabled || !digestPinUpdatesEditable"
+                aria-label="Digest-pin updates"
+              />
+              <n-alert
+                v-if="digestPinUpdatesEntry?.disabled_reason"
+                type="info"
+                :show-icon="false"
+                class="settings-action-alert"
+              >
+                {{ digestPinUpdatesEntry.disabled_reason }}
               </n-alert>
             </div>
           </div>

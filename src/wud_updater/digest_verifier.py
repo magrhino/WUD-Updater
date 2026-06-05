@@ -126,6 +126,16 @@ class DigestCheckResult:
     error: str = ""
 
 
+@dataclass(frozen=True)
+class DigestResolveResult:
+    ok: bool
+    status: str
+    reason: str
+    digest: str = ""
+    source: str = ""
+    error: str = ""
+
+
 class RegistryHttpManifestResolver:
     """Resolve public registry manifests through the distribution HTTP API."""
 
@@ -218,13 +228,18 @@ class RegistryHttpManifestResolver:
 class DockerManifestResolver:
     """Resolve manifests through ``docker manifest inspect``."""
 
-    def __init__(self, docker: DockerCli) -> None:
+    def __init__(self, docker: DockerCli, *, verbose: bool = False) -> None:
         self.docker = docker
+        self.verbose = verbose
 
     def fetch(self, image: RegistryImageRef, reference: str) -> ManifestDocument:
         manifest_ref = image.manifest_ref(reference)
         try:
-            result = self.docker.manifest_inspect(manifest_ref)
+            result = (
+                self.docker.manifest_inspect_verbose(manifest_ref)
+                if self.verbose
+                else self.docker.manifest_inspect(manifest_ref)
+            )
         except CommandError as exc:
             raise ManifestLookupError(
                 f"docker manifest inspect failed for {manifest_ref}"
@@ -240,8 +255,8 @@ class DockerManifestResolver:
                 f"docker manifest inspect returned non-object JSON for {manifest_ref}"
             )
         return ManifestDocument(
-            source="docker-manifest",
-            digest="",
+            source="docker-manifest-verbose" if self.verbose else "docker-manifest",
+            digest=_payload_digest(payload) if self.verbose else "",
             media_type=str(payload.get("mediaType") or ""),
             payload=payload,
         )
@@ -341,6 +356,39 @@ class DigestVerifier:
             seen_repo_digests=repo_digests,
             tag_digest=tag_document.digest,
             local_image_id=local_image_id,
+            source=tag_document.source,
+        )
+
+    def resolve_tag_digest(self, image: str) -> DigestResolveResult:
+        registry_image = parse_registry_image(image)
+        if registry_image is None:
+            return DigestResolveResult(
+                ok=False,
+                status="untrusted",
+                reason="unsupported-image-reference",
+            )
+        try:
+            tag_document = self._fetch(registry_image, registry_image.tag)
+        except ManifestLookupError as exc:
+            return DigestResolveResult(
+                ok=False,
+                status=_failure_status(registry_image),
+                reason=_manifest_unavailable_reason(registry_image),
+                error=str(exc),
+            )
+        digest = tag_document.digest or _payload_digest(tag_document.payload)
+        if not digest:
+            return DigestResolveResult(
+                ok=False,
+                status=_failure_status(registry_image),
+                reason="manifest-digest-missing",
+                source=tag_document.source,
+            )
+        return DigestResolveResult(
+            ok=True,
+            status="resolved",
+            reason="tag-digest-resolved",
+            digest=digest,
             source=tag_document.source,
         )
 
@@ -544,3 +592,15 @@ def _same_manifest(left: Mapping[str, Any], right: Mapping[str, Any]) -> bool:
         sort_keys=True,
         separators=(",", ":"),
     )
+
+
+def _payload_digest(payload: Mapping[str, Any]) -> str:
+    digest = payload.get("digest")
+    if isinstance(digest, str) and digest.startswith("sha256:"):
+        return digest
+    descriptor = payload.get("Descriptor")
+    if isinstance(descriptor, Mapping):
+        digest = descriptor.get("digest")
+        if isinstance(digest, str) and digest.startswith("sha256:"):
+            return digest
+    return ""

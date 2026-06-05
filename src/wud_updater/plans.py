@@ -11,9 +11,12 @@ from pathlib import Path
 from .command import CommandError, CommandRunner
 from .compose import COMPOSE_FILENAMES, ComposeCli, ComposeDiscoveryError, ComposeStack
 from .config import UpdaterConfig
+from .digest_verifier import DigestVerifier, DockerManifestResolver
 from .docker_cli import DockerCli
 from .images import image_has_tag, image_matches_resolved_target, image_with_tag
 from .updater import (
+    ComposeTagRewriteError,
+    DigestPinUpdate,
     RECREATE_STACK_LABEL,
     RECREATE_STACK_LABEL_FORMAT,
     Match,
@@ -29,6 +32,8 @@ from .updater import (
     _services_for_image,
     _stacks_to_update,
     _update_services,
+    digest_pin_update_from_values,
+    render_compose_digest_pins,
 )
 from .wud_file import ParsedWudFile, WudTarget, parse_wud_file
 
@@ -160,6 +165,19 @@ class DryRunPlanTagUpdate:
 
 
 @dataclass(frozen=True)
+class DryRunPlanDigestPinUpdate:
+    source_image: str
+    resolved_tag: str
+    planned_digest: str
+    final_image: str
+    watch_tag: str
+    marker: str
+    label_key: str
+    label_value: str
+    services: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class DryRunPlanAction:
     kind: str
     description: str
@@ -180,6 +198,7 @@ class DryRunPlanStack:
     force_recreate: bool
     up_no_deps: bool
     tag_updates: tuple[DryRunPlanTagUpdate, ...] = ()
+    digest_pin_updates: tuple[DryRunPlanDigestPinUpdate, ...] = ()
     actions: tuple[DryRunPlanAction, ...] = ()
     lines: tuple[DryRunPlanLine, ...] = ()
 
@@ -230,6 +249,7 @@ class DryRunPlan:
     source_file: str
     mode: str
     max_wait: int
+    digest_pin_updates: bool
     selected_line_numbers: tuple[int, ...]
     summary: DryRunPlanSummary
     targets: tuple[DryRunPlanTarget, ...] = ()
@@ -288,6 +308,10 @@ class _PlanBuilder:
     command_runner: CommandRunner | None = None
     docker: DockerCli = field(init=False)
     compose: ComposeCli = field(init=False)
+    digest_pin_updates_by_stack: dict[int, tuple[DigestPinUpdate, ...]] = field(
+        init=False,
+        default_factory=dict,
+    )
 
     def __post_init__(self) -> None:
         runner = self.command_runner or CommandRunner()
@@ -369,6 +393,7 @@ class _PlanBuilder:
             )
             issues.extend(self._tag_update_plan_issues(matches))
             issues.extend(self._manifest_issues(matches))
+            issues.extend(self._digest_pin_plan_issues(matches))
             issues.extend(self._preflight_issues(matches))
 
         plan_stacks = self._plan_stacks(matches)
@@ -390,6 +415,7 @@ class _PlanBuilder:
             source_file=str(self.config.wud_out_file),
             mode=self.config.update_mode,
             max_wait=self.config.max_wait,
+            digest_pin_updates=self.config.digest_pin_updates,
             selected_line_numbers=selected,
             summary=summary,
             targets=targets,
@@ -567,6 +593,86 @@ class _PlanBuilder:
                 )
         return issues
 
+    def _digest_pin_plan_issues(
+        self,
+        matches: Sequence[Match],
+    ) -> list[DryRunPlanIssue]:
+        self.digest_pin_updates_by_stack = {}
+        if not self.config.digest_pin_updates:
+            return []
+
+        issues: list[DryRunPlanIssue] = []
+        for stack in _stacks_to_update(matches):
+            stack_matches = [
+                match for match in matches if match.stack.index == stack.index
+            ]
+            for match in stack_matches:
+                if match.target.desired_tag:
+                    continue
+                issues.append(
+                    DryRunPlanIssue(
+                        severity="error",
+                        code="digest-pin-tag-required",
+                        message=(
+                            "Digest-pin updates require a safe resolved tag. "
+                            "This line cannot be digest-pinned automatically."
+                        ),
+                        line_no=match.target.line_no,
+                        stack=match.stack.name,
+                        service=match.service,
+                    )
+                )
+
+            stack_updates: list[DigestPinUpdate] = []
+            resolver = DockerManifestResolver(self.docker, verbose=True)
+            verifier = DigestVerifier(
+                self.docker,
+                primary_resolver=resolver,
+                fallback_resolver=resolver,
+            )
+            for update in _tag_updates(stack_matches):
+                result = verifier.resolve_tag_digest(update.new_image)
+                if not result.ok:
+                    issues.append(
+                        DryRunPlanIssue(
+                            severity="error",
+                            code="digest-pin-digest-unavailable",
+                            message=(
+                                "Could not resolve digest-pin target "
+                                f"{update.new_image}: {result.reason}"
+                                + (f" ({result.error})" if result.error else "")
+                            ),
+                            stack=stack.name,
+                        )
+                    )
+                    continue
+                stack_updates.append(
+                    digest_pin_update_from_values(
+                        old_image=update.old_image,
+                        resolved_tag=update.desired_tag,
+                        planned_digest=result.digest,
+                        services=update.services,
+                    )
+                )
+
+            if stack_updates:
+                try:
+                    render_compose_digest_pins(
+                        stack.directory / stack.file,
+                        stack_updates,
+                    )
+                except ComposeTagRewriteError as exc:
+                    issues.append(
+                        DryRunPlanIssue(
+                            severity="error",
+                            code="compose-digest-pin-unsupported",
+                            message=f"Compose digest-pin rewrite is not safe: {exc}",
+                            stack=stack.name,
+                        )
+                    )
+            self.digest_pin_updates_by_stack[stack.index] = tuple(stack_updates)
+        return issues
+
     def _preflight_issues(self, matches: Sequence[Match]) -> list[DryRunPlanIssue]:
         issues: list[DryRunPlanIssue] = []
         for stack in _stacks_to_update(matches):
@@ -645,6 +751,21 @@ class _PlanBuilder:
                 )
                 for update in tag_updates
             )
+            digest_pin_updates = self.digest_pin_updates_by_stack.get(stack.index, ())
+            plan_digest_pin_updates = tuple(
+                DryRunPlanDigestPinUpdate(
+                    source_image=update.old_image,
+                    resolved_tag=update.resolved_tag,
+                    planned_digest=update.planned_digest,
+                    final_image=update.final_image,
+                    watch_tag=update.watch_tag,
+                    marker=update.marker,
+                    label_key=update.label_key,
+                    label_value=update.label_value,
+                    services=update.services,
+                )
+                for update in digest_pin_updates
+            )
             stacks.append(
                 DryRunPlanStack(
                     name=stack.name,
@@ -660,8 +781,14 @@ class _PlanBuilder:
                     force_recreate=scope.force_recreate,
                     up_no_deps=scope.up_no_deps,
                     tag_updates=plan_tag_updates,
-                    actions=self._actions(stack, scope, plan_tag_updates),
-                    lines=self._plan_lines(stack_matches),
+                    digest_pin_updates=plan_digest_pin_updates,
+                    actions=self._actions(
+                        stack,
+                        scope,
+                        plan_tag_updates,
+                        plan_digest_pin_updates,
+                    ),
+                    lines=self._plan_lines(stack_matches, digest_pin_updates),
                 )
             )
         return tuple(stacks)
@@ -696,9 +823,17 @@ class _PlanBuilder:
             )
         return tuple(targets)
 
-    def _plan_lines(self, matches: Sequence[Match]) -> tuple[DryRunPlanLine, ...]:
+    def _plan_lines(
+        self,
+        matches: Sequence[Match],
+        digest_pin_updates: Sequence[DigestPinUpdate] = (),
+    ) -> tuple[DryRunPlanLine, ...]:
         seen: set[tuple[int, str, str, str]] = set()
         lines: list[DryRunPlanLine] = []
+        digest_pins = {
+            (update.old_image, update.resolved_tag): update
+            for update in digest_pin_updates
+        }
         for match in matches:
             key = (
                 match.target.line_no,
@@ -709,11 +844,17 @@ class _PlanBuilder:
             if key in seen:
                 continue
             seen.add(key)
-            target_image = (
-                image_with_tag(match.compose_image, match.target.desired_tag)
-                if match.target.desired_tag
-                else match.resolved
+            digest_pin = digest_pins.get(
+                (match.compose_image, match.target.desired_tag)
             )
+            if digest_pin is not None:
+                target_image = digest_pin.final_image
+            else:
+                target_image = (
+                    image_with_tag(match.compose_image, match.target.desired_tag)
+                    if match.target.desired_tag
+                    else match.resolved
+                )
             lines.append(
                 DryRunPlanLine(
                     line_no=match.target.line_no,
@@ -725,7 +866,13 @@ class _PlanBuilder:
                     service=match.service,
                     digest=match.target.digest,
                     desired_tag=match.target.desired_tag,
-                    action="tag-update" if match.target.desired_tag else "update",
+                    action=(
+                        "digest-pin"
+                        if digest_pin is not None
+                        else "tag-update"
+                        if match.target.desired_tag
+                        else "update"
+                    ),
                 )
             )
         return tuple(lines)
@@ -735,6 +882,7 @@ class _PlanBuilder:
         stack: ComposeStack,
         scope: UpdateScope,
         tag_updates: Sequence[DryRunPlanTagUpdate],
+        digest_pin_updates: Sequence[DryRunPlanDigestPinUpdate],
     ) -> tuple[DryRunPlanAction, ...]:
         actions: list[DryRunPlanAction] = []
         for update in tag_updates:
@@ -757,6 +905,18 @@ class _PlanBuilder:
                 "Pull matched image updates",
             )
         )
+        for update in digest_pin_updates:
+            actions.append(
+                DryRunPlanAction(
+                    kind="compose-digest-pin",
+                    description=(
+                        f"Pin {update.source_image} to {update.final_image}, "
+                        f"write {update.marker}, and set {update.label_key} "
+                        f"for {', '.join(update.services)}"
+                    ),
+                    cwd=str(stack.directory),
+                )
+            )
         stop_services = (
             scope.stop_services if scope.stop_services is not None else scope.services
         )
@@ -1597,6 +1757,7 @@ def _cleanup_id(
     payload = {
         "version": 1,
         "docker_base": str(config.docker_base),
+        "digest_pin_updates": config.digest_pin_updates,
         "host_docker_base": "" if host_docker_base is None else str(host_docker_base),
         "items": [
             {

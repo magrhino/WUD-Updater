@@ -77,7 +77,7 @@ while (($#)); do
       ;;
   esac
 done
-printf 'OUT_UID=%s OUT_GID=%s OUT_GUID=%s WUD_LOCK_TIMEOUT=%s WUD_LOCK_HELD_BY_PARENT=%s WUD_DB_PATH=%s HOST_DOCKER_BASE=%s\n' "${OUT_UID:-}" "${OUT_GID:-}" "${OUT_GUID:-}" "${WUD_LOCK_TIMEOUT:-}" "${WUD_LOCK_HELD_BY_PARENT:-}" "${WUD_DB_PATH:-}" "${HOST_DOCKER_BASE:-}" >> "${FAKE_UPDATER_LOG:?FAKE_UPDATER_LOG is required}"
+printf 'OUT_UID=%s OUT_GID=%s OUT_GUID=%s WUD_LOCK_TIMEOUT=%s WUD_LOCK_HELD_BY_PARENT=%s WUD_DB_PATH=%s HOST_DOCKER_BASE=%s WUD_DIGEST_PIN_UPDATES=%s\n' "${OUT_UID:-}" "${OUT_GID:-}" "${OUT_GUID:-}" "${WUD_LOCK_TIMEOUT:-}" "${WUD_LOCK_HELD_BY_PARENT:-}" "${WUD_DB_PATH:-}" "${HOST_DOCKER_BASE:-}" "${WUD_DIGEST_PIN_UPDATES:-}" >> "${FAKE_UPDATER_LOG:?FAKE_UPDATER_LOG is required}"
 if [[ "${FAKE_UPDATER_ASSERT_LOCK:-}" = "1" ]]; then
   if [[ "${WUD_LOCK_HELD_BY_PARENT:-}" != "1" ]]; then
     printf 'missing WUD_LOCK_HELD_BY_PARENT\n' >> "$FAKE_UPDATER_LOG"
@@ -412,6 +412,18 @@ test_yes_passes_lock_timeout_through_sudo_env(){
   teardown_case
 }
 
+test_yes_passes_digest_pin_updates_through_sudo_env(){
+  setup_case
+  printf 'repo/app:latest\n' > "$WUD_FILE"
+
+  run_updates WUD_DIGEST_PIN_UPDATES=true --yes --base "$TEST_TMP/docker"
+
+  assert_status 0
+  grep -q -- "WUD_DIGEST_PIN_UPDATES=true" "$TEST_TMP/sudo.log" || fail "sudo did not receive digest-pin env"
+  grep -q -- "WUD_DIGEST_PIN_UPDATES=true" "$TEST_TMP/updater.log" || fail "updater did not receive digest-pin env"
+  teardown_case
+}
+
 test_yes_passes_db_path_through_sudo_env(){
   setup_case
   local db_path="$TEST_TMP/state/wud-updater.sqlite"
@@ -726,6 +738,7 @@ main(){
   run_test test_log_dir_cli_overrides_environment
   run_test test_yes_passes_owner_config_through_sudo_env
   run_test test_yes_passes_lock_timeout_through_sudo_env
+  run_test test_yes_passes_digest_pin_updates_through_sudo_env
   run_test test_yes_passes_db_path_through_sudo_env
   run_test test_yes_passes_host_docker_base_through_sudo_env
   run_test test_yes_passes_allow_tag_updates_flag

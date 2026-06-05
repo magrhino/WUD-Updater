@@ -683,6 +683,16 @@ def test_settings_reports_effective_non_secret_configuration(
         "restart_required": False,
         "disabled_reason": "",
     }
+    assert managed["digest_pin_updates"] == {
+        "key": "digest_pin_updates",
+        "value": "false",
+        "default_value": "false",
+        "source": "default",
+        "editable": True,
+        "allowed_values": ["false", "true"],
+        "restart_required": False,
+        "disabled_reason": "",
+    }
     for value in secret_values.values():
         assert value not in serialized
 
@@ -779,6 +789,36 @@ def test_managed_settings_rejects_uneditable_or_invalid_values_without_partial_w
     assert managed["theme_preference"]["source"] == "default"
 
 
+def test_managed_digest_pin_updates_env_guard_disables_webui_edit(
+    tmp_path: Path,
+) -> None:
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+            "WUD_DIGEST_PIN_UPDATES": "true",
+        },
+    )
+    headers = _csrf_headers(client)
+
+    settings_response = client.get("/api/v1/settings")
+    managed = {entry["key"]: entry for entry in settings_response.json()["managed"]}
+    response = client.post(
+        "/api/v1/settings/managed",
+        json={"values": {"digest_pin_updates": "false"}},
+        headers=headers,
+    )
+
+    assert managed["digest_pin_updates"]["value"] == "true"
+    assert managed["digest_pin_updates"]["editable"] is False
+    assert "Unset it to manage digest-pin updates" in managed[
+        "digest_pin_updates"
+    ]["disabled_reason"]
+    assert response.status_code == 422
+    assert response.json()["detail"] == managed["digest_pin_updates"]["disabled_reason"]
+
+
 def test_managed_compose_ignore_paths_env_guard_disables_webui_edit(
     tmp_path: Path,
 ) -> None:
@@ -826,6 +866,7 @@ def test_managed_settings_persist_and_write_audit_records(tmp_path: Path) -> Non
                 "theme_preference": "dark",
                 "onboarding_checklist": "dismissed",
                 "compose_ignore_paths": "old, archive/disabled",
+                "digest_pin_updates": "true",
             }
         },
         headers=headers,
@@ -841,6 +882,8 @@ def test_managed_settings_persist_and_write_audit_records(tmp_path: Path) -> Non
     assert managed["onboarding_checklist"]["source"] == "configured"
     assert managed["compose_ignore_paths"]["value"] == "old, archive/disabled"
     assert managed["compose_ignore_paths"]["source"] == "configured"
+    assert managed["digest_pin_updates"]["value"] == "true"
+    assert managed["digest_pin_updates"]["source"] == "configured"
 
     db_path = tmp_path / "state" / "wud.sqlite"
     with connect_db(db_path) as conn:
@@ -852,6 +895,9 @@ def test_managed_settings_persist_and_write_audit_records(tmp_path: Path) -> Non
         ).fetchone()
         compose_ignore_paths = conn.execute(
             "SELECT value FROM web_settings WHERE key = 'compose.ignore_paths'"
+        ).fetchone()
+        digest_pin_updates = conn.execute(
+            "SELECT value FROM web_settings WHERE key = 'compose.digest_pin_updates'"
         ).fetchone()
         run = conn.execute(
             "SELECT * FROM update_runs WHERE id = ?",
@@ -867,20 +913,28 @@ def test_managed_settings_persist_and_write_audit_records(tmp_path: Path) -> Non
     assert theme["value"] == "dark"
     assert onboarding["value"]
     assert compose_ignore_paths["value"] == "old, archive/disabled"
+    assert digest_pin_updates["value"] == "true"
     assert run["mode"] == "web-settings"
     assert run_metadata["operation"] == "update_managed_settings"
     assert run_metadata["target"] == {
-        "keys": ["compose_ignore_paths", "onboarding_checklist", "theme_preference"]
+        "keys": [
+            "compose_ignore_paths",
+            "digest_pin_updates",
+            "onboarding_checklist",
+            "theme_preference",
+        ]
     }
     assert event_metadata["before"] == {
         "theme_preference": "system",
         "onboarding_checklist": "visible",
         "compose_ignore_paths": "old",
+        "digest_pin_updates": "false",
     }
     assert event_metadata["after"] == {
         "theme_preference": "dark",
         "onboarding_checklist": "dismissed",
         "compose_ignore_paths": "old, archive/disabled",
+        "digest_pin_updates": "true",
     }
 
     reset = client.post(

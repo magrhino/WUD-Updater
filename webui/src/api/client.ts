@@ -165,6 +165,18 @@ export interface PlanTagUpdate {
   services: string[];
 }
 
+export interface PlanDigestPinUpdate {
+  source_image: string;
+  resolved_tag: string;
+  planned_digest: string;
+  final_image: string;
+  watch_tag: string;
+  marker: string;
+  label_key: string;
+  label_value: string;
+  services: string[];
+}
+
 export interface PlanAction {
   kind: string;
   description: string;
@@ -184,6 +196,7 @@ export interface PlanStack {
   force_recreate: boolean;
   up_no_deps: boolean;
   tag_updates: PlanTagUpdate[];
+  digest_pin_updates: PlanDigestPinUpdate[];
   actions: PlanAction[];
   lines: PlanLine[];
 }
@@ -242,6 +255,7 @@ export interface PlanResponse {
   source_file: string;
   mode: string;
   max_wait: number;
+  digest_pin_updates: boolean;
   selected_line_numbers: number[];
   summary: PlanSummary;
   targets: PlanTarget[];

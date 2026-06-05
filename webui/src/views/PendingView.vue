@@ -81,6 +81,7 @@ type ApplyJobSnapshotLine = {
   lineNo: number;
   serviceLabel: string;
   tagRewriteLabel: string;
+  digestPinLabel: string;
   composeImage: string;
   targetImage: string;
 };
@@ -529,17 +530,36 @@ const planTagUpdates = computed(() =>
     stack.tag_updates.map((update) => ({ stack: stack.name, update })),
   ) ?? [],
 );
+const planDigestPinUpdates = computed(() =>
+  webui.plan?.stacks.flatMap((stack) =>
+    (stack.digest_pin_updates ?? []).map((update) => ({ stack: stack.name, update })),
+  ) ?? [],
+);
 const plannedTagRewriteLines = computed(() =>
-  planLines.value.filter(({ line }) => Boolean(line.desired_tag)),
+  planLines.value.filter(
+    ({ line }) => Boolean(line.desired_tag) && line.action !== "digest-pin",
+  ),
+);
+const plannedDigestPinLines = computed(() =>
+  planLines.value.filter(({ line }) => line.action === "digest-pin"),
 );
 const visibleTagRewriteCount = computed(
   () => planTagUpdates.value.length || plannedTagRewriteLines.value.length,
+);
+const visibleDigestPinCount = computed(
+  () => planDigestPinUpdates.value.length || plannedDigestPinLines.value.length,
 );
 const preflightTagRewriteNotice = computed(() => {
   if (!updateIntent.value?.allowTagUpdates || !visibleTagRewriteCount.value || !webui.plan) {
     return "";
   }
   return `${pluralize(visibleTagRewriteCount.value, "tag rewrite")} will be applied before recreating selected services.`;
+});
+const preflightDigestPinNotice = computed(() => {
+  if (!visibleDigestPinCount.value || !webui.plan?.digest_pin_updates) {
+    return "";
+  }
+  return `${pluralize(visibleDigestPinCount.value, "digest-pin rewrite")} will pin approved tag updates after pull verification.`;
 });
 const applyJobAlertType = computed(() => {
   if (webui.applyJob?.status === "failure") {
@@ -1509,6 +1529,7 @@ function createApplyJobSnapshot(): ApplyJobPlanSnapshot | null {
       lineNo: line.line_no,
       serviceLabel: planLineServiceLabel(stack, line),
       tagRewriteLabel: planLineTagRewriteLabel(line),
+      digestPinLabel: planLineDigestPinLabel(line),
       composeImage: line.compose_image,
       targetImage: line.target_image,
     })),
@@ -1805,7 +1826,14 @@ function planLineServiceLabel(stack: string, line: PlanLine): string {
 }
 
 function planLineTagRewriteLabel(line: PlanLine): string {
-  if (!line.desired_tag) {
+  if (!line.desired_tag || line.action === "digest-pin") {
+    return "";
+  }
+  return `${line.compose_image} -> ${line.target_image}`;
+}
+
+function planLineDigestPinLabel(line: PlanLine): string {
+  if (line.action !== "digest-pin") {
     return "";
   }
   return `${line.compose_image} -> ${line.target_image}`;
@@ -2064,6 +2092,10 @@ watch(
                   <span v-if="line.tagRewriteLabel" class="tag-rewrite-detail">
                     <n-tag size="small" type="warning">Tag rewrite</n-tag>
                     {{ line.tagRewriteLabel }}
+                  </span>
+                  <span v-else-if="line.digestPinLabel" class="tag-rewrite-detail">
+                    <n-tag size="small" type="info">Digest pin</n-tag>
+                    {{ line.digestPinLabel }}
                   </span>
                   <template v-else>
                     <code>{{ line.composeImage }}</code>
@@ -2885,6 +2917,13 @@ watch(
           {{ preflightTagRewriteNotice }}
         </n-alert>
         <n-alert
+          v-if="preflightDigestPinNotice"
+          class="preflight-block"
+          type="info"
+        >
+          {{ preflightDigestPinNotice }}
+        </n-alert>
+        <n-alert
           v-if="cleanupDisabledMessage"
           class="preflight-block"
           type="warning"
@@ -2946,6 +2985,13 @@ watch(
                   <n-tag size="small" type="warning">Tag rewrite</n-tag>
                   {{ planLineTagRewriteLabel(line) }}
                 </span>
+                <span
+                  v-else-if="planLineDigestPinLabel(line)"
+                  class="tag-rewrite-detail"
+                >
+                  <n-tag size="small" type="info">Digest pin</n-tag>
+                  {{ planLineDigestPinLabel(line) }}
+                </span>
                 <template v-else>
                   <code>{{ line.compose_image }}</code>
                   <span aria-hidden="true"> -> </span>
@@ -2989,6 +3035,13 @@ watch(
                   <span v-if="planLineTagRewriteLabel(line)" class="tag-rewrite-detail">
                     <n-tag size="small" type="warning">Tag rewrite</n-tag>
                     {{ planLineTagRewriteLabel(line) }}
+                  </span>
+                  <span
+                    v-else-if="planLineDigestPinLabel(line)"
+                    class="tag-rewrite-detail"
+                  >
+                    <n-tag size="small" type="info">Digest pin</n-tag>
+                    {{ planLineDigestPinLabel(line) }}
                   </span>
                   <template v-else>
                     <code>{{ line.compose_image }}</code>

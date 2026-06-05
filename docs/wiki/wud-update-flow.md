@@ -48,6 +48,16 @@ Interpolated image values such as `repo/app:${TAG}`, inherited image values, and
 ambiguous Compose source layouts fail closed and leave the WUD entry pending for
 manual review.
 
+When `WUD_DIGEST_PIN_UPDATES=true`, approved tag updates are planned as
+digest-pin rewrites. The updater resolves the proposed tag to a tag/index digest
+during dry-run planning, temporarily rewrites Compose to the resolved tag for
+`docker compose pull`, verifies the pulled local image against that planned
+digest, then writes the final image as `repo/app@sha256:<digest>`. The Compose
+edit also adds `# wud-updater.resolved-tag=<tag>` above `image:` and sets
+`wud.tag.include` to an exact regex for the resolved tag. Lines without a safe
+resolved tag, custom compound `wud.tag.include` regexes, YAML anchors/aliases,
+interpolation, and inherited image values fail closed.
+
 Older lines with a trailing `sha256=...` token are preserved as raw file lines
 when cleanup rewrites the todo file. The display wrappers hide that suffix when
 showing pending entries.
@@ -84,6 +94,12 @@ Apply tag updates explicitly:
 
 ```bash
 updates --yes --allow-tag-updates
+```
+
+Apply approved tag updates as digest-pinned Compose references:
+
+```bash
+WUD_DIGEST_PIN_UPDATES=true updates --yes --allow-tag-updates
 ```
 
 By default, matched Compose services are recreated without their dependencies.

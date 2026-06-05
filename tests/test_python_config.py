@@ -26,6 +26,7 @@ class LoadConfigTests(unittest.TestCase):
         self.assertEqual(config.lock_timeout, 30)
         self.assertEqual(config.timezone_name, "UTC")
         self.assertEqual(config.compose_ignore_paths, (Path("old"),))
+        self.assertFalse(config.digest_pin_updates)
         self.assertIsNone(config.out_uid)
         self.assertIsNone(config.out_gid)
 
@@ -41,6 +42,7 @@ class LoadConfigTests(unittest.TestCase):
                 "WUD_LOCK_TIMEOUT": "2",
                 "WUD_TIMEZONE": "America/Chicago",
                 "WUD_COMPOSE_IGNORE_PATHS": "old, archive/disabled,old",
+                "WUD_DIGEST_PIN_UPDATES": "true",
                 "OUT_UID": "1000",
                 "OUT_GID": "1001",
             },
@@ -59,6 +61,7 @@ class LoadConfigTests(unittest.TestCase):
             config.compose_ignore_paths,
             (Path("old"), Path("archive/disabled")),
         )
+        self.assertTrue(config.digest_pin_updates)
         self.assertEqual(config.out_uid, 1000)
         self.assertEqual(config.out_gid, 1001)
 
@@ -75,6 +78,7 @@ class LoadConfigTests(unittest.TestCase):
                 "WUD_LOCK_TIMEOUT": "",
                 "WUD_TIMEZONE": "",
                 "WUD_COMPOSE_IGNORE_PATHS": "",
+                "WUD_DIGEST_PIN_UPDATES": "",
             },
             home="/home/wud",
         )
@@ -91,6 +95,7 @@ class LoadConfigTests(unittest.TestCase):
         self.assertEqual(config.lock_timeout, 30)
         self.assertEqual(config.timezone_name, "UTC")
         self.assertEqual(config.compose_ignore_paths, ())
+        self.assertFalse(config.digest_pin_updates)
 
     def test_db_path_defaults_under_configured_log_dir(self) -> None:
         config = load_config({"WUD_LOG_DIR": "/srv/logs"}, home="/home/wud")
@@ -159,6 +164,21 @@ class LoadConfigTests(unittest.TestCase):
     def test_update_mode_is_validated(self) -> None:
         with self.assertRaisesRegex(ConfigError, "WUD_UPDATE_MODE"):
             load_config({"WUD_UPDATE_MODE": "restart"}, home="/home/wud")
+
+    def test_digest_pin_updates_bool_is_validated(self) -> None:
+        true_config = load_config(
+            {"WUD_DIGEST_PIN_UPDATES": "yes"},
+            home="/home/wud",
+        )
+        false_config = load_config(
+            {"WUD_DIGEST_PIN_UPDATES": "off"},
+            home="/home/wud",
+        )
+
+        self.assertTrue(true_config.digest_pin_updates)
+        self.assertFalse(false_config.digest_pin_updates)
+        with self.assertRaisesRegex(ConfigError, "WUD_DIGEST_PIN_UPDATES"):
+            load_config({"WUD_DIGEST_PIN_UPDATES": "maybe"}, home="/home/wud")
 
     def test_timezone_is_validated(self) -> None:
         with self.assertRaisesRegex(ConfigError, "WUD_TIMEZONE"):

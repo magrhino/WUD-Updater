@@ -16,6 +16,8 @@ DEFAULT_LOG_DIR = "./logs"
 DEFAULT_TIMEZONE = "UTC"
 COMPOSE_IGNORE_PATHS_ENV = "WUD_COMPOSE_IGNORE_PATHS"
 DEFAULT_COMPOSE_IGNORE_PATHS = (Path("old"),)
+DIGEST_PIN_UPDATES_ENV = "WUD_DIGEST_PIN_UPDATES"
+DEFAULT_DIGEST_PIN_UPDATES = False
 VALID_UPDATE_MODES = frozenset({"pause", "stop", "live"})
 
 
@@ -34,6 +36,7 @@ class UpdaterConfig:
     lock_timeout: int
     timezone_name: str
     compose_ignore_paths: tuple[Path, ...]
+    digest_pin_updates: bool
     out_uid: int | None
     out_gid: int | None
 
@@ -60,6 +63,22 @@ def _parse_optional_numeric_id(name: str, value: str | None) -> int | None:
     if parsed < 0:
         raise ConfigError(f"{name} must be zero or greater")
     return parsed
+
+
+def parse_bool_env(
+    name: str,
+    value: str | None,
+    *,
+    default: bool = False,
+) -> bool:
+    if value is None or value == "":
+        return default
+    normalized = value.strip().lower()
+    if normalized in {"1", "true", "yes", "on"}:
+        return True
+    if normalized in {"0", "false", "no", "off"}:
+        return False
+    raise ConfigError(f"{name} must be true or false")
 
 
 def _parse_timezone_name(value: str | None) -> str:
@@ -165,6 +184,11 @@ def load_config(
     compose_ignore_paths = parse_compose_ignore_paths(
         env.get(COMPOSE_IGNORE_PATHS_ENV)
     )
+    digest_pin_updates = parse_bool_env(
+        DIGEST_PIN_UPDATES_ENV,
+        env.get(DIGEST_PIN_UPDATES_ENV),
+        default=DEFAULT_DIGEST_PIN_UPDATES,
+    )
 
     out_uid = _parse_optional_numeric_id("OUT_UID", env.get("OUT_UID"))
     out_gid_value = env.get("OUT_GID") or env.get("OUT_GUID")
@@ -182,6 +206,7 @@ def load_config(
         lock_timeout=lock_timeout,
         timezone_name=timezone_name,
         compose_ignore_paths=compose_ignore_paths,
+        digest_pin_updates=digest_pin_updates,
         out_uid=out_uid,
         out_gid=out_gid,
     )
