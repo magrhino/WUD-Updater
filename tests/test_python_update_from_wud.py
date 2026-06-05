@@ -259,6 +259,13 @@ class PythonUpdateFromWudTests(unittest.TestCase):
             encoding="utf-8",
         )
 
+    def set_manifest_verbose_stdout(self, image: str, payload: object) -> None:
+        safe = safe_name(image)
+        (self.fake_root / "manifests" / f"{safe}.verbose_stdout").write_text(
+            json.dumps(payload),
+            encoding="utf-8",
+        )
+
     def run_direct(
         self,
         *,
@@ -1521,6 +1528,10 @@ class PythonUpdateFromWudTests(unittest.TestCase):
         self.set_image_state("repo/app@sha256:index", "new", "sha256:index")
         self.set_manifest_stdout(
             "docker.io/repo/app:2.0",
+            manifest_index("sha256:child"),
+        )
+        self.set_manifest_verbose_stdout(
+            "docker.io/repo/app:2.0",
             manifest_index_digest("sha256:index", "sha256:child"),
         )
 
@@ -1537,11 +1548,11 @@ class PythonUpdateFromWudTests(unittest.TestCase):
         self.assertIn("wud.tag.include=^2\\.0$$", content)
         calls = self.calls()
         self.assertRegex(calls, r"manifest inspect --verbose docker.io/repo/app:2.0")
-        self.assertRegex(calls, r"manifest inspect docker.io/repo/app:2.0")
         self.assertEqual(
             calls.count("manifest inspect --verbose docker.io/repo/app:2.0"),
-            1,
+            2,
         )
+        self.assertNotRegex(calls, r"(?m)^manifest inspect docker\.io/repo/app:2\.0$")
         self.assertRegex(calls, r"compose -f docker-compose.yml pull app")
         events = self.db_rows("SELECT * FROM update_events")
         known = self.db_rows("SELECT * FROM known_images")
@@ -1983,6 +1994,62 @@ class PythonUpdateFromWudTests(unittest.TestCase):
         self.assertIn("# wud-updater.resolved-tag=latest", content)
         self.assertIn("image: repo/app@sha256:child", content)
         self.assertIn("wud.tag.include=^latest$$", content)
+        self.assertRegex(self.calls(), r"compose -f docker-compose.yml pull app")
+        events = self.db_rows("SELECT * FROM update_events")
+        self.assertEqual(events[0]["target_image"], "repo/app@sha256:child")
+
+    def test_digest_pin_apply_updates_existing_tagged_digest_pin_with_tag_ref(self) -> None:
+        self.wud_file.write_text(
+            "repo/app:latest@sha256:child\n",
+            encoding="utf-8",
+        )
+        stack_dir = self.make_stack(
+            "app",
+            [("app", "repo/app:latest@sha256:old", "cid-app")],
+        )
+        compose_file = stack_dir / "docker-compose.yml"
+        compose_file.write_text(
+            "\n".join(
+                [
+                    "services:",
+                    "  app:",
+                    "    # wud-updater.resolved-tag=latest",
+                    "    image: repo/app:latest@sha256:old",
+                    "    labels:",
+                    "      - wud.tag.include=^latest$$",
+                    "",
+                ]
+            ),
+            encoding="utf-8",
+        )
+        self.set_image_state(
+            "repo/app:latest@sha256:old",
+            "sha256:old-config",
+            "sha256:old",
+        )
+        self.set_image_after_pull(
+            "repo/app:latest",
+            "sha256:new-config",
+            "sha256:child",
+        )
+        self.set_image_state(
+            "repo/app@sha256:child",
+            "sha256:new-config",
+            "sha256:child",
+        )
+        self.set_manifest_stdout(
+            "docker.io/repo/app:latest",
+            manifest_index_digest("sha256:index", "sha256:child"),
+        )
+
+        status, stdout, stderr = self.run_direct(digest_pin_updates=True)
+
+        self.assertEqual(status, 0, stderr + stdout)
+        self.assertEqual(self.wud_file.read_text(encoding="utf-8"), "")
+        content = compose_file.read_text(encoding="utf-8")
+        self.assertIn("# wud-updater.resolved-tag=latest", content)
+        self.assertIn("image: repo/app@sha256:child", content)
+        self.assertNotIn("image: repo/app:latest@sha256:old", content)
         self.assertRegex(self.calls(), r"compose -f docker-compose.yml pull app")
         events = self.db_rows("SELECT * FROM update_events")
         self.assertEqual(events[0]["target_image"], "repo/app@sha256:child")

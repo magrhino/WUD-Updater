@@ -2485,8 +2485,14 @@ class UpdateFromWudRunner:
         images: Sequence[str],
     ) -> bool:
         ok = True
+        resolver = DockerManifestResolver(self.docker, verbose=True)
+        tag_verifier = DigestVerifier(
+            self.docker,
+            primary_resolver=resolver,
+            fallback_resolver=resolver,
+        )
         for update in updates:
-            current = self.digest_verifier.verify_tag_digest(
+            current = tag_verifier.verify_tag_digest(
                 update.resolved_image,
                 update.planned_digest,
             )
@@ -4719,7 +4725,6 @@ def _digest_pin_tag_materialization_updates(
         if (
             update.old_image == update.resolved_image
             or "@sha256:" not in update.old_image
-            or image_has_tag(update.old_image)
         ):
             continue
         tag_updates.append(

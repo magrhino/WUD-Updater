@@ -545,6 +545,13 @@ manifest_cmd(){
     [[ -f "$file" ]] && cat "$file" >&2
     return 19
   fi
+  if [[ "$verbose" -eq 1 ]]; then
+    file="$(manifest_file "$image" verbose_stdout)"
+    if [[ -f "$file" ]]; then
+      cat "$file"
+      return 0
+    fi
+  fi
   file="$(manifest_file "$image" stdout)"
   if [[ -f "$file" ]]; then
     cat "$file"
