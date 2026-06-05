@@ -1,6 +1,7 @@
 import { createPinia, setActivePinia } from "pinia";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { webApi } from "../src/api/client";
 import { useAuthStore } from "../src/stores/auth";
 import {
   APPLY_JOB_RECOVERY_MESSAGE,
@@ -21,8 +22,10 @@ import {
   selfUpdatePrepareResponse,
   selfUpdateResponse,
   settingsResponse,
+  servicePolicy,
   statusResponse,
   stateOperationResponse,
+  snooze,
   updateTargetsResponse,
 } from "./helpers/fixtures";
 
@@ -224,6 +227,22 @@ describe("webui store", () => {
 
     expect(webui.updateTargets?.items[0]?.service_key).toBe("media/app");
     expect(fetchMock.mock.calls[0][0]).toBe("/api/v1/update-targets");
+  });
+
+  it("keeps fulfilled pending safety cue data when another cue source fails", async () => {
+    const existingPolicy = servicePolicy({ service_key: "media/app" });
+    const loadedSnooze = snooze({ service_key: "media/radarr" });
+    vi.spyOn(webApi, "servicePolicies").mockRejectedValue(
+      new Error("service policies unavailable"),
+    );
+    vi.spyOn(webApi, "snoozes").mockResolvedValue([loadedSnooze]);
+    const webui = useWebuiStore();
+    webui.servicePolicies = [existingPolicy];
+
+    await webui.loadPendingSafetyCues();
+
+    expect(webui.servicePolicies).toEqual([existingPolicy]);
+    expect(webui.snoozes).toEqual([loadedSnooze]);
   });
 
   it("passes csrf from auth store to state operations", async () => {

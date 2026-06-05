@@ -995,7 +995,7 @@ function riskCues(row: PendingItem): SafetyCue[] {
     }
   }
 
-  if (!row.desired_tag && row.digest && row.current_tag && row.current_tag !== "latest") {
+  if (!row.desired_tag && row.digest) {
     addCue("digest-only", "Digest-only", "info");
   }
 
@@ -2668,6 +2668,23 @@ watch(
                   {{ displayDigest(item.digest) }}
                 </code>
                 <span v-else>None</span>
+              </dd>
+            </div>
+            <div>
+              <dt>Safety cues</dt>
+              <dd>
+                <div v-if="riskCues(item).length" class="risk-badges-container">
+                  <n-tag
+                    v-for="cue in riskCues(item)"
+                    :key="`${item.line_no}-${cue.key}`"
+                    size="small"
+                    :type="cue.type"
+                    class="safety-badge"
+                  >
+                    {{ cue.label }}
+                  </n-tag>
+                </div>
+                <span v-else class="risk-badges-muted">None</span>
               </dd>
             </div>
             <div>

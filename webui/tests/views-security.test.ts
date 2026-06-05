@@ -88,6 +88,21 @@ function emitSelectValue(
   select.vm.$emit("update:value", value);
 }
 
+function mockMobileViewport(): void {
+  window.matchMedia = vi.fn().mockImplementation((query: string) => ({
+    matches:
+      !query.includes("prefers-") &&
+      (query.includes("max-width") || query.includes("width <")),
+    media: query,
+    onchange: null,
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+    addListener: vi.fn(),
+    removeListener: vi.fn(),
+    dispatchEvent: vi.fn(),
+  }));
+}
+
 function mockPendingLifecycle(webui: ReturnType<typeof useWebuiStore>) {
   vi.spyOn(webui, "loadPending").mockResolvedValue();
   vi.spyOn(webui, "loadReleaseNotes").mockResolvedValue();
@@ -904,6 +919,7 @@ describe("mutating WebUI views", () => {
     expect(previewText).toContain("ghcr.io/example/wud-updater:2.0");
     expect(card.text()).toContain("Recreate stack");
     expect(card.text()).toContain("Mutable latest");
+    expect(card.text()).toContain("Digest-only");
     expect(card.text()).toContain("Stack restart");
     expect(card.find(".stack-card-tags").text()).not.toContain(
       "radarr, wud-updater",
@@ -1079,6 +1095,36 @@ describe("mutating WebUI views", () => {
       "Stack grouping is unavailable. Showing pending file order.",
     );
     expect(wrapper.find('[role="table"]').exists()).toBe(true);
+  });
+
+  it("shows safety cues in the mobile pending file order fallback", () => {
+    mockMobileViewport();
+    const { pinia, webui } = setupStores(true);
+    webui.pending = {
+      ...pendingResponse([
+        pendingItem({
+          image: "redis:latest@sha256:abc",
+          repo: "redis",
+          current_tag: "latest",
+          desired_tag: "",
+          digest: "sha256:abc",
+        }),
+      ]),
+      grouping: {
+        status: "unavailable",
+        groups: [],
+        unmatched: [],
+        warnings: [],
+      },
+    };
+    mockPendingLifecycle(webui);
+    const wrapper = mountWithApp(PendingView, { pinia });
+    const card = wrapper.find(".mobile-card");
+
+    expect(wrapper.find('[role="table"]').exists()).toBe(false);
+    expect(card.text()).toContain("Safety cues");
+    expect(card.text()).toContain("Digest-only");
+    expect(card.text()).toContain("Mutable latest");
   });
 
   it("shows a pending loading skeleton before queue data is available", () => {

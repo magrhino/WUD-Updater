@@ -532,7 +532,7 @@ test("login from a protected route uses native credential fields and returns the
   await password.fill("password");
   await page.getByRole("button", { name: /Sign in/ }).click();
 
-  await expect(page.getByRole("heading", { name: "Pending updates" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Pending updates", exact: true })).toBeVisible();
   expect(state.calls.filter((call) => call.path === "/api/v1/auth/session")).toHaveLength(1);
 });
 

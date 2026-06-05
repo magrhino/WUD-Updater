@@ -304,15 +304,15 @@ export const useWebuiStore = defineStore("webui", () => {
   }
 
   async function loadPendingSafetyCues(): Promise<void> {
-    try {
-      const [nextServicePolicies, nextSnoozes] = await Promise.all([
-        webApi.servicePolicies(),
-        webApi.snoozes("active"),
-      ]);
-      servicePolicies.value = nextServicePolicies;
-      snoozes.value = nextSnoozes;
-    } catch {
-      // Pending rows remain usable when optional cue sources are unavailable.
+    const [nextServicePolicies, nextSnoozes] = await Promise.allSettled([
+      webApi.servicePolicies(),
+      webApi.snoozes("active"),
+    ]);
+    if (nextServicePolicies.status === "fulfilled") {
+      servicePolicies.value = nextServicePolicies.value;
+    }
+    if (nextSnoozes.status === "fulfilled") {
+      snoozes.value = nextSnoozes.value;
     }
   }
 
