@@ -761,6 +761,7 @@ class UpdateFromWudRunner:
                         target,
                         resolved,
                         allow_repo,
+                        allow_digest_pin_rematch=self.options.digest_pin_updates,
                     )
                     if services is None:
                         continue
@@ -4139,9 +4140,13 @@ def _services_for_target_match(
     target: WudTarget,
     resolved: str,
     allow_repo: bool,
+    *,
+    allow_digest_pin_rematch: bool = False,
 ) -> tuple[str, ...] | None:
     if image_matches_resolved_target(image, resolved, allow_repo):
         return _services_for_image(service_images, image)
+    if not allow_digest_pin_rematch:
+        return None
     services = _digest_pin_rematch_services(service_images, image, target)
     if services:
         return services

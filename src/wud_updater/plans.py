@@ -381,6 +381,7 @@ class _PlanBuilder:
                     stacks,
                     self.docker,
                     allow_tag_updates=True,
+                    digest_pin_updates=self.config.digest_pin_updates,
                 )
                 cleanup_diagnostics = _unmatched_diagnostics(
                     self.config,
@@ -485,6 +486,7 @@ class _PlanBuilder:
             stacks,
             self.docker,
             allow_tag_updates=self.allow_tag_updates,
+            digest_pin_updates=self.config.digest_pin_updates,
         )
 
     def _unmatched_issues(
@@ -1180,6 +1182,7 @@ def build_unmatched_cleanup(
         stacks,
         docker,
         allow_tag_updates=True,
+        digest_pin_updates=config.digest_pin_updates,
     )
     diagnostics = _unmatched_diagnostics(
         config,
@@ -1229,6 +1232,7 @@ def resolve_pending_groups(
         stacks,
         docker,
         allow_tag_updates=True,
+        digest_pin_updates=config.digest_pin_updates,
     )
     diagnostics = _unmatched_diagnostics(
         config,
@@ -1266,6 +1270,7 @@ def _match_targets(
     docker: DockerCli,
     *,
     allow_tag_updates: bool,
+    digest_pin_updates: bool,
 ) -> tuple[list[Match], list[DryRunPlanSkipped]]:
     container_images = {item.name: item.image for item in docker.try_container_images()}
     matches: list[Match] = []
@@ -1290,6 +1295,7 @@ def _match_targets(
                     target,
                     resolved,
                     allow_repo,
+                    allow_digest_pin_rematch=digest_pin_updates,
                 )
                 if services is None:
                     continue

@@ -1923,6 +1923,92 @@ class PythonUpdateFromWudTests(unittest.TestCase):
         events = self.db_rows("SELECT * FROM update_events")
         self.assertEqual(events[0]["target_image"], "repo/app@sha256:child")
 
+    def test_digest_pin_disabled_does_not_rematch_existing_tagged_digest_pin(self) -> None:
+        self.wud_file.write_text(
+            "repo/app:latest@sha256:child\n",
+            encoding="utf-8",
+        )
+        stack_dir = self.make_stack("app", [("app", "repo/app@sha256:old", "cid-app")])
+        compose_file = stack_dir / "docker-compose.yml"
+        compose_file.write_text(
+            "\n".join(
+                [
+                    "services:",
+                    "  app:",
+                    "    # wud-updater.resolved-tag=latest",
+                    "    image: repo/app@sha256:old",
+                    "    labels:",
+                    "      - wud.tag.include=^latest$$",
+                    "",
+                ]
+            ),
+            encoding="utf-8",
+        )
+        self.set_image_state(
+            "repo/app@sha256:old",
+            "sha256:old-config",
+            "sha256:old",
+        )
+
+        status, stdout, stderr = self.run_direct(digest_pin_updates=False)
+
+        self.assertEqual(status, 0, stderr + stdout)
+        self.assertEqual(
+            self.wud_file.read_text(encoding="utf-8"),
+            "repo/app:latest@sha256:child\n",
+        )
+        self.assertIn(
+            "image: repo/app@sha256:old",
+            compose_file.read_text(encoding="utf-8"),
+        )
+        self.assertNotRegex(self.calls(), r"compose -f docker-compose.yml pull app")
+        pending = self.db_rows("SELECT * FROM pending_updates")
+        self.assertEqual(pending[0]["status"], "pending")
+        self.assertEqual(pending[0]["status_reason"], "unmatched")
+
+    def test_digest_pin_plan_does_not_rematch_existing_pin_when_disabled(self) -> None:
+        self.wud_file.write_text(
+            "repo/app:latest@sha256:child\n",
+            encoding="utf-8",
+        )
+        stack_dir = self.make_stack("app", [("app", "repo/app@sha256:old", "cid-app")])
+        (stack_dir / "docker-compose.yml").write_text(
+            "\n".join(
+                [
+                    "services:",
+                    "  app:",
+                    "    # wud-updater.resolved-tag=latest",
+                    "    image: repo/app@sha256:old",
+                    "    labels:",
+                    "      - wud.tag.include=^latest$$",
+                    "",
+                ]
+            ),
+            encoding="utf-8",
+        )
+        config = load_config(
+            {
+                "DOCKER_BASE": str(self.base),
+                "WUD_OUT_FILE": str(self.wud_file),
+                "WUD_LOG_DIR": str(self.log_dir),
+                "WUD_DIGEST_PIN_UPDATES": "false",
+            },
+            home=str(self.root),
+        )
+
+        plan = build_dry_run_plan(
+            config,
+            line_numbers=(1,),
+            allow_tag_updates=False,
+            environ=self.env,
+        )
+
+        self.assertEqual(plan.status, "blocked")
+        self.assertFalse(plan.digest_pin_updates)
+        self.assertEqual(plan.summary.matched_target_count, 0)
+        self.assertEqual(plan.targets[0].action, "unmatched")
+        self.assertEqual(plan.issues[0].code, "unmatched")
+
     def test_network_mode_consumer_tag_update_stays_service_scoped(self) -> None:
         self.wud_file.write_text(
             "ghcr.io/linuxserver/qbittorrent:5.1.4 tag=5.2.0\n",
