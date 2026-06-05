@@ -3,7 +3,6 @@ from __future__ import annotations
 import os
 import unittest
 import tempfile
-from contextlib import closing
 from contextlib import redirect_stderr, redirect_stdout
 from io import StringIO
 from pathlib import Path
@@ -11,7 +10,7 @@ from unittest import mock
 
 from wud_updater.banner import current_tag
 from wud_updater.cli import main
-from wud_updater.db import connect_db, init_db, utc_timestamp
+from wud_updater.db import init_db, open_db, utc_timestamp
 from wud_updater.web import PASSWORD_HASHER
 
 
@@ -427,7 +426,7 @@ class CliTests(unittest.TestCase):
             root = Path(tmpdir)
             db_path = root / "state" / "wud.sqlite"
             now = utc_timestamp()
-            with closing(connect_db(db_path)) as conn:
+            with open_db(db_path) as conn:
                 init_db(conn)
                 with conn:
                     conn.execute(

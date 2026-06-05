@@ -76,7 +76,7 @@ from .db import (
     DatabaseError,
     SCHEMA_VERSION,
     active_snooze,
-    connect_db,
+    open_db,
     init_db,
     utc_timestamp,
 )
@@ -1870,7 +1870,7 @@ def api_update_managed_settings(
 
     updates = _validated_managed_setting_updates(payload, settings)
     try:
-        with connect_db(settings.config.db_path) as conn:
+        with open_db(settings.config.db_path) as conn:
             init_db(conn)
             with conn:
                 before = _managed_settings_entries_from_conn(conn, settings)
@@ -1942,7 +1942,7 @@ def api_onboarding_dismiss(request: Request) -> OnboardingDismissResponse:
     settings = _settings(request)
     dismissed_at = utc_timestamp()
     try:
-        with connect_db(settings.config.db_path) as conn:
+        with open_db(settings.config.db_path) as conn:
             init_db(conn)
             with conn:
                 _set_web_setting(conn, ONBOARDING_DISMISSED_AT_KEY, dismissed_at)
@@ -1968,7 +1968,7 @@ def api_update_core_update_tour(
 ) -> CoreUpdateTourResponse:
     settings = _settings(request)
     try:
-        with connect_db(settings.config.db_path) as conn:
+        with open_db(settings.config.db_path) as conn:
             init_db(conn)
             with conn:
                 return _set_core_update_tour_state(
@@ -2094,7 +2094,7 @@ def api_pending_cleanup(
 
         removed = _validated_cleanup_lines(payload, payload_lines, cleanup)
         try:
-            with connect_db(settings.config.db_path) as conn:
+            with open_db(settings.config.db_path) as conn:
                 init_db(conn)
                 with _immediate_transaction(conn):
                     audit_run_id = _insert_pending_cleanup_audit(
@@ -2192,7 +2192,7 @@ def api_pending_removal(
 
         removed = _validated_removal_lines(payload, payload_lines, plan)
         try:
-            with connect_db(settings.config.db_path) as conn:
+            with open_db(settings.config.db_path) as conn:
                 init_db(conn)
                 with _immediate_transaction(conn):
                     audit_run_id = _insert_pending_removal_audit(
@@ -2289,7 +2289,7 @@ def api_refresh_release_notes(request: Request) -> ReleaseNotesResponse:
             warnings=warnings,
         )
     try:
-        with connect_db(settings.config.db_path) as conn:
+        with open_db(settings.config.db_path) as conn:
             init_db(conn)
             items = refresh_release_notes(
                 conn,
@@ -2410,7 +2410,7 @@ def api_state_operation(
     if not settings.mutations_enabled:
         raise HTTPException(status_code=403, detail="mutations are disabled")
     try:
-        with connect_db(settings.config.db_path) as conn:
+        with open_db(settings.config.db_path) as conn:
             init_db(conn)
             with _immediate_transaction(conn):
                 return _apply_state_operation(conn, settings, request, payload)
@@ -2520,7 +2520,7 @@ def api_apply_self_update(
             )
 
         try:
-            with connect_db(settings.config.db_path) as conn:
+            with open_db(settings.config.db_path) as conn:
                 init_db(conn)
                 with _immediate_transaction(conn):
                     audit_run_id = _insert_self_update_audit(
@@ -2644,7 +2644,7 @@ def api_prepare_self_update(
             )
 
         try:
-            with connect_db(settings.config.db_path) as conn:
+            with open_db(settings.config.db_path) as conn:
                 init_db(conn)
                 with _immediate_transaction(conn):
                     audit_run_id = _insert_self_update_audit(
@@ -2749,7 +2749,7 @@ def api_restart_container(
         )
 
     try:
-        with connect_db(settings.config.db_path) as conn:
+        with open_db(settings.config.db_path) as conn:
             init_db(conn)
             with _immediate_transaction(conn):
                 audit_run_id = _insert_container_restart_audit(
@@ -3896,7 +3896,7 @@ def _loopback_only_browser_access(settings: WebSettings) -> bool:
 
 def _onboarding_dismissed_at(settings: WebSettings) -> str:
     try:
-        with connect_db(settings.config.db_path) as conn:
+        with open_db(settings.config.db_path) as conn:
             init_db(conn)
             return _web_setting(conn, ONBOARDING_DISMISSED_AT_KEY)
     except (OSError, sqlite3.Error, DatabaseError) as exc:
@@ -4311,7 +4311,7 @@ def _auto_update_tick(
         started_at = now_utc
     started_at_utc = started_at.astimezone(timezone.utc)
 
-    with connect_db(settings.config.db_path) as conn:
+    with open_db(settings.config.db_path) as conn:
         init_db(conn)
         candidate = _auto_update_candidate(
             conn,
@@ -4327,7 +4327,7 @@ def _auto_update_tick(
     try:
         locked_now_utc = now_utc if now is not None else datetime.now(timezone.utc)
         locked_now_utc = locked_now_utc.astimezone(timezone.utc)
-        with connect_db(settings.config.db_path) as conn:
+        with open_db(settings.config.db_path) as conn:
             init_db(conn)
             candidate = _auto_update_candidate(
                 conn,
@@ -4702,7 +4702,7 @@ def _update_auto_update_schedule_runs(
     error: str = "",
 ) -> None:
     now = utc_timestamp()
-    with connect_db(settings.config.db_path) as conn:
+    with open_db(settings.config.db_path) as conn:
         init_db(conn)
         with conn:
             for schedule_key in schedule_keys:
@@ -7513,7 +7513,7 @@ def _update_self_update_audit(
     metadata_extra: Mapping[str, Any] | None = None,
 ) -> None:
     now = utc_timestamp()
-    with connect_db(settings.config.db_path) as conn:
+    with open_db(settings.config.db_path) as conn:
         init_db(conn)
         with conn:
             metadata = _self_update_audit_metadata(conn, run_id)
@@ -7577,7 +7577,7 @@ def _update_container_restart_audit(
     error: str = "",
 ) -> None:
     now = utc_timestamp()
-    with connect_db(settings.config.db_path) as conn:
+    with open_db(settings.config.db_path) as conn:
         init_db(conn)
         with conn:
             metadata = _container_restart_audit_metadata(conn, run_id)
@@ -7981,7 +7981,7 @@ def _safe_exception_detail(
 
 
 def _prepare_web_auth_state(settings: WebSettings) -> str:
-    with connect_db(settings.config.db_path) as conn:
+    with open_db(settings.config.db_path) as conn:
         init_db(conn)
         user_count = _web_user_count(conn)
         if user_count > 0:
@@ -8003,7 +8003,7 @@ def _setup_required(settings: WebSettings) -> bool:
     if settings.dev_no_auth:
         return False
     try:
-        with connect_db(settings.config.db_path) as conn:
+        with open_db(settings.config.db_path) as conn:
             init_db(conn)
             return _web_user_count(conn) == 0
     except (OSError, sqlite3.Error, DatabaseError) as exc:
@@ -8025,7 +8025,7 @@ def _claim_initial_admin(
 ) -> int:
     now = utc_timestamp()
     try:
-        with connect_db(settings.config.db_path) as conn:
+        with open_db(settings.config.db_path) as conn:
             init_db(conn)
             with _immediate_transaction(conn):
                 if _web_user_count(conn) > 0:
@@ -8083,7 +8083,7 @@ def issue_admin_recovery_claim(
     expires_at = _utc_timestamp_after(SETUP_CLAIM_MAX_AGE_SECONDS)
     disabled_password_hash = PASSWORD_HASHER.hash(secrets.token_urlsafe(96))
     try:
-        with closing(connect_db(db_path)) as conn:
+        with open_db(db_path) as conn:
             init_db(conn)
             with _immediate_transaction(conn):
                 user = _active_admin_user(conn, normalized)
@@ -8151,7 +8151,7 @@ def _redeem_admin_recovery_claim(
 ) -> int:
     now = utc_timestamp()
     try:
-        with closing(connect_db(settings.config.db_path)) as conn:
+        with open_db(settings.config.db_path) as conn:
             init_db(conn)
             with _immediate_transaction(conn):
                 expected_hash = _web_setting(conn, RESET_ADMIN_CLAIM_HASH_KEY)
@@ -8255,7 +8255,7 @@ def _verify_web_user(
     if not normalized:
         return None
     try:
-        with connect_db(settings.config.db_path) as conn:
+        with open_db(settings.config.db_path) as conn:
             init_db(conn)
             user = conn.execute(
                 """
@@ -8455,7 +8455,7 @@ def _create_web_session(
     now = utc_timestamp()
     expires_at = _utc_timestamp_after(SESSION_MAX_AGE_SECONDS)
     try:
-        with connect_db(settings.config.db_path) as conn:
+        with open_db(settings.config.db_path) as conn:
             init_db(conn)
             with conn:
                 conn.execute(
@@ -8496,7 +8496,7 @@ def _session_user(settings: WebSettings, request: Request) -> sqlite3.Row | None
     if not session_id:
         return None
     try:
-        with connect_db(settings.config.db_path) as conn:
+        with open_db(settings.config.db_path) as conn:
             init_db(conn)
             row = conn.execute(
                 """
@@ -8531,7 +8531,7 @@ def _revoke_web_session(settings: WebSettings, session_id: str) -> None:
     if not session_id:
         return
     try:
-        with connect_db(settings.config.db_path) as conn:
+        with open_db(settings.config.db_path) as conn:
             init_db(conn)
             with conn:
                 conn.execute(

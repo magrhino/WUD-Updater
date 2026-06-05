@@ -19,7 +19,7 @@ from fastapi.testclient import TestClient
 
 from wud_updater import web as web_module
 from wud_updater.db import (
-    connect_db,
+    open_db,
     init_db,
     insert_pending_update,
     insert_update_event,
@@ -89,7 +89,7 @@ def _doctor_client(
     values["PATH"] = f"{fake_bin}:{os.environ.get('PATH', '')}"
     _write_doctor_fake_docker(fake_bin / "docker")
     _write_doctor_files(values)
-    with connect_db(Path(values["WUD_DB_PATH"])) as conn:
+    with open_db(Path(values["WUD_DB_PATH"])) as conn:
         init_db(conn)
     app = create_app(environ=values)
     if client is None:
@@ -233,7 +233,7 @@ def _assert_generic_auth_failed(response) -> None:
 
 def _insert_run(tmp_path: Path, *, log_file: str = "") -> int:
     db_path = tmp_path / "state" / "wud.sqlite"
-    with connect_db(db_path) as conn:
+    with open_db(db_path) as conn:
         init_db(conn)
         return insert_update_run(
             conn,
@@ -930,7 +930,7 @@ def test_managed_settings_persist_and_write_audit_records(tmp_path: Path) -> Non
     assert managed["digest_pin_updates"]["source"] == "configured"
 
     db_path = tmp_path / "state" / "wud.sqlite"
-    with connect_db(db_path) as conn:
+    with open_db(db_path) as conn:
         theme = conn.execute(
             "SELECT value FROM web_settings WHERE key = 'ui.theme_preference'"
         ).fetchone()
@@ -989,7 +989,7 @@ def test_managed_settings_persist_and_write_audit_records(tmp_path: Path) -> Non
     reset_managed = {entry["key"]: entry for entry in reset.json()["managed"]}
     assert reset.status_code == 200
     assert reset_managed["onboarding_checklist"]["value"] == "visible"
-    with connect_db(db_path) as conn:
+    with open_db(db_path) as conn:
         onboarding_row = conn.execute(
             "SELECT value FROM web_settings WHERE key = 'onboarding_checklist_dismissed_at'"
         ).fetchone()
@@ -1327,7 +1327,7 @@ def test_core_update_tour_persists_in_read_only_mode(tmp_path: Path) -> None:
     assert update.json()["step"] == "pending_preflight"
     assert update.json()["updated_at"]
     assert after.json() == update.json()
-    with connect_db(db_path) as conn:
+    with open_db(db_path) as conn:
         row = conn.execute(
             "SELECT value FROM web_settings WHERE key = 'onboarding_core_update_tour'"
         ).fetchone()
@@ -1430,7 +1430,7 @@ def test_first_run_setup_claim_serializes_concurrent_claims(
         hasher.release_first_hash.set()
         results = [first.result(timeout=5), second.result(timeout=5)]
 
-    with connect_db(db_path) as conn:
+    with open_db(db_path) as conn:
         users = conn.execute("SELECT username FROM web_users").fetchall()
 
     assert sorted(result[0] for result in results) == ["error", "ok"]
@@ -1442,14 +1442,15 @@ def test_first_run_setup_claim_serializes_concurrent_claims(
 def test_setup_claim_rejects_expired_secret(tmp_path: Path) -> None:
     client = _client(tmp_path)
     db_path = tmp_path / "state" / "wud.sqlite"
-    with connect_db(db_path) as conn:
-        conn.execute(
-            """
-            UPDATE web_settings
-            SET value = '2000-01-01T00:00:00+00:00'
-            WHERE key = 'setup_claim_expires_at'
-            """
-        )
+    with open_db(db_path) as conn:
+        with conn:
+            conn.execute(
+                """
+                UPDATE web_settings
+                SET value = '2000-01-01T00:00:00+00:00'
+                WHERE key = 'setup_claim_expires_at'
+                """
+            )
 
     response = client.post(
         "/api/v1/setup/claim",
@@ -2176,7 +2177,7 @@ def test_admin_reset_claim_revokes_sessions_invalidates_password_and_audits(
     assert recovery.revoked_sessions >= 2
     assert status_response.status_code == 401
     assert old_login_response.status_code == 401
-    with connect_db(tmp_path / "state" / "wud.sqlite") as conn:
+    with open_db(tmp_path / "state" / "wud.sqlite") as conn:
         init_db(conn)
         reset_hash = web_module._web_setting(
             conn,
@@ -2251,7 +2252,7 @@ def test_admin_reset_claim_redeems_once_and_allows_new_password(
     assert replay_response.json()["detail"] == "admin recovery claim is invalid"
     assert old_login_response.status_code == 401
     assert new_login_response.status_code == 200
-    with connect_db(tmp_path / "state" / "wud.sqlite") as conn:
+    with open_db(tmp_path / "state" / "wud.sqlite") as conn:
         init_db(conn)
         assert web_module._web_setting(
             conn,
@@ -2316,7 +2317,7 @@ def test_admin_reset_rejects_expired_claim_without_creating_session(
         setup_client.app.state.web_settings,
         "admin",
     )
-    with connect_db(tmp_path / "state" / "wud.sqlite") as conn:
+    with open_db(tmp_path / "state" / "wud.sqlite") as conn:
         init_db(conn)
         with conn:
             conn.execute(
@@ -2377,7 +2378,7 @@ def test_admin_reset_command_errors_for_missing_setup_and_unknown_user(
         assert "database file does not exist" in str(exc)
     assert not (tmp_path / "state" / "wud.sqlite").exists()
 
-    with connect_db(tmp_path / "state" / "wud.sqlite") as conn:
+    with open_db(tmp_path / "state" / "wud.sqlite") as conn:
         init_db(conn)
     try:
         web_module.issue_admin_recovery_claim(missing_settings, "admin")
@@ -3207,7 +3208,7 @@ def test_state_read_endpoints_list_existing_sqlite_rows(tmp_path: Path) -> None:
     now = datetime.now(timezone.utc).replace(microsecond=0)
     past = (now - timedelta(hours=1)).isoformat()
     future = (now + timedelta(hours=1)).isoformat()
-    with connect_db(db_path) as conn:
+    with open_db(db_path) as conn:
         init_db(conn)
         with conn:
             conn.execute(
@@ -3707,7 +3708,7 @@ def test_self_update_prepare_endpoint_rewrites_tag_pulls_and_audits(
     assert "restart " not in calls
     assert client.app.state.web_self_update_running is False
 
-    with connect_db(tmp_path / "state" / "wud.sqlite") as conn:
+    with open_db(tmp_path / "state" / "wud.sqlite") as conn:
         row = conn.execute(
             "SELECT mode, status, finished_at, metadata_json FROM update_runs WHERE id = ?",
             (body["audit_run_id"],),
@@ -3807,7 +3808,7 @@ def test_self_update_prepare_endpoint_digest_pins_after_verification(
     assert "wud.tag.include=^v0\\.25\\.0$$" in content
 
     body = response.json()
-    with connect_db(tmp_path / "state" / "wud.sqlite") as conn:
+    with open_db(tmp_path / "state" / "wud.sqlite") as conn:
         row = conn.execute(
             "SELECT metadata_json FROM update_runs WHERE id = ?",
             (body["audit_run_id"],),
@@ -3977,7 +3978,7 @@ def test_self_update_prepare_endpoint_restores_compose_when_pull_fails(
     assert "restart " not in calls
     assert client.app.state.web_self_update_running is False
 
-    with connect_db(tmp_path / "state" / "wud.sqlite") as conn:
+    with open_db(tmp_path / "state" / "wud.sqlite") as conn:
         row = conn.execute(
             "SELECT status, finished_at, metadata_json FROM update_runs WHERE mode = 'web-self-update'",
         ).fetchone()
@@ -4304,7 +4305,7 @@ def test_self_update_endpoint_pulls_image_and_audits(
     assert "restart --time 10 wud-updater" not in calls
     assert client.app.state.web_self_update_running is False
 
-    with connect_db(tmp_path / "state" / "wud.sqlite") as conn:
+    with open_db(tmp_path / "state" / "wud.sqlite") as conn:
         row = conn.execute(
             "SELECT mode, status, finished_at, metadata_json FROM update_runs WHERE id = ?",
             (body["audit_run_id"],),
@@ -4368,7 +4369,7 @@ def test_self_update_endpoint_inspects_restart_container_before_pull(
     assert "pull ghcr.io/magrhino/wud-updater:latest" not in calls
     assert client.app.state.web_self_update_running is False
     try:
-        with connect_db(tmp_path / "state" / "wud.sqlite") as conn:
+        with open_db(tmp_path / "state" / "wud.sqlite") as conn:
             row = conn.execute(
                 "SELECT id FROM update_runs WHERE mode = 'web-self-update'",
             ).fetchone()
@@ -4424,7 +4425,7 @@ def test_self_update_endpoint_marks_audit_failed_when_pull_fails(
     assert "restart --time 10 wud-updater" not in calls
     assert client.app.state.web_self_update_running is False
 
-    with connect_db(tmp_path / "state" / "wud.sqlite") as conn:
+    with open_db(tmp_path / "state" / "wud.sqlite") as conn:
         row = conn.execute(
             "SELECT status, finished_at, metadata_json FROM update_runs WHERE mode = 'web-self-update'",
         ).fetchone()
@@ -4543,7 +4544,7 @@ def test_container_restart_endpoint_schedules_docker_restart_and_audit(
     assert "inspect wud-updater" in calls
     assert "restart --time 10 wud-updater" in calls
 
-    with connect_db(tmp_path / "state" / "wud.sqlite") as conn:
+    with open_db(tmp_path / "state" / "wud.sqlite") as conn:
         row = conn.execute(
             "SELECT mode, status, finished_at, metadata_json FROM update_runs WHERE id = ?",
             (body["audit_run_id"],),
@@ -4592,7 +4593,7 @@ def test_container_restart_endpoint_marks_audit_failed_when_restart_fails(
     audit_run_id = response.json()["audit_run_id"]
     assert "restart --time 10 wud-updater" in _fake_docker_calls(fake_root)
 
-    with connect_db(tmp_path / "state" / "wud.sqlite") as conn:
+    with open_db(tmp_path / "state" / "wud.sqlite") as conn:
         row = conn.execute(
             "SELECT status, finished_at, metadata_json FROM update_runs WHERE id = ?",
             (audit_run_id,),
@@ -4697,7 +4698,7 @@ def test_state_operations_write_rows_and_audit_entries(tmp_path: Path) -> None:
     assert disabled_exclusion.json()["resource"]["status"] == "disabled"
 
     db_path = tmp_path / "state" / "wud.sqlite"
-    with connect_db(db_path) as conn:
+    with open_db(db_path) as conn:
         service_policies = conn.execute("SELECT * FROM service_policy").fetchall()
         snoozes = conn.execute("SELECT * FROM snoozes").fetchall()
         tag_exclusion = conn.execute(
@@ -4837,7 +4838,7 @@ def test_state_operation_rolls_back_when_audit_insert_fails(
         headers=headers,
     )
 
-    with connect_db(tmp_path / "state" / "wud.sqlite") as conn:
+    with open_db(tmp_path / "state" / "wud.sqlite") as conn:
         rows = conn.execute("SELECT * FROM service_policy").fetchall()
         runs = conn.execute("SELECT * FROM update_runs").fetchall()
 
@@ -4968,7 +4969,7 @@ def test_auto_update_scheduler_applies_due_policy_at_configured_local_time(
     assert "compose -f docker-compose.yml pull app" in calls
     assert "compose -f docker-compose.yml up -d --remove-orphans --no-deps app" in calls
 
-    with connect_db(tmp_path / "state" / "wud.sqlite") as conn:
+    with open_db(tmp_path / "state" / "wud.sqlite") as conn:
         schedule_rows = conn.execute(
             """
             SELECT *
@@ -5053,7 +5054,7 @@ def test_auto_update_scheduler_records_failed_policy_run(
     assert job["status"] == "failure"
     assert job["run_id"]
     assert wud_file.read_text(encoding="utf-8") == original
-    with connect_db(tmp_path / "state" / "wud.sqlite") as conn:
+    with open_db(tmp_path / "state" / "wud.sqlite") as conn:
         schedule_rows = conn.execute(
             """
             SELECT *
@@ -5185,7 +5186,7 @@ def test_auto_update_scheduler_applies_due_policy_after_local_midnight(
     assert policy.status_code == 200
     assert job["status"] == "success"
     assert wud_file.read_text(encoding="utf-8") == ""
-    with connect_db(tmp_path / "state" / "wud.sqlite") as conn:
+    with open_db(tmp_path / "state" / "wud.sqlite") as conn:
         schedule_row = conn.execute(
             """
             SELECT *
@@ -5254,7 +5255,7 @@ def test_auto_update_scheduler_does_not_apply_late_pending_after_grace_window(
     assert late_response is None
     assert wud_file.read_text(encoding="utf-8") == original
     assert " up -d " not in _fake_docker_calls(fake_root)
-    with connect_db(tmp_path / "state" / "wud.sqlite") as conn:
+    with open_db(tmp_path / "state" / "wud.sqlite") as conn:
         rows = conn.execute("SELECT * FROM auto_update_schedule_runs").fetchall()
     assert rows == []
 
@@ -5342,7 +5343,7 @@ def test_auto_update_scheduler_skips_previously_reserved_schedule(
         },
         headers=_csrf_headers(client),
     )
-    with connect_db(tmp_path / "state" / "wud.sqlite") as conn:
+    with open_db(tmp_path / "state" / "wud.sqlite") as conn:
         init_db(conn)
         with conn:
             conn.execute(
@@ -5425,7 +5426,7 @@ def test_auto_update_scheduler_rolls_back_partial_schedule_reservations(
             headers=headers,
         )
         assert policy.status_code == 200
-    with connect_db(tmp_path / "state" / "wud.sqlite") as conn:
+    with open_db(tmp_path / "state" / "wud.sqlite") as conn:
         init_db(conn)
         with conn:
             conn.execute(
@@ -5468,7 +5469,7 @@ def test_auto_update_scheduler_rolls_back_partial_schedule_reservations(
 
     assert response is None
     assert wud_file.read_text(encoding="utf-8") == original
-    with connect_db(tmp_path / "state" / "wud.sqlite") as conn:
+    with open_db(tmp_path / "state" / "wud.sqlite") as conn:
         rows = conn.execute(
             """
             SELECT schedule_key
@@ -5536,7 +5537,7 @@ def test_auto_update_scheduler_rolls_back_reservation_when_queue_fails(
 
     assert policy.status_code == 200
     assert wud_file.read_text(encoding="utf-8") == original
-    with connect_db(tmp_path / "state" / "wud.sqlite") as conn:
+    with open_db(tmp_path / "state" / "wud.sqlite") as conn:
         rows = conn.execute("SELECT * FROM auto_update_schedule_runs").fetchall()
     assert rows == []
     contender = DirectoryLock(wud_file, timeout_seconds=0)
@@ -5593,7 +5594,7 @@ def test_auto_update_scheduler_skips_tag_updates_without_mutation(
     assert response is None
     assert wud_file.read_text(encoding="utf-8") == original
     assert " up -d " not in _fake_docker_calls(fake_root)
-    with connect_db(tmp_path / "state" / "wud.sqlite") as conn:
+    with open_db(tmp_path / "state" / "wud.sqlite") as conn:
         rows = conn.execute("SELECT * FROM auto_update_schedule_runs").fetchall()
     assert rows == []
 
@@ -7703,7 +7704,7 @@ def test_run_detail_returns_not_found_without_creating_missing_database(
 def test_runs_endpoints_read_existing_sqlite_state(tmp_path: Path) -> None:
     client = _client(tmp_path, {"WUD_WEB_DEV_NO_AUTH": "true"})
     db_path = tmp_path / "state" / "wud.sqlite"
-    with connect_db(db_path) as conn:
+    with open_db(db_path) as conn:
         init_db(conn)
         run_id = insert_update_run(
             conn,
@@ -7773,7 +7774,7 @@ def test_runs_endpoints_sanitize_run_and_event_metadata(tmp_path: Path) -> None:
     wud_file = tmp_path / "state" / "images.todo"
     log_file = tmp_path / "state" / "logs" / "run.log"
     compose_file = tmp_path / "docker" / "media" / "compose.yml"
-    with connect_db(db_path) as conn:
+    with open_db(db_path) as conn:
         init_db(conn)
         run_id = insert_update_run(
             conn,
@@ -7947,7 +7948,7 @@ def test_diagnostics_support_bundle_reports_last_run_metadata_errors(
 ) -> None:
     run_id = _insert_run(tmp_path, log_file="run.log")
     db_path = tmp_path / "state" / "wud.sqlite"
-    with connect_db(db_path) as conn:
+    with open_db(db_path) as conn:
         with conn:
             conn.execute(
                 """

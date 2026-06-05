@@ -10,7 +10,7 @@ from wud_updater.db import (
     SCHEMA_VERSION,
     active_snooze,
     active_tag_exclusion_rules,
-    connect_db,
+    open_db,
     init_db,
     insert_pending_update,
     insert_snooze,
@@ -27,7 +27,7 @@ class DatabaseTests(unittest.TestCase):
         with tempfile.TemporaryDirectory(prefix="wud-python-db.") as tmpdir:
             db_path = Path(tmpdir) / "state" / "wud-updater.sqlite"
 
-            with connect_db(db_path) as conn:
+            with open_db(db_path) as conn:
                 init_db(conn)
                 tables = {
                     row["name"]
