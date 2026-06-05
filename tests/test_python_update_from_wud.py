@@ -30,6 +30,7 @@ from wud_updater.docker_cli import DockerCli
 from wud_updater.file_ops import OwnerConfig
 from wud_updater.plans import build_dry_run_plan
 from wud_updater.digest_verifier import (
+    _normalize_verbose_manifest_payload,
     _payload_digest,
 )
 from wud_updater.images import image_with_digest
@@ -3624,6 +3625,434 @@ class DigestPinNoTagRequiredTests(unittest.TestCase):
 
         # A non-tag-update line with digest_pin_updates=True should fail closed
         self.assertEqual(status, 1)
+
+
+class NormalizeVerboseManifestPayloadTests(unittest.TestCase):
+    """Direct unit tests for _normalize_verbose_manifest_payload."""
+
+    def _ref(self, image: str = "docker.io/repo/app:1.0") -> str:
+        return image
+
+    def test_mapping_passthrough(self) -> None:
+        """When payload is already a Mapping it is returned unchanged."""
+        payload = {"schemaVersion": 2, "mediaType": "application/vnd.oci.image.index.v1+json"}
+        result = _normalize_verbose_manifest_payload(payload, self._ref())
+        self.assertIs(result, payload)
+
+    def test_list_of_verbose_items_builds_synthetic_index(self) -> None:
+        """A list of verbose manifest items is normalized to an index manifest."""
+        items = [
+            verbose_manifest_item("sha256:amd64"),
+            verbose_manifest_item("sha256:arm64", architecture="arm64"),
+        ]
+        result = _normalize_verbose_manifest_payload(items, self._ref())
+        self.assertEqual(result.get("schemaVersion"), 2)
+        from wud_updater.digest_verifier import VERBOSE_MANIFEST_LIST_MEDIA_TYPE
+        self.assertEqual(result.get("mediaType"), VERBOSE_MANIFEST_LIST_MEDIA_TYPE)
+        manifests = result.get("manifests")
+        self.assertIsInstance(manifests, list)
+        assert manifests is not None
+        self.assertEqual(len(manifests), 2)
+        digests = [m.get("digest") for m in manifests]
+        self.assertIn("sha256:amd64", digests)
+        self.assertIn("sha256:arm64", digests)
+
+    def test_single_verbose_item_list(self) -> None:
+        """A list with one verbose item is normalized without error."""
+        items = [verbose_manifest_item("sha256:only")]
+        result = _normalize_verbose_manifest_payload(items, self._ref())
+        manifests = result.get("manifests")
+        self.assertIsNotNone(manifests)
+        assert manifests is not None
+        self.assertEqual(len(manifests), 1)
+        self.assertEqual(manifests[0].get("digest"), "sha256:only")
+
+    def test_non_list_non_mapping_raises(self) -> None:
+        """A payload that is neither a Mapping nor list raises ManifestLookupError."""
+        with self.assertRaises(ManifestLookupError):
+            _normalize_verbose_manifest_payload("a-string", self._ref())
+
+    def test_integer_payload_raises(self) -> None:
+        with self.assertRaises(ManifestLookupError):
+            _normalize_verbose_manifest_payload(42, self._ref())
+
+    def test_list_with_non_mapping_item_raises(self) -> None:
+        """A list containing a non-mapping item raises ManifestLookupError."""
+        with self.assertRaises(ManifestLookupError):
+            _normalize_verbose_manifest_payload(["not-a-dict"], self._ref())
+
+    def test_list_item_missing_descriptor_raises(self) -> None:
+        """A list item that lacks a 'Descriptor' key raises ManifestLookupError."""
+        item = {"Ref": "docker.io/repo/app:1.0", "SchemaV2Manifest": {}}
+        with self.assertRaises(ManifestLookupError):
+            _normalize_verbose_manifest_payload([item], self._ref())
+
+    def test_list_item_descriptor_not_mapping_raises(self) -> None:
+        """A list item whose 'Descriptor' is not a Mapping raises ManifestLookupError."""
+        item = {"Descriptor": "not-a-mapping"}
+        with self.assertRaises(ManifestLookupError):
+            _normalize_verbose_manifest_payload([item], self._ref())
+
+    def test_list_item_descriptor_missing_digest_raises(self) -> None:
+        """A Descriptor without a 'digest' key raises ManifestLookupError."""
+        item = {"Descriptor": {"mediaType": "application/vnd.oci.image.manifest.v1+json"}}
+        with self.assertRaises(ManifestLookupError):
+            _normalize_verbose_manifest_payload([item], self._ref())
+
+    def test_list_item_descriptor_empty_digest_raises(self) -> None:
+        """A Descriptor with an empty digest string raises ManifestLookupError."""
+        item = {"Descriptor": {"digest": ""}}
+        with self.assertRaises(ManifestLookupError):
+            _normalize_verbose_manifest_payload([item], self._ref())
+
+    def test_list_item_descriptor_non_string_digest_raises(self) -> None:
+        """A Descriptor with a non-string digest raises ManifestLookupError."""
+        item = {"Descriptor": {"digest": None}}
+        with self.assertRaises(ManifestLookupError):
+            _normalize_verbose_manifest_payload([item], self._ref())
+
+    def test_empty_list_raises(self) -> None:
+        """An empty list raises ManifestLookupError."""
+        with self.assertRaises(ManifestLookupError):
+            _normalize_verbose_manifest_payload([], self._ref())
+
+    def test_error_message_includes_manifest_ref(self) -> None:
+        """The ManifestLookupError message identifies the manifest reference."""
+        ref = "docker.io/org/myapp:2.0"
+        with self.assertRaises(ManifestLookupError) as ctx:
+            _normalize_verbose_manifest_payload([], ref)
+        self.assertIn(ref, str(ctx.exception))
+
+    def test_descriptor_fields_are_preserved_in_manifests(self) -> None:
+        """Descriptor fields (mediaType, platform) are preserved in normalized output."""
+        item = verbose_manifest_item("sha256:amd64")
+        result = _normalize_verbose_manifest_payload([item], self._ref())
+        manifests = result.get("manifests")
+        assert manifests is not None
+        self.assertEqual(manifests[0].get("digest"), "sha256:amd64")
+        self.assertIn("mediaType", manifests[0])
+
+
+class RenderComposeDigestPinsAdditionalTests(unittest.TestCase):
+    """Additional edge case tests for render_compose_digest_pins."""
+
+    def setUp(self) -> None:
+        self.tmp = tempfile.TemporaryDirectory(prefix="wud-render-extra.")
+        self.root = Path(self.tmp.name)
+
+    def tearDown(self) -> None:
+        self.tmp.cleanup()
+
+    def test_invalid_yaml_raises_compose_tag_rewrite_error(self) -> None:
+        compose_file = self.root / "compose.yml"
+        compose_file.write_text(
+            "services:\n  app:\n    image: [unclosed\n",
+            encoding="utf-8",
+        )
+        with self.assertRaisesRegex(ComposeTagRewriteError, "could not be parsed"):
+            render_compose_digest_pins(
+                compose_file,
+                (
+                    digest_pin_update_from_values(
+                        old_image="repo/app:1.0",
+                        resolved_tag="2.0",
+                        planned_digest="sha256:pin",
+                        services=("app",),
+                    ),
+                ),
+            )
+
+    def test_non_mapping_yaml_raises_compose_tag_rewrite_error(self) -> None:
+        compose_file = self.root / "compose.yml"
+        compose_file.write_text("- just\n- a\n- list\n", encoding="utf-8")
+        with self.assertRaisesRegex(ComposeTagRewriteError, "not a YAML mapping"):
+            render_compose_digest_pins(
+                compose_file,
+                (
+                    digest_pin_update_from_values(
+                        old_image="repo/app:1.0",
+                        resolved_tag="2.0",
+                        planned_digest="sha256:pin",
+                        services=("app",),
+                    ),
+                ),
+            )
+
+    def test_no_services_mapping_raises_compose_tag_rewrite_error(self) -> None:
+        compose_file = self.root / "compose.yml"
+        compose_file.write_text("version: '3'\n", encoding="utf-8")
+        with self.assertRaisesRegex(ComposeTagRewriteError, "no services mapping"):
+            render_compose_digest_pins(
+                compose_file,
+                (
+                    digest_pin_update_from_values(
+                        old_image="repo/app:1.0",
+                        resolved_tag="2.0",
+                        planned_digest="sha256:pin",
+                        services=("app",),
+                    ),
+                ),
+            )
+
+    def test_existing_custom_wud_tag_include_is_rejected(self) -> None:
+        """A custom (non-simple-exact) wud.tag.include regex blocks digest-pin."""
+        compose_file = self.root / "compose.yml"
+        compose_file.write_text(
+            "services:\n"
+            "  app:\n"
+            "    image: repo/app:1.0\n"
+            "    labels:\n"
+            "      wud.tag.include: ^(1|2)\\.0$$\n",
+            encoding="utf-8",
+        )
+        with self.assertRaisesRegex(ComposeTagRewriteError, "custom regex"):
+            render_compose_digest_pins(
+                compose_file,
+                (
+                    digest_pin_update_from_values(
+                        old_image="repo/app:1.0",
+                        resolved_tag="2.0",
+                        planned_digest="sha256:pin",
+                        services=("app",),
+                    ),
+                ),
+            )
+
+    def test_list_style_labels_existing_include_replaced(self) -> None:
+        """List-style labels with existing simple exact wud.tag.include are updated."""
+        compose_file = self.root / "compose.yml"
+        compose_file.write_text(
+            "services:\n"
+            "  app:\n"
+            "    image: repo/app:1.0\n"
+            "    labels:\n"
+            "    - wud.tag.include=^1\\.0$$\n",
+            encoding="utf-8",
+        )
+        rendered, applied = render_compose_digest_pins(
+            compose_file,
+            (
+                digest_pin_update_from_values(
+                    old_image="repo/app:1.0",
+                    resolved_tag="2.0",
+                    planned_digest="sha256:pin",
+                    services=("app",),
+                ),
+            ),
+        )
+        self.assertEqual(len(applied), 1)
+        self.assertIn("wud.tag.include", rendered)
+        self.assertIn("2", rendered)
+        self.assertNotIn("^1\\.0$$", rendered)
+
+    def test_multiple_services_in_one_update(self) -> None:
+        """An update covering multiple services applies to each service."""
+        compose_file = self.root / "compose.yml"
+        compose_file.write_text(
+            "services:\n"
+            "  app:\n"
+            "    image: repo/app:1.0\n"
+            "  worker:\n"
+            "    image: repo/app:1.0\n",
+            encoding="utf-8",
+        )
+        rendered, applied = render_compose_digest_pins(
+            compose_file,
+            (
+                digest_pin_update_from_values(
+                    old_image="repo/app:1.0",
+                    resolved_tag="2.0",
+                    planned_digest="sha256:pin",
+                    services=("app", "worker"),
+                ),
+            ),
+        )
+        self.assertEqual(len(applied), 1)
+        self.assertEqual(applied[0].replacements, 2)
+        # Both services should be pinned
+        self.assertEqual(rendered.count("repo/app@sha256:pin"), 2)
+
+    def test_applied_digest_pin_has_correct_metadata(self) -> None:
+        """Applied digest pin records correct fields for downstream audit use."""
+        compose_file = self.root / "compose.yml"
+        compose_file.write_text(
+            "services:\n  app:\n    image: repo/app:1.0\n",
+            encoding="utf-8",
+        )
+        rendered, applied = render_compose_digest_pins(
+            compose_file,
+            (
+                digest_pin_update_from_values(
+                    old_image="repo/app:1.0",
+                    resolved_tag="2.0",
+                    planned_digest="sha256:pinned",
+                    services=("app",),
+                ),
+            ),
+        )
+        self.assertEqual(len(applied), 1)
+        a = applied[0]
+        self.assertEqual(a.old_image, "repo/app:1.0")
+        self.assertEqual(a.resolved_tag, "2.0")
+        self.assertEqual(a.resolved_image, "repo/app:2.0")
+        self.assertEqual(a.planned_digest, "sha256:pinned")
+        self.assertEqual(a.final_image, "repo/app@sha256:pinned")
+        self.assertEqual(a.marker, "wud-updater.resolved-tag=2.0")
+        self.assertEqual(a.label_key, "wud.tag.include")
+        self.assertEqual(a.services, ("app",))
+        self.assertEqual(a.replacements, 1)
+
+
+class DigestVerifierResolveTagDigestStatusTests(unittest.TestCase):
+    """Additional resolve_tag_digest tests for status/failure branch coverage."""
+
+    def _make_resolver_pair(self, image_key: str, payload: object):
+        """Return (primary, fallback) static resolver pair for image_key."""
+        from wud_updater.digest_verifier import RegistryImageRef
+        import re as _re
+
+        class _StaticDockerResolver:
+            def __init__(self, p: object) -> None:
+                self._p = p
+
+            def fetch(self, image: object, reference: str) -> ManifestDocument:
+                import json as _json
+                payload_str = _json.dumps(p := self._p)
+                import json as _json2
+                data = _json2.loads(payload_str)
+                from collections.abc import Mapping as _Mapping
+                media_type = data.get("mediaType", "") if isinstance(data, _Mapping) else ""
+                return ManifestDocument(
+                    source="test-static",
+                    digest=data.get("Descriptor", {}).get("digest", "")
+                    if isinstance(data, _Mapping) else "",
+                    media_type=media_type,
+                    payload=data if isinstance(data, _Mapping) else {},
+                )
+
+        return _StaticDockerResolver(payload)
+
+    def test_unsupported_image_reference_no_tag_returns_not_ok(self) -> None:
+        """Image reference without a tag returns unsupported-image-reference."""
+        from wud_updater.digest_verifier import DigestVerifier, RegistryHttpManifestResolver
+
+        class _NeverCalled:
+            def fetch(self, image, reference):
+                raise AssertionError("should not be called")
+
+        verifier = DigestVerifier(
+            None,  # type: ignore[arg-type]
+            primary_resolver=_NeverCalled(),
+            fallback_resolver=_NeverCalled(),
+        )
+        result = verifier.resolve_tag_digest("notaregistry/repo/notaghere")
+        self.assertFalse(result.ok)
+        self.assertEqual(result.status, "untrusted")
+        self.assertEqual(result.reason, "unsupported-image-reference")
+
+    def test_ghcr_manifest_failure_returns_failed_status(self) -> None:
+        """For ghcr.io, ManifestLookupError yields status='failed' (not untrusted)."""
+        from wud_updater.digest_verifier import DigestVerifier, ManifestLookupError
+
+        class _AlwaysFail:
+            def fetch(self, image, reference):
+                raise ManifestLookupError("ghcr unavailable")
+
+        verifier = DigestVerifier(
+            None,  # type: ignore[arg-type]
+            primary_resolver=_AlwaysFail(),
+            fallback_resolver=_AlwaysFail(),
+        )
+        result = verifier.resolve_tag_digest("ghcr.io/org/app:latest")
+        self.assertFalse(result.ok)
+        self.assertEqual(result.status, "failed")
+        self.assertIn("unavailable", result.reason)
+
+    def test_non_ghcr_manifest_failure_returns_untrusted_status(self) -> None:
+        """For non-ghcr registries, ManifestLookupError yields status='untrusted'."""
+        from wud_updater.digest_verifier import DigestVerifier, ManifestLookupError
+
+        class _AlwaysFail:
+            def fetch(self, image, reference):
+                raise ManifestLookupError("docker unavailable")
+
+        verifier = DigestVerifier(
+            None,  # type: ignore[arg-type]
+            primary_resolver=_AlwaysFail(),
+            fallback_resolver=_AlwaysFail(),
+        )
+        result = verifier.resolve_tag_digest("quay.io/org/app:latest")
+        self.assertFalse(result.ok)
+        self.assertEqual(result.status, "untrusted")
+        self.assertIn("unavailable", result.reason)
+
+    def test_resolve_error_message_is_populated(self) -> None:
+        """resolve_tag_digest error field contains the exception message."""
+        from wud_updater.digest_verifier import DigestVerifier, ManifestLookupError
+
+        class _AlwaysFail:
+            def fetch(self, image, reference):
+                raise ManifestLookupError("detailed-error-text")
+
+        verifier = DigestVerifier(
+            None,  # type: ignore[arg-type]
+            primary_resolver=_AlwaysFail(),
+            fallback_resolver=_AlwaysFail(),
+        )
+        result = verifier.resolve_tag_digest("repo/app:latest")
+        self.assertFalse(result.ok)
+        self.assertIn("detailed-error-text", result.error)
+
+
+class IsSimpleExactTagIncludeAdditionalTests(unittest.TestCase):
+    """Additional boundary tests for _is_simple_exact_tag_include."""
+
+    def test_only_anchors_is_invalid_empty_tag(self) -> None:
+        """'^$' produces an empty tag which is invalid."""
+        self.assertFalse(_is_simple_exact_tag_include("^$"))
+
+    def test_escaped_dollar_at_end_is_invalid(self) -> None:
+        """'^abc\\$' means the $ is escaped so there is no end anchor."""
+        self.assertFalse(_is_simple_exact_tag_include(r"^abc\$"))
+
+    def test_very_long_valid_tag(self) -> None:
+        """A long but valid tag regex (128 chars, max length) is accepted."""
+        tag = "a" * 128
+        pattern = f"^{tag}$"
+        self.assertTrue(_is_simple_exact_tag_include(pattern))
+
+    def test_too_long_tag_is_invalid(self) -> None:
+        """A tag exceeding 128 characters is rejected by tag_value_valid."""
+        tag = "a" * 129
+        pattern = f"^{tag}$"
+        self.assertFalse(_is_simple_exact_tag_include(pattern))
+
+    def test_escaped_open_bracket_is_invalid(self) -> None:
+        """Escaped '[' produces a character class operator—not a valid tag char."""
+        self.assertFalse(_is_simple_exact_tag_include(r"^abc\[def$"))
+
+    def test_multiple_escaped_dots_are_valid(self) -> None:
+        """Multiple escaped dots within a version string are valid."""
+        self.assertTrue(_is_simple_exact_tag_include(r"^1\.2\.3\.4$"))
+
+
+class ImageWithDigestAdditionalTests(unittest.TestCase):
+    """Additional boundary tests for image_with_digest."""
+
+    def test_image_without_tag_or_registry(self) -> None:
+        """Simple image name without tag still gets digest applied."""
+        result = image_with_digest("app", "sha256:abc")
+        self.assertEqual(result, "app@sha256:abc")
+
+    def test_image_with_deep_path(self) -> None:
+        """Image with multi-level path preserves full path in result."""
+        result = image_with_digest("registry.example.com/org/sub/app:1.0", "sha256:abc")
+        self.assertEqual(result, "registry.example.com/org/sub/app@sha256:abc")
+
+    def test_already_digest_only_image_replaced(self) -> None:
+        """An image already pinned by digest gets its digest replaced."""
+        result = image_with_digest("repo/app@sha256:old123", "sha256:new456")
+        self.assertEqual(result, "repo/app@sha256:new456")
 
 
 def safe_name(value: str) -> str:
