@@ -7,7 +7,7 @@ from unittest.mock import patch
 from zoneinfo import ZoneInfo, reset_tzpath
 import zoneinfo
 
-from wud_updater.config import ConfigError, load_config
+from wud_updater.config import ConfigError, load_config, parse_bool_env
 
 
 class LoadConfigTests(unittest.TestCase):
@@ -214,6 +214,46 @@ class LoadConfigTests(unittest.TestCase):
             ZoneInfo.clear_cache()
 
         self.assertEqual(config.timezone_name, "America/Chicago")
+
+
+class ParseBoolEnvTests(unittest.TestCase):
+    def test_none_returns_default_false(self) -> None:
+        self.assertFalse(parse_bool_env("MY_VAR", None))
+
+    def test_empty_string_returns_default_false(self) -> None:
+        self.assertFalse(parse_bool_env("MY_VAR", ""))
+
+    def test_none_returns_supplied_default(self) -> None:
+        self.assertTrue(parse_bool_env("MY_VAR", None, default=True))
+
+    def test_truthy_values_return_true(self) -> None:
+        for value in ("1", "true", "yes", "on", "TRUE", "YES", "ON", "True", " true "):
+            with self.subTest(value=value):
+                self.assertTrue(parse_bool_env("MY_VAR", value))
+
+    def test_falsy_values_return_false(self) -> None:
+        for value in ("0", "false", "no", "off", "FALSE", "NO", "OFF", "False", " false "):
+            with self.subTest(value=value):
+                self.assertFalse(parse_bool_env("MY_VAR", value))
+
+    def test_invalid_value_raises_config_error(self) -> None:
+        invalid_values = ("maybe", "2", "tru", "enabled", "y", "n", "yes!")
+        for value in invalid_values:
+            with self.subTest(value=value):
+                with self.assertRaisesRegex(ConfigError, "MY_VAR must be true or false"):
+                    parse_bool_env("MY_VAR", value)
+
+    def test_error_message_includes_variable_name(self) -> None:
+        with self.assertRaisesRegex(ConfigError, "WUD_DIGEST_PIN_UPDATES"):
+            parse_bool_env("WUD_DIGEST_PIN_UPDATES", "invalid")
+
+    def test_whitespace_only_is_invalid(self) -> None:
+        with self.assertRaisesRegex(ConfigError, "MY_VAR must be true or false"):
+            parse_bool_env("MY_VAR", "   ")
+
+    def test_digit_one_and_zero_are_boolean(self) -> None:
+        self.assertTrue(parse_bool_env("X", "1"))
+        self.assertFalse(parse_bool_env("X", "0"))
 
 
 if __name__ == "__main__":
