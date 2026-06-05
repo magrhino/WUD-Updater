@@ -271,7 +271,7 @@ describe("mutating WebUI views", () => {
     await flushPromises();
 
     expect(wrapper.text()).toContain("Read-only mode is active");
-    expect(createPlan).toHaveBeenCalledWith([1], true, []);
+    expect(createPlan).toHaveBeenCalledWith([1], true, [], []);
     const applyButton = wrapper
       .findAll("button")
       .find((button) => button.text().includes("Apply 1 update"));
@@ -329,7 +329,7 @@ describe("mutating WebUI views", () => {
       ?.trigger("click");
     await flushPromises();
 
-    expect(createPlan).toHaveBeenCalledWith([1], true, []);
+    expect(createPlan).toHaveBeenCalledWith([1], true, [], []);
     expect(wrapper.find('[role="dialog"]').text()).toContain("Plan blocked");
     expect(wrapper.find('[role="dialog"]').text()).toContain(
       "No Compose service matched repo/app:1.0.",
@@ -341,6 +341,230 @@ describe("mutating WebUI views", () => {
         .some((button) => button.text().includes("Apply 1 update")),
     ).toBe(false);
     expect(createJob).not.toHaveBeenCalled();
+  });
+
+  it("rebuilds digest-pin label rewrite plans after approval", async () => {
+    const { pinia, webui } = setupStores(true);
+    webui.pending = pendingResponse();
+    mockPendingLifecycle(webui);
+    const approval = {
+      stack: "media",
+      service: "app",
+      label_key: "wud.tag.include",
+      current_label_value: "latest|stable",
+      planned_tag: "latest",
+      proposed_label_value: "^latest$$",
+    };
+    const issue = {
+      severity: "error",
+      code: "compose-digest-pin-label-rewrite-unapproved",
+      message:
+        'media wud.tag.include is "latest|stable"; approve replacing it with "^latest$" before pinning the digest.',
+      line_no: null,
+      stack: "media",
+      service: "app",
+      hint: "Approve the label rewrite.",
+      details: {
+        ...approval,
+        compose_file: "docker-compose.yml",
+        proposed_label_regex: "^latest$",
+        explanation:
+          "WUD-Updater can only overwrite this include rule after explicit approval.",
+      },
+    };
+    const createPlan = vi
+      .spyOn(webui, "createPlan")
+      .mockImplementation(async (_lines, _allow, _tags, approvals = []) => {
+        const base = planResponse();
+        webui.plan = approvals.length
+          ? planResponse({
+              stacks: [
+                {
+                  ...base.stacks[0],
+                  digest_pin_updates: [
+                    {
+                      source_image: "repo/app:latest",
+                      resolved_tag: "latest",
+                      planned_digest: "sha256:abc123",
+                      final_image: "repo/app@sha256:abc123",
+                      watch_tag: "latest",
+                      marker: "wud.updater.digest-pin.repo-app",
+                      label_key: "wud.tag.include",
+                      label_value: "^latest$$",
+                      services: ["app"],
+                      label_rewrites: [
+                        {
+                          service: "app",
+                          label_key: "wud.tag.include",
+                          current_label_value: "latest|stable",
+                          planned_tag: "latest",
+                          proposed_label_value: "^latest$$",
+                          proposed_label_regex: "^latest$",
+                          approved: true,
+                          reason: "approved",
+                        },
+                      ],
+                    },
+                  ],
+                },
+              ],
+            })
+          : planResponse({
+              can_apply: false,
+              status: "blocked",
+              summary: {
+                ...base.summary,
+                issue_count: 1,
+              },
+              issues: [issue],
+              apply_preflight: failedApplyPreflight(
+                "selected-services-matched",
+                issue.message,
+              ),
+            });
+      });
+    const wrapper = mountWithApp(PendingView, { pinia });
+
+    await wrapper
+      .findAll("button")
+      .find((button) => button.text().includes("Preview media plan"))
+      ?.trigger("click");
+    await flushPromises();
+
+    const dialog = wrapper.find('[role="dialog"]');
+    expect(dialog.text()).toContain("Digest-pin label approvals");
+    expect(dialog.text()).toContain("wud.tag.include=latest|stable");
+    expect(dialog.text()).toContain("^latest$");
+
+    await dialog
+      .findAll("button")
+      .find((button) => button.text().includes("Approve label rewrite"))
+      ?.trigger("click");
+    await flushPromises();
+
+    expect(createPlan).toHaveBeenNthCalledWith(1, [1], true, [], []);
+    expect(createPlan).toHaveBeenNthCalledWith(2, [1], true, [], [approval]);
+    expect(wrapper.find('[role="dialog"]').text()).toContain(
+      "Digest-pin label updates",
+    );
+    expect(wrapper.find('[role="dialog"]').text()).toContain(
+      "wud.tag.include=latest|stable",
+    );
+  });
+
+  it("does not reopen digest-pin approval preflight after close", async () => {
+    const { pinia, webui } = setupStores(true);
+    webui.pending = pendingResponse();
+    mockPendingLifecycle(webui);
+    let resolveSecondPlan: () => void = () => {};
+    const secondPlan = new Promise<void>((resolve) => {
+      resolveSecondPlan = resolve;
+    });
+    const approval = {
+      stack: "media",
+      service: "app",
+      label_key: "wud.tag.include",
+      current_label_value: "latest|stable",
+      planned_tag: "latest",
+      proposed_label_value: "^latest$$",
+    };
+    const issue = {
+      severity: "error",
+      code: "compose-digest-pin-label-rewrite-unapproved",
+      message:
+        'media wud.tag.include is "latest|stable"; approve replacing it with "^latest$" before pinning the digest.',
+      line_no: null,
+      stack: "media",
+      service: "app",
+      hint: "Approve the label rewrite.",
+      details: {
+        ...approval,
+        compose_file: "docker-compose.yml",
+        proposed_label_regex: "^latest$",
+        explanation:
+          "WUD-Updater can only overwrite this include rule after explicit approval.",
+      },
+    };
+    const createPlan = vi
+      .spyOn(webui, "createPlan")
+      .mockImplementation(async (_lines, _allow, _tags, approvals = []) => {
+        const base = planResponse();
+        if (approvals.length) {
+          await secondPlan;
+          webui.plan = planResponse({
+            stacks: [
+              {
+                ...base.stacks[0],
+                digest_pin_updates: [
+                  {
+                    source_image: "repo/app:latest",
+                    resolved_tag: "latest",
+                    planned_digest: "sha256:abc123",
+                    final_image: "repo/app@sha256:abc123",
+                    watch_tag: "latest",
+                    marker: "wud.updater.digest-pin.repo-app",
+                    label_key: "wud.tag.include",
+                    label_value: "^latest$$",
+                    services: ["app"],
+                    label_rewrites: [
+                      {
+                        service: "app",
+                        label_key: "wud.tag.include",
+                        current_label_value: "latest|stable",
+                        planned_tag: "latest",
+                        proposed_label_value: "^latest$$",
+                        proposed_label_regex: "^latest$",
+                        approved: true,
+                        reason: "approved",
+                      },
+                    ],
+                  },
+                ],
+              },
+            ],
+          });
+          return;
+        }
+        webui.plan = planResponse({
+          can_apply: false,
+          status: "blocked",
+          summary: {
+            ...base.summary,
+            issue_count: 1,
+          },
+          issues: [issue],
+          apply_preflight: failedApplyPreflight(
+            "selected-services-matched",
+            issue.message,
+          ),
+        });
+      });
+    const wrapper = mountWithApp(PendingView, { pinia });
+
+    await wrapper
+      .findAll("button")
+      .find((button) => button.text().includes("Preview media plan"))
+      ?.trigger("click");
+    await flushPromises();
+
+    await wrapper
+      .find('[role="dialog"]')
+      .findAll("button")
+      .find((button) => button.text().includes("Approve label rewrite"))
+      ?.trigger("click");
+    await wrapper
+      .find('[role="dialog"]')
+      .findAll("button")
+      .find((button) => button.text().includes("Close"))
+      ?.trigger("click");
+
+    expect(wrapper.find('[role="dialog"]').exists()).toBe(false);
+    resolveSecondPlan();
+    await flushPromises();
+
+    expect(createPlan).toHaveBeenNthCalledWith(1, [1], true, [], []);
+    expect(createPlan).toHaveBeenNthCalledWith(2, [1], true, [], [approval]);
+    expect(wrapper.find('[role="dialog"]').exists()).toBe(false);
   });
 
   it("shows unmatched cleanup preview disabled in read-only mode", async () => {
@@ -702,7 +926,7 @@ describe("mutating WebUI views", () => {
       .find((button) => button.text().includes("Preview media plan"))
       ?.trigger("click");
 
-    expect(createPlan).toHaveBeenCalledWith([4, 9], true, []);
+    expect(createPlan).toHaveBeenCalledWith([4, 9], true, [], []);
   });
 
   it("marks a stack indeterminate after one grouped item is deselected", async () => {
@@ -728,7 +952,7 @@ describe("mutating WebUI views", () => {
     expect(
       wrapper.find('input[aria-label="Select stack media"]').attributes("aria-checked"),
     ).toBe("mixed");
-    expect(createPlan).toHaveBeenCalledWith([1], true, []);
+    expect(createPlan).toHaveBeenCalledWith([1], true, [], []);
   });
 
   it("excludes unmatched items from select all stack updates", async () => {
@@ -765,7 +989,7 @@ describe("mutating WebUI views", () => {
       ?.trigger("click");
 
     expect(wrapper.text()).toContain("No Compose match");
-    expect(createPlan).toHaveBeenCalledWith([1], true, []);
+    expect(createPlan).toHaveBeenCalledWith([1], true, [], []);
   });
 
   it("selects tag update rows and enables tag rewrites when an override is edited", async () => {
@@ -792,6 +1016,7 @@ describe("mutating WebUI views", () => {
       [1],
       true,
       [{ line_no: 1, tag: "1.2" }],
+      [],
     );
   });
 
@@ -1414,7 +1639,7 @@ describe("mutating WebUI views", () => {
       .find((button) => button.text().includes("Apply 1 update"))
       ?.trigger("click");
 
-    expect(createJob).toHaveBeenCalledWith("plan-test", [1], true, []);
+    expect(createJob).toHaveBeenCalledWith("plan-test", [1], true, [], []);
     expect(jobStream.observed).toBe(true);
     await flushPromises();
 

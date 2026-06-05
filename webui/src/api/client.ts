@@ -165,6 +165,26 @@ export interface PlanTagUpdate {
   services: string[];
 }
 
+export interface DigestPinLabelRewriteApprovalRequest {
+  stack: string;
+  service: string;
+  label_key: string;
+  current_label_value: string;
+  planned_tag: string;
+  proposed_label_value: string;
+}
+
+export interface PlanDigestPinLabelRewrite {
+  service: string;
+  label_key: string;
+  current_label_value: string;
+  planned_tag: string;
+  proposed_label_value: string;
+  proposed_label_regex: string;
+  approved: boolean;
+  reason: string;
+}
+
 export interface PlanDigestPinUpdate {
   source_image: string;
   resolved_tag: string;
@@ -175,6 +195,7 @@ export interface PlanDigestPinUpdate {
   label_key: string;
   label_value: string;
   services: string[];
+  label_rewrites: PlanDigestPinLabelRewrite[];
 }
 
 export interface PlanAction {
@@ -1015,6 +1036,7 @@ const liveWebApi = {
     lineNumbers: number[],
     allowTagUpdates: boolean,
     tagOverrides: TagOverrideRequest[],
+    digestPinLabelRewriteApprovals: DigestPinLabelRewriteApprovalRequest[],
     csrfToken: string,
   ) =>
     apiRequest<PlanResponse>("/plans", {
@@ -1024,6 +1046,7 @@ const liveWebApi = {
         line_numbers: lineNumbers,
         allow_tag_updates: allowTagUpdates,
         tag_overrides: tagOverrides,
+        digest_pin_label_rewrite_approvals: digestPinLabelRewriteApprovals,
       }),
     }),
   createJob: (
@@ -1031,6 +1054,7 @@ const liveWebApi = {
     lineNumbers: number[],
     allowTagUpdates: boolean,
     tagOverrides: TagOverrideRequest[],
+    digestPinLabelRewriteApprovals: DigestPinLabelRewriteApprovalRequest[],
     csrfToken: string,
   ) =>
     apiRequest<ApplyJobResponse>("/jobs", {
@@ -1041,6 +1065,7 @@ const liveWebApi = {
         line_numbers: lineNumbers,
         allow_tag_updates: allowTagUpdates,
         tag_overrides: tagOverrides,
+        digest_pin_label_rewrite_approvals: digestPinLabelRewriteApprovals,
         confirmation: "apply",
       }),
     }),
@@ -1049,6 +1074,7 @@ const liveWebApi = {
     lineNumbers: number[],
     allowTagUpdates: boolean,
     tagOverrides: TagOverrideRequest[],
+    digestPinLabelRewriteApprovals: DigestPinLabelRewriteApprovalRequest[],
     csrfToken: string,
   ) =>
     apiRequest<ApplyJobResponse>("/plans/apply", {
@@ -1059,6 +1085,7 @@ const liveWebApi = {
         line_numbers: lineNumbers,
         allow_tag_updates: allowTagUpdates,
         tag_overrides: tagOverrides,
+        digest_pin_label_rewrite_approvals: digestPinLabelRewriteApprovals,
         confirmation: "apply",
       }),
     }),

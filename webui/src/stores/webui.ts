@@ -12,6 +12,7 @@ import {
   type CoreUpdateTourStatus,
   type CoreUpdateTourStep,
   type DiagnosticsSupportBundleResponse,
+  type DigestPinLabelRewriteApprovalRequest,
   type ManagedSettingsUpdateResponse,
   type OnboardingChecklistResponse,
   type OnboardingDismissResponse,
@@ -366,6 +367,7 @@ export const useWebuiStore = defineStore("webui", () => {
     lineNumbers: number[],
     allowTagUpdates: boolean,
     tagOverrides: TagOverrideRequest[] = [],
+    digestPinLabelRewriteApprovals: DigestPinLabelRewriteApprovalRequest[] = [],
   ): Promise<void> {
     const auth = useAuthStore();
     await loadWithState(async () => {
@@ -378,6 +380,7 @@ export const useWebuiStore = defineStore("webui", () => {
         lineNumbers,
         allowTagUpdates,
         tagOverrides,
+        digestPinLabelRewriteApprovals,
         await auth.ensureCsrf(),
       );
     });
@@ -457,6 +460,7 @@ export const useWebuiStore = defineStore("webui", () => {
     lineNumbers: number[],
     allowTagUpdates: boolean,
     tagOverrides: TagOverrideRequest[] = [],
+    digestPinLabelRewriteApprovals: DigestPinLabelRewriteApprovalRequest[] = [],
   ): Promise<ApplyJobResponse> {
     const auth = useAuthStore();
     await loadWithState(async () => {
@@ -466,6 +470,7 @@ export const useWebuiStore = defineStore("webui", () => {
         lineNumbers,
         allowTagUpdates,
         tagOverrides,
+        digestPinLabelRewriteApprovals,
         await auth.ensureCsrf(),
       );
       setApplyJob(job);
@@ -481,8 +486,15 @@ export const useWebuiStore = defineStore("webui", () => {
     lineNumbers: number[],
     allowTagUpdates: boolean,
     tagOverrides: TagOverrideRequest[] = [],
+    digestPinLabelRewriteApprovals: DigestPinLabelRewriteApprovalRequest[] = [],
   ): Promise<ApplyJobResponse> {
-    return createJob(planId, lineNumbers, allowTagUpdates, tagOverrides);
+    return createJob(
+      planId,
+      lineNumbers,
+      allowTagUpdates,
+      tagOverrides,
+      digestPinLabelRewriteApprovals,
+    );
   }
 
   function setApplyJob(job: ApplyJobResponse): void {

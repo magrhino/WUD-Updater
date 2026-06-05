@@ -32,6 +32,7 @@ import {
   type ApplyJobResponse,
   type ApplyPreflightCheck,
   type ApplyPreflightStatus,
+  type DigestPinLabelRewriteApprovalRequest,
   type PendingDiagnostic,
   type PendingGroupedItem,
   type PendingItem,
@@ -74,6 +75,7 @@ type UpdateIntent = {
   lineNumbers: number[];
   allowTagUpdates: boolean;
   tagOverrides: TagOverrideRequest[];
+  digestPinLabelRewriteApprovals: DigestPinLabelRewriteApprovalRequest[];
 };
 
 type ApplyJobSnapshotLine = {
@@ -428,6 +430,18 @@ const visiblePlanIssues = computed(() => {
   const cleanupKeys = new Set(cleanupItems.value.flatMap(cleanupIssueKeys));
   return issues.filter((issue) => !issueHiddenByCleanupPreview(issue, cleanupKeys));
 });
+const digestPinLabelApprovalIssues = computed(() =>
+  visiblePlanIssues.value.filter(
+    (issue) =>
+      issue.code === "compose-digest-pin-label-rewrite-unapproved" &&
+      digestPinLabelApprovalFromIssue(issue) !== null,
+  ),
+);
+const planDigestPinLabelRewrites = computed(() =>
+  planDigestPinUpdates.value.flatMap(({ stack, update }) =>
+    (update.label_rewrites ?? []).map((rewrite) => ({ stack, rewrite })),
+  ),
+);
 const unmatchedReviewSummary = computed(() =>
   staleReviewSummary(unmatchedItems.value, "pending line", "pending lines"),
 );
@@ -1244,6 +1258,7 @@ async function startUpdateFlow(input: {
     lineNumbers,
     allowTagUpdates: lineNumbersHaveTagUpdates(lineNumbers),
     tagOverrides: tagOverridesForLines(lineNumbers),
+    digestPinLabelRewriteApprovals: [],
   };
   updateIntent.value = intent;
   try {
@@ -1251,6 +1266,7 @@ async function startUpdateFlow(input: {
       intent.lineNumbers,
       intent.allowTagUpdates,
       intent.tagOverrides,
+      intent.digestPinLabelRewriteApprovals,
     );
   } catch {
     showPreflightModal.value = false;
@@ -1353,6 +1369,7 @@ async function confirmApply(): Promise<void> {
     lineNumbers,
     intent?.allowTagUpdates ?? lineNumbersHaveTagUpdates(lineNumbers),
     intent?.tagOverrides ?? tagOverridesForLines(lineNumbers),
+    intent?.digestPinLabelRewriteApprovals ?? [],
   );
   applyJobSnapshot.value = snapshot;
   subscribeApplyJob(job.job_id);
@@ -1645,6 +1662,88 @@ function issueHint(issue: PlanIssue): string {
   return issue.hint || "";
 }
 
+function issueDetailString(issue: PlanIssue, key: string): string {
+  const value = issue.details[key];
+  return typeof value === "string" ? value : "";
+}
+
+function digestPinLabelApprovalFromIssue(
+  issue: PlanIssue,
+): DigestPinLabelRewriteApprovalRequest | null {
+  if (issue.code !== "compose-digest-pin-label-rewrite-unapproved") {
+    return null;
+  }
+  const approval = {
+    stack: issueDetailString(issue, "stack") || issue.stack,
+    service: issueDetailString(issue, "service") || issue.service,
+    label_key: issueDetailString(issue, "label_key"),
+    current_label_value: issueDetailString(issue, "current_label_value"),
+    planned_tag: issueDetailString(issue, "planned_tag"),
+    proposed_label_value: issueDetailString(issue, "proposed_label_value"),
+  };
+  return Object.values(approval).every((value) => value.trim())
+    ? approval
+    : null;
+}
+
+function digestPinLabelApprovalKey(
+  approval: DigestPinLabelRewriteApprovalRequest,
+): string {
+  return [
+    approval.stack,
+    approval.service,
+    approval.label_key,
+    approval.current_label_value,
+    approval.planned_tag,
+    approval.proposed_label_value,
+  ].join("\u0000");
+}
+
+function digestPinLabelApprovalApproved(issue: PlanIssue): boolean {
+  const approval = digestPinLabelApprovalFromIssue(issue);
+  const intent = updateIntent.value;
+  if (!approval || !intent) {
+    return false;
+  }
+  const key = digestPinLabelApprovalKey(approval);
+  return intent.digestPinLabelRewriteApprovals.some(
+    (item) => digestPinLabelApprovalKey(item) === key,
+  );
+}
+
+function digestPinLabelIssueProposedRegex(issue: PlanIssue): string {
+  return issueDetailString(issue, "proposed_label_regex");
+}
+
+async function approveDigestPinLabelRewrite(issue: PlanIssue): Promise<void> {
+  const approval = digestPinLabelApprovalFromIssue(issue);
+  const intent = updateIntent.value;
+  if (!approval || !intent || webui.loading) {
+    return;
+  }
+  const approvalsByKey = new Map(
+    intent.digestPinLabelRewriteApprovals.map((item) => [
+      digestPinLabelApprovalKey(item),
+      item,
+    ]),
+  );
+  approvalsByKey.set(digestPinLabelApprovalKey(approval), approval);
+  const nextIntent: UpdateIntent = {
+    ...intent,
+    digestPinLabelRewriteApprovals: [...approvalsByKey.values()],
+  };
+  await webui.createPlan(
+    nextIntent.lineNumbers,
+    nextIntent.allowTagUpdates,
+    nextIntent.tagOverrides,
+    nextIntent.digestPinLabelRewriteApprovals,
+  );
+  if (updateIntent.value !== intent) {
+    return;
+  }
+  updateIntent.value = nextIntent;
+  showPreflightModal.value = true;
+}
 
 function staleDiagnosticLabel(item: DiagnosticItem): string {
   switch (item.diagnostic?.code) {
@@ -2923,6 +3022,77 @@ watch(
         >
           {{ preflightDigestPinNotice }}
         </n-alert>
+
+        <section
+          v-if="planDigestPinLabelRewrites.length"
+          class="preflight-impact preflight-block"
+          aria-labelledby="digest-pin-label-rewrites-title"
+        >
+          <div class="preflight-impact-heading">
+            <strong id="digest-pin-label-rewrites-title">Digest-pin label updates</strong>
+            <n-tag size="small">{{ pluralize(planDigestPinLabelRewrites.length, "label") }}</n-tag>
+          </div>
+          <div class="compact-list">
+            <div
+              v-for="item in planDigestPinLabelRewrites"
+              :key="`${item.stack}-${item.rewrite.service}-${item.rewrite.label_key}-${item.rewrite.current_label_value}`"
+              class="list-row plan-line-row"
+            >
+              <span>Label</span>
+              <strong>{{ item.stack }} / {{ item.rewrite.service }}</strong>
+              <em>
+                <code>{{ item.rewrite.label_key }}={{ item.rewrite.current_label_value }}</code>
+                <span aria-hidden="true"> -> </span>
+                <code>{{ item.rewrite.proposed_label_regex }}</code>
+              </em>
+            </div>
+          </div>
+        </section>
+
+        <section
+          v-if="digestPinLabelApprovalIssues.length"
+          class="preflight-impact preflight-block"
+          aria-labelledby="digest-pin-label-approvals-title"
+        >
+          <div class="preflight-impact-heading">
+            <strong id="digest-pin-label-approvals-title">Digest-pin label approvals</strong>
+            <n-tag size="small" type="warning">
+              {{ pluralize(digestPinLabelApprovalIssues.length, "approval") }}
+            </n-tag>
+          </div>
+          <p class="preflight-summary-text">
+            Approve replacing each current include rule with the exact planned tag before applying.
+          </p>
+          <div class="compact-list">
+            <div
+              v-for="issue in digestPinLabelApprovalIssues"
+              :key="`${issue.stack}-${issue.service}-${issueDetailString(issue, 'current_label_value')}`"
+              class="list-row plan-line-row digest-pin-approval-row"
+            >
+              <span>Review</span>
+              <strong>{{ issue.stack }} / {{ issue.service }}</strong>
+              <em>
+                <code>{{ issueDetailString(issue, "label_key") }}={{ issueDetailString(issue, "current_label_value") }}</code>
+                <span aria-hidden="true"> -> </span>
+                <code>{{ digestPinLabelIssueProposedRegex(issue) }}</code>
+                <n-button
+                  size="small"
+                  secondary
+                  type="primary"
+                  :disabled="digestPinLabelApprovalApproved(issue)"
+                  :loading="webui.loading"
+                  @click="approveDigestPinLabelRewrite(issue)"
+                >
+                  <template #icon>
+                    <Check :size="16" />
+                  </template>
+                  {{ digestPinLabelApprovalApproved(issue) ? "Approved" : "Approve label rewrite" }}
+                </n-button>
+              </em>
+            </div>
+          </div>
+        </section>
+
         <n-alert
           v-if="cleanupDisabledMessage"
           class="preflight-block"

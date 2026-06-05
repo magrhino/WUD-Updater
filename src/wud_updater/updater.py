@@ -133,6 +133,9 @@ class UpdaterOptions:
     log_dir_label: str | None = None
     metadata_json: str = "{}"
     digest_pin_plan: tuple["DigestPinUpdate", ...] = ()
+    digest_pin_label_rewrite_approvals: tuple[
+        "DigestPinLabelRewriteApproval", ...
+    ] = ()
 
 
 @dataclass(frozen=True)
@@ -182,6 +185,28 @@ class DigestPinCandidate:
 
 
 @dataclass(frozen=True)
+class DigestPinLabelRewriteApproval:
+    stack: str
+    service: str
+    label_key: str
+    current_label_value: str
+    planned_tag: str
+    proposed_label_value: str
+
+
+@dataclass(frozen=True)
+class DigestPinLabelRewrite:
+    service: str
+    label_key: str
+    current_label_value: str
+    planned_tag: str
+    proposed_label_value: str
+    proposed_label_regex: str
+    approved: bool
+    reason: str
+
+
+@dataclass(frozen=True)
 class TagOverride:
     line_no: int
     tag: str
@@ -217,6 +242,31 @@ class AppliedTagUpdate(TagUpdate):
 @dataclass(frozen=True)
 class AppliedDigestPinUpdate(DigestPinUpdate):
     replacements: int
+    label_rewrites: tuple[DigestPinLabelRewrite, ...] = ()
+
+
+class DigestPinLabelRewriteApprovalRequired(ComposeTagRewriteError):
+    def __init__(
+        self,
+        *,
+        service: str,
+        label_key: str,
+        current_label_value: str,
+        planned_tag: str,
+        proposed_label_value: str,
+        proposed_label_regex: str,
+    ) -> None:
+        self.service = service
+        self.label_key = label_key
+        self.current_label_value = current_label_value
+        self.planned_tag = planned_tag
+        self.proposed_label_value = proposed_label_value
+        self.proposed_label_regex = proposed_label_regex
+        super().__init__(
+            f'Service {service} {label_key} is "{current_label_value}"; this may '
+            "be a custom regex or non-matching tag and needs approval before "
+            f'replacing it with "{proposed_label_regex}".'
+        )
 
 
 @dataclass(frozen=True)
@@ -1414,6 +1464,10 @@ class UpdateFromWudRunner:
                 applied_digest_pins = apply_compose_digest_pins(
                     compose_path,
                     digest_pin_updates,
+                    label_rewrite_approvals=(
+                        self.options.digest_pin_label_rewrite_approvals
+                    ),
+                    stack_name=stack.name,
                 )
             except ComposeTagRewriteError as exc:
                 self.log.error(
@@ -2719,7 +2773,14 @@ class UpdateFromWudRunner:
                 stack_updates = self._digest_pin_updates(
                     [match for match in matches if match.stack.index == stack.index]
                 )
-                render_compose_digest_pins(stack.directory / stack.file, stack_updates)
+                render_compose_digest_pins(
+                    stack.directory / stack.file,
+                    stack_updates,
+                    label_rewrite_approvals=(
+                        self.options.digest_pin_label_rewrite_approvals
+                    ),
+                    stack_name=stack.name,
+                )
         except (ComposeTagRewriteError, UpdaterError) as exc:
             ok = False
             self.log.error(f"Digest-pin plan is not safe to apply: {exc}")
@@ -3659,10 +3720,18 @@ def apply_compose_tag_exclusions(
 def apply_compose_digest_pins(
     compose_path: Path,
     updates: Sequence[DigestPinUpdate],
+    *,
+    label_rewrite_approvals: Sequence[DigestPinLabelRewriteApproval] = (),
+    stack_name: str = "",
 ) -> tuple[AppliedDigestPinUpdate, ...]:
     """Write final digest-pinned images plus WUD watch metadata."""
 
-    rendered, applied = render_compose_digest_pins(compose_path, updates)
+    rendered, applied = render_compose_digest_pins(
+        compose_path,
+        updates,
+        label_rewrite_approvals=label_rewrite_approvals,
+        stack_name=stack_name,
+    )
     fd, tmp_name = tempfile.mkstemp(
         prefix=f".{compose_path.name}.digest-pin.",
         dir=str(compose_path.parent),
@@ -3688,6 +3757,9 @@ def apply_compose_digest_pins(
 def render_compose_digest_pins(
     compose_path: Path,
     updates: Sequence[DigestPinUpdate],
+    *,
+    label_rewrite_approvals: Sequence[DigestPinLabelRewriteApproval] = (),
+    stack_name: str = "",
 ) -> tuple[str, tuple[AppliedDigestPinUpdate, ...]]:
     """Return Compose YAML with digest-pin image and watch metadata applied."""
 
@@ -3711,6 +3783,7 @@ def render_compose_digest_pins(
 
     line_offsets = _line_start_offsets(source)
     counts = {id(update): 0 for update in updates}
+    label_rewrites = {id(update): [] for update in updates}
     seen_spans: set[tuple[int, int]] = set()
 
     for update in updates:
@@ -3761,11 +3834,25 @@ def render_compose_digest_pins(
             current_include = compose_unescape_dollars(
                 _get_service_label_value(service_config, update.label_key)
             )
-            if current_include and not _is_simple_exact_tag_include(current_include):
-                raise ComposeTagRewriteError(
-                    f"Service {service} {update.label_key} contains a custom regex "
-                    "and needs manual review."
-                )
+            label_rewrite = _digest_pin_label_rewrite(
+                stack_name=stack_name,
+                service=service,
+                current_image=str(current_image),
+                current_label_value=current_include,
+                update=update,
+                approvals=label_rewrite_approvals,
+            )
+            if label_rewrite is not None:
+                label_rewrites[id(update)].append(label_rewrite)
+                if label_rewrite.reason == "approval-required":
+                    raise DigestPinLabelRewriteApprovalRequired(
+                        service=label_rewrite.service,
+                        label_key=label_rewrite.label_key,
+                        current_label_value=label_rewrite.current_label_value,
+                        planned_tag=label_rewrite.planned_tag,
+                        proposed_label_value=label_rewrite.proposed_label_value,
+                        proposed_label_regex=label_rewrite.proposed_label_regex,
+                    )
             _set_service_label_value(
                 service_config,
                 update.label_key,
@@ -3793,6 +3880,7 @@ def render_compose_digest_pins(
             label_value=update.label_value,
             services=update.services,
             replacements=counts[id(update)],
+            label_rewrites=tuple(label_rewrites[id(update)]),
         )
         for update in updates
     )
@@ -4074,6 +4162,93 @@ def _is_simple_exact_tag_include(value: str) -> bool:
         tag_chars.append(char)
         index += 1
     return tag_value_valid("".join(tag_chars))
+
+
+def _digest_pin_label_rewrite(
+    *,
+    stack_name: str,
+    service: str,
+    current_image: str,
+    current_label_value: str,
+    update: DigestPinUpdate,
+    approvals: Sequence[DigestPinLabelRewriteApproval],
+) -> DigestPinLabelRewrite | None:
+    if not current_label_value:
+        return None
+
+    proposed_label_regex = exact_tags_regex((update.watch_tag,))
+    if current_label_value == proposed_label_regex:
+        return None
+
+    if _is_simple_exact_tag_include(current_label_value):
+        return DigestPinLabelRewrite(
+            service=service,
+            label_key=update.label_key,
+            current_label_value=current_label_value,
+            planned_tag=update.watch_tag,
+            proposed_label_value=update.label_value,
+            proposed_label_regex=proposed_label_regex,
+            approved=False,
+            reason="exact-regex-normalized",
+        )
+
+    if tag_value_valid(current_label_value) and current_label_value in {
+        update.watch_tag,
+        image_tag(current_image),
+    }:
+        return DigestPinLabelRewrite(
+            service=service,
+            label_key=update.label_key,
+            current_label_value=current_label_value,
+            planned_tag=update.watch_tag,
+            proposed_label_value=update.label_value,
+            proposed_label_regex=proposed_label_regex,
+            approved=False,
+            reason="plain-tag-normalized",
+        )
+
+    approved = any(
+        _digest_pin_label_rewrite_approval_matches(
+            approval,
+            stack_name=stack_name,
+            service=service,
+            label_key=update.label_key,
+            current_label_value=current_label_value,
+            planned_tag=update.watch_tag,
+            proposed_label_value=update.label_value,
+        )
+        for approval in approvals
+    )
+    return DigestPinLabelRewrite(
+        service=service,
+        label_key=update.label_key,
+        current_label_value=current_label_value,
+        planned_tag=update.watch_tag,
+        proposed_label_value=update.label_value,
+        proposed_label_regex=proposed_label_regex,
+        approved=approved,
+        reason="approved" if approved else "approval-required",
+    )
+
+
+def _digest_pin_label_rewrite_approval_matches(
+    approval: DigestPinLabelRewriteApproval,
+    *,
+    stack_name: str,
+    service: str,
+    label_key: str,
+    current_label_value: str,
+    planned_tag: str,
+    proposed_label_value: str,
+) -> bool:
+    return (
+        approval.stack == stack_name
+        and approval.service == service
+        and approval.label_key == label_key
+        and approval.current_label_value == current_label_value
+        and approval.planned_tag == planned_tag
+        and approval.proposed_label_value == proposed_label_value
+    )
 
 
 def _reject_yaml_anchor_or_alias_service_config(

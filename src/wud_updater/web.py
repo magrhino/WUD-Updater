@@ -126,6 +126,7 @@ from .release_notes import (
 from .self_update import current_container_image, release_self_update_target
 from .updater import (
     ComposeTagRewriteError,
+    DigestPinLabelRewriteApproval,
     DigestPinUpdate,
     TagOverride,
     TagUpdate,
@@ -756,10 +757,22 @@ class TagOverrideRequest(BaseModel):
     tag: str = Field(min_length=1, max_length=128)
 
 
+class DigestPinLabelRewriteApprovalRequest(BaseModel):
+    stack: str = Field(min_length=1, max_length=256)
+    service: str = Field(min_length=1, max_length=256)
+    label_key: str = Field(min_length=1, max_length=256)
+    current_label_value: str = Field(min_length=1, max_length=512)
+    planned_tag: str = Field(min_length=1, max_length=128)
+    proposed_label_value: str = Field(min_length=1, max_length=512)
+
+
 class PlanRequest(BaseModel):
     line_numbers: list[LineNumber] = Field(min_length=1)
     allow_tag_updates: bool = False
     tag_overrides: list[TagOverrideRequest] = Field(default_factory=list)
+    digest_pin_label_rewrite_approvals: list[
+        DigestPinLabelRewriteApprovalRequest
+    ] = Field(default_factory=list)
 
 
 class PlanSummary(BaseModel):
@@ -813,6 +826,17 @@ class PlanTagUpdate(BaseModel):
     services: list[str] = Field(default_factory=list)
 
 
+class PlanDigestPinLabelRewrite(BaseModel):
+    service: str
+    label_key: str
+    current_label_value: str
+    planned_tag: str
+    proposed_label_value: str
+    proposed_label_regex: str
+    approved: bool
+    reason: str
+
+
 class PlanDigestPinUpdate(BaseModel):
     source_image: str
     resolved_tag: str
@@ -823,6 +847,7 @@ class PlanDigestPinUpdate(BaseModel):
     label_key: str
     label_value: str
     services: list[str] = Field(default_factory=list)
+    label_rewrites: list[PlanDigestPinLabelRewrite] = Field(default_factory=list)
 
 
 class PlanAction(BaseModel):
@@ -948,6 +973,9 @@ class ApplyPlanRequest(BaseModel):
     line_numbers: list[LineNumber] = Field(min_length=1)
     allow_tag_updates: bool = False
     tag_overrides: list[TagOverrideRequest] = Field(default_factory=list)
+    digest_pin_label_rewrite_approvals: list[
+        DigestPinLabelRewriteApprovalRequest
+    ] = Field(default_factory=list)
     confirmation: Literal["apply"]
 
 
@@ -2813,6 +2841,9 @@ def api_create_job(payload: ApplyPlanRequest, request: Request) -> ApplyJobRespo
                     line_numbers=payload.line_numbers,
                     allow_tag_updates=payload.allow_tag_updates,
                     tag_overrides=payload.tag_overrides,
+                    digest_pin_label_rewrite_approvals=(
+                        payload.digest_pin_label_rewrite_approvals
+                    ),
                 ),
             )
         except (PlanInputError, PlanFileMissing) as exc:
@@ -4768,6 +4799,9 @@ def _build_web_plan(
         line_numbers=payload.line_numbers,
         allow_tag_updates=payload.allow_tag_updates,
         tag_overrides=_tag_overrides_from_payload(payload),
+        digest_pin_label_rewrite_approvals=(
+            _digest_pin_label_rewrite_approvals_from_payload(payload)
+        ),
         host_docker_base=settings.host_docker_base,
         environ=settings.command_env,
     )
@@ -5030,6 +5064,46 @@ def _tag_overrides_from_payload(
         overrides.append(TagOverride(line_no=line_no, tag=item.tag))
         seen.add(line_no)
     return tuple(overrides)
+
+
+def _digest_pin_label_rewrite_approvals_from_payload(
+    payload: PlanRequest | ApplyPlanRequest,
+) -> tuple[DigestPinLabelRewriteApproval, ...]:
+    approvals: list[DigestPinLabelRewriteApproval] = []
+    seen: set[tuple[str, str, str, str, str, str]] = set()
+    for item in payload.digest_pin_label_rewrite_approvals:
+        key = (
+            item.stack,
+            item.service,
+            item.label_key,
+            item.current_label_value,
+            item.planned_tag,
+            item.proposed_label_value,
+        )
+        if key in seen:
+            raise PlanInputError(
+                "digest_pin_label_rewrite_approvals contains a duplicate approval"
+            )
+        if item.label_key != "wud.tag.include":
+            raise PlanInputError(
+                "digest_pin_label_rewrite_approvals can only approve wud.tag.include"
+            )
+        if not tag_value_valid(item.planned_tag):
+            raise PlanInputError(
+                "digest_pin_label_rewrite_approvals has an invalid planned tag"
+            )
+        approvals.append(
+            DigestPinLabelRewriteApproval(
+                stack=item.stack,
+                service=item.service,
+                label_key=item.label_key,
+                current_label_value=item.current_label_value,
+                planned_tag=item.planned_tag,
+                proposed_label_value=item.proposed_label_value,
+            )
+        )
+        seen.add(key)
+    return tuple(approvals)
 
 
 def _apply_preflight_response(
@@ -5373,6 +5447,9 @@ def _submit_apply_job(
         plan,
         allow_tag_updates=payload.allow_tag_updates,
         tag_overrides=tuple(_tag_overrides_from_payload(payload)),
+        digest_pin_label_rewrite_approvals=(
+            _digest_pin_label_rewrite_approvals_from_payload(payload)
+        ),
         wud_lock=wud_lock,
     )
 
@@ -5384,6 +5461,7 @@ def _submit_apply_job_state(
     *,
     allow_tag_updates: bool,
     tag_overrides: tuple[TagOverride, ...],
+    digest_pin_label_rewrite_approvals: tuple[DigestPinLabelRewriteApproval, ...] = (),
     wud_lock: DirectoryLock,
     update_mode_override: str | None = None,
     metadata_extra: Mapping[str, Any] | None = None,
@@ -5412,6 +5490,7 @@ def _submit_apply_job_state(
             tuple(plan.selected_line_numbers),
             allow_tag_updates,
             tag_overrides,
+            digest_pin_label_rewrite_approvals,
             _digest_pin_updates_from_plan(plan),
             jobs,
             apply_condition,
@@ -5661,6 +5740,7 @@ def _run_apply_job(
     line_numbers: tuple[int, ...],
     allow_tag_updates: bool,
     tag_overrides: tuple[TagOverride, ...],
+    digest_pin_label_rewrite_approvals: tuple[DigestPinLabelRewriteApproval, ...],
     digest_pin_plan: tuple[DigestPinUpdate, ...],
     jobs: dict[str, WebApplyJob],
     apply_condition: Condition,
@@ -5687,6 +5767,7 @@ def _run_apply_job(
             line_numbers=line_numbers,
             allow_tag_updates=allow_tag_updates,
             tag_overrides=tag_overrides,
+            digest_pin_label_rewrite_approvals=digest_pin_label_rewrite_approvals,
             digest_pin_plan=digest_pin_plan,
             plan_id=plan_id,
             update_mode_override=update_mode_override,
@@ -5815,6 +5896,7 @@ def _apply_options(
     line_numbers: tuple[int, ...],
     allow_tag_updates: bool,
     tag_overrides: tuple[TagOverride, ...],
+    digest_pin_label_rewrite_approvals: tuple[DigestPinLabelRewriteApproval, ...] = (),
     digest_pin_plan: tuple[DigestPinUpdate, ...] = (),
     plan_id: str,
     update_mode_override: str | None = None,
@@ -5848,6 +5930,7 @@ def _apply_options(
         allow_tag_updates=allow_tag_updates,
         digest_pin_updates=config.digest_pin_updates,
         tag_overrides=tag_overrides,
+        digest_pin_label_rewrite_approvals=digest_pin_label_rewrite_approvals,
         digest_pin_plan=digest_pin_plan,
         only_lines=line_spec,
         remove_lines_before_run=line_spec,
