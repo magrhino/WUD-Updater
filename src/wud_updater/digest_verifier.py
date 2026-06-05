@@ -41,6 +41,9 @@ IMAGE_MANIFEST_MEDIA_TYPES = frozenset(
         "application/vnd.docker.distribution.manifest.v2+json",
     )
 )
+VERBOSE_MANIFEST_LIST_MEDIA_TYPE = (
+    "application/vnd.docker.distribution.manifest.list.v2+json"
+)
 
 
 class ManifestLookupError(RuntimeError):
@@ -250,7 +253,9 @@ class DockerManifestResolver:
             raise ManifestLookupError(
                 f"docker manifest inspect returned invalid JSON for {manifest_ref}"
             ) from exc
-        if not isinstance(payload, Mapping):
+        if self.verbose:
+            payload = _normalize_verbose_manifest_payload(payload, manifest_ref)
+        elif not isinstance(payload, Mapping):
             raise ManifestLookupError(
                 f"docker manifest inspect returned non-object JSON for {manifest_ref}"
             )
@@ -377,6 +382,8 @@ class DigestVerifier:
                 error=str(exc),
             )
         digest = tag_document.digest or _payload_digest(tag_document.payload)
+        if not digest and tag_document.is_index():
+            digest = self._resolve_index_digest(registry_image)
         if not digest:
             return DigestResolveResult(
                 ok=False,
@@ -391,6 +398,18 @@ class DigestVerifier:
             digest=digest,
             source=tag_document.source,
         )
+
+    def _resolve_index_digest(
+        self,
+        image: RegistryImageRef,
+    ) -> str:
+        try:
+            document = RegistryHttpManifestResolver().fetch(image, image.tag)
+        except ManifestLookupError:
+            return ""
+        if not document.is_index():
+            return ""
+        return document.digest or _payload_digest(document.payload)
 
     def _verify_expected_manifest(
         self,
@@ -604,3 +623,43 @@ def _payload_digest(payload: Mapping[str, Any]) -> str:
         if isinstance(digest, str) and digest.startswith("sha256:"):
             return digest
     return ""
+
+
+def _normalize_verbose_manifest_payload(
+    payload: Any,
+    manifest_ref: str,
+) -> Mapping[str, Any]:
+    if isinstance(payload, Mapping):
+        return payload
+    if not isinstance(payload, list):
+        raise ManifestLookupError(
+            f"docker manifest inspect --verbose returned unsupported JSON for {manifest_ref}"
+        )
+
+    manifests: list[Mapping[str, Any]] = []
+    for item in payload:
+        if not isinstance(item, Mapping):
+            raise ManifestLookupError(
+                f"docker manifest inspect --verbose returned unsupported JSON for {manifest_ref}"
+            )
+        descriptor = item.get("Descriptor")
+        if not isinstance(descriptor, Mapping):
+            raise ManifestLookupError(
+                f"docker manifest inspect --verbose omitted descriptors for {manifest_ref}"
+            )
+        digest = descriptor.get("digest")
+        if not isinstance(digest, str) or not digest:
+            raise ManifestLookupError(
+                f"docker manifest inspect --verbose omitted descriptor digests for {manifest_ref}"
+            )
+        manifests.append(dict(descriptor))
+
+    if not manifests:
+        raise ManifestLookupError(
+            f"docker manifest inspect --verbose returned an empty manifest list for {manifest_ref}"
+        )
+    return {
+        "schemaVersion": 2,
+        "mediaType": VERBOSE_MANIFEST_LIST_MEDIA_TYPE,
+        "manifests": manifests,
+    }

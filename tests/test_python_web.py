@@ -345,6 +345,50 @@ def _fake_image_state_file(fake_root: Path, image: str, suffix: str) -> Path:
     return fake_root / "images" / f"{safe}.{suffix}"
 
 
+def _fake_manifest_file(fake_root: Path, image: str, suffix: str) -> Path:
+    safe = re.sub(r"[^A-Za-z0-9._-]", "_", image)
+    return fake_root / "manifests" / f"{safe}.{suffix}"
+
+
+def _write_fake_manifest(fake_root: Path, image: str, payload: object) -> None:
+    _fake_manifest_file(fake_root, image, "stdout").write_text(
+        json.dumps(payload),
+        encoding="utf-8",
+    )
+
+
+def _write_fake_image_after_pull(
+    fake_root: Path,
+    image: str,
+    image_id: str,
+    digest: str,
+) -> None:
+    _fake_image_state_file(fake_root, image, "after_id").write_text(
+        image_id,
+        encoding="utf-8",
+    )
+    _fake_image_state_file(fake_root, image, "after_digests").write_text(
+        f"{image}@{digest}\n",
+        encoding="utf-8",
+    )
+
+
+def _manifest_index_digest(digest: str, *children: str) -> dict[str, object]:
+    return {
+        "schemaVersion": 2,
+        "mediaType": "application/vnd.oci.image.index.v1+json",
+        "Descriptor": {"digest": digest},
+        "manifests": [
+            {
+                "mediaType": "application/vnd.oci.image.manifest.v1+json",
+                "digest": child,
+                "platform": {"os": "linux", "architecture": "amd64"},
+            }
+            for child in children
+        ],
+    }
+
+
 def _wait_apply_job(client: TestClient, job_id: str) -> dict[str, object]:
     deadline = time.time() + 5
     while time.time() < deadline:
@@ -3685,6 +3729,180 @@ def test_self_update_prepare_endpoint_rewrites_tag_pulls_and_audits(
     assert metadata["tag_updates"][0]["new_image"] == (
         "ghcr.io/magrhino/wud-updater:v0.25.0"
     )
+
+
+def test_self_update_prepare_endpoint_digest_pins_after_verification(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    fake_env, fake_root = _fake_docker_env(tmp_path)
+    target_image = "ghcr.io/magrhino/wud-updater:v0.25.0"
+    _write_fake_manifest(
+        fake_root,
+        target_image,
+        _manifest_index_digest("sha256:index", "sha256:child"),
+    )
+    _write_fake_image_after_pull(
+        fake_root,
+        target_image,
+        "sha256:config",
+        "sha256:index",
+    )
+    monkeypatch.setattr(web_module, "current_tag", lambda: "v0.24.2")
+    monkeypatch.setattr(web_module, "fetch_latest_release_tag", lambda: "v0.25.0")
+    monkeypatch.setattr(
+        web_module,
+        "current_container_image",
+        lambda _env: "ghcr.io/magrhino/wud-updater:v0.24.2",
+    )
+    monkeypatch.setattr(
+        web_module,
+        "_fetch_self_update_release_notes",
+        lambda *_args, **_kwargs: ([], False, []),
+    )
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+            "WUD_WEB_RESTART_CONTAINER": "wud-updater",
+            "WUD_DIGEST_PIN_UPDATES": "true",
+            **fake_env,
+        },
+    )
+    compose_dir = _make_fake_stack(
+        tmp_path,
+        fake_root,
+        "wud",
+        [
+            (
+                "wud-updater",
+                "ghcr.io/magrhino/wud-updater:v0.24.2",
+                "wud-updater",
+            ),
+        ],
+    )
+    plan = client.post(
+        "/api/v1/self-update/plan",
+        headers=_csrf_headers(client),
+    ).json()
+
+    response = client.post(
+        "/api/v1/self-update/prepare",
+        json={
+            "confirmation": "prepare_tag_update",
+            "plan_id": plan["plan"]["plan_id"],
+            "current_tag": "v0.24.2",
+            "latest_tag": "v0.25.0",
+            "target_image": target_image,
+            "restart_container": "wud-updater",
+        },
+        headers=_csrf_headers(client),
+    )
+
+    assert response.status_code == 200
+    content = (compose_dir / "docker-compose.yml").read_text(encoding="utf-8")
+    assert "# wud-updater.resolved-tag=v0.25.0" in content
+    assert "image: ghcr.io/magrhino/wud-updater@sha256:index" in content
+    assert "wud.tag.include=^v0\\.25\\.0$$" in content
+
+    body = response.json()
+    with connect_db(tmp_path / "state" / "wud.sqlite") as conn:
+        row = conn.execute(
+            "SELECT metadata_json FROM update_runs WHERE id = ?",
+            (body["audit_run_id"],),
+        ).fetchone()
+    metadata = json.loads(row["metadata_json"])
+    assert metadata["digest_pin_updates"][0]["final_image"] == (
+        "ghcr.io/magrhino/wud-updater@sha256:index"
+    )
+
+
+def test_self_update_prepare_endpoint_rejects_moved_digest_pin_after_pull(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    fake_env, fake_root = _fake_docker_env(tmp_path)
+    target_image = "ghcr.io/magrhino/wud-updater:v0.25.0"
+    _write_fake_manifest(
+        fake_root,
+        target_image,
+        _manifest_index_digest("sha256:planned", "sha256:child"),
+    )
+    _write_fake_image_after_pull(
+        fake_root,
+        target_image,
+        "sha256:config",
+        "sha256:planned",
+    )
+    monkeypatch.setattr(web_module, "current_tag", lambda: "v0.24.2")
+    monkeypatch.setattr(web_module, "fetch_latest_release_tag", lambda: "v0.25.0")
+    monkeypatch.setattr(
+        web_module,
+        "current_container_image",
+        lambda _env: "ghcr.io/magrhino/wud-updater:v0.24.2",
+    )
+    monkeypatch.setattr(
+        web_module,
+        "_fetch_self_update_release_notes",
+        lambda *_args, **_kwargs: ([], False, []),
+    )
+    original_pull = web_module.ComposeCli.pull
+
+    def moving_pull(self, *args, **kwargs):
+        result = original_pull(self, *args, **kwargs)
+        _write_fake_manifest(
+            fake_root,
+            target_image,
+            _manifest_index_digest("sha256:moved", "sha256:child"),
+        )
+        return result
+
+    monkeypatch.setattr(web_module.ComposeCli, "pull", moving_pull)
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+            "WUD_WEB_RESTART_CONTAINER": "wud-updater",
+            "WUD_DIGEST_PIN_UPDATES": "true",
+            **fake_env,
+        },
+    )
+    compose_dir = _make_fake_stack(
+        tmp_path,
+        fake_root,
+        "wud",
+        [
+            (
+                "wud-updater",
+                "ghcr.io/magrhino/wud-updater:v0.24.2",
+                "wud-updater",
+            ),
+        ],
+    )
+    compose_before = (compose_dir / "docker-compose.yml").read_text(encoding="utf-8")
+    plan = client.post(
+        "/api/v1/self-update/plan",
+        headers=_csrf_headers(client),
+    ).json()
+
+    response = client.post(
+        "/api/v1/self-update/prepare",
+        json={
+            "confirmation": "prepare_tag_update",
+            "plan_id": plan["plan"]["plan_id"],
+            "current_tag": "v0.24.2",
+            "latest_tag": "v0.25.0",
+            "target_image": target_image,
+            "restart_container": "wud-updater",
+        },
+        headers=_csrf_headers(client),
+    )
+
+    assert response.status_code == 500
+    assert (compose_dir / "docker-compose.yml").read_text(encoding="utf-8") == compose_before
+    assert client.app.state.web_self_update_running is False
 
 
 def test_self_update_prepare_endpoint_restores_compose_when_pull_fails(

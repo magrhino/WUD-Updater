@@ -91,12 +91,14 @@ from .doctor import (
     DoctorSuggestion as DoctorDataSuggestion,
     options_from_namespace as doctor_options_from_namespace,
 )
+from .digest_verifier import DigestVerifier, DockerManifestResolver
 from .docker_cli import ContainerImage, DockerCli
 from .images import (
     image_has_tag,
     image_matches_resolved_target,
     image_tag,
     image_with_tag,
+    normalize_digest,
     repo_key,
     tag_value_valid,
 )
@@ -4873,6 +4875,48 @@ def _validate_self_update_prepare_plan(plan: PlanResponse) -> None:
         )
 
 
+def _verify_self_update_digest_pin_updates(
+    settings: WebSettings,
+    updates: Sequence[DigestPinUpdate],
+) -> None:
+    if not updates:
+        return
+
+    command_runner = CommandRunner(env=settings.command_env)
+    docker = DockerCli(runner=command_runner)
+    resolver = DockerManifestResolver(docker, verbose=True)
+    verifier = DigestVerifier(
+        docker,
+        primary_resolver=resolver,
+        fallback_resolver=resolver,
+    )
+    for update in updates:
+        current = verifier.resolve_tag_digest(update.resolved_image)
+        if not current.ok:
+            raise RuntimeError(
+                "could not re-resolve digest-pin target "
+                f"{update.resolved_image}: {current.reason}"
+                + (f" ({current.error})" if current.error else "")
+            )
+        current_digest = normalize_digest(current.digest)
+        if current_digest != update.planned_digest:
+            raise RuntimeError(
+                "digest-pin target moved for "
+                f"{update.resolved_image}: planned {update.planned_digest}, "
+                f"current {current_digest}"
+            )
+
+        digest_result = verifier.verify(update.resolved_image, update.planned_digest)
+        if not digest_result.ok:
+            detail = digest_result.reason
+            if digest_result.error:
+                detail = f"{detail} ({digest_result.error})"
+            raise RuntimeError(
+                "digest-pin target did not verify for "
+                f"{update.resolved_image}: wanted {update.planned_digest}; {detail}"
+            )
+
+
 def _prepare_self_update_tag_update(
     settings: WebSettings,
     plan: PlanResponse,
@@ -4917,6 +4961,7 @@ def _prepare_self_update_tag_update(
             project_directory=stack.project_directory or None,
         )
         if digest_pin_updates:
+            _verify_self_update_digest_pin_updates(settings, digest_pin_updates)
             applied_digest_pins = apply_compose_digest_pins(
                 compose_path,
                 digest_pin_updates,
