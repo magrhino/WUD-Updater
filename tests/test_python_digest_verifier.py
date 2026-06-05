@@ -103,6 +103,30 @@ def index_doc(
     )
 
 
+def unknown_platform_index_doc(
+    digest: str,
+    child: str,
+    *,
+    source: str = "static",
+) -> ManifestDocument:
+    return ManifestDocument(
+        source=source,
+        digest=digest,
+        media_type=INDEX_TYPE,
+        payload={
+            "schemaVersion": 2,
+            "mediaType": INDEX_TYPE,
+            "manifests": [
+                {
+                    "mediaType": MANIFEST_TYPE,
+                    "digest": child,
+                    "platform": {"os": "unknown", "architecture": "unknown"},
+                },
+            ],
+        },
+    )
+
+
 def manifest_doc(
     digest: str,
     config_digest: str,
@@ -304,6 +328,93 @@ class DigestVerifierTests(unittest.TestCase):
                 ("ghcr.io", "acme/app", "latest"),
             ],
         )
+
+    def test_verify_tag_digest_accepts_current_tag_digest(self) -> None:
+        resolver = StaticResolver(
+            {
+                ("ghcr.io", "acme/app", "latest"): index_doc(
+                    "sha256:index",
+                    ("sha256:child",),
+                ),
+            }
+        )
+        verifier = DigestVerifier(
+            FakeDocker(),
+            primary_resolver=resolver,
+            fallback_resolver=resolver,
+        )
+
+        result = verifier.verify_tag_digest("ghcr.io/acme/app:latest", "sha256:index")
+
+        self.assertTrue(result.ok)
+        self.assertEqual(result.reason, "tag-digest-current")
+        self.assertEqual(result.digest, "sha256:index")
+
+    def test_verify_tag_digest_accepts_current_platform_child_digest(self) -> None:
+        resolver = StaticResolver(
+            {
+                ("ghcr.io", "acme/app", "latest"): index_doc(
+                    "sha256:index",
+                    ("sha256:child",),
+                ),
+            }
+        )
+        verifier = DigestVerifier(
+            FakeDocker(),
+            primary_resolver=resolver,
+            fallback_resolver=resolver,
+        )
+
+        result = verifier.verify_tag_digest("ghcr.io/acme/app:latest", "sha256:child")
+
+        self.assertTrue(result.ok)
+        self.assertEqual(result.reason, "tag-child-digest-current")
+        self.assertEqual(result.digest, "sha256:child")
+
+    def test_verify_tag_digest_rejects_digest_missing_from_current_index(self) -> None:
+        resolver = StaticResolver(
+            {
+                ("ghcr.io", "acme/app", "latest"): index_doc(
+                    "sha256:index",
+                    ("sha256:child",),
+                ),
+            }
+        )
+        verifier = DigestVerifier(
+            FakeDocker(),
+            primary_resolver=resolver,
+            fallback_resolver=resolver,
+        )
+
+        result = verifier.verify_tag_digest("ghcr.io/acme/app:latest", "sha256:stale")
+
+        self.assertFalse(result.ok)
+        self.assertEqual(result.reason, "stale-digest")
+        self.assertEqual(result.digest, "sha256:index")
+
+    def test_verify_tag_digest_rejects_unknown_platform_child_digest(self) -> None:
+        resolver = StaticResolver(
+            {
+                ("ghcr.io", "acme/app", "latest"): unknown_platform_index_doc(
+                    "sha256:index",
+                    "sha256:attestation",
+                ),
+            }
+        )
+        verifier = DigestVerifier(
+            FakeDocker(),
+            primary_resolver=resolver,
+            fallback_resolver=resolver,
+        )
+
+        result = verifier.verify_tag_digest(
+            "ghcr.io/acme/app:latest",
+            "sha256:attestation",
+        )
+
+        self.assertFalse(result.ok)
+        self.assertEqual(result.reason, "stale-digest")
+        self.assertEqual(result.digest, "sha256:index")
 
     def test_non_ghcr_platform_child_digest_matches_local_config_digest(self) -> None:
         expected = "sha256:child"

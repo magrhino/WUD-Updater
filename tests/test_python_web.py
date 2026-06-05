@@ -5909,6 +5909,53 @@ def test_plan_endpoint_skips_tag_updates_unless_allowed(tmp_path: Path) -> None:
     assert "repo/app:1.0 tag=2.0\n" == wud_file.read_text(encoding="utf-8")
 
 
+def test_plan_endpoint_accepts_digest_pin_for_tagged_digest_only_latest(
+    tmp_path: Path,
+) -> None:
+    fake_env, fake_root = _fake_docker_env(tmp_path)
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_DIGEST_PIN_UPDATES": "true",
+            **fake_env,
+        },
+    )
+    wud_file = tmp_path / "state" / "images.todo"
+    wud_file.write_text("repo/app:latest@sha256:child\n", encoding="utf-8")
+    _make_fake_stack(
+        tmp_path,
+        fake_root,
+        "stack",
+        [("app", "repo/app:latest", "cid-app")],
+    )
+    _write_fake_manifest(
+        fake_root,
+        "docker.io/repo/app:latest",
+        _manifest_index_digest("sha256:index", "sha256:child"),
+    )
+
+    response = client.post(
+        "/api/v1/plans",
+        json={"line_numbers": [1]},
+        headers=_csrf_headers(client),
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "ready"
+    assert body["issues"] == []
+    assert body["stacks"][0]["lines"][0]["action"] == "digest-pin"
+    assert body["stacks"][0]["lines"][0]["target_image"] == "repo/app@sha256:child"
+    digest_pin = body["stacks"][0]["digest_pin_updates"][0]
+    assert digest_pin["source_image"] == "repo/app:latest"
+    assert digest_pin["resolved_tag"] == "latest"
+    assert digest_pin["watch_tag"] == "latest"
+    assert digest_pin["planned_digest"] == "sha256:child"
+    assert digest_pin["final_image"] == "repo/app@sha256:child"
+    assert "repo/app:latest@sha256:child\n" == wud_file.read_text(encoding="utf-8")
+
+
 def test_plan_endpoint_accepts_tag_overrides(tmp_path: Path) -> None:
     fake_env, fake_root = _fake_docker_env(tmp_path)
     client = _client(tmp_path, {"WUD_WEB_DEV_NO_AUTH": "true", **fake_env})

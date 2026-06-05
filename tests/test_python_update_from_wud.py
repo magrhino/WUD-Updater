@@ -1537,9 +1537,10 @@ class PythonUpdateFromWudTests(unittest.TestCase):
         self.assertIn("wud.tag.include=^2\\.0$$", content)
         calls = self.calls()
         self.assertRegex(calls, r"manifest inspect --verbose docker.io/repo/app:2.0")
+        self.assertRegex(calls, r"manifest inspect docker.io/repo/app:2.0")
         self.assertEqual(
             calls.count("manifest inspect --verbose docker.io/repo/app:2.0"),
-            2,
+            1,
         )
         self.assertRegex(calls, r"compose -f docker-compose.yml pull app")
         events = self.db_rows("SELECT * FROM update_events")
@@ -1644,6 +1645,106 @@ class PythonUpdateFromWudTests(unittest.TestCase):
         )
         self.assertNotEqual(plan.plan_id, moved_plan.plan_id)
 
+    def test_digest_pin_plan_accepts_tagged_digest_only_latest_child(self) -> None:
+        self.wud_file.write_text(
+            "repo/app:latest@sha256:child\n",
+            encoding="utf-8",
+        )
+        self.make_stack("app", [("app", "repo/app:latest", "cid-app")])
+        self.set_manifest_stdout(
+            "docker.io/repo/app:latest",
+            manifest_index_digest("sha256:index", "sha256:child"),
+        )
+        config = load_config(
+            {
+                "DOCKER_BASE": str(self.base),
+                "WUD_OUT_FILE": str(self.wud_file),
+                "WUD_LOG_DIR": str(self.log_dir),
+                "WUD_DIGEST_PIN_UPDATES": "true",
+            },
+            home=str(self.root),
+        )
+
+        plan = build_dry_run_plan(
+            config,
+            line_numbers=(1,),
+            allow_tag_updates=False,
+            environ=self.env,
+        )
+
+        self.assertEqual(plan.status, "ready")
+        self.assertTrue(plan.digest_pin_updates)
+        self.assertEqual(plan.stacks[0].lines[0].action, "digest-pin")
+        self.assertEqual(plan.stacks[0].lines[0].desired_tag, "")
+        self.assertEqual(plan.stacks[0].lines[0].target_image, "repo/app@sha256:child")
+        digest_pin = plan.stacks[0].digest_pin_updates[0]
+        self.assertEqual(digest_pin.resolved_tag, "latest")
+        self.assertEqual(digest_pin.watch_tag, "latest")
+        self.assertEqual(digest_pin.planned_digest, "sha256:child")
+        self.assertEqual(digest_pin.final_image, "repo/app@sha256:child")
+
+    def test_digest_pin_plan_blocks_stale_tagged_digest_only_latest_child(self) -> None:
+        self.wud_file.write_text(
+            "repo/app:latest@sha256:stale\n",
+            encoding="utf-8",
+        )
+        self.make_stack("app", [("app", "repo/app:latest", "cid-app")])
+        self.set_manifest_stdout(
+            "docker.io/repo/app:latest",
+            manifest_index_digest("sha256:index", "sha256:current"),
+        )
+        config = load_config(
+            {
+                "DOCKER_BASE": str(self.base),
+                "WUD_OUT_FILE": str(self.wud_file),
+                "WUD_LOG_DIR": str(self.log_dir),
+                "WUD_DIGEST_PIN_UPDATES": "true",
+            },
+            home=str(self.root),
+        )
+
+        plan = build_dry_run_plan(
+            config,
+            line_numbers=(1,),
+            allow_tag_updates=False,
+            environ=self.env,
+        )
+
+        self.assertEqual(plan.status, "blocked")
+        self.assertFalse(plan.can_apply)
+        self.assertEqual(plan.issues[0].code, "digest-pin-digest-stale")
+        self.assertIn("Digest-pin target moved", plan.issues[0].message)
+        self.assertEqual(plan.stacks[0].digest_pin_updates, ())
+
+    def test_digest_pin_plan_blocks_conflicting_tagged_digest_only_digests(self) -> None:
+        self.wud_file.write_text(
+            "repo/app:latest@sha256:first\n"
+            "repo/app:latest@sha256:second\n",
+            encoding="utf-8",
+        )
+        self.make_stack("app", [("app", "repo/app:latest", "cid-app")])
+        config = load_config(
+            {
+                "DOCKER_BASE": str(self.base),
+                "WUD_OUT_FILE": str(self.wud_file),
+                "WUD_LOG_DIR": str(self.log_dir),
+                "WUD_DIGEST_PIN_UPDATES": "true",
+            },
+            home=str(self.root),
+        )
+
+        plan = build_dry_run_plan(
+            config,
+            line_numbers=(1, 2),
+            allow_tag_updates=False,
+            environ=self.env,
+        )
+
+        self.assertEqual(plan.status, "blocked")
+        self.assertEqual(plan.issues[0].code, "digest-pin-conflict")
+        self.assertIn("Conflicting digest-pin digests", plan.issues[0].message)
+        self.assertEqual(plan.stacks[0].digest_pin_updates, ())
+
     def test_digest_pin_apply_rejects_moved_planned_digest(self) -> None:
         self.wud_file.write_text("repo/app:1.0 tag=2.0\n", encoding="utf-8")
         stack_dir = self.make_stack("app", [("app", "repo/app:1.0", "cid-app")])
@@ -1676,6 +1777,48 @@ class PythonUpdateFromWudTests(unittest.TestCase):
         )
         content = compose_file.read_text(encoding="utf-8")
         self.assertIn("image: repo/app:1.0", content)
+        self.assertNotIn("wud-updater.resolved-tag", content)
+        pending = self.db_rows("SELECT * FROM pending_updates")
+        self.assertEqual(pending[0]["status"], "failed")
+        self.assertEqual(
+            pending[0]["status_reason"],
+            "digest-pin-verification-failed",
+        )
+
+    def test_digest_pin_apply_rejects_moved_tagged_digest_only_latest_child(self) -> None:
+        self.wud_file.write_text(
+            "repo/app:latest@sha256:planned\n",
+            encoding="utf-8",
+        )
+        stack_dir = self.make_stack("app", [("app", "repo/app:latest", "cid-app")])
+        compose_file = stack_dir / "docker-compose.yml"
+        self.set_image_state("repo/app:latest", "old", "sha256:old")
+        self.set_image_after_pull("repo/app:latest", "new", "sha256:planned")
+        self.set_manifest_stdout(
+            "docker.io/repo/app:latest",
+            manifest_index_digest("sha256:moved-index", "sha256:moved"),
+        )
+        planned = (
+            digest_pin_update_from_values(
+                old_image="repo/app:latest",
+                resolved_tag="latest",
+                planned_digest="sha256:planned",
+                services=("app",),
+            ),
+        )
+
+        status, stdout, stderr = self.run_direct(
+            digest_pin_updates=True,
+            digest_pin_plan=planned,
+        )
+
+        self.assertEqual(status, 1, stderr + stdout)
+        self.assertEqual(
+            self.wud_file.read_text(encoding="utf-8"),
+            "repo/app:latest@sha256:planned\n",
+        )
+        content = compose_file.read_text(encoding="utf-8")
+        self.assertIn("image: repo/app:latest", content)
         self.assertNotIn("wud-updater.resolved-tag", content)
         pending = self.db_rows("SELECT * FROM pending_updates")
         self.assertEqual(pending[0]["status"], "failed")

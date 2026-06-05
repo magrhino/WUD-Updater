@@ -12,7 +12,7 @@ from typing import Any, Protocol
 
 from .command import CommandError
 from .docker_cli import DockerCli
-from .images import strip_digest
+from .images import normalize_digest, strip_digest
 
 
 GHCR_REGISTRY = "ghcr.io"
@@ -91,6 +91,14 @@ class ManifestDocument:
     def child_digest(self, digest: str) -> str:
         for manifest in self._manifest_items():
             if manifest.get("digest") == digest:
+                return digest
+        return ""
+
+    def platform_child_digest(self, digest: str) -> str:
+        for manifest in self._manifest_items():
+            if manifest.get("digest") == digest and _real_platform(
+                manifest.get("platform")
+            ):
                 return digest
         return ""
 
@@ -399,6 +407,60 @@ class DigestVerifier:
             source=tag_document.source,
         )
 
+    def verify_tag_digest(self, image: str, expected: str) -> DigestResolveResult:
+        expected = normalize_digest(expected)
+        if not expected:
+            return DigestResolveResult(
+                ok=False,
+                status="failed",
+                reason="expected-digest-missing",
+            )
+        registry_image = parse_registry_image(image)
+        if registry_image is None:
+            return DigestResolveResult(
+                ok=False,
+                status="untrusted",
+                reason="unsupported-image-reference",
+            )
+        try:
+            tag_document = self._fetch(registry_image, registry_image.tag)
+        except ManifestLookupError as exc:
+            return DigestResolveResult(
+                ok=False,
+                status=_failure_status(registry_image),
+                reason=_manifest_unavailable_reason(registry_image),
+                error=str(exc),
+            )
+
+        tag_digest = normalize_digest(
+            tag_document.digest or _payload_digest(tag_document.payload)
+        )
+        if not tag_digest and tag_document.is_index():
+            tag_digest = self._resolve_index_digest(registry_image)
+        if tag_digest == expected:
+            return DigestResolveResult(
+                ok=True,
+                status="verified",
+                reason="tag-digest-current",
+                digest=expected,
+                source=tag_document.source,
+            )
+        if tag_document.is_index() and tag_document.platform_child_digest(expected):
+            return DigestResolveResult(
+                ok=True,
+                status="verified",
+                reason="tag-child-digest-current",
+                digest=expected,
+                source=tag_document.source,
+            )
+        return DigestResolveResult(
+            ok=False,
+            status="failed",
+            reason="stale-digest",
+            digest=tag_digest,
+            source=tag_document.source,
+        )
+
     def _resolve_index_digest(
         self,
         image: RegistryImageRef,
@@ -596,6 +658,21 @@ def _reason(image: RegistryImageRef, suffix: str) -> str:
 
 def _is_registry_prefix(value: str) -> bool:
     return "." in value or ":" in value or value == "localhost"
+
+
+def _real_platform(value: Any) -> bool:
+    if not isinstance(value, Mapping):
+        return False
+    os_value = value.get("os")
+    architecture = value.get("architecture")
+    if not isinstance(os_value, str) or not isinstance(architecture, str):
+        return False
+    return (
+        os_value.strip() != ""
+        and architecture.strip() != ""
+        and os_value.lower() != "unknown"
+        and architecture.lower() != "unknown"
+    )
 
 
 def _content_type(value: str) -> str:
