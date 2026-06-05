@@ -4,6 +4,23 @@ All notable changes to WUD-Updater are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com) and versions follow
 [Semantic Versioning](https://semver.org).
 
+## [0.36.0](https://github.com/magrhino/WUD-Updater/compare/v0.35.1...v0.36.0) (2026-06-05)
+
+
+### Features
+
+* **tests:** parallelize Python test suite with pytest-xdist ([dc16409](https://github.com/magrhino/WUD-Updater/commit/dc164096d24a4792da610fdf1bfd8794003158a8))
+* **updater:** add digest-pin compose updates ([c0cc0dc](https://github.com/magrhino/WUD-Updater/commit/c0cc0dc27fb8e0096eb191203d38208ef3a23205))
+
+
+### Bug Fixes
+
+* apply CodeRabbit auto-fixes ([3a92885](https://github.com/magrhino/WUD-Updater/commit/3a928853f88ae44eb0cbb731618c966b14a0f674))
+* apply CodeRabbit auto-fixes ([afc15a5](https://github.com/magrhino/WUD-Updater/commit/afc15a5f14721006681926781da65a7600c685a0))
+* **digest:** reuse primary http resolver for index digest ([4348c5f](https://github.com/magrhino/WUD-Updater/commit/4348c5f6db14c714c0e6ab548a3cc402b3be0cb9))
+* **updater:** reduce digest-pin verification false negatives ([e7b1005](https://github.com/magrhino/WUD-Updater/commit/e7b1005ee89bb94f34d688b1c4700caee7c189bf))
+* **updater:** verify digest-pin self-update targets ([f203d68](https://github.com/magrhino/WUD-Updater/commit/f203d680a9b2a7e6a4b7497c8488732dc9711bc1))
+
 ## [0.35.1](https://github.com/magrhino/WUD-Updater/compare/v0.35.0...v0.35.1) (2026-06-05)
 
 
