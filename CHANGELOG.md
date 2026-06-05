@@ -4,6 +4,16 @@ All notable changes to WUD-Updater are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com) and versions follow
 [Semantic Versioning](https://semver.org).
 
+## [0.36.1](https://github.com/magrhino/WUD-Updater/compare/v0.36.0...v0.36.1) (2026-06-05)
+
+
+### Bug Fixes
+
+* apply CodeRabbit auto-fixes ([87f84ba](https://github.com/magrhino/WUD-Updater/commit/87f84bad5cf91fc9a47784a4c8faf3e085f52932))
+* Merge pull request [#205](https://github.com/magrhino/WUD-Updater/issues/205) from magrhino/codex/fix-webui-compose-ignore-default ([76922af](https://github.com/magrhino/WUD-Updater/commit/76922af3d07fdb738bffd7c0a303fd8729ef7c80))
+* **webui:** clarify onboarding check diagnostics ([3068e85](https://github.com/magrhino/WUD-Updater/commit/3068e85d4660a3b2ae3757cc30ab1ea85e30b3ec))
+* **webui:** preserve default compose ignores in doctor ([ea026bb](https://github.com/magrhino/WUD-Updater/commit/ea026bbd6f8695220753e7fa1d001e6ee6e03647))
+
 ## [0.36.0](https://github.com/magrhino/WUD-Updater/compare/v0.35.1...v0.36.0) (2026-06-05)
 
 
