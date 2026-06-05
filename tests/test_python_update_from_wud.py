@@ -3428,7 +3428,7 @@ class RenderComposeDigestPinsTests(unittest.TestCase):
             encoding="utf-8",
         )
 
-        rendered, applied = render_compose_digest_pins(
+        rendered, _ = render_compose_digest_pins(
             compose_file,
             (
                 digest_pin_update_from_values(
@@ -3450,7 +3450,7 @@ class RenderComposeDigestPinsTests(unittest.TestCase):
             encoding="utf-8",
         )
 
-        rendered, applied = render_compose_digest_pins(
+        rendered, _ = render_compose_digest_pins(
             compose_file,
             (
                 digest_pin_update_from_values(

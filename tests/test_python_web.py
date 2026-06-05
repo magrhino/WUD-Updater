@@ -7943,11 +7943,19 @@ def test_managed_digest_pin_updates_can_be_reset_to_false(
     )
     headers = _csrf_headers(client)
 
-    client.post(
+    initial_response = client.post(
         "/api/v1/settings/managed",
         json={"values": {"digest_pin_updates": "true"}},
         headers=headers,
     )
+    initial_managed = {
+        entry["key"]: entry for entry in initial_response.json()["managed"]
+    }
+
+    assert initial_response.status_code == 200
+    assert initial_managed["digest_pin_updates"]["value"] == "true"
+    assert initial_managed["digest_pin_updates"]["source"] == "configured"
+
     reset_response = client.post(
         "/api/v1/settings/managed",
         json={"values": {"digest_pin_updates": "false"}},
