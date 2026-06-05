@@ -1394,6 +1394,22 @@ class UpdateFromWudRunner:
 
         if digest_pin_updates:
             compose_path = stack.directory / stack.file
+            if compose_backup is None:
+                try:
+                    compose_backup = _backup_compose(compose_path)
+                except OSError as exc:
+                    self.log.error(
+                        f"[{stack.name}] Could not back up compose file before digest-pin rewrite: {exc}"
+                    )
+                    self._record_failure(
+                        stack,
+                        matches,
+                        phase="compose-backup",
+                        reason="compose-backup-failed",
+                        services=pull_services,
+                        note=str(exc),
+                    )
+                    return StackStatus("failure", "compose-backup-failed")
             try:
                 applied_digest_pins = apply_compose_digest_pins(
                     compose_path,
@@ -1582,6 +1598,7 @@ class UpdateFromWudRunner:
         else:
             self.log.info(f"[{stack.name}] Bringing stack up")
 
+        compose_rewrite_applied = bool(applied_tags or applied_digest_pins)
         up_result = self._run_compose_up(
             stack,
             services,
@@ -1589,7 +1606,7 @@ class UpdateFromWudRunner:
             no_deps=scope.up_no_deps,
         )
         if not up_result.ok:
-            if applied_tags and compose_backup is not None:
+            if compose_rewrite_applied and compose_backup is not None:
                 failure_phase = "up"
                 failure_reason = "up-or-health-failed"
                 failure_error = up_result.command_error
@@ -1658,7 +1675,7 @@ class UpdateFromWudRunner:
                         project_directory=stack.project_directory,
                     )
             except CommandError as exc:
-                if applied_tags and compose_backup is not None:
+                if compose_rewrite_applied and compose_backup is not None:
                     return self._handle_tag_update_failure(
                         stack,
                         matches,
@@ -1696,7 +1713,7 @@ class UpdateFromWudRunner:
         if up_result.wait_handled or self._wait_for_health(stack, services, matches):
             self.log.info(f"[{stack.name}] Healthy")
             if down_failed:
-                if applied_tags and compose_backup is not None:
+                if compose_rewrite_applied and compose_backup is not None:
                     return self._handle_tag_update_failure(
                         stack,
                         matches,
@@ -1737,7 +1754,7 @@ class UpdateFromWudRunner:
             return StackStatus("success", "updated")
 
         health_details = self._capture_health_details(stack, services)
-        if applied_tags and compose_backup is not None:
+        if compose_rewrite_applied and compose_backup is not None:
             return self._handle_tag_update_failure(
                 stack,
                 matches,

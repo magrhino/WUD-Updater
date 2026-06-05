@@ -1866,6 +1866,70 @@ class PythonUpdateFromWudTests(unittest.TestCase):
         self.assertEqual(events[0]["target_image"], "repo/app@sha256:child")
         self.assertEqual(known[0]["image"], "repo/app@sha256:child")
 
+    def test_digest_pin_only_health_failure_rolls_back_compose(self) -> None:
+        self.wud_file.write_text(
+            "repo/app:latest@sha256:child\n",
+            encoding="utf-8",
+        )
+        stack_dir = self.make_stack("app", [("app", "repo/app:latest", "cid-app")])
+        compose_file = stack_dir / "docker-compose.yml"
+        self.set_image_state("repo/app:latest", "sha256:old-config", "sha256:old")
+        self.set_image_after_pull(
+            "repo/app:latest",
+            "sha256:new-config",
+            "sha256:child",
+        )
+        self.set_image_state(
+            "repo/app@sha256:child",
+            "sha256:new-config",
+            "sha256:child",
+        )
+        self.set_manifest_stdout(
+            "docker.io/repo/app:latest",
+            manifest_index_digest("sha256:index", "sha256:child"),
+        )
+        self.set_manifest_stdout(
+            "docker.io/repo/app@sha256:child",
+            manifest_image("sha256:new-config"),
+        )
+        (self.fake_root / "containers" / "cid-app.healthlog").write_text(
+            "digest-pinned image failed health check\n",
+            encoding="utf-8",
+        )
+        hook = self.fake_root / "post-up-hook"
+        hook.write_text(
+            "#!/usr/bin/env bash\n"
+            "set -Eeuo pipefail\n"
+            "compose_file=\"${2:?compose file is required}\"\n"
+            "if grep -q 'repo/app@sha256:child' \"$compose_file\"; then\n"
+            "  printf '/cid-app|running|unhealthy|1|0\\n' > \"${FAKE_DOCKER_ROOT:?}/containers/cid-app.summary\"\n"
+            "else\n"
+            "  printf '/cid-app|running|healthy|0|0\\n' > \"${FAKE_DOCKER_ROOT:?}/containers/cid-app.summary\"\n"
+            "fi\n",
+            encoding="utf-8",
+        )
+        hook.chmod(0o755)
+
+        status, stdout, stderr = self.run_direct(digest_pin_updates=True)
+
+        self.assertEqual(status, 1, stderr + stdout)
+        self.assertEqual(
+            self.wud_file.read_text(encoding="utf-8"),
+            "repo/app:latest@sha256:child\n",
+        )
+        content = compose_file.read_text(encoding="utf-8")
+        self.assertIn("image: repo/app:latest", content)
+        self.assertNotIn("image: repo/app@sha256:child", content)
+        self.assertNotIn("wud-updater.resolved-tag", content)
+        incidents = sorted(stack_dir.glob("error-*.logs"))
+        self.assertTrue(incidents)
+        incident = incidents[-1].read_text(encoding="utf-8")
+        self.assertIn("reason=health-failed", incident)
+        self.assertIn("manual_review_required=no", incident)
+        pending = self.db_rows("SELECT * FROM pending_updates")
+        self.assertEqual(pending[0]["status"], "failed")
+        self.assertEqual(pending[0]["status_reason"], "health-failed")
+
     def test_digest_pin_apply_updates_existing_tagged_digest_pin(self) -> None:
         self.wud_file.write_text(
             "repo/app:latest@sha256:child\n",
