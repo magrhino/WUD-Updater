@@ -3033,7 +3033,7 @@ def _effective_compose_ignore_paths(settings: WebSettings) -> tuple[Path, ...]:
 def _stored_compose_ignore_paths(settings: WebSettings) -> tuple[Path, ...]:
     try:
         with closing(_connect_readonly_db(settings)) as conn:
-            value = _web_setting(conn, MANAGED_COMPOSE_IGNORE_PATHS_DB_KEY)
+            value = _web_setting_or_none(conn, MANAGED_COMPOSE_IGNORE_PATHS_DB_KEY)
     except ReadOnlyDatabaseMissing:
         return DEFAULT_COMPOSE_IGNORE_PATHS
     except (OSError, sqlite3.Error, DatabaseError) as exc:
@@ -8584,6 +8584,10 @@ def _web_user_count(conn: sqlite3.Connection) -> int:
 
 
 def _web_setting(conn: sqlite3.Connection, key: str) -> str:
+    return _web_setting_or_none(conn, key) or ""
+
+
+def _web_setting_or_none(conn: sqlite3.Connection, key: str) -> str | None:
     row = conn.execute(
         """
         SELECT value
@@ -8594,7 +8598,7 @@ def _web_setting(conn: sqlite3.Connection, key: str) -> str:
         (key,),
     ).fetchone()
     if row is None:
-        return ""
+        return None
     return str(row["value"] if isinstance(row, sqlite3.Row) else row[0])
 
 

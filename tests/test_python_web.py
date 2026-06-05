@@ -1125,6 +1125,32 @@ def test_onboarding_checklist_returns_redacted_setup_items(
     assert "<redacted>" in serialized
 
 
+def test_onboarding_checklist_uses_default_compose_ignore_paths(
+    tmp_path: Path,
+) -> None:
+    client = _doctor_client(tmp_path)
+    docker_base = client.app.state.web_settings.config.docker_base
+    ignored_stack = docker_base / "old" / "ignored"
+    ignored_stack.mkdir(parents=True)
+    (ignored_stack / "docker-compose.yml").write_text(
+        "services:\n  ignored:\n    image: repo/ignored:latest\n",
+        encoding="utf-8",
+    )
+
+    response = client.post(
+        "/api/v1/onboarding/checklist",
+        headers=_csrf_headers(client),
+    )
+    body = response.json()
+    compose_item = next(
+        item for item in body["items"] if item["key"] == "compose-discovery"
+    )
+
+    assert response.status_code == 200
+    assert compose_item["status"] == "PASS"
+    assert all("old-ignored" not in code for code in compose_item["check_codes"])
+
+
 def test_onboarding_dismissal_persists_in_sqlite(
     tmp_path: Path,
 ) -> None:
