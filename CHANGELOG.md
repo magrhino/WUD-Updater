@@ -4,6 +4,13 @@ All notable changes to WUD-Updater are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com) and versions follow
 [Semantic Versioning](https://semver.org).
 
+## [0.37.0](https://github.com/magrhino/WUD-Updater/compare/v0.36.1...v0.37.0) (2026-06-05)
+
+
+### Features
+
+* Support digest-pin rematching for tagged WUD entries ([#209](https://github.com/magrhino/WUD-Updater/issues/209)) ([d6fa1ad](https://github.com/magrhino/WUD-Updater/commit/d6fa1ad01c52f3248f8bea5d460d227473faba64))
+
 ## [0.36.1](https://github.com/magrhino/WUD-Updater/compare/v0.36.0...v0.36.1) (2026-06-05)
 
 
