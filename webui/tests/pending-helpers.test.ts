@@ -1,22 +1,48 @@
-import { defineComponent, h, type VNodeChild } from "vue";
+import { mount, type VueWrapper } from "@vue/test-utils";
+import { defineComponent, h, type Component, type VNodeChild } from "vue";
 import { describe, expect, it, vi } from "vitest";
 
 import type { PendingItem } from "../src/api/client";
+import PendingCleanupModal from "../src/components/pending/PendingCleanupModal.vue";
+import PendingPlanReviewModal from "../src/components/pending/PendingPlanReviewModal.vue";
+import PendingRemovalModal from "../src/components/pending/PendingRemovalModal.vue";
 import { safetyCues } from "../src/views/pending/safetyCues";
 import { createPendingColumns } from "../src/views/pending/tableColumns";
 import {
   pendingGroupedItem,
   pendingResponse,
+  planResponse,
   releaseNoteInfo,
   servicePolicy,
   snooze,
 } from "./helpers/fixtures";
-import { mountWithApp } from "./helpers/mount";
+import { mountWithApp, naiveStubs } from "./helpers/mount";
 
 type RenderColumn = {
   key?: string;
   render?: (row: PendingItem) => VNodeChild;
 };
+
+function pluralize(count: number, singular: string, plural = `${singular}s`): string {
+  return `${count} ${count === 1 ? singular : plural}`;
+}
+
+function mountPendingModal(component: Component, props: Record<string, unknown>): VueWrapper {
+  return mount(component, {
+    props,
+    global: {
+      stubs: {
+        ...naiveStubs,
+        CoreUpdateTourPanel: { template: "<div />" },
+      },
+    },
+  });
+}
+
+async function emitModalShowUpdate(wrapper: VueWrapper, value: boolean): Promise<void> {
+  const modal = wrapper.getComponent(naiveStubs.NModal as Component);
+  await modal.vm.$emit("update:show", value);
+}
 
 describe("pending helper modules", () => {
   it("builds safety cues from versions, release notes, policies, and snoozes", () => {
@@ -160,5 +186,101 @@ describe("pending helper modules", () => {
     expect(wrapper.text()).toContain("Major bump");
     expect(wrapper.text()).toContain("GitHub release");
     expect(wrapper.text()).toContain("Possible breaking change");
+  });
+
+  it("forwards pending modal update-close events to the owning view", async () => {
+    const modalCases = [
+      {
+        component: PendingPlanReviewModal,
+        props: {
+          actionCommand: () => "docker compose pull app",
+          applyButtonLabel: "Apply 1 update",
+          applyDisabled: false,
+          applyPreflight: null,
+          applyPreflightAttentionChecks: [],
+          applyPreflightCheckDetail: () => "",
+          applyPreflightCheckLabel: () => "Ready",
+          applyPreflightCheckType: () => "success",
+          applyPreflightPassedChecks: [],
+          applyPreflightPassedText: "",
+          applyReadinessStatusLabel: "",
+          applyReadinessStatusType: "success",
+          applyReadinessSummary: "",
+          applyVisible: false,
+          cleanupAvailable: false,
+          cleanupButtonLabel: "Remove 0 unmatched entries",
+          cleanupDisabled: true,
+          cleanupDisabledMessage: "",
+          cleanupItems: [],
+          cleanupReviewSummary: "",
+          digestPinLabelApprovalApproved: () => false,
+          digestPinLabelApprovalIssues: [],
+          digestPinLabelIssueProposedRegex: () => "",
+          issueDetailString: () => "",
+          issueHint: () => "",
+          issueLabel: () => "",
+          issueType: () => "warning",
+          loading: false,
+          mutationDisabledMessage: "",
+          plan: planResponse(),
+          planActions: [],
+          planAlertType: "info",
+          planDigestPinLabelRewrites: [],
+          planLineDigestPinLabel: () => "",
+          planLineServiceLabel: () => "media / app",
+          planLineTagRewriteLabel: () => "",
+          planLines: [],
+          preflightDigestPinNotice: "",
+          preflightServiceImpactLabel: "",
+          preflightSummary: "1 service ready to update.",
+          preflightTagRewriteNotice: "",
+          preflightTitle: "Review selected updates",
+          pluralize,
+          show: true,
+          staleDiagnosticDetail: () => "",
+          staleDiagnosticLabel: () => "",
+          visiblePlanIssues: [],
+        },
+      },
+      {
+        component: PendingCleanupModal,
+        props: {
+          assistantActions: [],
+          assistantFindings: [],
+          assistantReasons: [],
+          cleanupButtonLabel: "Remove 0 unmatched entries",
+          cleanupDisabled: true,
+          cleanupItems: [],
+          cleanupLineLabel: () => "#1",
+          loading: false,
+          pendingSourceLabel: "images.todo",
+          pluralize,
+          show: true,
+        },
+      },
+      {
+        component: PendingRemovalModal,
+        props: {
+          loading: false,
+          pendingSourceLabel: "images.todo",
+          pluralize,
+          removalConfirmButtonLabel: "Remove 0 selected entries",
+          removalDisabled: true,
+          removalItems: [],
+          removalLineLabel: () => "#1",
+          show: true,
+        },
+      },
+    ];
+
+    for (const { component, props } of modalCases) {
+      const wrapper = mountPendingModal(component, props);
+
+      await emitModalShowUpdate(wrapper, true);
+      expect(wrapper.emitted("close")).toBeUndefined();
+
+      await emitModalShowUpdate(wrapper, false);
+      expect(wrapper.emitted("close")).toHaveLength(1);
+    }
   });
 });

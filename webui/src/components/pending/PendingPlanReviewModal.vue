@@ -85,12 +85,19 @@ const emit = defineEmits<{
   (event: "close"): void;
   (event: "open-cleanup"): void;
 }>();
+
+function handleModalShowUpdate(value: boolean): void {
+  if (!value) {
+    emit("close");
+  }
+}
 </script>
 
 <template>
   <n-modal
     :show="show"
     :mask-closable="false"
+    @update:show="handleModalShowUpdate"
   >
     <section
       class="preflight-modal"
