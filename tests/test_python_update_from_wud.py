@@ -2019,7 +2019,15 @@ class PythonUpdateFromWudTests(unittest.TestCase):
             calls.count("manifest inspect --verbose docker.io/repo/app:latest"),
             2,
         )
-        self.assertNotIn("manifest inspect docker.io/repo/app:latest", calls)
+        self.assertTrue(
+            all(
+                "--verbose" in call.split()
+                for call in calls.splitlines()
+                if call.startswith("manifest inspect ")
+                and "docker.io/repo/app:latest" in call.split()
+            ),
+            calls,
+        )
 
     def test_digest_pin_apply_updates_existing_tagged_digest_pin(self) -> None:
         self.wud_file.write_text(
