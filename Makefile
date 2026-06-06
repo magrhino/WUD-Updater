@@ -1,4 +1,7 @@
-.PHONY: webui-demo-state webui-dev webui-demo
+.PHONY: webui-demo-state webui-dev webui-demo lock
+
+lock:
+	./scripts/lock.sh
 
 webui-demo-state:
 	python3 webui/scripts/seed_demo_state.py

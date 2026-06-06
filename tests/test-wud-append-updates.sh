@@ -274,6 +274,73 @@ test_lock_timeout_leaves_file_unchanged(){
   teardown_case
 }
 
+test_lock_retries_when_lock_released_during_status_check(){
+  setup_case
+  mkdir -p "$(dirname "$OUT_FILE")" "$TEST_TMP/bin"
+  printf 'repo/old:latest\n' > "$OUT_FILE"
+  local real_mkdir
+  real_mkdir="$(command -v mkdir)"
+  cat > "$TEST_TMP/bin/mkdir" <<'FAKE_MKDIR'
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [[ "$1" == "-p" ]]; then
+  exec "$REAL_MKDIR" "$@"
+fi
+
+if [[ "$1" == "${WUD_OUT_FILE}.lock" && ! -e "$FAKE_LOCK_RACE_STATE" ]]; then
+  : > "$FAKE_LOCK_RACE_STATE"
+  "$REAL_MKDIR" "$1"
+  rmdir "$1"
+  exit 1
+fi
+
+exec "$REAL_MKDIR" "$@"
+FAKE_MKDIR
+  chmod +x "$TEST_TMP/bin/mkdir"
+
+  run_script PATH="$TEST_TMP/bin:$PATH" REAL_MKDIR="$real_mkdir" FAKE_LOCK_RACE_STATE="$TEST_TMP/mkdir-raced" WUD_LOCK_TIMEOUT=2 update_available=true image_name=repo/app image_tag_value=latest
+
+  assert_status 0
+  assert_file_equals "repo/app:latest
+repo/old:latest"
+  assert_no_temp_files
+  teardown_case
+}
+
+test_lock_failure_when_dir_cannot_be_created(){
+  setup_case
+  mkdir -p "$(dirname "$OUT_FILE")"
+  printf 'repo/old:latest\n' > "$OUT_FILE"
+  touch "$OUT_FILE.lock"
+
+  run_script WUD_LOCK_TIMEOUT=5 update_available=true image_name=repo/app image_tag_value=latest
+
+  assert_status 1
+  assert_file_equals 'repo/old:latest'
+  grep -q "Failed to create WUD file lock" "$TEST_TMP/output.log" || fail "missing strict error check"
+  assert_no_temp_files
+  teardown_case
+}
+
+test_lock_failure_in_readonly_dir(){
+  setup_case
+  OUT_FILE="$TEST_TMP/readonly_dir/images.todo"
+  mkdir -p "$(dirname "$OUT_FILE")"
+  printf 'repo/old:latest\n' > "$OUT_FILE"
+  chmod 555 "$(dirname "$OUT_FILE")"
+
+  run_script WUD_LOCK_TIMEOUT=5 update_available=true image_name=repo/app image_tag_value=latest
+
+  chmod 755 "$(dirname "$OUT_FILE")"
+
+  assert_status 1
+  assert_file_equals 'repo/old:latest'
+  grep -q "Failed to create WUD file lock" "$TEST_TMP/output.log" || fail "missing strict error check"
+  assert_no_temp_files
+  teardown_case
+}
+
 test_sort_failure_leaves_file_unchanged(){
   setup_case
   mkdir -p "$(dirname "$OUT_FILE")" "$TEST_TMP/bin"
@@ -344,6 +411,9 @@ main(){
   run_test test_owner_config_requires_uid_and_group_before_replace
   run_test test_lock_removed_after_success
   run_test test_lock_timeout_leaves_file_unchanged
+  run_test test_lock_retries_when_lock_released_during_status_check
+  run_test test_lock_failure_when_dir_cannot_be_created
+  run_test test_lock_failure_in_readonly_dir
   run_test test_sort_failure_leaves_file_unchanged
   run_test test_replace_failure_leaves_file_unchanged
 }
