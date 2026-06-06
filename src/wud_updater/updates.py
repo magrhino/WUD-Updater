@@ -597,6 +597,7 @@ class UpdatesRunner:
             selected_display
         )
         print(f"Selected {len(selected_display)} of {todo_count} pending update(s).")
+        selection = self._prompt_tag_updates(selected_display, selected_line_spec, "")
 
         remove_line_spec = ""
         if unselected_display:
@@ -608,7 +609,16 @@ class UpdatesRunner:
                     unselected_display
                 )
 
-        return self._prompt_tag_updates(selected_display, selected_line_spec, remove_line_spec)
+        if remove_line_spec == "":
+            return selection
+        return UpdateSelectionState(
+            selected_line_spec=selection.selected_line_spec,
+            remove_line_spec=remove_line_spec,
+            allow_tag_updates=selection.allow_tag_updates,
+            tag_override_specs=selection.tag_override_specs,
+            exclude_tag_line_spec=selection.exclude_tag_line_spec,
+            recreate_excluded_services=selection.recreate_excluded_services,
+        )
 
     def _prompt_tag_updates(
         self,

@@ -596,6 +596,26 @@ class PythonUpdatesWrapperTests(unittest.TestCase):
         self.assertIn("[y]es/[n]o/[c]hange", result.stdout)
         self.assertNotIn("Override tag for update", result.stdout)
 
+    def test_interactive_selected_tag_prompt_precedes_remove_prompt(self) -> None:
+        self.wud_file.write_text(
+            "repo/app:1.0 tag=2.0\nrepo/sidecar:latest\n",
+            encoding="utf-8",
+        )
+
+        result = self.run_updates(
+            "--base",
+            str(self.root / "docker"),
+            input_text="s\n1\ny\nn\n",
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+        sudo_log = self.sudo_log.read_text(encoding="utf-8")
+        self.assertIn("--only-lines 1 --allow-tag-updates --yes", sudo_log)
+        self.assertNotIn("--remove-lines-before-run", sudo_log)
+        tag_prompt = result.stdout.index("Apply selected tag update entries?")
+        remove_prompt = result.stdout.index("Remove unselected entries")
+        self.assertLess(tag_prompt, remove_prompt)
+
     def test_interactive_tag_exclude_passes_line_and_recreate_flag(self) -> None:
         self.wud_file.write_text("repo/app:1.0 tag=2.0\n", encoding="utf-8")
 
