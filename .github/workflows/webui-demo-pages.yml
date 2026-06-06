@@ -5,6 +5,7 @@ on:
     branches:
       - main
     paths:
+      - ".github/actions/setup-node-env/**"
       - ".github/workflows/webui-demo-pages.yml"
       - "webui/**"
       - "README.md"
