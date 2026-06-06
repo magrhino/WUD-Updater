@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import errno
 import os
 import re
 import subprocess
@@ -149,7 +150,7 @@ class UpdatesFileLock:
                     self.held = True
                     return
                 except OSError as exc:
-                    if self.lock_dir.exists():
+                    if isinstance(exc, FileExistsError) or exc.errno == errno.EEXIST:
                         pass
                     elif self.use_sudo and self._sudo_mkdir():
                         self.via_sudo = True

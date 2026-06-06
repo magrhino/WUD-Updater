@@ -12,7 +12,12 @@ from io import StringIO
 from pathlib import Path
 from unittest import mock
 
-from wud_updater.updates import UpdateSelectionState, run_updates_from_namespace
+from wud_updater.updates import (
+    UpdateSelectionState,
+    UpdatesError,
+    UpdatesFileLock,
+    run_updates_from_namespace,
+)
 
 
 class PythonUpdatesWrapperTests(unittest.TestCase):
@@ -1397,6 +1402,27 @@ class UpdateSelectionStateTests(unittest.TestCase):
         self.assertEqual(state.tag_override_specs, ("2=3.0", "4=1.5"))
         self.assertEqual(state.exclude_tag_line_spec, "5")
         self.assertTrue(state.recreate_excluded_services)
+
+
+class UpdatesFileLockTests(unittest.TestCase):
+    def test_existing_lock_times_out_without_permission_probe(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="wud-lock.") as tmp:
+            wud_file = Path(tmp) / "images.todo"
+            lock_dir = Path(f"{wud_file}.lock")
+            lock_dir.mkdir()
+            sleep = mock.Mock()
+            lock = UpdatesFileLock(
+                str(wud_file),
+                "0",
+                {},
+                use_sudo=False,
+                sleep=sleep,
+            )
+
+            with self.assertRaisesRegex(UpdatesError, "Timed out waiting"):
+                lock.acquire()
+
+        sleep.assert_not_called()
 
 
 if __name__ == "__main__":
