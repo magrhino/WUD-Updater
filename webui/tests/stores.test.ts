@@ -783,6 +783,33 @@ describe("settings store", () => {
     expect(window.sessionStorage.getItem("applyJobId")).toBeNull();
   });
 
+  it("applies plans through the plan apply endpoint", async () => {
+    const auth = useAuthStore();
+    vi.spyOn(auth, "ensureCsrf").mockResolvedValue("csrf-plan-apply");
+    const applyPlan = vi
+      .spyOn(webApi, "applyPlan")
+      .mockResolvedValue(applyJobResponse({ job_id: "job-plan", status: "running" }));
+    const createJob = vi
+      .spyOn(webApi, "createJob")
+      .mockRejectedValue(new Error("wrong endpoint"));
+    const updates = useUpdatesStore();
+
+    const job = await updates.applyPlan("plan-test", [1], false, [], []);
+
+    expect(applyPlan).toHaveBeenCalledWith(
+      "plan-test",
+      [1],
+      false,
+      [],
+      [],
+      "csrf-plan-apply",
+    );
+    expect(createJob).not.toHaveBeenCalled();
+    expect(job.job_id).toBe("job-plan");
+    expect(updates.applyJob?.job_id).toBe("job-plan");
+    expect(updates.rememberedApplyJobId).toBe("job-plan");
+  });
+
   it("loads a terminal apply job log from the persisted run log", async () => {
     const fetchMock = mockFetch({
       run_id: 10,
