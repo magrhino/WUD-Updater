@@ -155,12 +155,20 @@ export const useSettingsStore = defineStore("settings", () => {
       webApi.servicePolicies(),
       webApi.snoozes("active"),
     ]);
+    const errors: string[] = [];
     if (nextServicePolicies.status === "fulfilled") {
       servicePolicies.value = nextServicePolicies.value;
+    } else {
+      errors.push(
+        `webApi.servicePolicies() failed: ${errorMessage(nextServicePolicies.reason)}`,
+      );
     }
     if (nextSnoozes.status === "fulfilled") {
       snoozes.value = nextSnoozes.value;
+    } else {
+      errors.push(`webApi.snoozes("active") failed: ${errorMessage(nextSnoozes.reason)}`);
     }
+    error.value = errors.join(" ");
   }
 
   async function loadServicePolicies(): Promise<void> {

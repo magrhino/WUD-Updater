@@ -336,6 +336,10 @@ export const useUpdatesStore = defineStore("updates", () => {
     applyJobLog.value = log;
   }
 
+  function setError(message: string): void {
+    error.value = message;
+  }
+
   async function loadApplyJob(
     jobId: string,
     options: { recoverMissing?: boolean } = {},
@@ -439,6 +443,7 @@ export const useUpdatesStore = defineStore("updates", () => {
     applyPlan,
     setApplyJob,
     setApplyJobLog,
+    setError,
     loadApplyJob,
     loadApplyJobLogFromRun,
     markApplyJobRecovery,

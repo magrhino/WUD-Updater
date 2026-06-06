@@ -257,7 +257,7 @@ describe("settings store", () => {
 
     await updates.loadUpdateTargets();
 
-    expect((connection as any).updateTargets?.items[0]?.service_key || (updates as any).updateTargets?.items[0]?.service_key || (runs as any).updateTargets?.items[0]?.service_key || (settings as any).updateTargets?.items[0]?.service_key).toBe("media/app");
+    expect(updates.updateTargets?.items[0]?.service_key).toBe("media/app");
     expect(fetchMock.mock.calls[0][0]).toBe("/api/v1/update-targets");
   });
 
@@ -273,11 +273,33 @@ describe("settings store", () => {
     const updates = useUpdatesStore();
     const runs = useRunsStore();
     settings.servicePolicies = [existingPolicy];
+    settings.error = "old failure";
 
     await settings.loadPendingSafetyCues();
 
     expect(settings.servicePolicies).toEqual([existingPolicy]);
     expect(settings.snoozes).toEqual([loadedSnooze]);
+    expect(settings.error).toBe(
+      "webApi.servicePolicies() failed: service policies unavailable",
+    );
+  });
+
+  it("clears pending safety cue errors after successful loads", async () => {
+    const loadedPolicy = servicePolicy({ service_key: "media/app" });
+    const loadedSnooze = snooze({ service_key: "media/radarr" });
+    vi.spyOn(webApi, "servicePolicies").mockResolvedValue([loadedPolicy]);
+    vi.spyOn(webApi, "snoozes").mockResolvedValue([loadedSnooze]);
+        const connection = useConnectionStore();
+    const settings = useSettingsStore();
+    const updates = useUpdatesStore();
+    const runs = useRunsStore();
+    settings.error = "old failure";
+
+    await settings.loadPendingSafetyCues();
+
+    expect(settings.servicePolicies).toEqual([loadedPolicy]);
+    expect(settings.snoozes).toEqual([loadedSnooze]);
+    expect(settings.error).toBe("");
   });
 
   it("passes csrf from auth store to state operations", async () => {
@@ -423,12 +445,13 @@ describe("settings store", () => {
     const settings = useSettingsStore();
     const updates = useUpdatesStore();
     const runs = useRunsStore();
-    updates.error = ("old failure");
+    runs.error = "old failure";
+    runs.loading = true;
 
     await runs.loadRuns();
 
     expect(runs.error).toBe("");
-    expect(updates.loading).toBe(false);
+    expect(runs.loading).toBe(false);
     expect(runs.runs).toEqual([]);
   });
 
@@ -455,7 +478,7 @@ describe("settings store", () => {
     await updates.loadSelfUpdate();
 
     expect(fetchMock.mock.calls[0][0]).toBe("/api/v1/self-update");
-    expect((connection as any).selfUpdate?.latest_tag || (updates as any).selfUpdate?.latest_tag || (runs as any).selfUpdate?.latest_tag || (settings as any).selfUpdate?.latest_tag).toBe("v0.25.0");
+    expect(updates.selfUpdate?.latest_tag).toBe("v0.25.0");
   });
 
   it("loads self-update tag prepare plan", async () => {
@@ -471,7 +494,7 @@ describe("settings store", () => {
 
     expect(ensureCsrf).toHaveBeenCalledTimes(1);
     expect(fetchMock.mock.calls[0][0]).toBe("/api/v1/self-update/plan");
-    expect((connection as any).selfUpdatePlan?.plan.plan_id || (updates as any).selfUpdatePlan?.plan.plan_id || (runs as any).selfUpdatePlan?.plan.plan_id || (settings as any).selfUpdatePlan?.plan.plan_id).toBe("self-update-plan-test");
+    expect(updates.selfUpdatePlan?.plan.plan_id).toBe("self-update-plan-test");
     expect(response.external_recreate_required).toBe(true);
     expect(
       ((fetchMock.mock.calls[0][1] as RequestInit).headers as Headers).get(
@@ -500,7 +523,7 @@ describe("settings store", () => {
 
     expect(ensureCsrf).toHaveBeenCalledTimes(1);
     expect(response.container).toBe("wud-updater");
-    expect((connection as any).selfUpdateMessage || (updates as any).selfUpdateMessage || (runs as any).selfUpdateMessage || (settings as any).selfUpdateMessage).toBe(
+    expect(updates.selfUpdateMessage).toBe(
       "Image pulled. Recreate the WUD-Updater container to run the new version. Tagged deployments are recommended for predictable updates.",
     );
     expect(fetchMock.mock.calls[0][0]).toBe("/api/v1/self-update");
@@ -544,7 +567,7 @@ describe("settings store", () => {
 
     expect(ensureCsrf).toHaveBeenCalledTimes(1);
     expect(response.status).toBe("tag_prepared");
-    expect((connection as any).selfUpdateMessage || (updates as any).selfUpdateMessage || (runs as any).selfUpdateMessage || (settings as any).selfUpdateMessage).toBe(
+    expect(updates.selfUpdateMessage).toBe(
       "Tag updated and image pulled. Recreate the WUD-Updater container from outside the WebUI to run the new version. Tagged deployments are recommended for predictable updates.",
     );
     expect(fetchMock.mock.calls[0][0]).toBe("/api/v1/self-update/prepare");
@@ -582,7 +605,7 @@ describe("settings store", () => {
 
     expect(ensureCsrf).not.toHaveBeenCalled();
     expect(fetchMock).not.toHaveBeenCalled();
-    expect((connection as any).selfUpdateError || (updates as any).selfUpdateError || (runs as any).selfUpdateError || (settings as any).selfUpdateError).toBe(
+    expect(updates.selfUpdateError).toBe(
       "Self-update tag update preview must be loaded before applying",
     );
   });
@@ -597,8 +620,8 @@ describe("settings store", () => {
     await settings.loadSettings();
 
     expect(fetchMock.mock.calls[0][0]).toBe("/api/v1/settings");
-    expect((connection as any).settings?.updater[0]?.name || (updates as any).settings?.updater[0]?.name || (runs as any).settings?.updater[0]?.name || (settings as any).settings?.updater[0]?.name).toBe("DOCKER_BASE");
-    expect((connection as any).settings?.secrets[1]?.configured || (updates as any).settings?.secrets[1]?.configured || (runs as any).settings?.secrets[1]?.configured || (settings as any).settings?.secrets[1]?.configured).toBe(true);
+    expect(settings.settings?.updater[0]?.name).toBe("DOCKER_BASE");
+    expect(settings.settings?.secrets[1]?.configured).toBe(true);
   });
 
   it("passes csrf from auth store to managed settings updates", async () => {
@@ -646,7 +669,7 @@ describe("settings store", () => {
 
     expect(response.audit_run_id).toBe(44);
     expect(ensureCsrf).toHaveBeenCalledTimes(1);
-    expect((connection as any).settings?.managed[0]?.value || (updates as any).settings?.managed[0]?.value || (runs as any).settings?.managed[0]?.value || (settings as any).settings?.managed[0]?.value).toBe("dark");
+    expect(settings.settings?.managed[0]?.value).toBe("dark");
     expect(fetchMock.mock.calls[0][0]).toBe("/api/v1/settings/managed");
     expect((fetchMock.mock.calls[0][1] as RequestInit).method).toBe("POST");
     expect(
@@ -692,7 +715,7 @@ describe("settings store", () => {
     });
 
     expect(response.audit_run_id).toBe(45);
-    expect((connection as any).settings?.managed[1]?.value || (updates as any).settings?.managed[1]?.value || (runs as any).settings?.managed[1]?.value || (settings as any).settings?.managed[1]?.value).toBe("dismissed");
+    expect(settings.settings?.managed[1]?.value).toBe("dismissed");
     expect(settings.onboarding?.visible).toBe(true);
     expect(runs.error).toBe("");
     expect(fetchMock.mock.calls.map((call) => call[0])).toEqual([

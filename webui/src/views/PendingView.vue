@@ -1409,7 +1409,7 @@ async function handleJobEvent(event: MessageEvent<string>): Promise<void> {
   try {
     job = JSON.parse(event.data) as ApplyJobResponse;
   } catch {
-    updates.error = "Job status stream returned invalid data.";
+    updates.setError("Job status stream returned invalid data.");
     closeJobStream();
     return;
   }
@@ -1417,8 +1417,8 @@ async function handleJobEvent(event: MessageEvent<string>): Promise<void> {
   if (!terminalJobStatuses.has(job.status)) {
     return;
   }
-  await loadTerminalApplyJobLogIfMissing(job);
   closeJobStream();
+  await loadTerminalApplyJobLogIfMissing(job);
   await refreshAfterTerminalJob();
 }
 
@@ -1427,7 +1427,7 @@ function handleJobProgressEvent(event: MessageEvent<string>): void {
   try {
     progress = JSON.parse(event.data) as ApplyJobProgressEvent;
   } catch {
-    updates.error = "Job progress stream returned invalid data.";
+    updates.setError("Job progress stream returned invalid data.");
     return;
   }
   const job = updates.applyJob;
@@ -1464,7 +1464,7 @@ async function handleJobLogEvent(event: MessageEvent<string>): Promise<void> {
   try {
     log = JSON.parse(event.data) as ApplyJobLogResponse;
   } catch {
-    updates.error = "Job log stream returned invalid data.";
+    updates.setError("Job log stream returned invalid data.");
     return;
   }
   const panelShouldScroll = shouldAutoScrollLog(applyJobPanelLogRef.value);

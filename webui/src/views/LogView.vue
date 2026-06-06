@@ -19,11 +19,11 @@ async function load(): Promise<void> {
 }
 
 onMounted(() => {
-  void load();
+  void load().catch(() => undefined);
 });
 
 watch(runId, () => {
-  void load();
+  void load().catch(() => undefined);
 });
 </script>
 

@@ -483,7 +483,7 @@ onMounted(() => {
   if (settings.coreUpdateTour === null) {
     loads.push(settings.loadCoreUpdateTour());
   }
-  void Promise.all(loads);
+  void Promise.all(loads).catch(() => undefined);
 });
 </script>
 
@@ -587,7 +587,7 @@ onMounted(() => {
             <n-button
               type="warning"
               :disabled="restartButtonDisabled"
-              :loading="settings.loading"
+              :loading="connection.loading"
               @click="openRestartDialog"
             >
               <template #icon>
