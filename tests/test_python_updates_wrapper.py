@@ -1090,11 +1090,50 @@ class PythonUpdatesWrapperTests(unittest.TestCase):
         self.assertIn("Dry-run mode: not running updates", result.stdout)
         self.assertFalse(self.sudo_log.exists())
 
+    def test_bin_updates_config_file_argument_is_sourced_by_python_cli(self) -> None:
+        self.wud_file.write_text("repo/app:latest\n", encoding="utf-8")
+        config_file = self.root / "host-env"
+        config_file.write_text(
+            "\n".join(
+                [
+                    "WUD_UPDATER_USE_SUDO=false",
+                    "",
+                ]
+            ),
+            encoding="utf-8",
+        )
+
+        result = self.run_updates(
+            "--dry-run",
+            "--config-file",
+            str(config_file),
+            command=[str(self.repo_root / "bin" / "updates")],
+            env_overrides={"PYTHON_BIN": sys.executable},
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+        self.assertIn("Dry-run mode: not running updates", result.stdout)
+        self.assertFalse(self.sudo_log.exists())
+
     def test_bin_updates_default_accepts_no_updater_sudo(self) -> None:
         self.wud_file.write_text("repo/app:latest\n", encoding="utf-8")
 
         result = self.run_updates(
             "--yes",
+            "--no-updater-sudo",
+            command=[str(self.repo_root / "bin" / "updates")],
+            env_overrides={"PYTHON_BIN": sys.executable},
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+        self.assertFalse(self.sudo_log.exists())
+        self.assertIn("--yes", self.updater_log.read_text(encoding="utf-8"))
+
+    def test_bin_updates_auto_run_alias_invokes_updater(self) -> None:
+        self.wud_file.write_text("repo/app:latest\n", encoding="utf-8")
+
+        result = self.run_updates(
+            "--auto-run",
             "--no-updater-sudo",
             command=[str(self.repo_root / "bin" / "updates")],
             env_overrides={"PYTHON_BIN": sys.executable},

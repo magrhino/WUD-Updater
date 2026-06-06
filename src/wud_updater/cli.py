@@ -52,8 +52,15 @@ def _add_update_from_wud_options(parser: argparse.ArgumentParser) -> None:
 
 def _add_updates_options(parser: argparse.ArgumentParser) -> None:
     _add_common_options(parser)
+    parser.add_argument("--config-file", metavar="PATH")
     parser.add_argument("--log-dir", metavar="PATH")
     parser.add_argument("--no-color", action="store_true")
+    parser.add_argument(
+        "--auto-run",
+        dest="yes",
+        action="store_true",
+        help=argparse.SUPPRESS,
+    )
     self_update = parser.add_mutually_exclusive_group()
     self_update.add_argument(
         "--self-update",

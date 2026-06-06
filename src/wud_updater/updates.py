@@ -939,7 +939,10 @@ def run_updates_from_namespace(
     environ: Mapping[str, str] | None = None,
     show_banner: bool = False,
 ) -> int:
-    env = load_configured_environ(environ)
+    env = load_configured_environ(
+        environ,
+        config_file=getattr(args, "config_file", None),
+    )
     if show_banner:
         print_startup_banner(
             environ=env,
@@ -1024,8 +1027,11 @@ def options_from_namespace(
 
 def load_configured_environ(
     environ: Mapping[str, str] | None = None,
+    config_file: str | None = None,
 ) -> dict[str, str]:
     env = dict(os.environ if environ is None else environ)
+    if config_file:
+        env["WUD_UPDATER_CONFIG"] = config_file
     if env.get("WUD_UPDATER_CONFIG_SOURCED") == "1":
         return env
     home = env.get("HOME") or str(Path.home())
