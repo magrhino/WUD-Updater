@@ -42,7 +42,6 @@ class PythonUpdatesWrapperTests(unittest.TestCase):
         include_pythonpath: bool = True,
     ) -> subprocess.CompletedProcess[str]:
         env = os.environ.copy()
-        env.pop("WUD_UPDATER_PYTHON", None)
         env_defaults = {
             "PATH": f"{self.fake_bin}:{env.get('PATH', '')}",
             "WUD_UPDATER": str(self.updater),
@@ -596,6 +595,26 @@ class PythonUpdatesWrapperTests(unittest.TestCase):
         self.assertIn("[y]es/[n]o/[c]hange", result.stdout)
         self.assertNotIn("Override tag for update", result.stdout)
 
+    def test_interactive_selected_tag_prompt_precedes_remove_prompt(self) -> None:
+        self.wud_file.write_text(
+            "repo/app:1.0 tag=2.0\nrepo/sidecar:latest\n",
+            encoding="utf-8",
+        )
+
+        result = self.run_updates(
+            "--base",
+            str(self.root / "docker"),
+            input_text="s\n1\ny\nn\n",
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+        sudo_log = self.sudo_log.read_text(encoding="utf-8")
+        self.assertIn("--only-lines 1 --allow-tag-updates --yes", sudo_log)
+        self.assertNotIn("--remove-lines-before-run", sudo_log)
+        tag_prompt = result.stdout.index("Apply selected tag update entries?")
+        remove_prompt = result.stdout.index("Remove unselected entries")
+        self.assertLess(tag_prompt, remove_prompt)
+
     def test_interactive_tag_exclude_passes_line_and_recreate_flag(self) -> None:
         self.wud_file.write_text("repo/app:1.0 tag=2.0\n", encoding="utf-8")
 
@@ -884,6 +903,24 @@ class PythonUpdatesWrapperTests(unittest.TestCase):
         self.assertIn("docker run exited 2", result.stdout)
         self.assertIn("TrueNAS not reachable; skipping alert check.", result.stdout)
 
+    def test_truenas_inspect_failure_reports_unreachable_without_failing(self) -> None:
+        result = self.run_updates(
+            "--dry-run",
+            env_overrides={
+                "TRUENAS_STATUS_CHECK": "true",
+                "HOSTNAME": "wud-updater-1",
+                "FAKE_DOCKER_INSPECT_RETURN": "2",
+            },
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+        self.assertIn(
+            "TrueNAS not reachable; skipping system update check.",
+            result.stdout,
+        )
+        self.assertIn("docker inspect exited 2", result.stdout)
+        self.assertIn("TrueNAS not reachable; skipping alert check.", result.stdout)
+
     def test_truenas_malformed_helper_status_reports_unreachable(self) -> None:
         result = self.run_updates(
             "--dry-run",
@@ -1009,38 +1046,6 @@ class PythonUpdatesWrapperTests(unittest.TestCase):
         self.assertIn("Dry-run mode: not running updates", result.stdout)
         self.assertFalse(self.sudo_log.exists())
 
-    def test_bin_updates_accepts_explicit_true(self) -> None:
-        self.wud_file.write_text("repo/app:latest\n", encoding="utf-8")
-
-        result = self.run_updates(
-            "--dry-run",
-            command=[str(self.repo_root / "bin" / "updates")],
-            env_overrides={
-                "WUD_UPDATER_PYTHON": "true",
-                "PYTHON_BIN": sys.executable,
-            },
-        )
-
-        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
-        self.assertIn("Dry-run mode: not running updates", result.stdout)
-        self.assertFalse(self.sudo_log.exists())
-
-    def test_bin_updates_opt_in_accepts_legacy_one(self) -> None:
-        self.wud_file.write_text("repo/app:latest\n", encoding="utf-8")
-
-        result = self.run_updates(
-            "--dry-run",
-            command=[str(self.repo_root / "bin" / "updates")],
-            env_overrides={
-                "WUD_UPDATER_PYTHON": "1",
-                "PYTHON_BIN": sys.executable,
-            },
-        )
-
-        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
-        self.assertIn("Dry-run mode: not running updates", result.stdout)
-        self.assertFalse(self.sudo_log.exists())
-
     def test_bin_updates_default_resolves_installed_symlink(self) -> None:
         self.wud_file.write_text("repo/app:latest\n", encoding="utf-8")
         installed_bin = self.root / "installed-bin"
@@ -1099,30 +1104,37 @@ class PythonUpdatesWrapperTests(unittest.TestCase):
         self.assertFalse(self.sudo_log.exists())
         self.assertIn("--yes", self.updater_log.read_text(encoding="utf-8"))
 
-    def test_bin_updates_zero_flag_uses_legacy_bash_fallback(self) -> None:
+    def test_bin_updates_legacy_python_false_does_not_disable_python(self) -> None:
+        self.wud_file.write_text("repo/app:latest\n", encoding="utf-8")
+
         result = self.run_updates(
             "--dry-run",
             "--no-updater-sudo",
             command=[str(self.repo_root / "bin" / "updates")],
-            env_overrides={"WUD_UPDATER_PYTHON": "0"},
+            env_overrides={
+                "WUD_UPDATER_PYTHON": "false",
+                "PYTHON_BIN": sys.executable,
+            },
         )
 
-        self.assertEqual(result.returncode, 2)
-        self.assertIn("Unknown argument: --no-updater-sudo", result.stderr)
+        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+        self.assertIn("Dry-run mode: not running updates", result.stdout)
+        self.assertFalse(self.sudo_log.exists())
 
-    def test_bin_updates_invalid_python_flag_fails(self) -> None:
+    def test_updates_help_describes_admin_convenience(self) -> None:
         result = self.run_updates(
-            "--dry-run",
+            "--help",
             command=[str(self.repo_root / "bin" / "updates")],
-            env_overrides={"WUD_UPDATER_PYTHON": "maybe"},
+            env_overrides={"PYTHON_BIN": sys.executable},
+            include_file=False,
         )
 
-        self.assertEqual(result.returncode, 2)
+        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+        self.assertIn("Admin convenience", result.stdout)
         self.assertIn(
-            "WUD_UPDATER_PYTHON must be one of",
-            result.stderr,
+            "CLI/WebUI feature parity is not a project goal",
+            result.stdout,
         )
-        self.assertEqual(result.stdout, "")
 
     def _write_fakes(self) -> None:
         self._write_executable(
@@ -1158,6 +1170,9 @@ if [[ "$1" == "pull" ]]; then
   exit "${FAKE_DOCKER_PULL_RETURN:-0}"
 fi
 if [[ "$1 $2" == "container inspect" ]]; then
+  if [[ "${FAKE_DOCKER_INSPECT_RETURN:-0}" != "0" ]]; then
+    exit "$FAKE_DOCKER_INSPECT_RETURN"
+  fi
   out_dir="$(dirname "${FAKE_WUD_FILE:?FAKE_WUD_FILE is required}")"
   printf '[{"Config":{"Image":"wud-updater:test"},"Mounts":[{"Type":"volume","Name":"wud-out","Destination":"%s"}]}]\\n' "$out_dir"
   exit 0

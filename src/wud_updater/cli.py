@@ -9,8 +9,8 @@ from pathlib import Path
 
 from .banner import print_startup_banner
 from .doctor import run_doctor_from_namespace
+from .truenas import run_truenas_status_export_from_namespace
 from .updates import (
-    run_truenas_status_export_from_namespace,
     run_updates_from_namespace,
 )
 
@@ -185,7 +185,12 @@ def build_parser() -> argparse.ArgumentParser:
 
     updates = subcommands.add_parser(
         "updates",
-        help="show WUD updates and optionally run the updater",
+        help="admin convenience for showing WUD updates and optionally running the updater",
+        description=(
+            "Admin convenience for host or helper-container operators. "
+            "The WebUI/API is the primary supported workflow; CLI/WebUI "
+            "feature parity is not a project goal."
+        ),
     )
     _add_updates_options(updates)
     updates.set_defaults(handler=_run_updates)

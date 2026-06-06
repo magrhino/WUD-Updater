@@ -19,9 +19,11 @@ from .command import CommandResult, CommandRunner
 from .compose import ComposeCli, compose_discovery_message, compose_files_under
 from .config import COMPOSE_IGNORE_PATHS_ENV, ConfigError, parse_compose_ignore_paths
 from .updates import (
+    load_configured_environ,
+)
+from .truenas import (
     DEFAULT_TRUENAS_STATUS_TIMEOUT,
     TRUENAS_MIDDLEWARE_MOUNT,
-    load_configured_environ,
 )
 
 

@@ -4,8 +4,6 @@ set -Eeuo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
 SCRIPT="$REPO_ROOT/bin/updates"
 TEST_TMP=""
-FAKE_BIN=""
-WUD_FILE=""
 LAST_STATUS=0
 
 fail(){
@@ -13,101 +11,15 @@ fail(){
   if [[ -n "${TEST_TMP:-}" && -f "$TEST_TMP/output.log" ]]; then
     sed 's/^/# /' "$TEST_TMP/output.log" >&2 || true
   fi
+  if [[ -n "${TEST_TMP:-}" && -f "$TEST_TMP/python.log" ]]; then
+    sed 's/^/# python: /' "$TEST_TMP/python.log" >&2 || true
+  fi
   exit 1
 }
 
 setup_case(){
-  TEST_TMP="$(mktemp -d "${TMPDIR:-/tmp}/wud-updates-wrapper-test.XXXXXX")"
-  FAKE_BIN="$TEST_TMP/bin"
-  WUD_FILE="$TEST_TMP/images.todo"
-  mkdir -p "$FAKE_BIN"
-
-  cat > "$FAKE_BIN/column" <<'FAKE_COLUMN'
-#!/usr/bin/env bash
-if [[ -n "${FAKE_COLUMN_LOCK_LOG:-}" ]]; then
-  if [[ -d "${FAKE_WUD_FILE:?FAKE_WUD_FILE is required}.lock" ]]; then
-    printf 'present\n' >> "$FAKE_COLUMN_LOCK_LOG"
-  else
-    printf 'missing\n' >> "$FAKE_COLUMN_LOCK_LOG"
-  fi
-fi
-cat
-if [[ -n "${FAKE_COLUMN_HOOK:-}" ]]; then
-  "$FAKE_COLUMN_HOOK"
-fi
-FAKE_COLUMN
-  chmod +x "$FAKE_BIN/column"
-
-  cat > "$FAKE_BIN/sudo" <<'FAKE_SUDO'
-#!/usr/bin/env bash
-printf '%s\n' "$*" >> "${FAKE_SUDO_LOG:?FAKE_SUDO_LOG is required}"
-"$@"
-FAKE_SUDO
-  chmod +x "$FAKE_BIN/sudo"
-
-  cat > "$FAKE_BIN/docker" <<'FAKE_DOCKER'
-#!/usr/bin/env bash
-if [[ -n "${FAKE_DOCKER_LOG:-}" ]]; then
-  printf '%s\n' "$*" >> "$FAKE_DOCKER_LOG"
-fi
-if [[ "${1:-}" == "pull" ]]; then
-  exit "${FAKE_DOCKER_PULL_RETURN:-0}"
-fi
-exit 1
-FAKE_DOCKER
-  chmod +x "$FAKE_BIN/docker"
-
-  cat > "$TEST_TMP/updater" <<'FAKE_UPDATER'
-#!/usr/bin/env bash
-args=("$@")
-wud_file=""
-only_lines=""
-while (($#)); do
-  case "$1" in
-    --file)
-      wud_file="${2:-}"
-      shift 2
-      ;;
-    --only-lines)
-      only_lines="${2:-}"
-      shift 2
-      ;;
-    *)
-      shift
-      ;;
-  esac
-done
-printf 'OUT_UID=%s OUT_GID=%s OUT_GUID=%s WUD_LOCK_TIMEOUT=%s WUD_LOCK_HELD_BY_PARENT=%s WUD_DB_PATH=%s HOST_DOCKER_BASE=%s WUD_DIGEST_PIN_UPDATES=%s\n' "${OUT_UID:-}" "${OUT_GID:-}" "${OUT_GUID:-}" "${WUD_LOCK_TIMEOUT:-}" "${WUD_LOCK_HELD_BY_PARENT:-}" "${WUD_DB_PATH:-}" "${HOST_DOCKER_BASE:-}" "${WUD_DIGEST_PIN_UPDATES:-}" >> "${FAKE_UPDATER_LOG:?FAKE_UPDATER_LOG is required}"
-if [[ "${FAKE_UPDATER_ASSERT_LOCK:-}" = "1" ]]; then
-  if [[ "${WUD_LOCK_HELD_BY_PARENT:-}" != "1" ]]; then
-    printf 'missing WUD_LOCK_HELD_BY_PARENT\n' >> "$FAKE_UPDATER_LOG"
-    exit 21
-  fi
-  if [[ -z "$wud_file" || ! -d "${wud_file}.lock" ]]; then
-    printf 'missing WUD file lock\n' >> "$FAKE_UPDATER_LOG"
-    exit 22
-  fi
-fi
-if [[ -n "$wud_file" && "${FAKE_UPDATER_LOG_WUD_CONTENT:-}" = "1" ]]; then
-  printf 'WUD_CONTENT=%s\n' "$(tr '\n' '|' < "$wud_file")" >> "${FAKE_UPDATER_LOG:?FAKE_UPDATER_LOG is required}"
-fi
-if [[ -n "$wud_file" && -n "$only_lines" && "${FAKE_UPDATER_REMOVE_ONLY_LINES:-}" = "1" ]]; then
-  tmp="${wud_file}.fake-update.$$"
-  awk -v spec="$only_lines" 'BEGIN {
-    split(spec, items, ",")
-    for (idx in items) {
-      if (items[idx] != "") {
-        remove[items[idx]] = 1
-      }
-    }
-  }
-  !(FNR in remove)' "$wud_file" > "$tmp"
-  mv "$tmp" "$wud_file"
-fi
-printf '%s\n' "${args[*]}" >> "${FAKE_UPDATER_LOG:?FAKE_UPDATER_LOG is required}"
-exit 0
-FAKE_UPDATER
-  chmod +x "$TEST_TMP/updater"
+  TEST_TMP="$(mktemp -d "${TMPDIR:-/tmp}/wud-updates-launcher-test.XXXXXX")"
+  mkdir -p "$TEST_TMP/bin" "$TEST_TMP/venv/bin"
 }
 
 teardown_case(){
@@ -115,68 +27,27 @@ teardown_case(){
   TEST_TMP=""
 }
 
-run_updates(){
-  local env_args=()
-  while [[ "$#" -gt 0 && "$1" == *=* ]]; do
-    env_args+=("$1")
-    shift
-  done
-
-  LAST_STATUS=0
-  if ((${#env_args[@]})); then
-    PATH="$FAKE_BIN:$PATH" \
-      WUD_UPDATER="$TEST_TMP/updater" \
-      FAKE_SUDO_LOG="$TEST_TMP/sudo.log" \
-      FAKE_UPDATER_LOG="$TEST_TMP/updater.log" \
-      FAKE_WUD_FILE="$WUD_FILE" \
-      WUD_UPDATER_BANNER=false \
-      WUD_UPDATER_RELEASE_CHECK=false \
-      WUD_UPDATER_PYTHON=false \
-      env "${env_args[@]}" "$SCRIPT" --file "$WUD_FILE" "$@" > "$TEST_TMP/output.log" 2>&1 || LAST_STATUS=$?
-  else
-    PATH="$FAKE_BIN:$PATH" \
-      WUD_UPDATER="$TEST_TMP/updater" \
-      FAKE_SUDO_LOG="$TEST_TMP/sudo.log" \
-      FAKE_UPDATER_LOG="$TEST_TMP/updater.log" \
-      FAKE_WUD_FILE="$WUD_FILE" \
-      WUD_UPDATER_BANNER=false \
-      WUD_UPDATER_RELEASE_CHECK=false \
-      WUD_UPDATER_PYTHON=false \
-      "$SCRIPT" --file "$WUD_FILE" "$@" > "$TEST_TMP/output.log" 2>&1 || LAST_STATUS=$?
-  fi
+write_fake_python(){
+  local path="$1"
+  cat > "$path" <<'FAKE_PYTHON'
+#!/usr/bin/env bash
+if [[ "${1:-}" == "-" ]]; then
+  exit "${FAKE_PYTHON_PROBE_STATUS:-0}"
+fi
+{
+  printf 'python=%s\n' "$0"
+  printf 'argv=%s\n' "$*"
+  printf 'PYTHONPATH=%s\n' "${PYTHONPATH:-}"
+  printf 'CONFIG_SENTINEL=%s\n' "${CONFIG_SENTINEL:-}"
+} >> "${FAKE_PYTHON_LOG:?FAKE_PYTHON_LOG is required}"
+exit "${FAKE_PYTHON_STATUS:-0}"
+FAKE_PYTHON
+  chmod +x "$path"
 }
 
-run_updates_with_input(){
-  local input="$1"
-  shift
-  local env_args=()
-  while [[ "$#" -gt 0 && "$1" == *=* ]]; do
-    env_args+=("$1")
-    shift
-  done
-
+run_script(){
   LAST_STATUS=0
-  if ((${#env_args[@]})); then
-    printf '%b' "$input" | PATH="$FAKE_BIN:$PATH" \
-      WUD_UPDATER="$TEST_TMP/updater" \
-      FAKE_SUDO_LOG="$TEST_TMP/sudo.log" \
-      FAKE_UPDATER_LOG="$TEST_TMP/updater.log" \
-      FAKE_WUD_FILE="$WUD_FILE" \
-      WUD_UPDATER_BANNER=false \
-      WUD_UPDATER_RELEASE_CHECK=false \
-      WUD_UPDATER_PYTHON=false \
-      env "${env_args[@]}" "$SCRIPT" --file "$WUD_FILE" "$@" > "$TEST_TMP/output.log" 2>&1 || LAST_STATUS=$?
-  else
-    printf '%b' "$input" | PATH="$FAKE_BIN:$PATH" \
-      WUD_UPDATER="$TEST_TMP/updater" \
-      FAKE_SUDO_LOG="$TEST_TMP/sudo.log" \
-      FAKE_UPDATER_LOG="$TEST_TMP/updater.log" \
-      FAKE_WUD_FILE="$WUD_FILE" \
-      WUD_UPDATER_BANNER=false \
-      WUD_UPDATER_RELEASE_CHECK=false \
-      WUD_UPDATER_PYTHON=false \
-      "$SCRIPT" --file "$WUD_FILE" "$@" > "$TEST_TMP/output.log" 2>&1 || LAST_STATUS=$?
-  fi
+  "$@" > "$TEST_TMP/output.log" 2>&1 || LAST_STATUS=$?
 }
 
 assert_status(){
@@ -184,534 +55,98 @@ assert_status(){
   [[ "$LAST_STATUS" == "$expected" ]] || fail "expected status $expected, got $LAST_STATUS"
 }
 
-test_dry_run_does_not_invoke_updater(){
+test_dispatches_python_cli(){
   setup_case
-  printf 'repo/app:latest\n' > "$WUD_FILE"
+  local fake_python="$TEST_TMP/bin/python"
+  write_fake_python "$fake_python"
 
-  run_updates --dry-run
+  run_script env \
+    PYTHON_BIN="$fake_python" \
+    WUD_UPDATER_CONFIG="$TEST_TMP/missing-env" \
+    FAKE_PYTHON_LOG="$TEST_TMP/python.log" \
+    "$SCRIPT" --dry-run
 
   assert_status 0
-  [[ ! -e "$TEST_TMP/sudo.log" ]] || fail "sudo was invoked during dry-run"
-  [[ ! -e "$TEST_TMP/updater.log" ]] || fail "updater was invoked during dry-run"
-  grep -q 'Dry-run mode: not running updates' "$TEST_TMP/output.log" || fail "missing dry-run message"
+  grep -q '^argv=-m wud_updater.cli updates --dry-run$' "$TEST_TMP/python.log" || fail "launcher did not dispatch updates subcommand"
+  grep -q "^PYTHONPATH=$REPO_ROOT/src$" "$TEST_TMP/python.log" || fail "launcher did not add repo src to PYTHONPATH"
   teardown_case
 }
 
-test_self_update_yes_runs_wud_entry_first(){
+test_sources_config_before_dispatch(){
   setup_case
-  printf 'ghcr.io/magrhino/wud-updater:latest\nrepo/app:latest\n' > "$WUD_FILE"
-
-  run_updates FAKE_UPDATER_REMOVE_ONLY_LINES=1 --yes --base "$TEST_TMP/docker"
-
-  assert_status 0
-  grep -q 'WUD-Updater self-update detected' "$TEST_TMP/output.log" || fail "missing self-update notice"
-  grep -q -- "--only-lines 1 --yes" "$TEST_TMP/updater.log" || fail "self-update line was not run first"
-  grep -q '^repo/app:latest$' "$WUD_FILE" || fail "remaining WUD entry was not refreshed after self-update"
-  teardown_case
-}
-
-test_self_update_tag_entry_enables_tag_updates(){
-  setup_case
-  printf 'ghcr.io/magrhino/wud-updater:1.0 tag=2.0\nrepo/app:latest\n' > "$WUD_FILE"
-
-  run_updates FAKE_UPDATER_REMOVE_ONLY_LINES=1 --yes --base "$TEST_TMP/docker"
-
-  assert_status 0
-  grep -q -- "--only-lines 1 --allow-tag-updates --yes" "$TEST_TMP/updater.log" || fail "self-update tag entry did not enable tag updates"
-  grep -q -- "--base $TEST_TMP/docker --file $WUD_FILE --log-dir ./logs --mode stop --max-wait 180 --yes" "$TEST_TMP/updater.log" || fail "allow-tag-updates leaked into remaining updates"
-  teardown_case
-}
-
-test_self_update_dry_run_does_not_invoke_updater(){
-  setup_case
-  printf 'wud-updater\n' > "$WUD_FILE"
-
-  run_updates --dry-run
-
-  assert_status 0
-  grep -q 'WUD-Updater self-update detected' "$TEST_TMP/output.log" || fail "missing self-update notice"
-  grep -q 'not running WUD-Updater self-update' "$TEST_TMP/output.log" || fail "missing self-update dry-run message"
-  [[ ! -e "$TEST_TMP/sudo.log" ]] || fail "sudo was invoked during self-update dry-run"
-  [[ ! -e "$TEST_TMP/updater.log" ]] || fail "updater was invoked during self-update dry-run"
-  teardown_case
-}
-
-test_self_update_eof_does_not_invoke_updater(){
-  setup_case
-  printf 'wud-updater\nrepo/app:latest\n' > "$WUD_FILE"
-
-  run_updates_with_input ''
-
-  assert_status 0
-  grep -q 'Skipped WUD-Updater self-update' "$TEST_TMP/output.log" || fail "missing self-update EOF skip message"
-  [[ ! -e "$TEST_TMP/sudo.log" ]] || fail "sudo was invoked after self-update EOF"
-  [[ ! -e "$TEST_TMP/updater.log" ]] || fail "updater was invoked after self-update EOF"
-  teardown_case
-}
-
-test_no_self_update_flag_disables_preflight(){
-  setup_case
-  printf 'ghcr.io/magrhino/wud-updater:latest\n' > "$WUD_FILE"
-
-  run_updates --yes --no-self-update
-
-  assert_status 0
-  ! grep -q 'WUD-Updater self-update detected' "$TEST_TMP/output.log" || fail "self-update preflight was not disabled"
-  ! grep -q -- "--only-lines" "$TEST_TMP/updater.log" || fail "self-update line selection was passed when disabled"
-  teardown_case
-}
-
-test_self_update_env_disables_preflight(){
-  setup_case
-  printf 'wud-updater\n' > "$WUD_FILE"
-
-  run_updates WUD_UPDATER_SELF_UPDATE=0 --yes
-
-  assert_status 0
-  ! grep -q 'WUD-Updater self-update detected' "$TEST_TMP/output.log" || fail "self-update env did not disable preflight"
-  ! grep -q -- "--only-lines" "$TEST_TMP/updater.log" || fail "self-update line selection was passed when disabled"
-  teardown_case
-}
-
-test_github_release_self_update_pulls_latest_and_exits(){
-  setup_case
-  printf 'repo/app:latest\n' > "$WUD_FILE"
-  cat > "$FAKE_BIN/python3" <<'FAKE_PYTHON'
-#!/usr/bin/env bash
-if [[ "${1:-}" == "-" ]]; then
-  exit 0
-fi
-if [[ "${1:-} ${2:-} ${3:-}" == "-m wud_updater.self_update github-target" ]]; then
-  printf 'ghcr.io/magrhino/wud-updater:latest\n'
-  exit 0
-fi
-exit 1
-FAKE_PYTHON
-  chmod +x "$FAKE_BIN/python3"
-
-  run_updates FAKE_DOCKER_LOG="$TEST_TMP/docker.log" WUD_UPDATER_RELEASE_CHECK=1 --yes
-
-  assert_status 0
-  grep -q 'WUD-Updater release update available' "$TEST_TMP/output.log" || fail "missing GitHub self-update notice"
-  grep -q 'pull ghcr.io/magrhino/wud-updater:latest' "$TEST_TMP/docker.log" || fail "GitHub self-update did not pull latest tag"
-  grep -q 'docker pull ghcr.io/magrhino/wud-updater:latest' "$TEST_TMP/sudo.log" || fail "GitHub self-update did not pull through sudo"
-  grep -q 'Please restart the wud-updater container before running updates again.' "$TEST_TMP/output.log" || fail "missing restart instruction"
-  [[ ! -e "$TEST_TMP/updater.log" ]] || fail "updater was invoked after release self-update pull"
-  teardown_case
-}
-
-test_github_release_self_update_rewrites_pinned_release_tag(){
-  setup_case
-  printf 'repo/app:latest\n' > "$WUD_FILE"
-  cat > "$FAKE_BIN/python3" <<'FAKE_PYTHON'
-#!/usr/bin/env bash
-if [[ "${1:-}" == "-" ]]; then
-  exit 0
-fi
-if [[ "${1:-} ${2:-} ${3:-}" == "-m wud_updater.self_update github-target" ]]; then
-  printf 'ghcr.io/magrhino/wud-updater:v0.12.2 tag=v999.0.0\n'
-  exit 0
-fi
-exit 1
-FAKE_PYTHON
-  chmod +x "$FAKE_BIN/python3"
-
-  run_updates FAKE_UPDATER_LOG_WUD_CONTENT=1 WUD_UPDATER_RELEASE_CHECK=1 --yes
-
-  assert_status 0
-  grep -q 'WUD-Updater release update available' "$TEST_TMP/output.log" || fail "missing GitHub self-update notice"
-  grep -q 'WUD_CONTENT=ghcr.io/magrhino/wud-updater:v0.12.2 tag=v999.0.0|' "$TEST_TMP/updater.log" || fail "temporary self-update target did not include desired release tag"
-  grep -q -- "--allow-tag-updates --yes" "$TEST_TMP/updater.log" || fail "GitHub self-update did not allow tag rewrite"
-  [[ "$(grep -c '^--base ' "$TEST_TMP/updater.log")" -eq 1 ]] || fail "normal updates continued after release self-update"
-  ! grep -q -- "--file $WUD_FILE" "$TEST_TMP/updater.log" || fail "normal WUD file was updated after release self-update"
-  [[ ! -e "$TEST_TMP/docker.log" ]] || fail "pinned release self-update used direct docker pull"
-  teardown_case
-}
-
-test_github_release_self_update_failed_pull_exits_without_restart_message(){
-  setup_case
-  printf 'repo/app:latest\n' > "$WUD_FILE"
-  cat > "$FAKE_BIN/python3" <<'FAKE_PYTHON'
-#!/usr/bin/env bash
-if [[ "${1:-}" == "-" ]]; then
-  exit 0
-fi
-if [[ "${1:-} ${2:-} ${3:-}" == "-m wud_updater.self_update github-target" ]]; then
-  printf 'ghcr.io/magrhino/wud-updater:latest\n'
-  exit 0
-fi
-exit 1
-FAKE_PYTHON
-  chmod +x "$FAKE_BIN/python3"
-
-  run_updates FAKE_DOCKER_LOG="$TEST_TMP/docker.log" FAKE_DOCKER_PULL_RETURN=17 WUD_UPDATER_RELEASE_CHECK=1 --yes
-
-  assert_status 17
-  grep -q 'pull ghcr.io/magrhino/wud-updater:latest' "$TEST_TMP/docker.log" || fail "GitHub self-update did not attempt latest release tag"
-  ! grep -q 'Please restart the wud-updater container before running updates again.' "$TEST_TMP/output.log" || fail "restart instruction printed after failed pull"
-  [[ ! -e "$TEST_TMP/updater.log" ]] || fail "updater was invoked after failed release self-update pull"
-  teardown_case
-}
-
-test_forced_banner_prints_before_legacy_updates_output(){
-  setup_case
-
-  run_updates WUD_UPDATER_BANNER=true WUD_UPDATER_RELEASE_CHECK=false --dry-run
-
-  assert_status 0
-  grep -q 'WUD-Updater v' "$TEST_TMP/output.log" || fail "missing startup banner"
-  grep -q '=== 📦 Docker Updates ===' "$TEST_TMP/output.log" || fail "missing updates output"
-  teardown_case
-}
-
-test_yes_invokes_configured_updater_through_sudo(){
-  setup_case
-  printf 'repo/app:latest\n' > "$WUD_FILE"
-
-  run_updates --yes --base "$TEST_TMP/docker" --mode live --max-wait 7
-
-  assert_status 0
-  grep -q -- "$TEST_TMP/updater --base $TEST_TMP/docker --file $WUD_FILE --log-dir ./logs --mode live --max-wait 7 --yes" "$TEST_TMP/sudo.log" || fail "sudo did not receive expected updater command"
-  grep -q -- "--base $TEST_TMP/docker --file $WUD_FILE --log-dir ./logs --mode live --max-wait 7 --yes" "$TEST_TMP/updater.log" || fail "updater did not receive expected arguments"
-  teardown_case
-}
-
-test_log_dir_cli_overrides_environment(){
-  setup_case
-  printf 'repo/app:latest\n' > "$WUD_FILE"
-
-  run_updates WUD_LOG_DIR="$TEST_TMP/env-logs" --yes --base "$TEST_TMP/docker" --log-dir "$TEST_TMP/cli-logs"
-
-  assert_status 0
-  grep -q -- "--log-dir $TEST_TMP/cli-logs" "$TEST_TMP/updater.log" || fail "updater did not receive CLI log dir"
-  ! grep -q -- "$TEST_TMP/env-logs" "$TEST_TMP/updater.log" || fail "environment log dir overrode CLI log dir"
-  teardown_case
-}
-
-test_yes_passes_owner_config_through_sudo_env(){
-  setup_case
-  printf 'repo/app:latest\n' > "$WUD_FILE"
-
-  run_updates OUT_UID=1000 OUT_GUID=1000 --yes --base "$TEST_TMP/docker"
-
-  assert_status 0
-  grep -q -- "env OUT_UID=1000 OUT_GID=1000 $TEST_TMP/updater --base $TEST_TMP/docker --file $WUD_FILE --log-dir ./logs --mode stop --max-wait 180 --yes" "$TEST_TMP/sudo.log" || fail "sudo did not receive expected owner env"
-  grep -q -- "OUT_UID=1000 OUT_GID=1000 OUT_GUID=" "$TEST_TMP/updater.log" || fail "updater did not receive owner env"
-  teardown_case
-}
-
-test_yes_passes_lock_timeout_through_sudo_env(){
-  setup_case
-  printf 'repo/app:latest\n' > "$WUD_FILE"
-
-  run_updates WUD_LOCK_TIMEOUT=0 --yes --base "$TEST_TMP/docker"
-
-  assert_status 0
-  grep -q -- "env WUD_LOCK_TIMEOUT=0 $TEST_TMP/updater --base $TEST_TMP/docker --file $WUD_FILE --log-dir ./logs --mode stop --max-wait 180 --yes" "$TEST_TMP/sudo.log" || fail "sudo did not receive expected lock timeout env"
-  grep -q -- "WUD_LOCK_TIMEOUT=0" "$TEST_TMP/updater.log" || fail "updater did not receive lock timeout env"
-  teardown_case
-}
-
-test_yes_passes_digest_pin_updates_through_sudo_env(){
-  setup_case
-  printf 'repo/app:latest\n' > "$WUD_FILE"
-
-  run_updates WUD_DIGEST_PIN_UPDATES=true --yes --base "$TEST_TMP/docker"
-
-  assert_status 0
-  grep -q -- "WUD_DIGEST_PIN_UPDATES=true" "$TEST_TMP/sudo.log" || fail "sudo did not receive digest-pin env"
-  grep -q -- "WUD_DIGEST_PIN_UPDATES=true" "$TEST_TMP/updater.log" || fail "updater did not receive digest-pin env"
-  teardown_case
-}
-
-test_yes_passes_db_path_through_sudo_env(){
-  setup_case
-  local db_path="$TEST_TMP/state/wud-updater.sqlite"
-  printf 'repo/app:latest\n' > "$WUD_FILE"
-
-  run_updates WUD_DB_PATH="$db_path" --yes --base "$TEST_TMP/docker"
-
-  assert_status 0
-  grep -q -- "env WUD_DB_PATH=$db_path $TEST_TMP/updater --base $TEST_TMP/docker --file $WUD_FILE --log-dir ./logs --mode stop --max-wait 180 --yes" "$TEST_TMP/sudo.log" || fail "sudo did not receive expected db path env"
-  grep -q -- "WUD_DB_PATH=$db_path" "$TEST_TMP/updater.log" || fail "updater did not receive db path env"
-  teardown_case
-}
-
-test_yes_passes_host_docker_base_through_sudo_env(){
-  setup_case
-  local host_base="$TEST_TMP/host-docker"
-  printf 'repo/app:latest\n' > "$WUD_FILE"
-
-  run_updates HOST_DOCKER_BASE="$host_base" --yes --base "$TEST_TMP/docker"
-
-  assert_status 0
-  grep -q -- "env HOST_DOCKER_BASE=$host_base $TEST_TMP/updater --base $TEST_TMP/docker --file $WUD_FILE --log-dir ./logs --mode stop --max-wait 180 --yes" "$TEST_TMP/sudo.log" || fail "sudo did not receive expected host docker base env"
-  grep -q -- "HOST_DOCKER_BASE=$host_base" "$TEST_TMP/updater.log" || fail "updater did not receive host docker base env"
-  teardown_case
-}
-
-test_yes_passes_allow_tag_updates_flag(){
-  setup_case
-  printf 'repo/app:1.0 tag=2.0\n' > "$WUD_FILE"
-
-  run_updates --yes --allow-tag-updates --base "$TEST_TMP/docker"
-
-  assert_status 0
-  grep -q -- "$TEST_TMP/updater --base $TEST_TMP/docker --file $WUD_FILE --log-dir ./logs --mode stop --max-wait 180 --allow-tag-updates --yes" "$TEST_TMP/sudo.log" || fail "sudo did not receive allow-tag-updates flag"
-  grep -q -- "--allow-tag-updates --yes" "$TEST_TMP/updater.log" || fail "updater did not receive allow-tag-updates flag"
-  teardown_case
-}
-
-test_interactive_all_preserves_default_updater_args(){
-  setup_case
-  printf 'repo/app:latest\n' > "$WUD_FILE"
-
-  run_updates_with_input 'a\n' --base "$TEST_TMP/docker"
-
-  assert_status 0
-  grep -q -- "$TEST_TMP/updater --base $TEST_TMP/docker --file $WUD_FILE --log-dir ./logs --mode stop --max-wait 180 --yes" "$TEST_TMP/sudo.log" || fail "sudo did not receive default all-selection updater command"
-  grep -q -- "--base $TEST_TMP/docker --file $WUD_FILE --log-dir ./logs --mode stop --max-wait 180 --yes" "$TEST_TMP/updater.log" || fail "updater did not receive default all-selection arguments"
-  teardown_case
-}
-
-test_interactive_display_uses_snapshot_without_holding_wud_lock(){
-  setup_case
-  printf 'repo/app:latest\n' > "$WUD_FILE"
-
-  run_updates_with_input 'n\n' FAKE_COLUMN_LOCK_LOG="$TEST_TMP/column-lock.log" --base "$TEST_TMP/docker"
-
-  assert_status 0
-  grep -qx 'missing' "$TEST_TMP/column-lock.log" || fail "pending updates were displayed while holding the WUD lock"
-  [[ ! -d "$WUD_FILE.lock" ]] || fail "WUD lock was not released after skip"
-  teardown_case
-}
-
-test_interactive_display_hides_sha_suffix(){
-  setup_case
-  printf 'repo/app:latest sha256=sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n' > "$WUD_FILE"
-
-  run_updates_with_input 'n\n' --base "$TEST_TMP/docker"
-
-  assert_status 0
-  grep -q 'repo/app:latest' "$TEST_TMP/output.log" || fail "pending update was not displayed"
-  ! grep -q 'sha256=' "$TEST_TMP/output.log" || fail "sha suffix was displayed"
-  teardown_case
-}
-
-test_interactive_holds_wud_lock_for_updater_handoff(){
-  setup_case
-  printf 'repo/app:latest\n' > "$WUD_FILE"
-
-  run_updates_with_input 's\n1\nn\n' FAKE_UPDATER_ASSERT_LOCK=1 --base "$TEST_TMP/docker"
-
-  assert_status 0
-  grep -q -- "WUD_LOCK_HELD_BY_PARENT=1" "$TEST_TMP/updater.log" || fail "updater did not receive parent lock marker"
-  [[ ! -d "$WUD_FILE.lock" ]] || fail "WUD lock was not released after updater handoff"
-  teardown_case
-}
-
-test_interactive_select_passes_original_line_numbers(){
-  setup_case
+  local config_python="$TEST_TMP/bin/config-python"
+  write_fake_python "$config_python"
   {
-    printf '# comment\n'
-    printf 'repo/app:one\n'
-    printf '\n'
-    printf 'repo/app:two\n'
-    printf 'repo/app:three\n'
-  } > "$WUD_FILE"
+    printf 'PYTHON_BIN="%s"\n' "$config_python"
+    printf 'export CONFIG_SENTINEL="from-config"\n'
+  } > "$TEST_TMP/env"
 
-  run_updates_with_input 's\n1,3\nn\n' --base "$TEST_TMP/docker"
-
-  assert_status 0
-  grep -q -- "--only-lines 2,5 --yes" "$TEST_TMP/sudo.log" || fail "sudo did not receive selected original line numbers"
-  grep -q -- "--only-lines 2,5" "$TEST_TMP/updater.log" || fail "updater did not receive selected original line numbers"
-  teardown_case
-}
-
-test_interactive_exclude_passes_complement_line_numbers(){
-  setup_case
-  {
-    printf 'repo/app:one\n'
-    printf '# comment\n'
-    printf 'repo/app:two\n'
-    printf 'repo/app:three\n'
-  } > "$WUD_FILE"
-
-  run_updates_with_input 'x\n2\nn\n' --base "$TEST_TMP/docker"
+  run_script env \
+    WUD_UPDATER_CONFIG="$TEST_TMP/env" \
+    FAKE_PYTHON_LOG="$TEST_TMP/python.log" \
+    "$SCRIPT" --dry-run
 
   assert_status 0
-  grep -q -- "--only-lines 1,4 --yes" "$TEST_TMP/sudo.log" || fail "sudo did not receive complement line numbers"
-  grep -q -- "--only-lines 1,4" "$TEST_TMP/updater.log" || fail "updater did not receive complement line numbers"
+  grep -q "^python=$config_python$" "$TEST_TMP/python.log" || fail "config PYTHON_BIN was not used"
+  grep -q '^CONFIG_SENTINEL=from-config$' "$TEST_TMP/python.log" || fail "config variables were not exported to Python"
   teardown_case
 }
 
-test_interactive_remove_unselected_passes_remove_lines(){
+test_installed_symlink_resolves_repo_src(){
   setup_case
-  {
-    printf 'repo/app:one\n'
-    printf 'repo/app:two\n'
-    printf 'repo/app:three\n'
-  } > "$WUD_FILE"
+  local fake_python="$TEST_TMP/bin/python"
+  local installed_bin="$TEST_TMP/installed-bin"
+  write_fake_python "$fake_python"
+  mkdir -p "$installed_bin"
+  ln -s "$SCRIPT" "$installed_bin/updates"
 
-  run_updates_with_input 's\n2\ny\n' --base "$TEST_TMP/docker"
+  run_script env \
+    PYTHON_BIN="$fake_python" \
+    PYTHONPATH="$TEST_TMP/existing-pythonpath" \
+    WUD_UPDATER_CONFIG="$TEST_TMP/missing-env" \
+    FAKE_PYTHON_LOG="$TEST_TMP/python.log" \
+    "$installed_bin/updates" --dry-run
 
   assert_status 0
-  grep -q -- "--only-lines 2 --remove-lines-before-run 1,3 --yes" "$TEST_TMP/sudo.log" || fail "sudo did not receive remove-lines arguments"
-  grep -q -- "--remove-lines-before-run 1,3" "$TEST_TMP/updater.log" || fail "updater did not receive remove-lines arguments"
+  grep -q "^PYTHONPATH=$REPO_ROOT/src:$TEST_TMP/existing-pythonpath$" "$TEST_TMP/python.log" || fail "symlinked launcher did not prepend repo src"
   teardown_case
 }
 
-test_interactive_tag_change_passes_original_line_number(){
+test_legacy_python_false_does_not_disable_python_dispatch(){
   setup_case
-  printf 'repo/app:1.0 tag=wrong\n' > "$WUD_FILE"
+  local fake_python="$TEST_TMP/bin/python"
+  write_fake_python "$fake_python"
 
-  run_updates_with_input 's\n1\nc\n3.0\n' --base "$TEST_TMP/docker"
+  run_script env \
+    PYTHON_BIN="$fake_python" \
+    WUD_UPDATER_CONFIG="$TEST_TMP/missing-env" \
+    WUD_UPDATER_PYTHON=false \
+    FAKE_PYTHON_LOG="$TEST_TMP/python.log" \
+    "$SCRIPT" --dry-run --no-updater-sudo
 
   assert_status 0
-  grep -q -- "--only-lines 1 --allow-tag-updates --tag-override 1=3.0 --yes" "$TEST_TMP/sudo.log" || fail "sudo did not receive tag override arguments"
-  grep -q -- "--tag-override 1=3.0" "$TEST_TMP/updater.log" || fail "updater did not receive tag override"
-  grep -q -- "Selected tag update(s):" "$TEST_TMP/output.log" || fail "tag update prompt was not shown"
+  grep -q '^argv=-m wud_updater.cli updates --dry-run --no-updater-sudo$' "$TEST_TMP/python.log" || fail "legacy env var disabled or altered Python dispatch"
   teardown_case
 }
 
-test_interactive_tag_yes_keeps_wud_tag_without_override_prompt(){
+test_uses_configured_venv_when_python3_lacks_runtime_deps(){
   setup_case
-  printf 'repo/app:1.0 tag=2.0\n' > "$WUD_FILE"
+  local system_python="$TEST_TMP/bin/python3"
+  local venv_python="$TEST_TMP/venv/bin/python"
+  write_fake_python "$system_python"
+  write_fake_python "$venv_python"
 
-  run_updates_with_input 's\n1\ny\n' --base "$TEST_TMP/docker"
+  run_script env \
+    PATH="$TEST_TMP/bin:$PATH" \
+    PYTHON_BIN= \
+    WUD_UPDATER_CONFIG="$TEST_TMP/missing-env" \
+    WUD_UPDATER_VENV="$TEST_TMP/venv" \
+    FAKE_PYTHON_LOG="$TEST_TMP/python.log" \
+    FAKE_PYTHON_PROBE_STATUS=1 \
+    "$SCRIPT" --dry-run
 
   assert_status 0
-  grep -q -- "--only-lines 1 --allow-tag-updates --yes" "$TEST_TMP/sudo.log" || fail "sudo did not receive allow tag updates"
-  ! grep -q -- "--tag-override" "$TEST_TMP/sudo.log" || fail "yes choice should not pass tag override"
-  grep -Fq -- "[y]es/[n]o/[c]hange" "$TEST_TMP/output.log" || fail "tag update choice prompt was not shown"
-  ! grep -q -- "Override tag for update" "$TEST_TMP/output.log" || fail "yes choice should not prompt for override"
-  teardown_case
-}
-
-test_interactive_tag_exclude_passes_line_and_recreate_flag(){
-  setup_case
-  printf 'repo/app:1.0 tag=2.0\n' > "$WUD_FILE"
-
-  run_updates_with_input 's\n1\ne\ny\n' --base "$TEST_TMP/docker"
-
-  assert_status 0
-  grep -q -- "--only-lines 1 --exclude-tag-lines 1 --recreate-excluded-services --yes" "$TEST_TMP/sudo.log" || fail "sudo did not receive tag exclusion arguments"
-  ! grep -q -- "--allow-tag-updates" "$TEST_TMP/sudo.log" || fail "exclude choice should not allow tag updates"
-  ! grep -q -- "--tag-override" "$TEST_TMP/sudo.log" || fail "exclude choice should not pass tag override"
-  teardown_case
-}
-
-test_interactive_tag_exclude_can_skip_recreate(){
-  setup_case
-  printf 'repo/app:1.0 tag=2.0\n' > "$WUD_FILE"
-
-  run_updates_with_input 's\n1\ne\nn\n' --base "$TEST_TMP/docker"
-
-  assert_status 0
-  grep -q -- "--only-lines 1 --exclude-tag-lines 1 --yes" "$TEST_TMP/sudo.log" || fail "sudo did not receive tag exclusion"
-  ! grep -q -- "--recreate-excluded-services" "$TEST_TMP/sudo.log" || fail "skip recreate should not pass recreate flag"
-  teardown_case
-}
-
-test_interactive_tag_exclude_selects_subset_of_tag_lines(){
-  setup_case
-  {
-    printf 'repo/app:1.0 tag=2.0\n'
-    printf 'repo/sidecar:latest\n'
-    printf 'repo/db:1.0 tag=1.1\n'
-    printf 'repo/cache:1.0 tag=1.2\n'
-  } > "$WUD_FILE"
-
-  run_updates_with_input 's\n1-4\ne\n1,4\nn\n' --base "$TEST_TMP/docker"
-
-  assert_status 0
-  grep -q -- "--only-lines 1,2,3,4 --exclude-tag-lines 1,4 --yes" "$TEST_TMP/sudo.log" || fail "sudo did not receive selected tag exclusions"
-  grep -q -- "--exclude-tag-lines 1,4" "$TEST_TMP/updater.log" || fail "updater did not receive selected tag exclusions"
-  ! grep -q -- "--allow-tag-updates" "$TEST_TMP/sudo.log" || fail "exclude subset should not allow tag updates"
-  ! grep -q -- "--tag-override" "$TEST_TMP/sudo.log" || fail "exclude subset should not pass tag override"
-  teardown_case
-}
-
-test_interactive_tag_exclude_rejects_non_tag_selection(){
-  setup_case
-  {
-    printf 'repo/app:1.0 tag=2.0\n'
-    printf 'repo/sidecar:latest\n'
-    printf 'repo/db:1.0 tag=1.1\n'
-  } > "$WUD_FILE"
-
-  run_updates_with_input 's\n1-3\ne\n2\n1,3\nn\n' --base "$TEST_TMP/docker"
-
-  assert_status 0
-  grep -q -- "Invalid tag selection. Use listed tag update numbers/ranges like 1,3-5." "$TEST_TMP/output.log" || fail "non-tag selection was not rejected"
-  grep -q -- "--only-lines 1,2,3 --exclude-tag-lines 1,3 --yes" "$TEST_TMP/sudo.log" || fail "sudo did not receive corrected tag exclusions"
-  ! grep -q -- "--allow-tag-updates" "$TEST_TMP/sudo.log" || fail "corrected exclusion should not allow tag updates"
-  ! grep -q -- "--tag-override" "$TEST_TMP/sudo.log" || fail "corrected exclusion should not pass tag override"
-  teardown_case
-}
-
-test_interactive_declined_tag_updates_do_not_enable_allow_flag(){
-  setup_case
-  printf 'repo/app:1.0 tag=2.0\n' > "$WUD_FILE"
-
-  run_updates_with_input 's\n1\nn\n' --base "$TEST_TMP/docker"
-
-  assert_status 0
-  grep -q -- "--only-lines 1 --yes" "$TEST_TMP/sudo.log" || fail "sudo did not run selected line"
-  ! grep -q -- "--allow-tag-updates" "$TEST_TMP/sudo.log" || fail "declined tag update should not pass allow flag"
-  ! grep -q -- "--tag-override" "$TEST_TMP/sudo.log" || fail "declined tag update should not pass override"
-  teardown_case
-}
-
-test_interactive_untagged_tag_token_does_not_prompt(){
-  setup_case
-  printf 'repo/app tag=2.0\n' > "$WUD_FILE"
-
-  run_updates_with_input 'a\n' --base "$TEST_TMP/docker"
-
-  assert_status 0
-  ! grep -q -- "Selected tag update(s):" "$TEST_TMP/output.log" || fail "untagged tag token should not show tag prompt"
-  ! grep -q -- "--allow-tag-updates" "$TEST_TMP/sudo.log" || fail "untagged tag token should not pass allow flag"
-  ! grep -q -- "--tag-override" "$TEST_TMP/sudo.log" || fail "untagged tag token should not pass override"
-  teardown_case
-}
-
-test_interactive_all_tag_override_aborts_when_snapshot_lines_change(){
-  setup_case
-  printf 'repo/app:1.0 tag=wrong\n' > "$WUD_FILE"
-  cat > "$TEST_TMP/change-wud-file" <<HOOK
-#!/usr/bin/env bash
-printf 'repo/app:changed tag=wrong\n' > "$WUD_FILE"
-HOOK
-  chmod +x "$TEST_TMP/change-wud-file"
-
-  run_updates_with_input 'a\nc\n3.0\n' FAKE_COLUMN_HOOK="$TEST_TMP/change-wud-file" --base "$TEST_TMP/docker"
-
-  assert_status 1
-  grep -q 'WUD file changed while selecting updates; please rerun updates.' "$TEST_TMP/output.log" || fail "missing changed-file validation message"
-  [[ ! -e "$TEST_TMP/sudo.log" ]] || fail "sudo was invoked after tag override line changed"
-  [[ ! -d "$WUD_FILE.lock" ]] || fail "WUD lock was not released after validation failure"
-  teardown_case
-}
-
-test_interactive_select_aborts_when_snapshot_lines_change(){
-  setup_case
-  {
-    printf 'repo/app:one\n'
-    printf 'repo/app:two\n'
-  } > "$WUD_FILE"
-  cat > "$TEST_TMP/change-wud-file" <<HOOK
-#!/usr/bin/env bash
-printf 'repo/app:changed\nrepo/app:two\n' > "$WUD_FILE"
-HOOK
-  chmod +x "$TEST_TMP/change-wud-file"
-
-  run_updates_with_input 's\n1\nn\n' FAKE_COLUMN_HOOK="$TEST_TMP/change-wud-file" --base "$TEST_TMP/docker"
-
-  assert_status 1
-  grep -q 'WUD file changed while selecting updates; please rerun updates.' "$TEST_TMP/output.log" || fail "missing changed-file validation message"
-  [[ ! -e "$TEST_TMP/sudo.log" ]] || fail "sudo was invoked after selected line changed"
-  [[ ! -d "$WUD_FILE.lock" ]] || fail "WUD lock was not released after validation failure"
+  grep -q "^python=$venv_python$" "$TEST_TMP/python.log" || fail "venv python was not used when python3 lacked deps"
   teardown_case
 }
 
@@ -723,42 +158,11 @@ run_test(){
 }
 
 main(){
-  run_test test_dry_run_does_not_invoke_updater
-  run_test test_self_update_yes_runs_wud_entry_first
-  run_test test_self_update_tag_entry_enables_tag_updates
-  run_test test_self_update_dry_run_does_not_invoke_updater
-  run_test test_self_update_eof_does_not_invoke_updater
-  run_test test_no_self_update_flag_disables_preflight
-  run_test test_self_update_env_disables_preflight
-  run_test test_github_release_self_update_pulls_latest_and_exits
-  run_test test_github_release_self_update_rewrites_pinned_release_tag
-  run_test test_github_release_self_update_failed_pull_exits_without_restart_message
-  run_test test_forced_banner_prints_before_legacy_updates_output
-  run_test test_yes_invokes_configured_updater_through_sudo
-  run_test test_log_dir_cli_overrides_environment
-  run_test test_yes_passes_owner_config_through_sudo_env
-  run_test test_yes_passes_lock_timeout_through_sudo_env
-  run_test test_yes_passes_digest_pin_updates_through_sudo_env
-  run_test test_yes_passes_db_path_through_sudo_env
-  run_test test_yes_passes_host_docker_base_through_sudo_env
-  run_test test_yes_passes_allow_tag_updates_flag
-  run_test test_interactive_all_preserves_default_updater_args
-  run_test test_interactive_display_uses_snapshot_without_holding_wud_lock
-  run_test test_interactive_display_hides_sha_suffix
-  run_test test_interactive_holds_wud_lock_for_updater_handoff
-  run_test test_interactive_select_passes_original_line_numbers
-  run_test test_interactive_exclude_passes_complement_line_numbers
-  run_test test_interactive_remove_unselected_passes_remove_lines
-  run_test test_interactive_tag_change_passes_original_line_number
-  run_test test_interactive_tag_yes_keeps_wud_tag_without_override_prompt
-  run_test test_interactive_tag_exclude_passes_line_and_recreate_flag
-  run_test test_interactive_tag_exclude_can_skip_recreate
-  run_test test_interactive_tag_exclude_selects_subset_of_tag_lines
-  run_test test_interactive_tag_exclude_rejects_non_tag_selection
-  run_test test_interactive_declined_tag_updates_do_not_enable_allow_flag
-  run_test test_interactive_untagged_tag_token_does_not_prompt
-  run_test test_interactive_all_tag_override_aborts_when_snapshot_lines_change
-  run_test test_interactive_select_aborts_when_snapshot_lines_change
+  run_test test_dispatches_python_cli
+  run_test test_sources_config_before_dispatch
+  run_test test_installed_symlink_resolves_repo_src
+  run_test test_legacy_python_false_does_not_disable_python_dispatch
+  run_test test_uses_configured_venv_when_python3_lacks_runtime_deps
 }
 
 trap teardown_case EXIT
