@@ -1,7 +1,7 @@
 .PHONY: webui-demo-state webui-dev webui-demo lock
 
 lock:
-	pip-compile pyproject.toml -o requirements.txt
+	./scripts/lock.sh
 
 webui-demo-state:
 	python3 webui/scripts/seed_demo_state.py
