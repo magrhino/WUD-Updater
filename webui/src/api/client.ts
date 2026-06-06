@@ -534,7 +534,7 @@ const plansApi = {
     }),
   job: (jobId: string) =>
     apiRequest<ApplyJobResponse>(`/jobs/${encodeURIComponent(jobId)}`),
-  applyJob: (jobId: string) => apiRequest<ApplyJobResponse>(`/apply-jobs/${jobId}`),
+  applyJob: (jobId: string) => apiRequest<ApplyJobResponse>(`/apply-jobs/${encodeURIComponent(jobId)}`),
   openJobStream: (jobId: string) =>
     new EventSource(
       `${API_PREFIX}/jobs/${encodeURIComponent(jobId)}/stream?log_tail_bytes=${LIVE_JOB_LOG_TAIL_BYTES}`,
