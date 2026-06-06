@@ -92,6 +92,33 @@ test_sources_config_before_dispatch(){
   teardown_case
 }
 
+test_config_file_argument_sources_explicit_config_before_dispatch(){
+  setup_case
+  local default_python="$TEST_TMP/bin/default-python"
+  local explicit_python="$TEST_TMP/bin/explicit-python"
+  write_fake_python "$default_python"
+  write_fake_python "$explicit_python"
+  {
+    printf 'PYTHON_BIN="%s"\n' "$default_python"
+    printf 'export CONFIG_SENTINEL="from-default"\n'
+  } > "$TEST_TMP/default-env"
+  {
+    printf 'PYTHON_BIN="%s"\n' "$explicit_python"
+    printf 'export CONFIG_SENTINEL="from-explicit"\n'
+  } > "$TEST_TMP/explicit-env"
+
+  run_script env \
+    WUD_UPDATER_CONFIG="$TEST_TMP/default-env" \
+    FAKE_PYTHON_LOG="$TEST_TMP/python.log" \
+    "$SCRIPT" --config-file "$TEST_TMP/explicit-env" --dry-run
+
+  assert_status 0
+  grep -q "^python=$explicit_python$" "$TEST_TMP/python.log" || fail "--config-file did not choose explicit config before dispatch"
+  grep -q '^CONFIG_SENTINEL=from-explicit$' "$TEST_TMP/python.log" || fail "explicit config variables were not exported to Python"
+  grep -q "^argv=-m wud_updater.cli updates --config-file $TEST_TMP/explicit-env --dry-run$" "$TEST_TMP/python.log" || fail "launcher did not preserve --config-file arguments"
+  teardown_case
+}
+
 test_installed_symlink_resolves_repo_src(){
   setup_case
   local fake_python="$TEST_TMP/bin/python"
@@ -160,6 +187,7 @@ run_test(){
 main(){
   run_test test_dispatches_python_cli
   run_test test_sources_config_before_dispatch
+  run_test test_config_file_argument_sources_explicit_config_before_dispatch
   run_test test_installed_symlink_resolves_repo_src
   run_test test_legacy_python_false_does_not_disable_python_dispatch
   run_test test_uses_configured_venv_when_python3_lacks_runtime_deps
