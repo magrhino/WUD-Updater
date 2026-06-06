@@ -54,6 +54,17 @@ class DoctorTests(unittest.TestCase):
         self.assertIn("[WARN] TrueNAS status helper", stdout)
         self.assertIn("Result: 0 failure(s)", stdout)
 
+    def test_doctor_fails_when_packaged_release_parser_is_missing(self) -> None:
+        (self.packaged_scripts / "release-parser.sh").unlink()
+
+        status, stdout = self._run_doctor()
+
+        self.assertEqual(status, 1, stdout)
+        self.assertIn(
+            "[FAIL] packaged WUD scripts: release-parser.sh missing",
+            stdout,
+        )
+
     def test_doctor_fails_when_no_compose_stacks_are_found(self) -> None:
         for path in self.stack_dir.iterdir():
             path.unlink()
@@ -244,6 +255,7 @@ exit 2
         for name in (
             "on-update.sh",
             "append-updates.sh",
+            "release-parser.sh",
             "release-notes-to-discord.sh",
             "github-release-embed.sh",
             "tag-manager.sh",

@@ -121,6 +121,7 @@ EOF
     bin/updates \
     bin/docker-update-from-wud \
     wud/http.sh \
+    wud/release-parser.sh \
     wud/release-notes-to-discord.sh \
     wud/github-release-embed.sh \
     wud/tag-manager.sh \
@@ -130,6 +131,7 @@ EOF
     tests/e2e-docker-compose.sh \
     tests/test-entrypoint.sh \
     tests/test-github-release-embed.sh \
+    tests/test-release-parser.sh \
     tests/test-release-notes-to-discord.sh \
     tests/test-tag-manager.sh \
     tests/test-wud-append-updates.sh \
@@ -149,6 +151,7 @@ EOF
     wud/on-update.sh \
     wud/append-updates.sh \
     wud/http.sh \
+    wud/release-parser.sh \
     wud/release-notes-to-discord.sh \
     wud/github-release-embed.sh \
     wud/tag-manager.sh \
@@ -158,6 +161,7 @@ EOF
     tests/e2e-docker-compose.sh \
     tests/test-entrypoint.sh \
     tests/test-github-release-embed.sh \
+    tests/test-release-parser.sh \
     tests/test-release-notes-to-discord.sh \
     tests/test-tag-manager.sh \
     tests/test-wud-append-updates.sh \

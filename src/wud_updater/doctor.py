@@ -493,6 +493,7 @@ class Doctor:
         required = (
             "on-update.sh",
             "append-updates.sh",
+            "release-parser.sh",
             "release-notes-to-discord.sh",
             "github-release-embed.sh",
             "tag-manager.sh",

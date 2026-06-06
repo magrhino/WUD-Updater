@@ -202,6 +202,7 @@ def _write_doctor_files(env: Mapping[str, str]) -> None:
     for name in (
         "on-update.sh",
         "append-updates.sh",
+        "release-parser.sh",
         "release-notes-to-discord.sh",
         "github-release-embed.sh",
         "tag-manager.sh",
