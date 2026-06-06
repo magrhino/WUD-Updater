@@ -524,6 +524,55 @@ class CliTests(unittest.TestCase):
         self.assertEqual(raised.exception.code, 2)
         self.assertIn("required", stderr.getvalue())
 
+    def test_updates_config_file_option_is_accepted(self) -> None:
+        with mock.patch(
+            "wud_updater.cli._run_updates",
+            return_value=0,
+        ) as run_updates:
+            status, _stdout, _stderr = self._run_main(
+                ["updates", "--config-file", "/tmp/custom.env", "--dry-run"]
+            )
+
+        self.assertEqual(status, 0)
+        args = run_updates.call_args.args[0]
+        self.assertEqual(args.config_file, "/tmp/custom.env")
+
+    def test_updates_auto_run_sets_yes_flag(self) -> None:
+        with mock.patch(
+            "wud_updater.cli._run_updates",
+            return_value=0,
+        ) as run_updates:
+            status, _stdout, _stderr = self._run_main(
+                ["updates", "--auto-run", "--dry-run"]
+            )
+
+        self.assertEqual(status, 0)
+        args = run_updates.call_args.args[0]
+        self.assertTrue(args.yes)
+
+    def test_updates_auto_run_and_yes_are_aliases(self) -> None:
+        # Both --auto-run and --yes should set args.yes = True
+        with mock.patch("wud_updater.cli._run_updates", return_value=0) as run_updates:
+            self._run_main(["updates", "--yes", "--dry-run"])
+            args_yes = run_updates.call_args.args[0]
+
+        with mock.patch("wud_updater.cli._run_updates", return_value=0) as run_updates:
+            self._run_main(["updates", "--auto-run", "--dry-run"])
+            args_auto_run = run_updates.call_args.args[0]
+
+        self.assertEqual(args_yes.yes, args_auto_run.yes)
+        self.assertTrue(args_yes.yes)
+
+    def test_updates_config_file_defaults_to_none(self) -> None:
+        with mock.patch(
+            "wud_updater.cli._run_updates",
+            return_value=0,
+        ) as run_updates:
+            self._run_main(["updates", "--dry-run"])
+
+        args = run_updates.call_args.args[0]
+        self.assertIsNone(args.config_file)
+
 
 if __name__ == "__main__":
     unittest.main()
