@@ -136,6 +136,18 @@ class DoctorTests(unittest.TestCase):
                 )
                 self.assertIn("Result: 1 failure(s), 0 warning(s)", stdout)
 
+    def test_doctor_uses_restart_container_for_truenas_inspect(self) -> None:
+        status, stdout = self._run_doctor(
+            {
+                "TRUENAS_STATUS_CHECK": "true",
+                "HOSTNAME": "custom-hostname",
+                "WUD_WEB_RESTART_CONTAINER": "wud-updater-1",
+            },
+        )
+
+        self.assertEqual(status, 0, stdout)
+        self.assertIn("[PASS] TrueNAS helper container inspect", stdout)
+
     def test_permission_probe_names_are_safe_for_concurrent_doctor_runs(self) -> None:
         with concurrent.futures.ThreadPoolExecutor(max_workers=16) as executor:
             issues = list(executor.map(lambda _: _write_probe(self.log_dir), range(64)))
@@ -220,6 +232,12 @@ case "${1:-}" in
   ps)
     printf 'CONTAINER ID   IMAGE\\n'
     exit 0
+    ;;
+  container)
+    if [[ "${2:-}" == "inspect" ]]; then
+      printf '[{"Config":{"Image":"wud-updater:test"}}]\\n'
+      exit 0
+    fi
     ;;
   compose)
     if [[ "${2:-}" == "version" ]]; then

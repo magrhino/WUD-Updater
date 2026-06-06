@@ -210,6 +210,7 @@ class PythonUpdatesWrapperTests(unittest.TestCase):
                 "FAKE_DOCKER_LOG": str(self.docker_log),
                 "WUD_UPDATER_BANNER": "0",
                 "WUD_UPDATER_RELEASE_CHECK": "1",
+                "DOCKER_HOST": "tcp://docker:2375",
                 "HOSTNAME": "wud-updater-1",
             }
         )
@@ -254,7 +255,8 @@ class PythonUpdatesWrapperTests(unittest.TestCase):
             self.docker_log.read_text(encoding="utf-8"),
         )
         self.assertIn(
-            "docker pull ghcr.io/magrhino/wud-updater:latest",
+            "env DOCKER_HOST=tcp://docker:2375 docker pull "
+            "ghcr.io/magrhino/wud-updater:latest",
             self.sudo_log.read_text(encoding="utf-8"),
         )
         self.assertIn(

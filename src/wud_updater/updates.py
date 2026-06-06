@@ -43,6 +43,14 @@ _DISPLAY_RANGE_RE = re.compile(r"^([0-9]+)-([0-9]+)$")
 _DISPLAY_NUMBER_RE = re.compile(r"^[0-9]+$")
 _SHELL_SPACE_RE = re.compile(r"[ \t\n\r\v\f]")
 _LEGACY_SHA_SUFFIX_RE = re.compile(r"^(.*\S)\s+sha256=\S+$")
+_DOCKER_CLI_ENV_NAMES = (
+    "DOCKER_HOST",
+    "DOCKER_CONTEXT",
+    "DOCKER_TLS_VERIFY",
+    "DOCKER_CERT_PATH",
+    "DOCKER_CONFIG",
+    "DOCKER_API_VERSION",
+)
 
 
 class UpdatesError(RuntimeError):
@@ -365,7 +373,14 @@ class UpdatesRunner:
         if image == "":
             raise UpdatesError("Could not determine WUD-Updater image to pull.")
 
-        if self.options.use_sudo:
+        docker_env = _docker_cli_env(self.environ) if self.options.use_sudo else []
+        if self.options.use_sudo and docker_env:
+            print(
+                "🚀 Pulling WUD-Updater image via: sudo env "
+                f"{' '.join(docker_env)} docker pull {image}"
+            )
+            command = ["sudo", "env", *docker_env, "docker", "pull", image]
+        elif self.options.use_sudo:
             print(f"🚀 Pulling WUD-Updater image via: sudo docker pull {image}")
             command = ["sudo", "docker", "pull", image]
         else:
@@ -1125,6 +1140,15 @@ def _self_update_desired_tag(target: str) -> str:
     if desired_tag and image_has_tag(image) and tag_value_valid(desired_tag):
         return desired_tag
     return ""
+
+
+def _docker_cli_env(environ: Mapping[str, str]) -> list[str]:
+    result: list[str] = []
+    for name in _DOCKER_CLI_ENV_NAMES:
+        value = environ.get(name)
+        if value:
+            result.append(f"{name}={value}")
+    return result
 
 
 def _read_todo_entries_with_sudo(

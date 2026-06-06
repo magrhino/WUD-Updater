@@ -4,7 +4,34 @@ import subprocess
 import unittest
 from unittest import mock
 
+from wud_updater.container_identity import container_identity_candidates
 from wud_updater.self_update import current_container_image, release_self_update_target
+
+
+class ContainerIdentityTests(unittest.TestCase):
+    def test_candidates_include_restart_target_hostname_and_cgroup_id(self) -> None:
+        with mock.patch(
+            "pathlib.Path.read_text",
+            return_value=(
+                "0::/docker/"
+                "1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef\n"
+            ),
+        ):
+            candidates = container_identity_candidates(
+                {
+                    "WUD_WEB_RESTART_CONTAINER": "wud-updater",
+                    "HOSTNAME": "custom-hostname",
+                }
+            )
+
+        self.assertEqual(
+            candidates,
+            [
+                "wud-updater",
+                "custom-hostname",
+                "1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
+            ],
+        )
 
 
 class SelfUpdateTests(unittest.TestCase):
@@ -24,6 +51,34 @@ class SelfUpdateTests(unittest.TestCase):
             image = current_container_image({"HOSTNAME": "wud-updater-1"})
 
         self.assertEqual(image, "ghcr.io/magrhino/wud-updater:latest")
+
+    def test_current_container_image_tries_next_candidate_after_missing_name(self) -> None:
+        run_mock = mock.Mock(
+            side_effect=[
+                subprocess.CompletedProcess(["docker"], 1, stdout="", stderr="missing"),
+                subprocess.CompletedProcess(
+                    ["docker"],
+                    0,
+                    stdout='[{"Config":{"Image":"ghcr.io/magrhino/wud-updater:latest"}}]',
+                    stderr="",
+                ),
+            ]
+        )
+
+        with (
+            mock.patch(
+                "wud_updater.self_update.container_identity_candidates",
+                return_value=["custom-hostname", "actual-container-id"],
+            ),
+            mock.patch("subprocess.run", run_mock),
+        ):
+            image = current_container_image({"HOSTNAME": "custom-hostname"})
+
+        self.assertEqual(image, "ghcr.io/magrhino/wud-updater:latest")
+        self.assertEqual(
+            run_mock.call_args_list[1].args[0],
+            ["docker", "container", "inspect", "actual-container-id"],
+        )
 
     def test_release_self_update_target_rewrites_pinned_release_tag(self) -> None:
         target = release_self_update_target(
