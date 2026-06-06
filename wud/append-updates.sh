@@ -35,7 +35,12 @@ acquire_lock() {
   esac
 
   while ! mkdir "$LOCK_DIR" 2>/dev/null; do
-    if [ ! -d "$LOCK_DIR" ]; then
+    if [ -e "$LOCK_DIR" ] && [ ! -d "$LOCK_DIR" ]; then
+      echo "Failed to create WUD file lock: $LOCK_DIR (permissions or missing parent?)" >&2
+      return 1
+    fi
+    LOCK_PARENT="$(dirname "$LOCK_DIR")"
+    if [ ! -e "$LOCK_DIR" ] && { [ ! -d "$LOCK_PARENT" ] || [ ! -w "$LOCK_PARENT" ]; }; then
       echo "Failed to create WUD file lock: $LOCK_DIR (permissions or missing parent?)" >&2
       return 1
     fi

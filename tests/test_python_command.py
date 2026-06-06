@@ -194,7 +194,7 @@ class CommandRunnerTests(unittest.TestCase):
         popen_mock.return_value = process_mock
 
         runner = CommandRunner()
-        
+
         with mock.patch("sys.stdout"), mock.patch("sys.stderr"):
             result = runner.run_streaming(["streaming_command"])
 
