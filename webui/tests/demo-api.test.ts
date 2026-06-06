@@ -494,4 +494,61 @@ describe("demo web API", () => {
       }),
     );
   });
+
+  it("createPlan accepts and ignores digestPinLabelRewriteApprovals", async () => {
+    const api = createDemoWebApi();
+    const approvals = [
+      {
+        stack: "media",
+        service: "plex",
+        label_key: "wud.tag.include",
+        current_label_value: "^beta|^stable",
+        planned_tag: "2.0",
+        proposed_label_value: "^2\\.0$$",
+      },
+    ];
+
+    const plan = await api.createPlan([3, 5], true, [], approvals, "csrf");
+
+    expect(plan.status).toBe("ready");
+    expect(plan.can_apply).toBe(true);
+  });
+
+  it("createJob passes digestPinLabelRewriteApprovals to plan creation", async () => {
+    const api = createDemoWebApi();
+    const approvals = [
+      {
+        stack: "media",
+        service: "plex",
+        label_key: "wud.tag.include",
+        current_label_value: "^beta|^stable",
+        planned_tag: "2.0",
+        proposed_label_value: "^2\\.0$$",
+      },
+    ];
+
+    const job = await api.createJob("demo-plan", [3], true, [], approvals, "csrf");
+
+    expect(job.job_id).toBeTruthy();
+    expect(["queued", "running"]).toContain(job.status);
+  });
+
+  it("applyPlan passes digestPinLabelRewriteApprovals to plan creation", async () => {
+    const api = createDemoWebApi();
+    const approvals = [
+      {
+        stack: "media",
+        service: "plex",
+        label_key: "wud.tag.include",
+        current_label_value: "^beta|^stable",
+        planned_tag: "2.0",
+        proposed_label_value: "^2\\.0$$",
+      },
+    ];
+
+    const job = await api.applyPlan("demo-plan", [3], true, [], approvals, "csrf");
+
+    expect(job.job_id).toBeTruthy();
+    expect(["queued", "running"]).toContain(job.status);
+  });
 });

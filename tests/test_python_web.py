@@ -6184,6 +6184,93 @@ def test_plan_endpoint_rejects_invalid_tag_overrides(tmp_path: Path) -> None:
     assert "does not target a tag update" in non_tag.json()["detail"]
 
 
+def test_plan_endpoint_rejects_duplicate_digest_pin_label_rewrite_approvals(
+    tmp_path: Path,
+) -> None:
+    client = _client(tmp_path, {"WUD_WEB_DEV_NO_AUTH": "true"})
+    (tmp_path / "state" / "images.todo").write_text(
+        "repo/app:1.0 tag=2.0\n", encoding="utf-8"
+    )
+    approval = {
+        "stack": "stack",
+        "service": "app",
+        "label_key": "wud.tag.include",
+        "current_label_value": "^beta|^stable",
+        "planned_tag": "2.0",
+        "proposed_label_value": "^2\\.0$$",
+    }
+
+    response = client.post(
+        "/api/v1/plans",
+        json={
+            "line_numbers": [1],
+            "digest_pin_label_rewrite_approvals": [approval, approval],
+        },
+        headers=_csrf_headers(client),
+    )
+
+    assert response.status_code == 422
+    assert "duplicate" in response.json()["detail"]
+
+
+def test_plan_endpoint_rejects_non_include_label_key_in_approval(
+    tmp_path: Path,
+) -> None:
+    client = _client(tmp_path, {"WUD_WEB_DEV_NO_AUTH": "true"})
+    (tmp_path / "state" / "images.todo").write_text(
+        "repo/app:1.0 tag=2.0\n", encoding="utf-8"
+    )
+    approval = {
+        "stack": "stack",
+        "service": "app",
+        "label_key": "wud.tag.exclude",
+        "current_label_value": "^beta|^stable",
+        "planned_tag": "2.0",
+        "proposed_label_value": "^2\\.0$$",
+    }
+
+    response = client.post(
+        "/api/v1/plans",
+        json={
+            "line_numbers": [1],
+            "digest_pin_label_rewrite_approvals": [approval],
+        },
+        headers=_csrf_headers(client),
+    )
+
+    assert response.status_code == 422
+    assert "wud.tag.include" in response.json()["detail"]
+
+
+def test_plan_endpoint_rejects_invalid_planned_tag_in_approval(
+    tmp_path: Path,
+) -> None:
+    client = _client(tmp_path, {"WUD_WEB_DEV_NO_AUTH": "true"})
+    (tmp_path / "state" / "images.todo").write_text(
+        "repo/app:1.0 tag=2.0\n", encoding="utf-8"
+    )
+    approval = {
+        "stack": "stack",
+        "service": "app",
+        "label_key": "wud.tag.include",
+        "current_label_value": "^beta|^stable",
+        "planned_tag": "bad:tag",
+        "proposed_label_value": "^2\\.0$$",
+    }
+
+    response = client.post(
+        "/api/v1/plans",
+        json={
+            "line_numbers": [1],
+            "digest_pin_label_rewrite_approvals": [approval],
+        },
+        headers=_csrf_headers(client),
+    )
+
+    assert response.status_code == 422
+    assert "invalid planned tag" in response.json()["detail"]
+
+
 def test_apply_endpoint_rejects_mixed_plan_with_skipped_lines_without_mutation(
     tmp_path: Path,
 ) -> None:

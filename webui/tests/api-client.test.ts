@@ -351,4 +351,74 @@ describe("webApi", () => {
 
     await expect(webApi.status()).rejects.toEqual(new ApiError(403, "denied"));
   });
+
+  it("includes digest_pin_label_rewrite_approvals in createPlan request", async () => {
+    const fetchMock = mockFetch({});
+    const approvals = [
+      {
+        stack: "media",
+        service: "plex",
+        label_key: "wud.tag.include",
+        current_label_value: "^beta|^stable",
+        planned_tag: "2.0",
+        proposed_label_value: "^2\\.0$$",
+      },
+    ];
+
+    await webApi.createPlan([1], false, [], approvals, "csrf-token");
+
+    const body = JSON.parse(String(requestInit(fetchMock.mock.calls[0]).body));
+    expect(body.digest_pin_label_rewrite_approvals).toEqual(approvals);
+  });
+
+  it("includes digest_pin_label_rewrite_approvals in createJob request", async () => {
+    const fetchMock = mockFetch({});
+    const approvals = [
+      {
+        stack: "media",
+        service: "plex",
+        label_key: "wud.tag.include",
+        current_label_value: "^beta|^stable",
+        planned_tag: "2.0",
+        proposed_label_value: "^2\\.0$$",
+      },
+    ];
+
+    await webApi.createJob("plan-id", [1], false, [], approvals, "csrf-token");
+
+    const body = JSON.parse(String(requestInit(fetchMock.mock.calls[0]).body));
+    expect(body.digest_pin_label_rewrite_approvals).toEqual(approvals);
+    expect(body.confirmation).toBe("apply");
+    expect(body.plan_id).toBe("plan-id");
+  });
+
+  it("includes digest_pin_label_rewrite_approvals in applyPlan request", async () => {
+    const fetchMock = mockFetch({});
+    const approvals = [
+      {
+        stack: "media",
+        service: "plex",
+        label_key: "wud.tag.include",
+        current_label_value: "^beta|^stable",
+        planned_tag: "2.0",
+        proposed_label_value: "^2\\.0$$",
+      },
+    ];
+
+    await webApi.applyPlan("plan-id", [1], false, [], approvals, "csrf-token");
+
+    const body = JSON.parse(String(requestInit(fetchMock.mock.calls[0]).body));
+    expect(body.digest_pin_label_rewrite_approvals).toEqual(approvals);
+    expect(body.confirmation).toBe("apply");
+    expect(body.plan_id).toBe("plan-id");
+  });
+
+  it("sends empty digest_pin_label_rewrite_approvals when none given", async () => {
+    const fetchMock = mockFetch({});
+
+    await webApi.createPlan([1], false, [], [], "csrf-token");
+
+    const body = JSON.parse(String(requestInit(fetchMock.mock.calls[0]).body));
+    expect(body.digest_pin_label_rewrite_approvals).toEqual([]);
+  });
 });
