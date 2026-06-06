@@ -163,9 +163,10 @@ function parseVersion(tag: string): ParsedVersion | null {
   if (!match) {
     return null;
   }
+  const [, majorStr = "0", minorStr = "0", patchStr = "0"] = match;
   return {
-    major: parseInt(match[1]!, 10),
-    minor: parseInt(match[2]!, 10),
-    patch: match[3] ? parseInt(match[3]!, 10) : 0,
+    major: parseInt(majorStr, 10),
+    minor: parseInt(minorStr, 10),
+    patch: parseInt(patchStr, 10),
   };
 }

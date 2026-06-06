@@ -269,7 +269,7 @@ describe("mutating WebUI views", () => {
         ),
       });
     });
-    const createJob = vi.spyOn(updates, "createJob");
+    const applyPlan = vi.spyOn(updates, "applyPlan");
     const wrapper = mountPendingView(pinia);
 
     await wrapper
@@ -288,7 +288,7 @@ describe("mutating WebUI views", () => {
       .find((button) => button.text().includes("Apply 1 update"));
     expect(applyButton?.exists()).toBe(true);
     expect(applyButton?.attributes("disabled")).toBeDefined();
-    expect(createJob).not.toHaveBeenCalled();
+    expect(applyPlan).not.toHaveBeenCalled();
   });
 
   it("shows blocked preflight errors without an apply action", async () => {
@@ -331,7 +331,7 @@ describe("mutating WebUI views", () => {
         ],
       });
     });
-    const createJob = vi.spyOn(updates, "createJob");
+    const applyPlan = vi.spyOn(updates, "applyPlan");
     const wrapper = mountPendingView(pinia);
 
     await wrapper
@@ -351,7 +351,7 @@ describe("mutating WebUI views", () => {
         .findAll("button")
         .some((button) => button.text().includes("Apply 1 update")),
     ).toBe(false);
-    expect(createJob).not.toHaveBeenCalled();
+    expect(applyPlan).not.toHaveBeenCalled();
   });
 
   it("rebuilds digest-pin label rewrite plans after approval", async () => {
@@ -1287,7 +1287,7 @@ describe("mutating WebUI views", () => {
         ),
       });
     });
-    const createJob = vi.spyOn(updates, "createJob");
+    const applyPlan = vi.spyOn(updates, "applyPlan");
     const wrapper = mountPendingView(pinia);
 
     await wrapper
@@ -1314,7 +1314,7 @@ describe("mutating WebUI views", () => {
     expect(applyButton?.attributes("disabled")).toBeDefined();
     await applyButton?.trigger("click");
 
-    expect(createJob).not.toHaveBeenCalled();
+    expect(applyPlan).not.toHaveBeenCalled();
   });
 
   it("falls back to pending file order when grouping is unavailable", () => {
@@ -1641,7 +1641,7 @@ describe("mutating WebUI views", () => {
     vi.spyOn(updates, "createPlan").mockImplementation(async () => {
       updates.plan = planResponse();
     });
-    const createJob = vi.spyOn(updates, "createJob").mockImplementation(async () => {
+    const applyPlan = vi.spyOn(updates, "applyPlan").mockImplementation(async () => {
       const job = applyJobResponse();
       updates.setApplyJob(job);
       return job;
@@ -1658,7 +1658,7 @@ describe("mutating WebUI views", () => {
       ?.trigger("click");
     await flushPromises();
 
-    expect(createJob).not.toHaveBeenCalled();
+    expect(applyPlan).not.toHaveBeenCalled();
     expect(wrapper.find('[role="dialog"]').exists()).toBe(true);
 
     await wrapper
@@ -1667,7 +1667,7 @@ describe("mutating WebUI views", () => {
       .find((button) => button.text().includes("Apply 1 update"))
       ?.trigger("click");
 
-    expect(createJob).toHaveBeenCalledWith("plan-test", [1], true, [], []);
+    expect(applyPlan).toHaveBeenCalledWith("plan-test", [1], true, [], []);
     expect(jobStream.observed).toBe(true);
     await flushPromises();
 
@@ -1771,7 +1771,7 @@ describe("mutating WebUI views", () => {
     vi.spyOn(updates, "createPlan").mockImplementation(async () => {
       updates.plan = planResponse();
     });
-    vi.spyOn(updates, "createJob").mockImplementation(async () => {
+    vi.spyOn(updates, "applyPlan").mockImplementation(async () => {
       const job = applyJobResponse();
       updates.setApplyJob(job);
       return job;
@@ -1847,7 +1847,7 @@ describe("mutating WebUI views", () => {
     vi.spyOn(updates, "createPlan").mockImplementation(async () => {
       updates.plan = planResponse();
     });
-    vi.spyOn(updates, "createJob").mockImplementation(async () => {
+    vi.spyOn(updates, "applyPlan").mockImplementation(async () => {
       const job = applyJobResponse({ status: "running" });
       updates.setApplyJob(job);
       return job;
@@ -1961,7 +1961,7 @@ describe("mutating WebUI views", () => {
     vi.spyOn(updates, "createPlan").mockImplementation(async () => {
       updates.plan = planResponse();
     });
-    vi.spyOn(updates, "createJob").mockImplementation(async () => {
+    vi.spyOn(updates, "applyPlan").mockImplementation(async () => {
       const job = applyJobResponse({
         status: "running",
         started_at: "2026-05-28T12:00:00+00:00",
@@ -2011,7 +2011,7 @@ describe("mutating WebUI views", () => {
     vi.spyOn(updates, "createPlan").mockImplementation(async () => {
       updates.plan = planResponse();
     });
-    vi.spyOn(updates, "createJob").mockImplementation(async () => {
+    vi.spyOn(updates, "applyPlan").mockImplementation(async () => {
       const job = applyJobResponse({ status: "running" });
       updates.setApplyJob(job);
       return job;

@@ -1151,7 +1151,7 @@ async function confirmApply(): Promise<void> {
   const intent = updateIntent.value;
   const lineNumbers = updates.plan.selected_line_numbers;
   const snapshot = createApplyJobSnapshot();
-  const job = await updates.createJob(
+  const job = await updates.applyPlan(
     updates.plan.plan_id,
     lineNumbers,
     intent?.allowTagUpdates ?? lineNumbersHaveTagUpdates(lineNumbers),
