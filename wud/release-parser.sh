@@ -20,24 +20,36 @@ detect_breaking() {
 }
 
 semver_first() {
-  tr -d '\r' \
-    | tr -cs '0-9A-Za-z._ -' '\n' \
-    | grep -m1 -E '^[vV]?[0-9]+(\.[0-9]+){1,3}([._-][0-9A-Za-z]+)?$' \
+  grep -Eoim1 '[vV]?[0-9]+(\.[0-9]+){1,3}([._-][0-9A-Za-z]+)*' \
     || true
 }
 
+strip_lsio_suffix() {
+  sed -E 's/[._-]ls[0-9]+([._-][0-9A-Za-z]+)*$//I'
+}
+
 strip_md_headers() {
-  sed -E 's/\r//g; s/^\*\*([A-Za-z0-9 _-]+):\*\*/\1:/; s/[[:space:]]+$//'
+  sed -E 's/\r//g; s/^[[:space:]]*#+[[:space:]]*//; s/^\*\*([A-Za-z0-9 _-]+):\*\*/\1:/; s/[[:space:]]+$//'
 }
 
 extract_block_header_ci() {
   local header="$1"
   awk -v target="$(printf '%s' "$header" | tr '[:upper:]' '[:lower:]')" '
     function lower(s) { return tolower(s) }
+    function trim(s) { gsub(/^[[:space:]]+|[[:space:]]+$/, "", s); return s }
+    function header_text(s) {
+      s = trim(s)
+      sub(/^#+[[:space:]]*/, "", s)
+      sub(/^\*\*/, "", s)
+      sub(/\*\*$/, "", s)
+      return trim(s)
+    }
     {
       line = $0
-      low = lower(line)
-      is_hdr = match(line, /^[[:space:]]*[A-Za-z0-9 _-]+:[[:space:]]*$/)
+      header = header_text(line)
+      low = lower(header)
+      is_bullet = match(line, /^[[:space:]]*([*+-]|•)[[:space:]]/)
+      is_hdr = !is_bullet && match(header, /^[A-Za-z0-9 _-]+:[[:space:]]*$/)
       if (low == target) { print line; show = 1; next }
       if (show && is_hdr) exit
       if (show) print line
@@ -64,13 +76,13 @@ extract_upstream_version() {
 
   text="$(cat)"
   version="$(printf '%s\n' "$text" \
-    | grep -Eoim1 'updat(ing|e)[[:space:]]+to[[:space:]]+[vV]?[0-9]+(\.[0-9]+){1,}([[:alnum:]._-])*' \
-    | sed -E 's/.*to[[:space:]]+//' || true)"
+    | grep -Eim1 'updat(ing|e)[[:space:]]+to[[:space:]]+[vV]?[0-9]+(\.[0-9]+){1,}' \
+    | semver_first || true)"
   [[ -z "$version" ]] && version="$(printf '%s\n' "$text" \
-    | grep -Eoim1 'bump[[:space:]]+to[[:space:]]+[vV]?[0-9]+(\.[0-9]+){1,}([[:alnum:]._-])*' \
-    | sed -E 's/.*to[[:space:]]+//' || true)"
+    | grep -Eim1 'bump[[:space:]]+to[[:space:]]+[vV]?[0-9]+(\.[0-9]+){1,}' \
+    | semver_first || true)"
   [[ -z "$version" ]] && version="$(printf '%s\n' "$text" \
-    | grep -Eoim1 '[vV]?[0-9]+(\.[0-9]+){1,}([[:alnum:]._-])*' || true)"
+    | semver_first || true)"
   printf '%s' "$version"
 }
 
@@ -88,22 +100,36 @@ select_key_change_bullets() {
   awk -v max="$max" '
     function lower(s) { return tolower(s) }
     function is_bullet(s) { return (s ~ /^[[:space:]]*([*+-]|•)[[:space:]]/) }
+    function is_h2(s) { return (s ~ /^##[[:space:]]/) }
+    function is_continuation(s) {
+      return (s !~ /^[[:space:]]*$/ && !is_bullet(s) && !is_h2(s))
+    }
+    function print_bullet(line) {
+      sub(/^[[:space:]]*([*+-]|•)[[:space:]]*/, "- ", line)
+      print line
+      keep = 1
+    }
     function emit(line,    low) {
       low = lower(line)
       if (low ~ /^##[[:space:]]*key[[:space:]]*changes/) { in_key = 1; return }
-      if (in_key && line ~ /^##[[:space:]]/) in_key = 0
+      if (in_key && is_h2(line)) { in_key = 0; keep = 0 }
       if (has_key) {
         if (in_key && is_bullet(line)) {
-          sub(/^[[:space:]]*([*+-]|•)[[:space:]]*/, "- ", line)
-          print line
-          out++
           if (out >= max) exit
+          print_bullet(line)
+          out++
+        } else if (in_key && keep && is_continuation(line)) {
+          print line
+        } else if (in_key) {
+          keep = 0
         }
       } else if (lines <= 200 && is_bullet(line) && seen < max) {
-        sub(/^[[:space:]]*([*+-]|•)[[:space:]]*/, "- ", line)
-        print line
+        print_bullet(line)
         seen++
-        if (seen >= max) exit
+      } else if (!has_key && lines <= 200 && keep && is_continuation(line)) {
+        print line
+      } else if (!has_key) {
+        keep = 0
       }
     }
     function finish_scan(    i, scan_lines) {

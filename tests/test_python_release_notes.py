@@ -35,6 +35,11 @@ class ReleaseNotesTests(unittest.TestCase):
         self.assertTrue(breaking)
         self.assertTrue(any("Major version" in reason for reason in reasons))
 
+        breaking, reasons = detect_breaking("Routine update", "v1.2", "v2.0")
+
+        self.assertTrue(breaking)
+        self.assertTrue(any("Major version" in reason for reason in reasons))
+
     def test_ghcr_release_metadata_marks_breaking_major_bump(self) -> None:
         parsed = parse_wud_text("ghcr.io/acme/app:1.0.0\n")
         client = GitHubClient(
@@ -152,6 +157,88 @@ class ReleaseNotesTests(unittest.TestCase):
             [(link.label, link.kind) for link in items[0].links],
             [("LSIO release", "lsio_release"), ("Upstream release", "github_release")],
         )
+
+    def test_lsio_remote_changes_accept_markdown_header_and_punctuation(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            upstream_map = Path(tmp) / "upstreams.txt"
+            upstream_map.write_text(
+                "linuxserver/docker-radarr: Radarr/Radarr\n",
+                encoding="utf-8",
+            )
+            parsed = parse_wud_text("linuxserver/radarr:latest\n")
+            responses = {
+                "https://api.github.com/repos/linuxserver/docker-radarr/releases/latest": {
+                    "tag_name": "1.2.3-ls14",
+                    "name": "1.2.3-ls14",
+                    "html_url": "https://github.com/linuxserver/docker-radarr/releases/tag/1.2.3-ls14",
+                    "body": (
+                        "### Remote Changes:\n"
+                        "- Updated dependencies:\n"
+                        "  - package one\n"
+                        "- Updating to v1.2.3-beta.1.\n"
+                        "\n"
+                        "LinuxServer Changes:\n"
+                        "- Rebase to Alpine 3.20"
+                    ),
+                    "published_at": "2026-01-02T00:00:00Z",
+                },
+                "https://api.github.com/repos/Radarr/Radarr/releases/tags/v1.2.3-beta.1": {
+                    "tag_name": "v1.2.3-beta.1",
+                    "name": "v1.2.3-beta.1",
+                    "html_url": "https://github.com/Radarr/Radarr/releases/tag/v1.2.3-beta.1",
+                    "body": "Routine update",
+                    "published_at": "2026-01-02T00:00:00Z",
+                },
+            }
+            client = GitHubClient(fetch_json=lambda url: responses[url])
+            with open_db(":memory:") as conn:
+                init_db(conn)
+                items = refresh_release_notes(
+                    conn,
+                    parsed.targets,
+                    {"UPSTREAM_MAP": str(upstream_map)},
+                    client=client,
+                )
+
+        self.assertEqual(items[0].status, "ready")
+        self.assertEqual(items[0].release_tag, "v1.2.3-beta.1")
+
+    def test_lsio_tag_fallback_strips_linuxserver_suffix(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            upstream_map = Path(tmp) / "upstreams.txt"
+            upstream_map.write_text(
+                "linuxserver/docker-radarr: Radarr/Radarr\n",
+                encoding="utf-8",
+            )
+            parsed = parse_wud_text("linuxserver/radarr:latest\n")
+            responses = {
+                "https://api.github.com/repos/linuxserver/docker-radarr/releases/latest": {
+                    "tag_name": "5.1.0-ls14-beta",
+                    "name": "5.1.0-ls14-beta",
+                    "html_url": "https://github.com/linuxserver/docker-radarr/releases/tag/5.1.0-ls14-beta",
+                    "body": "LinuxServer Changes:\n- Rebase to Alpine 3.20",
+                    "published_at": "2026-01-02T00:00:00Z",
+                },
+                "https://api.github.com/repos/Radarr/Radarr/releases/tags/v5.1.0": {
+                    "tag_name": "v5.1.0",
+                    "name": "v5.1.0",
+                    "html_url": "https://github.com/Radarr/Radarr/releases/tag/v5.1.0",
+                    "body": "Routine update",
+                    "published_at": "2026-01-02T00:00:00Z",
+                },
+            }
+            client = GitHubClient(fetch_json=lambda url: responses[url])
+            with open_db(":memory:") as conn:
+                init_db(conn)
+                items = refresh_release_notes(
+                    conn,
+                    parsed.targets,
+                    {"UPSTREAM_MAP": str(upstream_map)},
+                    client=client,
+                )
+
+        self.assertEqual(items[0].status, "ready")
+        self.assertEqual(items[0].release_tag, "v5.1.0")
 
     def test_lsio_mapping_takes_precedence_over_docker_source_label(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
