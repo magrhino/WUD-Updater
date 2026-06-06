@@ -479,11 +479,12 @@ watch(
 );
 
 onMounted(() => {
-  const loads = [settings.loadSettings()];
-  if (settings.coreUpdateTour === null) {
-    loads.push(settings.loadCoreUpdateTour());
-  }
-  void Promise.all(loads).catch(() => undefined);
+  void (async () => {
+    await settings.loadSettings();
+    if (settings.coreUpdateTour === null) {
+      await settings.loadCoreUpdateTour();
+    }
+  })().catch(() => undefined);
 });
 </script>
 
