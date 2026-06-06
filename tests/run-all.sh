@@ -67,6 +67,7 @@ EOF
     src/wud_updater/command.py \
     src/wud_updater/compose.py \
     src/wud_updater/config.py \
+    src/wud_updater/container_identity.py \
     src/wud_updater/db.py \
     src/wud_updater/doctor.py \
     src/wud_updater/docker_cli.py \

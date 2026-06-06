@@ -116,11 +116,14 @@ jobs:
               - 'tests/e2e-docker-compose.sh'
             webui_smoke:
               - 'webui/**'
+              - '.github/actions/setup-node-env/**'
             webui_demo:
               - 'webui/**'
+              - '.github/actions/setup-node-env/**'
               - '.github/workflows/ci.yml'
               - '.github/workflows/webui-demo-pages.yml'
             workflows:
+              - '.github/actions/**'
               - '.github/workflows/*'
 
   python-tests:

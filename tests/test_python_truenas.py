@@ -524,7 +524,13 @@ class TrueNasStatusHelperTests(unittest.TestCase):
             "docker not available",
         )
 
-        with mock.patch("wud_updater.truenas._has_command", return_value=True):
+        with (
+            mock.patch("wud_updater.truenas._has_command", return_value=True),
+            mock.patch(
+                "wud_updater.truenas.container_identity_candidates",
+                return_value=[],
+            ),
+        ):
             result = _run_truenas_status_helper(self._options(), {"PATH": ""})
 
         self.assertEqual(result.reason, "HOSTNAME not available")
@@ -578,6 +584,41 @@ class TrueNasStatusHelperTests(unittest.TestCase):
 
         self.assertFalse(result.ok)
         self.assertEqual(result.reason, "docker run exited 2: helper failed")
+
+    def test_run_helper_tries_next_container_identity_after_missing_name(self) -> None:
+        inspect_failure = self._completed(returncode=1, stderr="container not found")
+        inspect_success = self._completed(stdout='[{"Image":"wud-updater:test"}]')
+        helper_payload = {
+            "update": {"ok": True, "data": {"status": "AVAILABLE"}, "reason": ""},
+            "alerts": {"ok": True, "data": [], "reason": ""},
+        }
+        run_mock = mock.Mock(
+            side_effect=[
+                inspect_failure,
+                inspect_success,
+                self._completed(stdout=json.dumps(helper_payload)),
+            ]
+        )
+
+        with (
+            mock.patch("wud_updater.truenas._has_command", return_value=True),
+            mock.patch(
+                "wud_updater.truenas.container_identity_candidates",
+                return_value=["custom-hostname", "actual-container-id"],
+            ),
+            mock.patch("subprocess.run", run_mock),
+        ):
+            result = _run_truenas_status_helper(
+                self._options(),
+                {"PATH": "/usr/bin", "HOSTNAME": "custom-hostname"},
+            )
+
+        self.assertTrue(result.ok)
+        self.assertEqual(result.data, helper_payload)
+        self.assertEqual(
+            run_mock.call_args_list[1].args[0],
+            ["docker", "container", "inspect", "actual-container-id"],
+        )
 
     def test_run_helper_parses_successful_helper_stdout(self) -> None:
         inspect_result = self._completed(stdout='[{"Config":{"Image":"wud-updater:test"}}]')

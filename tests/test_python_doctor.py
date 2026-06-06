@@ -8,12 +8,17 @@ import unittest
 from contextlib import redirect_stdout
 from io import StringIO
 from pathlib import Path
+from unittest import mock
 
+from wud_updater.command import CommandResult
 from wud_updater.doctor import (
+    Doctor,
+    DoctorOptions,
     _write_probe,
     doctor_result_from_namespace,
     run_doctor_from_namespace,
 )
+from wud_updater.truenas import DEFAULT_TRUENAS_STATUS_TIMEOUT
 
 
 class DoctorTests(unittest.TestCase):
@@ -136,6 +141,209 @@ class DoctorTests(unittest.TestCase):
                 )
                 self.assertIn("Result: 1 failure(s), 0 warning(s)", stdout)
 
+    def test_doctor_uses_restart_container_for_truenas_inspect(self) -> None:
+        status, stdout = self._run_doctor(
+            {
+                "TRUENAS_STATUS_CHECK": "true",
+                "HOSTNAME": "custom-hostname",
+                "WUD_WEB_RESTART_CONTAINER": "wud-updater-1",
+            },
+        )
+
+        self.assertEqual(status, 0, stdout)
+        self.assertIn("[PASS] TrueNAS helper container inspect", stdout)
+
+    def test_truenas_fails_with_invalid_timeout(self) -> None:
+        status, stdout = self._run_doctor(
+            {
+                "TRUENAS_STATUS_CHECK": "true",
+                "TRUENAS_STATUS_TIMEOUT": "not-a-number",
+                "HOSTNAME": "wud-updater-1",
+            },
+        )
+
+        self.assertEqual(status, 1, stdout)
+        self.assertIn("[FAIL] TrueNAS status timeout", stdout)
+        self.assertIn("must be an integer number of seconds", stdout)
+
+    def test_truenas_fails_when_no_identity_candidates(self) -> None:
+        with mock.patch(
+            "wud_updater.doctor.container_identity_candidates",
+            return_value=[],
+        ):
+            status, stdout = self._run_doctor(
+                {"TRUENAS_STATUS_CHECK": "true"},
+            )
+
+        self.assertEqual(status, 1, stdout)
+        self.assertIn("[FAIL] TrueNAS helper container inspect", stdout)
+        self.assertIn("HOSTNAME is not set", stdout)
+
+    def test_truenas_fails_when_all_candidates_fail_inspect(self) -> None:
+        options = self._make_doctor_options(truenas_status_check=True)
+        fail_result = CommandResult(
+            args=("docker", "container", "inspect", "c1"),
+            cwd=None,
+            returncode=1,
+            stderr="no such container",
+        )
+        runner_mock = mock.Mock()
+        runner_mock.capture.return_value = fail_result
+
+        with mock.patch(
+            "wud_updater.doctor.container_identity_candidates",
+            return_value=["c1", "c2"],
+        ):
+            doctor = Doctor(
+                options,
+                environ={"HOSTNAME": "c1"},
+                runner=runner_mock,
+            )
+            doctor._check_truenas()
+
+        inspect_check = next(
+            c for c in doctor.checks if c.name == "TrueNAS helper container inspect"
+        )
+        self.assertEqual(inspect_check.status, "FAIL")
+        self.assertIn("no such container", inspect_check.detail)
+
+    def test_truenas_passes_on_second_candidate_when_first_fails(self) -> None:
+        options = self._make_doctor_options(truenas_status_check=True)
+        fail_result = CommandResult(
+            args=("docker", "container", "inspect", "c1"),
+            cwd=None,
+            returncode=1,
+            stderr="not found",
+        )
+        ok_result = CommandResult(
+            args=("docker", "container", "inspect", "c2"),
+            cwd=None,
+            returncode=0,
+            stdout='[{"Config":{"Image":"wud-updater:test"}}]',
+        )
+        runner_mock = mock.Mock()
+        runner_mock.capture.side_effect = [fail_result, ok_result]
+
+        with mock.patch(
+            "wud_updater.doctor.container_identity_candidates",
+            return_value=["c1", "c2"],
+        ):
+            doctor = Doctor(
+                options,
+                environ={"HOSTNAME": "c1"},
+                runner=runner_mock,
+            )
+            doctor._check_truenas()
+
+        inspect_check = next(
+            c for c in doctor.checks if c.name == "TrueNAS helper container inspect"
+        )
+        self.assertEqual(inspect_check.status, "PASS")
+
+    def test_check_updater_fails_when_empty(self) -> None:
+        # options_from_namespace treats WUD_UPDATER="" as unset and uses the default
+        # path, so we create DoctorOptions with updater="" directly to test this path.
+        options = self._make_doctor_options(updater="")
+        doctor = Doctor(options, environ={})
+        doctor._check_updater()
+
+        updater_check = next(c for c in doctor.checks if c.name == "updater executable")
+        self.assertEqual(updater_check.status, "FAIL")
+        self.assertIn("WUD_UPDATER is empty", updater_check.detail)
+
+    def test_check_updater_fails_when_not_executable(self) -> None:
+        non_exec = self.root / "non-executable"
+        non_exec.write_text("#!/usr/bin/env bash\n", encoding="utf-8")
+        non_exec.chmod(0o644)
+
+        status, stdout = self._run_doctor({"WUD_UPDATER": str(non_exec)})
+
+        self.assertEqual(status, 1, stdout)
+        self.assertIn("[FAIL] updater executable", stdout)
+        self.assertIn("not executable", stdout)
+
+    def test_check_updater_fails_when_absolute_path_missing(self) -> None:
+        status, stdout = self._run_doctor(
+            {"WUD_UPDATER": str(self.root / "nonexistent-updater")}
+        )
+
+        self.assertEqual(status, 1, stdout)
+        self.assertIn("[FAIL] updater executable", stdout)
+        self.assertIn("does not exist", stdout)
+
+    def test_check_updater_fails_when_not_found_on_path(self) -> None:
+        status, stdout = self._run_doctor(
+            {"WUD_UPDATER": "no-such-updater-on-path"},
+        )
+
+        self.assertEqual(status, 1, stdout)
+        self.assertIn("[FAIL] updater executable", stdout)
+        self.assertIn("not found on PATH", stdout)
+
+    def test_check_updater_passes_for_bare_name_on_path(self) -> None:
+        bare_bin = self.fake_bin / "my-updater"
+        bare_bin.write_text("#!/usr/bin/env bash\nexit 0\n", encoding="utf-8")
+        bare_bin.chmod(0o755)
+
+        status, stdout = self._run_doctor({"WUD_UPDATER": "my-updater"})
+
+        self.assertEqual(status, 0, stdout)
+        self.assertIn("[PASS] updater executable", stdout)
+
+    def test_check_sudo_fails_when_required_but_missing(self) -> None:
+        status, stdout = self._run_doctor(
+            {
+                "WUD_UPDATER_USE_SUDO": "true",
+                "PATH": str(self.root / "empty-bin"),
+            },
+        )
+
+        self.assertEqual(status, 1, stdout)
+        self.assertIn("[FAIL] sudo: required but not found on PATH", stdout)
+
+    def test_check_sudo_passes_when_disabled(self) -> None:
+        status, stdout = self._run_doctor({"WUD_UPDATER_USE_SUDO": "false"})
+
+        self.assertEqual(status, 0, stdout)
+        self.assertIn("[PASS] sudo: disabled by WUD_UPDATER_USE_SUDO=false", stdout)
+
+    def test_readiness_result_passes_with_accessible_docker_and_wud_file(self) -> None:
+        # Use a tcp DOCKER_HOST so no Unix socket check is needed.
+        options = self._make_doctor_options(docker_host="tcp://docker:2375")
+        env = self._doctor_env()
+        ok_result = CommandResult(
+            args=("docker", "version"),
+            cwd=None,
+            returncode=0,
+            stdout="Docker Engine 28.0.0",
+        )
+        runner_mock = mock.Mock()
+        runner_mock.capture.return_value = ok_result
+
+        doctor = Doctor(options, environ=env, runner=runner_mock)
+        result = doctor.run_readiness_result()
+
+        self.assertEqual(result.failures, 0)
+        self.assertTrue(result.ok)
+
+    def test_readiness_result_fails_when_docker_unavailable(self) -> None:
+        options = self._make_doctor_options(docker_host="tcp://docker:2375")
+        env = self._doctor_env()
+        fail_result = CommandResult(
+            args=("docker", "version"),
+            cwd=None,
+            returncode=1,
+            stderr="connection refused",
+        )
+        runner_mock = mock.Mock()
+        runner_mock.capture.return_value = fail_result
+
+        doctor = Doctor(options, environ=env, runner=runner_mock)
+        result = doctor.run_readiness_result()
+
+        self.assertFalse(result.ok)
+        self.assertGreater(result.failures, 0)
+
     def test_permission_probe_names_are_safe_for_concurrent_doctor_runs(self) -> None:
         with concurrent.futures.ThreadPoolExecutor(max_workers=16) as executor:
             issues = list(executor.map(lambda _: _write_probe(self.log_dir), range(64)))
@@ -199,6 +407,20 @@ class DoctorTests(unittest.TestCase):
             no_color=True,
         )
 
+    def _make_doctor_options(self, **overrides: object) -> DoctorOptions:
+        defaults: dict[str, object] = {
+            "docker_base": self.docker_base,
+            "wud_file": self.out_dir / "images.todo",
+            "log_dir": self.log_dir,
+            "scripts_dir": self.scripts_dir,
+            "packaged_scripts_dir": self.packaged_scripts,
+            "app_dir": self.app_dir,
+            "updater": str(self.updater),
+            "truenas_status_timeout": DEFAULT_TRUENAS_STATUS_TIMEOUT,
+        }
+        defaults.update(overrides)
+        return DoctorOptions(**defaults)  # type: ignore[arg-type]
+
     def _write_docker(self) -> None:
         docker = self.fake_bin / "docker"
         docker.write_text(
@@ -220,6 +442,12 @@ case "${1:-}" in
   ps)
     printf 'CONTAINER ID   IMAGE\\n'
     exit 0
+    ;;
+  container)
+    if [[ "${2:-}" == "inspect" ]]; then
+      printf '[{"Config":{"Image":"wud-updater:test"}}]\\n'
+      exit 0
+    fi
     ;;
   compose)
     if [[ "${2:-}" == "version" ]]; then

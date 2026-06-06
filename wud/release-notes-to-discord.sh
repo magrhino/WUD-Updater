@@ -483,7 +483,7 @@ run_lsio() {
   remote_block="$(extract_block_header_ci "remote changes:" <<<"$norm_lsio_body" 2>/dev/null || true)"
   upstream_version_raw="$(extract_upstream_version <<<"$remote_block" 2>/dev/null || true)"
   upstream_version="$(printf '%s' "$upstream_version_raw" | semver_first)"
-  [[ -z "$upstream_version" ]] && upstream_version="$(printf '%s' "$lsio_tag" | semver_first)"
+  [[ -z "$upstream_version" ]] && upstream_version="$(printf '%s' "$lsio_tag" | semver_first | strip_lsio_suffix)"
   [[ -n "$TAG_OVERRIDE" ]] && upstream_version="$TAG_OVERRIDE"
   alpine_base="$(extract_alpine_base <<<"$linux_block" 2>/dev/null || true)"
   ci_url="$(extract_ci_link <<<"$lsio_body" 2>/dev/null || true)"

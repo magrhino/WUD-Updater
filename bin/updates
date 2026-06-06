@@ -15,7 +15,46 @@ done
 script_dir="$(cd -P "$(dirname "$source_path")" && pwd -P)"
 repo_dir="$(cd "$script_dir/.." && pwd -P)"
 
-config_file="${WUD_UPDATER_CONFIG:-$HOME/.config/wud-updater/env}"
+config_file_from_args() {
+  local found=0
+  local selected=""
+
+  while (($#)); do
+    case "$1" in
+      --config-file)
+        found=1
+        if (($# > 1)); then
+          selected="$2"
+          shift 2
+          continue
+        fi
+        break
+        ;;
+      --config-file=*)
+        found=1
+        selected="${1#--config-file=}"
+        shift
+        continue
+        ;;
+      --)
+        break
+        ;;
+    esac
+    shift
+  done
+
+  if ((found)); then
+    printf '%s\n' "$selected"
+    return 0
+  fi
+  return 1
+}
+
+if cli_config_file="$(config_file_from_args "$@")"; then
+  config_file="$cli_config_file"
+else
+  config_file="${WUD_UPDATER_CONFIG:-$HOME/.config/wud-updater/env}"
+fi
 
 if [ -r "$config_file" ]; then
   # shellcheck source=/dev/null
