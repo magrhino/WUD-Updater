@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { webApi } from "../src/api/client";
 import { useAuthStore } from "../src/stores/auth";
-import { useConnectionStore } from "../src/stores/connection";
+import { useConnectionStore, errorMessage } from "../src/stores/connection";
 import { useSettingsStore } from "../src/stores/settings";
 import { useUpdatesStore, APPLY_JOB_RECOVERY_MESSAGE } from "../src/stores/updates";
 import { useRunsStore } from "../src/stores/runs";
@@ -18,6 +18,7 @@ import {
   pendingResponse,
   releaseNotesResponse,
   planResponse,
+  runSummary,
   selfUpdateApplyResponse,
   selfUpdatePlanResponse,
   selfUpdatePrepareResponse,
@@ -27,6 +28,7 @@ import {
   statusResponse,
   stateOperationResponse,
   snooze,
+  tagExclusion,
   updateTargetsResponse,
 } from "./helpers/fixtures";
 
@@ -819,5 +821,331 @@ describe("settings store", () => {
     expect(updates.rememberedApplyJobId).toBe("");
     expect(runs.error).toBe("");
     expect(window.sessionStorage.getItem("applyJobId")).toBeNull();
+  });
+});
+
+describe("connection store focused coverage", () => {
+  beforeEach(() => {
+    setActivePinia(createPinia());
+  });
+
+  it("extracts error messages without accepting plain objects", () => {
+    expect(errorMessage(new Error("plain error"))).toBe("plain error");
+    expect(errorMessage("string error")).toBe("Request failed");
+    expect(errorMessage({ message: "object message" })).toBe("Request failed");
+  });
+
+  it("loads diagnostics support bundle without csrf", async () => {
+    const bundlePayload = {
+      wud_updater_version: "0.24.2",
+      settings: settingsResponse(),
+      doctor_result: doctorResponse(),
+      pending_summary: pendingResponse(),
+      last_run_status: null,
+      diagnostics_warnings: [],
+      discovery_warnings: [],
+      log_tail: null,
+    };
+    const fetchMock = mockFetch(bundlePayload);
+    const connection = useConnectionStore();
+
+    const response = await connection.diagnosticsSupportBundle();
+
+    expect(fetchMock.mock.calls[0][0]).toBe("/api/v1/diagnostics/support-bundle");
+    expect((fetchMock.mock.calls[0][1] as RequestInit).method).toBeUndefined();
+    expect(response.wud_updater_version).toBe("0.24.2");
+    expect(connection.loading).toBe(false);
+    expect(connection.error).toBe("");
+  });
+
+  it("surfaces diagnostics support bundle errors", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(jsonResponse({ detail: "bundle unavailable" }, 503)),
+    );
+    const connection = useConnectionStore();
+
+    await expect(connection.diagnosticsSupportBundle()).rejects.toMatchObject({
+      message: "bundle unavailable",
+    });
+
+    expect(connection.error).toBe("bundle unavailable");
+    expect(connection.loading).toBe(false);
+  });
+
+  it("sets connection errors through the store action", () => {
+    const connection = useConnectionStore();
+
+    connection.setError("manual connection error");
+
+    expect(connection.error).toBe("manual connection error");
+    expect(connection.loading).toBe(false);
+  });
+});
+
+describe("runs store focused coverage", () => {
+  beforeEach(() => {
+    setActivePinia(createPinia());
+  });
+
+  it("loads run detail into a keyed record without clearing existing entries", async () => {
+    const existingDetail = {
+      ...runSummary({ id: 5 }),
+      pending_updates: [],
+    };
+    const fetchMock = mockFetch({
+      ...runSummary({ id: 7, status: "running" }),
+      pending_updates: [],
+    });
+    const runs = useRunsStore();
+    runs.runDetails = { 5: existingDetail };
+
+    await runs.loadRunDetail(7);
+
+    expect(fetchMock.mock.calls[0][0]).toBe("/api/v1/runs/7");
+    expect(runs.runDetails[5]).toEqual(existingDetail);
+    expect(runs.runDetails[7]?.id).toBe(7);
+    expect(runs.loading).toBe(false);
+    expect(runs.error).toBe("");
+  });
+
+  it("loads run logs with default and custom tail sizes", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        jsonResponse({
+          run_id: 9,
+          log_file: "/out/logs/run-9.log",
+          exists: true,
+          content: "run 9 log content\n",
+          truncated: false,
+          max_bytes: 262_144,
+        }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          run_id: 11,
+          log_file: "/out/logs/run-11.log",
+          exists: true,
+          content: "partial log\n",
+          truncated: true,
+          max_bytes: 4_096,
+        }),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+    const runs = useRunsStore();
+
+    await runs.loadRunLog(9);
+    await runs.loadRunLog(11, 4_096);
+
+    expect(fetchMock.mock.calls[0][0]).toBe("/api/v1/runs/9/log?tail_bytes=262144");
+    expect(fetchMock.mock.calls[1][0]).toBe("/api/v1/runs/11/log?tail_bytes=4096");
+    expect(runs.runLogs[9]?.content).toBe("run 9 log content\n");
+    expect(runs.runLogs[11]?.truncated).toBe(true);
+    expect(runs.loading).toBe(false);
+    expect(runs.error).toBe("");
+  });
+
+  it("surfaces run log errors through the runs store", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(jsonResponse({ detail: "run not found" }, 404)),
+    );
+    const runs = useRunsStore();
+
+    await expect(runs.loadRunLog(99)).rejects.toMatchObject({
+      message: "run not found",
+    });
+
+    expect(runs.error).toBe("run not found");
+    expect(runs.loading).toBe(false);
+  });
+});
+
+describe("settings store management coverage", () => {
+  beforeEach(() => {
+    setActivePinia(createPinia());
+  });
+
+  it("loads service policies, snoozes, and tag exclusions with their filters", async () => {
+    vi.spyOn(webApi, "servicePolicies").mockResolvedValue([
+      servicePolicy({ service_key: "media/app" }),
+    ]);
+    vi.spyOn(webApi, "snoozes").mockResolvedValue([
+      snooze({ service_key: "media/radarr", active: false }),
+    ]);
+    vi.spyOn(webApi, "tagExclusions").mockResolvedValue([
+      tagExclusion({ tag: "2.0", status: "disabled" }),
+    ]);
+    const settings = useSettingsStore();
+
+    await settings.loadServicePolicies();
+    await settings.loadSnoozes("expired");
+    await settings.loadTagExclusions("disabled");
+
+    expect(settings.servicePolicies[0]?.service_key).toBe("media/app");
+    expect(settings.snoozes[0]?.service_key).toBe("media/radarr");
+    expect(settings.snoozeStateFilter).toBe("expired");
+    expect(settings.tagExclusions[0]?.tag).toBe("2.0");
+    expect(settings.tagExclusionStatusFilter).toBe("disabled");
+    expect(settings.loading).toBe(false);
+    expect(settings.error).toBe("");
+  });
+
+  it("creates snoozes through state operations and reloads the selected filter", async () => {
+    const auth = useAuthStore();
+    vi.spyOn(auth, "ensureCsrf").mockResolvedValue("csrf-snooze");
+    const stateOperation = vi
+      .spyOn(webApi, "stateOperation")
+      .mockResolvedValue(stateOperationResponse());
+    vi.spyOn(webApi, "snoozes").mockResolvedValue([
+      snooze({ service_key: "media/radarr" }),
+    ]);
+    const settings = useSettingsStore();
+
+    await settings.createSnooze(
+      "media/radarr",
+      "2026-06-01T00:00:00+00:00",
+      "maintenance",
+      "active",
+    );
+
+    expect(stateOperation).toHaveBeenCalledWith(
+      {
+        kind: "create_snooze",
+        service_key: "media/radarr",
+        snoozed_until: "2026-06-01T00:00:00+00:00",
+        reason: "maintenance",
+      },
+      "csrf-snooze",
+    );
+    expect(webApi.snoozes).toHaveBeenCalledWith("active");
+    expect(settings.snoozes[0]?.service_key).toBe("media/radarr");
+    expect(settings.error).toBe("");
+  });
+
+  it("updates tag exclusions through state operations and reloads the selected filter", async () => {
+    const auth = useAuthStore();
+    vi.spyOn(auth, "ensureCsrf").mockResolvedValue("csrf-tag");
+    const stateOperation = vi
+      .spyOn(webApi, "stateOperation")
+      .mockResolvedValue(stateOperationResponse());
+    vi.spyOn(webApi, "tagExclusions").mockResolvedValue([
+      tagExclusion({ scope: "service", service_key: "media/app", tag: "3.0" }),
+    ]);
+    const settings = useSettingsStore();
+
+    await settings.upsertTagExclusion(
+      "service",
+      "repo/app",
+      "media/app",
+      "3.0",
+      "disabled",
+      "all",
+    );
+
+    expect(stateOperation).toHaveBeenCalledWith(
+      {
+        kind: "upsert_tag_exclusion",
+        scope: "service",
+        image_repo: "repo/app",
+        service_key: "media/app",
+        match_type: "exact",
+        tag: "3.0",
+        status: "disabled",
+      },
+      "csrf-tag",
+    );
+    expect(webApi.tagExclusions).toHaveBeenCalledWith("all");
+    expect(settings.tagExclusionStatusFilter).toBe("all");
+    expect(settings.tagExclusions[0]?.tag).toBe("3.0");
+  });
+
+  it("keeps loading active through tag-exclusion reloads", async () => {
+    const auth = useAuthStore();
+    vi.spyOn(auth, "ensureCsrf").mockResolvedValue("csrf-state");
+    const stateOperation = deferred<ReturnType<typeof stateOperationResponse>>();
+    const reloadedExclusions = deferred<ReturnType<typeof tagExclusion>[]>();
+    vi.spyOn(webApi, "stateOperation").mockReturnValue(stateOperation.promise);
+    vi.spyOn(webApi, "tagExclusions").mockReturnValue(reloadedExclusions.promise);
+    const settings = useSettingsStore();
+
+    const mutation = settings.setTagExclusionStatus(1, "disabled", "disabled");
+    await flushPromises();
+
+    expect(settings.loading).toBe(true);
+
+    stateOperation.resolve(stateOperationResponse());
+    await flushPromises();
+
+    expect(settings.loading).toBe(true);
+
+    reloadedExclusions.resolve([tagExclusion({ status: "disabled" })]);
+    await mutation;
+
+    expect(settings.loading).toBe(false);
+    expect(settings.error).toBe("");
+    expect(settings.tagExclusions[0]?.status).toBe("disabled");
+  });
+
+  it("does not reload snoozes after state operation failures", async () => {
+    const auth = useAuthStore();
+    vi.spyOn(auth, "ensureCsrf").mockResolvedValue("csrf-snooze");
+    vi.spyOn(webApi, "stateOperation").mockRejectedValue(
+      new Error("snooze write failed"),
+    );
+    const loadSnoozes = vi.spyOn(webApi, "snoozes").mockResolvedValue([]);
+    const settings = useSettingsStore();
+
+    await expect(settings.deleteSnooze(99, "active")).rejects.toThrow(
+      "snooze write failed",
+    );
+
+    expect(settings.error).toBe("snooze write failed");
+    expect(settings.loading).toBe(false);
+    expect(loadSnoozes).not.toHaveBeenCalled();
+  });
+});
+
+describe("updates store focused coverage", () => {
+  beforeEach(() => {
+    setActivePinia(createPinia());
+  });
+
+  it("loads release notes with independent loading state", async () => {
+    const fetchMock = mockFetch(releaseNotesResponse());
+    const updates = useUpdatesStore();
+
+    await updates.loadReleaseNotes();
+
+    expect(fetchMock.mock.calls[0][0]).toBe("/api/v1/release-notes");
+    expect(updates.releaseNotes?.items[0]?.release_tag).toBe("v2.0.0");
+    expect(updates.releaseNotesLoading).toBe(false);
+    expect(updates.releaseNotesError).toBe("");
+    expect(updates.loading).toBe(false);
+  });
+
+  it("surfaces release note errors without changing main loading state", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(jsonResponse({ detail: "notes unavailable" }, 503)),
+    );
+    const updates = useUpdatesStore();
+
+    await expect(updates.loadReleaseNotes()).rejects.toMatchObject({
+      message: "notes unavailable",
+    });
+
+    expect(updates.releaseNotesError).toBe("notes unavailable");
+    expect(updates.releaseNotesLoading).toBe(false);
+    expect(updates.loading).toBe(false);
+  });
+
+  it("sets stream errors through the updates store action", () => {
+    const updates = useUpdatesStore();
+
+    updates.setError("Job status stream returned invalid data.");
+
+    expect(updates.error).toBe("Job status stream returned invalid data.");
   });
 });
