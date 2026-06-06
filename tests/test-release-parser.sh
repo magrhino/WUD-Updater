@@ -88,6 +88,10 @@ test_select_key_change_bullets(){
   res="$(printf '%s' "$md" | select_key_change_bullets)"
   [[ "$res" == $'- one\n- two' ]] || fail "select_key_change_bullets explicit section failed: got '$res'"
 
+  local md_with_preamble=$'## Changes\n- fallback one\n- fallback two\n\n## Key changes\n- real one\n- real two\n\n## Other\n- ignored'
+  res="$(printf '%s' "$md_with_preamble" | select_key_change_bullets)"
+  [[ "$res" == $'- real one\n- real two' ]] || fail "select_key_change_bullets emitted fallback before explicit section: got '$res'"
+
   local md2=$'Introduction text.\n* first\n* second\n* third'
   res="$(printf '%s' "$md2" | select_key_change_bullets 2)"
   [[ "$res" == $'- first\n- second' ]] || fail "select_key_change_bullets max 2 failed: got '$res'"

@@ -88,23 +88,49 @@ select_key_change_bullets() {
   awk -v max="$max" '
     function lower(s) { return tolower(s) }
     function is_bullet(s) { return (s ~ /^[[:space:]]*([*+-]|•)[[:space:]]/) }
-    {
-      lines++
-      line = $0
+    function emit(line,    low) {
       low = lower(line)
-      if (low ~ /^##[[:space:]]*key[[:space:]]*changes[[:space:]]*$/) { in_key = 1; next }
+      if (low ~ /^##[[:space:]]*key[[:space:]]*changes/) { in_key = 1; return }
       if (in_key && line ~ /^##[[:space:]]/) in_key = 0
-      if (in_key && is_bullet(line)) {
-        sub(/^[[:space:]]*([*+-]|•)[[:space:]]*/, "- ", line)
-        print line
-        out++
-        if (out >= max) exit
-      } else if (!in_key && lines <= 200 && is_bullet(line) && seen < max) {
+      if (has_key) {
+        if (in_key && is_bullet(line)) {
+          sub(/^[[:space:]]*([*+-]|•)[[:space:]]*/, "- ", line)
+          print line
+          out++
+          if (out >= max) exit
+        }
+      } else if (lines <= 200 && is_bullet(line) && seen < max) {
         sub(/^[[:space:]]*([*+-]|•)[[:space:]]*/, "- ", line)
         print line
         seen++
         if (seen >= max) exit
       }
+    }
+    function finish_scan(    i, scan_lines) {
+      scanned = 1
+      scan_lines = lines
+      lines = 0
+      for (i = 1; i <= scan_lines; i++) {
+        lines++
+        emit(buffer[i])
+      }
+    }
+    !scanned {
+      lines++
+      buffer[lines] = $0
+      if (lines <= 200 && lower($0) ~ /^##[[:space:]]*key[[:space:]]*changes/) has_key = 1
+      if (lines >= 200) {
+        finish_scan()
+        if (!has_key) exit
+      }
+      next
+    }
+    {
+      lines++
+      emit($0)
+    }
+    END {
+      if (!scanned) finish_scan()
     }
   '
 }
