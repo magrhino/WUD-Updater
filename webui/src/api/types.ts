@@ -638,7 +638,7 @@ export type TagExclusionStatusFilter = TagExclusionStatus | "all";
 
 export interface ServicePolicyRecord {
   service_key: string;
-  update_mode: string;
+  update_mode: ServicePolicyUpdateMode;
   auto_update: boolean;
   snooze_default_seconds: number | null;
   auto_update_time: string | null;
@@ -660,13 +660,13 @@ export interface SnoozeRecord {
 
 export interface TagExclusionRuleRecord {
   id: number;
-  scope: string;
+  scope: TagExclusionScope;
   image_repo: string;
   service_key: string;
-  match_type: string;
+  match_type: TagExclusionMatchType;
   tag: string;
   regex_fragment: string;
-  status: string;
+  status: TagExclusionStatus;
   created_at: string;
   updated_at: string;
   metadata: Record<string, unknown>;
