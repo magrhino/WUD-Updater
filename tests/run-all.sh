@@ -130,6 +130,7 @@ EOF
     tests/e2e-docker-compose.sh \
     tests/test-entrypoint.sh \
     tests/test-github-release-embed.sh \
+    tests/test-release-parser.sh \
     tests/test-release-notes-to-discord.sh \
     tests/test-tag-manager.sh \
     tests/test-wud-append-updates.sh \
@@ -159,6 +160,7 @@ EOF
     tests/e2e-docker-compose.sh \
     tests/test-entrypoint.sh \
     tests/test-github-release-embed.sh \
+    tests/test-release-parser.sh \
     tests/test-release-notes-to-discord.sh \
     tests/test-tag-manager.sh \
     tests/test-wud-append-updates.sh \
