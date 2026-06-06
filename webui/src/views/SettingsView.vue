@@ -168,7 +168,7 @@ const restartDisabledReason = computed(() => {
   return "";
 });
 const restartButtonDisabled = computed(
-  () => settings.loading || restartDisabledReason.value !== "",
+  () => connection.loading || restartDisabledReason.value !== "",
 );
 const preferencesDisabledReason = computed(() => {
   if (!mutationsEnabled.value) {
@@ -278,12 +278,18 @@ function hydratePreferenceForm(): void {
 }
 
 function openRestartDialog(): void {
+  if (restartButtonDisabled.value) {
+    return;
+  }
   restartMessage.value = "";
   restartError.value = "";
   restartDialogVisible.value = true;
 }
 
 async function confirmRestartContainer(): Promise<void> {
+  if (restartButtonDisabled.value) {
+    return;
+  }
   restartMessage.value = "";
   restartError.value = "";
   try {
@@ -1124,7 +1130,11 @@ onMounted(() => {
       title="Restart WebUI container"
       positive-text="Restart container"
       negative-text="Cancel"
-      :positive-button-props="{ type: 'warning', loading: settings.loading }"
+      :positive-button-props="{
+        type: 'warning',
+        loading: connection.loading,
+        disabled: restartButtonDisabled,
+      }"
       @positive-click="confirmRestartContainer"
     >
       <n-alert type="warning" :show-icon="false" class="block-alert">

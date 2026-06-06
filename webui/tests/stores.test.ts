@@ -1,4 +1,5 @@
 import { createPinia, setActivePinia } from "pinia";
+import { flushPromises } from "@vue/test-utils";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { webApi } from "../src/api/client";
@@ -40,6 +41,16 @@ function mockFetch(body: unknown = {}): ReturnType<typeof vi.fn> {
   const fetchMock = vi.fn().mockImplementation(() => Promise.resolve(jsonResponse(body)));
   vi.stubGlobal("fetch", fetchMock);
   return fetchMock;
+}
+
+function deferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, resolve, reject };
 }
 
 describe("settings store", () => {
@@ -293,6 +304,68 @@ describe("settings store", () => {
         "x-wud-csrf-token",
       ),
     ).toBe("csrf-state");
+  });
+
+  it("keeps settings loading through policy mutation and reload", async () => {
+    const auth = useAuthStore();
+    vi.spyOn(auth, "ensureCsrf").mockResolvedValue("csrf-state");
+    const stateOperation = deferred<ReturnType<typeof stateOperationResponse>>();
+    const reloadedPolicies = [
+      servicePolicy({ service_key: "media/updated", update_mode: "live" }),
+    ];
+    const servicePolicies = deferred<typeof reloadedPolicies>();
+    vi.spyOn(webApi, "stateOperation").mockReturnValue(stateOperation.promise);
+    const loadServicePolicies = vi
+      .spyOn(webApi, "servicePolicies")
+      .mockReturnValue(servicePolicies.promise);
+    const settings = useSettingsStore();
+
+    const mutation = settings.upsertServicePolicy(
+      "media/app",
+      "live",
+      true,
+      null,
+      "09:30",
+      ["mon"],
+    );
+    await flushPromises();
+
+    expect(settings.loading).toBe(true);
+    expect(settings.error).toBe("");
+    expect(loadServicePolicies).not.toHaveBeenCalled();
+
+    stateOperation.resolve(stateOperationResponse());
+    await flushPromises();
+
+    expect(settings.loading).toBe(true);
+    expect(loadServicePolicies).toHaveBeenCalledTimes(1);
+
+    servicePolicies.resolve(reloadedPolicies);
+    await mutation;
+
+    expect(settings.loading).toBe(false);
+    expect(settings.error).toBe("");
+    expect(settings.servicePolicies).toEqual(reloadedPolicies);
+  });
+
+  it("surfaces settings mutation failures without refreshing state", async () => {
+    const auth = useAuthStore();
+    vi.spyOn(auth, "ensureCsrf").mockResolvedValue("csrf-state");
+    vi.spyOn(webApi, "stateOperation").mockRejectedValue(
+      new Error("state write failed"),
+    );
+    const loadServicePolicies = vi
+      .spyOn(webApi, "servicePolicies")
+      .mockResolvedValue([servicePolicy()]);
+    const settings = useSettingsStore();
+
+    await expect(settings.deleteServicePolicy("media/app")).rejects.toThrow(
+      "state write failed",
+    );
+
+    expect(settings.loading).toBe(false);
+    expect(settings.error).toBe("state write failed");
+    expect(loadServicePolicies).not.toHaveBeenCalled();
   });
 
   it("passes csrf from auth store to container restart", async () => {

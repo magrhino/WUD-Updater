@@ -2485,6 +2485,55 @@ describe("mutating WebUI views", () => {
     expect(wrapper.text()).toContain("Restart requested for wud-updater");
   });
 
+  it("blocks container restart controls while restart is pending", async () => {
+    const { pinia, auth, connection, settings, updates, runs } = setupStores(true);
+    settings.settings = settingsResponse({
+      webui: settingsResponse().webui.map((entry) =>
+        entry.name === "WUD_WEB_MUTATIONS_ENABLED"
+          ? { ...entry, value: "true", configured: true, source: "configured" as const }
+          : entry,
+      ),
+    });
+    settings.onboarding = onboardingChecklistResponse({ visible: false });
+    vi.spyOn(settings, "loadSettings").mockResolvedValue();
+    const restartContainer = vi.spyOn(connection, "restartContainer").mockResolvedValue({
+      status: "scheduled",
+      audit_run_id: 42,
+      container: "wud-updater",
+    });
+
+    const wrapper = mountWithApp(SettingsView, { pinia });
+    await flushPromises();
+
+    connection.loading = true;
+    await nextTick();
+
+    const restartButton = wrapper
+      .findAll("button")
+      .find((button) => button.text().includes("Restart container"));
+    expect(restartButton?.attributes("disabled")).toBeDefined();
+    await restartButton?.trigger("click");
+    expect(wrapper.find('[role="dialog"]').exists()).toBe(false);
+
+    connection.loading = false;
+    await nextTick();
+    await restartButton?.trigger("click");
+    await flushPromises();
+    expect(wrapper.find('[role="dialog"]').exists()).toBe(true);
+
+    connection.loading = true;
+    await nextTick();
+
+    const confirmButton = wrapper
+      .find('[role="dialog"]')
+      .findAll("button")
+      .find((button) => button.text().includes("Restart container"));
+    expect(confirmButton?.attributes("disabled")).toBeDefined();
+    await confirmButton?.trigger("click");
+
+    expect(restartContainer).not.toHaveBeenCalled();
+  });
+
   it("disables container restart in read-only settings", async () => {
     const { pinia, auth, connection, settings, updates, runs } = setupStores(false);
     settings.settings = settingsResponse();

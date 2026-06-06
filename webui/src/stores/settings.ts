@@ -14,6 +14,7 @@ import {
   type SettingsResponse,
   type SnoozeRecord,
   type SnoozeState,
+  type StateOperation,
   type TagExclusionRuleRecord,
   type TagExclusionScope,
   type TagExclusionStatus,
@@ -51,6 +52,17 @@ export const useSettingsStore = defineStore("settings", () => {
   async function loadSettings(): Promise<void> {
     await loadWithState(async () => {
       settings.value = await webApi.settings();
+    });
+  }
+
+  async function mutateAndReload(
+    operation: StateOperation,
+    reload: () => Promise<void>,
+  ): Promise<void> {
+    const connection = useConnectionStore();
+    await loadWithState(async () => {
+      await connection.stateOperation(operation);
+      await reload();
     });
   }
 
@@ -181,26 +193,32 @@ export const useSettingsStore = defineStore("settings", () => {
     autoUpdateTime: string | null,
     autoUpdateDays: AutoUpdateDay[],
   ): Promise<void> {
-    const connection = useConnectionStore();
-    await connection.stateOperation({
-      kind: "upsert_service_policy",
-      service_key: serviceKey,
-      update_mode: updateMode,
-      auto_update: autoUpdate,
-      snooze_default_seconds: snoozeDefaultSeconds,
-      auto_update_time: autoUpdateTime,
-      auto_update_days: autoUpdateDays,
-    });
-    await loadServicePolicies();
+    await mutateAndReload(
+      {
+        kind: "upsert_service_policy",
+        service_key: serviceKey,
+        update_mode: updateMode,
+        auto_update: autoUpdate,
+        snooze_default_seconds: snoozeDefaultSeconds,
+        auto_update_time: autoUpdateTime,
+        auto_update_days: autoUpdateDays,
+      },
+      async () => {
+        servicePolicies.value = await webApi.servicePolicies();
+      },
+    );
   }
 
   async function deleteServicePolicy(serviceKey: string): Promise<void> {
-    const connection = useConnectionStore();
-    await connection.stateOperation({
-      kind: "delete_service_policy",
-      service_key: serviceKey,
-    });
-    await loadServicePolicies();
+    await mutateAndReload(
+      {
+        kind: "delete_service_policy",
+        service_key: serviceKey,
+      },
+      async () => {
+        servicePolicies.value = await webApi.servicePolicies();
+      },
+    );
   }
 
   async function createSnooze(
@@ -209,26 +227,34 @@ export const useSettingsStore = defineStore("settings", () => {
     reason: string,
     state: SnoozeState,
   ): Promise<void> {
-    const connection = useConnectionStore();
-    await connection.stateOperation({
-      kind: "create_snooze",
-      service_key: serviceKey,
-      snoozed_until: snoozedUntil,
-      reason,
-    });
-    await loadSnoozes(state);
+    await mutateAndReload(
+      {
+        kind: "create_snooze",
+        service_key: serviceKey,
+        snoozed_until: snoozedUntil,
+        reason,
+      },
+      async () => {
+        snoozeStateFilter.value = state;
+        snoozes.value = await webApi.snoozes(state);
+      },
+    );
   }
 
   async function deleteSnooze(
     snoozeId: number,
     state: SnoozeState,
   ): Promise<void> {
-    const connection = useConnectionStore();
-    await connection.stateOperation({
-      kind: "delete_snooze",
-      snooze_id: snoozeId,
-    });
-    await loadSnoozes(state);
+    await mutateAndReload(
+      {
+        kind: "delete_snooze",
+        snooze_id: snoozeId,
+      },
+      async () => {
+        snoozeStateFilter.value = state;
+        snoozes.value = await webApi.snoozes(state);
+      },
+    );
   }
 
   async function upsertTagExclusion(
@@ -239,17 +265,21 @@ export const useSettingsStore = defineStore("settings", () => {
     status: TagExclusionStatus,
     statusFilter: TagExclusionStatusFilter,
   ): Promise<void> {
-    const connection = useConnectionStore();
-    await connection.stateOperation({
-      kind: "upsert_tag_exclusion",
-      scope,
-      image_repo: imageRepo,
-      service_key: serviceKey,
-      match_type: "exact",
-      tag,
-      status,
-    });
-    await loadTagExclusions(statusFilter);
+    await mutateAndReload(
+      {
+        kind: "upsert_tag_exclusion",
+        scope,
+        image_repo: imageRepo,
+        service_key: serviceKey,
+        match_type: "exact",
+        tag,
+        status,
+      },
+      async () => {
+        tagExclusionStatusFilter.value = statusFilter;
+        tagExclusions.value = await webApi.tagExclusions(statusFilter);
+      },
+    );
   }
 
   async function setTagExclusionStatus(
@@ -257,13 +287,17 @@ export const useSettingsStore = defineStore("settings", () => {
     status: TagExclusionStatus,
     statusFilter: TagExclusionStatusFilter,
   ): Promise<void> {
-    const connection = useConnectionStore();
-    await connection.stateOperation({
-      kind: "set_tag_exclusion_status",
-      rule_id: ruleId,
-      status,
-    });
-    await loadTagExclusions(statusFilter);
+    await mutateAndReload(
+      {
+        kind: "set_tag_exclusion_status",
+        rule_id: ruleId,
+        status,
+      },
+      async () => {
+        tagExclusionStatusFilter.value = statusFilter;
+        tagExclusions.value = await webApi.tagExclusions(statusFilter);
+      },
+    );
   }
 
   return {
