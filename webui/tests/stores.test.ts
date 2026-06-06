@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { webApi } from "../src/api/client";
 import { useAuthStore } from "../src/stores/auth";
-import { useConnectionStore } from "../src/stores/connection";
+import { useConnectionStore, errorMessage } from "../src/stores/connection";
 import { useSettingsStore } from "../src/stores/settings";
 import { useUpdatesStore, APPLY_JOB_RECOVERY_MESSAGE } from "../src/stores/updates";
 import { useRunsStore } from "../src/stores/runs";
@@ -24,9 +24,11 @@ import {
   selfUpdateResponse,
   settingsResponse,
   servicePolicy,
+  snooze,
   statusResponse,
   stateOperationResponse,
-  snooze,
+  tagExclusion,
+  runSummary,
   updateTargetsResponse,
 } from "./helpers/fixtures";
 
@@ -796,5 +798,434 @@ describe("settings store", () => {
     expect(updates.rememberedApplyJobId).toBe("");
     expect(runs.error).toBe("");
     expect(window.sessionStorage.getItem("applyJobId")).toBeNull();
+  });
+});
+
+describe("errorMessage helper", () => {
+  it("extracts message from Error instances", () => {
+    expect(errorMessage(new Error("plain error"))).toBe("plain error");
+  });
+
+  it("returns fallback for non-Error unknowns", () => {
+    expect(errorMessage("string error")).toBe("Request failed");
+    expect(errorMessage(null)).toBe("Request failed");
+    expect(errorMessage(42)).toBe("Request failed");
+    expect(errorMessage(undefined)).toBe("Request failed");
+    expect(errorMessage({ message: "obj" })).toBe("Request failed");
+  });
+
+  it("extracts message from ApiError (subclass of Error)", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ detail: "auth required" }), {
+        status: 401,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    setActivePinia(createPinia());
+    const connection = useConnectionStore();
+
+    await expect(connection.loadStatus()).rejects.toThrow("auth required");
+    expect(connection.error).toBe("auth required");
+  });
+});
+
+describe("runs store", () => {
+  beforeEach(() => {
+    setActivePinia(createPinia());
+  });
+
+  it("loads run summaries from the API", async () => {
+    const run1 = runSummary({ id: 10, mode: "apply" });
+    const run2 = runSummary({ id: 11, mode: "cli" });
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify([run1, run2]), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const runs = useRunsStore();
+
+    await runs.loadRuns();
+
+    expect(fetchMock.mock.calls[0][0]).toBe("/api/v1/runs");
+    expect(runs.runs).toHaveLength(2);
+    expect(runs.runs[0].id).toBe(10);
+    expect(runs.runs[1].id).toBe(11);
+    expect(runs.loading).toBe(false);
+    expect(runs.error).toBe("");
+  });
+
+  it("loads run detail for a specific run ID", async () => {
+    const detail = {
+      ...runSummary({ id: 99, mode: "stop" }),
+      pending_updates: [],
+    };
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify(detail), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const runs = useRunsStore();
+
+    await runs.loadRunDetail(99);
+
+    expect(fetchMock.mock.calls[0][0]).toBe("/api/v1/runs/99");
+    expect(runs.runDetails[99]?.id).toBe(99);
+    expect(runs.loading).toBe(false);
+  });
+
+  it("loads run log for a specific run ID with default tail bytes", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          run_id: 5,
+          log_file: "/out/logs/run-5.log",
+          exists: true,
+          content: "log line\n",
+          truncated: false,
+          max_bytes: 262144,
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const runs = useRunsStore();
+
+    await runs.loadRunLog(5);
+
+    expect(fetchMock.mock.calls[0][0]).toContain("/api/v1/runs/5/log");
+    expect(fetchMock.mock.calls[0][0]).toContain("tail_bytes=262144");
+    expect(runs.runLogs[5]?.content).toBe("log line\n");
+  });
+
+  it("loads run log with a custom tail bytes value", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          run_id: 7,
+          log_file: "/out/logs/run-7.log",
+          exists: true,
+          content: "trimmed\n",
+          truncated: true,
+          max_bytes: 65536,
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const runs = useRunsStore();
+
+    await runs.loadRunLog(7, 65536);
+
+    expect(fetchMock.mock.calls[0][0]).toContain("tail_bytes=65536");
+    expect(runs.runLogs[7]?.truncated).toBe(true);
+  });
+
+  it("preserves existing run details when loading a new run detail", async () => {
+    const existing = { ...runSummary({ id: 1 }), pending_updates: [] };
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({ ...runSummary({ id: 2 }), pending_updates: [] }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const runs = useRunsStore();
+    runs.runDetails = { 1: existing };
+
+    await runs.loadRunDetail(2);
+
+    expect(runs.runDetails[1]?.id).toBe(1);
+    expect(runs.runDetails[2]?.id).toBe(2);
+  });
+
+  it("sets error and clears loading on run load failure", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(JSON.stringify({ detail: "runs unavailable" }), {
+          status: 503,
+          headers: { "content-type": "application/json" },
+        }),
+      ),
+    );
+    const runs = useRunsStore();
+
+    await expect(runs.loadRuns()).rejects.toThrow("runs unavailable");
+
+    expect(runs.error).toBe("runs unavailable");
+    expect(runs.loading).toBe(false);
+  });
+});
+
+describe("settings store - snoozes and tag exclusions", () => {
+  beforeEach(() => {
+    setActivePinia(createPinia());
+  });
+
+  it("loads snoozes with an active state filter", async () => {
+    const activeSnooze = snooze({ service_key: "media/radarr", active: true });
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify([activeSnooze]), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const settings = useSettingsStore();
+
+    await settings.loadSnoozes("active");
+
+    expect(fetchMock.mock.calls[0][0]).toContain("/api/v1/snoozes");
+    expect(fetchMock.mock.calls[0][0]).toContain("state=active");
+    expect(settings.snoozes).toHaveLength(1);
+    expect(settings.snoozes[0].service_key).toBe("media/radarr");
+    expect(settings.snoozeStateFilter).toBe("active");
+  });
+
+  it("loads snoozes with an expired state filter", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify([]), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const settings = useSettingsStore();
+
+    await settings.loadSnoozes("expired");
+
+    expect(fetchMock.mock.calls[0][0]).toContain("state=expired");
+    expect(settings.snoozeStateFilter).toBe("expired");
+    expect(settings.snoozes).toHaveLength(0);
+  });
+
+  it("loads tag exclusions with an active status filter", async () => {
+    const activeExclusion = tagExclusion({ status: "active", tag: "2.0" });
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify([activeExclusion]), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const settings = useSettingsStore();
+
+    await settings.loadTagExclusions("active");
+
+    expect(fetchMock.mock.calls[0][0]).toContain("/api/v1/tag-exclusions");
+    expect(fetchMock.mock.calls[0][0]).toContain("status=active");
+    expect(settings.tagExclusions).toHaveLength(1);
+    expect(settings.tagExclusions[0].tag).toBe("2.0");
+    expect(settings.tagExclusionStatusFilter).toBe("active");
+  });
+
+  it("loads tag exclusions with a disabled status filter", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify([]), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const settings = useSettingsStore();
+
+    await settings.loadTagExclusions("disabled");
+
+    expect(fetchMock.mock.calls[0][0]).toContain("status=disabled");
+    expect(settings.tagExclusionStatusFilter).toBe("disabled");
+  });
+
+  it("creates a snooze via state operation then reloads snoozes", async () => {
+    const auth = useAuthStore();
+    vi.spyOn(auth, "ensureCsrf").mockResolvedValue("csrf-snooze");
+    const newSnooze = snooze({ service_key: "media/sonarr" });
+    vi.spyOn(webApi, "stateOperation").mockResolvedValue(stateOperationResponse());
+    vi.spyOn(webApi, "snoozes").mockResolvedValue([newSnooze]);
+    const settings = useSettingsStore();
+    const connection = useConnectionStore();
+
+    await settings.createSnooze(
+      "media/sonarr",
+      "2026-12-31T00:00:00+00:00",
+      "holiday freeze",
+      "active",
+    );
+
+    expect(webApi.stateOperation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: "create_snooze",
+        service_key: "media/sonarr",
+        snoozed_until: "2026-12-31T00:00:00+00:00",
+        reason: "holiday freeze",
+      }),
+      "csrf-snooze",
+    );
+    expect(webApi.snoozes).toHaveBeenCalledWith("active");
+    expect(settings.snoozes).toEqual([newSnooze]);
+    expect(settings.snoozeStateFilter).toBe("active");
+  });
+
+  it("deletes a snooze via state operation then reloads snoozes", async () => {
+    const auth = useAuthStore();
+    vi.spyOn(auth, "ensureCsrf").mockResolvedValue("csrf-snooze-delete");
+    vi.spyOn(webApi, "stateOperation").mockResolvedValue(stateOperationResponse());
+    vi.spyOn(webApi, "snoozes").mockResolvedValue([]);
+    const settings = useSettingsStore();
+
+    await settings.deleteSnooze(42, "active");
+
+    expect(webApi.stateOperation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: "delete_snooze",
+        snooze_id: 42,
+      }),
+      "csrf-snooze-delete",
+    );
+    expect(webApi.snoozes).toHaveBeenCalledWith("active");
+    expect(settings.snoozes).toHaveLength(0);
+  });
+
+  it("upserts a tag exclusion via state operation then reloads exclusions", async () => {
+    const auth = useAuthStore();
+    vi.spyOn(auth, "ensureCsrf").mockResolvedValue("csrf-exclusion");
+    const rule = tagExclusion({ scope: "image_repo", tag: "3.0" });
+    vi.spyOn(webApi, "stateOperation").mockResolvedValue(stateOperationResponse());
+    vi.spyOn(webApi, "tagExclusions").mockResolvedValue([rule]);
+    const settings = useSettingsStore();
+
+    await settings.upsertTagExclusion(
+      "image_repo",
+      "repo/app",
+      "",
+      "3.0",
+      "active",
+      "active",
+    );
+
+    expect(webApi.stateOperation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: "upsert_tag_exclusion",
+        scope: "image_repo",
+        image_repo: "repo/app",
+        tag: "3.0",
+        status: "active",
+        match_type: "exact",
+      }),
+      "csrf-exclusion",
+    );
+    expect(webApi.tagExclusions).toHaveBeenCalledWith("active");
+    expect(settings.tagExclusions).toEqual([rule]);
+    expect(settings.tagExclusionStatusFilter).toBe("active");
+  });
+
+  it("sets tag exclusion status via state operation then reloads exclusions", async () => {
+    const auth = useAuthStore();
+    vi.spyOn(auth, "ensureCsrf").mockResolvedValue("csrf-exclusion-status");
+    vi.spyOn(webApi, "stateOperation").mockResolvedValue(stateOperationResponse());
+    vi.spyOn(webApi, "tagExclusions").mockResolvedValue([]);
+    const settings = useSettingsStore();
+
+    await settings.setTagExclusionStatus(7, "disabled", "disabled");
+
+    expect(webApi.stateOperation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: "set_tag_exclusion_status",
+        rule_id: 7,
+        status: "disabled",
+      }),
+      "csrf-exclusion-status",
+    );
+    expect(webApi.tagExclusions).toHaveBeenCalledWith("disabled");
+    expect(settings.tagExclusionStatusFilter).toBe("disabled");
+  });
+
+  it("surfaces snooze mutation failures without reloading snooze list", async () => {
+    const auth = useAuthStore();
+    vi.spyOn(auth, "ensureCsrf").mockResolvedValue("csrf-snooze-fail");
+    vi.spyOn(webApi, "stateOperation").mockRejectedValue(new Error("snooze write failed"));
+    const reloadSnoozes = vi.spyOn(webApi, "snoozes").mockResolvedValue([]);
+    const settings = useSettingsStore();
+
+    await expect(
+      settings.deleteSnooze(99, "active"),
+    ).rejects.toThrow("snooze write failed");
+
+    expect(settings.error).toBe("snooze write failed");
+    expect(reloadSnoozes).not.toHaveBeenCalled();
+  });
+});
+
+describe("connection store - diagnostics", () => {
+  beforeEach(() => {
+    setActivePinia(createPinia());
+  });
+
+  it("loads the diagnostics support bundle", async () => {
+    const bundle = { bundle_path: "/out/support-bundle.tar.gz", size_bytes: 1024 };
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify(bundle), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const connection = useConnectionStore();
+
+    const result = await connection.diagnosticsSupportBundle();
+
+    expect(fetchMock.mock.calls[0][0]).toContain("/api/v1/diagnostics/support-bundle");
+    expect(result).toEqual(bundle);
+    expect(connection.loading).toBe(false);
+    expect(connection.error).toBe("");
+  });
+
+  it("surfaces diagnostics support bundle failures", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(JSON.stringify({ detail: "bundle unavailable" }), {
+          status: 503,
+          headers: { "content-type": "application/json" },
+        }),
+      ),
+    );
+    const connection = useConnectionStore();
+
+    await expect(connection.diagnosticsSupportBundle()).rejects.toThrow("bundle unavailable");
+
+    expect(connection.error).toBe("bundle unavailable");
+    expect(connection.loading).toBe(false);
+  });
+
+  it("sets and reads error via setError helper", () => {
+    setActivePinia(createPinia());
+    const connection = useConnectionStore();
+
+    connection.setError("manual error");
+
+    expect(connection.error).toBe("manual error");
+  });
+
+  it("clears error and loading state after a successful status load", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify(statusResponse()), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const connection = useConnectionStore();
+    connection.error = "stale error";
+
+    await connection.loadStatus();
+
+    expect(connection.error).toBe("");
+    expect(connection.loading).toBe(false);
+    expect(connection.status?.version).toBe("0.24.2");
   });
 });
