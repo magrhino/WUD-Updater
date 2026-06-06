@@ -1550,6 +1550,7 @@ class PythonUpdateFromWudTests(unittest.TestCase):
         self.assertIn("wud.tag.include=^2\\.0$$", content)
         calls = self.calls()
         self.assertRegex(calls, r"manifest inspect --verbose docker.io/repo/app:2.0")
+        self.assertRegex(calls, r"manifest inspect repo/app:2.0")
         self.assertEqual(
             calls.count("manifest inspect --verbose docker.io/repo/app:2.0"),
             2,
@@ -1695,6 +1696,47 @@ class PythonUpdateFromWudTests(unittest.TestCase):
         self.assertEqual(digest_pin.watch_tag, "latest")
         self.assertEqual(digest_pin.planned_digest, "sha256:child")
         self.assertEqual(digest_pin.final_image, "repo/app@sha256:child")
+
+    def test_digest_pin_plan_does_not_rematch_label_when_digest_pin_disabled(self) -> None:
+        self.wud_file.write_text(
+            "repo/app:latest@sha256:child\n",
+            encoding="utf-8",
+        )
+        stack_dir = self.make_stack("app", [("app", "repo/app@sha256:old", "cid-app")])
+        (stack_dir / "docker-compose.yml").write_text(
+            "\n".join(
+                [
+                    "services:",
+                    "  app:",
+                    "    image: repo/app@sha256:old",
+                    "    labels:",
+                    "      - wud.tag.include=^latest$$",
+                    "",
+                ]
+            ),
+            encoding="utf-8",
+        )
+        config = load_config(
+            {
+                "DOCKER_BASE": str(self.base),
+                "WUD_OUT_FILE": str(self.wud_file),
+                "WUD_LOG_DIR": str(self.log_dir),
+            },
+            home=str(self.root),
+        )
+
+        plan = build_dry_run_plan(
+            config,
+            line_numbers=(1,),
+            allow_tag_updates=False,
+            environ=self.env,
+        )
+
+        self.assertEqual(plan.status, "blocked")
+        self.assertFalse(plan.digest_pin_updates)
+        self.assertEqual(plan.summary.matched_target_count, 0)
+        self.assertEqual(plan.stacks, ())
+        self.assertEqual(plan.targets[0].action, "unmatched")
 
     def test_digest_pin_plan_blocks_stale_tagged_digest_only_latest_child(self) -> None:
         self.wud_file.write_text(
@@ -1942,6 +1984,50 @@ class PythonUpdateFromWudTests(unittest.TestCase):
         pending = self.db_rows("SELECT * FROM pending_updates")
         self.assertEqual(pending[0]["status"], "failed")
         self.assertEqual(pending[0]["status_reason"], "health-failed")
+
+    def test_digest_pin_apply_revalidates_tagged_digest_with_verbose_docker(self) -> None:
+        self.wud_file.write_text(
+            "repo/app:latest@sha256:child\n",
+            encoding="utf-8",
+        )
+        stack_dir = self.make_stack("app", [("app", "repo/app:latest", "cid-app")])
+        compose_file = stack_dir / "docker-compose.yml"
+        self.set_image_state("repo/app:latest", "sha256:old-config", "sha256:old")
+        self.set_image_after_pull(
+            "repo/app:latest",
+            "sha256:new-config",
+            "sha256:child",
+        )
+        self.set_image_state(
+            "repo/app@sha256:child",
+            "sha256:new-config",
+            "sha256:child",
+        )
+        self.set_manifest_stdout(
+            "docker.io/repo/app:latest",
+            [verbose_manifest_item("sha256:child")],
+        )
+
+        status, stdout, stderr = self.run_direct(digest_pin_updates=True)
+
+        self.assertEqual(status, 0, stderr + stdout)
+        self.assertEqual(self.wud_file.read_text(encoding="utf-8"), "")
+        content = compose_file.read_text(encoding="utf-8")
+        self.assertIn("image: repo/app@sha256:child", content)
+        calls = self.calls()
+        self.assertEqual(
+            calls.count("manifest inspect --verbose docker.io/repo/app:latest"),
+            2,
+        )
+        self.assertTrue(
+            all(
+                "--verbose" in call.split()
+                for call in calls.splitlines()
+                if call.startswith("manifest inspect ")
+                and "docker.io/repo/app:latest" in call.split()
+            ),
+            calls,
+        )
 
     def test_digest_pin_apply_updates_existing_tagged_digest_pin(self) -> None:
         self.wud_file.write_text(

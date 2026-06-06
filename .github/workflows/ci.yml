@@ -44,6 +44,7 @@ on:
 
 permissions:
   contents: read
+  pull-requests: read
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
@@ -54,22 +55,22 @@ jobs:
     name: changes
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    if: >-
-      ${{
-        github.event_name == 'workflow_dispatch' ||
-        !(
-          (github.event_name == 'pull_request' && contains(github.event.pull_request.title, '[skip ci]')) ||
-          (github.event_name == 'push' && (
-            startsWith(github.event.head_commit.message, 'docs:') ||
-            startsWith(github.event.head_commit.message, 'docs(') ||
-            startsWith(github.event.head_commit.message, 'docs!:') ||
-            startsWith(github.event.head_commit.message, 'chore:') ||
-            startsWith(github.event.head_commit.message, 'chore(') ||
-            startsWith(github.event.head_commit.message, 'chore!:')
-          ))
-        )
-      }}
     outputs:
+      skip_ci: >-
+        ${{
+          !(github.event_name == 'workflow_dispatch') &&
+          (
+            (github.event_name == 'pull_request' && contains(github.event.pull_request.title, '[skip ci]')) ||
+            (github.event_name == 'push' && (
+              startsWith(github.event.head_commit.message, 'docs:') ||
+              startsWith(github.event.head_commit.message, 'docs(') ||
+              startsWith(github.event.head_commit.message, 'docs!:') ||
+              startsWith(github.event.head_commit.message, 'chore:') ||
+              startsWith(github.event.head_commit.message, 'chore(') ||
+              startsWith(github.event.head_commit.message, 'chore!:')
+            ))
+          )
+        }}
       docker: ${{ steps.filter.outputs.docker }}
       docker_e2e: ${{ steps.filter.outputs.docker_e2e }}
       webui_smoke: ${{ steps.filter.outputs.webui_smoke }}
@@ -90,86 +91,45 @@ jobs:
 
       - name: Detect relevant path changes
         id: filter
-        shell: bash
-        env:
-          EVENT_NAME: ${{ github.event_name }}
-          BEFORE_SHA: ${{ github.event.before }}
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          HEAD_SHA: ${{ github.sha }}
-        run: |
-          set -euo pipefail
-
-          files=()
-          if [[ "$EVENT_NAME" == "pull_request" ]]; then
-            mapfile -t files < <(git diff --name-only "$BASE_SHA" "$HEAD_SHA")
-          elif [[ "$EVENT_NAME" == "push" ]]; then
-            if [[ -n "$BEFORE_SHA" && ! "$BEFORE_SHA" =~ ^0+$ ]]; then
-              mapfile -t files < <(git diff --name-only "$BEFORE_SHA" "$HEAD_SHA")
-            else
-              mapfile -t files < <(git diff-tree --no-commit-id --name-only -r "$HEAD_SHA")
-            fi
-          fi
-
-          docker=false
-          docker_e2e=false
-          webui_smoke=false
-          webui_demo=false
-          workflows=false
-          for file in "${files[@]}"; do
-            case "$file" in
-              Dockerfile|.dockerignore|entrypoint.sh|docs/examples/docker-compose*.yml|bin/*|wud/*|webui/**|tests/container-build.sh|tests/e2e-docker-compose.sh|tests/test-entrypoint.sh)
-                docker=true
-                ;;
-            esac
-            case "$file" in
-              Dockerfile|.dockerignore|entrypoint.sh|pyproject.toml|bin/*|wud/*|src/wud_updater/*|tests/e2e-docker-compose.sh)
-                docker_e2e=true
-                ;;
-            esac
-            case "$file" in
-              webui/**)
-                webui_smoke=true
-                ;;
-            esac
-            case "$file" in
-              webui/**|.github/workflows/ci.yml|.github/workflows/webui-demo-pages.yml)
-                webui_demo=true
-                ;;
-            esac
-            case "$file" in
-              .github/workflows/*)
-                workflows=true
-                ;;
-            esac
-          done
-
-          {
-            printf 'docker=%s\n' "$docker"
-            printf 'docker_e2e=%s\n' "$docker_e2e"
-            printf 'webui_smoke=%s\n' "$webui_smoke"
-            printf 'webui_demo=%s\n' "$webui_demo"
-            printf 'workflows=%s\n' "$workflows"
-          } >> "$GITHUB_OUTPUT"
+        uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3.0.2
+        with:
+          filters: |
+            docker:
+              - 'Dockerfile'
+              - '.dockerignore'
+              - 'entrypoint.sh'
+              - 'docs/examples/docker-compose*.yml'
+              - 'bin/*'
+              - 'wud/*'
+              - 'webui/**'
+              - 'tests/container-build.sh'
+              - 'tests/e2e-docker-compose.sh'
+              - 'tests/test-entrypoint.sh'
+            docker_e2e:
+              - 'Dockerfile'
+              - '.dockerignore'
+              - 'entrypoint.sh'
+              - 'pyproject.toml'
+              - 'bin/*'
+              - 'wud/*'
+              - 'src/wud_updater/*'
+              - 'tests/e2e-docker-compose.sh'
+            webui_smoke:
+              - 'webui/**'
+            webui_demo:
+              - 'webui/**'
+              - '.github/workflows/ci.yml'
+              - '.github/workflows/webui-demo-pages.yml'
+            workflows:
+              - '.github/workflows/*'
 
   python-tests:
     name: python tests
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    if: >-
-      ${{
-        github.event_name == 'workflow_dispatch' ||
-        !(
-          (github.event_name == 'pull_request' && contains(github.event.pull_request.title, '[skip ci]')) ||
-          (github.event_name == 'push' && (
-            startsWith(github.event.head_commit.message, 'docs:') ||
-            startsWith(github.event.head_commit.message, 'docs(') ||
-            startsWith(github.event.head_commit.message, 'docs!:') ||
-            startsWith(github.event.head_commit.message, 'chore:') ||
-            startsWith(github.event.head_commit.message, 'chore(') ||
-            startsWith(github.event.head_commit.message, 'chore!:')
-          ))
-        )
-      }}
+    needs:
+      - changes
+    if: ${{ needs.changes.outputs.skip_ci != 'true' }}
 
     steps:
       - name: Harden the runner (Audit all outbound calls)
@@ -182,21 +142,8 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Set up Python
-        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
-        with:
-          python-version: "3.x"
-          cache: pip
-          cache-dependency-path: pyproject.toml
-
-      - name: Install Python dev dependencies
-        shell: bash
-        run: |
-          set -euo pipefail
-          python -m venv .venv
-          . .venv/bin/activate
-          python -m pip install -e '.[dev]'
-          echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
+      - name: Set up Python environment
+        uses: ./.github/actions/setup-python-env
 
       - name: Run tests
         run: tests/run-all.sh --python
@@ -211,21 +158,9 @@ jobs:
     name: shell tests
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    if: >-
-      ${{
-        github.event_name == 'workflow_dispatch' ||
-        !(
-          (github.event_name == 'pull_request' && contains(github.event.pull_request.title, '[skip ci]')) ||
-          (github.event_name == 'push' && (
-            startsWith(github.event.head_commit.message, 'docs:') ||
-            startsWith(github.event.head_commit.message, 'docs(') ||
-            startsWith(github.event.head_commit.message, 'docs!:') ||
-            startsWith(github.event.head_commit.message, 'chore:') ||
-            startsWith(github.event.head_commit.message, 'chore(') ||
-            startsWith(github.event.head_commit.message, 'chore!:')
-          ))
-        )
-      }}
+    needs:
+      - changes
+    if: ${{ needs.changes.outputs.skip_ci != 'true' }}
 
     steps:
       - name: Harden the runner (Audit all outbound calls)
@@ -238,21 +173,8 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Set up Python
-        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
-        with:
-          python-version: "3.x"
-          cache: pip
-          cache-dependency-path: pyproject.toml
-
-      - name: Install Python dev dependencies
-        shell: bash
-        run: |
-          set -euo pipefail
-          python -m venv .venv
-          . .venv/bin/activate
-          python -m pip install -e '.[dev]'
-          echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
+      - name: Set up Python environment
+        uses: ./.github/actions/setup-python-env
 
       - name: Install ShellCheck
         shell: bash
@@ -270,21 +192,9 @@ jobs:
     name: webui checks
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    if: >-
-      ${{
-        github.event_name == 'workflow_dispatch' ||
-        !(
-          (github.event_name == 'pull_request' && contains(github.event.pull_request.title, '[skip ci]')) ||
-          (github.event_name == 'push' && (
-            startsWith(github.event.head_commit.message, 'docs:') ||
-            startsWith(github.event.head_commit.message, 'docs(') ||
-            startsWith(github.event.head_commit.message, 'docs!:') ||
-            startsWith(github.event.head_commit.message, 'chore:') ||
-            startsWith(github.event.head_commit.message, 'chore(') ||
-            startsWith(github.event.head_commit.message, 'chore!:')
-          ))
-        )
-      }}
+    needs:
+      - changes
+    if: ${{ needs.changes.outputs.skip_ci != 'true' }}
 
     steps:
       - name: Harden the runner (Audit all outbound calls)
@@ -321,17 +231,7 @@ jobs:
       - changes
     if: >-
       ${{
-        !(
-          (github.event_name == 'pull_request' && contains(github.event.pull_request.title, '[skip ci]')) ||
-          (github.event_name == 'push' && (
-            startsWith(github.event.head_commit.message, 'docs:') ||
-            startsWith(github.event.head_commit.message, 'docs(') ||
-            startsWith(github.event.head_commit.message, 'docs!:') ||
-            startsWith(github.event.head_commit.message, 'chore:') ||
-            startsWith(github.event.head_commit.message, 'chore(') ||
-            startsWith(github.event.head_commit.message, 'chore!:')
-          ))
-        ) &&
+        needs.changes.outputs.skip_ci != 'true' &&
         (
           (github.event_name == 'workflow_dispatch' && inputs.run_webui_smoke) ||
           needs.changes.outputs.webui_smoke == 'true'
@@ -373,17 +273,7 @@ jobs:
       - changes
     if: >-
       ${{
-        !(
-          (github.event_name == 'pull_request' && contains(github.event.pull_request.title, '[skip ci]')) ||
-          (github.event_name == 'push' && (
-            startsWith(github.event.head_commit.message, 'docs:') ||
-            startsWith(github.event.head_commit.message, 'docs(') ||
-            startsWith(github.event.head_commit.message, 'docs!:') ||
-            startsWith(github.event.head_commit.message, 'chore:') ||
-            startsWith(github.event.head_commit.message, 'chore(') ||
-            startsWith(github.event.head_commit.message, 'chore!:')
-          ))
-        ) &&
+        needs.changes.outputs.skip_ci != 'true' &&
         (
           (github.event_name == 'workflow_dispatch' && inputs.run_webui_demo) ||
           needs.changes.outputs.webui_demo == 'true'
@@ -424,19 +314,11 @@ jobs:
     name: macos tests
     runs-on: macos-latest
     timeout-minutes: 20
+    needs:
+      - changes
     if: >-
       ${{
-        !(
-          (github.event_name == 'pull_request' && contains(github.event.pull_request.title, '[skip ci]')) ||
-          (github.event_name == 'push' && (
-            startsWith(github.event.head_commit.message, 'docs:') ||
-            startsWith(github.event.head_commit.message, 'docs(') ||
-            startsWith(github.event.head_commit.message, 'docs!:') ||
-            startsWith(github.event.head_commit.message, 'chore:') ||
-            startsWith(github.event.head_commit.message, 'chore(') ||
-            startsWith(github.event.head_commit.message, 'chore!:')
-          ))
-        ) &&
+        needs.changes.outputs.skip_ci != 'true' &&
         (
           (github.event_name == 'workflow_dispatch' && inputs.run_macos) ||
           (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'ci:macos'))
@@ -462,21 +344,8 @@ jobs:
             brew install shellcheck
           fi
 
-      - name: Set up Python
-        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
-        with:
-          python-version: "3.x"
-          cache: pip
-          cache-dependency-path: pyproject.toml
-
-      - name: Install Python dev dependencies
-        shell: bash
-        run: |
-          set -euo pipefail
-          python -m venv .venv
-          . .venv/bin/activate
-          python -m pip install -e '.[dev]'
-          echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
+      - name: Set up Python environment
+        uses: ./.github/actions/setup-python-env
 
       - name: Run tests
         run: tests/run-all.sh
@@ -489,17 +358,7 @@ jobs:
       - changes
     if: >-
       ${{
-        !(
-          (github.event_name == 'pull_request' && contains(github.event.pull_request.title, '[skip ci]')) ||
-          (github.event_name == 'push' && (
-            startsWith(github.event.head_commit.message, 'docs:') ||
-            startsWith(github.event.head_commit.message, 'docs(') ||
-            startsWith(github.event.head_commit.message, 'docs!:') ||
-            startsWith(github.event.head_commit.message, 'chore:') ||
-            startsWith(github.event.head_commit.message, 'chore(') ||
-            startsWith(github.event.head_commit.message, 'chore!:')
-          ))
-        ) &&
+        needs.changes.outputs.skip_ci != 'true' &&
         (
           (github.event_name == 'workflow_dispatch' && inputs.run_docker) ||
           (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'ci:docker')) ||
@@ -529,17 +388,7 @@ jobs:
       - changes
     if: >-
       ${{
-        !(
-          (github.event_name == 'pull_request' && contains(github.event.pull_request.title, '[skip ci]')) ||
-          (github.event_name == 'push' && (
-            startsWith(github.event.head_commit.message, 'docs:') ||
-            startsWith(github.event.head_commit.message, 'docs(') ||
-            startsWith(github.event.head_commit.message, 'docs!:') ||
-            startsWith(github.event.head_commit.message, 'chore:') ||
-            startsWith(github.event.head_commit.message, 'chore(') ||
-            startsWith(github.event.head_commit.message, 'chore!:')
-          ))
-        ) &&
+        needs.changes.outputs.skip_ci != 'true' &&
         (
           (github.event_name == 'workflow_dispatch' && inputs.run_e2e) ||
           (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'ci:e2e')) ||
@@ -569,17 +418,7 @@ jobs:
       - changes
     if: >-
       ${{
-        !(
-          (github.event_name == 'pull_request' && contains(github.event.pull_request.title, '[skip ci]')) ||
-          (github.event_name == 'push' && (
-            startsWith(github.event.head_commit.message, 'docs:') ||
-            startsWith(github.event.head_commit.message, 'docs(') ||
-            startsWith(github.event.head_commit.message, 'docs!:') ||
-            startsWith(github.event.head_commit.message, 'chore:') ||
-            startsWith(github.event.head_commit.message, 'chore(') ||
-            startsWith(github.event.head_commit.message, 'chore!:')
-          ))
-        ) &&
+        needs.changes.outputs.skip_ci != 'true' &&
         (
           github.event_name == 'workflow_dispatch' ||
           needs.changes.outputs.workflows == 'true'
