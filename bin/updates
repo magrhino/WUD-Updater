@@ -20,6 +20,7 @@ config_file="${WUD_UPDATER_CONFIG:-$HOME/.config/wud-updater/env}"
 if [ -r "$config_file" ]; then
   # shellcheck source=/dev/null
   . "$config_file"
+  export WUD_UPDATER_CONFIG_SOURCED=1
 fi
 
 python_has_runtime_deps() {

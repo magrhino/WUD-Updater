@@ -363,6 +363,19 @@ def _midclt_json(
     except json.JSONDecodeError:
         return TrueNasCallResult(ok=False, reason="invalid JSON response")
 
+    if method == "update.status":
+        if not isinstance(data, dict):
+            return TrueNasCallResult(
+                ok=False,
+                reason=f"unexpected midclt payload for update.status: {type(data).__name__}",
+            )
+    elif method == "alert.list":
+        if not isinstance(data, list):
+            return TrueNasCallResult(
+                ok=False,
+                reason=f"unexpected midclt payload for alert.list: {type(data).__name__}",
+            )
+
     return TrueNasCallResult(ok=True, data=data)
 
 

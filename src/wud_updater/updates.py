@@ -1026,6 +1026,8 @@ def load_configured_environ(
     environ: Mapping[str, str] | None = None,
 ) -> dict[str, str]:
     env = dict(os.environ if environ is None else environ)
+    if env.get("WUD_UPDATER_CONFIG_SOURCED") == "1":
+        return env
     home = env.get("HOME") or str(Path.home())
     config_file = Path(
         env.get("WUD_UPDATER_CONFIG")
