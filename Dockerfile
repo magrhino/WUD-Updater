@@ -53,11 +53,14 @@ COPY --from=docker-cli /usr/local/libexec/docker/cli-plugins/docker-compose /usr
 
 WORKDIR /app
 
+COPY requirements.txt /app/
+RUN python -m pip install --no-cache-dir -r requirements.txt
+
 COPY pyproject.toml README.md /app/
 COPY src/ /app/src/
 COPY --from=webui-build /webui/dist/ /app/src/wud_updater/web_static/
 
-RUN python -m pip install --no-cache-dir .
+RUN python -m pip install --no-deps --no-cache-dir .
 
 COPY bin/ /app/bin/
 COPY wud/ /app/wud/

@@ -90,6 +90,7 @@ Use the shell already used by the target script.
 | Python lint | `ruff check .` |
 | Python syntax check | `python3 -m py_compile src/wud_updater/*.py tests/test_python_*.py` |
 | Python tests | `python -m pytest tests/test_python_*.py` |
+| update pip lockfile | `make lock` |
 | Live digest verification probe | `tests/live-digest-verification.py alpine:3.20 quay.io/prometheus/busybox:latest` |
 | WebUI dependency install | `npm --prefix webui ci` |
 | WebUI typecheck | `npm --prefix webui run typecheck` |
