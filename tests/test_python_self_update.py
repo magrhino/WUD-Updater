@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import subprocess
-import sys
 import unittest
+from contextlib import redirect_stderr
+from io import StringIO
 from unittest import mock
 
 from wud_updater.container_identity import container_identity_candidates
@@ -390,9 +391,11 @@ class IsAndDisplaySelfUpdateTests(unittest.TestCase):
 
 class MainTests(unittest.TestCase):
     def test_main_returns_2_for_wrong_args(self) -> None:
-        self.assertEqual(main(["wrong"]), 2)
-        self.assertEqual(main([]), 2)
-        self.assertEqual(main(["github-target", "extra"]), 2)
+        stderr = StringIO()
+        with redirect_stderr(stderr):
+            self.assertEqual(main(["wrong"]), 2)
+            self.assertEqual(main([]), 2)
+            self.assertEqual(main(["github-target", "extra"]), 2)
 
     def test_main_returns_0_when_no_update_available(self) -> None:
         with (
