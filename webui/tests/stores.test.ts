@@ -281,12 +281,13 @@ describe("settings store", () => {
 
     expect(settings.servicePolicies).toEqual([existingPolicy]);
     expect(settings.snoozes).toEqual([loadedSnooze]);
-    expect(settings.error).toBe(
+    expect(settings.error).toBe("old failure");
+    expect(settings.pendingSafetyCueError).toBe(
       "webApi.servicePolicies() failed: service policies unavailable",
     );
   });
 
-  it("clears pending safety cue errors after successful loads", async () => {
+  it("clears only pending safety cue errors after successful loads", async () => {
     const loadedPolicy = servicePolicy({ service_key: "media/app" });
     const loadedSnooze = snooze({ service_key: "media/radarr" });
     vi.spyOn(webApi, "servicePolicies").mockResolvedValue([loadedPolicy]);
@@ -296,12 +297,14 @@ describe("settings store", () => {
     const updates = useUpdatesStore();
     const runs = useRunsStore();
     settings.error = "old failure";
+    settings.pendingSafetyCueError = "old safety cue failure";
 
     await settings.loadPendingSafetyCues();
 
     expect(settings.servicePolicies).toEqual([loadedPolicy]);
     expect(settings.snoozes).toEqual([loadedSnooze]);
-    expect(settings.error).toBe("");
+    expect(settings.error).toBe("old failure");
+    expect(settings.pendingSafetyCueError).toBe("");
   });
 
   it("passes csrf from auth store to state operations", async () => {
@@ -338,10 +341,13 @@ describe("settings store", () => {
       servicePolicy({ service_key: "media/updated", update_mode: "live" }),
     ];
     const servicePolicies = deferred<typeof reloadedPolicies>();
-    vi.spyOn(webApi, "stateOperation").mockReturnValue(stateOperation.promise);
+    const stateOperationSpy = vi
+      .spyOn(webApi, "stateOperation")
+      .mockReturnValue(stateOperation.promise);
     const loadServicePolicies = vi
       .spyOn(webApi, "servicePolicies")
       .mockReturnValue(servicePolicies.promise);
+    const connection = useConnectionStore();
     const settings = useSettingsStore();
 
     const mutation = settings.upsertServicePolicy(
@@ -355,13 +361,27 @@ describe("settings store", () => {
     await flushPromises();
 
     expect(settings.loading).toBe(true);
+    expect(connection.loading).toBe(false);
     expect(settings.error).toBe("");
     expect(loadServicePolicies).not.toHaveBeenCalled();
+    expect(stateOperationSpy).toHaveBeenCalledWith(
+      {
+        kind: "upsert_service_policy",
+        service_key: "media/app",
+        update_mode: "live",
+        auto_update: true,
+        snooze_default_seconds: null,
+        auto_update_time: "09:30",
+        auto_update_days: ["mon"],
+      },
+      "csrf-state",
+    );
 
     stateOperation.resolve(stateOperationResponse());
     await flushPromises();
 
     expect(settings.loading).toBe(true);
+    expect(connection.loading).toBe(false);
     expect(loadServicePolicies).toHaveBeenCalledTimes(1);
 
     servicePolicies.resolve(reloadedPolicies);

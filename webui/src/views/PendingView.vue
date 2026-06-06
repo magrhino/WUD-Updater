@@ -1783,6 +1783,9 @@ watch(
     <n-alert v-if="(updates.error || runs.error)" type="error">
       {{ (updates.error || runs.error) }}
     </n-alert>
+    <n-alert v-if="settings.pendingSafetyCueError" type="warning">
+      Pending safety cues are unavailable: {{ settings.pendingSafetyCueError }}
+    </n-alert>
     <n-alert v-if="updates.pending && !updates.pending.exists" type="warning">
       {{ updates.pending.source_file }} is missing.
     </n-alert>

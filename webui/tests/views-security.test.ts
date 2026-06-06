@@ -1413,6 +1413,18 @@ describe("mutating WebUI views", () => {
     expect(wrapper.find(".selection-toolbar").exists()).toBe(true);
   });
 
+  it("shows pending safety cue loading failures", () => {
+    const { pinia, auth, connection, settings, updates, runs } = setupStores(true);
+    updates.pending = pendingResponse();
+    settings.pendingSafetyCueError = "service policies unavailable";
+    mockPendingLifecycle(settings, updates);
+    const wrapper = mountWithApp(PendingView, { pinia });
+
+    expect(wrapper.text()).toContain(
+      "Pending safety cues are unavailable: service policies unavailable",
+    );
+  });
+
   it("deduplicates malformed pending line keys before selecting all stack updates", async () => {
     const itemOne = pendingGroupedItem({
       line_no: 1,
