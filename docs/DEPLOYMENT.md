@@ -3,6 +3,9 @@
 This is the canonical reference for running WUD-Updater through Docker Compose,
 as a WebUI container, as a Docker script runner, or through host-installed
 commands. The WebUI container is the recommended deployment for new installs.
+The WebUI/API is the primary supported workflow; the `updates` CLI is retained
+as an admin convenience, and CLI/WebUI feature parity is not a project goal. New
+review and interactive features should generally go to the WebUI/API first.
 For a short entrypoint, see the [README](../README.md).
 
 WUD-Updater controls the Docker daemon it is pointed at. Review the socket and
@@ -67,8 +70,7 @@ docker run --rm \
 - Docker with the Compose plugin on the host.
 - Standard shell tools used by wrapper and callback scripts: `awk`, `sort`,
   `sed`, `perl`, `find`, `grep`, `cut`, `column`, and `mktemp`.
-- `jq` and `midclt` are optional for the legacy Bash `updates` fallback's
-  local TrueNAS status checks.
+- `midclt` is optional for local TrueNAS status checks.
 - Containerized TrueNAS status checks require Docker access and a helper image
   built with a compatible TrueNAS API client.
 - `curl` and `jq` are required for release-note helper scripts.
@@ -517,7 +519,6 @@ Boolean examples use `true` and `false`; legacy aliases `1`, `0`, `yes`, `no`,
 | `OUT_UID` / `OUT_GID` | unset | Optional owner for rewritten todo files and updater logs. `OUT_GUID` is accepted as an alias for `OUT_GID`. |
 | `WUD_UPDATER` | Host: repo-local `bin/docker-update-from-wud`; image: `/app/bin/docker-update-from-wud` | Updater command invoked by `updates`. |
 | `WUD_UPDATER_CONFIG` | `$HOME/.config/wud-updater/env` | Host config file read by `updates`. |
-| `WUD_UPDATER_PYTHON` | `true` | Set to `false` to use the temporary legacy Bash `updates` fallback. |
 | `WUD_UPDATER_USE_SUDO` | `true` | For the Python `updates` wrapper, set to `false` to disable sudo file fallbacks and run `WUD_UPDATER` directly. |
 | `WUD_UPDATER_BANNER` | `auto` | Startup banner mode: `auto` prints on TTY startup, `true` forces it, and `false` disables it. |
 | `WUD_UPDATER_RELEASE_CHECK` | `auto` | Latest-release check mode: `auto` or `true` lets startup banner, WebUI self-update banner, and self-update release checks try GitHub briefly, and `false` disables the network check. |

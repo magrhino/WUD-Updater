@@ -75,6 +75,11 @@ commands:
 | Docker script runner | You want short-lived `docker compose run` commands for `doctor`, dry runs, and applies without a persistent WebUI. | [Docker script runner](docs/DEPLOYMENT.md#docker-script-runner) |
 | Host install | You want `updates` and `docker-update-from-wud` on the host `PATH` with host-managed WUD script mounts. | [Host install](docs/DEPLOYMENT.md#host-install) |
 
+The WebUI/API is the primary supported workflow. The `updates` CLI is retained
+as an admin convenience for host and helper-container operators; CLI/WebUI
+feature parity is not a project goal. New review and interactive features
+should generally go to the WebUI/API first.
+
 ## Documentation
 
 | Topic | Where |

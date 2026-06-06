@@ -61,7 +61,6 @@ run_quiet docker compose -f "$COMPOSE_TRUENAS" config
 run docker build -t "$IMAGE" .
 run docker run --rm "$IMAGE" test -f /app/src/wud_updater/web_static/index.html
 run docker run --rm "$IMAGE"
-run docker run --rm -e WUD_UPDATER_PYTHON=false "$IMAGE"
 SYNC_TMP="$(mktemp -d "${TMPDIR:-/tmp}/wud-script-sync-test.XXXXXX")"
 run docker run --rm -v "$SYNC_TMP:/managed-wud" "$IMAGE" sync-wud-scripts
 [[ -x "$SYNC_TMP/on-update.sh" ]]
