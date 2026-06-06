@@ -7,9 +7,11 @@ detect_breaking() {
   if grep -Eiq '(breaking|migration|incompatible|manual step|major change|requires [^ ]+ [0-9]|deprecated[^.]*remov|remove[ds] feature)' <<<"$body"; then
     breaking="yes"
   fi
-  if [[ -n "$current" && "$current" =~ ^v?([0-9]+)\.([0-9]+)\.([0-9]+) ]]; then
+  current="$(printf '%s' "$current" | semver_first)"
+  new="$(printf '%s' "$new" | semver_first)"
+  if [[ -n "$current" && "$current" =~ ^[vV]?([0-9]+)\. ]]; then
     current_major="${BASH_REMATCH[1]}"
-    if [[ "$new" =~ ^v?([0-9]+)\.([0-9]+)\.([0-9]+) ]]; then
+    if [[ "$new" =~ ^[vV]?([0-9]+)\. ]]; then
       new_major="${BASH_REMATCH[1]}"
       if (( new_major > current_major )); then
         breaking="yes"
@@ -22,6 +24,7 @@ detect_breaking() {
 semver_first() {
   grep -Eoim1 '(^|[^0-9A-Za-z])[vV]?[0-9]+(\.[0-9]+){1,3}([._-][0-9A-Za-z]+)*([^0-9A-Za-z]|$)' \
     | sed -E 's/^[^0-9A-Za-z]*//; s/[^0-9A-Za-z]$//' \
+    | awk 'NF { print; exit }' \
     || true
 }
 

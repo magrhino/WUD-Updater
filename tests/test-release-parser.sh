@@ -28,6 +28,9 @@ test_detect_breaking(){
   res="$(detect_breaking "Minor updates" "v1.0.0" "v1.1.0")"
   [[ "$res" == "no" ]] || fail "detect_breaking incorrectly detected breaking on minor bump"
 
+  res="$(detect_breaking "Minor updates" "v1.2.3" "v2.0")"
+  [[ "$res" == "yes" ]] || fail "detect_breaking did not detect two-part major version bump"
+
   res="$(detect_breaking "Manual step required before upgrade" "v1.0.0" "v1.1.0")"
   [[ "$res" == "yes" ]] || fail "detect_breaking did not detect 'manual step'"
 }
@@ -48,6 +51,9 @@ test_semver_first(){
 
   res="$(printf 'Upgrade to v2.0' | semver_first)"
   [[ "$res" == "v2.0" ]] || fail "semver_first missed two-part version: got '$res'"
+
+  res="$(printf 'Update 1.2.3 and 4.5.6' | semver_first)"
+  [[ "$res" == "1.2.3" ]] || fail "semver_first emitted more than first match: got '$res'"
 
   res="$(printf 'Update python3.11 dependency' | semver_first)"
   [[ -z "$res" ]] || fail "semver_first matched embedded version: got '$res'"
@@ -89,6 +95,9 @@ test_extract_upstream_version(){
 
   res="$(printf 'Updating to v1.2.3-beta.1.' | extract_upstream_version)"
   [[ "$res" == "v1.2.3-beta.1" ]] || fail "extract_upstream_version trailing punctuation failed: got '$res'"
+
+  res="$(printf 'Updating to 1.2.3 and 4.5.6' | extract_upstream_version)"
+  [[ "$res" == "1.2.3" ]] || fail "extract_upstream_version emitted multiple versions: got '$res'"
 }
 
 test_extract_alpine_base(){
