@@ -92,6 +92,7 @@ EOF
     tests/test_python_release_notes.py \
     tests/test_python_self_update.py \
     tests/test_python_terminal.py \
+    tests/test_python_truenas.py \
     tests/test_python_update_from_wud.py \
     tests/test_python_updates_wrapper.py \
     tests/test_python_web.py \
