@@ -35,6 +35,14 @@ DEFAULT_CONTAINER_SCRIPTS_DIR = "/managed-wud"
 HELPER_ONLY_MOUNT_PREFIXES = (Path("/host"), Path("/docker-host"), Path("/container-host"))
 MANAGED_SCRIPTS_MARKER = ".wud-updater-managed"
 DOCTOR_PROBE_NAME = ".wud-updater-doctor-probe"
+REQUIRED_WUD_SCRIPTS = (
+    "on-update.sh",
+    "append-updates.sh",
+    "release-parser.sh",
+    "release-notes-to-discord.sh",
+    "github-release-embed.sh",
+    "tag-manager.sh",
+)
 
 
 @dataclass(frozen=True)
@@ -490,16 +498,8 @@ class Doctor:
             self._record("FAIL", "packaged WUD scripts", f"{scripts} does not exist")
             return
 
-        required = (
-            "on-update.sh",
-            "append-updates.sh",
-            "release-parser.sh",
-            "release-notes-to-discord.sh",
-            "github-release-embed.sh",
-            "tag-manager.sh",
-        )
         failures: list[str] = []
-        for name in required:
+        for name in REQUIRED_WUD_SCRIPTS:
             path = scripts / name
             if not path.is_file():
                 failures.append(f"{name} missing")

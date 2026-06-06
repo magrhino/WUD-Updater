@@ -10,6 +10,7 @@ from io import StringIO
 from pathlib import Path
 
 from wud_updater.doctor import (
+    REQUIRED_WUD_SCRIPTS,
     _write_probe,
     doctor_result_from_namespace,
     run_doctor_from_namespace,
@@ -54,16 +55,19 @@ class DoctorTests(unittest.TestCase):
         self.assertIn("[WARN] TrueNAS status helper", stdout)
         self.assertIn("Result: 0 failure(s)", stdout)
 
-    def test_doctor_fails_when_packaged_release_parser_is_missing(self) -> None:
-        (self.packaged_scripts / "release-parser.sh").unlink()
+    def test_doctor_fails_when_required_packaged_script_is_missing(self) -> None:
+        for script_name in REQUIRED_WUD_SCRIPTS:
+            with self.subTest(script_name=script_name):
+                self._write_packaged_scripts()
+                (self.packaged_scripts / script_name).unlink()
 
-        status, stdout = self._run_doctor()
+                status, stdout = self._run_doctor()
 
-        self.assertEqual(status, 1, stdout)
-        self.assertIn(
-            "[FAIL] packaged WUD scripts: release-parser.sh missing",
-            stdout,
-        )
+                self.assertEqual(status, 1, stdout)
+                self.assertIn(
+                    f"[FAIL] packaged WUD scripts: {script_name} missing",
+                    stdout,
+                )
 
     def test_doctor_fails_when_no_compose_stacks_are_found(self) -> None:
         for path in self.stack_dir.iterdir():
@@ -252,14 +256,7 @@ exit 2
         docker.chmod(0o755)
 
     def _write_packaged_scripts(self) -> None:
-        for name in (
-            "on-update.sh",
-            "append-updates.sh",
-            "release-parser.sh",
-            "release-notes-to-discord.sh",
-            "github-release-embed.sh",
-            "tag-manager.sh",
-        ):
+        for name in REQUIRED_WUD_SCRIPTS:
             path = self.packaged_scripts / name
             path.write_text("#!/usr/bin/env sh\nexit 0\n", encoding="utf-8")
             path.chmod(0o755)
