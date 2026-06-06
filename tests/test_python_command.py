@@ -136,7 +136,6 @@ class CommandRunnerTests(unittest.TestCase):
 
         self.assertEqual(cm.exception.result.returncode, 127)
 
-    @mock.patch("wud_updater.command.pty.openpty", create=True)
     @mock.patch("wud_updater.command.os.read")
     @mock.patch("wud_updater.command.os.close")
     @mock.patch("wud_updater.command.subprocess.Popen")
@@ -145,22 +144,22 @@ class CommandRunnerTests(unittest.TestCase):
         popen_mock: mock.Mock,
         close_mock: mock.Mock,
         read_mock: mock.Mock,
-        openpty_mock: mock.Mock,
     ) -> None:
         import wud_updater.command
 
         if getattr(wud_updater.command, "pty", None) is None:
             self.skipTest("pty not available on this platform")
 
-        openpty_mock.return_value = (10, 11)
-        read_mock.side_effect = [b"pty output", b""]
-        process_mock = mock.Mock()
-        process_mock.wait.return_value = 0
-        popen_mock.return_value = process_mock
+        with mock.patch("wud_updater.command.pty.openpty") as openpty_mock:
+            openpty_mock.return_value = (10, 11)
+            read_mock.side_effect = [b"pty output", b""]
+            process_mock = mock.Mock()
+            process_mock.wait.return_value = 0
+            popen_mock.return_value = process_mock
 
-        with mock.patch("wud_updater.command._copy_terminal_size"), mock.patch("sys.stdout"):
-            runner = CommandRunner()
-            result = runner.run_in_pty(["some-command"])
+            with mock.patch("wud_updater.command._copy_terminal_size"), mock.patch("sys.stdout"):
+                runner = CommandRunner()
+                result = runner.run_in_pty(["some-command"])
 
         self.assertTrue(result.ok)
         self.assertEqual(result.stdout, "pty output")
@@ -168,19 +167,19 @@ class CommandRunnerTests(unittest.TestCase):
         popen_mock.assert_called_once()
         self.assertEqual(popen_mock.call_args.kwargs["stdout"], 11)
 
-    @mock.patch("wud_updater.command.pty.openpty", create=True)
-    def test_run_in_pty_fallback_on_oserror(self, openpty_mock: mock.Mock) -> None:
+    def test_run_in_pty_fallback_on_oserror(self) -> None:
         import wud_updater.command
 
         if getattr(wud_updater.command, "pty", None) is None:
             self.skipTest("pty not available on this platform")
 
-        openpty_mock.side_effect = OSError("no pty")
-        runner = CommandRunner()
+        with mock.patch("wud_updater.command.pty.openpty") as openpty_mock:
+            openpty_mock.side_effect = OSError("no pty")
+            runner = CommandRunner()
 
-        with mock.patch.object(runner, "run_streaming") as streaming_mock:
-            streaming_mock.return_value = CommandResult(args=("foo",), cwd=None, returncode=0)
-            result = runner.run_in_pty(["foo"])
+            with mock.patch.object(runner, "run_streaming") as streaming_mock:
+                streaming_mock.return_value = CommandResult(args=("foo",), cwd=None, returncode=0)
+                result = runner.run_in_pty(["foo"])
 
         self.assertTrue(result.ok)
         streaming_mock.assert_called_once()
