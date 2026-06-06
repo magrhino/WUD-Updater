@@ -1329,5 +1329,79 @@ def _updater_arg_lines(log: str) -> list[str]:
     return [line for line in log.splitlines() if line.startswith("--base ")]
 
 
+class UpdateSelectionStateTests(unittest.TestCase):
+    """Tests for the UpdateSelectionState frozen dataclass added in this PR.
+
+    UpdateSelectionState replaced mutable instance variables on UpdatesRunner,
+    making selection state explicit and immutable once constructed.
+    """
+
+    def test_defaults_are_empty_and_false(self) -> None:
+        from wud_updater.updates import UpdateSelectionState
+
+        state = UpdateSelectionState()
+        self.assertEqual(state.selected_line_spec, "")
+        self.assertEqual(state.remove_line_spec, "")
+        self.assertFalse(state.allow_tag_updates)
+        self.assertEqual(state.tag_override_specs, ())
+        self.assertEqual(state.exclude_tag_line_spec, "")
+        self.assertFalse(state.recreate_excluded_services)
+
+    def test_custom_values_stored_correctly(self) -> None:
+        from wud_updater.updates import UpdateSelectionState
+
+        state = UpdateSelectionState(
+            selected_line_spec="1,3",
+            remove_line_spec="2",
+            allow_tag_updates=True,
+            tag_override_specs=("1=2.0", "3=3.0"),
+            exclude_tag_line_spec="5",
+            recreate_excluded_services=True,
+        )
+        self.assertEqual(state.selected_line_spec, "1,3")
+        self.assertEqual(state.remove_line_spec, "2")
+        self.assertTrue(state.allow_tag_updates)
+        self.assertEqual(state.tag_override_specs, ("1=2.0", "3=3.0"))
+        self.assertEqual(state.exclude_tag_line_spec, "5")
+        self.assertTrue(state.recreate_excluded_services)
+
+    def test_is_frozen(self) -> None:
+        from wud_updater.updates import UpdateSelectionState
+
+        state = UpdateSelectionState(selected_line_spec="1")
+        with self.assertRaises(Exception):
+            state.selected_line_spec = "2"  # type: ignore[misc]
+
+    def test_allow_tag_updates_only(self) -> None:
+        from wud_updater.updates import UpdateSelectionState
+
+        state = UpdateSelectionState(allow_tag_updates=True)
+        self.assertTrue(state.allow_tag_updates)
+        self.assertEqual(state.selected_line_spec, "")
+        self.assertEqual(state.tag_override_specs, ())
+
+    def test_equality_of_identical_states(self) -> None:
+        from wud_updater.updates import UpdateSelectionState
+
+        a = UpdateSelectionState(selected_line_spec="1", allow_tag_updates=True)
+        b = UpdateSelectionState(selected_line_spec="1", allow_tag_updates=True)
+        self.assertEqual(a, b)
+
+    def test_inequality_of_different_states(self) -> None:
+        from wud_updater.updates import UpdateSelectionState
+
+        a = UpdateSelectionState(selected_line_spec="1")
+        b = UpdateSelectionState(selected_line_spec="2")
+        self.assertNotEqual(a, b)
+
+    def test_tag_override_specs_default_is_empty_tuple(self) -> None:
+        from wud_updater.updates import UpdateSelectionState
+
+        state = UpdateSelectionState()
+        # Must be a sequence (tuple), not a list
+        self.assertIsInstance(state.tag_override_specs, tuple)
+        self.assertEqual(len(state.tag_override_specs), 0)
+
+
 if __name__ == "__main__":
     unittest.main()
