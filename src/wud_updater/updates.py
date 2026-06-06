@@ -3,10 +3,8 @@
 from __future__ import annotations
 
 import argparse
-import json
 import os
 import re
-import shutil
 import subprocess
 import sys
 import tempfile
@@ -26,12 +24,20 @@ from .self_update import (
 )
 from .terminal import TerminalRenderer
 
+from .truenas import (
+    DEFAULT_TRUENAS_STATUS_TIMEOUT,
+    TrueNasCallResult,
+    _refresh_truenas_status,
+    _truenas_active_alerts,
+    _truenas_unreachable_message,
+    _truenas_update_status,
+    _truenas_update_version,
+    _truenas_update_error_reason,
+)
 
 DEFAULT_UPDATE_MODE = "stop"
 DEFAULT_MAX_WAIT = "180"
 DEFAULT_LOCK_TIMEOUT = "30"
-DEFAULT_TRUENAS_STATUS_TIMEOUT = "5"
-TRUENAS_MIDDLEWARE_MOUNT = "/var/run/middleware"
 _SECONDS_RE = re.compile(r"^[0-9]+$")
 _DISPLAY_RANGE_RE = re.compile(r"^([0-9]+)-([0-9]+)$")
 _DISPLAY_NUMBER_RE = re.compile(r"^[0-9]+$")
@@ -97,19 +103,6 @@ class UpdatesOptions:
 class SelfUpdatePreflightResult:
     status: int
     continue_updates: bool = True
-
-
-@dataclass(frozen=True)
-class TrueNasCallResult:
-    ok: bool
-    data: object | None = None
-    reason: str = ""
-
-
-@dataclass(frozen=True)
-class TrueNasStatusSnapshot:
-    update: TrueNasCallResult
-    alerts: TrueNasCallResult
 
 
 @dataclass
@@ -195,6 +188,15 @@ class UpdatesFileLock:
         )
         return result.returncode == 0
 
+@dataclass(frozen=True)
+class UpdateSelectionState:
+    selected_line_spec: str = ""
+    remove_line_spec: str = ""
+    allow_tag_updates: bool = False
+    tag_override_specs: Sequence[str] = ()
+    exclude_tag_line_spec: str = ""
+    recreate_excluded_services: bool = False
+
 
 class UpdatesRunner:
     def __init__(
@@ -206,12 +208,6 @@ class UpdatesRunner:
         self.options = options
         self.environ = dict(os.environ if environ is None else environ)
         self.todo_entries: list[TodoEntry] = []
-        self.selected_line_spec = ""
-        self.remove_line_spec = ""
-        self.allow_tag_updates = options.allow_tag_updates
-        self.tag_override_specs: list[str] = []
-        self.exclude_tag_line_spec = ""
-        self.recreate_excluded_services = False
         self.renderer = TerminalRenderer(
             no_color=options.no_color,
             environ=self.environ,
@@ -286,13 +282,15 @@ class UpdatesRunner:
 
         print()
         if self.options.auto_run:
-            return self._run_updater()
+            selection = UpdateSelectionState(allow_tag_updates=self.options.allow_tag_updates)
+            return self._run_updater(selection)
 
-        if not self._choose_update_lines():
+        selection = self._choose_update_lines()
+        if selection is None:
             return 0
 
-        self._lock_updater_handoff()
-        status = self._run_updater()
+        self._lock_updater_handoff(selection)
+        status = self._run_updater(selection)
         self.lock.release()
         return status
 
@@ -319,7 +317,7 @@ class UpdatesRunner:
 
     def _run_wud_file_self_update(self, display_numbers: Sequence[int]) -> int | None:
         lines = self._display_numbers_to_file_line_spec(display_numbers)
-        allow_tag_updates = self.allow_tag_updates
+        allow_tag_updates = self.options.allow_tag_updates
         count = len(display_numbers)
         entry_label = "entry" if count == 1 else "entries"
         if not self._confirm_self_update(
@@ -328,24 +326,18 @@ class UpdatesRunner:
         ):
             return None
 
-        self.selected_line_spec = lines
-        self.remove_line_spec = ""
-        self.tag_override_specs = []
-        self.exclude_tag_line_spec = ""
-        self.recreate_excluded_services = False
         if any(self.todo_entries[display - 1].desired_tag for display in display_numbers):
-            self.allow_tag_updates = True
+            allow_tag_updates = True
+
+        selection = UpdateSelectionState(
+            selected_line_spec=lines,
+            allow_tag_updates=allow_tag_updates,
+        )
         try:
-            self._lock_updater_handoff()
-            return self._run_updater()
+            self._lock_updater_handoff(selection)
+            return self._run_updater(selection)
         finally:
             self.lock.release()
-            self.selected_line_spec = ""
-            self.remove_line_spec = ""
-            self.tag_override_specs = []
-            self.exclude_tag_line_spec = ""
-            self.recreate_excluded_services = False
-            self.allow_tag_updates = allow_tag_updates
 
     def _run_github_release_self_update(
         self,
@@ -365,27 +357,8 @@ class UpdatesRunner:
         with tempfile.TemporaryDirectory(prefix="wud-self-update.") as tmpdir:
             todo_file = Path(tmpdir) / "images.todo"
             todo_file.write_text(f"{target}\n", encoding="utf-8")
-            selected = self.selected_line_spec
-            removed = self.remove_line_spec
-            overrides = list(self.tag_override_specs)
-            excluded = self.exclude_tag_line_spec
-            recreate_excluded = self.recreate_excluded_services
-            allow_tag_updates = self.allow_tag_updates
-            self.selected_line_spec = ""
-            self.remove_line_spec = ""
-            self.tag_override_specs = []
-            self.exclude_tag_line_spec = ""
-            self.recreate_excluded_services = False
-            self.allow_tag_updates = True
-            try:
-                return self._run_updater(wud_file=str(todo_file))
-            finally:
-                self.selected_line_spec = selected
-                self.remove_line_spec = removed
-                self.tag_override_specs = overrides
-                self.exclude_tag_line_spec = excluded
-                self.recreate_excluded_services = recreate_excluded
-                self.allow_tag_updates = allow_tag_updates
+            selection = UpdateSelectionState(allow_tag_updates=True)
+            return self._run_updater(selection, wud_file=str(todo_file))
 
     def _pull_self_update_image(self, target: str) -> int:
         image = _self_update_pull_image(target)
@@ -571,12 +544,10 @@ class UpdatesRunner:
                 plain_header="=== 🚨 TrueNAS Alerts ===",
             )
 
-    def _choose_update_lines(self) -> bool:
+    def _choose_update_lines(self) -> UpdateSelectionState | None:
         todo_count = len(self.todo_entries)
-        self.selected_line_spec = ""
-        self.remove_line_spec = ""
-        self.exclude_tag_line_spec = ""
-        self.recreate_excluded_services = False
+        selected_display: list[int] = []
+        unselected_display: list[int] = []
 
         while True:
             choice = self.renderer.prompt_choice(
@@ -585,10 +556,10 @@ class UpdatesRunner:
             )
             if choice in ("", "n", "N", "no", "NO"):
                 print("⏸️  Skipped running updates.")
-                return False
+                return None
             if choice in ("a", "A", "all", "ALL", "y", "Y", "yes", "YES"):
-                self._prompt_tag_updates(list(range(1, todo_count + 1)))
-                return True
+                selected_display = list(range(1, todo_count + 1))
+                return self._prompt_tag_updates(selected_display, "", "")
 
             if choice in ("s", "S", "select", "SELECT"):
                 selected_display = self._read_display_selection(
@@ -596,7 +567,7 @@ class UpdatesRunner:
                     todo_count,
                 )
                 if not selected_display:
-                    return False
+                    return None
                 unselected_display = _complement_display_numbers(
                     selected_display,
                     todo_count,
@@ -609,7 +580,7 @@ class UpdatesRunner:
                     todo_count,
                 )
                 if not unselected_display:
-                    return False
+                    return None
                 selected_display = _complement_display_numbers(
                     unselected_display,
                     todo_count,
@@ -620,33 +591,54 @@ class UpdatesRunner:
 
         if not selected_display:
             print("⏸️  No updates selected; skipped running updates.")
-            return False
+            return None
 
-        self.selected_line_spec = self._display_numbers_to_file_line_spec(
+        selected_line_spec = self._display_numbers_to_file_line_spec(
             selected_display
         )
         print(f"Selected {len(selected_display)} of {todo_count} pending update(s).")
-        self._prompt_tag_updates(selected_display)
-
+        
+        remove_line_spec = ""
         if unselected_display:
             remove_reply = _prompt(
                 "Remove unselected entries from the WUD file before running? (y/N) "
             )
             if remove_reply in ("y", "Y", "yes", "YES", "Yes"):
-                self.remove_line_spec = self._display_numbers_to_file_line_spec(
+                remove_line_spec = self._display_numbers_to_file_line_spec(
                     unselected_display
                 )
 
-        return True
+        return self._prompt_tag_updates(selected_display, selected_line_spec, remove_line_spec)
 
-    def _prompt_tag_updates(self, display_numbers: Sequence[int]) -> None:
+    def _prompt_tag_updates(
+        self,
+        display_numbers: Sequence[int],
+        selected_line_spec: str,
+        remove_line_spec: str,
+    ) -> UpdateSelectionState:
         tag_entries = [
             (display, self.todo_entries[display - 1])
             for display in display_numbers
             if self.todo_entries[display - 1].desired_tag
         ]
+        
+        allow_tag_updates = self.options.allow_tag_updates
+        tag_override_specs: list[str] = []
+        exclude_tag_line_spec = ""
+        recreate_excluded_services = False
+
+        def _build_state() -> UpdateSelectionState:
+            return UpdateSelectionState(
+                selected_line_spec=selected_line_spec,
+                remove_line_spec=remove_line_spec,
+                allow_tag_updates=allow_tag_updates,
+                tag_override_specs=tuple(tag_override_specs),
+                exclude_tag_line_spec=exclude_tag_line_spec,
+                recreate_excluded_services=recreate_excluded_services,
+            )
+
         if not tag_entries:
-            return
+            return _build_state()
 
         print("Selected tag update(s):")
         for display, entry in tag_entries:
@@ -657,7 +649,7 @@ class UpdatesRunner:
             )
 
         change_tags = False
-        if not self.allow_tag_updates:
+        if not allow_tag_updates:
             while True:
                 if self.renderer.rich_enabled():
                     reply = self.renderer.prompt_choice(
@@ -671,26 +663,26 @@ class UpdatesRunner:
                     )
                 choice = reply.strip().casefold()
                 if choice in {"y", "yes"}:
-                    self.allow_tag_updates = True
+                    allow_tag_updates = True
                     break
                 if choice in {"", "n", "no"}:
-                    return
+                    return _build_state()
                 if choice in {"c", "change"}:
-                    self.allow_tag_updates = True
+                    allow_tag_updates = True
                     change_tags = True
                     break
                 if choice in {"e", "exclude"}:
                     line_spec = self._select_tag_exclusion_line_spec(tag_entries)
                     if line_spec:
-                        self.exclude_tag_line_spec = line_spec
-                        self.recreate_excluded_services = (
+                        exclude_tag_line_spec = line_spec
+                        recreate_excluded_services = (
                             self._confirm_recreate_exclusions()
                         )
-                    return
+                    return _build_state()
                 print("Invalid choice. Enter y, n, c, or e.")
 
         if not change_tags:
-            return
+            return _build_state()
 
         for display, entry in tag_entries:
             current_tag = entry.desired_tag
@@ -702,9 +694,11 @@ class UpdatesRunner:
                     break
                 if tag_value_valid(reply):
                     if reply != current_tag:
-                        self.tag_override_specs.append(f"{entry.line_no}={reply}")
+                        tag_override_specs.append(f"{entry.line_no}={reply}")
                     break
                 print("Invalid tag. Use a Docker tag value like 5.2.0.")
+
+        return _build_state()
 
     def _select_tag_exclusion_line_spec(
         self,
@@ -781,29 +775,29 @@ class UpdatesRunner:
             line_numbers.append(str(self.todo_entries[display - 1].line_no))
         return ",".join(_unique_in_order(line_numbers))
 
-    def _lock_updater_handoff(self) -> None:
+    def _lock_updater_handoff(self, selection: UpdateSelectionState) -> None:
         if (
-            self.selected_line_spec == ""
-            and self.remove_line_spec == ""
-            and self.exclude_tag_line_spec == ""
-            and not self.tag_override_specs
+            selection.selected_line_spec == ""
+            and selection.remove_line_spec == ""
+            and selection.exclude_tag_line_spec == ""
+            and not selection.tag_override_specs
         ):
             return
         self.lock.acquire()
-        if not self._selected_lines_match_snapshot():
+        if not self._selected_lines_match_snapshot(selection):
             self.lock.release()
             raise UpdatesError(
                 "WUD file changed while selecting updates; please rerun updates."
             )
 
-    def _selected_lines_match_snapshot(self) -> bool:
+    def _selected_lines_match_snapshot(self, selection: UpdateSelectionState) -> bool:
         selected_items = [
-            *self.selected_line_spec.split(","),
-            *self.remove_line_spec.split(","),
-            *self.exclude_tag_line_spec.split(","),
+            *selection.selected_line_spec.split(","),
+            *selection.remove_line_spec.split(","),
+            *selection.exclude_tag_line_spec.split(","),
             *(
                 override.partition("=")[0]
-                for override in self.tag_override_specs
+                for override in selection.tag_override_specs
             ),
         ]
         wanted = {
@@ -824,7 +818,7 @@ class UpdatesRunner:
         ]
         return expected == current
 
-    def _run_updater(self, *, wud_file: str | None = None) -> int:
+    def _run_updater(self, selection: UpdateSelectionState, *, wud_file: str | None = None) -> int:
         target_wud_file = wud_file or self.options.wud_file
         updater_args = [
             "--base",
@@ -838,17 +832,17 @@ class UpdatesRunner:
             "--max-wait",
             self.options.max_wait,
         ]
-        if self.selected_line_spec:
-            updater_args.extend(["--only-lines", self.selected_line_spec])
-        if self.remove_line_spec:
-            updater_args.extend(["--remove-lines-before-run", self.remove_line_spec])
-        if self.allow_tag_updates:
+        if selection.selected_line_spec:
+            updater_args.extend(["--only-lines", selection.selected_line_spec])
+        if selection.remove_line_spec:
+            updater_args.extend(["--remove-lines-before-run", selection.remove_line_spec])
+        if selection.allow_tag_updates:
             updater_args.append("--allow-tag-updates")
-        for override in self.tag_override_specs:
+        for override in selection.tag_override_specs:
             updater_args.extend(["--tag-override", override])
-        if self.exclude_tag_line_spec:
-            updater_args.extend(["--exclude-tag-lines", self.exclude_tag_line_spec])
-        if self.recreate_excluded_services:
+        if selection.exclude_tag_line_spec:
+            updater_args.extend(["--exclude-tag-lines", selection.exclude_tag_line_spec])
+        if selection.recreate_excluded_services:
             updater_args.append("--recreate-excluded-services")
         if self.options.no_color:
             updater_args.append("--no-color")
@@ -948,21 +942,6 @@ def run_updates_from_namespace(
         return 1
     return UpdatesRunner(options, environ=env).run()
 
-
-def run_truenas_status_export_from_namespace(
-    _args: argparse.Namespace,
-    *,
-    environ: Mapping[str, str] | None = None,
-) -> int:
-    env = dict(os.environ if environ is None else environ)
-    timeout = env.get("TRUENAS_STATUS_TIMEOUT") or DEFAULT_TRUENAS_STATUS_TIMEOUT
-
-    snapshot = TrueNasStatusSnapshot(
-        update=_midclt_json("update.status", timeout, env),
-        alerts=_midclt_json("alert.list", timeout, env),
-    )
-    print(_truenas_status_payload_json(snapshot))
-    return 0
 
 
 def options_from_namespace(
@@ -1304,406 +1283,6 @@ def _format_os_error(exc: OSError) -> str:
     return exc.strerror or str(exc)
 
 
-def _has_command(command: str, environ: Mapping[str, str]) -> bool:
-    return shutil.which(command, path=environ.get("PATH")) is not None
-
-
-def _refresh_truenas_status(
-    options: UpdatesOptions,
-    environ: Mapping[str, str],
-) -> TrueNasStatusSnapshot:
-    result = _run_truenas_status_helper(options, environ)
-    if not result.ok:
-        return _truenas_unavailable_snapshot(result.reason)
-    return _truenas_snapshot_from_payload(result.data)
-
-
-def _run_truenas_status_helper(
-    options: UpdatesOptions,
-    environ: Mapping[str, str],
-) -> TrueNasCallResult:
-    if not _has_command("docker", environ):
-        return TrueNasCallResult(ok=False, reason="docker not available")
-
-    hostname = environ.get("HOSTNAME") or ""
-    if hostname == "":
-        return TrueNasCallResult(ok=False, reason="HOSTNAME not available")
-
-    try:
-        helper_timeout = _truenas_helper_timeout_seconds(
-            options.truenas_status_timeout or DEFAULT_TRUENAS_STATUS_TIMEOUT
-        )
-    except UpdatesError as exc:
-        return TrueNasCallResult(ok=False, reason=str(exc))
-
-    inspect_command = ["docker", "container", "inspect", hostname]
-    try:
-        inspect_result = subprocess.run(
-            inspect_command,
-            env=dict(environ),
-            stdin=subprocess.DEVNULL,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-            timeout=helper_timeout,
-            check=False,
-        )
-    except subprocess.TimeoutExpired:
-        return TrueNasCallResult(ok=False, reason="docker inspect timed out")
-    except OSError as exc:
-        return TrueNasCallResult(
-            ok=False,
-            reason=f"docker inspect failed: {_format_os_error(exc)}",
-        )
-
-    if inspect_result.returncode != 0:
-        return TrueNasCallResult(
-            ok=False,
-            reason=_subprocess_failure_reason("docker inspect", inspect_result),
-        )
-
-    try:
-        inspect_data = json.loads(inspect_result.stdout)
-    except json.JSONDecodeError:
-        return TrueNasCallResult(
-            ok=False,
-            reason="docker inspect returned invalid JSON",
-        )
-    container = _first_inspected_container(inspect_data)
-    if container is None:
-        return TrueNasCallResult(
-            ok=False,
-            reason="docker inspect returned no container",
-        )
-
-    image = _inspected_container_image(container)
-    if image == "":
-        return TrueNasCallResult(
-            ok=False,
-            reason="docker inspect returned no image",
-        )
-
-    run_command = [
-        "docker",
-        "run",
-        "--rm",
-        "--pull",
-        "never",
-        "--network",
-        "none",
-        "--read-only",
-        "--cap-drop",
-        "ALL",
-        "--security-opt",
-        "no-new-privileges",
-        "-e",
-        "TRUENAS_STATUS_CHECK=false",
-        "-e",
-        "WUD_SYNC_SCRIPTS=false",
-        "-e",
-        f"TRUENAS_STATUS_TIMEOUT={options.truenas_status_timeout}",
-        "--mount",
-        (
-            "type=bind,"
-            f"src={TRUENAS_MIDDLEWARE_MOUNT},"
-            f"dst={TRUENAS_MIDDLEWARE_MOUNT},readonly"
-        ),
-        image,
-        "truenas-status-export",
-    ]
-    try:
-        run_result = subprocess.run(
-            run_command,
-            env=dict(environ),
-            stdin=subprocess.DEVNULL,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-            timeout=helper_timeout,
-            check=False,
-        )
-    except subprocess.TimeoutExpired:
-        return TrueNasCallResult(ok=False, reason="docker run timed out")
-    except OSError as exc:
-        return TrueNasCallResult(
-            ok=False,
-            reason=f"docker run failed: {_format_os_error(exc)}",
-        )
-
-    if run_result.returncode != 0:
-        return TrueNasCallResult(
-            ok=False,
-            reason=_subprocess_failure_reason("docker run", run_result),
-        )
-    return _truenas_status_result_from_stdout(run_result.stdout)
-
-
-def _truenas_helper_timeout_seconds(value: str) -> int:
-    call_timeout = _parse_seconds(value, "TRUENAS_STATUS_TIMEOUT")
-    return max(5, call_timeout * 2 + 5)
-
-
-def _subprocess_failure_reason(
-    label: str,
-    result: subprocess.CompletedProcess[str],
-) -> str:
-    reason = f"{label} exited {result.returncode}"
-    detail = (result.stderr.strip() or result.stdout.strip()).splitlines()
-    if detail:
-        reason = f"{reason}: {detail[0][:200]}"
-    return reason
-
-
-def _first_inspected_container(data: object) -> dict[str, object] | None:
-    if not isinstance(data, list) or not data:
-        return None
-    first = data[0]
-    return first if isinstance(first, dict) else None
-
-
-def _inspected_container_image(container: Mapping[str, object]) -> str:
-    image = container.get("Image")
-    if isinstance(image, str) and image:
-        return image
-    config = container.get("Config")
-    if isinstance(config, dict):
-        image = config.get("Image")
-        if isinstance(image, str) and image:
-            return image
-    return ""
-
-
-def _truenas_unavailable_snapshot(reason: str) -> TrueNasStatusSnapshot:
-    return TrueNasStatusSnapshot(
-        update=TrueNasCallResult(ok=False, reason=reason),
-        alerts=TrueNasCallResult(ok=False, reason=reason),
-    )
-
-
-def _truenas_status_result_from_stdout(stdout: str) -> TrueNasCallResult:
-    text = stdout.strip()
-    if text == "":
-        return TrueNasCallResult(ok=False, reason="empty helper response")
-    try:
-        payload = json.loads(text)
-    except json.JSONDecodeError:
-        return TrueNasCallResult(ok=False, reason="invalid JSON response")
-
-    if not isinstance(payload, dict):
-        return TrueNasCallResult(ok=False, reason="invalid status response")
-    return TrueNasCallResult(ok=True, data=payload)
-
-
-def _truenas_snapshot_from_payload(payload: object | None) -> TrueNasStatusSnapshot:
-    if not isinstance(payload, dict):
-        return _truenas_unavailable_snapshot("invalid status response")
-
-    return TrueNasStatusSnapshot(
-        update=_truenas_result_from_payload(payload.get("update")),
-        alerts=_truenas_result_from_payload(payload.get("alerts")),
-    )
-
-
-def _truenas_result_from_payload(value: object) -> TrueNasCallResult:
-    if not isinstance(value, dict):
-        return TrueNasCallResult(ok=False, reason="invalid status response")
-    ok = value.get("ok")
-    if ok is True:
-        return TrueNasCallResult(ok=True, data=value.get("data"))
-    if ok is False:
-        reason = value.get("reason")
-        return TrueNasCallResult(
-            ok=False,
-            reason=reason if isinstance(reason, str) and reason else "unknown error",
-        )
-    return TrueNasCallResult(ok=False, reason="invalid status response")
-
-
-def _truenas_status_payload_json(snapshot: TrueNasStatusSnapshot) -> str:
-    return json.dumps(
-        _truenas_status_payload(snapshot),
-        sort_keys=True,
-        separators=(",", ":"),
-    )
-
-
-def _truenas_status_payload(snapshot: TrueNasStatusSnapshot) -> dict[str, object]:
-    return {
-        "update": _truenas_update_result_to_payload(snapshot.update),
-        "alerts": _truenas_alerts_result_to_payload(snapshot.alerts),
-    }
-
-
-def _truenas_update_result_to_payload(
-    result: TrueNasCallResult,
-) -> dict[str, object]:
-    data: object | None = None
-    if result.ok:
-        data = _truenas_update_summary(result.data)
-    return {"ok": result.ok, "data": data, "reason": result.reason}
-
-
-def _truenas_alerts_result_to_payload(
-    result: TrueNasCallResult,
-) -> dict[str, object]:
-    data: object | None = None
-    if result.ok:
-        data = _truenas_active_alerts(result.data)
-    return {"ok": result.ok, "data": data, "reason": result.reason}
-
-
-def _truenas_update_summary(data: object | None) -> dict[str, str]:
-    summary: dict[str, str] = {}
-    status = _truenas_update_status(data)
-    version = _truenas_update_version(data)
-    reason = _truenas_update_error_reason(data)
-    if status:
-        summary["status"] = status
-    if version:
-        summary["version"] = version
-    if reason:
-        summary["reason"] = reason
-    return summary
-
-
-def _midclt_json(
-    method: str,
-    status_timeout: str,
-    environ: Mapping[str, str],
-) -> TrueNasCallResult:
-    if not _has_command("midclt", environ):
-        return TrueNasCallResult(ok=False, reason="midclt not available")
-    try:
-        timeout = _parse_seconds(
-            status_timeout or DEFAULT_TRUENAS_STATUS_TIMEOUT,
-            "TRUENAS_STATUS_TIMEOUT",
-        )
-    except UpdatesError as exc:
-        return TrueNasCallResult(ok=False, reason=str(exc))
-
-    command = _midclt_command(method)
-    try:
-        result = subprocess.run(
-            command,
-            env=dict(environ),
-            stdin=subprocess.DEVNULL,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-            timeout=timeout,
-            check=False,
-        )
-    except subprocess.TimeoutExpired:
-        return TrueNasCallResult(ok=False, reason="midclt timed out")
-    except OSError as exc:
-        return TrueNasCallResult(
-            ok=False,
-            reason=f"midclt failed: {_format_os_error(exc)}",
-        )
-
-    if result.returncode != 0:
-        return TrueNasCallResult(
-            ok=False,
-            reason=f"midclt exited {result.returncode}",
-        )
-
-    stdout = result.stdout.strip()
-    if stdout == "":
-        return TrueNasCallResult(ok=False, reason="empty midclt response")
-
-    try:
-        data = json.loads(stdout)
-    except json.JSONDecodeError:
-        return TrueNasCallResult(ok=False, reason="invalid JSON response")
-
-    return TrueNasCallResult(ok=True, data=data)
-
-
-def _midclt_command(method: str) -> list[str]:
-    return ["midclt", "call", method]
-
-
-def _print_truenas_unreachable(check: str, reason: str = "") -> None:
-    print(_truenas_unreachable_message(check, reason))
-
-
-def _truenas_unreachable_message(check: str, reason: str = "") -> str:
-    suffix = f" ({reason})" if reason else ""
-    return f"ℹ️  TrueNAS not reachable; skipping {check}.{suffix}"
-
-
-def _truenas_update_status(data: object | None) -> str:
-    if not isinstance(data, dict):
-        return ""
-
-    legacy_status = data.get("status")
-    if isinstance(legacy_status, str):
-        return legacy_status
-
-    code = data.get("code")
-    if code == "ERROR":
-        return "ERROR"
-    if code != "NORMAL":
-        return str(code or "")
-
-    status = data.get("status")
-    if not isinstance(status, dict):
-        return ""
-    new_version = status.get("new_version")
-    if isinstance(new_version, dict) and new_version:
-        return "AVAILABLE"
-    if new_version is None:
-        return "UNAVAILABLE"
-    return ""
-
-
-def _truenas_update_version(data: object | None) -> str:
-    if not isinstance(data, dict):
-        return ""
-    version = data.get("version")
-    if isinstance(version, str):
-        return version
-    status = data.get("status")
-    if not isinstance(status, dict):
-        return ""
-    new_version = status.get("new_version")
-    if not isinstance(new_version, dict):
-        return ""
-    version = new_version.get("version")
-    return version if isinstance(version, str) else ""
-
-
-def _truenas_update_error_reason(data: object | None) -> str:
-    if not isinstance(data, dict):
-        return ""
-    reason = data.get("reason")
-    if isinstance(reason, str):
-        return reason
-    error = data.get("error")
-    if not isinstance(error, dict):
-        return ""
-    reason = error.get("reason")
-    return reason if isinstance(reason, str) else ""
-
-
-def _truenas_active_alerts(data: object | None) -> list[str] | None:
-    if not isinstance(data, list):
-        return None
-
-    alerts: list[str] = []
-    for item in data:
-        if isinstance(item, str):
-            if item:
-                alerts.append(item)
-            continue
-        if not isinstance(item, dict):
-            continue
-        if item.get("dismissed") is True:
-            continue
-        formatted = item.get("formatted")
-        if isinstance(formatted, str) and formatted:
-            alerts.append(formatted)
-    return alerts
 
 
 def _print_numbered_lines(value: str, environ: Mapping[str, str]) -> None:

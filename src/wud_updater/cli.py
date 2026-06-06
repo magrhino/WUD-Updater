@@ -9,8 +9,8 @@ from pathlib import Path
 
 from .banner import print_startup_banner
 from .doctor import run_doctor_from_namespace
+from .truenas import run_truenas_status_export_from_namespace
 from .updates import (
-    run_truenas_status_export_from_namespace,
     run_updates_from_namespace,
 )
 
