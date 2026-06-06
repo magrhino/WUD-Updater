@@ -48,8 +48,8 @@ import type {
   TagOverrideRequest,
   UpdateTargetItem,
   UpdateTargetsResponse,
-  WebApi,
-} from "./client";
+} from "./types";
+import type { WebApi } from "./client";
 
 const DEMO_VERSION = "0.25.0";
 const DEMO_LATEST_VERSION = "v0.26.0";
