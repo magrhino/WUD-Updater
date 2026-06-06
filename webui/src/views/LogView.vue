@@ -5,32 +5,32 @@ import { useClipboard } from "@vueuse/core";
 import { Copy, RefreshCw } from "@lucide/vue";
 import { NAlert, NButton } from "naive-ui";
 
-import { useWebuiStore } from "../stores/webui";
+import { useRunsStore } from "../stores/runs";
 
 const route = useRoute();
-const webui = useWebuiStore();
+const runs = useRunsStore();
 const runId = computed(() => Number(route.params.id));
-const log = computed(() => webui.runLogs[runId.value] ?? null);
+const log = computed(() => runs.runLogs[runId.value] ?? null);
 const logText = computed(() => log.value?.content ?? "");
 const { copy, copied, isSupported } = useClipboard({ source: logText });
 
 async function load(): Promise<void> {
-  await webui.loadRunLog(runId.value);
+  await runs.loadRunLog(runId.value);
 }
 
 onMounted(() => {
-  void load();
+  void load().catch(() => undefined);
 });
 
 watch(runId, () => {
-  void load();
+  void load().catch(() => undefined);
 });
 </script>
 
 <template>
   <section class="content-stack">
-    <n-alert v-if="webui.error" type="error" :show-icon="false">
-      {{ webui.error }}
+    <n-alert v-if="runs.error" type="error" :show-icon="false">
+      {{ runs.error }}
     </n-alert>
 
     <div class="section-heading">

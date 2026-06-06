@@ -4,15 +4,15 @@ import { RouterLink, useRoute } from "vue-router";
 import { FileText } from "@lucide/vue";
 import { NAlert } from "naive-ui";
 
-import { useWebuiStore } from "../stores/webui";
+import { useRunsStore } from "../stores/runs";
 
 const route = useRoute();
-const webui = useWebuiStore();
+const runs = useRunsStore();
 const runId = computed(() => Number(route.params.id));
-const run = computed(() => webui.runDetails[runId.value] ?? null);
+const run = computed(() => runs.runDetails[runId.value] ?? null);
 
 async function load(): Promise<void> {
-  await webui.loadRunDetail(runId.value);
+  await runs.loadRunDetail(runId.value);
 }
 
 onMounted(() => {
@@ -26,8 +26,8 @@ watch(runId, () => {
 
 <template>
   <section class="content-stack">
-    <n-alert v-if="webui.error" type="error" :show-icon="false">
-      {{ webui.error }}
+    <n-alert v-if="runs.error" type="error" :show-icon="false">
+      {{ runs.error }}
     </n-alert>
 
     <div class="section-heading">

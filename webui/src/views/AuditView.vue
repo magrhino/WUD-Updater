@@ -6,9 +6,9 @@ import { NAlert, NDataTable, NTag, type DataTableColumns } from "naive-ui";
 
 import HistoryViewTabs from "../components/HistoryViewTabs.vue";
 import type { RunSummary } from "../api/client";
-import { useWebuiStore } from "../stores/webui";
+import { useRunsStore } from "../stores/runs";
 
-const webui = useWebuiStore();
+const runs = useRunsStore();
 const breakpoints = useBreakpoints(breakpointsTailwind);
 const isMobile = breakpoints.smaller("md");
 const isLoadingRuns = ref(false);
@@ -24,7 +24,7 @@ const WEB_AUDIT_MODES = new Set([
   "web-auth",
 ]);
 
-const auditRuns = computed(() => webui.runs.filter(isAuditRun));
+const auditRuns = computed(() => runs.runs.filter(isAuditRun));
 const auditCountLabel = computed(() => {
   const count = auditRuns.value.length;
   return `${count} operator ${count === 1 ? "action" : "actions"}`;
@@ -140,7 +140,7 @@ const columns = computed<DataTableColumns<RunSummary>>(() => [
 async function loadAuditRuns(): Promise<void> {
   isLoadingRuns.value = true;
   try {
-    await webui.loadRuns();
+    await runs.loadRuns();
   } finally {
     isLoadingRuns.value = false;
   }
@@ -153,8 +153,8 @@ onMounted(() => {
 
 <template>
   <section class="content-stack">
-    <n-alert v-if="webui.error" type="error" :show-icon="false">
-      {{ webui.error }}
+    <n-alert v-if="runs.error" type="error" :show-icon="false">
+      {{ runs.error }}
     </n-alert>
 
     <div class="section-heading">

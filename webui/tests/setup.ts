@@ -34,10 +34,6 @@ class MemoryStorage implements Storage {
 beforeEach(() => {
   const local = new MemoryStorage();
   const session = new MemoryStorage();
-  Object.defineProperty(globalThis, "Storage", {
-    configurable: true,
-    value: MemoryStorage,
-  });
   Object.defineProperty(window, "localStorage", {
     configurable: true,
     value: local,

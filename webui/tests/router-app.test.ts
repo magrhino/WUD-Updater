@@ -7,7 +7,10 @@ import { nextTick } from "vue";
 import App from "../src/App.vue";
 import { createWudRouter } from "../src/router";
 import { useAuthStore } from "../src/stores/auth";
-import { useWebuiStore } from "../src/stores/webui";
+import { useConnectionStore } from "../src/stores/connection";
+import { useSettingsStore } from "../src/stores/settings";
+import { useUpdatesStore, APPLY_JOB_RECOVERY_MESSAGE } from "../src/stores/updates";
+import { useRunsStore } from "../src/stores/runs";
 import SetupView from "../src/views/SetupView.vue";
 import { themeStorageKey } from "../src/theme";
 import {
@@ -147,10 +150,18 @@ describe("app shell", () => {
     setActivePinia(pinia);
     const auth = useAuthStore();
     auth.session = authSession({ mutations_enabled: true });
-    const webui = useWebuiStore();
-    webui.status = statusResponse({ version: "0.24.2" });
-    webui.coreUpdateTour = coreUpdateTourResponse();
-    vi.spyOn(webui, "loadDashboard").mockResolvedValue();
+        const connection = useConnectionStore();
+    const settings = useSettingsStore();
+    const updates = useUpdatesStore();
+    const runs = useRunsStore();
+    connection.status = statusResponse({ version: "0.24.2" });
+    settings.coreUpdateTour = coreUpdateTourResponse();
+    vi.spyOn(connection, "loadStatus").mockResolvedValue(undefined as any);
+vi.spyOn(updates, "loadPending").mockResolvedValue(undefined as any);
+vi.spyOn(runs, "loadRuns").mockResolvedValue(undefined as any);
+vi.spyOn(settings, "loadServicePolicies").mockResolvedValue(undefined as any);
+vi.spyOn(settings, "loadSnoozes").mockResolvedValue(undefined as any);
+vi.spyOn(settings, "loadTagExclusions").mockResolvedValue(undefined as any);
     const router = createWudRouter(createMemoryHistory());
     await router.push("/");
     await router.isReady();
@@ -164,7 +175,7 @@ describe("app shell", () => {
     expect(versionLink.text()).toBe("v0.24.2");
     expect(wrapper.text()).not.toContain("Mutations enabled");
 
-    webui.status = statusResponse({ version: "dev-build" });
+    connection.status = statusResponse({ version: "dev-build" });
     await nextTick();
 
     const buildLink = wrapper.find(
@@ -179,9 +190,17 @@ describe("app shell", () => {
     setActivePinia(pinia);
     const auth = useAuthStore();
     auth.session = authSession({ mutations_enabled: false });
-    const webui = useWebuiStore();
-    webui.coreUpdateTour = coreUpdateTourResponse();
-    vi.spyOn(webui, "loadDashboard").mockResolvedValue();
+        const connection = useConnectionStore();
+    const settings = useSettingsStore();
+    const updates = useUpdatesStore();
+    const runs = useRunsStore();
+    settings.coreUpdateTour = coreUpdateTourResponse();
+    vi.spyOn(connection, "loadStatus").mockResolvedValue(undefined as any);
+vi.spyOn(updates, "loadPending").mockResolvedValue(undefined as any);
+vi.spyOn(runs, "loadRuns").mockResolvedValue(undefined as any);
+vi.spyOn(settings, "loadServicePolicies").mockResolvedValue(undefined as any);
+vi.spyOn(settings, "loadSnoozes").mockResolvedValue(undefined as any);
+vi.spyOn(settings, "loadTagExclusions").mockResolvedValue(undefined as any);
     const router = createWudRouter(createMemoryHistory());
     await router.push("/");
     await router.isReady();
@@ -229,9 +248,12 @@ describe("app shell", () => {
     setActivePinia(pinia);
     const auth = useAuthStore();
     auth.session = authSession({ mutations_enabled: true });
-    const webui = useWebuiStore();
-    webui.coreUpdateTour = coreUpdateTourResponse();
-    webui.settings = settingsResponse({
+        const connection = useConnectionStore();
+    const settings = useSettingsStore();
+    const updates = useUpdatesStore();
+    const runs = useRunsStore();
+    settings.coreUpdateTour = coreUpdateTourResponse();
+    settings.settings = settingsResponse({
       managed: [
         {
           key: "theme_preference",
@@ -245,7 +267,12 @@ describe("app shell", () => {
         settingsResponse().managed[1]!,
       ],
     });
-    vi.spyOn(webui, "loadDashboard").mockResolvedValue();
+    vi.spyOn(connection, "loadStatus").mockResolvedValue(undefined as any);
+vi.spyOn(updates, "loadPending").mockResolvedValue(undefined as any);
+vi.spyOn(runs, "loadRuns").mockResolvedValue(undefined as any);
+vi.spyOn(settings, "loadServicePolicies").mockResolvedValue(undefined as any);
+vi.spyOn(settings, "loadSnoozes").mockResolvedValue(undefined as any);
+vi.spyOn(settings, "loadTagExclusions").mockResolvedValue(undefined as any);
     const router = createWudRouter(createMemoryHistory());
     await router.push("/");
     await router.isReady();
@@ -267,15 +294,23 @@ describe("app shell", () => {
     setActivePinia(pinia);
     const auth = useAuthStore();
     auth.session = authSession({ mutations_enabled: true });
-    const webui = useWebuiStore();
-    webui.status = statusResponse({ version: "0.24.2" });
-    webui.coreUpdateTour = coreUpdateTourResponse();
-    webui.selfUpdate = selfUpdateResponse({
+        const connection = useConnectionStore();
+    const settings = useSettingsStore();
+    const updates = useUpdatesStore();
+    const runs = useRunsStore();
+    connection.status = statusResponse({ version: "0.24.2" });
+    settings.coreUpdateTour = coreUpdateTourResponse();
+    updates.selfUpdate = selfUpdateResponse({
       release_notes_truncated: true,
     });
-    vi.spyOn(webui, "loadDashboard").mockResolvedValue();
+    vi.spyOn(connection, "loadStatus").mockResolvedValue(undefined as any);
+vi.spyOn(updates, "loadPending").mockResolvedValue(undefined as any);
+vi.spyOn(runs, "loadRuns").mockResolvedValue(undefined as any);
+vi.spyOn(settings, "loadServicePolicies").mockResolvedValue(undefined as any);
+vi.spyOn(settings, "loadSnoozes").mockResolvedValue(undefined as any);
+vi.spyOn(settings, "loadTagExclusions").mockResolvedValue(undefined as any);
     const applySelfUpdate = vi
-      .spyOn(webui, "applySelfUpdate")
+      .spyOn(updates, "applySelfUpdate")
       .mockResolvedValue(selfUpdateApplyResponse());
     const router = createWudRouter(createMemoryHistory());
     await router.push("/");
@@ -324,25 +359,33 @@ describe("app shell", () => {
     setActivePinia(pinia);
     const auth = useAuthStore();
     auth.session = authSession({ mutations_enabled: true });
-    const webui = useWebuiStore();
-    webui.status = statusResponse({ version: "0.24.2" });
-    webui.coreUpdateTour = coreUpdateTourResponse();
-    webui.selfUpdate = selfUpdateResponse({
+        const connection = useConnectionStore();
+    const settings = useSettingsStore();
+    const updates = useUpdatesStore();
+    const runs = useRunsStore();
+    connection.status = statusResponse({ version: "0.24.2" });
+    settings.coreUpdateTour = coreUpdateTourResponse();
+    updates.selfUpdate = selfUpdateResponse({
       strategy: "prepare_tag_update",
       current_image: "ghcr.io/magrhino/wud-updater:v0.24.2",
       target_image: "ghcr.io/magrhino/wud-updater:v0.25.0",
       external_recreate_required: true,
     });
-    vi.spyOn(webui, "loadDashboard").mockResolvedValue();
+    vi.spyOn(connection, "loadStatus").mockResolvedValue(undefined as any);
+vi.spyOn(updates, "loadPending").mockResolvedValue(undefined as any);
+vi.spyOn(runs, "loadRuns").mockResolvedValue(undefined as any);
+vi.spyOn(settings, "loadServicePolicies").mockResolvedValue(undefined as any);
+vi.spyOn(settings, "loadSnoozes").mockResolvedValue(undefined as any);
+vi.spyOn(settings, "loadTagExclusions").mockResolvedValue(undefined as any);
     const planSelfUpdate = vi
-      .spyOn(webui, "planSelfUpdate")
+      .spyOn(updates, "planSelfUpdate")
       .mockImplementation(async () => {
         const plan = selfUpdatePlanResponse();
-        webui.selfUpdatePlan = plan;
+        updates.selfUpdatePlan = plan;
         return plan;
       });
     const applySelfUpdate = vi
-      .spyOn(webui, "applySelfUpdate")
+      .spyOn(updates, "applySelfUpdate")
       .mockResolvedValue(selfUpdatePrepareResponse());
     const router = createWudRouter(createMemoryHistory());
     await router.push("/");
@@ -378,29 +421,37 @@ describe("app shell", () => {
     setActivePinia(pinia);
     const auth = useAuthStore();
     auth.session = authSession({ mutations_enabled: true });
-    const webui = useWebuiStore();
-    webui.status = statusResponse({ version: "0.24.2" });
-    webui.coreUpdateTour = coreUpdateTourResponse();
-    webui.selfUpdate = selfUpdateResponse({
+        const connection = useConnectionStore();
+    const settings = useSettingsStore();
+    const updates = useUpdatesStore();
+    const runs = useRunsStore();
+    connection.status = statusResponse({ version: "0.24.2" });
+    settings.coreUpdateTour = coreUpdateTourResponse();
+    updates.selfUpdate = selfUpdateResponse({
       strategy: "prepare_tag_update",
       current_image: "ghcr.io/magrhino/wud-updater:v0.24.2",
       target_image: "ghcr.io/magrhino/wud-updater:v0.25.0",
       external_recreate_required: true,
     });
-    vi.spyOn(webui, "loadDashboard").mockResolvedValue();
+    vi.spyOn(connection, "loadStatus").mockResolvedValue(undefined as any);
+vi.spyOn(updates, "loadPending").mockResolvedValue(undefined as any);
+vi.spyOn(runs, "loadRuns").mockResolvedValue(undefined as any);
+vi.spyOn(settings, "loadServicePolicies").mockResolvedValue(undefined as any);
+vi.spyOn(settings, "loadSnoozes").mockResolvedValue(undefined as any);
+vi.spyOn(settings, "loadTagExclusions").mockResolvedValue(undefined as any);
     let resolvePlan: (plan: ReturnType<typeof selfUpdatePlanResponse>) => void;
     const planPromise = new Promise<ReturnType<typeof selfUpdatePlanResponse>>(
       (resolve) => {
         resolvePlan = resolve;
       },
     );
-    vi.spyOn(webui, "planSelfUpdate").mockImplementation(async () => {
+    vi.spyOn(updates, "planSelfUpdate").mockImplementation(async () => {
       const plan = await planPromise;
-      webui.selfUpdatePlan = plan;
+      updates.selfUpdatePlan = plan;
       return plan;
     });
     const applySelfUpdate = vi
-      .spyOn(webui, "applySelfUpdate")
+      .spyOn(updates, "applySelfUpdate")
       .mockResolvedValue(selfUpdatePrepareResponse());
     const router = createWudRouter(createMemoryHistory());
     await router.push("/");
@@ -433,12 +484,15 @@ describe("app shell", () => {
     setActivePinia(pinia);
     const auth = useAuthStore();
     auth.session = authSession({ mutations_enabled: false });
-    const webui = useWebuiStore();
-    vi.spyOn(webui, "loadStatus").mockResolvedValue();
-    const loadSettings = vi.spyOn(webui, "loadSettings").mockResolvedValue();
-    const loadOnboarding = vi.spyOn(webui, "loadOnboarding").mockResolvedValue();
+        const connection = useConnectionStore();
+    const settings = useSettingsStore();
+    const updates = useUpdatesStore();
+    const runs = useRunsStore();
+    vi.spyOn(connection, "loadStatus").mockResolvedValue();
+    const loadSettings = vi.spyOn(settings, "loadSettings").mockResolvedValue();
+    const loadOnboarding = vi.spyOn(settings, "loadOnboarding").mockResolvedValue();
     const loadCoreUpdateTour = vi
-      .spyOn(webui, "loadCoreUpdateTour")
+      .spyOn(settings, "loadCoreUpdateTour")
       .mockResolvedValue();
     const router = createWudRouter(createMemoryHistory());
     await router.push("/settings");
@@ -460,10 +514,13 @@ describe("app shell", () => {
     setActivePinia(pinia);
     const auth = useAuthStore();
     auth.session = authSession({ mutations_enabled: false });
-    const webui = useWebuiStore();
-    vi.spyOn(webui, "loadStatus").mockResolvedValue();
-    vi.spyOn(webui, "loadSettings").mockResolvedValue();
-    const loadRuns = vi.spyOn(webui, "loadRuns").mockResolvedValue();
+        const connection = useConnectionStore();
+    const settings = useSettingsStore();
+    const updates = useUpdatesStore();
+    const runs = useRunsStore();
+    vi.spyOn(connection, "loadStatus").mockResolvedValue();
+    vi.spyOn(settings, "loadSettings").mockResolvedValue();
+    const loadRuns = vi.spyOn(runs, "loadRuns").mockResolvedValue();
     const router = createWudRouter(createMemoryHistory());
     await router.push("/audit");
     await router.isReady();

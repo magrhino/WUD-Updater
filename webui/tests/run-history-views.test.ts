@@ -12,7 +12,8 @@ import type {
 } from "../src/api/client";
 import { createWudRouter } from "../src/router";
 import { useAuthStore } from "../src/stores/auth";
-import { useWebuiStore } from "../src/stores/webui";
+import { useSettingsStore } from "../src/stores/settings";
+import { useRunsStore } from "../src/stores/runs";
 import RunDetailView from "../src/views/RunDetailView.vue";
 import RunsView from "../src/views/RunsView.vue";
 import {
@@ -46,18 +47,20 @@ function mockMobileViewport(): void {
 async function setupRoute(path: string): Promise<{
   pinia: ReturnType<typeof createPinia>;
   router: Router;
-  webui: ReturnType<typeof useWebuiStore>;
+  settings: ReturnType<typeof useSettingsStore>;
+  runs: ReturnType<typeof useRunsStore>;
 }> {
   const pinia = createPinia();
   setActivePinia(pinia);
   const auth = useAuthStore();
   auth.session = authSession({ authenticated: true });
-  const webui = useWebuiStore();
-  webui.coreUpdateTour = coreUpdateTourResponse();
+  const settings = useSettingsStore();
+  const runs = useRunsStore();
+  settings.coreUpdateTour = coreUpdateTourResponse();
   const router = createWudRouter(createMemoryHistory());
   await router.push(path);
   await router.isReady();
-  return { pinia, router, webui };
+  return { pinia, router, settings, runs };
 }
 
 function runEvent(overrides: Partial<RunEventRecord> = {}): RunEventRecord {
@@ -178,14 +181,14 @@ describe("RunsView", () => {
   });
 
   it("loads and renders desktop history rows with action and service labels", async () => {
-    const { pinia, router, webui } = await setupRoute("/runs");
-    webui.error = "history database is unavailable";
-    webui.coreUpdateTour = coreUpdateTourResponse({
+    const { pinia, router, settings, runs } = await setupRoute("/runs");
+    runs.error = "history database is unavailable";
+    settings.coreUpdateTour = coreUpdateTourResponse({
       status: "in_progress",
       step: "runs_history",
     });
-    webui.runs = actionRuns();
-    const loadRuns = vi.spyOn(webui, "loadRuns").mockResolvedValue();
+    runs.runs = actionRuns();
+    const loadRuns = vi.spyOn(runs, "loadRuns").mockResolvedValue();
 
     const wrapper = mountWithApp(RunsView, { pinia, router });
     await flushPromises();
@@ -195,7 +198,7 @@ describe("RunsView", () => {
       "history database is unavailable",
     );
     expect(wrapper.find(".history-view-tab.active").text()).toBe("All runs");
-    expect(wrapper.text()).toContain(`${webui.runs.length} recent runs`);
+    expect(wrapper.text()).toContain(`${runs.runs.length} recent runs`);
     expect(wrapper.text()).toContain("Verify the run afterward");
     expect(wrapper.text()).toContain("Details and logs stay linked from each run");
     expect(wrapper.find('[role="table"]').exists()).toBe(true);
@@ -236,8 +239,8 @@ describe("RunsView", () => {
 
   it("renders mobile run cards with running and finished states", async () => {
     mockMobileViewport();
-    const { pinia, router, webui } = await setupRoute("/runs");
-    webui.runs = [
+    const { pinia, router, settings, runs } = await setupRoute("/runs");
+    runs.runs = [
       runSummary({
         id: 21,
         status: "running",
@@ -255,7 +258,7 @@ describe("RunsView", () => {
         events: [],
       }),
     ];
-    vi.spyOn(webui, "loadRuns").mockResolvedValue();
+    vi.spyOn(runs, "loadRuns").mockResolvedValue();
 
     const wrapper = mountWithApp(RunsView, { pinia, router });
     await flushPromises();
@@ -273,9 +276,9 @@ describe("RunsView", () => {
 
   it("renders the mobile empty state when there are no runs", async () => {
     mockMobileViewport();
-    const { pinia, router, webui } = await setupRoute("/runs");
-    webui.runs = [];
-    vi.spyOn(webui, "loadRuns").mockResolvedValue();
+    const { pinia, router, settings, runs } = await setupRoute("/runs");
+    runs.runs = [];
+    vi.spyOn(runs, "loadRuns").mockResolvedValue();
 
     const wrapper = mountWithApp(RunsView, { pinia, router });
     await flushPromises();
@@ -290,7 +293,7 @@ describe("RunDetailView", () => {
   });
 
   it("loads run detail, renders evidence, and reloads when the route id changes", async () => {
-    const { pinia, router, webui } = await setupRoute("/runs/42");
+    const { pinia, router, settings, runs } = await setupRoute("/runs/42");
     const oldDigest = "sha256:old-digest-value-12345";
     const newDigest = "sha256:new-digest-value-12345";
     const newOnlyDigest = "sha256:new-only-digest-value";
@@ -360,10 +363,10 @@ describe("RunDetailView", () => {
       events: [],
     });
     const loadRunDetail = vi
-      .spyOn(webui, "loadRunDetail")
+      .spyOn(runs, "loadRunDetail")
       .mockImplementation(async (runId: number) => {
-        webui.runDetails = {
-          ...webui.runDetails,
+        runs.runDetails = {
+          ...runs.runDetails,
           [runId]: runId === 42 ? firstDetail : secondDetail,
         };
       });
@@ -417,9 +420,9 @@ describe("RunDetailView", () => {
   });
 
   it("renders error and empty detail states", async () => {
-    const { pinia, router, webui } = await setupRoute("/runs/9");
-    webui.error = "run detail failed to load";
-    webui.runDetails = {
+    const { pinia, router, settings, runs } = await setupRoute("/runs/9");
+    runs.error = "run detail failed to load";
+    runs.runDetails = {
       9: runDetail({
         id: 9,
         log_file: "",
@@ -427,7 +430,7 @@ describe("RunDetailView", () => {
         events: [],
       }),
     };
-    vi.spyOn(webui, "loadRunDetail").mockResolvedValue();
+    vi.spyOn(runs, "loadRunDetail").mockResolvedValue();
 
     const wrapper = mountWithApp(RunDetailView, { pinia, router });
     await flushPromises();

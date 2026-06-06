@@ -47,9 +47,13 @@ import {
 } from "../api/client";
 import CoreUpdateTourPanel from "../components/CoreUpdateTourPanel.vue";
 import { useAuthStore } from "../stores/auth";
-import { useWebuiStore } from "../stores/webui";
+import { useUpdatesStore } from "../stores/updates";
+import { useRunsStore } from "../stores/runs";
+import { useSettingsStore } from "../stores/settings";
 
-const webui = useWebuiStore();
+const updates = useUpdatesStore();
+const runs = useRunsStore();
+const settings = useSettingsStore();
 const auth = useAuthStore();
 const breakpoints = useBreakpoints(breakpointsTailwind);
 const isMobile = breakpoints.smaller("md");
@@ -225,30 +229,30 @@ const columns = computed<DataTableColumns<PendingItem>>(() => [
 ]);
 
 const allLineNumbers = computed(
-  () => uniqueSorted(webui.pending?.items.map((item) => item.line_no) ?? []),
+  () => uniqueSorted(updates.pending?.items.map((item) => item.line_no) ?? []),
 );
 const groupingReady = computed(
-  () => webui.pending?.grouping.status === "ready",
+  () => updates.pending?.grouping.status === "ready",
 );
 const stackGroups = computed(() =>
-  groupingReady.value ? (webui.pending?.grouping.groups ?? []) : [],
+  groupingReady.value ? (updates.pending?.grouping.groups ?? []) : [],
 );
 const unmatchedItems = computed(() =>
-  groupingReady.value ? (webui.pending?.grouping.unmatched ?? []) : [],
+  groupingReady.value ? (updates.pending?.grouping.unmatched ?? []) : [],
 );
 const stackLineNumbers = computed(() =>
   uniqueSorted(stackGroups.value.flatMap((group) => group.line_numbers)),
 );
-const pendingLoaded = computed(() => webui.pending !== null);
+const pendingLoaded = computed(() => updates.pending !== null);
 const pendingLoadFailed = computed(
-  () => !pendingLoaded.value && !webui.loading && Boolean(webui.error),
+  () => !pendingLoaded.value && !updates.loading && Boolean((updates.error || runs.error)),
 );
 const pendingLoading = computed(
   () => !pendingLoaded.value && !pendingLoadFailed.value,
 );
 const pendingHeadingText = computed(() =>
-  webui.pending
-    ? pluralize(webui.pending.count, "pending update")
+  updates.pending
+    ? pluralize(updates.pending.count, "pending update")
     : pendingLoadFailed.value
       ? "Pending updates unavailable"
       : "Loading pending updates",
@@ -261,16 +265,16 @@ const selectAllLabel = computed(() =>
 );
 const releaseNotesByLine = computed(() => {
   const notes = new Map<number, ReleaseNoteInfo>();
-  for (const item of webui.releaseNotes?.items ?? []) {
+  for (const item of updates.releaseNotes?.items ?? []) {
     notes.set(item.line_no, item);
   }
   return notes;
 });
-const latestRun = computed(() => webui.runs[0] ?? null);
-const pendingSourceFile = computed(() => webui.pending?.source_file ?? "Pending file");
+const latestRun = computed(() => runs.runs[0] ?? null);
+const pendingSourceFile = computed(() => updates.pending?.source_file ?? "Pending file");
 const pendingSourceLabel = computed(() => fileName(pendingSourceFile.value));
 const pendingSourceDisplay = computed(() =>
-  webui.pending?.source_file ? `Source ${pendingSourceLabel.value}` : "Pending file",
+  updates.pending?.source_file ? `Source ${pendingSourceLabel.value}` : "Pending file",
 );
 const selectedLineSet = computed(() => new Set(selectedLineNumbers.value));
 const mutationStateLabel = computed(() =>
@@ -290,13 +294,13 @@ const selectedTagOverrideError = computed(() => {
 const updateSelectedDisabled = computed(
   () =>
     selectedLineNumbers.value.length === 0 ||
-    webui.loading ||
+    updates.loading ||
     Boolean(selectedTagOverrideError.value),
 );
 const removeSelectedDisabled = computed(
   () =>
     selectedLineNumbers.value.length === 0 ||
-    webui.loading ||
+    updates.loading ||
     !auth.session?.mutations_enabled,
 );
 const removeSelectedDisabledMessage = computed(() => {
@@ -306,34 +310,34 @@ const removeSelectedDisabledMessage = computed(() => {
   return "Read-only mode is active. Set WUD_WEB_MUTATIONS_ENABLED=true on the server to remove selected entries.";
 });
 const planAlertType = computed(() => {
-  if (webui.plan?.status === "blocked") {
+  if (updates.plan?.status === "blocked") {
     return "error";
   }
-  if (webui.plan?.status === "empty") {
+  if (updates.plan?.status === "empty") {
     return "warning";
   }
   return "info";
 });
 const planContextLabel = computed(() => {
-  if (!webui.plan) {
+  if (!updates.plan) {
     return updateIntent.value?.contextLabel ?? "selected updates";
   }
-  if (webui.plan.stacks.length === 1) {
-    return webui.plan.stacks[0].name;
+  if (updates.plan.stacks.length === 1) {
+    return updates.plan.stacks[0].name;
   }
-  if (webui.plan.summary.stack_count > 1) {
-    return pluralize(webui.plan.summary.stack_count, "stack");
+  if (updates.plan.summary.stack_count > 1) {
+    return pluralize(updates.plan.summary.stack_count, "stack");
   }
   return updateIntent.value?.contextLabel ?? "selected updates";
 });
 const preflightTitle = computed(() => {
-  if (!webui.plan) {
+  if (!updates.plan) {
     return updateIntent.value?.title ?? "Preview selected plan";
   }
-  if (webui.plan.status === "blocked") {
+  if (updates.plan.status === "blocked") {
     return "Plan blocked";
   }
-  if (webui.plan.status === "empty") {
+  if (updates.plan.status === "empty") {
     return "No changes to apply";
   }
   const context = planContextLabel.value;
@@ -346,36 +350,36 @@ const preflightTitle = computed(() => {
   return `Review ${context} plan`;
 });
 const preflightSummary = computed(() => {
-  if (!webui.plan) {
+  if (!updates.plan) {
     return "";
   }
-  if (webui.plan.status === "blocked") {
-    const issueCount = webui.plan.summary.issue_count || webui.plan.issues.length;
+  if (updates.plan.status === "blocked") {
+    const issueCount = updates.plan.summary.issue_count || updates.plan.issues.length;
     return `${pluralize(issueCount, "issue")} must be fixed before applying.`;
   }
-  if (webui.plan.status === "empty") {
+  if (updates.plan.status === "empty") {
     return "No selected services need changes.";
   }
   const serviceCount =
-    webui.plan.summary.service_count ||
-    webui.plan.summary.target_count ||
-    webui.plan.selected_line_numbers.length;
+    updates.plan.summary.service_count ||
+    updates.plan.summary.target_count ||
+    updates.plan.selected_line_numbers.length;
   return `${pluralize(serviceCount, "service")} ready to update.`;
 });
 const preflightServiceImpactLabel = computed(() => {
-  if (!webui.plan || webui.plan.status !== "ready") {
+  if (!updates.plan || updates.plan.status !== "ready") {
     return "";
   }
   return summarizeList(
     planLines.value.map(({ stack, line }) =>
-      webui.plan && webui.plan.summary.stack_count > 1
+      updates.plan && updates.plan.summary.stack_count > 1
         ? `${stack} / ${line.service || "stack-level"}`
         : line.service || "stack-level",
     ),
     4,
   );
 });
-const applyPreflight = computed(() => webui.plan?.apply_preflight ?? null);
+const applyPreflight = computed(() => updates.plan?.apply_preflight ?? null);
 const applyPreflightPassedChecks = computed(() =>
   applyPreflight.value?.checks.filter((check) => check.status === "PASS") ?? [],
 );
@@ -412,18 +416,18 @@ const applyReadinessSummary = computed(() => {
   }
   return "Required resources are reachable.";
 });
-const applyVisible = computed(() => webui.plan?.status === "ready");
-const applyAvailable = computed(() => applyVisible.value && !!webui.plan?.can_apply);
-const applyDisabled = computed(() => !applyAvailable.value || webui.loading);
+const applyVisible = computed(() => updates.plan?.status === "ready");
+const applyAvailable = computed(() => applyVisible.value && !!updates.plan?.can_apply);
+const applyDisabled = computed(() => !applyAvailable.value || updates.loading);
 const applyButtonLabel = computed(() =>
-  webui.plan?.selected_line_numbers.length
-    ? `Apply ${pluralize(webui.plan.selected_line_numbers.length, "update")}`
+  updates.plan?.selected_line_numbers.length
+    ? `Apply ${pluralize(updates.plan.selected_line_numbers.length, "update")}`
     : "Apply selected updates",
 );
-const cleanupItems = computed(() => webui.plan?.cleanup.items ?? []);
+const cleanupItems = computed(() => updates.plan?.cleanup.items ?? []);
 const cleanupAvailable = computed(() => cleanupItems.value.length > 0);
 const visiblePlanIssues = computed(() => {
-  const issues = webui.plan?.issues ?? [];
+  const issues = updates.plan?.issues ?? [];
   if (!cleanupItems.value.length) {
     return issues;
   }
@@ -470,10 +474,10 @@ const cleanupButtonLabel = computed(() =>
   `Remove ${pluralize(cleanupItems.value.length, "unmatched entry", "unmatched entries")}`,
 );
 const cleanupDisabled = computed(
-  () => !webui.plan?.cleanup.can_remove_unmatched || webui.loading,
+  () => !updates.plan?.cleanup.can_remove_unmatched || updates.loading,
 );
 const cleanupDisabledMessage = computed(() => {
-  if (!webui.plan || !cleanupAvailable.value || webui.plan.cleanup.can_remove_unmatched) {
+  if (!updates.plan || !cleanupAvailable.value || updates.plan.cleanup.can_remove_unmatched) {
     return "";
   }
   if (!auth.session?.mutations_enabled) {
@@ -482,12 +486,12 @@ const cleanupDisabledMessage = computed(() => {
   return "These pending entries cannot be removed right now.";
 });
 const pendingCleanupMessage = computed(() => {
-  if (!webui.pendingCleanup) {
+  if (!updates.pendingCleanup) {
     return "";
   }
-  return `${pluralize(webui.pendingCleanup.removed_count, "pending entry", "pending entries")} removed from ${pendingSourceLabel.value}.`;
+  return `${pluralize(updates.pendingCleanup.removed_count, "pending entry", "pending entries")} removed from ${pendingSourceLabel.value}.`;
 });
-const removalItems = computed(() => webui.pendingRemovalPlan?.lines ?? []);
+const removalItems = computed(() => updates.pendingRemovalPlan?.lines ?? []);
 const removalButtonLabel = computed(() =>
   `Remove ${pluralize(selectedLineNumbers.value.length, "selected entry", "selected entries")}`,
 );
@@ -495,16 +499,16 @@ const removalConfirmButtonLabel = computed(() =>
   `Remove ${pluralize(removalItems.value.length, "selected entry", "selected entries")}`,
 );
 const removalDisabled = computed(
-  () => !webui.pendingRemovalPlan?.can_remove || webui.loading,
+  () => !updates.pendingRemovalPlan?.can_remove || updates.loading,
 );
 const mutationDisabledMessage = computed(() => {
-  if (!webui.plan || webui.plan.status !== "ready" || webui.plan.can_apply) {
+  if (!updates.plan || updates.plan.status !== "ready" || updates.plan.can_apply) {
     return "";
   }
   if (!auth.session?.mutations_enabled) {
     return "Read-only mode is active. Set WUD_WEB_MUTATIONS_ENABLED=true on the server to apply updates.";
   }
-  if (!webui.plan.apply_preflight.ok) {
+  if (!updates.plan.apply_preflight.ok) {
     return "Fix the failed apply readiness check before applying updates.";
   }
   return "This plan cannot be applied.";
@@ -530,22 +534,22 @@ const batchSummaryLabel = computed(() => {
     : `${count} selected in ${selectedUpdateContext.value}`;
 });
 const planLines = computed(() =>
-  webui.plan?.stacks.flatMap((stack) =>
+  updates.plan?.stacks.flatMap((stack) =>
     stack.lines.map((line) => ({ stack: stack.name, line })),
   ) ?? [],
 );
 const planActions = computed(() =>
-  webui.plan?.stacks.flatMap((stack) =>
+  updates.plan?.stacks.flatMap((stack) =>
     stack.actions.map((action) => ({ stack: stack.name, action })),
   ) ?? [],
 );
 const planTagUpdates = computed(() =>
-  webui.plan?.stacks.flatMap((stack) =>
+  updates.plan?.stacks.flatMap((stack) =>
     stack.tag_updates.map((update) => ({ stack: stack.name, update })),
   ) ?? [],
 );
 const planDigestPinUpdates = computed(() =>
-  webui.plan?.stacks.flatMap((stack) =>
+  updates.plan?.stacks.flatMap((stack) =>
     (stack.digest_pin_updates ?? []).map((update) => ({ stack: stack.name, update })),
   ) ?? [],
 );
@@ -564,33 +568,33 @@ const visibleDigestPinCount = computed(
   () => planDigestPinUpdates.value.length || plannedDigestPinLines.value.length,
 );
 const preflightTagRewriteNotice = computed(() => {
-  if (!updateIntent.value?.allowTagUpdates || !visibleTagRewriteCount.value || !webui.plan) {
+  if (!updateIntent.value?.allowTagUpdates || !visibleTagRewriteCount.value || !updates.plan) {
     return "";
   }
   return `${pluralize(visibleTagRewriteCount.value, "tag rewrite")} will be applied before recreating selected services.`;
 });
 const preflightDigestPinNotice = computed(() => {
-  if (!visibleDigestPinCount.value || !webui.plan?.digest_pin_updates) {
+  if (!visibleDigestPinCount.value || !updates.plan?.digest_pin_updates) {
     return "";
   }
   return `${pluralize(visibleDigestPinCount.value, "digest-pin rewrite")} will pin approved tag updates after pull verification.`;
 });
 const applyJobAlertType = computed(() => {
-  if (webui.applyJob?.status === "failure") {
+  if (updates.applyJob?.status === "failure") {
     return "error";
   }
-  if (webui.applyJob?.status === "success") {
+  if (updates.applyJob?.status === "success") {
     return "success";
   }
   return "info";
 });
 const applyJobActive = computed(
-  () => Boolean(webui.applyJob && !terminalJobStatuses.has(webui.applyJob.status)),
+  () => Boolean(updates.applyJob && !terminalJobStatuses.has(updates.applyJob.status)),
 );
-const applyJobSucceeded = computed(() => webui.applyJob?.status === "success");
+const applyJobSucceeded = computed(() => updates.applyJob?.status === "success");
 const applyJobUpdateCount = computed(
   () =>
-    webui.applyJob?.selected_line_numbers.length ||
+    updates.applyJob?.selected_line_numbers.length ||
     applyJobSnapshot.value?.lines.length ||
     0,
 );
@@ -598,43 +602,43 @@ const applyJobUpdateLabel = computed(() =>
   pluralize(applyJobUpdateCount.value, "update"),
 );
 const applyJobTitle = computed(() => {
-  if (!webui.applyJob) {
+  if (!updates.applyJob) {
     return "";
   }
-  if (webui.applyJob.status === "queued" || webui.applyJob.status === "running") {
+  if (updates.applyJob.status === "queued" || updates.applyJob.status === "running") {
     return `Applying ${applyJobUpdateLabel.value}`;
   }
-  if (webui.applyJob.status === "success") {
+  if (updates.applyJob.status === "success") {
     return "Apply complete";
   }
-  if (webui.applyJob.status === "failure") {
+  if (updates.applyJob.status === "failure") {
     return "Apply failed";
   }
   return "Apply job";
 });
 const applyJobStatusMessage = computed(() => {
-  if (!webui.applyJob) {
+  if (!updates.applyJob) {
     return "";
   }
-  if (webui.applyJob.status === "queued") {
+  if (updates.applyJob.status === "queued") {
     return "Waiting for the updater job to start.";
   }
-  if (webui.applyJob.status === "running") {
+  if (updates.applyJob.status === "running") {
     return "Updater command is running.";
   }
-  if (webui.applyJob.status === "success") {
+  if (updates.applyJob.status === "success") {
     return `${applyJobUpdateLabel.value} finished. Pending updates and run history were refreshed.`;
   }
-  if (webui.applyJob.error) {
-    return webui.applyJob.error;
+  if (updates.applyJob.error) {
+    return updates.applyJob.error;
   }
   return "Updater stopped before completing the selected updates.";
 });
 const applyJobStartedLabel = computed(() => {
-  if (!webui.applyJob) {
+  if (!updates.applyJob) {
     return "";
   }
-  return webui.applyJob.started_at || "Queued";
+  return updates.applyJob.started_at || "Queued";
 });
 const applyJobSnapshotLines = computed(() => applyJobSnapshot.value?.lines ?? []);
 const applyJobImpactLabel = computed(() => {
@@ -649,9 +653,9 @@ const applyJobImpactLabel = computed(() => {
   }
   return `${pluralize(serviceCount, "service")} in ${applyJobSnapshot.value.contextLabel}`;
 });
-const applyJobLogText = computed(() => webui.applyJobLog?.content ?? "");
+const applyJobLogText = computed(() => updates.applyJobLog?.content ?? "");
 const applyJobLogTitle = computed(
-  () => webui.applyJobLog?.log_file || webui.applyJob?.log_file || "Live log",
+  () => updates.applyJobLog?.log_file || updates.applyJob?.log_file || "Live log",
 );
 const applyJobLiveLogVisible = computed(
   () => applyJobActive.value || applyJobLiveLogExpanded.value,
@@ -676,7 +680,7 @@ const applyJobLogEmptyMessage = computed(() =>
   applyJobActive.value ? "Waiting for log output." : "No live log was captured.",
 );
 const applyJobLogWaiting = computed(() => {
-  const log = webui.applyJobLog;
+  const log = updates.applyJobLog;
   if (!log || log.error) {
     return !log;
   }
@@ -684,7 +688,7 @@ const applyJobLogWaiting = computed(() => {
 });
 const displayApplyJobProgressByPhase = computed(() => {
   const displayEvents = new Map<string, ApplyJobProgressEvent>();
-  for (const event of webui.applyJob?.progress ?? []) {
+  for (const event of updates.applyJob?.progress ?? []) {
     displayEvents.set(
       event.phase,
       displayProgressEvent(displayEvents.get(event.phase) ?? null, event),
@@ -707,7 +711,7 @@ const applyJobProgressSteps = computed<ApplyJobProgressStep[]>(() =>
   }),
 );
 const applyJobProgressSummary = computed(() => {
-  const progress = webui.applyJob?.progress ?? [];
+  const progress = updates.applyJob?.progress ?? [];
   if (!progress.length) {
     return applyJobActive.value ? "Starting" : "No progress events";
   }
@@ -743,14 +747,14 @@ const applyJobCurrentStep = computed<ApplyJobProgressStep | null>(() => {
   return [...applyJobProgressSteps.value].reverse().find((step) => step.event) ?? null;
 });
 const applyJobNowTitle = computed(() => {
-  if (!webui.applyJob) {
+  if (!updates.applyJob) {
     return "";
   }
   const step = applyJobCurrentStep.value;
-  if (webui.applyJob.status === "failure") {
+  if (updates.applyJob.status === "failure") {
     return step ? `Failed: ${step.label}` : "Apply failed";
   }
-  if (webui.applyJob.status === "success") {
+  if (updates.applyJob.status === "success") {
     return "Update complete";
   }
   if (step?.status === "running") {
@@ -759,17 +763,17 @@ const applyJobNowTitle = computed(() => {
   if (step?.status === "success") {
     return `Completed: ${step.label}`;
   }
-  if (webui.applyJob.status === "queued") {
+  if (updates.applyJob.status === "queued") {
     return "Queued to start";
   }
   return "Starting updater";
 });
 const applyJobNowMessage = computed(() => {
-  if (!webui.applyJob) {
+  if (!updates.applyJob) {
     return "";
   }
-  if (webui.applyJob.status === "failure" && webui.applyJob.error) {
-    return webui.applyJob.error;
+  if (updates.applyJob.status === "failure" && updates.applyJob.error) {
+    return updates.applyJob.error;
   }
   return applyJobCurrentStep.value?.message || applyJobStatusMessage.value;
 });
@@ -782,25 +786,25 @@ const applyJobNowDescriptionIds = computed(() =>
     : "apply-job-now-message",
 );
 const applyJobNowStatusLabel = computed(() => {
-  if (webui.applyJob?.status === "success") {
+  if (updates.applyJob?.status === "success") {
     return "Complete";
   }
-  if (webui.applyJob?.status === "failure") {
+  if (updates.applyJob?.status === "failure") {
     return "Failed";
   }
   return applyJobProgressSummary.value;
 });
 const applyJobPanelStatusLabel = computed(() => {
-  if (webui.applyJob?.status === "queued") {
+  if (updates.applyJob?.status === "queued") {
     return "Queued";
   }
-  if (webui.applyJob?.status === "running") {
+  if (updates.applyJob?.status === "running") {
     return "Running";
   }
-  if (webui.applyJob?.status === "success") {
+  if (updates.applyJob?.status === "success") {
     return "Complete";
   }
-  if (webui.applyJob?.status === "failure") {
+  if (updates.applyJob?.status === "failure") {
     return "Failed";
   }
   return "Job";
@@ -906,7 +910,7 @@ function releaseNoteStatus(note: ReleaseNoteInfo | null): string {
   if (note?.links.length) {
     return "";
   }
-  if (webui.releaseNotesLoading) {
+  if (updates.releaseNotesLoading) {
     return "Checking...";
   }
   if (note?.status === "unsupported") {
@@ -974,25 +978,25 @@ function renderReleaseNotes(row: PendingItem) {
 }
 
 function getPendingGroupedItem(lineNo: number): PendingGroupedItem | undefined {
-  if (!webui.pending?.grouping) return undefined;
-  for (const group of webui.pending.grouping.groups) {
+  if (!updates.pending?.grouping) return undefined;
+  for (const group of updates.pending.grouping.groups) {
     const found = group.items.find((i) => i.line_no === lineNo);
     if (found) return found;
   }
-  return webui.pending.grouping.unmatched.find((i) => i.line_no === lineNo);
+  return updates.pending.grouping.unmatched.find((i) => i.line_no === lineNo);
 }
 
 function pendingServiceKeys(row: PendingItem): string[] {
-  if (!webui.pending?.grouping) return [];
+  if (!updates.pending?.grouping) return [];
   const keys: string[] = [];
-  for (const group of webui.pending.grouping.groups) {
+  for (const group of updates.pending.grouping.groups) {
     const item = group.items.find((i) => i.line_no === row.line_no);
     if (!item) continue;
     for (const service of item.services) {
       keys.push(`${group.name}/${service}`);
     }
   }
-  const unmatched = webui.pending.grouping.unmatched.find(
+  const unmatched = updates.pending.grouping.unmatched.find(
     (item) => item.line_no === row.line_no,
   );
   if (unmatched?.diagnostic?.stack && unmatched.diagnostic.service) {
@@ -1046,17 +1050,17 @@ function riskCues(row: PendingItem): SafetyCue[] {
     addCue("possible-breaking", "Possible breaking", "warning");
   }
   if (
-    webui.releaseNotes &&
-    !webui.releaseNotesLoading &&
+    updates.releaseNotes &&
+    !updates.releaseNotesLoading &&
     (!note?.links.length || note.status === "error" || note.status === "unsupported")
   ) {
     addCue("no-release-notes", "No release notes", "warning");
   }
 
-  if (webui.snoozes.some((s) => serviceKeys.includes(s.service_key))) {
+  if (settings.snoozes.some((s) => serviceKeys.includes(s.service_key))) {
     addCue("snoozed", "Snoozed", "default");
   }
-  const policy = webui.servicePolicies.find((p) => serviceKeys.includes(p.service_key));
+  const policy = settings.servicePolicies.find((p) => serviceKeys.includes(p.service_key));
   if (policy?.auto_update) {
     addCue("auto-update", "Auto-update", "success");
   }
@@ -1096,7 +1100,7 @@ function tagOverrideValue(item: PendingItem): string {
 
 function pendingItemsForLines(lineNumbers: number[]): PendingItem[] {
   const lineSet = new Set(lineNumbers);
-  return (webui.pending?.items ?? []).filter((item) => lineSet.has(item.line_no));
+  return (updates.pending?.items ?? []).filter((item) => lineSet.has(item.line_no));
 }
 
 function tagOverrideErrorForLines(lineNumbers: number[]): string {
@@ -1120,7 +1124,7 @@ function tagOverridesForLines(lineNumbers: number[]): TagOverrideRequest[] {
       tag: tagOverrideValue(item).trim(),
     }))
     .filter((item) => {
-      const original = webui.pending?.items.find(
+      const original = updates.pending?.items.find(
         (pendingItem) => pendingItem.line_no === item.line_no,
       );
       return original !== undefined && item.tag !== original.desired_tag;
@@ -1136,7 +1140,7 @@ function clearPreflight(): void {
   showCleanupModal.value = false;
   showRemovalModal.value = false;
   updateIntent.value = null;
-  webui.clearPlan();
+  updates.clearPlan();
 }
 
 function updateTagOverride(item: PendingItem, value: string): void {
@@ -1215,7 +1219,7 @@ function toggleStack(group: PendingStackGroup, checked: boolean): void {
 function updateDisabled(lineNumbers: number[]): boolean {
   return (
     lineNumbers.length === 0 ||
-    webui.loading ||
+    updates.loading ||
     Boolean(tagOverrideErrorForLines(lineNumbers))
   );
 }
@@ -1242,7 +1246,7 @@ async function startUpdateFlow(input: {
   lineNumbers: number[];
 }): Promise<void> {
   const lineNumbers = uniqueSorted(input.lineNumbers);
-  if (lineNumbers.length === 0 || webui.loading) {
+  if (lineNumbers.length === 0 || updates.loading) {
     return;
   }
   selectedLineNumbers.value = lineNumbers;
@@ -1262,7 +1266,7 @@ async function startUpdateFlow(input: {
   };
   updateIntent.value = intent;
   try {
-    await webui.createPlan(
+    await updates.createPlan(
       intent.lineNumbers,
       intent.allowTagUpdates,
       intent.tagOverrides,
@@ -1273,7 +1277,7 @@ async function startUpdateFlow(input: {
     updateIntent.value = null;
     return;
   }
-  if (webui.plan) {
+  if (updates.plan) {
     showPreflightModal.value = true;
   }
 }
@@ -1300,27 +1304,27 @@ async function startSelectedRemoval(): Promise<void> {
   }
   selectedLineNumbers.value = lineNumbers;
   try {
-    await webui.createRemovalPlan(lineNumbers);
+    await updates.createRemovalPlan(lineNumbers);
   } catch {
     showRemovalModal.value = false;
     return;
   }
-  if (webui.pendingRemovalPlan?.lines.length) {
+  if (updates.pendingRemovalPlan?.lines.length) {
     showRemovalModal.value = true;
   }
 }
 
 function closeRemovalModal(): void {
   showRemovalModal.value = false;
-  webui.clearPlan();
+  updates.clearPlan();
 }
 
 async function confirmSelectedRemoval(): Promise<void> {
-  const removal = webui.pendingRemovalPlan;
+  const removal = updates.pendingRemovalPlan;
   if (!removal?.removal_id || removalDisabled.value || !removal.lines.length) {
     return;
   }
-  const result = await webui.removeSelectedPending(
+  const result = await updates.removeSelectedPending(
     removal.removal_id,
     removal.lines.map((item) => ({ line_no: item.line_no, raw: item.raw })),
   );
@@ -1331,16 +1335,16 @@ async function confirmSelectedRemoval(): Promise<void> {
   showRemovalModal.value = false;
   await Promise.all([
     loadPendingAndReleaseNotes({ preserveCleanup: true }),
-    webui.loadRuns(),
+    runs.loadRuns(),
   ]);
 }
 
 async function confirmCleanup(): Promise<void> {
-  const cleanup = webui.plan?.cleanup;
+  const cleanup = updates.plan?.cleanup;
   if (!cleanup?.cleanup_id || cleanupDisabled.value || !cleanup.items.length) {
     return;
   }
-  const result = await webui.cleanupPending(
+  const result = await updates.cleanupPending(
     cleanup.cleanup_id,
     cleanup.items.map((item) => ({ line_no: item.line_no, raw: item.raw })),
   );
@@ -1353,19 +1357,19 @@ async function confirmCleanup(): Promise<void> {
   updateIntent.value = null;
   await Promise.all([
     loadPendingAndReleaseNotes({ preserveCleanup: true }),
-    webui.loadRuns(),
+    runs.loadRuns(),
   ]);
 }
 
 async function confirmApply(): Promise<void> {
-  if (!webui.plan || applyDisabled.value) {
+  if (!updates.plan || applyDisabled.value) {
     return;
   }
   const intent = updateIntent.value;
-  const lineNumbers = webui.plan.selected_line_numbers;
+  const lineNumbers = updates.plan.selected_line_numbers;
   const snapshot = createApplyJobSnapshot();
-  const job = await webui.createJob(
-    webui.plan.plan_id,
+  const job = await updates.createJob(
+    updates.plan.plan_id,
     lineNumbers,
     intent?.allowTagUpdates ?? lineNumbersHaveTagUpdates(lineNumbers),
     intent?.tagOverrides ?? tagOverridesForLines(lineNumbers),
@@ -1392,7 +1396,7 @@ function subscribeApplyJob(jobId: string): void {
     void handleJobLogEvent(event as MessageEvent<string>);
   });
   source.onerror = () => {
-    if (webui.applyJob && terminalJobStatuses.has(webui.applyJob.status)) {
+    if (updates.applyJob && terminalJobStatuses.has(updates.applyJob.status)) {
       closeJobStream();
       return;
     }
@@ -1405,16 +1409,16 @@ async function handleJobEvent(event: MessageEvent<string>): Promise<void> {
   try {
     job = JSON.parse(event.data) as ApplyJobResponse;
   } catch {
-    webui.setError("Job status stream returned invalid data.");
+    updates.setError("Job status stream returned invalid data.");
     closeJobStream();
     return;
   }
-  webui.setApplyJob(job);
+  updates.setApplyJob(job);
   if (!terminalJobStatuses.has(job.status)) {
     return;
   }
-  await loadTerminalApplyJobLogIfMissing(job);
   closeJobStream();
+  await loadTerminalApplyJobLogIfMissing(job);
   await refreshAfterTerminalJob();
 }
 
@@ -1423,10 +1427,10 @@ function handleJobProgressEvent(event: MessageEvent<string>): void {
   try {
     progress = JSON.parse(event.data) as ApplyJobProgressEvent;
   } catch {
-    webui.setError("Job progress stream returned invalid data.");
+    updates.setError("Job progress stream returned invalid data.");
     return;
   }
-  const job = webui.applyJob;
+  const job = updates.applyJob;
   if (!job || job.job_id !== progress.job_id) {
     return;
   }
@@ -1434,25 +1438,25 @@ function handleJobProgressEvent(event: MessageEvent<string>): void {
   if (progressEvents.some((item) => progressEventKey(item) === progressEventKey(progress))) {
     return;
   }
-  webui.setApplyJob({
+  updates.setApplyJob({
     ...job,
     progress: [...progressEvents, progress],
   });
 }
 
 async function loadTerminalApplyJobLogIfMissing(
-  job: ApplyJobResponse | null = webui.applyJob,
+  job: ApplyJobResponse | null = updates.applyJob,
 ): Promise<void> {
   if (
     !job?.run_id ||
     !terminalJobStatuses.has(job.status) ||
-    webui.applyJobLog?.content ||
+    updates.applyJobLog?.content ||
     applyJobRunLogFallbackRunId.value === job.run_id
   ) {
     return;
   }
   applyJobRunLogFallbackRunId.value = job.run_id;
-  await webui.loadApplyJobLogFromRun(job);
+  await updates.loadApplyJobLogFromRun(job);
 }
 
 async function handleJobLogEvent(event: MessageEvent<string>): Promise<void> {
@@ -1460,11 +1464,11 @@ async function handleJobLogEvent(event: MessageEvent<string>): Promise<void> {
   try {
     log = JSON.parse(event.data) as ApplyJobLogResponse;
   } catch {
-    webui.setError("Job log stream returned invalid data.");
+    updates.setError("Job log stream returned invalid data.");
     return;
   }
   const panelShouldScroll = shouldAutoScrollLog(applyJobPanelLogRef.value);
-  webui.setApplyJobLog(log);
+  updates.setApplyJobLog(log);
   await nextTick();
   if (panelShouldScroll) {
     scrollLogToBottom(applyJobPanelLogRef.value);
@@ -1487,7 +1491,7 @@ function progressEventKey(event: ApplyJobProgressEvent): string {
 }
 
 async function recoverOrRefreshApplyJob(jobId: string): Promise<void> {
-  const job = await webui
+  const job = await updates
     .loadApplyJob(jobId, { recoverMissing: true })
     .catch(() => undefined);
   if (job === undefined) {
@@ -1495,7 +1499,7 @@ async function recoverOrRefreshApplyJob(jobId: string): Promise<void> {
   }
   if (job === null) {
     closeJobStream();
-    await webui.loadRuns().catch(() => undefined);
+    await runs.loadRuns().catch(() => undefined);
     return;
   }
   if (terminalJobStatuses.has(job.status)) {
@@ -1505,17 +1509,17 @@ async function recoverOrRefreshApplyJob(jobId: string): Promise<void> {
 }
 
 async function reconnectObservedApplyJob(): Promise<void> {
-  if (!webui.rememberedApplyJobId) {
+  if (!updates.rememberedApplyJobId) {
     return;
   }
-  const job = await webui
-    .loadApplyJob(webui.rememberedApplyJobId, { recoverMissing: true })
+  const job = await updates
+    .loadApplyJob(updates.rememberedApplyJobId, { recoverMissing: true })
     .catch(() => undefined);
   if (job === undefined) {
     return;
   }
   if (job === null) {
-    await webui.loadRuns().catch(() => undefined);
+    await runs.loadRuns().catch(() => undefined);
     return;
   }
   if (terminalJobStatuses.has(job.status)) {
@@ -1526,21 +1530,21 @@ async function reconnectObservedApplyJob(): Promise<void> {
 }
 
 async function refreshAfterTerminalJob(): Promise<void> {
-  await Promise.all([loadPendingAndReleaseNotes(), webui.loadRuns()]);
+  await Promise.all([loadPendingAndReleaseNotes(), runs.loadRuns()]);
 }
 
 function createApplyJobSnapshot(): ApplyJobPlanSnapshot | null {
-  if (!webui.plan) {
+  if (!updates.plan) {
     return null;
   }
   return {
     contextLabel: planContextLabel.value,
     serviceCount:
-      webui.plan.summary.service_count ||
-      webui.plan.summary.target_count ||
+      updates.plan.summary.service_count ||
+      updates.plan.summary.target_count ||
       planLines.value.length,
-    stackCount: webui.plan.summary.stack_count,
-    sourceFile: webui.plan.source_file,
+    stackCount: updates.plan.summary.stack_count,
+    sourceFile: updates.plan.source_file,
     lines: planLines.value.map(({ stack, line }) => ({
       key: `${stack}-${line.line_no}-${line.service}`,
       lineNo: line.line_no,
@@ -1718,7 +1722,7 @@ function digestPinLabelIssueProposedRegex(issue: PlanIssue): string {
 async function approveDigestPinLabelRewrite(issue: PlanIssue): Promise<void> {
   const approval = digestPinLabelApprovalFromIssue(issue);
   const intent = updateIntent.value;
-  if (!approval || !intent || webui.loading) {
+  if (!approval || !intent || updates.loading) {
     return;
   }
   const approvalsByKey = new Map(
@@ -1732,7 +1736,7 @@ async function approveDigestPinLabelRewrite(issue: PlanIssue): Promise<void> {
     ...intent,
     digestPinLabelRewriteApprovals: [...approvalsByKey.values()],
   };
-  await webui.createPlan(
+  await updates.createPlan(
     nextIntent.lineNumbers,
     nextIntent.allowTagUpdates,
     nextIntent.tagOverrides,
@@ -1919,7 +1923,7 @@ function groupedItemTagRewriteLabel(item: PendingGroupedItem): string {
 
 function planLineServiceLabel(stack: string, line: PlanLine): string {
   const service = line.service || "stack-level";
-  return webui.plan?.summary.stack_count && webui.plan.summary.stack_count > 1
+  return updates.plan?.summary.stack_count && updates.plan.summary.stack_count > 1
     ? `${stack} / ${service}`
     : service;
 }
@@ -1941,9 +1945,9 @@ function planLineDigestPinLabel(line: PlanLine): string {
 async function loadPendingAndReleaseNotes(
   options: { preserveCleanup?: boolean } = {},
 ): Promise<void> {
-  await webui.loadPending(options);
-  await webui.loadReleaseNotes().catch(() => undefined);
-  void webui.refreshReleaseNotes().catch(() => undefined);
+  await updates.loadPending(options);
+  await updates.loadReleaseNotes().catch(() => undefined);
+  void updates.refreshReleaseNotes().catch(() => undefined);
 }
 
 async function retryPendingLoad(): Promise<void> {
@@ -1952,12 +1956,12 @@ async function retryPendingLoad(): Promise<void> {
 
 onMounted(() => {
   void retryPendingLoad();
-  void webui.loadPendingSafetyCues();
+  void settings.loadPendingSafetyCues();
   void reconnectObservedApplyJob();
 });
 
 watch(
-  () => webui.pending?.items ?? [],
+  () => updates.pending?.items ?? [],
   (items) => {
     const next: Record<number, string> = {};
     const pendingLineNumbers = new Set<number>();
@@ -1980,7 +1984,7 @@ onUnmounted(() => {
 });
 
 watch(
-  () => [webui.applyJob?.status, webui.applyJob?.run_id] as const,
+  () => [updates.applyJob?.status, updates.applyJob?.run_id] as const,
   () => {
     void loadTerminalApplyJobLogIfMissing();
   },
@@ -1988,7 +1992,7 @@ watch(
 );
 
 watch(
-  () => webui.applyJob?.status,
+  () => updates.applyJob?.status,
   (status) => {
     applyJobLiveLogExpanded.value = status
       ? !terminalJobStatuses.has(status)
@@ -2000,31 +2004,31 @@ watch(
 
 <template>
   <section class="content-stack">
-    <n-alert v-if="webui.error" type="error">
-      {{ webui.error }}
+    <n-alert v-if="(updates.error || runs.error)" type="error">
+      {{ (updates.error || runs.error) }}
     </n-alert>
-    <n-alert v-if="webui.pending && !webui.pending.exists" type="warning">
-      {{ webui.pending.source_file }} is missing.
+    <n-alert v-if="updates.pending && !updates.pending.exists" type="warning">
+      {{ updates.pending.source_file }} is missing.
     </n-alert>
-    <n-alert v-if="webui.releaseNotesError" type="warning">
-      Release-note metadata is unavailable: {{ webui.releaseNotesError }}
+    <n-alert v-if="updates.releaseNotesError" type="warning">
+      Release-note metadata is unavailable: {{ updates.releaseNotesError }}
     </n-alert>
     <n-alert v-if="pendingCleanupMessage" type="success">
       {{ pendingCleanupMessage }}
       <span class="inline-actions recovery-actions">
         <RouterLink
           class="text-link"
-          :to="{ name: 'run-detail', params: { id: webui.pendingCleanup?.audit_run_id } }"
+          :to="{ name: 'run-detail', params: { id: updates.pendingCleanup?.audit_run_id } }"
         >
           Details
         </RouterLink>
       </span>
     </n-alert>
     <n-alert
-      v-if="webui.applyJobRecovery"
+      v-if="updates.applyJobRecovery"
       type="warning"
     >
-      {{ webui.applyJobRecovery }}
+      {{ updates.applyJobRecovery }}
       <span class="inline-actions recovery-actions">
         <RouterLink class="text-link" to="/runs">Runs</RouterLink>
         <RouterLink
@@ -2045,7 +2049,7 @@ watch(
     </n-alert>
 
     <section
-      v-if="webui.applyJob"
+      v-if="updates.applyJob"
       ref="applyJobPanelRef"
       class="section-panel apply-job-panel"
       :class="{
@@ -2079,8 +2083,8 @@ watch(
         id="apply-job-panel-status"
         class="apply-job-now"
         :class="{
-          'apply-job-now-success': webui.applyJob.status === 'success',
-          'apply-job-now-failure': webui.applyJob.status === 'failure',
+          'apply-job-now-success': updates.applyJob.status === 'success',
+          'apply-job-now-failure': updates.applyJob.status === 'failure',
         }"
         role="status"
         aria-live="polite"
@@ -2151,19 +2155,19 @@ watch(
               <strong>{{ applyJobImpactLabel }}</strong>
               <em>{{ applyJobSnapshot?.sourceFile }}</em>
             </div>
-            <div v-if="webui.applyJob.run_id" class="list-row">
+            <div v-if="updates.applyJob.run_id" class="list-row">
               <span>Run</span>
-              <strong>#{{ webui.applyJob.run_id }}</strong>
+              <strong>#{{ updates.applyJob.run_id }}</strong>
               <em class="inline-actions">
                 <RouterLink
                   class="text-link"
-                  :to="{ name: 'run-detail', params: { id: webui.applyJob.run_id } }"
+                  :to="{ name: 'run-detail', params: { id: updates.applyJob.run_id } }"
                 >
                   Details
                 </RouterLink>
                 <RouterLink
                   class="text-link"
-                  :to="{ name: 'run-log', params: { id: webui.applyJob.run_id } }"
+                  :to="{ name: 'run-log', params: { id: updates.applyJob.run_id } }"
                 >
                   Log
                 </RouterLink>
@@ -2236,26 +2240,26 @@ watch(
         </div>
         <div v-show="applyJobLiveLogVisible" class="apply-job-live-log-body">
           <n-alert
-            v-if="webui.applyJobLog?.truncated"
+            v-if="updates.applyJobLog?.truncated"
             class="preflight-block"
             type="warning"
             :show-icon="false"
           >
-            Showing the last {{ webui.applyJobLog.max_bytes }} bytes.
+            Showing the last {{ updates.applyJobLog.max_bytes }} bytes.
           </n-alert>
           <n-alert
-            v-if="webui.applyJobLog?.error"
+            v-if="updates.applyJobLog?.error"
             class="preflight-block"
             type="warning"
             :show-icon="false"
           >
-            Live log unavailable: {{ webui.applyJobLog.error }}
+            Live log unavailable: {{ updates.applyJobLog.error }}
           </n-alert>
           <div v-if="applyJobLogWaiting" class="empty-state">
             {{ applyJobLogEmptyMessage }}
           </div>
           <pre
-            v-else-if="!webui.applyJobLog?.error"
+            v-else-if="!updates.applyJobLog?.error"
             ref="applyJobPanelLogRef"
             class="log-viewer apply-job-log-viewer"
           >{{ applyJobLogText }}</pre>
@@ -2263,11 +2267,11 @@ watch(
       </section>
 
       <n-alert
-        v-if="webui.applyJob.error"
+        v-if="updates.applyJob.error"
         class="plan-section"
         type="error"
       >
-        {{ webui.applyJob.error }}
+        {{ updates.applyJob.error }}
       </n-alert>
     </section>
 
@@ -2366,7 +2370,7 @@ watch(
           size="small"
           secondary
           :disabled="removeSelectedDisabled"
-          :loading="webui.loading"
+          :loading="updates.loading"
           @click="startSelectedRemoval"
         >
           <template #icon>
@@ -2378,7 +2382,7 @@ watch(
           type="primary"
           size="small"
           :disabled="updateSelectedDisabled"
-          :loading="webui.loading"
+          :loading="updates.loading"
           @click="startSelectedUpdate"
         >
           <template #icon>
@@ -2440,7 +2444,7 @@ watch(
                   size="small"
                   secondary
                   :disabled="updateDisabled(group.line_numbers)"
-                  :loading="webui.loading"
+                  :loading="updates.loading"
                   @click="startStackUpdate(group)"
                 >
                   <template #icon>
@@ -2687,11 +2691,11 @@ watch(
           </span>
           <strong>Update queue is clear</strong>
           <span>{{ pendingSourceLabel }} has no updates waiting for review.</span>
-          <span v-if="webui.coreUpdateTour?.status === 'in_progress'">
+          <span v-if="settings.coreUpdateTour?.status === 'in_progress'">
             New WUD entries will appear here for stack selection and preflight review.
           </span>
           <RouterLink
-            v-if="webui.coreUpdateTour?.status === 'in_progress'"
+            v-if="settings.coreUpdateTour?.status === 'in_progress'"
             class="text-link"
             to="/settings"
           >
@@ -2708,13 +2712,13 @@ watch(
       </section>
     </template>
 
-    <template v-else-if="webui.pending">
+    <template v-else-if="updates.pending">
       <n-alert type="info">
         Stack grouping is unavailable. Showing pending file order.
       </n-alert>
 
       <div
-        v-if="!webui.pending?.items.length"
+        v-if="!updates.pending?.items.length"
         class="empty-state clear-queue-state"
         role="status"
         aria-live="polite"
@@ -2724,11 +2728,11 @@ watch(
         </span>
         <strong>Update queue is clear</strong>
         <span>{{ pendingSourceLabel }} has no updates waiting for review.</span>
-        <span v-if="webui.coreUpdateTour?.status === 'in_progress'">
+        <span v-if="settings.coreUpdateTour?.status === 'in_progress'">
           New WUD entries will appear here for stack selection and preflight review.
         </span>
         <RouterLink
-          v-if="webui.coreUpdateTour?.status === 'in_progress'"
+          v-if="settings.coreUpdateTour?.status === 'in_progress'"
           class="text-link"
           to="/settings"
         >
@@ -2746,8 +2750,8 @@ watch(
       <n-data-table
         v-else-if="!isMobile"
         :columns="columns"
-        :data="webui.pending?.items ?? []"
-        :loading="webui.loading"
+        :data="updates.pending?.items ?? []"
+        :loading="updates.loading"
         :pagination="{ pageSize: 15 }"
         :row-key="rowKey"
         :checked-row-keys="selectedLineNumbers"
@@ -2757,7 +2761,7 @@ watch(
       />
 
       <div v-else class="mobile-list">
-        <article v-for="item in webui.pending?.items ?? []" :key="item.line_no" class="mobile-card">
+        <article v-for="item in updates.pending?.items ?? []" :key="item.line_no" class="mobile-card">
           <div class="mobile-card-title">
             <n-checkbox
               :checked="selectedLineSet.has(item.line_no)"
@@ -2882,13 +2886,13 @@ watch(
     >
       <strong>Pending updates did not load</strong>
       <span>Check the WebUI API connection, then try again.</span>
-      <n-button size="small" secondary :loading="webui.loading" @click="retryPendingLoad">
+      <n-button size="small" secondary :loading="updates.loading" @click="retryPendingLoad">
         Retry pending load
       </n-button>
     </div>
 
     <n-modal
-      v-if="webui.plan"
+      v-if="updates.plan"
       v-model:show="showPreflightModal"
       :mask-closable="false"
     >
@@ -2907,25 +2911,25 @@ watch(
               {{ preflightServiceImpactLabel }}
             </p>
           </div>
-          <n-tag :type="planAlertType">{{ webui.plan.status }}</n-tag>
+          <n-tag :type="planAlertType">{{ updates.plan.status }}</n-tag>
         </div>
 
         <div class="preflight-metrics">
           <div>
             <span>Targets</span>
-            <strong>{{ webui.plan.summary.target_count }}</strong>
+            <strong>{{ updates.plan.summary.target_count }}</strong>
           </div>
           <div>
             <span>Matched</span>
-            <strong>{{ webui.plan.summary.matched_target_count }}</strong>
+            <strong>{{ updates.plan.summary.matched_target_count }}</strong>
           </div>
           <div>
             <span>Stacks</span>
-            <strong>{{ webui.plan.summary.stack_count }}</strong>
+            <strong>{{ updates.plan.summary.stack_count }}</strong>
           </div>
           <div>
             <span>Issues</span>
-            <strong>{{ webui.plan.summary.issue_count }}</strong>
+            <strong>{{ updates.plan.summary.issue_count }}</strong>
           </div>
         </div>
 
@@ -3080,7 +3084,7 @@ watch(
                   secondary
                   type="primary"
                   :disabled="digestPinLabelApprovalApproved(issue)"
-                  :loading="webui.loading"
+                  :loading="updates.loading"
                   @click="approveDigestPinLabelRewrite(issue)"
                 >
                   <template #icon>
@@ -3134,7 +3138,7 @@ watch(
         </section>
 
         <section
-          v-if="webui.plan.status === 'ready'"
+          v-if="updates.plan.status === 'ready'"
           class="preflight-impact preflight-block"
           aria-labelledby="preflight-impact-title"
         >
@@ -3188,9 +3192,9 @@ watch(
 
         <div class="preflight-details-list">
           <details
-            v-if="webui.plan.status !== 'ready'"
+            v-if="updates.plan.status !== 'ready'"
             class="preflight-details"
-            :open="webui.plan.status === 'blocked'"
+            :open="updates.plan.status === 'blocked'"
           >
             <summary>Services and images</summary>
             <div v-if="planLines.length" class="compact-list">
@@ -3238,10 +3242,10 @@ watch(
             </div>
           </details>
 
-          <details v-if="webui.plan.skipped.length" class="preflight-details" open>
+          <details v-if="updates.plan.skipped.length" class="preflight-details" open>
             <summary>Skipped</summary>
             <div class="compact-list">
-              <div v-for="item in webui.plan.skipped" :key="item.line_no" class="list-row">
+              <div v-for="item in updates.plan.skipped" :key="item.line_no" class="list-row">
                 <span>#{{ item.line_no }}</span>
                 <strong>{{ item.image }}</strong>
                 <em>{{ item.reason }}</em>
@@ -3253,13 +3257,13 @@ watch(
             <summary>Source lines</summary>
             <div class="compact-list">
               <div
-                v-for="lineNo in webui.plan.selected_line_numbers"
+                v-for="lineNo in updates.plan.selected_line_numbers"
                 :key="lineNo"
                 class="list-row"
               >
                 <span>Line</span>
                 <strong>#{{ lineNo }}</strong>
-                <em>{{ webui.plan.source_file }}</em>
+                <em>{{ updates.plan.source_file }}</em>
               </div>
             </div>
           </details>
@@ -3275,7 +3279,7 @@ watch(
             size="small"
             secondary
             :disabled="cleanupDisabled"
-            :loading="webui.loading"
+            :loading="updates.loading"
             @click="openCleanupModal"
           >
             <template #icon>
@@ -3288,7 +3292,7 @@ watch(
             type="primary"
             size="small"
             :disabled="applyDisabled"
-            :loading="webui.loading"
+            :loading="updates.loading"
             @click="confirmApply"
           >
             <template #icon>
@@ -3301,7 +3305,7 @@ watch(
     </n-modal>
 
     <n-modal
-      v-if="webui.plan && cleanupAvailable"
+      v-if="updates.plan && cleanupAvailable"
       v-model:show="showCleanupModal"
       :mask-closable="false"
     >
@@ -3395,7 +3399,7 @@ watch(
             type="warning"
             size="small"
             :disabled="cleanupDisabled"
-            :loading="webui.loading"
+            :loading="updates.loading"
             @click="confirmCleanup"
           >
             <template #icon>
@@ -3408,7 +3412,7 @@ watch(
     </n-modal>
 
     <n-modal
-      v-if="webui.pendingRemovalPlan"
+      v-if="updates.pendingRemovalPlan"
       v-model:show="showRemovalModal"
       :mask-closable="false"
     >
@@ -3459,7 +3463,7 @@ watch(
             type="warning"
             size="small"
             :disabled="removalDisabled"
-            :loading="webui.loading"
+            :loading="updates.loading"
             @click="confirmSelectedRemoval"
           >
             <template #icon>

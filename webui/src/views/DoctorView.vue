@@ -12,13 +12,13 @@ import {
 import { NAlert, NButton, NTag } from "naive-ui";
 
 import type { DoctorCheck, DoctorCheckStatus } from "../api/client";
-import { useWebuiStore } from "../stores/webui";
+import { useConnectionStore } from "../stores/connection";
 
-const webui = useWebuiStore();
+const connection = useConnectionStore();
 const copiedSnippet = ref("");
 const { copy, copied, isSupported } = useClipboard({ legacy: true });
 
-const doctor = computed(() => webui.doctor);
+const doctor = computed(() => connection.doctor);
 const checks = computed(() => doctor.value?.checks ?? []);
 const passCount = computed(
   () => checks.value.filter((check) => check.status === "PASS").length,
@@ -35,13 +35,13 @@ const groupedChecks = computed(() => {
 });
 
 onMounted(() => {
-  if (webui.doctor === null) {
-    void webui.loadDoctor().catch(() => undefined);
+  if (connection.doctor === null) {
+    void connection.loadDoctor().catch(() => undefined);
   }
 });
 
 async function refreshDoctor(): Promise<void> {
-  await webui.loadDoctor();
+  await connection.loadDoctor();
 }
 
 async function copySuggestion(snippet: string): Promise<void> {
@@ -116,8 +116,8 @@ function statusIcon(status: DoctorCheckStatus): Component {
 
 <template>
   <section class="content-stack">
-    <n-alert v-if="webui.error" type="error" :show-icon="false">
-      {{ webui.error }}
+    <n-alert v-if="connection.error" type="error" :show-icon="false">
+      {{ connection.error }}
     </n-alert>
 
     <section class="section-panel">
@@ -140,7 +140,7 @@ function statusIcon(status: DoctorCheckStatus): Component {
           </n-tag>
           <n-button
             quaternary
-            :loading="webui.loading"
+            :loading="connection.loading"
             title="Refresh doctor results"
             @click="refreshDoctor"
           >
@@ -153,7 +153,7 @@ function statusIcon(status: DoctorCheckStatus): Component {
         </div>
       </div>
 
-      <div v-if="!doctor && webui.loading" class="settings-loading" aria-busy="true">
+      <div v-if="!doctor && connection.loading" class="settings-loading" aria-busy="true">
         <span class="sr-only">Loading doctor results.</span>
         <span aria-hidden="true" class="settings-skeleton-row"></span>
         <span aria-hidden="true" class="settings-skeleton-row"></span>

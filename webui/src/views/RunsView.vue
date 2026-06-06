@@ -7,9 +7,9 @@ import { NAlert, NDataTable, NTag, type DataTableColumns } from "naive-ui";
 import CoreUpdateTourPanel from "../components/CoreUpdateTourPanel.vue";
 import HistoryViewTabs from "../components/HistoryViewTabs.vue";
 import type { RunSummary } from "../api/client";
-import { useWebuiStore } from "../stores/webui";
+import { useRunsStore } from "../stores/runs";
 
-const webui = useWebuiStore();
+const runs = useRunsStore();
 const breakpoints = useBreakpoints(breakpointsTailwind);
 const isMobile = breakpoints.smaller("md");
 
@@ -60,20 +60,20 @@ const columns = computed<DataTableColumns<RunSummary>>(() => [
 ]);
 
 onMounted(() => {
-  void webui.loadRuns();
+  void runs.loadRuns();
 });
 </script>
 
 <template>
   <section class="content-stack">
-    <n-alert v-if="webui.error" type="error" :show-icon="false">
-      {{ webui.error }}
+    <n-alert v-if="runs.error" type="error" :show-icon="false">
+      {{ runs.error }}
     </n-alert>
 
     <div class="section-heading">
       <div>
         <p class="eyebrow">SQLite history</p>
-        <h2>{{ webui.runs.length }} recent runs</h2>
+        <h2>{{ runs.runs.length }} recent runs</h2>
       </div>
     </div>
 
@@ -87,7 +87,7 @@ onMounted(() => {
       next-label="Finish tour"
     >
       <div class="core-tour-facts">
-        <span>{{ webui.runs.length }} recent runs</span>
+        <span>{{ runs.runs.length }} recent runs</span>
         <span>Details and logs stay linked from each run</span>
       </div>
     </CoreUpdateTourPanel>
@@ -95,8 +95,8 @@ onMounted(() => {
     <n-data-table
       v-if="!isMobile"
       :columns="columns"
-      :data="webui.runs"
-      :loading="webui.loading"
+      :data="runs.runs"
+      :loading="runs.loading"
       :pagination="{ pageSize: 15 }"
       size="small"
       class="data-surface"
@@ -104,7 +104,7 @@ onMounted(() => {
 
     <div v-else class="mobile-list">
       <RouterLink
-        v-for="run in webui.runs"
+        v-for="run in runs.runs"
         :key="run.id"
         :to="`/runs/${run.id}`"
         class="mobile-card linked"
@@ -130,7 +130,7 @@ onMounted(() => {
           </div>
         </dl>
       </RouterLink>
-      <div v-if="!webui.runs.length" class="empty-state">No runs recorded.</div>
+      <div v-if="!runs.runs.length" class="empty-state">No runs recorded.</div>
     </div>
   </section>
 </template>

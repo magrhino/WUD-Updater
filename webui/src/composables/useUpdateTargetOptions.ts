@@ -2,11 +2,11 @@ import { computed } from "vue";
 import type { SelectOption } from "naive-ui";
 
 import type { UpdateTargetItem } from "../api/client";
-import { useWebuiStore } from "../stores/webui";
+import { useUpdatesStore } from "../stores/updates";
 
 export function useUpdateTargetOptions() {
-  const webui = useWebuiStore();
-  const targets = computed(() => webui.updateTargets?.items ?? []);
+  const updates = useUpdatesStore();
+  const targets = computed(() => updates.updateTargets?.items ?? []);
   const serviceKeyOptions = computed(() =>
     uniqueOptions(
       targets.value

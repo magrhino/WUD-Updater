@@ -14,26 +14,44 @@ import {
 import { NAlert } from "naive-ui";
 
 import CoreUpdateTourPanel from "../components/CoreUpdateTourPanel.vue";
-import { useWebuiStore } from "../stores/webui";
+import { useConnectionStore } from "../stores/connection";
+import { useUpdatesStore } from "../stores/updates";
+import { useRunsStore } from "../stores/runs";
+import { useSettingsStore } from "../stores/settings";
 
-const webui = useWebuiStore();
+const connection = useConnectionStore();
+const updates = useUpdatesStore();
+const runs = useRunsStore();
+const settings = useSettingsStore();
 
-const latestRun = computed(() => webui.runs[0] ?? null);
+const latestRun = computed(() => runs.runs[0] ?? null);
+const error = computed(() => connection.error || updates.error || runs.error || settings.error);
+const warnings = computed(() => [
+  ...(connection.status?.warnings ?? []),
+  ...(updates.pending?.warnings ?? []),
+]);
 
 onMounted(() => {
-  void webui.loadDashboard();
+  void Promise.all([
+    connection.loadStatus(),
+    updates.loadPending(),
+    runs.loadRuns(),
+    settings.loadServicePolicies(),
+    settings.loadSnoozes(),
+    settings.loadTagExclusions(),
+  ]);
 });
 </script>
 
 <template>
   <section class="content-stack">
-    <n-alert v-if="webui.error" type="error" :show-icon="false">
-      {{ webui.error }}
+    <n-alert v-if="error" type="error" :show-icon="false">
+      {{ error }}
     </n-alert>
 
-    <div v-if="webui.warnings.length" class="warning-list">
+    <div v-if="warnings.length" class="warning-list">
       <n-alert
-        v-for="warning in webui.warnings"
+        v-for="warning in warnings"
         :key="warning"
         type="warning"
         :show-icon="false"
@@ -51,9 +69,9 @@ onMounted(() => {
       next-to="/pending"
     >
       <div class="core-tour-facts">
-        <span>Pending: {{ webui.status?.pending_count ?? webui.pending?.count ?? 0 }}</span>
-        <span>Database: {{ webui.status?.db_ready ? "ready" : "missing" }}</span>
-        <span>Mutations: {{ webui.status?.mutations_enabled ? "enabled" : "read-only" }}</span>
+        <span>Pending: {{ connection.status?.pending_count ?? updates.pending?.count ?? 0 }}</span>
+        <span>Database: {{ connection.status?.db_ready ? "ready" : "missing" }}</span>
+        <span>Mutations: {{ connection.status?.mutations_enabled ? "enabled" : "read-only" }}</span>
       </div>
     </CoreUpdateTourPanel>
 
@@ -61,12 +79,12 @@ onMounted(() => {
       <article class="metric-card">
         <ListChecks :size="22" />
         <span>Pending</span>
-        <strong>{{ webui.status?.pending_count ?? webui.pending?.count ?? "0" }}</strong>
+        <strong>{{ connection.status?.pending_count ?? updates.pending?.count ?? "0" }}</strong>
       </article>
       <article class="metric-card">
         <Database :size="22" />
         <span>Database</span>
-        <strong>{{ webui.status?.db_ready ? "Ready" : "Missing" }}</strong>
+        <strong>{{ connection.status?.db_ready ? "Ready" : "Missing" }}</strong>
       </article>
       <article class="metric-card">
         <Clock3 :size="22" />
@@ -74,10 +92,10 @@ onMounted(() => {
         <strong>{{ latestRun ? `#${latestRun.id}` : "None" }}</strong>
       </article>
       <article class="metric-card">
-        <CheckCircle2 v-if="webui.status?.ok" :size="22" />
+        <CheckCircle2 v-if="connection.status?.ok" :size="22" />
         <AlertTriangle v-else :size="22" />
         <span>Status</span>
-        <strong>{{ webui.status?.ok ? "OK" : "Needs attention" }}</strong>
+        <strong>{{ connection.status?.ok ? "OK" : "Needs attention" }}</strong>
       </article>
     </div>
 
@@ -90,7 +108,7 @@ onMounted(() => {
         <RouterLink to="/pending" class="text-link">View pending</RouterLink>
       </div>
       <div
-        v-if="!webui.pending?.items.length"
+        v-if="!updates.pending?.items.length"
         class="empty-state clear-queue-state clear-queue-state-compact"
         role="status"
       >
@@ -101,7 +119,7 @@ onMounted(() => {
         <span>No pending updates are waiting for review.</span>
       </div>
       <div v-else class="compact-list">
-        <div v-for="item in webui.pending.items.slice(0, 5)" :key="item.line_no" class="list-row">
+        <div v-for="item in updates.pending.items.slice(0, 5)" :key="item.line_no" class="list-row">
           <span>#{{ item.line_no }}</span>
           <strong>{{ item.image }}</strong>
           <em>{{ item.desired_tag || item.digest || "latest available" }}</em>
@@ -117,10 +135,10 @@ onMounted(() => {
         </div>
         <RouterLink to="/runs" class="text-link">View history</RouterLink>
       </div>
-      <div v-if="!webui.runs.length" class="empty-state">No runs recorded.</div>
+      <div v-if="!runs.runs.length" class="empty-state">No runs recorded.</div>
       <div v-else class="compact-list">
         <RouterLink
-          v-for="run in webui.runs.slice(0, 5)"
+          v-for="run in runs.runs.slice(0, 5)"
           :key="run.id"
           :to="`/runs/${run.id}`"
           class="list-row linked"
@@ -143,17 +161,17 @@ onMounted(() => {
         <RouterLink to="/policies" class="shortcut-card">
           <Settings2 :size="20" />
           <span>Policies</span>
-          <strong>{{ webui.servicePolicies.length }}</strong>
+          <strong>{{ settings.servicePolicies.length }}</strong>
         </RouterLink>
         <RouterLink to="/snoozes" class="shortcut-card">
           <BellOff :size="20" />
           <span>Active snoozes</span>
-          <strong>{{ webui.snoozes.length }}</strong>
+          <strong>{{ settings.snoozes.length }}</strong>
         </RouterLink>
         <RouterLink to="/tag-exclusions" class="shortcut-card">
           <Tags :size="20" />
           <span>Active exclusions</span>
-          <strong>{{ webui.tagExclusions.length }}</strong>
+          <strong>{{ settings.tagExclusions.length }}</strong>
         </RouterLink>
       </div>
     </section>

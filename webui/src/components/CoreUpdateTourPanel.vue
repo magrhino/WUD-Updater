@@ -5,7 +5,7 @@ import { ArrowRight, CheckCircle2, X } from "@lucide/vue";
 import { NButton, NTag } from "naive-ui";
 
 import type { CoreUpdateTourStep } from "../api/client";
-import { useWebuiStore } from "../stores/webui";
+import { useSettingsStore } from "../stores/settings";
 
 const props = withDefaults(
   defineProps<{
@@ -30,14 +30,14 @@ const emit = defineEmits<{
   (event: "advanced"): void;
 }>();
 
-const webui = useWebuiStore();
+const settings = useSettingsStore();
 const router = useRouter();
 
 const active = computed(
   () =>
     props.show &&
-    webui.coreUpdateTour?.status === "in_progress" &&
-    webui.coreUpdateTour.step === props.step,
+    settings.coreUpdateTour?.status === "in_progress" &&
+    settings.coreUpdateTour.step === props.step,
 );
 const actionLabel = computed(() => {
   if (props.nextLabel) {
@@ -49,7 +49,7 @@ const actionLabel = computed(() => {
 async function advanceTour(): Promise<void> {
   const nextStatus = props.complete ? "completed" : "in_progress";
   const nextStep = props.nextStep ?? props.step;
-  await webui.updateCoreUpdateTour(nextStatus, nextStep);
+  await settings.updateCoreUpdateTour(nextStatus, nextStep);
   emit("advanced");
   if (props.nextTo) {
     await router?.push(props.nextTo);
@@ -57,7 +57,7 @@ async function advanceTour(): Promise<void> {
 }
 
 async function dismissTour(): Promise<void> {
-  await webui.updateCoreUpdateTour("dismissed", props.step);
+  await settings.updateCoreUpdateTour("dismissed", props.step);
 }
 </script>
 
@@ -72,13 +72,13 @@ async function dismissTour(): Promise<void> {
       </div>
     </div>
     <div class="core-tour-actions">
-      <n-button size="small" quaternary :loading="webui.loading" @click="dismissTour">
+      <n-button size="small" quaternary :loading="settings.loading" @click="dismissTour">
         <template #icon>
           <X :size="16" />
         </template>
         Dismiss tour
       </n-button>
-      <n-button size="small" type="primary" :loading="webui.loading" @click="advanceTour">
+      <n-button size="small" type="primary" :loading="settings.loading" @click="advanceTour">
         <template #icon>
           <CheckCircle2 v-if="complete" :size="16" />
           <ArrowRight v-else :size="16" />
