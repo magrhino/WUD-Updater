@@ -147,9 +147,12 @@ select_representative_changes() {
     elif [[ "$line" =~ (^|[^A-Za-z0-9_])#([0-9]+) ]]; then
       printf -- '- [#%s](https://github.com/%s/%s/pull/%s)\n' "${BASH_REMATCH[2]}" "$owner" "$repo" "${BASH_REMATCH[2]}"
       count=$((count + 1))
-    elif [[ "$line" =~ ([0-9a-f]{7,40}) ]]; then
-      printf -- '- [%s](https://github.com/%s/%s/commit/%s)\n' "${BASH_REMATCH[1]:0:7}" "$owner" "$repo" "${BASH_REMATCH[1]}"
-      count=$((count + 1))
+    elif [[ "$line" =~ (^|[^A-Za-z0-9])([0-9a-f]{7,40})([^A-Za-z0-9]|$) ]]; then
+      local commit="${BASH_REMATCH[2]:-}"
+      if [[ "$commit" =~ [0-9] ]]; then
+        printf -- '- [%s](https://github.com/%s/%s/commit/%s)\n' "${commit:0:7}" "$owner" "$repo" "$commit"
+        count=$((count + 1))
+      fi
     fi
     if (( count >= max )); then
       break

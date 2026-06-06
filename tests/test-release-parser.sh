@@ -102,6 +102,10 @@ test_select_representative_changes(){
   local md=$'## Changes\n- Fixed bug (#123)\n- Other fix #456\n- Minor abcdef123456789'
   res="$(printf '%s' "$md" | select_representative_changes "owner" "repo" 2)"
   [[ "$res" == $'- [#123](https://github.com/owner/repo/pull/123)\n- [#456](https://github.com/owner/repo/pull/456)' ]] || fail "select_representative_changes failed: got '$res'"
+
+  local md_hash=$'## Changes\n- defaced markdown\n- acceded wording\n- Fixed abcdef123456789'
+  res="$(printf '%s' "$md_hash" | select_representative_changes "owner" "repo" 2)"
+  [[ "$res" == $'- [abcdef1](https://github.com/owner/repo/commit/abcdef123456789)' ]] || fail "select_representative_changes linked false commit words: got '$res'"
 }
 
 test_extract_intro_until_h3(){
