@@ -12,7 +12,7 @@ from io import StringIO
 from pathlib import Path
 from unittest import mock
 
-from wud_updater.updates import run_updates_from_namespace
+from wud_updater.updates import UpdateSelectionState, run_updates_from_namespace
 
 
 class PythonUpdatesWrapperTests(unittest.TestCase):
@@ -1327,6 +1327,69 @@ exit 0
 
 def _updater_arg_lines(log: str) -> list[str]:
     return [line for line in log.splitlines() if line.startswith("--base ")]
+
+
+class UpdateSelectionStateTests(unittest.TestCase):
+    """Unit tests for the UpdateSelectionState dataclass added in this PR."""
+
+    def test_defaults(self) -> None:
+        state = UpdateSelectionState()
+        self.assertEqual(state.selected_line_spec, "")
+        self.assertEqual(state.remove_line_spec, "")
+        self.assertFalse(state.allow_tag_updates)
+        self.assertEqual(state.tag_override_specs, ())
+        self.assertEqual(state.exclude_tag_line_spec, "")
+        self.assertFalse(state.recreate_excluded_services)
+
+    def test_construction_with_values(self) -> None:
+        state = UpdateSelectionState(
+            selected_line_spec="2,4",
+            remove_line_spec="1,3",
+            allow_tag_updates=True,
+            tag_override_specs=("2=3.0", "4=1.5"),
+            exclude_tag_line_spec="5",
+            recreate_excluded_services=True,
+        )
+        self.assertEqual(state.selected_line_spec, "2,4")
+        self.assertEqual(state.remove_line_spec, "1,3")
+        self.assertTrue(state.allow_tag_updates)
+        self.assertEqual(state.tag_override_specs, ("2=3.0", "4=1.5"))
+        self.assertEqual(state.exclude_tag_line_spec, "5")
+        self.assertTrue(state.recreate_excluded_services)
+
+    def test_is_frozen(self) -> None:
+        state = UpdateSelectionState()
+        with self.assertRaises((AttributeError, TypeError)):
+            state.selected_line_spec = "1"  # type: ignore[misc]
+
+    def test_tag_override_specs_accepts_tuple(self) -> None:
+        state = UpdateSelectionState(tag_override_specs=("1=2.0",))
+        self.assertEqual(len(state.tag_override_specs), 1)
+        self.assertEqual(state.tag_override_specs[0], "1=2.0")
+
+    def test_empty_state_has_no_selection(self) -> None:
+        state = UpdateSelectionState()
+        # A default state should not trigger lock acquisition
+        self.assertFalse(bool(state.selected_line_spec))
+        self.assertFalse(bool(state.remove_line_spec))
+        self.assertFalse(bool(state.exclude_tag_line_spec))
+        self.assertFalse(bool(state.tag_override_specs))
+
+    def test_allow_tag_updates_only(self) -> None:
+        state = UpdateSelectionState(allow_tag_updates=True)
+        self.assertTrue(state.allow_tag_updates)
+        self.assertEqual(state.selected_line_spec, "")
+        self.assertEqual(state.tag_override_specs, ())
+
+    def test_equality(self) -> None:
+        state1 = UpdateSelectionState(selected_line_spec="1", allow_tag_updates=True)
+        state2 = UpdateSelectionState(selected_line_spec="1", allow_tag_updates=True)
+        self.assertEqual(state1, state2)
+
+    def test_inequality_when_different(self) -> None:
+        state1 = UpdateSelectionState(selected_line_spec="1")
+        state2 = UpdateSelectionState(selected_line_spec="2")
+        self.assertNotEqual(state1, state2)
 
 
 if __name__ == "__main__":
