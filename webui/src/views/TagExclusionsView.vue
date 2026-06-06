@@ -77,6 +77,7 @@ const saveDisabled = computed(
     (exclusionForm.scope === "service" && !exclusionForm.serviceKey.trim()) ||
     settings.loading,
 );
+const viewError = computed(() => updates.error || settings.error);
 
 function editExclusion(rule: TagExclusionRuleRecord): void {
   exclusionForm.scope = rule.scope as TagExclusionScope;
@@ -180,19 +181,19 @@ async function confirmStatusChange(): Promise<void> {
 }
 
 onMounted(() => {
-  void updates.loadUpdateTargets();
-  void settings.loadTagExclusions(statusFilter.value);
+  void updates.loadUpdateTargets().catch(() => undefined);
+  void settings.loadTagExclusions(statusFilter.value).catch(() => undefined);
 });
 
 watch(statusFilter, (nextFilter) => {
-  void settings.loadTagExclusions(nextFilter);
+  void settings.loadTagExclusions(nextFilter).catch(() => undefined);
 });
 </script>
 
 <template>
   <section class="content-stack">
-    <n-alert v-if="settings.error" type="error" :show-icon="false">
-      {{ settings.error }}
+    <n-alert v-if="viewError" type="error" :show-icon="false">
+      {{ viewError }}
     </n-alert>
     <n-alert v-if="!mutationsEnabled" type="info" :show-icon="false">
       Read-only mode is active. Set WUD_WEB_MUTATIONS_ENABLED=true on the server to manage tag exclusions.

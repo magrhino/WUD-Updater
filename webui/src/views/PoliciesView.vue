@@ -103,6 +103,9 @@ const saveDisabled = computed(
     (policyForm.autoUpdate && !timezoneKnown.value) ||
     settings.loading,
 );
+const viewError = computed(
+  () => connection.error || updates.error || settings.error,
+);
 
 function editPolicy(policy: ServicePolicyRecord): void {
   policyForm.serviceKey = policy.service_key;
@@ -199,17 +202,17 @@ async function confirmDelete(): Promise<void> {
 
 onMounted(() => {
   if (connection.status === null) {
-    void connection.loadStatus();
+    void connection.loadStatus().catch(() => undefined);
   }
-  void updates.loadUpdateTargets();
-  void settings.loadServicePolicies();
+  void updates.loadUpdateTargets().catch(() => undefined);
+  void settings.loadServicePolicies().catch(() => undefined);
 });
 </script>
 
 <template>
   <section class="content-stack">
-    <n-alert v-if="settings.error" type="error" :show-icon="false">
-      {{ settings.error }}
+    <n-alert v-if="viewError" type="error" :show-icon="false">
+      {{ viewError }}
     </n-alert>
     <n-alert v-if="!mutationsEnabled" type="info" :show-icon="false">
       Read-only mode is active. Set WUD_WEB_MUTATIONS_ENABLED=true on the server to edit policies.

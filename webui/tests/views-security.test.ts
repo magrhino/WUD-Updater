@@ -49,10 +49,10 @@ function setupStores(mutationsEnabled: boolean) {
   setActivePinia(pinia);
   const auth = useAuthStore();
   auth.session = authSession({ mutations_enabled: mutationsEnabled });
-      const connection = useConnectionStore();
-    const settings = useSettingsStore();
-    const updates = useUpdatesStore();
-    const runs = useRunsStore();
+  const connection = useConnectionStore();
+  const settings = useSettingsStore();
+  const updates = useUpdatesStore();
+  const runs = useRunsStore();
   connection.status = statusResponse({ mutations_enabled: mutationsEnabled });
   settings.coreUpdateTour = coreUpdateTourResponse();
   return { pinia, auth, connection, settings, updates, runs };
@@ -110,7 +110,10 @@ function mockMobileViewport(): () => void {
   };
 }
 
-function mockPendingLifecycle(settings: ReturnType<typeof useWebuiStore>, updates: any) {
+function mockPendingLifecycle(
+  settings: ReturnType<typeof useSettingsStore>,
+  updates: ReturnType<typeof useUpdatesStore>,
+) {
   vi.spyOn(updates, "loadPending").mockResolvedValue();
   vi.spyOn(updates, "loadReleaseNotes").mockResolvedValue();
   vi.spyOn(updates, "refreshReleaseNotes").mockResolvedValue();
@@ -2070,6 +2073,38 @@ describe("mutating WebUI views", () => {
     expect(deletePolicy).not.toHaveBeenCalled();
   });
 
+  it("shows policy target loading errors from the updates store", async () => {
+    const { pinia, auth, connection, settings, updates, runs } = setupStores(true);
+    settings.servicePolicies = [];
+    vi.spyOn(updates, "loadUpdateTargets").mockImplementation(async () => {
+      updates.error = "update targets unavailable";
+      throw new Error("update targets unavailable");
+    });
+    vi.spyOn(settings, "loadServicePolicies").mockResolvedValue();
+
+    const wrapper = mountWithApp(PoliciesView, { pinia });
+    await flushPromises();
+
+    expect(wrapper.text()).toContain("update targets unavailable");
+  });
+
+  it("shows policy status loading errors from the connection store", async () => {
+    const { pinia, auth, connection, settings, updates, runs } = setupStores(true);
+    connection.status = null;
+    settings.servicePolicies = [];
+    vi.spyOn(connection, "loadStatus").mockImplementation(async () => {
+      connection.error = "status unavailable";
+      throw new Error("status unavailable");
+    });
+    vi.spyOn(updates, "loadUpdateTargets").mockResolvedValue();
+    vi.spyOn(settings, "loadServicePolicies").mockResolvedValue();
+
+    const wrapper = mountWithApp(PoliciesView, { pinia });
+    await flushPromises();
+
+    expect(wrapper.text()).toContain("status unavailable");
+  });
+
   it("does not assume UTC while policy schedule timezone is loading", async () => {
     const { pinia, auth, connection, settings, updates, runs } = setupStores(true);
     connection.status = null;
@@ -2266,6 +2301,21 @@ describe("mutating WebUI views", () => {
     expect(deleteSnooze).not.toHaveBeenCalled();
   });
 
+  it("shows snooze target loading errors from the updates store", async () => {
+    const { pinia, auth, connection, settings, updates, runs } = setupStores(true);
+    settings.snoozes = [];
+    vi.spyOn(updates, "loadUpdateTargets").mockImplementation(async () => {
+      updates.error = "snooze targets unavailable";
+      throw new Error("snooze targets unavailable");
+    });
+    vi.spyOn(settings, "loadSnoozes").mockResolvedValue();
+
+    const wrapper = mountWithApp(SnoozesView, { pinia });
+    await flushPromises();
+
+    expect(wrapper.text()).toContain("snooze targets unavailable");
+  });
+
   it("disables tag exclusion mutations in read-only mode", async () => {
     const { pinia, auth, connection, settings, updates, runs } = setupStores(false);
     settings.tagExclusions = [tagExclusion()];
@@ -2287,6 +2337,21 @@ describe("mutating WebUI views", () => {
     expect(disableButton?.attributes("disabled")).toBeDefined();
     await disableButton?.trigger("click");
     expect(setStatus).not.toHaveBeenCalled();
+  });
+
+  it("shows tag exclusion target loading errors from the updates store", async () => {
+    const { pinia, auth, connection, settings, updates, runs } = setupStores(true);
+    settings.tagExclusions = [];
+    vi.spyOn(updates, "loadUpdateTargets").mockImplementation(async () => {
+      updates.error = "tag targets unavailable";
+      throw new Error("tag targets unavailable");
+    });
+    vi.spyOn(settings, "loadTagExclusions").mockResolvedValue();
+
+    const wrapper = mountWithApp(TagExclusionsView, { pinia });
+    await flushPromises();
+
+    expect(wrapper.text()).toContain("tag targets unavailable");
   });
 
   it("renders read-only settings without exposing secret values or edit controls", async () => {

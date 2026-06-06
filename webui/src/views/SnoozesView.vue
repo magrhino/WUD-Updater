@@ -52,6 +52,7 @@ const createDisabled = computed(
     !snoozeForm.snoozedUntil.trim() ||
     settings.loading,
 );
+const viewError = computed(() => updates.error || settings.error);
 
 function futureIso(hours: number): string {
   return new Date(Date.now() + hours * 60 * 60 * 1000).toISOString();
@@ -112,19 +113,19 @@ async function confirmDelete(): Promise<void> {
 }
 
 onMounted(() => {
-  void updates.loadUpdateTargets();
-  void settings.loadSnoozes(snoozeState.value);
+  void updates.loadUpdateTargets().catch(() => undefined);
+  void settings.loadSnoozes(snoozeState.value).catch(() => undefined);
 });
 
 watch(snoozeState, (nextState) => {
-  void settings.loadSnoozes(nextState);
+  void settings.loadSnoozes(nextState).catch(() => undefined);
 });
 </script>
 
 <template>
   <section class="content-stack">
-    <n-alert v-if="settings.error" type="error" :show-icon="false">
-      {{ settings.error }}
+    <n-alert v-if="viewError" type="error" :show-icon="false">
+      {{ viewError }}
     </n-alert>
     <n-alert v-if="!mutationsEnabled" type="info" :show-icon="false">
       Read-only mode is active. Set WUD_WEB_MUTATIONS_ENABLED=true on the server to manage snoozes.

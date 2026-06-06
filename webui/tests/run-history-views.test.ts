@@ -12,9 +12,7 @@ import type {
 } from "../src/api/client";
 import { createWudRouter } from "../src/router";
 import { useAuthStore } from "../src/stores/auth";
-import { useConnectionStore } from "../src/stores/connection";
 import { useSettingsStore } from "../src/stores/settings";
-import { useUpdatesStore, APPLY_JOB_RECOVERY_MESSAGE } from "../src/stores/updates";
 import { useRunsStore } from "../src/stores/runs";
 import RunDetailView from "../src/views/RunDetailView.vue";
 import RunsView from "../src/views/RunsView.vue";
@@ -49,16 +47,15 @@ function mockMobileViewport(): void {
 async function setupRoute(path: string): Promise<{
   pinia: ReturnType<typeof createPinia>;
   router: Router;
-  settings: ReturnType<typeof useWebuiStore>;
+  settings: ReturnType<typeof useSettingsStore>;
+  runs: ReturnType<typeof useRunsStore>;
 }> {
   const pinia = createPinia();
   setActivePinia(pinia);
   const auth = useAuthStore();
   auth.session = authSession({ authenticated: true });
-      const connection = useConnectionStore();
-    const settings = useSettingsStore();
-    const updates = useUpdatesStore();
-    const runs = useRunsStore();
+  const settings = useSettingsStore();
+  const runs = useRunsStore();
   settings.coreUpdateTour = coreUpdateTourResponse();
   const router = createWudRouter(createMemoryHistory());
   await router.push(path);
@@ -369,7 +366,7 @@ describe("RunDetailView", () => {
       .spyOn(runs, "loadRunDetail")
       .mockImplementation(async (runId: number) => {
         runs.runDetails = {
-          ...settings.runDetails,
+          ...runs.runDetails,
           [runId]: runId === 42 ? firstDetail : secondDetail,
         };
       });
