@@ -737,7 +737,7 @@ describe("settings store", () => {
     await expect(runs.loadRuns()).rejects.toMatchObject({ message: "db missing" });
 
     expect(runs.error).toBe("db missing");
-    expect(updates.loading).toBe(false);
+    expect(runs.loading).toBe(false);
   });
 
   it("remembers active apply jobs and clears terminal jobs", async () => {
