@@ -186,6 +186,9 @@ describe("pending helper modules", () => {
     expect(wrapper.text()).toContain("Major bump");
     expect(wrapper.text()).toContain("GitHub release");
     expect(wrapper.text()).toContain("Possible breaking change");
+    expect(wrapper.find(".release-note-link").attributes("rel")).toBe(
+      "noopener noreferrer",
+    );
   });
 
   it("forwards pending modal update-close events to the owning view", async () => {

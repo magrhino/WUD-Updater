@@ -1523,7 +1523,12 @@ describe("mutating WebUI views", () => {
 
     expect(wrapper.text()).toContain("GitHub release");
     expect(wrapper.text()).toContain("Possible breaking change");
-    expect(wrapper.find('a[href="https://github.com/acme/app/releases/tag/v2.0.0"]').exists()).toBe(true);
+    const link = wrapper.find(
+      'a[href="https://github.com/acme/app/releases/tag/v2.0.0"]',
+    );
+    expect(link.exists()).toBe(true);
+    expect(link.attributes("target")).toBe("_blank");
+    expect(link.attributes("rel")).toBe("noopener noreferrer");
   });
 
   it("renders both LSIO and upstream release-note links", () => {

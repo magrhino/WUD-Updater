@@ -2146,7 +2146,7 @@ watch(
                       class="release-note-link"
                       :href="link.url"
                       target="_blank"
-                      rel="noreferrer"
+                      rel="noopener noreferrer"
                     >
                       {{ link.label }}
                       <ExternalLink :size="14" aria-hidden="true" />
@@ -2416,7 +2416,7 @@ watch(
                     class="release-note-link"
                     :href="link.url"
                     target="_blank"
-                    rel="noreferrer"
+                    rel="noopener noreferrer"
                   >
                     {{ link.label }}
                     <ExternalLink :size="14" aria-hidden="true" />

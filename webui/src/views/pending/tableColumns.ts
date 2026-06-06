@@ -137,7 +137,7 @@ export function renderReleaseNotes(
           class: "release-note-link",
           href: link.url,
           target: "_blank",
-          rel: "noreferrer",
+          rel: "noopener noreferrer",
         },
         [
           link.label,
