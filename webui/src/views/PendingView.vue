@@ -1,17 +1,14 @@
 <script setup lang="ts">
-import { computed, h, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import { breakpointsTailwind, useBreakpoints } from "@vueuse/core";
 import {
   AlertTriangle,
   Check,
   CheckCircle2,
-  ChevronDown,
-  ChevronUp,
   ExternalLink,
   Play,
   Trash2,
   X,
-  XCircle,
 } from "@lucide/vue";
 import {
   NAlert,
@@ -19,9 +16,7 @@ import {
   NCheckbox,
   NDataTable,
   NInput,
-  NModal,
   NTag,
-  type DataTableColumns,
   type DataTableRowKey,
 } from "naive-ui";
 
@@ -46,10 +41,16 @@ import {
   type TagOverrideRequest,
 } from "../api/client";
 import CoreUpdateTourPanel from "../components/CoreUpdateTourPanel.vue";
+import PendingApplyJobPanel from "../components/pending/PendingApplyJobPanel.vue";
+import PendingCleanupModal from "../components/pending/PendingCleanupModal.vue";
+import PendingPlanReviewModal from "../components/pending/PendingPlanReviewModal.vue";
+import PendingRemovalModal from "../components/pending/PendingRemovalModal.vue";
 import { useAuthStore } from "../stores/auth";
 import { useUpdatesStore } from "../stores/updates";
 import { useRunsStore } from "../stores/runs";
 import { useSettingsStore } from "../stores/settings";
+import { safetyCues, type SafetyCue } from "./pending/safetyCues";
+import { createPendingColumns } from "./pending/tableColumns";
 
 const updates = useUpdatesStore();
 const runs = useRunsStore();
@@ -63,8 +64,7 @@ const showPreflightModal = ref(false);
 const showCleanupModal = ref(false);
 const showRemovalModal = ref(false);
 const jobEventSource = ref<EventSource | null>(null);
-const applyJobPanelRef = ref<HTMLElement | null>(null);
-const applyJobPanelLogRef = ref<HTMLElement | null>(null);
+const applyJobPanelRef = ref<InstanceType<typeof PendingApplyJobPanel> | null>(null);
 const applyJobLiveLogExpanded = ref(true);
 const applyJobRunLogFallbackRunId = ref<number | null>(null);
 const terminalJobStatuses = new Set<ApplyJobResponse["status"]>([
@@ -106,12 +106,6 @@ type AssistantDetailKey =
   | "recommended_actions";
 type DiagnosticItem = {
   diagnostic?: PendingDiagnostic | null;
-};
-
-type SafetyCue = {
-  key: string;
-  label: string;
-  type: "default" | "error" | "info" | "success" | "warning";
 };
 
 type ApplyJobProgressPhase = {
@@ -164,69 +158,19 @@ const applyJobProgressPhases: ApplyJobProgressPhase[] = [
 const updateIntent = ref<UpdateIntent | null>(null);
 const applyJobSnapshot = ref<ApplyJobPlanSnapshot | null>(null);
 
-const columns = computed<DataTableColumns<PendingItem>>(() => [
-  { type: "selection", width: 48 },
-  { title: "Line", key: "line_no", width: 80 },
-  {
-    title: "Image",
-    key: "image",
-    minWidth: 240,
-    render: (row) =>
-      h("code", { class: "pending-table-value", title: row.image }, row.image),
-  },
-  {
-    title: "Repository",
-    key: "repo",
-    minWidth: 200,
-    render: (row) =>
-      h("span", { class: "pending-table-value", title: row.repo }, row.repo),
-  },
-  {
-    title: "Current tag",
-    key: "current_tag",
-    minWidth: 120,
-    render: (row) => displayValue(row.current_tag),
-  },
-  {
-    title: "New tag",
-    key: "desired_tag",
-    minWidth: 160,
-    render: (row) => {
-      if (!row.desired_tag) {
-        return displayValue("");
-      }
-      return h(NInput, {
-        value: tagOverrideValue(row),
-        size: "small",
-        class: "tag-override-input",
-        placeholder: row.desired_tag,
-        inputProps: tagInputProps(row),
-        onUpdateValue: (value: string) => updateTagOverride(row, value),
-      });
-    },
-  },
-  {
-    title: "New digest",
-    key: "digest",
-    minWidth: 220,
-    render: (row) =>
-      row.digest
-        ? h("code", { class: "digest-value", title: row.digest }, displayDigest(row.digest))
-        : displayValue(""),
-  },
-  {
-    title: "Safety cues",
-    key: "safety_cues",
-    minWidth: 200,
-    render: (row) => renderRiskBadges(row),
-  },
-  {
-    title: "Release notes",
-    key: "release_notes",
-    minWidth: 220,
-    render: (row) => renderReleaseNotes(row),
-  },
-]);
+const columns = computed(() =>
+  createPendingColumns({
+    displayDigest,
+    displayValue,
+    releaseNoteFor,
+    releaseNoteReason,
+    releaseNoteStatus,
+    riskCues,
+    tagInputProps,
+    tagOverrideValue,
+    updateTagOverride,
+  }),
+);
 
 const allLineNumbers = computed(
   () => uniqueSorted(updates.pending?.items.map((item) => item.line_no) ?? []),
@@ -830,21 +774,6 @@ function progressStatusLabel(status: ApplyJobProgressStep["status"]): string {
   return "Waiting";
 }
 
-function progressTagType(
-  status: ApplyJobProgressStep["status"],
-): "default" | "success" | "warning" | "error" {
-  if (status === "success") {
-    return "success";
-  }
-  if (status === "running") {
-    return "warning";
-  }
-  if (status === "failure") {
-    return "error";
-  }
-  return "default";
-}
-
 function displayProgressEvent(
   current: ApplyJobProgressEvent | null,
   next: ApplyJobProgressEvent,
@@ -937,161 +866,15 @@ function releaseNoteReason(note: ReleaseNoteInfo | null): string {
   return error;
 }
 
-function renderReleaseNotes(row: PendingItem) {
-  const note = releaseNoteFor(row);
-  const reason = releaseNoteReason(note);
-  if (!note?.links.length) {
-    return h(
-      "span",
-      {
-        class: "release-notes-muted",
-        title: reason || undefined,
-      },
-      [
-        h("span", { class: "release-notes-status" }, releaseNoteStatus(note)),
-        reason ? h("span", { class: "release-notes-reason" }, reason) : null,
-      ],
-    );
-  }
-  return h("div", { class: "release-notes-cell" }, [
-    ...note.links.map((link) =>
-      h(
-        "a",
-        {
-          key: `${row.line_no}-${link.kind}-${link.url}`,
-          class: "release-note-link",
-          href: link.url,
-          target: "_blank",
-          rel: "noreferrer",
-        },
-        [
-          link.label,
-          h(ExternalLink, {
-            size: 14,
-            "aria-hidden": "true",
-          }),
-        ],
-      ),
-    ),
-    note.breaking ? breakingCue(note) : null,
-  ]);
-}
-
-function getPendingGroupedItem(lineNo: number): PendingGroupedItem | undefined {
-  if (!updates.pending?.grouping) return undefined;
-  for (const group of updates.pending.grouping.groups) {
-    const found = group.items.find((i) => i.line_no === lineNo);
-    if (found) return found;
-  }
-  return updates.pending.grouping.unmatched.find((i) => i.line_no === lineNo);
-}
-
-function pendingServiceKeys(row: PendingItem): string[] {
-  if (!updates.pending?.grouping) return [];
-  const keys: string[] = [];
-  for (const group of updates.pending.grouping.groups) {
-    const item = group.items.find((i) => i.line_no === row.line_no);
-    if (!item) continue;
-    for (const service of item.services) {
-      keys.push(`${group.name}/${service}`);
-    }
-  }
-  const unmatched = updates.pending.grouping.unmatched.find(
-    (item) => item.line_no === row.line_no,
-  );
-  if (unmatched?.diagnostic?.stack && unmatched.diagnostic.service) {
-    keys.push(`${unmatched.diagnostic.stack}/${unmatched.diagnostic.service}`);
-  }
-  return [...new Set(keys)];
-}
-
 function riskCues(row: PendingItem): SafetyCue[] {
-  const groupedItem = getPendingGroupedItem(row.line_no);
-  const serviceKeys = pendingServiceKeys(row);
-  const cues: SafetyCue[] = [];
-  const addCue = (key: string, label: string, type: SafetyCue["type"]) => {
-    cues.push({ key, label, type });
-  };
-
-  const parseVersion = (tag: string) => {
-    const m = tag.match(/^v?(\d+)\.(\d+)(?:\.(\d+))?/);
-    if (!m) return null;
-    return {
-      major: parseInt(m[1]!, 10),
-      minor: parseInt(m[2]!, 10),
-      patch: m[3] ? parseInt(m[3]!, 10) : 0,
-    };
-  };
-
-  if (row.current_tag && row.desired_tag && row.current_tag !== row.desired_tag) {
-    const c = parseVersion(row.current_tag);
-    const d = parseVersion(row.desired_tag);
-    if (c && d) {
-      if (c.major !== d.major) addCue("major-bump", "Major bump", "error");
-      else if (c.minor !== d.minor) addCue("minor-bump", "Minor bump", "warning");
-      else if (c.patch !== d.patch) addCue("patch-bump", "Patch bump", "info");
-    }
-  }
-
-  if (!row.desired_tag && row.digest) {
-    addCue("digest-only", "Digest-only", "info");
-  }
-
-  if (row.desired_tag === "latest" || (!row.desired_tag && row.current_tag === "latest")) {
-    addCue("mutable-latest", "Mutable latest", "warning");
-  }
-
-  if (groupedItem?.action === "recreate_stack") {
-    addCue("stack-restart", "Stack restart", "warning");
-  }
-
-  const note = releaseNoteFor(row);
-  if (note?.breaking) {
-    addCue("possible-breaking", "Possible breaking", "warning");
-  }
-  if (
-    updates.releaseNotes &&
-    !updates.releaseNotesLoading &&
-    (!note?.links.length || note.status === "error" || note.status === "unsupported")
-  ) {
-    addCue("no-release-notes", "No release notes", "warning");
-  }
-
-  if (settings.snoozes.some((s) => serviceKeys.includes(s.service_key))) {
-    addCue("snoozed", "Snoozed", "default");
-  }
-  const policy = settings.servicePolicies.find((p) => serviceKeys.includes(p.service_key));
-  if (policy?.auto_update) {
-    addCue("auto-update", "Auto-update", "success");
-  }
-
-  return cues;
-}
-
-function renderRiskBadges(row: PendingItem) {
-  const badges = riskCues(row).map((cue) =>
-    h(NTag, { key: cue.key, size: "small", type: cue.type, class: "safety-badge" }, () => cue.label),
-  );
-  if (badges.length === 0) return h("span", { class: "risk-badges-muted" }, "None");
-  return h("div", { class: "risk-badges-container" }, badges);
-}
-
-function breakingCue(note: ReleaseNoteInfo) {
-  return h(
-    "span",
-    {
-      class: "release-breaking-cue",
-      title: note.breaking_reasons.join(" "),
-      "aria-label": "Possible breaking change",
-    },
-    [
-      h(AlertTriangle, {
-        size: 14,
-        "aria-hidden": "true",
-      }),
-      "Possible breaking change",
-    ],
-  );
+  return safetyCues(row, {
+    pending: updates.pending,
+    releaseNote: releaseNoteFor(row),
+    releaseNotesLoaded: Boolean(updates.releaseNotes),
+    releaseNotesLoading: updates.releaseNotesLoading,
+    servicePolicies: settings.servicePolicies,
+    snoozes: settings.snoozes,
+  });
 }
 
 function tagOverrideValue(item: PendingItem): string {
@@ -1467,11 +1250,12 @@ async function handleJobLogEvent(event: MessageEvent<string>): Promise<void> {
     updates.setError("Job log stream returned invalid data.");
     return;
   }
-  const panelShouldScroll = shouldAutoScrollLog(applyJobPanelLogRef.value);
+  const logElement = applyJobPanelRef.value?.logElement() ?? null;
+  const panelShouldScroll = shouldAutoScrollLog(logElement);
   updates.setApplyJobLog(log);
   await nextTick();
   if (panelShouldScroll) {
-    scrollLogToBottom(applyJobPanelLogRef.value);
+    scrollLogToBottom(applyJobPanelRef.value?.logElement() ?? null);
   }
 }
 
@@ -1559,15 +1343,7 @@ function createApplyJobSnapshot(): ApplyJobPlanSnapshot | null {
 
 async function focusApplyJobPanel(): Promise<void> {
   await nextTick();
-  const panel = applyJobPanelRef.value;
-  if (!panel) {
-    return;
-  }
-  panel.scrollIntoView?.({
-    block: "start",
-    behavior: prefersReducedMotion() ? "auto" : "smooth",
-  });
-  panel.focus({ preventScroll: true });
+  applyJobPanelRef.value?.focusPanel(prefersReducedMotion() ? "auto" : "smooth");
 }
 
 function shouldAutoScrollLog(element: HTMLElement | null): boolean {
@@ -2048,232 +1824,37 @@ watch(
       </span>
     </n-alert>
 
-    <section
+    <PendingApplyJobPanel
       v-if="updates.applyJob"
       ref="applyJobPanelRef"
-      class="section-panel apply-job-panel"
-      :class="{
-        'apply-job-panel-active': applyJobActive,
-        'apply-job-panel-success': applyJobSucceeded,
-      }"
-      tabindex="-1"
-      aria-labelledby="apply-job-panel-title"
-    >
-      <div class="section-heading apply-job-heading">
-        <div>
-          <p class="eyebrow">Apply job</p>
-          <div class="apply-job-heading-title">
-            <span v-if="applyJobSucceeded" class="apply-job-complete-mark" aria-hidden="true">
-              <CheckCircle2 :size="18" />
-            </span>
-            <h2 id="apply-job-panel-title">{{ applyJobTitle }}</h2>
-          </div>
-          <p class="apply-job-summary" role="status" aria-live="polite">
-            {{ applyJobStatusMessage }}
-          </p>
-        </div>
-        <n-tag :type="applyJobAlertType">{{ applyJobPanelStatusLabel }}</n-tag>
-      </div>
-
-      <div v-if="applyJobActive" class="apply-job-progress" aria-hidden="true">
-        <span />
-      </div>
-
-      <section
-        id="apply-job-panel-status"
-        class="apply-job-now"
-        :class="{
-          'apply-job-now-success': updates.applyJob.status === 'success',
-          'apply-job-now-failure': updates.applyJob.status === 'failure',
-        }"
-        role="status"
-        aria-live="polite"
-        aria-atomic="true"
-        tabindex="-1"
-        aria-labelledby="apply-job-now-title"
-        :aria-describedby="applyJobNowDescriptionIds"
-      >
-        <div class="apply-job-now-copy">
-          <span>Current status</span>
-          <strong id="apply-job-now-title">{{ applyJobNowTitle }}</strong>
-          <em id="apply-job-now-message">{{ applyJobNowMessage }}</em>
-          <small v-if="applyJobNowDetail" id="apply-job-now-detail">
-            {{ applyJobNowDetail }}
-          </small>
-        </div>
-        <n-tag size="small" :type="applyJobAlertType">{{ applyJobNowStatusLabel }}</n-tag>
-      </section>
-
-      <section class="apply-job-latest-log" aria-labelledby="apply-job-latest-log-title">
-        <span id="apply-job-latest-log-title">Latest log line</span>
-        <code>{{ applyJobLatestLogMessage }}</code>
-      </section>
-
-      <section class="apply-job-progress-steps" aria-labelledby="apply-job-progress-title">
-        <div class="apply-job-impact-heading">
-          <strong id="apply-job-progress-title">Update progress</strong>
-          <n-tag size="small">{{ applyJobProgressSummary }}</n-tag>
-        </div>
-        <ol class="apply-progress-list">
-          <li
-            v-for="step in applyJobProgressSteps"
-            :key="step.key"
-            class="apply-progress-step"
-            :class="`apply-progress-step-${step.status}`"
-          >
-            <span class="apply-progress-icon" aria-hidden="true">
-              <Check v-if="step.status === 'success'" :size="14" />
-              <X v-else-if="step.status === 'failure'" :size="14" />
-              <Play v-else-if="step.status === 'running'" :size="14" />
-            </span>
-            <span class="apply-progress-copy">
-              <strong>{{ step.label }}</strong>
-              <span>{{ step.message }}</span>
-              <em v-if="step.detail">{{ step.detail }}</em>
-            </span>
-            <n-tag size="small" :type="progressTagType(step.status)">
-              {{ step.statusLabel }}
-            </n-tag>
-          </li>
-        </ol>
-      </section>
-
-      <details class="apply-job-details" :open="!applyJobActive">
-        <summary>
-          <span>Applied scope</span>
-          <n-tag size="small">{{ applyJobImpactLabel || applyJobUpdateLabel }}</n-tag>
-        </summary>
-        <div class="apply-job-grid">
-          <div class="compact-list">
-            <div class="list-row">
-              <span>Updates</span>
-              <strong>{{ applyJobUpdateLabel }}</strong>
-              <em>{{ applyJobStartedLabel }}</em>
-            </div>
-            <div v-if="applyJobImpactLabel" class="list-row">
-              <span>Impact</span>
-              <strong>{{ applyJobImpactLabel }}</strong>
-              <em>{{ applyJobSnapshot?.sourceFile }}</em>
-            </div>
-            <div v-if="updates.applyJob.run_id" class="list-row">
-              <span>Run</span>
-              <strong>#{{ updates.applyJob.run_id }}</strong>
-              <em class="inline-actions">
-                <RouterLink
-                  class="text-link"
-                  :to="{ name: 'run-detail', params: { id: updates.applyJob.run_id } }"
-                >
-                  Details
-                </RouterLink>
-                <RouterLink
-                  class="text-link"
-                  :to="{ name: 'run-log', params: { id: updates.applyJob.run_id } }"
-                >
-                  Log
-                </RouterLink>
-              </em>
-            </div>
-          </div>
-
-          <section
-            class="apply-job-impact"
-            aria-labelledby="apply-job-impact-title"
-          >
-            <div class="apply-job-impact-heading">
-              <strong id="apply-job-impact-title">Services and images</strong>
-              <n-tag size="small">{{ pluralize(applyJobSnapshotLines.length, "service") }}</n-tag>
-            </div>
-            <div v-if="applyJobSnapshotLines.length" class="compact-list">
-              <div
-                v-for="line in applyJobSnapshotLines"
-                :key="line.key"
-                class="list-row plan-line-row"
-              >
-                <span>#{{ line.lineNo }}</span>
-                <strong>{{ line.serviceLabel }}</strong>
-                <em>
-                  <span v-if="line.tagRewriteLabel" class="tag-rewrite-detail">
-                    <n-tag size="small" type="warning">Tag rewrite</n-tag>
-                    {{ line.tagRewriteLabel }}
-                  </span>
-                  <span v-else-if="line.digestPinLabel" class="tag-rewrite-detail">
-                    <n-tag size="small" type="info">Digest pin</n-tag>
-                    {{ line.digestPinLabel }}
-                  </span>
-                  <template v-else>
-                    <code>{{ line.composeImage }}</code>
-                    <span aria-hidden="true"> -> </span>
-                    <code>{{ line.targetImage }}</code>
-                  </template>
-                </em>
-              </div>
-            </div>
-            <div v-else class="empty-state">
-              Plan details are unavailable after page reload.
-            </div>
-          </section>
-        </div>
-      </details>
-
-      <section class="apply-job-live-log" aria-labelledby="apply-job-log-title">
-        <div class="apply-job-impact-heading apply-job-live-log-heading">
-          <div class="apply-job-log-heading-copy">
-            <strong id="apply-job-log-title">Live log</strong>
-            <span class="apply-job-log-note">Raw command output</span>
-            <span class="apply-job-log-path">{{ applyJobLogTitle }}</span>
-          </div>
-          <n-button
-            v-show="!applyJobActive"
-            class="apply-job-log-toggle"
-            size="small"
-            secondary
-            :aria-expanded="applyJobLiveLogExpanded"
-            :title="applyJobLiveLogToggleLabel"
-            @click="applyJobLiveLogExpanded = !applyJobLiveLogExpanded"
-          >
-            <template #icon>
-              <ChevronUp v-if="applyJobLiveLogExpanded" :size="16" />
-              <ChevronDown v-else :size="16" />
-            </template>
-            {{ applyJobLiveLogExpanded ? "Hide output" : "Show output" }}
-          </n-button>
-        </div>
-        <div v-show="applyJobLiveLogVisible" class="apply-job-live-log-body">
-          <n-alert
-            v-if="updates.applyJobLog?.truncated"
-            class="preflight-block"
-            type="warning"
-            :show-icon="false"
-          >
-            Showing the last {{ updates.applyJobLog.max_bytes }} bytes.
-          </n-alert>
-          <n-alert
-            v-if="updates.applyJobLog?.error"
-            class="preflight-block"
-            type="warning"
-            :show-icon="false"
-          >
-            Live log unavailable: {{ updates.applyJobLog.error }}
-          </n-alert>
-          <div v-if="applyJobLogWaiting" class="empty-state">
-            {{ applyJobLogEmptyMessage }}
-          </div>
-          <pre
-            v-else-if="!updates.applyJobLog?.error"
-            ref="applyJobPanelLogRef"
-            class="log-viewer apply-job-log-viewer"
-          >{{ applyJobLogText }}</pre>
-        </div>
-      </section>
-
-      <n-alert
-        v-if="updates.applyJob.error"
-        class="plan-section"
-        type="error"
-      >
-        {{ updates.applyJob.error }}
-      </n-alert>
-    </section>
+      v-model:live-log-expanded="applyJobLiveLogExpanded"
+      :active="applyJobActive"
+      :alert-type="applyJobAlertType"
+      :impact-label="applyJobImpactLabel"
+      :job="updates.applyJob"
+      :latest-log-message="applyJobLatestLogMessage"
+      :live-log-toggle-label="applyJobLiveLogToggleLabel"
+      :live-log-visible="applyJobLiveLogVisible"
+      :log="updates.applyJobLog"
+      :log-empty-message="applyJobLogEmptyMessage"
+      :log-text="applyJobLogText"
+      :log-title="applyJobLogTitle"
+      :log-waiting="applyJobLogWaiting"
+      :now-description-ids="applyJobNowDescriptionIds"
+      :now-detail="applyJobNowDetail"
+      :now-message="applyJobNowMessage"
+      :now-status-label="applyJobNowStatusLabel"
+      :now-title="applyJobNowTitle"
+      :panel-status-label="applyJobPanelStatusLabel"
+      :progress-steps="applyJobProgressSteps"
+      :progress-summary="applyJobProgressSummary"
+      :snapshot="applyJobSnapshot"
+      :started-label="applyJobStartedLabel"
+      :status-message="applyJobStatusMessage"
+      :succeeded="applyJobSucceeded"
+      :title="applyJobTitle"
+      :update-label="applyJobUpdateLabel"
+    />
 
     <div class="section-heading pending-heading">
       <div>
@@ -2891,588 +2472,90 @@ watch(
       </n-button>
     </div>
 
-    <n-modal
+    <PendingPlanReviewModal
       v-if="updates.plan"
-      v-model:show="showPreflightModal"
-      :mask-closable="false"
-    >
-      <section
-        class="preflight-modal"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="preflight-modal-title"
-      >
-        <div class="section-heading">
-          <div>
-            <p class="eyebrow">Preflight</p>
-            <h2 id="preflight-modal-title">{{ preflightTitle }}</h2>
-            <p class="preflight-summary-text">{{ preflightSummary }}</p>
-            <p v-if="preflightServiceImpactLabel" class="preflight-impact-text">
-              {{ preflightServiceImpactLabel }}
-            </p>
-          </div>
-          <n-tag :type="planAlertType">{{ updates.plan.status }}</n-tag>
-        </div>
+      :show="showPreflightModal"
+      :plan="updates.plan"
+      :action-command="actionCommand"
+      :apply-button-label="applyButtonLabel"
+      :apply-disabled="applyDisabled"
+      :apply-preflight="applyPreflight"
+      :apply-preflight-attention-checks="applyPreflightAttentionChecks"
+      :apply-preflight-check-detail="applyPreflightCheckDetail"
+      :apply-preflight-check-label="applyPreflightCheckLabel"
+      :apply-preflight-check-type="applyPreflightCheckType"
+      :apply-preflight-passed-checks="applyPreflightPassedChecks"
+      :apply-preflight-passed-text="applyPreflightPassedText"
+      :apply-readiness-status-label="applyReadinessStatusLabel"
+      :apply-readiness-status-type="applyReadinessStatusType"
+      :apply-readiness-summary="applyReadinessSummary"
+      :apply-visible="applyVisible"
+      :cleanup-available="cleanupAvailable"
+      :cleanup-button-label="cleanupButtonLabel"
+      :cleanup-disabled="cleanupDisabled"
+      :cleanup-disabled-message="cleanupDisabledMessage"
+      :cleanup-items="cleanupItems"
+      :cleanup-review-summary="cleanupReviewSummary"
+      :digest-pin-label-approval-approved="digestPinLabelApprovalApproved"
+      :digest-pin-label-approval-issues="digestPinLabelApprovalIssues"
+      :digest-pin-label-issue-proposed-regex="digestPinLabelIssueProposedRegex"
+      :issue-detail-string="issueDetailString"
+      :issue-hint="issueHint"
+      :issue-label="issueLabel"
+      :issue-type="issueType"
+      :loading="updates.loading"
+      :mutation-disabled-message="mutationDisabledMessage"
+      :plan-actions="planActions"
+      :plan-alert-type="planAlertType"
+      :plan-digest-pin-label-rewrites="planDigestPinLabelRewrites"
+      :plan-line-digest-pin-label="planLineDigestPinLabel"
+      :plan-line-service-label="planLineServiceLabel"
+      :plan-line-tag-rewrite-label="planLineTagRewriteLabel"
+      :plan-lines="planLines"
+      :preflight-digest-pin-notice="preflightDigestPinNotice"
+      :preflight-service-impact-label="preflightServiceImpactLabel"
+      :preflight-summary="preflightSummary"
+      :preflight-tag-rewrite-notice="preflightTagRewriteNotice"
+      :preflight-title="preflightTitle"
+      :pluralize="pluralize"
+      :stale-diagnostic-detail="staleDiagnosticDetail"
+      :stale-diagnostic-label="staleDiagnosticLabel"
+      :visible-plan-issues="visiblePlanIssues"
+      @apply="confirmApply"
+      @approve-digest-pin-label-rewrite="approveDigestPinLabelRewrite"
+      @close="closePreflightModal"
+      @open-cleanup="openCleanupModal"
+    />
 
-        <div class="preflight-metrics">
-          <div>
-            <span>Targets</span>
-            <strong>{{ updates.plan.summary.target_count }}</strong>
-          </div>
-          <div>
-            <span>Matched</span>
-            <strong>{{ updates.plan.summary.matched_target_count }}</strong>
-          </div>
-          <div>
-            <span>Stacks</span>
-            <strong>{{ updates.plan.summary.stack_count }}</strong>
-          </div>
-          <div>
-            <span>Issues</span>
-            <strong>{{ updates.plan.summary.issue_count }}</strong>
-          </div>
-        </div>
-
-        <section
-          v-if="applyPreflight"
-          class="apply-readiness preflight-block"
-          aria-labelledby="apply-readiness-title"
-        >
-          <div class="apply-readiness-heading">
-            <div>
-              <strong id="apply-readiness-title">Apply readiness</strong>
-              <span>{{ applyReadinessSummary }}</span>
-            </div>
-            <n-tag size="small" :type="applyReadinessStatusType">
-              {{ applyReadinessStatusLabel }}
-            </n-tag>
-          </div>
-          <div
-            v-if="applyPreflightPassedChecks.length"
-            class="apply-readiness-passed"
-          >
-            <CheckCircle2 :size="16" aria-hidden="true" />
-            <p>
-              <strong>
-                {{ pluralize(applyPreflightPassedChecks.length, "check") }} passed:
-              </strong>
-              <span class="apply-readiness-pass-list">
-                {{ applyPreflightPassedText }}
-              </span>
-            </p>
-          </div>
-          <div
-            v-if="applyPreflightAttentionChecks.length"
-            class="apply-readiness-list"
-          >
-            <div
-              v-for="check in applyPreflightAttentionChecks"
-              :key="check.code"
-              class="apply-readiness-row"
-              :class="`status-${check.status.toLowerCase()}`"
-            >
-              <CheckCircle2
-                v-if="check.status === 'PASS'"
-                :size="16"
-                aria-hidden="true"
-              />
-              <AlertTriangle
-                v-else-if="check.status === 'WARN'"
-                :size="16"
-                aria-hidden="true"
-              />
-              <XCircle v-else :size="16" aria-hidden="true" />
-              <strong>{{ check.label }}</strong>
-              <n-tag size="small" :type="applyPreflightCheckType(check.status)">
-                {{ applyPreflightCheckLabel(check.status) }}
-              </n-tag>
-              <span
-                v-if="applyPreflightCheckDetail(check)"
-                class="apply-readiness-detail"
-              >
-                {{ applyPreflightCheckDetail(check) }}
-              </span>
-            </div>
-          </div>
-        </section>
-
-        <CoreUpdateTourPanel
-          step="pending_preflight"
-          title="Read the plan like a checklist"
-          detail="Matched services and images show what will change. Issues block apply, tag rewrites are called out, and cleanup actions only edit the pending file after confirmation."
-          next-label="Continue to apply guidance"
-          next-step="pending_apply"
-          @advanced="closePreflightModal"
-        />
-
-        <n-alert
-          v-if="mutationDisabledMessage"
-          class="preflight-block"
-          type="warning"
-        >
-          {{ mutationDisabledMessage }}
-        </n-alert>
-        <n-alert
-          v-if="preflightTagRewriteNotice"
-          class="preflight-block"
-          type="warning"
-        >
-          {{ preflightTagRewriteNotice }}
-        </n-alert>
-        <n-alert
-          v-if="preflightDigestPinNotice"
-          class="preflight-block"
-          type="info"
-        >
-          {{ preflightDigestPinNotice }}
-        </n-alert>
-
-        <section
-          v-if="planDigestPinLabelRewrites.length"
-          class="preflight-impact preflight-block"
-          aria-labelledby="digest-pin-label-rewrites-title"
-        >
-          <div class="preflight-impact-heading">
-            <strong id="digest-pin-label-rewrites-title">Digest-pin label updates</strong>
-            <n-tag size="small">{{ pluralize(planDigestPinLabelRewrites.length, "label") }}</n-tag>
-          </div>
-          <div class="compact-list">
-            <div
-              v-for="item in planDigestPinLabelRewrites"
-              :key="`${item.stack}-${item.rewrite.service}-${item.rewrite.label_key}-${item.rewrite.current_label_value}`"
-              class="list-row plan-line-row"
-            >
-              <span>Label</span>
-              <strong>{{ item.stack }} / {{ item.rewrite.service }}</strong>
-              <em>
-                <code>{{ item.rewrite.label_key }}={{ item.rewrite.current_label_value }}</code>
-                <span aria-hidden="true"> -> </span>
-                <code>{{ item.rewrite.proposed_label_regex }}</code>
-              </em>
-            </div>
-          </div>
-        </section>
-
-        <section
-          v-if="digestPinLabelApprovalIssues.length"
-          class="preflight-impact preflight-block"
-          aria-labelledby="digest-pin-label-approvals-title"
-        >
-          <div class="preflight-impact-heading">
-            <strong id="digest-pin-label-approvals-title">Digest-pin label approvals</strong>
-            <n-tag size="small" type="warning">
-              {{ pluralize(digestPinLabelApprovalIssues.length, "approval") }}
-            </n-tag>
-          </div>
-          <p class="preflight-summary-text">
-            Approve replacing each current include rule with the exact planned tag before applying.
-          </p>
-          <div class="compact-list">
-            <div
-              v-for="issue in digestPinLabelApprovalIssues"
-              :key="`${issue.stack}-${issue.service}-${issueDetailString(issue, 'current_label_value')}`"
-              class="list-row plan-line-row digest-pin-approval-row"
-            >
-              <span>Review</span>
-              <strong>{{ issue.stack }} / {{ issue.service }}</strong>
-              <em>
-                <code>{{ issueDetailString(issue, "label_key") }}={{ issueDetailString(issue, "current_label_value") }}</code>
-                <span aria-hidden="true"> -> </span>
-                <code>{{ digestPinLabelIssueProposedRegex(issue) }}</code>
-                <n-button
-                  size="small"
-                  secondary
-                  type="primary"
-                  :disabled="digestPinLabelApprovalApproved(issue)"
-                  :loading="updates.loading"
-                  @click="approveDigestPinLabelRewrite(issue)"
-                >
-                  <template #icon>
-                    <Check :size="16" />
-                  </template>
-                  {{ digestPinLabelApprovalApproved(issue) ? "Approved" : "Approve label rewrite" }}
-                </n-button>
-              </em>
-            </div>
-          </div>
-        </section>
-
-        <n-alert
-          v-if="cleanupDisabledMessage"
-          class="preflight-block"
-          type="warning"
-        >
-          {{ cleanupDisabledMessage }}
-        </n-alert>
-
-        <section
-          v-if="cleanupAvailable"
-          class="preflight-impact preflight-block"
-          aria-labelledby="cleanup-preview-title"
-        >
-          <div class="preflight-impact-heading">
-            <strong id="cleanup-preview-title">Unmatched pending entries</strong>
-            <n-tag size="small" type="warning">
-              {{ pluralize(cleanupItems.length, "entry", "entries") }}
-            </n-tag>
-          </div>
-          <p class="preflight-summary-text">{{ cleanupReviewSummary }}</p>
-          <div class="compact-list">
-            <div
-              v-for="item in cleanupItems"
-              :key="`cleanup-${item.line_no}`"
-              class="list-row plan-line-row"
-            >
-              <span>#{{ item.line_no }}</span>
-              <strong class="plan-line-heading">
-                <span>{{ item.image }}</span>
-                <n-tag size="small" type="warning">
-                  {{ staleDiagnosticLabel(item) }}
-                </n-tag>
-              </strong>
-              <em>
-                <span>{{ staleDiagnosticDetail(item) }}</span>
-              </em>
-            </div>
-          </div>
-        </section>
-
-        <section
-          v-if="updates.plan.status === 'ready'"
-          class="preflight-impact preflight-block"
-          aria-labelledby="preflight-impact-title"
-        >
-          <div class="preflight-impact-heading">
-            <strong id="preflight-impact-title">Services and images</strong>
-            <n-tag size="small">{{ pluralize(planLines.length, "service") }}</n-tag>
-          </div>
-          <div v-if="planLines.length" class="compact-list">
-            <div
-              v-for="{ stack, line } in planLines"
-              :key="`${stack}-${line.line_no}-${line.service}`"
-              class="list-row plan-line-row"
-            >
-              <span>#{{ line.line_no }}</span>
-              <strong>{{ planLineServiceLabel(stack, line) }}</strong>
-              <em>
-                <span v-if="planLineTagRewriteLabel(line)" class="tag-rewrite-detail">
-                  <n-tag size="small" type="warning">Tag rewrite</n-tag>
-                  {{ planLineTagRewriteLabel(line) }}
-                </span>
-                <span
-                  v-else-if="planLineDigestPinLabel(line)"
-                  class="tag-rewrite-detail"
-                >
-                  <n-tag size="small" type="info">Digest pin</n-tag>
-                  {{ planLineDigestPinLabel(line) }}
-                </span>
-                <template v-else>
-                  <code>{{ line.compose_image }}</code>
-                  <span aria-hidden="true"> -> </span>
-                  <code>{{ line.target_image }}</code>
-                </template>
-              </em>
-            </div>
-          </div>
-          <div v-else class="empty-state">No matched services.</div>
-        </section>
-
-        <div v-if="visiblePlanIssues.length" class="warning-list preflight-block">
-          <n-alert
-            v-for="issue in visiblePlanIssues"
-            :key="`${issue.code}-${issue.line_no ?? ''}-${issue.stack}-${issue.service}`"
-            :type="issueType(issue)"
-          >
-            <span>{{ issueLabel(issue) }}</span>
-            <span v-if="issueHint(issue)" class="issue-hint">
-              {{ issueHint(issue) }}
-            </span>
-          </n-alert>
-        </div>
-
-        <div class="preflight-details-list">
-          <details
-            v-if="updates.plan.status !== 'ready'"
-            class="preflight-details"
-            :open="updates.plan.status === 'blocked'"
-          >
-            <summary>Services and images</summary>
-            <div v-if="planLines.length" class="compact-list">
-              <div
-                v-for="{ stack, line } in planLines"
-                :key="`${stack}-${line.line_no}-${line.service}`"
-                class="list-row plan-line-row"
-              >
-                <span>#{{ line.line_no }}</span>
-                <strong>{{ planLineServiceLabel(stack, line) }}</strong>
-                <em>
-                  <span v-if="planLineTagRewriteLabel(line)" class="tag-rewrite-detail">
-                    <n-tag size="small" type="warning">Tag rewrite</n-tag>
-                    {{ planLineTagRewriteLabel(line) }}
-                  </span>
-                  <span
-                    v-else-if="planLineDigestPinLabel(line)"
-                    class="tag-rewrite-detail"
-                  >
-                    <n-tag size="small" type="info">Digest pin</n-tag>
-                    {{ planLineDigestPinLabel(line) }}
-                  </span>
-                  <template v-else>
-                    <code>{{ line.compose_image }}</code>
-                    <span aria-hidden="true"> -> </span>
-                    <code>{{ line.target_image }}</code>
-                  </template>
-                </em>
-              </div>
-            </div>
-            <div v-else class="empty-state">No matched services.</div>
-          </details>
-
-          <details v-if="planActions.length" class="preflight-details">
-            <summary>Commands</summary>
-            <div class="plan-actions">
-              <div
-                v-for="{ stack, action } in planActions"
-                :key="`${stack}-${action.kind}-${actionCommand(action)}`"
-                class="plan-action"
-              >
-                <n-tag size="small">{{ action.kind }}</n-tag>
-                <code>{{ actionCommand(action) }}</code>
-              </div>
-            </div>
-          </details>
-
-          <details v-if="updates.plan.skipped.length" class="preflight-details" open>
-            <summary>Skipped</summary>
-            <div class="compact-list">
-              <div v-for="item in updates.plan.skipped" :key="item.line_no" class="list-row">
-                <span>#{{ item.line_no }}</span>
-                <strong>{{ item.image }}</strong>
-                <em>{{ item.reason }}</em>
-              </div>
-            </div>
-          </details>
-
-          <details class="preflight-details">
-            <summary>Source lines</summary>
-            <div class="compact-list">
-              <div
-                v-for="lineNo in updates.plan.selected_line_numbers"
-                :key="lineNo"
-                class="list-row"
-              >
-                <span>Line</span>
-                <strong>#{{ lineNo }}</strong>
-                <em>{{ updates.plan.source_file }}</em>
-              </div>
-            </div>
-          </details>
-        </div>
-
-        <div class="preflight-footer">
-          <n-button size="small" quaternary @click="closePreflightModal">
-            Close
-          </n-button>
-          <n-button
-            v-if="cleanupAvailable"
-            type="warning"
-            size="small"
-            secondary
-            :disabled="cleanupDisabled"
-            :loading="updates.loading"
-            @click="openCleanupModal"
-          >
-            <template #icon>
-              <Trash2 :size="16" />
-            </template>
-            {{ cleanupButtonLabel }}
-          </n-button>
-          <n-button
-            v-if="applyVisible"
-            type="primary"
-            size="small"
-            :disabled="applyDisabled"
-            :loading="updates.loading"
-            @click="confirmApply"
-          >
-            <template #icon>
-              <Play :size="16" />
-            </template>
-            {{ applyButtonLabel }}
-          </n-button>
-        </div>
-      </section>
-    </n-modal>
-
-    <n-modal
+    <PendingCleanupModal
       v-if="updates.plan && cleanupAvailable"
-      v-model:show="showCleanupModal"
-      :mask-closable="false"
-    >
-      <section
-        class="preflight-modal"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="cleanup-modal-title"
-      >
-        <div class="section-heading">
-          <div>
-            <p class="eyebrow">Pending cleanup</p>
-            <h2 id="cleanup-modal-title">Remove unmatched entries</h2>
-            <p class="preflight-summary-text">
-              These lines will be removed from {{ pendingSourceLabel }} without running Docker updates.
-            </p>
-          </div>
-          <n-tag type="warning">{{ pluralize(cleanupItems.length, "entry", "entries") }}</n-tag>
-        </div>
+      :show="showCleanupModal"
+      :assistant-actions="cleanupAssistantActions"
+      :assistant-findings="cleanupAssistantFindings"
+      :assistant-reasons="cleanupAssistantReasons"
+      :cleanup-button-label="cleanupButtonLabel"
+      :cleanup-disabled="cleanupDisabled"
+      :cleanup-items="cleanupItems"
+      :cleanup-line-label="cleanupLineLabel"
+      :loading="updates.loading"
+      :pending-source-label="pendingSourceLabel"
+      :pluralize="pluralize"
+      @close="closeCleanupModal"
+      @confirm="confirmCleanup"
+    />
 
-        <n-alert class="preflight-block" type="warning">
-          The server will re-read {{ pendingSourceLabel }} and reject the cleanup if any selected line changed or now matches an active Compose stack.
-        </n-alert>
-        <n-alert class="preflight-block" type="warning">
-          This only edits {{ pendingSourceLabel }}. Containers, images, Compose services, and Compose files are not deleted or updated.
-        </n-alert>
-
-        <section
-          v-if="
-            cleanupAssistantFindings.length ||
-            cleanupAssistantReasons.length ||
-            cleanupAssistantActions.length
-          "
-          class="preflight-impact preflight-block"
-          aria-labelledby="cleanup-guidance-title"
-        >
-          <div class="preflight-impact-heading">
-            <strong id="cleanup-guidance-title">Stale entry guidance</strong>
-          </div>
-          <div class="pending-assistant">
-            <div v-if="cleanupAssistantFindings.length" class="pending-assistant-section">
-              <strong>Preflight found</strong>
-              <ul>
-                <li v-for="finding in cleanupAssistantFindings" :key="finding">
-                  {{ finding }}
-                </li>
-              </ul>
-            </div>
-            <div v-if="cleanupAssistantReasons.length" class="pending-assistant-section">
-              <strong>Likely causes</strong>
-              <ul>
-                <li v-for="reason in cleanupAssistantReasons" :key="reason">
-                  {{ reason }}
-                </li>
-              </ul>
-            </div>
-            <div v-if="cleanupAssistantActions.length" class="pending-assistant-section">
-              <strong>Recommended actions</strong>
-              <ul>
-                <li v-for="action in cleanupAssistantActions" :key="action">
-                  {{ action }}
-                </li>
-              </ul>
-            </div>
-          </div>
-        </section>
-
-        <section class="preflight-impact preflight-block" aria-labelledby="cleanup-lines-title">
-          <div class="preflight-impact-heading">
-            <strong id="cleanup-lines-title">Source lines</strong>
-            <n-tag size="small">{{ pluralize(cleanupItems.length, "line") }}</n-tag>
-          </div>
-          <div class="compact-list">
-            <div
-              v-for="item in cleanupItems"
-              :key="`cleanup-confirm-${item.line_no}`"
-              class="list-row plan-line-row"
-            >
-              <span>Line</span>
-              <strong>{{ cleanupLineLabel(item) }}</strong>
-              <em><code>{{ item.raw }}</code></em>
-            </div>
-          </div>
-        </section>
-
-        <div class="preflight-footer">
-          <n-button size="small" quaternary @click="closeCleanupModal">
-            Cancel
-          </n-button>
-          <n-button
-            type="warning"
-            size="small"
-            :disabled="cleanupDisabled"
-            :loading="updates.loading"
-            @click="confirmCleanup"
-          >
-            <template #icon>
-              <Trash2 :size="16" />
-            </template>
-            {{ cleanupButtonLabel }}
-          </n-button>
-        </div>
-      </section>
-    </n-modal>
-
-    <n-modal
+    <PendingRemovalModal
       v-if="updates.pendingRemovalPlan"
-      v-model:show="showRemovalModal"
-      :mask-closable="false"
-    >
-      <section
-        class="preflight-modal"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="removal-modal-title"
-      >
-        <div class="section-heading">
-          <div>
-            <p class="eyebrow">Pending removal</p>
-            <h2 id="removal-modal-title">Remove selected entries</h2>
-            <p class="preflight-summary-text">
-              These lines will be removed from {{ pendingSourceLabel }} without running Docker updates.
-            </p>
-          </div>
-          <n-tag type="warning">{{ pluralize(removalItems.length, "entry", "entries") }}</n-tag>
-        </div>
-
-        <n-alert class="preflight-block" type="warning">
-          This only edits {{ pendingSourceLabel }}. Containers, images, and Compose services are not deleted or updated, and WUD may add these entries again if the updates still exist.
-        </n-alert>
-
-        <section class="preflight-impact preflight-block" aria-labelledby="removal-lines-title">
-          <div class="preflight-impact-heading">
-            <strong id="removal-lines-title">Source lines</strong>
-            <n-tag size="small">{{ pluralize(removalItems.length, "line") }}</n-tag>
-          </div>
-          <div class="compact-list">
-            <div
-              v-for="item in removalItems"
-              :key="`removal-confirm-${item.line_no}`"
-              class="list-row plan-line-row"
-            >
-              <span>Line</span>
-              <strong>{{ removalLineLabel(item) }}</strong>
-              <em><code>{{ item.raw }}</code></em>
-            </div>
-          </div>
-        </section>
-
-        <div class="preflight-footer">
-          <n-button size="small" quaternary @click="closeRemovalModal">
-            Cancel
-          </n-button>
-          <n-button
-            type="warning"
-            size="small"
-            :disabled="removalDisabled"
-            :loading="updates.loading"
-            @click="confirmSelectedRemoval"
-          >
-            <template #icon>
-              <Trash2 :size="16" />
-            </template>
-            {{ removalConfirmButtonLabel }}
-          </n-button>
-        </div>
-      </section>
-    </n-modal>
+      :show="showRemovalModal"
+      :loading="updates.loading"
+      :pending-source-label="pendingSourceLabel"
+      :pluralize="pluralize"
+      :removal-confirm-button-label="removalConfirmButtonLabel"
+      :removal-disabled="removalDisabled"
+      :removal-items="removalItems"
+      :removal-line-label="removalLineLabel"
+      @close="closeRemovalModal"
+      @confirm="confirmSelectedRemoval"
+    />
   </section>
 </template>
