@@ -22,13 +22,19 @@ import {
 } from "@lucide/vue";
 
 import { useAuthStore } from "./stores/auth";
-import { useWebuiStore } from "./stores/webui";
+import { useConnectionStore } from "./stores/connection";
+import { useSettingsStore } from "./stores/settings";
+import { useUpdatesStore } from "./stores/updates";
+import { useRunsStore } from "./stores/runs";
 import { themePreferenceLabels, useWebuiTheme } from "./theme";
 
 const route = useRoute();
 const router = useRouter();
 const auth = useAuthStore();
-const webui = useWebuiStore();
+const connection = useConnectionStore();
+const settings = useSettingsStore();
+const updates = useUpdatesStore();
+const runs = useRunsStore();
 const {
   preference: themePreference,
   effectiveTheme,
@@ -45,7 +51,7 @@ const selfUpdateDialogVisible = ref(false);
 const showShell = computed(
   () => route.name !== "login" && route.name !== "setup" && auth.authenticated,
 );
-const appVersion = computed(() => webui.status?.version ?? "");
+const appVersion = computed(() => connection.status?.version ?? "");
 const appVersionIsRelease = computed(() =>
   VERSION_RELEASE_RE.test(appVersion.value),
 );
@@ -72,7 +78,7 @@ const appVersionTitle = computed(() =>
     : "Open WUD-Updater releases",
 );
 const managedThemePreference = computed(() =>
-  webui.settings?.managed.find((entry) => entry.key === "theme_preference"),
+  settings.settings?.managed.find((entry) => entry.key === "theme_preference"),
 );
 const themePreferenceIcon = computed(() => {
   if (themePreference.value === "dark") {
@@ -95,19 +101,19 @@ const themeButtonAriaLabel = computed(
     ].toLowerCase()}.`,
 );
 const selfUpdateVisible = computed(
-  () => showShell.value && webui.selfUpdate?.status === "available",
+  () => showShell.value && updates.selfUpdate?.status === "available",
 );
 const selfUpdateButtonDisabled = computed(
-  () => webui.loading || !(webui.selfUpdate?.can_update ?? false),
+  () => updates.loading || !(updates.selfUpdate?.can_update ?? false),
 );
 const selfUpdateStrategy = computed(
-  () => webui.selfUpdate?.strategy ?? "pull_image",
+  () => updates.selfUpdate?.strategy ?? "pull_image",
 );
 const selfUpdateConfirmDisabled = computed(
   () =>
     selfUpdateButtonDisabled.value ||
     (selfUpdateStrategy.value === "prepare_tag_update" &&
-      webui.selfUpdatePlan === null),
+      updates.selfUpdatePlan === null),
 );
 const selfUpdateActionLabel = computed(() =>
   selfUpdateStrategy.value === "prepare_tag_update"
@@ -123,10 +129,10 @@ const selfUpdateActionTitle = computed(() => {
     : "Review release notes and pull image";
 });
 const selfUpdateDisabledReason = computed(
-  () => webui.selfUpdate?.disabled_reason ?? "",
+  () => updates.selfUpdate?.disabled_reason ?? "",
 );
 const selfUpdateFacts = computed(() => {
-  const update = webui.selfUpdate;
+  const update = updates.selfUpdate;
   if (!update) {
     return "";
   }
@@ -135,16 +141,16 @@ const selfUpdateFacts = computed(() => {
   return `${image} -> ${container}`;
 });
 const selfUpdateReleaseCapTitle = computed(() => {
-  const cap = webui.selfUpdate?.release_notes_cap ?? 10;
+  const cap = updates.selfUpdate?.release_notes_cap ?? 10;
   return `Showing the newest ${cap} matching releases between the running version and latest version. Open GitHub releases for older notes.`;
 });
 const selfUpdateReleasesUrl = computed(() => {
-  const latest = webui.selfUpdate?.latest_tag;
+  const latest = updates.selfUpdate?.latest_tag;
   return latest
     ? `${RELEASES_URL}/tag/${latest}`
     : RELEASES_URL;
 });
-const selfUpdatePlanStack = computed(() => webui.selfUpdatePlan?.plan.stacks[0]);
+const selfUpdatePlanStack = computed(() => updates.selfUpdatePlan?.plan.stacks[0]);
 const selfUpdatePlanTagUpdates = computed(
   () => selfUpdatePlanStack.value?.tag_updates ?? [],
 );
@@ -217,17 +223,17 @@ function isNavItemActive(item: NavItem): boolean {
 watch(
   showShell,
   (visible) => {
-    if (visible && webui.status === null) {
-      void webui.loadStatus().catch(() => undefined);
+    if (visible && connection.status === null) {
+      void connection.loadStatus().catch(() => undefined);
     }
-    if (visible && webui.settings === null) {
-      void webui.loadSettings().catch(() => undefined);
+    if (visible && settings.settings === null) {
+      void settings.loadSettings().catch(() => undefined);
     }
-    if (visible && webui.coreUpdateTour === null) {
-      void webui.loadCoreUpdateTour().catch(() => undefined);
+    if (visible && settings.coreUpdateTour === null) {
+      void settings.loadCoreUpdateTour().catch(() => undefined);
     }
-    if (visible && webui.selfUpdate === null) {
-      void webui.loadSelfUpdate().catch(() => undefined);
+    if (visible && updates.selfUpdate === null) {
+      void updates.loadSelfUpdate().catch(() => undefined);
     }
   },
   { immediate: true },
@@ -250,29 +256,36 @@ watch(
 
 async function refreshCurrentView(): Promise<void> {
   if (route.name === "dashboard") {
-    await webui.loadDashboard();
+    await Promise.all([
+      connection.loadStatus(),
+      updates.loadPending(),
+      runs.loadRuns(),
+      settings.loadServicePolicies(),
+      settings.loadSnoozes("active"),
+      settings.loadTagExclusions("active"),
+    ]);
   } else if (route.name === "pending") {
-    await webui.loadPending();
+    await updates.loadPending();
   } else if (route.name === "runs" || route.name === "audit") {
-    await webui.loadRuns();
+    await runs.loadRuns();
   } else if (route.name === "policies") {
-    await webui.loadServicePolicies();
+    await settings.loadServicePolicies();
   } else if (route.name === "snoozes") {
-    await webui.loadSnoozes(webui.snoozeStateFilter);
+    await settings.loadSnoozes(settings.snoozeStateFilter);
   } else if (route.name === "tag-exclusions") {
-    await webui.loadTagExclusions(webui.tagExclusionStatusFilter);
+    await settings.loadTagExclusions(settings.tagExclusionStatusFilter);
   } else if (route.name === "settings") {
     await Promise.all([
-      webui.loadSettings(),
-      webui.loadOnboarding(),
-      webui.loadCoreUpdateTour(),
+      settings.loadSettings(),
+      settings.loadOnboarding(),
+      settings.loadCoreUpdateTour(),
     ]);
   } else if (route.name === "doctor") {
-    await webui.loadDoctor();
+    await connection.loadDoctor();
   } else if (route.name === "run-detail") {
-    await webui.loadRunDetail(Number(route.params.id));
+    await runs.loadRunDetail(Number(route.params.id));
   } else if (route.name === "run-log") {
-    await webui.loadRunLog(Number(route.params.id));
+    await runs.loadRunLog(Number(route.params.id));
   }
 }
 
@@ -284,15 +297,15 @@ async function handleLogout(): Promise<void> {
 async function openSelfUpdateDialog(): Promise<void> {
   selfUpdateDialogVisible.value = true;
   if (
-    webui.selfUpdate?.strategy === "prepare_tag_update" &&
-    webui.selfUpdatePlan === null
+    updates.selfUpdate?.strategy === "prepare_tag_update" &&
+    updates.selfUpdatePlan === null
   ) {
-    await webui.planSelfUpdate().catch(() => undefined);
+    await updates.planSelfUpdate().catch(() => undefined);
   }
 }
 
 async function confirmSelfUpdate(): Promise<void> {
-  await webui.applySelfUpdate();
+  await updates.applySelfUpdate();
   selfUpdateDialogVisible.value = false;
 }
 </script>
@@ -390,7 +403,7 @@ async function confirmSelfUpdate(): Promise<void> {
               <div>
                 <strong>
                   Update available:
-                  {{ webui.selfUpdate?.current_tag }} &rarr; {{ webui.selfUpdate?.latest_tag }}
+                  {{ updates.selfUpdate?.current_tag }} &rarr; {{ updates.selfUpdate?.latest_tag }}
                 </strong>
                 <span>{{ selfUpdateFacts }}</span>
               </div>
@@ -415,18 +428,18 @@ async function confirmSelfUpdate(): Promise<void> {
           </section>
 
           <n-alert
-            v-if="webui.selfUpdateMessage"
+            v-if="updates.selfUpdateMessage"
             class="self-update-message"
             type="success"
           >
-            {{ webui.selfUpdateMessage }}
+            {{ updates.selfUpdateMessage }}
           </n-alert>
           <n-alert
-            v-if="webui.selfUpdateError"
+            v-if="updates.selfUpdateError"
             class="self-update-message"
             type="error"
           >
-            {{ webui.selfUpdateError }}
+            {{ updates.selfUpdateError }}
           </n-alert>
 
           <RouterView v-slot="routeSlot">
@@ -448,7 +461,7 @@ async function confirmSelfUpdate(): Promise<void> {
           negative-text="Cancel"
           :positive-button-props="{
             type: 'warning',
-            loading: webui.loading,
+            loading: updates.loading,
             disabled: selfUpdateConfirmDisabled,
           }"
           @positive-click="confirmSelfUpdate"
@@ -472,11 +485,11 @@ async function confirmSelfUpdate(): Promise<void> {
                   <div class="self-update-facts">
                     <div>
                       <span>Image</span>
-                      <code>{{ webui.selfUpdate?.target_image || "unavailable" }}</code>
+                      <code>{{ updates.selfUpdate?.target_image || "unavailable" }}</code>
                     </div>
                     <div>
                       <span>Container</span>
-                      <code>{{ webui.selfUpdate?.restart_container || "unavailable" }}</code>
+                      <code>{{ updates.selfUpdate?.restart_container || "unavailable" }}</code>
                     </div>
                   </div>
 
@@ -487,7 +500,7 @@ async function confirmSelfUpdate(): Promise<void> {
                   >
                     <div class="self-update-notes-heading">
                       <strong>Compose tag update</strong>
-                      <span v-if="webui.loading" class="self-update-disabled">
+                      <span v-if="updates.loading" class="self-update-disabled">
                         Loading preview
                       </span>
                     </div>
@@ -531,7 +544,7 @@ async function confirmSelfUpdate(): Promise<void> {
                           :title="selfUpdateReleaseCapTitle"
                         >
                           <Info :size="14" aria-hidden="true" />
-                          Cap {{ webui.selfUpdate?.release_notes_cap ?? 10 }}
+                          Cap {{ updates.selfUpdate?.release_notes_cap ?? 10 }}
                         </span>
                       </template>
                       {{ selfUpdateReleaseCapTitle }}
@@ -539,11 +552,11 @@ async function confirmSelfUpdate(): Promise<void> {
                   </div>
 
                   <div
-                    v-if="webui.selfUpdate?.release_notes.length"
+                    v-if="updates.selfUpdate?.release_notes.length"
                     class="self-update-notes"
                   >
                     <article
-                      v-for="note in webui.selfUpdate.release_notes"
+                      v-for="note in updates.selfUpdate.release_notes"
                       :key="note.tag"
                       class="self-update-note"
                     >

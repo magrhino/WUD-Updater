@@ -22,9 +22,13 @@ import type {
 } from "../api/client";
 import { useUpdateTargetOptions } from "../composables/useUpdateTargetOptions";
 import { useAuthStore } from "../stores/auth";
-import { useWebuiStore } from "../stores/webui";
+import { useSettingsStore } from "../stores/settings";
+import { useConnectionStore } from "../stores/connection";
+import { useUpdatesStore } from "../stores/updates";
 
-const webui = useWebuiStore();
+const settings = useSettingsStore();
+const connection = useConnectionStore();
+const updates = useUpdatesStore();
 const auth = useAuthStore();
 const { serviceKeyOptions } = useUpdateTargetOptions();
 const breakpoints = useBreakpoints({ managementDesktop: 1200 });
@@ -67,8 +71,8 @@ const weekdayOptions = Object.entries(dayLabels).map(([value, label]) => ({
 const mutationsEnabled = computed(
   () => auth.session?.mutations_enabled === true,
 );
-const timezoneKnown = computed(() => webui.status !== null);
-const timezoneLabel = computed(() => webui.status?.timezone ?? "loading");
+const timezoneKnown = computed(() => connection.status !== null);
+const timezoneLabel = computed(() => connection.status?.timezone ?? "loading");
 const scheduleFeedback = computed(() =>
   timezoneKnown.value
     ? `Server timezone: ${timezoneLabel.value}`
@@ -97,7 +101,7 @@ const saveDisabled = computed(
     !policyForm.serviceKey.trim() ||
     !autoUpdateScheduleValid.value ||
     (policyForm.autoUpdate && !timezoneKnown.value) ||
-    webui.loading,
+    settings.loading,
 );
 
 function editPolicy(policy: ServicePolicyRecord): void {
@@ -164,7 +168,7 @@ async function confirmSave(): Promise<void> {
   if (saveDisabled.value) {
     return;
   }
-  await webui.upsertServicePolicy(
+  await settings.upsertServicePolicy(
     policyForm.serviceKey.trim(),
     policyForm.updateMode,
     policyForm.autoUpdate,
@@ -186,7 +190,7 @@ async function confirmDelete(): Promise<void> {
   if (deleteTarget.value === null) {
     return;
   }
-  await webui.deleteServicePolicy(deleteTarget.value.service_key);
+  await settings.deleteServicePolicy(deleteTarget.value.service_key);
   if (deleteTarget.value.service_key === policyForm.serviceKey) {
     resetPolicyForm();
   }
@@ -194,18 +198,18 @@ async function confirmDelete(): Promise<void> {
 }
 
 onMounted(() => {
-  if (webui.status === null) {
-    void webui.loadStatus();
+  if (connection.status === null) {
+    void connection.loadStatus();
   }
-  void webui.loadUpdateTargets();
-  void webui.loadServicePolicies();
+  void updates.loadUpdateTargets();
+  void settings.loadServicePolicies();
 });
 </script>
 
 <template>
   <section class="content-stack">
-    <n-alert v-if="webui.error" type="error" :show-icon="false">
-      {{ webui.error }}
+    <n-alert v-if="settings.error" type="error" :show-icon="false">
+      {{ settings.error }}
     </n-alert>
     <n-alert v-if="!mutationsEnabled" type="info" :show-icon="false">
       Read-only mode is active. Set WUD_WEB_MUTATIONS_ENABLED=true on the server to edit policies.
@@ -231,7 +235,7 @@ onMounted(() => {
             clearable
             :options="serviceKeyOptions"
             placeholder="stack/service"
-            :disabled="webui.loading"
+            :disabled="settings.loading"
             @update:value="setPolicyServiceKey"
           />
         </n-form-item>
@@ -239,11 +243,11 @@ onMounted(() => {
           <n-select
             v-model:value="policyForm.updateMode"
             :options="updateModeOptions"
-            :disabled="webui.loading"
+            :disabled="settings.loading"
           />
         </n-form-item>
         <n-form-item label="Auto update">
-          <n-switch v-model:value="policyForm.autoUpdate" :disabled="webui.loading" />
+          <n-switch v-model:value="policyForm.autoUpdate" :disabled="settings.loading" />
         </n-form-item>
         <n-form-item
           :label="`Update time (${timezoneLabel})`"
@@ -253,7 +257,7 @@ onMounted(() => {
             v-model:value="policyForm.autoUpdateTime"
             placeholder="09:30"
             :maxlength="5"
-            :disabled="webui.loading"
+            :disabled="settings.loading"
           />
         </n-form-item>
         <n-form-item label="Update days">
@@ -261,7 +265,7 @@ onMounted(() => {
             v-model:value="policyForm.autoUpdateDays"
             multiple
             :options="weekdayOptions"
-            :disabled="webui.loading"
+            :disabled="settings.loading"
           />
         </n-form-item>
         <n-form-item
@@ -273,18 +277,18 @@ onMounted(() => {
             clearable
             :min="0"
             :show-button="false"
-            :disabled="webui.loading"
+            :disabled="settings.loading"
           />
         </n-form-item>
         <div class="form-actions">
-          <n-button quaternary :disabled="webui.loading" @click="resetPolicyForm">
+          <n-button quaternary :disabled="settings.loading" @click="resetPolicyForm">
             Clear form
           </n-button>
           <n-button
             type="primary"
             attr-type="submit"
             :disabled="saveDisabled"
-            :loading="webui.loading"
+            :loading="settings.loading"
           >
             <template #icon>
               <Save :size="16" />
@@ -299,7 +303,7 @@ onMounted(() => {
       <div class="section-heading">
         <div>
           <p class="eyebrow">SQLite state</p>
-          <h2>{{ webui.servicePolicies.length }} service policies</h2>
+          <h2>{{ settings.servicePolicies.length }} service policies</h2>
         </div>
       </div>
 
@@ -313,7 +317,7 @@ onMounted(() => {
           <span>Actions</span>
         </div>
         <div
-          v-for="policy in webui.servicePolicies"
+          v-for="policy in settings.servicePolicies"
           :key="policy.service_key"
           class="management-row"
         >
@@ -347,7 +351,7 @@ onMounted(() => {
 
       <div v-else class="mobile-list">
         <article
-          v-for="policy in webui.servicePolicies"
+          v-for="policy in settings.servicePolicies"
           :key="policy.service_key"
           class="mobile-card"
         >
@@ -391,7 +395,7 @@ onMounted(() => {
           </div>
         </article>
       </div>
-      <div v-if="!webui.servicePolicies.length" class="empty-state">No service policies.</div>
+      <div v-if="!settings.servicePolicies.length" class="empty-state">No service policies.</div>
     </section>
 
     <n-modal
@@ -400,7 +404,7 @@ onMounted(() => {
       title="Save service policy"
       positive-text="Save policy"
       negative-text="Cancel"
-      :positive-button-props="{ type: 'primary', loading: webui.loading }"
+      :positive-button-props="{ type: 'primary', loading: settings.loading }"
       @positive-click="confirmSave"
     >
       <div class="confirmation-list">
@@ -433,7 +437,7 @@ onMounted(() => {
       title="Delete service policy"
       positive-text="Delete"
       negative-text="Cancel"
-      :positive-button-props="{ type: 'error', loading: webui.loading }"
+      :positive-button-props="{ type: 'error', loading: settings.loading }"
       @positive-click="confirmDelete"
     >
       <div v-if="deleteTarget" class="confirmation-list">

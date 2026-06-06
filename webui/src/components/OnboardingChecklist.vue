@@ -16,9 +16,9 @@ import {
 import { NButton, NTag } from "naive-ui";
 
 import type { DoctorCheckStatus, OnboardingChecklistItem } from "../api/client";
-import { useWebuiStore } from "../stores/webui";
+import { useSettingsStore } from "../stores/settings";
 
-const webui = useWebuiStore();
+const settings = useSettingsStore();
 const router = useRouter();
 const copiedSnippet = ref("");
 const dismissing = ref(false);
@@ -31,7 +31,7 @@ const tourRouteByStep = {
   runs_history: "runs",
 } as const;
 
-const onboarding = computed(() => webui.onboarding);
+const onboarding = computed(() => settings.onboarding);
 const visible = computed(() => onboarding.value?.visible === true);
 const items = computed(() => onboarding.value?.items ?? []);
 const failingItems = computed(
@@ -53,12 +53,12 @@ const firstWarningItem = computed(
 );
 const canStartUpdateTour = computed(() => failingItems.value === 0);
 const tourStep = computed(() =>
-  webui.coreUpdateTour?.status === "in_progress"
-    ? webui.coreUpdateTour.step
+  settings.coreUpdateTour?.status === "in_progress"
+    ? settings.coreUpdateTour.step
     : "dashboard",
 );
 const tourActionLabel = computed(() =>
-  webui.coreUpdateTour?.status === "in_progress"
+  settings.coreUpdateTour?.status === "in_progress"
     ? "Resume update tour"
     : "Start update tour",
 );
@@ -78,22 +78,22 @@ const nextActionDetail = computed(() =>
 );
 
 onMounted(() => {
-  if (webui.onboarding === null) {
+  if (settings.onboarding === null) {
     void refreshOnboarding().catch(() => undefined);
   }
-  if (webui.coreUpdateTour === null) {
-    void webui.loadCoreUpdateTour().catch(() => undefined);
+  if (settings.coreUpdateTour === null) {
+    void settings.loadCoreUpdateTour().catch(() => undefined);
   }
 });
 
 async function refreshOnboarding(): Promise<void> {
-  await webui.loadOnboarding();
+  await settings.loadOnboarding();
 }
 
 async function dismissChecklist(): Promise<void> {
   dismissing.value = true;
   try {
-    await webui.dismissOnboarding();
+    await settings.dismissOnboarding();
   } finally {
     dismissing.value = false;
   }
@@ -108,7 +108,7 @@ async function copySuggestion(snippet: string): Promise<void> {
 }
 
 async function startUpdateTour(): Promise<void> {
-  await webui.updateCoreUpdateTour("in_progress", tourStep.value);
+  await settings.updateCoreUpdateTour("in_progress", tourStep.value);
   await router?.push({ name: tourRouteByStep[tourStep.value] });
 }
 
@@ -212,7 +212,7 @@ function sourceCheckSummaryLabel(item: OnboardingChecklistItem): string {
         </n-tag>
         <n-button
           quaternary
-          :loading="webui.loading"
+          :loading="settings.loading"
           title="Refresh setup checklist"
           @click="refreshOnboarding"
         >
@@ -254,7 +254,7 @@ function sourceCheckSummaryLabel(item: OnboardingChecklistItem): string {
         v-if="canStartUpdateTour"
         type="primary"
         size="small"
-        :loading="webui.loading"
+        :loading="settings.loading"
         @click="startUpdateTour"
       >
         <template #icon>
@@ -266,7 +266,7 @@ function sourceCheckSummaryLabel(item: OnboardingChecklistItem): string {
         v-else
         size="small"
         secondary
-        :loading="webui.loading"
+        :loading="settings.loading"
         @click="refreshOnboarding"
       >
         <template #icon>

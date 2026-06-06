@@ -16,9 +16,11 @@ import {
 import type { SnoozeRecord, SnoozeState } from "../api/client";
 import { useUpdateTargetOptions } from "../composables/useUpdateTargetOptions";
 import { useAuthStore } from "../stores/auth";
-import { useWebuiStore } from "../stores/webui";
+import { useSettingsStore } from "../stores/settings";
+import { useUpdatesStore } from "../stores/updates";
 
-const webui = useWebuiStore();
+const settings = useSettingsStore();
+const updates = useUpdatesStore();
 const auth = useAuthStore();
 const { serviceKeyOptions } = useUpdateTargetOptions();
 const breakpoints = useBreakpoints({ managementDesktop: 1120 });
@@ -48,7 +50,7 @@ const createDisabled = computed(
     !mutationsEnabled.value ||
     !snoozeForm.serviceKey.trim() ||
     !snoozeForm.snoozedUntil.trim() ||
-    webui.loading,
+    settings.loading,
 );
 
 function futureIso(hours: number): string {
@@ -84,7 +86,7 @@ async function confirmCreate(): Promise<void> {
   if (createDisabled.value) {
     return;
   }
-  await webui.createSnooze(
+  await settings.createSnooze(
     snoozeForm.serviceKey.trim(),
     snoozeForm.snoozedUntil.trim(),
     snoozeForm.reason.trim(),
@@ -105,24 +107,24 @@ async function confirmDelete(): Promise<void> {
   if (deleteTarget.value === null) {
     return;
   }
-  await webui.deleteSnooze(deleteTarget.value.id, snoozeState.value);
+  await settings.deleteSnooze(deleteTarget.value.id, snoozeState.value);
   deleteTarget.value = null;
 }
 
 onMounted(() => {
-  void webui.loadUpdateTargets();
-  void webui.loadSnoozes(snoozeState.value);
+  void updates.loadUpdateTargets();
+  void settings.loadSnoozes(snoozeState.value);
 });
 
 watch(snoozeState, (nextState) => {
-  void webui.loadSnoozes(nextState);
+  void settings.loadSnoozes(nextState);
 });
 </script>
 
 <template>
   <section class="content-stack">
-    <n-alert v-if="webui.error" type="error" :show-icon="false">
-      {{ webui.error }}
+    <n-alert v-if="settings.error" type="error" :show-icon="false">
+      {{ settings.error }}
     </n-alert>
     <n-alert v-if="!mutationsEnabled" type="info" :show-icon="false">
       Read-only mode is active. Set WUD_WEB_MUTATIONS_ENABLED=true on the server to manage snoozes.
@@ -148,7 +150,7 @@ watch(snoozeState, (nextState) => {
             clearable
             :options="serviceKeyOptions"
             placeholder="stack/service"
-            :disabled="webui.loading"
+            :disabled="settings.loading"
             @update:value="setSnoozeServiceKey"
           />
         </n-form-item>
@@ -160,34 +162,34 @@ watch(snoozeState, (nextState) => {
           <n-input
             v-model:value="snoozeForm.snoozedUntil"
             placeholder="YYYY-MM-DDTHH:MM:SSZ"
-            :disabled="webui.loading"
+            :disabled="settings.loading"
           />
         </n-form-item>
         <n-form-item label="Reason">
           <n-input
             v-model:value="snoozeForm.reason"
             placeholder="maintenance"
-            :disabled="webui.loading"
+            :disabled="settings.loading"
           />
         </n-form-item>
         <div class="form-actions">
-          <n-button size="small" quaternary :disabled="webui.loading" @click="setFuture(1)">
+          <n-button size="small" quaternary :disabled="settings.loading" @click="setFuture(1)">
             1h
           </n-button>
-          <n-button size="small" quaternary :disabled="webui.loading" @click="setFuture(24)">
+          <n-button size="small" quaternary :disabled="settings.loading" @click="setFuture(24)">
             1d
           </n-button>
-          <n-button size="small" quaternary :disabled="webui.loading" @click="setFuture(168)">
+          <n-button size="small" quaternary :disabled="settings.loading" @click="setFuture(168)">
             7d
           </n-button>
-          <n-button quaternary :disabled="webui.loading" @click="resetSnoozeForm">
+          <n-button quaternary :disabled="settings.loading" @click="resetSnoozeForm">
             Clear form
           </n-button>
           <n-button
             type="primary"
             attr-type="submit"
             :disabled="createDisabled"
-            :loading="webui.loading"
+            :loading="settings.loading"
           >
             <template #icon>
               <Plus :size="16" />
@@ -202,13 +204,13 @@ watch(snoozeState, (nextState) => {
       <div class="section-heading">
         <div>
           <p class="eyebrow">SQLite state</p>
-          <h2>{{ webui.snoozes.length }} snoozes</h2>
+          <h2>{{ settings.snoozes.length }} snoozes</h2>
         </div>
         <n-select
           v-model:value="snoozeState"
           class="filter-control"
           :options="stateOptions"
-          :disabled="webui.loading"
+          :disabled="settings.loading"
           aria-label="Filter snoozes by state"
         />
       </div>
@@ -222,7 +224,7 @@ watch(snoozeState, (nextState) => {
           <span>Actions</span>
         </div>
         <div
-          v-for="snooze in webui.snoozes"
+          v-for="snooze in settings.snoozes"
           :key="snooze.id"
           class="management-row"
         >
@@ -251,7 +253,7 @@ watch(snoozeState, (nextState) => {
 
       <div v-else class="mobile-list">
         <article
-          v-for="snooze in webui.snoozes"
+          v-for="snooze in settings.snoozes"
           :key="snooze.id"
           class="mobile-card"
         >
@@ -287,7 +289,7 @@ watch(snoozeState, (nextState) => {
           </div>
         </article>
       </div>
-      <div v-if="!webui.snoozes.length" class="empty-state">No snoozes.</div>
+      <div v-if="!settings.snoozes.length" class="empty-state">No snoozes.</div>
     </section>
 
     <n-modal
@@ -296,7 +298,7 @@ watch(snoozeState, (nextState) => {
       title="Create snooze"
       positive-text="Create snooze"
       negative-text="Cancel"
-      :positive-button-props="{ type: 'primary', loading: webui.loading }"
+      :positive-button-props="{ type: 'primary', loading: settings.loading }"
       @positive-click="confirmCreate"
     >
       <div class="confirmation-list">
@@ -321,7 +323,7 @@ watch(snoozeState, (nextState) => {
       title="Delete snooze"
       positive-text="Delete"
       negative-text="Cancel"
-      :positive-button-props="{ type: 'error', loading: webui.loading }"
+      :positive-button-props="{ type: 'error', loading: settings.loading }"
       @positive-click="confirmDelete"
     >
       <div v-if="deleteTarget" class="confirmation-list">

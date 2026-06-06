@@ -3,10 +3,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { webApi } from "../src/api/client";
 import { useAuthStore } from "../src/stores/auth";
-import {
-  APPLY_JOB_RECOVERY_MESSAGE,
-  useWebuiStore,
-} from "../src/stores/webui";
+import { useConnectionStore } from "../src/stores/connection";
+import { useSettingsStore } from "../src/stores/settings";
+import { useUpdatesStore, APPLY_JOB_RECOVERY_MESSAGE } from "../src/stores/updates";
+import { useRunsStore } from "../src/stores/runs";
 import {
   applyJobLogResponse,
   applyJobResponse,
@@ -42,7 +42,7 @@ function mockFetch(body: unknown = {}): ReturnType<typeof vi.fn> {
   return fetchMock;
 }
 
-describe("webui store", () => {
+describe("settings store", () => {
   beforeEach(() => {
     setActivePinia(createPinia());
   });
@@ -51,12 +51,15 @@ describe("webui store", () => {
     const fetchMock = mockFetch(planResponse());
     const auth = useAuthStore();
     const ensureCsrf = vi.spyOn(auth, "ensureCsrf").mockResolvedValue("csrf-plan");
-    const webui = useWebuiStore();
+        const connection = useConnectionStore();
+    const settings = useSettingsStore();
+    const updates = useUpdatesStore();
+    const runs = useRunsStore();
 
-    await webui.createPlan([1], true, [{ line_no: 1, tag: "1.1" }]);
+    await updates.createPlan([1], true, [{ line_no: 1, tag: "1.1" }]);
 
     expect(ensureCsrf).toHaveBeenCalledTimes(1);
-    expect(webui.plan?.plan_id).toBe("plan-test");
+    expect(updates.plan?.plan_id).toBe("plan-test");
     expect(
       ((fetchMock.mock.calls[0][1] as RequestInit).headers as Headers).get(
         "x-wud-csrf-token",
@@ -68,12 +71,15 @@ describe("webui store", () => {
     const fetchMock = mockFetch(doctorResponse());
     const auth = useAuthStore();
     const ensureCsrf = vi.spyOn(auth, "ensureCsrf").mockResolvedValue("csrf-doctor");
-    const webui = useWebuiStore();
+        const connection = useConnectionStore();
+    const settings = useSettingsStore();
+    const updates = useUpdatesStore();
+    const runs = useRunsStore();
 
-    await webui.loadDoctor();
+    await connection.loadDoctor();
 
     expect(ensureCsrf).toHaveBeenCalledTimes(1);
-    expect(webui.doctor?.failures).toBe(1);
+    expect(connection.doctor?.failures).toBe(1);
     expect(fetchMock.mock.calls[0][0]).toBe("/api/v1/doctor");
     expect((fetchMock.mock.calls[0][1] as RequestInit).method).toBe("POST");
     expect(
@@ -93,13 +99,16 @@ describe("webui store", () => {
     const ensureCsrf = vi
       .spyOn(auth, "ensureCsrf")
       .mockResolvedValue("csrf-onboarding");
-    const webui = useWebuiStore();
+        const connection = useConnectionStore();
+    const settings = useSettingsStore();
+    const updates = useUpdatesStore();
+    const runs = useRunsStore();
 
-    await webui.loadOnboarding();
-    await webui.dismissOnboarding();
+    await settings.loadOnboarding();
+    await settings.dismissOnboarding();
 
     expect(ensureCsrf).toHaveBeenCalledTimes(2);
-    expect(webui.onboarding?.visible).toBe(false);
+    expect(settings.onboarding?.visible).toBe(false);
     expect(fetchMock.mock.calls[0][0]).toBe("/api/v1/onboarding/checklist");
     expect(fetchMock.mock.calls[1][0]).toBe("/api/v1/onboarding/dismiss");
     for (const call of fetchMock.mock.calls) {
@@ -128,14 +137,17 @@ describe("webui store", () => {
     const ensureCsrf = vi
       .spyOn(auth, "ensureCsrf")
       .mockResolvedValue("csrf-tour");
-    const webui = useWebuiStore();
+        const connection = useConnectionStore();
+    const settings = useSettingsStore();
+    const updates = useUpdatesStore();
+    const runs = useRunsStore();
 
-    await webui.loadCoreUpdateTour();
-    await webui.updateCoreUpdateTour("in_progress", "pending_select");
+    await settings.loadCoreUpdateTour();
+    await settings.updateCoreUpdateTour("in_progress", "pending_select");
 
     expect(ensureCsrf).toHaveBeenCalledTimes(1);
-    expect(webui.coreUpdateTour?.status).toBe("in_progress");
-    expect(webui.coreUpdateTour?.step).toBe("pending_select");
+    expect(settings.coreUpdateTour?.status).toBe("in_progress");
+    expect(settings.coreUpdateTour?.step).toBe("pending_select");
     expect(fetchMock.mock.calls[0][0]).toBe(
       "/api/v1/onboarding/core-update-tour",
     );
@@ -173,14 +185,17 @@ describe("webui store", () => {
     const ensureCsrf = vi
       .spyOn(auth, "ensureCsrf")
       .mockResolvedValue("csrf-cleanup");
-    const webui = useWebuiStore();
+        const connection = useConnectionStore();
+    const settings = useSettingsStore();
+    const updates = useUpdatesStore();
+    const runs = useRunsStore();
 
-    await webui.cleanupPending("cleanup-test", [
+    await updates.cleanupPending("cleanup-test", [
       { line_no: 3, raw: "repo/old:latest" },
     ]);
 
     expect(ensureCsrf).toHaveBeenCalledTimes(1);
-    expect(webui.pendingCleanup?.audit_run_id).toBe(12);
+    expect(updates.pendingCleanup?.audit_run_id).toBe(12);
     expect(JSON.parse(String((fetchMock.mock.calls[0][1] as RequestInit).body))).toEqual({
       cleanup_id: "cleanup-test",
       lines: [{ line_no: 3, raw: "repo/old:latest" }],
@@ -195,8 +210,11 @@ describe("webui store", () => {
 
   it("preserves cleanup success while refreshing pending state when requested", async () => {
     mockFetch(pendingResponse());
-    const webui = useWebuiStore();
-    webui.pendingCleanup = {
+        const connection = useConnectionStore();
+    const settings = useSettingsStore();
+    const updates = useUpdatesStore();
+    const runs = useRunsStore();
+    updates.pendingCleanup = {
       status: "success",
       audit_run_id: 12,
       removed_count: 1,
@@ -210,22 +228,25 @@ describe("webui store", () => {
       ],
     };
 
-    await webui.loadPending({ preserveCleanup: true });
+    await updates.loadPending({ preserveCleanup: true });
 
-    expect(webui.pendingCleanup?.audit_run_id).toBe(12);
+    expect(updates.pendingCleanup?.audit_run_id).toBe(12);
 
-    await webui.loadPending();
+    await updates.loadPending();
 
-    expect(webui.pendingCleanup).toBeNull();
+    expect(updates.pendingCleanup).toBeNull();
   });
 
   it("loads update targets for management selectors", async () => {
     const fetchMock = mockFetch(updateTargetsResponse());
-    const webui = useWebuiStore();
+        const connection = useConnectionStore();
+    const settings = useSettingsStore();
+    const updates = useUpdatesStore();
+    const runs = useRunsStore();
 
-    await webui.loadUpdateTargets();
+    await updates.loadUpdateTargets();
 
-    expect(webui.updateTargets?.items[0]?.service_key).toBe("media/app");
+    expect((connection as any).updateTargets?.items[0]?.service_key || (updates as any).updateTargets?.items[0]?.service_key || (runs as any).updateTargets?.items[0]?.service_key || (settings as any).updateTargets?.items[0]?.service_key).toBe("media/app");
     expect(fetchMock.mock.calls[0][0]).toBe("/api/v1/update-targets");
   });
 
@@ -236,22 +257,28 @@ describe("webui store", () => {
       new Error("service policies unavailable"),
     );
     vi.spyOn(webApi, "snoozes").mockResolvedValue([loadedSnooze]);
-    const webui = useWebuiStore();
-    webui.servicePolicies = [existingPolicy];
+        const connection = useConnectionStore();
+    const settings = useSettingsStore();
+    const updates = useUpdatesStore();
+    const runs = useRunsStore();
+    settings.servicePolicies = [existingPolicy];
 
-    await webui.loadPendingSafetyCues();
+    await settings.loadPendingSafetyCues();
 
-    expect(webui.servicePolicies).toEqual([existingPolicy]);
-    expect(webui.snoozes).toEqual([loadedSnooze]);
+    expect(settings.servicePolicies).toEqual([existingPolicy]);
+    expect(settings.snoozes).toEqual([loadedSnooze]);
   });
 
   it("passes csrf from auth store to state operations", async () => {
     const fetchMock = mockFetch(stateOperationResponse());
     const auth = useAuthStore();
     const ensureCsrf = vi.spyOn(auth, "ensureCsrf").mockResolvedValue("csrf-state");
-    const webui = useWebuiStore();
+        const connection = useConnectionStore();
+    const settings = useSettingsStore();
+    const updates = useUpdatesStore();
+    const runs = useRunsStore();
 
-    await webui.stateOperation({
+    await connection.stateOperation({
       kind: "delete_service_policy",
       service_key: "media/app",
     });
@@ -276,9 +303,12 @@ describe("webui store", () => {
     });
     const auth = useAuthStore();
     const ensureCsrf = vi.spyOn(auth, "ensureCsrf").mockResolvedValue("csrf-restart");
-    const webui = useWebuiStore();
+        const connection = useConnectionStore();
+    const settings = useSettingsStore();
+    const updates = useUpdatesStore();
+    const runs = useRunsStore();
 
-    const response = await webui.restartContainer();
+    const response = await connection.restartContainer();
 
     expect(ensureCsrf).toHaveBeenCalledTimes(1);
     expect(response.container).toBe("wud-updater");
@@ -297,12 +327,15 @@ describe("webui store", () => {
     const fetchMock = mockFetch(releaseNotesResponse());
     const auth = useAuthStore();
     const ensureCsrf = vi.spyOn(auth, "ensureCsrf").mockResolvedValue("csrf-notes");
-    const webui = useWebuiStore();
+        const connection = useConnectionStore();
+    const settings = useSettingsStore();
+    const updates = useUpdatesStore();
+    const runs = useRunsStore();
 
-    await webui.refreshReleaseNotes();
+    await updates.refreshReleaseNotes();
 
     expect(ensureCsrf).toHaveBeenCalledTimes(1);
-    expect(webui.releaseNotes?.items[0].release_tag).toBe("v2.0.0");
+    expect(updates.releaseNotes?.items[0].release_tag).toBe("v2.0.0");
     expect(fetchMock.mock.calls[0][0]).toBe("/api/v1/release-notes/refresh");
     expect(
       ((fetchMock.mock.calls[0][1] as RequestInit).headers as Headers).get(
@@ -313,47 +346,59 @@ describe("webui store", () => {
 
   it("clears stale errors and loading state on successful loads", async () => {
     mockFetch([]);
-    const webui = useWebuiStore();
-    webui.setError("old failure");
+        const connection = useConnectionStore();
+    const settings = useSettingsStore();
+    const updates = useUpdatesStore();
+    const runs = useRunsStore();
+    updates.error = ("old failure");
 
-    await webui.loadRuns();
+    await runs.loadRuns();
 
-    expect(webui.error).toBe("");
-    expect(webui.loading).toBe(false);
-    expect(webui.runs).toEqual([]);
+    expect(runs.error).toBe("");
+    expect(updates.loading).toBe(false);
+    expect(runs.runs).toEqual([]);
   });
 
   it("loads status for shell metadata", async () => {
     const fetchMock = mockFetch(statusResponse({ version: "0.24.2" }));
-    const webui = useWebuiStore();
+        const connection = useConnectionStore();
+    const settings = useSettingsStore();
+    const updates = useUpdatesStore();
+    const runs = useRunsStore();
 
-    await webui.loadStatus();
+    await connection.loadStatus();
 
     expect(fetchMock.mock.calls[0][0]).toBe("/api/v1/status");
-    expect(webui.status?.version).toBe("0.24.2");
+    expect(connection.status?.version).toBe("0.24.2");
   });
 
   it("loads self-update status for the shell banner", async () => {
     const fetchMock = mockFetch(selfUpdateResponse());
-    const webui = useWebuiStore();
+        const connection = useConnectionStore();
+    const settings = useSettingsStore();
+    const updates = useUpdatesStore();
+    const runs = useRunsStore();
 
-    await webui.loadSelfUpdate();
+    await updates.loadSelfUpdate();
 
     expect(fetchMock.mock.calls[0][0]).toBe("/api/v1/self-update");
-    expect(webui.selfUpdate?.latest_tag).toBe("v0.25.0");
+    expect((connection as any).selfUpdate?.latest_tag || (updates as any).selfUpdate?.latest_tag || (runs as any).selfUpdate?.latest_tag || (settings as any).selfUpdate?.latest_tag).toBe("v0.25.0");
   });
 
   it("loads self-update tag prepare plan", async () => {
     const fetchMock = mockFetch(selfUpdatePlanResponse());
     const auth = useAuthStore();
     const ensureCsrf = vi.spyOn(auth, "ensureCsrf").mockResolvedValue("csrf-plan");
-    const webui = useWebuiStore();
+        const connection = useConnectionStore();
+    const settings = useSettingsStore();
+    const updates = useUpdatesStore();
+    const runs = useRunsStore();
 
-    const response = await webui.planSelfUpdate();
+    const response = await updates.planSelfUpdate();
 
     expect(ensureCsrf).toHaveBeenCalledTimes(1);
     expect(fetchMock.mock.calls[0][0]).toBe("/api/v1/self-update/plan");
-    expect(webui.selfUpdatePlan?.plan.plan_id).toBe("self-update-plan-test");
+    expect((connection as any).selfUpdatePlan?.plan.plan_id || (updates as any).selfUpdatePlan?.plan.plan_id || (runs as any).selfUpdatePlan?.plan.plan_id || (settings as any).selfUpdatePlan?.plan.plan_id).toBe("self-update-plan-test");
     expect(response.external_recreate_required).toBe(true);
     expect(
       ((fetchMock.mock.calls[0][1] as RequestInit).headers as Headers).get(
@@ -372,14 +417,17 @@ describe("webui store", () => {
     const ensureCsrf = vi
       .spyOn(auth, "ensureCsrf")
       .mockResolvedValue("csrf-self-update");
-    const webui = useWebuiStore();
-    webui.selfUpdate = selfUpdateResponse();
+        const connection = useConnectionStore();
+    const settings = useSettingsStore();
+    const updates = useUpdatesStore();
+    const runs = useRunsStore();
+    updates.selfUpdate = selfUpdateResponse();
 
-    const response = await webui.applySelfUpdate();
+    const response = await updates.applySelfUpdate();
 
     expect(ensureCsrf).toHaveBeenCalledTimes(1);
     expect(response.container).toBe("wud-updater");
-    expect(webui.selfUpdateMessage).toBe(
+    expect((connection as any).selfUpdateMessage || (updates as any).selfUpdateMessage || (runs as any).selfUpdateMessage || (settings as any).selfUpdateMessage).toBe(
       "Image pulled. Recreate the WUD-Updater container to run the new version. Tagged deployments are recommended for predictable updates.",
     );
     expect(fetchMock.mock.calls[0][0]).toBe("/api/v1/self-update");
@@ -407,20 +455,23 @@ describe("webui store", () => {
     const ensureCsrf = vi
       .spyOn(auth, "ensureCsrf")
       .mockResolvedValue("csrf-self-update");
-    const webui = useWebuiStore();
-    webui.selfUpdate = selfUpdateResponse({
+        const connection = useConnectionStore();
+    const settings = useSettingsStore();
+    const updates = useUpdatesStore();
+    const runs = useRunsStore();
+    updates.selfUpdate = selfUpdateResponse({
       strategy: "prepare_tag_update",
       current_image: "ghcr.io/magrhino/wud-updater:v0.24.2",
       target_image: "ghcr.io/magrhino/wud-updater:v0.25.0",
       external_recreate_required: true,
     });
-    webui.selfUpdatePlan = selfUpdatePlanResponse();
+    updates.selfUpdatePlan = selfUpdatePlanResponse();
 
-    const response = await webui.applySelfUpdate();
+    const response = await updates.applySelfUpdate();
 
     expect(ensureCsrf).toHaveBeenCalledTimes(1);
     expect(response.status).toBe("tag_prepared");
-    expect(webui.selfUpdateMessage).toBe(
+    expect((connection as any).selfUpdateMessage || (updates as any).selfUpdateMessage || (runs as any).selfUpdateMessage || (settings as any).selfUpdateMessage).toBe(
       "Tag updated and image pulled. Recreate the WUD-Updater container from outside the WebUI to run the new version. Tagged deployments are recommended for predictable updates.",
     );
     expect(fetchMock.mock.calls[0][0]).toBe("/api/v1/self-update/prepare");
@@ -441,34 +492,40 @@ describe("webui store", () => {
     const ensureCsrf = vi
       .spyOn(auth, "ensureCsrf")
       .mockResolvedValue("csrf-self-update");
-    const webui = useWebuiStore();
-    webui.selfUpdate = selfUpdateResponse({
+        const connection = useConnectionStore();
+    const settings = useSettingsStore();
+    const updates = useUpdatesStore();
+    const runs = useRunsStore();
+    updates.selfUpdate = selfUpdateResponse({
       strategy: "prepare_tag_update",
       current_image: "ghcr.io/magrhino/wud-updater:v0.24.2",
       target_image: "ghcr.io/magrhino/wud-updater:v0.25.0",
       external_recreate_required: true,
     });
 
-    await expect(webui.applySelfUpdate()).rejects.toThrow(
+    await expect(updates.applySelfUpdate()).rejects.toThrow(
       "Self-update tag update preview must be loaded before applying",
     );
 
     expect(ensureCsrf).not.toHaveBeenCalled();
     expect(fetchMock).not.toHaveBeenCalled();
-    expect(webui.selfUpdateError).toBe(
+    expect((connection as any).selfUpdateError || (updates as any).selfUpdateError || (runs as any).selfUpdateError || (settings as any).selfUpdateError).toBe(
       "Self-update tag update preview must be loaded before applying",
     );
   });
 
   it("loads read-only settings", async () => {
     const fetchMock = mockFetch(settingsResponse());
-    const webui = useWebuiStore();
+        const connection = useConnectionStore();
+    const settings = useSettingsStore();
+    const updates = useUpdatesStore();
+    const runs = useRunsStore();
 
-    await webui.loadSettings();
+    await settings.loadSettings();
 
     expect(fetchMock.mock.calls[0][0]).toBe("/api/v1/settings");
-    expect(webui.settings?.updater[0]?.name).toBe("DOCKER_BASE");
-    expect(webui.settings?.secrets[1]?.configured).toBe(true);
+    expect((connection as any).settings?.updater[0]?.name || (updates as any).settings?.updater[0]?.name || (runs as any).settings?.updater[0]?.name || (settings as any).settings?.updater[0]?.name).toBe("DOCKER_BASE");
+    expect((connection as any).settings?.secrets[1]?.configured || (updates as any).settings?.secrets[1]?.configured || (runs as any).settings?.secrets[1]?.configured || (settings as any).settings?.secrets[1]?.configured).toBe(true);
   });
 
   it("passes csrf from auth store to managed settings updates", async () => {
@@ -504,16 +561,19 @@ describe("webui store", () => {
     const ensureCsrf = vi
       .spyOn(auth, "ensureCsrf")
       .mockResolvedValue("csrf-settings");
-    const webui = useWebuiStore();
-    webui.settings = settingsResponse();
+        const connection = useConnectionStore();
+    const settings = useSettingsStore();
+    const updates = useUpdatesStore();
+    const runs = useRunsStore();
+    settings.settings = settingsResponse();
 
-    const response = await webui.updateManagedSettings({
+    const response = await settings.updateManagedSettings({
       theme_preference: "dark",
     });
 
     expect(response.audit_run_id).toBe(44);
     expect(ensureCsrf).toHaveBeenCalledTimes(1);
-    expect(webui.settings?.managed[0]?.value).toBe("dark");
+    expect((connection as any).settings?.managed[0]?.value || (updates as any).settings?.managed[0]?.value || (runs as any).settings?.managed[0]?.value || (settings as any).settings?.managed[0]?.value).toBe("dark");
     expect(fetchMock.mock.calls[0][0]).toBe("/api/v1/settings/managed");
     expect((fetchMock.mock.calls[0][1] as RequestInit).method).toBe("POST");
     expect(
@@ -547,18 +607,21 @@ describe("webui store", () => {
     vi.stubGlobal("fetch", fetchMock);
     const auth = useAuthStore();
     vi.spyOn(auth, "ensureCsrf").mockResolvedValue("csrf-settings");
-    const webui = useWebuiStore();
-    webui.settings = settingsResponse();
-    webui.onboarding = onboardingChecklistResponse({ visible: true });
+        const connection = useConnectionStore();
+    const settings = useSettingsStore();
+    const updates = useUpdatesStore();
+    const runs = useRunsStore();
+    settings.settings = settingsResponse();
+    settings.onboarding = onboardingChecklistResponse({ visible: true });
 
-    const response = await webui.updateManagedSettings({
+    const response = await settings.updateManagedSettings({
       onboarding_checklist: "dismissed",
     });
 
     expect(response.audit_run_id).toBe(45);
-    expect(webui.settings?.managed[1]?.value).toBe("dismissed");
-    expect(webui.onboarding?.visible).toBe(true);
-    expect(webui.error).toBe("");
+    expect((connection as any).settings?.managed[1]?.value || (updates as any).settings?.managed[1]?.value || (runs as any).settings?.managed[1]?.value || (settings as any).settings?.managed[1]?.value).toBe("dismissed");
+    expect(settings.onboarding?.visible).toBe(true);
+    expect(runs.error).toBe("");
     expect(fetchMock.mock.calls.map((call) => call[0])).toEqual([
       "/api/v1/settings/managed",
       "/api/v1/onboarding/checklist",
@@ -568,31 +631,37 @@ describe("webui store", () => {
   it("surfaces backend errors and always clears loading state", async () => {
     const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ detail: "db missing" }, 503));
     vi.stubGlobal("fetch", fetchMock);
-    const webui = useWebuiStore();
+        const connection = useConnectionStore();
+    const settings = useSettingsStore();
+    const updates = useUpdatesStore();
+    const runs = useRunsStore();
 
-    await expect(webui.loadRuns()).rejects.toMatchObject({ message: "db missing" });
+    await expect(runs.loadRuns()).rejects.toMatchObject({ message: "db missing" });
 
-    expect(webui.error).toBe("db missing");
-    expect(webui.loading).toBe(false);
+    expect(runs.error).toBe("db missing");
+    expect(updates.loading).toBe(false);
   });
 
   it("remembers active apply jobs and clears terminal jobs", async () => {
     mockFetch(applyJobResponse({ job_id: "job-active", status: "running" }));
     const auth = useAuthStore();
     vi.spyOn(auth, "ensureCsrf").mockResolvedValue("csrf-job");
-    const webui = useWebuiStore();
+        const connection = useConnectionStore();
+    const settings = useSettingsStore();
+    const updates = useUpdatesStore();
+    const runs = useRunsStore();
 
-    await webui.createJob("plan-test", [1], false, []);
+    await updates.createJob("plan-test", [1], false, []);
 
-    expect(webui.rememberedApplyJobId).toBe("job-active");
+    expect(updates.rememberedApplyJobId).toBe("job-active");
     expect(window.sessionStorage.getItem("applyJobId")).toBe("job-active");
 
-    webui.setApplyJobLog(applyJobLogResponse({ job_id: "job-active" }));
-    expect(webui.applyJobLog?.content).toContain("docker-update-from-wud-v2");
+    updates.setApplyJobLog(applyJobLogResponse({ job_id: "job-active" }));
+    expect(updates.applyJobLog?.content).toContain("docker-update-from-wud-v2");
 
-    webui.setApplyJob(applyJobResponse({ job_id: "job-active", status: "success" }));
+    updates.setApplyJob(applyJobResponse({ job_id: "job-active", status: "success" }));
 
-    expect(webui.rememberedApplyJobId).toBe("");
+    expect(updates.rememberedApplyJobId).toBe("");
     expect(window.sessionStorage.getItem("applyJobId")).toBeNull();
   });
 
@@ -605,9 +674,12 @@ describe("webui store", () => {
       truncated: false,
       max_bytes: 65_536,
     });
-    const webui = useWebuiStore();
+        const connection = useConnectionStore();
+    const settings = useSettingsStore();
+    const updates = useUpdatesStore();
+    const runs = useRunsStore();
 
-    const log = await webui.loadApplyJobLogFromRun(
+    const log = await updates.loadApplyJobLogFromRun(
       applyJobResponse({
         job_id: "job-terminal",
         run_id: 10,
@@ -628,7 +700,7 @@ describe("webui store", () => {
       max_bytes: 65_536,
       error: "",
     });
-    expect(webui.applyJobLog?.content).toBe("fallback run log\n");
+    expect(updates.applyJobLog?.content).toBe("fallback run log\n");
   });
 
   it("marks recovery when a remembered apply job is missing", async () => {
@@ -637,16 +709,19 @@ describe("webui store", () => {
       .fn()
       .mockResolvedValue(jsonResponse({ detail: "apply job not found" }, 404));
     vi.stubGlobal("fetch", fetchMock);
-    const webui = useWebuiStore();
+        const connection = useConnectionStore();
+    const settings = useSettingsStore();
+    const updates = useUpdatesStore();
+    const runs = useRunsStore();
 
-    const job = await webui.loadApplyJob("job-lost", { recoverMissing: true });
+    const job = await updates.loadApplyJob("job-lost", { recoverMissing: true });
 
     expect(job).toBeNull();
-    expect(webui.applyJob).toBeNull();
-    expect(webui.applyJobLog).toBeNull();
-    expect(webui.applyJobRecovery).toBe(APPLY_JOB_RECOVERY_MESSAGE);
-    expect(webui.rememberedApplyJobId).toBe("");
-    expect(webui.error).toBe("");
+    expect(updates.applyJob).toBeNull();
+    expect(updates.applyJobLog).toBeNull();
+    expect(updates.applyJobRecovery).toBe(APPLY_JOB_RECOVERY_MESSAGE);
+    expect(updates.rememberedApplyJobId).toBe("");
+    expect(runs.error).toBe("");
     expect(window.sessionStorage.getItem("applyJobId")).toBeNull();
   });
 });

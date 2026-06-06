@@ -20,9 +20,11 @@ import type {
 } from "../api/client";
 import { useUpdateTargetOptions } from "../composables/useUpdateTargetOptions";
 import { useAuthStore } from "../stores/auth";
-import { useWebuiStore } from "../stores/webui";
+import { useSettingsStore } from "../stores/settings";
+import { useUpdatesStore } from "../stores/updates";
 
-const webui = useWebuiStore();
+const settings = useSettingsStore();
+const updates = useUpdatesStore();
 const auth = useAuthStore();
 const {
   imageRepoOptions,
@@ -73,7 +75,7 @@ const saveDisabled = computed(
     !exclusionForm.imageRepo.trim() ||
     !exclusionForm.tag.trim() ||
     (exclusionForm.scope === "service" && !exclusionForm.serviceKey.trim()) ||
-    webui.loading,
+    settings.loading,
 );
 
 function editExclusion(rule: TagExclusionRuleRecord): void {
@@ -143,7 +145,7 @@ async function confirmSave(): Promise<void> {
   if (saveDisabled.value) {
     return;
   }
-  await webui.upsertTagExclusion(
+  await settings.upsertTagExclusion(
     exclusionForm.scope,
     exclusionForm.imageRepo.trim(),
     exclusionForm.scope === "service" ? exclusionForm.serviceKey.trim() : "",
@@ -169,7 +171,7 @@ async function confirmStatusChange(): Promise<void> {
   if (statusTarget.value === null) {
     return;
   }
-  await webui.setTagExclusionStatus(
+  await settings.setTagExclusionStatus(
     statusTarget.value.id,
     nextStatus.value,
     statusFilter.value,
@@ -178,19 +180,19 @@ async function confirmStatusChange(): Promise<void> {
 }
 
 onMounted(() => {
-  void webui.loadUpdateTargets();
-  void webui.loadTagExclusions(statusFilter.value);
+  void updates.loadUpdateTargets();
+  void settings.loadTagExclusions(statusFilter.value);
 });
 
 watch(statusFilter, (nextFilter) => {
-  void webui.loadTagExclusions(nextFilter);
+  void settings.loadTagExclusions(nextFilter);
 });
 </script>
 
 <template>
   <section class="content-stack">
-    <n-alert v-if="webui.error" type="error" :show-icon="false">
-      {{ webui.error }}
+    <n-alert v-if="settings.error" type="error" :show-icon="false">
+      {{ settings.error }}
     </n-alert>
     <n-alert v-if="!mutationsEnabled" type="info" :show-icon="false">
       Read-only mode is active. Set WUD_WEB_MUTATIONS_ENABLED=true on the server to manage tag exclusions.
@@ -208,7 +210,7 @@ watch(statusFilter, (nextFilter) => {
           <n-select
             v-model:value="exclusionForm.scope"
             :options="scopeOptions"
-            :disabled="webui.loading"
+            :disabled="settings.loading"
           />
         </n-form-item>
         <n-form-item
@@ -223,7 +225,7 @@ watch(statusFilter, (nextFilter) => {
             clearable
             :options="imageRepoOptions"
             placeholder="repo/app"
-            :disabled="webui.loading"
+            :disabled="settings.loading"
             @update:value="applyImageRepoSelection"
           />
         </n-form-item>
@@ -240,7 +242,7 @@ watch(statusFilter, (nextFilter) => {
             clearable
             :options="serviceKeyOptions"
             placeholder="stack/service"
-            :disabled="webui.loading"
+            :disabled="settings.loading"
             @update:value="applyServiceSelection"
           />
         </n-form-item>
@@ -256,7 +258,7 @@ watch(statusFilter, (nextFilter) => {
             clearable
             :options="tagOptions"
             placeholder="2.0"
-            :disabled="webui.loading"
+            :disabled="settings.loading"
             @update:value="setTagValue"
           />
         </n-form-item>
@@ -264,18 +266,18 @@ watch(statusFilter, (nextFilter) => {
           <n-select
             v-model:value="exclusionForm.status"
             :options="statusOptions"
-            :disabled="webui.loading"
+            :disabled="settings.loading"
           />
         </n-form-item>
         <div class="form-actions">
-          <n-button quaternary :disabled="webui.loading" @click="resetExclusionForm">
+          <n-button quaternary :disabled="settings.loading" @click="resetExclusionForm">
             Clear form
           </n-button>
           <n-button
             type="primary"
             attr-type="submit"
             :disabled="saveDisabled"
-            :loading="webui.loading"
+            :loading="settings.loading"
           >
             <template #icon>
               <Save :size="16" />
@@ -290,13 +292,13 @@ watch(statusFilter, (nextFilter) => {
       <div class="section-heading">
         <div>
           <p class="eyebrow">SQLite state</p>
-          <h2>{{ webui.tagExclusions.length }} tag exclusions</h2>
+          <h2>{{ settings.tagExclusions.length }} tag exclusions</h2>
         </div>
         <n-select
           v-model:value="statusFilter"
           class="filter-control"
           :options="statusFilterOptions"
-          :disabled="webui.loading"
+          :disabled="settings.loading"
           aria-label="Filter tag exclusions by status"
         />
       </div>
@@ -310,7 +312,7 @@ watch(statusFilter, (nextFilter) => {
           <span>Actions</span>
         </div>
         <div
-          v-for="rule in webui.tagExclusions"
+          v-for="rule in settings.tagExclusions"
           :key="rule.id"
           class="management-row"
         >
@@ -350,7 +352,7 @@ watch(statusFilter, (nextFilter) => {
 
       <div v-else class="mobile-list">
         <article
-          v-for="rule in webui.tagExclusions"
+          v-for="rule in settings.tagExclusions"
           :key="rule.id"
           class="mobile-card"
         >
@@ -401,7 +403,7 @@ watch(statusFilter, (nextFilter) => {
           </div>
         </article>
       </div>
-      <div v-if="!webui.tagExclusions.length" class="empty-state">No tag exclusions.</div>
+      <div v-if="!settings.tagExclusions.length" class="empty-state">No tag exclusions.</div>
     </section>
 
     <n-modal
@@ -410,7 +412,7 @@ watch(statusFilter, (nextFilter) => {
       title="Save tag exclusion"
       positive-text="Save rule"
       negative-text="Cancel"
-      :positive-button-props="{ type: 'primary', loading: webui.loading }"
+      :positive-button-props="{ type: 'primary', loading: settings.loading }"
       @positive-click="confirmSave"
     >
       <div class="confirmation-list">
@@ -447,7 +449,7 @@ watch(statusFilter, (nextFilter) => {
       title="Update tag exclusion"
       positive-text="Update status"
       negative-text="Cancel"
-      :positive-button-props="{ type: nextStatus === 'active' ? 'primary' : 'warning', loading: webui.loading }"
+      :positive-button-props="{ type: nextStatus === 'active' ? 'primary' : 'warning', loading: settings.loading }"
       @positive-click="confirmStatusChange"
     >
       <div v-if="statusTarget" class="confirmation-list">

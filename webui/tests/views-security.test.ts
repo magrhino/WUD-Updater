@@ -14,10 +14,10 @@ import SettingsView from "../src/views/SettingsView.vue";
 import SnoozesView from "../src/views/SnoozesView.vue";
 import TagExclusionsView from "../src/views/TagExclusionsView.vue";
 import { useAuthStore } from "../src/stores/auth";
-import {
-  APPLY_JOB_RECOVERY_MESSAGE,
-  useWebuiStore,
-} from "../src/stores/webui";
+import { useConnectionStore } from "../src/stores/connection";
+import { useSettingsStore } from "../src/stores/settings";
+import { useUpdatesStore, APPLY_JOB_RECOVERY_MESSAGE } from "../src/stores/updates";
+import { useRunsStore } from "../src/stores/runs";
 import {
   applyPreflightResponse,
   applyJobLogResponse,
@@ -49,10 +49,13 @@ function setupStores(mutationsEnabled: boolean) {
   setActivePinia(pinia);
   const auth = useAuthStore();
   auth.session = authSession({ mutations_enabled: mutationsEnabled });
-  const webui = useWebuiStore();
-  webui.status = statusResponse({ mutations_enabled: mutationsEnabled });
-  webui.coreUpdateTour = coreUpdateTourResponse();
-  return { pinia, auth, webui };
+      const connection = useConnectionStore();
+    const settings = useSettingsStore();
+    const updates = useUpdatesStore();
+    const runs = useRunsStore();
+  connection.status = statusResponse({ mutations_enabled: mutationsEnabled });
+  settings.coreUpdateTour = coreUpdateTourResponse();
+  return { pinia, auth, connection, settings, updates, runs };
 }
 
 function failedApplyPreflight(code: string, detail: string) {
@@ -107,11 +110,11 @@ function mockMobileViewport(): () => void {
   };
 }
 
-function mockPendingLifecycle(webui: ReturnType<typeof useWebuiStore>) {
-  vi.spyOn(webui, "loadPending").mockResolvedValue();
-  vi.spyOn(webui, "loadReleaseNotes").mockResolvedValue();
-  vi.spyOn(webui, "refreshReleaseNotes").mockResolvedValue();
-  vi.spyOn(webui, "loadPendingSafetyCues").mockResolvedValue();
+function mockPendingLifecycle(settings: ReturnType<typeof useWebuiStore>, updates: any) {
+  vi.spyOn(updates, "loadPending").mockResolvedValue();
+  vi.spyOn(updates, "loadReleaseNotes").mockResolvedValue();
+  vi.spyOn(updates, "refreshReleaseNotes").mockResolvedValue();
+  vi.spyOn(settings, "loadPendingSafetyCues").mockResolvedValue();
 }
 
 const stalePendingPreflightFindings = [
@@ -246,11 +249,11 @@ describe("mutating WebUI views", () => {
   });
 
   it("allows read-only pending preflight but blocks apply", async () => {
-    const { pinia, webui } = setupStores(false);
-    webui.pending = pendingResponse();
-    mockPendingLifecycle(webui);
-    const createPlan = vi.spyOn(webui, "createPlan").mockImplementation(async () => {
-      webui.plan = planResponse({
+    const { pinia, auth, connection, settings, updates, runs } = setupStores(false);
+    updates.pending = pendingResponse();
+    mockPendingLifecycle(settings, updates);
+    const createPlan = vi.spyOn(updates, "createPlan").mockImplementation(async () => {
+      updates.plan = planResponse({
         can_apply: false,
         apply_preflight: failedApplyPreflight(
           "mutations-enabled",
@@ -258,7 +261,7 @@ describe("mutating WebUI views", () => {
         ),
       });
     });
-    const createJob = vi.spyOn(webui, "createJob");
+    const createJob = vi.spyOn(updates, "createJob");
     const wrapper = mountWithApp(PendingView, { pinia });
 
     await wrapper
@@ -281,11 +284,11 @@ describe("mutating WebUI views", () => {
   });
 
   it("shows blocked preflight errors without an apply action", async () => {
-    const { pinia, webui } = setupStores(true);
-    webui.pending = pendingResponse();
-    mockPendingLifecycle(webui);
-    const createPlan = vi.spyOn(webui, "createPlan").mockImplementation(async () => {
-      webui.plan = planResponse({
+    const { pinia, auth, connection, settings, updates, runs } = setupStores(true);
+    updates.pending = pendingResponse();
+    mockPendingLifecycle(settings, updates);
+    const createPlan = vi.spyOn(updates, "createPlan").mockImplementation(async () => {
+      updates.plan = planResponse({
         can_apply: false,
         status: "blocked",
         summary: {
@@ -320,7 +323,7 @@ describe("mutating WebUI views", () => {
         ],
       });
     });
-    const createJob = vi.spyOn(webui, "createJob");
+    const createJob = vi.spyOn(updates, "createJob");
     const wrapper = mountWithApp(PendingView, { pinia });
 
     await wrapper
@@ -344,9 +347,9 @@ describe("mutating WebUI views", () => {
   });
 
   it("rebuilds digest-pin label rewrite plans after approval", async () => {
-    const { pinia, webui } = setupStores(true);
-    webui.pending = pendingResponse();
-    mockPendingLifecycle(webui);
+    const { pinia, auth, connection, settings, updates, runs } = setupStores(true);
+    updates.pending = pendingResponse();
+    mockPendingLifecycle(settings, updates);
     const approval = {
       stack: "media",
       service: "app",
@@ -373,10 +376,10 @@ describe("mutating WebUI views", () => {
       },
     };
     const createPlan = vi
-      .spyOn(webui, "createPlan")
+      .spyOn(updates, "createPlan")
       .mockImplementation(async (_lines, _allow, _tags, approvals = []) => {
         const base = planResponse();
-        webui.plan = approvals.length
+        updates.plan = approvals.length
           ? planResponse({
               stacks: [
                 {
@@ -453,9 +456,9 @@ describe("mutating WebUI views", () => {
   });
 
   it("does not reopen digest-pin approval preflight after close", async () => {
-    const { pinia, webui } = setupStores(true);
-    webui.pending = pendingResponse();
-    mockPendingLifecycle(webui);
+    const { pinia, auth, connection, settings, updates, runs } = setupStores(true);
+    updates.pending = pendingResponse();
+    mockPendingLifecycle(settings, updates);
     let resolveSecondPlan: () => void = () => {};
     const secondPlan = new Promise<void>((resolve) => {
       resolveSecondPlan = resolve;
@@ -486,12 +489,12 @@ describe("mutating WebUI views", () => {
       },
     };
     const createPlan = vi
-      .spyOn(webui, "createPlan")
+      .spyOn(updates, "createPlan")
       .mockImplementation(async (_lines, _allow, _tags, approvals = []) => {
         const base = planResponse();
         if (approvals.length) {
           await secondPlan;
-          webui.plan = planResponse({
+          updates.plan = planResponse({
             stacks: [
               {
                 ...base.stacks[0],
@@ -525,7 +528,7 @@ describe("mutating WebUI views", () => {
           });
           return;
         }
-        webui.plan = planResponse({
+        updates.plan = planResponse({
           can_apply: false,
           status: "blocked",
           summary: {
@@ -569,11 +572,11 @@ describe("mutating WebUI views", () => {
 
   it("shows unmatched cleanup preview disabled in read-only mode", async () => {
     const item = unmatchedPendingItem();
-    const { pinia, webui } = setupStores(false);
-    webui.pending = pendingWithUnmatched(item);
-    mockPendingLifecycle(webui);
-    vi.spyOn(webui, "createPlan").mockImplementation(async () => {
-      webui.plan = planResponse({
+    const { pinia, auth, connection, settings, updates, runs } = setupStores(false);
+    updates.pending = pendingWithUnmatched(item);
+    mockPendingLifecycle(settings, updates);
+    vi.spyOn(updates, "createPlan").mockImplementation(async () => {
+      updates.plan = planResponse({
         can_apply: false,
         status: "blocked",
         summary: {
@@ -623,7 +626,7 @@ describe("mutating WebUI views", () => {
         },
       });
     });
-    const cleanupPending = vi.spyOn(webui, "cleanupPending");
+    const cleanupPending = vi.spyOn(updates, "cleanupPending");
     const wrapper = mountWithApp(PendingView, { pinia });
 
     expect(wrapper.text()).toContain("Stale pending entries");
@@ -668,16 +671,16 @@ describe("mutating WebUI views", () => {
 
   it("confirms unmatched cleanup before refreshing pending state", async () => {
     const item = unmatchedPendingItem();
-    const { pinia, webui } = setupStores(true);
-    webui.pending = pendingWithUnmatched(item);
-    const loadPending = vi.spyOn(webui, "loadPending").mockResolvedValue();
-    const loadReleaseNotes = vi.spyOn(webui, "loadReleaseNotes").mockResolvedValue();
+    const { pinia, auth, connection, settings, updates, runs } = setupStores(true);
+    updates.pending = pendingWithUnmatched(item);
+    const loadPending = vi.spyOn(updates, "loadPending").mockResolvedValue();
+    const loadReleaseNotes = vi.spyOn(updates, "loadReleaseNotes").mockResolvedValue();
     const refreshReleaseNotes = vi
-      .spyOn(webui, "refreshReleaseNotes")
+      .spyOn(updates, "refreshReleaseNotes")
       .mockResolvedValue();
-    const loadRuns = vi.spyOn(webui, "loadRuns").mockResolvedValue();
-    vi.spyOn(webui, "createPlan").mockImplementation(async () => {
-      webui.plan = planResponse({
+    const loadRuns = vi.spyOn(runs, "loadRuns").mockResolvedValue();
+    vi.spyOn(updates, "createPlan").mockImplementation(async () => {
+      updates.plan = planResponse({
         can_apply: false,
         status: "blocked",
         summary: {
@@ -728,7 +731,7 @@ describe("mutating WebUI views", () => {
       });
     });
     const cleanupPending = vi
-      .spyOn(webui, "cleanupPending")
+      .spyOn(updates, "cleanupPending")
       .mockImplementation(async () => {
         const response = {
           status: "success" as const,
@@ -743,8 +746,8 @@ describe("mutating WebUI views", () => {
             },
           ],
         };
-        webui.pendingCleanup = response;
-        webui.plan = null;
+        updates.pendingCleanup = response;
+        updates.plan = null;
         return response;
       });
     const wrapper = mountWithApp(PendingView, { pinia });
@@ -798,10 +801,10 @@ describe("mutating WebUI views", () => {
   });
 
   it("disables selected pending removal in read-only mode", async () => {
-    const { pinia, webui } = setupStores(false);
-    webui.pending = pendingResponse();
-    mockPendingLifecycle(webui);
-    const createRemovalPlan = vi.spyOn(webui, "createRemovalPlan");
+    const { pinia, auth, connection, settings, updates, runs } = setupStores(false);
+    updates.pending = pendingResponse();
+    mockPendingLifecycle(settings, updates);
+    const createRemovalPlan = vi.spyOn(updates, "createRemovalPlan");
     const wrapper = mountWithApp(PendingView, { pinia });
 
     await wrapper
@@ -826,14 +829,14 @@ describe("mutating WebUI views", () => {
       image: "repo/app:1.0",
       repo: "repo/app",
     });
-    const { pinia, webui } = setupStores(true);
-    webui.pending = pendingResponse([item]);
-    const loadPending = vi.spyOn(webui, "loadPending").mockResolvedValue();
-    const loadReleaseNotes = vi.spyOn(webui, "loadReleaseNotes").mockResolvedValue();
+    const { pinia, auth, connection, settings, updates, runs } = setupStores(true);
+    updates.pending = pendingResponse([item]);
+    const loadPending = vi.spyOn(updates, "loadPending").mockResolvedValue();
+    const loadReleaseNotes = vi.spyOn(updates, "loadReleaseNotes").mockResolvedValue();
     const refreshReleaseNotes = vi
-      .spyOn(webui, "refreshReleaseNotes")
+      .spyOn(updates, "refreshReleaseNotes")
       .mockResolvedValue();
-    const loadRuns = vi.spyOn(webui, "loadRuns").mockResolvedValue();
+    const loadRuns = vi.spyOn(runs, "loadRuns").mockResolvedValue();
     const removalPlan = {
       removal_id: "removal-test",
       source_file: "/out/images.todo",
@@ -850,13 +853,13 @@ describe("mutating WebUI views", () => {
       ],
     };
     const createRemovalPlan = vi
-      .spyOn(webui, "createRemovalPlan")
+      .spyOn(updates, "createRemovalPlan")
       .mockImplementation(async () => {
-        webui.pendingRemovalPlan = removalPlan;
+        updates.pendingRemovalPlan = removalPlan;
         return removalPlan;
       });
     const removeSelectedPending = vi
-      .spyOn(webui, "removeSelectedPending")
+      .spyOn(updates, "removeSelectedPending")
       .mockImplementation(async () => {
         const response = {
           status: "success" as const,
@@ -871,8 +874,8 @@ describe("mutating WebUI views", () => {
             },
           ],
         };
-        webui.pendingCleanup = response;
-        webui.pendingRemovalPlan = null;
+        updates.pendingCleanup = response;
+        updates.pendingRemovalPlan = null;
         return response;
       });
     const wrapper = mountWithApp(PendingView, { pinia });
@@ -912,13 +915,13 @@ describe("mutating WebUI views", () => {
   });
 
   it("starts a stack update with the full stack line set", async () => {
-    const { pinia, webui } = setupStores(true);
-    webui.pending = pendingResponse([
+    const { pinia, auth, connection, settings, updates, runs } = setupStores(true);
+    updates.pending = pendingResponse([
       pendingItem({ line_no: 4, image: "repo/app:1.0", repo: "repo/app" }),
       pendingItem({ line_no: 9, image: "repo/worker:1.0", repo: "repo/worker" }),
     ]);
-    mockPendingLifecycle(webui);
-    const createPlan = vi.spyOn(webui, "createPlan").mockResolvedValue();
+    mockPendingLifecycle(settings, updates);
+    const createPlan = vi.spyOn(updates, "createPlan").mockResolvedValue();
     const wrapper = mountWithApp(PendingView, { pinia });
 
     await wrapper
@@ -930,13 +933,13 @@ describe("mutating WebUI views", () => {
   });
 
   it("marks a stack indeterminate after one grouped item is deselected", async () => {
-    const { pinia, webui } = setupStores(true);
-    webui.pending = pendingResponse([
+    const { pinia, auth, connection, settings, updates, runs } = setupStores(true);
+    updates.pending = pendingResponse([
       pendingItem({ line_no: 1, image: "repo/app:1.0", repo: "repo/app" }),
       pendingItem({ line_no: 2, image: "repo/worker:1.0", repo: "repo/worker" }),
     ]);
-    mockPendingLifecycle(webui);
-    const createPlan = vi.spyOn(webui, "createPlan").mockResolvedValue();
+    mockPendingLifecycle(settings, updates);
+    const createPlan = vi.spyOn(updates, "createPlan").mockResolvedValue();
     const wrapper = mountWithApp(PendingView, { pinia });
     const stackCheckbox = wrapper.find('input[aria-label="Select stack media"]');
 
@@ -967,16 +970,16 @@ describe("mutating WebUI views", () => {
       repo: "repo/loose",
       services: [],
     });
-    const { pinia, webui } = setupStores(true);
-    webui.pending = {
+    const { pinia, auth, connection, settings, updates, runs } = setupStores(true);
+    updates.pending = {
       ...pendingResponse([stackItem, unmatchedItem]),
       grouping: {
         ...pendingGrouping([stackItem]),
         unmatched: [unmatchedItem],
       },
     };
-    mockPendingLifecycle(webui);
-    const createPlan = vi.spyOn(webui, "createPlan").mockResolvedValue();
+    mockPendingLifecycle(settings, updates);
+    const createPlan = vi.spyOn(updates, "createPlan").mockResolvedValue();
     const wrapper = mountWithApp(PendingView, { pinia });
 
     await wrapper
@@ -994,10 +997,10 @@ describe("mutating WebUI views", () => {
 
   it("selects tag update rows and enables tag rewrites when an override is edited", async () => {
     const item = pendingItem();
-    const { pinia, webui } = setupStores(true);
-    webui.pending = pendingResponse([item]);
-    mockPendingLifecycle(webui);
-    const createPlan = vi.spyOn(webui, "createPlan").mockResolvedValue();
+    const { pinia, auth, connection, settings, updates, runs } = setupStores(true);
+    updates.pending = pendingResponse([item]);
+    mockPendingLifecycle(settings, updates);
+    const createPlan = vi.spyOn(updates, "createPlan").mockResolvedValue();
     const wrapper = mountWithApp(PendingView, { pinia });
 
     await wrapper
@@ -1022,10 +1025,10 @@ describe("mutating WebUI views", () => {
 
   it("blocks invalid pending tag overrides before planning", async () => {
     const item = pendingItem();
-    const { pinia, webui } = setupStores(true);
-    webui.pending = pendingResponse([item]);
-    mockPendingLifecycle(webui);
-    const createPlan = vi.spyOn(webui, "createPlan");
+    const { pinia, auth, connection, settings, updates, runs } = setupStores(true);
+    updates.pending = pendingResponse([item]);
+    mockPendingLifecycle(settings, updates);
+    const createPlan = vi.spyOn(updates, "createPlan");
     const wrapper = mountWithApp(PendingView, { pinia });
 
     await wrapper
@@ -1046,9 +1049,9 @@ describe("mutating WebUI views", () => {
   });
 
   it("keeps grouped update details collapsed by default", () => {
-    const { pinia, webui } = setupStores(true);
-    webui.pending = pendingResponse();
-    mockPendingLifecycle(webui);
+    const { pinia, auth, connection, settings, updates, runs } = setupStores(true);
+    updates.pending = pendingResponse();
+    mockPendingLifecycle(settings, updates);
     const wrapper = mountWithApp(PendingView, { pinia });
 
     expect(wrapper.find("details.stack-details").attributes("open")).toBeUndefined();
@@ -1088,8 +1091,8 @@ describe("mutating WebUI views", () => {
       services: [],
       action: "recreate_stack",
     });
-    const { pinia, webui } = setupStores(true);
-    webui.releaseNotes = releaseNotesResponse([
+    const { pinia, auth, connection, settings, updates, runs } = setupStores(true);
+    updates.releaseNotes = releaseNotesResponse([
       releaseNoteInfo({
         line_no: 1,
         status: "error",
@@ -1102,11 +1105,11 @@ describe("mutating WebUI views", () => {
         breaking_reasons: ["Major version update."],
       }),
     ]);
-    webui.servicePolicies = [
+    settings.servicePolicies = [
       servicePolicy({ service_key: "media/wud-updater", auto_update: true }),
     ];
-    webui.snoozes = [snooze({ service_key: "media/radarr" })];
-    webui.pending = {
+    settings.snoozes = [snooze({ service_key: "media/radarr" })];
+    updates.pending = {
       source_file: "/out/images.todo",
       exists: true,
       count: 3,
@@ -1125,7 +1128,7 @@ describe("mutating WebUI views", () => {
       },
       warnings: [],
     };
-    mockPendingLifecycle(webui);
+    mockPendingLifecycle(settings, updates);
     const wrapper = mountWithApp(PendingView, { pinia });
     const card = wrapper.find(".stack-card");
 
@@ -1156,11 +1159,11 @@ describe("mutating WebUI views", () => {
   });
 
   it("shows ready preflight service impact and row tag rewrites", async () => {
-    const { pinia, webui } = setupStores(true);
-    webui.pending = pendingResponse();
-    mockPendingLifecycle(webui);
-    vi.spyOn(webui, "createPlan").mockImplementation(async () => {
-      webui.plan = planResponse({
+    const { pinia, auth, connection, settings, updates, runs } = setupStores(true);
+    updates.pending = pendingResponse();
+    mockPendingLifecycle(settings, updates);
+    vi.spyOn(updates, "createPlan").mockImplementation(async () => {
+      updates.plan = planResponse({
         selected_line_numbers: [1, 2],
         summary: {
           target_count: 2,
@@ -1264,11 +1267,11 @@ describe("mutating WebUI views", () => {
   });
 
   it("shows failed apply readiness and disables apply", async () => {
-    const { pinia, webui } = setupStores(true);
-    webui.pending = pendingResponse();
-    mockPendingLifecycle(webui);
-    vi.spyOn(webui, "createPlan").mockImplementation(async () => {
-      webui.plan = planResponse({
+    const { pinia, auth, connection, settings, updates, runs } = setupStores(true);
+    updates.pending = pendingResponse();
+    mockPendingLifecycle(settings, updates);
+    vi.spyOn(updates, "createPlan").mockImplementation(async () => {
+      updates.plan = planResponse({
         can_apply: false,
         apply_preflight: failedApplyPreflight(
           "logs-writable",
@@ -1276,7 +1279,7 @@ describe("mutating WebUI views", () => {
         ),
       });
     });
-    const createJob = vi.spyOn(webui, "createJob");
+    const createJob = vi.spyOn(updates, "createJob");
     const wrapper = mountWithApp(PendingView, { pinia });
 
     await wrapper
@@ -1307,8 +1310,8 @@ describe("mutating WebUI views", () => {
   });
 
   it("falls back to pending file order when grouping is unavailable", () => {
-    const { pinia, webui } = setupStores(true);
-    webui.pending = {
+    const { pinia, auth, connection, settings, updates, runs } = setupStores(true);
+    updates.pending = {
       ...pendingResponse(),
       grouping: {
         status: "unavailable",
@@ -1317,7 +1320,7 @@ describe("mutating WebUI views", () => {
         warnings: [],
       },
     };
-    mockPendingLifecycle(webui);
+    mockPendingLifecycle(settings, updates);
     const wrapper = mountWithApp(PendingView, { pinia });
 
     expect(wrapper.text()).toContain(
@@ -1329,8 +1332,8 @@ describe("mutating WebUI views", () => {
   it("shows safety cues in the mobile pending file order fallback", () => {
     const restore = mockMobileViewport();
     try {
-      const { pinia, webui } = setupStores(true);
-      webui.pending = {
+      const { pinia, auth, connection, settings, updates, runs } = setupStores(true);
+      updates.pending = {
         ...pendingResponse([
           pendingItem({
             image: "redis:latest@sha256:abc",
@@ -1347,7 +1350,7 @@ describe("mutating WebUI views", () => {
           warnings: [],
         },
       };
-      mockPendingLifecycle(webui);
+      mockPendingLifecycle(settings, updates);
       const wrapper = mountWithApp(PendingView, { pinia });
       const card = wrapper.find(".mobile-card");
 
@@ -1361,10 +1364,10 @@ describe("mutating WebUI views", () => {
   });
 
   it("shows a pending loading skeleton before queue data is available", () => {
-    const { pinia, webui } = setupStores(true);
-    webui.pending = null;
-    webui.loading = true;
-    mockPendingLifecycle(webui);
+    const { pinia, auth, connection, settings, updates, runs } = setupStores(true);
+    updates.pending = null;
+    updates.loading = true;
+    mockPendingLifecycle(settings, updates);
     const wrapper = mountWithApp(PendingView, { pinia });
 
     expect(wrapper.text()).toContain("Loading pending updates");
@@ -1373,20 +1376,20 @@ describe("mutating WebUI views", () => {
   });
 
   it("keeps failed pending loads recoverable without showing stale selection controls", async () => {
-    const { pinia, webui } = setupStores(true);
-    webui.pending = null;
+    const { pinia, auth, connection, settings, updates, runs } = setupStores(true);
+    updates.pending = null;
     const loadPending = vi
-      .spyOn(webui, "loadPending")
+      .spyOn(updates, "loadPending")
       .mockImplementationOnce(async () => {
-        webui.setError("Network request failed");
+        updates.error = ("Network request failed");
         throw new Error("Network request failed");
       })
       .mockImplementationOnce(async () => {
-        webui.setError("");
-        webui.pending = pendingResponse();
+        updates.error = ("");
+        updates.pending = pendingResponse();
       });
-    vi.spyOn(webui, "loadReleaseNotes").mockResolvedValue();
-    vi.spyOn(webui, "refreshReleaseNotes").mockResolvedValue();
+    vi.spyOn(updates, "loadReleaseNotes").mockResolvedValue();
+    vi.spyOn(updates, "refreshReleaseNotes").mockResolvedValue();
     const wrapper = mountWithApp(PendingView, { pinia });
 
     await flushPromises();
@@ -1418,8 +1421,8 @@ describe("mutating WebUI views", () => {
       image: "repo/worker:1.0",
       repo: "repo/worker",
     });
-    const { pinia, webui } = setupStores(true);
-    webui.pending = {
+    const { pinia, auth, connection, settings, updates, runs } = setupStores(true);
+    updates.pending = {
       ...pendingResponse([itemOne, itemTwo]),
       grouping: {
         ...pendingGrouping([itemOne, itemTwo]),
@@ -1432,7 +1435,7 @@ describe("mutating WebUI views", () => {
         ],
       },
     };
-    mockPendingLifecycle(webui);
+    mockPendingLifecycle(settings, updates);
     const wrapper = mountWithApp(PendingView, { pinia });
 
     await wrapper
@@ -1448,8 +1451,8 @@ describe("mutating WebUI views", () => {
   it("wraps long pending values in the fallback table", () => {
     const longImage =
       "registry.example.test/selfhosted/very-long-namespace-with-extra-segments/service-name-that-keeps-going:2026.06.01-build-with-extra-metadata";
-    const { pinia, webui } = setupStores(true);
-    webui.pending = {
+    const { pinia, auth, connection, settings, updates, runs } = setupStores(true);
+    updates.pending = {
       ...pendingResponse([
         pendingItem({
           image: longImage,
@@ -1463,7 +1466,7 @@ describe("mutating WebUI views", () => {
         warnings: [],
       },
     };
-    mockPendingLifecycle(webui);
+    mockPendingLifecycle(settings, updates);
     const wrapper = mountWithApp(PendingView, { pinia });
 
     const wrappedValues = wrapper.findAll(".pending-table-value");
@@ -1473,10 +1476,10 @@ describe("mutating WebUI views", () => {
   });
 
   it("renders a clear queue state when no pending updates remain", () => {
-    const { pinia, webui } = setupStores(true);
-    webui.pending = pendingResponse([]);
-    webui.runs = [runSummary({ id: 42 })];
-    mockPendingLifecycle(webui);
+    const { pinia, auth, connection, settings, updates, runs } = setupStores(true);
+    updates.pending = pendingResponse([]);
+    runs.runs = [runSummary({ id: 42 })];
+    mockPendingLifecycle(settings, updates);
     const wrapper = mountWithApp(PendingView, { pinia });
 
     const clearState = wrapper.find(".clear-queue-state");
@@ -1490,17 +1493,17 @@ describe("mutating WebUI views", () => {
   });
 
   it("renders release-note links with breaking cues", () => {
-    const { pinia, webui } = setupStores(false);
-    webui.pending = pendingResponse();
-    webui.releaseNotes = releaseNotesResponse([
+    const { pinia, auth, connection, settings, updates, runs } = setupStores(false);
+    updates.pending = pendingResponse();
+    updates.releaseNotes = releaseNotesResponse([
       releaseNoteInfo({
         breaking: true,
         breaking_reasons: ["Major version changes from 1 to 2."],
       }),
     ]);
-    vi.spyOn(webui, "loadPending").mockResolvedValue();
-    vi.spyOn(webui, "loadReleaseNotes").mockResolvedValue();
-    vi.spyOn(webui, "refreshReleaseNotes").mockResolvedValue();
+    vi.spyOn(updates, "loadPending").mockResolvedValue();
+    vi.spyOn(updates, "loadReleaseNotes").mockResolvedValue();
+    vi.spyOn(updates, "refreshReleaseNotes").mockResolvedValue();
     const wrapper = mountWithApp(PendingView, { pinia });
 
     expect(wrapper.text()).toContain("GitHub release");
@@ -1509,9 +1512,9 @@ describe("mutating WebUI views", () => {
   });
 
   it("renders both LSIO and upstream release-note links", () => {
-    const { pinia, webui } = setupStores(false);
-    webui.pending = pendingResponse([pendingItem({ image: "linuxserver/radarr:latest" })]);
-    webui.releaseNotes = releaseNotesResponse([
+    const { pinia, auth, connection, settings, updates, runs } = setupStores(false);
+    updates.pending = pendingResponse([pendingItem({ image: "linuxserver/radarr:latest" })]);
+    updates.releaseNotes = releaseNotesResponse([
       releaseNoteInfo({
         provider: "lsio",
         image_repo: "linuxserver/docker-radarr",
@@ -1530,9 +1533,9 @@ describe("mutating WebUI views", () => {
         ],
       }),
     ]);
-    vi.spyOn(webui, "loadPending").mockResolvedValue();
-    vi.spyOn(webui, "loadReleaseNotes").mockResolvedValue();
-    vi.spyOn(webui, "refreshReleaseNotes").mockResolvedValue();
+    vi.spyOn(updates, "loadPending").mockResolvedValue();
+    vi.spyOn(updates, "loadReleaseNotes").mockResolvedValue();
+    vi.spyOn(updates, "refreshReleaseNotes").mockResolvedValue();
     const wrapper = mountWithApp(PendingView, { pinia });
 
     expect(wrapper.text()).toContain("LSIO release");
@@ -1540,8 +1543,8 @@ describe("mutating WebUI views", () => {
   });
 
   it("renders unavailable release-note reasons without hiding LSIO links", () => {
-    const { pinia, webui } = setupStores(false);
-    webui.pending = pendingResponse([
+    const { pinia, auth, connection, settings, updates, runs } = setupStores(false);
+    updates.pending = pendingResponse([
       pendingItem({
         line_no: 1,
         image: "advplyr/audiobookshelf:latest",
@@ -1553,7 +1556,7 @@ describe("mutating WebUI views", () => {
         repo: "linuxserver/calibre",
       }),
     ]);
-    webui.releaseNotes = releaseNotesResponse([
+    updates.releaseNotes = releaseNotesResponse([
       releaseNoteInfo({
         line_no: 1,
         status: "unsupported",
@@ -1582,9 +1585,9 @@ describe("mutating WebUI views", () => {
         ],
       }),
     ]);
-    vi.spyOn(webui, "loadPending").mockResolvedValue();
-    vi.spyOn(webui, "loadReleaseNotes").mockResolvedValue();
-    vi.spyOn(webui, "refreshReleaseNotes").mockResolvedValue();
+    vi.spyOn(updates, "loadPending").mockResolvedValue();
+    vi.spyOn(updates, "loadReleaseNotes").mockResolvedValue();
+    vi.spyOn(updates, "refreshReleaseNotes").mockResolvedValue();
     const wrapper = mountWithApp(PendingView, { pinia });
 
     expect(wrapper.text()).toContain("Unavailable");
@@ -1596,26 +1599,26 @@ describe("mutating WebUI views", () => {
   });
 
   it("creates an apply job only after explicit confirmation", async () => {
-    const { pinia, webui } = setupStores(true);
-    webui.pending = pendingResponse();
+    const { pinia, auth, connection, settings, updates, runs } = setupStores(true);
+    updates.pending = pendingResponse();
     let pendingRefreshRemovesSelection = false;
-    const loadPending = vi.spyOn(webui, "loadPending").mockImplementation(async () => {
-      webui.plan = null;
+    const loadPending = vi.spyOn(updates, "loadPending").mockImplementation(async () => {
+      updates.plan = null;
       if (pendingRefreshRemovesSelection) {
-        webui.pending = pendingResponse([]);
+        updates.pending = pendingResponse([]);
       }
     });
-    const loadReleaseNotes = vi.spyOn(webui, "loadReleaseNotes").mockResolvedValue();
+    const loadReleaseNotes = vi.spyOn(updates, "loadReleaseNotes").mockResolvedValue();
     const refreshReleaseNotes = vi
-      .spyOn(webui, "refreshReleaseNotes")
+      .spyOn(updates, "refreshReleaseNotes")
       .mockResolvedValue();
-    const loadRuns = vi.spyOn(webui, "loadRuns").mockResolvedValue();
-    vi.spyOn(webui, "createPlan").mockImplementation(async () => {
-      webui.plan = planResponse();
+    const loadRuns = vi.spyOn(runs, "loadRuns").mockResolvedValue();
+    vi.spyOn(updates, "createPlan").mockImplementation(async () => {
+      updates.plan = planResponse();
     });
-    const createJob = vi.spyOn(webui, "createJob").mockImplementation(async () => {
+    const createJob = vi.spyOn(updates, "createJob").mockImplementation(async () => {
       const job = applyJobResponse();
-      webui.setApplyJob(job);
+      updates.setApplyJob(job);
       return job;
     });
     const focus = vi
@@ -1736,16 +1739,16 @@ describe("mutating WebUI views", () => {
   });
 
   it("keeps an earlier phase failure visible after a later same-phase success", async () => {
-    const { pinia, webui } = setupStores(true);
-    webui.pending = pendingResponse();
-    mockPendingLifecycle(webui);
-    vi.spyOn(webui, "loadRuns").mockResolvedValue();
-    vi.spyOn(webui, "createPlan").mockImplementation(async () => {
-      webui.plan = planResponse();
+    const { pinia, auth, connection, settings, updates, runs } = setupStores(true);
+    updates.pending = pendingResponse();
+    mockPendingLifecycle(settings, updates);
+    vi.spyOn(runs, "loadRuns").mockResolvedValue();
+    vi.spyOn(updates, "createPlan").mockImplementation(async () => {
+      updates.plan = planResponse();
     });
-    vi.spyOn(webui, "createJob").mockImplementation(async () => {
+    vi.spyOn(updates, "createJob").mockImplementation(async () => {
       const job = applyJobResponse();
-      webui.setApplyJob(job);
+      updates.setApplyJob(job);
       return job;
     });
     const jobStream = mockApplyJobStream();
@@ -1812,16 +1815,16 @@ describe("mutating WebUI views", () => {
   });
 
   it("loads the persisted run log when the job stream ends without live log content", async () => {
-    const { pinia, webui } = setupStores(true);
-    webui.pending = pendingResponse();
-    mockPendingLifecycle(webui);
-    const loadRuns = vi.spyOn(webui, "loadRuns").mockResolvedValue();
-    vi.spyOn(webui, "createPlan").mockImplementation(async () => {
-      webui.plan = planResponse();
+    const { pinia, auth, connection, settings, updates, runs } = setupStores(true);
+    updates.pending = pendingResponse();
+    mockPendingLifecycle(settings, updates);
+    const loadRuns = vi.spyOn(runs, "loadRuns").mockResolvedValue();
+    vi.spyOn(updates, "createPlan").mockImplementation(async () => {
+      updates.plan = planResponse();
     });
-    vi.spyOn(webui, "createJob").mockImplementation(async () => {
+    vi.spyOn(updates, "createJob").mockImplementation(async () => {
       const job = applyJobResponse({ status: "running" });
-      webui.setApplyJob(job);
+      updates.setApplyJob(job);
       return job;
     });
     const runLog = vi.spyOn(webApi, "runLog").mockResolvedValue({
@@ -1879,10 +1882,10 @@ describe("mutating WebUI views", () => {
   });
 
   it("loads the persisted run log for already-terminal apply job state", async () => {
-    const { pinia, webui } = setupStores(true);
-    webui.pending = pendingResponse();
-    mockPendingLifecycle(webui);
-    webui.setApplyJob(
+    const { pinia, auth, connection, settings, updates, runs } = setupStores(true);
+    updates.pending = pendingResponse();
+    mockPendingLifecycle(settings, updates);
+    updates.setApplyJob(
       applyJobResponse({
         status: "success",
         run_id: 10,
@@ -1926,19 +1929,19 @@ describe("mutating WebUI views", () => {
   });
 
   it("keeps failed apply jobs visible with the confirmed plan impact", async () => {
-    const { pinia, webui } = setupStores(true);
-    webui.pending = pendingResponse();
-    mockPendingLifecycle(webui);
-    vi.spyOn(webui, "loadRuns").mockResolvedValue();
-    vi.spyOn(webui, "createPlan").mockImplementation(async () => {
-      webui.plan = planResponse();
+    const { pinia, auth, connection, settings, updates, runs } = setupStores(true);
+    updates.pending = pendingResponse();
+    mockPendingLifecycle(settings, updates);
+    vi.spyOn(runs, "loadRuns").mockResolvedValue();
+    vi.spyOn(updates, "createPlan").mockImplementation(async () => {
+      updates.plan = planResponse();
     });
-    vi.spyOn(webui, "createJob").mockImplementation(async () => {
+    vi.spyOn(updates, "createJob").mockImplementation(async () => {
       const job = applyJobResponse({
         status: "running",
         started_at: "2026-05-28T12:00:00+00:00",
       });
-      webui.setApplyJob(job);
+      updates.setApplyJob(job);
       return job;
     });
     const jobStream = mockApplyJobStream();
@@ -1976,16 +1979,16 @@ describe("mutating WebUI views", () => {
   });
 
   it("reports invalid log stream payloads without closing the job stream", async () => {
-    const { pinia, webui } = setupStores(true);
-    webui.pending = pendingResponse();
-    mockPendingLifecycle(webui);
-    vi.spyOn(webui, "loadRuns").mockResolvedValue();
-    vi.spyOn(webui, "createPlan").mockImplementation(async () => {
-      webui.plan = planResponse();
+    const { pinia, auth, connection, settings, updates, runs } = setupStores(true);
+    updates.pending = pendingResponse();
+    mockPendingLifecycle(settings, updates);
+    vi.spyOn(runs, "loadRuns").mockResolvedValue();
+    vi.spyOn(updates, "createPlan").mockImplementation(async () => {
+      updates.plan = planResponse();
     });
-    vi.spyOn(webui, "createJob").mockImplementation(async () => {
+    vi.spyOn(updates, "createJob").mockImplementation(async () => {
       const job = applyJobResponse({ status: "running" });
-      webui.setApplyJob(job);
+      updates.setApplyJob(job);
       return job;
     });
     const jobStream = mockApplyJobStream();
@@ -2017,16 +2020,16 @@ describe("mutating WebUI views", () => {
 
   it("shows recovery guidance when a remembered apply job is missing", async () => {
     window.sessionStorage.setItem("applyJobId", "job-lost");
-    const { pinia, webui } = setupStores(true);
-    webui.pending = pendingResponse();
-    vi.spyOn(webui, "loadPending").mockResolvedValue();
-    vi.spyOn(webui, "loadReleaseNotes").mockResolvedValue();
-    vi.spyOn(webui, "refreshReleaseNotes").mockResolvedValue();
+    const { pinia, auth, connection, settings, updates, runs } = setupStores(true);
+    updates.pending = pendingResponse();
+    vi.spyOn(updates, "loadPending").mockResolvedValue();
+    vi.spyOn(updates, "loadReleaseNotes").mockResolvedValue();
+    vi.spyOn(updates, "refreshReleaseNotes").mockResolvedValue();
     vi.spyOn(webApi, "job").mockRejectedValue(
       new ApiError(404, "apply job not found"),
     );
-    const loadRuns = vi.spyOn(webui, "loadRuns").mockImplementation(async () => {
-      webui.runs = [runSummary({ id: 42 })];
+    const loadRuns = vi.spyOn(runs, "loadRuns").mockImplementation(async () => {
+      runs.runs = [runSummary({ id: 42 })];
     });
     const wrapper = mountWithApp(PendingView, { pinia });
 
@@ -2034,8 +2037,8 @@ describe("mutating WebUI views", () => {
 
     expect(webApi.job).toHaveBeenCalledWith("job-lost");
     expect(loadRuns).toHaveBeenCalled();
-    expect(webui.applyJob).toBeNull();
-    expect(webui.rememberedApplyJobId).toBe("");
+    expect(updates.applyJob).toBeNull();
+    expect(updates.rememberedApplyJobId).toBe("");
     expect(window.sessionStorage.getItem("applyJobId")).toBeNull();
     expect(wrapper.text()).toContain(APPLY_JOB_RECOVERY_MESSAGE);
     expect(wrapper.text()).toContain("Runs");
@@ -2044,12 +2047,12 @@ describe("mutating WebUI views", () => {
   });
 
   it("disables policy mutations in read-only mode", async () => {
-    const { pinia, webui } = setupStores(false);
-    webui.servicePolicies = [servicePolicy()];
-    webui.updateTargets = updateTargetsResponse();
-    vi.spyOn(webui, "loadUpdateTargets").mockResolvedValue();
-    vi.spyOn(webui, "loadServicePolicies").mockResolvedValue();
-    const deletePolicy = vi.spyOn(webui, "deleteServicePolicy");
+    const { pinia, auth, connection, settings, updates, runs } = setupStores(false);
+    settings.servicePolicies = [servicePolicy()];
+    updates.updateTargets = updateTargetsResponse();
+    vi.spyOn(updates, "loadUpdateTargets").mockResolvedValue();
+    vi.spyOn(settings, "loadServicePolicies").mockResolvedValue();
+    const deletePolicy = vi.spyOn(settings, "deleteServicePolicy");
     const wrapper = mountWithApp(PoliciesView, { pinia });
 
     expect(wrapper.text()).toContain("Read-only mode is active");
@@ -2068,13 +2071,13 @@ describe("mutating WebUI views", () => {
   });
 
   it("does not assume UTC while policy schedule timezone is loading", async () => {
-    const { pinia, webui } = setupStores(true);
-    webui.status = null;
-    webui.servicePolicies = [servicePolicy()];
-    webui.updateTargets = updateTargetsResponse();
-    vi.spyOn(webui, "loadStatus").mockResolvedValue();
-    vi.spyOn(webui, "loadUpdateTargets").mockResolvedValue();
-    vi.spyOn(webui, "loadServicePolicies").mockResolvedValue();
+    const { pinia, auth, connection, settings, updates, runs } = setupStores(true);
+    connection.status = null;
+    settings.servicePolicies = [servicePolicy()];
+    updates.updateTargets = updateTargetsResponse();
+    vi.spyOn(connection, "loadStatus").mockResolvedValue();
+    vi.spyOn(updates, "loadUpdateTargets").mockResolvedValue();
+    vi.spyOn(settings, "loadServicePolicies").mockResolvedValue();
     const wrapper = mountWithApp(PoliciesView, { pinia });
     await flushPromises();
 
@@ -2091,7 +2094,7 @@ describe("mutating WebUI views", () => {
     expect(wrapper.text()).not.toContain("Update time (UTC)");
     expect(saveButton?.attributes("disabled")).toBeDefined();
 
-    webui.status = statusResponse({
+    connection.status = statusResponse({
       mutations_enabled: true,
       timezone: "America/Chicago",
     });
@@ -2107,22 +2110,22 @@ describe("mutating WebUI views", () => {
   });
 
   it("saves scheduled policy fields after server timezone is known", async () => {
-    const { pinia, webui } = setupStores(true);
-    webui.status = statusResponse({
+    const { pinia, auth, connection, settings, updates, runs } = setupStores(true);
+    connection.status = statusResponse({
       mutations_enabled: true,
       timezone: "America/Chicago",
     });
-    webui.servicePolicies = [
+    settings.servicePolicies = [
       servicePolicy({
         auto_update_time: "09:30",
         auto_update_days: ["mon", "fri"],
       }),
     ];
-    webui.updateTargets = updateTargetsResponse();
-    vi.spyOn(webui, "loadUpdateTargets").mockResolvedValue();
-    vi.spyOn(webui, "loadServicePolicies").mockResolvedValue();
+    updates.updateTargets = updateTargetsResponse();
+    vi.spyOn(updates, "loadUpdateTargets").mockResolvedValue();
+    vi.spyOn(settings, "loadServicePolicies").mockResolvedValue();
     const upsertPolicy = vi
-      .spyOn(webui, "upsertServicePolicy")
+      .spyOn(settings, "upsertServicePolicy")
       .mockResolvedValue();
     const wrapper = mountWithApp(PoliciesView, { pinia });
     await flushPromises();
@@ -2153,8 +2156,8 @@ describe("mutating WebUI views", () => {
   });
 
   it("offers discovered services and image repositories on management forms", async () => {
-    const { pinia, webui } = setupStores(true);
-    webui.updateTargets = updateTargetsResponse([
+    const { pinia, auth, connection, settings, updates, runs } = setupStores(true);
+    updates.updateTargets = updateTargetsResponse([
       updateTarget({
         service_key: "media/radarr",
         service: "radarr",
@@ -2163,9 +2166,9 @@ describe("mutating WebUI views", () => {
         current_tag: "5.21.1",
       }),
     ]);
-    webui.tagExclusions = [];
-    vi.spyOn(webui, "loadUpdateTargets").mockResolvedValue();
-    vi.spyOn(webui, "loadTagExclusions").mockResolvedValue();
+    settings.tagExclusions = [];
+    vi.spyOn(updates, "loadUpdateTargets").mockResolvedValue();
+    vi.spyOn(settings, "loadTagExclusions").mockResolvedValue();
     const wrapper = mountWithApp(TagExclusionsView, { pinia });
     await flushPromises();
 
@@ -2179,11 +2182,11 @@ describe("mutating WebUI views", () => {
 
   it("keeps clearable management selects string-safe", async () => {
     {
-      const { pinia, webui } = setupStores(true);
-      webui.servicePolicies = [servicePolicy()];
-      webui.updateTargets = updateTargetsResponse();
-      vi.spyOn(webui, "loadUpdateTargets").mockResolvedValue();
-      vi.spyOn(webui, "loadServicePolicies").mockResolvedValue();
+      const { pinia, auth, connection, settings, updates, runs } = setupStores(true);
+      settings.servicePolicies = [servicePolicy()];
+      updates.updateTargets = updateTargetsResponse();
+      vi.spyOn(updates, "loadUpdateTargets").mockResolvedValue();
+      vi.spyOn(settings, "loadServicePolicies").mockResolvedValue();
       const wrapper = mountWithApp(PoliciesView, { pinia });
       await flushPromises();
 
@@ -2199,11 +2202,11 @@ describe("mutating WebUI views", () => {
     }
 
     {
-      const { pinia, webui } = setupStores(true);
-      webui.snoozes = [];
-      webui.updateTargets = updateTargetsResponse();
-      vi.spyOn(webui, "loadUpdateTargets").mockResolvedValue();
-      vi.spyOn(webui, "loadSnoozes").mockResolvedValue();
+      const { pinia, auth, connection, settings, updates, runs } = setupStores(true);
+      settings.snoozes = [];
+      updates.updateTargets = updateTargetsResponse();
+      vi.spyOn(updates, "loadUpdateTargets").mockResolvedValue();
+      vi.spyOn(settings, "loadSnoozes").mockResolvedValue();
       const wrapper = mountWithApp(SnoozesView, { pinia });
       await flushPromises();
 
@@ -2219,11 +2222,11 @@ describe("mutating WebUI views", () => {
     }
 
     {
-      const { pinia, webui } = setupStores(true);
-      webui.tagExclusions = [];
-      webui.updateTargets = updateTargetsResponse();
-      vi.spyOn(webui, "loadUpdateTargets").mockResolvedValue();
-      vi.spyOn(webui, "loadTagExclusions").mockResolvedValue();
+      const { pinia, auth, connection, settings, updates, runs } = setupStores(true);
+      settings.tagExclusions = [];
+      updates.updateTargets = updateTargetsResponse();
+      vi.spyOn(updates, "loadUpdateTargets").mockResolvedValue();
+      vi.spyOn(settings, "loadTagExclusions").mockResolvedValue();
       const wrapper = mountWithApp(TagExclusionsView, { pinia });
       await flushPromises();
 
@@ -2241,12 +2244,12 @@ describe("mutating WebUI views", () => {
   });
 
   it("disables snooze mutations in read-only mode", async () => {
-    const { pinia, webui } = setupStores(false);
-    webui.snoozes = [snooze()];
-    webui.updateTargets = updateTargetsResponse();
-    vi.spyOn(webui, "loadUpdateTargets").mockResolvedValue();
-    vi.spyOn(webui, "loadSnoozes").mockResolvedValue();
-    const deleteSnooze = vi.spyOn(webui, "deleteSnooze");
+    const { pinia, auth, connection, settings, updates, runs } = setupStores(false);
+    settings.snoozes = [snooze()];
+    updates.updateTargets = updateTargetsResponse();
+    vi.spyOn(updates, "loadUpdateTargets").mockResolvedValue();
+    vi.spyOn(settings, "loadSnoozes").mockResolvedValue();
+    const deleteSnooze = vi.spyOn(settings, "deleteSnooze");
     const wrapper = mountWithApp(SnoozesView, { pinia });
 
     expect(wrapper.text()).toContain("Read-only mode is active");
@@ -2264,12 +2267,12 @@ describe("mutating WebUI views", () => {
   });
 
   it("disables tag exclusion mutations in read-only mode", async () => {
-    const { pinia, webui } = setupStores(false);
-    webui.tagExclusions = [tagExclusion()];
-    webui.updateTargets = updateTargetsResponse();
-    vi.spyOn(webui, "loadUpdateTargets").mockResolvedValue();
-    vi.spyOn(webui, "loadTagExclusions").mockResolvedValue();
-    const setStatus = vi.spyOn(webui, "setTagExclusionStatus");
+    const { pinia, auth, connection, settings, updates, runs } = setupStores(false);
+    settings.tagExclusions = [tagExclusion()];
+    updates.updateTargets = updateTargetsResponse();
+    vi.spyOn(updates, "loadUpdateTargets").mockResolvedValue();
+    vi.spyOn(settings, "loadTagExclusions").mockResolvedValue();
+    const setStatus = vi.spyOn(settings, "setTagExclusionStatus");
     const wrapper = mountWithApp(TagExclusionsView, { pinia });
 
     expect(wrapper.text()).toContain("Read-only mode is active");
@@ -2287,10 +2290,10 @@ describe("mutating WebUI views", () => {
   });
 
   it("renders read-only settings without exposing secret values or edit controls", async () => {
-    const { pinia, webui } = setupStores(false);
-    webui.settings = settingsResponse();
-    webui.onboarding = onboardingChecklistResponse({ visible: false });
-    vi.spyOn(webui, "loadSettings").mockResolvedValue();
+    const { pinia, auth, connection, settings, updates, runs } = setupStores(false);
+    settings.settings = settingsResponse();
+    settings.onboarding = onboardingChecklistResponse({ visible: false });
+    vi.spyOn(settings, "loadSettings").mockResolvedValue();
 
     const wrapper = mountWithApp(SettingsView, { pinia });
     await flushPromises();
@@ -2316,12 +2319,12 @@ describe("mutating WebUI views", () => {
   });
 
   it("disables managed preference saves in read-only settings", async () => {
-    const { pinia, webui } = setupStores(false);
-    webui.settings = settingsResponse();
-    webui.onboarding = onboardingChecklistResponse({ visible: false });
-    vi.spyOn(webui, "loadSettings").mockResolvedValue();
+    const { pinia, auth, connection, settings, updates, runs } = setupStores(false);
+    settings.settings = settingsResponse();
+    settings.onboarding = onboardingChecklistResponse({ visible: false });
+    vi.spyOn(settings, "loadSettings").mockResolvedValue();
     const updateManagedSettings = vi
-      .spyOn(webui, "updateManagedSettings")
+      .spyOn(settings, "updateManagedSettings")
       .mockResolvedValue({
         managed: settingsResponse().managed,
         audit_run_id: 77,
@@ -2349,18 +2352,18 @@ describe("mutating WebUI views", () => {
   });
 
   it("saves managed preference changes through the store", async () => {
-    const { pinia, webui } = setupStores(true);
-    webui.settings = settingsResponse({
+    const { pinia, auth, connection, settings, updates, runs } = setupStores(true);
+    settings.settings = settingsResponse({
       webui: settingsResponse().webui.map((entry) =>
         entry.name === "WUD_WEB_MUTATIONS_ENABLED"
           ? { ...entry, value: "true", configured: true, source: "configured" as const }
           : entry,
       ),
     });
-    webui.onboarding = onboardingChecklistResponse({ visible: false });
-    vi.spyOn(webui, "loadSettings").mockResolvedValue();
+    settings.onboarding = onboardingChecklistResponse({ visible: false });
+    vi.spyOn(settings, "loadSettings").mockResolvedValue();
     const updateManagedSettings = vi
-      .spyOn(webui, "updateManagedSettings")
+      .spyOn(settings, "updateManagedSettings")
       .mockResolvedValue({
         managed: settingsResponse({
           managed: [
@@ -2395,7 +2398,7 @@ describe("mutating WebUI views", () => {
   });
 
   it("relaunches the onboarding checklist from settings", async () => {
-    const { pinia, webui } = setupStores(true);
+    const { pinia, auth, connection, settings, updates, runs } = setupStores(true);
     const visibleOnboardingEntry = settingsResponse().managed[1]!;
     const dismissedOnboardingEntry = {
       ...visibleOnboardingEntry,
@@ -2405,21 +2408,21 @@ describe("mutating WebUI views", () => {
     const visibleSettings = settingsResponse({
       managed: [settingsResponse().managed[0]!, visibleOnboardingEntry],
     });
-    webui.settings = settingsResponse({
+    settings.settings = settingsResponse({
       managed: [settingsResponse().managed[0]!, dismissedOnboardingEntry],
     });
-    webui.onboarding = onboardingChecklistResponse({
+    settings.onboarding = onboardingChecklistResponse({
       dismissed: true,
       dismissed_at: "2026-05-31T00:00:00+00:00",
       visible: false,
       items: [],
     });
-    vi.spyOn(webui, "loadSettings").mockResolvedValue();
+    vi.spyOn(settings, "loadSettings").mockResolvedValue();
     const updateManagedSettings = vi
-      .spyOn(webui, "updateManagedSettings")
+      .spyOn(settings, "updateManagedSettings")
       .mockImplementation(async (values) => {
-        webui.settings = visibleSettings;
-        webui.onboarding = onboardingChecklistResponse();
+        settings.settings = visibleSettings;
+        settings.onboarding = onboardingChecklistResponse();
         return {
           managed: visibleSettings.managed,
           audit_run_id: 88,
@@ -2442,17 +2445,17 @@ describe("mutating WebUI views", () => {
   });
 
   it("requires warning confirmation before restarting the WebUI container", async () => {
-    const { pinia, webui } = setupStores(true);
-    webui.settings = settingsResponse({
+    const { pinia, auth, connection, settings, updates, runs } = setupStores(true);
+    settings.settings = settingsResponse({
       webui: settingsResponse().webui.map((entry) =>
         entry.name === "WUD_WEB_MUTATIONS_ENABLED"
           ? { ...entry, value: "true", configured: true, source: "configured" as const }
           : entry,
       ),
     });
-    webui.onboarding = onboardingChecklistResponse({ visible: false });
-    vi.spyOn(webui, "loadSettings").mockResolvedValue();
-    const restartContainer = vi.spyOn(webui, "restartContainer").mockResolvedValue({
+    settings.onboarding = onboardingChecklistResponse({ visible: false });
+    vi.spyOn(settings, "loadSettings").mockResolvedValue();
+    const restartContainer = vi.spyOn(connection, "restartContainer").mockResolvedValue({
       status: "scheduled",
       audit_run_id: 42,
       container: "wud-updater",
@@ -2483,11 +2486,11 @@ describe("mutating WebUI views", () => {
   });
 
   it("disables container restart in read-only settings", async () => {
-    const { pinia, webui } = setupStores(false);
-    webui.settings = settingsResponse();
-    webui.onboarding = onboardingChecklistResponse({ visible: false });
-    vi.spyOn(webui, "loadSettings").mockResolvedValue();
-    const restartContainer = vi.spyOn(webui, "restartContainer").mockResolvedValue({
+    const { pinia, auth, connection, settings, updates, runs } = setupStores(false);
+    settings.settings = settingsResponse();
+    settings.onboarding = onboardingChecklistResponse({ visible: false });
+    vi.spyOn(settings, "loadSettings").mockResolvedValue();
+    const restartContainer = vi.spyOn(connection, "restartContainer").mockResolvedValue({
       status: "scheduled",
       audit_run_id: 42,
       container: "wud-updater",
@@ -2506,9 +2509,9 @@ describe("mutating WebUI views", () => {
   });
 
   it("renders first-run onboarding checklist with copyable suggestions", async () => {
-    const { pinia, webui } = setupStores(false);
-    webui.settings = settingsResponse();
-    webui.onboarding = onboardingChecklistResponse({
+    const { pinia, auth, connection, settings, updates, runs } = setupStores(false);
+    settings.settings = settingsResponse();
+    settings.onboarding = onboardingChecklistResponse({
       items: [
         {
           key: "docker-access",
@@ -2532,9 +2535,9 @@ describe("mutating WebUI views", () => {
         },
       ],
     });
-    vi.spyOn(webui, "loadSettings").mockResolvedValue();
-    vi.spyOn(webui, "loadOnboarding").mockResolvedValue();
-    vi.spyOn(webui, "dismissOnboarding").mockResolvedValue({
+    vi.spyOn(settings, "loadSettings").mockResolvedValue();
+    vi.spyOn(settings, "loadOnboarding").mockResolvedValue();
+    vi.spyOn(settings, "dismissOnboarding").mockResolvedValue({
       dismissed: true,
       dismissed_at: "2026-05-31T00:00:00+00:00",
     });
@@ -2561,9 +2564,9 @@ describe("mutating WebUI views", () => {
   });
 
   it("keeps non-actionable onboarding source checks out of the visible error chips", async () => {
-    const { pinia, webui } = setupStores(false);
-    webui.settings = settingsResponse();
-    webui.onboarding = onboardingChecklistResponse({
+    const { pinia, auth, connection, settings, updates, runs } = setupStores(false);
+    settings.settings = settingsResponse();
+    settings.onboarding = onboardingChecklistResponse({
       items: [
         {
           key: "compose-discovery",
@@ -2581,8 +2584,8 @@ describe("mutating WebUI views", () => {
         },
       ],
     });
-    vi.spyOn(webui, "loadSettings").mockResolvedValue();
-    vi.spyOn(webui, "loadOnboarding").mockResolvedValue();
+    vi.spyOn(settings, "loadSettings").mockResolvedValue();
+    vi.spyOn(settings, "loadOnboarding").mockResolvedValue();
 
     const wrapper = mountWithApp(SettingsView, { pinia });
     await flushPromises();
@@ -2603,16 +2606,16 @@ describe("mutating WebUI views", () => {
   });
 
   it("starts the core update tour once setup has no failing checks", async () => {
-    const { pinia, webui } = setupStores(true);
-    webui.settings = settingsResponse();
-    webui.onboarding = onboardingChecklistResponse({
+    const { pinia, auth, connection, settings, updates, runs } = setupStores(true);
+    settings.settings = settingsResponse();
+    settings.onboarding = onboardingChecklistResponse({
       items: [
         {
           key: "admin-setup",
           title: "Admin setup",
           status: "PASS",
           detail: "The first admin account exists.",
-          check_codes: ["webui-authentication"],
+          check_codes: ["settings-authentication"],
           suggestions: [],
           docs: [],
         },
@@ -2621,16 +2624,16 @@ describe("mutating WebUI views", () => {
           title: "Browser mutation mode",
           status: "WARN",
           detail: "Browser apply controls are server-side enabled.",
-          check_codes: ["webui-mutation-gate"],
+          check_codes: ["settings-mutation-gate"],
           suggestions: [],
           docs: [],
         },
       ],
     });
-    vi.spyOn(webui, "loadSettings").mockResolvedValue();
-    vi.spyOn(webui, "loadOnboarding").mockResolvedValue();
+    vi.spyOn(settings, "loadSettings").mockResolvedValue();
+    vi.spyOn(settings, "loadOnboarding").mockResolvedValue();
     const updateCoreUpdateTour = vi
-      .spyOn(webui, "updateCoreUpdateTour")
+      .spyOn(settings, "updateCoreUpdateTour")
       .mockResolvedValue(
         coreUpdateTourResponse({
           status: "in_progress",
@@ -2652,9 +2655,9 @@ describe("mutating WebUI views", () => {
   });
 
   it("focuses the setup checklist once onboarding deep link data renders", async () => {
-    const { pinia, webui } = setupStores(false);
-    webui.settings = null;
-    webui.onboarding = null;
+    const { pinia, auth, connection, settings, updates, runs } = setupStores(false);
+    settings.settings = null;
+    settings.onboarding = null;
     const scrollIntoView = vi.fn();
     Object.defineProperty(Element.prototype, "scrollIntoView", {
       configurable: true,
@@ -2663,10 +2666,10 @@ describe("mutating WebUI views", () => {
     const focus = vi
       .spyOn(HTMLElement.prototype, "focus")
       .mockImplementation(() => undefined);
-    vi.spyOn(webui, "loadSettings").mockImplementation(async () => {
-      webui.settings = settingsResponse();
+    vi.spyOn(settings, "loadSettings").mockImplementation(async () => {
+      settings.settings = settingsResponse();
     });
-    const loadOnboarding = vi.spyOn(webui, "loadOnboarding").mockResolvedValue();
+    const loadOnboarding = vi.spyOn(settings, "loadOnboarding").mockResolvedValue();
     const router = createWudRouter(createMemoryHistory());
     await router.push("/settings?onboarding=1");
     await router.isReady();
@@ -2674,7 +2677,7 @@ describe("mutating WebUI views", () => {
     const wrapper = mountWithApp(SettingsView, { pinia, router });
     document.body.appendChild(wrapper.element);
     await flushPromises();
-    webui.onboarding = onboardingChecklistResponse();
+    settings.onboarding = onboardingChecklistResponse();
     await nextTick();
     await flushPromises();
 
@@ -2685,17 +2688,17 @@ describe("mutating WebUI views", () => {
   });
 
   it("replays and dismisses the core update tour from settings", async () => {
-    const { pinia, webui } = setupStores(true);
-    webui.settings = settingsResponse();
-    webui.onboarding = onboardingChecklistResponse({ visible: false });
-    webui.coreUpdateTour = coreUpdateTourResponse({
+    const { pinia, auth, connection, settings, updates, runs } = setupStores(true);
+    settings.settings = settingsResponse();
+    settings.onboarding = onboardingChecklistResponse({ visible: false });
+    settings.coreUpdateTour = coreUpdateTourResponse({
       status: "completed",
       step: "runs_history",
       updated_at: "2026-05-31T00:00:00+00:00",
     });
-    vi.spyOn(webui, "loadSettings").mockResolvedValue();
+    vi.spyOn(settings, "loadSettings").mockResolvedValue();
     const updateCoreUpdateTour = vi
-      .spyOn(webui, "updateCoreUpdateTour")
+      .spyOn(settings, "updateCoreUpdateTour")
       .mockResolvedValue(
         coreUpdateTourResponse({
           status: "dismissed",
@@ -2725,20 +2728,25 @@ describe("mutating WebUI views", () => {
   });
 
   it("shows the dashboard step of the core update tour", async () => {
-    const { pinia, webui } = setupStores(true);
-    webui.status = statusResponse({
+    const { pinia, auth, connection, settings, updates, runs } = setupStores(true);
+    connection.status = statusResponse({
       pending_count: 2,
       db_ready: true,
       mutations_enabled: true,
     });
-    webui.pending = pendingResponse();
-    webui.coreUpdateTour = coreUpdateTourResponse({
+    updates.pending = pendingResponse();
+    settings.coreUpdateTour = coreUpdateTourResponse({
       status: "in_progress",
       step: "dashboard",
     });
-    vi.spyOn(webui, "loadDashboard").mockResolvedValue();
+    vi.spyOn(connection, "loadStatus").mockResolvedValue(undefined as any);
+vi.spyOn(updates, "loadPending").mockResolvedValue(undefined as any);
+vi.spyOn(runs, "loadRuns").mockResolvedValue(undefined as any);
+vi.spyOn(settings, "loadServicePolicies").mockResolvedValue(undefined as any);
+vi.spyOn(settings, "loadSnoozes").mockResolvedValue(undefined as any);
+vi.spyOn(settings, "loadTagExclusions").mockResolvedValue(undefined as any);
     const updateCoreUpdateTour = vi
-      .spyOn(webui, "updateCoreUpdateTour")
+      .spyOn(settings, "updateCoreUpdateTour")
       .mockResolvedValue(
         coreUpdateTourResponse({
           status: "in_progress",
@@ -2764,22 +2772,22 @@ describe("mutating WebUI views", () => {
   });
 
   it("closes the preflight modal before showing apply tour guidance", async () => {
-    const { pinia, webui } = setupStores(true);
-    webui.pending = pendingResponse();
-    webui.releaseNotes = releaseNotesResponse([]);
-    webui.coreUpdateTour = coreUpdateTourResponse({
+    const { pinia, auth, connection, settings, updates, runs } = setupStores(true);
+    updates.pending = pendingResponse();
+    updates.releaseNotes = releaseNotesResponse([]);
+    settings.coreUpdateTour = coreUpdateTourResponse({
       status: "in_progress",
       step: "pending_preflight",
     });
-    mockPendingLifecycle(webui);
-    vi.spyOn(webui, "createPlan").mockImplementation(async () => {
-      webui.plan = planResponse({ can_apply: true });
+    mockPendingLifecycle(settings, updates);
+    vi.spyOn(updates, "createPlan").mockImplementation(async () => {
+      updates.plan = planResponse({ can_apply: true });
     });
     const updateCoreUpdateTour = vi
-      .spyOn(webui, "updateCoreUpdateTour")
+      .spyOn(settings, "updateCoreUpdateTour")
       .mockImplementation(async (status, step) => {
         const response = coreUpdateTourResponse({ status, step });
-        webui.coreUpdateTour = response;
+        settings.coreUpdateTour = response;
         return response;
       });
 
@@ -2809,15 +2817,15 @@ describe("mutating WebUI views", () => {
   });
 
   it("shows read-only pending tour guidance and the empty queue fallback", async () => {
-    const { pinia, webui } = setupStores(false);
-    webui.pending = pendingResponse([]);
-    webui.releaseNotes = releaseNotesResponse([]);
-    webui.coreUpdateTour = coreUpdateTourResponse({
+    const { pinia, auth, connection, settings, updates, runs } = setupStores(false);
+    updates.pending = pendingResponse([]);
+    updates.releaseNotes = releaseNotesResponse([]);
+    settings.coreUpdateTour = coreUpdateTourResponse({
       status: "in_progress",
       step: "pending_apply",
     });
-    mockPendingLifecycle(webui);
-    vi.spyOn(webui, "loadRuns").mockResolvedValue();
+    mockPendingLifecycle(settings, updates);
+    vi.spyOn(runs, "loadRuns").mockResolvedValue();
 
     const wrapper = mountWithApp(PendingView, { pinia });
     await flushPromises();
@@ -2831,8 +2839,8 @@ describe("mutating WebUI views", () => {
   });
 
   it("renders doctor results with redacted details and copyable suggestions", async () => {
-    const { pinia, webui } = setupStores(false);
-    webui.doctor = doctorResponse({
+    const { pinia, auth, connection, settings, updates, runs } = setupStores(false);
+    connection.doctor = doctorResponse({
       checks: [
         {
           status: "FAIL",
@@ -2851,7 +2859,7 @@ describe("mutating WebUI views", () => {
         },
       ],
     });
-    vi.spyOn(webui, "loadDoctor").mockResolvedValue();
+    vi.spyOn(connection, "loadDoctor").mockResolvedValue();
 
     const wrapper = mountWithApp(DoctorView, { pinia });
     await flushPromises();

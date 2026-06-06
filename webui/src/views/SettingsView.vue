@@ -25,10 +25,12 @@ import type {
 } from "../api/client";
 import OnboardingChecklist from "../components/OnboardingChecklist.vue";
 import { useAuthStore } from "../stores/auth";
-import { useWebuiStore } from "../stores/webui";
+import { useSettingsStore } from "../stores/settings";
+import { useConnectionStore } from "../stores/connection";
 
 const auth = useAuthStore();
-const webui = useWebuiStore();
+const settings = useSettingsStore();
+const connection = useConnectionStore();
 const route = useRoute();
 const router = useRouter();
 
@@ -85,11 +87,11 @@ const SETTINGS_SECTION_LINKS = [
   { id: "settings-docs", label: "Docs" },
 ] as const;
 
-const settings = computed(() => webui.settings);
-const updaterEntries = computed(() => settings.value?.updater ?? []);
-const webuiEntries = computed(() => settings.value?.webui ?? []);
-const secrets = computed(() => settings.value?.secrets ?? []);
-const managedEntries = computed(() => settings.value?.managed ?? []);
+const settingsData = computed(() => settings.settings);
+const updaterEntries = computed(() => settingsData.value?.updater ?? []);
+const webuiEntries = computed(() => settingsData.value?.webui ?? []);
+const secrets = computed(() => settingsData.value?.secrets ?? []);
+const managedEntries = computed(() => settingsData.value?.managed ?? []);
 const restartDialogVisible = ref(false);
 const restartMessage = ref("");
 const restartError = ref("");
@@ -166,7 +168,7 @@ const restartDisabledReason = computed(() => {
   return "";
 });
 const restartButtonDisabled = computed(
-  () => webui.loading || restartDisabledReason.value !== "",
+  () => settings.loading || restartDisabledReason.value !== "",
 );
 const preferencesDisabledReason = computed(() => {
   if (!mutationsEnabled.value) {
@@ -175,7 +177,7 @@ const preferencesDisabledReason = computed(() => {
   return "";
 });
 const preferenceControlsDisabled = computed(
-  () => webui.loading || preferencesDisabledReason.value !== "",
+  () => settings.loading || preferencesDisabledReason.value !== "",
 );
 const composeIgnorePathsEditable = computed(
   () => composeIgnorePathsEntry.value?.editable === true,
@@ -211,18 +213,18 @@ const digestPinUpdatesOptions = computed(() =>
   managedOptions(digestPinUpdatesEntry.value, DIGEST_PIN_UPDATES_LABELS),
 );
 const coreUpdateTourStatusLabel = computed(() => {
-  const status = webui.coreUpdateTour?.status ?? "not_started";
+  const status = settings.coreUpdateTour?.status ?? "not_started";
   return CORE_UPDATE_TOUR_STATUS_LABELS[status] ?? status;
 });
 const coreUpdateTourStepLabel = computed(() => {
-  const step = webui.coreUpdateTour?.step ?? "dashboard";
+  const step = settings.coreUpdateTour?.step ?? "dashboard";
   return CORE_UPDATE_TOUR_STEP_LABELS[step] ?? step;
 });
 const shouldFocusOnboardingChecklist = computed(
   () =>
     route?.query.onboarding === "1" &&
-    settings.value !== null &&
-    webui.onboarding?.visible === true,
+    settingsData.value !== null &&
+    settings.onboarding?.visible === true,
 );
 
 function displayValue(value: string): string {
@@ -285,7 +287,7 @@ async function confirmRestartContainer(): Promise<void> {
   restartMessage.value = "";
   restartError.value = "";
   try {
-    const response = await webui.restartContainer();
+    const response = await connection.restartContainer();
     restartDialogVisible.value = false;
     restartMessage.value = `Restart requested for ${response.container}. The WebUI may disconnect while the container comes back.`;
   } catch (exc) {
@@ -343,7 +345,7 @@ async function saveManagedPreferences(): Promise<void> {
   }
 
   try {
-    const response = await webui.updateManagedSettings(values);
+    const response = await settings.updateManagedSettings(values);
     preferencesMessage.value = `Preferences saved. Audit run #${response.audit_run_id}.`;
     hydratePreferenceForm();
   } catch (exc) {
@@ -356,11 +358,11 @@ async function relaunchOnboardingChecklist(): Promise<void> {
   preferencesMessage.value = "";
   preferencesError.value = "";
   try {
-    const response = await webui.updateManagedSettings({
+    const response = await settings.updateManagedSettings({
       onboarding_checklist: "visible",
     });
     hydratePreferenceForm();
-    if (webui.onboarding?.visible === true) {
+    if (settings.onboarding?.visible === true) {
       preferencesMessage.value = `Onboarding checklist relaunched. Audit run #${response.audit_run_id}.`;
       await focusOnboardingChecklist();
     } else {
@@ -376,7 +378,7 @@ async function replayCoreUpdateTour(): Promise<void> {
   preferencesMessage.value = "";
   preferencesError.value = "";
   try {
-    await webui.updateCoreUpdateTour("in_progress", "dashboard");
+    await settings.updateCoreUpdateTour("in_progress", "dashboard");
     await router?.push({ name: "dashboard" });
   } catch (exc) {
     preferencesError.value =
@@ -388,9 +390,9 @@ async function dismissCoreUpdateTour(): Promise<void> {
   preferencesMessage.value = "";
   preferencesError.value = "";
   try {
-    await webui.updateCoreUpdateTour(
+    await settings.updateCoreUpdateTour(
       "dismissed",
-      webui.coreUpdateTour?.step ?? "dashboard",
+      settings.coreUpdateTour?.step ?? "dashboard",
     );
     preferencesMessage.value = "Core update tour dismissed.";
   } catch (exc) {
@@ -425,7 +427,7 @@ async function loadSupportBundleText(): Promise<string | null> {
   diagnosticsError.value = "";
   diagnosticsDownloading.value = true;
   try {
-    const bundle = await webui.diagnosticsSupportBundle();
+    const bundle = await connection.diagnosticsSupportBundle();
     return JSON.stringify(bundle, null, 2);
   } catch (exc) {
     diagnosticsError.value = exc instanceof Error ? exc.message : "Failed to load support bundle";
@@ -471,9 +473,9 @@ watch(
 );
 
 onMounted(() => {
-  const loads = [webui.loadSettings()];
-  if (webui.coreUpdateTour === null) {
-    loads.push(webui.loadCoreUpdateTour());
+  const loads = [settings.loadSettings()];
+  if (settings.coreUpdateTour === null) {
+    loads.push(settings.loadCoreUpdateTour());
   }
   void Promise.all(loads);
 });
@@ -481,12 +483,12 @@ onMounted(() => {
 
 <template>
   <section class="content-stack">
-    <n-alert v-if="webui.error" type="error" :show-icon="false">
-      {{ webui.error }}
+    <n-alert v-if="settings.error" type="error" :show-icon="false">
+      {{ settings.error }}
     </n-alert>
 
     <div
-      v-if="settings"
+      v-if="settingsData"
       class="settings-safety-strip"
       :class="{ 'is-mutable': mutationsEnabled, 'is-read-only': !mutationsEnabled }"
       role="status"
@@ -508,7 +510,7 @@ onMounted(() => {
       </div>
     </div>
 
-    <nav v-if="settings" class="settings-jump-nav" aria-label="Settings sections">
+    <nav v-if="settingsData" class="settings-jump-nav" aria-label="Settings sections">
       <button
         v-for="link in SETTINGS_SECTION_LINKS"
         :key="link.id"
@@ -520,7 +522,7 @@ onMounted(() => {
       </button>
     </nav>
 
-    <div v-if="settings" id="settings-actions" class="settings-zone">
+    <div v-if="settingsData" id="settings-actions" class="settings-zone">
       <div class="settings-zone-heading">
         <div>
           <h2>Actions</h2>
@@ -579,7 +581,7 @@ onMounted(() => {
             <n-button
               type="warning"
               :disabled="restartButtonDisabled"
-              :loading="webui.loading"
+              :loading="settings.loading"
               @click="openRestartDialog"
             >
               <template #icon>
@@ -602,7 +604,7 @@ onMounted(() => {
       </div>
     </div>
 
-    <div v-if="settings" id="settings-preferences" class="settings-zone">
+    <div v-if="settingsData" id="settings-preferences" class="settings-zone">
       <div class="settings-zone-heading">
         <div>
           <h2>Preferences</h2>
@@ -675,7 +677,7 @@ onMounted(() => {
               <n-button
                 size="small"
                 :disabled="preferenceControlsDisabled"
-                :loading="webui.loading"
+                :loading="settings.loading"
                 @click="relaunchOnboardingChecklist"
               >
                 <template #icon>
@@ -756,7 +758,7 @@ onMounted(() => {
             <div class="settings-button-group">
               <n-button
                 size="small"
-                :loading="webui.loading"
+                :loading="settings.loading"
                 @click="dismissCoreUpdateTour"
               >
                 Dismiss tour
@@ -764,7 +766,7 @@ onMounted(() => {
               <n-button
                 size="small"
                 type="primary"
-                :loading="webui.loading"
+                :loading="settings.loading"
                 @click="replayCoreUpdateTour"
               >
                 <template #icon>
@@ -781,7 +783,7 @@ onMounted(() => {
             <span>Managed values apply to new WebUI requests immediately.</span>
           </div>
           <div class="settings-button-group">
-            <n-button :disabled="webui.loading || !preferencesDirty" @click="resetPreferenceForm">
+            <n-button :disabled="settings.loading || !preferencesDirty" @click="resetPreferenceForm">
               <template #icon>
                 <RotateCcw :size="16" />
               </template>
@@ -790,7 +792,7 @@ onMounted(() => {
             <n-button
               type="primary"
               :disabled="preferenceSaveDisabled"
-              :loading="webui.loading"
+              :loading="settings.loading"
               @click="saveManagedPreferences"
             >
               <template #icon>
@@ -816,7 +818,7 @@ onMounted(() => {
         <div>
           <h2>Effective configuration</h2>
         </div>
-        <div v-if="settings" class="settings-source-legend" aria-label="Source label legend">
+        <div v-if="settingsData" class="settings-source-legend" aria-label="Source label legend">
           <span><strong>Default</strong> fallback</span>
           <span><strong>Configured</strong> explicit</span>
           <span><strong>Runtime derived</strong> computed</span>
@@ -835,10 +837,10 @@ onMounted(() => {
           </div>
           <SlidersHorizontal :size="20" class="section-heading-icon settings-overview-icon" />
         </div>
-        <div v-if="!settings && !webui.loading" class="empty-state">
+        <div v-if="!settingsData && !settings.loading" class="empty-state">
           Settings are unavailable.
         </div>
-        <div v-else-if="!settings" class="settings-loading" aria-busy="true">
+        <div v-else-if="!settingsData" class="settings-loading" aria-busy="true">
           <span class="sr-only">Loading settings.</span>
           <span aria-hidden="true" class="settings-skeleton-row"></span>
           <span aria-hidden="true" class="settings-skeleton-row"></span>
@@ -866,7 +868,7 @@ onMounted(() => {
     </div>
 
     <details
-      v-if="settings"
+      v-if="settingsData"
       id="settings-paths"
       class="section-panel settings-disclosure"
       :open="!compactSettingsLayout"
@@ -907,7 +909,7 @@ onMounted(() => {
     </details>
 
     <details
-      v-if="settings"
+      v-if="settingsData"
       id="settings-behavior"
       class="section-panel settings-disclosure"
       :open="!compactSettingsLayout"
@@ -948,7 +950,7 @@ onMounted(() => {
     </details>
 
     <details
-      v-if="settings"
+      v-if="settingsData"
       id="settings-webui"
       class="section-panel settings-disclosure"
       :open="!compactSettingsLayout"
@@ -990,7 +992,7 @@ onMounted(() => {
     </details>
 
     <details
-      v-if="settings"
+      v-if="settingsData"
       id="settings-secrets"
       class="section-panel settings-disclosure"
       :open="!compactSettingsLayout"
@@ -1105,7 +1107,7 @@ onMounted(() => {
           <ExternalLink :size="15" />
         </a>
         <a
-          href="https://github.com/magrhino/WUD-Updater/blob/main/docs/examples/webui.env.example"
+          href="https://github.com/magrhino/WUD-Updater/blob/main/docs/examples/settings.env.example"
           target="_blank"
           rel="noopener noreferrer"
           class="text-link"
@@ -1122,7 +1124,7 @@ onMounted(() => {
       title="Restart WebUI container"
       positive-text="Restart container"
       negative-text="Cancel"
-      :positive-button-props="{ type: 'warning', loading: webui.loading }"
+      :positive-button-props="{ type: 'warning', loading: settings.loading }"
       @positive-click="confirmRestartContainer"
     >
       <n-alert type="warning" :show-icon="false" class="block-alert">

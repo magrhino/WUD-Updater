@@ -6,7 +6,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { createWudRouter } from "../src/router";
 import { useAuthStore } from "../src/stores/auth";
-import { useWebuiStore } from "../src/stores/webui";
+import { useConnectionStore } from "../src/stores/connection";
+import { useSettingsStore } from "../src/stores/settings";
+import { useUpdatesStore, APPLY_JOB_RECOVERY_MESSAGE } from "../src/stores/updates";
+import { useRunsStore } from "../src/stores/runs";
 import AuditView from "../src/views/AuditView.vue";
 import { authSession, runSummary } from "./helpers/fixtures";
 import { mountWithApp } from "./helpers/mount";
@@ -61,8 +64,11 @@ describe("AuditView", () => {
     setActivePinia(pinia);
     const auth = useAuthStore();
     auth.session = authSession({ authenticated: true });
-    const webui = useWebuiStore();
-    webui.runs = [
+        const connection = useConnectionStore();
+    const settings = useSettingsStore();
+    const updates = useUpdatesStore();
+    const runs = useRunsStore();
+    runs.runs = [
       runSummary({
         id: 11,
         mode: "stop",
@@ -72,7 +78,7 @@ describe("AuditView", () => {
       runSummary({
         id: 12,
         mode: "stop",
-        metadata: { source: "webui-auto" },
+        metadata: { source: "settings-auto" },
         events: [event("auto-service")],
       }),
       runSummary({
@@ -82,7 +88,7 @@ describe("AuditView", () => {
         events: [event("policy-service")],
       }),
     ];
-    vi.spyOn(webui, "loadRuns").mockResolvedValue();
+    vi.spyOn(runs, "loadRuns").mockResolvedValue();
     const router = createWudRouter(createMemoryHistory());
     await router.push("/audit");
     await router.isReady();
@@ -105,10 +111,13 @@ describe("AuditView", () => {
     setActivePinia(pinia);
     const auth = useAuthStore();
     auth.session = authSession({ authenticated: true });
-    const webui = useWebuiStore();
-    webui.runs = [];
+        const connection = useConnectionStore();
+    const settings = useSettingsStore();
+    const updates = useUpdatesStore();
+    const runs = useRunsStore();
+    runs.runs = [];
     let resolveRuns: () => void = () => undefined;
-    vi.spyOn(webui, "loadRuns").mockReturnValue(
+    vi.spyOn(runs, "loadRuns").mockReturnValue(
       new Promise<void>((resolve) => {
         resolveRuns = resolve;
       }),
