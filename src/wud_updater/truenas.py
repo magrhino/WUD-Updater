@@ -85,23 +85,25 @@ def _run_truenas_status_helper(
         inspect_result = subprocess.run(
             ["docker", "container", "inspect", hostname],
             env=dict(environ),
+            stdin=subprocess.DEVNULL,
             stdout=subprocess.PIPE,
-            stderr=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
             text=True,
             timeout=helper_timeout,
-            check=True,
+            check=False,
         )
     except subprocess.TimeoutExpired:
         return TrueNasCallResult(ok=False, reason="docker inspect timed out")
-    except subprocess.CalledProcessError as exc:
-        return TrueNasCallResult(
-            ok=False,
-            reason=_subprocess_failure_reason("docker inspect", exc),
-        )
     except OSError as exc:
         return TrueNasCallResult(
             ok=False,
             reason=f"docker inspect failed: {_format_os_error(exc)}",
+        )
+
+    if inspect_result.returncode != 0:
+        return TrueNasCallResult(
+            ok=False,
+            reason=_subprocess_failure_reason("docker inspect", inspect_result),
         )
 
     try:
@@ -449,4 +451,3 @@ def _truenas_active_alerts(data: object | None) -> list[str] | None:
         if isinstance(formatted, str) and formatted:
             alerts.append(formatted)
     return alerts
-

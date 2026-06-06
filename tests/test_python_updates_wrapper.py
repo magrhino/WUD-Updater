@@ -884,6 +884,24 @@ class PythonUpdatesWrapperTests(unittest.TestCase):
         self.assertIn("docker run exited 2", result.stdout)
         self.assertIn("TrueNAS not reachable; skipping alert check.", result.stdout)
 
+    def test_truenas_inspect_failure_reports_unreachable_without_failing(self) -> None:
+        result = self.run_updates(
+            "--dry-run",
+            env_overrides={
+                "TRUENAS_STATUS_CHECK": "true",
+                "HOSTNAME": "wud-updater-1",
+                "FAKE_DOCKER_INSPECT_RETURN": "2",
+            },
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+        self.assertIn(
+            "TrueNAS not reachable; skipping system update check.",
+            result.stdout,
+        )
+        self.assertIn("docker inspect exited 2", result.stdout)
+        self.assertIn("TrueNAS not reachable; skipping alert check.", result.stdout)
+
     def test_truenas_malformed_helper_status_reports_unreachable(self) -> None:
         result = self.run_updates(
             "--dry-run",
@@ -1158,6 +1176,9 @@ if [[ "$1" == "pull" ]]; then
   exit "${FAKE_DOCKER_PULL_RETURN:-0}"
 fi
 if [[ "$1 $2" == "container inspect" ]]; then
+  if [[ "${FAKE_DOCKER_INSPECT_RETURN:-0}" != "0" ]]; then
+    exit "$FAKE_DOCKER_INSPECT_RETURN"
+  fi
   out_dir="$(dirname "${FAKE_WUD_FILE:?FAKE_WUD_FILE is required}")"
   printf '[{"Config":{"Image":"wud-updater:test"},"Mounts":[{"Type":"volume","Name":"wud-out","Destination":"%s"}]}]\\n' "$out_dir"
   exit 0

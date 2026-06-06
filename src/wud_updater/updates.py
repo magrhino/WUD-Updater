@@ -597,7 +597,7 @@ class UpdatesRunner:
             selected_display
         )
         print(f"Selected {len(selected_display)} of {todo_count} pending update(s).")
-        
+
         remove_line_spec = ""
         if unselected_display:
             remove_reply = _prompt(
@@ -621,7 +621,7 @@ class UpdatesRunner:
             for display in display_numbers
             if self.todo_entries[display - 1].desired_tag
         ]
-        
+
         allow_tag_updates = self.options.allow_tag_updates
         tag_override_specs: list[str] = []
         exclude_tag_line_spec = ""
