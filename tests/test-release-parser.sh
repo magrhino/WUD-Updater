@@ -48,6 +48,9 @@ test_semver_first(){
 
   res="$(printf 'Upgrade to v2.0' | semver_first)"
   [[ "$res" == "v2.0" ]] || fail "semver_first missed two-part version: got '$res'"
+
+  res="$(printf 'Update python3.11 dependency' | semver_first)"
+  [[ -z "$res" ]] || fail "semver_first matched embedded version: got '$res'"
 }
 
 test_strip_lsio_suffix(){

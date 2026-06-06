@@ -1046,9 +1046,10 @@ def load_configured_environ(
     config_file: str | None = None,
 ) -> dict[str, str]:
     env = dict(os.environ if environ is None else environ)
+    explicit_config_file = config_file is not None
     if config_file:
         env["WUD_UPDATER_CONFIG"] = config_file
-    if env.get("WUD_UPDATER_CONFIG_SOURCED") == "1":
+    if env.get("WUD_UPDATER_CONFIG_SOURCED") == "1" and not explicit_config_file:
         return env
     home = env.get("HOME") or str(Path.home())
     config_file = Path(

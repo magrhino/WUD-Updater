@@ -1099,6 +1099,16 @@ class PythonUpdatesWrapperTests(unittest.TestCase):
 
     def test_bin_updates_config_file_argument_is_sourced_by_python_cli(self) -> None:
         self.wud_file.write_text("repo/app:latest\n", encoding="utf-8")
+        default_config_file = self.root / "default-env"
+        default_config_file.write_text(
+            "\n".join(
+                [
+                    "export WUD_UPDATER_USE_SUDO=true",
+                    "",
+                ]
+            ),
+            encoding="utf-8",
+        )
         config_file = self.root / "host-env"
         config_file.write_text(
             "\n".join(
@@ -1111,16 +1121,20 @@ class PythonUpdatesWrapperTests(unittest.TestCase):
         )
 
         result = self.run_updates(
-            "--dry-run",
+            "--yes",
             "--config-file",
             str(config_file),
             command=[str(self.repo_root / "bin" / "updates")],
-            env_overrides={"PYTHON_BIN": sys.executable},
+            env_overrides={
+                "PYTHON_BIN": sys.executable,
+                "WUD_UPDATER_CONFIG": str(default_config_file),
+            },
         )
 
         self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
-        self.assertIn("Dry-run mode: not running updates", result.stdout)
+        self.assertIn("Update script completed", result.stdout)
         self.assertFalse(self.sudo_log.exists())
+        self.assertIn("--yes", self.updater_log.read_text(encoding="utf-8"))
 
     def test_bin_updates_default_accepts_no_updater_sudo(self) -> None:
         self.wud_file.write_text("repo/app:latest\n", encoding="utf-8")

@@ -20,7 +20,8 @@ detect_breaking() {
 }
 
 semver_first() {
-  grep -Eoim1 '[vV]?[0-9]+(\.[0-9]+){1,3}([._-][0-9A-Za-z]+)*' \
+  grep -Eoim1 '(^|[^0-9A-Za-z])[vV]?[0-9]+(\.[0-9]+){1,3}([._-][0-9A-Za-z]+)*([^0-9A-Za-z]|$)' \
+    | sed -E 's/^[^0-9A-Za-z]*//; s/[^0-9A-Za-z]$//' \
     || true
 }
 
