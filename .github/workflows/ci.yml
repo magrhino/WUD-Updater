@@ -209,6 +209,8 @@ jobs:
 
       - name: Set up Node.js environment
         uses: ./.github/actions/setup-node-env
+        with:
+          install-dependencies: "false"
 
       - name: Run tests
         run: tests/run-all.sh --webui

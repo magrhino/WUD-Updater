@@ -1,5 +1,10 @@
 name: setup-node-env
 description: "Set up Node.js and install WebUI frontend dependencies"
+inputs:
+  install-dependencies:
+    description: "Install WebUI frontend dependencies"
+    required: false
+    default: "true"
 runs:
   using: "composite"
   steps:
@@ -11,5 +16,6 @@ runs:
         cache-dependency-path: webui/package-lock.json
 
     - name: Install frontend dependencies
+      if: ${{ inputs.install-dependencies == 'true' }}
       shell: bash
       run: npm --prefix webui ci
