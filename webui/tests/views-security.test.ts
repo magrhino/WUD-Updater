@@ -120,6 +120,11 @@ function mockPendingLifecycle(
   vi.spyOn(settings, "loadPendingSafetyCues").mockResolvedValue();
 }
 
+function mountPendingView(pinia: ReturnType<typeof createPinia>) {
+  const router = createWudRouter(createMemoryHistory());
+  return mountWithApp(PendingView, { pinia, router });
+}
+
 const stalePendingPreflightFindings = [
   "Running container old still matches this pending line.",
   "Docker labels reference docker-compose.yml.",
@@ -264,8 +269,8 @@ describe("mutating WebUI views", () => {
         ),
       });
     });
-    const createJob = vi.spyOn(updates, "createJob");
-    const wrapper = mountWithApp(PendingView, { pinia });
+    const applyPlan = vi.spyOn(updates, "applyPlan");
+    const wrapper = mountPendingView(pinia);
 
     await wrapper
       .find('input[aria-label="Select stack media"]')
@@ -283,7 +288,7 @@ describe("mutating WebUI views", () => {
       .find((button) => button.text().includes("Apply 1 update"));
     expect(applyButton?.exists()).toBe(true);
     expect(applyButton?.attributes("disabled")).toBeDefined();
-    expect(createJob).not.toHaveBeenCalled();
+    expect(applyPlan).not.toHaveBeenCalled();
   });
 
   it("shows blocked preflight errors without an apply action", async () => {
@@ -326,8 +331,8 @@ describe("mutating WebUI views", () => {
         ],
       });
     });
-    const createJob = vi.spyOn(updates, "createJob");
-    const wrapper = mountWithApp(PendingView, { pinia });
+    const applyPlan = vi.spyOn(updates, "applyPlan");
+    const wrapper = mountPendingView(pinia);
 
     await wrapper
       .findAll("button")
@@ -346,7 +351,7 @@ describe("mutating WebUI views", () => {
         .findAll("button")
         .some((button) => button.text().includes("Apply 1 update")),
     ).toBe(false);
-    expect(createJob).not.toHaveBeenCalled();
+    expect(applyPlan).not.toHaveBeenCalled();
   });
 
   it("rebuilds digest-pin label rewrite plans after approval", async () => {
@@ -429,7 +434,7 @@ describe("mutating WebUI views", () => {
               ),
             });
       });
-    const wrapper = mountWithApp(PendingView, { pinia });
+    const wrapper = mountPendingView(pinia);
 
     await wrapper
       .findAll("button")
@@ -545,7 +550,7 @@ describe("mutating WebUI views", () => {
           ),
         });
       });
-    const wrapper = mountWithApp(PendingView, { pinia });
+    const wrapper = mountPendingView(pinia);
 
     await wrapper
       .findAll("button")
@@ -630,7 +635,7 @@ describe("mutating WebUI views", () => {
       });
     });
     const cleanupPending = vi.spyOn(updates, "cleanupPending");
-    const wrapper = mountWithApp(PendingView, { pinia });
+    const wrapper = mountPendingView(pinia);
 
     expect(wrapper.text()).toContain("Stale pending entries");
     expect(wrapper.text()).toContain(
@@ -753,7 +758,7 @@ describe("mutating WebUI views", () => {
         updates.plan = null;
         return response;
       });
-    const wrapper = mountWithApp(PendingView, { pinia });
+    const wrapper = mountPendingView(pinia);
 
     await wrapper
       .find('input[aria-label="Select update repo/old:latest"]')
@@ -808,7 +813,7 @@ describe("mutating WebUI views", () => {
     updates.pending = pendingResponse();
     mockPendingLifecycle(settings, updates);
     const createRemovalPlan = vi.spyOn(updates, "createRemovalPlan");
-    const wrapper = mountWithApp(PendingView, { pinia });
+    const wrapper = mountPendingView(pinia);
 
     await wrapper
       .find('input[aria-label="Select stack media"]')
@@ -881,7 +886,7 @@ describe("mutating WebUI views", () => {
         updates.pendingRemovalPlan = null;
         return response;
       });
-    const wrapper = mountWithApp(PendingView, { pinia });
+    const wrapper = mountPendingView(pinia);
 
     await wrapper
       .find('input[aria-label="Select stack media"]')
@@ -925,7 +930,7 @@ describe("mutating WebUI views", () => {
     ]);
     mockPendingLifecycle(settings, updates);
     const createPlan = vi.spyOn(updates, "createPlan").mockResolvedValue();
-    const wrapper = mountWithApp(PendingView, { pinia });
+    const wrapper = mountPendingView(pinia);
 
     await wrapper
       .findAll("button")
@@ -943,7 +948,7 @@ describe("mutating WebUI views", () => {
     ]);
     mockPendingLifecycle(settings, updates);
     const createPlan = vi.spyOn(updates, "createPlan").mockResolvedValue();
-    const wrapper = mountWithApp(PendingView, { pinia });
+    const wrapper = mountPendingView(pinia);
     const stackCheckbox = wrapper.find('input[aria-label="Select stack media"]');
 
     await stackCheckbox.setValue(true);
@@ -983,7 +988,7 @@ describe("mutating WebUI views", () => {
     };
     mockPendingLifecycle(settings, updates);
     const createPlan = vi.spyOn(updates, "createPlan").mockResolvedValue();
-    const wrapper = mountWithApp(PendingView, { pinia });
+    const wrapper = mountPendingView(pinia);
 
     await wrapper
       .findAll("button")
@@ -1004,7 +1009,7 @@ describe("mutating WebUI views", () => {
     updates.pending = pendingResponse([item]);
     mockPendingLifecycle(settings, updates);
     const createPlan = vi.spyOn(updates, "createPlan").mockResolvedValue();
-    const wrapper = mountWithApp(PendingView, { pinia });
+    const wrapper = mountPendingView(pinia);
 
     await wrapper
       .find(`input[aria-label="New tag for ${item.image}"]`)
@@ -1032,7 +1037,7 @@ describe("mutating WebUI views", () => {
     updates.pending = pendingResponse([item]);
     mockPendingLifecycle(settings, updates);
     const createPlan = vi.spyOn(updates, "createPlan");
-    const wrapper = mountWithApp(PendingView, { pinia });
+    const wrapper = mountPendingView(pinia);
 
     await wrapper
       .findAll("button")
@@ -1055,7 +1060,7 @@ describe("mutating WebUI views", () => {
     const { pinia, auth, connection, settings, updates, runs } = setupStores(true);
     updates.pending = pendingResponse();
     mockPendingLifecycle(settings, updates);
-    const wrapper = mountWithApp(PendingView, { pinia });
+    const wrapper = mountPendingView(pinia);
 
     expect(wrapper.find("details.stack-details").attributes("open")).toBeUndefined();
     expect(wrapper.text()).toContain("Details");
@@ -1132,7 +1137,7 @@ describe("mutating WebUI views", () => {
       warnings: [],
     };
     mockPendingLifecycle(settings, updates);
-    const wrapper = mountWithApp(PendingView, { pinia });
+    const wrapper = mountPendingView(pinia);
     const card = wrapper.find(".stack-card");
 
     expect(card.find(".stack-identity").text()).toContain(
@@ -1221,7 +1226,7 @@ describe("mutating WebUI views", () => {
         ],
       });
     });
-    const wrapper = mountWithApp(PendingView, { pinia });
+    const wrapper = mountPendingView(pinia);
 
     await wrapper
       .findAll("button")
@@ -1282,8 +1287,8 @@ describe("mutating WebUI views", () => {
         ),
       });
     });
-    const createJob = vi.spyOn(updates, "createJob");
-    const wrapper = mountWithApp(PendingView, { pinia });
+    const applyPlan = vi.spyOn(updates, "applyPlan");
+    const wrapper = mountPendingView(pinia);
 
     await wrapper
       .findAll("button")
@@ -1309,7 +1314,7 @@ describe("mutating WebUI views", () => {
     expect(applyButton?.attributes("disabled")).toBeDefined();
     await applyButton?.trigger("click");
 
-    expect(createJob).not.toHaveBeenCalled();
+    expect(applyPlan).not.toHaveBeenCalled();
   });
 
   it("falls back to pending file order when grouping is unavailable", () => {
@@ -1324,7 +1329,7 @@ describe("mutating WebUI views", () => {
       },
     };
     mockPendingLifecycle(settings, updates);
-    const wrapper = mountWithApp(PendingView, { pinia });
+    const wrapper = mountPendingView(pinia);
 
     expect(wrapper.text()).toContain(
       "Stack grouping is unavailable. Showing pending file order.",
@@ -1354,7 +1359,7 @@ describe("mutating WebUI views", () => {
         },
       };
       mockPendingLifecycle(settings, updates);
-      const wrapper = mountWithApp(PendingView, { pinia });
+      const wrapper = mountPendingView(pinia);
       const card = wrapper.find(".mobile-card");
 
       expect(wrapper.find('[role="table"]').exists()).toBe(false);
@@ -1371,7 +1376,7 @@ describe("mutating WebUI views", () => {
     updates.pending = null;
     updates.loading = true;
     mockPendingLifecycle(settings, updates);
-    const wrapper = mountWithApp(PendingView, { pinia });
+    const wrapper = mountPendingView(pinia);
 
     expect(wrapper.text()).toContain("Loading pending updates");
     expect(wrapper.find(".pending-loading-state").exists()).toBe(true);
@@ -1393,7 +1398,7 @@ describe("mutating WebUI views", () => {
       });
     vi.spyOn(updates, "loadReleaseNotes").mockResolvedValue();
     vi.spyOn(updates, "refreshReleaseNotes").mockResolvedValue();
-    const wrapper = mountWithApp(PendingView, { pinia });
+    const wrapper = mountPendingView(pinia);
 
     await flushPromises();
 
@@ -1411,6 +1416,18 @@ describe("mutating WebUI views", () => {
     expect(loadPending).toHaveBeenCalledTimes(2);
     expect(wrapper.text()).toContain("1 pending update");
     expect(wrapper.find(".selection-toolbar").exists()).toBe(true);
+  });
+
+  it("shows pending safety cue loading failures", () => {
+    const { pinia, auth, connection, settings, updates, runs } = setupStores(true);
+    updates.pending = pendingResponse();
+    settings.pendingSafetyCueError = "service policies unavailable";
+    mockPendingLifecycle(settings, updates);
+    const wrapper = mountPendingView(pinia);
+
+    expect(wrapper.text()).toContain(
+      "Pending safety cues are unavailable: service policies unavailable",
+    );
   });
 
   it("deduplicates malformed pending line keys before selecting all stack updates", async () => {
@@ -1439,7 +1456,7 @@ describe("mutating WebUI views", () => {
       },
     };
     mockPendingLifecycle(settings, updates);
-    const wrapper = mountWithApp(PendingView, { pinia });
+    const wrapper = mountPendingView(pinia);
 
     await wrapper
       .findAll("button")
@@ -1470,7 +1487,7 @@ describe("mutating WebUI views", () => {
       },
     };
     mockPendingLifecycle(settings, updates);
-    const wrapper = mountWithApp(PendingView, { pinia });
+    const wrapper = mountPendingView(pinia);
 
     const wrappedValues = wrapper.findAll(".pending-table-value");
     expect(wrappedValues.length).toBeGreaterThanOrEqual(2);
@@ -1483,7 +1500,7 @@ describe("mutating WebUI views", () => {
     updates.pending = pendingResponse([]);
     runs.runs = [runSummary({ id: 42 })];
     mockPendingLifecycle(settings, updates);
-    const wrapper = mountWithApp(PendingView, { pinia });
+    const wrapper = mountPendingView(pinia);
 
     const clearState = wrapper.find(".clear-queue-state");
     expect(clearState.exists()).toBe(true);
@@ -1507,11 +1524,16 @@ describe("mutating WebUI views", () => {
     vi.spyOn(updates, "loadPending").mockResolvedValue();
     vi.spyOn(updates, "loadReleaseNotes").mockResolvedValue();
     vi.spyOn(updates, "refreshReleaseNotes").mockResolvedValue();
-    const wrapper = mountWithApp(PendingView, { pinia });
+    const wrapper = mountPendingView(pinia);
 
     expect(wrapper.text()).toContain("GitHub release");
     expect(wrapper.text()).toContain("Possible breaking change");
-    expect(wrapper.find('a[href="https://github.com/acme/app/releases/tag/v2.0.0"]').exists()).toBe(true);
+    const link = wrapper.find(
+      'a[href="https://github.com/acme/app/releases/tag/v2.0.0"]',
+    );
+    expect(link.exists()).toBe(true);
+    expect(link.attributes("target")).toBe("_blank");
+    expect(link.attributes("rel")).toBe("noopener noreferrer");
   });
 
   it("renders both LSIO and upstream release-note links", () => {
@@ -1539,7 +1561,7 @@ describe("mutating WebUI views", () => {
     vi.spyOn(updates, "loadPending").mockResolvedValue();
     vi.spyOn(updates, "loadReleaseNotes").mockResolvedValue();
     vi.spyOn(updates, "refreshReleaseNotes").mockResolvedValue();
-    const wrapper = mountWithApp(PendingView, { pinia });
+    const wrapper = mountPendingView(pinia);
 
     expect(wrapper.text()).toContain("LSIO release");
     expect(wrapper.text()).toContain("Upstream release");
@@ -1591,7 +1613,7 @@ describe("mutating WebUI views", () => {
     vi.spyOn(updates, "loadPending").mockResolvedValue();
     vi.spyOn(updates, "loadReleaseNotes").mockResolvedValue();
     vi.spyOn(updates, "refreshReleaseNotes").mockResolvedValue();
-    const wrapper = mountWithApp(PendingView, { pinia });
+    const wrapper = mountPendingView(pinia);
 
     expect(wrapper.text()).toContain("Unavailable");
     expect(wrapper.text()).toContain(
@@ -1619,7 +1641,7 @@ describe("mutating WebUI views", () => {
     vi.spyOn(updates, "createPlan").mockImplementation(async () => {
       updates.plan = planResponse();
     });
-    const createJob = vi.spyOn(updates, "createJob").mockImplementation(async () => {
+    const applyPlan = vi.spyOn(updates, "applyPlan").mockImplementation(async () => {
       const job = applyJobResponse();
       updates.setApplyJob(job);
       return job;
@@ -1628,7 +1650,7 @@ describe("mutating WebUI views", () => {
       .spyOn(HTMLElement.prototype, "focus")
       .mockImplementation(() => undefined);
     const jobStream = mockApplyJobStream();
-    const wrapper = mountWithApp(PendingView, { pinia });
+    const wrapper = mountPendingView(pinia);
 
     await wrapper
       .findAll("button")
@@ -1636,7 +1658,7 @@ describe("mutating WebUI views", () => {
       ?.trigger("click");
     await flushPromises();
 
-    expect(createJob).not.toHaveBeenCalled();
+    expect(applyPlan).not.toHaveBeenCalled();
     expect(wrapper.find('[role="dialog"]').exists()).toBe(true);
 
     await wrapper
@@ -1645,7 +1667,7 @@ describe("mutating WebUI views", () => {
       .find((button) => button.text().includes("Apply 1 update"))
       ?.trigger("click");
 
-    expect(createJob).toHaveBeenCalledWith("plan-test", [1], true, [], []);
+    expect(applyPlan).toHaveBeenCalledWith("plan-test", [1], true, [], []);
     expect(jobStream.observed).toBe(true);
     await flushPromises();
 
@@ -1749,13 +1771,13 @@ describe("mutating WebUI views", () => {
     vi.spyOn(updates, "createPlan").mockImplementation(async () => {
       updates.plan = planResponse();
     });
-    vi.spyOn(updates, "createJob").mockImplementation(async () => {
+    vi.spyOn(updates, "applyPlan").mockImplementation(async () => {
       const job = applyJobResponse();
       updates.setApplyJob(job);
       return job;
     });
     const jobStream = mockApplyJobStream();
-    const wrapper = mountWithApp(PendingView, { pinia });
+    const wrapper = mountPendingView(pinia);
 
     await wrapper
       .findAll("button")
@@ -1825,7 +1847,7 @@ describe("mutating WebUI views", () => {
     vi.spyOn(updates, "createPlan").mockImplementation(async () => {
       updates.plan = planResponse();
     });
-    vi.spyOn(updates, "createJob").mockImplementation(async () => {
+    vi.spyOn(updates, "applyPlan").mockImplementation(async () => {
       const job = applyJobResponse({ status: "running" });
       updates.setApplyJob(job);
       return job;
@@ -1839,7 +1861,7 @@ describe("mutating WebUI views", () => {
       max_bytes: 65_536,
     });
     const jobStream = mockApplyJobStream();
-    const wrapper = mountWithApp(PendingView, { pinia });
+    const wrapper = mountPendingView(pinia);
 
     await wrapper
       .findAll("button")
@@ -1904,7 +1926,7 @@ describe("mutating WebUI views", () => {
       max_bytes: 65_536,
     });
 
-    const wrapper = mountWithApp(PendingView, { pinia });
+    const wrapper = mountPendingView(pinia);
     await flushPromises();
 
     expect(runLog).toHaveBeenCalledWith(10, 65_536);
@@ -1939,7 +1961,7 @@ describe("mutating WebUI views", () => {
     vi.spyOn(updates, "createPlan").mockImplementation(async () => {
       updates.plan = planResponse();
     });
-    vi.spyOn(updates, "createJob").mockImplementation(async () => {
+    vi.spyOn(updates, "applyPlan").mockImplementation(async () => {
       const job = applyJobResponse({
         status: "running",
         started_at: "2026-05-28T12:00:00+00:00",
@@ -1948,7 +1970,7 @@ describe("mutating WebUI views", () => {
       return job;
     });
     const jobStream = mockApplyJobStream();
-    const wrapper = mountWithApp(PendingView, { pinia });
+    const wrapper = mountPendingView(pinia);
 
     await wrapper
       .findAll("button")
@@ -1989,13 +2011,13 @@ describe("mutating WebUI views", () => {
     vi.spyOn(updates, "createPlan").mockImplementation(async () => {
       updates.plan = planResponse();
     });
-    vi.spyOn(updates, "createJob").mockImplementation(async () => {
+    vi.spyOn(updates, "applyPlan").mockImplementation(async () => {
       const job = applyJobResponse({ status: "running" });
       updates.setApplyJob(job);
       return job;
     });
     const jobStream = mockApplyJobStream();
-    const wrapper = mountWithApp(PendingView, { pinia });
+    const wrapper = mountPendingView(pinia);
 
     await wrapper
       .findAll("button")
@@ -2034,7 +2056,7 @@ describe("mutating WebUI views", () => {
     const loadRuns = vi.spyOn(runs, "loadRuns").mockImplementation(async () => {
       runs.runs = [runSummary({ id: 42 })];
     });
-    const wrapper = mountWithApp(PendingView, { pinia });
+    const wrapper = mountPendingView(pinia);
 
     await flushPromises();
 
@@ -2905,7 +2927,7 @@ vi.spyOn(settings, "loadTagExclusions").mockResolvedValue(undefined as any);
         return response;
       });
 
-    const wrapper = mountWithApp(PendingView, { pinia });
+    const wrapper = mountPendingView(pinia);
     await wrapper
       .find('input[aria-label="Select stack media"]')
       .setValue(true);
@@ -2941,7 +2963,7 @@ vi.spyOn(settings, "loadTagExclusions").mockResolvedValue(undefined as any);
     mockPendingLifecycle(settings, updates);
     vi.spyOn(runs, "loadRuns").mockResolvedValue();
 
-    const wrapper = mountWithApp(PendingView, { pinia });
+    const wrapper = mountPendingView(pinia);
     await flushPromises();
     const text = wrapper.text();
 

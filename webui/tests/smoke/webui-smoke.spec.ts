@@ -400,7 +400,7 @@ async function fulfillApi(
     await json(route, planResponse({ can_apply: state.mutationsEnabled }));
     return;
   }
-  if (path === "/api/v1/jobs" && method === "POST") {
+  if (path === "/api/v1/plans/apply" && method === "POST") {
     await json(route, jobResponse());
     return;
   }
@@ -566,7 +566,7 @@ test("read-only pending flow can preflight a stack but cannot apply", async ({ p
   await expect(page.getByRole("heading", { name: "Review media plan" })).toBeVisible();
   await expect(page.getByRole("button", { name: /Apply 1 update/ })).toBeDisabled();
   expect(state.calls.some((call) => call.path === "/api/v1/plans")).toBe(true);
-  expect(state.calls.some((call) => call.path === "/api/v1/jobs")).toBe(false);
+  expect(state.calls.some((call) => call.path === "/api/v1/plans/apply")).toBe(false);
 });
 
 test("mutation-enabled pending flow applies and links to run details", async ({
@@ -604,7 +604,7 @@ test("mutation-enabled pending flow applies and links to run details", async ({
   );
   await expect(applyPanel.getByRole("link", { name: "Details" })).toBeVisible();
   await expect(applyPanel.getByRole("link", { name: "Log" })).toBeVisible();
-  expect(state.calls.some((call) => call.path === "/api/v1/jobs")).toBe(true);
+  expect(state.calls.some((call) => call.path === "/api/v1/plans/apply")).toBe(true);
   expect(
     state.calls.some((call) =>
       call.path.startsWith("/api/v1/jobs/job-smoke/stream?"),
@@ -746,19 +746,19 @@ test("mutation-enabled pending flow creates jobs only after confirmation", async
     hasText: "Review media plan",
   });
   await expect(dialog).toBeVisible();
-  expect(state.calls.some((call) => call.path === "/api/v1/jobs")).toBe(false);
+  expect(state.calls.some((call) => call.path === "/api/v1/plans/apply")).toBe(false);
 
   await dialog.getByRole("button", { name: "Apply 1 update" }).click();
 
   const planCall = state.calls.find((call) => call.path === "/api/v1/plans");
-  const jobCall = state.calls.find((call) => call.path === "/api/v1/jobs");
+  const applyCall = state.calls.find((call) => call.path === "/api/v1/plans/apply");
   expect(planCall?.headers["x-wud-csrf-token"]).toBe(csrfToken);
   expect(planCall?.body).toMatchObject({
     line_numbers: [1],
     allow_tag_updates: true,
   });
-  expect(jobCall?.headers["x-wud-csrf-token"]).toBe(csrfToken);
-  expect(jobCall?.body).toMatchObject({
+  expect(applyCall?.headers["x-wud-csrf-token"]).toBe(csrfToken);
+  expect(applyCall?.body).toMatchObject({
     plan_id: "plan-smoke",
     line_numbers: [1],
     allow_tag_updates: true,

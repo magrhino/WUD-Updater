@@ -22,7 +22,7 @@ import {
   webApi,
 } from "../api/client";
 import { useAuthStore } from "./auth";
-import { useConnectionStore, errorMessage } from "./connection";
+import { errorMessage } from "./connection";
 
 export const useSettingsStore = defineStore("settings", () => {
   const settings = ref<SettingsResponse | null>(null);
@@ -35,6 +35,7 @@ export const useSettingsStore = defineStore("settings", () => {
   const tagExclusionStatusFilter = ref<TagExclusionStatusFilter>("active");
   const loading = ref(false);
   const error = ref("");
+  const pendingSafetyCueError = ref("");
 
   async function loadWithState(work: () => Promise<void>): Promise<void> {
     loading.value = true;
@@ -59,9 +60,9 @@ export const useSettingsStore = defineStore("settings", () => {
     operation: StateOperation,
     reload: () => Promise<void>,
   ): Promise<void> {
-    const connection = useConnectionStore();
+    const auth = useAuthStore();
     await loadWithState(async () => {
-      await connection.stateOperation(operation);
+      await webApi.stateOperation(operation, await auth.ensureCsrf());
       await reload();
     });
   }
@@ -168,7 +169,7 @@ export const useSettingsStore = defineStore("settings", () => {
     } else {
       errors.push(`webApi.snoozes("active") failed: ${errorMessage(nextSnoozes.reason)}`);
     }
-    error.value = errors.join(" ");
+    pendingSafetyCueError.value = errors.join(" ");
   }
 
   async function loadServicePolicies(): Promise<void> {
@@ -319,6 +320,7 @@ export const useSettingsStore = defineStore("settings", () => {
     tagExclusionStatusFilter,
     loading,
     error,
+    pendingSafetyCueError,
     loadSettings,
     updateManagedSettings,
     loadOnboarding,

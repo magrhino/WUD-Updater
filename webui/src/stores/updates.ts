@@ -317,13 +317,23 @@ export const useUpdatesStore = defineStore("updates", () => {
     tagOverrides: TagOverrideRequest[] = [],
     digestPinLabelRewriteApprovals: DigestPinLabelRewriteApprovalRequest[] = [],
   ): Promise<ApplyJobResponse> {
-    return createJob(
-      planId,
-      lineNumbers,
-      allowTagUpdates,
-      tagOverrides,
-      digestPinLabelRewriteApprovals,
-    );
+    const auth = useAuthStore();
+    await loadWithState(async () => {
+      applyJobLog.value = null;
+      const job = await webApi.applyPlan(
+        planId,
+        lineNumbers,
+        allowTagUpdates,
+        tagOverrides,
+        digestPinLabelRewriteApprovals,
+        await auth.ensureCsrf(),
+      );
+      setApplyJob(job);
+    });
+    if (applyJob.value === null) {
+      throw new Error("Apply job was not created");
+    }
+    return applyJob.value;
   }
 
   function setApplyJob(job: ApplyJobResponse): void {
