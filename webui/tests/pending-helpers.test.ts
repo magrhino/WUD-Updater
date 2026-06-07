@@ -23,10 +23,6 @@ type RenderColumn = {
   render?: (row: PendingItem) => VNodeChild;
 };
 
-function pluralize(count: number, singular: string, plural = `${singular}s`): string {
-  return `${count} ${count === 1 ? singular : plural}`;
-}
-
 function mountPendingModal(component: Component, props: Record<string, unknown>): VueWrapper {
   return mount(component, {
     props,
@@ -229,16 +225,12 @@ describe("pending helper modules", () => {
           planActions: [],
           planAlertType: "info",
           planDigestPinLabelRewrites: [],
-          planLineDigestPinLabel: () => "",
-          planLineServiceLabel: () => "media / app",
-          planLineTagRewriteLabel: () => "",
           planLines: [],
           preflightDigestPinNotice: "",
           preflightServiceImpactLabel: "",
           preflightSummary: "1 service ready to update.",
           preflightTagRewriteNotice: "",
           preflightTitle: "Review selected updates",
-          pluralize,
           show: true,
           staleDiagnosticDetail: () => "",
           staleDiagnosticLabel: () => "",
@@ -257,7 +249,6 @@ describe("pending helper modules", () => {
           cleanupLineLabel: () => "#1",
           loading: false,
           pendingSourceLabel: "images.todo",
-          pluralize,
           show: true,
         },
       },
@@ -266,7 +257,6 @@ describe("pending helper modules", () => {
         props: {
           loading: false,
           pendingSourceLabel: "images.todo",
-          pluralize,
           removalConfirmButtonLabel: "Remove 0 selected entries",
           removalDisabled: true,
           removalItems: [],

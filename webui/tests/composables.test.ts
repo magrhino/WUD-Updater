@@ -196,7 +196,6 @@ function setupPendingApplyJob() {
     planLineServiceLabel: planReview.state.planLineServiceLabel,
     planLineTagRewriteLabel: planReview.state.planLineTagRewriteLabel,
     planLines: planReview.state.planLines,
-    pluralize: planReview.state.pluralize,
   });
 
   return {

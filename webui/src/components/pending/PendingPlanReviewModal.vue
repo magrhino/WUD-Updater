@@ -8,26 +8,21 @@ import type {
   ApplyPreflightStatus,
   PlanAction,
   PlanCleanupItem,
-  PlanDigestPinLabelRewrite,
   PlanIssue,
-  PlanLine,
   PlanResponse,
 } from "../../api/client";
+import {
+  planLineDigestPinLabel,
+  planLineServiceLabel,
+  planLineTagRewriteLabel,
+  pluralize,
+  type PlanActionView,
+  type PlanDigestPinLabelRewriteView,
+  type PlanLineView,
+} from "../../views/pending/utils";
 import CoreUpdateTourPanel from "../CoreUpdateTourPanel.vue";
 
 type TagType = "default" | "error" | "info" | "success" | "warning";
-type PlanLineView = {
-  stack: string;
-  line: PlanLine;
-};
-type PlanActionView = {
-  stack: string;
-  action: PlanAction;
-};
-type DigestPinLabelRewriteView = {
-  stack: string;
-  rewrite: PlanDigestPinLabelRewrite;
-};
 
 defineProps<{
   actionCommand: (action: PlanAction) => string;
@@ -62,17 +57,13 @@ defineProps<{
   plan: PlanResponse;
   planActions: PlanActionView[];
   planAlertType: TagType;
-  planDigestPinLabelRewrites: DigestPinLabelRewriteView[];
-  planLineDigestPinLabel: (line: PlanLine) => string;
-  planLineServiceLabel: (stack: string, line: PlanLine) => string;
-  planLineTagRewriteLabel: (line: PlanLine) => string;
+  planDigestPinLabelRewrites: PlanDigestPinLabelRewriteView[];
   planLines: PlanLineView[];
   preflightDigestPinNotice: string;
   preflightServiceImpactLabel: string;
   preflightSummary: string;
   preflightTagRewriteNotice: string;
   preflightTitle: string;
-  pluralize: (count: number, singular: string, plural?: string) => string;
   show: boolean;
   staleDiagnosticDetail: (item: PlanCleanupItem) => string;
   staleDiagnosticLabel: (item: PlanCleanupItem) => string;
@@ -356,7 +347,7 @@ function handleModalShowUpdate(value: boolean): void {
             class="list-row plan-line-row"
           >
             <span>#{{ line.line_no }}</span>
-            <strong>{{ planLineServiceLabel(stack, line) }}</strong>
+            <strong>{{ planLineServiceLabel(plan.summary.stack_count, stack, line) }}</strong>
             <em>
               <span v-if="planLineTagRewriteLabel(line)" class="tag-rewrite-detail">
                 <n-tag size="small" type="warning">Tag rewrite</n-tag>
@@ -407,7 +398,7 @@ function handleModalShowUpdate(value: boolean): void {
               class="list-row plan-line-row"
             >
               <span>#{{ line.line_no }}</span>
-              <strong>{{ planLineServiceLabel(stack, line) }}</strong>
+              <strong>{{ planLineServiceLabel(plan.summary.stack_count, stack, line) }}</strong>
               <em>
                 <span v-if="planLineTagRewriteLabel(line)" class="tag-rewrite-detail">
                   <n-tag size="small" type="warning">Tag rewrite</n-tag>

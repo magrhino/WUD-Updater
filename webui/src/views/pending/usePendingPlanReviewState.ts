@@ -16,6 +16,19 @@ import type {
 } from "../../api/client";
 import { useAuthStore } from "../../stores/auth";
 import { useUpdatesStore } from "../../stores/updates";
+import {
+  pendingPlanContextLabel,
+  planActionsFromPlan,
+  planDigestPinLabelRewritesFromPlan,
+  planLineDigestPinLabel,
+  planLinesFromPlan,
+  planLineServiceLabel as formatPlanLineServiceLabel,
+  planLineTagRewriteLabel,
+  planTagUpdatesFromPlan,
+  pluralize,
+  reviewCountLabel,
+  summarizeList,
+} from "./utils";
 
 export type PendingUpdateIntent = {
   title: string;
@@ -96,16 +109,10 @@ export function usePendingPlanReviewState(
     return "info";
   });
   const planContextLabel = computed(() => {
-    if (!updates.plan) {
-      return options.updateIntent.value?.contextLabel ?? "selected updates";
-    }
-    if (updates.plan.stacks.length === 1) {
-      return updates.plan.stacks[0].name;
-    }
-    if (updates.plan.summary.stack_count > 1) {
-      return pluralize(updates.plan.summary.stack_count, "stack");
-    }
-    return options.updateIntent.value?.contextLabel ?? "selected updates";
+    return pendingPlanContextLabel(
+      updates.plan,
+      options.updateIntent.value?.contextLabel ?? "selected updates",
+    );
   });
   const preflightTitle = computed(() => {
     if (!updates.plan) {
@@ -230,9 +237,7 @@ export function usePendingPlanReviewState(
     ),
   );
   const planDigestPinLabelRewrites = computed(() =>
-    planDigestPinUpdates.value.flatMap(({ stack, update }) =>
-      (update.label_rewrites ?? []).map((rewrite) => ({ stack, rewrite })),
-    ),
+    planDigestPinLabelRewritesFromPlan(updates.plan),
   );
   const unmatchedReviewSummary = computed(() =>
     staleReviewSummary(options.unmatchedItems.value, "pending line", "pending lines"),
@@ -333,22 +338,13 @@ export function usePendingPlanReviewState(
       : `${count} selected in ${selectedUpdateContext.value}`;
   });
   const planLines = computed(
-    () =>
-      updates.plan?.stacks.flatMap((stack) =>
-        stack.lines.map((line) => ({ stack: stack.name, line })),
-      ) ?? [],
+    () => planLinesFromPlan(updates.plan),
   );
   const planActions = computed(
-    () =>
-      updates.plan?.stacks.flatMap((stack) =>
-        stack.actions.map((action) => ({ stack: stack.name, action })),
-      ) ?? [],
+    () => planActionsFromPlan(updates.plan),
   );
   const planTagUpdates = computed(
-    () =>
-      updates.plan?.stacks.flatMap((stack) =>
-        stack.tag_updates.map((update) => ({ stack: stack.name, update })),
-      ) ?? [],
+    () => planTagUpdatesFromPlan(updates.plan),
   );
   const planDigestPinUpdates = computed(
     () =>
@@ -418,10 +414,11 @@ export function usePendingPlanReviewState(
   }
 
   function planLineServiceLabel(stack: string, line: PlanLine): string {
-    const service = line.service || "stack-level";
-    return updates.plan?.summary.stack_count && updates.plan.summary.stack_count > 1
-      ? `${stack} / ${service}`
-      : service;
+    return formatPlanLineServiceLabel(
+      updates.plan?.summary.stack_count ?? 0,
+      stack,
+      line,
+    );
   }
 
   return {
@@ -687,43 +684,4 @@ function cleanupLineLabel(item: PlanCleanupItem): string {
 
 function removalLineLabel(item: PendingRemovalPlanLine): string {
   return `#${item.line_no} ${item.image}`;
-}
-
-export function pluralize(
-  count: number,
-  singular: string,
-  plural = `${singular}s`,
-): string {
-  return `${count} ${count === 1 ? singular : plural}`;
-}
-
-function reviewCountLabel(
-  count: number,
-  singular: string,
-  plural = `${singular}s`,
-): string {
-  const verb = count === 1 ? "needs" : "need";
-  return `${pluralize(count, singular, plural)} ${verb} review`;
-}
-
-function summarizeList(values: string[], limit = 3): string {
-  const uniqueValues = [...new Set(values.filter(Boolean))];
-  if (uniqueValues.length <= limit) {
-    return uniqueValues.join(", ");
-  }
-  return `${uniqueValues.slice(0, limit).join(", ")} +${uniqueValues.length - limit} more`;
-}
-
-function planLineTagRewriteLabel(line: PlanLine): string {
-  if (!line.desired_tag || line.action === "digest-pin") {
-    return "";
-  }
-  return `${line.compose_image} -> ${line.target_image}`;
-}
-
-function planLineDigestPinLabel(line: PlanLine): string {
-  if (line.action !== "digest-pin") {
-    return "";
-  }
-  return `${line.compose_image} -> ${line.target_image}`;
 }

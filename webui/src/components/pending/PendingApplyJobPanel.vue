@@ -8,6 +8,7 @@ import type {
   ApplyJobPlanSnapshot,
   ApplyJobProgressStep,
 } from "../../views/pending/usePendingApplyJob";
+import { pluralize } from "../../views/pending/utils";
 
 type TagType = "default" | "error" | "info" | "success" | "warning";
 
@@ -82,10 +83,6 @@ function progressTagType(
     return "error";
   }
   return "default";
-}
-
-function pluralize(count: number, singular: string, plural = `${singular}s`): string {
-  return `${count} ${count === 1 ? singular : plural}`;
 }
 </script>
 

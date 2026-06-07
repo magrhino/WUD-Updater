@@ -3,11 +3,11 @@ import { Trash2 } from "@lucide/vue";
 import { NAlert, NButton, NModal, NTag } from "naive-ui";
 
 import type { PendingRemovalPlanLine } from "../../api/client";
+import { pluralize } from "../../views/pending/utils";
 
 defineProps<{
   loading: boolean;
   pendingSourceLabel: string;
-  pluralize: (count: number, singular: string, plural?: string) => string;
   removalConfirmButtonLabel: string;
   removalDisabled: boolean;
   removalItems: PendingRemovalPlanLine[];

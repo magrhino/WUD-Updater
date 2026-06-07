@@ -18,6 +18,7 @@ import {
 } from "../../api/client";
 import { useRunsStore } from "../../stores/runs";
 import { useUpdatesStore } from "../../stores/updates";
+import { pluralize } from "./utils";
 
 export type ApplyJobSnapshotLine = {
   key: string;
@@ -69,7 +70,6 @@ export type UsePendingApplyJobOptions = {
   planLineServiceLabel: (stack: string, line: PlanLine) => string;
   planLineTagRewriteLabel: (line: PlanLine) => string;
   planLineDigestPinLabel: (line: PlanLine) => string;
-  pluralize: (count: number, singular: string, plural?: string) => string;
 };
 
 export const terminalJobStatuses = new Set<ApplyJobResponse["status"]>([
@@ -138,7 +138,7 @@ export function usePendingApplyJob(options: UsePendingApplyJobOptions) {
       0,
   );
   const applyJobUpdateLabel = computed(() =>
-    options.pluralize(applyJobUpdateCount.value, "update"),
+    pluralize(applyJobUpdateCount.value, "update"),
   );
   const applyJobTitle = computed(() => {
     if (!updates.applyJob) {
@@ -188,9 +188,9 @@ export function usePendingApplyJob(options: UsePendingApplyJobOptions) {
       applyJobSnapshot.value.serviceCount || applyJobSnapshotLines.value.length;
     const stackCount = applyJobSnapshot.value.stackCount;
     if (stackCount > 1) {
-      return `${options.pluralize(serviceCount, "service")} across ${options.pluralize(stackCount, "stack")}`;
+      return `${pluralize(serviceCount, "service")} across ${pluralize(stackCount, "stack")}`;
     }
-    return `${options.pluralize(serviceCount, "service")} in ${applyJobSnapshot.value.contextLabel}`;
+    return `${pluralize(serviceCount, "service")} in ${applyJobSnapshot.value.contextLabel}`;
   });
   const applyJobLogText = computed(() => updates.applyJobLog?.content ?? "");
   const applyJobLogTitle = computed(

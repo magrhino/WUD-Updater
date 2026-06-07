@@ -38,6 +38,7 @@ import { useRunsStore } from "../stores/runs";
 import { useSettingsStore } from "../stores/settings";
 import { safetyCues, type SafetyCue } from "./pending/safetyCues";
 import { createPendingColumns } from "./pending/tableColumns";
+import { pluralize } from "./pending/utils";
 import {
   usePendingApplyJob,
   type PendingApplyJobPanelRef,
@@ -178,7 +179,6 @@ const {
   preflightSummary,
   preflightTagRewriteNotice,
   preflightTitle,
-  pluralize,
   removalButtonLabel,
   removalConfirmButtonLabel,
   removalDisabled,
@@ -243,7 +243,6 @@ const {
   planLineServiceLabel,
   planLineTagRewriteLabel,
   planLines,
-  pluralize,
 });
 
 function rowKey(row: PendingItem): number {
@@ -1476,16 +1475,12 @@ watch(
       :plan-actions="planActions"
       :plan-alert-type="planAlertType"
       :plan-digest-pin-label-rewrites="planDigestPinLabelRewrites"
-      :plan-line-digest-pin-label="planLineDigestPinLabel"
-      :plan-line-service-label="planLineServiceLabel"
-      :plan-line-tag-rewrite-label="planLineTagRewriteLabel"
       :plan-lines="planLines"
       :preflight-digest-pin-notice="preflightDigestPinNotice"
       :preflight-service-impact-label="preflightServiceImpactLabel"
       :preflight-summary="preflightSummary"
       :preflight-tag-rewrite-notice="preflightTagRewriteNotice"
       :preflight-title="preflightTitle"
-      :pluralize="pluralize"
       :stale-diagnostic-detail="staleDiagnosticDetail"
       :stale-diagnostic-label="staleDiagnosticLabel"
       :visible-plan-issues="visiblePlanIssues"
@@ -1507,7 +1502,6 @@ watch(
       :cleanup-line-label="cleanupLineLabel"
       :loading="updates.loading"
       :pending-source-label="pendingSourceLabel"
-      :pluralize="pluralize"
       @close="closeCleanupModal"
       @confirm="confirmCleanup"
     />
@@ -1517,7 +1511,6 @@ watch(
       :show="showRemovalModal"
       :loading="updates.loading"
       :pending-source-label="pendingSourceLabel"
-      :pluralize="pluralize"
       :removal-confirm-button-label="removalConfirmButtonLabel"
       :removal-disabled="removalDisabled"
       :removal-items="removalItems"

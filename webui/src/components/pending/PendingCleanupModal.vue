@@ -3,6 +3,7 @@ import { Trash2 } from "@lucide/vue";
 import { NAlert, NButton, NModal, NTag } from "naive-ui";
 
 import type { PlanCleanupItem } from "../../api/client";
+import { pluralize } from "../../views/pending/utils";
 
 defineProps<{
   assistantActions: string[];
@@ -14,7 +15,6 @@ defineProps<{
   cleanupLineLabel: (item: PlanCleanupItem) => string;
   loading: boolean;
   pendingSourceLabel: string;
-  pluralize: (count: number, singular: string, plural?: string) => string;
   show: boolean;
 }>();
 
