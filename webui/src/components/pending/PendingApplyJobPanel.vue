@@ -3,40 +3,11 @@ import { ref } from "vue";
 import { Check, CheckCircle2, ChevronDown, ChevronUp, Play, X } from "@lucide/vue";
 import { NAlert, NButton, NTag } from "naive-ui";
 
+import type { ApplyJobLogResponse, ApplyJobResponse } from "../../api/client";
 import type {
-  ApplyJobLogResponse,
-  ApplyJobProgressEvent,
-  ApplyJobResponse,
-} from "../../api/client";
-
-type ApplyJobSnapshotLine = {
-  key: string;
-  lineNo: number;
-  serviceLabel: string;
-  tagRewriteLabel: string;
-  digestPinLabel: string;
-  composeImage: string;
-  targetImage: string;
-};
-
-type ApplyJobPlanSnapshot = {
-  contextLabel: string;
-  serviceCount: number;
-  stackCount: number;
-  sourceFile: string;
-  lines: ApplyJobSnapshotLine[];
-};
-
-type ApplyJobProgressStep = {
-  key: string;
-  label: string;
-  waitingMessage: string;
-  status: "pending" | ApplyJobProgressEvent["status"];
-  statusLabel: string;
-  message: string;
-  detail: string;
-  event: ApplyJobProgressEvent | null;
-};
+  ApplyJobPlanSnapshot,
+  ApplyJobProgressStep,
+} from "../../views/pending/usePendingApplyJob";
 
 type TagType = "default" | "error" | "info" | "success" | "warning";
 
