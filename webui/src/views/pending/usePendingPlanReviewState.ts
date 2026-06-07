@@ -1,4 +1,4 @@
-import { computed, type ComputedRef, type Ref } from "vue";
+import { computed, ref, type ComputedRef, type Ref } from "vue";
 
 import type {
   ApplyPreflightCheck,
@@ -11,7 +11,6 @@ import type {
   PlanAction,
   PlanCleanupItem,
   PlanIssue,
-  PlanLine,
   TagOverrideRequest,
 } from "../../api/client";
 import { useAuthStore } from "../../stores/auth";
@@ -20,10 +19,7 @@ import {
   pendingPlanContextLabel,
   planActionsFromPlan,
   planDigestPinLabelRewritesFromPlan,
-  planLineDigestPinLabel,
   planLinesFromPlan,
-  planLineServiceLabel as formatPlanLineServiceLabel,
-  planLineTagRewriteLabel,
   planTagUpdatesFromPlan,
   pluralize,
   reviewCountLabel,
@@ -34,6 +30,12 @@ export type PendingUpdateIntent = {
   title: string;
   contextLabel: string;
   lineNumbers: number[];
+  allowTagUpdates: boolean;
+  tagOverrides: TagOverrideRequest[];
+  digestPinLabelRewriteApprovals: DigestPinLabelRewriteApprovalRequest[];
+};
+
+export type PendingApplyPlanPayload = {
   allowTagUpdates: boolean;
   tagOverrides: TagOverrideRequest[];
   digestPinLabelRewriteApprovals: DigestPinLabelRewriteApprovalRequest[];
@@ -53,7 +55,6 @@ export type UsePendingPlanReviewStateOptions = {
   selectedLineSet: ComputedRef<Set<number>>;
   stackGroups: ComputedRef<PendingStackGroup[]>;
   unmatchedItems: ComputedRef<PendingGroupedItem[]>;
-  updateIntent: Ref<PendingUpdateIntent | null>;
   pendingSourceLabel: ComputedRef<string>;
   tagOverrideErrorForLines: (lineNumbers: number[]) => string;
 };
@@ -63,6 +64,7 @@ export function usePendingPlanReviewState(
 ) {
   const updates = useUpdatesStore();
   const auth = useAuthStore();
+  const updateIntent = ref<PendingUpdateIntent | null>(null);
 
   const mutationStateLabel = computed(() =>
     auth.session?.mutations_enabled ? "Mutations enabled" : "Read-only",
@@ -111,12 +113,12 @@ export function usePendingPlanReviewState(
   const planContextLabel = computed(() => {
     return pendingPlanContextLabel(
       updates.plan,
-      options.updateIntent.value?.contextLabel ?? "selected updates",
+      updateIntent.value?.contextLabel ?? "selected updates",
     );
   });
   const preflightTitle = computed(() => {
     if (!updates.plan) {
-      return options.updateIntent.value?.title ?? "Preview selected plan";
+      return updateIntent.value?.title ?? "Preview selected plan";
     }
     if (updates.plan.status === "blocked") {
       return "Plan blocked";
@@ -371,7 +373,7 @@ export function usePendingPlanReviewState(
   );
   const preflightTagRewriteNotice = computed(() => {
     if (
-      !options.updateIntent.value?.allowTagUpdates ||
+      !updateIntent.value?.allowTagUpdates ||
       !visibleTagRewriteCount.value ||
       !updates.plan
     ) {
@@ -403,7 +405,7 @@ export function usePendingPlanReviewState(
 
   function digestPinLabelApprovalApproved(issue: PlanIssue): boolean {
     const approval = digestPinLabelApprovalFromIssue(issue);
-    const intent = options.updateIntent.value;
+    const intent = updateIntent.value;
     if (!approval || !intent) {
       return false;
     }
@@ -413,12 +415,57 @@ export function usePendingPlanReviewState(
     );
   }
 
-  function planLineServiceLabel(stack: string, line: PlanLine): string {
-    return formatPlanLineServiceLabel(
-      updates.plan?.summary.stack_count ?? 0,
-      stack,
-      line,
+  function setUpdateIntent(intent: PendingUpdateIntent): void {
+    updateIntent.value = intent;
+  }
+
+  function clearUpdateIntent(): void {
+    updateIntent.value = null;
+  }
+
+  function applyPlanPayload(fallback: {
+    allowTagUpdates: boolean;
+    tagOverrides: TagOverrideRequest[];
+  }): PendingApplyPlanPayload {
+    const intent = updateIntent.value;
+    return {
+      allowTagUpdates: intent?.allowTagUpdates ?? fallback.allowTagUpdates,
+      tagOverrides: intent?.tagOverrides ?? fallback.tagOverrides,
+      digestPinLabelRewriteApprovals:
+        intent?.digestPinLabelRewriteApprovals ?? [],
+    };
+  }
+
+  async function approveDigestPinLabelRewrite(
+    issue: PlanIssue,
+  ): Promise<boolean> {
+    const approval = digestPinLabelApprovalFromIssue(issue);
+    const intent = updateIntent.value;
+    if (!approval || !intent || updates.loading) {
+      return false;
+    }
+    const approvalsByKey = new Map(
+      intent.digestPinLabelRewriteApprovals.map((item) => [
+        digestPinLabelApprovalKey(item),
+        item,
+      ]),
     );
+    approvalsByKey.set(digestPinLabelApprovalKey(approval), approval);
+    const nextIntent: PendingUpdateIntent = {
+      ...intent,
+      digestPinLabelRewriteApprovals: [...approvalsByKey.values()],
+    };
+    await updates.createPlan(
+      nextIntent.lineNumbers,
+      nextIntent.allowTagUpdates,
+      nextIntent.tagOverrides,
+      nextIntent.digestPinLabelRewriteApprovals,
+    );
+    if (updateIntent.value !== intent) {
+      return false;
+    }
+    updateIntent.value = nextIntent;
+    return true;
   }
 
   return {
@@ -432,6 +479,7 @@ export function usePendingPlanReviewState(
     applyPreflightCheckType,
     applyPreflightPassedChecks,
     applyPreflightPassedText,
+    applyPlanPayload,
     applyReadinessStatusLabel,
     applyReadinessStatusType,
     applyReadinessSummary,
@@ -447,9 +495,9 @@ export function usePendingPlanReviewState(
     cleanupItems,
     cleanupLineLabel,
     cleanupReviewSummary,
+    approveDigestPinLabelRewrite,
+    clearUpdateIntent,
     digestPinLabelApprovalApproved,
-    digestPinLabelApprovalFromIssue,
-    digestPinLabelApprovalKey,
     digestPinLabelApprovalIssues,
     digestPinLabelIssueProposedRegex,
     issueDetailString,
@@ -465,9 +513,6 @@ export function usePendingPlanReviewState(
     planAlertType,
     planContextLabel,
     planDigestPinLabelRewrites,
-    planLineDigestPinLabel,
-    planLineServiceLabel,
-    planLineTagRewriteLabel,
     planLines,
     preflightDigestPinNotice,
     preflightServiceImpactLabel,
@@ -484,9 +529,9 @@ export function usePendingPlanReviewState(
     removeSelectedDisabledMessage,
     selectedTagOverrideError,
     selectedUpdateContext,
+    setUpdateIntent,
     staleDiagnosticDetail,
     staleDiagnosticLabel,
-    summarizeList,
     unmatchedIssueSummary,
     unmatchedReviewCountLabel,
     unmatchedReviewSummary,

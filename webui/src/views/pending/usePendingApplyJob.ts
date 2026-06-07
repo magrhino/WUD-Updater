@@ -5,7 +5,6 @@ import {
   onUnmounted,
   ref,
   watch,
-  type ComputedRef,
   type Ref,
 } from "vue";
 
@@ -14,11 +13,17 @@ import {
   type ApplyJobLogResponse,
   type ApplyJobProgressEvent,
   type ApplyJobResponse,
-  type PlanLine,
 } from "../../api/client";
 import { useRunsStore } from "../../stores/runs";
 import { useUpdatesStore } from "../../stores/updates";
-import { pluralize } from "./utils";
+import {
+  pendingPlanContextLabel,
+  planLineDigestPinLabel,
+  planLinesFromPlan,
+  planLineServiceLabel,
+  planLineTagRewriteLabel,
+  pluralize,
+} from "./utils";
 
 export type ApplyJobSnapshotLine = {
   key: string;
@@ -57,19 +62,9 @@ export type PendingApplyJobPanelRef = {
   logElement: () => HTMLElement | null;
 };
 
-type PlanLineView = {
-  stack: string;
-  line: PlanLine;
-};
-
 export type UsePendingApplyJobOptions = {
   applyJobPanelRef: Ref<PendingApplyJobPanelRef | null>;
   loadPendingAndReleaseNotes: () => Promise<void>;
-  planContextLabel: ComputedRef<string>;
-  planLines: ComputedRef<PlanLineView[]>;
-  planLineServiceLabel: (stack: string, line: PlanLine) => string;
-  planLineTagRewriteLabel: (line: PlanLine) => string;
-  planLineDigestPinLabel: (line: PlanLine) => string;
 };
 
 export const terminalJobStatuses = new Set<ApplyJobResponse["status"]>([
@@ -117,6 +112,8 @@ export function usePendingApplyJob(options: UsePendingApplyJobOptions) {
   const applyJobLiveLogExpanded = ref(true);
   const applyJobRunLogFallbackRunId = ref<number | null>(null);
   const applyJobSnapshot = ref<ApplyJobPlanSnapshot | null>(null);
+  const planContextLabel = computed(() => pendingPlanContextLabel(updates.plan));
+  const planLines = computed(() => planLinesFromPlan(updates.plan));
 
   const applyJobAlertType = computed(() => {
     if (updates.applyJob?.status === "failure") {
@@ -503,23 +500,22 @@ export function usePendingApplyJob(options: UsePendingApplyJobOptions) {
   }
 
   function createApplyJobSnapshot(): ApplyJobPlanSnapshot | null {
-    if (!updates.plan) {
+    const plan = updates.plan;
+    if (!plan) {
       return null;
     }
     return {
-      contextLabel: options.planContextLabel.value,
+      contextLabel: planContextLabel.value,
       serviceCount:
-        updates.plan.summary.service_count ||
-        updates.plan.summary.target_count ||
-        options.planLines.value.length,
-      stackCount: updates.plan.summary.stack_count,
-      sourceFile: updates.plan.source_file,
-      lines: options.planLines.value.map(({ stack, line }) => ({
+        plan.summary.service_count || plan.summary.target_count || planLines.value.length,
+      stackCount: plan.summary.stack_count,
+      sourceFile: plan.source_file,
+      lines: planLines.value.map(({ stack, line }) => ({
         key: `${stack}-${line.line_no}-${line.service}`,
         lineNo: line.line_no,
-        serviceLabel: options.planLineServiceLabel(stack, line),
-        tagRewriteLabel: options.planLineTagRewriteLabel(line),
-        digestPinLabel: options.planLineDigestPinLabel(line),
+        serviceLabel: planLineServiceLabel(plan.summary.stack_count, stack, line),
+        tagRewriteLabel: planLineTagRewriteLabel(line),
+        digestPinLabel: planLineDigestPinLabel(line),
         composeImage: line.compose_image,
         targetImage: line.target_image,
       })),

@@ -24,7 +24,6 @@ import {
   type PendingGroupedItem,
   type PendingItem,
   type PendingStackGroup,
-  type PlanIssue,
   type ReleaseNoteInfo,
   type TagOverrideRequest,
 } from "../api/client";
@@ -60,8 +59,6 @@ const showCleanupModal = ref(false);
 const showRemovalModal = ref(false);
 const applyJobPanelRef = ref<PendingApplyJobPanelRef | null>(null);
 const tagValuePattern = /^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$/;
-
-const updateIntent = ref<PendingUpdateIntent | null>(null);
 
 const columns = computed(() =>
   createPendingColumns({
@@ -137,6 +134,7 @@ const {
   applyPreflightCheckType,
   applyPreflightPassedChecks,
   applyPreflightPassedText,
+  applyPlanPayload,
   applyReadinessStatusLabel,
   applyReadinessStatusType,
   applyReadinessSummary,
@@ -152,9 +150,9 @@ const {
   cleanupItems,
   cleanupLineLabel,
   cleanupReviewSummary,
+  approveDigestPinLabelRewrite,
+  clearUpdateIntent,
   digestPinLabelApprovalApproved,
-  digestPinLabelApprovalFromIssue,
-  digestPinLabelApprovalKey,
   digestPinLabelApprovalIssues,
   digestPinLabelIssueProposedRegex,
   issueDetailString,
@@ -168,11 +166,7 @@ const {
   pendingCleanupMessage,
   planActions,
   planAlertType,
-  planContextLabel,
   planDigestPinLabelRewrites,
-  planLineDigestPinLabel,
-  planLineServiceLabel,
-  planLineTagRewriteLabel,
   planLines,
   preflightDigestPinNotice,
   preflightServiceImpactLabel,
@@ -188,6 +182,7 @@ const {
   removeSelectedDisabledMessage,
   selectedTagOverrideError,
   selectedUpdateContext,
+  setUpdateIntent,
   staleDiagnosticDetail,
   staleDiagnosticLabel,
   unmatchedIssueSummary,
@@ -202,7 +197,6 @@ const {
   stackGroups,
   tagOverrideErrorForLines,
   unmatchedItems,
-  updateIntent,
 });
 
 const {
@@ -238,11 +232,6 @@ const {
 } = usePendingApplyJob({
   applyJobPanelRef,
   loadPendingAndReleaseNotes,
-  planContextLabel,
-  planLineDigestPinLabel,
-  planLineServiceLabel,
-  planLineTagRewriteLabel,
-  planLines,
 });
 
 function rowKey(row: PendingItem): number {
@@ -367,7 +356,7 @@ function clearPreflight(): void {
   showPreflightModal.value = false;
   showCleanupModal.value = false;
   showRemovalModal.value = false;
-  updateIntent.value = null;
+  clearUpdateIntent();
   updates.clearPlan();
 }
 
@@ -492,7 +481,7 @@ async function startUpdateFlow(input: {
     tagOverrides: tagOverridesForLines(lineNumbers),
     digestPinLabelRewriteApprovals: [],
   };
-  updateIntent.value = intent;
+  setUpdateIntent(intent);
   try {
     await updates.createPlan(
       intent.lineNumbers,
@@ -502,7 +491,7 @@ async function startUpdateFlow(input: {
     );
   } catch {
     showPreflightModal.value = false;
-    updateIntent.value = null;
+    clearUpdateIntent();
     return;
   }
   if (updates.plan) {
@@ -582,7 +571,7 @@ async function confirmCleanup(): Promise<void> {
   );
   showCleanupModal.value = false;
   showPreflightModal.value = false;
-  updateIntent.value = null;
+  clearUpdateIntent();
   await Promise.all([
     loadPendingAndReleaseNotes({ preserveCleanup: true }),
     runs.loadRuns(),
@@ -593,51 +582,24 @@ async function confirmApply(): Promise<void> {
   if (!updates.plan || applyDisabled.value) {
     return;
   }
-  const intent = updateIntent.value;
   const lineNumbers = updates.plan.selected_line_numbers;
   const snapshot = createApplyJobSnapshot();
+  const payload = applyPlanPayload({
+    allowTagUpdates: lineNumbersHaveTagUpdates(lineNumbers),
+    tagOverrides: tagOverridesForLines(lineNumbers),
+  });
   const job = await updates.applyPlan(
     updates.plan.plan_id,
     lineNumbers,
-    intent?.allowTagUpdates ?? lineNumbersHaveTagUpdates(lineNumbers),
-    intent?.tagOverrides ?? tagOverridesForLines(lineNumbers),
-    intent?.digestPinLabelRewriteApprovals ?? [],
+    payload.allowTagUpdates,
+    payload.tagOverrides,
+    payload.digestPinLabelRewriteApprovals,
   );
   applyJobSnapshot.value = snapshot;
   subscribeApplyJob(job.job_id);
   showPreflightModal.value = false;
-  updateIntent.value = null;
+  clearUpdateIntent();
   await focusApplyJobPanel();
-}
-
-async function approveDigestPinLabelRewrite(issue: PlanIssue): Promise<void> {
-  const approval = digestPinLabelApprovalFromIssue(issue);
-  const intent = updateIntent.value;
-  if (!approval || !intent || updates.loading) {
-    return;
-  }
-  const approvalsByKey = new Map(
-    intent.digestPinLabelRewriteApprovals.map((item) => [
-      digestPinLabelApprovalKey(item),
-      item,
-    ]),
-  );
-  approvalsByKey.set(digestPinLabelApprovalKey(approval), approval);
-  const nextIntent: PendingUpdateIntent = {
-    ...intent,
-    digestPinLabelRewriteApprovals: [...approvalsByKey.values()],
-  };
-  await updates.createPlan(
-    nextIntent.lineNumbers,
-    nextIntent.allowTagUpdates,
-    nextIntent.tagOverrides,
-    nextIntent.digestPinLabelRewriteApprovals,
-  );
-  if (updateIntent.value !== intent) {
-    return;
-  }
-  updateIntent.value = nextIntent;
-  showPreflightModal.value = true;
 }
 
 function groupTagChangeCount(group: PendingStackGroup): number {

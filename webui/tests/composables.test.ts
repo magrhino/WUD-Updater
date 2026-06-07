@@ -23,7 +23,6 @@ import {
 } from "../src/views/pending/usePendingApplyJob";
 import {
   usePendingPlanReviewState,
-  type PendingUpdateIntent,
 } from "../src/views/pending/usePendingPlanReviewState";
 
 describe("useUpdateTargetOptions", () => {
@@ -156,7 +155,6 @@ function setupPendingPlanReview(mutationsEnabled = true) {
   const selectedLineSet = computed(() => new Set(selectedLineNumbers.value));
   const stackGroups = computed(() => updates.pending?.grouping.groups ?? []);
   const unmatchedItems = computed(() => updates.pending?.grouping.unmatched ?? []);
-  const updateIntent = ref<PendingUpdateIntent | null>(null);
   const pendingSourceLabel = computed(() => "images.todo");
   const tagOverrideErrorForLines = vi.fn(() => "");
   const state = usePendingPlanReviewState({
@@ -166,7 +164,6 @@ function setupPendingPlanReview(mutationsEnabled = true) {
     stackGroups,
     tagOverrideErrorForLines,
     unmatchedItems,
-    updateIntent,
   });
 
   return {
@@ -174,13 +171,11 @@ function setupPendingPlanReview(mutationsEnabled = true) {
     updates,
     selectedLineNumbers,
     selectedLineSet,
-    updateIntent,
     tagOverrideErrorForLines,
   };
 }
 
 function setupPendingApplyJob() {
-  const planReview = setupPendingPlanReview(true);
   const updates = useUpdatesStore();
   const runs = useRunsStore();
   const panelRef = ref<PendingApplyJobPanelRef | null>({
@@ -191,15 +186,9 @@ function setupPendingApplyJob() {
   const state = usePendingApplyJob({
     applyJobPanelRef: panelRef,
     loadPendingAndReleaseNotes,
-    planContextLabel: planReview.state.planContextLabel,
-    planLineDigestPinLabel: planReview.state.planLineDigestPinLabel,
-    planLineServiceLabel: planReview.state.planLineServiceLabel,
-    planLineTagRewriteLabel: planReview.state.planLineTagRewriteLabel,
-    planLines: planReview.state.planLines,
   });
 
   return {
-    ...planReview,
     state,
     updates,
     runs,
@@ -255,6 +244,47 @@ function mockApplyJobStream() {
 describe("usePendingPlanReviewState", () => {
   beforeEach(() => {
     setActivePinia(createPinia());
+  });
+
+  it("owns update intent labels and apply payloads", () => {
+    const { state } = setupPendingPlanReview();
+    const tagOverrides = [{ line_no: 1, tag: "1.2" }];
+
+    state.setUpdateIntent({
+      title: "Preview media plan",
+      contextLabel: "media",
+      lineNumbers: [1],
+      allowTagUpdates: true,
+      tagOverrides,
+      digestPinLabelRewriteApprovals: [],
+    });
+
+    expect(state.planContextLabel.value).toBe("media");
+    expect(state.preflightTitle.value).toBe("Preview media plan");
+    expect(
+      state.applyPlanPayload({
+        allowTagUpdates: false,
+        tagOverrides: [],
+      }),
+    ).toEqual({
+      allowTagUpdates: true,
+      tagOverrides,
+      digestPinLabelRewriteApprovals: [],
+    });
+
+    state.clearUpdateIntent();
+
+    expect(state.planContextLabel.value).toBe("selected updates");
+    expect(
+      state.applyPlanPayload({
+        allowTagUpdates: false,
+        tagOverrides: [],
+      }),
+    ).toEqual({
+      allowTagUpdates: false,
+      tagOverrides: [],
+      digestPinLabelRewriteApprovals: [],
+    });
   });
 
   it("derives apply readiness states from the current plan preflight", () => {
@@ -370,6 +400,28 @@ describe("usePendingPlanReviewState", () => {
 describe("usePendingApplyJob", () => {
   beforeEach(() => {
     setActivePinia(createPinia());
+  });
+
+  it("creates apply snapshots from the current plan store state", () => {
+    const { state, updates } = setupPendingApplyJob();
+    updates.plan = planResponse();
+
+    expect(state.createApplyJobSnapshot()).toMatchObject({
+      contextLabel: "media",
+      serviceCount: 1,
+      stackCount: 1,
+      sourceFile: "/out/images.todo",
+      lines: [
+        {
+          lineNo: 1,
+          serviceLabel: "app",
+          tagRewriteLabel: "repo/app:1.0 -> repo/app:1.1",
+          digestPinLabel: "",
+          composeImage: "repo/app:1.0",
+          targetImage: "repo/app:1.1",
+        },
+      ],
+    });
   });
 
   it("derives apply job labels, logs, and failed progress precedence", () => {
