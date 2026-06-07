@@ -424,5 +424,3 @@ def _sse_log_events(content: str) -> list[dict[str, object]]:
 
 def _sse_progress_events(content: str) -> list[dict[str, object]]:
     return _sse_events(content, "progress")
-
-
