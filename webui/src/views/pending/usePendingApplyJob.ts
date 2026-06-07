@@ -199,13 +199,9 @@ export function usePendingApplyJob(options: UsePendingApplyJobOptions) {
   const applyJobLiveLogToggleLabel = computed(() =>
     applyJobLiveLogExpanded.value ? "Hide live log output" : "Show live log output",
   );
-  const applyJobLatestLogLine = computed(() => {
-    const lines = applyJobLogText.value
-      .split(/\r?\n/)
-      .map((line) => line.trim())
-      .filter(Boolean);
-    return lines.at(-1) ?? "";
-  });
+  const applyJobLatestLogLine = computed(() =>
+    latestNonEmptyLogLine(applyJobLogText.value),
+  );
   const applyJobLatestLogMessage = computed(() => {
     if (applyJobLatestLogLine.value) {
       return applyJobLatestLogLine.value;
@@ -408,9 +404,8 @@ export function usePendingApplyJob(options: UsePendingApplyJobOptions) {
       return;
     }
     const progressEvents = job.progress ?? [];
-    if (
-      progressEvents.some((item) => progressEventKey(item) === progressEventKey(progress))
-    ) {
+    const progressKey = progressEventKey(progress);
+    if (progressEvents.some((item) => progressEventKey(item) === progressKey)) {
       return;
     }
     updates.setApplyJob({
@@ -643,6 +638,24 @@ function progressEventKey(event: ApplyJobProgressEvent): string {
     event.stack,
     event.message,
   ].join("\u0000");
+}
+
+function latestNonEmptyLogLine(log: string): string {
+  let lineEnd = log.length;
+  while (lineEnd > 0) {
+    let lineStart = log.lastIndexOf("\n", lineEnd - 1);
+    if (lineStart === -1) {
+      lineStart = 0;
+    } else {
+      lineStart += 1;
+    }
+    const line = log.slice(lineStart, lineEnd).trim();
+    if (line) {
+      return line;
+    }
+    lineEnd = lineStart > 0 ? lineStart - 1 : 0;
+  }
+  return "";
 }
 
 function shouldAutoScrollLog(element: HTMLElement | null): boolean {
