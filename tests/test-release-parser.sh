@@ -28,6 +28,9 @@ test_detect_breaking(){
   res="$(detect_breaking "Minor updates" "v1.0.0" "v1.1.0")"
   [[ "$res" == "no" ]] || fail "detect_breaking incorrectly detected breaking on minor bump"
 
+  res="$(detect_breaking "Minor updates" "v1.2.3" "v2.0")"
+  [[ "$res" == "yes" ]] || fail "detect_breaking did not detect two-part major version bump"
+
   res="$(detect_breaking "Manual step required before upgrade" "v1.0.0" "v1.1.0")"
   [[ "$res" == "yes" ]] || fail "detect_breaking did not detect 'manual step'"
 }
@@ -39,6 +42,27 @@ test_semver_first(){
 
   res="$(printf '4.5.6.xyz' | semver_first)"
   [[ "$res" == "4.5.6.xyz" ]] || fail "semver_first failed on standard semver: got '$res'"
+
+  res="$(printf 'Update to v1.2.3-beta.1.' | semver_first)"
+  [[ "$res" == "v1.2.3-beta.1" ]] || fail "semver_first truncated multi-part suffix: got '$res'"
+
+  res="$(printf 'Release 1.2.3-ls14-beta' | semver_first)"
+  [[ "$res" == "1.2.3-ls14-beta" ]] || fail "semver_first truncated ls suffix: got '$res'"
+
+  res="$(printf 'Upgrade to v2.0' | semver_first)"
+  [[ "$res" == "v2.0" ]] || fail "semver_first missed two-part version: got '$res'"
+
+  res="$(printf 'Update 1.2.3 and 4.5.6' | semver_first)"
+  [[ "$res" == "1.2.3" ]] || fail "semver_first emitted more than first match: got '$res'"
+
+  res="$(printf 'Update python3.11 dependency' | semver_first)"
+  [[ -z "$res" ]] || fail "semver_first matched embedded version: got '$res'"
+}
+
+test_strip_lsio_suffix(){
+  local res
+  res="$(printf '1.2.3-ls14-beta' | strip_lsio_suffix)"
+  [[ "$res" == "1.2.3" ]] || fail "strip_lsio_suffix failed: got '$res'"
 }
 
 test_strip_md_headers(){
@@ -49,9 +73,9 @@ test_strip_md_headers(){
 
 test_extract_block_header_ci(){
   local res
-  local md=$'Some text\nLinuxServer Changes:\n- Rebase\n- Update\n\nOther changes:'
+  local md=$'Some text\n### LinuxServer Changes:\n- Rebase\n- Updated dependencies:\n  - package one\n- Update\n\nOther changes:'
   res="$(printf '%s' "$md" | extract_block_header_ci "linuxserver changes:")"
-  [[ "$res" == $'LinuxServer Changes:\n- Rebase\n- Update' ]] || fail "extract_block_header_ci failed: got '$res'"
+  [[ "$res" == $'### LinuxServer Changes:\n- Rebase\n- Updated dependencies:\n  - package one\n- Update' ]] || fail "extract_block_header_ci failed: got '$res'"
 }
 
 test_extract_md_h2_section_ci(){
@@ -68,6 +92,12 @@ test_extract_upstream_version(){
 
   res="$(printf 'Bump to 3.0.0-rc1' | extract_upstream_version)"
   [[ "$res" == "3.0.0-rc1" ]] || fail "extract_upstream_version bump failed: got '$res'"
+
+  res="$(printf 'Updating to v1.2.3-beta.1.' | extract_upstream_version)"
+  [[ "$res" == "v1.2.3-beta.1" ]] || fail "extract_upstream_version trailing punctuation failed: got '$res'"
+
+  res="$(printf 'Updating to 1.2.3 and 4.5.6' | extract_upstream_version)"
+  [[ "$res" == "1.2.3" ]] || fail "extract_upstream_version emitted multiple versions: got '$res'"
 }
 
 test_extract_alpine_base(){
@@ -88,6 +118,10 @@ test_select_key_change_bullets(){
   res="$(printf '%s' "$md" | select_key_change_bullets)"
   [[ "$res" == $'- one\n- two' ]] || fail "select_key_change_bullets explicit section failed: got '$res'"
 
+  local md_continued=$'## Key changes\n- Fixed parser:\n  keeps continuation\n- second\n## Other'
+  res="$(printf '%s' "$md_continued" | select_key_change_bullets)"
+  [[ "$res" == $'- Fixed parser:\n  keeps continuation\n- second' ]] || fail "select_key_change_bullets dropped continuation: got '$res'"
+
   local md_with_preamble=$'## Changes\n- fallback one\n- fallback two\n\n## Key changes\n- real one\n- real two\n\n## Other\n- ignored'
   res="$(printf '%s' "$md_with_preamble" | select_key_change_bullets)"
   [[ "$res" == $'- real one\n- real two' ]] || fail "select_key_change_bullets emitted fallback before explicit section: got '$res'"
@@ -102,6 +136,10 @@ test_select_representative_changes(){
   local md=$'## Changes\n- Fixed bug (#123)\n- Other fix #456\n- Minor abcdef123456789'
   res="$(printf '%s' "$md" | select_representative_changes "owner" "repo" 2)"
   [[ "$res" == $'- [#123](https://github.com/owner/repo/pull/123)\n- [#456](https://github.com/owner/repo/pull/456)' ]] || fail "select_representative_changes failed: got '$res'"
+
+  local md_hash=$'## Changes\n- defaced markdown\n- acceded wording\n- Fixed abcdef123456789'
+  res="$(printf '%s' "$md_hash" | select_representative_changes "owner" "repo" 2)"
+  [[ "$res" == $'- [abcdef1](https://github.com/owner/repo/commit/abcdef123456789)' ]] || fail "select_representative_changes linked false commit words: got '$res'"
 }
 
 test_extract_intro_until_h3(){
@@ -121,6 +159,7 @@ test_extract_lsio_non_rebase_changes(){
 main(){
   run_test test_detect_breaking
   run_test test_semver_first
+  run_test test_strip_lsio_suffix
   run_test test_strip_md_headers
   run_test test_extract_block_header_ci
   run_test test_extract_md_h2_section_ci

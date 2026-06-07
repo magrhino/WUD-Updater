@@ -12,7 +12,12 @@ from io import StringIO
 from pathlib import Path
 from unittest import mock
 
-from wud_updater.updates import UpdateSelectionState, run_updates_from_namespace
+from wud_updater.updates import (
+    UpdateSelectionState,
+    UpdatesError,
+    UpdatesFileLock,
+    run_updates_from_namespace,
+)
 
 
 class PythonUpdatesWrapperTests(unittest.TestCase):
@@ -210,6 +215,7 @@ class PythonUpdatesWrapperTests(unittest.TestCase):
                 "FAKE_DOCKER_LOG": str(self.docker_log),
                 "WUD_UPDATER_BANNER": "0",
                 "WUD_UPDATER_RELEASE_CHECK": "1",
+                "DOCKER_HOST": "tcp://docker:2375",
                 "HOSTNAME": "wud-updater-1",
             }
         )
@@ -254,7 +260,8 @@ class PythonUpdatesWrapperTests(unittest.TestCase):
             self.docker_log.read_text(encoding="utf-8"),
         )
         self.assertIn(
-            "docker pull ghcr.io/magrhino/wud-updater:latest",
+            "env DOCKER_HOST=tcp://docker:2375 docker pull "
+            "ghcr.io/magrhino/wud-updater:latest",
             self.sudo_log.read_text(encoding="utf-8"),
         )
         self.assertIn(
@@ -1090,11 +1097,64 @@ class PythonUpdatesWrapperTests(unittest.TestCase):
         self.assertIn("Dry-run mode: not running updates", result.stdout)
         self.assertFalse(self.sudo_log.exists())
 
+    def test_bin_updates_config_file_argument_is_sourced_by_python_cli(self) -> None:
+        self.wud_file.write_text("repo/app:latest\n", encoding="utf-8")
+        default_config_file = self.root / "default-env"
+        default_config_file.write_text(
+            "\n".join(
+                [
+                    "export WUD_UPDATER_USE_SUDO=true",
+                    "",
+                ]
+            ),
+            encoding="utf-8",
+        )
+        config_file = self.root / "host-env"
+        config_file.write_text(
+            "\n".join(
+                [
+                    "WUD_UPDATER_USE_SUDO=false",
+                    "",
+                ]
+            ),
+            encoding="utf-8",
+        )
+
+        result = self.run_updates(
+            "--yes",
+            "--config-file",
+            str(config_file),
+            command=[str(self.repo_root / "bin" / "updates")],
+            env_overrides={
+                "PYTHON_BIN": sys.executable,
+                "WUD_UPDATER_CONFIG": str(default_config_file),
+            },
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+        self.assertIn("Update script completed", result.stdout)
+        self.assertFalse(self.sudo_log.exists())
+        self.assertIn("--yes", self.updater_log.read_text(encoding="utf-8"))
+
     def test_bin_updates_default_accepts_no_updater_sudo(self) -> None:
         self.wud_file.write_text("repo/app:latest\n", encoding="utf-8")
 
         result = self.run_updates(
             "--yes",
+            "--no-updater-sudo",
+            command=[str(self.repo_root / "bin" / "updates")],
+            env_overrides={"PYTHON_BIN": sys.executable},
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+        self.assertFalse(self.sudo_log.exists())
+        self.assertIn("--yes", self.updater_log.read_text(encoding="utf-8"))
+
+    def test_bin_updates_auto_run_alias_invokes_updater(self) -> None:
+        self.wud_file.write_text("repo/app:latest\n", encoding="utf-8")
+
+        result = self.run_updates(
+            "--auto-run",
             "--no-updater-sudo",
             command=[str(self.repo_root / "bin" / "updates")],
             env_overrides={"PYTHON_BIN": sys.executable},
@@ -1356,6 +1416,27 @@ class UpdateSelectionStateTests(unittest.TestCase):
         self.assertEqual(state.tag_override_specs, ("2=3.0", "4=1.5"))
         self.assertEqual(state.exclude_tag_line_spec, "5")
         self.assertTrue(state.recreate_excluded_services)
+
+
+class UpdatesFileLockTests(unittest.TestCase):
+    def test_existing_lock_times_out_without_permission_probe(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="wud-lock.") as tmp:
+            wud_file = Path(tmp) / "images.todo"
+            lock_dir = Path(f"{wud_file}.lock")
+            lock_dir.mkdir()
+            sleep = mock.Mock()
+            lock = UpdatesFileLock(
+                str(wud_file),
+                "0",
+                {},
+                use_sudo=False,
+                sleep=sleep,
+            )
+
+            with self.assertRaisesRegex(UpdatesError, "Timed out waiting"):
+                lock.acquire()
+
+        sleep.assert_not_called()
 
 
 if __name__ == "__main__":

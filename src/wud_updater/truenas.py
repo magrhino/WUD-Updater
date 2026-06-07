@@ -11,6 +11,8 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from .container_identity import container_identity_candidates
+
 if TYPE_CHECKING:
     from .updates import UpdatesOptions
 
@@ -69,8 +71,8 @@ def _run_truenas_status_helper(
     if not _has_command("docker", environ):
         return TrueNasCallResult(ok=False, reason="docker not available")
 
-    hostname = environ.get("HOSTNAME") or ""
-    if hostname == "":
+    candidates = container_identity_candidates(environ)
+    if not candidates:
         return TrueNasCallResult(ok=False, reason="HOSTNAME not available")
 
     from .updates import UpdatesError
@@ -81,30 +83,37 @@ def _run_truenas_status_helper(
     except UpdatesError as exc:
         return TrueNasCallResult(ok=False, reason=str(exc))
 
-    try:
-        inspect_result = subprocess.run(
-            ["docker", "container", "inspect", hostname],
-            env=dict(environ),
-            stdin=subprocess.DEVNULL,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-            timeout=helper_timeout,
-            check=False,
-        )
-    except subprocess.TimeoutExpired:
-        return TrueNasCallResult(ok=False, reason="docker inspect timed out")
-    except OSError as exc:
-        return TrueNasCallResult(
-            ok=False,
-            reason=f"docker inspect failed: {_format_os_error(exc)}",
-        )
+    inspect_failure = ""
+    inspect_result = None
+    for candidate in candidates:
+        try:
+            candidate_result = subprocess.run(
+                ["docker", "container", "inspect", candidate],
+                env=dict(environ),
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                timeout=helper_timeout,
+                check=False,
+            )
+        except subprocess.TimeoutExpired:
+            return TrueNasCallResult(ok=False, reason="docker inspect timed out")
+        except OSError as exc:
+            return TrueNasCallResult(
+                ok=False,
+                reason=f"docker inspect failed: {_format_os_error(exc)}",
+            )
 
-    if inspect_result.returncode != 0:
-        return TrueNasCallResult(
-            ok=False,
-            reason=_subprocess_failure_reason("docker inspect", inspect_result),
+        if candidate_result.returncode == 0:
+            inspect_result = candidate_result
+            break
+        inspect_failure = _subprocess_failure_reason(
+            "docker inspect",
+            candidate_result,
         )
+    if inspect_result is None:
+        return TrueNasCallResult(ok=False, reason=inspect_failure)
 
     try:
         inspect_data = json.loads(inspect_result.stdout)

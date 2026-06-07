@@ -16,6 +16,7 @@ from .banner import (
     release_check_enabled,
     release_update_available,
 )
+from .container_identity import container_identity_candidates
 from .images import repo_key, tag_value_valid
 
 
@@ -105,36 +106,38 @@ def current_container_image(
     timeout: float = 5.0,
 ) -> str:
     env = dict(os.environ if environ is None else environ)
-    hostname = env.get("HOSTNAME") or ""
-    if hostname == "":
+    candidates = container_identity_candidates(env)
+    if not candidates:
         return ""
 
-    try:
-        result = subprocess.run(
-            ["docker", "container", "inspect", hostname],
-            env=env,
-            stdin=subprocess.DEVNULL,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.DEVNULL,
-            text=True,
-            timeout=timeout,
-            check=False,
-        )
-    except (OSError, subprocess.TimeoutExpired):
-        return ""
-    if result.returncode != 0:
-        return ""
+    for candidate in candidates:
+        try:
+            result = subprocess.run(
+                ["docker", "container", "inspect", candidate],
+                env=env,
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.DEVNULL,
+                text=True,
+                timeout=timeout,
+                check=False,
+            )
+        except (OSError, subprocess.TimeoutExpired):
+            return ""
+        if result.returncode != 0:
+            continue
 
-    try:
-        payload = json.loads(result.stdout)
-    except json.JSONDecodeError:
-        return ""
-    if not isinstance(payload, list) or not payload:
-        return ""
-    container = payload[0]
-    if not isinstance(container, dict):
-        return ""
-    return _inspected_container_image(container)
+        try:
+            payload = json.loads(result.stdout)
+        except json.JSONDecodeError:
+            return ""
+        if not isinstance(payload, list) or not payload:
+            return ""
+        container = payload[0]
+        if not isinstance(container, dict):
+            return ""
+        return _inspected_container_image(container)
+    return ""
 
 
 def main(argv: Sequence[str] | None = None) -> int:

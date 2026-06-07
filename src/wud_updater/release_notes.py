@@ -25,7 +25,10 @@ ERROR_CACHE_TTL_SECONDS = 900
 DEFAULT_GITHUB_TIMEOUT_SECONDS = 6.0
 GITHUB_REPO_RE = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
 OCI_SOURCE_LABEL = "org.opencontainers.image.source"
-SEMVER_RE = re.compile(r"\bv?([0-9]+)\.([0-9]+)\.([0-9]+)(?:[._-][0-9A-Za-z]+)?\b")
+SEMVER_RE = re.compile(
+    r"(?<![0-9A-Za-z])v?([0-9]+)(?:\.[0-9]+){1,3}"
+    r"(?:[._-][0-9A-Za-z]+)*(?![0-9A-Za-z])"
+)
 BREAKING_RE = re.compile(
     r"breaking|migration|incompatible|manual step|major change|"
     r"requires [^ \n]+ [0-9]|deprecated[^.\n]*remov|remove[ds] feature",
@@ -650,7 +653,7 @@ def _lsio_upstream_version(body: str, lsio_tag: str) -> str:
         found = _first_semver(match.group(1))
         if found:
             return found
-    return _first_semver(lsio_tag)
+    return _strip_lsio_suffix(_first_semver(lsio_tag))
 
 
 def _extract_block(body: str, header: str) -> str:
@@ -660,8 +663,13 @@ def _extract_block(body: str, header: str) -> str:
     result: list[str] = []
     for line in lines:
         stripped = line.strip()
-        is_header = bool(re.fullmatch(r"[A-Za-z0-9 _-]+:", stripped))
-        if stripped.lower() == target:
+        header = _block_header_text(stripped)
+        is_header = bool(
+            header
+            and not _markdown_bullet(stripped)
+            and re.fullmatch(r"[A-Za-z0-9 _-]+:", header)
+        )
+        if header.lower() == target:
             collecting = True
             result.append(line)
             continue
@@ -670,6 +678,18 @@ def _extract_block(body: str, header: str) -> str:
         if collecting:
             result.append(line)
     return "\n".join(result)
+
+
+def _block_header_text(value: str) -> str:
+    header = re.sub(r"^#{1,6}\s*", "", value.strip())
+    match = re.fullmatch(r"\*\*([^*]+:)\*\*", header)
+    if match:
+        header = match.group(1)
+    return header.strip()
+
+
+def _markdown_bullet(value: str) -> bool:
+    return bool(re.match(r"^([*+-]|•)\s+", value))
 
 
 def _load_upstream_map(environ: Mapping[str, str]) -> dict[str, str]:
@@ -769,6 +789,10 @@ def _github_url(repo: str) -> str:
 def _first_semver(value: str) -> str:
     match = SEMVER_RE.search(value)
     return match.group(0) if match else ""
+
+
+def _strip_lsio_suffix(value: str) -> str:
+    return re.sub(r"(?i)[._-]ls[0-9]+(?:[._-][0-9A-Za-z]+)*$", "", value)
 
 
 def _semver_major(value: str) -> int | None:

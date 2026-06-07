@@ -18,6 +18,7 @@ from pathlib import Path
 from .command import CommandResult, CommandRunner
 from .compose import ComposeCli, compose_discovery_message, compose_files_under
 from .config import COMPOSE_IGNORE_PATHS_ENV, ConfigError, parse_compose_ignore_paths
+from .container_identity import container_identity_candidates
 from .updates import (
     load_configured_environ,
 )
@@ -274,8 +275,8 @@ class Doctor:
                 f"{self.options.truenas_status_timeout}s",
             )
 
-        hostname = self.environ.get("HOSTNAME") or ""
-        if not hostname:
+        candidates = container_identity_candidates(self.environ)
+        if not candidates:
             self._record(
                 "FAIL",
                 "TrueNAS helper container inspect",
@@ -283,27 +284,31 @@ class Doctor:
             )
             return
 
-        result = self.runner.capture(
-            ["docker", "container", "inspect", hostname],
-            check=False,
+        failed_result: CommandResult | None = None
+        for candidate in candidates:
+            result = self.runner.capture(
+                ["docker", "container", "inspect", candidate],
+                check=False,
+            )
+            if result.ok:
+                self._record(
+                    "PASS",
+                    "TrueNAS helper container inspect",
+                    "current container is inspectable",
+                )
+                self._record(
+                    "WARN",
+                    "TrueNAS middleware socket",
+                    f"{TRUENAS_MIDDLEWARE_MOUNT} is validated by docker run at status-check time",
+                )
+                return
+            failed_result = result
+
+        self._record(
+            "FAIL",
+            "TrueNAS helper container inspect",
+            _failure_detail(failed_result) if failed_result is not None else "",
         )
-        if result.ok:
-            self._record(
-                "PASS",
-                "TrueNAS helper container inspect",
-                "current container is inspectable",
-            )
-            self._record(
-                "WARN",
-                "TrueNAS middleware socket",
-                f"{TRUENAS_MIDDLEWARE_MOUNT} is validated by docker run at status-check time",
-            )
-        else:
-            self._record(
-                "FAIL",
-                "TrueNAS helper container inspect",
-                _failure_detail(result),
-            )
 
     def _check_command(self, name: str, command: Sequence[str]) -> CommandResult:
         result = self.runner.capture(command, check=False)

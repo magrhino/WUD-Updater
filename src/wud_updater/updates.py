@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import errno
 import os
 import re
 import subprocess
@@ -43,6 +44,14 @@ _DISPLAY_RANGE_RE = re.compile(r"^([0-9]+)-([0-9]+)$")
 _DISPLAY_NUMBER_RE = re.compile(r"^[0-9]+$")
 _SHELL_SPACE_RE = re.compile(r"[ \t\n\r\v\f]")
 _LEGACY_SHA_SUFFIX_RE = re.compile(r"^(.*\S)\s+sha256=\S+$")
+_DOCKER_CLI_ENV_NAMES = (
+    "DOCKER_HOST",
+    "DOCKER_CONTEXT",
+    "DOCKER_TLS_VERIFY",
+    "DOCKER_CERT_PATH",
+    "DOCKER_CONFIG",
+    "DOCKER_API_VERSION",
+)
 
 
 class UpdatesError(RuntimeError):
@@ -141,7 +150,7 @@ class UpdatesFileLock:
                     self.held = True
                     return
                 except OSError as exc:
-                    if self.lock_dir.exists():
+                    if isinstance(exc, FileExistsError) or exc.errno == errno.EEXIST:
                         pass
                     elif self.use_sudo and self._sudo_mkdir():
                         self.via_sudo = True
@@ -365,7 +374,14 @@ class UpdatesRunner:
         if image == "":
             raise UpdatesError("Could not determine WUD-Updater image to pull.")
 
-        if self.options.use_sudo:
+        docker_env = _docker_cli_env(self.environ) if self.options.use_sudo else []
+        if self.options.use_sudo and docker_env:
+            print(
+                "🚀 Pulling WUD-Updater image via: sudo env "
+                f"{' '.join(docker_env)} docker pull {image}"
+            )
+            command = ["sudo", "env", *docker_env, "docker", "pull", image]
+        elif self.options.use_sudo:
             print(f"🚀 Pulling WUD-Updater image via: sudo docker pull {image}")
             command = ["sudo", "docker", "pull", image]
         else:
@@ -939,7 +955,10 @@ def run_updates_from_namespace(
     environ: Mapping[str, str] | None = None,
     show_banner: bool = False,
 ) -> int:
-    env = load_configured_environ(environ)
+    env = load_configured_environ(
+        environ,
+        config_file=getattr(args, "config_file", None),
+    )
     if show_banner:
         print_startup_banner(
             environ=env,
@@ -1024,9 +1043,13 @@ def options_from_namespace(
 
 def load_configured_environ(
     environ: Mapping[str, str] | None = None,
+    config_file: str | None = None,
 ) -> dict[str, str]:
     env = dict(os.environ if environ is None else environ)
-    if env.get("WUD_UPDATER_CONFIG_SOURCED") == "1":
+    explicit_config_file = config_file is not None
+    if config_file:
+        env["WUD_UPDATER_CONFIG"] = config_file
+    if env.get("WUD_UPDATER_CONFIG_SOURCED") == "1" and not explicit_config_file:
         return env
     home = env.get("HOME") or str(Path.home())
     config_file = Path(
@@ -1119,6 +1142,15 @@ def _self_update_desired_tag(target: str) -> str:
     if desired_tag and image_has_tag(image) and tag_value_valid(desired_tag):
         return desired_tag
     return ""
+
+
+def _docker_cli_env(environ: Mapping[str, str]) -> list[str]:
+    result: list[str] = []
+    for name in _DOCKER_CLI_ENV_NAMES:
+        value = environ.get(name)
+        if value:
+            result.append(f"{name}={value}")
+    return result
 
 
 def _read_todo_entries_with_sudo(
