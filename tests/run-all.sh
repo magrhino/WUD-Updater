@@ -97,6 +97,7 @@ EOF
     tests/test_python_update_from_wud.py \
     tests/test_python_updates_wrapper.py \
     tests/test_python_web.py \
+    tests/web_test_helpers.py \
     tests/test_python_webui_demo_state.py \
     tests/test_python_wud_file_ops.py \
     tests/test_python_wud_parsing.py \
