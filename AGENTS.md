@@ -17,15 +17,14 @@ Repo-local routing/context only for WUD-Updater. Global instructions control def
 |---|---|---|---|---|
 | `bin/updates` | Host CLI wrapper that displays WUD Docker updates, TrueNAS update status, alerts, and optionally calls the updater. | `README.md`, `bin/docker-update-from-wud` usage block. | Preserve prompt, `--dry-run`, `--yes`, config-file, `sudo`, and updater handoff behavior. | TrueNAS `midclt` handling unless the task targets system update or alert checks. |
 | `bin/docker-update-from-wud` | Symlink-safe dispatcher for the default Python updater. | `README.md`, `src/wud_updater/cli.py`, `src/wud_updater/updater.py`, and dispatcher tests. | Keep argument pass-through exact; preserve `PYTHON_BIN` and `PYTHONPATH` behavior. | Adding updater logic here instead of in Python. |
-| `pyproject.toml`, `src/wud_updater/` | Default Python updater package plus the opt-in Python `updates` wrapper. | `pyproject.toml`, `src/wud_updater/cli.py`, relevant Python module, and relevant Python tests. For WebUI backend work, read `src/wud_updater/web.py` only as the app factory/compatibility surface, then inspect the focused `web_*` module that owns the feature. For updater work, read `src/wud_updater/updater.py` only as the CLI/compatibility surface, then inspect the focused updater module that owns the behavior. | Prefer composable modules over adding logic to `web.py` or `updater.py`; keep `wud-updater updates` opt-in until promoted separately. Add new Python modules to the explicit syntax-check list in `tests/run-all.sh`. | Moving WUD callback scripts out of shell; adding new route families, schedulers, Compose rewrite behavior, or updater subsystems directly to `web.py` or `updater.py` when a focused module would fit. |
-| `webui/` | Vue 3/Vite/TypeScript SPA for the read-only WebUI plus static GitHub Pages demo mode. | `webui/package.json`, the owning split Pinia store, `webui/src/api/client.ts`, the consuming view/component, the focused backend `web_*` module, and focused WebUI tests. Read `src/wud_updater/web.py` only for app factory, route registration, and compatibility wiring. | Keep auth/session state out of localStorage; use the typed API client and Pinia stores; keep public demo mode fixture-backed and sanitized. Backend API changes should go into focused `web_*` modules, not a larger `web.py`. | Adding mutation UX without matching backend CSRF/origin, read-only-mode, and audit tests; deploying dev auth bypass or backend mutation paths as a public demo; re-growing monolithic backend route files or monolithic frontend stores. |
-| `webui/src/stores/connection.ts`, `webui/src/stores/updates.ts`, `webui/src/stores/runs.ts`, `webui/src/stores/settings.ts` | Split Pinia stores for WebUI status/doctor/restart/diagnostics, pending updates/release notes/self-update/jobs, run history/logs, and settings/onboarding/policies/snoozes/tag exclusions. | `webui/src/api/client.ts`, the store that owns the state being changed, the consuming view/component, and the focused WebUI tests. | Keep state ownership explicit; surface errors through the owning store; keep mutation loading guards tied to the store performing the operation; preserve session storage only for transient apply-job recovery. | Reintroducing a monolithic WebUI store, duplicating state across stores, or sharing mutation state through localStorage. |
+| `pyproject.toml`, `src/wud_updater/` | Python updater, WebUI backend, config, DB, planning, Docker/Compose helpers, and CLI entrypoints. | `src/wud_updater/AGENTS.md`, then the owning module and focused Python tests. | Keep `wud-updater updates` opt-in until promoted separately; add new Python modules/tests to `tests/run-all.sh` py_compile list. | Moving WUD callback scripts out of shell; growing `web.py`, `updater.py`, or giant WebUI test files when a focused module/test file can own the behavior. |
+| `webui/` | Vue 3/Vite/TypeScript SPA for the read-only WebUI plus static GitHub Pages demo mode. | `webui/AGENTS.md`, then the owning store/API/component and focused tests. | Keep public demo mode fixture-backed and sanitized. | Deploying dev auth bypass, fake Docker, SQLite mutation, or real backend mutation paths as a public demo. |
 | `Makefile` | Developer convenience targets for WebUI demo state and local dev. | `Makefile`, `webui/package.json`, `webui/scripts/*`, and relevant tests. | Keep targets thin wrappers around checked-in scripts; do not hard-code machine-specific paths. | Production install or release behavior unless the task explicitly targets it. |
 | `wud/on-update.sh`, `wud/append-updates.sh` | WUD notification callback and line-oriented update-list writer. | Both files plus WUD env variable usage. | Keep POSIX `sh` compatibility and container defaults for `/wud` and `/out`. | Host-specific paths, secrets, or behavior that belongs in `bin/`. |
 | `wud/release-notes-to-discord.sh`, `wud/github-release-embed.sh`, `wud/tag-manager.sh`, `wud/http.sh`, `wud/upstreams.txt` | Canonical shell Discord/GitHub release-note router, compatibility wrappers, shared HTTP behavior, and LinuxServer.io upstream mapping. | `wud/release-notes-to-discord.sh`, wrapper entrypoint when compatibility is involved, `wud/http.sh`, and `wud/upstreams.txt` when mapping is involved. | Keep WUD callbacks shell-based; keep legacy wrapper arguments/env accepted; keep webhook/token values environment-driven and redacted in logs. Preserve standardized `curl`/`jq` based GitHub and Discord behavior. | Network calls unless validating release-note behavior. |
 | `install.sh` | Idempotent installer that chmods scripts and creates host symlinks for CLI commands and WUD scripts. | `install.sh`, then README install section. | Preserve refusal to replace non-symlink targets and existing env overrides. | Changing default target layout unless the task asks for installer behavior changes. |
 | `Dockerfile`, `entrypoint.sh`, `docs/examples/docker-compose.example.yml`, `docs/examples/docker-compose.webui.yml`, `docs/examples/docker-compose.hardened.yml`, `docs/examples/docker-compose.truenas.yml`, `docs/examples/docker-compose.build.yml`, `.dockerignore` | Container packaging for running the updater helpers with Docker CLI access, the long-running WebUI container, and optional TrueNAS API reachability. | `README.md`, `docs/DEPLOYMENT.md`, `entrypoint.sh`, `bin/updates`, `bin/docker-update-from-wud`, `src/wud_updater/web.py` for WebUI examples. | Keep the default command non-mutating, keep WebUI examples read-only unless mutation work is explicit, preserve command dispatch, keep Docker socket or socket-proxy access and host stack mounts explicit, and keep TrueNAS API keys secret-file based in examples. | Replacing WUD's separate `/wud` script mount, enabling WebUI mutations by default, or baking version-specific TrueNAS clients into the default image. |
-| `tests/` | Local test runner, focused shell tests, Python config tests, fake command implementations, WebUI backend tests, and Docker E2E harnesses. | `tests/run-all.sh`, then the focused test for the behavior being changed. For WebUI backend work, prefer focused files such as `tests/test_python_web_auth.py`, `tests/test_python_web_pending.py`, `tests/test_python_web_jobs.py`, and shared helper modules over growing `tests/test_python_web.py`. | Keep tests temp-dir based; fake Docker for default tests; reserve real Docker mutations for explicit Docker-gated harnesses such as `tests/e2e-docker-compose.sh`; keep Python dev dependencies explicit in `pyproject.toml`; add new Python modules/tests to the explicit syntax-check list in `tests/run-all.sh`. | Adding dependencies or broad fixtures when a small shell fake, unittest, or Docker-gated E2E fixture is enough; adding more unrelated cases to giant test files when a focused test file would better match the owning module. |
+| `tests/` | Local test runner, focused shell tests, Python tests, fake command implementations, WebUI backend tests, and Docker E2E harnesses. | `tests/run-all.sh`, then the focused test for the behavior being changed. | Keep tests temp-dir based; fake Docker for default tests; reserve real Docker mutations for explicit Docker-gated harnesses; keep Python dev dependencies explicit in `pyproject.toml`. | Adding dependencies or broad fixtures when a small shell fake, unittest, or Docker-gated E2E fixture is enough. |
 | `.github/workflows/ci.yml` | Cost-conscious CI for PRs to `main`, pushes to `main`, optional macOS/Docker checks, Docker E2E, and workflow linting. | `tests/run-all.sh`, `tests/container-build.sh`, `tests/e2e-docker-compose.sh`, workflow file. | Keep default CI Linux-only; keep macOS gated by `ci:macos` or manual dispatch; keep Docker build gated by `ci:docker`, manual dispatch, or image-impacting path changes; keep Docker E2E separate and gated by `ci:e2e`, manual dispatch, or image-impacting path changes. Ensure new Compose examples are covered by container-build config validation. | Scheduled workflows, broad matrices, caches, artifacts, or always-on macOS/Docker jobs unless explicitly requested. |
 | `.github/workflows/webui-demo-pages.yml` | Static GitHub Pages deployment for the public fixture-backed WebUI demo. | `webui/package.json`, `webui/vite.config.ts`, `docs/DEVELOPMENT.md`, workflow file. | Build only static assets with demo mode; keep Pages permissions narrow; never deploy FastAPI, fake Docker, SQLite, dev auth bypass, or real mutation backends. | Server-side demo hosting, secrets, custom domains, or Pages environment assumptions unless requested. |
 | `.github/workflows/security.yml`, `.github/CODEOWNERS`, `.github/zizmor.yml` | Security scanning suite, sensitive-path ownership, and GitHub Actions audit policy. | Existing workflow/release workflow rows plus the security files. | Keep PR-blocking jobs high-signal; skip GHAS-backed scans while the repo is private; keep Scorecard advisory; preserve readable Action version tags unless policy changes. | Repo-setting assumptions that cannot be enforced from files alone. |
@@ -58,68 +57,11 @@ Repo-local routing/context only for WUD-Updater. Global instructions control def
 - Secrets such as Discord webhooks and GitHub tokens must come from the environment or host-local config and must not be logged in full.
 - Container-facing scripts assume `/wud` for mounted scripts and `/out` for WUD output; host paths belong in install/config, not hard-coded into container scripts.
 
-## Composable Backend Architecture
+## Scoped AGENTS
 
-Prefer small, owned backend modules over adding more behavior to large files.
-
-### No new godfiles
-
-- Do not add new feature logic, route families, schedulers, runners, parsers, or large helper clusters directly to `src/wud_updater/web.py` or `src/wud_updater/updater.py`.
-- Treat `web.py` and `updater.py` as compatibility facades and orchestration entrypoints:
-  - `web.py` should own `create_app()`, WebUI startup wiring, CLI-facing web entrypoints, and compatibility re-exports only.
-  - `updater.py` should own updater CLI orchestration, public compatibility imports, and thin handoff logic only.
-- If a change would add more than a small glue function to either file, create or use a focused module instead.
-- When touching an existing godfile area, prefer leaving the file smaller or no larger than before. If adding behavior is unavoidable, explain why in the PR summary.
-
-### Preferred backend module boundaries
-
-Use focused modules with one clear reason to change. Prefer these ownership patterns:
-
-- Web models/schemas: `src/wud_updater/web_models.py`
-- Web auth, setup, sessions, CSRF, host/origin safety: `src/wud_updater/web_auth.py`
-- Web status, readiness, doctor, onboarding: `src/wud_updater/web_status.py`
-- Web pending updates, plans, cleanup, release notes: `src/wud_updater/web_pending.py`
-- Web run history and logs: `src/wud_updater/web_runs.py`
-- Web settings, service policies, snoozes, tag exclusions, state operations: `src/wud_updater/web_state.py`
-- Web apply jobs and job streams: `src/wud_updater/web_jobs.py`
-- Web auto-update scheduler: `src/wud_updater/web_scheduler.py`
-- Web self-update and container restart: `src/wud_updater/web_self_update.py`
-- Updater dataclasses, typed records, and custom exceptions: `src/wud_updater/updater_models.py`
-- Compose YAML/tag/digest rewrite logic: `src/wud_updater/compose_rewrite.py`
-- Updater health-check/wait helpers: `src/wud_updater/updater_health.py`
-- Updater runner internals, if split from the public facade: `src/wud_updater/updater_runner.py`
-
-If the exact module does not exist yet, create the narrowest reasonable module rather than growing `web.py` or `updater.py`.
-
-### Route and dependency pattern
-
-- Prefer route modules that expose a small registration surface, such as `build_<feature>_router(...)` or `register_<feature>_routes(app, deps)`.
-- Keep feature modules from importing `wud_updater.web` just to reach shared helpers. Move shared helpers into a focused module instead.
-- Avoid circular imports. If two modules need the same helper, extract the helper into a third, narrower module.
-- Prefer explicit dependency parameters or small dependency dataclasses over module-level global state.
-- Keep app state setup centralized and boring; feature modules should not secretly create executors, background threads, databases, or global mutable state at import time.
-
-### Test layout follows module layout
-
-- Do not keep growing `tests/test_python_web.py` for new WebUI backend behavior.
-- Add focused test files that mirror the owning module, for example:
-  - `tests/test_python_web_auth.py`
-  - `tests/test_python_web_pending.py`
-  - `tests/test_python_web_jobs.py`
-  - `tests/test_python_web_scheduler.py`
-  - `tests/test_python_web_self_update.py`
-- Keep shared WebUI test fixtures/helpers in a focused helper module instead of duplicating them or hiding them in one giant test file.
-- When adding Python source modules or test files, update the explicit Python syntax-check list in `tests/run-all.sh`.
-
-### Extraction and compatibility rules
-
-- Preserve public imports from existing compatibility surfaces during refactors unless the task explicitly removes them.
-  - `from wud_updater.web import create_app` must keep working.
-  - Existing imports from `wud_updater.updater` should keep working while updater internals are being split.
-- Prefer behavior-preserving extraction before behavior changes.
-- Do not combine a large move with a feature rewrite. First move code with tests passing, then change behavior in a follow-up PR.
-- Preserve dataclass, Pydantic, and `Literal` precision during extraction. Do not replace typed models with generic `dict[str, Any]` unless there is a specific reason.
-- Preserve custom exception classes, exception chaining, HTTP status codes, response bodies, audit behavior, and redaction behavior during extraction.
+- `src/wud_updater/AGENTS.md` owns Python backend module boundaries, WebUI backend safety, updater compatibility, and focused Python test guidance.
+- `webui/AGENTS.md` owns frontend state, typed API client, components/views, static demo, and frontend validation guidance.
+- Prefer the closest scoped file over expanding root; nested guidance should replace duplicated root detail.
 
 ## Repo Commands
 
@@ -194,7 +136,7 @@ Use the shell already used by the target script.
 ## Maintenance Notes
 
 - When adding a top-level file, script, test harness, workflow, or user-facing config surface, update `Path Map`, `Repo Commands`, and `Validation Selection` in the same change when relevant.
-- When creating a new backend module, update `Path Map`, `Composable Backend Architecture`, and validation guidance if the module becomes an owning surface for a feature area.
+- When creating a new backend module or frontend surface, update the closest scoped `AGENTS.md` if ownership or validation guidance changes.
 - During release prep, draft `CHANGELOG.md` from commits since the previous tag and group entries by user-visible impact (`Added`, `Changed`, `Fixed`, `Docs`, `Removed`, or `Internal` as appropriate).
 
 ## Local Summaries
@@ -228,14 +170,15 @@ Do not read or edit unless directly required.
 
 ## Nested AGENTS Suggestions
 
-No nested `AGENTS.md` files are currently suggested; the repository is small enough for this root guide. Add nested files only when a directory grows enough that local rules can replace, not duplicate, root detail.
+Intentional scoped guides: `src/wud_updater/AGENTS.md` and `webui/AGENTS.md`.
+Do not add `tests/AGENTS.md` until focused backend test files make test ownership stable enough to replace root guidance.
 
 ## Edit Discipline
 
 - Identify the owning path from `Path map` before editing.
 - Read nearest implementation and test examples first.
 - Make the smallest correct change.
-- Prefer composable modules over godfiles: do not grow `web.py`, `updater.py`, or large test files when a focused module/test file can own the behavior.
+- Prefer scoped guidance over root expansion; update nested `AGENTS.md` files when local rules change.
 - Do not normalize formatting outside touched lines.
 - Do not move code across directories unless requested.
 - If multiple areas are touched, re-check whether nested `AGENTS.md` files apply.

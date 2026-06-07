@@ -2,13 +2,13 @@
 
 ## Scope
 
-Rules for files under `webui/`. Root `AGENTS.md` still controls repo-wide safety, validation, releases, and backend files outside this directory.
+Rules for files under `webui/`. Root `AGENTS.md` still controls repo-wide safety, validation, and releases; `src/wud_updater/AGENTS.md` controls backend contract work.
 
 ## Context Budget
 
 - Read `package.json`, the owning store/API/component, and focused tests for the task.
 - Avoid broad frontend tree reads; use `rg` and nearby examples.
-- For backend contract changes, inspect only the matching `src/wud_updater/web*.py` route/module and focused Python tests.
+- For backend contract changes, read `src/wud_updater/AGENTS.md`, then inspect the matching `web_*` backend module and focused Python tests.
 
 ## Ownership Map
 
@@ -34,7 +34,7 @@ Rules for files under `webui/`. Root `AGENTS.md` still controls repo-wide safety
 
 ## Backend Contract Rules
 
-- Backend route implementations live outside `webui/`; follow root `AGENTS.md` before editing them.
+- Backend route implementations live outside `webui/`; follow `src/wud_updater/AGENTS.md` before editing them.
 - Preserve API paths, methods, response shapes, auth/session assumptions, and error surfaces unless the task explicitly changes the contract.
 - When frontend API types change, update matching backend tests or explain why the change is frontend-only.
 
@@ -48,7 +48,7 @@ Choose the smallest useful set:
 - Build-affecting change: `npm --prefix webui run build`
 - Static demo change: `npm --prefix webui run build:demo` and `npm --prefix webui run test:smoke:demo`
 - Browser auth/routing/smoke fixture change: install Chromium when needed, then `npm --prefix webui run test:smoke`
-- Backend API contract change: run the focused Python WebUI backend tests named in root `AGENTS.md`
+- Backend API contract change: run the focused Python WebUI backend tests selected by `src/wud_updater/AGENTS.md`
 
 ## Edit Discipline
 
