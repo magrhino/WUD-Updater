@@ -4,6 +4,22 @@ All notable changes to WUD-Updater are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com) and versions follow
 [Semantic Versioning](https://semver.org).
 
+## [0.38.0](https://github.com/magrhino/WUD-Updater/compare/v0.37.0...v0.38.0) (2026-06-07)
+
+
+### Features
+
+* Harden the updates wrapper and TrueNAS checks and Remove bash ([#217](https://github.com/magrhino/WUD-Updater/issues/217)) ([9550872](https://github.com/magrhino/WUD-Updater/commit/955087206482da482c13497b35fb5b0236e45d15))
+
+
+### Bug Fixes
+
+* [codex] harden digest-pin updates and CI maintenance ([#215](https://github.com/magrhino/WUD-Updater/issues/215)) ([bf47041](https://github.com/magrhino/WUD-Updater/commit/bf47041deb4ea0f6ae11c0206e1198e9e6c78db0))
+* [codex] maintainability quick wins ([#216](https://github.com/magrhino/WUD-Updater/issues/216)) ([4a1bbee](https://github.com/magrhino/WUD-Updater/commit/4a1bbeeb4e0a01a7b007403e23335fd69e3aab93))
+* **digest:** allow updater to read human tags and rewrite to regex ([#213](https://github.com/magrhino/WUD-Updater/issues/213)) ([c821414](https://github.com/magrhino/WUD-Updater/commit/c82141431301adc91cbd8aea227aec51335a6fb8))
+* fix regression findings ([#229](https://github.com/magrhino/WUD-Updater/issues/229)) ([2c39377](https://github.com/magrhino/WUD-Updater/commit/2c39377002afcbd2543c90baa2de542f2f84f5eb))
+* **tests:** run local full suite sections in parallel ([#211](https://github.com/magrhino/WUD-Updater/issues/211)) ([d48aae4](https://github.com/magrhino/WUD-Updater/commit/d48aae438f8f466300268d714e4093fa34d86490))
+
 ## [0.37.0](https://github.com/magrhino/WUD-Updater/compare/v0.36.1...v0.37.0) (2026-06-05)
 
 
