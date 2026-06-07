@@ -2,7 +2,7 @@
 
 ## Scope
 
-Rules for files under `src/wud_updater/`. Root `AGENTS.md` still controls repo-wide safety, commits, validation, releases, docs, and files outside this directory.
+Rules for files under `src/wud_updater/`. Root `AGENTS.md` controls repo-wide safety, commits, releases, docs, and files outside this directory; this file owns backend module boundaries, backend safety deltas, and scoped validation.
 
 ## Context Budget
 
@@ -28,14 +28,12 @@ Prefer small modules with one clear reason to change:
 
 If the exact owner does not exist yet, create the narrowest reasonable module instead of growing `web.py`, `updater.py`, or a giant test file.
 
-## Safety Invariants
+## Backend Safety
 
-- Mutating Docker or Compose operations require explicit confirmation or `--yes`; `--dry-run` must not pull, restart, clean WUD output, or mutate host state.
 - WebUI mutations must remain disabled unless `WUD_WEB_MUTATIONS_ENABLED=true`.
 - Mutating browser requests must keep auth, CSRF, Origin, Host, read-only-mode, stale-plan, single-job, and audit protections.
 - No GET route may mutate host, Docker, Compose, or SQLite state beyond safe session/bootstrap behavior such as issuing a CSRF cookie.
 - Preserve custom exception classes, exception chaining, HTTP status codes, response bodies, audit behavior, failure records, and secret/path redaction.
-- Keep secrets environment-driven and never log raw tokens, webhooks, cookies, or full environment dumps.
 
 ## Tests
 

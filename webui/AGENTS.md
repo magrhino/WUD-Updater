@@ -2,7 +2,7 @@
 
 ## Scope
 
-Rules for files under `webui/`. Root `AGENTS.md` still controls repo-wide safety, validation, and releases; `src/wud_updater/AGENTS.md` controls backend contract work.
+Rules for files under `webui/`. Root `AGENTS.md` controls repo-wide safety, releases, and files outside this directory; this file owns frontend architecture and scoped validation. `src/wud_updater/AGENTS.md` controls backend contract work.
 
 ## Context Budget
 
@@ -48,6 +48,7 @@ Choose the smallest useful set:
 - Build-affecting change: `npm --prefix webui run build`
 - Static demo change: `npm --prefix webui run build:demo` and `npm --prefix webui run test:smoke:demo`
 - Browser auth/routing/smoke fixture change: install Chromium when needed, then `npm --prefix webui run test:smoke`
+- Local/demo tooling change: `node --check webui/scripts/dev-server.mjs` plus focused script tests; use `make webui-demo-state` or `make webui-dev` when validating those flows.
 - Backend API contract change: run the focused Python WebUI backend tests selected by `src/wud_updater/AGENTS.md`
 
 ## Edit Discipline
