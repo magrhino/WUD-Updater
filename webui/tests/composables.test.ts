@@ -347,7 +347,19 @@ describe("usePendingPlanReviewState", () => {
         service: "old",
         compose_file: "docker-compose.yml",
         found_files: ["docker-compose.archive.yml"],
-        details: {},
+        details: {
+          preflight_findings: [
+            "Compose file missing",
+            "Archived file found",
+            "Compose file missing",
+          ],
+          possible_reasons: ["Stack moved", "Stack moved"],
+          recommended_actions: [
+            "Restore Compose file",
+            "Remove stale line",
+            "Restore Compose file",
+          ],
+        },
       },
     });
     selectedLineNumbers.value = [1];
@@ -393,6 +405,15 @@ describe("usePendingPlanReviewState", () => {
     expect(state.cleanupReviewSummary.value).toContain(
       "1 entry needs review: Compose file missing.",
     );
+    expect(state.cleanupAssistantFindings.value).toEqual([
+      "Compose file missing",
+      "Archived file found",
+    ]);
+    expect(state.cleanupAssistantReasons.value).toEqual(["Stack moved"]);
+    expect(state.cleanupAssistantActions.value).toEqual([
+      "Restore Compose file",
+      "Remove stale line",
+    ]);
     expect(state.visiblePlanIssues.value).toEqual([]);
   });
 });

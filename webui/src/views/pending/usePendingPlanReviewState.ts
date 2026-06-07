@@ -696,9 +696,11 @@ function assistantDetailList(
   key: AssistantDetailKey,
 ): string[] {
   const values: string[] = [];
+  const seenValues = new Set<string>();
   for (const item of items) {
     for (const value of diagnosticDetailList(item.diagnostic, key)) {
-      if (!values.includes(value)) {
+      if (!seenValues.has(value)) {
+        seenValues.add(value);
         values.push(value);
       }
     }
