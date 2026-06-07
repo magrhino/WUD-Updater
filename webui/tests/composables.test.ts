@@ -545,4 +545,23 @@ describe("usePendingApplyJob", () => {
     expect(updates.error).toBe("Job status stream returned invalid data.");
     expect(stream.close).toHaveBeenCalledTimes(1);
   });
+
+  it("derives the latest log message from apply job log content", () => {
+    const { state, updates } = setupPendingApplyJob();
+
+    // Setup an active job so fallback message is "Waiting for log output."
+    updates.setApplyJob(applyJobResponse({ status: "running" }));
+
+    updates.setApplyJobLog(applyJobLogResponse({ content: "" }));
+    expect(state.applyJobLatestLogMessage.value).toBe("Waiting for log output.");
+
+    updates.setApplyJobLog(applyJobLogResponse({ content: "   \n\t\n" }));
+    expect(state.applyJobLatestLogMessage.value).toBe("Waiting for log output.");
+
+    updates.setApplyJobLog(applyJobLogResponse({ content: "single line content" }));
+    expect(state.applyJobLatestLogMessage.value).toBe("single line content");
+
+    updates.setApplyJobLog(applyJobLogResponse({ content: "first\nsecond\n\n\n" }));
+    expect(state.applyJobLatestLogMessage.value).toBe("second");
+  });
 });

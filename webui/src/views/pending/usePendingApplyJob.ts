@@ -263,7 +263,11 @@ export function usePendingApplyJob(options: UsePendingApplyJobOptions) {
     if (complete?.status === "success") {
       return "Complete";
     }
-    return `${progress.length} updates`;
+    const lastProgress = progress[progress.length - 1];
+    const lastPhase = applyJobProgressSteps.value.find(
+      (step) => step.key === lastProgress.phase,
+    );
+    return lastPhase ? lastPhase.label : applyJobUpdateLabel.value;
   });
   const applyJobCurrentStep = computed<ApplyJobProgressStep | null>(() => {
     const failed = applyJobProgressSteps.value.find(
@@ -426,7 +430,11 @@ export function usePendingApplyJob(options: UsePendingApplyJobOptions) {
       return;
     }
     applyJobRunLogFallbackRunId.value = job.run_id;
-    await updates.loadApplyJobLogFromRun(job);
+    try {
+      await updates.loadApplyJobLogFromRun(job);
+    } catch {
+      applyJobRunLogFallbackRunId.value = null;
+    }
   }
 
   async function handleJobLogEvent(event: MessageEvent<string>): Promise<void> {
