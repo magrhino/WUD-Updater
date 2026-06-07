@@ -1,6 +1,7 @@
 import { createPinia, setActivePinia } from "pinia";
 import { computed, ref } from "vue";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { flushPromises } from "@vue/test-utils";
 
 import {
   webApi,
@@ -701,7 +702,7 @@ describe("usePendingApplyJob", () => {
 
     state.subscribeApplyJob("job-test");
     stream.emitLogData("{");
-    await Promise.resolve();
+    await flushPromises();
 
     expect(updates.error).toBe("Job log stream returned invalid data.");
     expect(stream.close).not.toHaveBeenCalled();
@@ -713,7 +714,7 @@ describe("usePendingApplyJob", () => {
     expect(updates.applyJob?.progress).toEqual([progress]);
 
     stream.emitJobData("{");
-    await Promise.resolve();
+    await flushPromises();
 
     expect(updates.error).toBe("Job status stream returned invalid data.");
     expect(stream.close).toHaveBeenCalledTimes(1);
@@ -762,9 +763,7 @@ describe("usePendingApplyJob", () => {
         }),
       ),
     );
-    await Promise.resolve();
-    await Promise.resolve();
-    await Promise.resolve();
+    await flushPromises();
 
     expect(stream.close).toHaveBeenCalledTimes(1);
     expect(loadApplyJobLogFromRun).toHaveBeenCalledWith(
