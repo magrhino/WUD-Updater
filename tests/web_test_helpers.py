@@ -6,6 +6,7 @@ import re
 import time
 from collections.abc import Mapping
 from pathlib import Path
+from typing import Optional
 
 from fastapi.testclient import TestClient
 
@@ -113,8 +114,10 @@ def _setup_admin(
     client: TestClient,
     *,
     username: str = "admin",
-    password: str = "correct horse battery staple",
+    password: Optional[str] = None,
 ) -> None:
+    if password is None:
+        password = "correct horse battery staple"
     claim = client.app.state.web_setup_claim
     response = client.post(
         "/api/v1/setup/claim",
