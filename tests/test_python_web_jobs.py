@@ -1,6 +1,7 @@
 from __future__ import annotations
 from pathlib import Path
 from wud_updater import web as web_module
+from wud_updater import web_jobs
 from tests.web_test_helpers import (
     _client,
     _csrf_headers,
@@ -84,6 +85,29 @@ def test_job_stream_returns_404_for_missing_job(tmp_path: Path) -> None:
 
     assert response.status_code == 404
     assert response.json()["detail"] == "apply job not found"
+
+
+def test_job_status_snapshots_while_locked(tmp_path: Path, monkeypatch) -> None:
+    client = _client(tmp_path, {"WUD_WEB_DEV_NO_AUTH": "true"})
+    job_id = "job-active"
+    client.app.state.web_apply_jobs[job_id] = web_module.WebApplyJob(
+        id=job_id,
+        status="running",
+        selected_line_numbers=(1,),
+    )
+    original_response = web_jobs._apply_job_response
+    observed: dict[str, bool] = {}
+
+    def assert_locked(job):
+        observed["locked"] = client.app.state.web_apply_lock.locked()
+        return original_response(job)
+
+    monkeypatch.setattr(web_jobs, "_apply_job_response", assert_locked)
+
+    response = client.get(f"/api/v1/jobs/{job_id}")
+
+    assert response.status_code == 200
+    assert observed["locked"] is True
 
 
 def test_job_stream_emits_initial_and_terminal_status(tmp_path: Path) -> None:

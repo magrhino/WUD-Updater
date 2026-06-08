@@ -208,6 +208,16 @@ def _require_apply_job(job_id: str, request: Request) -> WebApplyJob:
         return job
 
 
+def _apply_job_response_for_request(job_id: str, request: Request) -> ApplyJobResponse:
+    apply_lock: Lock = request.app.state.web_apply_lock
+    jobs: dict[str, WebApplyJob] = request.app.state.web_apply_jobs
+    with apply_lock:
+        job = jobs.get(job_id)
+        if job is None:
+            raise HTTPException(status_code=404, detail="apply job not found")
+        return _apply_job_response(job)
+
+
 def _apply_job_stream(
     state: Any,
     settings: WebSettings,

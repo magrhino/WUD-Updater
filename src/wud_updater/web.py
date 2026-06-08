@@ -1895,7 +1895,7 @@ def api_apply_plan(payload: ApplyPlanRequest, request: Request) -> ApplyJobRespo
 
 
 def api_job(job_id: str, request: Request) -> ApplyJobResponse:
-    return web_jobs._apply_job_response(web_jobs._require_apply_job(job_id, request))
+    return web_jobs._apply_job_response_for_request(job_id, request)
 
 
 def api_apply_job(job_id: str, request: Request) -> ApplyJobResponse:
