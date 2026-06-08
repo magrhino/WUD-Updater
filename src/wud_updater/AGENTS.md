@@ -34,6 +34,8 @@ If the exact owner does not exist yet, create the narrowest reasonable module in
 - Mutating browser requests must keep auth, CSRF, Origin, Host, read-only-mode, stale-plan, single-job, and audit protections.
 - No GET route may mutate host, Docker, Compose, or SQLite state beyond safe session/bootstrap behavior such as issuing a CSRF cookie.
 - Preserve custom exception classes, exception chaining, HTTP status codes, response bodies, audit behavior, failure records, and secret/path redaction.
+- When a WebUI helper validates filesystem containment with resolved paths, return and read from the same resolved `Path`; do not validate one path and later open the original candidate.
+- When stored or environment-derived config parsing fails during server-side WebUI reads or writes, wrap `ConfigError` in a sanitized `HTTPException` detail via `_safe_exception_detail`; keep user-submitted validation errors as explicit 4xx responses.
 
 ## Tests
 

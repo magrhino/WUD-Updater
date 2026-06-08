@@ -12,6 +12,7 @@ from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
 from wud_updater import web as web_module
+from wud_updater import web_auth as web_auth_module
 from wud_updater.db import (
     open_db,
     init_db,
@@ -293,6 +294,31 @@ def test_login_rejects_wrong_password(tmp_path: Path) -> None:
     assert client.cookies.get("wud_session") is None
 
 
+def test_safe_exception_detail_redacts_secrets_and_absolute_paths(
+    tmp_path: Path,
+) -> None:
+    secret = "secret-token-value"
+    client = _client(tmp_path, {"WUD_WEB_TOKEN": secret})
+    settings = client.app.state.web_settings
+    exc = OSError(
+        "open failed for "
+        f"{tmp_path / 'state' / 'wud.sqlite'}, "
+        r"C:\Users\admin\wud.sqlite, "
+        r"\\server\share\wud.sqlite "
+        f"with token {secret}"
+    )
+
+    detail = web_module._safe_exception_detail(settings, "could not read", exc)
+
+    assert detail.startswith("could not read: open failed for ")
+    assert secret not in detail
+    assert "<redacted>" in detail
+    assert str(tmp_path) not in detail
+    assert "C:" not in detail
+    assert r"\\server" not in detail
+    assert "[REDACTED_PATH]" in detail
+
+
 def test_login_throttle_locks_after_repeated_failures_and_expires(
     tmp_path: Path,
     monkeypatch,
@@ -395,13 +421,15 @@ def test_login_throttle_entry_cap_evicts_unlocked_entries_without_global_lockout
     settings = app.state.web_settings
 
     for index in range(web_module.LOGIN_THROTTLE_MAX_ENTRIES):
+        request.client.host = f"client-{index}.test"
         web_module._record_login_failure(request, settings, f"filler-{index}")
+    request.client.host = "client-overflow.test"
     web_module._record_login_failure(request, settings, "overflow")
 
     throttle = app.state.web_login_throttle
     assert len(throttle) == web_module.LOGIN_THROTTLE_MAX_ENTRIES
-    assert ("filler-0", "203.0.113.10") not in throttle
-    assert ("overflow", "203.0.113.10") in throttle
+    assert ("filler-0", "client-0.test") not in throttle
+    assert ("overflow", "client-overflow.test") in throttle
 
     client = TestClient(app, client=("203.0.113.10", 50000))
     headers = _csrf_headers(client)
@@ -426,24 +454,24 @@ def test_login_throttle_entry_cap_records_client_overflow_when_all_entries_locke
     app = create_app(environ=_web_env(tmp_path))
     setup_client = TestClient(app)
     _setup_admin(setup_client)
-    client = TestClient(app, client=("203.0.113.99", 50000))
-    headers = _csrf_headers(client)
+    settings = app.state.web_settings
 
     for index in range(web_module.LOGIN_THROTTLE_MAX_ENTRIES):
-        _assert_generic_auth_failed(
-            client.post(
-                "/api/v1/auth/login",
-                json={"username": f"filler-{index}", "password": "wrong"},
-                headers=headers,
-            )
+        request = SimpleNamespace(
+            app=app,
+            client=SimpleNamespace(host=f"203.0.113.{index}"),
+            headers={},
         )
-    _assert_generic_auth_failed(
-        client.post(
-            "/api/v1/auth/login",
-            json={"username": "overflow", "password": "wrong"},
-            headers=headers,
-        )
+        web_module._record_login_failure(request, settings, f"filler-{index}")
+    overflow_request = SimpleNamespace(
+        app=app,
+        client=SimpleNamespace(host="203.0.113.99"),
+        headers={},
     )
+    web_module._record_login_failure(overflow_request, settings, "overflow")
+
+    client = TestClient(app, client=("203.0.113.99", 50000))
+    headers = _csrf_headers(client)
     locked_response = client.post(
         "/api/v1/auth/login",
         json={"username": "admin", "password": "correct horse battery staple"},
@@ -541,7 +569,7 @@ def test_login_throttle_client_overflow_cap_evicts_oldest_client(
     assert "203.0.113.12" in client_throttle
 
 
-def test_login_throttle_is_scoped_by_username_and_client_address(
+def test_login_throttle_locks_client_across_usernames(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
@@ -582,7 +610,7 @@ def test_login_throttle_is_scoped_by_username_and_client_address(
         headers=headers_b,
     )
 
-    assert same_address_different_user.status_code == 200
+    _assert_generic_auth_failed(same_address_different_user)
     assert different_address_same_user.status_code == 200
 
 
@@ -843,6 +871,35 @@ def test_session_endpoint_reports_cookie_auth_state(tmp_path: Path) -> None:
     assert before.json()["authenticated"] is False
     assert after.status_code == 200
     assert after.json()["authenticated"] is True
+
+
+def test_authenticated_get_does_not_touch_session_last_seen(tmp_path: Path) -> None:
+    setup_client = _client(tmp_path)
+    _setup_admin(setup_client)
+    client = _client(tmp_path)
+    login_response = client.post(
+        "/api/v1/auth/login",
+        json={"username": "admin", "password": "correct horse battery staple"},
+        headers=_csrf_headers(client),
+    )
+    assert login_response.status_code == 200
+
+    db_path = tmp_path / "state" / "wud.sqlite"
+    sentinel = "2000-01-01T00:00:00+00:00"
+    with open_db(db_path) as conn:
+        init_db(conn)
+        with conn:
+            conn.execute("UPDATE web_sessions SET last_seen_at = ?", (sentinel,))
+
+    status_response = client.get("/api/v1/status")
+
+    with open_db(db_path) as conn:
+        last_seen = conn.execute(
+            "SELECT last_seen_at FROM web_sessions LIMIT 1"
+        ).fetchone()["last_seen_at"]
+
+    assert status_response.status_code == 200
+    assert last_seen == sentinel
 
 
 def test_logout_clears_session_and_csrf_cookies(tmp_path: Path) -> None:
@@ -1219,6 +1276,53 @@ def test_forwarded_headers_require_trusted_proxy(tmp_path: Path) -> None:
     assert untrusted_response.status_code == 403
     assert untrusted_response.json()["detail"] == "origin is not allowed"
     assert trusted_response.status_code == 200
+
+
+def test_trusted_forwarded_headers_use_last_proxy_hop(tmp_path: Path) -> None:
+    app = create_app(
+        environ=_web_env(
+            tmp_path,
+            {
+                "WUD_WEB_ALLOWED_HOSTS": "internal.test,wud.example.test",
+                "WUD_WEB_TRUSTED_PROXIES": "10.0.0.1/32",
+            },
+        )
+    )
+    settings = app.state.web_settings
+    forwarded_request = SimpleNamespace(
+        client=SimpleNamespace(host="10.0.0.1"),
+        headers={
+            "forwarded": (
+                "for=198.51.100.10;proto=http;host=evil.test, "
+                "for=203.0.113.20;proto=https;host=wud.example.test"
+            ),
+        },
+    )
+    x_forwarded_request = SimpleNamespace(
+        client=SimpleNamespace(host="10.0.0.1"),
+        headers={
+            "x-forwarded-for": "198.51.100.10, 203.0.113.20",
+            "x-forwarded-proto": "http, https",
+            "x-forwarded-host": "evil.test, wud.example.test",
+        },
+    )
+
+    assert (
+        web_auth_module._trusted_forwarded_origin(forwarded_request, settings)
+        == "https://wud.example.test"
+    )
+    assert (
+        web_auth_module._request_client_address(forwarded_request, settings)
+        == "203.0.113.20"
+    )
+    assert (
+        web_auth_module._trusted_forwarded_origin(x_forwarded_request, settings)
+        == "https://wud.example.test"
+    )
+    assert (
+        web_auth_module._request_client_address(x_forwarded_request, settings)
+        == "203.0.113.20"
+    )
 
 
 def test_secure_cookie_auto_follows_effective_origin(tmp_path: Path) -> None:

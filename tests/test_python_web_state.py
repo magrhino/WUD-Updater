@@ -22,6 +22,20 @@ from tests.web_test_helpers import (
     _wait_apply_job,
 )
 
+
+def _store_web_setting(tmp_path: Path, key: str, value: str) -> None:
+    with open_db(tmp_path / "state" / "wud.sqlite") as conn:
+        init_db(conn)
+        with conn:
+            conn.execute(
+                """
+                INSERT OR REPLACE INTO web_settings (key, value, updated_at)
+                VALUES (?, ?, ?)
+                """,
+                (key, value, "2026-06-08T00:00:00+00:00"),
+            )
+
+
 def test_settings_rejects_unauthenticated_requests_without_dev_bypass(
     tmp_path: Path,
 ) -> None:
@@ -145,6 +159,20 @@ def test_settings_reports_effective_non_secret_configuration(
         assert value not in serialized
 
 
+def test_settings_wraps_invalid_managed_setting_config_error(
+    tmp_path: Path,
+) -> None:
+    client = _client(tmp_path, {"WUD_WEB_DEV_NO_AUTH": "true"})
+    _store_web_setting(tmp_path, "compose.digest_pin_updates", "maybe")
+
+    response = client.get("/api/v1/settings")
+    detail = response.json()["detail"]
+
+    assert response.status_code == 500
+    assert detail.startswith("could not read managed settings: ")
+    assert "true or false" in detail
+
+
 def test_managed_settings_endpoint_enforces_auth_csrf_read_only_and_post(
     tmp_path: Path,
 ) -> None:
@@ -235,6 +263,30 @@ def test_managed_settings_rejects_uneditable_or_invalid_values_without_partial_w
     assert empty_payload.json()["detail"] == "at least one managed setting is required"
     assert managed["theme_preference"]["value"] == "system"
     assert managed["theme_preference"]["source"] == "default"
+
+
+def test_managed_settings_update_wraps_invalid_existing_config_error(
+    tmp_path: Path,
+) -> None:
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+        },
+    )
+    _store_web_setting(tmp_path, "compose.digest_pin_updates", "maybe")
+
+    response = client.post(
+        "/api/v1/settings/managed",
+        json={"values": {"theme_preference": "dark"}},
+        headers=_csrf_headers(client),
+    )
+    detail = response.json()["detail"]
+
+    assert response.status_code == 500
+    assert detail.startswith("could not read managed settings: ")
+    assert "true or false" in detail
 
 
 def test_managed_digest_pin_updates_env_guard_disables_webui_edit(
@@ -1346,6 +1398,5 @@ def test_managed_digest_pin_default_value_is_false(
     assert managed["digest_pin_updates"]["allowed_values"] == ["false", "true"]
     assert managed["digest_pin_updates"]["editable"] is True
     assert managed["digest_pin_updates"]["restart_required"] is False
-
 
 
