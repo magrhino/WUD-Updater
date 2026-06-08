@@ -17,6 +17,8 @@ from wud_updater.db import (
 )
 from wud_updater.web import create_app
 
+DEFAULT_PASSWORD = "correct horse battery staple"
+
 
 def _web_env(
     tmp_path: Path,
@@ -117,7 +119,7 @@ def _setup_admin(
     password: Optional[str] = None,
 ) -> None:
     if password is None:
-        password = "correct horse battery staple"
+        password = DEFAULT_PASSWORD
     claim = client.app.state.web_setup_claim
     response = client.post(
         "/api/v1/setup/claim",
