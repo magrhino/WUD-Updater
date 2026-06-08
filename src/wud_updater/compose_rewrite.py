@@ -154,6 +154,8 @@ def apply_compose_digest_pins(
         label_rewrite_approvals=label_rewrite_approvals,
         stack_name=stack_name,
     )
+    if updates and not rendered:
+        raise ComposeTagRewriteError("Compose digest-pin rewrite produced no output.")
     _atomic_replace_compose(compose_path, rendered, prefix="digest-pin")
     return applied
 
@@ -750,7 +752,14 @@ def _backup_compose(compose_path: Path) -> Path:
     )
     os.close(fd)
     backup = Path(tmp_name)
-    shutil.copy2(compose_path, backup)
+    try:
+        shutil.copy2(compose_path, backup)
+    except Exception:
+        try:
+            backup.unlink()
+        except FileNotFoundError:
+            pass
+        raise
     return backup
 
 

@@ -4,6 +4,7 @@ import os
 import stat
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 
 from wud_updater import compose_rewrite
@@ -619,6 +620,23 @@ class ComposeDigestPinTests(ComposeRewriteTestCase):
         self.assertIn("# wud-updater.resolved-tag=2.0", content)
         self.assertIn("image: repo/app@sha256:pin", content)
 
+    def test_apply_rejects_empty_digest_pin_render_without_write(self) -> None:
+        original = "services:\n  app:\n    image: repo/app:1.0\n"
+        compose_file = self.write_compose(original)
+
+        with (
+            mock.patch(
+                "wud_updater.compose_rewrite.render_compose_digest_pins",
+                return_value=("", ()),
+            ),
+            mock.patch("wud_updater.compose_rewrite._atomic_replace_compose") as replace,
+        ):
+            with self.assertRaisesRegex(ComposeTagRewriteError, "produced no output"):
+                apply_compose_digest_pins(compose_file, (self.digest_pin_update(),))
+
+        replace.assert_not_called()
+        self.assertEqual(compose_file.read_text(encoding="utf-8"), original)
+
     def test_render_requires_approval_for_custom_include_label(self) -> None:
         compose_file = self.write_compose(
             "services:\n"
@@ -979,6 +997,20 @@ class ComposeDigestPinTests(ComposeRewriteTestCase):
             apply_compose_digest_pins(compose_file, (self.digest_pin_update(),))
 
         self.assertEqual(compose_file.read_text(encoding="utf-8"), original)
+
+
+class ComposeBackupTests(ComposeRewriteTestCase):
+    def test_backup_removes_created_temp_file_when_copy_fails(self) -> None:
+        compose_file = self.write_compose("services: {}\n")
+
+        with mock.patch(
+            "wud_updater.compose_rewrite.shutil.copy2",
+            side_effect=OSError("copy failed"),
+        ):
+            with self.assertRaisesRegex(OSError, "copy failed"):
+                compose_rewrite._backup_compose(compose_file)
+
+        self.assertEqual(list(self.root.glob(".compose.yml.backup.*")), [])
 
 
 if __name__ == "__main__":
