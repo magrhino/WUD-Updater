@@ -34,14 +34,6 @@ from wud_updater.digest_verifier import (
 )
 from wud_updater.images import image_with_digest
 from wud_updater.updater import (
-    ComposeTagRewriteError,
-    DigestPinLabelRewriteApproval,
-    DigestPinLabelRewriteApprovalRequired,
-    DigestPinUpdate,
-    TagExclusionUpdate,
-    TagUpdate,
-    UpdaterError,
-    UpdaterOptions,
     UpdateFromWudRunner,
     _apply_sqlite_owner,
     _is_simple_exact_tag_include,
@@ -53,6 +45,16 @@ from wud_updater.updater import (
     merge_wud_exclude_regex,
     prepare_log_file,
     render_compose_digest_pins,
+)
+from wud_updater.updater_models import (
+    ComposeTagRewriteError,
+    DigestPinLabelRewriteApproval,
+    DigestPinLabelRewriteApprovalRequired,
+    DigestPinUpdate,
+    TagExclusionUpdate,
+    TagUpdate,
+    UpdaterError,
+    UpdaterOptions,
 )
 
 

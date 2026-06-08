@@ -125,19 +125,21 @@ from .release_notes import (
 )
 from .self_update import current_container_image, release_self_update_target
 from .updater import (
-    ComposeTagRewriteError,
-    DigestPinLabelRewriteApproval,
-    DigestPinUpdate,
-    TagOverride,
-    TagUpdate,
-    UpdaterProgressEvent,
     UpdateFromWudRunner,
-    UpdaterOptions,
     apply_compose_digest_pins,
     apply_compose_tag_updates,
     digest_pin_update_from_values,
     js_regex_escape,
     _backup_compose,
+)
+from .updater_models import (
+    ComposeTagRewriteError,
+    DigestPinLabelRewriteApproval,
+    DigestPinUpdate,
+    TagOverride,
+    TagUpdate,
+    UpdaterOptions,
+    UpdaterProgressEvent,
 )
 from .file_ops import OwnerConfig
 from .wud_file import ParsedWudFile, WudTarget, parse_wud_file, remove_lines_before_run
