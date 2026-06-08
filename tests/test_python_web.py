@@ -8,6 +8,7 @@ from pathlib import Path
 
 from wud_updater import web as web_module
 from wud_updater import web_jobs
+from wud_updater import web_scheduler
 from wud_updater import web_models
 from wud_updater.db import (
     open_db,
@@ -1332,7 +1333,7 @@ def test_auto_update_scheduler_rolls_back_partial_schedule_reservations(
                 """
             )
     monkeypatch.setattr(
-        web_module,
+        web_scheduler,
         "_auto_update_schedule_recorded",
         lambda _conn, _schedule_key: False,
     )
