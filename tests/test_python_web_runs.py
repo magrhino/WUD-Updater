@@ -208,16 +208,15 @@ def test_run_log_endpoint_caps_tail_size(tmp_path: Path) -> None:
     assert response.json()["max_bytes"] == 1_048_576
 
 
-def test_run_log_endpoint_reports_missing_log_file(tmp_path: Path) -> None:
+def test_run_log_endpoint_rejects_missing_log_file(tmp_path: Path) -> None:
     log_file = tmp_path / "state" / "logs" / "missing.log"
     run_id = _insert_run(tmp_path, log_file=str(log_file))
     client = _client(tmp_path, {"WUD_WEB_DEV_NO_AUTH": "true"})
 
     response = client.get(f"/api/v1/runs/{run_id}/log")
 
-    assert response.status_code == 200
-    assert response.json()["exists"] is False
-    assert response.json()["content"] == ""
+    assert response.status_code == 404
+    assert response.json()["detail"] == "log file not found"
 
 
 def test_run_log_endpoint_rejects_logs_outside_configured_dir(

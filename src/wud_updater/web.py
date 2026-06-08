@@ -6945,10 +6945,9 @@ def _safe_log_path(settings: WebSettings, raw_log_file: str) -> Path | None:
         candidate = log_dir / candidate
     try:
         resolved_log_dir = log_dir.resolve(strict=False)
-        if candidate.exists():
-            resolved_candidate = candidate.resolve(strict=True)
-        else:
-            resolved_candidate = candidate.resolve(strict=False)
+        resolved_candidate = candidate.resolve(strict=True)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="log file not found") from exc
     except OSError as exc:
         raise HTTPException(
             status_code=500,

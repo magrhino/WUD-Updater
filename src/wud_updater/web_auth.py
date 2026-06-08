@@ -403,9 +403,14 @@ def _support_bundle_path_replacements(settings: WebSettings) -> list[tuple[str, 
 
 
 def _redact_unknown_absolute_paths(value: str) -> str:
+    absolute_path_pattern = (
+        r"(?<![:/<>\w-])/(?:[^\s\"'`,;)\]}]+)"
+        r"|(?<![\w<])(?:[A-Za-z]:[\\/][^\s\"'`,;)\]}]+"
+        r"|\\\\[^\s\"'`,;)\]}]+)"
+    )
     return re.sub(
-        r"(?<![:/<>\w-])/(?:[^\s\"'`,;)\]}]+)",
-        "<absolute-path-redacted>",
+        absolute_path_pattern,
+        "[REDACTED_PATH]",
         value,
     )
 
@@ -455,7 +460,8 @@ def _safe_exception_detail(
     message: str,
     exc: BaseException,
 ) -> str:
-    return f"{message}: {_redact_sensitive_text(settings, str(exc))}"
+    detail = _redact_sensitive_text(settings, str(exc))
+    return f"{message}: {_redact_unknown_absolute_paths(detail)}"
 
 
 def _prepare_web_auth_state(settings: WebSettings) -> str:
@@ -833,14 +839,14 @@ def _record_login_failure(
         )
         _prune_login_throttle(throttle, now)
         _prune_login_throttle(client_throttle, now)
+        _record_login_client_failure(
+            client_throttle,
+            client_address,
+            now,
+        )
         entry = throttle.get(key)
         if entry is None:
             if len(throttle) >= _login_throttle_max_entries():
-                _record_login_client_failure(
-                    client_throttle,
-                    client_address,
-                    now,
-                )
                 if not _evict_login_throttle_entry(throttle, now):
                     return
             entry = LoginThrottleEntry(
@@ -1335,11 +1341,17 @@ def _effective_origin(request: Request, settings: WebSettings) -> str:
 def _trusted_forwarded_origin(request: Request, settings: WebSettings) -> str:
     if not _client_is_trusted_proxy(request, settings):
         return ""
-    forwarded_origin = _origin_from_forwarded_header(request.headers.get("forwarded", ""))
+    forwarded_origin = _origin_from_forwarded_header(
+        request.headers.get("forwarded", "")
+    )
     if forwarded_origin:
         return forwarded_origin
-    proto = request.headers.get("x-forwarded-proto", "").split(",", 1)[0].strip()
-    host = request.headers.get("x-forwarded-host", "").split(",", 1)[0].strip()
+    proto = _last_forwarded_header_value(
+        request.headers.get("x-forwarded-proto", "")
+    )
+    host = _last_forwarded_header_value(
+        request.headers.get("x-forwarded-host", "")
+    )
     if proto and host:
         return _normalize_origin(f"{proto}://{host}")
     return ""
@@ -1365,15 +1377,25 @@ def _trusted_forwarded_client_address(
     )
     if forwarded:
         return forwarded
-    forwarded_for = request.headers.get("x-forwarded-for", "").split(",", 1)[0]
+    forwarded_for = _last_forwarded_header_value(
+        request.headers.get("x-forwarded-for", "")
+    )
     return _normalize_forwarded_client_address(forwarded_for)
+
+
+def _last_forwarded_header_value(value: str) -> str:
+    for item in reversed(value.split(",")):
+        stripped = item.strip()
+        if stripped:
+            return stripped
+    return ""
 
 
 def _client_address_from_forwarded_header(value: str) -> str:
     if not value:
         return ""
-    first = value.split(",", 1)[0]
-    for segment in first.split(";"):
+    hop = _last_forwarded_header_value(value)
+    for segment in hop.split(";"):
         key, separator, raw = segment.strip().partition("=")
         if separator and key.lower() == "for":
             return _normalize_forwarded_client_address(raw)
@@ -1400,9 +1422,9 @@ def _normalize_forwarded_client_address(value: str) -> str:
 def _origin_from_forwarded_header(value: str) -> str:
     if not value:
         return ""
-    first = value.split(",", 1)[0]
+    hop = _last_forwarded_header_value(value)
     parts: dict[str, str] = {}
-    for segment in first.split(";"):
+    for segment in hop.split(";"):
         key, separator, raw = segment.strip().partition("=")
         if separator:
             parts[key.lower()] = raw.strip().strip('"')
