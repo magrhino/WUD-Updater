@@ -64,6 +64,8 @@ def start_auto_update_scheduler(
 ) -> Thread | None:
     if not settings.mutations_enabled:
         return None
+    with open_db(settings.config.db_path) as conn:
+        init_db(conn)
     stop_event: Event = app.state.web_auto_update_stop
     thread = Thread(
         target=_auto_update_scheduler_loop,
@@ -81,6 +83,14 @@ def _auto_update_scheduler_loop(
     stop_event: Event,
     effective_config_loader: EffectiveConfigLoader,
 ) -> None:
+    try:
+        _auto_update_tick(
+            app,
+            settings,
+            effective_config_loader=effective_config_loader,
+        )
+    except Exception:
+        LOGGER.exception("auto update scheduler tick failed")
     while not stop_event.wait(AUTO_UPDATE_POLL_SECONDS):
         try:
             _auto_update_tick(
@@ -142,6 +152,7 @@ def _auto_update_tick(
             with _immediate_transaction(conn):
                 _reserve_auto_update_schedule_runs(conn, settings, selection)
                 start_event = Event()
+            try:
                 response = web_jobs._submit_apply_job_state(
                     app.state,
                     settings,
@@ -165,7 +176,17 @@ def _auto_update_tick(
                     auto_update_schedule_keys=selection.schedule_keys,
                     start_event=start_event,
                 )
-                lock_transferred = True
+            except Exception:
+                try:
+                    with _immediate_transaction(conn):
+                        _release_auto_update_schedule_runs(conn, selection)
+                except Exception:
+                    LOGGER.exception(
+                        "failed to release auto update schedule reservation"
+                    )
+                raise
+            lock_transferred = True
+            with _immediate_transaction(conn):
                 _queue_auto_update_schedule_runs(
                     conn,
                     settings,
@@ -194,6 +215,14 @@ def _auto_update_candidate(
     now_utc: datetime,
     started_at: datetime,
 ) -> tuple[AutoUpdateSelection, DryRunPlan] | None:
+    policies = _due_auto_update_policies(
+        conn,
+        settings,
+        now_utc=now_utc,
+        started_at=started_at,
+    )
+    if not policies:
+        return None
     try:
         parsed = parse_wud_file(settings.config.wud_out_file)
     except FileNotFoundError:
@@ -208,12 +237,6 @@ def _auto_update_candidate(
     if grouping.status != "ready":
         return None
 
-    policies = _due_auto_update_policies(
-        conn,
-        settings,
-        now_utc=now_utc,
-        started_at=started_at,
-    )
     selection = _auto_update_selection(settings, grouping, policies)
     if selection is None:
         return None
@@ -389,17 +412,22 @@ def _auto_update_selection(
             scheduled_for_by_mode[mode] = (
                 scheduled_for if current is None else min(current, scheduled_for)
             )
-    for mode in sorted(lines_by_mode):
-        line_numbers = tuple(sorted(set(lines_by_mode[mode])))
-        if line_numbers:
-            return AutoUpdateSelection(
-                line_numbers=line_numbers,
-                service_keys=tuple(sorted(services_by_mode[mode])),
-                schedule_keys=tuple(sorted(schedules_by_mode[mode])),
-                scheduled_for=scheduled_for_by_mode[mode],
-                update_mode=mode,
-            )
-    return None
+    eligible_modes = [
+        mode
+        for mode in sorted(lines_by_mode)
+        if lines_by_mode[mode] and mode in scheduled_for_by_mode
+    ]
+    if not eligible_modes:
+        return None
+    mode = min(eligible_modes, key=lambda item: scheduled_for_by_mode[item])
+    line_numbers = tuple(sorted(set(lines_by_mode[mode])))
+    return AutoUpdateSelection(
+        line_numbers=line_numbers,
+        service_keys=tuple(sorted(services_by_mode[mode])),
+        schedule_keys=tuple(sorted(schedules_by_mode[mode])),
+        scheduled_for=scheduled_for_by_mode[mode],
+        update_mode=mode,
+    )
 
 
 def _auto_update_schedule_key(
@@ -481,6 +509,22 @@ def _reserve_auto_update_schedule_runs(
             )
         except sqlite3.IntegrityError as exc:
             raise AutoUpdateScheduleReservationError(schedule_key) from exc
+
+
+def _release_auto_update_schedule_runs(
+    conn: sqlite3.Connection,
+    selection: AutoUpdateSelection,
+) -> None:
+    for schedule_key in selection.schedule_keys:
+        conn.execute(
+            """
+            DELETE FROM auto_update_schedule_runs
+            WHERE schedule_key = ?
+              AND run_id IS NULL
+              AND status = 'reserved'
+            """,
+            (schedule_key,),
+        )
 
 
 def _queue_auto_update_schedule_runs(

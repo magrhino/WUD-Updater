@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import json
+import logging
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from types import SimpleNamespace
 
 from wud_updater import web as web_module
 from wud_updater import web_jobs, web_scheduler
@@ -28,6 +30,39 @@ def _auto_update_tick(client, now: datetime):
     )
 
 
+def test_auto_update_scheduler_loop_runs_initial_tick_before_wait(
+    monkeypatch,
+    caplog,
+) -> None:
+    calls: list[str] = []
+
+    class StopAfterInitialTick:
+        timeout: float | None = None
+
+        def wait(self, timeout: float) -> bool:
+            self.timeout = timeout
+            return True
+
+    def fail_tick(*_args, **_kwargs):
+        calls.append("tick")
+        raise RuntimeError("tick failed")
+
+    stop_event = StopAfterInitialTick()
+    monkeypatch.setattr(web_scheduler, "_auto_update_tick", fail_tick)
+
+    with caplog.at_level(logging.ERROR, logger=web_scheduler.LOGGER.name):
+        web_scheduler._auto_update_scheduler_loop(
+            SimpleNamespace(),
+            SimpleNamespace(),
+            stop_event,
+            lambda _settings: None,
+        )
+
+    assert calls == ["tick"]
+    assert stop_event.timeout == web_scheduler.AUTO_UPDATE_POLL_SECONDS
+    assert "auto update scheduler tick failed" in caplog.text
+
+
 def test_auto_update_scheduler_does_not_start_without_mutations(tmp_path: Path) -> None:
     client = _client(tmp_path, {"WUD_WEB_DEV_NO_AUTH": "true"})
 
@@ -35,6 +70,30 @@ def test_auto_update_scheduler_does_not_start_without_mutations(tmp_path: Path) 
 
     assert client.app.state.web_auto_update_thread is None
     assert response is None
+
+
+def test_auto_update_scheduler_start_initializes_database(tmp_path: Path) -> None:
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+        },
+    )
+    try:
+        with open_db(tmp_path / "state" / "wud.sqlite") as conn:
+            row = conn.execute(
+                """
+                SELECT name
+                FROM sqlite_master
+                WHERE type = 'table'
+                  AND name = 'web_settings'
+                """
+            ).fetchone()
+    finally:
+        web_scheduler.shutdown_auto_update_scheduler_state(client.app.state)
+
+    assert row is not None
 
 
 def test_auto_update_scheduler_applies_due_policy_at_configured_local_time(
@@ -128,6 +187,88 @@ def test_auto_update_scheduler_applies_due_policy_at_configured_local_time(
     assert detail["metadata"]["auto_update_scheduled_for"] == (
         "2026-05-30T14:30:00+00:00"
     )
+
+
+def test_auto_update_scheduler_submits_after_reservation_commit(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    fake_env, fake_root = _fake_docker_env(tmp_path)
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+            "WUD_TIMEZONE": "America/Chicago",
+            **fake_env,
+        },
+    )
+    wud_file = tmp_path / "state" / "images.todo"
+    wud_file.write_text("repo/app:latest\n", encoding="utf-8")
+    _make_fake_stack(
+        tmp_path,
+        fake_root,
+        "stack",
+        [("app", "repo/app:latest", "cid-app")],
+    )
+    policy = client.post(
+        "/api/v1/state/operations",
+        json={
+            "kind": "upsert_service_policy",
+            "service_key": "stack/app",
+            "update_mode": "live",
+            "auto_update": True,
+            "auto_update_time": "09:30",
+            "auto_update_days": ["sat"],
+        },
+        headers=_csrf_headers(client),
+    )
+    observed: dict[str, object] = {}
+
+    def submit_after_commit(*_args, **kwargs):
+        with open_db(tmp_path / "state" / "wud.sqlite") as conn:
+            row = conn.execute(
+                """
+                SELECT status
+                FROM auto_update_schedule_runs
+                WHERE schedule_key = ?
+                """,
+                ("stack/app|2026-05-30|09:30|America/Chicago",),
+            ).fetchone()
+        assert row is not None
+        assert row["status"] == "reserved"
+        kwargs["wud_lock"].close()
+        observed["start_event"] = kwargs["start_event"]
+        return web_scheduler.ApplyJobResponse(
+            job_id="job-after-commit",
+            status="queued",
+            selected_line_numbers=[1],
+        )
+
+    monkeypatch.setattr(web_jobs, "_submit_apply_job_state", submit_after_commit)
+    now = datetime(2026, 5, 30, 14, 30, tzinfo=timezone.utc)
+    client.app.state.web_auto_update_started_at = now - timedelta(minutes=30)
+    response = _auto_update_tick(client, now)
+
+    assert policy.status_code == 200
+    assert response is not None
+    assert response.job_id == "job-after-commit"
+    assert observed["start_event"].is_set()
+    with open_db(tmp_path / "state" / "wud.sqlite") as conn:
+        row = conn.execute(
+            """
+            SELECT status, metadata_json
+            FROM auto_update_schedule_runs
+            WHERE schedule_key = ?
+            """,
+            ("stack/app|2026-05-30|09:30|America/Chicago",),
+        ).fetchone()
+
+    assert row is not None
+    assert row["status"] == "queued"
+    metadata = json.loads(row["metadata_json"])
+    assert metadata["job_id"] == "job-after-commit"
+    assert metadata["status"] == "queued"
 
 
 def test_auto_update_scheduler_records_failed_policy_run(
@@ -683,3 +824,57 @@ def test_auto_update_scheduler_skips_tag_updates_without_mutation(
     with open_db(tmp_path / "state" / "wud.sqlite") as conn:
         rows = conn.execute("SELECT * FROM auto_update_schedule_runs").fetchall()
     assert rows == []
+
+
+def test_auto_update_selection_prefers_earliest_scheduled_mode() -> None:
+    earlier = datetime(2026, 5, 30, 14, 0, tzinfo=timezone.utc)
+    later = datetime(2026, 5, 30, 15, 0, tzinfo=timezone.utc)
+    settings = SimpleNamespace(config=SimpleNamespace(update_mode="live"))
+    grouping = SimpleNamespace(
+        groups=(
+            SimpleNamespace(
+                name="stack",
+                items=(
+                    SimpleNamespace(
+                        desired_tag="",
+                        line_no=1,
+                        services=("app",),
+                    ),
+                    SimpleNamespace(
+                        desired_tag="",
+                        line_no=2,
+                        services=("worker",),
+                    ),
+                ),
+            ),
+        ),
+    )
+    policies = {
+        "stack/app": web_scheduler.AutoUpdatePolicy(
+            service_key="stack/app",
+            update_mode="a-later",
+            auto_update_time="10:00",
+            auto_update_days=("sat",),
+            schedule_key="stack/app|2026-05-30|10:00|America/Chicago",
+            scheduled_for=later,
+        ),
+        "stack/worker": web_scheduler.AutoUpdatePolicy(
+            service_key="stack/worker",
+            update_mode="z-earlier",
+            auto_update_time="09:00",
+            auto_update_days=("sat",),
+            schedule_key="stack/worker|2026-05-30|09:00|America/Chicago",
+            scheduled_for=earlier,
+        ),
+    }
+
+    selection = web_scheduler._auto_update_selection(settings, grouping, policies)
+
+    assert selection is not None
+    assert selection.update_mode == "z-earlier"
+    assert selection.line_numbers == (2,)
+    assert selection.service_keys == ("stack/worker",)
+    assert selection.schedule_keys == (
+        "stack/worker|2026-05-30|09:00|America/Chicago",
+    )
+    assert selection.scheduled_for == earlier
