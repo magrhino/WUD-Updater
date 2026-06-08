@@ -6956,7 +6956,7 @@ def _safe_log_path(settings: WebSettings, raw_log_file: str) -> Path | None:
         ) from exc
     if not _path_is_or_under(resolved_candidate, resolved_log_dir):
         raise HTTPException(status_code=403, detail="log file is outside WUD_LOG_DIR")
-    return candidate
+    return resolved_candidate
 
 
 def _path_is_or_under(path: Path, parent: Path) -> bool:
@@ -7052,17 +7052,37 @@ def _managed_settings_entries(settings: WebSettings) -> list[ManagedSettingEntry
                 exc,
             ),
         ) from exc
-    return _managed_settings_entries_from_values(values, settings)
+    try:
+        return _managed_settings_entries_from_values(values, settings)
+    except ConfigError as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=_safe_exception_detail(
+                settings,
+                "could not read managed settings",
+                exc,
+            ),
+        ) from exc
 
 
 def _managed_settings_entries_from_conn(
     conn: sqlite3.Connection,
     settings: WebSettings,
 ) -> list[ManagedSettingEntry]:
-    return _managed_settings_entries_from_values(
-        _managed_settings_db_values(conn),
-        settings,
-    )
+    try:
+        return _managed_settings_entries_from_values(
+            _managed_settings_db_values(conn),
+            settings,
+        )
+    except ConfigError as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=_safe_exception_detail(
+                settings,
+                "could not read managed settings",
+                exc,
+            ),
+        ) from exc
 
 
 def _managed_settings_db_values(conn: sqlite3.Connection) -> dict[str, str]:

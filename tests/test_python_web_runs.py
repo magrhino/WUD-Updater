@@ -1,6 +1,7 @@
 from __future__ import annotations
 import json
 from pathlib import Path
+from wud_updater import web as web_module
 from wud_updater.db import (
     open_db,
     init_db,
@@ -231,6 +232,29 @@ def test_run_log_endpoint_rejects_logs_outside_configured_dir(
 
     assert response.status_code == 403
     assert response.json()["detail"] == "log file is outside WUD_LOG_DIR"
+
+
+def test_safe_log_path_uses_resolved_path_after_symlink_swap(
+    tmp_path: Path,
+) -> None:
+    client = _client(tmp_path, {"WUD_WEB_DEV_NO_AUTH": "true"})
+    log_dir = tmp_path / "state" / "logs"
+    log_dir.mkdir(parents=True)
+    allowed = log_dir / "allowed.log"
+    outside = tmp_path / "outside.log"
+    link = log_dir / "run.log"
+    allowed.write_text("allowed", encoding="utf-8")
+    outside.write_text("outside", encoding="utf-8")
+    link.symlink_to(allowed)
+
+    log_path = web_module._safe_log_path(client.app.state.web_settings, "run.log")
+    link.unlink()
+    link.symlink_to(outside)
+    tail = web_module._read_log_tail(log_path, 1024)
+
+    assert log_path == allowed.resolve()
+    assert tail.exists is True
+    assert tail.content == "allowed"
 
 
 def test_run_log_endpoint_returns_not_found_for_unknown_run(tmp_path: Path) -> None:
