@@ -89,10 +89,19 @@ def shutdown_apply_job_state(state: Any) -> None:
     executor.shutdown(wait=False, cancel_futures=True)
 
 
+def _apply_wud_lock_timeout_seconds(settings: WebSettings) -> int:
+    raw_timeout = (settings.command_env or {}).get("WUD_LOCK_TIMEOUT", "30")
+    try:
+        timeout_seconds = int(raw_timeout)
+    except (TypeError, ValueError):
+        return 30
+    return timeout_seconds if timeout_seconds >= 0 else 30
+
+
 def _acquire_apply_wud_lock(settings: WebSettings) -> DirectoryLock:
     lock = DirectoryLock(
         settings.config.wud_out_file,
-        timeout_seconds=(settings.command_env or {}).get("WUD_LOCK_TIMEOUT", "30"),
+        timeout_seconds=_apply_wud_lock_timeout_seconds(settings),
     )
     try:
         lock.acquire()
