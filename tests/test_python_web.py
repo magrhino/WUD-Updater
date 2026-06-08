@@ -7,6 +7,7 @@ from pathlib import Path
 
 
 from wud_updater import web as web_module
+from wud_updater import web_jobs
 from wud_updater import web_models
 from wud_updater.db import (
     open_db,
@@ -1398,7 +1399,7 @@ def test_auto_update_scheduler_rolls_back_reservation_when_queue_fails(
     def fail_submit(*_args, **_kwargs):
         raise RuntimeError("queue failed")
 
-    monkeypatch.setattr(web_module, "_submit_apply_job_state", fail_submit)
+    monkeypatch.setattr(web_jobs, "_submit_apply_job_state", fail_submit)
     now = datetime(2026, 5, 30, 14, 30, tzinfo=timezone.utc)
     client.app.state.web_auto_update_started_at = now - timedelta(minutes=30)
     try:
@@ -1498,7 +1499,7 @@ def test_legacy_apply_routes_remain_compatible(
         [("app", "repo/app:latest", "cid-app")],
     )
 
-    monkeypatch.setattr(web_module.UpdateFromWudRunner, "run", lambda _runner: 0)
+    monkeypatch.setattr(web_jobs.UpdateFromWudRunner, "run", lambda _runner: 0)
     headers = _csrf_headers(client)
     plan = client.post(
         "/api/v1/plans",
