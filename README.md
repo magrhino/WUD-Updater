@@ -95,9 +95,10 @@ should generally go to the WebUI/API first.
 | Security policy and private vulnerability reporting | [SECURITY.md](SECURITY.md) |
 | Release notes | [CHANGELOG.md](CHANGELOG.md) |
 
-Apprieciate my work on this?
+## Apprieciate my work on this?
 
 [![Buy Me a Coffee](https://img.shields.io/badge/Buy%20Me%20a%20Coffee-orange?logo=buy-me-a-coffee)](https://www.buymeacoffee.com/magrhino)   
+
 or
 
 BTC: `bc1q3r9g3k8fyzxr29njgfjdqs53z9tuezwuaagx0h`
