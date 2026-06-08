@@ -17,7 +17,7 @@ from wud_updater.db import (
 )
 from wud_updater.web import create_app
 
-DEFAULT_PASSWORD = "correct horse battery staple"
+DEFAULT_PASSWORD = "correct horse battery staple"  # noqa: S105  # test-only literal
 
 
 def _web_env(
