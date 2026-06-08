@@ -845,6 +845,35 @@ def test_session_endpoint_reports_cookie_auth_state(tmp_path: Path) -> None:
     assert after.json()["authenticated"] is True
 
 
+def test_authenticated_get_does_not_touch_session_last_seen(tmp_path: Path) -> None:
+    setup_client = _client(tmp_path)
+    _setup_admin(setup_client)
+    client = _client(tmp_path)
+    login_response = client.post(
+        "/api/v1/auth/login",
+        json={"username": "admin", "password": "correct horse battery staple"},
+        headers=_csrf_headers(client),
+    )
+    assert login_response.status_code == 200
+
+    db_path = tmp_path / "state" / "wud.sqlite"
+    sentinel = "2000-01-01T00:00:00+00:00"
+    with open_db(db_path) as conn:
+        init_db(conn)
+        with conn:
+            conn.execute("UPDATE web_sessions SET last_seen_at = ?", (sentinel,))
+
+    status_response = client.get("/api/v1/status")
+
+    with open_db(db_path) as conn:
+        last_seen = conn.execute(
+            "SELECT last_seen_at FROM web_sessions LIMIT 1"
+        ).fetchone()["last_seen_at"]
+
+    assert status_response.status_code == 200
+    assert last_seen == sentinel
+
+
 def test_logout_clears_session_and_csrf_cookies(tmp_path: Path) -> None:
     setup_client = _client(tmp_path)
     _setup_admin(setup_client)
