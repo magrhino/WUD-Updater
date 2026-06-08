@@ -15,18 +15,8 @@ from .digest_verifier import DigestVerifier, DockerManifestResolver
 from .docker_cli import DockerCli
 from .images import image_has_tag, image_matches_resolved_target, image_with_tag
 from .updater import (
-    ComposeTagRewriteError,
-    DigestPinLabelRewrite,
-    DigestPinLabelRewriteApproval,
-    DigestPinLabelRewriteApprovalRequired,
-    DigestPinUpdate,
     RECREATE_STACK_LABEL,
     RECREATE_STACK_LABEL_FORMAT,
-    Match,
-    TagOverride,
-    TagUpdate,
-    UpdateScope,
-    UpdaterError,
     _container_bind_mount_path_issue,
     _digest_pin_candidates,
     _digest_pin_match_tag,
@@ -42,6 +32,18 @@ from .updater import (
     _update_services,
     digest_pin_update_from_values,
     render_compose_digest_pins,
+)
+from .updater_models import (
+    ComposeTagRewriteError,
+    DigestPinLabelRewrite,
+    DigestPinLabelRewriteApproval,
+    DigestPinLabelRewriteApprovalRequired,
+    DigestPinUpdate,
+    Match,
+    TagOverride,
+    TagUpdate,
+    UpdateScope,
+    UpdaterError,
 )
 from .wud_file import ParsedWudFile, WudTarget, parse_wud_file
 

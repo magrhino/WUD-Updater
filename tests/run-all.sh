@@ -80,6 +80,7 @@ EOF
     src/wud_updater/self_update.py \
     src/wud_updater/terminal.py \
     src/wud_updater/updates.py \
+    src/wud_updater/updater_models.py \
     src/wud_updater/updater.py \
     src/wud_updater/web.py \
     src/wud_updater/wud_file.py \

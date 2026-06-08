@@ -130,7 +130,8 @@ def _add_init_options(parser: argparse.ArgumentParser) -> None:
 
 
 def _run_update_from_wud(args: argparse.Namespace) -> int:
-    from .updater import UpdaterError, options_from_namespace, run_update_from_wud
+    from .updater import options_from_namespace, run_update_from_wud
+    from .updater_models import UpdaterError
 
     print_startup_banner(no_color=bool(getattr(args, "no_color", False)))
     try:
