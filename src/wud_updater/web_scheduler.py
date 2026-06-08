@@ -64,15 +64,20 @@ def start_auto_update_scheduler(
 ) -> Thread | None:
     if not settings.mutations_enabled:
         return None
+    existing_thread = app.state.web_auto_update_thread
+    if existing_thread is not None and existing_thread.is_alive():
+        return existing_thread
     with open_db(settings.config.db_path) as conn:
         init_db(conn)
-    stop_event: Event = app.state.web_auto_update_stop
+    stop_event = Event()
+    app.state.web_auto_update_stop = stop_event
     thread = Thread(
         target=_auto_update_scheduler_loop,
         args=(app, settings, stop_event, effective_config_loader),
         name="wud-auto-update-scheduler",
         daemon=True,
     )
+    app.state.web_auto_update_thread = thread
     thread.start()
     return thread
 
@@ -228,8 +233,9 @@ def _auto_update_candidate(
     except FileNotFoundError:
         return None
 
+    effective_config = effective_config_loader(settings)
     grouping = resolve_pending_groups(
-        effective_config_loader(settings),
+        effective_config,
         parsed,
         host_docker_base=settings.host_docker_base,
         environ=settings.command_env,
@@ -245,7 +251,7 @@ def _auto_update_candidate(
         settings,
         selection.line_numbers,
         update_mode_override=selection.update_mode,
-        effective_config_loader=effective_config_loader,
+        base_config=effective_config,
     )
     if not _plan_can_auto_apply(plan, settings):
         return None
@@ -257,9 +263,8 @@ def _build_auto_update_plan(
     line_numbers: Sequence[int],
     *,
     update_mode_override: str | None,
-    effective_config_loader: EffectiveConfigLoader,
+    base_config: UpdaterConfig,
 ) -> DryRunPlan:
-    base_config = effective_config_loader(settings)
     config = (
         base_config
         if update_mode_override is None
