@@ -86,6 +86,7 @@ EOF
     src/wud_updater/web_auth.py \
     src/wud_updater/web_jobs.py \
     src/wud_updater/web_models.py \
+    src/wud_updater/web_scheduler.py \
     src/wud_updater/web.py \
     src/wud_updater/wud_file.py \
     tests/test_python_banner.py \
@@ -108,6 +109,7 @@ EOF
     tests/test_python_web_pending.py \
     tests/test_python_web_plans.py \
     tests/test_python_web_runs.py \
+    tests/test_python_web_scheduler.py \
     tests/test_python_web_self_update.py \
     tests/test_python_web_startup.py \
     tests/test_python_web_state.py \
