@@ -66,6 +66,7 @@ EOF
     src/wud_updater/cli.py \
     src/wud_updater/command.py \
     src/wud_updater/compose.py \
+    src/wud_updater/compose_rewrite.py \
     src/wud_updater/config.py \
     src/wud_updater/container_identity.py \
     src/wud_updater/db.py \
@@ -86,6 +87,7 @@ EOF
     src/wud_updater/wud_file.py \
     tests/test_python_banner.py \
     tests/test_python_cli.py \
+    tests/test_python_compose_rewrite.py \
     tests/test_python_config.py \
     tests/test_python_db.py \
     tests/test_python_doctor.py \
