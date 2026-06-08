@@ -7,6 +7,7 @@ read-only safety defaults, Doctor checks, run history, logs, diagnostics, and an
 optional plan-first apply flow.
 
 ## Web Deployment
+_Check out the demo: https://magrhino.github.io/WUD-Updater/_
 
 The WebUI container serves the FastAPI backend and packaged Vue SPA from the
 same image. WUD records pending image updates into a shared todo file, and the
