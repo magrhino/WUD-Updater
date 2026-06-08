@@ -4,7 +4,6 @@ import os
 import stat
 import tempfile
 import unittest
-import shutil
 from ruamel.yaml import YAML
 from wud_updater.compose_rewrite import _reject_yaml_anchor_or_alias_image_value, _reject_yaml_anchor_or_alias_service_config, _reject_yaml_anchor_or_alias_labels, _backup_compose, _exact_tag_include_matches
 from unittest import mock
@@ -1016,10 +1015,6 @@ class ComposeBackupTests(ComposeRewriteTestCase):
         self.assertEqual(list(self.root.glob(".compose.yml.backup.*")), [])
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 class MalformedYamlTests(ComposeRewriteTestCase):
     def test_apply_compose_tag_updates_root_not_mapping(self) -> None:
         compose_file = self.write_compose("- services\n- app\n")
@@ -1434,12 +1429,6 @@ class ComposeRewriteEdgeCaseTests(unittest.TestCase):
                     _backup_compose(compose_file)
 
 class MoreCoverageTests(ComposeRewriteTestCase):
-    def test_apply_compose_tag_updates_no_replacements(self) -> None:
-        compose_file = self.write_compose("services:\n  app:\n    image: repo/app:1.0\n")
-        # Update asks for a service, but doesn't find it or replacements < 1
-        # Wait, if old_image doesn't match, it raises an error. So replacements < 1 is only if no updates were passed or something.
-        pass
-
     def test_render_compose_tag_exclusions_service_not_map(self) -> None:
         compose_file = self.write_compose("services:\n  app: repo/app:1.0\n")
         with self.assertRaisesRegex(ComposeTagRewriteError, "is not a mapping"):
@@ -1461,3 +1450,6 @@ class MoreCoverageTests(ComposeRewriteTestCase):
         # Line 553
         render_compose_tag_exclusions(compose_file, (self.tag_exclusion_update(tag="2.0"),), existing_exact_tags={})
 
+
+if __name__ == "__main__":
+    unittest.main()
