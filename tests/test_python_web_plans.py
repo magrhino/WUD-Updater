@@ -3,6 +3,7 @@ import json
 from pathlib import Path
 from wud_updater import web as web_module
 from wud_updater import web_jobs
+from wud_updater import web_self_update as self_update_module
 from wud_updater.locks import DirectoryLock, WudLockError, lock_dir_for
 from tests.web_test_helpers import (
     _client,
@@ -23,15 +24,15 @@ def test_self_update_plan_endpoint_returns_pinned_tag_preview(
     monkeypatch,
 ) -> None:
     fake_env, fake_root = _fake_docker_env(tmp_path)
-    monkeypatch.setattr(web_module, "current_tag", lambda: "v0.24.2")
-    monkeypatch.setattr(web_module, "fetch_latest_release_tag", lambda: "v0.25.0")
+    monkeypatch.setattr(self_update_module, "current_tag", lambda: "v0.24.2")
+    monkeypatch.setattr(self_update_module, "fetch_latest_release_tag", lambda: "v0.25.0")
     monkeypatch.setattr(
-        web_module,
+        self_update_module,
         "current_container_image",
         lambda _env: "ghcr.io/magrhino/wud-updater:v0.24.2",
     )
     monkeypatch.setattr(
-        web_module,
+        self_update_module,
         "_fetch_self_update_release_notes",
         lambda *_args, **_kwargs: ([], False, []),
     )
@@ -93,15 +94,15 @@ def test_self_update_prepare_endpoint_rejects_stale_plan(
     monkeypatch,
 ) -> None:
     fake_env, fake_root = _fake_docker_env(tmp_path)
-    monkeypatch.setattr(web_module, "current_tag", lambda: "v0.24.2")
-    monkeypatch.setattr(web_module, "fetch_latest_release_tag", lambda: "v0.25.0")
+    monkeypatch.setattr(self_update_module, "current_tag", lambda: "v0.24.2")
+    monkeypatch.setattr(self_update_module, "fetch_latest_release_tag", lambda: "v0.25.0")
     monkeypatch.setattr(
-        web_module,
+        self_update_module,
         "current_container_image",
         lambda _env: "ghcr.io/magrhino/wud-updater:v0.24.2",
     )
     monkeypatch.setattr(
-        web_module,
+        self_update_module,
         "_fetch_self_update_release_notes",
         lambda *_args, **_kwargs: ([], False, []),
     )

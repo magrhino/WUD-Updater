@@ -2,6 +2,7 @@ from __future__ import annotations
 from pathlib import Path
 from wud_updater import web as web_module
 from wud_updater import web_jobs
+from wud_updater import web_self_update as self_update_module
 from wud_updater.config import UpdaterConfig
 from wud_updater.web_models import WebSettings
 from tests.web_test_helpers import (
@@ -81,10 +82,10 @@ def test_self_update_endpoint_enforces_auth_csrf_read_only_and_active_job(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
-    monkeypatch.setattr(web_module, "current_tag", lambda: "v0.24.2")
-    monkeypatch.setattr(web_module, "fetch_latest_release_tag", lambda: "v0.25.0")
+    monkeypatch.setattr(self_update_module, "current_tag", lambda: "v0.24.2")
+    monkeypatch.setattr(self_update_module, "fetch_latest_release_tag", lambda: "v0.25.0")
     monkeypatch.setattr(
-        web_module,
+        self_update_module,
         "_fetch_self_update_release_notes",
         lambda *_args, **_kwargs: ([], False, []),
     )

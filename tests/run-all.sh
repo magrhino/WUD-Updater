@@ -87,6 +87,7 @@ EOF
     src/wud_updater/web_jobs.py \
     src/wud_updater/web_models.py \
     src/wud_updater/web_scheduler.py \
+    src/wud_updater/web_self_update.py \
     src/wud_updater/web.py \
     src/wud_updater/wud_file.py \
     tests/test_python_banner.py \
