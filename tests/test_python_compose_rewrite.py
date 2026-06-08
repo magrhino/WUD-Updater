@@ -369,7 +369,7 @@ class ComposeTagExclusionTests(ComposeRewriteTestCase):
             "  app:\n"
             "    image: repo/app:1.0\n"
         )
-        os.chmod(compose_file, 0o640)
+        os.chmod(compose_file, 0o600)
         before = compose_file.stat()
 
         applied = apply_compose_tag_exclusions(
