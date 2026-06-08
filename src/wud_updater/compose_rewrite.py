@@ -67,6 +67,20 @@ def apply_compose_tag_updates(
                 f"No compose service was mapped for {update.old_image}."
             )
         for service in update.services:
+            service_config = _direct_service_config(services, service)
+            _reject_yaml_anchor_or_alias_service_config(
+                services,
+                service,
+                service_config,
+            )
+            if (
+                not _commented_map_has_direct_key(service_config, "image")
+                and service_config.get("image") is not None
+            ):
+                raise ComposeTagRewriteError(
+                    f"Service {service} image is inherited and needs manual review."
+                )
+            _reject_yaml_anchor_or_alias_image_value(services, service, service_config)
             span = _service_image_scalar_span(
                 services,
                 service,

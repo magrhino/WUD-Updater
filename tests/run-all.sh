@@ -87,6 +87,7 @@ EOF
     src/wud_updater/wud_file.py \
     tests/test_python_banner.py \
     tests/test_python_cli.py \
+    tests/test_python_compose_rewrite.py \
     tests/test_python_config.py \
     tests/test_python_db.py \
     tests/test_python_doctor.py \

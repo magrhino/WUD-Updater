@@ -1,0 +1,474 @@
+from __future__ import annotations
+
+import os
+import stat
+import tempfile
+import unittest
+from pathlib import Path
+
+from wud_updater import compose_rewrite
+from wud_updater.compose import ComposeStack, ServiceImage
+from wud_updater.compose_rewrite import (
+    apply_compose_digest_pins,
+    apply_compose_tag_exclusions,
+    apply_compose_tag_updates,
+    compose_escape_dollars,
+    exact_tags_regex,
+    merge_wud_exclude_regex,
+    render_compose_digest_pins,
+    render_compose_tag_exclusions,
+    _is_simple_exact_tag_include,
+)
+from wud_updater.updater_models import (
+    ComposeTagRewriteError,
+    DigestPinLabelRewriteApproval,
+    DigestPinLabelRewriteApprovalRequired,
+    DigestPinUpdate,
+    TagExclusionUpdate,
+    TagUpdate,
+)
+
+
+class ComposeRewriteTestCase(unittest.TestCase):
+    def setUp(self) -> None:
+        self.tmp = tempfile.TemporaryDirectory(prefix="wud-compose-rewrite.")
+        self.root = Path(self.tmp.name)
+
+    def tearDown(self) -> None:
+        self.tmp.cleanup()
+
+    def write_compose(self, source: str, name: str = "compose.yml") -> Path:
+        compose_path = self.root / name
+        compose_path.write_text(source, encoding="utf-8")
+        return compose_path
+
+    def stack(
+        self,
+        service_images: tuple[tuple[str, str], ...] = (("app", "repo/app:1.0"),),
+    ) -> ComposeStack:
+        return ComposeStack(
+            index=1,
+            directory=self.root,
+            file="compose.yml",
+            name="stack",
+            images=tuple(image for _service, image in service_images),
+            service_images=tuple(
+                ServiceImage(service, image) for service, image in service_images
+            ),
+        )
+
+    def tag_exclusion_update(
+        self,
+        *,
+        service: str = "app",
+        image: str = "repo/app:1.0",
+        image_repo: str = "repo/app",
+        tag: str = "2.0",
+        scope: str = "service",
+    ) -> TagExclusionUpdate:
+        return TagExclusionUpdate(
+            stack=self.stack(((service, image),)),
+            service=service,
+            image=image,
+            image_repo=image_repo,
+            tag=tag,
+            source_line=1,
+            scope=scope,
+        )
+
+    def digest_pin_update(
+        self,
+        *,
+        old_image: str = "repo/app:1.0",
+        resolved_tag: str = "2.0",
+        planned_digest: str = "sha256:pin",
+        services: tuple[str, ...] = ("app",),
+    ) -> DigestPinUpdate:
+        image_repo = old_image.rsplit(":", 1)[0]
+        return DigestPinUpdate(
+            old_image=old_image,
+            resolved_tag=resolved_tag,
+            resolved_image=f"{image_repo}:{resolved_tag}",
+            planned_digest=planned_digest,
+            final_image=f"{image_repo}@{planned_digest}",
+            watch_tag=resolved_tag,
+            marker=f"wud-updater.resolved-tag={resolved_tag}",
+            label_key="wud.tag.include",
+            label_value=compose_escape_dollars(exact_tags_regex((resolved_tag,))),
+            services=services,
+        )
+
+
+class ComposeRewriteCompatibilityTests(unittest.TestCase):
+    def test_updater_reexports_compose_rewrite_helpers(self) -> None:
+        from wud_updater import updater
+
+        names = (
+            "apply_compose_tag_updates",
+            "apply_compose_tag_exclusions",
+            "apply_compose_digest_pins",
+            "render_compose_digest_pins",
+            "render_compose_tag_exclusions",
+            "exact_tags_regex",
+            "merge_wud_exclude_regex",
+            "_is_simple_exact_tag_include",
+        )
+        for name in names:
+            with self.subTest(name=name):
+                self.assertIs(getattr(updater, name), getattr(compose_rewrite, name))
+
+
+class ComposeRegexTests(unittest.TestCase):
+    def test_exact_tags_regex_sorts_deduplicates_and_escapes_tags(self) -> None:
+        self.assertEqual(exact_tags_regex(()), "")
+        self.assertEqual(exact_tags_regex(("2.0",)), r"^2\.0$")
+        self.assertEqual(
+            exact_tags_regex(("3+hotfix", "2.0", "2.0")),
+            r"^(?:2\.0|3\+hotfix)$",
+        )
+
+    def test_merge_wud_exclude_regex_replaces_or_extends_managed_regex(self) -> None:
+        self.assertEqual(
+            merge_wud_exclude_regex(
+                "",
+                previous_managed="",
+                next_managed=r"^2\.0$",
+            ),
+            r"^2\.0$",
+        )
+        self.assertEqual(
+            merge_wud_exclude_regex(
+                r"^1\.0$",
+                previous_managed=r"^1\.0$",
+                next_managed=r"^(?:1\.0|2\.0)$",
+            ),
+            r"^(?:1\.0|2\.0)$",
+        )
+        self.assertEqual(
+            merge_wud_exclude_regex(
+                r"^beta",
+                previous_managed=r"^1\.0$",
+                next_managed=r"^(?:1\.0|2\.0)$",
+            ),
+            r"(?:^beta)|(?:^(?:1\.0|2\.0)$)",
+        )
+        self.assertEqual(
+            merge_wud_exclude_regex(
+                r"^beta",
+                previous_managed=r"^1\.0$",
+                next_managed="",
+            ),
+            r"^beta",
+        )
+
+    def test_simple_exact_tag_include_accepts_only_exact_valid_tags(self) -> None:
+        valid_values = (r"^1\.2\.3$", "^latest$", "^v1-alpha$", "^my_tag$")
+        invalid_values = (
+            r"^beta|stable$",
+            r"^1\.*$",
+            "latest$",
+            "^latest",
+            "^$",
+            "^1.2$",
+            "^1+2$",
+            r"^abc\\def$",
+            r"^abc\adef$",
+            "^ $",
+        )
+
+        for value in valid_values:
+            with self.subTest(value=value):
+                self.assertTrue(_is_simple_exact_tag_include(value))
+        for value in invalid_values:
+            with self.subTest(value=value):
+                self.assertFalse(_is_simple_exact_tag_include(value))
+
+
+class ComposeTagUpdateTests(ComposeRewriteTestCase):
+    def test_rewrites_only_direct_service_image_source_span(self) -> None:
+        original = (
+            "x-template:\n"
+            "  image: repo/app:1.0\n"
+            "services:\n"
+            "  app:\n"
+            "    image: \"repo/app:1.0\" # keep comment\n"
+            "    labels:\n"
+            "      image: repo/app:1.0\n"
+            "  db:\n"
+            "    image: repo/db:1.0\n"
+        )
+        compose_file = self.write_compose(original)
+
+        applied = apply_compose_tag_updates(
+            compose_file,
+            (
+                TagUpdate(
+                    old_image="repo/app:1.0",
+                    desired_tag="2.0",
+                    new_image="repo/app:2.0",
+                    services=("app",),
+                ),
+            ),
+        )
+
+        self.assertEqual(applied[0].replacements, 1)
+        self.assertEqual(
+            compose_file.read_text(encoding="utf-8"),
+            original.replace(
+                '    image: "repo/app:1.0" # keep comment',
+                '    image: "repo/app:2.0" # keep comment',
+            ),
+        )
+
+    def test_rejects_invalid_yaml_without_write(self) -> None:
+        original = "services:\n  app:\n    image: [repo/app:1.0\n"
+        compose_file = self.write_compose(original)
+
+        with self.assertRaisesRegex(ComposeTagRewriteError, "could not be parsed"):
+            apply_compose_tag_updates(
+                compose_file,
+                (
+                    TagUpdate(
+                        old_image="repo/app:1.0",
+                        desired_tag="2.0",
+                        new_image="repo/app:2.0",
+                        services=("app",),
+                    ),
+                ),
+            )
+
+        self.assertEqual(compose_file.read_text(encoding="utf-8"), original)
+
+    def test_rejects_anchored_and_inherited_images_without_write(self) -> None:
+        cases = (
+            (
+                "alias.yml",
+                "x-base: &base\n"
+                "  image: repo/app:1.0\n"
+                "services:\n"
+                "  app: *base\n",
+                "YAML anchors or aliases",
+            ),
+            (
+                "merge.yml",
+                "x-base: &base\n"
+                "  image: repo/app:1.0\n"
+                "services:\n"
+                "  app:\n"
+                "    <<: *base\n",
+                "inherited",
+            ),
+        )
+
+        for name, original, expected_error in cases:
+            with self.subTest(name=name):
+                compose_file = self.write_compose(original, name=name)
+
+                with self.assertRaisesRegex(ComposeTagRewriteError, expected_error):
+                    apply_compose_tag_updates(
+                        compose_file,
+                        (
+                            TagUpdate(
+                                old_image="repo/app:1.0",
+                                desired_tag="2.0",
+                                new_image="repo/app:2.0",
+                                services=("app",),
+                            ),
+                        ),
+                    )
+
+                self.assertEqual(compose_file.read_text(encoding="utf-8"), original)
+
+
+class ComposeTagExclusionTests(ComposeRewriteTestCase):
+    def test_render_merges_custom_label_with_existing_exact_tags(self) -> None:
+        compose_file = self.write_compose(
+            "services:\n"
+            "  app:\n"
+            "    image: repo/app:1.0\n"
+            "    labels:\n"
+            "      wud.tag.exclude: ^beta\n"
+        )
+
+        rendered, applied = render_compose_tag_exclusions(
+            compose_file,
+            (
+                self.tag_exclusion_update(
+                    tag="3.0",
+                    scope="service",
+                ),
+            ),
+            existing_exact_tags={"app": {"2.0"}},
+        )
+
+        self.assertEqual(applied[0].tags, ("2.0", "3.0"))
+        self.assertIn("wud.tag.exclude: (?:^beta)|(?:^(?:2\\.0|3\\.0)$$)", rendered)
+        self.assertNotIn(
+            "3\\.0",
+            compose_file.read_text(encoding="utf-8"),
+        )
+
+    def test_apply_writes_atomically_and_preserves_mode_and_owner(self) -> None:
+        compose_file = self.write_compose(
+            "services:\n"
+            "  app:\n"
+            "    image: repo/app:1.0\n"
+        )
+        os.chmod(compose_file, 0o640)
+        before = compose_file.stat()
+
+        applied = apply_compose_tag_exclusions(
+            compose_file,
+            (self.tag_exclusion_update(tag="2.0"),),
+            existing_exact_tags={},
+        )
+
+        after = compose_file.stat()
+        content = compose_file.read_text(encoding="utf-8")
+        self.assertEqual(applied[0].tags, ("2.0",))
+        self.assertIn("wud.tag.exclude=^2\\.0$$", content)
+        self.assertEqual(stat.S_IMODE(after.st_mode), stat.S_IMODE(before.st_mode))
+        self.assertEqual((after.st_uid, after.st_gid), (before.st_uid, before.st_gid))
+        self.assertEqual(list(self.root.glob(".compose.yml.exclude.*")), [])
+
+    def test_rejects_shared_label_alias_without_write(self) -> None:
+        original = (
+            "x-labels: &common\n"
+            "  - foo=bar\n"
+            "services:\n"
+            "  app:\n"
+            "    image: repo/app:1.0\n"
+            "    labels: *common\n"
+            "  worker:\n"
+            "    image: repo/worker:1.0\n"
+            "    labels: *common\n"
+        )
+        compose_file = self.write_compose(original)
+
+        with self.assertRaisesRegex(ComposeTagRewriteError, "YAML anchors or aliases"):
+            apply_compose_tag_exclusions(
+                compose_file,
+                (self.tag_exclusion_update(tag="2.0"),),
+                existing_exact_tags={},
+            )
+
+        self.assertEqual(compose_file.read_text(encoding="utf-8"), original)
+
+
+class ComposeDigestPinTests(ComposeRewriteTestCase):
+    def test_render_empty_updates_returns_source_without_applied_updates(self) -> None:
+        original = "services:\n  app:\n    image: repo/app:1.0\n"
+        compose_file = self.write_compose(original)
+
+        rendered, applied = render_compose_digest_pins(compose_file, ())
+
+        self.assertEqual(rendered, original)
+        self.assertEqual(applied, ())
+
+    def test_render_writes_image_marker_label_and_rewrite_metadata(self) -> None:
+        compose_file = self.write_compose(
+            "services:\n"
+            "  app:\n"
+            "    labels:\n"
+            "    - wud.tag.include=1.0\n"
+            "    image: repo/app:1.0\n"
+        )
+
+        rendered, applied = render_compose_digest_pins(
+            compose_file,
+            (self.digest_pin_update(),),
+            stack_name="stack",
+        )
+
+        self.assertEqual(applied[0].replacements, 1)
+        self.assertIn("# wud-updater.resolved-tag=2.0", rendered)
+        self.assertIn("image: repo/app@sha256:pin", rendered)
+        self.assertIn("wud.tag.include=^2\\.0$$", rendered)
+        self.assertEqual(
+            applied[0].label_rewrites[0].reason,
+            "plain-tag-normalized",
+        )
+        self.assertEqual(applied[0].label_rewrites[0].current_label_value, "1.0")
+
+    def test_apply_writes_digest_pin_file(self) -> None:
+        compose_file = self.write_compose(
+            "services:\n"
+            "  app:\n"
+            "    image: repo/app:1.0\n"
+        )
+
+        applied = apply_compose_digest_pins(compose_file, (self.digest_pin_update(),))
+
+        content = compose_file.read_text(encoding="utf-8")
+        self.assertEqual(applied[0].final_image, "repo/app@sha256:pin")
+        self.assertIn("# wud-updater.resolved-tag=2.0", content)
+        self.assertIn("image: repo/app@sha256:pin", content)
+
+    def test_render_requires_approval_for_custom_include_label(self) -> None:
+        compose_file = self.write_compose(
+            "services:\n"
+            "  app:\n"
+            "    labels:\n"
+            "    - wud.tag.include=^beta|^stable\n"
+            "    image: repo/app:1.0\n"
+        )
+
+        with self.assertRaises(DigestPinLabelRewriteApprovalRequired) as raised:
+            render_compose_digest_pins(
+                compose_file,
+                (self.digest_pin_update(),),
+                stack_name="stack",
+            )
+
+        self.assertEqual(raised.exception.service, "app")
+        self.assertEqual(raised.exception.current_label_value, "^beta|^stable")
+        self.assertEqual(raised.exception.proposed_label_value, "^2\\.0$$")
+        self.assertEqual(raised.exception.proposed_label_regex, "^2\\.0$")
+
+    def test_render_accepts_matching_custom_include_label_approval(self) -> None:
+        compose_file = self.write_compose(
+            "services:\n"
+            "  app:\n"
+            "    labels:\n"
+            "    - wud.tag.include=^beta|^stable\n"
+            "    image: repo/app:1.0\n"
+        )
+
+        rendered, applied = render_compose_digest_pins(
+            compose_file,
+            (self.digest_pin_update(),),
+            label_rewrite_approvals=(
+                DigestPinLabelRewriteApproval(
+                    stack="stack",
+                    service="app",
+                    label_key="wud.tag.include",
+                    current_label_value="^beta|^stable",
+                    planned_tag="2.0",
+                    proposed_label_value="^2\\.0$$",
+                ),
+            ),
+            stack_name="stack",
+        )
+
+        self.assertIn("wud.tag.include=^2\\.0$$", rendered)
+        self.assertEqual(applied[0].label_rewrites[0].reason, "approved")
+        self.assertTrue(applied[0].label_rewrites[0].approved)
+
+    def test_apply_rejects_inherited_image_without_write(self) -> None:
+        original = (
+            "x-base: &base\n"
+            "  image: repo/app:1.0\n"
+            "services:\n"
+            "  app:\n"
+            "    <<: *base\n"
+        )
+        compose_file = self.write_compose(original)
+
+        with self.assertRaisesRegex(ComposeTagRewriteError, "inherited"):
+            apply_compose_digest_pins(compose_file, (self.digest_pin_update(),))
+
+        self.assertEqual(compose_file.read_text(encoding="utf-8"), original)
+
+
+if __name__ == "__main__":
+    unittest.main()
