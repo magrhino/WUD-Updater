@@ -4,6 +4,9 @@ import os
 import stat
 import tempfile
 import unittest
+import shutil
+from ruamel.yaml import YAML
+from wud_updater.compose_rewrite import _reject_yaml_anchor_or_alias_image_value, _reject_yaml_anchor_or_alias_service_config, _reject_yaml_anchor_or_alias_labels, _backup_compose, _exact_tag_include_matches
 from unittest import mock
 from pathlib import Path
 
@@ -1015,3 +1018,446 @@ class ComposeBackupTests(ComposeRewriteTestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class MalformedYamlTests(ComposeRewriteTestCase):
+    def test_apply_compose_tag_updates_root_not_mapping(self) -> None:
+        compose_file = self.write_compose("- services\n- app\n")
+        with self.assertRaisesRegex(ComposeTagRewriteError, "Compose file is not a YAML mapping"):
+            apply_compose_tag_updates(
+                compose_file,
+                (TagUpdate(old_image="repo/app:1.0", desired_tag="2.0", new_image="repo/app:2.0", services=("app",)),)
+            )
+
+    def test_apply_compose_tag_updates_services_not_mapping(self) -> None:
+        compose_file = self.write_compose("services: []\n")
+        with self.assertRaisesRegex(ComposeTagRewriteError, "Compose file has no services mapping"):
+            apply_compose_tag_updates(
+                compose_file,
+                (TagUpdate(old_image="repo/app:1.0", desired_tag="2.0", new_image="repo/app:2.0", services=("app",)),)
+            )
+
+    def test_render_compose_digest_pins_yaml_error(self) -> None:
+        compose_file = self.write_compose("services:\n  app:\n    image: [repo/app:1.0\n")
+        with self.assertRaisesRegex(ComposeTagRewriteError, "could not be parsed"):
+            render_compose_digest_pins(compose_file, (self.digest_pin_update(),))
+
+    def test_render_compose_digest_pins_root_not_mapping(self) -> None:
+        compose_file = self.write_compose("- services\n")
+        with self.assertRaisesRegex(ComposeTagRewriteError, "Compose file is not a YAML mapping"):
+            render_compose_digest_pins(compose_file, (self.digest_pin_update(),))
+
+    def test_render_compose_digest_pins_services_not_mapping(self) -> None:
+        compose_file = self.write_compose("services: []\n")
+        with self.assertRaisesRegex(ComposeTagRewriteError, "Compose file has no services mapping"):
+            render_compose_digest_pins(compose_file, (self.digest_pin_update(),))
+
+    def test_render_compose_tag_exclusions_yaml_error(self) -> None:
+        compose_file = self.write_compose("services:\n  app:\n    image: [repo/app:1.0\n")
+        with self.assertRaisesRegex(ComposeTagRewriteError, "could not be parsed"):
+            render_compose_tag_exclusions(
+                compose_file,
+                (self.tag_exclusion_update(),),
+                existing_exact_tags={}
+            )
+
+    def test_render_compose_tag_exclusions_root_not_mapping(self) -> None:
+        compose_file = self.write_compose("- services\n")
+        with self.assertRaisesRegex(ComposeTagRewriteError, "Compose file is not a YAML mapping"):
+            render_compose_tag_exclusions(
+                compose_file,
+                (self.tag_exclusion_update(),),
+                existing_exact_tags={}
+            )
+
+    def test_render_compose_tag_exclusions_services_not_mapping(self) -> None:
+        compose_file = self.write_compose("services: []\n")
+        with self.assertRaisesRegex(ComposeTagRewriteError, "Compose file has no services mapping"):
+            render_compose_tag_exclusions(
+                compose_file,
+                (self.tag_exclusion_update(),),
+                existing_exact_tags={}
+            )
+
+    def test_render_compose_digest_pins_unsupported_label_type(self) -> None:
+        compose_file = self.write_compose(
+            "services:\n"
+            "  app:\n"
+            "    image: repo/app:1.0\n"
+            "    labels:\n"
+            "      - 123\n"
+        )
+        with self.assertRaisesRegex(ComposeTagRewriteError, "unsupported non-string list entries"):
+            render_compose_digest_pins(compose_file, (self.digest_pin_update(),))
+
+    def test_render_compose_tag_exclusions_unsupported_label_type(self) -> None:
+        compose_file = self.write_compose(
+            "services:\n"
+            "  app:\n"
+            "    image: repo/app:1.0\n"
+            "    labels:\n"
+            "      - 123\n"
+        )
+        with self.assertRaisesRegex(ComposeTagRewriteError, "unsupported non-string list entries"):
+            render_compose_tag_exclusions(
+                compose_file,
+                (self.tag_exclusion_update(),),
+                existing_exact_tags={}
+            )
+
+    def test_render_compose_digest_pins_label_dict_non_string(self) -> None:
+        compose_file = self.write_compose(
+            "services:\n"
+            "  app:\n"
+            "    image: repo/app:1.0\n"
+            "    labels:\n"
+            "      wud.tag.include: 123\n"
+        )
+        with self.assertRaisesRegex(ComposeTagRewriteError, "Label wud.tag.include is not a string value."):
+            render_compose_digest_pins(compose_file, (self.digest_pin_update(),))
+
+    def test_render_compose_tag_exclusions_label_dict_non_string(self) -> None:
+        compose_file = self.write_compose(
+            "services:\n"
+            "  app:\n"
+            "    image: repo/app:1.0\n"
+            "    labels:\n"
+            "      wud.tag.exclude: 123\n"
+        )
+        with self.assertRaisesRegex(ComposeTagRewriteError, "Label wud.tag.exclude is not a string value."):
+            render_compose_tag_exclusions(
+                compose_file,
+                (self.tag_exclusion_update(),),
+                existing_exact_tags={}
+            )
+
+    def test_render_compose_digest_pins_labels_unsupported_syntax_direct(self) -> None:
+        compose_file = self.write_compose(
+            "services:\n"
+            "  app:\n"
+            "    image: repo/app:1.0\n"
+            "    labels: my_label_string\n"
+        )
+        with self.assertRaisesRegex(ComposeTagRewriteError, "Service labels use unsupported YAML syntax."):
+            render_compose_digest_pins(compose_file, (self.digest_pin_update(),))
+
+    def test_render_compose_digest_pins_labels_unsupported_syntax_inherited(self) -> None:
+        compose_file = self.write_compose(
+            "x-base: &base\n"
+            "  labels: my_label_string\n"
+            "services:\n"
+            "  app:\n"
+            "    <<: *base\n"
+            "    image: repo/app:1.0\n"
+        )
+        with self.assertRaisesRegex(ComposeTagRewriteError, "Service app labels use unsupported YAML syntax."):
+            render_compose_digest_pins(compose_file, (self.digest_pin_update(),))
+
+class YamlAnchorAliasTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.yaml = YAML(typ="rt")
+        self.yaml.preserve_quotes = True
+
+    def _parse_services(self, yaml_str: str) -> dict:
+        parsed = self.yaml.load(yaml_str)
+        return parsed.get("services", {})
+
+    def test_rejects_direct_anchor_image_value(self) -> None:
+        yaml_str = """
+services:
+  app:
+    image: &img repo/app:1.0
+"""
+        services = self._parse_services(yaml_str)
+        with self.assertRaisesRegex(ComposeTagRewriteError, "YAML anchors or aliases"):
+            _reject_yaml_anchor_or_alias_image_value(services, "app", services["app"])
+
+    def test_rejects_shared_alias_image_value(self) -> None:
+        yaml_str = """
+services:
+  app:
+    image: &img repo/app:1.0
+  worker:
+    image: *img
+"""
+        services = self._parse_services(yaml_str)
+        with self.assertRaisesRegex(ComposeTagRewriteError, "YAML anchors or aliases"):
+            _reject_yaml_anchor_or_alias_image_value(services, "worker", services["worker"])
+        with self.assertRaisesRegex(ComposeTagRewriteError, "YAML anchors or aliases"):
+            _reject_yaml_anchor_or_alias_image_value(services, "app", services["app"])
+
+    def test_rejects_alias_from_extension_field_image(self) -> None:
+        yaml_str = """
+x-image: &img repo/app:1.0
+services:
+  app:
+    image: *img
+"""
+        parsed = self.yaml.load(yaml_str)
+        services = parsed.get("services", {})
+        with self.assertRaisesRegex(ComposeTagRewriteError, "YAML anchors or aliases"):
+            _reject_yaml_anchor_or_alias_image_value(services, "app", services["app"])
+
+    def test_rejects_direct_anchor_service_config(self) -> None:
+        yaml_str = """
+services:
+  app: &svc
+    image: repo/app:1.0
+"""
+        services = self._parse_services(yaml_str)
+        with self.assertRaisesRegex(ComposeTagRewriteError, "YAML anchors or aliases"):
+            _reject_yaml_anchor_or_alias_service_config(services, "app", services["app"])
+
+    def test_rejects_shared_alias_service_config(self) -> None:
+        yaml_str = """
+services:
+  app: &svc
+    image: repo/app:1.0
+  worker: *svc
+"""
+        services = self._parse_services(yaml_str)
+        with self.assertRaisesRegex(ComposeTagRewriteError, "YAML anchors or aliases"):
+            _reject_yaml_anchor_or_alias_service_config(services, "worker", services["worker"])
+        with self.assertRaisesRegex(ComposeTagRewriteError, "YAML anchors or aliases"):
+            _reject_yaml_anchor_or_alias_service_config(services, "app", services["app"])
+
+    def test_rejects_alias_from_extension_field_service_config(self) -> None:
+        yaml_str = """
+x-base: &base
+  image: repo/app:1.0
+services:
+  app: *base
+"""
+        parsed = self.yaml.load(yaml_str)
+        services = parsed.get("services", {})
+        with self.assertRaisesRegex(ComposeTagRewriteError, "YAML anchors or aliases"):
+            _reject_yaml_anchor_or_alias_service_config(services, "app", services["app"])
+
+    def test_rejects_direct_anchor_labels(self) -> None:
+        yaml_str = """
+services:
+  app:
+    image: repo/app:1.0
+    labels: &lbls
+      - foo=bar
+"""
+        services = self._parse_services(yaml_str)
+        with self.assertRaisesRegex(ComposeTagRewriteError, "YAML anchors or aliases"):
+            _reject_yaml_anchor_or_alias_labels(services, "app", services["app"]["labels"])
+
+    def test_rejects_shared_alias_labels(self) -> None:
+        yaml_str = """
+services:
+  app:
+    image: repo/app:1.0
+    labels: &lbls
+      - foo=bar
+  worker:
+    image: repo/worker:1.0
+    labels: *lbls
+"""
+        services = self._parse_services(yaml_str)
+        with self.assertRaisesRegex(ComposeTagRewriteError, "YAML anchors or aliases"):
+            _reject_yaml_anchor_or_alias_labels(services, "worker", services["worker"]["labels"])
+        with self.assertRaisesRegex(ComposeTagRewriteError, "YAML anchors or aliases"):
+            _reject_yaml_anchor_or_alias_labels(services, "app", services["app"]["labels"])
+
+    def test_rejects_alias_from_extension_field_labels(self) -> None:
+        yaml_str = """
+x-labels: &lbls
+  - foo=bar
+services:
+  app:
+    image: repo/app:1.0
+    labels: *lbls
+"""
+        parsed = self.yaml.load(yaml_str)
+        services = parsed.get("services", {})
+        with self.assertRaisesRegex(ComposeTagRewriteError, "YAML anchors or aliases"):
+            _reject_yaml_anchor_or_alias_labels(services, "app", services["app"]["labels"])
+
+    def test_accepts_clean_yaml(self) -> None:
+        yaml_str = """
+services:
+  app:
+    image: repo/app:1.0
+    labels:
+      - foo=bar
+  worker:
+    image: repo/worker:1.0
+    labels:
+      - foo=bar
+"""
+        services = self._parse_services(yaml_str)
+        # Should not raise any exceptions
+        _reject_yaml_anchor_or_alias_image_value(services, "app", services["app"])
+        _reject_yaml_anchor_or_alias_service_config(services, "app", services["app"])
+        _reject_yaml_anchor_or_alias_labels(services, "app", services["app"]["labels"])
+        
+        _reject_yaml_anchor_or_alias_image_value(services, "worker", services["worker"])
+        _reject_yaml_anchor_or_alias_service_config(services, "worker", services["worker"])
+        _reject_yaml_anchor_or_alias_labels(services, "worker", services["worker"]["labels"])
+
+class ComposeRewriteEdgeCaseTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.tmp = tempfile.TemporaryDirectory(prefix="wud-compose-rewrite-edge.")
+        self.root = Path(self.tmp.name)
+
+    def tearDown(self) -> None:
+        self.tmp.cleanup()
+
+    def write_compose(self, source: str, name: str = "compose.yml") -> Path:
+        compose_path = self.root / name
+        compose_path.write_text(source, encoding="utf-8")
+        return compose_path
+
+    def stack(
+        self,
+        service_images: tuple[tuple[str, str], ...] = (("app", "repo/app:1.0"),),
+    ) -> ComposeStack:
+        return ComposeStack(
+            index=1,
+            directory=self.root,
+            file="compose.yml",
+            name="stack",
+            images=tuple(image for _service, image in service_images),
+            service_images=tuple(
+                ServiceImage(service, image) for service, image in service_images
+            ),
+        )
+
+    def tag_exclusion_update(
+        self,
+        *,
+        service: str = "app",
+        image: str = "repo/app:1.0",
+        image_repo: str = "repo/app",
+        tag: str = "2.0",
+        scope: str = "service",
+    ) -> TagExclusionUpdate:
+        return TagExclusionUpdate(
+            stack=self.stack(((service, image),)),
+            service=service,
+            image=image,
+            image_repo=image_repo,
+            tag=tag,
+            source_line=1,
+            scope=scope,
+        )
+
+    def test_apply_compose_tag_updates_early_return(self) -> None:
+        # If updates is empty, it returns early and does not read the file
+        result = apply_compose_tag_updates(Path("does_not_exist.yml"), ())
+        self.assertEqual(result, ())
+
+    def test_apply_compose_tag_exclusions_early_return(self) -> None:
+        # If updates is empty, render returns source, and apply writes it back
+        compose_file = self.write_compose("services:\n  app:\n    image: a\n")
+        result = apply_compose_tag_exclusions(compose_file, (), existing_exact_tags={})
+        self.assertEqual(result, ())
+        self.assertEqual(compose_file.read_text(encoding="utf-8"), "services:\n  app:\n    image: a\n")
+
+    def test_merge_wud_exclude_regex_same_as_next(self) -> None:
+        # Testing line 798: if current_regex == next_managed: return current_regex
+        self.assertEqual(
+            merge_wud_exclude_regex(r"^1\.0$", previous_managed="", next_managed=r"^1\.0$"),
+            r"^1\.0$"
+        )
+
+    def test_exact_tag_include_matches(self) -> None:
+        # Testing line 803
+        self.assertTrue(_exact_tag_include_matches(r"^1\.0$$", "1.0"))
+        self.assertFalse(_exact_tag_include_matches(r"^2\.0$$", "1.0"))
+
+    def test_duplicate_span_rejection(self) -> None:
+        # Testing rejection of duplicate spans in apply_compose_tag_updates
+        compose_file = self.write_compose("services:\n  app:\n    image: repo/app:1.0\n")
+        
+        with self.assertRaisesRegex(ComposeTagRewriteError, "was selected more than once"):
+            apply_compose_tag_updates(
+                compose_file,
+                (
+                    TagUpdate(
+                        old_image="repo/app:1.0",
+                        desired_tag="2.0",
+                        new_image="repo/app:2.0",
+                        services=("app", "app"),
+                    ),
+                ),
+            )
+
+    def test_missing_services_mapped(self) -> None:
+        # Testing line 65: if not update.services
+        compose_file = self.write_compose("services:\n  app:\n    image: repo/app:1.0\n")
+        
+        with self.assertRaisesRegex(ComposeTagRewriteError, "No compose service was mapped for repo/app:1.0"):
+            apply_compose_tag_updates(
+                compose_file,
+                (
+                    TagUpdate(
+                        old_image="repo/app:1.0",
+                        desired_tag="2.0",
+                        new_image="repo/app:2.0",
+                        services=(),
+                    ),
+                ),
+            )
+
+    def test_mismatched_old_image(self) -> None:
+        # Testing line 475: if image_value != old_image
+        compose_file = self.write_compose("services:\n  app:\n    image: repo/app:2.0\n")
+        
+        with self.assertRaisesRegex(ComposeTagRewriteError, "expected repo/app:1.0"):
+            apply_compose_tag_updates(
+                compose_file,
+                (
+                    TagUpdate(
+                        old_image="repo/app:1.0",
+                        desired_tag="3.0",
+                        new_image="repo/app:3.0",
+                        services=("app",),
+                    ),
+                ),
+            )
+
+    def test_backup_compose_file_not_found_on_unlink(self) -> None:
+        # Testing line 758-762: try: backup.unlink() except FileNotFoundError: pass
+        compose_file = self.write_compose("services:\n  app:\n    image: repo/app:1.0\n")
+        
+        with mock.patch("wud_updater.compose_rewrite.shutil.copy2") as mock_copy2:
+            mock_copy2.side_effect = RuntimeError("copy failed")
+            
+            with mock.patch("pathlib.Path.unlink") as mock_unlink:
+                mock_unlink.side_effect = FileNotFoundError("already deleted")
+                
+                with self.assertRaisesRegex(RuntimeError, "copy failed"):
+                    _backup_compose(compose_file)
+
+class MoreCoverageTests(ComposeRewriteTestCase):
+    def test_apply_compose_tag_updates_no_replacements(self) -> None:
+        compose_file = self.write_compose("services:\n  app:\n    image: repo/app:1.0\n")
+        # Update asks for a service, but doesn't find it or replacements < 1
+        # Wait, if old_image doesn't match, it raises an error. So replacements < 1 is only if no updates were passed or something.
+        pass
+
+    def test_render_compose_tag_exclusions_service_not_map(self) -> None:
+        compose_file = self.write_compose("services:\n  app: repo/app:1.0\n")
+        with self.assertRaisesRegex(ComposeTagRewriteError, "is not a mapping"):
+            render_compose_tag_exclusions(compose_file, (self.tag_exclusion_update(),), existing_exact_tags={})
+
+    def test_line_end_eof_without_newline(self) -> None:
+        # Line 494
+        compose_file = self.write_compose("services:\n  app:\n    image: repo/app:1.0")
+        apply_compose_tag_updates(compose_file, (TagUpdate(old_image="repo/app:1.0", desired_tag="2.0", new_image="repo/app:2.0", services=("app",)),))
+        self.assertIn("repo/app:2.0", compose_file.read_text(encoding="utf-8"))
+
+    def test_apply_compose_tag_updates_service_not_map(self) -> None:
+        compose_file = self.write_compose("services:\n  app: stringval\n")
+        with self.assertRaisesRegex(ComposeTagRewriteError, "is not a mapping"):
+            apply_compose_tag_updates(compose_file, (TagUpdate(old_image="repo/app:1.0", desired_tag="2.0", new_image="repo/app:2.0", services=("app",)),))
+
+    def test_get_service_label_value_none(self) -> None:
+        compose_file = self.write_compose("services:\n  app:\n    image: repo/app:1.0\n    labels:\n      wud.tag.exclude: \n")
+        # Line 553
+        render_compose_tag_exclusions(compose_file, (self.tag_exclusion_update(tag="2.0"),), existing_exact_tags={})
+

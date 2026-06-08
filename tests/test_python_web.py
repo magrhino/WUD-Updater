@@ -27,7 +27,7 @@ from wud_updater.release_notes import ReleaseNoteInfo as ReleaseNoteData
 from wud_updater.web import create_app
 
 
-from tests.web_test_helpers import (
+from web_test_helpers import (
     _web_env,
     _client,
     _doctor_client,
