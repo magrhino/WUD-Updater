@@ -15,6 +15,7 @@ from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
 from wud_updater import web as web_module
+from wud_updater import web_models
 from wud_updater.db import (
     open_db,
     init_db,
@@ -52,6 +53,12 @@ from tests.web_test_helpers import (
     _sse_log_events,
     _sse_progress_events,
 )
+
+def test_web_module_reexports_web_models_for_compatibility() -> None:
+    missing = [name for name in web_models.__all__ if not hasattr(web_module, name)]
+
+    assert missing == []
+
 
 def test_healthz_is_unauthenticated_before_setup(tmp_path: Path) -> None:
     client = _client(tmp_path)
