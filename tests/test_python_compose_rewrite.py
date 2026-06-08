@@ -162,15 +162,25 @@ class ComposeRegexTests(unittest.TestCase):
         )
 
     def test_simple_exact_tag_include_accepts_only_exact_valid_tags(self) -> None:
-        valid_values = (r"^1\.2\.3$", "^latest$", "^v1-alpha$", "^my_tag$")
+        valid_values = (
+            r"^1\.2\.3$",
+            "^latest$",
+            "^v1-alpha$",
+            "^my_tag$",
+            "^20240101$",
+        )
         invalid_values = (
             r"^beta|stable$",
             r"^1\.*$",
             "latest$",
             "^latest",
             "^$",
+            "^",
+            "",
             "^1.2$",
             "^1+2$",
+            "^(abc)$",
+            r"^abc\$",
             r"^abc\\def$",
             r"^abc\adef$",
             "^ $",
@@ -225,6 +235,51 @@ class ComposeTagUpdateTests(ComposeRewriteTestCase):
         compose_file = self.write_compose(original)
 
         with self.assertRaisesRegex(ComposeTagRewriteError, "could not be parsed"):
+            apply_compose_tag_updates(
+                compose_file,
+                (
+                    TagUpdate(
+                        old_image="repo/app:1.0",
+                        desired_tag="2.0",
+                        new_image="repo/app:2.0",
+                        services=("app",),
+                    ),
+                ),
+            )
+
+        self.assertEqual(compose_file.read_text(encoding="utf-8"), original)
+
+    def test_rejects_interpolated_image_without_write(self) -> None:
+        original = "services:\n  app:\n    image: repo/app:${TAG}\n"
+        compose_file = self.write_compose(original)
+
+        with self.assertRaisesRegex(ComposeTagRewriteError, "interpolation"):
+            apply_compose_tag_updates(
+                compose_file,
+                (
+                    TagUpdate(
+                        old_image="repo/app:${TAG}",
+                        desired_tag="2.0",
+                        new_image="repo/app:2.0",
+                        services=("app",),
+                    ),
+                ),
+            )
+
+        self.assertEqual(compose_file.read_text(encoding="utf-8"), original)
+
+    def test_rejects_service_without_direct_image_without_write(self) -> None:
+        original = (
+            "x-template:\n"
+            "  image: repo/app:1.0\n"
+            "services:\n"
+            "  app:\n"
+            "    labels:\n"
+            "      image: repo/app:1.0\n"
+        )
+        compose_file = self.write_compose(original)
+
+        with self.assertRaisesRegex(ComposeTagRewriteError, "direct string"):
             apply_compose_tag_updates(
                 compose_file,
                 (
@@ -331,6 +386,166 @@ class ComposeTagExclusionTests(ComposeRewriteTestCase):
         self.assertEqual((after.st_uid, after.st_gid), (before.st_uid, before.st_gid))
         self.assertEqual(list(self.root.glob(".compose.yml.exclude.*")), [])
 
+    def test_materializes_service_merged_map_labels(self) -> None:
+        compose_file = self.write_compose(
+            "\n".join(
+                [
+                    "x-base: &base",
+                    "  labels:",
+                    "    wud.tag.exclude: ^beta",
+                    "    foo: bar",
+                    "services:",
+                    "  app:",
+                    "    <<: *base",
+                    "    image: repo/app:1.0",
+                    "  worker:",
+                    "    <<: *base",
+                    "    image: repo/worker:1.0",
+                    "",
+                ]
+            )
+        )
+
+        apply_compose_tag_exclusions(
+            compose_file,
+            (self.tag_exclusion_update(tag="2.0"),),
+            existing_exact_tags={},
+        )
+
+        content = compose_file.read_text(encoding="utf-8")
+        self.assertEqual(content.count("wud.tag.exclude: ^beta"), 1)
+        self.assertEqual(
+            content.count("wud.tag.exclude: (?:^beta)|(?:^2\\.0$$)"),
+            1,
+        )
+        self.assertIn(
+            "  app:\n"
+            "    <<: *base\n"
+            "    image: repo/app:1.0\n"
+            "    labels:\n"
+            "      wud.tag.exclude: (?:^beta)|(?:^2\\.0$$)\n"
+            "      foo: bar\n",
+            content,
+        )
+        self.assertIn(
+            "  worker:\n"
+            "    <<: *base\n"
+            "    image: repo/worker:1.0\n",
+            content,
+        )
+        self.assertNotIn("repo/worker:1.0\n    labels:", content)
+
+    def test_materializes_service_merged_list_labels(self) -> None:
+        compose_file = self.write_compose(
+            "\n".join(
+                [
+                    "x-base: &base",
+                    "  labels:",
+                    "    - wud.tag.exclude=^beta",
+                    "    - foo=bar",
+                    "services:",
+                    "  app:",
+                    "    <<: *base",
+                    "    image: repo/app:1.0",
+                    "",
+                ]
+            )
+        )
+
+        apply_compose_tag_exclusions(
+            compose_file,
+            (self.tag_exclusion_update(tag="2.0"),),
+            existing_exact_tags={},
+        )
+
+        content = compose_file.read_text(encoding="utf-8")
+        self.assertEqual(content.count("- wud.tag.exclude=^beta"), 1)
+        self.assertEqual(
+            content.count("- wud.tag.exclude=(?:^beta)|(?:^2\\.0$$)"),
+            1,
+        )
+        self.assertIn(
+            "  app:\n"
+            "    <<: *base\n"
+            "    image: repo/app:1.0\n"
+            "    labels:\n"
+            "    - wud.tag.exclude=(?:^beta)|(?:^2\\.0$$)\n"
+            "    - foo=bar\n",
+            content,
+        )
+
+    def test_preserves_internal_label_merge(self) -> None:
+        compose_file = self.write_compose(
+            "\n".join(
+                [
+                    "x-labels: &common",
+                    "  wud.tag.exclude: ^beta",
+                    "  foo: bar",
+                    "services:",
+                    "  app:",
+                    "    image: repo/app:1.0",
+                    "    labels:",
+                    "      <<: *common",
+                    "      baz: qux",
+                    "",
+                ]
+            )
+        )
+
+        apply_compose_tag_exclusions(
+            compose_file,
+            (self.tag_exclusion_update(tag="2.0"),),
+            existing_exact_tags={},
+        )
+
+        content = compose_file.read_text(encoding="utf-8")
+        self.assertEqual(content.count("wud.tag.exclude: ^beta"), 1)
+        self.assertEqual(
+            content.count("wud.tag.exclude: (?:^beta)|(?:^2\\.0$$)"),
+            1,
+        )
+        self.assertIn("      <<: *common\n", content)
+        self.assertIn("      baz: qux\n", content)
+
+    def test_rejects_interpolated_image_without_write(self) -> None:
+        original = "services:\n  app:\n    image: repo/app:${TAG}\n"
+        compose_file = self.write_compose(original)
+
+        with self.assertRaisesRegex(ComposeTagRewriteError, "interpolation"):
+            apply_compose_tag_exclusions(
+                compose_file,
+                (
+                    self.tag_exclusion_update(
+                        image="repo/app:${TAG}",
+                        tag="2.0",
+                    ),
+                ),
+                existing_exact_tags={},
+            )
+
+        self.assertEqual(compose_file.read_text(encoding="utf-8"), original)
+
+    def test_rejects_service_anchor_without_write(self) -> None:
+        original = "\n".join(
+            [
+                "x-base: &base",
+                "  image: repo/app:1.0",
+                "services:",
+                "  app: *base",
+                "",
+            ]
+        )
+        compose_file = self.write_compose(original)
+
+        with self.assertRaisesRegex(ComposeTagRewriteError, "YAML anchors or aliases"):
+            apply_compose_tag_exclusions(
+                compose_file,
+                (self.tag_exclusion_update(tag="2.0"),),
+                existing_exact_tags={},
+            )
+
+        self.assertEqual(compose_file.read_text(encoding="utf-8"), original)
+
     def test_rejects_shared_label_alias_without_write(self) -> None:
         original = (
             "x-labels: &common\n"
@@ -425,6 +640,49 @@ class ComposeDigestPinTests(ComposeRewriteTestCase):
         self.assertEqual(raised.exception.proposed_label_value, "^2\\.0$$")
         self.assertEqual(raised.exception.proposed_label_regex, "^2\\.0$")
 
+    def test_render_normalizes_plain_planned_tag_label(self) -> None:
+        compose_file = self.write_compose(
+            "services:\n"
+            "  app:\n"
+            "    labels:\n"
+            "    - wud.tag.include=latest\n"
+            "    image: repo/app:latest\n"
+        )
+
+        rendered, applied = render_compose_digest_pins(
+            compose_file,
+            (
+                self.digest_pin_update(
+                    old_image="repo/app:latest",
+                    resolved_tag="latest",
+                ),
+            ),
+            stack_name="stack",
+        )
+
+        self.assertIn("wud.tag.include=^latest$$", rendered)
+        self.assertEqual(applied[0].label_rewrites[0].reason, "plain-tag-normalized")
+        self.assertEqual(applied[0].label_rewrites[0].current_label_value, "latest")
+
+    def test_render_requires_approval_for_different_plain_tag_label(self) -> None:
+        compose_file = self.write_compose(
+            "services:\n"
+            "  app:\n"
+            "    labels:\n"
+            "    - wud.tag.include=stable\n"
+            "    image: repo/app:1.0\n"
+        )
+
+        with self.assertRaises(DigestPinLabelRewriteApprovalRequired) as raised:
+            render_compose_digest_pins(
+                compose_file,
+                (self.digest_pin_update(),),
+                stack_name="stack",
+            )
+
+        self.assertEqual(raised.exception.current_label_value, "stable")
+        self.assertEqual(raised.exception.proposed_label_value, "^2\\.0$$")
+
     def test_render_accepts_matching_custom_include_label_approval(self) -> None:
         compose_file = self.write_compose(
             "services:\n"
@@ -453,6 +711,259 @@ class ComposeDigestPinTests(ComposeRewriteTestCase):
         self.assertIn("wud.tag.include=^2\\.0$$", rendered)
         self.assertEqual(applied[0].label_rewrites[0].reason, "approved")
         self.assertTrue(applied[0].label_rewrites[0].approved)
+
+    def test_render_rejects_stale_custom_include_label_approval(self) -> None:
+        compose_file = self.write_compose(
+            "services:\n"
+            "  app:\n"
+            "    labels:\n"
+            "    - wud.tag.include=^beta|^stable\n"
+            "    image: repo/app:1.0\n"
+        )
+
+        with self.assertRaises(DigestPinLabelRewriteApprovalRequired):
+            render_compose_digest_pins(
+                compose_file,
+                (self.digest_pin_update(),),
+                label_rewrite_approvals=(
+                    DigestPinLabelRewriteApproval(
+                        stack="stack",
+                        service="app",
+                        label_key="wud.tag.include",
+                        current_label_value="^beta|^stable",
+                        planned_tag="2.0",
+                        proposed_label_value="^3\\.0$$",
+                    ),
+                ),
+                stack_name="stack",
+            )
+
+    def test_render_label_already_matching_proposed_regex_has_no_rewrite(self) -> None:
+        compose_file = self.write_compose(
+            "services:\n"
+            "  app:\n"
+            "    labels:\n"
+            "    - wud.tag.include=^2\\.0$$\n"
+            "    image: repo/app:1.0\n"
+        )
+
+        rendered, applied = render_compose_digest_pins(
+            compose_file,
+            (self.digest_pin_update(),),
+            stack_name="stack",
+        )
+
+        self.assertEqual(applied[0].label_rewrites, ())
+        self.assertIn("wud.tag.include=^2\\.0$$", rendered)
+
+    def test_render_service_without_include_label_has_no_rewrite(self) -> None:
+        compose_file = self.write_compose(
+            "services:\n"
+            "  app:\n"
+            "    image: repo/app:1.0\n"
+        )
+
+        _rendered, applied = render_compose_digest_pins(
+            compose_file,
+            (self.digest_pin_update(),),
+            stack_name="stack",
+        )
+
+        self.assertEqual(applied[0].label_rewrites, ())
+
+    def test_render_normalizes_exact_regex_label(self) -> None:
+        compose_file = self.write_compose(
+            "services:\n"
+            "  app:\n"
+            "    labels:\n"
+            "    - wud.tag.include=^1\\.0$\n"
+            "    image: repo/app:1.0\n"
+        )
+
+        rendered, applied = render_compose_digest_pins(
+            compose_file,
+            (self.digest_pin_update(),),
+            stack_name="stack",
+        )
+
+        self.assertIn("wud.tag.include=^2\\.0$$", rendered)
+        self.assertEqual(applied[0].label_rewrites[0].reason, "exact-regex-normalized")
+        self.assertEqual(applied[0].label_rewrites[0].current_label_value, "^1\\.0$")
+        self.assertFalse(applied[0].label_rewrites[0].approved)
+
+    def test_render_rejects_approval_with_wrong_stack(self) -> None:
+        compose_file = self.write_compose(
+            "services:\n"
+            "  app:\n"
+            "    labels:\n"
+            "    - wud.tag.include=^custom|regex\n"
+            "    image: repo/app:1.0\n"
+        )
+
+        with self.assertRaises(DigestPinLabelRewriteApprovalRequired):
+            render_compose_digest_pins(
+                compose_file,
+                (self.digest_pin_update(),),
+                label_rewrite_approvals=(
+                    DigestPinLabelRewriteApproval(
+                        stack="other-stack",
+                        service="app",
+                        label_key="wud.tag.include",
+                        current_label_value="^custom|regex",
+                        planned_tag="2.0",
+                        proposed_label_value="^2\\.0$$",
+                    ),
+                ),
+                stack_name="stack",
+            )
+
+    def test_render_rejects_approval_with_wrong_service(self) -> None:
+        compose_file = self.write_compose(
+            "services:\n"
+            "  app:\n"
+            "    labels:\n"
+            "    - wud.tag.include=^custom|regex\n"
+            "    image: repo/app:1.0\n"
+        )
+
+        with self.assertRaises(DigestPinLabelRewriteApprovalRequired):
+            render_compose_digest_pins(
+                compose_file,
+                (self.digest_pin_update(),),
+                label_rewrite_approvals=(
+                    DigestPinLabelRewriteApproval(
+                        stack="stack",
+                        service="other-service",
+                        label_key="wud.tag.include",
+                        current_label_value="^custom|regex",
+                        planned_tag="2.0",
+                        proposed_label_value="^2\\.0$$",
+                    ),
+                ),
+                stack_name="stack",
+            )
+
+    def test_render_rejects_approval_with_wrong_current_label_value(self) -> None:
+        compose_file = self.write_compose(
+            "services:\n"
+            "  app:\n"
+            "    labels:\n"
+            "    - wud.tag.include=^custom|regex\n"
+            "    image: repo/app:1.0\n"
+        )
+
+        with self.assertRaises(DigestPinLabelRewriteApprovalRequired):
+            render_compose_digest_pins(
+                compose_file,
+                (self.digest_pin_update(),),
+                label_rewrite_approvals=(
+                    DigestPinLabelRewriteApproval(
+                        stack="stack",
+                        service="app",
+                        label_key="wud.tag.include",
+                        current_label_value="^different|regex",
+                        planned_tag="2.0",
+                        proposed_label_value="^2\\.0$$",
+                    ),
+                ),
+                stack_name="stack",
+            )
+
+    def test_approval_required_exception_exposes_rewrite_fields(self) -> None:
+        compose_file = self.write_compose(
+            "services:\n"
+            "  myservice:\n"
+            "    labels:\n"
+            "    - wud.tag.include=^custom.*regex\n"
+            "    image: repo/myimage:1.0\n"
+        )
+
+        with self.assertRaises(DigestPinLabelRewriteApprovalRequired) as raised:
+            render_compose_digest_pins(
+                compose_file,
+                (
+                    self.digest_pin_update(
+                        old_image="repo/myimage:1.0",
+                        services=("myservice",),
+                    ),
+                ),
+                stack_name="mystack",
+            )
+
+        exc = raised.exception
+        self.assertEqual(exc.service, "myservice")
+        self.assertEqual(exc.label_key, "wud.tag.include")
+        self.assertEqual(exc.current_label_value, "^custom.*regex")
+        self.assertEqual(exc.planned_tag, "2.0")
+        self.assertEqual(exc.proposed_label_value, "^2\\.0$$")
+        self.assertEqual(exc.proposed_label_regex, "^2\\.0$")
+        self.assertIn("myservice", str(exc))
+        self.assertIn("^custom.*regex", str(exc))
+
+    def test_render_rejects_service_not_in_compose(self) -> None:
+        compose_file = self.write_compose(
+            "services:\n"
+            "  other:\n"
+            "    image: repo/other:1.0\n"
+        )
+
+        with self.assertRaises(ComposeTagRewriteError):
+            render_compose_digest_pins(compose_file, (self.digest_pin_update(),))
+
+    def test_render_rejects_image_mismatch(self) -> None:
+        compose_file = self.write_compose(
+            "services:\n"
+            "  app:\n"
+            "    image: repo/different:1.0\n"
+        )
+
+        with self.assertRaisesRegex(ComposeTagRewriteError, "expected"):
+            render_compose_digest_pins(compose_file, (self.digest_pin_update(),))
+
+    def test_render_rejects_empty_services_list(self) -> None:
+        compose_file = self.write_compose(
+            "services:\n"
+            "  app:\n"
+            "    image: repo/app:1.0\n"
+        )
+
+        with self.assertRaisesRegex(ComposeTagRewriteError, "No compose service"):
+            render_compose_digest_pins(
+                compose_file,
+                (self.digest_pin_update(services=()),),
+            )
+
+    def test_render_accepts_resolved_image_already_written(self) -> None:
+        compose_file = self.write_compose(
+            "services:\n"
+            "  app:\n"
+            "    image: repo/app:2.0\n"
+        )
+
+        rendered, applied = render_compose_digest_pins(
+            compose_file,
+            (self.digest_pin_update(),),
+        )
+
+        self.assertEqual(len(applied), 1)
+        self.assertIn("repo/app@sha256:pin", rendered)
+
+    def test_render_updates_map_style_labels(self) -> None:
+        compose_file = self.write_compose(
+            "services:\n"
+            "  app:\n"
+            "    image: repo/app:1.0\n"
+            "    labels:\n"
+            "      wud.tag.include: ^1\\.0$\n"
+        )
+
+        rendered, _applied = render_compose_digest_pins(
+            compose_file,
+            (self.digest_pin_update(),),
+        )
+
+        self.assertIn("wud.tag.include", rendered)
+        self.assertIn("2", rendered)
 
     def test_apply_rejects_inherited_image_without_write(self) -> None:
         original = (
