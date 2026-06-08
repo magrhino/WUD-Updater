@@ -15,13 +15,12 @@ import tempfile
 import time
 import urllib.error
 import urllib.request
-from concurrent.futures import ThreadPoolExecutor
 from collections.abc import Awaitable, Callable, Iterator, Mapping, Sequence
 from contextlib import closing
 from dataclasses import asdict, replace
 from datetime import datetime, time as datetime_time, timedelta, timezone
 from pathlib import Path
-from threading import Condition, Event, Lock, Thread
+from threading import Event, Lock, Thread
 from types import SimpleNamespace
 from typing import Any, Literal, cast
 from urllib.parse import quote
@@ -37,12 +36,11 @@ from fastapi import (
     Request,
     Response,
 )
-from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
-from . import __version__
+from . import __version__, web_jobs
 from .banner import (
     current_tag,
     fetch_latest_release_tag,
@@ -97,7 +95,7 @@ from .images import (
     repo_key,
     tag_value_valid,
 )
-from .locks import DirectoryLock, WudLockError
+from .locks import DirectoryLock
 from .plans import (
     DryRunPlan,
     DryRunPlanCleanup,
@@ -120,7 +118,6 @@ from .release_notes import (
 )
 from .self_update import current_container_image, release_self_update_target
 from .updater import (
-    UpdateFromWudRunner,
     apply_compose_digest_pins,
     apply_compose_tag_updates,
     digest_pin_update_from_values,
@@ -133,17 +130,15 @@ from .updater_models import (
     DigestPinUpdate,
     TagOverride,
     TagUpdate,
-    UpdaterOptions,
-    UpdaterProgressEvent,
 )
 from .file_ops import OwnerConfig
 from .wud_file import ParsedWudFile, WudTarget, parse_wud_file, remove_lines_before_run
 
 from .web_models import (
-    APPLY_JOB_PROGRESS_STATUSES,
-    ApplyJobLogResponse,
-    ApplyJobProgressEvent,
-    ApplyJobProgressStatus,
+    APPLY_JOB_PROGRESS_STATUSES as APPLY_JOB_PROGRESS_STATUSES,
+    ApplyJobLogResponse as ApplyJobLogResponse,
+    ApplyJobProgressEvent as ApplyJobProgressEvent,
+    ApplyJobProgressStatus as ApplyJobProgressStatus,
     ApplyJobResponse,
     ApplyJobStatus,
     ApplyPlanRequest,
@@ -223,15 +218,15 @@ from .web_models import (
     StateOperation,
     StateOperationResponse,
     StatusResponse,
-    TERMINAL_APPLY_JOB_STATUSES,
+    TERMINAL_APPLY_JOB_STATUSES as TERMINAL_APPLY_JOB_STATUSES,
     TagExclusionRuleRecord,
     TagExclusionStatusFilter,
     UpdateTargetItem,
     UpdateTargetsResponse,
     UpsertServicePolicyOperation,
     UpsertTagExclusionOperation,
-    WebApplyJob,
-    WebApplyJobProgressEvent,
+    WebApplyJob as WebApplyJob,
+    WebApplyJobProgressEvent as WebApplyJobProgressEvent,
     WebSelfUpdatePlan,
     WebSettings,
 )
@@ -340,7 +335,7 @@ DEFAULT_WEB_HOST = "127.0.0.1"
 DEFAULT_WEB_PORT = 7417
 DEFAULT_RUN_LIMIT = 50
 DEFAULT_LOG_TAIL_BYTES = 262_144
-DEFAULT_JOB_LOG_TAIL_BYTES = 65_536
+DEFAULT_JOB_LOG_TAIL_BYTES = web_jobs.DEFAULT_JOB_LOG_TAIL_BYTES
 SELF_UPDATE_RELEASES_URL = "https://api.github.com/repos/magrhino/WUD-Updater/releases"
 SELF_UPDATE_PLAN_TTL_SECONDS = 30 * 60
 MAX_LOG_TAIL_BYTES = 1_048_576
@@ -370,8 +365,8 @@ CORE_UPDATE_TOUR_STEP_VALUES = (
     "runs_history",
 )
 CONTAINER_REF_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$")
-JOB_STREAM_HEARTBEAT_SECONDS = 15.0
-JOB_STREAM_LOG_POLL_SECONDS = 1.0
+JOB_STREAM_HEARTBEAT_SECONDS = web_jobs.JOB_STREAM_HEARTBEAT_SECONDS
+JOB_STREAM_LOG_POLL_SECONDS = web_jobs.JOB_STREAM_LOG_POLL_SECONDS
 AUTO_UPDATE_POLL_SECONDS = 60.0
 AUTO_UPDATE_GRACE_SECONDS = 300
 AUTO_UPDATE_DAYS = ("mon", "tue", "wed", "thu", "fri", "sat", "sun")
@@ -418,12 +413,7 @@ def create_app(
     )
     app.state.web_settings = active_settings
     app.state.web_setup_claim = ""
-    app.state.web_apply_executor = ThreadPoolExecutor(max_workers=1)
-    app.state.web_apply_lock = Lock()
-    app.state.web_apply_condition = Condition(app.state.web_apply_lock)
-    app.state.web_apply_jobs = {}
-    app.state.web_self_update_running = False
-    app.state.web_self_update_plans = {}
+    web_jobs.initialize_apply_job_state(app.state)
     app.state.web_login_throttle_lock = Lock()
     app.state.web_login_throttle = {}
     app.state.web_login_client_throttle = {}
@@ -448,7 +438,7 @@ def create_app(
         thread = app.state.web_auto_update_thread
         if thread is not None:
             thread.join(timeout=1.0)
-        app.state.web_apply_executor.shutdown(wait=False, cancel_futures=True)
+        web_jobs.shutdown_apply_job_state(app.state)
 
     router_shutdown = getattr(getattr(app, "router", None), "on_shutdown", None)
     if isinstance(router_shutdown, list):
@@ -1129,12 +1119,12 @@ def api_pending_cleanup(
     settings = _settings(request)
     if not settings.mutations_enabled:
         raise HTTPException(status_code=403, detail="mutations are disabled")
-    active_error = _active_mutation_error(request)
+    active_error = web_jobs._active_mutation_error(request)
     if active_error:
         raise HTTPException(status_code=409, detail=active_error)
 
     payload_lines = _cleanup_payload_lines(payload)
-    wud_lock = _acquire_apply_wud_lock(settings)
+    wud_lock = web_jobs._acquire_apply_wud_lock(settings)
     try:
         try:
             parsed = parse_wud_file(settings.config.wud_out_file)
@@ -1229,12 +1219,12 @@ def api_pending_removal(
     settings = _settings(request)
     if not settings.mutations_enabled:
         raise HTTPException(status_code=403, detail="mutations are disabled")
-    active_error = _active_mutation_error(request)
+    active_error = web_jobs._active_mutation_error(request)
     if active_error:
         raise HTTPException(status_code=409, detail=active_error)
 
     payload_lines = _removal_payload_lines(payload)
-    wud_lock = _acquire_apply_wud_lock(settings)
+    wud_lock = web_jobs._acquire_apply_wud_lock(settings)
     try:
         try:
             parsed = parse_wud_file(settings.config.wud_out_file)
@@ -1492,7 +1482,7 @@ def api_plan_self_update(request: Request) -> SelfUpdatePlanResponse:
     settings = _settings(request)
     if not settings.mutations_enabled:
         raise HTTPException(status_code=403, detail="mutations are disabled")
-    active_error = _active_mutation_error(request)
+    active_error = web_jobs._active_mutation_error(request)
     if active_error:
         raise HTTPException(status_code=409, detail=active_error)
 
@@ -1546,7 +1536,7 @@ def api_apply_self_update(
     settings = _settings(request)
     if not settings.mutations_enabled:
         raise HTTPException(status_code=403, detail="mutations are disabled")
-    reservation_error = _reserve_self_update(request.app.state)
+    reservation_error = web_jobs._reserve_self_update(request.app.state)
     if reservation_error:
         raise HTTPException(status_code=409, detail=reservation_error)
 
@@ -1629,7 +1619,7 @@ def api_apply_self_update(
             status="image_pulled",
         )
     finally:
-        _release_self_update(request.app.state)
+        web_jobs._release_self_update(request.app.state)
 
     return SelfUpdateApplyResponse(
         status="image_pulled",
@@ -1649,7 +1639,7 @@ def api_prepare_self_update(
     settings = _settings(request)
     if not settings.mutations_enabled:
         raise HTTPException(status_code=403, detail="mutations are disabled")
-    reservation_error = _reserve_self_update(request.app.state)
+    reservation_error = web_jobs._reserve_self_update(request.app.state)
     if reservation_error:
         raise HTTPException(status_code=409, detail=reservation_error)
 
@@ -1755,7 +1745,7 @@ def api_prepare_self_update(
             metadata_extra=metadata,
         )
     finally:
-        _release_self_update(request.app.state)
+        web_jobs._release_self_update(request.app.state)
         _remove_self_update_cached_plan(request.app.state, payload.plan_id)
 
     return SelfUpdatePrepareResponse(
@@ -1778,7 +1768,7 @@ def api_restart_container(
     settings = _settings(request)
     if not settings.mutations_enabled:
         raise HTTPException(status_code=403, detail="mutations are disabled")
-    active_error = _active_mutation_error(request)
+    active_error = web_jobs._active_mutation_error(request)
     if active_error:
         raise HTTPException(status_code=409, detail=active_error)
     container = settings.restart_container.strip()
@@ -1862,10 +1852,10 @@ def api_create_job(payload: ApplyPlanRequest, request: Request) -> ApplyJobRespo
     settings = _settings(request)
     if not settings.mutations_enabled:
         raise HTTPException(status_code=403, detail="mutations are disabled")
-    active_error = _active_mutation_error(request)
+    active_error = web_jobs._active_mutation_error(request)
     if active_error:
         raise HTTPException(status_code=409, detail=active_error)
-    wud_lock = _acquire_apply_wud_lock(settings)
+    wud_lock = web_jobs._acquire_apply_wud_lock(settings)
     try:
         try:
             plan = _build_web_plan(
@@ -1905,13 +1895,7 @@ def api_apply_plan(payload: ApplyPlanRequest, request: Request) -> ApplyJobRespo
 
 
 def api_job(job_id: str, request: Request) -> ApplyJobResponse:
-    jobs: dict[str, WebApplyJob] = request.app.state.web_apply_jobs
-    apply_lock: Lock = request.app.state.web_apply_lock
-    with apply_lock:
-        job = jobs.get(job_id)
-        if job is None:
-            raise HTTPException(status_code=404, detail="apply job not found")
-        return _apply_job_response(job)
+    return web_jobs._apply_job_response_for_request(job_id, request)
 
 
 def api_apply_job(job_id: str, request: Request) -> ApplyJobResponse:
@@ -1923,12 +1907,16 @@ def api_job_stream(
     request: Request,
     log_tail_bytes: int = Query(default=DEFAULT_JOB_LOG_TAIL_BYTES, ge=1),
 ) -> StreamingResponse:
-    _require_apply_job(job_id, request)
+    settings = _settings(request)
+    web_jobs._require_apply_job(job_id, request)
     return StreamingResponse(
-        _apply_job_stream(
-            request,
+        web_jobs._apply_job_stream(
+            request.app.state,
+            settings,
             job_id,
             log_tail_bytes=min(log_tail_bytes, MAX_LOG_TAIL_BYTES),
+            safe_log_path=_safe_log_path,
+            read_log_tail=_read_log_tail,
         ),
         media_type="text/event-stream",
         headers={
@@ -3363,7 +3351,10 @@ def _auto_update_tick(
     *,
     now: datetime | None = None,
 ) -> ApplyJobResponse | None:
-    if not settings.mutations_enabled or _active_apply_job_exists_in_state(app.state):
+    if (
+        not settings.mutations_enabled
+        or web_jobs._active_apply_job_exists_in_state(app.state)
+    ):
         return None
     now_utc = (now or datetime.now(timezone.utc)).astimezone(timezone.utc)
     started_at = app.state.web_auto_update_started_at
@@ -3381,7 +3372,7 @@ def _auto_update_tick(
         )
     if candidate is None:
         return None
-    wud_lock = _acquire_apply_wud_lock(settings)
+    wud_lock = web_jobs._acquire_apply_wud_lock(settings)
     lock_transferred = False
     start_event: Event | None = None
     try:
@@ -3401,13 +3392,17 @@ def _auto_update_tick(
             with _immediate_transaction(conn):
                 _reserve_auto_update_schedule_runs(conn, settings, selection)
                 start_event = Event()
-                response = _submit_apply_job_state(
+                response = web_jobs._submit_apply_job_state(
                     app.state,
                     settings,
                     plan,
                     allow_tag_updates=False,
                     tag_overrides=(),
                     wud_lock=wud_lock,
+                    effective_config_loader=_effective_config,
+                    auto_update_schedule_run_updater=(
+                        _safe_update_auto_update_schedule_runs
+                    ),
                     update_mode_override=selection.update_mode,
                     metadata_extra={
                         "source": "webui-auto",
@@ -4451,18 +4446,6 @@ def _plan_can_apply(plan: DryRunPlan, settings: WebSettings) -> bool:
     )
 
 
-def _acquire_apply_wud_lock(settings: WebSettings) -> DirectoryLock:
-    lock = DirectoryLock(
-        settings.config.wud_out_file,
-        timeout_seconds=(settings.command_env or {}).get("WUD_LOCK_TIMEOUT", "30"),
-    )
-    try:
-        lock.acquire()
-    except WudLockError as exc:
-        raise HTTPException(status_code=409, detail="WUD file is locked") from exc
-    return lock
-
-
 def _submit_apply_job(
     request: Request,
     settings: WebSettings,
@@ -4470,7 +4453,7 @@ def _submit_apply_job(
     payload: ApplyPlanRequest,
     wud_lock: DirectoryLock,
 ) -> ApplyJobResponse:
-    return _submit_apply_job_state(
+    return web_jobs._submit_apply_job_state(
         request.app.state,
         settings,
         plan,
@@ -4480,117 +4463,9 @@ def _submit_apply_job(
             _digest_pin_label_rewrite_approvals_from_payload(payload)
         ),
         wud_lock=wud_lock,
+        effective_config_loader=_effective_config,
+        auto_update_schedule_run_updater=_safe_update_auto_update_schedule_runs,
     )
-
-
-def _submit_apply_job_state(
-    state: Any,
-    settings: WebSettings,
-    plan: DryRunPlan,
-    *,
-    allow_tag_updates: bool,
-    tag_overrides: tuple[TagOverride, ...],
-    digest_pin_label_rewrite_approvals: tuple[DigestPinLabelRewriteApproval, ...] = (),
-    wud_lock: DirectoryLock,
-    update_mode_override: str | None = None,
-    metadata_extra: Mapping[str, Any] | None = None,
-    auto_update_schedule_keys: tuple[str, ...] = (),
-    start_event: Event | None = None,
-) -> ApplyJobResponse:
-    apply_condition: Condition = state.web_apply_condition
-    jobs: dict[str, WebApplyJob] = state.web_apply_jobs
-    executor: ThreadPoolExecutor = state.web_apply_executor
-    with apply_condition:
-        active_error = _active_mutation_error_unlocked(state)
-        if active_error:
-            raise HTTPException(status_code=409, detail=active_error)
-        job = WebApplyJob(
-            id=secrets.token_urlsafe(18),
-            status="queued",
-            selected_line_numbers=tuple(plan.selected_line_numbers),
-        )
-        jobs[job.id] = job
-        response = _apply_job_response(job)
-        apply_condition.notify_all()
-        executor.submit(
-            _run_apply_job,
-            settings,
-            plan.plan_id,
-            tuple(plan.selected_line_numbers),
-            allow_tag_updates,
-            tag_overrides,
-            digest_pin_label_rewrite_approvals,
-            _digest_pin_updates_from_plan(plan),
-            jobs,
-            apply_condition,
-            job.id,
-            wud_lock,
-            update_mode_override,
-            metadata_extra,
-            auto_update_schedule_keys,
-            start_event,
-        )
-        return response
-
-
-def _active_apply_job_exists(request: Request) -> bool:
-    return _active_apply_job_exists_in_state(request.app.state)
-
-
-def _digest_pin_updates_from_plan(
-    plan: DryRunPlan,
-) -> tuple[DigestPinUpdate, ...]:
-    updates: list[DigestPinUpdate] = []
-    for stack in plan.stacks:
-        for item in stack.digest_pin_updates:
-            updates.append(
-                digest_pin_update_from_values(
-                    old_image=item.source_image,
-                    resolved_tag=item.resolved_tag,
-                    planned_digest=item.planned_digest,
-                    services=tuple(item.services),
-                )
-            )
-    return tuple(updates)
-
-
-def _active_apply_job_exists_in_state(state: Any) -> bool:
-    return _active_mutation_error_in_state(state) != ""
-
-
-def _active_mutation_error(request: Request) -> str:
-    return _active_mutation_error_in_state(request.app.state)
-
-
-def _active_mutation_error_in_state(state: Any) -> str:
-    apply_lock: Lock = state.web_apply_lock
-    with apply_lock:
-        return _active_mutation_error_unlocked(state)
-
-
-def _active_mutation_error_unlocked(state: Any) -> str:
-    jobs: dict[str, WebApplyJob] = state.web_apply_jobs
-    if any(job.status in {"queued", "running"} for job in jobs.values()):
-        return "an apply job is already running"
-    if bool(getattr(state, "web_self_update_running", False)):
-        return "self-update is already running"
-    return ""
-
-
-def _reserve_self_update(state: Any) -> str:
-    apply_lock: Lock = state.web_apply_lock
-    with apply_lock:
-        active_error = _active_mutation_error_unlocked(state)
-        if active_error:
-            return active_error
-        state.web_self_update_running = True
-    return ""
-
-
-def _release_self_update(state: Any) -> None:
-    apply_lock: Lock = state.web_apply_lock
-    with apply_lock:
-        state.web_self_update_running = False
 
 
 def _cache_self_update_plan(state: Any, cached: WebSelfUpdatePlan) -> None:
@@ -4661,417 +4536,6 @@ def _self_update_cached_plan_stale(
         or cached.target_image != status.target_image
         or cached.restart_container != status.restart_container
     )
-
-
-def _require_apply_job(job_id: str, request: Request) -> WebApplyJob:
-    apply_lock: Lock = request.app.state.web_apply_lock
-    jobs: dict[str, WebApplyJob] = request.app.state.web_apply_jobs
-    with apply_lock:
-        job = jobs.get(job_id)
-        if job is None:
-            raise HTTPException(status_code=404, detail="apply job not found")
-        return job
-
-
-def _apply_job_stream(
-    request: Request,
-    job_id: str,
-    *,
-    log_tail_bytes: int,
-) -> Iterator[str]:
-    settings = _settings(request)
-    jobs: dict[str, WebApplyJob] = request.app.state.web_apply_jobs
-    apply_condition: Condition = request.app.state.web_apply_condition
-    last_version = -1
-    last_log_signature: tuple[object, ...] | None = None
-    terminal_log_emitted = False
-    last_heartbeat = time.monotonic()
-    last_progress_count = 0
-
-    while True:
-        job_snapshot: ApplyJobResponse
-        response: ApplyJobResponse | None = None
-        progress_events: list[ApplyJobProgressEvent] = []
-        terminal = False
-        with apply_condition:
-            job = jobs.get(job_id)
-            if job is None:
-                return
-            if (
-                job.version == last_version
-                and len(job.progress) == last_progress_count
-            ):
-                apply_condition.wait(timeout=JOB_STREAM_LOG_POLL_SECONDS)
-                job = jobs.get(job_id)
-                if job is None:
-                    return
-            job_snapshot = _apply_job_response(job)
-            if job.version != last_version:
-                response = job_snapshot
-                last_version = job.version
-            if len(job.progress) > last_progress_count:
-                progress_events = job_snapshot.progress[last_progress_count:]
-                last_progress_count = len(job.progress)
-            terminal = job.status in TERMINAL_APPLY_JOB_STATUSES
-
-        log_event = ""
-        log_response = _apply_job_log_response(
-            settings,
-            job_snapshot,
-            max_bytes=log_tail_bytes,
-        )
-        if log_response is not None:
-            log_signature = _apply_job_log_signature(log_response)
-            should_emit_log = (
-                bool(log_response.content)
-                or bool(log_response.error)
-                or terminal
-            ) and (
-                log_signature != last_log_signature
-                or (terminal and not terminal_log_emitted)
-            )
-            if should_emit_log:
-                log_event = _sse_job_log_event(log_response)
-                last_log_signature = log_signature
-                last_heartbeat = time.monotonic()
-                if terminal:
-                    terminal_log_emitted = True
-
-        if terminal and log_event:
-            yield log_event
-
-        for progress_event in progress_events:
-            yield _sse_job_progress_event(progress_event)
-        if progress_events:
-            last_heartbeat = time.monotonic()
-
-        if response is not None:
-            yield _sse_job_event(response)
-
-        if not terminal and log_event:
-            yield log_event
-
-        if response is not None:
-            last_heartbeat = time.monotonic()
-
-        now = time.monotonic()
-        if response is None and now - last_heartbeat >= JOB_STREAM_HEARTBEAT_SECONDS:
-            yield ": heartbeat\n\n"
-            last_heartbeat = now
-
-        if terminal:
-            return
-
-
-def _run_apply_job(
-    settings: WebSettings,
-    plan_id: str,
-    line_numbers: tuple[int, ...],
-    allow_tag_updates: bool,
-    tag_overrides: tuple[TagOverride, ...],
-    digest_pin_label_rewrite_approvals: tuple[DigestPinLabelRewriteApproval, ...],
-    digest_pin_plan: tuple[DigestPinUpdate, ...],
-    jobs: dict[str, WebApplyJob],
-    apply_condition: Condition,
-    job_id: str,
-    wud_lock: DirectoryLock,
-    update_mode_override: str | None = None,
-    metadata_extra: Mapping[str, Any] | None = None,
-    auto_update_schedule_keys: tuple[str, ...] = (),
-    start_event: Event | None = None,
-) -> None:
-    if start_event is not None:
-        start_event.wait()
-    _update_apply_job(
-        jobs,
-        apply_condition,
-        job_id,
-        status="running",
-        started_at=utc_timestamp(),
-    )
-    runner: UpdateFromWudRunner | None = None
-    try:
-        options = _apply_options(
-            settings,
-            line_numbers=line_numbers,
-            allow_tag_updates=allow_tag_updates,
-            tag_overrides=tag_overrides,
-            digest_pin_label_rewrite_approvals=digest_pin_label_rewrite_approvals,
-            digest_pin_plan=digest_pin_plan,
-            plan_id=plan_id,
-            update_mode_override=update_mode_override,
-            metadata_extra=metadata_extra,
-        )
-        apply_env = dict(settings.command_env or {})
-        apply_env["WUD_LOCK_HELD_BY_PARENT"] = "1"
-        runner = UpdateFromWudRunner(
-            options,
-            environ=apply_env,
-            command_runner=CommandRunner(env=apply_env),
-            progress_callback=lambda event: _append_apply_job_progress(
-                jobs,
-                apply_condition,
-                job_id,
-                event,
-            ),
-        )
-        _update_apply_job(
-            jobs,
-            apply_condition,
-            job_id,
-            log_file=str(runner.log_file),
-        )
-        status_code = runner.run()
-        job_status: ApplyJobStatus = "success" if status_code == 0 else "failure"
-        _safe_update_auto_update_schedule_runs(
-            settings,
-            auto_update_schedule_keys,
-            status=job_status,
-            run_id=runner.audit_run_id,
-            error="" if status_code == 0 else f"updater exited with status {status_code}",
-        )
-        _update_apply_job(
-            jobs,
-            apply_condition,
-            job_id,
-            status=job_status,
-            run_id=runner.audit_run_id,
-            log_file=str(runner.log_file),
-            finished_at=utc_timestamp(),
-            error="" if status_code == 0 else f"updater exited with status {status_code}",
-        )
-    except Exception as exc:
-        run_id = None if runner is None else runner.audit_run_id
-        _append_apply_job_progress(
-            jobs,
-            apply_condition,
-            job_id,
-            UpdaterProgressEvent(
-                phase="completion",
-                status="failure",
-                message=str(exc),
-            ),
-        )
-        _safe_update_auto_update_schedule_runs(
-            settings,
-            auto_update_schedule_keys,
-            status="failure",
-            run_id=run_id,
-            error=str(exc),
-        )
-        _update_apply_job(
-            jobs,
-            apply_condition,
-            job_id,
-            status="failure",
-            run_id=run_id,
-            log_file="" if runner is None else str(runner.log_file),
-            finished_at=utc_timestamp(),
-            error=str(exc),
-        )
-    finally:
-        wud_lock.close()
-
-
-def _update_apply_job(
-    jobs: dict[str, WebApplyJob],
-    apply_condition: Condition,
-    job_id: str,
-    **changes: object,
-) -> None:
-    with apply_condition:
-        job = jobs.get(job_id)
-        if job is None:
-            return
-        for key, value in changes.items():
-            setattr(job, key, value)
-        job.version += 1
-        apply_condition.notify_all()
-
-
-def _append_apply_job_progress(
-    jobs: dict[str, WebApplyJob],
-    apply_condition: Condition,
-    job_id: str,
-    event: UpdaterProgressEvent,
-) -> None:
-    with apply_condition:
-        job = jobs.get(job_id)
-        if job is None:
-            return
-        status = (
-            event.status
-            if event.status in APPLY_JOB_PROGRESS_STATUSES
-            else "running"
-        )
-        job.progress = (
-            *job.progress,
-            WebApplyJobProgressEvent(
-                phase=event.phase,
-                status=cast(ApplyJobProgressStatus, status),
-                message=event.message,
-                created_at=utc_timestamp(),
-                stack=event.stack,
-                services=event.services,
-                line_numbers=event.line_numbers,
-            ),
-        )
-        apply_condition.notify_all()
-
-
-def _apply_options(
-    settings: WebSettings,
-    *,
-    line_numbers: tuple[int, ...],
-    allow_tag_updates: bool,
-    tag_overrides: tuple[TagOverride, ...],
-    digest_pin_label_rewrite_approvals: tuple[DigestPinLabelRewriteApproval, ...] = (),
-    digest_pin_plan: tuple[DigestPinUpdate, ...] = (),
-    plan_id: str,
-    update_mode_override: str | None = None,
-    metadata_extra: Mapping[str, Any] | None = None,
-) -> UpdaterOptions:
-    line_spec = _line_spec(line_numbers)
-    metadata = {
-        "plan_id": plan_id,
-        "selected_line_numbers": list(line_numbers),
-        "source": "webui",
-    }
-    if metadata_extra:
-        metadata.update(metadata_extra)
-    metadata_json = json.dumps(
-        metadata,
-        sort_keys=True,
-        separators=(",", ":"),
-    )
-    config = _effective_config(settings)
-    host_docker_base_label = (
-        None if settings.host_docker_base is None else str(settings.host_docker_base)
-    )
-    return UpdaterOptions(
-        docker_base=config.docker_base,
-        wud_file=config.wud_out_file,
-        log_dir=config.log_dir,
-        mode=update_mode_override or config.update_mode,
-        max_wait=config.max_wait,
-        dry_run=False,
-        assume_yes=True,
-        allow_tag_updates=allow_tag_updates,
-        digest_pin_updates=config.digest_pin_updates,
-        tag_overrides=tag_overrides,
-        digest_pin_label_rewrite_approvals=digest_pin_label_rewrite_approvals,
-        digest_pin_plan=digest_pin_plan,
-        only_lines=line_spec,
-        remove_lines_before_run=line_spec,
-        compose_ignore_paths=config.compose_ignore_paths,
-        db_path=config.db_path,
-        docker_base_label=str(config.docker_base),
-        host_docker_base=settings.host_docker_base,
-        host_docker_base_label=host_docker_base_label,
-        wud_file_label=str(config.wud_out_file),
-        log_dir_label=str(config.log_dir),
-        metadata_json=metadata_json,
-    )
-
-
-def _line_spec(line_numbers: tuple[int, ...]) -> str:
-    return ",".join(str(line_no) for line_no in sorted(set(line_numbers)))
-
-
-def _apply_job_response(job: WebApplyJob) -> ApplyJobResponse:
-    return ApplyJobResponse(
-        job_id=job.id,
-        status=job.status,
-        run_id=job.run_id,
-        log_file=job.log_file,
-        started_at=job.started_at,
-        finished_at=job.finished_at,
-        error=job.error,
-        selected_line_numbers=list(job.selected_line_numbers),
-        progress=[
-            ApplyJobProgressEvent(
-                job_id=job.id,
-                phase=event.phase,
-                status=event.status,
-                message=event.message,
-                created_at=event.created_at,
-                stack=event.stack,
-                services=list(event.services),
-                line_numbers=list(event.line_numbers),
-            )
-            for event in job.progress
-        ],
-    )
-
-
-def _sse_job_event(job: ApplyJobResponse) -> str:
-    payload = json.dumps(
-        jsonable_encoder(job),
-        sort_keys=True,
-        separators=(",", ":"),
-    )
-    return f"event: job\ndata: {payload}\n\n"
-
-
-def _sse_job_progress_event(progress: ApplyJobProgressEvent) -> str:
-    payload = json.dumps(
-        jsonable_encoder(progress),
-        sort_keys=True,
-        separators=(",", ":"),
-    )
-    return f"event: progress\ndata: {payload}\n\n"
-
-
-def _apply_job_log_response(
-    settings: WebSettings,
-    job: ApplyJobResponse,
-    *,
-    max_bytes: int,
-) -> ApplyJobLogResponse | None:
-    if not job.log_file:
-        return None
-    try:
-        log_path = _safe_log_path(settings, job.log_file)
-        if log_path is None:
-            return None
-        tail = _read_log_tail(log_path, max_bytes)
-    except HTTPException as exc:
-        return ApplyJobLogResponse(
-            job_id=job.job_id,
-            log_file=job.log_file,
-            max_bytes=max_bytes,
-            error=str(exc.detail),
-        )
-    return ApplyJobLogResponse(
-        job_id=job.job_id,
-        log_file=job.log_file,
-        exists=tail.exists,
-        content=tail.content,
-        truncated=tail.truncated,
-        max_bytes=max_bytes,
-    )
-
-
-def _apply_job_log_signature(log: ApplyJobLogResponse) -> tuple[object, ...]:
-    content_hash = hashlib.sha256(log.content.encode("utf-8")).hexdigest()
-    return (
-        log.job_id,
-        log.log_file,
-        log.exists,
-        log.truncated,
-        log.max_bytes,
-        log.error,
-        content_hash,
-    )
-
-
-def _sse_job_log_event(log: ApplyJobLogResponse) -> str:
-    payload = json.dumps(
-        jsonable_encoder(log),
-        sort_keys=True,
-        separators=(",", ":"),
-    )
-    return f"event: log\ndata: {payload}\n\n"
 
 
 def _pending_response(

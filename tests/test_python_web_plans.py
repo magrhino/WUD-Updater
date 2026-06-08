@@ -2,6 +2,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 from wud_updater import web as web_module
+from wud_updater import web_jobs
 from wud_updater.locks import DirectoryLock, WudLockError, lock_dir_for
 from tests.web_test_helpers import (
     _client,
@@ -1546,7 +1547,7 @@ def test_apply_endpoint_holds_wud_lock_for_worker_handoff(
             observed["contended"] = False
         return 0
 
-    monkeypatch.setattr(web_module.UpdateFromWudRunner, "run", fake_run)
+    monkeypatch.setattr(web_jobs.UpdateFromWudRunner, "run", fake_run)
     headers = _csrf_headers(client)
     plan = client.post(
         "/api/v1/plans",
@@ -1604,7 +1605,7 @@ def test_apply_endpoint_releases_wud_lock_when_runner_raises(
         assert lock_dir_for(wud_file).is_dir()
         raise RuntimeError("runner exploded")
 
-    monkeypatch.setattr(web_module.UpdateFromWudRunner, "run", fake_run)
+    monkeypatch.setattr(web_jobs.UpdateFromWudRunner, "run", fake_run)
     headers = _csrf_headers(client)
     plan = client.post(
         "/api/v1/plans",
