@@ -1047,6 +1047,47 @@ def test_apply_endpoint_requires_csrf_origin_headers(tmp_path: Path) -> None:
     assert bad_origin.json()["detail"] == "origin is not allowed"
 
 
+def test_apply_endpoint_wraps_config_error(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    secret = "apply-secret-token"
+
+    def invalid_config(_settings):
+        raise ConfigError(
+            f"failed to parse {tmp_path / 'state' / 'config.env'} with {secret}"
+        )
+
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+            "WUD_WEB_TOKEN": secret,
+        },
+    )
+    monkeypatch.setattr(plans_module, "_effective_config_loader", invalid_config)
+
+    response = client.post(
+        "/api/v1/jobs",
+        json={
+            "plan_id": "plan",
+            "line_numbers": [1],
+            "confirmation": "apply",
+        },
+        headers=_csrf_headers(client),
+    )
+    detail = response.json()["detail"]
+
+    assert response.status_code == 409
+    assert detail.startswith("could not revalidate plan: ")
+    assert secret not in detail
+    assert str(tmp_path) not in detail
+    assert "<redacted>" in detail
+    assert "[REDACTED_PATH]" in detail
+    assert not lock_dir_for(tmp_path / "state" / "images.todo").exists()
+
+
 def test_apply_endpoint_rejects_read_only_mode(tmp_path: Path) -> None:
     fake_env, fake_root = _fake_docker_env(tmp_path)
     client = _client(tmp_path, {"WUD_WEB_DEV_NO_AUTH": "true", **fake_env})

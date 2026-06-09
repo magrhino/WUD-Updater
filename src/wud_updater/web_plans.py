@@ -80,6 +80,15 @@ def api_create_job(payload: ApplyPlanRequest, request: Request) -> ApplyJobRespo
             )
         except (PlanInputError, PlanFileMissing) as exc:
             raise HTTPException(status_code=409, detail="plan is stale") from exc
+        except ConfigError as exc:
+            raise HTTPException(
+                status_code=409,
+                detail=_safe_exception_detail(
+                    settings,
+                    "could not revalidate plan",
+                    exc,
+                ),
+            ) from exc
         except OSError as exc:
             raise HTTPException(
                 status_code=500,
