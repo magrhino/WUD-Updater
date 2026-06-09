@@ -2,7 +2,7 @@ from __future__ import annotations
 import json
 import sqlite3
 from pathlib import Path
-from wud_updater import web as web_module
+from wud_updater import web_self_update as self_update_module
 from wud_updater.db import (
     open_db,
 )
@@ -23,13 +23,13 @@ def test_self_update_get_reports_available_up_to_date_disabled_and_unavailable(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
-    monkeypatch.setattr(web_module, "current_tag", lambda: "v0.24.2")
+    monkeypatch.setattr(self_update_module, "current_tag", lambda: "v0.24.2")
     monkeypatch.setattr(
-        web_module,
+        self_update_module,
         "_fetch_self_update_release_notes",
         lambda *_args, **_kwargs: ([], False, []),
     )
-    monkeypatch.setattr(web_module, "fetch_latest_release_tag", lambda: "v0.25.0")
+    monkeypatch.setattr(self_update_module, "fetch_latest_release_tag", lambda: "v0.25.0")
     available = _client(
         tmp_path,
         {
@@ -47,7 +47,7 @@ def test_self_update_get_reports_available_up_to_date_disabled_and_unavailable(
     assert body["can_update"] is False
     assert "Read-only mode" in body["disabled_reason"]
 
-    monkeypatch.setattr(web_module, "fetch_latest_release_tag", lambda: "v0.24.2")
+    monkeypatch.setattr(self_update_module, "fetch_latest_release_tag", lambda: "v0.24.2")
     up_to_date = _client(
         tmp_path,
         {"WUD_WEB_DEV_NO_AUTH": "true"},
@@ -63,7 +63,7 @@ def test_self_update_get_reports_available_up_to_date_disabled_and_unavailable(
     ).get("/api/v1/self-update")
     assert disabled.json()["status"] == "disabled"
 
-    monkeypatch.setattr(web_module, "fetch_latest_release_tag", lambda: None)
+    monkeypatch.setattr(self_update_module, "fetch_latest_release_tag", lambda: None)
     unavailable = _client(
         tmp_path,
         {"WUD_WEB_DEV_NO_AUTH": "true"},
@@ -101,15 +101,15 @@ def test_self_update_get_reports_prepare_strategy_for_pinned_tag_rewrite_targets
     tmp_path: Path,
     monkeypatch,
 ) -> None:
-    monkeypatch.setattr(web_module, "current_tag", lambda: "v0.24.2")
-    monkeypatch.setattr(web_module, "fetch_latest_release_tag", lambda: "v0.25.0")
+    monkeypatch.setattr(self_update_module, "current_tag", lambda: "v0.24.2")
+    monkeypatch.setattr(self_update_module, "fetch_latest_release_tag", lambda: "v0.25.0")
     monkeypatch.setattr(
-        web_module,
+        self_update_module,
         "current_container_image",
         lambda _env: "ghcr.io/magrhino/wud-updater:v0.24.2",
     )
     monkeypatch.setattr(
-        web_module,
+        self_update_module,
         "_fetch_self_update_release_notes",
         lambda *_args, **_kwargs: ([], False, []),
     )
@@ -137,15 +137,15 @@ def test_self_update_pull_endpoint_rejects_pinned_tag_prepare_targets(
     monkeypatch,
 ) -> None:
     fake_env, fake_root = _fake_docker_env(tmp_path)
-    monkeypatch.setattr(web_module, "current_tag", lambda: "v0.24.2")
-    monkeypatch.setattr(web_module, "fetch_latest_release_tag", lambda: "v0.25.0")
+    monkeypatch.setattr(self_update_module, "current_tag", lambda: "v0.24.2")
+    monkeypatch.setattr(self_update_module, "fetch_latest_release_tag", lambda: "v0.25.0")
     monkeypatch.setattr(
-        web_module,
+        self_update_module,
         "current_container_image",
         lambda _env: "ghcr.io/magrhino/wud-updater:v0.24.2",
     )
     monkeypatch.setattr(
-        web_module,
+        self_update_module,
         "_fetch_self_update_release_notes",
         lambda *_args, **_kwargs: ([], False, []),
     )
@@ -177,15 +177,15 @@ def test_self_update_prepare_endpoint_rewrites_tag_pulls_and_audits(
     monkeypatch,
 ) -> None:
     fake_env, fake_root = _fake_docker_env(tmp_path)
-    monkeypatch.setattr(web_module, "current_tag", lambda: "v0.24.2")
-    monkeypatch.setattr(web_module, "fetch_latest_release_tag", lambda: "v0.25.0")
+    monkeypatch.setattr(self_update_module, "current_tag", lambda: "v0.24.2")
+    monkeypatch.setattr(self_update_module, "fetch_latest_release_tag", lambda: "v0.25.0")
     monkeypatch.setattr(
-        web_module,
+        self_update_module,
         "current_container_image",
         lambda _env: "ghcr.io/magrhino/wud-updater:v0.24.2",
     )
     monkeypatch.setattr(
-        web_module,
+        self_update_module,
         "_fetch_self_update_release_notes",
         lambda *_args, **_kwargs: ([], False, []),
     )
@@ -283,15 +283,15 @@ def test_self_update_prepare_endpoint_digest_pins_after_verification(
         "sha256:config",
         "sha256:index",
     )
-    monkeypatch.setattr(web_module, "current_tag", lambda: "v0.24.2")
-    monkeypatch.setattr(web_module, "fetch_latest_release_tag", lambda: "v0.25.0")
+    monkeypatch.setattr(self_update_module, "current_tag", lambda: "v0.24.2")
+    monkeypatch.setattr(self_update_module, "fetch_latest_release_tag", lambda: "v0.25.0")
     monkeypatch.setattr(
-        web_module,
+        self_update_module,
         "current_container_image",
         lambda _env: "ghcr.io/magrhino/wud-updater:v0.24.2",
     )
     monkeypatch.setattr(
-        web_module,
+        self_update_module,
         "_fetch_self_update_release_notes",
         lambda *_args, **_kwargs: ([], False, []),
     )
@@ -370,19 +370,19 @@ def test_self_update_prepare_endpoint_rejects_moved_digest_pin_after_pull(
         "sha256:config",
         "sha256:planned",
     )
-    monkeypatch.setattr(web_module, "current_tag", lambda: "v0.24.2")
-    monkeypatch.setattr(web_module, "fetch_latest_release_tag", lambda: "v0.25.0")
+    monkeypatch.setattr(self_update_module, "current_tag", lambda: "v0.24.2")
+    monkeypatch.setattr(self_update_module, "fetch_latest_release_tag", lambda: "v0.25.0")
     monkeypatch.setattr(
-        web_module,
+        self_update_module,
         "current_container_image",
         lambda _env: "ghcr.io/magrhino/wud-updater:v0.24.2",
     )
     monkeypatch.setattr(
-        web_module,
+        self_update_module,
         "_fetch_self_update_release_notes",
         lambda *_args, **_kwargs: ([], False, []),
     )
-    original_pull = web_module.ComposeCli.pull
+    original_pull = self_update_module.ComposeCli.pull
 
     def moving_pull(self, *args, **kwargs):
         result = original_pull(self, *args, **kwargs)
@@ -393,7 +393,7 @@ def test_self_update_prepare_endpoint_rejects_moved_digest_pin_after_pull(
         )
         return result
 
-    monkeypatch.setattr(web_module.ComposeCli, "pull", moving_pull)
+    monkeypatch.setattr(self_update_module.ComposeCli, "pull", moving_pull)
     client = _client(
         tmp_path,
         {
@@ -445,15 +445,15 @@ def test_self_update_prepare_endpoint_restores_compose_when_pull_fails(
     monkeypatch,
 ) -> None:
     fake_env, fake_root = _fake_docker_env(tmp_path)
-    monkeypatch.setattr(web_module, "current_tag", lambda: "v0.24.2")
-    monkeypatch.setattr(web_module, "fetch_latest_release_tag", lambda: "v0.25.0")
+    monkeypatch.setattr(self_update_module, "current_tag", lambda: "v0.24.2")
+    monkeypatch.setattr(self_update_module, "fetch_latest_release_tag", lambda: "v0.25.0")
     monkeypatch.setattr(
-        web_module,
+        self_update_module,
         "current_container_image",
         lambda _env: "ghcr.io/magrhino/wud-updater:v0.24.2",
     )
     monkeypatch.setattr(
-        web_module,
+        self_update_module,
         "_fetch_self_update_release_notes",
         lambda *_args, **_kwargs: ([], False, []),
     )
@@ -523,6 +523,89 @@ def test_self_update_prepare_endpoint_restores_compose_when_pull_fails(
     assert "docker compose" in metadata["error"]
 
 
+def test_self_update_prepare_endpoint_keeps_backup_when_restore_fails(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    fake_env, fake_root = _fake_docker_env(tmp_path)
+    monkeypatch.setattr(self_update_module, "current_tag", lambda: "v0.24.2")
+    monkeypatch.setattr(self_update_module, "fetch_latest_release_tag", lambda: "v0.25.0")
+    monkeypatch.setattr(
+        self_update_module,
+        "current_container_image",
+        lambda _env: "ghcr.io/magrhino/wud-updater:v0.24.2",
+    )
+    monkeypatch.setattr(
+        self_update_module,
+        "_fetch_self_update_release_notes",
+        lambda *_args, **_kwargs: ([], False, []),
+    )
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+            "WUD_WEB_RESTART_CONTAINER": "wud-updater",
+            **fake_env,
+        },
+    )
+    compose_dir = _make_fake_stack(
+        tmp_path,
+        fake_root,
+        "wud",
+        [
+            (
+                "wud-updater",
+                "ghcr.io/magrhino/wud-updater:v0.24.2",
+                "wud-updater",
+            ),
+        ],
+    )
+    (fake_root / "stacks" / "wud" / "pull_fail").write_text(
+        "pull failed\n",
+        encoding="utf-8",
+    )
+    compose_path = compose_dir / "docker-compose.yml"
+    compose_before = compose_path.read_text(encoding="utf-8")
+    original_copy2 = self_update_module.shutil.copy2
+    backup = compose_path.with_name(".docker-compose.yml.backup.test")
+
+    def backup_compose(path: Path) -> Path:
+        original_copy2(path, backup)
+        return backup
+
+    def fail_restore(_backup: Path, _compose_path: Path) -> None:
+        raise OSError("restore blocked")
+
+    monkeypatch.setattr(self_update_module, "_backup_compose", backup_compose)
+    monkeypatch.setattr(self_update_module.shutil, "copy2", fail_restore)
+    plan = client.post(
+        "/api/v1/self-update/plan",
+        headers=_csrf_headers(client),
+    ).json()
+
+    response = client.post(
+        "/api/v1/self-update/prepare",
+        json={
+            "confirmation": "prepare_tag_update",
+            "plan_id": plan["plan"]["plan_id"],
+            "current_tag": "v0.24.2",
+            "latest_tag": "v0.25.0",
+            "target_image": "ghcr.io/magrhino/wud-updater:v0.25.0",
+            "restart_container": "wud-updater",
+        },
+        headers=_csrf_headers(client),
+    )
+
+    assert response.status_code == 500
+    assert "compose rollback failed: restore blocked" in response.json()["detail"]
+    assert backup.read_text(encoding="utf-8") == compose_before
+    assert "image: ghcr.io/magrhino/wud-updater:v0.25.0" in compose_path.read_text(
+        encoding="utf-8",
+    )
+    assert client.app.state.web_self_update_running is False
+
+
 def test_self_update_release_notes_are_between_versions_and_capped(
     monkeypatch,
 ) -> None:
@@ -546,9 +629,9 @@ def test_self_update_release_notes_are_between_versions_and_capped(
             ]
             return json.dumps(releases).encode("utf-8")
 
-    monkeypatch.setattr(web_module.urllib.request, "urlopen", lambda *_args, **_kwargs: FakeResponse())
+    monkeypatch.setattr(self_update_module.urllib.request, "urlopen", lambda *_args, **_kwargs: FakeResponse())
 
-    notes, truncated, warnings = web_module._fetch_self_update_release_notes(
+    notes, truncated, warnings = self_update_module._fetch_self_update_release_notes(
         "v0.12.0",
         "v0.24.0",
         {},
@@ -568,15 +651,15 @@ def test_self_update_endpoint_rejects_stale_confirmation(
     monkeypatch,
 ) -> None:
     fake_env, fake_root = _fake_docker_env(tmp_path)
-    monkeypatch.setattr(web_module, "current_tag", lambda: "v0.24.2")
-    monkeypatch.setattr(web_module, "fetch_latest_release_tag", lambda: "v0.25.0")
+    monkeypatch.setattr(self_update_module, "current_tag", lambda: "v0.24.2")
+    monkeypatch.setattr(self_update_module, "fetch_latest_release_tag", lambda: "v0.25.0")
     monkeypatch.setattr(
-        web_module,
+        self_update_module,
         "current_container_image",
         lambda _env: "ghcr.io/magrhino/wud-updater:latest",
     )
     monkeypatch.setattr(
-        web_module,
+        self_update_module,
         "_fetch_self_update_release_notes",
         lambda *_args, **_kwargs: ([], False, []),
     )
@@ -606,15 +689,15 @@ def test_self_update_endpoint_pulls_image_and_audits(
     monkeypatch,
 ) -> None:
     fake_env, fake_root = _fake_docker_env(tmp_path)
-    monkeypatch.setattr(web_module, "current_tag", lambda: "v0.24.2")
-    monkeypatch.setattr(web_module, "fetch_latest_release_tag", lambda: "v0.25.0")
+    monkeypatch.setattr(self_update_module, "current_tag", lambda: "v0.24.2")
+    monkeypatch.setattr(self_update_module, "fetch_latest_release_tag", lambda: "v0.25.0")
     monkeypatch.setattr(
-        web_module,
+        self_update_module,
         "current_container_image",
         lambda _env: "ghcr.io/magrhino/wud-updater:latest",
     )
     monkeypatch.setattr(
-        web_module,
+        self_update_module,
         "_fetch_self_update_release_notes",
         lambda *_args, **_kwargs: ([], False, []),
     )
@@ -677,15 +760,15 @@ def test_self_update_endpoint_inspects_restart_container_before_pull(
     monkeypatch,
 ) -> None:
     fake_env, fake_root = _fake_docker_env(tmp_path)
-    monkeypatch.setattr(web_module, "current_tag", lambda: "v0.24.2")
-    monkeypatch.setattr(web_module, "fetch_latest_release_tag", lambda: "v0.25.0")
+    monkeypatch.setattr(self_update_module, "current_tag", lambda: "v0.24.2")
+    monkeypatch.setattr(self_update_module, "fetch_latest_release_tag", lambda: "v0.25.0")
     monkeypatch.setattr(
-        web_module,
+        self_update_module,
         "current_container_image",
         lambda _env: "ghcr.io/magrhino/wud-updater:latest",
     )
     monkeypatch.setattr(
-        web_module,
+        self_update_module,
         "_fetch_self_update_release_notes",
         lambda *_args, **_kwargs: ([], False, []),
     )
@@ -729,15 +812,15 @@ def test_self_update_endpoint_marks_audit_failed_when_pull_fails(
 ) -> None:
     fake_env, fake_root = _fake_docker_env(tmp_path)
     (fake_root / "pull_fail").write_text("pull failed\n", encoding="utf-8")
-    monkeypatch.setattr(web_module, "current_tag", lambda: "v0.24.2")
-    monkeypatch.setattr(web_module, "fetch_latest_release_tag", lambda: "v0.25.0")
+    monkeypatch.setattr(self_update_module, "current_tag", lambda: "v0.24.2")
+    monkeypatch.setattr(self_update_module, "fetch_latest_release_tag", lambda: "v0.25.0")
     monkeypatch.setattr(
-        web_module,
+        self_update_module,
         "current_container_image",
         lambda _env: "ghcr.io/magrhino/wud-updater:latest",
     )
     monkeypatch.setattr(
-        web_module,
+        self_update_module,
         "_fetch_self_update_release_notes",
         lambda *_args, **_kwargs: ([], False, []),
     )
@@ -784,8 +867,8 @@ def test_self_update_endpoint_rejects_active_self_update(
     monkeypatch,
 ) -> None:
     fake_env, fake_root = _fake_docker_env(tmp_path)
-    monkeypatch.setattr(web_module, "current_tag", lambda: "v0.24.2")
-    monkeypatch.setattr(web_module, "fetch_latest_release_tag", lambda: "v0.25.0")
+    monkeypatch.setattr(self_update_module, "current_tag", lambda: "v0.24.2")
+    monkeypatch.setattr(self_update_module, "fetch_latest_release_tag", lambda: "v0.25.0")
     client = _client(
         tmp_path,
         {
