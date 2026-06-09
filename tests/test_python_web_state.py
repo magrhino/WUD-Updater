@@ -303,7 +303,7 @@ def test_effective_config_wraps_invalid_stored_compose_ignore_paths_error(
         assert exc.detail.startswith("stored compose_ignore_paths is invalid: ")
         assert "non-empty relative paths" in exc.detail
     else:
-        assert False, "expected invalid stored compose ignore paths to fail"
+        raise AssertionError("expected invalid stored compose ignore paths to fail")
 
 
 def test_effective_config_wraps_invalid_stored_digest_pin_error(
@@ -319,7 +319,7 @@ def test_effective_config_wraps_invalid_stored_digest_pin_error(
         assert exc.detail.startswith("stored digest_pin_updates is invalid: ")
         assert "true or false" in exc.detail
     else:
-        assert False, "expected invalid stored digest-pin setting to fail"
+        raise AssertionError("expected invalid stored digest-pin setting to fail")
 
 
 def test_managed_digest_pin_updates_env_guard_disables_webui_edit(
