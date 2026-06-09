@@ -3,6 +3,7 @@ import sqlite3
 import stat
 from pathlib import Path
 from wud_updater import web as web_module
+from wud_updater import web_pending as pending_module
 from wud_updater.locks import lock_dir_for
 from tests.web_test_helpers import (
     _client,
@@ -575,12 +576,12 @@ def test_pending_cleanup_audit_failure_does_not_remove_wud_lines(
         json={"line_numbers": [1, 2]},
         headers=headers,
     ).json()
-    original_init_db = web_module.init_db
+    original_init_db = pending_module.init_db
 
     def failing_init_db(conn: sqlite3.Connection) -> None:
-        raise web_module.DatabaseError("audit database unavailable")
+        raise pending_module.DatabaseError("audit database unavailable")
 
-    web_module.init_db = failing_init_db
+    pending_module.init_db = failing_init_db
     try:
         response = client.post(
             "/api/v1/pending/cleanup",
@@ -597,7 +598,7 @@ def test_pending_cleanup_audit_failure_does_not_remove_wud_lines(
             headers=headers,
         )
     finally:
-        web_module.init_db = original_init_db
+        pending_module.init_db = original_init_db
 
     assert response.status_code == 500
     assert "could not record cleanup audit" in response.json()["detail"]
@@ -919,12 +920,12 @@ def test_pending_removal_audit_failure_does_not_remove_wud_lines(
         json={"line_numbers": [1]},
         headers=headers,
     ).json()
-    original_init_db = web_module.init_db
+    original_init_db = pending_module.init_db
 
     def failing_init_db(conn: sqlite3.Connection) -> None:
-        raise web_module.DatabaseError("audit database unavailable")
+        raise pending_module.DatabaseError("audit database unavailable")
 
-    web_module.init_db = failing_init_db
+    pending_module.init_db = failing_init_db
     try:
         response = client.post(
             "/api/v1/pending/removal",
@@ -936,7 +937,7 @@ def test_pending_removal_audit_failure_does_not_remove_wud_lines(
             headers=headers,
         )
     finally:
-        web_module.init_db = original_init_db
+        pending_module.init_db = original_init_db
 
     assert response.status_code == 500
     assert "could not record removal audit" in response.json()["detail"]

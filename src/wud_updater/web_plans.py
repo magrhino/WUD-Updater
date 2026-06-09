@@ -1,0 +1,256 @@
+"""WebUI plan creation and apply-job route handlers."""
+
+from __future__ import annotations
+
+import secrets
+from dataclasses import asdict, replace
+from typing import Protocol
+
+from fastapi import HTTPException, Request
+
+from . import web_diagnostics, web_jobs, web_scheduler
+from .config import UpdaterConfig
+from .images import tag_value_valid
+from .locks import DirectoryLock
+from .plans import DryRunPlan, PlanFileMissing, PlanInputError, build_dry_run_plan
+from .updater_models import DigestPinLabelRewriteApproval, TagOverride
+from .web_auth import _settings
+from .web_models import (
+    ApplyJobResponse,
+    ApplyPlanRequest,
+    PlanRequest,
+    PlanResponse,
+    WebSettings,
+)
+
+
+class EffectiveConfigLoader(Protocol):
+    def __call__(self, settings: WebSettings) -> UpdaterConfig: ...
+
+
+_effective_config_loader: EffectiveConfigLoader | None = None
+
+
+def configure(*, effective_config_loader: EffectiveConfigLoader) -> None:
+    global _effective_config_loader
+    _effective_config_loader = effective_config_loader
+
+
+def api_create_plan(payload: PlanRequest, request: Request) -> PlanResponse:
+    settings = _settings(request)
+    try:
+        plan = build_web_plan(settings, payload)
+    except PlanInputError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except PlanFileMissing as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except OSError as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=f"could not create plan: {exc}",
+        ) from exc
+    return plan_response(plan, settings, request)
+
+
+def api_create_job(payload: ApplyPlanRequest, request: Request) -> ApplyJobResponse:
+    settings = _settings(request)
+    if not settings.mutations_enabled:
+        raise HTTPException(status_code=403, detail="mutations are disabled")
+    active_error = web_jobs._active_mutation_error(request)
+    if active_error:
+        raise HTTPException(status_code=409, detail=active_error)
+    wud_lock = web_jobs._acquire_apply_wud_lock(settings)
+    try:
+        try:
+            plan = build_web_plan(
+                settings,
+                PlanRequest(
+                    line_numbers=payload.line_numbers,
+                    allow_tag_updates=payload.allow_tag_updates,
+                    tag_overrides=payload.tag_overrides,
+                    digest_pin_label_rewrite_approvals=(
+                        payload.digest_pin_label_rewrite_approvals
+                    ),
+                ),
+            )
+        except (PlanInputError, PlanFileMissing) as exc:
+            raise HTTPException(status_code=409, detail="plan is stale") from exc
+        except OSError as exc:
+            raise HTTPException(
+                status_code=500,
+                detail=f"could not revalidate plan: {exc}",
+            ) from exc
+
+        if not secrets.compare_digest(plan.plan_id, payload.plan_id):
+            raise HTTPException(status_code=409, detail="plan is stale")
+        if not plan_can_apply(plan, settings):
+            raise HTTPException(status_code=409, detail="plan is not ready to apply")
+        apply_preflight = web_diagnostics.apply_preflight_response(
+            settings,
+            request,
+            plan,
+        )
+        if not apply_preflight.ok:
+            raise HTTPException(status_code=409, detail="apply preflight failed")
+        return submit_apply_job(request, settings, plan, payload, wud_lock)
+    except Exception:
+        wud_lock.close()
+        raise
+
+
+def api_apply_plan(payload: ApplyPlanRequest, request: Request) -> ApplyJobResponse:
+    return api_create_job(payload, request)
+
+
+def build_web_plan(
+    settings: WebSettings,
+    payload: PlanRequest,
+    *,
+    update_mode_override: str | None = None,
+) -> DryRunPlan:
+    base_config = _effective_config(settings)
+    config = (
+        base_config
+        if update_mode_override is None
+        else replace(base_config, update_mode=update_mode_override)
+    )
+    return build_dry_run_plan(
+        config,
+        line_numbers=payload.line_numbers,
+        allow_tag_updates=payload.allow_tag_updates,
+        tag_overrides=tag_overrides_from_payload(payload),
+        digest_pin_label_rewrite_approvals=(
+            digest_pin_label_rewrite_approvals_from_payload(payload)
+        ),
+        host_docker_base=settings.host_docker_base,
+        environ=settings.command_env,
+    )
+
+
+def tag_overrides_from_payload(
+    payload: PlanRequest | ApplyPlanRequest,
+) -> tuple[TagOverride, ...]:
+    overrides: list[TagOverride] = []
+    seen: set[int] = set()
+    for item in payload.tag_overrides:
+        line_no = item.line_no
+        if line_no in seen:
+            raise PlanInputError(
+                f"tag_overrides line {line_no} was provided more than once"
+            )
+        if not tag_value_valid(item.tag):
+            raise PlanInputError(
+                f"tag_overrides line {line_no} has invalid tag: {item.tag}"
+            )
+        overrides.append(TagOverride(line_no=line_no, tag=item.tag))
+        seen.add(line_no)
+    return tuple(overrides)
+
+
+def digest_pin_label_rewrite_approvals_from_payload(
+    payload: PlanRequest | ApplyPlanRequest,
+) -> tuple[DigestPinLabelRewriteApproval, ...]:
+    approvals: list[DigestPinLabelRewriteApproval] = []
+    seen: set[tuple[str, str, str, str, str, str]] = set()
+    for item in payload.digest_pin_label_rewrite_approvals:
+        key = (
+            item.stack,
+            item.service,
+            item.label_key,
+            item.current_label_value,
+            item.planned_tag,
+            item.proposed_label_value,
+        )
+        if key in seen:
+            raise PlanInputError(
+                "digest_pin_label_rewrite_approvals contains a duplicate approval"
+            )
+        if item.label_key != "wud.tag.include":
+            raise PlanInputError(
+                "digest_pin_label_rewrite_approvals can only approve wud.tag.include"
+            )
+        if not tag_value_valid(item.planned_tag):
+            raise PlanInputError(
+                "digest_pin_label_rewrite_approvals has an invalid planned tag"
+            )
+        approvals.append(
+            DigestPinLabelRewriteApproval(
+                stack=item.stack,
+                service=item.service,
+                label_key=item.label_key,
+                current_label_value=item.current_label_value,
+                planned_tag=item.planned_tag,
+                proposed_label_value=item.proposed_label_value,
+            )
+        )
+        seen.add(key)
+    return tuple(approvals)
+
+
+def plan_can_apply(plan: DryRunPlan, settings: WebSettings) -> bool:
+    return (
+        settings.mutations_enabled
+        and plan.status == "ready"
+        and not plan.skipped
+        and not any(issue.severity == "error" for issue in plan.issues)
+    )
+
+
+def plan_response(
+    plan: DryRunPlan,
+    settings: WebSettings,
+    request: Request,
+) -> PlanResponse:
+    apply_preflight = web_diagnostics.apply_preflight_response(
+        settings,
+        request,
+        plan,
+    )
+    payload = asdict(plan)
+    payload["can_apply"] = plan_can_apply(plan, settings) and apply_preflight.ok
+    payload["cleanup"]["can_remove_unmatched"] = (
+        settings.mutations_enabled and bool(plan.cleanup.items)
+    )
+    payload["apply_preflight"] = apply_preflight.model_dump()
+    return PlanResponse.model_validate(payload)
+
+
+def submit_apply_job(
+    request: Request,
+    settings: WebSettings,
+    plan: DryRunPlan,
+    payload: ApplyPlanRequest,
+    wud_lock: DirectoryLock,
+) -> ApplyJobResponse:
+    return web_jobs._submit_apply_job_state(
+        request.app.state,
+        settings,
+        plan,
+        allow_tag_updates=payload.allow_tag_updates,
+        tag_overrides=tuple(tag_overrides_from_payload(payload)),
+        digest_pin_label_rewrite_approvals=(
+            digest_pin_label_rewrite_approvals_from_payload(payload)
+        ),
+        wud_lock=wud_lock,
+        effective_config_loader=_effective_config,
+        auto_update_schedule_run_updater=(
+            web_scheduler._safe_update_auto_update_schedule_runs
+        ),
+    )
+
+
+def _effective_config(settings: WebSettings) -> UpdaterConfig:
+    if _effective_config_loader is None:
+        return settings.config
+    return _effective_config_loader(settings)
+
+
+# Compatibility aliases for callers that imported private helpers from web.py.
+_build_web_plan = build_web_plan
+_tag_overrides_from_payload = tag_overrides_from_payload
+_digest_pin_label_rewrite_approvals_from_payload = (
+    digest_pin_label_rewrite_approvals_from_payload
+)
+_plan_can_apply = plan_can_apply
+_plan_response = plan_response
+_submit_apply_job = submit_apply_job

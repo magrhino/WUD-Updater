@@ -1,0 +1,185 @@
+"""WebUI release-note route handlers."""
+
+from __future__ import annotations
+
+import logging
+import sqlite3
+from contextlib import closing
+from dataclasses import asdict
+from typing import Any
+
+from fastapi import HTTPException, Request
+
+from .command import CommandError, CommandRunner
+from .db import DatabaseError, init_db, open_db
+from .docker_cli import ContainerImage, DockerCli
+from .images import image_matches_resolved_target
+from .release_notes import (
+    OCI_SOURCE_LABEL,
+    ReleaseNoteSourceResolver,
+    cached_release_notes,
+    github_repo_from_ghcr_image,
+    github_repo_from_source,
+    refresh_release_notes,
+    release_note_placeholders,
+)
+from .web_auth import (
+    _redact_sensitive_text,
+    _safe_exception_detail,
+    _settings,
+)
+from .web_database import (
+    ReadOnlyDatabaseMissing,
+    connect_readonly_db as _connect_readonly_db,
+)
+from .web_models import ReleaseNoteInfo, ReleaseNotesResponse, WebSettings
+from .web_pending import parse_pending_file
+from .wud_file import WudTarget
+
+
+LOGGER = logging.getLogger(__name__)
+
+
+def api_release_notes(request: Request) -> ReleaseNotesResponse:
+    settings = _settings(request)
+    exists, parsed = parse_pending_file(settings)
+    warnings = list(parsed.warnings)
+    if not exists:
+        return ReleaseNotesResponse(
+            source_file=str(settings.config.wud_out_file),
+            count=0,
+            items=[],
+            warnings=warnings,
+        )
+    try:
+        with closing(_connect_readonly_db(settings)) as conn:
+            items = cached_release_notes(
+                conn,
+                parsed.targets,
+                settings.command_env or {},
+                source_resolver=release_note_source_resolver(settings),
+            )
+    except ReadOnlyDatabaseMissing:
+        items = release_note_placeholders(
+            parsed.targets,
+            settings.command_env or {},
+            source_resolver=release_note_source_resolver(settings),
+        )
+    except (OSError, sqlite3.Error, DatabaseError) as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=_safe_exception_detail(
+                settings,
+                "could not read release-note cache",
+                exc,
+            ),
+        ) from exc
+    return release_notes_response(settings, items, warnings)
+
+
+def api_refresh_release_notes(request: Request) -> ReleaseNotesResponse:
+    settings = _settings(request)
+    exists, parsed = parse_pending_file(settings)
+    warnings = list(parsed.warnings)
+    if not exists:
+        return ReleaseNotesResponse(
+            source_file=str(settings.config.wud_out_file),
+            count=0,
+            items=[],
+            warnings=warnings,
+        )
+    try:
+        with open_db(settings.config.db_path) as conn:
+            init_db(conn)
+            items = refresh_release_notes(
+                conn,
+                parsed.targets,
+                settings.command_env or {},
+                source_resolver=release_note_source_resolver(settings),
+                redact_error=lambda value: _redact_sensitive_text(settings, value),
+            )
+    except (OSError, sqlite3.Error, DatabaseError) as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=_safe_exception_detail(
+                settings,
+                "could not refresh release-note metadata",
+                exc,
+            ),
+        ) from exc
+    return release_notes_response(settings, items, warnings)
+
+
+def release_notes_response(
+    settings: WebSettings,
+    items: list[Any],
+    warnings: list[str],
+) -> ReleaseNotesResponse:
+    redacted_items: list[ReleaseNoteInfo] = []
+    for item in items:
+        data = asdict(item)
+        data["error"] = _redact_sensitive_text(settings, str(data.get("error", "")))
+        redacted_items.append(ReleaseNoteInfo.model_validate(data))
+    return ReleaseNotesResponse(
+        source_file=str(settings.config.wud_out_file),
+        count=len(items),
+        items=redacted_items,
+        warnings=[_redact_sensitive_text(settings, warning) for warning in warnings],
+    )
+
+
+def release_note_source_resolver(settings: WebSettings) -> ReleaseNoteSourceResolver:
+    docker = DockerCli(runner=CommandRunner(env=settings.command_env))
+    label_cache: dict[str, tuple[str, CommandError | None]] = {}
+    container_images: list[ContainerImage] | None = None
+
+    def source_label(image: str) -> tuple[str, CommandError | None]:
+        if image not in label_cache:
+            value, error = docker.try_image_label(image, OCI_SOURCE_LABEL)
+            label_cache[image] = (value, error)
+        return label_cache[image]
+
+    def running_images() -> list[ContainerImage]:
+        nonlocal container_images
+        if container_images is None:
+            container_images = docker.try_container_images()
+        return container_images
+
+    def resolve(target: WudTarget) -> str:
+        value, error = source_label(target.first)
+        if github_repo_from_source(value):
+            return value
+
+        repo = github_repo_from_ghcr_image(target.first)
+        if repo:
+            return f"https://github.com/{repo}"
+
+        for container in running_images():
+            if container.name != target.first and not image_matches_resolved_target(
+                container.image,
+                target.first,
+                target.allow_repo,
+            ):
+                continue
+            matched_repo = github_repo_from_ghcr_image(container.image)
+            if matched_repo:
+                return f"https://github.com/{matched_repo}"
+
+        if error is not None:
+            LOGGER.error(
+                "WebUI release-note fallback: Docker inspect failed for %s; "
+                "cannot read %s, so GitHub release links may be unavailable. "
+                "Command: %s. stderr: %s",
+                target.first,
+                OCI_SOURCE_LABEL,
+                error.result.display,
+                error.result.stderr.strip() or "<empty>",
+            )
+        return value
+
+    return resolve
+
+
+# Compatibility aliases for callers that imported private helpers from web.py.
+_release_notes_response = release_notes_response
+_release_note_source_resolver = release_note_source_resolver

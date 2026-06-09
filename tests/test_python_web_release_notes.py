@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
-from wud_updater import web as web_module
+from wud_updater import web_release_notes as release_notes_module
 from wud_updater.release_notes import ReleaseNoteInfo as ReleaseNoteData
 
 from tests.web_test_helpers import (
@@ -149,7 +149,7 @@ def test_release_notes_get_logs_when_docker_source_label_inspect_fails(
     image = "advplyr/audiobookshelf:latest"
     wud_file.write_text(f"{image}\n", encoding="utf-8")
 
-    with caplog.at_level(logging.ERROR, logger="wud_updater.web"):
+    with caplog.at_level(logging.ERROR, logger="wud_updater.web_release_notes"):
         response = client.get("/api/v1/release-notes")
 
     assert response.status_code == 200
@@ -243,7 +243,7 @@ def test_release_note_error_metadata_redacts_configured_secrets(
         ]
 
     monkeypatch.setattr(
-        web_module,
+        release_notes_module,
         "refresh_release_notes",
         fake_refresh_release_notes,
     )
