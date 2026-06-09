@@ -3,7 +3,8 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
-from wud_updater import web as web_module
+from wud_updater.command import CommandError, CommandResult
+from wud_updater import web_release_notes as release_notes_module
 from wud_updater.release_notes import ReleaseNoteInfo as ReleaseNoteData
 
 from tests.web_test_helpers import (
@@ -149,7 +150,7 @@ def test_release_notes_get_logs_when_docker_source_label_inspect_fails(
     image = "advplyr/audiobookshelf:latest"
     wud_file.write_text(f"{image}\n", encoding="utf-8")
 
-    with caplog.at_level(logging.ERROR, logger="wud_updater.web"):
+    with caplog.at_level(logging.ERROR, logger="wud_updater.web_release_notes"):
         response = client.get("/api/v1/release-notes")
 
     assert response.status_code == 200
@@ -161,6 +162,62 @@ def test_release_notes_get_logs_when_docker_source_label_inspect_fails(
         "advplyr/audiobookshelf:latest"
     ) in caplog.text
     assert "cannot read org.opencontainers.image.source" in caplog.text
+
+
+def test_release_notes_get_sanitizes_docker_inspect_stderr_in_log(
+    tmp_path: Path,
+    monkeypatch,
+    caplog,
+) -> None:
+    secret = "release-notes-secret-token"
+    image = "example.invalid/acme/app:latest"
+    wud_file = tmp_path / "state" / "images.todo"
+    stderr = (
+        f"inspect failed for {tmp_path / 'state' / 'docker.sock'} with {secret} "
+        + ("x" * 700)
+        + " tail-marker"
+    )
+
+    class FakeDockerCli:
+        def __init__(self, **_kwargs) -> None:
+            pass
+
+        def try_image_label(self, label_image: str, _label: str):
+            result = CommandResult(
+                args=("docker", "image", "inspect", label_image),
+                cwd=None,
+                returncode=1,
+                stderr=stderr,
+            )
+            return "", CommandError(result)
+
+        def try_container_images(self):
+            return []
+
+    monkeypatch.setattr(release_notes_module, "DockerCli", FakeDockerCli)
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_TOKEN": secret,
+        },
+    )
+    wud_file.write_text(f"{image}\n", encoding="utf-8")
+
+    with caplog.at_level(logging.ERROR, logger="wud_updater.web_release_notes"):
+        response = client.get("/api/v1/release-notes")
+
+    assert response.status_code == 200
+    assert f"Docker inspect failed for {image}" in caplog.text
+    assert "cannot read org.opencontainers.image.source" in caplog.text
+    assert f"Command: docker image inspect {image}" in caplog.text
+    assert secret not in caplog.text
+    assert str(tmp_path) not in caplog.text
+    assert "<redacted>" in caplog.text
+    assert "[REDACTED_PATH]" in caplog.text
+    assert "[truncated]" in caplog.text
+    assert "tail-marker" not in caplog.text
+
 
 def test_release_notes_refresh_requires_csrf(tmp_path: Path) -> None:
     wud_file = tmp_path / "state" / "images.todo"
@@ -243,7 +300,7 @@ def test_release_note_error_metadata_redacts_configured_secrets(
         ]
 
     monkeypatch.setattr(
-        web_module,
+        release_notes_module,
         "refresh_release_notes",
         fake_refresh_release_notes,
     )

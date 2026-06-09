@@ -90,6 +90,9 @@ EOF
     src/wud_updater/web_jobs.py \
     src/wud_updater/web_models.py \
     src/wud_updater/web_onboarding.py \
+    src/wud_updater/web_pending.py \
+    src/wud_updater/web_plans.py \
+    src/wud_updater/web_release_notes.py \
     src/wud_updater/web_scheduler.py \
     src/wud_updater/web_self_update.py \
     src/wud_updater/web.py \
