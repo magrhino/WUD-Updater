@@ -70,6 +70,7 @@ EOF
     src/wud_updater/config.py \
     src/wud_updater/container_identity.py \
     src/wud_updater/db.py \
+    src/wud_updater/digest_verifier.py \
     src/wud_updater/doctor.py \
     src/wud_updater/docker_cli.py \
     src/wud_updater/file_ops.py \
@@ -77,9 +78,11 @@ EOF
     src/wud_updater/init_config.py \
     src/wud_updater/line_specs.py \
     src/wud_updater/locks.py \
+    src/wud_updater/plans.py \
     src/wud_updater/release_notes.py \
     src/wud_updater/self_update.py \
     src/wud_updater/terminal.py \
+    src/wud_updater/truenas.py \
     src/wud_updater/updates.py \
     src/wud_updater/updater_models.py \
     src/wud_updater/updater.py \
