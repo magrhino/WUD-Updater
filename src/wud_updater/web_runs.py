@@ -12,7 +12,11 @@ from typing import Any
 from fastapi import HTTPException, Query, Request
 
 from .db import DatabaseError
-from .web_auth import _sanitize_support_bundle_value, _settings
+from .web_auth import (
+    _safe_exception_detail,
+    _sanitize_support_bundle_value,
+    _settings,
+)
 from .web_database import (
     ReadOnlyDatabaseMissing,
     connect_readonly_db as _connect_readonly_db,
@@ -67,7 +71,7 @@ def api_runs(request: Request) -> list[RunSummary]:
     except (OSError, sqlite3.Error, DatabaseError) as exc:
         raise HTTPException(
             status_code=500,
-            detail=f"could not read database: {exc}",
+            detail=_safe_exception_detail(settings, "could not read database", exc),
         ) from exc
     return [
         _sanitize_run_summary(
@@ -115,7 +119,7 @@ def api_run_detail(run_id: int, request: Request) -> RunDetail:
     except (OSError, sqlite3.Error, DatabaseError) as exc:
         raise HTTPException(
             status_code=500,
-            detail=f"could not read database: {exc}",
+            detail=_safe_exception_detail(settings, "could not read database", exc),
         ) from exc
 
     summary = _run_summary_from_row(
@@ -153,7 +157,7 @@ def api_run_log(
     except (OSError, sqlite3.Error, DatabaseError) as exc:
         raise HTTPException(
             status_code=500,
-            detail=f"could not read database: {exc}",
+            detail=_safe_exception_detail(settings, "could not read database", exc),
         ) from exc
 
     raw_log_file = str(run["log_file"] or "")
@@ -292,7 +296,7 @@ def _safe_log_path(settings: WebSettings, raw_log_file: str) -> Path | None:
     except OSError as exc:
         raise HTTPException(
             status_code=500,
-            detail=f"could not resolve log file: {exc}",
+            detail=_safe_exception_detail(settings, "could not resolve log file", exc),
         ) from exc
     if not _path_is_or_under(resolved_candidate, resolved_log_dir):
         raise HTTPException(status_code=403, detail="log file is outside WUD_LOG_DIR")
@@ -341,7 +345,7 @@ def _read_log_tail(log_path: Path, max_bytes: int) -> LogTail:
     except OSError as exc:
         raise HTTPException(
             status_code=500,
-            detail=f"could not read log file: {exc}",
+            detail="could not read log file",
         ) from exc
     return LogTail(
         exists=True,

@@ -19,6 +19,7 @@ from .web_auth import (
     SESSION_COOKIE,
     _bearer_token_valid,
     _immediate_transaction,
+    _safe_exception_detail,
     _settings,
 )
 from .web_database import (
@@ -62,7 +63,7 @@ def api_service_policies(request: Request) -> list[ServicePolicyRecord]:
     except (OSError, sqlite3.Error, DatabaseError) as exc:
         raise HTTPException(
             status_code=500,
-            detail=f"could not read database: {exc}",
+            detail=_safe_exception_detail(settings, "could not read database", exc),
         ) from exc
     return [_service_policy_from_row(row) for row in rows]
 
@@ -97,7 +98,7 @@ def api_snoozes(
     except (OSError, sqlite3.Error, DatabaseError) as exc:
         raise HTTPException(
             status_code=500,
-            detail=f"could not read database: {exc}",
+            detail=_safe_exception_detail(settings, "could not read database", exc),
         ) from exc
     return [_snooze_from_row(row, now=now) for row in rows]
 
@@ -133,7 +134,7 @@ def api_tag_exclusions(
     except (OSError, sqlite3.Error, DatabaseError) as exc:
         raise HTTPException(
             status_code=500,
-            detail=f"could not read database: {exc}",
+            detail=_safe_exception_detail(settings, "could not read database", exc),
         ) from exc
     return [_tag_exclusion_from_row(row) for row in rows]
 
@@ -155,7 +156,7 @@ def api_state_operation(
     except (OSError, sqlite3.Error, DatabaseError) as exc:
         raise HTTPException(
             status_code=500,
-            detail=f"could not update database: {exc}",
+            detail=_safe_exception_detail(settings, "could not update database", exc),
         ) from exc
 
 

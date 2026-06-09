@@ -255,8 +255,8 @@ AutoUpdateScheduleReservationError = (
 )
 LOGGER = logging.getLogger(__name__)
 
-# Compatibility re-exports for route handlers and helpers extracted from this
-# module. New code should import from the owning web_* module directly.
+# Import-compatibility re-exports for route handlers and helpers extracted from
+# this module. New code and monkeypatches should target the owning web_* module.
 api_pending = web_pending.api_pending
 api_update_targets = web_pending.api_update_targets
 api_pending_cleanup = web_pending.api_pending_cleanup
@@ -348,7 +348,7 @@ _future_iso_timestamp = web_state._future_iso_timestamp
 _normalized_image_repo = web_state._normalized_image_repo
 _tag_exclusion_service_key = web_state._tag_exclusion_service_key
 _valid_tag = web_state._valid_tag
-_insert_managed_settings_audit = web_state._insert_managed_settings_audit
+_insert_managed_settings_audit = web_settings._insert_managed_settings_audit
 _insert_state_audit = web_state._insert_state_audit
 _state_actor_type = web_state._state_actor_type
 _state_audit_stack_name = web_state._state_audit_stack_name

@@ -37,6 +37,36 @@ def _store_web_setting(tmp_path: Path, key: str, value: str) -> None:
             )
 
 
+def test_state_read_database_errors_are_sanitized(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    secret = "github-secret-token"
+    leaked_path = tmp_path / "state" / "wud.sqlite"
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "GITHUB_TOKEN": secret,
+        },
+    )
+
+    def fail_connect(_settings: object) -> object:
+        raise OSError(f"cannot open {leaked_path} with {secret}")
+
+    monkeypatch.setattr(state_module, "_connect_readonly_db", fail_connect)
+
+    response = client.get("/api/v1/service-policies")
+
+    assert response.status_code == 500
+    detail = response.json()["detail"]
+    assert detail.startswith("could not read database: ")
+    assert str(leaked_path) not in detail
+    assert secret not in detail
+    assert "[REDACTED_PATH]" in detail
+    assert "<redacted>" in detail
+
+
 def test_settings_rejects_unauthenticated_requests_without_dev_bypass(
     tmp_path: Path,
 ) -> None:
@@ -881,17 +911,21 @@ def test_state_operation_rolls_back_when_audit_insert_fails(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
+    secret = "github-secret-token"
     client = _client(
         tmp_path,
         {
             "WUD_WEB_DEV_NO_AUTH": "true",
             "WUD_WEB_MUTATIONS_ENABLED": "true",
+            "GITHUB_TOKEN": secret,
         },
     )
     headers = _csrf_headers(client)
 
     def fail_audit(*_args: object, **_kwargs: object) -> int:
-        raise sqlite3.OperationalError("audit failed")
+        raise sqlite3.OperationalError(
+            f"audit failed for {tmp_path / 'state' / 'wud.sqlite'} with {secret}"
+        )
 
     monkeypatch.setattr(state_module, "_insert_state_audit", fail_audit)
 
@@ -910,7 +944,12 @@ def test_state_operation_rolls_back_when_audit_insert_fails(
         runs = conn.execute("SELECT * FROM update_runs").fetchall()
 
     assert response.status_code == 500
-    assert response.json()["detail"] == "could not update database: audit failed"
+    detail = response.json()["detail"]
+    assert detail.startswith("could not update database: audit failed for ")
+    assert str(tmp_path) not in detail
+    assert secret not in detail
+    assert "[REDACTED_PATH]" in detail
+    assert "<redacted>" in detail
     assert rows == []
     assert runs == []
 

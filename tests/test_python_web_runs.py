@@ -1,6 +1,9 @@
 from __future__ import annotations
 import json
 from pathlib import Path
+
+from fastapi import HTTPException
+
 from wud_updater import web_runs as runs_module
 from wud_updater.db import (
     open_db,
@@ -32,6 +35,36 @@ def test_runs_list_returns_empty_without_creating_missing_database(
     assert response.json() == []
     assert not root.exists()
     assert not db_path.exists()
+
+
+def test_runs_database_errors_are_sanitized(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    secret = "github-secret-token"
+    leaked_path = tmp_path / "state" / "wud.sqlite"
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "GITHUB_TOKEN": secret,
+        },
+    )
+
+    def fail_connect(_settings: object) -> object:
+        raise OSError(f"cannot open {leaked_path} with {secret}")
+
+    monkeypatch.setattr(runs_module, "_connect_readonly_db", fail_connect)
+
+    response = client.get("/api/v1/runs")
+
+    assert response.status_code == 500
+    detail = response.json()["detail"]
+    assert detail.startswith("could not read database: ")
+    assert str(leaked_path) not in detail
+    assert secret not in detail
+    assert "[REDACTED_PATH]" in detail
+    assert "<redacted>" in detail
 
 
 def test_run_detail_returns_not_found_without_creating_missing_database(
@@ -273,6 +306,26 @@ def test_safe_log_path_uses_resolved_path_after_symlink_swap(
     assert log_path == allowed.resolve()
     assert tail.exists is True
     assert tail.content == "allowed"
+
+
+def test_read_log_tail_hides_os_error_detail(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    log_path = tmp_path / "state" / "logs" / "run.log"
+
+    def fail_is_file(_path: Path) -> bool:
+        raise OSError(f"permission denied: {tmp_path / 'private.log'}")
+
+    monkeypatch.setattr(Path, "is_file", fail_is_file)
+
+    try:
+        runs_module._read_log_tail(log_path, 1024)
+    except HTTPException as exc:
+        assert exc.status_code == 500
+        assert exc.detail == "could not read log file"
+    else:
+        raise AssertionError("expected log tail read to fail")
 
 
 def test_run_log_endpoint_returns_not_found_for_unknown_run(tmp_path: Path) -> None:
