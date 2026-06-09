@@ -4,6 +4,21 @@ All notable changes to WUD-Updater are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com) and versions follow
 [Semantic Versioning](https://semver.org).
 
+## [0.38.1](https://github.com/magrhino/WUD-Updater/compare/v0.38.0...v0.38.1) (2026-06-09)
+
+
+### Bug Fixes
+
+* **web:** remove facade monkeypatch seams ([#257](https://github.com/magrhino/WUD-Updater/issues/257)) ([c326990](https://github.com/magrhino/WUD-Updater/commit/c32699078507f1c0aa6114d18c205cea5d358862))
+
+
+### Documentation
+
+* Add demo link to Web Deployment section ([91b97ca](https://github.com/magrhino/WUD-Updater/commit/91b97caf126aadf274708e3d545b40f40f61776a))
+* Add donation section to README ([59672f4](https://github.com/magrhino/WUD-Updater/commit/59672f4364b58e58b87ad90cda99dfe85a8e83e7))
+* Fix header formatting in README.md ([fbdeab4](https://github.com/magrhino/WUD-Updater/commit/fbdeab4078f39844e27f6c04ffe526dc66b16bd8))
+* guide agents toward composable backend modules ([#234](https://github.com/magrhino/WUD-Updater/issues/234)) ([c7c791e](https://github.com/magrhino/WUD-Updater/commit/c7c791e755b620f6b13e75d4e865d9d7cad3fcff))
+
 ## [0.38.0](https://github.com/magrhino/WUD-Updater/compare/v0.37.0...v0.38.0) (2026-06-07)
 
 
