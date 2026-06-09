@@ -4,6 +4,7 @@ from pathlib import Path
 
 from fastapi import HTTPException
 
+from wud_updater import web as web_module
 from wud_updater import web_runs as runs_module
 from wud_updater.db import (
     open_db,
@@ -258,6 +259,39 @@ def test_run_log_endpoint_caps_tail_size(tmp_path: Path) -> None:
 
     assert response.status_code == 200
     assert response.json()["max_bytes"] == 1_048_576
+
+
+def test_run_log_endpoint_uses_web_module_tail_reader_seam(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    log_dir = tmp_path / "state" / "logs"
+    log_dir.mkdir(parents=True)
+    log_file = log_dir / "run.log"
+    log_file.write_text("original", encoding="utf-8")
+    run_id = _insert_run(tmp_path, log_file=str(log_file))
+    client = _client(tmp_path, {"WUD_WEB_DEV_NO_AUTH": "true"})
+
+    def fake_read_log_tail(
+        _log_path: Path,
+        _max_bytes: int,
+    ) -> web_module.LogTail:
+        return web_module.LogTail(
+            exists=True,
+            content="web tail seam used",
+            truncated=False,
+        )
+
+    monkeypatch.setattr(web_module, "_read_log_tail", fake_read_log_tail)
+
+    response = client.get(f"/api/v1/runs/{run_id}/log?tail_bytes=4")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["exists"] is True
+    assert body["content"] == "web tail seam used"
+    assert body["truncated"] is False
+    assert body["max_bytes"] == 4
 
 
 def test_run_log_endpoint_rejects_missing_log_file(tmp_path: Path) -> None:

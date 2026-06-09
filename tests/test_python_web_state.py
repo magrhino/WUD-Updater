@@ -7,6 +7,7 @@ from pathlib import Path
 
 from fastapi import HTTPException
 
+from wud_updater import web as web_module
 from wud_updater import web_settings as settings_module
 from wud_updater import web_state as state_module
 from wud_updater.db import (
@@ -294,6 +295,38 @@ def test_managed_settings_rejects_uneditable_or_invalid_values_without_partial_w
     assert empty_payload.json()["detail"] == "at least one managed setting is required"
     assert managed["theme_preference"]["value"] == "system"
     assert managed["theme_preference"]["source"] == "default"
+
+
+def test_managed_settings_endpoint_uses_web_module_validation_seam(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+        },
+    )
+    headers = _csrf_headers(client)
+
+    def fail_validation(*_args: object, **_kwargs: object) -> dict[str, str]:
+        raise HTTPException(status_code=409, detail="web validation seam used")
+
+    monkeypatch.setattr(
+        web_module,
+        "_validated_managed_setting_updates",
+        fail_validation,
+    )
+
+    response = client.post(
+        "/api/v1/settings/managed",
+        json={"values": {"theme_preference": "dark"}},
+        headers=headers,
+    )
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == "web validation seam used"
 
 
 def test_managed_settings_update_wraps_invalid_existing_config_error(
@@ -952,6 +985,40 @@ def test_state_operation_rolls_back_when_audit_insert_fails(
     assert "<redacted>" in detail
     assert rows == []
     assert runs == []
+
+
+def test_state_operation_uses_web_module_audit_seam(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+        },
+    )
+    headers = _csrf_headers(client)
+
+    def fail_audit(*_args: object, **_kwargs: object) -> int:
+        raise sqlite3.OperationalError("web audit seam used")
+
+    monkeypatch.setattr(web_module, "_insert_state_audit", fail_audit)
+
+    response = client.post(
+        "/api/v1/state/operations",
+        json={
+            "kind": "upsert_service_policy",
+            "service_key": "stack/app",
+            "update_mode": "stop",
+        },
+        headers=headers,
+    )
+
+    assert response.status_code == 500
+    assert response.json()["detail"].startswith(
+        "could not update database: web audit seam used"
+    )
 
 
 def test_state_operations_validate_inputs(tmp_path: Path) -> None:
