@@ -128,11 +128,11 @@ def test_first_run_setup_claim_serializes_concurrent_claims(
             return f"hashed-{password}-{call}"
 
     hasher = SlowPasswordHasher()
-    monkeypatch.setattr(web_module, "PASSWORD_HASHER", hasher)
+    monkeypatch.setattr(web_auth_module, "PASSWORD_HASHER", hasher)
 
     def claim_admin(username: str) -> tuple[str, int | str]:
         try:
-            user_id = web_module._claim_initial_admin(
+            user_id = web_auth_module._claim_initial_admin(
                 settings,
                 claim,
                 username,
@@ -215,7 +215,7 @@ def test_invalid_setup_claim_does_not_hash_password(
         def hash(self, _password: str) -> str:
             raise AssertionError("password hash should not be called")
 
-    monkeypatch.setattr(web_module, "PASSWORD_HASHER", ExplodingPasswordHasher())
+    monkeypatch.setattr(web_auth_module, "PASSWORD_HASHER", ExplodingPasswordHasher())
 
     response = client.post(
         "/api/v1/setup/claim",
@@ -308,7 +308,7 @@ def test_safe_exception_detail_redacts_secrets_and_absolute_paths(
         f"with token {secret}"
     )
 
-    detail = web_module._safe_exception_detail(settings, "could not read", exc)
+    detail = web_auth_module._safe_exception_detail(settings, "could not read", exc)
 
     assert detail.startswith("could not read: open failed for ")
     assert secret not in detail
@@ -324,14 +324,14 @@ def test_login_throttle_locks_after_repeated_failures_and_expires(
     monkeypatch,
 ) -> None:
     now = 1_000.0
-    monkeypatch.setattr(web_module.time, "monotonic", lambda: now)
+    monkeypatch.setattr(web_auth_module.time, "monotonic", lambda: now)
     app = create_app(environ=_web_env(tmp_path))
     setup_client = TestClient(app)
     _setup_admin(setup_client)
     client = TestClient(app)
     headers = _csrf_headers(client)
 
-    for _index in range(web_module.LOGIN_THROTTLE_MAX_FAILURES):
+    for _index in range(web_auth_module.LOGIN_THROTTLE_MAX_FAILURES):
         response = client.post(
             "/api/v1/auth/login",
             json={"username": "admin", "password": "wrong"},
@@ -344,7 +344,7 @@ def test_login_throttle_locks_after_repeated_failures_and_expires(
         json={"username": "admin", "password": "correct horse battery staple"},
         headers=headers,
     )
-    now += web_module.LOGIN_THROTTLE_COOLDOWN_SECONDS + 0.1
+    now += web_auth_module.LOGIN_THROTTLE_COOLDOWN_SECONDS + 0.1
     unlocked_response = client.post(
         "/api/v1/auth/login",
         json={"username": "admin", "password": "correct horse battery staple"},
@@ -362,14 +362,14 @@ def test_login_throttle_entry_cap_does_not_evict_locked_user(
     monkeypatch,
 ) -> None:
     now = 1_000.0
-    monkeypatch.setattr(web_module.time, "monotonic", lambda: now)
+    monkeypatch.setattr(web_auth_module.time, "monotonic", lambda: now)
     app = create_app(environ=_web_env(tmp_path))
     setup_client = TestClient(app)
     _setup_admin(setup_client)
     client = TestClient(app, client=("203.0.113.10", 50000))
     headers = _csrf_headers(client)
 
-    for _index in range(web_module.LOGIN_THROTTLE_MAX_FAILURES):
+    for _index in range(web_auth_module.LOGIN_THROTTLE_MAX_FAILURES):
         _assert_generic_auth_failed(
             client.post(
                 "/api/v1/auth/login",
@@ -378,7 +378,7 @@ def test_login_throttle_entry_cap_does_not_evict_locked_user(
             )
         )
 
-    for index in range(web_module.LOGIN_THROTTLE_MAX_ENTRIES + 1):
+    for index in range(web_auth_module.LOGIN_THROTTLE_MAX_ENTRIES + 1):
         _assert_generic_auth_failed(
             client.post(
                 "/api/v1/auth/login",
@@ -392,7 +392,7 @@ def test_login_throttle_entry_cap_does_not_evict_locked_user(
         json={"username": "admin", "password": "correct horse battery staple"},
         headers=headers,
     )
-    now += web_module.LOGIN_THROTTLE_COOLDOWN_SECONDS + 0.1
+    now += web_auth_module.LOGIN_THROTTLE_COOLDOWN_SECONDS + 0.1
     unlocked_response = client.post(
         "/api/v1/auth/login",
         json={"username": "admin", "password": "correct horse battery staple"},
@@ -409,7 +409,7 @@ def test_login_throttle_entry_cap_evicts_unlocked_entries_without_global_lockout
     monkeypatch,
 ) -> None:
     now = 1_000.0
-    monkeypatch.setattr(web_module.time, "monotonic", lambda: now)
+    monkeypatch.setattr(web_auth_module.time, "monotonic", lambda: now)
     app = create_app(environ=_web_env(tmp_path))
     setup_client = TestClient(app)
     _setup_admin(setup_client)
@@ -420,14 +420,14 @@ def test_login_throttle_entry_cap_evicts_unlocked_entries_without_global_lockout
     )
     settings = app.state.web_settings
 
-    for index in range(web_module.LOGIN_THROTTLE_MAX_ENTRIES):
+    for index in range(web_auth_module.LOGIN_THROTTLE_MAX_ENTRIES):
         request.client.host = f"client-{index}.test"
-        web_module._record_login_failure(request, settings, f"filler-{index}")
+        web_auth_module._record_login_failure(request, settings, f"filler-{index}")
     request.client.host = "client-overflow.test"
-    web_module._record_login_failure(request, settings, "overflow")
+    web_auth_module._record_login_failure(request, settings, "overflow")
 
     throttle = app.state.web_login_throttle
-    assert len(throttle) == web_module.LOGIN_THROTTLE_MAX_ENTRIES
+    assert len(throttle) == web_auth_module.LOGIN_THROTTLE_MAX_ENTRIES
     assert ("filler-0", "client-0.test") not in throttle
     assert ("overflow", "client-overflow.test") in throttle
 
@@ -448,27 +448,27 @@ def test_login_throttle_entry_cap_records_client_overflow_when_all_entries_locke
     monkeypatch,
 ) -> None:
     now = 1_000.0
-    monkeypatch.setattr(web_module.time, "monotonic", lambda: now)
-    monkeypatch.setattr(web_module, "LOGIN_THROTTLE_MAX_ENTRIES", 2)
-    monkeypatch.setattr(web_module, "LOGIN_THROTTLE_MAX_FAILURES", 1)
+    monkeypatch.setattr(web_auth_module.time, "monotonic", lambda: now)
+    monkeypatch.setattr(web_auth_module, "LOGIN_THROTTLE_MAX_ENTRIES", 2)
+    monkeypatch.setattr(web_auth_module, "LOGIN_THROTTLE_MAX_FAILURES", 1)
     app = create_app(environ=_web_env(tmp_path))
     setup_client = TestClient(app)
     _setup_admin(setup_client)
     settings = app.state.web_settings
 
-    for index in range(web_module.LOGIN_THROTTLE_MAX_ENTRIES):
+    for index in range(web_auth_module.LOGIN_THROTTLE_MAX_ENTRIES):
         request = SimpleNamespace(
             app=app,
             client=SimpleNamespace(host=f"203.0.113.{index}"),
             headers={},
         )
-        web_module._record_login_failure(request, settings, f"filler-{index}")
+        web_auth_module._record_login_failure(request, settings, f"filler-{index}")
     overflow_request = SimpleNamespace(
         app=app,
         client=SimpleNamespace(host="203.0.113.99"),
         headers={},
     )
-    web_module._record_login_failure(overflow_request, settings, "overflow")
+    web_auth_module._record_login_failure(overflow_request, settings, "overflow")
 
     client = TestClient(app, client=("203.0.113.99", 50000))
     headers = _csrf_headers(client)
@@ -480,12 +480,12 @@ def test_login_throttle_entry_cap_records_client_overflow_when_all_entries_locke
 
     throttle = app.state.web_login_throttle
     client_throttle = app.state.web_login_client_throttle
-    assert len(throttle) == web_module.LOGIN_THROTTLE_MAX_ENTRIES
+    assert len(throttle) == web_auth_module.LOGIN_THROTTLE_MAX_ENTRIES
     assert ("overflow", "203.0.113.99") not in throttle
     assert client_throttle["203.0.113.99"].locked_until > now
     _assert_generic_auth_failed(locked_response)
 
-    now += web_module.LOGIN_THROTTLE_COOLDOWN_SECONDS + 0.1
+    now += web_auth_module.LOGIN_THROTTLE_COOLDOWN_SECONDS + 0.1
     unlocked_response = client.post(
         "/api/v1/auth/login",
         json={"username": "admin", "password": "correct horse battery staple"},
@@ -500,9 +500,9 @@ def test_login_throttle_client_overflow_does_not_lock_out_other_clients(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
-    monkeypatch.setattr(web_module.time, "monotonic", lambda: 1_000.0)
-    monkeypatch.setattr(web_module, "LOGIN_THROTTLE_MAX_ENTRIES", 2)
-    monkeypatch.setattr(web_module, "LOGIN_THROTTLE_MAX_FAILURES", 1)
+    monkeypatch.setattr(web_auth_module.time, "monotonic", lambda: 1_000.0)
+    monkeypatch.setattr(web_auth_module, "LOGIN_THROTTLE_MAX_ENTRIES", 2)
+    monkeypatch.setattr(web_auth_module, "LOGIN_THROTTLE_MAX_FAILURES", 1)
     app = create_app(environ=_web_env(tmp_path))
     setup_client = TestClient(app)
     _setup_admin(setup_client)
@@ -539,10 +539,10 @@ def test_login_throttle_client_overflow_cap_evicts_oldest_client(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
-    monkeypatch.setattr(web_module.time, "monotonic", lambda: 1_000.0)
-    monkeypatch.setattr(web_module, "LOGIN_THROTTLE_MAX_ENTRIES", 1)
-    monkeypatch.setattr(web_module, "LOGIN_THROTTLE_MAX_FAILURES", 1)
-    monkeypatch.setattr(web_module, "LOGIN_THROTTLE_MAX_CLIENT_ENTRIES", 2)
+    monkeypatch.setattr(web_auth_module.time, "monotonic", lambda: 1_000.0)
+    monkeypatch.setattr(web_auth_module, "LOGIN_THROTTLE_MAX_ENTRIES", 1)
+    monkeypatch.setattr(web_auth_module, "LOGIN_THROTTLE_MAX_FAILURES", 1)
+    monkeypatch.setattr(web_auth_module, "LOGIN_THROTTLE_MAX_CLIENT_ENTRIES", 2)
     app = create_app(environ=_web_env(tmp_path))
     setup_client = TestClient(app)
     _setup_admin(setup_client)
@@ -552,7 +552,7 @@ def test_login_throttle_client_overflow_cap_evicts_oldest_client(
         client=SimpleNamespace(host="203.0.113.9"),
         headers={},
     )
-    web_module._record_login_failure(seed_request, settings, "seed")
+    web_auth_module._record_login_failure(seed_request, settings, "seed")
 
     for index in range(3):
         request = SimpleNamespace(
@@ -560,10 +560,10 @@ def test_login_throttle_client_overflow_cap_evicts_oldest_client(
             client=SimpleNamespace(host=f"203.0.113.{index + 10}"),
             headers={},
         )
-        web_module._record_login_failure(request, settings, f"overflow-{index}")
+        web_auth_module._record_login_failure(request, settings, f"overflow-{index}")
 
     client_throttle = app.state.web_login_client_throttle
-    assert len(client_throttle) == web_module.LOGIN_THROTTLE_MAX_CLIENT_ENTRIES
+    assert len(client_throttle) == web_auth_module.LOGIN_THROTTLE_MAX_CLIENT_ENTRIES
     assert "203.0.113.10" not in client_throttle
     assert "203.0.113.11" in client_throttle
     assert "203.0.113.12" in client_throttle
@@ -573,7 +573,7 @@ def test_login_throttle_locks_client_across_usernames(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
-    monkeypatch.setattr(web_module.time, "monotonic", lambda: 1_000.0)
+    monkeypatch.setattr(web_auth_module.time, "monotonic", lambda: 1_000.0)
     app = create_app(environ=_web_env(tmp_path))
     setup_client = TestClient(app)
     _setup_admin(setup_client)
@@ -582,7 +582,7 @@ def test_login_throttle_locks_client_across_usernames(
     headers_a = _csrf_headers(client_a)
     headers_b = _csrf_headers(client_b)
 
-    for _index in range(web_module.LOGIN_THROTTLE_MAX_FAILURES):
+    for _index in range(web_auth_module.LOGIN_THROTTLE_MAX_FAILURES):
         _assert_generic_auth_failed(
             client_a.post(
                 "/api/v1/auth/login",
@@ -596,7 +596,7 @@ def test_login_throttle_locks_client_across_usernames(
         headers=headers_a,
     )
 
-    for _index in range(web_module.LOGIN_THROTTLE_MAX_FAILURES):
+    for _index in range(web_auth_module.LOGIN_THROTTLE_MAX_FAILURES):
         _assert_generic_auth_failed(
             client_a.post(
                 "/api/v1/auth/login",
@@ -618,7 +618,7 @@ def test_login_throttle_uses_trusted_forwarded_client_address(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
-    monkeypatch.setattr(web_module.time, "monotonic", lambda: 1_000.0)
+    monkeypatch.setattr(web_auth_module.time, "monotonic", lambda: 1_000.0)
     app = create_app(
         environ=_web_env(
             tmp_path,
@@ -632,7 +632,7 @@ def test_login_throttle_uses_trusted_forwarded_client_address(
     forwarded_a = {**headers, "X-Forwarded-For": "198.51.100.10"}
     forwarded_b = {**headers, "X-Forwarded-For": "198.51.100.11"}
 
-    for _index in range(web_module.LOGIN_THROTTLE_MAX_FAILURES):
+    for _index in range(web_auth_module.LOGIN_THROTTLE_MAX_FAILURES):
         _assert_generic_auth_failed(
             proxy_client.post(
                 "/api/v1/auth/login",
@@ -653,14 +653,14 @@ def test_login_throttle_ignores_untrusted_forwarded_client_address(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
-    monkeypatch.setattr(web_module.time, "monotonic", lambda: 1_000.0)
+    monkeypatch.setattr(web_auth_module.time, "monotonic", lambda: 1_000.0)
     app = create_app(environ=_web_env(tmp_path))
     setup_client = TestClient(app, client=("203.0.113.10", 50000))
     _setup_admin(setup_client)
     client = TestClient(app, client=("203.0.113.10", 50000))
     headers = _csrf_headers(client)
 
-    for index in range(web_module.LOGIN_THROTTLE_MAX_FAILURES):
+    for index in range(web_auth_module.LOGIN_THROTTLE_MAX_FAILURES):
         _assert_generic_auth_failed(
             client.post(
                 "/api/v1/auth/login",
@@ -684,14 +684,14 @@ def test_successful_login_clears_failed_login_throttle(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
-    monkeypatch.setattr(web_module.time, "monotonic", lambda: 1_000.0)
+    monkeypatch.setattr(web_auth_module.time, "monotonic", lambda: 1_000.0)
     app = create_app(environ=_web_env(tmp_path))
     setup_client = TestClient(app)
     _setup_admin(setup_client)
     client = TestClient(app)
     headers = _csrf_headers(client)
 
-    for _index in range(web_module.LOGIN_THROTTLE_MAX_FAILURES - 1):
+    for _index in range(web_auth_module.LOGIN_THROTTLE_MAX_FAILURES - 1):
         _assert_generic_auth_failed(
             client.post(
                 "/api/v1/auth/login",
@@ -736,7 +736,7 @@ def test_login_failures_use_same_generic_response(tmp_path: Path) -> None:
         json={"username": "admin", "password": "wrong"},
         headers=headers,
     )
-    for _index in range(web_module.LOGIN_THROTTLE_MAX_FAILURES - 1):
+    for _index in range(web_auth_module.LOGIN_THROTTLE_MAX_FAILURES - 1):
         _assert_generic_auth_failed(
             client.post(
                 "/api/v1/auth/login",
@@ -936,7 +936,7 @@ def test_admin_reset_claim_revokes_sessions_invalidates_password_and_audits(
     )
     assert login_response.status_code == 200
 
-    recovery = web_module.issue_admin_recovery_claim(
+    recovery = web_auth_module.issue_admin_recovery_claim(
         setup_client.app.state.web_settings,
         "admin",
     )
@@ -955,9 +955,9 @@ def test_admin_reset_claim_revokes_sessions_invalidates_password_and_audits(
     assert old_login_response.status_code == 401
     with open_db(tmp_path / "state" / "wud.sqlite") as conn:
         init_db(conn)
-        reset_hash = web_module._web_setting(
+        reset_hash = web_auth_module._web_setting(
             conn,
-            web_module.RESET_ADMIN_CLAIM_HASH_KEY,
+            web_auth_module.RESET_ADMIN_CLAIM_HASH_KEY,
         )
         sessions = conn.execute("SELECT revoked_at FROM web_sessions").fetchall()
         audit_rows = conn.execute(
@@ -984,7 +984,7 @@ def test_admin_reset_claim_redeems_once_and_allows_new_password(
 ) -> None:
     setup_client = _client(tmp_path)
     _setup_admin(setup_client)
-    recovery = web_module.issue_admin_recovery_claim(
+    recovery = web_auth_module.issue_admin_recovery_claim(
         setup_client.app.state.web_settings,
         "admin",
     )
@@ -1031,9 +1031,9 @@ def test_admin_reset_claim_redeems_once_and_allows_new_password(
     with open_db(tmp_path / "state" / "wud.sqlite") as conn:
         init_db(conn)
         assert (
-            web_module._web_setting(
+            web_auth_module._web_setting(
                 conn,
-                web_module.RESET_ADMIN_CLAIM_HASH_KEY,
+                web_auth_module.RESET_ADMIN_CLAIM_HASH_KEY,
             )
             == ""
         )
@@ -1057,7 +1057,7 @@ def test_admin_reset_rejects_invalid_claim_without_burning_valid_claim(
 ) -> None:
     setup_client = _client(tmp_path)
     _setup_admin(setup_client)
-    recovery = web_module.issue_admin_recovery_claim(
+    recovery = web_auth_module.issue_admin_recovery_claim(
         setup_client.app.state.web_settings,
         "admin",
     )
@@ -1092,7 +1092,7 @@ def test_admin_reset_rejects_expired_claim_without_creating_session(
 ) -> None:
     setup_client = _client(tmp_path)
     _setup_admin(setup_client)
-    recovery = web_module.issue_admin_recovery_claim(
+    recovery = web_auth_module.issue_admin_recovery_claim(
         setup_client.app.state.web_settings,
         "admin",
     )
@@ -1105,7 +1105,7 @@ def test_admin_reset_rejects_expired_claim_without_creating_session(
                 SET value = '2000-01-01T00:00:00+00:00'
                 WHERE key = ?
                 """,
-                (web_module.RESET_ADMIN_CLAIM_EXPIRES_KEY,),
+                (web_auth_module.RESET_ADMIN_CLAIM_EXPIRES_KEY,),
             )
     client = _client(tmp_path)
 
@@ -1127,7 +1127,7 @@ def test_admin_reset_rejects_expired_claim_without_creating_session(
 def test_admin_reset_claim_requires_csrf_origin_headers(tmp_path: Path) -> None:
     setup_client = _client(tmp_path)
     _setup_admin(setup_client)
-    recovery = web_module.issue_admin_recovery_claim(
+    recovery = web_auth_module.issue_admin_recovery_claim(
         setup_client.app.state.web_settings,
         "admin",
     )
@@ -1151,29 +1151,29 @@ def test_admin_reset_command_errors_for_missing_setup_and_unknown_user(
 ) -> None:
     missing_settings = web_module.load_web_settings(_web_env(tmp_path))
     try:
-        web_module.issue_admin_recovery_claim(missing_settings, "admin")
+        web_auth_module.issue_admin_recovery_claim(missing_settings, "admin")
         raise AssertionError("missing database should fail")
-    except web_module.WebAdminResetError as exc:
+    except web_auth_module.WebAdminResetError as exc:
         assert "database file does not exist" in str(exc)
     assert not (tmp_path / "state" / "wud.sqlite").exists()
 
     with open_db(tmp_path / "state" / "wud.sqlite") as conn:
         init_db(conn)
     try:
-        web_module.issue_admin_recovery_claim(missing_settings, "admin")
+        web_auth_module.issue_admin_recovery_claim(missing_settings, "admin")
         raise AssertionError("incomplete setup should fail")
-    except web_module.WebAdminResetError as exc:
+    except web_auth_module.WebAdminResetError as exc:
         assert "setup is not complete" in str(exc)
 
     setup_client = _client(tmp_path)
     _setup_admin(setup_client)
     try:
-        web_module.issue_admin_recovery_claim(
+        web_auth_module.issue_admin_recovery_claim(
             setup_client.app.state.web_settings,
             "other",
         )
         raise AssertionError("unknown user should fail")
-    except web_module.WebAdminResetError as exc:
+    except web_auth_module.WebAdminResetError as exc:
         assert "active admin user not found" in str(exc)
 
 

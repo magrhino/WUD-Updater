@@ -92,9 +92,11 @@ EOF
     src/wud_updater/wud_file.py \
     tests/test_python_banner.py \
     tests/test_python_cli.py \
+    tests/test_python_command.py \
     tests/test_python_compose_rewrite.py \
     tests/test_python_config.py \
     tests/test_python_db.py \
+    tests/test_python_digest_verifier.py \
     tests/test_python_doctor.py \
     tests/test_python_docker_compose.py \
     tests/test_python_init_config.py \
@@ -106,9 +108,13 @@ EOF
     tests/test_python_updates_wrapper.py \
     tests/test_python_web.py \
     tests/test_python_web_auth.py \
+    tests/test_python_web_diagnostics.py \
+    tests/test_python_web_health.py \
     tests/test_python_web_jobs.py \
+    tests/test_python_web_onboarding.py \
     tests/test_python_web_pending.py \
     tests/test_python_web_plans.py \
+    tests/test_python_web_release_notes.py \
     tests/test_python_web_runs.py \
     tests/test_python_web_scheduler.py \
     tests/test_python_web_self_update.py \
