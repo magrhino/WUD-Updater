@@ -650,6 +650,7 @@ def _prepare_self_update_tag_update(
 
     backup = _backup_compose(compose_path)
     restore_error = ""
+    restore_succeeded = True
     applied_digest_pins = ()
     try:
         applied = apply_compose_tag_updates(compose_path, updates)
@@ -672,13 +673,16 @@ def _prepare_self_update_tag_update(
             if not applied_digest_pins:
                 raise RuntimeError("no Compose image lines were digest-pinned")
     except Exception as exc:
+        restore_succeeded = False
         try:
             shutil.copy2(backup, compose_path)
-        except OSError as restore_exc:
+            restore_succeeded = True
+        except Exception as restore_exc:
             restore_error = f"; compose rollback failed: {restore_exc}"
         raise RuntimeError(f"{exc}{restore_error}") from exc
     finally:
-        _delete_self_update_plan_file_path(backup)
+        if restore_succeeded:
+            _delete_self_update_plan_file_path(backup)
 
     return {
         "strategy": "prepare_tag_update",
