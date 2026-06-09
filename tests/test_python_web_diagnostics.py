@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from wud_updater import web_settings
 from wud_updater.db import open_db
 
 from tests.web_test_helpers import (
@@ -53,6 +54,27 @@ def test_diagnostics_support_bundle_returns_semantically_redacted_payload(
     assert "compose-discovery" in doctor_codes
     assert body["pending_summary"]["source_file"] == "<WUD_OUT_FILE>"
     assert body["log_tail"]["exists"] is True
+
+
+def test_diagnostics_support_bundle_reuses_resolved_settings(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    client = _client(tmp_path, {"WUD_WEB_DEV_NO_AUTH": "true"})
+    observed: list[bool] = []
+    original_settings_response = web_settings.settings_response
+
+    def wrapped_settings_response(settings, request):
+        observed.append(settings is client.app.state.web_settings)
+        return original_settings_response(settings, request)
+
+    monkeypatch.setattr(web_settings, "settings_response", wrapped_settings_response)
+
+    response = client.get("/api/v1/diagnostics/support-bundle")
+
+    assert response.status_code == 200
+    assert observed == [True]
+
 
 def test_diagnostics_support_bundle_warns_for_log_file_outside_configured_dir(
     tmp_path: Path,

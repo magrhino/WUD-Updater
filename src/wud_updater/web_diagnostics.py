@@ -41,7 +41,7 @@ def api_diagnostics_support_bundle(request: Request) -> DiagnosticsSupportBundle
     settings = _settings(request)
 
     version = __version__
-    settings_resp = web_settings.api_settings(request)
+    settings_resp = web_settings.settings_response(settings, request)
     doctor_result = doctor_response(settings, web_doctor_result(settings, request))
 
     pending = web_pending.pending_response(settings, include_grouping=True)

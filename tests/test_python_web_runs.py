@@ -144,6 +144,20 @@ def test_runs_endpoints_sanitize_run_and_event_metadata(tmp_path: Path) -> None:
                 }
             ),
         )
+        insert_pending_update(
+            conn,
+            run_id=run_id,
+            line_no=1,
+            raw="nginx:1.25",
+            image="nginx:1.25",
+            status="success",
+            metadata_json=json.dumps(
+                {
+                    "log": str(log_file),
+                    "target": {"compose_file": str(compose_file)},
+                }
+            ),
+        )
         insert_update_event(
             conn,
             run_id=run_id,
@@ -174,6 +188,11 @@ def test_runs_endpoints_sanitize_run_and_event_metadata(tmp_path: Path) -> None:
             payload["events"][0]["metadata"]["before"]["compose_file"]
             == "<DOCKER_BASE>/media/compose.yml"
         )
+    assert detail["pending_updates"][0]["metadata"]["log"] == "<WUD_LOG_DIR>/run.log"
+    assert (
+        detail["pending_updates"][0]["metadata"]["target"]["compose_file"]
+        == "<DOCKER_BASE>/media/compose.yml"
+    )
 
 
 def test_run_log_endpoint_tails_configured_log_file(tmp_path: Path) -> None:

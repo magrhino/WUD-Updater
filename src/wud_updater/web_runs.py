@@ -243,6 +243,11 @@ def _sanitize_run_detail(settings: WebSettings, run: RunDetail) -> RunDetail:
         _sanitize_run_event(settings, event).model_dump(mode="json")
         for event in run.events
     ]
+    for pending_update in payload["pending_updates"]:
+        pending_update["metadata"] = _sanitize_support_bundle_value(
+            settings,
+            pending_update["metadata"],
+        )
     return RunDetail.model_validate(payload)
 
 

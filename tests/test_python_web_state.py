@@ -5,7 +5,9 @@ import sqlite3
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+from fastapi import HTTPException
 
+from wud_updater import web_settings as settings_module
 from wud_updater import web_state as state_module
 from wud_updater.db import (
     open_db,
@@ -286,6 +288,38 @@ def test_managed_settings_update_wraps_invalid_existing_config_error(
     assert response.status_code == 500
     assert detail.startswith("could not read managed settings: ")
     assert "true or false" in detail
+
+
+def test_effective_config_wraps_invalid_stored_compose_ignore_paths_error(
+    tmp_path: Path,
+) -> None:
+    client = _client(tmp_path, {"WUD_WEB_DEV_NO_AUTH": "true"})
+    _store_web_setting(tmp_path, "compose.ignore_paths", "old,,archive")
+
+    try:
+        settings_module._effective_config(client.app.state.web_settings)
+    except HTTPException as exc:
+        assert exc.status_code == 500
+        assert exc.detail.startswith("stored compose_ignore_paths is invalid: ")
+        assert "non-empty relative paths" in exc.detail
+    else:
+        assert False, "expected invalid stored compose ignore paths to fail"
+
+
+def test_effective_config_wraps_invalid_stored_digest_pin_error(
+    tmp_path: Path,
+) -> None:
+    client = _client(tmp_path, {"WUD_WEB_DEV_NO_AUTH": "true"})
+    _store_web_setting(tmp_path, "compose.digest_pin_updates", "maybe")
+
+    try:
+        settings_module._effective_config(client.app.state.web_settings)
+    except HTTPException as exc:
+        assert exc.status_code == 500
+        assert exc.detail.startswith("stored digest_pin_updates is invalid: ")
+        assert "true or false" in exc.detail
+    else:
+        assert False, "expected invalid stored digest-pin setting to fail"
 
 
 def test_managed_digest_pin_updates_env_guard_disables_webui_edit(

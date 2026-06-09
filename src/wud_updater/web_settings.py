@@ -74,6 +74,10 @@ DIGEST_PIN_UPDATES_VALUES = ("false", "true")
 
 def api_settings(request: Request) -> SettingsResponse:
     settings = _settings(request)
+    return settings_response(settings, request)
+
+
+def settings_response(settings: WebSettings, request: Request) -> SettingsResponse:
     return SettingsResponse(
         updater=_updater_settings_entries(settings),
         webui=_webui_settings_entries(settings, request),
@@ -157,7 +161,11 @@ def _stored_compose_ignore_paths(settings: WebSettings) -> tuple[Path, ...]:
     except ConfigError as exc:
         raise HTTPException(
             status_code=500,
-            detail=f"stored {MANAGED_COMPOSE_IGNORE_PATHS_KEY} is invalid: {exc}",
+            detail=_safe_exception_detail(
+                settings,
+                f"stored {MANAGED_COMPOSE_IGNORE_PATHS_KEY} is invalid",
+                exc,
+            ),
         ) from exc
 
 
@@ -204,7 +212,11 @@ def _stored_digest_pin_updates(settings: WebSettings) -> bool:
     except ConfigError as exc:
         raise HTTPException(
             status_code=500,
-            detail=f"stored {MANAGED_DIGEST_PIN_UPDATES_KEY} is invalid: {exc}",
+            detail=_safe_exception_detail(
+                settings,
+                f"stored {MANAGED_DIGEST_PIN_UPDATES_KEY} is invalid",
+                exc,
+            ),
         ) from exc
 
 
