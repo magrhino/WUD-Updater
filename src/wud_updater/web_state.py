@@ -1016,4 +1016,3 @@ def _json_object(value: Mapping[str, Any]) -> str:
 
 def _json_list(value: Sequence[str]) -> str:
     return json.dumps(list(value), separators=(",", ":"))
-

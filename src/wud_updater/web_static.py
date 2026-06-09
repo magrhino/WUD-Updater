@@ -35,5 +35,3 @@ def resolve_static_dir(configured: str | Path | None) -> Path | None:
         if (candidate / "index.html").is_file():
             return candidate
     return None
-
-

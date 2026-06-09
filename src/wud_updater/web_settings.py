@@ -671,4 +671,3 @@ def _format_bool(value: bool) -> str:
 
 def _format_sequence(values: Sequence[str] | Iterator[str]) -> str:
     return ", ".join(item for item in values if item)
-

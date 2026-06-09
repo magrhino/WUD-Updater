@@ -343,5 +343,3 @@ def _read_log_tail(log_path: Path, max_bytes: int) -> LogTail:
         content=content,
         truncated=truncated,
     )
-
-
