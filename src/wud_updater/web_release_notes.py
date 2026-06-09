@@ -25,6 +25,7 @@ from .release_notes import (
 )
 from .web_auth import (
     _redact_sensitive_text,
+    _redact_unknown_absolute_paths,
     _safe_exception_detail,
     _settings,
 )
@@ -38,6 +39,7 @@ from .wud_file import WudTarget
 
 
 LOGGER = logging.getLogger(__name__)
+DOCKER_STDERR_LOG_LIMIT = 500
 
 
 def api_release_notes(request: Request) -> ReleaseNotesResponse:
@@ -173,11 +175,21 @@ def release_note_source_resolver(settings: WebSettings) -> ReleaseNoteSourceReso
                 target.first,
                 OCI_SOURCE_LABEL,
                 error.result.display,
-                error.result.stderr.strip() or "<empty>",
+                sanitize_stderr(
+                    settings,
+                    error.result.stderr.strip() or "<empty>",
+                ),
             )
         return value
 
     return resolve
+
+
+def sanitize_stderr(settings: WebSettings, value: str) -> str:
+    sanitized = _redact_unknown_absolute_paths(_redact_sensitive_text(settings, value))
+    if len(sanitized) <= DOCKER_STDERR_LOG_LIMIT:
+        return sanitized
+    return f"{sanitized[:DOCKER_STDERR_LOG_LIMIT].rstrip()}... [truncated]"
 
 
 # Compatibility aliases for callers that imported private helpers from web.py.

@@ -3,7 +3,9 @@ import json
 from pathlib import Path
 from wud_updater import web as web_module
 from wud_updater import web_jobs
+from wud_updater import web_plans as plans_module
 from wud_updater import web_self_update as self_update_module
+from wud_updater.config import ConfigError
 from wud_updater.locks import DirectoryLock, WudLockError, lock_dir_for
 from tests.web_test_helpers import (
     _client,
@@ -239,6 +241,41 @@ def test_plan_endpoint_requires_csrf_origin_headers(tmp_path: Path) -> None:
 
     assert response.status_code == 403
     assert response.json()["detail"] == "origin header is required"
+
+
+def test_plan_endpoint_wraps_config_error(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    secret = "plan-secret-token"
+
+    def invalid_config(_settings):
+        raise ConfigError(
+            f"failed to parse {tmp_path / 'state' / 'config.env'} with {secret}"
+        )
+
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_TOKEN": secret,
+        },
+    )
+    monkeypatch.setattr(plans_module, "_effective_config_loader", invalid_config)
+
+    response = client.post(
+        "/api/v1/plans",
+        json={"line_numbers": [1]},
+        headers=_csrf_headers(client),
+    )
+    detail = response.json()["detail"]
+
+    assert response.status_code == 500
+    assert detail.startswith("could not create plan: ")
+    assert secret not in detail
+    assert str(tmp_path) not in detail
+    assert "<redacted>" in detail
+    assert "[REDACTED_PATH]" in detail
 
 
 def test_plan_endpoint_returns_selected_dry_run_without_mutation(

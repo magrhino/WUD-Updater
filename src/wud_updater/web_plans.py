@@ -9,12 +9,12 @@ from typing import Protocol
 from fastapi import HTTPException, Request
 
 from . import web_diagnostics, web_jobs, web_scheduler
-from .config import UpdaterConfig
+from .config import ConfigError, UpdaterConfig
 from .images import tag_value_valid
 from .locks import DirectoryLock
 from .plans import DryRunPlan, PlanFileMissing, PlanInputError, build_dry_run_plan
 from .updater_models import DigestPinLabelRewriteApproval, TagOverride
-from .web_auth import _settings
+from .web_auth import _safe_exception_detail, _settings
 from .web_models import (
     ApplyJobResponse,
     ApplyPlanRequest,
@@ -44,6 +44,11 @@ def api_create_plan(payload: PlanRequest, request: Request) -> PlanResponse:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     except PlanFileMissing as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ConfigError as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=_safe_exception_detail(settings, "could not create plan", exc),
+        ) from exc
     except OSError as exc:
         raise HTTPException(
             status_code=500,

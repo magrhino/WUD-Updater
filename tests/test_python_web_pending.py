@@ -4,6 +4,7 @@ import stat
 from pathlib import Path
 from wud_updater import web as web_module
 from wud_updater import web_pending as pending_module
+from wud_updater.config import ConfigError
 from wud_updater.locks import lock_dir_for
 from tests.web_test_helpers import (
     _client,
@@ -40,6 +41,70 @@ def test_pending_endpoint_reads_wud_file_without_mutation(tmp_path: Path) -> Non
     assert body["grouping"]["unmatched"][1]["action"] == "recreate_stack"
     assert body["grouping"]["warnings"]
     assert wud_file.read_text(encoding="utf-8") == original
+
+
+def test_pending_endpoint_wraps_effective_config_error(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    secret = "pending-secret-token"
+
+    def invalid_config(_settings):
+        raise ConfigError(
+            f"failed to parse {tmp_path / 'state' / 'config.env'} with {secret}"
+        )
+
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_TOKEN": secret,
+        },
+    )
+    monkeypatch.setattr(pending_module, "_effective_config_loader", invalid_config)
+    wud_file = tmp_path / "state" / "images.todo"
+    wud_file.write_text("repo/app:latest\n", encoding="utf-8")
+
+    response = client.get("/api/v1/pending")
+    detail = response.json()["detail"]
+
+    assert response.status_code == 400
+    assert detail.startswith("could not read effective config: ")
+    assert secret not in detail
+    assert str(tmp_path) not in detail
+    assert "<redacted>" in detail
+    assert "[REDACTED_PATH]" in detail
+
+
+def test_pending_endpoint_sanitizes_wud_file_errors(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    secret = "pending-read-secret"
+
+    def failed_parse(_path):
+        raise OSError(
+            f"open failed for {tmp_path / 'state' / 'images.todo'} with {secret}"
+        )
+
+    monkeypatch.setattr(pending_module, "parse_wud_file", failed_parse)
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_TOKEN": secret,
+        },
+    )
+
+    response = client.get("/api/v1/pending")
+    detail = response.json()["detail"]
+
+    assert response.status_code == 500
+    assert detail.startswith("could not read WUD file: ")
+    assert secret not in detail
+    assert str(tmp_path) not in detail
+    assert "<redacted>" in detail
+    assert "[REDACTED_PATH]" in detail
 
 
 def test_pending_endpoint_groups_items_by_compose_stack_without_mutation(

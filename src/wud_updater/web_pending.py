@@ -15,7 +15,7 @@ from fastapi import HTTPException, Request
 from . import web_jobs
 from .command import CommandRunner
 from .compose import ComposeCli, ComposeDiscoveryError
-from .config import UpdaterConfig
+from .config import ConfigError, UpdaterConfig
 from .db import DatabaseError, init_db, open_db, utc_timestamp
 from .file_ops import OwnerConfig
 from .images import image_tag, repo_key
@@ -31,6 +31,7 @@ from .web_auth import (
     SESSION_COOKIE,
     _bearer_token_valid,
     _immediate_transaction,
+    _safe_exception_detail,
     _settings,
 )
 from .web_models import (
@@ -103,7 +104,11 @@ def api_pending_cleanup(
         except OSError as exc:
             raise HTTPException(
                 status_code=500,
-                detail=f"could not revalidate cleanup: {exc}",
+                detail=_safe_exception_detail(
+                    settings,
+                    "could not revalidate cleanup",
+                    exc,
+                ),
             ) from exc
 
         removed = _validated_cleanup_lines(payload, payload_lines, cleanup)
@@ -128,14 +133,22 @@ def api_pending_cleanup(
                     except OSError as exc:
                         raise HTTPException(
                             status_code=500,
-                            detail=f"could not remove pending lines: {exc}",
+                            detail=_safe_exception_detail(
+                                settings,
+                                "could not remove pending lines",
+                                exc,
+                            ),
                         ) from exc
         except HTTPException:
             raise
         except (OSError, sqlite3.Error, DatabaseError) as exc:
             raise HTTPException(
                 status_code=500,
-                detail=f"could not record cleanup audit: {exc}",
+                detail=_safe_exception_detail(
+                    settings,
+                    "could not record cleanup audit",
+                    exc,
+                ),
             ) from exc
 
         return PendingCleanupResponse(
@@ -171,7 +184,11 @@ def api_pending_removal_plan(
     except OSError as exc:
         raise HTTPException(
             status_code=500,
-            detail=f"could not create removal plan: {exc}",
+            detail=_safe_exception_detail(
+                settings,
+                "could not create removal plan",
+                exc,
+            ),
         ) from exc
 
 
@@ -201,7 +218,11 @@ def api_pending_removal(
         except OSError as exc:
             raise HTTPException(
                 status_code=500,
-                detail=f"could not revalidate removal: {exc}",
+                detail=_safe_exception_detail(
+                    settings,
+                    "could not revalidate removal",
+                    exc,
+                ),
             ) from exc
 
         removed = _validated_removal_lines(payload, payload_lines, plan)
@@ -226,14 +247,22 @@ def api_pending_removal(
                     except OSError as exc:
                         raise HTTPException(
                             status_code=500,
-                            detail=f"could not remove pending lines: {exc}",
+                            detail=_safe_exception_detail(
+                                settings,
+                                "could not remove pending lines",
+                                exc,
+                            ),
                         ) from exc
         except HTTPException:
             raise
         except (OSError, sqlite3.Error, DatabaseError) as exc:
             raise HTTPException(
                 status_code=500,
-                detail=f"could not record removal audit: {exc}",
+                detail=_safe_exception_detail(
+                    settings,
+                    "could not record removal audit",
+                    exc,
+                ),
             ) from exc
 
         return PendingCleanupResponse(
@@ -381,14 +410,24 @@ def parse_pending_file(settings: WebSettings) -> tuple[bool, ParsedWudFile]:
     except OSError as exc:
         raise HTTPException(
             status_code=500,
-            detail=f"could not read WUD file: {exc}",
+            detail=_safe_exception_detail(settings, "could not read WUD file", exc),
         ) from exc
 
 
 def _effective_config(settings: WebSettings) -> UpdaterConfig:
     if _effective_config_loader is None:
         return settings.config
-    return _effective_config_loader(settings)
+    try:
+        return _effective_config_loader(settings)
+    except ConfigError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail=_safe_exception_detail(
+                settings,
+                "could not read effective config",
+                exc,
+            ),
+        ) from exc
 
 
 def _pending_grouping_response(
