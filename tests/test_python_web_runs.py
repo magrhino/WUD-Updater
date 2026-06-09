@@ -1,7 +1,7 @@
 from __future__ import annotations
 import json
 from pathlib import Path
-from wud_updater import web as web_module
+from wud_updater import web_runs as runs_module
 from wud_updater.db import (
     open_db,
     init_db,
@@ -246,10 +246,10 @@ def test_safe_log_path_uses_resolved_path_after_symlink_swap(
     outside.write_text("outside", encoding="utf-8")
     link.symlink_to(allowed)
 
-    log_path = web_module._safe_log_path(client.app.state.web_settings, "run.log")
+    log_path = runs_module._safe_log_path(client.app.state.web_settings, "run.log")
     link.unlink()
     link.symlink_to(outside)
-    tail = web_module._read_log_tail(log_path, 1024)
+    tail = runs_module._read_log_tail(log_path, 1024)
 
     assert log_path == allowed.resolve()
     assert tail.exists is True

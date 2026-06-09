@@ -6,7 +6,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 
-from wud_updater import web as web_module
+from wud_updater import web_state as state_module
 from wud_updater.db import (
     open_db,
     init_db,
@@ -859,7 +859,7 @@ def test_state_operation_rolls_back_when_audit_insert_fails(
     def fail_audit(*_args: object, **_kwargs: object) -> int:
         raise sqlite3.OperationalError("audit failed")
 
-    monkeypatch.setattr(web_module, "_insert_state_audit", fail_audit)
+    monkeypatch.setattr(state_module, "_insert_state_audit", fail_audit)
 
     response = client.post(
         "/api/v1/state/operations",
