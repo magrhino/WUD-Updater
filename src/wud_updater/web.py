@@ -16,9 +16,7 @@ from dataclasses import asdict, replace
 from datetime import datetime, time as datetime_time, timezone
 from pathlib import Path
 from threading import Lock
-from types import SimpleNamespace
-from typing import Any, cast
-from urllib.parse import quote
+from typing import Any
 
 from fastapi import (
     APIRouter,
@@ -33,7 +31,15 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
-from . import __version__, web_jobs, web_scheduler, web_self_update
+from . import (
+    __version__,
+    web_diagnostics,
+    web_health,
+    web_jobs,
+    web_onboarding,
+    web_scheduler,
+    web_self_update,
+)
 from .command import CommandError, CommandRunner
 from .compose import ComposeCli, ComposeDiscoveryError
 from .config import (
@@ -54,21 +60,9 @@ from .config import (
 )
 from .db import (
     DatabaseError,
-    SCHEMA_VERSION,
     open_db,
     init_db,
     utc_timestamp,
-)
-from .db import _user_version as db_user_version
-from .db import _validate_schema as validate_db_schema
-from .doctor import (
-    Doctor,
-    DoctorCheck as DoctorDataCheck,
-    DoctorConfigError,
-    DoctorOptions as DoctorDataOptions,
-    DoctorResult as DoctorDataResult,
-    DoctorSuggestion as DoctorDataSuggestion,
-    options_from_namespace as doctor_options_from_namespace,
 )
 from .docker_cli import ContainerImage, DockerCli
 from .images import (
@@ -104,6 +98,12 @@ from .updater_models import (
 )
 from .file_ops import OwnerConfig
 from .wud_file import ParsedWudFile, WudTarget, parse_wud_file, remove_lines_before_run
+from .web_database import (
+    ReadOnlyDatabaseMissing,
+    connect_readonly_db as _connect_readonly_db,
+    database_ready as _database_ready,
+)
+from .web_onboarding import ONBOARDING_DISMISSED_AT_KEY
 
 from .web_models import (
     APPLY_JOB_PROGRESS_STATUSES as APPLY_JOB_PROGRESS_STATUSES,
@@ -113,35 +113,35 @@ from .web_models import (
     ApplyJobResponse,
     ApplyJobStatus as ApplyJobStatus,
     ApplyPlanRequest,
-    ApplyPreflightCheck,
-    ApplyPreflightResponse,
+    ApplyPreflightCheck as ApplyPreflightCheck,
+    ApplyPreflightResponse as ApplyPreflightResponse,
     AuthSessionResponse,
     AutoUpdatePolicy as AutoUpdatePolicy,
     AutoUpdateSelection as AutoUpdateSelection,
     ContainerRestartResponse,
     CoreUpdateTourResponse,
-    CoreUpdateTourStatus,
-    CoreUpdateTourStep,
-    CoreUpdateTourUpdateRequest,
+    CoreUpdateTourStatus as CoreUpdateTourStatus,
+    CoreUpdateTourStep as CoreUpdateTourStep,
+    CoreUpdateTourUpdateRequest as CoreUpdateTourUpdateRequest,
     CreateSnoozeOperation,
     CsrfResponse,
-    DEFAULT_CORE_UPDATE_TOUR_STEP,
+    DEFAULT_CORE_UPDATE_TOUR_STEP as DEFAULT_CORE_UPDATE_TOUR_STEP,
     DeleteServicePolicyOperation,
     DeleteSnoozeOperation,
     DiagnosticsSupportBundleResponse,
-    DoctorCheckResponse,
-    DoctorCheckStatus,
+    DoctorCheckResponse as DoctorCheckResponse,
+    DoctorCheckStatus as DoctorCheckStatus,
     DoctorResponse,
-    DoctorSuggestionResponse,
+    DoctorSuggestionResponse as DoctorSuggestionResponse,
     HealthResponse,
     LogTail,
     ManagedSettingEntry,
     ManagedSettingsUpdateRequest,
     ManagedSettingsUpdateResponse,
-    OnboardingChecklistItem,
+    OnboardingChecklistItem as OnboardingChecklistItem,
     OnboardingChecklistResponse,
     OnboardingDismissResponse,
-    OnboardingDocLink,
+    OnboardingDocLink as OnboardingDocLink,
     PendingCleanupLine,
     PendingCleanupRemovedLine,
     PendingCleanupRequest,
@@ -194,14 +194,12 @@ from .web_models import (
     WebSettings,
 )
 from .web_auth import (
-    DEFAULT_ALLOWED_HOSTS,
     SENSITIVE_ENV_KEYS,
     SESSION_COOKIE,
     WebAdminResetError,
     WebConfigError,
     _bearer_token_valid,
     _delete_web_setting,
-    _effective_origin,
     _immediate_transaction,
     _parse_allowed_hosts,
     _parse_bool,
@@ -211,7 +209,6 @@ from .web_auth import (
     _parse_trusted_proxies,
     _prepare_web_auth_state,
     _print_setup_claim,
-    _raw_client_is_loopback,
     _redact_sensitive_text,
     _reset_admin_url,
     _safe_exception_detail,
@@ -308,8 +305,6 @@ DEFAULT_RUN_LIMIT = 50
 DEFAULT_LOG_TAIL_BYTES = 262_144
 DEFAULT_JOB_LOG_TAIL_BYTES = web_jobs.DEFAULT_JOB_LOG_TAIL_BYTES
 MAX_LOG_TAIL_BYTES = 1_048_576
-ONBOARDING_DISMISSED_AT_KEY = "onboarding_checklist_dismissed_at"
-CORE_UPDATE_TOUR_KEY = "onboarding_core_update_tour"
 MANAGED_THEME_PREFERENCE_KEY = "theme_preference"
 MANAGED_THEME_PREFERENCE_DB_KEY = "ui.theme_preference"
 MANAGED_ONBOARDING_CHECKLIST_KEY = "onboarding_checklist"
@@ -320,19 +315,6 @@ MANAGED_DIGEST_PIN_UPDATES_DB_KEY = "compose.digest_pin_updates"
 THEME_PREFERENCE_VALUES = ("system", "light", "dark")
 ONBOARDING_CHECKLIST_VALUES = ("visible", "dismissed")
 DIGEST_PIN_UPDATES_VALUES = ("false", "true")
-CORE_UPDATE_TOUR_STATUS_VALUES = (
-    "not_started",
-    "in_progress",
-    "completed",
-    "dismissed",
-)
-CORE_UPDATE_TOUR_STEP_VALUES = (
-    "dashboard",
-    "pending_select",
-    "pending_preflight",
-    "pending_apply",
-    "runs_history",
-)
 JOB_STREAM_HEARTBEAT_SECONDS = web_jobs.JOB_STREAM_HEARTBEAT_SECONDS
 JOB_STREAM_LOG_POLL_SECONDS = web_jobs.JOB_STREAM_LOG_POLL_SECONDS
 AUTO_UPDATE_POLL_SECONDS = web_scheduler.AUTO_UPDATE_POLL_SECONDS
@@ -342,26 +324,6 @@ AutoUpdateScheduleReservationError = (
     web_scheduler.AutoUpdateScheduleReservationError
 )
 LOGGER = logging.getLogger(__name__)
-
-
-class ReadOnlyDatabaseMissing(RuntimeError):
-    """Raised when the read-only WebUI database does not exist."""
-
-
-READINESS_DOCKER_ENDPOINT_CODES = frozenset({"docker-endpoint", "docker-socket"})
-READINESS_REQUIRED_CODES = frozenset(
-    {
-        "docker-daemon-version",
-        "docker-daemon-info",
-        "docker-container-listing",
-        "wud-out-file-directory",
-        "wud-out-file",
-        "webui-database",
-    }
-)
-READINESS_INCLUDED_CODES = (
-    READINESS_DOCKER_ENDPOINT_CODES | READINESS_REQUIRED_CODES | {"configuration"}
-)
 
 def create_app(
     settings: WebSettings | None = None,
@@ -414,15 +376,33 @@ def create_app(
     ) -> Response:
         return await request_safety_middleware(request, call_next, active_settings)
 
+    web_health.configure(
+        effective_config_loader=_effective_config,
+        static_spa_available_checker=_static_spa_available,
+    )
+    web_diagnostics.configure(
+        settings_response_builder=api_settings,
+        pending_response_builder=(
+            lambda settings, include_grouping: _pending_response(
+                settings,
+                include_grouping=include_grouping,
+            )
+        ),
+        run_summary_builder=_run_summary_from_row,
+        safe_log_path=_safe_log_path,
+        read_log_tail=_read_log_tail,
+        default_job_log_tail_bytes=DEFAULT_JOB_LOG_TAIL_BYTES,
+    )
+
     app.add_api_route(
         "/healthz",
-        api_healthz,
+        web_health.api_healthz,
         methods=["GET"],
         response_model=HealthResponse,
     )
     app.add_api_route(
         "/readyz",
-        api_readyz,
+        web_health.api_readyz,
         methods=["GET"],
         response_model=ReadyResponse,
     )
@@ -508,24 +488,24 @@ def create_app(
     )
     router.add_api_route(
         "/doctor",
-        api_doctor,
+        web_health.api_doctor,
         methods=["POST"],
         response_model=DoctorResponse,
     )
     router.add_api_route(
         "/doctor",
-        api_doctor_method_not_allowed,
+        api_post_only_method_not_allowed,
         methods=["GET"],
     )
     router.add_api_route(
         "/ready",
-        api_ready,
+        web_health.api_ready,
         methods=["GET"],
         response_model=ReadyResponse,
     )
     router.add_api_route(
         "/onboarding/checklist",
-        api_onboarding_checklist,
+        web_onboarding.api_onboarding_checklist,
         methods=["POST"],
         response_model=OnboardingChecklistResponse,
     )
@@ -536,7 +516,7 @@ def create_app(
     )
     router.add_api_route(
         "/onboarding/dismiss",
-        api_onboarding_dismiss,
+        web_onboarding.api_onboarding_dismiss,
         methods=["POST"],
         response_model=OnboardingDismissResponse,
     )
@@ -547,13 +527,13 @@ def create_app(
     )
     router.add_api_route(
         "/onboarding/core-update-tour",
-        api_core_update_tour,
+        web_onboarding.api_core_update_tour,
         methods=["GET"],
         response_model=CoreUpdateTourResponse,
     )
     router.add_api_route(
         "/onboarding/core-update-tour",
-        api_update_core_update_tour,
+        web_onboarding.api_update_core_update_tour,
         methods=["POST"],
         response_model=CoreUpdateTourResponse,
     )
@@ -613,7 +593,7 @@ def create_app(
     )
     router.add_api_route(
         "/diagnostics/support-bundle",
-        api_diagnostics_support_bundle,
+        web_diagnostics.api_diagnostics_support_bundle,
         methods=["GET"],
         response_model=DiagnosticsSupportBundleResponse,
     )
@@ -832,16 +812,6 @@ def run_web_reset_admin_from_namespace(args: object) -> int:
     return 0
 
 
-def api_healthz() -> HealthResponse:
-    return HealthResponse(ok=True, version=__version__)
-
-
-def api_readyz(request: Request, response: Response) -> ReadyResponse | Response:
-    if not _raw_client_is_loopback(request):
-        return Response(status_code=404)
-    return _ready_response(_settings(request), response)
-
-
 def api_status(request: Request) -> StatusResponse:
     settings = _settings(request)
     pending = _pending_response(settings, include_grouping=False)
@@ -915,159 +885,11 @@ def api_update_managed_settings(
     return ManagedSettingsUpdateResponse(managed=after, audit_run_id=audit_run_id)
 
 
-def api_doctor(request: Request) -> DoctorResponse:
-    settings = _settings(request)
-    return _doctor_response(settings, _web_doctor_result(settings, request))
-
-
-def api_ready(request: Request, response: Response) -> ReadyResponse:
-    return _ready_response(_settings(request), response)
-
-
-def api_doctor_method_not_allowed() -> JSONResponse:
-    return api_post_only_method_not_allowed()
-
-
 def api_post_only_method_not_allowed() -> JSONResponse:
     return JSONResponse(
         {"detail": "method not allowed"},
         status_code=405,
         headers={"Allow": "POST"},
-    )
-
-
-def api_onboarding_checklist(request: Request) -> OnboardingChecklistResponse:
-    settings = _settings(request)
-    dismissed_at = _onboarding_dismissed_at(settings)
-    if dismissed_at:
-        return OnboardingChecklistResponse(
-            dismissed=True,
-            dismissed_at=dismissed_at,
-            all_passed=False,
-            visible=False,
-            items=[],
-        )
-    result = _web_doctor_result(settings, request)
-    return _onboarding_checklist_response(
-        settings,
-        request,
-        result,
-        dismissed_at=dismissed_at,
-    )
-
-
-def api_onboarding_dismiss(request: Request) -> OnboardingDismissResponse:
-    settings = _settings(request)
-    dismissed_at = utc_timestamp()
-    try:
-        with open_db(settings.config.db_path) as conn:
-            init_db(conn)
-            with conn:
-                _set_web_setting(conn, ONBOARDING_DISMISSED_AT_KEY, dismissed_at)
-    except (OSError, sqlite3.Error, DatabaseError) as exc:
-        raise HTTPException(
-            status_code=500,
-            detail=_safe_exception_detail(
-                settings,
-                "could not dismiss onboarding checklist",
-                exc,
-            ),
-        ) from exc
-    return OnboardingDismissResponse(dismissed=True, dismissed_at=dismissed_at)
-
-
-def api_core_update_tour(request: Request) -> CoreUpdateTourResponse:
-    return _core_update_tour_response(_settings(request))
-
-
-def api_update_core_update_tour(
-    payload: CoreUpdateTourUpdateRequest,
-    request: Request,
-) -> CoreUpdateTourResponse:
-    settings = _settings(request)
-    try:
-        with open_db(settings.config.db_path) as conn:
-            init_db(conn)
-            with conn:
-                return _set_core_update_tour_state(
-                    conn,
-                    status=payload.status,
-                    step=payload.step,
-                )
-    except (OSError, sqlite3.Error, DatabaseError) as exc:
-        raise HTTPException(
-            status_code=500,
-            detail=_safe_exception_detail(
-                settings,
-                "could not update core update tour",
-                exc,
-            ),
-        ) from exc
-
-
-def api_diagnostics_support_bundle(request: Request) -> DiagnosticsSupportBundleResponse:
-    settings = _settings(request)
-
-    version = __version__
-    settings_resp = api_settings(request)
-    doctor_result = api_doctor(request)
-
-    pending = _pending_response(settings, include_grouping=True)
-    for item in pending.items:
-        item.raw = ""
-    if pending.grouping:
-        for group in pending.grouping.groups:
-            for gi in group.items:
-                gi.raw = ""
-        for ui in pending.grouping.unmatched:
-            ui.raw = ""
-
-    last_run = None
-    diagnostics_warnings: list[str] = []
-    try:
-        with closing(_connect_readonly_db(settings)) as conn:
-            rows = conn.execute(
-                """
-                SELECT *
-                FROM update_runs
-                ORDER BY id DESC
-                LIMIT 1
-                """
-            ).fetchall()
-            if rows:
-                last_run = _run_summary_from_row(rows[0])
-    except ReadOnlyDatabaseMissing as exc:
-        diagnostics_warnings.append(f"last run status unavailable: {exc}")
-    except HTTPException as exc:
-        diagnostics_warnings.append(f"last run status unavailable: {exc.detail}")
-    except (OSError, sqlite3.Error, DatabaseError) as exc:
-        diagnostics_warnings.append(f"last run status unavailable: {exc}")
-
-    discovery_warnings = list(pending.warnings)
-
-    log_tail = None
-    if last_run and last_run.log_file:
-        try:
-            log_path = _safe_log_path(settings, last_run.log_file)
-            if log_path is None:
-                log_tail = LogTail(exists=False, content="", truncated=False)
-            else:
-                log_tail = _read_log_tail(log_path, DEFAULT_JOB_LOG_TAIL_BYTES)
-        except HTTPException as exc:
-            diagnostics_warnings.append(f"log tail unavailable: {exc.detail}")
-
-    bundle = DiagnosticsSupportBundleResponse(
-        wud_updater_version=version,
-        settings=settings_resp,
-        doctor_result=doctor_result,
-        pending_summary=pending,
-        last_run_status=last_run,
-        diagnostics_warnings=diagnostics_warnings,
-        discovery_warnings=discovery_warnings,
-        log_tail=log_tail,
-    )
-    return DiagnosticsSupportBundleResponse.model_validate(
-        _sanitize_support_bundle_value(settings, bundle.model_dump(mode="json"))
     )
 
 
@@ -1490,7 +1312,11 @@ def api_create_job(payload: ApplyPlanRequest, request: Request) -> ApplyJobRespo
             raise HTTPException(status_code=409, detail="plan is stale")
         if not _plan_can_apply(plan, settings):
             raise HTTPException(status_code=409, detail="plan is not ready to apply")
-        apply_preflight = _apply_preflight_response(settings, request, plan)
+        apply_preflight = web_diagnostics.apply_preflight_response(
+            settings,
+            request,
+            plan,
+        )
         if not apply_preflight.ok:
             raise HTTPException(status_code=409, detail="apply preflight failed")
         return _submit_apply_job(request, settings, plan, payload, wud_lock)
@@ -1773,798 +1599,6 @@ def _digest_pin_disabled_reason(settings: WebSettings) -> str:
         f"{DIGEST_PIN_UPDATES_ENV} is configured in the server environment. "
         "Unset it to manage digest-pin updates in the WebUI."
     )
-
-
-def _ready_response(
-    settings: WebSettings,
-    response: Response,
-) -> ReadyResponse:
-    doctor = _doctor_response(settings, _web_readiness_result(settings))
-    checks = [
-        check for check in doctor.checks if check.code in READINESS_INCLUDED_CODES
-    ]
-    missing = _missing_readiness_checks(checks)
-    if missing:
-        checks.append(
-            DoctorCheckResponse(
-                status="FAIL",
-                code="readiness-missing-checks",
-                category="webui",
-                name="readiness checks",
-                detail="missing required check(s): " + ", ".join(missing),
-            )
-        )
-    ok = all(check.status != "FAIL" for check in checks)
-    if not ok:
-        response.status_code = 503
-    return ReadyResponse(ok=ok, version=__version__, checks=checks)
-
-
-def _missing_readiness_checks(checks: Sequence[DoctorCheckResponse]) -> list[str]:
-    present = {check.code for check in checks}
-    missing = [
-        code.replace("-", " ")
-        for code in sorted(READINESS_REQUIRED_CODES)
-        if code not in present
-    ]
-    if not present.intersection(READINESS_DOCKER_ENDPOINT_CODES):
-        missing.insert(0, "docker socket or endpoint")
-    return missing
-
-
-def _web_doctor_options_and_env(
-    settings: WebSettings,
-) -> tuple[DoctorDataOptions, dict[str, str]]:
-    env = _doctor_command_env(settings)
-    args = SimpleNamespace(
-        base=str(settings.config.docker_base),
-        file=str(settings.config.wud_out_file),
-        log_dir=str(settings.config.log_dir),
-        scripts_dir=env.get("WUD_SCRIPTS_DIR", ""),
-        no_color=True,
-    )
-    return (
-        doctor_options_from_namespace(
-            args,
-            repo_root=Path(__file__).resolve().parents[2],
-            environ=env,
-        ),
-        env,
-    )
-
-
-def _doctor_configuration_result(exc: DoctorConfigError) -> DoctorDataResult:
-    return DoctorDataResult(
-        checks=(
-            DoctorDataCheck(
-                status="FAIL",
-                name="configuration",
-                detail=str(exc),
-                code="configuration",
-                category="configuration",
-                suggestions=(
-                    DoctorDataSuggestion(
-                        label="Fix environment value",
-                        description=(
-                            "Set the reported variable to an accepted value "
-                            "before running doctor again."
-                        ),
-                    ),
-                ),
-            ),
-        )
-    )
-
-
-def _web_doctor_result(settings: WebSettings, request: Request) -> DoctorDataResult:
-    try:
-        options, env = _web_doctor_options_and_env(settings)
-        result = Doctor(options, environ=env).run_result()
-    except DoctorConfigError as exc:
-        result = _doctor_configuration_result(exc)
-    return DoctorDataResult(
-        checks=(*result.checks, *_web_doctor_checks(settings, request))
-    )
-
-
-def _web_readiness_result(
-    settings: WebSettings,
-) -> DoctorDataResult:
-    try:
-        options, env = _web_doctor_options_and_env(settings)
-        result = Doctor(options, environ=env).run_readiness_result()
-    except DoctorConfigError as exc:
-        result = _doctor_configuration_result(exc)
-    return DoctorDataResult(
-        checks=(*result.checks, _web_database_doctor_check(settings))
-    )
-
-
-def _doctor_command_env(settings: WebSettings) -> dict[str, str]:
-    config = _effective_config(settings)
-    env = dict(settings.command_env or {})
-    env["DOCKER_BASE"] = str(config.docker_base)
-    env["WUD_OUT_FILE"] = str(config.wud_out_file)
-    env["WUD_LOG_DIR"] = str(config.log_dir)
-    env[COMPOSE_IGNORE_PATHS_ENV] = format_compose_ignore_paths(
-        config.compose_ignore_paths
-    )
-    env[DIGEST_PIN_UPDATES_ENV] = _format_bool(config.digest_pin_updates)
-    return env
-
-
-def _web_doctor_checks(
-    settings: WebSettings,
-    request: Request,
-) -> tuple[DoctorDataCheck, ...]:
-    checks: list[DoctorDataCheck] = []
-    checks.append(_web_database_doctor_check(settings))
-    checks.append(
-        _web_doctor_check(
-            "WARN" if settings.dev_no_auth else "PASS",
-            "WebUI authentication",
-            "development auth bypass is enabled"
-            if settings.dev_no_auth
-            else "authentication is required",
-            code="webui-authentication",
-            suggestions=()
-            if not settings.dev_no_auth
-            else (
-                DoctorDataSuggestion(
-                    label="Require browser authentication",
-                    description=(
-                        "Disable the local development auth bypass before exposing "
-                        "the WebUI."
-                    ),
-                    snippet="WUD_WEB_DEV_NO_AUTH=false",
-                ),
-            ),
-        )
-    )
-    checks.append(
-        _web_doctor_check(
-            "WARN" if settings.mutations_enabled else "PASS",
-            "WebUI mutation gate",
-            "browser mutations are enabled"
-            if settings.mutations_enabled
-            else "browser mutations are disabled",
-            code="webui-mutation-gate",
-            suggestions=()
-            if not settings.mutations_enabled
-            else (
-                DoctorDataSuggestion(
-                    label="Return to read-only mode",
-                    description=(
-                        "Leave browser mutations disabled unless this deployment "
-                        "is intentionally allowed to apply updates."
-                    ),
-                    snippet="WUD_WEB_MUTATIONS_ENABLED=false",
-                ),
-            ),
-        )
-    )
-    checks.append(
-        _web_doctor_check(
-            "PASS" if settings.allowed_hosts else "FAIL",
-            "WebUI allowed hosts",
-            _format_sequence(sorted(settings.allowed_hosts)) or "none configured",
-            code="webui-allowed-hosts",
-            suggestions=()
-            if settings.allowed_hosts
-            else (
-                DoctorDataSuggestion(
-                    label="Configure allowed hosts",
-                    description=(
-                        "Set the hostnames clients use to reach the WebUI."
-                    ),
-                    snippet="WUD_WEB_ALLOWED_HOSTS=localhost,127.0.0.1",
-                ),
-            ),
-        )
-    )
-    effective_origin = _effective_origin(request, settings)
-    checks.append(
-        _web_doctor_check(
-            "PASS" if settings.public_origin else "WARN",
-            "WebUI public origin",
-            settings.public_origin
-            if settings.public_origin
-            else f"derived from request as {effective_origin}",
-            code="webui-public-origin",
-            suggestions=()
-            if settings.public_origin
-            else (
-                DoctorDataSuggestion(
-                    label="Set reverse proxy origin",
-                    description=(
-                        "Set WUD_WEB_PUBLIC_ORIGIN when the WebUI is served "
-                        "behind a reverse proxy."
-                    ),
-                    snippet="WUD_WEB_PUBLIC_ORIGIN=https://wud.example.test",
-                ),
-            ),
-        )
-    )
-    secure_cookie = _secure_cookie(settings, request)
-    checks.append(
-        _web_doctor_check(
-            "PASS" if secure_cookie else "WARN",
-            "WebUI secure cookies",
-            f"{settings.secure_cookies} mode resolves to {_format_bool(secure_cookie)}",
-            code="webui-secure-cookies",
-            suggestions=()
-            if secure_cookie
-            else (
-                DoctorDataSuggestion(
-                    label="Use HTTPS public origin",
-                    description=(
-                        "Set a HTTPS public origin or force secure cookies for "
-                        "reverse-proxy deployments."
-                    ),
-                    snippet="WUD_WEB_PUBLIC_ORIGIN=https://wud.example.test",
-                ),
-            ),
-        )
-    )
-    checks.append(
-        _web_doctor_check(
-            "PASS",
-            "WebUI trusted proxies",
-            _format_sequence(str(network) for network in settings.trusted_proxies)
-            or "not configured",
-            code="webui-trusted-proxies",
-        )
-    )
-    static_available = _static_spa_available(settings)
-    checks.append(
-        _web_doctor_check(
-            "PASS" if static_available else "WARN",
-            "WebUI static SPA",
-            "static assets are available"
-            if static_available
-            else "static assets are not mounted; API-only mode is active",
-            code="webui-static-spa",
-        )
-    )
-    return tuple(checks)
-
-
-def _web_database_doctor_check(settings: WebSettings) -> DoctorDataCheck:
-    db_ready, db_warning = _database_ready(settings)
-    return _web_doctor_check(
-        "PASS" if db_ready else "FAIL",
-        "WebUI database",
-        str(settings.config.db_path) if db_ready else db_warning,
-        code="webui-database",
-        suggestions=()
-        if db_ready
-        else (
-            DoctorDataSuggestion(
-                label="Persist WebUI database",
-                description=(
-                    "Mount a writable persistent directory and set WUD_DB_PATH "
-                    "inside it."
-                ),
-                snippet="WUD_DB_PATH=/logs/wud-updater.sqlite",
-            ),
-        ),
-    )
-
-
-def _web_doctor_check(
-    status: DoctorCheckStatus,
-    name: str,
-    detail: str,
-    *,
-    code: str,
-    suggestions: Sequence[DoctorDataSuggestion] = (),
-) -> DoctorDataCheck:
-    return DoctorDataCheck(
-        status=status,
-        name=name,
-        detail=detail,
-        code=code,
-        category="webui",
-        suggestions=tuple(suggestions),
-    )
-
-
-def _doctor_response(
-    settings: WebSettings,
-    result: DoctorDataResult,
-) -> DoctorResponse:
-    return DoctorResponse(
-        ok=result.ok,
-        failures=result.failures,
-        warnings=result.warnings,
-        checks=[
-            DoctorCheckResponse(
-                status=check.status,  # type: ignore[arg-type]
-                code=check.code,
-                category=check.category,
-                name=check.name,
-                detail=_redact_sensitive_text(settings, check.detail),
-                target=_redact_sensitive_text(settings, check.target),
-                suggestions=[
-                    DoctorSuggestionResponse(
-                        label=suggestion.label,
-                        description=_redact_sensitive_text(
-                            settings,
-                            suggestion.description,
-                        ),
-                        snippet=_redact_sensitive_text(settings, suggestion.snippet),
-                    )
-                    for suggestion in check.suggestions
-                ],
-            )
-            for check in result.checks
-        ],
-    )
-
-
-ONBOARDING_REQUIRED_KEYS = frozenset(
-    {
-        "admin-setup",
-        "wud-output",
-        "wud-scripts",
-        "docker-access",
-        "compose-discovery",
-        "persistence",
-        "browser-access",
-        "mutation-mode",
-    }
-)
-ONBOARDING_STATUS_RANK: Mapping[DoctorCheckStatus, int] = {
-    "PASS": 0,
-    "WARN": 1,
-    "FAIL": 2,
-}
-ONBOARDING_DOC_BASE = "https://github.com/magrhino/WUD-Updater/blob/main/docs"
-
-
-def _onboarding_checklist_response(
-    settings: WebSettings,
-    request: Request,
-    result: DoctorDataResult,
-    *,
-    dismissed_at: str,
-) -> OnboardingChecklistResponse:
-    doctor = _doctor_response(settings, result)
-    checks = doctor.checks
-    items = [
-        _onboarding_admin_item(settings),
-        _onboarding_item_from_checks(
-            key="wud-output",
-            title="Shared WUD output file",
-            checks=_checks_by_code(
-                checks,
-                {"wud-out-file-directory", "wud-out-file"},
-            ),
-            pass_detail=(
-                "WUD_OUT_FILE points at a writable shared location that WUD can "
-                "create or update."
-            ),
-            missing_detail="WUD_OUT_FILE readiness was not reported by doctor.",
-            docs=[
-                _onboarding_doc(
-                    "WebUI container setup",
-                    f"{ONBOARDING_DOC_BASE}/wiki/webui-container.md#start-the-webui",
-                )
-            ],
-        ),
-        _onboarding_item_from_checks(
-            key="wud-scripts",
-            title="WUD callback scripts",
-            checks=_checks_by_code(
-                checks,
-                {"packaged-wud-scripts", "wud-script-sync"},
-            ),
-            pass_detail=(
-                "Packaged WUD scripts are available and script sync can update "
-                "the managed trigger directory."
-            ),
-            missing_detail="WUD script sync readiness was not reported by doctor.",
-            docs=[
-                _onboarding_doc(
-                    "Script sync notes",
-                    f"{ONBOARDING_DOC_BASE}/wiki/container-script-sync.md",
-                )
-            ],
-        ),
-        _onboarding_item_from_checks(
-            key="docker-access",
-            title="Docker daemon access",
-            checks=_checks_by_code(
-                checks,
-                {
-                    "docker-endpoint",
-                    "docker-socket",
-                    "docker-daemon-version",
-                    "docker-daemon-info",
-                    "docker-container-listing",
-                },
-            ),
-            pass_detail="The WebUI helper can reach Docker and list containers.",
-            missing_detail="Docker daemon readiness was not reported by doctor.",
-            docs=[
-                _onboarding_doc(
-                    "Deployment Docker access",
-                    f"{ONBOARDING_DOC_BASE}/DEPLOYMENT.md#requirements",
-                )
-            ],
-        ),
-        _onboarding_item_from_checks(
-            key="compose-discovery",
-            title="Compose stack discovery",
-            checks=_compose_onboarding_checks(checks),
-            pass_detail=(
-                "Compose stacks render under DOCKER_BASE and any HOST_DOCKER_BASE "
-                "mapping is usable."
-            ),
-            missing_detail="Compose discovery readiness was not reported by doctor.",
-            docs=[
-                _onboarding_doc(
-                    "Path mapping",
-                    f"{ONBOARDING_DOC_BASE}/DEPLOYMENT.md#docker-compose",
-                )
-            ],
-        ),
-        _onboarding_item_from_checks(
-            key="persistence",
-            title="Logs and SQLite persistence",
-            checks=_checks_by_code(checks, {"wud-log-dir", "webui-database"}),
-            pass_detail=(
-                "The log directory is writable and the WebUI database is ready."
-            ),
-            missing_detail="Persistence readiness was not reported by doctor.",
-            docs=[
-                _onboarding_doc(
-                    "First login",
-                    f"{ONBOARDING_DOC_BASE}/wiki/webui-container.md#first-login",
-                )
-            ],
-        ),
-        _browser_access_onboarding_item(settings, request, checks),
-        _mutation_onboarding_item(settings, checks),
-    ]
-    all_passed = all(
-        item.status == "PASS"
-        for item in items
-        if item.key in ONBOARDING_REQUIRED_KEYS
-    )
-    dismissed = bool(dismissed_at)
-    return OnboardingChecklistResponse(
-        dismissed=dismissed,
-        dismissed_at=dismissed_at,
-        all_passed=all_passed,
-        visible=not dismissed and not all_passed,
-        items=items,
-    )
-
-
-def _onboarding_admin_item(settings: WebSettings) -> OnboardingChecklistItem:
-    if settings.dev_no_auth:
-        status: DoctorCheckStatus = "WARN"
-        detail = (
-            "Development auth bypass is active; first-admin setup is skipped for "
-            "this process."
-        )
-    else:
-        status = "PASS"
-        detail = "The first admin account exists and browser authentication is active."
-    return OnboardingChecklistItem(
-        key="admin-setup",
-        title="Admin setup",
-        status=status,
-        detail=detail,
-        check_codes=["webui-authentication"],
-        suggestions=()
-        if not settings.dev_no_auth
-        else [
-            DoctorSuggestionResponse(
-                label="Require browser authentication",
-                description=(
-                    "Disable the local development auth bypass before exposing "
-                    "the WebUI."
-                ),
-                snippet="WUD_WEB_DEV_NO_AUTH=false",
-            )
-        ],
-        docs=[
-            _onboarding_doc(
-                "First login",
-                f"{ONBOARDING_DOC_BASE}/wiki/webui-container.md#first-login",
-            )
-        ],
-    )
-
-
-def _browser_access_onboarding_item(
-    settings: WebSettings,
-    request: Request,
-    checks: Sequence[DoctorCheckResponse],
-) -> OnboardingChecklistItem:
-    relevant = _checks_by_code(
-        checks,
-        {
-            "webui-authentication",
-            "webui-allowed-hosts",
-            "webui-public-origin",
-            "webui-secure-cookies",
-            "webui-trusted-proxies",
-        },
-    )
-    failures = [check for check in relevant if check.status == "FAIL"]
-    if failures:
-        return _onboarding_item_from_checks(
-            key="browser-access",
-            title="Browser access safety",
-            checks=relevant,
-            pass_detail="Browser access safety checks passed.",
-            missing_detail="Browser access readiness was not reported by doctor.",
-            docs=_browser_access_docs(),
-        )
-
-    if _loopback_only_browser_access(settings):
-        status: DoctorCheckStatus = "PASS"
-        detail = "Browser access is limited to loopback hosts for first run."
-    elif settings.public_origin:
-        status = "PASS"
-        detail = "Public origin and allowed hosts are configured for browser access."
-    else:
-        status = "WARN"
-        detail = (
-            "Browser origin is derived from the request. Configure "
-            "WUD_WEB_PUBLIC_ORIGIN and WUD_WEB_ALLOWED_HOSTS before LAN or "
-            "reverse-proxy exposure."
-        )
-    return OnboardingChecklistItem(
-        key="browser-access",
-        title="Browser access safety",
-        status=status,
-        detail=detail,
-        check_codes=_check_codes(relevant),
-        suggestions=[]
-        if status == "PASS"
-        else _dedupe_suggestions(
-            suggestion
-            for check in relevant
-            for suggestion in check.suggestions
-            if check.status != "PASS"
-        ),
-        docs=_browser_access_docs(),
-    )
-
-
-def _mutation_onboarding_item(
-    settings: WebSettings,
-    checks: Sequence[DoctorCheckResponse],
-) -> OnboardingChecklistItem:
-    relevant = _checks_by_code(checks, {"webui-mutation-gate"})
-    check = relevant[0] if relevant else None
-    suggestions = check.suggestions if check is not None else []
-    return OnboardingChecklistItem(
-        key="mutation-mode",
-        title="Browser mutation mode",
-        status="WARN" if settings.mutations_enabled else "PASS",
-        detail=(
-            "Browser apply controls are server-side enabled; keep this intentional."
-            if settings.mutations_enabled
-            else "Browser apply controls are disabled server-side, so the WebUI is read-only."
-        ),
-        check_codes=_check_codes(relevant) or ["webui-mutation-gate"],
-        suggestions=suggestions,
-        docs=[
-            _onboarding_doc(
-                "Read-only and mutations",
-                f"{ONBOARDING_DOC_BASE}/wiki/webui-container.md#read-only-and-mutations",
-            )
-        ],
-    )
-
-
-def _onboarding_item_from_checks(
-    *,
-    key: str,
-    title: str,
-    checks: Sequence[DoctorCheckResponse],
-    pass_detail: str,
-    missing_detail: str,
-    docs: Sequence[OnboardingDocLink],
-) -> OnboardingChecklistItem:
-    status = _aggregate_onboarding_status(checks)
-    return OnboardingChecklistItem(
-        key=key,
-        title=title,
-        status=status,
-        detail=_onboarding_detail(checks, status, pass_detail, missing_detail),
-        check_codes=_check_codes(checks),
-        suggestions=_dedupe_suggestions(
-            suggestion
-            for check in checks
-            for suggestion in check.suggestions
-            if check.status != "PASS"
-        ),
-        docs=list(docs),
-    )
-
-
-def _aggregate_onboarding_status(
-    checks: Sequence[DoctorCheckResponse],
-) -> DoctorCheckStatus:
-    if not checks:
-        return "WARN"
-    return max(checks, key=lambda check: ONBOARDING_STATUS_RANK[check.status]).status
-
-
-def _onboarding_detail(
-    checks: Sequence[DoctorCheckResponse],
-    status: DoctorCheckStatus,
-    pass_detail: str,
-    missing_detail: str,
-) -> str:
-    if not checks:
-        return missing_detail
-    if status == "PASS":
-        return pass_detail
-    details = [
-        f"{check.name}: {check.detail}" if check.detail else check.name
-        for check in checks
-        if check.status == status
-    ]
-    return "; ".join(details[:3]) or missing_detail
-
-
-def _checks_by_code(
-    checks: Sequence[DoctorCheckResponse],
-    codes: set[str],
-) -> list[DoctorCheckResponse]:
-    return [check for check in checks if check.code in codes]
-
-
-def _compose_onboarding_checks(
-    checks: Sequence[DoctorCheckResponse],
-) -> list[DoctorCheckResponse]:
-    return [
-        check
-        for check in checks
-        if check.category == "compose"
-        or check.code.startswith("host-docker-base-mapping")
-    ]
-
-
-def _check_codes(checks: Sequence[DoctorCheckResponse]) -> list[str]:
-    return [check.code for check in checks]
-
-
-def _dedupe_suggestions(
-    suggestions: Sequence[DoctorSuggestionResponse] | Iterator[DoctorSuggestionResponse],
-) -> list[DoctorSuggestionResponse]:
-    seen: set[tuple[str, str]] = set()
-    deduped: list[DoctorSuggestionResponse] = []
-    for suggestion in suggestions:
-        key = (suggestion.label, suggestion.snippet)
-        if key in seen:
-            continue
-        seen.add(key)
-        deduped.append(suggestion)
-    return deduped
-
-
-def _browser_access_docs() -> list[OnboardingDocLink]:
-    return [
-        _onboarding_doc(
-            "Network exposure",
-            f"{ONBOARDING_DOC_BASE}/wiki/webui-container.md#network-exposure",
-        )
-    ]
-
-
-def _onboarding_doc(label: str, url: str) -> OnboardingDocLink:
-    return OnboardingDocLink(label=label, url=url)
-
-
-def _core_update_tour_response(settings: WebSettings) -> CoreUpdateTourResponse:
-    try:
-        with closing(_connect_readonly_db(settings)) as conn:
-            return _core_update_tour_response_from_conn(conn)
-    except ReadOnlyDatabaseMissing:
-        return _default_core_update_tour_response()
-    except (OSError, sqlite3.Error, DatabaseError) as exc:
-        raise HTTPException(
-            status_code=500,
-            detail=_safe_exception_detail(
-                settings,
-                "could not read core update tour state",
-                exc,
-            ),
-        ) from exc
-
-
-def _core_update_tour_response_from_conn(
-    conn: sqlite3.Connection,
-) -> CoreUpdateTourResponse:
-    row = conn.execute(
-        """
-        SELECT value, updated_at
-        FROM web_settings
-        WHERE key = ?
-        LIMIT 1
-        """,
-        (CORE_UPDATE_TOUR_KEY,),
-    ).fetchone()
-    if row is None:
-        return _default_core_update_tour_response()
-    return _core_update_tour_response_from_value(
-        str(row["value"]),
-        str(row["updated_at"] or ""),
-    )
-
-
-def _default_core_update_tour_response() -> CoreUpdateTourResponse:
-    return CoreUpdateTourResponse(
-        status="not_started",
-        step=DEFAULT_CORE_UPDATE_TOUR_STEP,
-        updated_at="",
-    )
-
-
-def _core_update_tour_response_from_value(
-    raw_value: str,
-    updated_at: str,
-) -> CoreUpdateTourResponse:
-    try:
-        decoded = json.loads(raw_value) if raw_value else {}
-    except json.JSONDecodeError:
-        decoded = {}
-    if not isinstance(decoded, Mapping):
-        decoded = {}
-    status = str(decoded.get("status", ""))
-    step = str(decoded.get("step", ""))
-    if status not in CORE_UPDATE_TOUR_STATUS_VALUES:
-        status = "not_started"
-    if step not in CORE_UPDATE_TOUR_STEP_VALUES:
-        step = DEFAULT_CORE_UPDATE_TOUR_STEP
-    return CoreUpdateTourResponse(
-        status=cast(CoreUpdateTourStatus, status),
-        step=cast(CoreUpdateTourStep, step),
-        updated_at=updated_at,
-    )
-
-
-def _set_core_update_tour_state(
-    conn: sqlite3.Connection,
-    *,
-    status: CoreUpdateTourStatus,
-    step: CoreUpdateTourStep,
-) -> CoreUpdateTourResponse:
-    value = json.dumps({"status": status, "step": step}, sort_keys=True)
-    _set_web_setting(conn, CORE_UPDATE_TOUR_KEY, value)
-    return _core_update_tour_response_from_conn(conn)
-
-
-def _loopback_only_browser_access(settings: WebSettings) -> bool:
-    return (
-        not settings.public_origin
-        and bool(settings.allowed_hosts)
-        and settings.allowed_hosts.issubset(DEFAULT_ALLOWED_HOSTS)
-    )
-
-
-def _onboarding_dismissed_at(settings: WebSettings) -> str:
-    try:
-        with open_db(settings.config.db_path) as conn:
-            init_db(conn)
-            return _web_setting(conn, ONBOARDING_DISMISSED_AT_KEY)
-    except (OSError, sqlite3.Error, DatabaseError) as exc:
-        raise HTTPException(
-            status_code=500,
-            detail=_safe_exception_detail(
-                settings,
-                "could not read onboarding checklist state",
-                exc,
-            ),
-        ) from exc
 
 
 def _cleanup_payload_lines(
@@ -3042,313 +2076,6 @@ def _digest_pin_label_rewrite_approvals_from_payload(
     return tuple(approvals)
 
 
-def _apply_preflight_response(
-    settings: WebSettings,
-    request: Request,
-    plan: DryRunPlan,
-) -> ApplyPreflightResponse:
-    doctor = _doctor_response(settings, _web_doctor_result(settings, request))
-    doctor_checks = doctor.checks
-    checks = [
-        _docker_reachable_apply_preflight_check(settings, doctor_checks),
-        _doctor_apply_preflight_check(
-            settings,
-            "compose-renders",
-            "Compose renders",
-            _compose_render_checks(doctor_checks, plan),
-            missing_detail="Compose rendering readiness was not reported.",
-        ),
-        _doctor_apply_preflight_check(
-            settings,
-            "wud-file-writable",
-            "WUD file writable",
-            _doctor_checks_by_code(
-                doctor_checks,
-                {"wud-out-file-directory", "wud-out-file"},
-            ),
-            missing_detail="WUD output file readiness was not reported.",
-        ),
-        _database_apply_preflight_check(settings),
-        _doctor_apply_preflight_check(
-            settings,
-            "logs-writable",
-            "Logs writable",
-            _doctor_checks_by_code(doctor_checks, {"wud-log-dir"}),
-            missing_detail="Log directory readiness was not reported.",
-        ),
-        _mutation_apply_preflight_check(settings),
-        _bind_mount_apply_preflight_check(settings, plan),
-        _selected_services_apply_preflight_check(settings, plan),
-    ]
-    failures = sum(1 for check in checks if check.status == "FAIL")
-    warnings = sum(1 for check in checks if check.status == "WARN")
-    return ApplyPreflightResponse(
-        ok=failures == 0,
-        failures=failures,
-        warnings=warnings,
-        checks=checks,
-    )
-
-
-def _doctor_checks_by_code(
-    checks: Sequence[DoctorCheckResponse],
-    codes: set[str] | frozenset[str],
-) -> list[DoctorCheckResponse]:
-    return [check for check in checks if check.code in codes]
-
-
-def _compose_render_checks(
-    checks: Sequence[DoctorCheckResponse],
-    plan: DryRunPlan,
-) -> list[DoctorCheckResponse]:
-    render_checks = [
-        check
-        for check in checks
-        if check.code == "compose-discovery" or check.code.startswith("compose-config")
-    ]
-    selected_compose_labels = {
-        f"compose config {Path(stack.directory) / stack.compose_file}"
-        for stack in plan.stacks
-    }
-    if not selected_compose_labels:
-        return render_checks
-    return [
-        check for check in render_checks if check.name in selected_compose_labels
-    ]
-
-
-def _docker_reachable_apply_preflight_check(
-    settings: WebSettings,
-    checks: Sequence[DoctorCheckResponse],
-) -> ApplyPreflightCheck:
-    source_checks = _doctor_checks_by_code(
-        checks,
-        {
-            "docker-endpoint",
-            "docker-socket",
-            "docker-daemon-version",
-            "docker-daemon-info",
-            "docker-container-listing",
-        },
-    )
-    present = {check.code for check in source_checks}
-    missing = [
-        code.replace("-", " ")
-        for code in (
-            "docker-daemon-version",
-            "docker-daemon-info",
-            "docker-container-listing",
-        )
-        if code not in present
-    ]
-    if not present.intersection({"docker-endpoint", "docker-socket"}):
-        missing.insert(0, "docker socket or endpoint")
-    missing_detail = (
-        "Missing Docker readiness check(s): " + ", ".join(missing) if missing else ""
-    )
-    if missing_detail:
-        return ApplyPreflightCheck(
-            status="FAIL",
-            code="docker-reachable",
-            label="Docker reachable",
-            detail=_redact_sensitive_text(settings, missing_detail),
-            source_check_codes=[check.code for check in source_checks],
-        )
-    return _doctor_apply_preflight_check(
-        settings,
-        "docker-reachable",
-        "Docker reachable",
-        source_checks,
-        missing_detail=missing_detail,
-    )
-
-
-def _doctor_apply_preflight_check(
-    settings: WebSettings,
-    code: str,
-    label: str,
-    source_checks: Sequence[DoctorCheckResponse],
-    *,
-    missing_detail: str,
-) -> ApplyPreflightCheck:
-    source_check_codes = [check.code for check in source_checks]
-    if not source_checks:
-        return ApplyPreflightCheck(
-            status="FAIL",
-            code=code,
-            label=label,
-            detail=_redact_sensitive_text(
-                settings,
-                missing_detail or "No readiness check was reported.",
-            ),
-            source_check_codes=source_check_codes,
-        )
-    status = _aggregate_apply_preflight_status(source_checks)
-    return ApplyPreflightCheck(
-        status=status,
-        code=code,
-        label=label,
-        detail=(
-            ""
-            if status == "PASS"
-            else _apply_preflight_check_detail(settings, source_checks, status)
-        ),
-        source_check_codes=source_check_codes,
-    )
-
-
-def _aggregate_apply_preflight_status(
-    checks: Sequence[DoctorCheckResponse],
-) -> DoctorCheckStatus:
-    if any(check.status == "FAIL" for check in checks):
-        return "FAIL"
-    if any(check.status == "WARN" for check in checks):
-        return "WARN"
-    return "PASS"
-
-
-def _apply_preflight_check_detail(
-    settings: WebSettings,
-    checks: Sequence[DoctorCheckResponse],
-    status: DoctorCheckStatus,
-) -> str:
-    problems = [check for check in checks if check.status == status]
-    if not problems and status == "WARN":
-        problems = [check for check in checks if check.status == "FAIL"]
-    if not problems:
-        return ""
-    first = problems[0]
-    detail = first.detail or first.name
-    if len(problems) > 1:
-        detail = f"{detail}; +{len(problems) - 1} more"
-    return _redact_sensitive_text(settings, detail)
-
-
-def _mutation_apply_preflight_check(settings: WebSettings) -> ApplyPreflightCheck:
-    if settings.mutations_enabled:
-        return ApplyPreflightCheck(
-            status="PASS",
-            code="mutations-enabled",
-            label="Mutations enabled",
-            source_check_codes=["webui-mutation-gate"],
-        )
-    return ApplyPreflightCheck(
-        status="FAIL",
-        code="mutations-enabled",
-        label="Mutations enabled",
-        detail="Set WUD_WEB_MUTATIONS_ENABLED=true on the server to apply updates.",
-        source_check_codes=["webui-mutation-gate"],
-    )
-
-
-def _database_apply_preflight_check(settings: WebSettings) -> ApplyPreflightCheck:
-    db_ready, db_warning = _database_ready(settings)
-    if db_ready:
-        return ApplyPreflightCheck(
-            status="PASS",
-            code="database-ready",
-            label="Database ready",
-            source_check_codes=["webui-database"],
-        )
-
-    path = settings.config.db_path
-    if str(path) != ":memory:" and not path.exists():
-        parent = path.parent
-        if parent.is_dir() and os.access(parent, os.W_OK | os.X_OK):
-            return ApplyPreflightCheck(
-                status="PASS",
-                code="database-ready",
-                label="Database ready",
-                source_check_codes=["webui-database"],
-            )
-
-    return ApplyPreflightCheck(
-        status="FAIL",
-        code="database-ready",
-        label="Database ready",
-        detail=_redact_sensitive_text(settings, db_warning),
-        source_check_codes=["webui-database"],
-    )
-
-
-def _bind_mount_apply_preflight_check(
-    settings: WebSettings,
-    plan: DryRunPlan,
-) -> ApplyPreflightCheck:
-    issues = [
-        issue for issue in plan.issues if issue.code == "bind-mount-path-invalid"
-    ]
-    if not issues:
-        return ApplyPreflightCheck(
-            status="PASS",
-            code="bind-mounts-safe",
-            label="Bind mounts safe",
-            source_check_codes=["bind-mount-path-invalid"],
-        )
-    return ApplyPreflightCheck(
-        status="FAIL",
-        code="bind-mounts-safe",
-        label="Bind mounts safe",
-        detail=_apply_preflight_issue_detail(settings, issues),
-        source_check_codes=["bind-mount-path-invalid"],
-    )
-
-
-def _selected_services_apply_preflight_check(
-    settings: WebSettings,
-    plan: DryRunPlan,
-) -> ApplyPreflightCheck:
-    if (
-        plan.status == "ready"
-        and not plan.skipped
-        and plan.summary.matched_target_count == plan.summary.target_count
-        and plan.summary.service_count > 0
-    ):
-        return ApplyPreflightCheck(
-            status="PASS",
-            code="selected-services-matched",
-            label="Selected services matched",
-            source_check_codes=["selected-services"],
-        )
-
-    detail = "Selected updates are not ready to apply."
-    if plan.status == "empty":
-        detail = "No selected services need changes."
-    elif plan.skipped:
-        detail = plan.skipped[0].reason
-    elif plan.issues:
-        detail = _apply_preflight_issue_detail(settings, plan.issues)
-    elif plan.summary.matched_target_count != plan.summary.target_count:
-        detail = (
-            f"{plan.summary.matched_target_count} of "
-            f"{plan.summary.target_count} selected target(s) matched services."
-        )
-
-    return ApplyPreflightCheck(
-        status="FAIL",
-        code="selected-services-matched",
-        label="Selected services matched",
-        detail=_redact_sensitive_text(settings, detail),
-        source_check_codes=["selected-services"],
-    )
-
-
-def _apply_preflight_issue_detail(
-    settings: WebSettings,
-    issues: Sequence[Any],
-) -> str:
-    if not issues:
-        return ""
-    first = issues[0]
-    detail = str(getattr(first, "message", "") or getattr(first, "reason", ""))
-    hint = str(getattr(first, "hint", "") or "")
-    if hint:
-        detail = f"{detail} {hint}".strip()
-    if len(issues) > 1:
-        detail = f"{detail}; +{len(issues) - 1} more"
-    return _redact_sensitive_text(settings, detail)
-
-
 def _plan_can_apply(plan: DryRunPlan, settings: WebSettings) -> bool:
     return (
         settings.mutations_enabled
@@ -3594,7 +2321,11 @@ def _plan_response(
     settings: WebSettings,
     request: Request,
 ) -> PlanResponse:
-    apply_preflight = _apply_preflight_response(settings, request, plan)
+    apply_preflight = web_diagnostics.apply_preflight_response(
+        settings,
+        request,
+        plan,
+    )
     payload = asdict(plan)
     payload["can_apply"] = _plan_can_apply(plan, settings) and apply_preflight.ok
     payload["cleanup"]["can_remove_unmatched"] = (
@@ -3615,49 +2346,6 @@ def _parse_pending_file(settings: WebSettings) -> tuple[bool, ParsedWudFile]:
             status_code=500,
             detail=f"could not read WUD file: {exc}",
         ) from exc
-
-
-def _database_ready(settings: WebSettings) -> tuple[bool, str]:
-    try:
-        with closing(_connect_readonly_db(settings)):
-            pass
-        return True, ""
-    except ReadOnlyDatabaseMissing as exc:
-        return False, str(exc)
-    except (OSError, sqlite3.Error, DatabaseError) as exc:
-        return False, f"database is not ready: {exc}"
-
-
-def _connect_readonly_db(settings: WebSettings) -> sqlite3.Connection:
-    path = settings.config.db_path
-    if str(path) == ":memory:" or not path.is_file():
-        raise ReadOnlyDatabaseMissing(f"database file does not exist: {path}")
-    conn = sqlite3.connect(_readonly_sqlite_uri(path), uri=True)
-    conn.row_factory = sqlite3.Row
-    try:
-        conn.execute("PRAGMA foreign_keys = ON")
-        conn.execute("PRAGMA query_only = ON")
-        conn.execute("PRAGMA busy_timeout = 5000")
-        _validate_readonly_schema(conn)
-    except Exception:
-        conn.close()
-        raise
-    return conn
-
-
-def _readonly_sqlite_uri(path: Path) -> str:
-    return f"file:{quote(str(path), safe='/')}?mode=ro"
-
-
-def _validate_readonly_schema(conn: sqlite3.Connection) -> None:
-    version = db_user_version(conn)
-    if version == 0:
-        raise DatabaseError("database schema is not initialized")
-    if version != SCHEMA_VERSION:
-        raise DatabaseError(
-            f"database schema version {version} requires migration to {SCHEMA_VERSION}"
-        )
-    validate_db_schema(conn)
 
 
 def _run_summary_from_row(
