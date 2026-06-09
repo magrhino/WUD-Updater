@@ -2,14 +2,12 @@
 
 from __future__ import annotations
 
-import logging
 import os
 import sys
 from collections.abc import Awaitable, Callable, Mapping
 from datetime import datetime
-from functools import wraps
 from pathlib import Path
-from threading import Lock, RLock
+from threading import Lock
 from typing import Any
 
 from fastapi import (
@@ -254,38 +252,6 @@ AUTO_UPDATE_DAYS = web_scheduler.AUTO_UPDATE_DAYS
 AutoUpdateScheduleReservationError = (
     web_scheduler.AutoUpdateScheduleReservationError
 )
-LOGGER = logging.getLogger(__name__)
-_COMPAT_SEAM_LOCK = RLock()
-_COMPAT_ORIGINAL_SEAMS: dict[tuple[int, str], Any] = {}
-
-
-def _register_compat_seams(module: Any, seam_names: tuple[str, ...]) -> None:
-    for name in seam_names:
-        _COMPAT_ORIGINAL_SEAMS[(id(module), name)] = getattr(module, name)
-
-
-def _call_with_local_seams(
-    module: Any,
-    seam_names: tuple[str, ...],
-    function: Callable[..., Any],
-    *args: Any,
-    **kwargs: Any,
-) -> Any:
-    with _COMPAT_SEAM_LOCK:
-        originals = {name: getattr(module, name) for name in seam_names}
-        try:
-            for name in seam_names:
-                local_value = globals()[name]
-                original_value = _COMPAT_ORIGINAL_SEAMS.get(
-                    (id(module), name),
-                    local_value,
-                )
-                if local_value is not original_value:
-                    setattr(module, name, local_value)
-            return function(*args, **kwargs)
-        finally:
-            for name, value in originals.items():
-                setattr(module, name, value)
 
 
 # Import-compatibility re-exports for route handlers and helpers extracted from
@@ -317,7 +283,7 @@ api_refresh_release_notes = web_release_notes.api_refresh_release_notes
 _release_notes_response = web_release_notes.release_notes_response
 _release_note_source_resolver = web_release_notes.release_note_source_resolver
 
-_api_update_managed_settings = web_settings.api_update_managed_settings
+api_update_managed_settings = web_settings.api_update_managed_settings
 api_settings = web_settings.api_settings
 _effective_config = web_settings._effective_config
 _effective_compose_ignore_paths = web_settings._effective_compose_ignore_paths
@@ -354,29 +320,7 @@ _env_configured = web_settings._env_configured
 _format_bool = web_settings._format_bool
 _format_sequence = web_settings._format_sequence
 
-_WEB_SETTINGS_COMPAT_SEAMS = (
-    "_settings",
-    "_validated_managed_setting_updates",
-    "_apply_managed_setting_updates",
-    "_managed_settings_entries_from_conn",
-    "_managed_settings_audit_values",
-    "_insert_managed_settings_audit",
-)
-_register_compat_seams(web_settings, _WEB_SETTINGS_COMPAT_SEAMS)
-
-
-@wraps(_api_update_managed_settings)
-def api_update_managed_settings(*args: Any, **kwargs: Any) -> Any:
-    return _call_with_local_seams(
-        web_settings,
-        _WEB_SETTINGS_COMPAT_SEAMS,
-        _api_update_managed_settings,
-        *args,
-        **kwargs,
-    )
-
-
-_api_state_operation = web_state.api_state_operation
+api_state_operation = web_state.api_state_operation
 api_service_policies = web_state.api_service_policies
 api_snoozes = web_state.api_snoozes
 api_tag_exclusions = web_state.api_tag_exclusions
@@ -415,58 +359,7 @@ _tag_exclusion_summary = web_state._tag_exclusion_summary
 _json_object = web_state._json_object
 _json_list = web_state._json_list
 
-_WEB_STATE_COMPAT_SEAMS = (
-    "_settings",
-    "_apply_state_operation",
-    "_upsert_service_policy",
-    "_service_policy_upsert_values",
-    "_normalized_auto_update_time",
-    "_normalized_auto_update_days",
-    "_delete_service_policy",
-    "_create_snooze",
-    "_delete_snooze",
-    "_upsert_tag_exclusion",
-    "_set_tag_exclusion_status",
-    "_service_policy_row",
-    "_snooze_row",
-    "_tag_exclusion_row",
-    "_tag_exclusion_unique_row",
-    "_required_state_text",
-    "_future_iso_timestamp",
-    "_normalized_image_repo",
-    "_tag_exclusion_service_key",
-    "_valid_tag",
-    "_insert_state_audit",
-    "_state_actor_type",
-    "_state_audit_stack_name",
-    "_state_audit_service_name",
-    "_state_audit_image",
-    "_service_policy_summary",
-    "_snooze_summary",
-    "_tag_exclusion_summary",
-    "_json_object",
-    "_json_list",
-    "_metadata_from_row",
-    "_auto_update_days_from_row",
-    "_service_policy_from_row",
-    "_snooze_from_row",
-    "_tag_exclusion_from_row",
-)
-_register_compat_seams(web_state, _WEB_STATE_COMPAT_SEAMS)
-
-
-@wraps(_api_state_operation)
-def api_state_operation(*args: Any, **kwargs: Any) -> Any:
-    return _call_with_local_seams(
-        web_state,
-        _WEB_STATE_COMPAT_SEAMS,
-        _api_state_operation,
-        *args,
-        **kwargs,
-    )
-
-
-_api_run_log = web_runs.api_run_log
+api_run_log = web_runs.api_run_log
 api_runs = web_runs.api_runs
 api_run_detail = web_runs.api_run_detail
 _run_summary_from_row = web_runs._run_summary_from_row
@@ -480,27 +373,6 @@ _safe_log_path = web_runs._safe_log_path
 _path_is_or_under = web_runs._path_is_or_under
 _run_log_response = web_runs._run_log_response
 _read_log_tail = web_runs._read_log_tail
-
-_WEB_RUNS_COMPAT_SEAMS = (
-    "_settings",
-    "_safe_log_path",
-    "_path_is_or_under",
-    "_run_log_response",
-    "_read_log_tail",
-)
-_register_compat_seams(web_runs, _WEB_RUNS_COMPAT_SEAMS)
-
-
-@wraps(_api_run_log)
-def api_run_log(*args: Any, **kwargs: Any) -> Any:
-    return _call_with_local_seams(
-        web_runs,
-        _WEB_RUNS_COMPAT_SEAMS,
-        _api_run_log,
-        *args,
-        **kwargs,
-    )
-
 
 _mount_static_spa_if_present = web_static.mount_static_spa_if_present
 _static_spa_available = web_static.static_spa_available

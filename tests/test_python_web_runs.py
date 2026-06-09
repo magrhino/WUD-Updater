@@ -4,7 +4,6 @@ from pathlib import Path
 
 from fastapi import HTTPException
 
-from wud_updater import web as web_module
 from wud_updater import web_runs as runs_module
 from wud_updater.db import (
     open_db,
@@ -13,6 +12,7 @@ from wud_updater.db import (
     insert_update_event,
     insert_update_run,
 )
+from wud_updater.web_models import LogTail
 from tests.web_test_helpers import (
     _client,
     _insert_run,
@@ -261,7 +261,7 @@ def test_run_log_endpoint_caps_tail_size(tmp_path: Path) -> None:
     assert response.json()["max_bytes"] == 1_048_576
 
 
-def test_run_log_endpoint_uses_web_module_tail_reader_seam(
+def test_run_log_endpoint_uses_runs_module_tail_reader_seam(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
@@ -275,14 +275,14 @@ def test_run_log_endpoint_uses_web_module_tail_reader_seam(
     def fake_read_log_tail(
         _log_path: Path,
         _max_bytes: int,
-    ) -> web_module.LogTail:
-        return web_module.LogTail(
+    ) -> LogTail:
+        return LogTail(
             exists=True,
             content="web tail seam used",
             truncated=False,
         )
 
-    monkeypatch.setattr(web_module, "_read_log_tail", fake_read_log_tail)
+    monkeypatch.setattr(runs_module, "_read_log_tail", fake_read_log_tail)
 
     response = client.get(f"/api/v1/runs/{run_id}/log?tail_bytes=4")
 
