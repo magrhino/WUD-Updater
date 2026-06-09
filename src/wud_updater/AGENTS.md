@@ -19,6 +19,10 @@ Prefer small modules with one clear reason to change:
 | Web app factory, startup, CLI handoff, compatibility imports | `web.py` | Do not add new route families or large helper clusters here. |
 | Web models and schemas | `web_models.py` | Preserve Pydantic fields, defaults, `Field(...)` constraints, and `Literal` precision. |
 | Web auth, setup, sessions, CSRF, Host/Origin safety | `web_auth.py` | Security-sensitive; preserve failure bodies, cookies, headers, and redaction. |
+| Web health, readiness, and doctor routes | `web_health.py` | Preserve unauthenticated `/healthz`, local-only `/readyz`, authenticated readiness, doctor option/env construction, and redaction. |
+| Web diagnostics support bundle and apply preflight | `web_diagnostics.py` | Preserve support-bundle redaction and apply preflight missing-check aggregation, status codes, failures, and warnings. |
+| Web onboarding checklist and core update tour | `web_onboarding.py` | Preserve auth/CSRF behavior, dismissed-onboarding short-circuiting, SQLite setting keys, and read-only-mode tour persistence. |
+| Web read-only database helpers | `web_database.py` | Preserve read-only SQLite URI handling, schema validation, and database readiness messages. |
 | Web apply jobs, streams, plan apply | `web_jobs.py` | Preserve one-job-at-a-time, stale-plan rejection, WUD locks, audit, and progress events. |
 | Web auto-update scheduler | `web_scheduler.py` | Keep disabled unless mutations are enabled; preserve reservations and timing behavior. |
 | Web self-update and container restart | `web_self_update.py` | Preserve plan TTL, image/tag validation, restart validation, audit, and redaction. |

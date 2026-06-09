@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from wud_updater import web as web_module
+from wud_updater import web_onboarding
 from wud_updater.db import open_db
 
 from tests.web_test_helpers import (
@@ -157,7 +157,7 @@ def test_onboarding_checklist_skips_doctor_after_dismissal(
     def fail_doctor(*_args, **_kwargs):
         raise AssertionError("dismissed onboarding should not run doctor")
 
-    monkeypatch.setattr(web_module, "_web_doctor_result", fail_doctor)
+    monkeypatch.setattr(web_onboarding, "web_doctor_result", fail_doctor)
     after = client.post(
         "/api/v1/onboarding/checklist",
         headers=_csrf_headers(client),

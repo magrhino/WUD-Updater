@@ -84,8 +84,12 @@ EOF
     src/wud_updater/updater_models.py \
     src/wud_updater/updater.py \
     src/wud_updater/web_auth.py \
+    src/wud_updater/web_database.py \
+    src/wud_updater/web_diagnostics.py \
+    src/wud_updater/web_health.py \
     src/wud_updater/web_jobs.py \
     src/wud_updater/web_models.py \
+    src/wud_updater/web_onboarding.py \
     src/wud_updater/web_scheduler.py \
     src/wud_updater/web_self_update.py \
     src/wud_updater/web.py \
