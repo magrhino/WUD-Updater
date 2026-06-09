@@ -1,7 +1,11 @@
 from __future__ import annotations
 import json
 from pathlib import Path
+
+from fastapi import HTTPException
+
 from wud_updater import web as web_module
+from wud_updater import web_runs as runs_module
 from wud_updater.db import (
     open_db,
     init_db,
@@ -32,6 +36,36 @@ def test_runs_list_returns_empty_without_creating_missing_database(
     assert response.json() == []
     assert not root.exists()
     assert not db_path.exists()
+
+
+def test_runs_database_errors_are_sanitized(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    secret = "github-secret-token"
+    leaked_path = tmp_path / "state" / "wud.sqlite"
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "GITHUB_TOKEN": secret,
+        },
+    )
+
+    def fail_connect(_settings: object) -> object:
+        raise OSError(f"cannot open {leaked_path} with {secret}")
+
+    monkeypatch.setattr(runs_module, "_connect_readonly_db", fail_connect)
+
+    response = client.get("/api/v1/runs")
+
+    assert response.status_code == 500
+    detail = response.json()["detail"]
+    assert detail.startswith("could not read database: ")
+    assert str(leaked_path) not in detail
+    assert secret not in detail
+    assert "[REDACTED_PATH]" in detail
+    assert "<redacted>" in detail
 
 
 def test_run_detail_returns_not_found_without_creating_missing_database(
@@ -144,6 +178,20 @@ def test_runs_endpoints_sanitize_run_and_event_metadata(tmp_path: Path) -> None:
                 }
             ),
         )
+        insert_pending_update(
+            conn,
+            run_id=run_id,
+            line_no=1,
+            raw="nginx:1.25",
+            image="nginx:1.25",
+            status="success",
+            metadata_json=json.dumps(
+                {
+                    "log": str(log_file),
+                    "target": {"compose_file": str(compose_file)},
+                }
+            ),
+        )
         insert_update_event(
             conn,
             run_id=run_id,
@@ -174,6 +222,11 @@ def test_runs_endpoints_sanitize_run_and_event_metadata(tmp_path: Path) -> None:
             payload["events"][0]["metadata"]["before"]["compose_file"]
             == "<DOCKER_BASE>/media/compose.yml"
         )
+    assert detail["pending_updates"][0]["metadata"]["log"] == "<WUD_LOG_DIR>/run.log"
+    assert (
+        detail["pending_updates"][0]["metadata"]["target"]["compose_file"]
+        == "<DOCKER_BASE>/media/compose.yml"
+    )
 
 
 def test_run_log_endpoint_tails_configured_log_file(tmp_path: Path) -> None:
@@ -206,6 +259,39 @@ def test_run_log_endpoint_caps_tail_size(tmp_path: Path) -> None:
 
     assert response.status_code == 200
     assert response.json()["max_bytes"] == 1_048_576
+
+
+def test_run_log_endpoint_uses_web_module_tail_reader_seam(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    log_dir = tmp_path / "state" / "logs"
+    log_dir.mkdir(parents=True)
+    log_file = log_dir / "run.log"
+    log_file.write_text("original", encoding="utf-8")
+    run_id = _insert_run(tmp_path, log_file=str(log_file))
+    client = _client(tmp_path, {"WUD_WEB_DEV_NO_AUTH": "true"})
+
+    def fake_read_log_tail(
+        _log_path: Path,
+        _max_bytes: int,
+    ) -> web_module.LogTail:
+        return web_module.LogTail(
+            exists=True,
+            content="web tail seam used",
+            truncated=False,
+        )
+
+    monkeypatch.setattr(web_module, "_read_log_tail", fake_read_log_tail)
+
+    response = client.get(f"/api/v1/runs/{run_id}/log?tail_bytes=4")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["exists"] is True
+    assert body["content"] == "web tail seam used"
+    assert body["truncated"] is False
+    assert body["max_bytes"] == 4
 
 
 def test_run_log_endpoint_rejects_missing_log_file(tmp_path: Path) -> None:
@@ -246,14 +332,34 @@ def test_safe_log_path_uses_resolved_path_after_symlink_swap(
     outside.write_text("outside", encoding="utf-8")
     link.symlink_to(allowed)
 
-    log_path = web_module._safe_log_path(client.app.state.web_settings, "run.log")
+    log_path = runs_module._safe_log_path(client.app.state.web_settings, "run.log")
     link.unlink()
     link.symlink_to(outside)
-    tail = web_module._read_log_tail(log_path, 1024)
+    tail = runs_module._read_log_tail(log_path, 1024)
 
     assert log_path == allowed.resolve()
     assert tail.exists is True
     assert tail.content == "allowed"
+
+
+def test_read_log_tail_hides_os_error_detail(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    log_path = tmp_path / "state" / "logs" / "run.log"
+
+    def fail_is_file(_path: Path) -> bool:
+        raise OSError(f"permission denied: {tmp_path / 'private.log'}")
+
+    monkeypatch.setattr(Path, "is_file", fail_is_file)
+
+    try:
+        runs_module._read_log_tail(log_path, 1024)
+    except HTTPException as exc:
+        assert exc.status_code == 500
+        assert exc.detail == "could not read log file"
+    else:
+        raise AssertionError("expected log tail read to fail")
 
 
 def test_run_log_endpoint_returns_not_found_for_unknown_run(tmp_path: Path) -> None:

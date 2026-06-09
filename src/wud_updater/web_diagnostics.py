@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import os
 import sqlite3
-from collections.abc import Callable, Sequence
+from collections.abc import Sequence
 from contextlib import closing
 from pathlib import Path
 from typing import Any
@@ -12,6 +12,7 @@ from typing import Any
 from fastapi import HTTPException, Request
 
 from . import __version__
+from . import web_jobs, web_pending, web_runs, web_settings
 from .db import DatabaseError
 from .plans import DryRunPlan
 from .web_auth import (
@@ -32,57 +33,18 @@ from .web_models import (
     DoctorCheckResponse,
     DoctorCheckStatus,
     LogTail,
-    PendingResponse,
-    RunSummary,
-    SettingsResponse,
     WebSettings,
 )
-
-_SettingsResponseBuilder = Callable[[Request], SettingsResponse]
-_PendingResponseBuilder = Callable[[WebSettings, bool], PendingResponse]
-_RunSummaryBuilder = Callable[[sqlite3.Row], RunSummary]
-_SafeLogPath = Callable[[WebSettings, str], Path | None]
-_ReadLogTail = Callable[[Path, int], LogTail]
-
-_settings_response_builder: _SettingsResponseBuilder | None = None
-_pending_response_builder: _PendingResponseBuilder | None = None
-_run_summary_builder: _RunSummaryBuilder | None = None
-_safe_log_path: _SafeLogPath | None = None
-_read_log_tail: _ReadLogTail | None = None
-_default_job_log_tail_bytes = 262_144
-
-
-def configure(
-    *,
-    settings_response_builder: _SettingsResponseBuilder,
-    pending_response_builder: _PendingResponseBuilder,
-    run_summary_builder: _RunSummaryBuilder,
-    safe_log_path: _SafeLogPath,
-    read_log_tail: _ReadLogTail,
-    default_job_log_tail_bytes: int,
-) -> None:
-    global _settings_response_builder
-    global _pending_response_builder
-    global _run_summary_builder
-    global _safe_log_path
-    global _read_log_tail
-    global _default_job_log_tail_bytes
-    _settings_response_builder = settings_response_builder
-    _pending_response_builder = pending_response_builder
-    _run_summary_builder = run_summary_builder
-    _safe_log_path = safe_log_path
-    _read_log_tail = read_log_tail
-    _default_job_log_tail_bytes = default_job_log_tail_bytes
 
 
 def api_diagnostics_support_bundle(request: Request) -> DiagnosticsSupportBundleResponse:
     settings = _settings(request)
 
     version = __version__
-    settings_resp = _build_settings_response(request)
+    settings_resp = web_settings.settings_response(settings, request)
     doctor_result = doctor_response(settings, web_doctor_result(settings, request))
 
-    pending = _build_pending_response(settings, include_grouping=True)
+    pending = web_pending.pending_response(settings, include_grouping=True)
     for item in pending.items:
         item.raw = ""
     if pending.grouping:
@@ -105,7 +67,7 @@ def api_diagnostics_support_bundle(request: Request) -> DiagnosticsSupportBundle
                 """
             ).fetchall()
             if rows:
-                last_run = _build_run_summary(rows[0])
+                last_run = web_runs._run_summary_from_row(rows[0])
     except ReadOnlyDatabaseMissing as exc:
         diagnostics_warnings.append(f"last run status unavailable: {exc}")
     except HTTPException as exc:
@@ -118,13 +80,13 @@ def api_diagnostics_support_bundle(request: Request) -> DiagnosticsSupportBundle
     log_tail = None
     if last_run and last_run.log_file:
         try:
-            log_path = _resolve_safe_log_path(settings, last_run.log_file)
+            log_path = web_runs._safe_log_path(settings, last_run.log_file)
             if log_path is None:
                 log_tail = LogTail(exists=False, content="", truncated=False)
             else:
-                log_tail = _read_log_tail_response(
+                log_tail = web_runs._read_log_tail(
                     log_path,
-                    _default_job_log_tail_bytes,
+                    web_jobs.DEFAULT_JOB_LOG_TAIL_BYTES,
                 )
         except HTTPException as exc:
             diagnostics_warnings.append(f"log tail unavailable: {exc.detail}")
@@ -449,37 +411,3 @@ def _apply_preflight_issue_detail(
     if len(issues) > 1:
         detail = f"{detail}; +{len(issues) - 1} more"
     return _redact_sensitive_text(settings, detail)
-
-
-def _build_settings_response(request: Request) -> SettingsResponse:
-    if _settings_response_builder is None:
-        raise RuntimeError("web_diagnostics.configure() was not called")
-    return _settings_response_builder(request)
-
-
-def _build_pending_response(
-    settings: WebSettings,
-    *,
-    include_grouping: bool,
-) -> PendingResponse:
-    if _pending_response_builder is None:
-        raise RuntimeError("web_diagnostics.configure() was not called")
-    return _pending_response_builder(settings, include_grouping)
-
-
-def _build_run_summary(row: sqlite3.Row) -> RunSummary:
-    if _run_summary_builder is None:
-        raise RuntimeError("web_diagnostics.configure() was not called")
-    return _run_summary_builder(row)
-
-
-def _resolve_safe_log_path(settings: WebSettings, raw_log_file: str) -> Path | None:
-    if _safe_log_path is None:
-        raise RuntimeError("web_diagnostics.configure() was not called")
-    return _safe_log_path(settings, raw_log_file)
-
-
-def _read_log_tail_response(log_path: Path, max_bytes: int) -> LogTail:
-    if _read_log_tail is None:
-        raise RuntimeError("web_diagnostics.configure() was not called")
-    return _read_log_tail(log_path, max_bytes)

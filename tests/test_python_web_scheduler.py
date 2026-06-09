@@ -9,7 +9,7 @@ from threading import Event, Thread
 from types import SimpleNamespace
 
 from wud_updater import web as web_module
-from wud_updater import web_jobs, web_scheduler
+from wud_updater import web_jobs, web_scheduler, web_settings
 from wud_updater.db import init_db, open_db
 from wud_updater.locks import DirectoryLock
 
@@ -28,7 +28,7 @@ def _auto_update_tick(client, now: datetime):
     return web_scheduler._auto_update_tick(
         client.app,
         client.app.state.web_settings,
-        effective_config_loader=web_module._effective_config,
+        effective_config_loader=web_settings._effective_config,
         now=now,
     )
 

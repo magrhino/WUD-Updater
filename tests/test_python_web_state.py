@@ -5,8 +5,11 @@ import sqlite3
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+from fastapi import HTTPException
 
 from wud_updater import web as web_module
+from wud_updater import web_settings as settings_module
+from wud_updater import web_state as state_module
 from wud_updater.db import (
     open_db,
     init_db,
@@ -33,6 +36,36 @@ def _store_web_setting(tmp_path: Path, key: str, value: str) -> None:
                 """,
                 (key, value, "2026-06-08T00:00:00+00:00"),
             )
+
+
+def test_state_read_database_errors_are_sanitized(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    secret = "github-secret-token"
+    leaked_path = tmp_path / "state" / "wud.sqlite"
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "GITHUB_TOKEN": secret,
+        },
+    )
+
+    def fail_connect(_settings: object) -> object:
+        raise OSError(f"cannot open {leaked_path} with {secret}")
+
+    monkeypatch.setattr(state_module, "_connect_readonly_db", fail_connect)
+
+    response = client.get("/api/v1/service-policies")
+
+    assert response.status_code == 500
+    detail = response.json()["detail"]
+    assert detail.startswith("could not read database: ")
+    assert str(leaked_path) not in detail
+    assert secret not in detail
+    assert "[REDACTED_PATH]" in detail
+    assert "<redacted>" in detail
 
 
 def test_settings_rejects_unauthenticated_requests_without_dev_bypass(
@@ -264,6 +297,38 @@ def test_managed_settings_rejects_uneditable_or_invalid_values_without_partial_w
     assert managed["theme_preference"]["source"] == "default"
 
 
+def test_managed_settings_endpoint_uses_web_module_validation_seam(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+        },
+    )
+    headers = _csrf_headers(client)
+
+    def fail_validation(*_args: object, **_kwargs: object) -> dict[str, str]:
+        raise HTTPException(status_code=409, detail="web validation seam used")
+
+    monkeypatch.setattr(
+        web_module,
+        "_validated_managed_setting_updates",
+        fail_validation,
+    )
+
+    response = client.post(
+        "/api/v1/settings/managed",
+        json={"values": {"theme_preference": "dark"}},
+        headers=headers,
+    )
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == "web validation seam used"
+
+
 def test_managed_settings_update_wraps_invalid_existing_config_error(
     tmp_path: Path,
 ) -> None:
@@ -286,6 +351,38 @@ def test_managed_settings_update_wraps_invalid_existing_config_error(
     assert response.status_code == 500
     assert detail.startswith("could not read managed settings: ")
     assert "true or false" in detail
+
+
+def test_effective_config_wraps_invalid_stored_compose_ignore_paths_error(
+    tmp_path: Path,
+) -> None:
+    client = _client(tmp_path, {"WUD_WEB_DEV_NO_AUTH": "true"})
+    _store_web_setting(tmp_path, "compose.ignore_paths", "old,,archive")
+
+    try:
+        settings_module._effective_config(client.app.state.web_settings)
+    except HTTPException as exc:
+        assert exc.status_code == 500
+        assert exc.detail.startswith("stored compose_ignore_paths is invalid: ")
+        assert "non-empty relative paths" in exc.detail
+    else:
+        raise AssertionError("expected invalid stored compose ignore paths to fail")
+
+
+def test_effective_config_wraps_invalid_stored_digest_pin_error(
+    tmp_path: Path,
+) -> None:
+    client = _client(tmp_path, {"WUD_WEB_DEV_NO_AUTH": "true"})
+    _store_web_setting(tmp_path, "compose.digest_pin_updates", "maybe")
+
+    try:
+        settings_module._effective_config(client.app.state.web_settings)
+    except HTTPException as exc:
+        assert exc.status_code == 500
+        assert exc.detail.startswith("stored digest_pin_updates is invalid: ")
+        assert "true or false" in exc.detail
+    else:
+        raise AssertionError("expected invalid stored digest-pin setting to fail")
 
 
 def test_managed_digest_pin_updates_env_guard_disables_webui_edit(
@@ -847,19 +944,23 @@ def test_state_operation_rolls_back_when_audit_insert_fails(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
+    secret = "github-secret-token"
     client = _client(
         tmp_path,
         {
             "WUD_WEB_DEV_NO_AUTH": "true",
             "WUD_WEB_MUTATIONS_ENABLED": "true",
+            "GITHUB_TOKEN": secret,
         },
     )
     headers = _csrf_headers(client)
 
     def fail_audit(*_args: object, **_kwargs: object) -> int:
-        raise sqlite3.OperationalError("audit failed")
+        raise sqlite3.OperationalError(
+            f"audit failed for {tmp_path / 'state' / 'wud.sqlite'} with {secret}"
+        )
 
-    monkeypatch.setattr(web_module, "_insert_state_audit", fail_audit)
+    monkeypatch.setattr(state_module, "_insert_state_audit", fail_audit)
 
     response = client.post(
         "/api/v1/state/operations",
@@ -876,9 +977,48 @@ def test_state_operation_rolls_back_when_audit_insert_fails(
         runs = conn.execute("SELECT * FROM update_runs").fetchall()
 
     assert response.status_code == 500
-    assert response.json()["detail"] == "could not update database: audit failed"
+    detail = response.json()["detail"]
+    assert detail.startswith("could not update database: audit failed for ")
+    assert str(tmp_path) not in detail
+    assert secret not in detail
+    assert "[REDACTED_PATH]" in detail
+    assert "<redacted>" in detail
     assert rows == []
     assert runs == []
+
+
+def test_state_operation_uses_web_module_audit_seam(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+        },
+    )
+    headers = _csrf_headers(client)
+
+    def fail_audit(*_args: object, **_kwargs: object) -> int:
+        raise sqlite3.OperationalError("web audit seam used")
+
+    monkeypatch.setattr(web_module, "_insert_state_audit", fail_audit)
+
+    response = client.post(
+        "/api/v1/state/operations",
+        json={
+            "kind": "upsert_service_policy",
+            "service_key": "stack/app",
+            "update_mode": "stop",
+        },
+        headers=headers,
+    )
+
+    assert response.status_code == 500
+    assert response.json()["detail"].startswith(
+        "could not update database: web audit seam used"
+    )
 
 
 def test_state_operations_validate_inputs(tmp_path: Path) -> None:
