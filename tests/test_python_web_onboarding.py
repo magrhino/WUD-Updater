@@ -113,7 +113,8 @@ def test_onboarding_checklist_uses_default_compose_ignore_paths(
 
     assert response.status_code == 200
     assert compose_item["status"] == "PASS"
-    assert all("old-ignored" not in code for code in compose_item["check_codes"])
+    check_codes = compose_item.get("check_codes") or []
+    assert all("old-ignored" not in code for code in check_codes)
 
 def test_onboarding_dismissal_persists_in_sqlite(
     tmp_path: Path,
@@ -316,5 +317,6 @@ def test_core_update_tour_persists_in_read_only_mode(tmp_path: Path) -> None:
         row = conn.execute(
             "SELECT value FROM web_settings WHERE key = 'onboarding_core_update_tour'"
         ).fetchone()
+    assert row is not None, "expected onboarding_core_update_tour row in web_settings"
     stored = json.loads(row["value"])
     assert stored == {"status": "in_progress", "step": "pending_preflight"}
