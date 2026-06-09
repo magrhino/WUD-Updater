@@ -1,0 +1,267 @@
+from __future__ import annotations
+
+import logging
+from pathlib import Path
+
+from wud_updater import web as web_module
+from wud_updater.release_notes import ReleaseNoteInfo as ReleaseNoteData
+
+from tests.web_test_helpers import (
+    _client,
+    _csrf_headers,
+    _fake_docker_calls,
+    _fake_docker_env,
+    _fake_image_state_file,
+)
+
+
+def test_release_notes_get_returns_placeholders_without_creating_database(
+    tmp_path: Path,
+) -> None:
+    wud_file = tmp_path / "state" / "images.todo"
+    db_path = tmp_path / "state" / "wud.sqlite"
+    client = _client(tmp_path, {"WUD_WEB_DEV_NO_AUTH": "true"})
+    wud_file.write_text("ghcr.io/acme/app:1.0.0\n", encoding="utf-8")
+
+    response = client.get("/api/v1/release-notes")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["count"] == 1
+    assert body["items"][0]["line_no"] == 1
+    assert body["items"][0]["status"] == "missing"
+    assert body["items"][0]["provider"] == "github"
+    assert not db_path.exists()
+
+def test_release_notes_get_uses_docker_source_label_without_creating_database(
+    tmp_path: Path,
+) -> None:
+    wud_file = tmp_path / "state" / "images.todo"
+    db_path = tmp_path / "state" / "wud.sqlite"
+    docker_env, fake_root = _fake_docker_env(tmp_path)
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            **docker_env,
+        },
+    )
+    image = "advplyr/audiobookshelf:latest"
+    wud_file.write_text(f"{image}\n", encoding="utf-8")
+    _fake_image_state_file(fake_root, image, "labels").write_text(
+        "org.opencontainers.image.source=https://github.com/advplyr/audiobookshelf\n",
+        encoding="utf-8",
+    )
+
+    response = client.get("/api/v1/release-notes")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["count"] == 1
+    assert body["items"][0]["status"] == "missing"
+    assert body["items"][0]["provider"] == "github"
+    assert body["items"][0]["upstream_repo"] == "advplyr/audiobookshelf"
+    assert f"image inspect {image}" in _fake_docker_calls(fake_root)
+    assert not db_path.exists()
+
+def test_release_notes_get_recovers_ghcr_repo_from_running_image(
+    tmp_path: Path,
+) -> None:
+    wud_file = tmp_path / "state" / "images.todo"
+    db_path = tmp_path / "state" / "wud.sqlite"
+    docker_env, fake_root = _fake_docker_env(tmp_path)
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            **docker_env,
+        },
+    )
+    image = "advplyr/audiobookshelf:latest"
+    wud_file.write_text(f"{image}\n", encoding="utf-8")
+    (fake_root / "containers.tsv").write_text(
+        "audiobookshelf\tghcr.io/advplyr/audiobookshelf:latest\n",
+        encoding="utf-8",
+    )
+
+    response = client.get("/api/v1/release-notes")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["count"] == 1
+    assert body["items"][0]["status"] == "missing"
+    assert body["items"][0]["provider"] == "github"
+    assert body["items"][0]["image_repo"] == "advplyr/audiobookshelf"
+    assert body["items"][0]["upstream_repo"] == "advplyr/audiobookshelf"
+    calls = _fake_docker_calls(fake_root)
+    assert f"image inspect {image}" in calls
+    assert "ps --format" in calls
+    assert not db_path.exists()
+
+def test_release_notes_get_recovers_ghcr_repo_from_running_container_name(
+    tmp_path: Path,
+) -> None:
+    wud_file = tmp_path / "state" / "images.todo"
+    db_path = tmp_path / "state" / "wud.sqlite"
+    docker_env, fake_root = _fake_docker_env(tmp_path)
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            **docker_env,
+        },
+    )
+    container = "audiobookshelf"
+    wud_file.write_text(f"{container}\n", encoding="utf-8")
+    (fake_root / "containers.tsv").write_text(
+        "audiobookshelf\tghcr.io/advplyr/audiobookshelf:latest\n",
+        encoding="utf-8",
+    )
+
+    response = client.get("/api/v1/release-notes")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["count"] == 1
+    assert body["items"][0]["status"] == "missing"
+    assert body["items"][0]["provider"] == "github"
+    assert body["items"][0]["image_repo"] == "advplyr/audiobookshelf"
+    assert body["items"][0]["upstream_repo"] == "advplyr/audiobookshelf"
+    calls = _fake_docker_calls(fake_root)
+    assert f"image inspect {container}" in calls
+    assert "ps --format" in calls
+    assert not db_path.exists()
+
+def test_release_notes_get_logs_when_docker_source_label_inspect_fails(
+    tmp_path: Path,
+    caplog,
+) -> None:
+    wud_file = tmp_path / "state" / "images.todo"
+    no_docker_bin = tmp_path / "no-docker-bin"
+    no_docker_bin.mkdir()
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "PATH": str(no_docker_bin),
+        },
+    )
+    image = "advplyr/audiobookshelf:latest"
+    wud_file.write_text(f"{image}\n", encoding="utf-8")
+
+    with caplog.at_level(logging.ERROR, logger="wud_updater.web"):
+        response = client.get("/api/v1/release-notes")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["items"][0]["status"] == "unsupported"
+    assert body["items"][0]["error"] == "no supported GitHub release source found"
+    assert (
+        "WebUI release-note fallback: Docker inspect failed for "
+        "advplyr/audiobookshelf:latest"
+    ) in caplog.text
+    assert "cannot read org.opencontainers.image.source" in caplog.text
+
+def test_release_notes_refresh_requires_csrf(tmp_path: Path) -> None:
+    wud_file = tmp_path / "state" / "images.todo"
+    client = _client(tmp_path, {"WUD_WEB_DEV_NO_AUTH": "true"})
+    wud_file.write_text("docker.io/library/redis:latest\n", encoding="utf-8")
+
+    response = client.post("/api/v1/release-notes/refresh")
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == "origin header is required"
+
+    response = client.post(
+        "/api/v1/release-notes/refresh",
+        headers={"Origin": "http://testserver"},
+    )
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == "csrf token is required"
+
+def test_release_notes_refresh_works_when_mutations_are_disabled(
+    tmp_path: Path,
+) -> None:
+    wud_file = tmp_path / "state" / "images.todo"
+    client = _client(tmp_path, {"WUD_WEB_DEV_NO_AUTH": "true"})
+    wud_file.write_text("docker.io/library/redis:latest\n", encoding="utf-8")
+
+    response = client.post(
+        "/api/v1/release-notes/refresh",
+        headers=_csrf_headers(client),
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["items"][0]["status"] == "unsupported"
+    assert body["items"][0]["error"] == "no supported GitHub release source found"
+
+def test_release_note_error_metadata_redacts_configured_secrets(
+    tmp_path: Path,
+    monkeypatch,
+    caplog,
+) -> None:
+    github_token = "github-token-secret-value"
+    release_webhook = "https://discord.test/fail/release-secret-token"
+    admin_webhook = "https://discord.test/fail/admin-secret-token"
+    wud_file = tmp_path / "state" / "images.todo"
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "GITHUB_TOKEN": github_token,
+            "DISCORD_RELEASES_WEBHOOK": release_webhook,
+            "ADMIN_WEBHOOK": admin_webhook,
+        },
+    )
+    wud_file.write_text("ghcr.io/acme/app:1.0.0 tag=2.0.0\n", encoding="utf-8")
+
+    def fake_refresh_release_notes(
+        _conn,
+        _targets,
+        _environ,
+        *,
+        redact_error=None,
+        **_kwargs,
+    ):
+        error = (
+            f"request failed with {github_token} via {release_webhook} "
+            f"and {admin_webhook}"
+        )
+        if redact_error is not None:
+            error = redact_error(error)
+        return [
+            ReleaseNoteData(
+                line_no=1,
+                status="error",
+                provider="github",
+                image_repo="acme/app",
+                upstream_repo="acme/app",
+                error=error,
+            )
+        ]
+
+    monkeypatch.setattr(
+        web_module,
+        "refresh_release_notes",
+        fake_refresh_release_notes,
+    )
+
+    with caplog.at_level(logging.DEBUG):
+        response = client.post(
+            "/api/v1/release-notes/refresh",
+            headers=_csrf_headers(client),
+        )
+
+    assert response.status_code == 200
+    assert "<redacted>" in response.text
+    for secret in (
+        github_token,
+        release_webhook,
+        "release-secret-token",
+        admin_webhook,
+        "admin-secret-token",
+    ):
+        assert secret not in response.text
+        assert secret not in caplog.text

@@ -75,51 +75,24 @@ class WebAdminResetError(RuntimeError):
     """Raised when local admin recovery cannot be issued."""
 
 
-def _web_compat_attr(name: str, default: Any) -> Any:
-    web_module = sys.modules.get("wud_updater.web")
-    if web_module is None:
-        return default
-    return getattr(web_module, name, default)
-
-
 def _password_hasher() -> Any:
-    return _web_compat_attr("PASSWORD_HASHER", PASSWORD_HASHER)
+    return PASSWORD_HASHER
 
 
 def _login_throttle_max_failures() -> int:
-    return int(
-        _web_compat_attr(
-            "LOGIN_THROTTLE_MAX_FAILURES",
-            LOGIN_THROTTLE_MAX_FAILURES,
-        )
-    )
+    return LOGIN_THROTTLE_MAX_FAILURES
 
 
 def _login_throttle_cooldown_seconds() -> float:
-    return float(
-        _web_compat_attr(
-            "LOGIN_THROTTLE_COOLDOWN_SECONDS",
-            LOGIN_THROTTLE_COOLDOWN_SECONDS,
-        )
-    )
+    return LOGIN_THROTTLE_COOLDOWN_SECONDS
 
 
 def _login_throttle_max_entries() -> int:
-    return int(
-        _web_compat_attr(
-            "LOGIN_THROTTLE_MAX_ENTRIES",
-            LOGIN_THROTTLE_MAX_ENTRIES,
-        )
-    )
+    return LOGIN_THROTTLE_MAX_ENTRIES
 
 
 def _login_throttle_max_client_entries() -> int:
-    return int(
-        _web_compat_attr(
-            "LOGIN_THROTTLE_MAX_CLIENT_ENTRIES",
-            LOGIN_THROTTLE_MAX_CLIENT_ENTRIES,
-        )
-    )
+    return LOGIN_THROTTLE_MAX_CLIENT_ENTRIES
 
 
 async def request_safety_middleware(

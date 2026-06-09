@@ -1775,3 +1775,54 @@ def test_apply_endpoint_reports_updater_failure_and_preserves_line(
     detail = client.get(f"/api/v1/runs/{job['run_id']}").json()
     assert detail["status"] == "failure"
     assert detail["pending_updates"][0]["status"] == "failed"
+
+
+def test_legacy_apply_routes_remain_compatible(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    fake_env, fake_root = _fake_docker_env(tmp_path)
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+            **fake_env,
+        },
+    )
+    wud_file = tmp_path / "state" / "images.todo"
+    wud_file.write_text("repo/app:latest\n", encoding="utf-8")
+    _make_fake_stack(
+        tmp_path,
+        fake_root,
+        "stack",
+        [("app", "repo/app:latest", "cid-app")],
+    )
+
+    monkeypatch.setattr(web_jobs.UpdateFromWudRunner, "run", lambda _runner: 0)
+    headers = _csrf_headers(client)
+    plan = client.post(
+        "/api/v1/plans",
+        json={"line_numbers": [1]},
+        headers=headers,
+    ).json()
+
+    apply_response = client.post(
+        "/api/v1/plans/apply",
+        json={
+            "plan_id": plan["plan_id"],
+            "line_numbers": [1],
+            "confirmation": "apply",
+        },
+        headers=headers,
+    )
+    job = _wait_apply_job(client, apply_response.json()["job_id"])
+    legacy_status = client.get(f"/api/v1/apply-jobs/{job['job_id']}")
+
+    assert apply_response.status_code == 202
+    assert job["status"] == "success"
+    assert legacy_status.status_code == 200
+    assert legacy_status.json()["job_id"] == job["job_id"]
+    calls = _fake_docker_calls(fake_root)
+    assert " pull " not in calls
+    assert " up -d " not in calls
