@@ -18,7 +18,7 @@ from .updater_matching import (
 from .updater_models import Match, UpdateScope
 
 
-class _LifecycleScopeMixin:
+class _UpdateScopeMixin:
     def _update_scope(self, stack: ComposeStack, matches: Sequence[Match]) -> UpdateScope:
         services = _update_services(matches)
         if services is None:

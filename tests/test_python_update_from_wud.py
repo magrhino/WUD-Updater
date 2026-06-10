@@ -108,9 +108,11 @@ def manifest_image(config_digest: str) -> dict[str, object]:
     }
 
 
-class PythonUpdateFromWudTests(unittest.TestCase):
+class FakeDockerTestCase(unittest.TestCase):
+    tmp_prefix = "wud-python-update."
+
     def setUp(self) -> None:
-        self.tmp = tempfile.TemporaryDirectory(prefix="wud-python-update.")
+        self.tmp = tempfile.TemporaryDirectory(prefix=self.tmp_prefix)
         self.root = Path(self.tmp.name)
         self.repo_root = Path(__file__).resolve().parents[1]
         self.base = self.root / "base"
@@ -139,41 +141,6 @@ class PythonUpdateFromWudTests(unittest.TestCase):
 
     def tearDown(self) -> None:
         self.tmp.cleanup()
-
-    def run_python(self, *args: str, wrapper: bool = False) -> subprocess.CompletedProcess[str]:
-        common = [
-            "--base",
-            str(self.base),
-            "--file",
-            str(self.wud_file),
-            "--log-dir",
-            str(self.log_dir),
-            "--max-wait",
-            "0",
-            "--no-color",
-            *args,
-        ]
-        env = dict(self.env)
-        if wrapper:
-            env["PYTHON_BIN"] = sys.executable
-            command = [str(self.repo_root / "bin" / "docker-update-from-wud"), *common]
-        else:
-            command = [
-                sys.executable,
-                "-m",
-                "wud_updater.cli",
-                "update-from-wud",
-                *common,
-            ]
-        return subprocess.run(
-            command,
-            env=env,
-            stdin=subprocess.DEVNULL,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-            check=False,
-        )
 
     def make_stack(
         self,
@@ -218,6 +185,119 @@ class PythonUpdateFromWudTests(unittest.TestCase):
         )
         return directory
 
+    def _set_manifest_stdout(self, image: str, payload: object) -> None:
+        safe = safe_name(image)
+        (self.fake_root / "manifests" / f"{safe}.stdout").write_text(
+            json.dumps(payload),
+            encoding="utf-8",
+        )
+
+    def set_manifest_stdout(self, image: str, payload: object) -> None:
+        self._set_manifest_stdout(image, payload)
+
+    def set_manifest_verbose_stdout(self, image: str, payload: object) -> None:
+        safe = safe_name(image)
+        (self.fake_root / "manifests" / f"{safe}.verbose_stdout").write_text(
+            json.dumps(payload),
+            encoding="utf-8",
+        )
+
+    def _set_manifest_failure(self, image: str, stderr: str) -> None:
+        safe = safe_name(image)
+        (self.fake_root / "manifests" / f"{safe}.fail").write_text("", encoding="utf-8")
+        (self.fake_root / "manifests" / f"{safe}.stderr").write_text(
+            stderr,
+            encoding="utf-8",
+        )
+
+    def set_manifest_failure(self, image: str, stderr: str) -> None:
+        self._set_manifest_failure(image, stderr)
+
+    def _calls(self) -> str:
+        return self.calls()
+
+    def calls(self) -> str:
+        return (self.fake_root / "calls.log").read_text(encoding="utf-8")
+
+
+class PythonUpdateFromWudTests(FakeDockerTestCase):
+    def run_python(self, *args: str, wrapper: bool = False) -> subprocess.CompletedProcess[str]:
+        common = [
+            "--base",
+            str(self.base),
+            "--file",
+            str(self.wud_file),
+            "--log-dir",
+            str(self.log_dir),
+            "--max-wait",
+            "0",
+            "--no-color",
+            *args,
+        ]
+        env = dict(self.env)
+        if wrapper:
+            env["PYTHON_BIN"] = sys.executable
+            command = [str(self.repo_root / "bin" / "docker-update-from-wud"), *common]
+        else:
+            command = [
+                sys.executable,
+                "-m",
+                "wud_updater.cli",
+                "update-from-wud",
+                *common,
+            ]
+        return subprocess.run(
+            command,
+            env=env,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            check=False,
+        )
+
+    def updater_options(
+        self,
+        *,
+        assume_yes: bool = True,
+        allow_tag_updates: bool = False,
+        digest_pin_updates: bool = False,
+        db_path: Path | None = None,
+    ) -> UpdaterOptions:
+        return UpdaterOptions(
+            docker_base=self.base,
+            wud_file=self.wud_file,
+            log_dir=self.log_dir,
+            max_wait=0,
+            assume_yes=assume_yes,
+            allow_tag_updates=allow_tag_updates,
+            digest_pin_updates=digest_pin_updates,
+            no_color=True,
+            db_path=db_path,
+        )
+
+    def make_runner(
+        self,
+        *,
+        command_runner: CommandRunner | None = None,
+        digest_verifier: DigestVerifier | None = None,
+        assume_yes: bool = True,
+        allow_tag_updates: bool = False,
+        digest_pin_updates: bool = False,
+        db_path: Path | None = None,
+    ) -> UpdateFromWudRunner:
+        return UpdateFromWudRunner(
+            self.updater_options(
+                assume_yes=assume_yes,
+                allow_tag_updates=allow_tag_updates,
+                digest_pin_updates=digest_pin_updates,
+                db_path=db_path,
+            ),
+            environ=self.env,
+            command_runner=command_runner or CommandRunner(env=self.env),
+            digest_verifier=digest_verifier,
+        )
+
     def set_image_state(self, image: str, image_id: str, digest: str = "") -> None:
         safe = safe_name(image)
         (self.fake_root / "images" / f"{safe}.id").write_text(
@@ -237,31 +317,6 @@ class PythonUpdateFromWudTests(unittest.TestCase):
         )
         (self.fake_root / "images" / f"{safe}.after_digests").write_text(
             f"{image}@{digest}\n" if digest else "",
-            encoding="utf-8",
-        )
-
-    def set_manifest_failure(self, image: str, stderr: str) -> None:
-        safe = safe_name(image)
-        (self.fake_root / "manifests" / f"{safe}.fail").write_text(
-            "",
-            encoding="utf-8",
-        )
-        (self.fake_root / "manifests" / f"{safe}.stderr").write_text(
-            stderr,
-            encoding="utf-8",
-        )
-
-    def set_manifest_stdout(self, image: str, payload: object) -> None:
-        safe = safe_name(image)
-        (self.fake_root / "manifests" / f"{safe}.stdout").write_text(
-            json.dumps(payload),
-            encoding="utf-8",
-        )
-
-    def set_manifest_verbose_stdout(self, image: str, payload: object) -> None:
-        safe = safe_name(image)
-        (self.fake_root / "manifests" / f"{safe}.verbose_stdout").write_text(
-            json.dumps(payload),
             encoding="utf-8",
         )
 
@@ -303,9 +358,6 @@ class PythonUpdateFromWudTests(unittest.TestCase):
             status = runner.run()
         return status, stdout.getvalue(), stderr.getvalue()
 
-    def calls(self) -> str:
-        return (self.fake_root / "calls.log").read_text(encoding="utf-8")
-
     def latest_error_report(self) -> Path:
         reports = sorted(self.log_dir.glob("update-from-wud-v2-*.errors.log"))
         self.assertTrue(reports, "expected updater error report")
@@ -336,6 +388,112 @@ class PythonUpdateFromWudTests(unittest.TestCase):
             "docker.io/repo/app@sha256:child",
             manifest_image("sha256:config"),
         )
+
+    def write_tag_update_health_flip_hook(self) -> None:
+        hook = self.fake_root / "post-up-hook"
+        hook.write_text(
+            "#!/usr/bin/env bash\n"
+            "set -Eeuo pipefail\n"
+            "compose_file=\"${2:?compose file is required}\"\n"
+            "if grep -q 'repo/app:2.0' \"$compose_file\"; then\n"
+            "  printf '/cid-app|running|unhealthy|1|0\\n' > \"${FAKE_DOCKER_ROOT:?}/containers/cid-app.summary\"\n"
+            "else\n"
+            "  printf '/cid-app|running|healthy|0|0\\n' > \"${FAKE_DOCKER_ROOT:?}/containers/cid-app.summary\"\n"
+            "fi\n",
+            encoding="utf-8",
+        )
+        hook.chmod(0o755)
+
+    def write_media_provider_post_up_hook(self) -> None:
+        hook = self.fake_root / "post-up-hook"
+        hook.write_text(
+            "\n".join(
+                [
+                    "#!/usr/bin/env bash",
+                    "set -euo pipefail",
+                    'printf "cid-gluetun\\n" > "$FAKE_DOCKER_ROOT/stacks/media/cids-gluetun.txt"',
+                    "",
+                ]
+            ),
+            encoding="utf-8",
+        )
+        hook.chmod(0o755)
+
+    def prepare_network_mode_media_stack(
+        self,
+        *,
+        include_provider_cid: bool,
+        include_extra_consumer: bool = False,
+        write_provider_hook: bool = False,
+    ) -> Path:
+        self.wud_file.write_text(
+            "ghcr.io/linuxserver/qbittorrent:5.1.4 tag=5.2.0\n",
+            encoding="utf-8",
+        )
+        stack_dir = self.base / "media"
+        stack_dir.mkdir()
+        (stack_dir / ".fake-docker-id").write_text("media\n", encoding="utf-8")
+        compose_lines = [
+            "services:",
+            "  gluetun:",
+            "    image: qmcgaw/gluetun:latest",
+            "  qbittorrent:",
+            "    image: ghcr.io/linuxserver/qbittorrent:5.1.4",
+            "    network_mode: service:gluetun",
+        ]
+        if include_extra_consumer:
+            compose_lines.extend(
+                [
+                    "  mamapi:",
+                    "    image: ghcr.io/example/mamapi:latest",
+                    "    network_mode: service:gluetun",
+                ]
+            )
+        compose_lines.append("")
+        compose_file = stack_dir / "docker-compose.yml"
+        compose_file.write_text("\n".join(compose_lines), encoding="utf-8")
+
+        stack_state = self.fake_root / "stacks" / "media"
+        stack_state.mkdir()
+        cids = ["cid-qbittorrent"]
+        if include_provider_cid:
+            cids.insert(0, "cid-gluetun")
+        if include_extra_consumer:
+            cids.append("cid-mamapi")
+        (stack_state / "cids.txt").write_text(
+            "".join(f"{cid}\n" for cid in cids),
+            encoding="utf-8",
+        )
+        if include_provider_cid:
+            (stack_state / "cids-gluetun.txt").write_text(
+                "cid-gluetun\n",
+                encoding="utf-8",
+            )
+        (stack_state / "cids-qbittorrent.txt").write_text(
+            "cid-qbittorrent\n",
+            encoding="utf-8",
+        )
+        summary_cids = set(cids)
+        if write_provider_hook:
+            summary_cids.add("cid-gluetun")
+        for cid in sorted(summary_cids):
+            (self.fake_root / "containers" / f"{cid}.summary").write_text(
+                f"/{cid}|running|healthy|0|0\n",
+                encoding="utf-8",
+            )
+        if write_provider_hook:
+            self.write_media_provider_post_up_hook()
+        self.set_image_state(
+            "ghcr.io/linuxserver/qbittorrent:5.1.4",
+            "old-qbit",
+            "sha256:old-qbit",
+        )
+        self.set_image_after_pull(
+            "ghcr.io/linuxserver/qbittorrent:5.2.0",
+            "new-qbit",
+            "sha256:new-qbit",
+        )
+        return compose_file
 
     def test_wrapper_default_dry_run_plans_without_mutation(self) -> None:
         self.wud_file.write_text("repo/app:latest\n", encoding="utf-8")
@@ -903,20 +1061,7 @@ class PythonUpdateFromWudTests(unittest.TestCase):
         self.make_stack("app", [("app", "repo/app:latest", "cid-app")])
         self.set_image_state("repo/app:latest", "old", "sha256:old")
         self.set_image_after_pull("repo/app:latest", "new", "sha256:new")
-        options = UpdaterOptions(
-            docker_base=self.base,
-            wud_file=self.wud_file,
-            log_dir=self.log_dir,
-            max_wait=0,
-            assume_yes=True,
-            no_color=True,
-            db_path=self.db_path,
-        )
-        runner = UpdateFromWudRunner(
-            options,
-            environ=self.env,
-            command_runner=CommandRunner(env=self.env),
-        )
+        runner = self.make_runner(db_path=self.db_path)
         stdout = StringIO()
         stderr = StringIO()
 
@@ -947,20 +1092,7 @@ class PythonUpdateFromWudTests(unittest.TestCase):
         self.make_stack("app", [("app", "repo/app:latest", "cid-app")])
         self.set_image_state("repo/app:latest", "old", "sha256:old")
         self.set_image_after_pull("repo/app:latest", "new", "sha256:new")
-        options = UpdaterOptions(
-            docker_base=self.base,
-            wud_file=self.wud_file,
-            log_dir=self.log_dir,
-            max_wait=0,
-            assume_yes=True,
-            no_color=True,
-            db_path=self.db_path,
-        )
-        runner = UpdateFromWudRunner(
-            options,
-            environ=self.env,
-            command_runner=CommandRunner(env=self.env),
-        )
+        runner = self.make_runner(db_path=self.db_path)
         stdout = StringIO()
         stderr = StringIO()
 
@@ -989,20 +1121,7 @@ class PythonUpdateFromWudTests(unittest.TestCase):
         self.make_stack("app", [("app", "repo/app:latest", "cid-app")])
         self.set_image_state("repo/app:latest", "old", "sha256:old")
         self.set_image_after_pull("repo/app:latest", "new", "sha256:new")
-        options = UpdaterOptions(
-            docker_base=self.base,
-            wud_file=self.wud_file,
-            log_dir=self.log_dir,
-            max_wait=0,
-            assume_yes=True,
-            no_color=True,
-            db_path=self.db_path,
-        )
-        runner = UpdateFromWudRunner(
-            options,
-            environ=self.env,
-            command_runner=CommandRunner(env=self.env),
-        )
+        runner = self.make_runner(db_path=self.db_path)
         stdout = StringIO()
         stderr = StringIO()
 
@@ -1032,20 +1151,7 @@ class PythonUpdateFromWudTests(unittest.TestCase):
         self.set_image_after_pull("repo/app:latest", "new", "sha256:new")
         self.env["OUT_UID"] = str(os.getuid())
         self.env["OUT_GID"] = str(os.getgid())
-        options = UpdaterOptions(
-            docker_base=self.base,
-            wud_file=self.wud_file,
-            log_dir=self.log_dir,
-            max_wait=0,
-            assume_yes=True,
-            no_color=True,
-            db_path=self.db_path,
-        )
-        runner = UpdateFromWudRunner(
-            options,
-            environ=self.env,
-            command_runner=CommandRunner(env=self.env),
-        )
+        runner = self.make_runner(db_path=self.db_path)
         stdout = StringIO()
         stderr = StringIO()
 
@@ -1406,56 +1512,10 @@ class PythonUpdateFromWudTests(unittest.TestCase):
         self.assertEqual(captured["existing_exact_tags"], {"app": {"2.0"}})
 
     def test_exclude_tag_line_recreate_includes_missing_network_provider(self) -> None:
-        self.wud_file.write_text(
-            "ghcr.io/linuxserver/qbittorrent:5.1.4 tag=5.2.0\n",
-            encoding="utf-8",
+        compose_file = self.prepare_network_mode_media_stack(
+            include_provider_cid=False,
+            write_provider_hook=True,
         )
-        stack_dir = self.base / "media"
-        stack_dir.mkdir()
-        (stack_dir / ".fake-docker-id").write_text("media\n", encoding="utf-8")
-        compose_file = stack_dir / "docker-compose.yml"
-        compose_file.write_text(
-            "\n".join(
-                [
-                    "services:",
-                    "  gluetun:",
-                    "    image: qmcgaw/gluetun:latest",
-                    "  qbittorrent:",
-                    "    image: ghcr.io/linuxserver/qbittorrent:5.1.4",
-                    "    network_mode: service:gluetun",
-                    "",
-                ]
-            ),
-            encoding="utf-8",
-        )
-        stack_state = self.fake_root / "stacks" / "media"
-        stack_state.mkdir()
-        (stack_state / "cids.txt").write_text(
-            "cid-qbittorrent\n",
-            encoding="utf-8",
-        )
-        (stack_state / "cids-qbittorrent.txt").write_text(
-            "cid-qbittorrent\n",
-            encoding="utf-8",
-        )
-        for cid in ("cid-gluetun", "cid-qbittorrent"):
-            (self.fake_root / "containers" / f"{cid}.summary").write_text(
-                f"/{cid}|running|healthy|0|0\n",
-                encoding="utf-8",
-            )
-        hook = self.fake_root / "post-up-hook"
-        hook.write_text(
-            "\n".join(
-                [
-                    "#!/usr/bin/env bash",
-                    "set -euo pipefail",
-                    'printf "cid-gluetun\\n" > "$FAKE_DOCKER_ROOT/stacks/media/cids-gluetun.txt"',
-                    "",
-                ]
-            ),
-            encoding="utf-8",
-        )
-        hook.chmod(0o755)
 
         result = self.run_python(
             "--yes",
@@ -2420,59 +2480,9 @@ class PythonUpdateFromWudTests(unittest.TestCase):
         self.assertEqual(plan.issues[0].code, "unmatched")
 
     def test_network_mode_consumer_tag_update_stays_service_scoped(self) -> None:
-        self.wud_file.write_text(
-            "ghcr.io/linuxserver/qbittorrent:5.1.4 tag=5.2.0\n",
-            encoding="utf-8",
-        )
-        stack_dir = self.base / "media"
-        stack_dir.mkdir()
-        (stack_dir / ".fake-docker-id").write_text("media\n", encoding="utf-8")
-        compose_file = stack_dir / "docker-compose.yml"
-        compose_file.write_text(
-            "\n".join(
-                [
-                    "services:",
-                    "  gluetun:",
-                    "    image: qmcgaw/gluetun:latest",
-                    "  qbittorrent:",
-                    "    image: ghcr.io/linuxserver/qbittorrent:5.1.4",
-                    "    network_mode: service:gluetun",
-                    "  mamapi:",
-                    "    image: ghcr.io/example/mamapi:latest",
-                    "    network_mode: service:gluetun",
-                    "",
-                ]
-            ),
-            encoding="utf-8",
-        )
-        stack_state = self.fake_root / "stacks" / "media"
-        stack_state.mkdir()
-        (stack_state / "cids.txt").write_text(
-            "cid-gluetun\ncid-qbittorrent\ncid-mamapi\n",
-            encoding="utf-8",
-        )
-        (stack_state / "cids-gluetun.txt").write_text(
-            "cid-gluetun\n",
-            encoding="utf-8",
-        )
-        (stack_state / "cids-qbittorrent.txt").write_text(
-            "cid-qbittorrent\n",
-            encoding="utf-8",
-        )
-        for cid in ("cid-gluetun", "cid-qbittorrent", "cid-mamapi"):
-            (self.fake_root / "containers" / f"{cid}.summary").write_text(
-                f"/{cid}|running|healthy|0|0\n",
-                encoding="utf-8",
-            )
-        self.set_image_state(
-            "ghcr.io/linuxserver/qbittorrent:5.1.4",
-            "old-qbit",
-            "sha256:old-qbit",
-        )
-        self.set_image_after_pull(
-            "ghcr.io/linuxserver/qbittorrent:5.2.0",
-            "new-qbit",
-            "sha256:new-qbit",
+        compose_file = self.prepare_network_mode_media_stack(
+            include_provider_cid=True,
+            include_extra_consumer=True,
         )
 
         result = self.run_python("--yes", "--allow-tag-updates")
@@ -2496,65 +2506,9 @@ class PythonUpdateFromWudTests(unittest.TestCase):
         self.assertNotRegex(calls, r"compose -f docker-compose.yml stop .*mamapi")
 
     def test_network_mode_consumer_up_includes_missing_provider(self) -> None:
-        self.wud_file.write_text(
-            "ghcr.io/linuxserver/qbittorrent:5.1.4 tag=5.2.0\n",
-            encoding="utf-8",
-        )
-        stack_dir = self.base / "media"
-        stack_dir.mkdir()
-        (stack_dir / ".fake-docker-id").write_text("media\n", encoding="utf-8")
-        compose_file = stack_dir / "docker-compose.yml"
-        compose_file.write_text(
-            "\n".join(
-                [
-                    "services:",
-                    "  gluetun:",
-                    "    image: qmcgaw/gluetun:latest",
-                    "  qbittorrent:",
-                    "    image: ghcr.io/linuxserver/qbittorrent:5.1.4",
-                    "    network_mode: service:gluetun",
-                    "",
-                ]
-            ),
-            encoding="utf-8",
-        )
-        stack_state = self.fake_root / "stacks" / "media"
-        stack_state.mkdir()
-        (stack_state / "cids.txt").write_text(
-            "cid-qbittorrent\n",
-            encoding="utf-8",
-        )
-        (stack_state / "cids-qbittorrent.txt").write_text(
-            "cid-qbittorrent\n",
-            encoding="utf-8",
-        )
-        for cid in ("cid-gluetun", "cid-qbittorrent"):
-            (self.fake_root / "containers" / f"{cid}.summary").write_text(
-                f"/{cid}|running|healthy|0|0\n",
-                encoding="utf-8",
-            )
-        hook = self.fake_root / "post-up-hook"
-        hook.write_text(
-            "\n".join(
-                [
-                    "#!/usr/bin/env bash",
-                    "set -euo pipefail",
-                    'printf "cid-gluetun\\n" > "$FAKE_DOCKER_ROOT/stacks/media/cids-gluetun.txt"',
-                    "",
-                ]
-            ),
-            encoding="utf-8",
-        )
-        hook.chmod(0o755)
-        self.set_image_state(
-            "ghcr.io/linuxserver/qbittorrent:5.1.4",
-            "old-qbit",
-            "sha256:old-qbit",
-        )
-        self.set_image_after_pull(
-            "ghcr.io/linuxserver/qbittorrent:5.2.0",
-            "new-qbit",
-            "sha256:new-qbit",
+        compose_file = self.prepare_network_mode_media_stack(
+            include_provider_cid=False,
+            write_provider_hook=True,
         )
 
         result = self.run_python("--yes", "--allow-tag-updates")
@@ -2636,20 +2590,7 @@ class PythonUpdateFromWudTests(unittest.TestCase):
         self.wud_file.write_text("repo/app:1.0 tag=2.0\n", encoding="utf-8")
         stack_dir = self.make_stack("app", [("app", "repo/app:1.0", "cid-app")])
         self.set_image_state("repo/app:1.0", "old", "sha256:old")
-        options = UpdaterOptions(
-            docker_base=self.base,
-            wud_file=self.wud_file,
-            log_dir=self.log_dir,
-            max_wait=0,
-            assume_yes=True,
-            allow_tag_updates=True,
-            no_color=True,
-        )
-        runner = UpdateFromWudRunner(
-            options,
-            environ=self.env,
-            command_runner=CommandRunner(env=self.env),
-        )
+        runner = self.make_runner(allow_tag_updates=True)
         stdout = StringIO()
         stderr = StringIO()
 
@@ -2678,20 +2619,7 @@ class PythonUpdateFromWudTests(unittest.TestCase):
         self.wud_file.write_text("repo/app:1.0 tag=2.0\n", encoding="utf-8")
         stack_dir = self.make_stack("app", [("app", "repo/app:1.0", "cid-app")])
         self.set_image_state("repo/app:1.0", "old", "sha256:old")
-        options = UpdaterOptions(
-            docker_base=self.base,
-            wud_file=self.wud_file,
-            log_dir=self.log_dir,
-            max_wait=0,
-            assume_yes=True,
-            allow_tag_updates=True,
-            no_color=True,
-        )
-        runner = UpdateFromWudRunner(
-            options,
-            environ=self.env,
-            command_runner=CommandRunner(env=self.env),
-        )
+        runner = self.make_runner(allow_tag_updates=True)
         refreshed = ComposeStack(
             index=1,
             directory=stack_dir,
@@ -2980,19 +2908,7 @@ class PythonUpdateFromWudTests(unittest.TestCase):
             "new tag failed health check\n",
             encoding="utf-8",
         )
-        hook = self.fake_root / "post-up-hook"
-        hook.write_text(
-            "#!/usr/bin/env bash\n"
-            "set -Eeuo pipefail\n"
-            "compose_file=\"${2:?compose file is required}\"\n"
-            "if grep -q 'repo/app:2.0' \"$compose_file\"; then\n"
-            "  printf '/cid-app|running|unhealthy|1|0\\n' > \"${FAKE_DOCKER_ROOT:?}/containers/cid-app.summary\"\n"
-            "else\n"
-            "  printf '/cid-app|running|healthy|0|0\\n' > \"${FAKE_DOCKER_ROOT:?}/containers/cid-app.summary\"\n"
-            "fi\n",
-            encoding="utf-8",
-        )
-        hook.chmod(0o755)
+        self.write_tag_update_health_flip_hook()
 
         result = self.run_python("--yes", "--allow-tag-updates")
 
@@ -3018,20 +2934,7 @@ class PythonUpdateFromWudTests(unittest.TestCase):
         self.env["OUT_UID"] = str(os.getuid())
         self.env["OUT_GID"] = str(os.getgid())
         stack_dir = self.make_stack("app", [("app", "repo/app:1.0", "cid-app")])
-        options = UpdaterOptions(
-            docker_base=self.base,
-            wud_file=self.wud_file,
-            log_dir=self.log_dir,
-            max_wait=0,
-            assume_yes=True,
-            allow_tag_updates=True,
-            no_color=True,
-        )
-        runner = UpdateFromWudRunner(
-            options,
-            environ=self.env,
-            command_runner=CommandRunner(env=self.env),
-        )
+        runner = self.make_runner(allow_tag_updates=True)
         stack = ComposeStack(
             index=1,
             directory=stack_dir,
@@ -3069,19 +2972,7 @@ class PythonUpdateFromWudTests(unittest.TestCase):
 
     def test_tag_incident_log_creation_failure_warns_without_raising(self) -> None:
         stack_dir = self.make_stack("app", [("app", "repo/app:1.0", "cid-app")])
-        runner = UpdateFromWudRunner(
-            UpdaterOptions(
-                docker_base=self.base,
-                wud_file=self.wud_file,
-                log_dir=self.log_dir,
-                max_wait=0,
-                assume_yes=True,
-                allow_tag_updates=True,
-                no_color=True,
-            ),
-            environ=self.env,
-            command_runner=CommandRunner(env=self.env),
-        )
+        runner = self.make_runner(allow_tag_updates=True)
         stack = ComposeStack(
             index=1,
             directory=stack_dir,
@@ -3126,19 +3017,7 @@ class PythonUpdateFromWudTests(unittest.TestCase):
             "new tag failed health check\n",
             encoding="utf-8",
         )
-        hook = self.fake_root / "post-up-hook"
-        hook.write_text(
-            "#!/usr/bin/env bash\n"
-            "set -Eeuo pipefail\n"
-            "compose_file=\"${2:?compose file is required}\"\n"
-            "if grep -q 'repo/app:2.0' \"$compose_file\"; then\n"
-            "  printf '/cid-app|running|unhealthy|1|0\\n' > \"${FAKE_DOCKER_ROOT:?}/containers/cid-app.summary\"\n"
-            "else\n"
-            "  printf '/cid-app|running|healthy|0|0\\n' > \"${FAKE_DOCKER_ROOT:?}/containers/cid-app.summary\"\n"
-            "fi\n",
-            encoding="utf-8",
-        )
-        hook.chmod(0o755)
+        self.write_tag_update_health_flip_hook()
         target = self.root / "incident-target.logs"
         target.write_text("keep\n", encoding="utf-8")
         (stack_dir / "error-2.0-fixed.logs").symlink_to(target)
@@ -3275,37 +3154,7 @@ class PayloadDigestTests(unittest.TestCase):
         self.assertEqual(_payload_digest(payload), "")
 
 
-class DockerManifestResolverVerboseTests(unittest.TestCase):
-    def setUp(self) -> None:
-        self.tmp = tempfile.TemporaryDirectory(prefix="wud-manifest-test.")
-        self.root = Path(self.tmp.name)
-        self.repo_root = Path(__file__).resolve().parents[1]
-        self.fake_root = self.root / "fake"
-        for path in (
-            self.fake_root / "manifests",
-            self.fake_root / "images",
-            self.fake_root / "stacks",
-            self.fake_root / "containers",
-        ):
-            path.mkdir(parents=True, exist_ok=True)
-        (self.fake_root / "containers.tsv").write_text("", encoding="utf-8")
-        (self.fake_root / "calls.log").write_text("", encoding="utf-8")
-        self.env = os.environ.copy()
-        self.env["FAKE_DOCKER_ROOT"] = str(self.fake_root)
-        self.env["PATH"] = f"{self.repo_root / 'tests' / 'fakes'}:{self.env['PATH']}"
-
-    def tearDown(self) -> None:
-        self.tmp.cleanup()
-
-    def _set_manifest_stdout(self, image: str, payload: object) -> None:
-        safe = re.sub(r"[^A-Za-z0-9._-]", "_", image)
-        (self.fake_root / "manifests" / f"{safe}.stdout").write_text(
-            json.dumps(payload), encoding="utf-8"
-        )
-
-    def _calls(self) -> str:
-        return (self.fake_root / "calls.log").read_text(encoding="utf-8")
-
+class DockerManifestResolverVerboseTests(FakeDockerTestCase):
     def test_verbose_false_uses_regular_manifest_inspect(self) -> None:
         self._set_manifest_stdout(
             "docker.io/repo/app:1.0",
@@ -3383,39 +3232,7 @@ class DockerManifestResolverVerboseTests(unittest.TestCase):
         self.assertEqual(doc.child_digests(), ("sha256:amd64", "sha256:arm64"))
 
 
-class DigestVerifierResolveTagDigestTests(unittest.TestCase):
-    def setUp(self) -> None:
-        self.tmp = tempfile.TemporaryDirectory(prefix="wud-resolver-test.")
-        self.root = Path(self.tmp.name)
-        self.repo_root = Path(__file__).resolve().parents[1]
-        self.fake_root = self.root / "fake"
-        for path in (
-            self.fake_root / "manifests",
-            self.fake_root / "images",
-            self.fake_root / "stacks",
-            self.fake_root / "containers",
-        ):
-            path.mkdir(parents=True, exist_ok=True)
-        (self.fake_root / "containers.tsv").write_text("", encoding="utf-8")
-        (self.fake_root / "calls.log").write_text("", encoding="utf-8")
-        self.env = os.environ.copy()
-        self.env["FAKE_DOCKER_ROOT"] = str(self.fake_root)
-        self.env["PATH"] = f"{self.repo_root / 'tests' / 'fakes'}:{self.env['PATH']}"
-
-    def tearDown(self) -> None:
-        self.tmp.cleanup()
-
-    def _set_manifest_stdout(self, image: str, payload: object) -> None:
-        safe = re.sub(r"[^A-Za-z0-9._-]", "_", image)
-        (self.fake_root / "manifests" / f"{safe}.stdout").write_text(
-            json.dumps(payload), encoding="utf-8"
-        )
-
-    def _set_manifest_failure(self, image: str, stderr: str) -> None:
-        safe = re.sub(r"[^A-Za-z0-9._-]", "_", image)
-        (self.fake_root / "manifests" / f"{safe}.fail").write_text("", encoding="utf-8")
-        (self.fake_root / "manifests" / f"{safe}.stderr").write_text(stderr, encoding="utf-8")
-
+class DigestVerifierResolveTagDigestTests(FakeDockerTestCase):
     def _make_verifier(self) -> "DigestVerifier":
         command_runner = CommandRunner(env=self.env)
         docker = DockerCli(runner=command_runner)
@@ -3554,66 +3371,8 @@ class DigestPinUpdateFromValuesTests(unittest.TestCase):
         self.assertTrue(update.final_image.startswith("ghcr.io/org/app@sha256:"))
 
 
-class DigestPinNoTagRequiredTests(unittest.TestCase):
+class DigestPinNoTagRequiredTests(FakeDockerTestCase):
     """Tests for _validate_digest_pin_plan rejecting lines without resolved tags."""
-
-    def setUp(self) -> None:
-        self.tmp = tempfile.TemporaryDirectory(prefix="wud-notagtest.")
-        self.root = Path(self.tmp.name)
-        self.repo_root = Path(__file__).resolve().parents[1]
-        self.base = self.root / "base"
-        self.wud_file = self.root / "images.todo"
-        self.log_dir = self.root / "logs"
-        self.db_path = self.root / "state" / "wud-updater.sqlite"
-        self.fake_root = self.root / "fake"
-        for path in (
-            self.base,
-            self.log_dir,
-            self.fake_root / "images",
-            self.fake_root / "manifests",
-            self.fake_root / "stacks",
-            self.fake_root / "containers",
-        ):
-            path.mkdir(parents=True, exist_ok=True)
-        (self.fake_root / "containers.tsv").write_text("", encoding="utf-8")
-        (self.fake_root / "calls.log").write_text("", encoding="utf-8")
-        self.env = os.environ.copy()
-        self.env["FAKE_DOCKER_ROOT"] = str(self.fake_root)
-        self.env["PATH"] = f"{self.repo_root / 'tests' / 'fakes'}:{self.env['PATH']}"
-        self.env["PYTHONPATH"] = str(self.repo_root / "src")
-        self.env["WUD_UPDATER_BANNER"] = "false"
-        self.env["WUD_DB_PATH"] = str(self.db_path)
-
-    def tearDown(self) -> None:
-        self.tmp.cleanup()
-
-    def make_stack(
-        self,
-        stack_id: str,
-        services: list[tuple[str, str, str | None]],
-    ) -> Path:
-        directory = self.base / stack_id
-        directory.mkdir(parents=True, exist_ok=True)
-        (directory / ".fake-docker-id").write_text(f"{stack_id}\n", encoding="utf-8")
-        stack_state = self.fake_root / "stacks" / stack_id
-        stack_state.mkdir(parents=True, exist_ok=True)
-        cids: list[str] = []
-        compose_lines = ["services:\n"]
-        for service, image, cid in services:
-            compose_lines.extend([f"  {service}:\n", f"    image: {image}\n"])
-            with (stack_state / "service-images.tsv").open("a", encoding="utf-8") as file:
-                file.write(f"{service}\t{image}\n")
-            (stack_state / "services.txt").write_text(f"{service}\n", encoding="utf-8")
-            (stack_state / "images.txt").write_text(f"{image}\n", encoding="utf-8")
-            if cid is not None:
-                cids.append(cid)
-                (stack_state / f"cids-{service}.txt").write_text(f"{cid}\n", encoding="utf-8")
-                (self.fake_root / "containers" / f"{cid}.summary").write_text(
-                    f"/{cid}|running|healthy|0|0\n", encoding="utf-8"
-                )
-        (directory / "docker-compose.yml").write_text("".join(compose_lines), encoding="utf-8")
-        (stack_state / "cids.txt").write_text("".join(f"{cid}\n" for cid in cids), encoding="utf-8")
-        return directory
 
     def test_digest_pin_without_tag_rejects_at_preflight(self) -> None:
         """digest_pin_updates=True without a tag token should fail at preflight."""

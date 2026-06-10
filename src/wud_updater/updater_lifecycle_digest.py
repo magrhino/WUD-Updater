@@ -16,7 +16,6 @@ from .digest_verifier import (
 )
 from .images import (
     image_matches_resolved_target,
-    image_with_tag,
     normalize_digest,
 )
 from .updater_digest_pin import (
@@ -32,7 +31,11 @@ from .updater_models import (
     TagUpdate,
     UpdaterError,
 )
-from .updater_planning import _digest_check_allow_repo, _digest_check_image
+from .updater_planning import (
+    _digest_check_allow_repo,
+    _digest_check_image,
+    _tag_updates as _shared_tag_updates,
+)
 
 
 class _LifecycleDigestMixin:
@@ -218,25 +221,7 @@ class _LifecycleDigestMixin:
             )
 
     def _tag_updates(self, matches: Sequence[Match]) -> tuple[TagUpdate, ...]:
-        services_by_update: dict[tuple[str, str, str], set[str]] = {}
-        for match in matches:
-            if match.target.desired_tag:
-                new_image = image_with_tag(match.compose_image, match.target.desired_tag)
-                key = (match.compose_image, match.target.desired_tag, new_image)
-                services_by_update.setdefault(key, set())
-                if match.service:
-                    services_by_update[key].add(match.service)
-        return tuple(
-            TagUpdate(
-                old_image=old_image,
-                desired_tag=desired_tag,
-                new_image=new_image,
-                services=tuple(sorted(services)),
-            )
-            for (old_image, desired_tag, new_image), services in sorted(
-                services_by_update.items()
-            )
-        )
+        return _shared_tag_updates(matches)
 
     def _digest_pin_updates(
         self,

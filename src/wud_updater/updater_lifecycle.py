@@ -24,7 +24,7 @@ from .updater_lifecycle_rewrite import (
     _tag_update_failure_progress_phase as _tag_update_failure_progress_phase,
 )
 from .updater_lifecycle_scope import (
-    _LifecycleScopeMixin,
+    _UpdateScopeMixin,
     _stack_level_scope_message as _stack_level_scope_message,
 )
 from .updater_lifecycle_state import _StackUpdateState
@@ -35,7 +35,7 @@ class StackLifecycleExecutor(
     _LifecycleRewriteMixin,
     _LifecycleRecreateMixin,
     _LifecycleHealthMixin,
-    _LifecycleScopeMixin,
+    _UpdateScopeMixin,
     _LifecycleDigestMixin,
 ):
     def __init__(self, runner: Any) -> None:
