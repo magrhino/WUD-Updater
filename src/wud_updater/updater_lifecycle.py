@@ -224,6 +224,14 @@ class StackLifecycleExecutor(
                     "digest-pin-verification-failed",
                     phase="digest",
                 )
+            self._progress(
+                "pull",
+                "failure",
+                f"[{stack.name}] Pulled images failed digest pin verification.",
+                stack=stack.name,
+                services=state.pull_services,
+                matches=state.matches,
+            )
             self._record_failure(
                 stack,
                 state.matches,
