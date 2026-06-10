@@ -1859,6 +1859,7 @@ class UpdateFromWudRunner:
             incident = updater_logging._create_unique_text_file_exclusive(
                 incident,
                 "".join(content),
+                owner=self.owner,
             )
         except OSError as exc:
             raise UpdaterError(

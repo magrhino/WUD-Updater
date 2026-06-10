@@ -39,6 +39,7 @@ from wud_updater.updater import (
     _apply_sqlite_owner,
 )
 from wud_updater.updater_models import (
+    AppliedTagUpdate,
     ComposeTagRewriteError,
     DigestPinUpdate,
     TagExclusionUpdate,
@@ -2814,6 +2815,59 @@ class PythonUpdateFromWudTests(unittest.TestCase):
         self.assertIn("health=unhealthy", incident)
         self.assertIn("new tag failed health check", incident)
         self.assertIn("manual_review_required=no", incident)
+
+    def test_tag_update_incident_log_uses_configured_owner(self) -> None:
+        self.env["OUT_UID"] = str(os.getuid())
+        self.env["OUT_GID"] = str(os.getgid())
+        stack_dir = self.make_stack("app", [("app", "repo/app:1.0", "cid-app")])
+        options = UpdaterOptions(
+            docker_base=self.base,
+            wud_file=self.wud_file,
+            log_dir=self.log_dir,
+            max_wait=0,
+            assume_yes=True,
+            allow_tag_updates=True,
+            no_color=True,
+        )
+        runner = UpdateFromWudRunner(
+            options,
+            environ=self.env,
+            command_runner=CommandRunner(env=self.env),
+        )
+        stack = ComposeStack(
+            index=1,
+            directory=stack_dir,
+            file="docker-compose.yml",
+            name="app",
+            images=("repo/app:1.0",),
+            service_images=(),
+        )
+        applied = AppliedTagUpdate(
+            old_image="repo/app:1.0",
+            desired_tag="2.0",
+            new_image="repo/app:2.0",
+            services=("app",),
+            replacements=1,
+        )
+
+        def fake_create(path: Path, content: str, **_: object) -> Path:
+            self.assertIn("reason=health-failed", content)
+            return path
+
+        with mock.patch(
+            "wud_updater.updater_logging._create_unique_text_file_exclusive",
+            side_effect=fake_create,
+        ) as create_file:
+            runner._write_tag_incident_log(
+                stack,
+                ("app",),
+                (applied,),
+                "health-failed",
+                "restored-and-healthy",
+                "health=unhealthy\n",
+            )
+
+        self.assertEqual(create_file.call_args.kwargs["owner"], runner.owner)
 
     def test_tag_incident_creation_does_not_follow_existing_symlink(self) -> None:
         self.wud_file.write_text("repo/app:1.0 tag=2.0\n", encoding="utf-8")
