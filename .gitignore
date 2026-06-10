@@ -1,6 +1,7 @@
 # OS/editor noise
 .DS_Store
 *.tmp
+.vscode/
 
 # Local config and secrets
 .env
