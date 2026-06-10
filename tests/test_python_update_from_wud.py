@@ -38,11 +38,14 @@ from wud_updater.updater import (
     UpdateFromWudRunner,
     _apply_sqlite_owner,
 )
+from wud_updater.updater_lifecycle_health import _updated_images
 from wud_updater.updater_digest_pin import digest_pin_update_from_values
 from wud_updater.updater_models import (
+    AppliedDigestPinUpdate,
     AppliedTagUpdate,
     ComposeTagRewriteError,
     DigestPinUpdate,
+    ImageState,
     TagExclusionUpdate,
     UpdaterError,
     UpdaterOptions,
@@ -311,6 +314,27 @@ class PythonUpdateFromWudTests(unittest.TestCase):
         with closing(sqlite3.connect(self.db_path)) as conn:
             conn.row_factory = sqlite3.Row
             return list(conn.execute(query, params))
+
+    def prepare_digest_pin_latest_update(self) -> None:
+        self.wud_file.write_text(
+            "repo/app:latest@sha256:child\n",
+            encoding="utf-8",
+        )
+        self.make_stack("app", [("app", "repo/app:latest", "cid-app")])
+        self.set_image_state("repo/app:latest", "sha256:old", "sha256:old-index")
+        self.set_image_after_pull(
+            "repo/app:latest",
+            "sha256:config",
+            "sha256:index",
+        )
+        self.set_manifest_stdout(
+            "docker.io/repo/app:latest",
+            manifest_index_digest("sha256:index", "sha256:child"),
+        )
+        self.set_manifest_stdout(
+            "docker.io/repo/app@sha256:child",
+            manifest_image("sha256:config"),
+        )
 
     def test_wrapper_default_dry_run_plans_without_mutation(self) -> None:
         self.wud_file.write_text("repo/app:latest\n", encoding="utf-8")
@@ -1199,6 +1223,28 @@ class PythonUpdateFromWudTests(unittest.TestCase):
         self.assertIn("recovery up failed", report)
         self.assertNotIn("argv=docker compose -f docker-compose.yml down", report)
 
+    def test_tag_update_compose_up_failure_unpauses_before_rollback(self) -> None:
+        self.wud_file.write_text("repo/app:1.0 tag=2.0\n", encoding="utf-8")
+        stack_dir = self.make_stack("app", [("app", "repo/app:1.0", "cid-app")])
+        self.set_image_state("repo/app:1.0", "old", "sha256:old")
+        self.set_image_after_pull("repo/app:2.0", "new", "sha256:new")
+        stack_state = self.fake_root / "stacks" / "app"
+        (stack_state / "up_fail").write_text("", encoding="utf-8")
+
+        result = self.run_python("--yes", "--allow-tag-updates", "--mode", "pause")
+
+        self.assertEqual(result.returncode, 1, result.stderr + result.stdout)
+        self.assertIn(
+            "image: repo/app:1.0",
+            (stack_dir / "docker-compose.yml").read_text(encoding="utf-8"),
+        )
+        calls = self.calls()
+        failed_up = calls.index("compose -f docker-compose.yml up")
+        unpause = calls.index("compose -f docker-compose.yml unpause app")
+        rollback_up = calls.rindex("compose -f docker-compose.yml up")
+        self.assertLess(failed_up, unpause)
+        self.assertLess(unpause, rollback_up)
+
     def test_tag_update_requires_explicit_flag(self) -> None:
         self.wud_file.write_text("repo/app:1.0 tag=2.0\n", encoding="utf-8")
         stack_dir = self.make_stack("app", [("app", "repo/app:1.0", "cid-app")])
@@ -1554,6 +1600,83 @@ class PythonUpdateFromWudTests(unittest.TestCase):
         known = self.db_rows("SELECT * FROM known_images")
         self.assertEqual(events[0]["target_image"], "repo/app@sha256:index")
         self.assertEqual(known[0]["image"], "repo/app@sha256:index")
+
+    def test_digest_pin_os_error_records_failure_without_tag_rollback(self) -> None:
+        self.prepare_digest_pin_latest_update()
+
+        with mock.patch(
+            "wud_updater.compose_rewrite.apply_compose_digest_pins",
+            side_effect=OSError("write denied"),
+        ):
+            status, stdout, stderr = self.run_direct(digest_pin_updates=True)
+
+        self.assertEqual(status, 1, stderr + stdout)
+        report = self.latest_error_report().read_text(encoding="utf-8")
+        self.assertIn("phase=compose-digest-pin", report)
+        self.assertIn("reason=compose-digest-pin-failed", report)
+        self.assertIn("write denied", report)
+        pending = self.db_rows("SELECT * FROM pending_updates")
+        self.assertEqual(pending[0]["status"], "failed")
+        self.assertEqual(pending[0]["status_reason"], "compose-digest-pin-failed")
+
+    def test_digest_pin_empty_apply_records_failure_without_tag_rollback(self) -> None:
+        self.prepare_digest_pin_latest_update()
+
+        with mock.patch(
+            "wud_updater.compose_rewrite.apply_compose_digest_pins",
+            return_value=(),
+        ):
+            status, stdout, stderr = self.run_direct(digest_pin_updates=True)
+
+        self.assertEqual(status, 1, stderr + stdout)
+        report = self.latest_error_report().read_text(encoding="utf-8")
+        self.assertIn("phase=compose-digest-pin", report)
+        self.assertIn("reason=compose-digest-pin-failed", report)
+        self.assertIn("No compose image lines were digest pinned.", report)
+
+    def test_applied_rewrite_validators_accept_stack_level_records(self) -> None:
+        runner = UpdateFromWudRunner(
+            UpdaterOptions(
+                docker_base=self.base,
+                wud_file=self.wud_file,
+                log_dir=self.log_dir,
+                max_wait=0,
+                no_color=True,
+            ),
+            environ=self.env,
+            command_runner=CommandRunner(env=self.env),
+        )
+        stack = ComposeStack(
+            index=1,
+            directory=self.root,
+            file="docker-compose.yml",
+            name="app",
+            images=("repo/app:1.0",),
+            service_images=(),
+        )
+        applied_tag = AppliedTagUpdate(
+            old_image="repo/app:1.0",
+            desired_tag="2.0",
+            new_image="repo/app:2.0",
+            services=(),
+            replacements=1,
+        )
+        applied_pin = AppliedDigestPinUpdate(
+            old_image="repo/app:1.0",
+            resolved_tag="2.0",
+            resolved_image="repo/app:2.0",
+            planned_digest="sha256:index",
+            final_image="repo/app@sha256:index",
+            watch_tag="2.0",
+            marker="wud-updater.resolved-tag=2.0",
+            label_key="wud.tag.include",
+            label_value="^2\\.0$$",
+            services=(),
+            replacements=1,
+        )
+
+        self.assertTrue(runner._validate_applied_tag_updates(stack, (applied_tag,), ()))
+        self.assertTrue(runner._validate_applied_digest_pins(stack, (applied_pin,), ()))
 
     def test_digest_pin_verification_matches_canonical_compose_image(self) -> None:
         stack = ComposeStack(
@@ -2869,6 +2992,56 @@ class PythonUpdateFromWudTests(unittest.TestCase):
 
         self.assertEqual(create_file.call_args.kwargs["owner"], runner.owner)
 
+    def test_tag_incident_log_creation_failure_warns_without_raising(self) -> None:
+        stack_dir = self.make_stack("app", [("app", "repo/app:1.0", "cid-app")])
+        runner = UpdateFromWudRunner(
+            UpdaterOptions(
+                docker_base=self.base,
+                wud_file=self.wud_file,
+                log_dir=self.log_dir,
+                max_wait=0,
+                assume_yes=True,
+                allow_tag_updates=True,
+                no_color=True,
+            ),
+            environ=self.env,
+            command_runner=CommandRunner(env=self.env),
+        )
+        stack = ComposeStack(
+            index=1,
+            directory=stack_dir,
+            file="docker-compose.yml",
+            name="app",
+            images=("repo/app:1.0",),
+            service_images=(),
+        )
+        applied = AppliedTagUpdate(
+            old_image="repo/app:1.0",
+            desired_tag="2.0",
+            new_image="repo/app:2.0",
+            services=("app",),
+            replacements=1,
+        )
+        with (
+            mock.patch(
+                "wud_updater.updater_logging._create_unique_text_file_exclusive",
+                side_effect=OSError("permission denied"),
+            ),
+            mock.patch.object(runner.log, "warn") as warn,
+        ):
+            runner._write_tag_incident_log(
+                stack,
+                ("app",),
+                (applied,),
+                "health-failed",
+                "restored-and-healthy",
+                "health=unhealthy\n",
+            )
+
+        warning = warn.call_args.args[0]
+        self.assertIn("Could not create tag update incident log", warning)
+        self.assertIn("permission denied", warning)
+
     def test_tag_incident_creation_does_not_follow_existing_symlink(self) -> None:
         self.wud_file.write_text("repo/app:1.0 tag=2.0\n", encoding="utf-8")
         stack_dir = self.make_stack("app", [("app", "repo/app:1.0", "cid-app")])
@@ -2961,6 +3134,27 @@ class ImageWithDigestTests(unittest.TestCase):
         self.assertEqual(
             image_with_digest("docker.io/library/nginx:latest", "sha256:hash"),
             "docker.io/library/nginx@sha256:hash",
+        )
+
+
+class UpdatedImagesTests(unittest.TestCase):
+    def test_matches_rewritten_image_reference_by_repository_identity(self) -> None:
+        before = {
+            "repo/app:1.0": ImageState(
+                image_id="sha256:old",
+                digest="repo/app:1.0@sha256:old",
+            ),
+        }
+        after = {
+            "repo/app:2.0": ImageState(
+                image_id="sha256:new",
+                digest="repo/app:2.0@sha256:new",
+            ),
+        }
+
+        self.assertEqual(
+            _updated_images(before, after),
+            [("repo/app:1.0", after["repo/app:2.0"])],
         )
 
 

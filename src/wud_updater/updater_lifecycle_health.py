@@ -8,6 +8,7 @@ from collections.abc import Iterable, Mapping, Sequence
 from . import updater_logging
 from .command import CommandError, CommandResult
 from .compose import ComposeStack
+from .images import image_repo_ref
 from .updater_models import ImageState, Match, UpResult
 
 
@@ -195,9 +196,38 @@ def _updated_images(
     after: Mapping[str, ImageState],
 ) -> list[tuple[str, ImageState]]:
     changes: list[tuple[str, ImageState]] = []
+    after_by_image_id: dict[str, tuple[str, ImageState] | None] = {}
+    after_by_repository: dict[str, tuple[str, ImageState] | None] = {}
+    for image, state in after.items():
+        if state.image_id:
+            after_by_image_id[state.image_id] = (
+                None
+                if state.image_id in after_by_image_id
+                else (image, state)
+            )
+        repository = image_repo_ref(image)
+        after_by_repository[repository] = (
+            None
+            if repository in after_by_repository
+            else (image, state)
+        )
+
     for image, old in before.items():
+        new_image = image
         new = after.get(image)
-        if new is not None and new.image_id and old.image_id != new.image_id:
+        if new is None and old.image_id:
+            image_id_match = after_by_image_id.get(old.image_id)
+            if image_id_match is not None:
+                new_image, new = image_id_match
+        if new is None:
+            repository_match = after_by_repository.get(image_repo_ref(image))
+            if repository_match is not None:
+                new_image, new = repository_match
+        if (
+            new is not None
+            and new.image_id
+            and (old.image_id != new.image_id or image != new_image)
+        ):
             changes.append((image, new))
     return changes
 

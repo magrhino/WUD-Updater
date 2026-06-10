@@ -16,7 +16,6 @@ from .updater_models import (
     ComposeTagRewriteError,
     Match,
     StackStatus,
-    UpdaterError,
 )
 
 
@@ -137,6 +136,14 @@ class _LifecycleRewriteMixin:
                     "compose-digest-pin-failed",
                     phase="compose-digest-pin",
                 )
+            self._record_failure(
+                stack,
+                state.matches,
+                phase="compose-digest-pin",
+                reason="compose-digest-pin-failed",
+                services=state.pull_services,
+                note=str(exc),
+            )
             return StackStatus("failure", "compose-digest-pin-failed")
         except OSError as exc:
             self.log.error(
@@ -148,6 +155,14 @@ class _LifecycleRewriteMixin:
                     "compose-digest-pin-failed",
                     phase="compose-digest-pin",
                 )
+            self._record_failure(
+                stack,
+                state.matches,
+                phase="compose-digest-pin",
+                reason="compose-digest-pin-failed",
+                services=state.pull_services,
+                note=str(exc),
+            )
             return StackStatus("failure", "compose-digest-pin-failed")
 
         if not state.applied_digest_pins:
@@ -160,6 +175,14 @@ class _LifecycleRewriteMixin:
                     "compose-digest-pin-failed",
                     phase="compose-digest-pin",
                 )
+            self._record_failure(
+                stack,
+                state.matches,
+                phase="compose-digest-pin",
+                reason="compose-digest-pin-failed",
+                services=state.pull_services,
+                note="No compose image lines were digest pinned.",
+            )
             return StackStatus("failure", "compose-digest-pin-failed")
 
         for applied in state.applied_digest_pins:
@@ -367,9 +390,11 @@ class _LifecycleRewriteMixin:
                 owner=self.owner,
             )
         except OSError as exc:
-            raise UpdaterError(
-                f"[{stack.name}] Could not create tag update incident log: {exc}"
-            ) from exc
+            self.log.warn(
+                f"[{stack.name}] Could not create tag update incident log "
+                f"{incident} with owner={self.owner}: {exc}"
+            )
+            return
         self.log.warn(f"[{stack.name}] Wrote tag update incident log: {incident}")
 
     def _validate_applied_tag_updates(
@@ -384,6 +409,8 @@ class _LifecycleRewriteMixin:
             for item in service_images
         }
         for applied in applied_tags:
+            if not applied.services:
+                continue
             expected_replacements = len(applied.services)
             if applied.replacements != expected_replacements:
                 ok = False
@@ -411,6 +438,8 @@ class _LifecycleRewriteMixin:
         ok = True
         image_by_service = {(item.service, item.image) for item in service_images}
         for applied in applied_pins:
+            if not applied.services:
+                continue
             expected_replacements = len(applied.services)
             if applied.replacements != expected_replacements:
                 ok = False
