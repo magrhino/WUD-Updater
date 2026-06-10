@@ -14,7 +14,7 @@ from fastapi import HTTPException, Query, Request
 from . import web_scheduler
 from .db import DatabaseError, init_db, open_db, utc_timestamp
 from .images import repo_key, tag_value_valid
-from .updater import js_regex_escape
+from .compose_rewrite import js_regex_escape
 from .web_auth import (
     SESSION_COOKIE,
     _bearer_token_valid,

@@ -42,13 +42,13 @@ from .images import (
 from .plans import DryRunPlan, PlanFileMissing, PlanInputError, build_dry_run_plan
 from .release_notes import detect_breaking
 from .self_update import current_container_image, release_self_update_target
-from .updater import (
+from .compose_rewrite import (
+    _backup_compose,
     apply_compose_digest_pins,
     apply_compose_tag_updates,
-    digest_pin_update_from_values,
-    _backup_compose,
 )
 from .updater_models import ComposeTagRewriteError, DigestPinUpdate, TagUpdate
+from .updater_planning import digest_pin_update_from_values
 from .web_auth import (
     SESSION_COOKIE,
     WebConfigError,

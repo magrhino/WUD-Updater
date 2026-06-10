@@ -86,6 +86,9 @@ EOF
     src/wud_updater/updates.py \
     src/wud_updater/updater_models.py \
     src/wud_updater/updater.py \
+    src/wud_updater/updater_cli.py \
+    src/wud_updater/updater_logging.py \
+    src/wud_updater/updater_planning.py \
     src/wud_updater/web_auth.py \
     src/wud_updater/web_database.py \
     src/wud_updater/web_diagnostics.py \
@@ -118,6 +121,8 @@ EOF
     tests/test_python_self_update.py \
     tests/test_python_terminal.py \
     tests/test_python_truenas.py \
+    tests/test_python_updater_cli.py \
+    tests/test_python_updater_logging.py \
     tests/test_python_update_from_wud.py \
     tests/test_python_updates_wrapper.py \
     tests/test_python_web.py \

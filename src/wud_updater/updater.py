@@ -2,20 +2,17 @@
 
 from __future__ import annotations
 
-import errno
 import json
 import os
-import re
 import shutil
 import sqlite3
 import sys
 import time
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import replace
-from datetime import datetime
 from pathlib import Path
-from typing import TextIO
 
+from . import compose_rewrite, updater_logging
 from .command import CommandError, CommandResult, CommandRunner
 from .compose import (
     ComposeBindMount,
@@ -42,16 +39,6 @@ from .compose_rewrite import (
     render_compose_digest_pins as render_compose_digest_pins,
     render_compose_tag_exclusions as render_compose_tag_exclusions,
 )
-from .config import (
-    COMPOSE_IGNORE_PATHS_ENV,
-    ConfigError,
-    DIGEST_PIN_UPDATES_ENV,
-    DEFAULT_MAX_WAIT,
-    DEFAULT_UPDATE_MODE,
-    DEFAULT_DIGEST_PIN_UPDATES,
-    parse_compose_ignore_paths,
-    parse_bool_env,
-)
 from .db import (
     DatabaseError,
     active_tag_exclusion_rules,
@@ -76,16 +63,61 @@ from .file_ops import OwnerConfig, OwnerConfigError, apply_configured_owner
 from .images import (
     image_has_tag,
     image_matches_resolved_target,
-    image_tag,
-    image_with_digest,
     repo_key,
     normalize_digest,
     image_with_tag,
-    tag_value_valid,
 )
 from .line_specs import LineSpecError, parse_line_spec
 from .locks import DirectoryLock, WudLockError
-from .terminal import TerminalRenderer
+from .updater_cli import (
+    options_from_namespace as options_from_namespace,
+    parse_seconds as parse_seconds,
+    parse_tag_overrides as parse_tag_overrides,
+)
+from .updater_logging import (
+    Logger as Logger,
+    file_timestamp as file_timestamp,
+    prepare_log_file as prepare_log_file,
+    safe_component as safe_component,
+    sanitize_stream as sanitize_stream,
+    timestamp as timestamp,
+)
+from .updater_planning import (
+    RECREATE_STACK_LABEL as RECREATE_STACK_LABEL,
+    RECREATE_STACK_LABEL_FORMAT as RECREATE_STACK_LABEL_FORMAT,
+    _container_bind_mount_path_issue,
+    _digest_check_allow_repo,
+    _digest_check_image,
+    _digest_pin_candidates,
+    _digest_pin_match_tag,
+    _digest_pin_resolve_error,
+    _digest_pin_tag_materialization_updates,
+    _expand_network_mode_services,
+    _failed_line_numbers,
+    _failed_match_for_line,
+    _failure_target_lines,
+    _first_match_by_line,
+    _first_tag_exclusion_by_line,
+    _label_value_is_true,
+    _line_status_reason,
+    _network_mode_providers,
+    _ordered_unique,
+    _plan_line,
+    _preflight_status_reason,
+    _resolve_digest_pin_candidate,
+    _scope_plan_label,
+    _service_key,
+    _services_for_image,
+    _services_for_target_match,
+    _stacks_to_update,
+    _tag_exclusion_preflight_matches,
+    _tag_exclusion_updates_by_stack,
+    _target_image_for_match,
+    _unique_matches,
+    _unique_tag_exclusion_updates,
+    _update_services,
+    digest_pin_update_from_values as digest_pin_update_from_values,
+)
 from .wud_file import (
     ParsedWudFile,
     WudTarget,
@@ -104,7 +136,6 @@ from .updater_models import (
     Match,
     StackStatus,
     TagExclusionUpdate,
-    TagOverride,
     TagUpdate,
     UpResult,
     UpdateScope,
@@ -116,56 +147,10 @@ from .updater_models import (
 
 CONTAINER_SUMMARY_FORMAT = "{{.Name}}|{{.State.Status}}|{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}|{{.RestartCount}}|{{.State.ExitCode}}"
 HEALTH_LOG_FORMAT = "{{if .State.Health}}{{range .State.Health.Log}}{{println .Output}}{{end}}{{end}}"
-RECREATE_STACK_LABEL = "WUD-UPDATER-RECREATE-STACK"
-RECREATE_STACK_LABEL_FORMAT = f'{{{{ index .Config.Labels "{RECREATE_STACK_LABEL}" }}}}'
 VALID_MODES = frozenset({"pause", "stop", "live"})
-_SAFE_COMPONENT_RE = re.compile(r"[^A-Za-z0-9._-]")
-_CONTROL_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
-_EXCLUSIVE_CREATE_ATTEMPTS = 100
 _SERVICES_UNSET = object()
-_HELPER_ONLY_MOUNT_PREFIXES = (Path("/host"), Path("/docker-host"), Path("/container-host"))
 
 
-class Logger:
-    def __init__(
-        self,
-        log_file: Path,
-        *,
-        no_color: bool = False,
-        environ: Mapping[str, str] | None = None,
-    ) -> None:
-        self.log_file = log_file
-        self.no_color = no_color
-        self.renderer = TerminalRenderer(no_color=no_color, environ=environ)
-
-    def info(self, message: str) -> None:
-        self._term("INFO", message)
-
-    def warn(self, message: str) -> None:
-        self._term("WARN", message)
-
-    def error(self, message: str) -> None:
-        self._term("ERROR", message, stream=sys.stderr)
-
-    def plain(self, level: str, message: str) -> None:
-        with self.log_file.open("a", encoding="utf-8") as file:
-            file.write(f"[{timestamp()}] [{level}] {message}\n")
-
-    def rich_enabled(self) -> bool:
-        return self.renderer.rich_enabled()
-
-    def _term(self, level: str, message: str, *, stream: TextIO | None = None) -> None:
-        if stream is None:
-            stream = sys.stdout
-        stamped = timestamp()
-        self.renderer.log_line(
-            timestamp=stamped,
-            level=level,
-            message=message,
-            stream=stream,
-        )
-        with self.log_file.open("a", encoding="utf-8") as file:
-            file.write(f"[{stamped}] [{level}] {message}\n")
 
 
 class UpdateFromWudRunner:
@@ -799,7 +784,7 @@ class UpdateFromWudRunner:
     ) -> bool:
         try:
             for stack, stack_updates in _tag_exclusion_updates_by_stack(updates).items():
-                render_compose_tag_exclusions(
+                compose_rewrite.render_compose_tag_exclusions(
                     stack.directory / stack.file,
                     stack_updates,
                     existing_exact_tags={},
@@ -823,7 +808,7 @@ class UpdateFromWudRunner:
         for stack, stack_updates in _tag_exclusion_updates_by_stack(updates).items():
             existing_exact_tags = self._existing_exact_tag_exclusions(stack_updates)
             try:
-                applied = apply_compose_tag_exclusions(
+                applied = compose_rewrite.apply_compose_tag_exclusions(
                     stack.directory / stack.file,
                     stack_updates,
                     existing_exact_tags=existing_exact_tags,
@@ -895,7 +880,7 @@ class UpdateFromWudRunner:
                 image_repo=update.image_repo,
                 service_key=service_key,
                 tag=update.tag,
-                regex_fragment=js_regex_escape(update.tag),
+                regex_fragment=compose_rewrite.js_regex_escape(update.tag),
             )
 
     def _recreate_tag_exclusion_services(
@@ -1051,7 +1036,7 @@ class UpdateFromWudRunner:
             self.log.info(f"[{stack.name}] Applying compose tag update(s)")
             compose_path = stack.directory / stack.file
             try:
-                compose_backup = _backup_compose(compose_path)
+                compose_backup = compose_rewrite._backup_compose(compose_path)
             except OSError as exc:
                 self.log.error(
                     f"[{stack.name}] Could not back up compose file before tag update: {exc}"
@@ -1066,7 +1051,7 @@ class UpdateFromWudRunner:
                 )
                 return StackStatus("failure", "compose-backup-failed")
             try:
-                applied_tags = apply_compose_tag_updates(
+                applied_tags = compose_rewrite.apply_compose_tag_updates(
                     compose_path,
                     compose_tag_updates,
                 )
@@ -1256,7 +1241,7 @@ class UpdateFromWudRunner:
             compose_path = stack.directory / stack.file
             if compose_backup is None:
                 try:
-                    compose_backup = _backup_compose(compose_path)
+                    compose_backup = compose_rewrite._backup_compose(compose_path)
                 except OSError as exc:
                     self.log.error(
                         f"[{stack.name}] Could not back up compose file before digest-pin rewrite: {exc}"
@@ -1271,7 +1256,7 @@ class UpdateFromWudRunner:
                     )
                     return StackStatus("failure", "compose-backup-failed")
             try:
-                applied_digest_pins = apply_compose_digest_pins(
+                applied_digest_pins = compose_rewrite.apply_compose_digest_pins(
                     compose_path,
                     digest_pin_updates,
                     label_rewrite_approvals=(
@@ -1839,11 +1824,14 @@ class UpdateFromWudRunner:
         failure_health: str,
     ) -> None:
         first_tag = applied_tags[0].desired_tag if applied_tags else "tag"
-        incident = stack.directory / f"error-{safe_component(first_tag)}-{file_timestamp()}.logs"
+        incident = (
+            stack.directory
+            / f"error-{updater_logging.safe_component(first_tag)}-{updater_logging.file_timestamp()}.logs"
+        )
         services_label = " ".join(services or ()) or "stack-level"
         content = [
             "WUD-Updater tag update incident\n",
-            f"timestamp={timestamp()}\n",
+            f"timestamp={updater_logging.timestamp()}\n",
             f"stack={stack.name}\n",
             f"compose_file={stack.file}\n",
             f"services={services_label}\n",
@@ -1868,7 +1856,7 @@ class UpdateFromWudRunner:
             + ("no\n" if rollback_result == "restored-and-healthy" else "yes\n")
         )
         try:
-            incident = _create_unique_text_file_exclusive(
+            incident = updater_logging._create_unique_text_file_exclusive(
                 incident,
                 "".join(content),
             )
@@ -2003,7 +1991,7 @@ class UpdateFromWudRunner:
                 f"health={health} restarts={restarts} exit_code={exit_code}"
             )
             for output in self.docker.try_inspect(cid, HEALTH_LOG_FORMAT):
-                output = sanitize_stream(output)
+                output = updater_logging.sanitize_stream(output)
                 if output:
                     lines.append(f"health_output[{name.lstrip('/')}]: {output}")
         return "\n".join(lines) + "\n"
@@ -2021,7 +2009,7 @@ class UpdateFromWudRunner:
             self.log.plain("ERROR", f"[{stack.name}] {line}")
 
     def _log_command_result(self, result: CommandResult) -> None:
-        for line in _render_command_result(result):
+        for line in updater_logging._render_command_result(result):
             self.log.plain("ERROR", line.rstrip("\n"))
 
     def _cid_summary(self, cid: str) -> str:
@@ -2050,7 +2038,9 @@ class UpdateFromWudRunner:
                     f"{update.old_image} -> {update.new_image}"
                 )
                 for line in exc.result.stderr_lines:
-                    self.log.error(f"manifest stderr: {sanitize_stream(line)}")
+                    self.log.error(
+                        f"manifest stderr: {updater_logging.sanitize_stream(line)}"
+                    )
                 self._log_command_result(exc.result)
             else:
                 self.log.info(
@@ -2370,7 +2360,7 @@ class UpdateFromWudRunner:
                     if current.error:
                         self.log.plain(
                             "ERROR",
-                            f"[{stack.name}] Digest resolution error: {sanitize_stream(current.error)}",
+                            f"[{stack.name}] Digest resolution error: {updater_logging.sanitize_stream(current.error)}",
                         )
                 continue
             matched = False
@@ -2472,7 +2462,7 @@ class UpdateFromWudRunner:
         if result.error:
             self.log.plain(
                 level,
-                f"[{stack_name}] Digest verification error: {sanitize_stream(result.error)}",
+                f"[{stack_name}] Digest verification error: {updater_logging.sanitize_stream(result.error)}",
             )
 
     def _tag_updates(self, matches: Sequence[Match]) -> tuple[TagUpdate, ...]:
@@ -2589,7 +2579,7 @@ class UpdateFromWudRunner:
                 stack_updates = self._digest_pin_updates(
                     [match for match in matches if match.stack.index == stack.index]
                 )
-                render_compose_digest_pins(
+                compose_rewrite.render_compose_digest_pins(
                     stack.directory / stack.file,
                     stack_updates,
                     label_rewrite_approvals=(
@@ -2968,7 +2958,7 @@ class UpdateFromWudRunner:
         report_path = self._error_report_path()
         content = self._render_error_report(report_path)
         try:
-            return _create_unique_text_file_exclusive(
+            return updater_logging._create_unique_text_file_exclusive(
                 report_path,
                 content,
                 owner=self.owner,
@@ -2988,7 +2978,7 @@ class UpdateFromWudRunner:
     def _render_error_report(self, report_path: Path) -> str:
         content = [
             "WUD-Updater error report\n",
-            f"timestamp={timestamp()}\n",
+            f"timestamp={updater_logging.timestamp()}\n",
             f"central_log={self.log_file}\n",
             f"error_report={report_path}\n",
             f"failures={len(self.failures)}\n",
@@ -2999,7 +2989,7 @@ class UpdateFromWudRunner:
 
     def _render_failure(self, index: int, failure: FailureRecord) -> list[str]:
         services = " ".join(failure.services or ()) or "stack-level"
-        restored = _restored_text(failure.wud_restored)
+        restored = updater_logging._restored_text(failure.wud_restored)
         content = [
             f"\n[Failure {index}]\n",
             f"stack={failure.stack.name}\n",
@@ -3014,13 +3004,13 @@ class UpdateFromWudRunner:
         for line in _failure_target_lines(failure.matches):
             content.append(f"  {line}\n")
         if failure.note:
-            content.append(f"note={sanitize_stream(failure.note)}\n")
+            content.append(f"note={updater_logging.sanitize_stream(failure.note)}\n")
         result = failure.command_result
         if result is not None:
-            content.extend(_render_command_result(result))
+            content.extend(updater_logging._render_command_result(result))
         details_label = "details" if failure.phase == "preflight" else "health"
         content.append(f"{details_label}:\n")
-        content.extend(_indented_block(failure.health_details, "  "))
+        content.extend(updater_logging._indented_block(failure.health_details, "  "))
         return content
 
     def _print_header(self) -> None:
@@ -3034,10 +3024,14 @@ class UpdateFromWudRunner:
         self.log.info(f"WUD file: {opts.wud_file_label or str(opts.wud_file)}")
         self.log.info(f"Log file: {self.log_file}")
         self.log.info(f"Mode    : {opts.mode}")
-        self.log.info(f"Dry-run : {_bool_text(opts.dry_run)}")
-        self.log.info(f"Confirm : {_bool_text(opts.assume_yes)}")
-        self.log.info(f"TagEdit : {_bool_text(opts.allow_tag_updates)}")
-        self.log.info(f"DigestP : {_bool_text(opts.digest_pin_updates)}")
+        self.log.info(f"Dry-run : {updater_logging._bool_text(opts.dry_run)}")
+        self.log.info(f"Confirm : {updater_logging._bool_text(opts.assume_yes)}")
+        self.log.info(
+            f"TagEdit : {updater_logging._bool_text(opts.allow_tag_updates)}"
+        )
+        self.log.info(
+            f"DigestP : {updater_logging._bool_text(opts.digest_pin_updates)}"
+        )
         self.log.info(f"MaxWait : {opts.max_wait}s")
         if opts.only_lines:
             self.log.info(f"Only    : {opts.only_lines}")
@@ -3046,7 +3040,7 @@ class UpdateFromWudRunner:
         if opts.exclude_tag_lines:
             self.log.info(f"Exclude : {opts.exclude_tag_lines}")
             self.log.info(
-                f"Recreate: {_bool_text(opts.recreate_excluded_services)}"
+                f"Recreate: {updater_logging._bool_text(opts.recreate_excluded_services)}"
             )
         for override in opts.tag_overrides:
             self.log.info(f"Override: line {override.line_no} tag={override.tag}")
@@ -3230,316 +3224,20 @@ def run_update_from_wud(
             log_dir.mkdir(parents=True, exist_ok=True)
         except OSError:
             pass
-        print(f"[{timestamp()}] {exc}", file=sys.stderr)
+        print(f"[{updater_logging.timestamp()}] {exc}", file=sys.stderr)
         return 1
 
 
-def options_from_namespace(
-    args: object, *, environ: Mapping[str, str] | None = None
-) -> UpdaterOptions:
-    env = os.environ if environ is None else environ
-    home = env.get("HOME") or str(Path.home())
-    docker_base_label = str(
-        getattr(args, "base", None) or env.get("DOCKER_BASE") or f"{home}/docker"
-    )
-    wud_file_label = str(
-        getattr(args, "file", None)
-        or env.get("WUD_OUT_FILE")
-        or f"{docker_base_label}/wud/out/images.todo"
-    )
-    log_dir_label = str(
-        getattr(args, "log_dir", None) or env.get("WUD_LOG_DIR") or "./logs"
-    )
-    docker_base = Path(docker_base_label)
-    wud_file = Path(wud_file_label)
-    log_dir = Path(log_dir_label)
-    db_path = Path(env.get("WUD_DB_PATH") or str(log_dir / "wud-updater.sqlite"))
-    host_docker_base_label = env.get("HOST_DOCKER_BASE") or ""
-    host_docker_base = Path(host_docker_base_label) if host_docker_base_label else None
-    if host_docker_base is not None:
-        if not host_docker_base.is_absolute():
-            raise UpdaterError("HOST_DOCKER_BASE must be an absolute path")
-        if not docker_base.is_absolute():
-            raise UpdaterError(
-                "DOCKER_BASE must be an absolute path when HOST_DOCKER_BASE is set"
-            )
-    max_wait_value = getattr(args, "max_wait", None)
-    max_wait_label = "--max-wait"
-    if max_wait_value is None:
-        max_wait_value = env.get("WUD_MAX_WAIT")
-        max_wait_label = "WUD_MAX_WAIT"
-    max_wait = parse_seconds(max_wait_value, max_wait_label)
-    tag_overrides = parse_tag_overrides(getattr(args, "tag_override", None) or ())
-    allow_tag_updates = bool(getattr(args, "allow_tag_updates", False))
-    if tag_overrides and not allow_tag_updates:
-        raise UpdaterError("--tag-override requires --allow-tag-updates")
-    mode = (
-        getattr(args, "mode", None)
-        or env.get("WUD_UPDATE_MODE")
-        or DEFAULT_UPDATE_MODE
-    )
-    try:
-        compose_ignore_paths = parse_compose_ignore_paths(
-            env.get(COMPOSE_IGNORE_PATHS_ENV)
-        )
-        digest_pin_updates = parse_bool_env(
-            DIGEST_PIN_UPDATES_ENV,
-            env.get(DIGEST_PIN_UPDATES_ENV),
-            default=DEFAULT_DIGEST_PIN_UPDATES,
-        )
-    except ConfigError as exc:
-        raise UpdaterError(str(exc)) from exc
-    return UpdaterOptions(
-        docker_base=docker_base,
-        wud_file=wud_file,
-        log_dir=log_dir,
-        mode=mode,
-        max_wait=max_wait,
-        dry_run=bool(getattr(args, "dry_run", False)),
-        assume_yes=bool(getattr(args, "yes", False)),
-        allow_tag_updates=allow_tag_updates,
-        digest_pin_updates=digest_pin_updates,
-        no_color=bool(getattr(args, "no_color", False)),
-        only_lines=getattr(args, "only_lines", None) or "",
-        remove_lines_before_run=getattr(args, "remove_lines_before_run", None) or "",
-        tag_overrides=tag_overrides,
-        exclude_tag_lines=getattr(args, "exclude_tag_lines", None) or "",
-        recreate_excluded_services=bool(
-            getattr(args, "recreate_excluded_services", False)
-        ),
-        compose_ignore_paths=compose_ignore_paths,
-        db_path=db_path,
-        docker_base_label=docker_base_label,
-        host_docker_base=host_docker_base,
-        host_docker_base_label=host_docker_base_label or None,
-        wud_file_label=wud_file_label,
-        log_dir_label=log_dir_label,
-    )
 
 
-def prepare_log_file(log_dir: Path, owner: OwnerConfig) -> Path:
-    log_dir.mkdir(parents=True, exist_ok=True)
-    apply_configured_owner(log_dir, owner)
-    log_file = log_dir / f"update-from-wud-v2-{file_timestamp()}.log"
-    try:
-        return _create_unique_text_file_exclusive(log_file, "", owner=owner)
-    except OSError as exc:
-        raise UpdaterError(f"Could not create updater log file: {exc}") from exc
 
 
-def _create_unique_text_file_exclusive(
-    path: Path,
-    content: str,
-    *,
-    owner: OwnerConfig | None = None,
-    encoding: str = "utf-8",
-) -> Path:
-    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
-    flags |= getattr(os, "O_NOFOLLOW", 0)
-    owner = owner or OwnerConfig()
-
-    for attempt in range(_EXCLUSIVE_CREATE_ATTEMPTS):
-        candidate = _collision_path(path, attempt)
-        fd = -1
-        try:
-            fd = os.open(candidate, flags, 0o666)
-            if owner.configured:
-                if owner.uid is None or owner.gid is None:
-                    raise OwnerConfigError(
-                        "OUT_UID and OUT_GID/OUT_GUID must be set together"
-                    )
-                os.fchown(fd, owner.uid, owner.gid)
-            with os.fdopen(fd, "w", encoding=encoding, newline="") as file:
-                fd = -1
-                file.write(content)
-            return candidate
-        except FileExistsError:
-            continue
-        except OSError as exc:
-            if exc.errno == errno.ELOOP:
-                continue
-            raise
-        finally:
-            if fd != -1:
-                os.close(fd)
-
-    raise FileExistsError(
-        errno.EEXIST,
-        f"could not create a unique file after {_EXCLUSIVE_CREATE_ATTEMPTS} attempts",
-        str(path),
-    )
 
 
-def _collision_path(path: Path, attempt: int) -> Path:
-    if attempt == 0:
-        return path
-    return path.with_name(f"{path.stem}-{attempt}{path.suffix}")
 
 
-def parse_seconds(value: str | None, label: str) -> int:
-    if value is None or value == "":
-        return DEFAULT_MAX_WAIT
-    if not re.fullmatch(r"[0-9]+", str(value)):
-        raise UpdaterError(f"{label} must be an integer number of seconds")
-    return int(str(value), 10)
 
 
-def parse_tag_overrides(values: Sequence[str]) -> tuple[TagOverride, ...]:
-    overrides: list[TagOverride] = []
-    seen: set[int] = set()
-    for value in values:
-        line_raw, sep, tag = value.partition("=")
-        if not sep or not line_raw or not tag:
-            raise UpdaterError("--tag-override must use LINE=TAG")
-        if not re.fullmatch(r"[0-9]+", line_raw):
-            raise UpdaterError("--tag-override line must be a positive integer")
-        line_no = int(line_raw, 10)
-        if line_no < 1:
-            raise UpdaterError("--tag-override line must be a positive integer")
-        if line_no in seen:
-            raise UpdaterError(f"--tag-override line {line_no} was provided more than once")
-        if not tag_value_valid(tag):
-            raise UpdaterError(f"--tag-override line {line_no} has invalid tag: {tag}")
-        overrides.append(TagOverride(line_no=line_no, tag=tag))
-        seen.add(line_no)
-    return tuple(overrides)
-
-
-def _services_for_image(service_images: Sequence[ServiceImage], image: str) -> tuple[str, ...]:
-    return tuple(sorted({item.service for item in service_images if item.image == image}))
-
-
-def _services_for_target_match(
-    service_images: Sequence[ServiceImage],
-    image: str,
-    target: WudTarget,
-    resolved: str,
-    allow_repo: bool,
-    *,
-    allow_digest_pin_rematch: bool = False,
-) -> tuple[str, ...] | None:
-    if image_matches_resolved_target(image, resolved, allow_repo):
-        return _services_for_image(service_images, image)
-    if not allow_digest_pin_rematch:
-        return None
-    services = _digest_pin_rematch_services(service_images, image, target)
-    if services:
-        return services
-    return None
-
-
-def _digest_pin_rematch_services(
-    service_images: Sequence[ServiceImage],
-    image: str,
-    target: WudTarget,
-) -> tuple[str, ...]:
-    if not target.digest or not image_has_tag(target.first):
-        return ()
-    if image_has_tag(image) or repo_key(image) != target.repo:
-        return ()
-    tag = image_tag(target.first)
-    if not tag_value_valid(tag):
-        return ()
-    return tuple(
-        sorted(
-            item.service
-            for item in service_images
-            if item.image == image
-            and _exact_tag_include_matches(
-                _service_image_label_value(item, WUD_TAG_INCLUDE_LABEL),
-                tag,
-            )
-        )
-    )
-
-
-def _service_image_label_value(service_image: ServiceImage, key: str) -> str:
-    for label_key, label_value in service_image.labels:
-        if label_key == key:
-            return label_value
-    return ""
-
-
-def _network_mode_providers(service_images: Sequence[ServiceImage]) -> dict[str, str]:
-    providers: dict[str, str] = {}
-    for item in service_images:
-        mode = item.network_mode.strip()
-        if not mode.startswith("service:"):
-            continue
-        provider = mode.removeprefix("service:").strip()
-        if provider:
-            providers[item.service] = provider
-    return providers
-
-
-def _expand_network_mode_services(
-    services: Sequence[str],
-    providers: Mapping[str, str],
-) -> tuple[tuple[str, ...], bool]:
-    consumers_by_provider = _network_mode_consumers(providers)
-    expanded: list[str] = []
-    seen: set[str] = set()
-    visiting: set[str] = set()
-    uses_network_provider = False
-
-    def visit(service: str) -> None:
-        nonlocal uses_network_provider
-        if service in seen:
-            return
-        if service in visiting:
-            return
-
-        visiting.add(service)
-        consumers = consumers_by_provider.get(service, ())
-        if consumers:
-            uses_network_provider = True
-
-        if service not in seen:
-            expanded.append(service)
-            seen.add(service)
-
-        for consumer in consumers:
-            visit(consumer)
-        visiting.remove(service)
-
-    for service in services:
-        visit(service)
-    return tuple(expanded), uses_network_provider
-
-
-def _network_mode_consumers(providers: Mapping[str, str]) -> dict[str, tuple[str, ...]]:
-    consumers: dict[str, list[str]] = {}
-    for service, provider in providers.items():
-        if provider and provider != service:
-            consumers.setdefault(provider, []).append(service)
-    return {
-        provider: tuple(sorted(service_names))
-        for provider, service_names in consumers.items()
-    }
-
-
-def _ordered_unique(services: Iterable[str]) -> tuple[str, ...]:
-    ordered: list[str] = []
-    seen: set[str] = set()
-    for service in services:
-        if service in seen:
-            continue
-        seen.add(service)
-        ordered.append(service)
-    return tuple(ordered)
-
-
-def _update_services(matches: Sequence[Match]) -> tuple[str, ...] | None:
-    services = sorted({match.service for match in matches if match.service})
-    if not services:
-        return None
-    if any(not match.service for match in matches):
-        return None
-    return tuple(services)
-
-
-def _label_value_is_true(value: str) -> bool:
-    return value.strip().lower() == "true"
 
 
 def _stack_level_scope_message(scope: UpdateScope) -> str:
@@ -3577,211 +3275,6 @@ def _tag_update_failure_progress_message(stack_name: str, phase: str, reason: st
     if phase == "health":
         return f"[{stack_name}] Health wait failed after tag rewrite."
     return f"[{stack_name}] Tag update failed before pull: {reason}."
-
-
-def _scope_plan_label(scope: UpdateScope) -> str:
-    if scope.services is not None:
-        return " ".join(scope.services)
-    if scope.stack_reason:
-        if scope.pull_services is not None:
-            return (
-                f"{' '.join(scope.pull_services)} "
-                f"(stack-level recreate: {RECREATE_STACK_LABEL}=true)"
-            )
-        return f"stack-level recreate ({RECREATE_STACK_LABEL}=true)"
-    return "stack-level fallback"
-
-
-def _stacks_to_update(matches: Sequence[Match]) -> tuple[ComposeStack, ...]:
-    stacks: dict[int, ComposeStack] = {}
-    for match in matches:
-        stacks[match.stack.index] = match.stack
-    return tuple(stacks[idx] for idx in sorted(stacks))
-
-
-def _container_bind_mount_path_issue(
-    mount: ComposeBindMount,
-    *,
-    docker_base: Path,
-) -> str:
-    source = Path(mount.source)
-    if not source.is_absolute():
-        return ""
-    for prefix in _HELPER_ONLY_MOUNT_PREFIXES:
-        if _path_is_or_under(source, prefix):
-            base_hint = ""
-            if _path_is_or_under(source, docker_base):
-                base_hint = f" from DOCKER_BASE={docker_base}"
-            return (
-                f"the source path is under helper-only prefix {prefix}{base_hint}; "
-                "the Docker daemon must be able to see bind sources at the same path"
-            )
-    return ""
-
-
-def _path_is_or_under(path: Path, parent: Path) -> bool:
-    try:
-        path.relative_to(parent)
-    except ValueError:
-        return False
-    return True
-
-
-def _plan_line(
-    line_no: int,
-    target: str,
-    resolved: str,
-    desired_tag: str,
-    digest_pin: DigestPinUpdate | None = None,
-) -> str:
-    if digest_pin is not None:
-        return (
-            f"line {line_no}: {resolved} -> {digest_pin.final_image} "
-            f"(digest pin tag={digest_pin.resolved_tag} digest={digest_pin.planned_digest})"
-        )
-    if desired_tag:
-        desired_image = image_with_tag(resolved, desired_tag)
-        return f"line {line_no}: {resolved} -> {desired_image} (tag update)"
-    if target == resolved:
-        return f"line {line_no}: {target}"
-    return f"line {line_no}: {target} -> {resolved}"
-
-
-def _digest_check_image(match: Match) -> str:
-    if match.target.desired_tag:
-        return image_with_tag(match.compose_image, match.target.desired_tag)
-    return match.resolved
-
-
-def _digest_check_allow_repo(match: Match) -> bool:
-    if match.target.desired_tag:
-        return False
-    return match.resolved != match.target.first or not image_has_tag(match.resolved)
-
-
-def _failed_line_numbers(
-    matches: Sequence[Match],
-    stack_statuses: Mapping[int, StackStatus],
-) -> list[int]:
-    failed: list[int] = []
-    for line_no in sorted({match.target.line_no for match in matches}):
-        idxs = {match.stack.index for match in matches if match.target.line_no == line_no}
-        if any(stack_statuses.get(idx, StackStatus("failure", "missing")).status != "success" for idx in idxs):
-            failed.append(line_no)
-    return failed
-
-
-def _first_match_by_line(matches: Sequence[Match]) -> dict[int, Match]:
-    first: dict[int, Match] = {}
-    for match in matches:
-        first.setdefault(match.target.line_no, match)
-    return first
-
-
-def _tag_exclusion_preflight_matches(
-    matches: Sequence[Match],
-    updates: Sequence[TagExclusionUpdate],
-) -> tuple[Match, ...]:
-    keys = {
-        (update.stack.index, update.service, update.source_line)
-        for update in updates
-    }
-    return tuple(
-        match
-        for match in matches
-        if (match.stack.index, match.service, match.target.line_no) in keys
-    )
-
-
-def _unique_matches(matches: Iterable[Match]) -> tuple[Match, ...]:
-    unique: list[Match] = []
-    seen: set[tuple[int, int, str, str, str]] = set()
-    for match in matches:
-        key = (
-            match.stack.index,
-            match.target.line_no,
-            match.resolved,
-            match.compose_image,
-            match.service,
-        )
-        if key in seen:
-            continue
-        seen.add(key)
-        unique.append(match)
-    return tuple(unique)
-
-
-def _failed_match_for_line(
-    line_no: int,
-    matches: Sequence[Match],
-    stack_statuses: Mapping[int, StackStatus],
-) -> Match | None:
-    first: Match | None = None
-    for match in matches:
-        if match.target.line_no != line_no:
-            continue
-        if first is None:
-            first = match
-        status = stack_statuses.get(match.stack.index, StackStatus("failure", "missing"))
-        if status.status != "success":
-            return match
-    return first
-
-
-def _line_status_reason(
-    line_no: int,
-    matches: Sequence[Match],
-    stack_statuses: Mapping[int, StackStatus],
-) -> str:
-    statuses = [
-        stack_statuses.get(match.stack.index, StackStatus("failure", "missing"))
-        for match in matches
-        if match.target.line_no == line_no
-    ]
-    failure_reasons = {
-        status.reason for status in statuses if status.status != "success"
-    }
-    if failure_reasons:
-        return sorted(failure_reasons)[0]
-    reasons = {
-        status.reason
-        for status in statuses
-    }
-    if "updated" in reasons:
-        return "updated"
-    if "already-current" in reasons:
-        return "already-current"
-    return sorted(reasons)[0] if reasons else "missing"
-
-
-def _preflight_status_reason(
-    stack_index: int,
-    failures: Sequence[FailureRecord],
-) -> str:
-    reasons = sorted(
-        {
-            failure.reason
-            for failure in failures
-            if failure.stack.index == stack_index
-        }
-    )
-    if len(reasons) == 1:
-        return reasons[0]
-    if reasons:
-        return "preflight-failed"
-    return "missing"
-
-
-def _service_key(match: Match) -> str:
-    if match.service:
-        return f"{match.stack.name}/{match.service}"
-    return f"{match.stack.name}/{match.compose_image}"
-
-
-def _target_image_for_match(match: Match) -> str:
-    if match.target.desired_tag:
-        return image_with_tag(match.compose_image, match.target.desired_tag)
-    return match.resolved
 
 
 def _db_path(options: UpdaterOptions, environ: Mapping[str, str]) -> Path:
@@ -3845,255 +3338,3 @@ def _split_summary(summary: str) -> tuple[str, str, str, str, str]:
     while len(parts) < 5:
         parts.append("")
     return tuple(parts[:5])  # type: ignore[return-value]
-
-
-def safe_component(value: str) -> str:
-    cleaned = _SAFE_COMPONENT_RE.sub("_", value)
-    return cleaned or "tag"
-
-
-def _unique_tag_exclusion_updates(
-    updates: Iterable[TagExclusionUpdate],
-) -> list[TagExclusionUpdate]:
-    unique: dict[tuple[int, str, str, str, str], TagExclusionUpdate] = {}
-    for update in updates:
-        key = (
-            update.stack.index,
-            update.service,
-            update.image_repo,
-            update.tag,
-            update.scope,
-        )
-        unique.setdefault(key, update)
-    return [unique[key] for key in sorted(unique)]
-
-
-def digest_pin_update_from_values(
-    *,
-    old_image: str,
-    resolved_tag: str,
-    planned_digest: str,
-    services: Sequence[str],
-) -> DigestPinUpdate:
-    tag_update = TagUpdate(
-        old_image=old_image,
-        desired_tag=resolved_tag,
-        new_image=image_with_tag(old_image, resolved_tag),
-        services=tuple(sorted(services)),
-    )
-    return _digest_pin_update_from_tag_update(tag_update, planned_digest)
-
-
-def _digest_pin_match_tag(match: Match) -> str:
-    if match.target.desired_tag:
-        return match.target.desired_tag
-    if not match.target.digest or not image_has_tag(match.target.first):
-        return ""
-    tag = image_tag(match.target.first)
-    return tag if tag_value_valid(tag) else ""
-
-
-def _digest_pin_candidates(
-    matches: Sequence[Match],
-) -> tuple[DigestPinCandidate, ...]:
-    services_by_key: dict[tuple[str, str, str], set[str]] = {}
-    digests_by_key: dict[tuple[str, str, str], set[str]] = {}
-    for match in matches:
-        resolved_tag = _digest_pin_match_tag(match)
-        if not resolved_tag:
-            continue
-        resolved_image = image_with_tag(match.compose_image, resolved_tag)
-        key = (match.compose_image, resolved_tag, resolved_image)
-        services_by_key.setdefault(key, set())
-        if match.service:
-            services_by_key[key].add(match.service)
-        if not match.target.desired_tag:
-            digests_by_key.setdefault(key, set()).add(
-                normalize_digest(match.target.digest)
-            )
-
-    candidates: list[DigestPinCandidate] = []
-    for key, services in sorted(services_by_key.items()):
-        old_image, resolved_tag, resolved_image = key
-        digests = sorted(digests_by_key.get(key, set()))
-        if len(digests) > 1:
-            raise UpdaterError(
-                "Conflicting digest-pin digests for "
-                f"{resolved_image}: {', '.join(digests)}"
-            )
-        candidates.append(
-            DigestPinCandidate(
-                old_image=old_image,
-                resolved_tag=resolved_tag,
-                resolved_image=resolved_image,
-                planned_digest=digests[0] if digests else "",
-                services=tuple(sorted(services)),
-            )
-        )
-    return tuple(candidates)
-
-
-def _digest_pin_tag_materialization_updates(
-    updates: Sequence[DigestPinUpdate],
-) -> tuple[TagUpdate, ...]:
-    tag_updates: list[TagUpdate] = []
-    for update in updates:
-        if (
-            update.old_image == update.resolved_image
-            or "@sha256:" not in update.old_image
-        ):
-            continue
-        tag_updates.append(
-            TagUpdate(
-                old_image=update.old_image,
-                desired_tag=update.resolved_tag,
-                new_image=update.resolved_image,
-                services=update.services,
-            )
-        )
-    return tuple(tag_updates)
-
-
-def _resolve_digest_pin_candidate(
-    verifier: DigestVerifier,
-    candidate: DigestPinCandidate,
-) -> DigestResolveResult:
-    if candidate.planned_digest:
-        return verifier.verify_tag_digest(
-            candidate.resolved_image,
-            candidate.planned_digest,
-        )
-    return verifier.resolve_tag_digest(candidate.resolved_image)
-
-
-def _digest_pin_resolve_error(
-    resolved_image: str,
-    result: DigestResolveResult,
-) -> str:
-    if result.reason == "stale-digest":
-        current = f", current {normalize_digest(result.digest)}" if result.digest else ""
-        return (
-            f"Digest-pin target moved for {resolved_image}: "
-            f"planned digest is no longer current{current}"
-        )
-    return f"Could not resolve digest-pin target for {resolved_image}: {result.reason}"
-
-
-def _digest_pin_update_from_tag_update(
-    update: TagUpdate,
-    planned_digest: str,
-) -> DigestPinUpdate:
-    digest = normalize_digest(planned_digest)
-    watch_tag = update.desired_tag
-    return DigestPinUpdate(
-        old_image=update.old_image,
-        resolved_tag=update.desired_tag,
-        resolved_image=update.new_image,
-        planned_digest=digest,
-        final_image=image_with_digest(update.old_image, digest),
-        watch_tag=watch_tag,
-        marker=f"{DIGEST_PIN_MARKER_PREFIX}{watch_tag}",
-        label_key=WUD_TAG_INCLUDE_LABEL,
-        label_value=compose_escape_dollars(exact_tags_regex((watch_tag,))),
-        services=update.services,
-    )
-
-
-def _tag_exclusion_updates_by_stack(
-    updates: Sequence[TagExclusionUpdate],
-) -> dict[ComposeStack, list[TagExclusionUpdate]]:
-    grouped: dict[ComposeStack, list[TagExclusionUpdate]] = {}
-    for update in updates:
-        grouped.setdefault(update.stack, []).append(update)
-    return grouped
-
-
-def _first_tag_exclusion_by_line(
-    updates: Sequence[TagExclusionUpdate],
-) -> dict[int, TagExclusionUpdate]:
-    first: dict[int, TagExclusionUpdate] = {}
-    for update in updates:
-        first.setdefault(update.source_line, update)
-    return first
-
-
-def _failure_target_lines(matches: Sequence[Match]) -> list[str]:
-    lines: list[str] = []
-    seen: set[tuple[int, str, str, str, str, str]] = set()
-    for match in sorted(
-        matches,
-        key=lambda item: (
-            item.target.line_no,
-            item.target.first,
-            item.resolved,
-            item.compose_image,
-            item.service,
-        ),
-    ):
-        suffix = f" sha256={match.target.digest}" if match.target.digest else ""
-        suffix += f" tag={match.target.desired_tag}" if match.target.desired_tag else ""
-        key = (
-            match.target.line_no,
-            match.target.first,
-            suffix,
-            match.resolved,
-            match.compose_image,
-            match.service,
-        )
-        if key in seen:
-            continue
-        seen.add(key)
-        service = match.service or "stack-level"
-        lines.append(
-            f"line {match.target.line_no}: {match.target.first}{suffix}; "
-            f"resolved={match.resolved}; compose_image={match.compose_image}; "
-            f"service={service}"
-        )
-    return lines
-
-
-def _render_command_result(result: CommandResult) -> list[str]:
-    content = [
-        "command:\n",
-        f"  cwd={result.cwd if result.cwd is not None else ''}\n",
-        f"  argv={result.display}\n",
-        f"  exit_code={result.returncode}\n",
-        f"  stdout_tail_truncated={_bool_text(result.stdout_truncated)}\n",
-        "  stdout_tail:\n",
-    ]
-    content.extend(_indented_block(result.stdout, "    "))
-    content.append(f"  stderr_tail_truncated={_bool_text(result.stderr_truncated)}\n")
-    content.append("  stderr_tail:\n")
-    content.extend(_indented_block(result.stderr, "    "))
-    return content
-
-
-def _indented_block(value: str, prefix: str) -> list[str]:
-    if not value.strip():
-        return [f"{prefix}(empty)\n"]
-    lines: list[str] = []
-    for line in value.splitlines():
-        lines.append(f"{prefix}{sanitize_stream(line)}\n")
-    return lines
-
-
-def _restored_text(value: bool | None) -> str:
-    if value is None:
-        return "unknown"
-    return "yes" if value else "no"
-
-
-def sanitize_stream(value: str) -> str:
-    return _CONTROL_RE.sub("", value.replace("\r", "\n")).strip()
-
-
-def timestamp() -> str:
-    return datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
-
-
-def file_timestamp() -> str:
-    return datetime.now().strftime("%Y-%m-%dT%H-%M-%S")
-
-
-def _bool_text(value: bool) -> str:
-    return "true" if value else "false"

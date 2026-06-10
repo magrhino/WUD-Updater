@@ -19,6 +19,7 @@ from wud_updater.compose import (
     ComposeStack,
     ServiceImage,
 )
+from wud_updater.compose_rewrite import apply_compose_tag_exclusions
 from wud_updater.config import load_config
 from wud_updater.digest_verifier import (
     DigestVerifier,
@@ -36,9 +37,6 @@ from wud_updater.images import image_with_digest
 from wud_updater.updater import (
     UpdateFromWudRunner,
     _apply_sqlite_owner,
-    apply_compose_tag_exclusions,
-    digest_pin_update_from_values,
-    prepare_log_file,
 )
 from wud_updater.updater_models import (
     ComposeTagRewriteError,
@@ -47,6 +45,7 @@ from wud_updater.updater_models import (
     UpdaterError,
     UpdaterOptions,
 )
+from wud_updater.updater_planning import digest_pin_update_from_values
 
 
 MANIFEST_INDEX_TYPE = "application/vnd.oci.image.index.v1+json"
@@ -1395,7 +1394,7 @@ class PythonUpdateFromWudTests(unittest.TestCase):
             )
 
         with mock.patch(
-            "wud_updater.updater.apply_compose_tag_exclusions",
+            "wud_updater.compose_rewrite.apply_compose_tag_exclusions",
             side_effect=flaky_apply_compose_tag_exclusions,
         ):
             result = runner.run()
@@ -2757,7 +2756,7 @@ class PythonUpdateFromWudTests(unittest.TestCase):
 
         with (
             mock.patch(
-                "wud_updater.updater._backup_compose",
+                "wud_updater.compose_rewrite._backup_compose",
                 side_effect=OSError("backup denied"),
             ),
             redirect_stdout(stdout),
@@ -2772,22 +2771,6 @@ class PythonUpdateFromWudTests(unittest.TestCase):
         )
         self.assertIn("Could not back up compose file", stderr.getvalue())
         self.assertNotIn("Traceback", stderr.getvalue())
-
-    def test_log_file_creation_does_not_follow_existing_symlink(self) -> None:
-        target = self.root / "symlink-target.log"
-        target.write_text("keep\n", encoding="utf-8")
-        (self.log_dir / "update-from-wud-v2-fixed.log").symlink_to(target)
-        owner = OwnerConfig.from_values(str(os.getuid()), str(os.getgid()))
-
-        with mock.patch("wud_updater.updater.file_timestamp", return_value="fixed"):
-            log_file = prepare_log_file(self.log_dir, owner)
-
-        self.assertEqual(log_file.name, "update-from-wud-v2-fixed-1.log")
-        self.assertEqual(target.read_text(encoding="utf-8"), "keep\n")
-        self.assertFalse(log_file.is_symlink())
-        self.assertEqual(log_file.read_text(encoding="utf-8"), "")
-        after_stat = log_file.stat()
-        self.assertEqual((after_stat.st_uid, after_stat.st_gid), (os.getuid(), os.getgid()))
 
     def test_tag_update_failure_rolls_back_and_writes_incident_log(self) -> None:
         self.wud_file.write_text("repo/app:1.0 tag=2.0\n", encoding="utf-8")
@@ -2875,7 +2858,7 @@ class PythonUpdateFromWudTests(unittest.TestCase):
         stderr = StringIO()
 
         with (
-            mock.patch("wud_updater.updater.file_timestamp", return_value="fixed"),
+            mock.patch("wud_updater.updater_logging.file_timestamp", return_value="fixed"),
             redirect_stdout(stdout),
             redirect_stderr(stderr),
         ):
