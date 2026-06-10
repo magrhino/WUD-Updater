@@ -151,6 +151,13 @@ jobs:
       - name: Run tests
         run: tests/run-all.sh --python
 
+      - name: Upload Python coverage
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: python-coverage
+          path: coverage.xml
+          retention-days: 1
+
       - name: Upload results to Codecov
         uses: codecov/codecov-action@e79a6962e0d4c0c17b229090214935d2e33f8354 # v6.0.1
         with:
@@ -217,6 +224,13 @@ jobs:
 
       - name: Run tests
         run: tests/run-all.sh --webui
+
+      - name: Upload WebUI coverage
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: webui-coverage
+          path: webui/coverage/lcov.info
+          retention-days: 1
 
       - name: Upload results to Codecov
         uses: codecov/codecov-action@e79a6962e0d4c0c17b229090214935d2e33f8354 # v6.0.1

@@ -18,7 +18,7 @@ export default defineConfig({
     isolate: true,
     coverage: {
       provider: "v8",
-      reporter: ["text", "cobertura"],
+      reporter: ["text", "cobertura", "lcov"],
       reportsDirectory: "coverage",
       include: ["src/**/*.ts", "src/**/*.vue"],
     },
