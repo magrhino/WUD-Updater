@@ -5,7 +5,7 @@ from __future__ import annotations
 import shutil
 import time
 from collections.abc import Iterable, Mapping, Sequence
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
@@ -60,6 +60,61 @@ CONTAINER_SUMMARY_FORMAT = "{{.Name}}|{{.State.Status}}|{{if .State.Health}}{{.S
 HEALTH_LOG_FORMAT = "{{if .State.Health}}{{range .State.Health.Log}}{{println .Output}}{{end}}{{end}}"
 
 
+@dataclass
+class _StackUpdateState:
+    stack: ComposeStack
+    matches: Sequence[Match]
+    scope: UpdateScope
+    current_stack: ComposeStack
+    images: tuple[str, ...]
+    before: dict[str, ImageState]
+    after: dict[str, ImageState]
+    digest_pin_updates: tuple[DigestPinUpdate, ...]
+    compose_tag_updates: tuple[TagUpdate, ...]
+    applied_tags: tuple[AppliedTagUpdate, ...] = ()
+    applied_digest_pins: tuple[AppliedDigestPinUpdate, ...] = ()
+    compose_backup: Path | None = None
+
+    @property
+    def services(self) -> tuple[str, ...] | None:
+        return self.scope.services
+
+    @property
+    def pull_services(self) -> tuple[str, ...] | None:
+        return self.scope.pull_services
+
+    @property
+    def stop_services(self) -> tuple[str, ...] | None:
+        return (
+            self.scope.stop_services
+            if self.scope.stop_services is not None
+            else self.scope.services
+        )
+
+    @property
+    def service_scoped(self) -> bool:
+        return self.services is not None
+
+    @property
+    def services_label(self) -> str:
+        return " ".join(self.services or ())
+
+    @property
+    def stop_services_label(self) -> str:
+        return " ".join(self.stop_services or ())
+
+    @property
+    def compose_rewrite_applied(self) -> bool:
+        return bool(self.applied_tags or self.applied_digest_pins)
+
+
+@dataclass(frozen=True)
+class _StopResult:
+    failed: bool = False
+    error: CommandError | None = None
+    phase: str = "stop"
+
+
 class StackLifecycleExecutor:
     def __init__(self, runner: Any) -> None:
         self.runner = runner
@@ -68,15 +123,71 @@ class StackLifecycleExecutor:
         return getattr(self.runner, name)
 
     def _update_stack(self, stack: ComposeStack, matches: Sequence[Match]) -> StackStatus:
-        opts = self.options
+        state_or_status = self._build_stack_update_state(stack, matches)
+        if isinstance(state_or_status, StackStatus):
+            return state_or_status
+
+        state = state_or_status
+        for step in (
+            self._apply_compose_tag_updates,
+            self._pull_and_verify_images,
+            self._apply_compose_digest_pin_updates,
+            self._finish_pull_phase,
+        ):
+            status = step(state)
+            if status is not None:
+                return status
+
+        return self._recreate_and_verify_stack(state)
+
+    def _build_stack_update_state(
+        self,
+        stack: ComposeStack,
+        matches: Sequence[Match],
+    ) -> _StackUpdateState | StackStatus:
         scope = self._update_scope(stack, matches)
+        self._log_stack_scope(stack, scope)
+
+        images = tuple(stack.images)
+        before = self._image_state(images)
+        tag_updates = self._tag_updates(matches)
+        try:
+            digest_pin_updates = self._digest_pin_updates(matches)
+        except UpdaterError as exc:
+            self.log.error(f"[{stack.name}] {exc}")
+            self._record_failure(
+                stack,
+                matches,
+                phase="compose-digest-pin",
+                reason="compose-digest-pin-plan-failed",
+                services=scope.pull_services,
+                note=str(exc),
+            )
+            return StackStatus("failure", "compose-digest-pin-plan-failed")
+
+        digest_pin_tag_updates = _digest_pin_tag_materialization_updates(
+            digest_pin_updates
+        )
+        compose_tag_updates = (*tag_updates, *digest_pin_tag_updates)
+        return _StackUpdateState(
+            stack=stack,
+            matches=matches,
+            scope=scope,
+            current_stack=stack,
+            images=images,
+            before=before,
+            after=dict(before),
+            digest_pin_updates=digest_pin_updates,
+            compose_tag_updates=compose_tag_updates,
+        )
+
+    def _log_stack_scope(self, stack: ComposeStack, scope: UpdateScope) -> None:
+        opts = self.options
         services = scope.services
         pull_services = scope.pull_services
-        stop_services = scope.stop_services if scope.stop_services is not None else services
         service_scoped = services is not None
         services_label = " ".join(services or ())
         pull_services_label = " ".join(pull_services or ())
-        stop_services_label = " ".join(stop_services or ())
 
         if self.log.rich_enabled():
             self.log.plain("INFO", f"[{stack.name}] Checking for updates (mode={opts.mode})")
@@ -105,365 +216,289 @@ class StackLifecycleExecutor:
                         f"[{stack.name}] Pulling matched compose service(s): {pull_services_label}"
                     )
 
-        images = tuple(stack.images)
-        before = self._image_state(images)
-        tag_updates = self._tag_updates(matches)
+    def _apply_compose_tag_updates(
+        self,
+        state: _StackUpdateState,
+    ) -> StackStatus | None:
+        if not state.compose_tag_updates:
+            return None
+
+        stack = state.stack
+        self.log.info(f"[{stack.name}] Applying compose tag update(s)")
+        status = self._ensure_compose_backup(state, "tag update")
+        if status is not None:
+            return status
+
+        compose_path = stack.directory / stack.file
         try:
-            digest_pin_updates = self._digest_pin_updates(matches)
-        except UpdaterError as exc:
-            self.log.error(f"[{stack.name}] {exc}")
+            state.applied_tags = compose_rewrite.apply_compose_tag_updates(
+                compose_path,
+                state.compose_tag_updates,
+            )
+        except ComposeTagRewriteError as exc:
+            self.log.error(
+                f"[{stack.name}] Could not safely rewrite compose image tag(s): {exc}"
+            )
             self._record_failure(
                 stack,
-                matches,
-                phase="compose-digest-pin",
-                reason="compose-digest-pin-plan-failed",
-                services=pull_services,
+                state.matches,
+                phase="compose-tag-rewrite",
+                reason="compose-tag-rewrite-failed",
+                services=state.pull_services,
                 note=str(exc),
             )
-            return StackStatus("failure", "compose-digest-pin-plan-failed")
-        digest_pin_tag_updates = _digest_pin_tag_materialization_updates(
-            digest_pin_updates
-        )
-        compose_tag_updates = (*tag_updates, *digest_pin_tag_updates)
-        applied_tags: tuple[AppliedTagUpdate, ...] = ()
-        applied_digest_pins: tuple[AppliedDigestPinUpdate, ...] = ()
-        compose_backup: Path | None = None
-        current_stack = stack
-
-        if compose_tag_updates:
-            self.log.info(f"[{stack.name}] Applying compose tag update(s)")
-            compose_path = stack.directory / stack.file
-            try:
-                compose_backup = compose_rewrite._backup_compose(compose_path)
-            except OSError as exc:
-                self.log.error(
-                    f"[{stack.name}] Could not back up compose file before tag update: {exc}"
-                )
-                self._record_failure(
-                    stack,
-                    matches,
-                    phase="compose-backup",
-                    reason="compose-backup-failed",
-                    services=pull_services,
-                    note=str(exc),
-                )
-                return StackStatus("failure", "compose-backup-failed")
-            try:
-                applied_tags = compose_rewrite.apply_compose_tag_updates(
-                    compose_path,
-                    compose_tag_updates,
-                )
-            except ComposeTagRewriteError as exc:
-                self.log.error(
-                    f"[{stack.name}] Could not safely rewrite compose image tag(s): {exc}"
-                )
-                self._record_failure(
-                    stack,
-                    matches,
-                    phase="compose-tag-rewrite",
-                    reason="compose-tag-rewrite-failed",
-                    services=pull_services,
-                    note=str(exc),
-                )
-                return StackStatus("failure", "compose-tag-rewrite-failed")
-            except OSError as exc:
-                self.log.error(
-                    f"[{stack.name}] Could not rewrite compose image tag(s): {exc}"
-                )
-                self._record_failure(
-                    stack,
-                    matches,
-                    phase="compose-tag-rewrite",
-                    reason="compose-tag-rewrite-failed",
-                    services=pull_services,
-                    note=str(exc),
-                )
-                return StackStatus("failure", "compose-tag-rewrite-failed")
-            if not applied_tags:
-                self.log.error(
-                    f"[{stack.name}] Could not rewrite compose image tag(s); leaving WUD entry pending for manual review."
-                )
-                self._record_failure(
-                    stack,
-                    matches,
-                    phase="compose-tag-rewrite",
-                    reason="compose-tag-rewrite-failed",
-                    services=pull_services,
-                    note="No compose image lines were rewritten.",
-                )
-                return StackStatus("failure", "compose-tag-rewrite-failed")
-            for applied in applied_tags:
-                self.log.info(
-                    f"[{stack.name}] Compose tag updated: {applied.old_image} -> {applied.new_image}"
-                )
-            refreshed = self.runner._refresh_stack_images(current_stack)
-            if refreshed is None:
-                return self._handle_tag_update_failure(
-                    stack,
-                    matches,
-                    services,
-                    applied_tags,
-                    compose_backup,
-                    "compose-refresh-failed",
-                    phase="compose-refresh",
-                    force_recreate=scope.force_recreate,
-                    no_deps=scope.up_no_deps,
-                )
-            if not self._validate_applied_tag_updates(
+            return StackStatus("failure", "compose-tag-rewrite-failed")
+        except OSError as exc:
+            self.log.error(f"[{stack.name}] Could not rewrite compose image tag(s): {exc}")
+            self._record_failure(
                 stack,
-                applied_tags,
-                refreshed.service_images,
-            ):
-                return self._handle_tag_update_failure(
-                    stack,
-                    matches,
-                    services,
-                    applied_tags,
-                    compose_backup,
-                    "compose-tag-validation-failed",
-                    phase="compose-tag-validation",
-                    force_recreate=scope.force_recreate,
-                    no_deps=scope.up_no_deps,
-                )
-            current_stack = refreshed
-            images = tuple(current_stack.images)
+                state.matches,
+                phase="compose-tag-rewrite",
+                reason="compose-tag-rewrite-failed",
+                services=state.pull_services,
+                note=str(exc),
+            )
+            return StackStatus("failure", "compose-tag-rewrite-failed")
+
+        if not state.applied_tags:
+            self.log.error(
+                f"[{stack.name}] Could not rewrite compose image tag(s); leaving WUD entry pending for manual review."
+            )
+            self._record_failure(
+                stack,
+                state.matches,
+                phase="compose-tag-rewrite",
+                reason="compose-tag-rewrite-failed",
+                services=state.pull_services,
+                note="No compose image lines were rewritten.",
+            )
+            return StackStatus("failure", "compose-tag-rewrite-failed")
+
+        for applied in state.applied_tags:
+            self.log.info(
+                f"[{stack.name}] Compose tag updated: {applied.old_image} -> {applied.new_image}"
+            )
+
+        refreshed = self.runner._refresh_stack_images(state.current_stack)
+        if refreshed is None:
+            return self._handle_compose_rewrite_failure(
+                state,
+                "compose-refresh-failed",
+                phase="compose-refresh",
+            )
+        if not self._validate_applied_tag_updates(
+            stack,
+            state.applied_tags,
+            refreshed.service_images,
+        ):
+            return self._handle_compose_rewrite_failure(
+                state,
+                "compose-tag-validation-failed",
+                phase="compose-tag-validation",
+            )
+
+        self._set_current_stack(state, refreshed)
+        return None
+
+    def _pull_and_verify_images(
+        self,
+        state: _StackUpdateState,
+    ) -> StackStatus | None:
+        stack = state.stack
+        matches = state.matches
 
         self._progress(
             "pull",
             "running",
             f"[{stack.name}] Pulling selected image updates.",
             stack=stack.name,
-            services=pull_services,
-            matches=matches,
+            services=state.pull_services,
+            matches=state.matches,
         )
         try:
             self.compose.pull(
                 stack.directory,
                 stack.file,
-                pull_services,
+                state.pull_services,
                 project_directory=stack.project_directory,
             )
         except CommandError as exc:
-            if applied_tags and compose_backup is not None:
-                return self._handle_tag_update_failure(
-                    stack,
-                    matches,
-                    services,
-                    applied_tags,
-                    compose_backup,
+            if state.applied_tags and state.compose_backup is not None:
+                return self._handle_compose_rewrite_failure(
+                    state,
                     "pull-failed",
                     phase="pull",
                     command_error=exc,
-                    force_recreate=scope.force_recreate,
-                    no_deps=scope.up_no_deps,
                 )
             self._record_failure(
                 stack,
-                matches,
+                state.matches,
                 phase="pull",
                 reason="pull-failed",
-                services=pull_services,
+                services=state.pull_services,
                 command_error=exc,
-                health_details=self._capture_health_details(stack, pull_services),
+                health_details=self._capture_health_details(stack, state.pull_services),
             )
             self._progress(
                 "pull",
                 "failure",
                 f"[{stack.name}] Pull failed.",
                 stack=stack.name,
-                services=pull_services,
-                matches=matches,
+                services=state.pull_services,
+                matches=state.matches,
             )
             return StackStatus("failure", "pull-failed")
 
-        after = self._image_state(images)
-        if not self._verify_expected_digests(stack, matches, images):
-            if applied_tags and compose_backup is not None:
-                return self._handle_tag_update_failure(
-                    stack,
-                    matches,
-                    services,
-                    applied_tags,
-                    compose_backup,
+        state.after = self._image_state(state.images)
+        if not self._verify_expected_digests(stack, matches, state.images):
+            if state.applied_tags and state.compose_backup is not None:
+                return self._handle_compose_rewrite_failure(
+                    state,
                     "expected-digest-not-reached",
                     phase="digest",
-                    force_recreate=scope.force_recreate,
-                    no_deps=scope.up_no_deps,
                 )
             self._record_failure(
                 stack,
-                matches,
+                state.matches,
                 phase="digest",
                 reason="expected-digest-not-reached",
-                services=pull_services,
-                health_details=self._capture_health_details(stack, pull_services),
+                services=state.pull_services,
+                health_details=self._capture_health_details(stack, state.pull_services),
             )
             self._progress(
                 "pull",
                 "failure",
                 f"[{stack.name}] Pulled images did not reach the expected digest.",
                 stack=stack.name,
-                services=pull_services,
-                matches=matches,
+                services=state.pull_services,
+                matches=state.matches,
             )
             return StackStatus("failure", "expected-digest-not-reached")
 
-        if digest_pin_updates and not self._verify_digest_pin_updates(
+        if state.digest_pin_updates and not self._verify_digest_pin_updates(
             stack,
-            digest_pin_updates,
-            images,
+            state.digest_pin_updates,
+            state.images,
         ):
-            if applied_tags and compose_backup is not None:
-                return self._handle_tag_update_failure(
-                    stack,
-                    matches,
-                    services,
-                    applied_tags,
-                    compose_backup,
+            if state.applied_tags and state.compose_backup is not None:
+                return self._handle_compose_rewrite_failure(
+                    state,
                     "digest-pin-verification-failed",
                     phase="digest",
-                    force_recreate=scope.force_recreate,
-                    no_deps=scope.up_no_deps,
                 )
             self._record_failure(
                 stack,
-                matches,
+                state.matches,
                 phase="digest",
                 reason="digest-pin-verification-failed",
-                services=pull_services,
-                health_details=self._capture_health_details(stack, pull_services),
+                services=state.pull_services,
+                health_details=self._capture_health_details(stack, state.pull_services),
             )
             return StackStatus("failure", "digest-pin-verification-failed")
 
-        if digest_pin_updates:
-            compose_path = stack.directory / stack.file
-            if compose_backup is None:
-                try:
-                    compose_backup = compose_rewrite._backup_compose(compose_path)
-                except OSError as exc:
-                    self.log.error(
-                        f"[{stack.name}] Could not back up compose file before digest-pin rewrite: {exc}"
-                    )
-                    self._record_failure(
-                        stack,
-                        matches,
-                        phase="compose-backup",
-                        reason="compose-backup-failed",
-                        services=pull_services,
-                        note=str(exc),
-                    )
-                    return StackStatus("failure", "compose-backup-failed")
-            try:
-                applied_digest_pins = compose_rewrite.apply_compose_digest_pins(
-                    compose_path,
-                    digest_pin_updates,
-                    label_rewrite_approvals=(
-                        self.options.digest_pin_label_rewrite_approvals
-                    ),
-                    stack_name=stack.name,
-                )
-            except ComposeTagRewriteError as exc:
-                self.log.error(
-                    f"[{stack.name}] Could not safely write digest-pinned compose image(s): {exc}"
-                )
-                if applied_tags and compose_backup is not None:
-                    return self._handle_tag_update_failure(
-                        stack,
-                        matches,
-                        services,
-                        applied_tags,
-                        compose_backup,
-                        "compose-digest-pin-failed",
-                        phase="compose-digest-pin",
-                        force_recreate=scope.force_recreate,
-                        no_deps=scope.up_no_deps,
-                    )
-                return StackStatus("failure", "compose-digest-pin-failed")
-            except OSError as exc:
-                self.log.error(
-                    f"[{stack.name}] Could not write digest-pinned compose image(s): {exc}"
-                )
-                if applied_tags and compose_backup is not None:
-                    return self._handle_tag_update_failure(
-                        stack,
-                        matches,
-                        services,
-                        applied_tags,
-                        compose_backup,
-                        "compose-digest-pin-failed",
-                        phase="compose-digest-pin",
-                        force_recreate=scope.force_recreate,
-                        no_deps=scope.up_no_deps,
-                    )
-                return StackStatus("failure", "compose-digest-pin-failed")
-            if not applied_digest_pins:
-                self.log.error(
-                    f"[{stack.name}] Could not write digest-pinned compose image(s); leaving WUD entry pending for manual review."
-                )
-                if applied_tags and compose_backup is not None:
-                    return self._handle_tag_update_failure(
-                        stack,
-                        matches,
-                        services,
-                        applied_tags,
-                        compose_backup,
-                        "compose-digest-pin-failed",
-                        phase="compose-digest-pin",
-                        force_recreate=scope.force_recreate,
-                        no_deps=scope.up_no_deps,
-                    )
-                return StackStatus("failure", "compose-digest-pin-failed")
-            for applied in applied_digest_pins:
-                self.log.info(
-                    f"[{stack.name}] Compose digest pinned: "
-                    f"{applied.old_image} -> {applied.final_image} "
-                    f"(resolved-tag={applied.resolved_tag})"
-                )
-            refreshed = self.runner._refresh_stack_images(current_stack)
-            if refreshed is None:
-                return self._handle_tag_update_failure(
-                    stack,
-                    matches,
-                    services,
-                    applied_tags,
-                    compose_backup,
-                    "compose-digest-pin-refresh-failed",
+        return None
+
+    def _apply_compose_digest_pin_updates(
+        self,
+        state: _StackUpdateState,
+    ) -> StackStatus | None:
+        if not state.digest_pin_updates:
+            return None
+
+        stack = state.stack
+        status = self._ensure_compose_backup(state, "digest-pin rewrite")
+        if status is not None:
+            return status
+
+        compose_path = stack.directory / stack.file
+        try:
+            state.applied_digest_pins = compose_rewrite.apply_compose_digest_pins(
+                compose_path,
+                state.digest_pin_updates,
+                label_rewrite_approvals=(
+                    self.options.digest_pin_label_rewrite_approvals
+                ),
+                stack_name=stack.name,
+            )
+        except ComposeTagRewriteError as exc:
+            self.log.error(
+                f"[{stack.name}] Could not safely write digest-pinned compose image(s): {exc}"
+            )
+            if state.applied_tags and state.compose_backup is not None:
+                return self._handle_compose_rewrite_failure(
+                    state,
+                    "compose-digest-pin-failed",
                     phase="compose-digest-pin",
-                    force_recreate=scope.force_recreate,
-                    no_deps=scope.up_no_deps,
                 )
-            if not self._validate_applied_digest_pins(
-                stack,
-                applied_digest_pins,
-                refreshed.service_images,
-            ):
-                return self._handle_tag_update_failure(
-                    stack,
-                    matches,
-                    services,
-                    applied_tags,
-                    compose_backup,
-                    "compose-digest-pin-validation-failed",
+            return StackStatus("failure", "compose-digest-pin-failed")
+        except OSError as exc:
+            self.log.error(
+                f"[{stack.name}] Could not write digest-pinned compose image(s): {exc}"
+            )
+            if state.applied_tags and state.compose_backup is not None:
+                return self._handle_compose_rewrite_failure(
+                    state,
+                    "compose-digest-pin-failed",
                     phase="compose-digest-pin",
-                    force_recreate=scope.force_recreate,
-                    no_deps=scope.up_no_deps,
                 )
-            current_stack = refreshed
-            images = tuple(current_stack.images)
-            after = self._image_state(images)
+            return StackStatus("failure", "compose-digest-pin-failed")
+
+        if not state.applied_digest_pins:
+            self.log.error(
+                f"[{stack.name}] Could not write digest-pinned compose image(s); leaving WUD entry pending for manual review."
+            )
+            if state.applied_tags and state.compose_backup is not None:
+                return self._handle_compose_rewrite_failure(
+                    state,
+                    "compose-digest-pin-failed",
+                    phase="compose-digest-pin",
+                )
+            return StackStatus("failure", "compose-digest-pin-failed")
+
+        for applied in state.applied_digest_pins:
+            self.log.info(
+                f"[{stack.name}] Compose digest pinned: "
+                f"{applied.old_image} -> {applied.final_image} "
+                f"(resolved-tag={applied.resolved_tag})"
+            )
+
+        refreshed = self.runner._refresh_stack_images(state.current_stack)
+        if refreshed is None:
+            return self._handle_compose_rewrite_failure(
+                state,
+                "compose-digest-pin-refresh-failed",
+                phase="compose-digest-pin",
+            )
+        if not self._validate_applied_digest_pins(
+            stack,
+            state.applied_digest_pins,
+            refreshed.service_images,
+        ):
+            return self._handle_compose_rewrite_failure(
+                state,
+                "compose-digest-pin-validation-failed",
+                phase="compose-digest-pin",
+            )
+
+        self._set_current_stack(state, refreshed)
+        state.after = self._image_state(state.images)
+        return None
+
+    def _finish_pull_phase(self, state: _StackUpdateState) -> StackStatus | None:
+        stack = state.stack
         self._progress(
             "pull",
             "success",
             f"[{stack.name}] Images pulled and verified.",
             stack=stack.name,
-            services=pull_services,
-            matches=matches,
+            services=state.pull_services,
+            matches=state.matches,
         )
 
-        changes = _updated_images(before, after)
-        update_needed = bool(applied_tags or applied_digest_pins or changes)
-        for image, state in changes:
-            target = state.digest if state.digest else state.image_id
+        changes = _updated_images(state.before, state.after)
+        update_needed = bool(state.applied_tags or state.applied_digest_pins or changes)
+        for image, image_state in changes:
+            target = image_state.digest if image_state.digest else image_state.image_id
             self.log.info(f"[{stack.name}] Image updated: {image} -> {target}")
 
         if not update_needed:
@@ -473,31 +508,60 @@ class StackLifecycleExecutor:
                 "skipped",
                 f"[{stack.name}] Images are already current; recreate was skipped.",
                 stack=stack.name,
-                services=services,
-                matches=matches,
+                services=state.services,
+                matches=state.matches,
             )
             self._progress(
                 "health",
                 "skipped",
                 f"[{stack.name}] Health wait was skipped because no containers changed.",
                 stack=stack.name,
-                services=services,
-                matches=matches,
+                services=state.services,
+                matches=state.matches,
             )
             return StackStatus("success", "already-current")
 
+        return None
+
+    def _recreate_and_verify_stack(self, state: _StackUpdateState) -> StackStatus:
+        stack = state.stack
         self._progress(
             "recreate",
             "running",
             f"[{stack.name}] Recreating selected containers.",
             stack=stack.name,
-            services=services,
-            matches=matches,
+            services=state.services,
+            matches=state.matches,
         )
-        down_failed = False
-        down_error: CommandError | None = None
-        down_phase = "stop"
-        if opts.mode == "pause":
+
+        stop_result = self._prepare_for_recreate(state)
+        self._log_compose_up_scope(state)
+        up_result = self._run_compose_up(
+            stack,
+            state.services,
+            force_recreate=state.scope.force_recreate,
+            no_deps=state.scope.up_no_deps,
+        )
+        if not up_result.ok:
+            return self._handle_compose_up_failure(state, stop_result, up_result)
+
+        self._progress(
+            "recreate",
+            "success",
+            f"[{stack.name}] Containers were recreated.",
+            stack=stack.name,
+            services=state.services,
+            matches=state.matches,
+        )
+
+        unpaused = self._unpause_after_recreate(state, up_result)
+        if isinstance(unpaused, StackStatus):
+            return unpaused
+        return self._finish_health_after_recreate(state, stop_result, unpaused)
+
+    def _prepare_for_recreate(self, state: _StackUpdateState) -> _StopResult:
+        stack = state.stack
+        if self.options.mode == "pause":
             self.log.warn(
                 f"[{stack.name}] Mode pause is deprecated; pausing before recreate and unpausing before health check"
             )
@@ -505,182 +569,186 @@ class StackLifecycleExecutor:
                 self.compose.pause(
                     stack.directory,
                     stack.file,
-                    services,
+                    state.services,
                     project_directory=stack.project_directory,
                 )
             except CommandError:
                 self.log.warn(f"[{stack.name}] Pause failed; continuing with live recreate")
-        elif opts.mode == "stop":
+        elif self.options.mode == "stop":
             try:
-                if service_scoped:
-                    self.log.warn(f"[{stack.name}] Stopping affected service(s): {stop_services_label}")
+                if state.service_scoped:
+                    self.log.warn(
+                        f"[{stack.name}] Stopping affected service(s): {state.stop_services_label}"
+                    )
                     self.compose.stop(
                         stack.directory,
                         stack.file,
-                        stop_services,
+                        state.stop_services,
                         project_directory=stack.project_directory,
                     )
                 else:
-                    if stop_services_label:
+                    if state.stop_services_label:
                         self.log.warn(
-                            f"[{stack.name}] Stopping stack service(s): {stop_services_label}"
+                            f"[{stack.name}] Stopping stack service(s): {state.stop_services_label}"
                         )
                     else:
                         self.log.warn(f"[{stack.name}] Stopping stack")
                     self.compose.stop(
                         stack.directory,
                         stack.file,
-                        stop_services,
+                        state.stop_services,
                         project_directory=stack.project_directory,
                     )
             except CommandError as exc:
-                down_failed = True
-                down_error = exc
                 self.log.warn(
                     f"[{stack.name}] Stop failed; attempting up for recovery, but this stack will not be marked successful"
                 )
+                return _StopResult(True, exc)
+        return _StopResult()
 
-        if service_scoped:
-            self.log.info(f"[{stack.name}] Bringing affected service(s) up: {services_label}")
+    def _log_compose_up_scope(self, state: _StackUpdateState) -> None:
+        if state.service_scoped:
+            self.log.info(
+                f"[{state.stack.name}] Bringing affected service(s) up: {state.services_label}"
+            )
         else:
-            self.log.info(f"[{stack.name}] Bringing stack up")
+            self.log.info(f"[{state.stack.name}] Bringing stack up")
 
-        compose_rewrite_applied = bool(applied_tags or applied_digest_pins)
-        up_result = self._run_compose_up(
+    def _handle_compose_up_failure(
+        self,
+        state: _StackUpdateState,
+        stop_result: _StopResult,
+        up_result: UpResult,
+    ) -> StackStatus:
+        stack = state.stack
+        if state.compose_rewrite_applied and state.compose_backup is not None:
+            failure_phase = "up"
+            failure_reason = "up-or-health-failed"
+            failure_error = up_result.command_error
+            if stop_result.failed and stop_result.error is not None:
+                failure_phase = stop_result.phase
+                failure_reason = "down-failed"
+                failure_error = stop_result.error
+            return self._handle_compose_rewrite_failure(
+                state,
+                failure_reason,
+                phase=failure_phase,
+                command_error=failure_error,
+                failure_health=up_result.health_details,
+            )
+
+        if stop_result.failed and stop_result.error is not None:
+            self._record_failure(
+                stack,
+                state.matches,
+                phase=stop_result.phase,
+                reason="down-failed",
+                services=state.services,
+                command_error=stop_result.error,
+                health_details=self._capture_health_details(stack, state.services),
+                note="Update recovery also failed during compose up.",
+            )
+
+        self._record_failure(
             stack,
-            services,
-            force_recreate=scope.force_recreate,
-            no_deps=scope.up_no_deps,
+            state.matches,
+            phase="up",
+            reason="up-or-health-failed",
+            services=state.services,
+            command_error=up_result.command_error,
+            health_details=up_result.health_details,
         )
-        if not up_result.ok:
-            if compose_rewrite_applied and compose_backup is not None:
-                failure_phase = "up"
-                failure_reason = "up-or-health-failed"
-                failure_error = up_result.command_error
-                if down_failed and down_error is not None:
-                    failure_phase = down_phase
-                    failure_reason = "down-failed"
-                    failure_error = down_error
-                return self._handle_tag_update_failure(
-                    stack,
-                    matches,
-                    services,
-                    applied_tags,
-                    compose_backup,
-                    failure_reason,
-                    phase=failure_phase,
-                    command_error=failure_error,
-                    failure_health=up_result.health_details,
-                    force_recreate=scope.force_recreate,
-                    no_deps=scope.up_no_deps,
-                )
-            if down_failed and down_error is not None:
-                self._record_failure(
-                    stack,
-                    matches,
-                    phase=down_phase,
-                    reason="down-failed",
-                    services=services,
-                    command_error=down_error,
-                    health_details=self._capture_health_details(stack, services),
-                    note="Update recovery also failed during compose up.",
+        self._progress(
+            "recreate",
+            "failure",
+            f"[{stack.name}] Compose up failed.",
+            stack=stack.name,
+            services=state.services,
+            matches=state.matches,
+        )
+        return StackStatus("failure", "up-or-health-failed")
+
+    def _unpause_after_recreate(
+        self,
+        state: _StackUpdateState,
+        up_result: UpResult,
+    ) -> UpResult | StackStatus:
+        stack = state.stack
+        if self.options.mode != "pause":
+            return up_result
+
+        self.log.warn(f"[{stack.name}] Unpausing before health check")
+        try:
+            self.compose.unpause(
+                stack.directory,
+                stack.file,
+                state.services,
+                project_directory=stack.project_directory,
+            )
+        except CommandError as exc:
+            if state.compose_rewrite_applied and state.compose_backup is not None:
+                return self._handle_compose_rewrite_failure(
+                    state,
+                    "unpause-failed",
+                    phase="unpause",
+                    command_error=exc,
                 )
             self._record_failure(
                 stack,
-                matches,
-                phase="up",
-                reason="up-or-health-failed",
-                services=services,
-                command_error=up_result.command_error,
-                health_details=up_result.health_details,
+                state.matches,
+                phase="unpause",
+                reason="unpause-failed",
+                services=state.services,
+                command_error=exc,
+                health_details=self._capture_health_details(stack, state.services),
             )
-            self._progress(
-                "recreate",
-                "failure",
-                f"[{stack.name}] Compose up failed.",
-                stack=stack.name,
-                services=services,
-                matches=matches,
-            )
-            return StackStatus("failure", "up-or-health-failed")
-        self._progress(
-            "recreate",
-            "success",
-            f"[{stack.name}] Containers were recreated.",
-            stack=stack.name,
-            services=services,
-            matches=matches,
+            return StackStatus("failure", "unpause-failed")
+        return UpResult(
+            up_result.ok,
+            False,
+            up_result.command_error,
+            up_result.health_details,
         )
 
-        if opts.mode == "pause":
-            self.log.warn(f"[{stack.name}] Unpausing before health check")
-            try:
-                    self.compose.unpause(
-                        stack.directory,
-                        stack.file,
-                        services,
-                        project_directory=stack.project_directory,
-                    )
-            except CommandError as exc:
-                if compose_rewrite_applied and compose_backup is not None:
-                    return self._handle_tag_update_failure(
-                        stack,
-                        matches,
-                        services,
-                        applied_tags,
-                        compose_backup,
-                        "unpause-failed",
-                        phase="unpause",
-                        command_error=exc,
-                        force_recreate=scope.force_recreate,
-                        no_deps=scope.up_no_deps,
-                    )
-                self._record_failure(
-                    stack,
-                    matches,
-                    phase="unpause",
-                    reason="unpause-failed",
-                    services=services,
-                    command_error=exc,
-                    health_details=self._capture_health_details(stack, services),
-                )
-                return StackStatus("failure", "unpause-failed")
-            up_result = UpResult(up_result.ok, False, up_result.command_error, up_result.health_details)
-
+    def _finish_health_after_recreate(
+        self,
+        state: _StackUpdateState,
+        stop_result: _StopResult,
+        up_result: UpResult,
+    ) -> StackStatus:
+        stack = state.stack
         if up_result.wait_handled:
             self._progress(
                 "health",
                 "success",
                 f"[{stack.name}] Compose reported healthy containers.",
                 stack=stack.name,
-                services=services,
-                matches=matches,
+                services=state.services,
+                matches=state.matches,
             )
 
-        if up_result.wait_handled or self._wait_for_health(stack, services, matches):
+        if up_result.wait_handled or self._wait_for_health(
+            stack,
+            state.services,
+            state.matches,
+        ):
             self.log.info(f"[{stack.name}] Healthy")
-            if down_failed:
-                if compose_rewrite_applied and compose_backup is not None:
-                    return self._handle_tag_update_failure(
-                        stack,
-                        matches,
-                        services,
-                        applied_tags,
-                        compose_backup,
+            if stop_result.failed:
+                if state.compose_rewrite_applied and state.compose_backup is not None:
+                    return self._handle_compose_rewrite_failure(
+                        state,
                         "down-failed",
-                        phase=down_phase,
-                        command_error=down_error,
-                        force_recreate=scope.force_recreate,
-                        no_deps=scope.up_no_deps,
+                        phase=stop_result.phase,
+                        command_error=stop_result.error,
                     )
                 self._record_failure(
                     stack,
-                    matches,
-                    phase=down_phase,
+                    state.matches,
+                    phase=stop_result.phase,
                     reason="down-failed",
-                    services=services,
-                    command_error=down_error,
-                    health_details=self._capture_health_details(stack, services),
+                    services=state.services,
+                    command_error=stop_result.error,
+                    health_details=self._capture_health_details(stack, state.services),
                     note="Compose up recovery succeeded, but the earlier stop command failed.",
                 )
                 self._progress(
@@ -688,38 +756,33 @@ class StackLifecycleExecutor:
                     "failure",
                     f"[{stack.name}] Stop failed before recreate.",
                     stack=stack.name,
-                    services=services,
-                    matches=matches,
+                    services=state.services,
+                    matches=state.matches,
                 )
                 return StackStatus("failure", "down-failed")
-            if digest_pin_updates:
+
+            if state.digest_pin_updates:
                 self._remember_applied_digest_pins(
                     stack,
-                    matches,
-                    digest_pin_updates,
+                    state.matches,
+                    state.digest_pin_updates,
                 )
             return StackStatus("success", "updated")
 
-        health_details = self._capture_health_details(stack, services)
-        if compose_rewrite_applied and compose_backup is not None:
-            return self._handle_tag_update_failure(
-                stack,
-                matches,
-                services,
-                applied_tags,
-                compose_backup,
+        health_details = self._capture_health_details(stack, state.services)
+        if state.compose_rewrite_applied and state.compose_backup is not None:
+            return self._handle_compose_rewrite_failure(
+                state,
                 "health-failed",
                 phase="health",
                 failure_health=health_details,
-                force_recreate=scope.force_recreate,
-                no_deps=scope.up_no_deps,
             )
         self._record_failure(
             stack,
-            matches,
+            state.matches,
             phase="health",
             reason="health-failed",
-            services=services,
+            services=state.services,
             health_details=health_details,
         )
         self._progress(
@@ -727,10 +790,70 @@ class StackLifecycleExecutor:
             "failure",
             f"[{stack.name}] Health wait failed.",
             stack=stack.name,
-            services=services,
-            matches=matches,
+            services=state.services,
+            matches=state.matches,
         )
         return StackStatus("failure", "health-failed")
+
+    def _ensure_compose_backup(
+        self,
+        state: _StackUpdateState,
+        action: str,
+    ) -> StackStatus | None:
+        if state.compose_backup is not None:
+            return None
+
+        stack = state.stack
+        compose_path = stack.directory / stack.file
+        try:
+            state.compose_backup = compose_rewrite._backup_compose(compose_path)
+        except OSError as exc:
+            self.log.error(
+                f"[{stack.name}] Could not back up compose file before {action}: {exc}"
+            )
+            self._record_failure(
+                stack,
+                state.matches,
+                phase="compose-backup",
+                reason="compose-backup-failed",
+                services=state.pull_services,
+                note=str(exc),
+            )
+            return StackStatus("failure", "compose-backup-failed")
+        return None
+
+    def _handle_compose_rewrite_failure(
+        self,
+        state: _StackUpdateState,
+        reason: str,
+        *,
+        phase: str,
+        command_error: CommandError | None = None,
+        failure_health: str | None = None,
+    ) -> StackStatus:
+        if state.compose_backup is None:
+            return StackStatus("failure", reason)
+        return self._handle_tag_update_failure(
+            state.stack,
+            state.matches,
+            state.services,
+            state.applied_tags,
+            state.compose_backup,
+            reason,
+            phase=phase,
+            command_error=command_error,
+            failure_health=failure_health,
+            force_recreate=state.scope.force_recreate,
+            no_deps=state.scope.up_no_deps,
+        )
+
+    @staticmethod
+    def _set_current_stack(
+        state: _StackUpdateState,
+        stack: ComposeStack,
+    ) -> None:
+        state.current_stack = stack
+        state.images = tuple(stack.images)
 
     def _run_compose_up(
         self,
