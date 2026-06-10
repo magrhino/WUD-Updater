@@ -135,9 +135,8 @@ def apply_compose_tag_exclusions(
         updates,
         existing_exact_tags=existing_exact_tags,
     )
-    if not applied:
-        return applied
-    _atomic_replace_compose(compose_path, rendered, prefix="exclude")
+    if applied:
+        _atomic_replace_compose(compose_path, rendered, prefix="exclude")
     return applied
 
 
