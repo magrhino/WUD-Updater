@@ -1361,6 +1361,113 @@ class PythonUpdateFromWudTests(FakeDockerTestCase):
         self.assertLess(failed_up, unpause)
         self.assertLess(unpause, rollback_up)
 
+    def test_run_rejects_invalid_mode(self) -> None:
+        options = UpdaterOptions(mode="invalid", docker_base=self.base, wud_file=self.wud_file, log_dir=self.log_dir)
+        runner = UpdateFromWudRunner(options)
+        with self.assertRaisesRegex(UpdaterError, "--mode must be pause\\|stop\\|live"):
+            runner.run()
+
+    def test_run_rejects_negative_max_wait(self) -> None:
+        options = UpdaterOptions(max_wait=-1, docker_base=self.base, wud_file=self.wud_file, log_dir=self.log_dir)
+        runner = UpdateFromWudRunner(options)
+        with self.assertRaisesRegex(UpdaterError, "--max-wait must be an integer number of seconds"):
+            runner.run()
+
+    def test_run_rejects_tag_overrides_without_allow_tag_updates(self) -> None:
+        from wud_updater.updater_models import TagOverride
+        options = UpdaterOptions(tag_overrides=(TagOverride(1, "tag"),), allow_tag_updates=False, docker_base=self.base, wud_file=self.wud_file, log_dir=self.log_dir)
+        runner = UpdateFromWudRunner(options)
+        with self.assertRaisesRegex(UpdaterError, "--tag-override requires --allow-tag-updates"):
+            runner.run()
+
+    def test_run_rejects_missing_wud_file(self) -> None:
+        options = UpdaterOptions(docker_base=self.base, wud_file=self.base / "missing.todo", log_dir=self.log_dir)
+        runner = UpdateFromWudRunner(options)
+        with self.assertRaisesRegex(UpdaterError, "List file not found"):
+            runner.run()
+
+    def test_run_acquires_lock_if_parent_held(self) -> None:
+        self.wud_file.write_text("repo/app:latest\n", encoding="utf-8")
+        self.make_stack("app", [("app", "repo/app:latest", "cid-app")])
+        self.set_image_state("repo/app:latest", "old", "sha256:old")
+        self.set_image_after_pull("repo/app:latest", "new", "sha256:new")
+        self.env["WUD_LOCK_HELD_BY_PARENT"] = "1"
+        from wud_updater.locks import lock_dir_for
+        lock_dir_for(self.wud_file).mkdir(parents=True)
+        result = self.run_python("--yes")
+        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+
+    def test_recreate_compose_unpause_failure_aborts_without_rewrite(self) -> None:
+        self.wud_file.write_text("repo/app:latest\n", encoding="utf-8")
+        self.make_stack("app", [("app", "repo/app:latest", "cid-app")])
+        self.set_image_state("repo/app:latest", "old", "sha256:old")
+        self.set_image_after_pull("repo/app:latest", "new", "sha256:new")
+        stack_state = self.fake_root / "stacks" / "app"
+        (stack_state / "unpause_fail").write_text("", encoding="utf-8")
+
+        result = self.run_python("--yes", "--mode", "pause")
+
+        self.assertEqual(result.returncode, 1, result.stderr + result.stdout)
+        report = self.latest_error_report().read_text(encoding="utf-8")
+        self.assertIn("reason=unpause-failed", report)
+        self.assertIn("phase=unpause", report)
+        self.assertIn("compose -f docker-compose.yml unpause app", report)
+
+    def test_recreate_compose_up_failure_and_unpause_failure_aborts_without_rewrite(self) -> None:
+        self.wud_file.write_text("repo/app:latest\n", encoding="utf-8")
+        self.make_stack("app", [("app", "repo/app:latest", "cid-app")])
+        self.set_image_state("repo/app:latest", "old", "sha256:old")
+        self.set_image_after_pull("repo/app:latest", "new", "sha256:new")
+        stack_state = self.fake_root / "stacks" / "app"
+        (stack_state / "up_fail").write_text("", encoding="utf-8")
+        (stack_state / "unpause_fail").write_text("", encoding="utf-8")
+
+        result = self.run_python("--yes", "--mode", "pause")
+
+        self.assertEqual(result.returncode, 1, result.stderr + result.stdout)
+        report = self.latest_error_report().read_text(encoding="utf-8")
+        self.assertIn("reason=unpause-failed", report)
+        self.assertIn("phase=unpause", report)
+
+    def test_recreate_health_wait_failure_aborts_without_rewrite(self) -> None:
+        self.wud_file.write_text("repo/app:latest\n", encoding="utf-8")
+        self.make_stack("app", [("app", "repo/app:latest", "cid-app")])
+        self.set_image_state("repo/app:latest", "old", "sha256:old")
+        self.set_image_after_pull("repo/app:latest", "new", "sha256:new")
+        (self.fake_root / "containers" / "cid-app.summary").write_text("/cid-app|running|unhealthy|1|0\n", encoding="utf-8")
+
+        result = self.run_python("--yes")
+
+        self.assertEqual(result.returncode, 1, result.stderr + result.stdout)
+        report = self.latest_error_report().read_text(encoding="utf-8")
+        self.assertIn("reason=health-failed", report)
+        self.assertIn("phase=health", report)
+        self.assertIn("health: container=cid-app status=running health=unhealthy", report)
+
+    def test_recreate_stop_failure_and_up_failure_without_rewrite(self) -> None:
+        self.env["FAKE_COMPOSE_UP_WAIT"] = "1"
+        self.wud_file.write_text("repo/app:latest\n", encoding="utf-8")
+        self.make_stack("app", [("app", "repo/app:latest", "cid-app")])
+        self.set_image_state("repo/app:latest", "old", "sha256:old")
+        self.set_image_after_pull("repo/app:latest", "new", "sha256:new")
+        stack_state = self.fake_root / "stacks" / "app"
+        (self.fake_root / "containers" / "cid-app.labels").write_text(
+            "WUD-UPDATER-RECREATE-STACK=true\n",
+            encoding="utf-8",
+        )
+        (stack_state / "stop_fail").write_text("", encoding="utf-8")
+        (stack_state / "stop_stderr").write_text("container stop failed\n", encoding="utf-8")
+        (stack_state / "up_fail").write_text("", encoding="utf-8")
+        (stack_state / "up_stderr").write_text("recovery up failed\n", encoding="utf-8")
+
+        result = self.run_python("--yes")
+
+        self.assertEqual(result.returncode, 1, result.stderr + result.stdout)
+        report = self.latest_error_report().read_text(encoding="utf-8")
+        self.assertIn("phase=up", report)
+        self.assertIn("reason=up-or-health-failed", report)
+        self.assertIn("recovery up failed", report)
+
     def test_tag_update_requires_explicit_flag(self) -> None:
         self.wud_file.write_text("repo/app:1.0 tag=2.0\n", encoding="utf-8")
         stack_dir = self.make_stack("app", [("app", "repo/app:1.0", "cid-app")])
