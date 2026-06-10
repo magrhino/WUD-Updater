@@ -73,7 +73,7 @@ def build_tag_exclusion_matches(
     parsed: ParsedWudFile,
     stacks: Sequence[ComposeStack],
 ) -> tuple[list[Match], list[tuple[WudTarget, str]]]:
-    container_images = {item.name: item.image for item in runner.docker.try_container_images()}
+    container_images = _container_images_by_name(runner)
     matches: list[Match] = []
     failures: list[tuple[WudTarget, str]] = []
     seen: set[tuple[int, int, str, str, str]] = set()
@@ -83,35 +83,99 @@ def build_tag_exclusion_matches(
             failures.append((target, "not-a-tag-update"))
             continue
 
-        resolved = container_images.get(target.first, target.first)
-        allow_repo = target.allow_repo or resolved != target.first or not image_has_tag(resolved)
+        resolved, allow_repo = _resolve_tag_exclusion_target(target, container_images)
+        target_matches = _tag_exclusion_matches_for_target(
+            target,
+            resolved,
+            allow_repo,
+            stacks,
+        )
+        _append_unique_matches(matches, target_matches, seen)
 
-        for stack in stacks:
-            for image in stack.images:
-                if not image_matches_resolved_target(image, resolved, allow_repo):
-                    continue
-                services = _services_for_image(stack.service_images, image)
-                for service in services:
-                    key = (stack.index, target.line_no, resolved, image, service)
-                    if key in seen:
-                        continue
-                    matches.append(Match(stack, target, resolved, image, service))
-                    seen.add(key)
-
-        if not any(match.target.line_no == target.line_no for match in matches):
+        if not target_matches:
             failures.append((target, "unmatched"))
 
-    matches.sort(
-        key=lambda item: (
-            item.stack.index,
-            item.target.line_no,
-            item.target.first,
-            item.resolved,
-            item.compose_image,
-            item.service,
-        )
-    )
+    matches.sort(key=_match_sort_key)
     return matches, failures
+
+
+def _container_images_by_name(runner: Any) -> dict[str, str]:
+    return {item.name: item.image for item in runner.docker.try_container_images()}
+
+
+def _resolve_tag_exclusion_target(
+    target: WudTarget,
+    container_images: Mapping[str, str],
+) -> tuple[str, bool]:
+    resolved = container_images.get(target.first, target.first)
+    allow_repo = target.allow_repo or resolved != target.first or not image_has_tag(resolved)
+    return resolved, allow_repo
+
+
+def _tag_exclusion_matches_for_target(
+    target: WudTarget,
+    resolved: str,
+    allow_repo: bool,
+    stacks: Sequence[ComposeStack],
+) -> list[Match]:
+    matches: list[Match] = []
+    for stack in stacks:
+        for image in stack.images:
+            matches.extend(
+                Match(stack, target, resolved, image, service)
+                for service in _tag_exclusion_services_for_image(
+                    stack,
+                    image,
+                    resolved,
+                    allow_repo,
+                )
+            )
+    return matches
+
+
+def _tag_exclusion_services_for_image(
+    stack: ComposeStack,
+    image: str,
+    resolved: str,
+    allow_repo: bool,
+) -> tuple[str, ...]:
+    if not image_matches_resolved_target(image, resolved, allow_repo):
+        return ()
+    return _services_for_image(stack.service_images, image)
+
+
+def _append_unique_matches(
+    matches: list[Match],
+    candidates: Sequence[Match],
+    seen: set[tuple[int, int, str, str, str]],
+) -> None:
+    for match in candidates:
+        key = _match_dedupe_key(match)
+        if key in seen:
+            continue
+        matches.append(match)
+        seen.add(key)
+
+
+def _match_dedupe_key(match: Match) -> tuple[int, int, str, str, str]:
+    return (
+        match.stack.index,
+        match.target.line_no,
+        match.resolved,
+        match.compose_image,
+        match.service,
+    )
+
+
+def _match_sort_key(match: Match) -> tuple[int, int, str, str, str, str]:
+    return (
+        match.stack.index,
+        match.target.line_no,
+        match.target.first,
+        match.resolved,
+        match.compose_image,
+        match.service,
+    )
 
 
 def plan_tag_exclusions(
