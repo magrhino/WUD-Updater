@@ -142,53 +142,6 @@ class FakeDockerTestCase(unittest.TestCase):
     def tearDown(self) -> None:
         self.tmp.cleanup()
 
-<<<<<<< Updated upstream
-=======
-    def run_python(self, *args: str, wrapper: bool = False) -> subprocess.CompletedProcess[str]:
-        common = [
-            "--base",
-            str(self.base),
-            "--file",
-            str(self.wud_file),
-            "--log-dir",
-            str(self.log_dir),
-            "--max-wait",
-            "0",
-            "--no-color",
-            *args,
-        ]
-        env = dict(self.env)
-        if wrapper:
-            env["PYTHON_BIN"] = sys.executable
-            command = [str(self.repo_root / "bin" / "docker-update-from-wud"), *common]
-        else:
-            command = [
-                sys.executable,
-                "-m",
-                "wud_updater.cli",
-                "update-from-wud",
-                *common,
-            ]
-        try:
-            return subprocess.run(
-                command,
-                env=env,
-                stdin=subprocess.DEVNULL,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True,
-                check=False,
-                timeout=30.0,
-            )
-        except subprocess.TimeoutExpired as e:
-            raise RuntimeError(
-                f"run_python timed out after {e.timeout}s.\n"
-                f"Command: {e.cmd}\n"
-                f"Stdout: {e.stdout or ''}\n"
-                f"Stderr: {e.stderr or ''}"
-            ) from e
-
->>>>>>> Stashed changes
     def make_stack(
         self,
         stack_id: str,
@@ -293,15 +246,24 @@ class PythonUpdateFromWudTests(FakeDockerTestCase):
                 "update-from-wud",
                 *common,
             ]
-        return subprocess.run(
-            command,
-            env=env,
-            stdin=subprocess.DEVNULL,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-            check=False,
-        )
+        try:
+            return subprocess.run(
+                command,
+                env=env,
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                check=False,
+                timeout=30.0,
+            )
+        except subprocess.TimeoutExpired as e:
+            raise RuntimeError(
+                f"run_python timed out after {e.timeout}s.\n"
+                f"Command: {e.cmd}\n"
+                f"Stdout: {e.stdout or ''}\n"
+                f"Stderr: {e.stderr or ''}"
+            ) from e
 
     def updater_options(
         self,
