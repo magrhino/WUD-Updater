@@ -84,6 +84,7 @@ EOF
     src/wud_updater/terminal.py \
     src/wud_updater/truenas.py \
     src/wud_updater/updates.py \
+    src/wud_updater/updater_audit.py \
     src/wud_updater/updater_digest_pin.py \
     src/wud_updater/updater_matching.py \
     src/wud_updater/updater_models.py \
@@ -91,6 +92,7 @@ EOF
     src/wud_updater/updater_cli.py \
     src/wud_updater/updater_logging.py \
     src/wud_updater/updater_planning.py \
+    src/wud_updater/updater_preflight.py \
     src/wud_updater/web_auth.py \
     src/wud_updater/web_database.py \
     src/wud_updater/web_diagnostics.py \

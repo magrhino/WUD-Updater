@@ -1,0 +1,445 @@
+"""Audit database helpers for ``update-from-wud``."""
+
+from __future__ import annotations
+
+import json
+import sqlite3
+from collections.abc import Callable, Iterable, Mapping, Sequence
+from pathlib import Path
+from typing import Any
+
+from . import compose_rewrite
+from .db import (
+    DatabaseError,
+    active_tag_exclusion_rules,
+    connect_db,
+    init_db,
+    insert_pending_update,
+    insert_update_event,
+    insert_update_run,
+    update_pending_update,
+    upsert_known_image,
+    upsert_tag_exclusion_rule,
+    utc_timestamp as db_utc_timestamp,
+)
+from .file_ops import (
+    OwnerConfig,
+    OwnerConfigError,
+    apply_configured_owner as _apply_configured_owner,
+)
+from .updater_matching import (
+    _failed_line_numbers,
+    _failed_match_for_line,
+    _first_match_by_line,
+    _line_status_reason,
+    _service_key,
+)
+from .updater_models import (
+    Match,
+    StackStatus,
+    TagExclusionUpdate,
+    UpdaterError,
+    UpdaterOptions,
+)
+from .updater_planning import _first_tag_exclusion_by_line
+from .wud_file import ParsedWudFile, WudTarget, parse_wud_file
+
+
+ApplyOwner = Callable[[str | Path, OwnerConfig | None], None]
+InsertUpdateEvent = Callable[..., Any]
+
+
+def audit_parsed_file(
+    runner: Any,
+    parsed: ParsedWudFile,
+    audit_lines: Sequence[int],
+) -> ParsedWudFile:
+    target_lines = {target.line_no for target in parsed.targets}
+    if set(audit_lines).issubset(target_lines):
+        return parsed
+    audit_parsed = parse_wud_file(
+        runner.options.wud_file,
+        selected_lines=sorted(target_lines | set(audit_lines)),
+    )
+    return runner._apply_tag_overrides(audit_parsed, log=False)
+
+
+def existing_exact_tag_exclusions(
+    runner: Any,
+    updates: Sequence[TagExclusionUpdate],
+) -> dict[str, set[str]]:
+    existing: dict[str, set[str]] = {}
+    if runner.audit_conn is None:
+        return existing
+    for update in updates:
+        rows = active_tag_exclusion_rules(
+            runner.audit_conn,
+            image_repo=update.image_repo,
+            service_key=update.service_key,
+        )
+        tags = existing.setdefault(update.service, set())
+        tags.update(str(row["tag"]) for row in rows)
+    return existing
+
+
+def record_tag_exclusion_rules(
+    runner: Any,
+    updates: Sequence[TagExclusionUpdate],
+) -> None:
+    if runner.audit_conn is None:
+        return
+    seen: set[tuple[str, str, str, str]] = set()
+    for update in updates:
+        service_key = "" if update.scope == "image_repo" else update.service_key
+        key = (update.scope, update.image_repo, service_key, update.tag)
+        if key in seen:
+            continue
+        seen.add(key)
+        upsert_tag_exclusion_rule(
+            runner.audit_conn,
+            scope=update.scope,
+            image_repo=update.image_repo,
+            service_key=service_key,
+            tag=update.tag,
+            regex_fragment=compose_rewrite.js_regex_escape(update.tag),
+        )
+
+
+def mark_tag_exclusions_pending(
+    runner: Any,
+    updates: Sequence[TagExclusionUpdate],
+) -> None:
+    if runner.audit_conn is None or runner.audit_run_id is None:
+        return
+    for line_no, update in _first_tag_exclusion_by_line(updates).items():
+        update_pending_update(
+            runner.audit_conn,
+            run_id=runner.audit_run_id,
+            line_no=line_no,
+            status="in_progress",
+            status_reason="tag-exclusion",
+            service_key=update.service_key,
+            stack_name=update.stack.name,
+            service_name=update.service,
+        )
+
+
+def mark_successful_tag_exclusions(
+    runner: Any,
+    updates: Sequence[TagExclusionUpdate],
+    statuses: Mapping[int, StackStatus],
+) -> None:
+    if runner.audit_conn is None or runner.audit_run_id is None:
+        return
+    for line_no, update in _first_tag_exclusion_by_line(updates).items():
+        status = statuses.get(line_no, StackStatus("failure", "missing"))
+        update_pending_update(
+            runner.audit_conn,
+            run_id=runner.audit_run_id,
+            line_no=line_no,
+            status="resolved" if status.status == "success" else "failed",
+            status_reason=status.reason,
+            service_key=update.service_key,
+            stack_name=update.stack.name,
+            service_name=update.service,
+        )
+
+
+def mark_tag_exclusion_failures(
+    runner: Any,
+    failures: Sequence[tuple[WudTarget, str]],
+) -> None:
+    if runner.audit_conn is None or runner.audit_run_id is None:
+        return
+    for target, reason in failures:
+        update_pending_update(
+            runner.audit_conn,
+            run_id=runner.audit_run_id,
+            line_no=target.line_no,
+            status="failed",
+            status_reason=f"tag-exclusion-{reason}",
+        )
+
+
+def start_audit(
+    runner: Any,
+    parsed: ParsedWudFile,
+    *,
+    db_path_fn: Callable[..., Path] | None = None,
+) -> None:
+    if runner.audit_run_id is not None:
+        return
+    conn: sqlite3.Connection | None = None
+    resolve_db_path = db_path if db_path_fn is None else db_path_fn
+    try:
+        audit_db_path = resolve_db_path(runner.options, runner.environ)
+        chown_parent = sqlite_parent_missing(audit_db_path)
+        conn = connect_db(audit_db_path)
+        runner.audit_db_path = audit_db_path
+        init_db(conn)
+        runner.audit_conn = conn
+        runner.audit_run_id = insert_update_run(
+            conn,
+            status="started",
+            dry_run=False,
+            mode=runner.options.mode,
+            wud_file=runner.options.wud_file_label or str(runner.options.wud_file),
+            log_file=str(runner.log_file),
+            metadata_json=runner.options.metadata_json,
+        )
+        for target in parsed.targets:
+            insert_pending_update(
+                conn,
+                run_id=runner.audit_run_id,
+                line_no=target.line_no,
+                raw=target.raw,
+                image=target.first,
+                target_digest=target.digest,
+                desired_tag=target.desired_tag,
+            )
+        runner._apply_audit_db_owner(chown_parent=chown_parent)
+    except (OSError, sqlite3.Error, DatabaseError, OwnerConfigError) as exc:
+        if runner.audit_conn is not None and runner.audit_run_id is not None:
+            runner._finish_audit_run("failure", best_effort=True)
+        if conn is not None:
+            conn.close()
+        runner.audit_conn = None
+        runner.audit_run_id = None
+        runner.audit_db_path = None
+        raise UpdaterError(f"Could not initialize audit database: {exc}") from exc
+
+
+def apply_audit_db_owner(runner: Any, *, chown_parent: bool = False) -> None:
+    if runner.audit_db_path is None:
+        return
+    runner._apply_sqlite_owner(
+        runner.audit_db_path,
+        runner.owner,
+        chown_parent=chown_parent,
+    )
+
+
+def finish_audit_run(
+    runner: Any,
+    status: str,
+    *,
+    best_effort: bool = False,
+) -> None:
+    if runner.audit_conn is None or runner.audit_run_id is None:
+        return
+    try:
+        with runner.audit_conn:
+            runner.audit_conn.execute(
+                """
+                UPDATE update_runs
+                SET status = ?,
+                    finished_at = ?
+                WHERE id = ?
+                """,
+                (status, db_utc_timestamp(), runner.audit_run_id),
+            )
+    except sqlite3.Error:
+        if best_effort:
+            return
+        raise
+
+
+def mark_unmatched_pending(
+    runner: Any,
+    parsed: ParsedWudFile,
+    matches: Sequence[Match],
+    skipped_tags: Sequence[WudTarget],
+) -> None:
+    if runner.audit_conn is None or runner.audit_run_id is None:
+        return
+    matched_lines = {match.target.line_no for match in matches}
+    skipped_lines = {target.line_no for target in skipped_tags}
+    for target in parsed.targets:
+        if target.line_no in matched_lines:
+            continue
+        reason = "tag-update-disabled" if target.line_no in skipped_lines else "unmatched"
+        update_pending_update(
+            runner.audit_conn,
+            run_id=runner.audit_run_id,
+            line_no=target.line_no,
+            status="pending",
+            status_reason=reason,
+        )
+
+
+def mark_matched_pending(
+    runner: Any,
+    matches: Sequence[Match],
+    *,
+    status: str,
+    status_reason: str = "matched",
+) -> None:
+    if runner.audit_conn is None or runner.audit_run_id is None:
+        return
+    for line_no, match in _first_match_by_line(matches).items():
+        update_pending_update(
+            runner.audit_conn,
+            run_id=runner.audit_run_id,
+            line_no=line_no,
+            status=status,
+            status_reason=status_reason,
+            service_key=_service_key(match),
+            stack_name=match.stack.name,
+            service_name=match.service,
+        )
+
+
+def mark_removed_pending(
+    runner: Any,
+    parsed: ParsedWudFile,
+    remove_lines: Iterable[int],
+    matches: Sequence[Match],
+) -> None:
+    if runner.audit_conn is None or runner.audit_run_id is None:
+        return
+    matched_lines = {match.target.line_no for match in matches}
+    removed_lines = set(remove_lines) - matched_lines
+    for target in parsed.targets:
+        if target.line_no not in removed_lines:
+            continue
+        update_pending_update(
+            runner.audit_conn,
+            run_id=runner.audit_run_id,
+            line_no=target.line_no,
+            status="resolved",
+            status_reason="removed-before-run",
+        )
+
+
+def mark_failed_pending(
+    runner: Any,
+    matches: Sequence[Match],
+    stack_statuses: Mapping[int, StackStatus],
+    failed_lines: Iterable[int],
+) -> None:
+    if runner.audit_conn is None or runner.audit_run_id is None:
+        return
+    for line_no in failed_lines:
+        match = _failed_match_for_line(line_no, matches, stack_statuses)
+        if match is None:
+            continue
+        reason = _line_status_reason(line_no, matches, stack_statuses)
+        update_pending_update(
+            runner.audit_conn,
+            run_id=runner.audit_run_id,
+            line_no=line_no,
+            status="failed",
+            status_reason=reason,
+            service_key=_service_key(match),
+            stack_name=match.stack.name,
+            service_name=match.service,
+        )
+
+
+def mark_successful_pending(
+    runner: Any,
+    matches: Sequence[Match],
+    stack_statuses: Mapping[int, StackStatus],
+) -> None:
+    if runner.audit_conn is None or runner.audit_run_id is None:
+        return
+    failed = set(_failed_line_numbers(matches, stack_statuses))
+    for line_no, match in _first_match_by_line(matches).items():
+        if line_no in failed:
+            continue
+        reason = _line_status_reason(line_no, matches, stack_statuses)
+        update_pending_update(
+            runner.audit_conn,
+            run_id=runner.audit_run_id,
+            line_no=line_no,
+            status="resolved",
+            status_reason=reason,
+            service_key=_service_key(match),
+            stack_name=match.stack.name,
+            service_name=match.service,
+        )
+
+
+def record_update_events(
+    runner: Any,
+    matches: Sequence[Match],
+    stack_statuses: Mapping[int, StackStatus],
+    *,
+    insert_event: InsertUpdateEvent = insert_update_event,
+) -> None:
+    if runner.audit_conn is None or runner.audit_run_id is None:
+        return
+    for match in matches:
+        status = stack_statuses.get(
+            match.stack.index,
+            StackStatus("failure", "missing"),
+        )
+        insert_event(
+            runner.audit_conn,
+            run_id=runner.audit_run_id,
+            service_name=match.service,
+            stack_name=match.stack.name,
+            image=match.compose_image,
+            target_image=runner._target_image_for_match(match),
+            status=status.status,
+            metadata_json=json.dumps({"reason": status.reason}, sort_keys=True),
+        )
+
+
+def record_known_images(
+    runner: Any,
+    matches: Sequence[Match],
+    stack_statuses: Mapping[int, StackStatus],
+) -> None:
+    if runner.audit_conn is None:
+        return
+    for match in matches:
+        status = stack_statuses.get(match.stack.index)
+        if status is None or status.status != "success":
+            continue
+        image = runner._target_image_for_match(match)
+        upsert_known_image(
+            runner.audit_conn,
+            service_key=_service_key(match),
+            image=image,
+            image_id=runner.docker.image_id(image),
+            digest=runner.docker.image_digest(image),
+        )
+
+
+def db_path(options: UpdaterOptions, environ: Mapping[str, str]) -> Path:
+    configured = environ.get("WUD_DB_PATH")
+    if configured:
+        return Path(configured)
+    if options.db_path is not None:
+        return options.db_path
+    return options.log_dir / "wud-updater.sqlite"
+
+
+def sqlite_parent_missing(db_path: Path) -> bool:
+    return str(db_path) != ":memory:" and not db_path.parent.exists()
+
+
+def apply_sqlite_owner(
+    db_path: Path,
+    owner: OwnerConfig,
+    *,
+    chown_parent: bool = False,
+    apply_owner: ApplyOwner = _apply_configured_owner,
+) -> None:
+    if not owner.configured or str(db_path) == ":memory:":
+        return
+    if chown_parent and db_path.parent.exists():
+        apply_owner(db_path.parent, owner)
+    for path in sqlite_state_paths(db_path):
+        if path.exists():
+            apply_owner(path, owner)
+
+
+def sqlite_state_paths(db_path: Path) -> tuple[Path, ...]:
+    return (
+        db_path,
+        Path(f"{db_path}-wal"),
+        Path(f"{db_path}-shm"),
+        Path(f"{db_path}-journal"),
+    )
