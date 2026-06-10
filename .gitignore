@@ -74,5 +74,6 @@ webui/playwright-report/
 webui/blob-report/
 
 # Local agent/tooling state
+.codex/
 .agents/
 .impeccable/
