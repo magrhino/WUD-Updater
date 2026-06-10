@@ -1362,18 +1362,21 @@ class PythonUpdateFromWudTests(FakeDockerTestCase):
         self.assertLess(unpause, rollback_up)
 
     def test_run_rejects_invalid_mode(self) -> None:
+        self.wud_file.write_text("repo/app:latest\n", encoding="utf-8")
         options = UpdaterOptions(mode="invalid", docker_base=self.base, wud_file=self.wud_file, log_dir=self.log_dir)
         runner = UpdateFromWudRunner(options)
         with self.assertRaisesRegex(UpdaterError, "--mode must be pause\\|stop\\|live"):
             runner.run()
 
     def test_run_rejects_negative_max_wait(self) -> None:
+        self.wud_file.write_text("repo/app:latest\n", encoding="utf-8")
         options = UpdaterOptions(max_wait=-1, docker_base=self.base, wud_file=self.wud_file, log_dir=self.log_dir)
         runner = UpdateFromWudRunner(options)
         with self.assertRaisesRegex(UpdaterError, "--max-wait must be an integer number of seconds"):
             runner.run()
 
     def test_run_rejects_tag_overrides_without_allow_tag_updates(self) -> None:
+        self.wud_file.write_text("repo/app:latest\n", encoding="utf-8")
         from wud_updater.updater_models import TagOverride
         options = UpdaterOptions(tag_overrides=(TagOverride(1, "tag"),), allow_tag_updates=False, docker_base=self.base, wud_file=self.wud_file, log_dir=self.log_dir)
         runner = UpdateFromWudRunner(options)
@@ -1396,6 +1399,7 @@ class PythonUpdateFromWudTests(FakeDockerTestCase):
         lock_dir_for(self.wud_file).mkdir(parents=True)
         result = self.run_python("--yes")
         self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+        self.assertFalse(lock_dir_for(self.wud_file).exists())
 
     def test_recreate_compose_unpause_failure_aborts_without_rewrite(self) -> None:
         self.wud_file.write_text("repo/app:latest\n", encoding="utf-8")
@@ -2186,11 +2190,40 @@ class PythonUpdateFromWudTests(FakeDockerTestCase):
             ),
         )
 
-        status, stdout, stderr = self.run_direct(
+        progress = []
+        command_runner = CommandRunner(env=self.env)
+        docker = DockerCli(runner=command_runner)
+        options = UpdaterOptions(
+            docker_base=self.base,
+            wud_file=self.wud_file,
+            log_dir=self.log_dir,
+            max_wait=0,
+            assume_yes=True,
             allow_tag_updates=True,
             digest_pin_updates=True,
             digest_pin_plan=planned,
+            no_color=True,
+            db_path=self.db_path,
         )
+        runner = UpdateFromWudRunner(
+            options,
+            environ=self.env,
+            command_runner=command_runner,
+            digest_verifier=DigestVerifier(
+                docker,
+                primary_resolver=FailingManifestResolver(),
+                fallback_resolver=DockerManifestResolver(docker),
+            ),
+            progress_callback=progress.append,
+        )
+        stdout_buf = StringIO()
+        stderr_buf = StringIO()
+
+        with redirect_stdout(stdout_buf), redirect_stderr(stderr_buf):
+            status = runner.run()
+
+        stdout = stdout_buf.getvalue()
+        stderr = stderr_buf.getvalue()
 
         self.assertEqual(status, 1, stderr + stdout)
         self.assertEqual(
@@ -2206,6 +2239,15 @@ class PythonUpdateFromWudTests(FakeDockerTestCase):
             pending[0]["status_reason"],
             "digest-pin-verification-failed",
         )
+        pull_failures = [
+            event
+            for event in progress
+            if event.phase == "pull" and event.status == "failure"
+        ]
+        self.assertEqual(len(pull_failures), 1)
+        self.assertEqual(pull_failures[0].stack, "app")
+        self.assertEqual(pull_failures[0].services, ("app",))
+        self.assertIn("digest", pull_failures[0].message.lower())
 
     def test_digest_pin_apply_rejects_moved_tagged_digest_only_latest_child(self) -> None:
         self.wud_file.write_text(
