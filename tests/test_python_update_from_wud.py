@@ -13,6 +13,7 @@ from io import StringIO
 from pathlib import Path
 from unittest import mock
 
+from wud_updater import updater_tag_exclusions
 from wud_updater.command import CommandRunner
 from wud_updater.compose import (
     ComposeBindMount,
@@ -1283,6 +1284,80 @@ class PythonUpdateFromWudTests(unittest.TestCase):
             self.calls(),
             r"compose -f docker-compose.yml up -d --remove-orphans --no-deps app",
         )
+
+    def test_exclude_tag_line_does_not_recreate_already_excluded_service(self) -> None:
+        self.wud_file.write_text("repo/app:1.0 tag=2.0\n", encoding="utf-8")
+        self.make_stack("app", [("app", "repo/app:1.0", "cid-app")])
+
+        initial = self.run_python("--yes", "--exclude-tag-lines", "1")
+        self.assertEqual(initial.returncode, 0, initial.stderr + initial.stdout)
+
+        self.wud_file.write_text("repo/app:1.0 tag=2.0\n", encoding="utf-8")
+        result = self.run_python(
+            "--yes",
+            "--exclude-tag-lines",
+            "1",
+            "--recreate-excluded-services",
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+        self.assertEqual(self.wud_file.read_text(encoding="utf-8"), "")
+        self.assertNotRegex(self.calls(), r"compose -f docker-compose.yml up -d")
+
+    def test_can_apply_tag_exclusions_uses_existing_exact_tags(self) -> None:
+        stack_dir = self.make_stack("app", [("app", "repo/app:1.0", "cid-app")])
+        stack = ComposeStack(
+            index=0,
+            directory=stack_dir,
+            file="docker-compose.yml",
+            name="app",
+            images=("repo/app:1.0",),
+            service_images=(ServiceImage("app", "repo/app:1.0"),),
+        )
+        update = TagExclusionUpdate(
+            stack=stack,
+            service="app",
+            image="repo/app:1.0",
+            image_repo="repo/app",
+            tag="3.0",
+            source_line=1,
+            scope="service",
+        )
+        captured: dict[str, object] = {}
+
+        class Runner:
+            def _existing_exact_tag_exclusions(
+                self,
+                updates: list[TagExclusionUpdate],
+            ) -> dict[str, set[str]]:
+                captured["updates"] = updates
+                return {"app": {"2.0"}}
+
+        def fake_render_compose_tag_exclusions(
+            compose_path: Path,
+            updates: list[TagExclusionUpdate],
+            *,
+            existing_exact_tags: dict[str, set[str]],
+        ) -> tuple[str, tuple[object, ...]]:
+            captured["compose_path"] = compose_path
+            captured["render_updates"] = updates
+            captured["existing_exact_tags"] = existing_exact_tags
+            return "", ()
+
+        with mock.patch(
+            "wud_updater.compose_rewrite.render_compose_tag_exclusions",
+            side_effect=fake_render_compose_tag_exclusions,
+        ):
+            result = updater_tag_exclusions.can_apply_tag_exclusions(
+                Runner(),
+                (update,),
+            )
+
+        self.assertTrue(result)
+        self.assertEqual(captured["updates"], [update])
+        self.assertEqual(captured["render_updates"], [update])
+        self.assertEqual(captured["compose_path"], stack_dir / "docker-compose.yml")
+        self.assertEqual(captured["existing_exact_tags"], {"app": {"2.0"}})
 
     def test_exclude_tag_line_recreate_includes_missing_network_provider(self) -> None:
         self.wud_file.write_text(

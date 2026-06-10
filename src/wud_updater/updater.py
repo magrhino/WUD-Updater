@@ -684,7 +684,7 @@ class UpdateFromWudRunner:
         self,
         updates: Sequence[TagExclusionUpdate],
     ) -> bool:
-        return updater_tag_exclusions.can_apply_tag_exclusions(updates)
+        return updater_tag_exclusions.can_apply_tag_exclusions(self, updates)
 
     def _apply_tag_exclusions(
         self,

@@ -253,14 +253,16 @@ def tag_exclusion_repo_updates(
 
 
 def can_apply_tag_exclusions(
+    runner: Any,
     updates: Sequence[TagExclusionUpdate],
 ) -> bool:
     try:
         for stack, stack_updates in _tag_exclusion_updates_by_stack(updates).items():
+            existing_exact_tags = runner._existing_exact_tag_exclusions(stack_updates)
             compose_rewrite.render_compose_tag_exclusions(
                 stack.directory / stack.file,
                 stack_updates,
-                existing_exact_tags={},
+                existing_exact_tags=existing_exact_tags,
             )
     except ComposeTagRewriteError:
         return False
@@ -312,11 +314,21 @@ def apply_tag_exclusions(
                 f"{item.service}: {', '.join(item.tags)}"
             )
         runner._record_tag_exclusion_rules(stack_updates)
-        successful_updates.extend(stack_updates)
+        successful_updates.extend(
+            _applied_tag_exclusion_updates(stack_updates, applied)
+        )
 
     if runner.options.recreate_excluded_services:
         runner._recreate_tag_exclusion_services(successful_updates, statuses)
     return statuses
+
+
+def _applied_tag_exclusion_updates(
+    stack_updates: Sequence[TagExclusionUpdate],
+    applied: Sequence[Any],
+) -> list[TagExclusionUpdate]:
+    applied_services = {item.service for item in applied}
+    return [update for update in stack_updates if update.service in applied_services]
 
 
 def existing_exact_tag_exclusions(

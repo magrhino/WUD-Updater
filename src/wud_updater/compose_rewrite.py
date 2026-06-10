@@ -360,6 +360,8 @@ def render_compose_tag_exclusions(
             previous_managed=previous_managed,
             next_managed=next_managed,
         )
+        if current_regex == next_regex:
+            continue
         _set_service_label_value(
             service_config,
             "wud.tag.exclude",
