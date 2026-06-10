@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Callable, Iterable, Sequence
+from dataclasses import dataclass, field
 from typing import Any
 
 from . import compose_rewrite, updater_logging
@@ -18,6 +19,33 @@ from .updater_models import (
 )
 from .updater_planning import _container_bind_mount_path_issue
 from .wud_file import ParsedWudFile, WudTarget
+
+
+@dataclass
+class _PreflightIssueRecords:
+    messages_by_stack: dict[int, list[str]] = field(default_factory=dict)
+    services_by_stack: dict[int, set[str]] = field(default_factory=dict)
+
+    def add(
+        self,
+        stack: ComposeStack,
+        service: str,
+        messages: Sequence[str],
+    ) -> None:
+        self.messages_by_stack.setdefault(stack.index, []).extend(messages)
+        self.services_by_stack.setdefault(stack.index, set()).add(service)
+
+    def messages_for(self, stack: ComposeStack) -> list[str] | None:
+        return self.messages_by_stack.get(stack.index)
+
+    def services_for(self, stack: ComposeStack) -> tuple[str, ...] | None:
+        return tuple(sorted(self.services_by_stack.get(stack.index, ()))) or None
+
+
+_ComposePreflightValidator = Callable[
+    [Any, ComposeStack, Sequence[Match], _PreflightIssueRecords],
+    bool,
+]
 
 
 def validate_tag_manifests(runner: Any, matches: Sequence[Match]) -> bool:
@@ -85,104 +113,164 @@ def validate_compose_bind_mount_paths(
     runner: Any,
     matches: Sequence[Match],
 ) -> bool:
+    return _validate_compose_preflight(
+        runner,
+        matches,
+        reason="bind-mount-path-invalid",
+        validate_stack=_validate_stack_bind_mount_paths,
+    )
+
+
+def _validate_compose_preflight(
+    runner: Any,
+    matches: Sequence[Match],
+    *,
+    reason: str,
+    validate_stack: _ComposePreflightValidator,
+) -> bool:
     ok = True
-    issue_messages: dict[int, list[str]] = {}
-    issue_services: dict[int, set[str]] = {}
-    for stack in _stacks_to_update(matches):
-        stack_matches = [match for match in matches if match.stack.index == stack.index]
-        mounts = runner.compose.try_service_bind_mounts(
-            stack.directory,
-            stack.file,
-            project_directory=stack.project_directory,
-        )
-        if not mounts:
+    stacks = _stacks_to_update(matches)
+    records = _PreflightIssueRecords()
+    for stack in stacks:
+        stack_matches = _matches_for_stack(matches, stack)
+        if validate_stack(runner, stack, stack_matches, records):
             continue
-        scope = runner._update_scope(stack, stack_matches)
-        scoped_services = set(scope.services or ())
-        if scope.services is None:
-            scoped_services = {mount.service for mount in mounts}
-        for mount in mounts:
-            if mount.service not in scoped_services:
-                continue
-            issue = _container_bind_mount_path_issue(
-                mount,
-                docker_base=runner.options.docker_base,
-            )
-            if not issue:
-                continue
-            ok = False
-            messages = runner._bind_mount_path_issue_messages(stack, mount, issue)
-            runner._log_bind_mount_path_issue(messages)
-            if not runner.options.dry_run:
-                issue_messages.setdefault(stack.index, []).extend(messages)
-                issue_services.setdefault(stack.index, set()).add(mount.service)
-    if not runner.options.dry_run:
-        for stack in _stacks_to_update(matches):
-            messages = issue_messages.get(stack.index)
-            if not messages:
-                continue
-            stack_matches = [
-                match for match in matches if match.stack.index == stack.index
-            ]
-            services = tuple(sorted(issue_services.get(stack.index, ()))) or None
-            runner._record_failure(
-                stack,
-                stack_matches,
-                phase="preflight",
-                reason="bind-mount-path-invalid",
-                services=services,
-                health_details="\n".join(messages),
-            )
+        ok = False
+    _record_compose_preflight_failures(
+        runner,
+        matches,
+        stacks,
+        records,
+        reason=reason,
+    )
     return ok
+
+
+def _validate_stack_bind_mount_paths(
+    runner: Any,
+    stack: ComposeStack,
+    stack_matches: Sequence[Match],
+    records: _PreflightIssueRecords,
+) -> bool:
+    stack_ok = True
+    mounts = runner.compose.try_service_bind_mounts(
+        stack.directory,
+        stack.file,
+        project_directory=stack.project_directory,
+    )
+    if not mounts:
+        return stack_ok
+
+    scoped_services = _scoped_preflight_services(
+        runner,
+        stack,
+        stack_matches,
+        (mount.service for mount in mounts),
+    )
+    for mount in mounts:
+        if mount.service not in scoped_services:
+            continue
+        issue = _container_bind_mount_path_issue(
+            mount,
+            docker_base=runner.options.docker_base,
+        )
+        if not issue:
+            continue
+        stack_ok = False
+        messages = runner._bind_mount_path_issue_messages(stack, mount, issue)
+        runner._log_bind_mount_path_issue(messages)
+        if runner.options.dry_run:
+            continue
+        records.add(stack, mount.service, messages)
+    return stack_ok
+
+
+def _record_compose_preflight_failures(
+    runner: Any,
+    matches: Sequence[Match],
+    stacks: Sequence[ComposeStack],
+    records: _PreflightIssueRecords,
+    *,
+    reason: str,
+) -> None:
+    if runner.options.dry_run:
+        return
+    for stack in stacks:
+        messages = records.messages_for(stack)
+        if not messages:
+            continue
+        runner._record_failure(
+            stack,
+            _matches_for_stack(matches, stack),
+            phase="preflight",
+            reason=reason,
+            services=records.services_for(stack),
+            health_details="\n".join(messages),
+        )
+
+
+def _matches_for_stack(
+    matches: Sequence[Match],
+    stack: ComposeStack,
+) -> list[Match]:
+    return [match for match in matches if match.stack.index == stack.index]
+
+
+def _scoped_preflight_services(
+    runner: Any,
+    stack: ComposeStack,
+    stack_matches: Sequence[Match],
+    service_names: Iterable[str],
+) -> set[str]:
+    scope = runner._update_scope(stack, stack_matches)
+    if scope.services is None:
+        return set(service_names)
+    return set(scope.services)
 
 
 def validate_compose_runtime_ports(
     runner: Any,
     matches: Sequence[Match],
 ) -> bool:
-    ok = True
-    issue_messages: dict[int, list[str]] = {}
-    issue_services: dict[int, set[str]] = {}
-    for stack in _stacks_to_update(matches):
-        stack_matches = [match for match in matches if match.stack.index == stack.index]
-        issues = runner.compose.try_service_runtime_port_issues(
-            stack.directory,
-            stack.file,
-            project_directory=stack.project_directory,
-        )
-        if not issues:
+    return _validate_compose_preflight(
+        runner,
+        matches,
+        reason="compose-port-invalid",
+        validate_stack=_validate_stack_runtime_ports,
+    )
+
+
+def _validate_stack_runtime_ports(
+    runner: Any,
+    stack: ComposeStack,
+    stack_matches: Sequence[Match],
+    records: _PreflightIssueRecords,
+) -> bool:
+    stack_ok = True
+    issues = runner.compose.try_service_runtime_port_issues(
+        stack.directory,
+        stack.file,
+        project_directory=stack.project_directory,
+    )
+    if not issues:
+        return stack_ok
+
+    scoped_services = _scoped_preflight_services(
+        runner,
+        stack,
+        stack_matches,
+        (issue.service for issue in issues),
+    )
+    for issue in issues:
+        if issue.service not in scoped_services:
             continue
-        scope = runner._update_scope(stack, stack_matches)
-        scoped_services = set(scope.services or ())
-        if scope.services is None:
-            scoped_services = {issue.service for issue in issues}
-        for issue in issues:
-            if issue.service not in scoped_services:
-                continue
-            ok = False
-            message = runner._compose_runtime_port_issue_message(stack, issue)
-            runner._log_preflight_issue(message)
-            if not runner.options.dry_run:
-                issue_messages.setdefault(stack.index, []).append(message)
-                issue_services.setdefault(stack.index, set()).add(issue.service)
-    if not runner.options.dry_run:
-        for stack in _stacks_to_update(matches):
-            messages = issue_messages.get(stack.index)
-            if not messages:
-                continue
-            stack_matches = [
-                match for match in matches if match.stack.index == stack.index
-            ]
-            services = tuple(sorted(issue_services.get(stack.index, ()))) or None
-            runner._record_failure(
-                stack,
-                stack_matches,
-                phase="preflight",
-                reason="compose-port-invalid",
-                services=services,
-                health_details="\n".join(messages),
-            )
-    return ok
+        stack_ok = False
+        message = runner._compose_runtime_port_issue_message(stack, issue)
+        runner._log_preflight_issue(message)
+        if runner.options.dry_run:
+            continue
+        records.add(stack, issue.service, (message,))
+    return stack_ok
 
 
 def compose_runtime_port_issue_message(
