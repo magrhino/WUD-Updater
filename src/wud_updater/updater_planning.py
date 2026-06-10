@@ -350,13 +350,13 @@ def _line_status_reason(
         status.reason for status in statuses if status.status != "success"
     }
     if failure_reasons:
-        return sorted(failure_reasons)[0]
+        return min(failure_reasons)
     reasons = {status.reason for status in statuses}
     if "updated" in reasons:
         return "updated"
     if "already-current" in reasons:
         return "already-current"
-    return sorted(reasons)[0] if reasons else "missing"
+    return min(reasons) if reasons else "missing"
 
 
 def _preflight_status_reason(
