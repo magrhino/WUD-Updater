@@ -91,7 +91,7 @@ def _create_unique_text_file_exclusive(
         candidate = _collision_path(path, attempt)
         fd = -1
         try:
-            fd = os.open(candidate, flags, 0o666)
+            fd = os.open(candidate, flags, 0o600)
             if owner.configured:
                 if owner.uid is None or owner.gid is None:
                     raise OwnerConfigError(
