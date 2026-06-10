@@ -106,11 +106,10 @@ class _LifecycleRecreateMixin:
         up_result: UpResult,
     ) -> StackStatus:
         stack = state.stack
-        if state.compose_rewrite_applied:
-            unpaused = self._unpause_after_recreate(state, up_result)
-            if isinstance(unpaused, StackStatus):
-                return unpaused
-            up_result = unpaused
+        unpaused = self._unpause_after_recreate(state, up_result)
+        if isinstance(unpaused, StackStatus):
+            return unpaused
+        up_result = unpaused
 
         if state.compose_rewrite_applied and state.compose_backup is not None:
             failure_phase = "up"
