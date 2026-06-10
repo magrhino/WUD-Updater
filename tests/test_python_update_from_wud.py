@@ -38,6 +38,7 @@ from wud_updater.updater import (
     UpdateFromWudRunner,
     _apply_sqlite_owner,
 )
+from wud_updater.updater_digest_pin import digest_pin_update_from_values
 from wud_updater.updater_models import (
     AppliedTagUpdate,
     ComposeTagRewriteError,
@@ -46,7 +47,6 @@ from wud_updater.updater_models import (
     UpdaterError,
     UpdaterOptions,
 )
-from wud_updater.updater_planning import digest_pin_update_from_values
 
 
 MANIFEST_INDEX_TYPE = "application/vnd.oci.image.index.v1+json"

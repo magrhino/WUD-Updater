@@ -47,8 +47,8 @@ from .compose_rewrite import (
     apply_compose_digest_pins,
     apply_compose_tag_updates,
 )
+from .updater_digest_pin import digest_pin_update_from_values
 from .updater_models import ComposeTagRewriteError, DigestPinUpdate, TagUpdate
-from .updater_planning import digest_pin_update_from_values
 from .web_auth import (
     SESSION_COOKIE,
     WebConfigError,

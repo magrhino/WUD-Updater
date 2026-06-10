@@ -21,6 +21,7 @@ from .db import utc_timestamp
 from .locks import DirectoryLock, WudLockError
 from .plans import DryRunPlan
 from .updater import UpdateFromWudRunner
+from .updater_digest_pin import digest_pin_update_from_values
 from .updater_models import (
     DigestPinLabelRewriteApproval,
     DigestPinUpdate,
@@ -28,7 +29,6 @@ from .updater_models import (
     UpdaterOptions,
     UpdaterProgressEvent,
 )
-from .updater_planning import digest_pin_update_from_values
 from .web_models import (
     APPLY_JOB_PROGRESS_STATUSES,
     ApplyJobLogResponse,

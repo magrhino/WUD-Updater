@@ -84,6 +84,8 @@ EOF
     src/wud_updater/terminal.py \
     src/wud_updater/truenas.py \
     src/wud_updater/updates.py \
+    src/wud_updater/updater_digest_pin.py \
+    src/wud_updater/updater_matching.py \
     src/wud_updater/updater_models.py \
     src/wud_updater/updater.py \
     src/wud_updater/updater_cli.py \

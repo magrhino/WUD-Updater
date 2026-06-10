@@ -15,24 +15,26 @@ from .digest_verifier import DigestVerifier, DockerManifestResolver
 from .docker_cli import DockerCli
 from .images import image_has_tag, image_matches_resolved_target, image_with_tag
 from .compose_rewrite import render_compose_digest_pins
-from .updater_planning import (
-    RECREATE_STACK_LABEL,
-    RECREATE_STACK_LABEL_FORMAT,
-    _container_bind_mount_path_issue,
+from .updater_digest_pin import (
     _digest_pin_candidates,
     _digest_pin_match_tag,
     _digest_pin_resolve_error,
+    _resolve_digest_pin_candidate,
+    digest_pin_update_from_values,
+)
+from .updater_matching import (
+    RECREATE_STACK_LABEL,
+    RECREATE_STACK_LABEL_FORMAT,
     _expand_network_mode_services,
     _label_value_is_true,
     _network_mode_providers,
     _ordered_unique,
-    _resolve_digest_pin_candidate,
     _scope_plan_label,
     _services_for_target_match,
     _stacks_to_update,
     _update_services,
-    digest_pin_update_from_values,
 )
+from .updater_planning import _container_bind_mount_path_issue
 from .updater_models import (
     ComposeTagRewriteError,
     DigestPinLabelRewrite,
