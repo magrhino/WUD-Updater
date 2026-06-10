@@ -7,6 +7,7 @@ on:
       - completed
 
 permissions:
+  actions: read
   contents: read
 
 jobs:
@@ -33,7 +34,40 @@ jobs:
           persist-credentials: false
           ref: ${{ github.event.workflow_run.head_sha }}
 
+      - name: Check coverage artifacts
+        id: coverage-artifacts
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+
+          artifacts="$(gh api "repos/${REPOSITORY}/actions/runs/${RUN_ID}/artifacts" --jq '.artifacts[].name')"
+          have_python=false
+          have_webui=false
+
+          while IFS= read -r artifact_name; do
+            case "$artifact_name" in
+              python-coverage)
+                have_python=true
+                ;;
+              webui-coverage)
+                have_webui=true
+                ;;
+            esac
+          done <<< "$artifacts"
+
+          if [[ "$have_python" == true && "$have_webui" == true ]]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Skipping SonarQube scan because this CI run did not upload both coverage artifacts."
+          fi
+
       - name: Download Python coverage
+        if: ${{ steps.coverage-artifacts.outputs.present == 'true' }}
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: python-coverage
@@ -41,6 +75,7 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Download WebUI coverage
+        if: ${{ steps.coverage-artifacts.outputs.present == 'true' }}
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: webui-coverage
@@ -49,12 +84,14 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: SonarQube Scan
+        if: ${{ steps.coverage-artifacts.outputs.present == 'true' }}
         uses: SonarSource/sonarqube-scan-action@689fb39b34b9aa95ebc5f8f119343ddd51542402 # v4.2.2
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           args: >
+            -Dsonar.projectKey=magrhino_WUD-Updater
             -Dsonar.python.coverage.reportPaths=coverage.xml
             -Dsonar.javascript.lcov.reportPaths=webui/coverage/lcov.info
             -Dsonar.sources=src,webui/src,wud,bin
