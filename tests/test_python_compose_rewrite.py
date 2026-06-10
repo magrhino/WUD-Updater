@@ -1346,11 +1346,34 @@ class ComposeRewriteEdgeCaseTests(unittest.TestCase):
         self.assertEqual(result, ())
 
     def test_apply_compose_tag_exclusions_early_return(self) -> None:
-        # If updates is empty, render returns source, and apply writes it back
+        # If updates is empty, render returns source, and apply skips the write.
         compose_file = self.write_compose("services:\n  app:\n    image: a\n")
         result = apply_compose_tag_exclusions(compose_file, (), existing_exact_tags={})
         self.assertEqual(result, ())
         self.assertEqual(compose_file.read_text(encoding="utf-8"), "services:\n  app:\n    image: a\n")
+
+    def test_apply_compose_tag_exclusions_skips_write_for_noop_existing_exact_tag(
+        self,
+    ) -> None:
+        original = (
+            "services:\n"
+            "  app:\n"
+            "    image: repo/app:1.0\n"
+            "    labels:\n"
+            "    - wud.tag.exclude=^2\\.0$$\n"
+        )
+        compose_file = self.write_compose(original)
+
+        with mock.patch("wud_updater.compose_rewrite._atomic_replace_compose") as replace:
+            applied = apply_compose_tag_exclusions(
+                compose_file,
+                (self.tag_exclusion_update(tag="2.0"),),
+                existing_exact_tags={"app": {"2.0"}},
+            )
+
+        self.assertEqual(applied, ())
+        replace.assert_not_called()
+        self.assertEqual(compose_file.read_text(encoding="utf-8"), original)
 
     def test_merge_wud_exclude_regex_same_as_next(self) -> None:
         # Testing line 798: if current_regex == next_managed: return current_regex
