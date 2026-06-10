@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import os
 import shutil
 import sqlite3
@@ -12,7 +11,7 @@ from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import replace
 from pathlib import Path
 
-from . import compose_rewrite, updater_logging
+from . import compose_rewrite, updater_audit, updater_logging, updater_preflight
 from .command import CommandError, CommandResult, CommandRunner
 from .compose import (
     ComposeBindMount,
@@ -41,16 +40,7 @@ from .compose_rewrite import (
 )
 from .db import (
     DatabaseError,
-    active_tag_exclusion_rules,
-    connect_db,
-    init_db,
-    insert_pending_update,
     insert_update_event,
-    insert_update_run,
-    update_pending_update,
-    upsert_tag_exclusion_rule,
-    upsert_known_image,
-    utc_timestamp as db_utc_timestamp,
 )
 from .digest_verifier import (
     DigestCheckResult,
@@ -95,17 +85,13 @@ from .updater_matching import (
     RECREATE_STACK_LABEL_FORMAT as RECREATE_STACK_LABEL_FORMAT,
     _expand_network_mode_services,
     _failed_line_numbers,
-    _failed_match_for_line,
     _failure_target_lines,
     _first_match_by_line,
     _label_value_is_true,
-    _line_status_reason,
     _network_mode_providers,
     _ordered_unique,
     _plan_line,
-    _preflight_status_reason,
     _scope_plan_label,
-    _service_key,
     _services_for_image,
     _services_for_target_match,
     _stacks_to_update,
@@ -115,10 +101,8 @@ from .updater_matching import (
     _update_services,
 )
 from .updater_planning import (
-    _container_bind_mount_path_issue,
     _digest_check_allow_repo,
     _digest_check_image,
-    _first_tag_exclusion_by_line,
     _tag_exclusion_updates_by_stack,
     _unique_tag_exclusion_updates,
 )
@@ -575,14 +559,7 @@ class UpdateFromWudRunner:
         parsed: ParsedWudFile,
         audit_lines: Sequence[int],
     ) -> ParsedWudFile:
-        target_lines = {target.line_no for target in parsed.targets}
-        if set(audit_lines).issubset(target_lines):
-            return parsed
-        audit_parsed = parse_wud_file(
-            self.options.wud_file,
-            selected_lines=sorted(target_lines | set(audit_lines)),
-        )
-        return self._apply_tag_overrides(audit_parsed, log=False)
+        return updater_audit.audit_parsed_file(self, parsed, audit_lines)
 
     def _build_matches(
         self,
@@ -852,40 +829,13 @@ class UpdateFromWudRunner:
         self,
         updates: Sequence[TagExclusionUpdate],
     ) -> dict[str, set[str]]:
-        existing: dict[str, set[str]] = {}
-        if self.audit_conn is None:
-            return existing
-        for update in updates:
-            rows = active_tag_exclusion_rules(
-                self.audit_conn,
-                image_repo=update.image_repo,
-                service_key=update.service_key,
-            )
-            tags = existing.setdefault(update.service, set())
-            tags.update(str(row["tag"]) for row in rows)
-        return existing
+        return updater_audit.existing_exact_tag_exclusions(self, updates)
 
     def _record_tag_exclusion_rules(
         self,
         updates: Sequence[TagExclusionUpdate],
     ) -> None:
-        if self.audit_conn is None:
-            return
-        seen: set[tuple[str, str, str, str]] = set()
-        for update in updates:
-            service_key = "" if update.scope == "image_repo" else update.service_key
-            key = (update.scope, update.image_repo, service_key, update.tag)
-            if key in seen:
-                continue
-            seen.add(key)
-            upsert_tag_exclusion_rule(
-                self.audit_conn,
-                scope=update.scope,
-                image_repo=update.image_repo,
-                service_key=service_key,
-                tag=update.tag,
-                regex_fragment=compose_rewrite.js_regex_escape(update.tag),
-            )
+        updater_audit.record_tag_exclusion_rules(self, updates)
 
     def _recreate_tag_exclusion_services(
         self,
@@ -924,54 +874,20 @@ class UpdateFromWudRunner:
         self,
         updates: Sequence[TagExclusionUpdate],
     ) -> None:
-        if self.audit_conn is None or self.audit_run_id is None:
-            return
-        for line_no, update in _first_tag_exclusion_by_line(updates).items():
-            update_pending_update(
-                self.audit_conn,
-                run_id=self.audit_run_id,
-                line_no=line_no,
-                status="in_progress",
-                status_reason="tag-exclusion",
-                service_key=update.service_key,
-                stack_name=update.stack.name,
-                service_name=update.service,
-            )
+        updater_audit.mark_tag_exclusions_pending(self, updates)
 
     def _mark_successful_tag_exclusions(
         self,
         updates: Sequence[TagExclusionUpdate],
         statuses: Mapping[int, StackStatus],
     ) -> None:
-        if self.audit_conn is None or self.audit_run_id is None:
-            return
-        for line_no, update in _first_tag_exclusion_by_line(updates).items():
-            status = statuses.get(line_no, StackStatus("failure", "missing"))
-            update_pending_update(
-                self.audit_conn,
-                run_id=self.audit_run_id,
-                line_no=line_no,
-                status="resolved" if status.status == "success" else "failed",
-                status_reason=status.reason,
-                service_key=update.service_key,
-                stack_name=update.stack.name,
-                service_name=update.service,
-            )
+        updater_audit.mark_successful_tag_exclusions(self, updates, statuses)
 
     def _mark_tag_exclusion_failures(
         self,
         failures: Sequence[tuple[WudTarget, str]],
     ) -> None:
-        if self.audit_conn is None or self.audit_run_id is None:
-            return
-        for target, reason in failures:
-            update_pending_update(
-                self.audit_conn,
-                run_id=self.audit_run_id,
-                line_no=target.line_no,
-                status="failed",
-                status_reason=f"tag-exclusion-{reason}",
-            )
+        updater_audit.mark_tag_exclusion_failures(self, failures)
 
     def _update_stack(self, stack: ComposeStack, matches: Sequence[Match]) -> StackStatus:
         opts = self.options
@@ -2032,169 +1948,23 @@ class UpdateFromWudRunner:
         }
 
     def _validate_tag_manifests(self, matches: Sequence[Match]) -> bool:
-        ok = True
-        for update in self._tag_updates(matches):
-            try:
-                self.docker.manifest_inspect(update.new_image)
-            except CommandError as exc:
-                ok = False
-                self.log.error(
-                    "Invalid or unavailable remote tag: "
-                    f"{update.old_image} -> {update.new_image}"
-                )
-                for line in exc.result.stderr_lines:
-                    self.log.error(
-                        f"manifest stderr: {updater_logging.sanitize_stream(line)}"
-                    )
-                self._log_command_result(exc.result)
-            else:
-                self.log.info(
-                    "Validated remote tag: "
-                    f"{update.old_image} -> {update.new_image}"
-                )
-        return ok
+        return updater_preflight.validate_tag_manifests(self, matches)
 
     def _validate_tag_update_plan(self, matches: Sequence[Match]) -> bool:
-        ok = True
-        desired_by_service: dict[tuple[int, str, str], set[str]] = {}
-        for match in matches:
-            if not match.target.desired_tag:
-                continue
-            if not match.service:
-                ok = False
-                self.log.error(
-                    f"[{match.stack.name}] Tag update for {match.compose_image} "
-                    "cannot be safely rewritten because the compose service image "
-                    "could not be mapped."
-                )
-                continue
-            key = (match.stack.index, match.service, match.compose_image)
-            desired_by_service.setdefault(key, set()).add(match.target.desired_tag)
-
-        for stack_index, service, image in sorted(desired_by_service):
-            desired = desired_by_service[(stack_index, service, image)]
-            if len(desired) <= 1:
-                continue
-            ok = False
-            stack_name = next(
-                (
-                    match.stack.name
-                    for match in matches
-                    if match.stack.index == stack_index
-                ),
-                str(stack_index),
-            )
-            self.log.error(
-                f"[{stack_name}] Conflicting tag updates for service {service} "
-                f"image {image}: {', '.join(sorted(desired))}"
-            )
-        return ok
+        return updater_preflight.validate_tag_update_plan(self, matches)
 
     def _validate_compose_bind_mount_paths(self, matches: Sequence[Match]) -> bool:
-        ok = True
-        issue_messages: dict[int, list[str]] = {}
-        issue_services: dict[int, set[str]] = {}
-        for stack in _stacks_to_update(matches):
-            stack_matches = [match for match in matches if match.stack.index == stack.index]
-            mounts = self.compose.try_service_bind_mounts(
-                stack.directory,
-                stack.file,
-                project_directory=stack.project_directory,
-            )
-            if not mounts:
-                continue
-            scope = self._update_scope(stack, stack_matches)
-            scoped_services = set(scope.services or ())
-            if scope.services is None:
-                scoped_services = {mount.service for mount in mounts}
-            for mount in mounts:
-                if mount.service not in scoped_services:
-                    continue
-                issue = _container_bind_mount_path_issue(
-                    mount,
-                    docker_base=self.options.docker_base,
-                )
-                if not issue:
-                    continue
-                ok = False
-                messages = self._bind_mount_path_issue_messages(stack, mount, issue)
-                self._log_bind_mount_path_issue(messages)
-                if not self.options.dry_run:
-                    issue_messages.setdefault(stack.index, []).extend(messages)
-                    issue_services.setdefault(stack.index, set()).add(mount.service)
-        if not self.options.dry_run:
-            for stack in _stacks_to_update(matches):
-                messages = issue_messages.get(stack.index)
-                if not messages:
-                    continue
-                stack_matches = [
-                    match for match in matches if match.stack.index == stack.index
-                ]
-                services = tuple(sorted(issue_services.get(stack.index, ()))) or None
-                self._record_failure(
-                    stack,
-                    stack_matches,
-                    phase="preflight",
-                    reason="bind-mount-path-invalid",
-                    services=services,
-                    health_details="\n".join(messages),
-                )
-        return ok
+        return updater_preflight.validate_compose_bind_mount_paths(self, matches)
 
     def _validate_compose_runtime_ports(self, matches: Sequence[Match]) -> bool:
-        ok = True
-        issue_messages: dict[int, list[str]] = {}
-        issue_services: dict[int, set[str]] = {}
-        for stack in _stacks_to_update(matches):
-            stack_matches = [match for match in matches if match.stack.index == stack.index]
-            issues = self.compose.try_service_runtime_port_issues(
-                stack.directory,
-                stack.file,
-                project_directory=stack.project_directory,
-            )
-            if not issues:
-                continue
-            scope = self._update_scope(stack, stack_matches)
-            scoped_services = set(scope.services or ())
-            if scope.services is None:
-                scoped_services = {issue.service for issue in issues}
-            for issue in issues:
-                if issue.service not in scoped_services:
-                    continue
-                ok = False
-                message = self._compose_runtime_port_issue_message(stack, issue)
-                self._log_preflight_issue(message)
-                if not self.options.dry_run:
-                    issue_messages.setdefault(stack.index, []).append(message)
-                    issue_services.setdefault(stack.index, set()).add(issue.service)
-        if not self.options.dry_run:
-            for stack in _stacks_to_update(matches):
-                messages = issue_messages.get(stack.index)
-                if not messages:
-                    continue
-                stack_matches = [
-                    match for match in matches if match.stack.index == stack.index
-                ]
-                services = tuple(sorted(issue_services.get(stack.index, ()))) or None
-                self._record_failure(
-                    stack,
-                    stack_matches,
-                    phase="preflight",
-                    reason="compose-port-invalid",
-                    services=services,
-                    health_details="\n".join(messages),
-                )
-        return ok
+        return updater_preflight.validate_compose_runtime_ports(self, matches)
 
     def _compose_runtime_port_issue_message(
         self,
         stack: ComposeStack,
         issue: ComposeRuntimePortIssue,
     ) -> str:
-        return (
-            f"[{stack.name}] Compose service {issue.service} has invalid "
-            f"{issue.field} value {issue.value!r}: {issue.reason}."
-        )
+        return updater_preflight.compose_runtime_port_issue_message(stack, issue)
 
     def _bind_mount_path_issue_messages(
         self,
@@ -2202,35 +1972,18 @@ class UpdateFromWudRunner:
         mount: ComposeBindMount,
         issue: str,
     ) -> list[str]:
-        target = f" -> {mount.target}" if mount.target else ""
-        messages = [
-            f"[{stack.name}] Compose bind mount for service {mount.service} "
-            f"resolves to {mount.source}{target}; {issue}."
-        ]
-        if self.options.host_docker_base is not None:
-            messages.append(
-                f"[{stack.name}] HOST_DOCKER_BASE is set to "
-                f"{self.options.host_docker_base}; verify it is the Docker "
-                f"daemon-visible host root that corresponds to "
-                f"DOCKER_BASE={self.options.docker_base}."
-            )
-            return messages
-        messages.append(
-            f"[{stack.name}] Mount the Compose root at the same absolute path "
-            "the Docker daemon uses, then set DOCKER_BASE to that path "
-            "(for example DOCKER_BASE=/srv/docker with /srv/docker:/srv/docker), "
-            "or keep the helper path and set HOST_DOCKER_BASE=/srv/docker "
-            "to the matching daemon-visible host root."
+        return updater_preflight.bind_mount_path_issue_messages(
+            self,
+            stack,
+            mount,
+            issue,
         )
-        return messages
 
     def _log_bind_mount_path_issue(self, messages: Sequence[str]) -> None:
-        for message in messages:
-            self._log_preflight_issue(message)
+        updater_preflight.log_bind_mount_path_issue(self, messages)
 
     def _log_preflight_issue(self, message: str) -> None:
-        log = self.log.warn if self.options.dry_run else self.log.error
-        log(message)
+        updater_preflight.log_preflight_issue(self, message)
 
     def _validate_applied_tag_updates(
         self,
@@ -2568,34 +2321,7 @@ class UpdateFromWudRunner:
         )
 
     def _validate_digest_pin_plan(self, matches: Sequence[Match]) -> bool:
-        if not self.options.digest_pin_updates:
-            return True
-        ok = True
-        for match in matches:
-            if _digest_pin_match_tag(match):
-                continue
-            ok = False
-            self.log.error(
-                f"[{match.stack.name}] Digest-pin updates require a safe resolved "
-                f"tag for line {match.target.line_no} ({match.target.first})."
-            )
-        try:
-            for stack in _stacks_to_update(matches):
-                stack_updates = self._digest_pin_updates(
-                    [match for match in matches if match.stack.index == stack.index]
-                )
-                compose_rewrite.render_compose_digest_pins(
-                    stack.directory / stack.file,
-                    stack_updates,
-                    label_rewrite_approvals=(
-                        self.options.digest_pin_label_rewrite_approvals
-                    ),
-                    stack_name=stack.name,
-                )
-        except (ComposeTagRewriteError, UpdaterError) as exc:
-            ok = False
-            self.log.error(f"Digest-pin plan is not safe to apply: {exc}")
-        return ok
+        return updater_preflight.validate_digest_pin_plan(self, matches)
 
     def _refresh_stack_images(self, stack: ComposeStack) -> ComposeStack | None:
         try:
@@ -2660,116 +2386,30 @@ class UpdateFromWudRunner:
         matches: Sequence[Match],
         skipped_tags: Sequence[WudTarget],
     ) -> int:
-        preflight_failures = [
-            failure
-            for failure in self.failures
-            if failure.phase == "preflight"
-        ]
-        failed_stack_indices = {failure.stack.index for failure in preflight_failures}
-        failed_matches = [
-            match for match in matches if match.stack.index in failed_stack_indices
-        ]
-        skipped_matches = [
-            match for match in matches if match.stack.index not in failed_stack_indices
-        ]
-        failed_lines = sorted({match.target.line_no for match in failed_matches})
-        stack_statuses = {
-            stack_index: StackStatus(
-                "failure",
-                _preflight_status_reason(stack_index, preflight_failures),
-            )
-            for stack_index in failed_stack_indices
-        }
-
-        self._start_audit(parsed)
-        self._mark_unmatched_pending(parsed, matches, skipped_tags)
-        self._mark_matched_pending(
-            skipped_matches,
-            status="pending",
-            status_reason="preflight-skipped",
+        return updater_preflight.finish_preflight_failure(
+            self,
+            parsed,
+            matches,
+            skipped_tags,
         )
-        self._mark_failed_pending(failed_matches, stack_statuses, failed_lines)
-        self._mark_failed_lines_restored(())
-        self._finish_audit_run("failure")
-
-        error_report = self._write_error_report()
-        if error_report is not None:
-            self.log.error(
-                "Completed with preflight failure(s). "
-                f"See log: {self.log_file}; error report: {error_report}"
-            )
-        else:
-            self.log.error(f"Completed with preflight failure(s). See log: {self.log_file}")
-        return 1
 
     def _start_audit(self, parsed: ParsedWudFile) -> None:
-        if self.audit_run_id is not None:
-            return
-        conn: sqlite3.Connection | None = None
-        try:
-            db_path = _db_path(self.options, self.environ)
-            chown_parent = _sqlite_parent_missing(db_path)
-            conn = connect_db(db_path)
-            self.audit_db_path = db_path
-            init_db(conn)
-            self.audit_conn = conn
-            self.audit_run_id = insert_update_run(
-                conn,
-                status="started",
-                dry_run=False,
-                mode=self.options.mode,
-                wud_file=self.options.wud_file_label or str(self.options.wud_file),
-                log_file=str(self.log_file),
-                metadata_json=self.options.metadata_json,
-            )
-            for target in parsed.targets:
-                insert_pending_update(
-                    conn,
-                    run_id=self.audit_run_id,
-                    line_no=target.line_no,
-                    raw=target.raw,
-                    image=target.first,
-                    target_digest=target.digest,
-                    desired_tag=target.desired_tag,
-                )
-            self._apply_audit_db_owner(chown_parent=chown_parent)
-        except (OSError, sqlite3.Error, DatabaseError, OwnerConfigError) as exc:
-            if self.audit_conn is not None and self.audit_run_id is not None:
-                self._finish_audit_run("failure", best_effort=True)
-            if conn is not None:
-                conn.close()
-            self.audit_conn = None
-            self.audit_run_id = None
-            self.audit_db_path = None
-            raise UpdaterError(f"Could not initialize audit database: {exc}") from exc
+        updater_audit.start_audit(self, parsed, db_path_fn=_db_path)
 
     def _apply_audit_db_owner(self, *, chown_parent: bool = False) -> None:
-        if self.audit_db_path is None:
-            return
-        _apply_sqlite_owner(
-            self.audit_db_path,
-            self.owner,
-            chown_parent=chown_parent,
-        )
+        updater_audit.apply_audit_db_owner(self, chown_parent=chown_parent)
+
+    def _apply_sqlite_owner(
+        self,
+        db_path: Path,
+        owner: OwnerConfig,
+        *,
+        chown_parent: bool = False,
+    ) -> None:
+        _apply_sqlite_owner(db_path, owner, chown_parent=chown_parent)
 
     def _finish_audit_run(self, status: str, *, best_effort: bool = False) -> None:
-        if self.audit_conn is None or self.audit_run_id is None:
-            return
-        try:
-            with self.audit_conn:
-                self.audit_conn.execute(
-                    """
-                    UPDATE update_runs
-                    SET status = ?,
-                        finished_at = ?
-                    WHERE id = ?
-                    """,
-                    (status, db_utc_timestamp(), self.audit_run_id),
-                )
-        except sqlite3.Error:
-            if best_effort:
-                return
-            raise
+        updater_audit.finish_audit_run(self, status, best_effort=best_effort)
 
     def _mark_unmatched_pending(
         self,
@@ -2777,21 +2417,7 @@ class UpdateFromWudRunner:
         matches: Sequence[Match],
         skipped_tags: Sequence[WudTarget],
     ) -> None:
-        if self.audit_conn is None or self.audit_run_id is None:
-            return
-        matched_lines = {match.target.line_no for match in matches}
-        skipped_lines = {target.line_no for target in skipped_tags}
-        for target in parsed.targets:
-            if target.line_no in matched_lines:
-                continue
-            reason = "tag-update-disabled" if target.line_no in skipped_lines else "unmatched"
-            update_pending_update(
-                self.audit_conn,
-                run_id=self.audit_run_id,
-                line_no=target.line_no,
-                status="pending",
-                status_reason=reason,
-            )
+        updater_audit.mark_unmatched_pending(self, parsed, matches, skipped_tags)
 
     def _mark_matched_pending(
         self,
@@ -2800,19 +2426,12 @@ class UpdateFromWudRunner:
         status: str,
         status_reason: str = "matched",
     ) -> None:
-        if self.audit_conn is None or self.audit_run_id is None:
-            return
-        for line_no, match in _first_match_by_line(matches).items():
-            update_pending_update(
-                self.audit_conn,
-                run_id=self.audit_run_id,
-                line_no=line_no,
-                status=status,
-                status_reason=status_reason,
-                service_key=_service_key(match),
-                stack_name=match.stack.name,
-                service_name=match.service,
-            )
+        updater_audit.mark_matched_pending(
+            self,
+            matches,
+            status=status,
+            status_reason=status_reason,
+        )
 
     def _mark_removed_pending(
         self,
@@ -2820,20 +2439,7 @@ class UpdateFromWudRunner:
         remove_lines: Iterable[int],
         matches: Sequence[Match],
     ) -> None:
-        if self.audit_conn is None or self.audit_run_id is None:
-            return
-        matched_lines = {match.target.line_no for match in matches}
-        removed_lines = set(remove_lines) - matched_lines
-        for target in parsed.targets:
-            if target.line_no not in removed_lines:
-                continue
-            update_pending_update(
-                self.audit_conn,
-                run_id=self.audit_run_id,
-                line_no=target.line_no,
-                status="resolved",
-                status_reason="removed-before-run",
-            )
+        updater_audit.mark_removed_pending(self, parsed, remove_lines, matches)
 
     def _mark_failed_pending(
         self,
@@ -2841,86 +2447,33 @@ class UpdateFromWudRunner:
         stack_statuses: Mapping[int, StackStatus],
         failed_lines: Iterable[int],
     ) -> None:
-        if self.audit_conn is None or self.audit_run_id is None:
-            return
-        for line_no in failed_lines:
-            match = _failed_match_for_line(line_no, matches, stack_statuses)
-            if match is None:
-                continue
-            reason = _line_status_reason(line_no, matches, stack_statuses)
-            update_pending_update(
-                self.audit_conn,
-                run_id=self.audit_run_id,
-                line_no=line_no,
-                status="failed",
-                status_reason=reason,
-                service_key=_service_key(match),
-                stack_name=match.stack.name,
-                service_name=match.service,
-            )
+        updater_audit.mark_failed_pending(self, matches, stack_statuses, failed_lines)
 
     def _mark_successful_pending(
         self,
         matches: Sequence[Match],
         stack_statuses: Mapping[int, StackStatus],
     ) -> None:
-        if self.audit_conn is None or self.audit_run_id is None:
-            return
-        failed = set(_failed_line_numbers(matches, stack_statuses))
-        for line_no, match in _first_match_by_line(matches).items():
-            if line_no in failed:
-                continue
-            reason = _line_status_reason(line_no, matches, stack_statuses)
-            update_pending_update(
-                self.audit_conn,
-                run_id=self.audit_run_id,
-                line_no=line_no,
-                status="resolved",
-                status_reason=reason,
-                service_key=_service_key(match),
-                stack_name=match.stack.name,
-                service_name=match.service,
-            )
+        updater_audit.mark_successful_pending(self, matches, stack_statuses)
 
     def _record_update_events(
         self,
         matches: Sequence[Match],
         stack_statuses: Mapping[int, StackStatus],
     ) -> None:
-        if self.audit_conn is None or self.audit_run_id is None:
-            return
-        for match in matches:
-            status = stack_statuses.get(match.stack.index, StackStatus("failure", "missing"))
-            insert_update_event(
-                self.audit_conn,
-                run_id=self.audit_run_id,
-                service_name=match.service,
-                stack_name=match.stack.name,
-                image=match.compose_image,
-                target_image=self._target_image_for_match(match),
-                status=status.status,
-                metadata_json=json.dumps({"reason": status.reason}, sort_keys=True),
-            )
+        updater_audit.record_update_events(
+            self,
+            matches,
+            stack_statuses,
+            insert_event=insert_update_event,
+        )
 
     def _record_known_images(
         self,
         matches: Sequence[Match],
         stack_statuses: Mapping[int, StackStatus],
     ) -> None:
-        if self.audit_conn is None:
-            return
-        for match in matches:
-            status = stack_statuses.get(match.stack.index)
-            if status is None or status.status != "success":
-                continue
-            image = self._target_image_for_match(match)
-            upsert_known_image(
-                self.audit_conn,
-                service_key=_service_key(match),
-                image=image,
-                image_id=self.docker.image_id(image),
-                digest=self.docker.image_digest(image),
-            )
+        updater_audit.record_known_images(self, matches, stack_statuses)
 
     def _remember_applied_digest_pins(
         self,
@@ -3283,16 +2836,11 @@ def _tag_update_failure_progress_message(stack_name: str, phase: str, reason: st
 
 
 def _db_path(options: UpdaterOptions, environ: Mapping[str, str]) -> Path:
-    configured = environ.get("WUD_DB_PATH")
-    if configured:
-        return Path(configured)
-    if options.db_path is not None:
-        return options.db_path
-    return options.log_dir / "wud-updater.sqlite"
+    return updater_audit.db_path(options, environ)
 
 
 def _sqlite_parent_missing(db_path: Path) -> bool:
-    return str(db_path) != ":memory:" and not db_path.parent.exists()
+    return updater_audit.sqlite_parent_missing(db_path)
 
 
 def _apply_sqlite_owner(
@@ -3301,22 +2849,16 @@ def _apply_sqlite_owner(
     *,
     chown_parent: bool = False,
 ) -> None:
-    if not owner.configured or str(db_path) == ":memory:":
-        return
-    if chown_parent and db_path.parent.exists():
-        apply_configured_owner(db_path.parent, owner)
-    for path in _sqlite_state_paths(db_path):
-        if path.exists():
-            apply_configured_owner(path, owner)
+    updater_audit.apply_sqlite_owner(
+        db_path,
+        owner,
+        chown_parent=chown_parent,
+        apply_owner=apply_configured_owner,
+    )
 
 
 def _sqlite_state_paths(db_path: Path) -> tuple[Path, ...]:
-    return (
-        db_path,
-        Path(f"{db_path}-wal"),
-        Path(f"{db_path}-shm"),
-        Path(f"{db_path}-journal"),
-    )
+    return updater_audit.sqlite_state_paths(db_path)
 
 
 def _updated_images(
