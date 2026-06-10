@@ -86,6 +86,7 @@ EOF
     src/wud_updater/updates.py \
     src/wud_updater/updater_audit.py \
     src/wud_updater/updater_digest_pin.py \
+    src/wud_updater/updater_lifecycle.py \
     src/wud_updater/updater_matching.py \
     src/wud_updater/updater_models.py \
     src/wud_updater/updater.py \
