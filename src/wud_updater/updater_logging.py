@@ -6,7 +6,7 @@ import errno
 import os
 import re
 import sys
-from collections.abc import Mapping
+from collections.abc import Iterator, Mapping
 from datetime import datetime
 from pathlib import Path
 from typing import TextIO
@@ -83,34 +83,21 @@ def _create_unique_text_file_exclusive(
     owner: OwnerConfig | None = None,
     encoding: str = "utf-8",
 ) -> Path:
-    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
-    flags |= getattr(os, "O_NOFOLLOW", 0)
     owner = owner or OwnerConfig()
 
-    for attempt in range(_EXCLUSIVE_CREATE_ATTEMPTS):
-        candidate = _collision_path(path, attempt)
-        fd = -1
+    for candidate in _exclusive_text_file_candidates(path):
         try:
-            fd = os.open(candidate, flags, 0o600)
-            if owner.configured:
-                if owner.uid is None or owner.gid is None:
-                    raise OwnerConfigError(
-                        "OUT_UID and OUT_GID/OUT_GUID must be set together"
-                    )
-                os.fchown(fd, owner.uid, owner.gid)
-            with os.fdopen(fd, "w", encoding=encoding, newline="") as file:
-                fd = -1
-                file.write(content)
-            return candidate
-        except FileExistsError:
-            continue
+            _write_exclusive_text_file(
+                candidate,
+                content,
+                owner=owner,
+                encoding=encoding,
+            )
         except OSError as exc:
-            if exc.errno == errno.ELOOP:
+            if _is_exclusive_create_collision(exc):
                 continue
             raise
-        finally:
-            if fd != -1:
-                os.close(fd)
+        return candidate
 
     raise FileExistsError(
         errno.EEXIST,
@@ -123,6 +110,47 @@ def _collision_path(path: Path, attempt: int) -> Path:
     if attempt == 0:
         return path
     return path.with_name(f"{path.stem}-{attempt}{path.suffix}")
+
+
+def _exclusive_text_file_candidates(path: Path) -> Iterator[Path]:
+    for attempt in range(_EXCLUSIVE_CREATE_ATTEMPTS):
+        yield _collision_path(path, attempt)
+
+
+def _write_exclusive_text_file(
+    path: Path,
+    content: str,
+    *,
+    owner: OwnerConfig,
+    encoding: str,
+) -> None:
+    fd = -1
+    try:
+        fd = os.open(path, _exclusive_create_flags(), 0o600)
+        _apply_configured_fd_owner(fd, owner)
+        with os.fdopen(fd, "w", encoding=encoding, newline="") as file:
+            fd = -1
+            file.write(content)
+    finally:
+        if fd != -1:
+            os.close(fd)
+
+
+def _exclusive_create_flags() -> int:
+    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
+    return flags | getattr(os, "O_NOFOLLOW", 0)
+
+
+def _apply_configured_fd_owner(fd: int, owner: OwnerConfig) -> None:
+    if not owner.configured:
+        return
+    if owner.uid is None or owner.gid is None:
+        raise OwnerConfigError("OUT_UID and OUT_GID/OUT_GUID must be set together")
+    os.fchown(fd, owner.uid, owner.gid)
+
+
+def _is_exclusive_create_collision(exc: OSError) -> bool:
+    return exc.errno in {errno.EEXIST, errno.ELOOP}
 
 
 def safe_component(value: str) -> str:
