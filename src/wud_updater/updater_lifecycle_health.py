@@ -1,0 +1,246 @@
+"""Container health and image-state helpers for updater lifecycle execution."""
+
+from __future__ import annotations
+
+import time
+from collections.abc import Iterable, Mapping, Sequence
+
+from . import updater_logging
+from .command import CommandError, CommandResult
+from .compose import ComposeStack
+from .images import image_repo_ref
+from .updater_models import ImageState, Match, UpResult
+
+
+CONTAINER_SUMMARY_FORMAT = "{{.Name}}|{{.State.Status}}|{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}|{{.RestartCount}}|{{.State.ExitCode}}"
+HEALTH_LOG_FORMAT = "{{if .State.Health}}{{range .State.Health.Log}}{{println .Output}}{{end}}{{end}}"
+
+
+class _LifecycleHealthMixin:
+    def _run_compose_up(
+        self,
+        stack: ComposeStack,
+        services: Sequence[str] | None,
+        *,
+        force_recreate: bool = False,
+        no_deps: bool = True,
+    ) -> UpResult:
+        if self.options.mode != "pause" and self.compose.up_wait_supported(
+            stack.directory,
+            stack.file,
+            project_directory=stack.project_directory,
+        ):
+            self.log.info(
+                f"[{stack.name}] docker compose up --wait is supported; using native wait"
+            )
+            try:
+                self.compose.up(
+                    stack.directory,
+                    stack.file,
+                    services,
+                    wait=True,
+                    wait_timeout=self.options.max_wait,
+                    force_recreate=force_recreate,
+                    no_deps=no_deps,
+                    project_directory=stack.project_directory,
+                )
+                return UpResult(True, True)
+            except CommandError as exc:
+                self.log.error(f"[{stack.name}] docker compose up --wait failed")
+                health_details = self._capture_health_details(stack, services)
+                self._log_health_details(stack, services, health_details)
+                return UpResult(False, True, exc, health_details)
+
+        try:
+            self.compose.up(
+                stack.directory,
+                stack.file,
+                services,
+                force_recreate=force_recreate,
+                no_deps=no_deps,
+                project_directory=stack.project_directory,
+            )
+            return UpResult(True, False)
+        except CommandError as exc:
+            self.log.error(f"[{stack.name}] docker compose up failed")
+            health_details = self._capture_health_details(stack, services)
+            self._log_health_details(stack, services, health_details)
+            return UpResult(False, False, exc, health_details)
+
+    def _wait_for_health(
+        self,
+        stack: ComposeStack,
+        services: Sequence[str] | None,
+        matches: Sequence[Match] = (),
+    ) -> bool:
+        start = time.monotonic()
+        self._progress(
+            "health",
+            "running",
+            f"[{stack.name}] Waiting up to {self.options.max_wait}s for health.",
+            stack=stack.name,
+            services=services,
+            matches=matches,
+        )
+        if self.options.max_wait > 0:
+            time.sleep(2)
+
+        while True:
+            cids = self.compose.ps_quiet(
+                stack.directory,
+                stack.file,
+                services,
+                project_directory=stack.project_directory,
+            )
+            ok = bool(cids)
+            for cid in cids:
+                summary = self._cid_summary(cid)
+                if not summary or not _cid_is_ok(summary):
+                    ok = False
+
+            elapsed = int(time.monotonic() - start)
+            if ok:
+                self.log.plain("INFO", f"[{stack.name}] Health wait succeeded in {elapsed}s")
+                self._progress(
+                    "health",
+                    "success",
+                    f"[{stack.name}] Health wait succeeded in {elapsed}s.",
+                    stack=stack.name,
+                    services=services,
+                    matches=matches,
+                )
+                return True
+            if elapsed >= self.options.max_wait:
+                self.log.error(f"[{stack.name}] Failed health gate after {elapsed}s")
+                if not cids:
+                    self.log.plain(
+                        "ERROR",
+                        f"[{stack.name}] Health blocker: docker compose ps -q returned no containers",
+                    )
+                self._log_health_details(stack, services)
+                self._progress(
+                    "health",
+                    "failure",
+                    f"[{stack.name}] Failed health gate after {elapsed}s.",
+                    stack=stack.name,
+                    services=services,
+                    matches=matches,
+                )
+                return False
+            time.sleep(2)
+
+    def _capture_health_details(
+        self,
+        stack: ComposeStack,
+        services: Sequence[str] | None,
+    ) -> str:
+        cids = self.compose.ps_quiet(
+            stack.directory,
+            stack.file,
+            services,
+            project_directory=stack.project_directory,
+        )
+        if not cids:
+            return "health: docker compose ps -q returned no containers\n"
+
+        lines: list[str] = []
+        for cid in cids:
+            summary = self._cid_summary(cid)
+            if not summary:
+                lines.append(f"health: container={cid} inspect returned no state")
+                continue
+            name, status, health, restarts, exit_code = _split_summary(summary)
+            lines.append(
+                f"health: container={name.lstrip('/')} status={status} "
+                f"health={health} restarts={restarts} exit_code={exit_code}"
+            )
+            for output in self.docker.try_inspect(cid, HEALTH_LOG_FORMAT):
+                output = updater_logging.sanitize_stream(output)
+                if output:
+                    lines.append(f"health_output[{name.lstrip('/')}]: {output}")
+        return "\n".join(lines) + "\n"
+
+    def _log_health_details(
+        self,
+        stack: ComposeStack,
+        services: Sequence[str] | None,
+        health_details: str | None = None,
+    ) -> None:
+        details = health_details
+        if details is None:
+            details = self._capture_health_details(stack, services)
+        for line in details.splitlines():
+            self.log.plain("ERROR", f"[{stack.name}] {line}")
+
+    def _log_command_result(self, result: CommandResult) -> None:
+        for line in updater_logging._render_command_result(result):
+            self.log.plain("ERROR", line.rstrip("\n"))
+
+    def _cid_summary(self, cid: str) -> str:
+        lines = self.docker.try_inspect(cid, CONTAINER_SUMMARY_FORMAT)
+        return lines[0] if lines else ""
+
+    def _image_state(self, images: Iterable[str]) -> dict[str, ImageState]:
+        return {
+            image: ImageState(
+                image_id=self.docker.image_id(image),
+                digest=self.docker.image_digest(image),
+            )
+            for image in images
+            if image
+        }
+
+
+def _updated_images(
+    before: Mapping[str, ImageState],
+    after: Mapping[str, ImageState],
+) -> list[tuple[str, ImageState]]:
+    changes: list[tuple[str, ImageState]] = []
+    after_by_image_id: dict[str, tuple[str, ImageState] | None] = {}
+    after_by_repository: dict[str, tuple[str, ImageState] | None] = {}
+    for image, state in after.items():
+        if state.image_id:
+            after_by_image_id[state.image_id] = (
+                None
+                if state.image_id in after_by_image_id
+                else (image, state)
+            )
+        repository = image_repo_ref(image)
+        after_by_repository[repository] = (
+            None
+            if repository in after_by_repository
+            else (image, state)
+        )
+
+    for image, old in before.items():
+        new_image = image
+        new = after.get(image)
+        if new is None and old.image_id:
+            image_id_match = after_by_image_id.get(old.image_id)
+            if image_id_match is not None:
+                new_image, new = image_id_match
+        if new is None:
+            repository_match = after_by_repository.get(image_repo_ref(image))
+            if repository_match is not None:
+                new_image, new = repository_match
+        if (
+            new is not None
+            and new.image_id
+            and (old.image_id != new.image_id or image != new_image)
+        ):
+            changes.append((image, new))
+    return changes
+
+
+def _cid_is_ok(summary: str) -> bool:
+    _name, status, health, _restarts, _exit_code = _split_summary(summary)
+    if health != "none":
+        return health == "healthy"
+    return status == "running"
+
+
+def _split_summary(summary: str) -> tuple[str, str, str, str, str]:
+    parts = summary.split("|", 4)
+    while len(parts) < 5:
+        parts.append("")
+    return tuple(parts[:5])  # type: ignore[return-value]

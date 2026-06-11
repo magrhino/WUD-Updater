@@ -39,7 +39,7 @@ from .updater_matching import (
     _unique_matches as _unique_matches,
     _update_services as _update_services,
 )
-from .updater_models import Match, TagExclusionUpdate
+from .updater_models import Match, TagExclusionUpdate, TagUpdate
 
 
 _HELPER_ONLY_MOUNT_PREFIXES = (Path("/host"), Path("/docker-host"), Path("/container-host"))
@@ -83,6 +83,28 @@ def _digest_check_allow_repo(match: Match) -> bool:
     if match.target.desired_tag:
         return False
     return match.resolved != match.target.first or not image_has_tag(match.resolved)
+
+
+def _tag_updates(matches: Sequence[Match]) -> tuple[TagUpdate, ...]:
+    services_by_update: dict[tuple[str, str, str], set[str]] = {}
+    for match in matches:
+        if match.target.desired_tag:
+            new_image = image_with_tag(match.compose_image, match.target.desired_tag)
+            key = (match.compose_image, match.target.desired_tag, new_image)
+            services_by_update.setdefault(key, set())
+            if match.service:
+                services_by_update[key].add(match.service)
+    return tuple(
+        TagUpdate(
+            old_image=old_image,
+            desired_tag=desired_tag,
+            new_image=new_image,
+            services=tuple(sorted(services)),
+        )
+        for (old_image, desired_tag, new_image), services in sorted(
+            services_by_update.items()
+        )
+    )
 
 
 def _unique_tag_exclusion_updates(

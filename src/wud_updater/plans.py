@@ -23,18 +23,13 @@ from .updater_digest_pin import (
     digest_pin_update_from_values,
 )
 from .updater_matching import (
-    RECREATE_STACK_LABEL,
-    RECREATE_STACK_LABEL_FORMAT,
-    _expand_network_mode_services,
-    _label_value_is_true,
-    _network_mode_providers,
     _ordered_unique,
     _scope_plan_label,
     _services_for_target_match,
     _stacks_to_update,
-    _update_services,
 )
-from .updater_planning import _container_bind_mount_path_issue
+from .updater_lifecycle_scope import _UpdateScopeMixin
+from .updater_planning import _container_bind_mount_path_issue, _tag_updates
 from .updater_models import (
     ComposeTagRewriteError,
     DigestPinLabelRewrite,
@@ -43,7 +38,6 @@ from .updater_models import (
     DigestPinUpdate,
     Match,
     TagOverride,
-    TagUpdate,
     UpdateScope,
     UpdaterError,
 )
@@ -324,7 +318,7 @@ class PendingGroupingResult:
 
 
 @dataclass
-class _PlanBuilder:
+class _PlanBuilder(_UpdateScopeMixin):
     config: UpdaterConfig
     line_numbers: Sequence[int]
     allow_tag_updates: bool = False
@@ -1123,108 +1117,6 @@ class _PlanBuilder:
                 )
             ),
         )
-
-    def _update_scope(self, stack: ComposeStack, matches: Sequence[Match]) -> UpdateScope:
-        services = _update_services(matches)
-        if services is None:
-            return UpdateScope(
-                services=None,
-                pull_services=None,
-                stop_services=self._stack_stop_services(stack),
-                force_recreate=True,
-            )
-        network_providers = _network_mode_providers(stack.service_images)
-        lifecycle_services, uses_network_provider = _expand_network_mode_services(
-            services,
-            network_providers,
-        )
-        missing_providers = self._missing_network_mode_providers(
-            stack,
-            services,
-            network_providers,
-        )
-        if missing_providers:
-            lifecycle_services = _ordered_unique(
-                (*missing_providers, *lifecycle_services)
-            )
-            uses_network_provider = True
-        stop_services = (
-            services
-            if missing_providers
-            else tuple(reversed(lifecycle_services))
-            if uses_network_provider
-            else lifecycle_services
-        )
-
-        label_cid = self._stack_recreate_label_cid(stack, lifecycle_services)
-        if label_cid:
-            return UpdateScope(
-                services=None,
-                pull_services=services,
-                stack_reason=(
-                    f"selected service scope container {label_cid} has "
-                    f"{RECREATE_STACK_LABEL}=true"
-                ),
-                stop_services=self._stack_stop_services(stack),
-                force_recreate=False,
-            )
-        return UpdateScope(
-            services=lifecycle_services,
-            pull_services=services,
-            stop_services=stop_services,
-            up_no_deps=not uses_network_provider,
-        )
-
-    def _missing_network_mode_providers(
-        self,
-        stack: ComposeStack,
-        services: Sequence[str],
-        providers: Mapping[str, str],
-    ) -> tuple[str, ...]:
-        missing: list[str] = []
-        for service in services:
-            provider = providers.get(service)
-            if not provider or provider in services or provider in missing:
-                continue
-            cids = self.compose.ps_quiet(
-                stack.directory,
-                stack.file,
-                (provider,),
-                project_directory=stack.project_directory,
-            )
-            if not cids:
-                missing.append(provider)
-        return tuple(missing)
-
-    def _stack_stop_services(self, stack: ComposeStack) -> tuple[str, ...] | None:
-        try:
-            services = self.compose.config_services(
-                stack.directory,
-                stack.file,
-                project_directory=stack.project_directory,
-            )
-        except CommandError:
-            return None
-        if not services:
-            return None
-        return tuple(reversed(services))
-
-    def _stack_recreate_label_cid(
-        self,
-        stack: ComposeStack,
-        services: Sequence[str],
-    ) -> str:
-        for cid in self.compose.ps_quiet(
-            stack.directory,
-            stack.file,
-            services,
-            project_directory=stack.project_directory,
-        ):
-            for value in self.docker.try_inspect(cid, RECREATE_STACK_LABEL_FORMAT):
-                if _label_value_is_true(value):
-                    return cid
-        return ""
-
 
 def build_dry_run_plan(
     config: UpdaterConfig,
@@ -2151,28 +2043,6 @@ def _skipped(target: WudTarget, reason: str) -> DryRunPlanSkipped:
         image=target.first,
         desired_tag=target.desired_tag,
         reason=reason,
-    )
-
-
-def _tag_updates(matches: Sequence[Match]) -> tuple[TagUpdate, ...]:
-    services_by_update: dict[tuple[str, str, str], set[str]] = {}
-    for match in matches:
-        if match.target.desired_tag:
-            new_image = image_with_tag(match.compose_image, match.target.desired_tag)
-            key = (match.compose_image, match.target.desired_tag, new_image)
-            services_by_update.setdefault(key, set())
-            if match.service:
-                services_by_update[key].add(match.service)
-    return tuple(
-        TagUpdate(
-            old_image=old_image,
-            desired_tag=desired_tag,
-            new_image=new_image,
-            services=tuple(sorted(services)),
-        )
-        for (old_image, desired_tag, new_image), services in sorted(
-            services_by_update.items()
-        )
     )
 
 

@@ -86,6 +86,13 @@ EOF
     src/wud_updater/updates.py \
     src/wud_updater/updater_audit.py \
     src/wud_updater/updater_digest_pin.py \
+    src/wud_updater/updater_lifecycle.py \
+    src/wud_updater/updater_lifecycle_digest.py \
+    src/wud_updater/updater_lifecycle_health.py \
+    src/wud_updater/updater_lifecycle_recreate.py \
+    src/wud_updater/updater_lifecycle_rewrite.py \
+    src/wud_updater/updater_lifecycle_scope.py \
+    src/wud_updater/updater_lifecycle_state.py \
     src/wud_updater/updater_matching.py \
     src/wud_updater/updater_models.py \
     src/wud_updater/updater.py \
