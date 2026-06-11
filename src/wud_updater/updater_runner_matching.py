@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import replace
 
 from . import updater_audit
@@ -103,42 +103,25 @@ class _RunnerMatchingMixin:
     ) -> tuple[list[Match], list[WudTarget]]:
         container_images = {item.name: item.image for item in self.docker.try_container_images()}
         matches: list[Match] = []
-        skipped_tags: list[WudTarget] = []
         seen: set[tuple[int, int, str, str, str]] = set()
+        targets, skipped_tags = self._prefilter_targets(parsed.targets)
 
-        for target in parsed.targets:
-            if target.desired_tag and not self.options.allow_tag_updates:
-                skipped_tags.append(target)
-                continue
-
-            resolved = container_images.get(target.first, target.first)
-            allow_repo = target.allow_repo or resolved != target.first or not image_has_tag(resolved)
-
+        for target in targets:
             for stack in stacks:
-                for image in stack.images:
-                    services = _services_for_target_match(
-                        stack.service_images,
-                        image,
+                for resolved, image, service in self._match_target_in_stack(
+                    target,
+                    stack,
+                    container_images,
+                ):
+                    self._append_match_if_new(
+                        matches,
+                        seen,
+                        stack,
                         target,
                         resolved,
-                        allow_repo,
-                        allow_digest_pin_rematch=self.options.digest_pin_updates,
+                        image,
+                        service,
                     )
-                    if services is None:
-                        continue
-                    if services:
-                        for service in services:
-                            key = (stack.index, target.line_no, resolved, image, service)
-                            if key not in seen:
-                                matches.append(
-                                    Match(stack, target, resolved, image, service)
-                                )
-                                seen.add(key)
-                    else:
-                        key = (stack.index, target.line_no, resolved, image, "")
-                        if key not in seen:
-                            matches.append(Match(stack, target, resolved, image, ""))
-                            seen.add(key)
 
         matches.sort(
             key=lambda item: (
@@ -151,6 +134,65 @@ class _RunnerMatchingMixin:
             )
         )
         return matches, skipped_tags
+
+    def _prefilter_targets(
+        self,
+        targets: Sequence[WudTarget],
+    ) -> tuple[list[WudTarget], list[WudTarget]]:
+        filtered: list[WudTarget] = []
+        skipped_tags: list[WudTarget] = []
+        for target in targets:
+            if target.desired_tag and not self.options.allow_tag_updates:
+                skipped_tags.append(target)
+                continue
+            filtered.append(target)
+        return filtered, skipped_tags
+
+    def _match_target_in_stack(
+        self,
+        target: WudTarget,
+        stack: ComposeStack,
+        container_images: Mapping[str, str],
+    ) -> list[tuple[str, str, str]]:
+        resolved = container_images.get(target.first, target.first)
+        allow_repo = (
+            target.allow_repo or resolved != target.first or not image_has_tag(resolved)
+        )
+        candidates: list[tuple[str, str, str]] = []
+
+        for image in stack.images:
+            services = _services_for_target_match(
+                stack.service_images,
+                image,
+                target,
+                resolved,
+                allow_repo,
+                allow_digest_pin_rematch=self.options.digest_pin_updates,
+            )
+            if services is None:
+                continue
+            if services:
+                candidates.extend((resolved, image, service) for service in services)
+            else:
+                candidates.append((resolved, image, ""))
+
+        return candidates
+
+    def _append_match_if_new(
+        self,
+        matches: list[Match],
+        seen: set[tuple[int, int, str, str, str]],
+        stack: ComposeStack,
+        target: WudTarget,
+        resolved: str,
+        image: str,
+        service: str,
+    ) -> None:
+        key = (stack.index, target.line_no, resolved, image, service)
+        if key in seen:
+            return
+        matches.append(Match(stack, target, resolved, image, service))
+        seen.add(key)
 
     def _progress(
         self,
