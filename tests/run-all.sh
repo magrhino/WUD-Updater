@@ -100,6 +100,9 @@ EOF
     src/wud_updater/updater_logging.py \
     src/wud_updater/updater_planning.py \
     src/wud_updater/updater_preflight.py \
+    src/wud_updater/updater_runner_matching.py \
+    src/wud_updater/updater_runner_operations.py \
+    src/wud_updater/updater_runner_output.py \
     src/wud_updater/updater_tag_exclusions.py \
     src/wud_updater/web_auth.py \
     src/wud_updater/web_database.py \
