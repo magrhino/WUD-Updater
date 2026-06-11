@@ -27,6 +27,8 @@ from .compose import (
 from .compose_rewrite import (
     DIGEST_PIN_MARKER_PREFIX as DIGEST_PIN_MARKER_PREFIX,
     WUD_TAG_INCLUDE_LABEL as WUD_TAG_INCLUDE_LABEL,
+    _backup_compose as _backup_compose,
+    _exact_tag_include_matches as _exact_tag_include_matches,
     _is_simple_exact_tag_include as _is_simple_exact_tag_include,
     apply_compose_digest_pins as apply_compose_digest_pins,
     apply_compose_tag_exclusions as apply_compose_tag_exclusions,
@@ -77,24 +79,46 @@ from .updater_lifecycle import (
     CONTAINER_SUMMARY_FORMAT as CONTAINER_SUMMARY_FORMAT,
     HEALTH_LOG_FORMAT as HEALTH_LOG_FORMAT,
     StackLifecycleExecutor,
+    _cid_is_ok as _cid_is_ok,
+    _split_summary as _split_summary,
+    _stack_level_scope_message as _stack_level_scope_message,
+    _tag_update_failure_progress_message as _tag_update_failure_progress_message,
+    _tag_update_failure_progress_phase as _tag_update_failure_progress_phase,
+    _updated_images as _updated_images,
 )
 from .updater_digest_pin import (
+    _digest_pin_candidates as _digest_pin_candidates,
     _digest_pin_match_tag as _digest_pin_match_tag,
+    _digest_pin_resolve_error as _digest_pin_resolve_error,
+    _digest_pin_tag_materialization_updates as _digest_pin_tag_materialization_updates,
+    _resolve_digest_pin_candidate as _resolve_digest_pin_candidate,
     digest_pin_update_from_values as digest_pin_update_from_values,
 )
 from .updater_matching import (
     RECREATE_STACK_LABEL as RECREATE_STACK_LABEL,
     RECREATE_STACK_LABEL_FORMAT as RECREATE_STACK_LABEL_FORMAT,
+    _expand_network_mode_services as _expand_network_mode_services,
     _failed_line_numbers,
     _failure_target_lines as _failure_target_lines,
+    _first_match_by_line as _first_match_by_line,
+    _label_value_is_true as _label_value_is_true,
+    _network_mode_providers as _network_mode_providers,
+    _ordered_unique as _ordered_unique,
     _plan_line as _plan_line,
     _scope_plan_label as _scope_plan_label,
+    _services_for_image as _services_for_image,
     _services_for_target_match as _services_for_target_match,
     _stacks_to_update,
     _tag_exclusion_preflight_matches,
     _target_image_for_match as _target_image_for_match,
     _unique_matches,
     _update_services as _update_services,
+)
+from .updater_planning import (
+    _digest_check_allow_repo as _digest_check_allow_repo,
+    _digest_check_image as _digest_check_image,
+    _tag_exclusion_updates_by_stack as _tag_exclusion_updates_by_stack,
+    _unique_tag_exclusion_updates as _unique_tag_exclusion_updates,
 )
 from .wud_file import (
     ParsedWudFile,
@@ -122,7 +146,10 @@ from .updater_models import (
     UpdaterProgressEvent,
 )
 from .updater_runner_matching import _RunnerMatchingMixin
-from .updater_runner_operations import _RunnerOperationsMixin
+from .updater_runner_operations import (
+    _RunnerOperationsMixin,
+    _SERVICES_UNSET as _SERVICES_UNSET,
+)
 from .updater_runner_output import _RunnerOutputMixin
 
 VALID_MODES = frozenset({"pause", "stop", "live"})
@@ -577,6 +604,10 @@ def _db_path(options: UpdaterOptions, environ: Mapping[str, str]) -> Path:
     return updater_audit.db_path(options, environ)
 
 
+def _sqlite_parent_missing(db_path: Path) -> bool:
+    return updater_audit.sqlite_parent_missing(db_path)
+
+
 def _apply_sqlite_owner(
     db_path: Path,
     owner: OwnerConfig,
@@ -589,3 +620,7 @@ def _apply_sqlite_owner(
         chown_parent=chown_parent,
         apply_owner=apply_configured_owner,
     )
+
+
+def _sqlite_state_paths(db_path: Path) -> tuple[Path, ...]:
+    return updater_audit.sqlite_state_paths(db_path)
