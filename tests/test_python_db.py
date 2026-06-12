@@ -3,6 +3,7 @@ from __future__ import annotations
 import sqlite3
 import tempfile
 import unittest
+from collections.abc import Iterator, Mapping
 from pathlib import Path
 
 from wud_updater.db import (
@@ -36,14 +37,17 @@ class DatabaseTests(unittest.TestCase):
         )
 
     def test_digest_provenance_from_row_treats_missing_columns_as_empty(self) -> None:
-        class SparseRow:
-            def keys(self) -> tuple[str, ...]:
-                return ("digest_source_image",)
-
+        class SparseRow(Mapping[str, str]):
             def __getitem__(self, key: str) -> str:
                 if key == "digest_source_image":
                     return "repo/app:latest"
                 raise KeyError(key)
+
+            def __iter__(self) -> Iterator[str]:
+                return iter(("digest_source_image",))
+
+            def __len__(self) -> int:
+                return 1
 
         self.assertEqual(
             digest_provenance_from_row({"digest_source_image": "repo/app:latest"}),
