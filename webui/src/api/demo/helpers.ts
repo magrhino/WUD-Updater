@@ -457,7 +457,7 @@ export function upsertBy<T>(items: T[], next: T, matches: (item: T) => boolean):
 }
 
 export function escapeRegex(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return value.replace(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`);
 }
 
 export function nowIso(): string {
@@ -465,8 +465,5 @@ export function nowIso(): string {
 }
 
 export function clone<T>(value: T): T {
-  if (typeof structuredClone === "function") {
-    return structuredClone(value);
-  }
-  return JSON.parse(JSON.stringify(value)) as T;
+  return structuredClone(value);
 }

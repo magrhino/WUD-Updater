@@ -16,6 +16,7 @@ import type {
   PendingRemovalPlanResponse,
   PendingResponse,
   PlanResponse,
+  PlanStatus,
   ReleaseNotesResponse,
   RunDetail,
   RunLogResponse,
@@ -76,6 +77,16 @@ import {
   upsertBy,
 } from "./helpers";
 import type { DemoJobRecord, DemoPendingItem, DemoRunFixture, DemoStackName } from "./types";
+
+function planStatus(selectedCount: number, issueCount: number): PlanStatus {
+  if (selectedCount === 0) {
+    return "empty";
+  }
+  if (issueCount > 0) {
+    return "blocked";
+  }
+  return "ready";
+}
 
 export class DemoApiState {
   pending = clone(INITIAL_PENDING);
@@ -414,38 +425,65 @@ export class DemoApiState {
     values: Record<string, string>,
   ): ManagedSettingsUpdateResponse {
     for (const [key, value] of Object.entries(values)) {
-      if (key === "theme_preference") {
-        if (!["system", "light", "dark"].includes(value)) {
-          throw new Error("theme_preference must be system, light, or dark");
-        }
-        this.themePreference = value;
-        this.themePreferenceConfigured = true;
-      } else if (key === "onboarding_checklist") {
-        if (!["visible", "dismissed"].includes(value)) {
-          throw new Error("onboarding_checklist must be visible or dismissed");
-        }
-        this.onboardingDismissedAt =
-          value === "dismissed"
-            ? this.onboardingDismissedAt ||
-              new Date("2026-05-31T00:00:00.000Z").toISOString()
-            : "";
-      } else if (key === "compose_ignore_paths") {
-        this.composeIgnorePaths = normalizeDemoComposeIgnorePaths(value);
-        this.composeIgnorePathsConfigured = true;
-      } else if (key === "digest_pin_updates") {
-        if (!["false", "true"].includes(value)) {
-          throw new Error("digest_pin_updates must be false or true");
-        }
-        this.digestPinUpdates = value;
-        this.digestPinUpdatesConfigured = true;
-      } else {
-        throw new Error(`managed setting is not editable: ${key}`);
-      }
+      this.updateManagedSetting(key, value);
     }
     return {
       managed: this.settings().managed,
       audit_run_id: this.nextAudit++,
     };
+  }
+
+  private updateManagedSetting(key: string, value: string): void {
+    switch (key) {
+      case "theme_preference":
+        this.updateThemePreference(value);
+        return;
+      case "onboarding_checklist":
+        this.updateOnboardingChecklist(value);
+        return;
+      case "compose_ignore_paths":
+        this.updateComposeIgnorePaths(value);
+        return;
+      case "digest_pin_updates":
+        this.updateDigestPinUpdates(value);
+        return;
+      default:
+        throw new Error(`managed setting is not editable: ${key}`);
+    }
+  }
+
+  private updateThemePreference(value: string): void {
+    if (!["system", "light", "dark"].includes(value)) {
+      throw new Error("theme_preference must be system, light, or dark");
+    }
+    this.themePreference = value;
+    this.themePreferenceConfigured = true;
+  }
+
+  private updateOnboardingChecklist(value: string): void {
+    if (!["visible", "dismissed"].includes(value)) {
+      throw new Error("onboarding_checklist must be visible or dismissed");
+    }
+    if (value === "visible") {
+      this.onboardingDismissedAt = "";
+      return;
+    }
+    if (!this.onboardingDismissedAt) {
+      this.onboardingDismissedAt = new Date("2026-05-31T00:00:00.000Z").toISOString();
+    }
+  }
+
+  private updateComposeIgnorePaths(value: string): void {
+    this.composeIgnorePaths = normalizeDemoComposeIgnorePaths(value);
+    this.composeIgnorePathsConfigured = true;
+  }
+
+  private updateDigestPinUpdates(value: string): void {
+    if (!["false", "true"].includes(value)) {
+      throw new Error("digest_pin_updates must be false or true");
+    }
+    this.digestPinUpdates = value;
+    this.digestPinUpdatesConfigured = true;
   }
 
   pendingResponse(): PendingResponse {
@@ -638,7 +676,7 @@ export class DemoApiState {
     const cleanupItems = unmatchedSelected.map(planCleanupItem);
 
     const canApply = matchedSelected.length > 0 && issues.length === 0;
-    const status = selected.length === 0 ? "empty" : issues.length > 0 ? "blocked" : "ready";
+    const status = planStatus(selected.length, issues.length);
 
     return {
       plan_id: `demo-plan-${Date.now()}`,

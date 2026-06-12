@@ -189,7 +189,7 @@ class DemoJobStream extends EventTarget {
 
   close(): void {
     for (const timer of this.timers) {
-      window.clearTimeout(timer);
+      globalThis.clearTimeout(timer);
     }
     this.timers = [];
   }
@@ -250,7 +250,7 @@ class DemoJobStream extends EventTarget {
   }
 
   private queue(callback: () => void, delay: number): void {
-    this.timers.push(window.setTimeout(callback, delay));
+    this.timers.push(globalThis.setTimeout(callback, delay));
   }
 
   private emit(type: string, data: unknown): void {
