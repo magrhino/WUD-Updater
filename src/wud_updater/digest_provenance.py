@@ -53,7 +53,7 @@ class DigestTagProvenance:
 
 
 def empty_digest_provenance_sql_values() -> dict[str, str]:
-    return {column: "" for column in DIGEST_PROVENANCE_SQL_COLUMNS}
+    return dict.fromkeys(DIGEST_PROVENANCE_SQL_COLUMNS, "")
 
 
 def digest_provenance_from_update(
@@ -97,14 +97,17 @@ def digest_provenance_from_digest_target(
 
 
 def digest_provenance_from_row(row: Mapping[str, Any]) -> DigestTagProvenance | None:
+    row_values = dict(row)
     values = {
-        "source_image": str(row["digest_source_image"] or ""),
-        "resolved_tag": str(row["digest_resolved_tag"] or ""),
-        "watch_tag": str(row["digest_watch_tag"] or ""),
-        "target_digest": str(row["digest_target_digest"] or ""),
-        "final_image": str(row["digest_final_image"] or ""),
-        "provenance_source": str(row["digest_provenance_source"] or ""),
-        "provenance_confidence": str(row["digest_provenance_confidence"] or ""),
+        "source_image": str(row_values.get("digest_source_image") or ""),
+        "resolved_tag": str(row_values.get("digest_resolved_tag") or ""),
+        "watch_tag": str(row_values.get("digest_watch_tag") or ""),
+        "target_digest": str(row_values.get("digest_target_digest") or ""),
+        "final_image": str(row_values.get("digest_final_image") or ""),
+        "provenance_source": str(row_values.get("digest_provenance_source") or ""),
+        "provenance_confidence": str(
+            row_values.get("digest_provenance_confidence") or ""
+        ),
     }
     provenance = DigestTagProvenance(**values)
     return None if provenance.is_empty() else provenance

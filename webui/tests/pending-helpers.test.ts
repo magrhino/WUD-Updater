@@ -49,9 +49,9 @@ describe("pending helper modules", () => {
   it("formats digest provenance with tag context and truncated digest detail", () => {
     const digest = "sha256:abcdefghijklmnopqrstuvwxyz0123456789";
     const provenance = {
-      source_image: "repo/app:latest",
+      source_image: "repo/app:stable",
       resolved_tag: "latest",
-      watch_tag: "latest",
+      watch_tag: "stable",
       target_digest: digest,
       final_image: `repo/app@${digest}`,
       provenance_source: "plan",
@@ -62,7 +62,7 @@ describe("pending helper modules", () => {
       "sha256:abcdefghijklm...yz0123456789",
     );
     expect(digestProvenanceDisplay(provenance)).toMatchObject({
-      primary: "repo/app: latest -> latest",
+      primary: "repo/app: stable -> latest",
       digest: "Digest: sha256:abcdefghijklm...yz0123456789",
     });
     expect(digestProvenanceDisplay(provenance)?.title).toContain(
@@ -71,8 +71,8 @@ describe("pending helper modules", () => {
     expect(
       planLineDigestPinLabel({
         line_no: 1,
-        raw: `repo/app:latest ${digest}`,
-        image: "repo/app:latest",
+        raw: `repo/app:stable ${digest}`,
+        image: "repo/app:stable",
         resolved_image: "repo/app:latest",
         compose_image: "repo/app@sha256:old",
         target_image: `repo/app@${digest}`,
@@ -83,7 +83,7 @@ describe("pending helper modules", () => {
         digest_provenance: provenance,
       }),
     ).toBe(
-      "repo/app: latest -> latest (Digest: sha256:abcdefghijklm...yz0123456789)",
+      "repo/app: stable -> latest (Digest: sha256:abcdefghijklm...yz0123456789)",
     );
   });
 

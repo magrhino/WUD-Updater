@@ -20,10 +20,41 @@ from wud_updater.db import (
     update_pending_update,
     upsert_known_image,
 )
-from wud_updater.digest_provenance import DigestTagProvenance
+from wud_updater.digest_provenance import (
+    DIGEST_PROVENANCE_SQL_COLUMNS,
+    DigestTagProvenance,
+    digest_provenance_from_row,
+    empty_digest_provenance_sql_values,
+)
 
 
 class DatabaseTests(unittest.TestCase):
+    def test_empty_digest_provenance_sql_values_returns_empty_columns(self) -> None:
+        self.assertEqual(
+            empty_digest_provenance_sql_values(),
+            dict.fromkeys(DIGEST_PROVENANCE_SQL_COLUMNS, ""),
+        )
+
+    def test_digest_provenance_from_row_treats_missing_columns_as_empty(self) -> None:
+        class SparseRow:
+            def keys(self) -> tuple[str, ...]:
+                return ("digest_source_image",)
+
+            def __getitem__(self, key: str) -> str:
+                if key == "digest_source_image":
+                    return "repo/app:latest"
+                raise KeyError(key)
+
+        self.assertEqual(
+            digest_provenance_from_row({"digest_source_image": "repo/app:latest"}),
+            DigestTagProvenance(source_image="repo/app:latest"),
+        )
+        self.assertEqual(
+            digest_provenance_from_row(SparseRow()),
+            DigestTagProvenance(source_image="repo/app:latest"),
+        )
+        self.assertIsNone(digest_provenance_from_row({}))
+
     def test_initial_db_creation_creates_expected_tables(self) -> None:
         with tempfile.TemporaryDirectory(prefix="wud-python-db.") as tmpdir:
             db_path = Path(tmpdir) / "state" / "wud-updater.sqlite"

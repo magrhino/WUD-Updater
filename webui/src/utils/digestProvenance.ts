@@ -15,8 +15,9 @@ export function digestProvenanceDisplay(
   const repo = imageRepositoryLabel(
     provenance.source_image || provenance.final_image,
   );
-  const fromTag = provenance.resolved_tag || "unknown";
-  const toTag = provenance.watch_tag || provenance.resolved_tag || "unknown";
+  const fromTag =
+    provenance.watch_tag || provenance.resolved_tag || "unknown";
+  const toTag = provenance.resolved_tag || provenance.watch_tag || "unknown";
   const digest = provenance.target_digest
     ? `Digest: ${displayDigest(provenance.target_digest)}`
     : "";
