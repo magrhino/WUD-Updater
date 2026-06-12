@@ -62,9 +62,9 @@ export function createDemoWebApi(): WebApi {
     updateTargets: async () => state.updateTargets(),
     diagnosticsSupportBundle: async () => ({
       wud_updater_version: "demo-v0.0.0",
-      settings: await state.settings(),
-      doctor_result: await state.doctor(),
-      pending_summary: await state.pendingResponse(),
+      settings: state.settings(),
+      doctor_result: state.doctor(),
+      pending_summary: state.pendingResponse(),
       last_run_status: null,
       diagnostics_warnings: [],
       discovery_warnings: [],
