@@ -10,7 +10,8 @@ from types import SimpleNamespace
 
 from wud_updater import web as web_module
 from wud_updater import web_jobs, web_scheduler, web_settings
-from wud_updater.db import init_db, open_db
+from wud_updater.db import init_db, open_db, upsert_known_image
+from wud_updater.digest_provenance import DigestTagProvenance
 from wud_updater.locks import DirectoryLock
 
 from tests.web_test_helpers import (
@@ -923,10 +924,12 @@ def test_auto_update_candidate_reuses_effective_config_snapshot(
         *,
         host_docker_base,
         environ,
+        known_digest_provenance_by_service,
     ):
         observed["resolve_config"] = config
         observed["host_docker_base"] = host_docker_base
         observed["environ"] = environ
+        observed["grouping_provenance"] = known_digest_provenance_by_service
         return SimpleNamespace(
             status="ready",
             groups=(
@@ -956,6 +959,22 @@ def test_auto_update_candidate_reuses_effective_config_snapshot(
     monkeypatch.setattr(web_scheduler, "build_dry_run_plan", fake_build_dry_run_plan)
     with open_db(settings.config.db_path) as conn:
         init_db(conn)
+        upsert_known_image(
+            conn,
+            service_key="stack/app",
+            image="repo/app@sha256:old",
+            image_id="sha256:old-id",
+            digest="repo/app@sha256:old",
+            digest_provenance=DigestTagProvenance(
+                source_image="repo/app:latest",
+                resolved_tag="latest",
+                watch_tag="latest",
+                target_digest="sha256:old",
+                final_image="repo/app@sha256:old",
+                provenance_source="apply",
+                provenance_confidence="verified",
+            ),
+        )
         with conn:
             conn.execute(
                 """
@@ -995,9 +1014,13 @@ def test_auto_update_candidate_reuses_effective_config_snapshot(
     assert observed["resolve_config"] is first_config
     assert observed["host_docker_base"] == settings.host_docker_base
     assert observed["environ"] == settings.command_env
+    grouping_provenance = observed["grouping_provenance"]
+    assert grouping_provenance["stack/app"].resolved_tag == "latest"
     assert observed["plan_config"].docker_base == first_config.docker_base
     assert observed["plan_config"].docker_base != second_config.docker_base
     assert observed["plan_kwargs"]["line_numbers"] == (1,)
+    plan_provenance = observed["plan_kwargs"]["known_digest_provenance_by_service"]
+    assert plan_provenance is grouping_provenance
 
 
 def test_auto_update_selection_prefers_earliest_scheduled_mode() -> None:
