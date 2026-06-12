@@ -22,6 +22,11 @@ from .db import (
     upsert_tag_exclusion_rule,
     utc_timestamp as db_utc_timestamp,
 )
+from .digest_provenance import (
+    DigestTagProvenance,
+    digest_from_image,
+    digest_provenance_from_update,
+)
 from .file_ops import (
     OwnerConfig,
     OwnerConfigError,
@@ -33,7 +38,9 @@ from .updater_matching import (
     _first_match_by_line,
     _line_status_reason,
     _service_key,
+    _stacks_to_update,
 )
+from .updater_digest_pin import _digest_pin_match_tag
 from .updater_models import (
     Match,
     StackStatus,
@@ -276,6 +283,7 @@ def mark_matched_pending(
 ) -> None:
     if runner.audit_conn is None or runner.audit_run_id is None:
         return
+    provenance_by_line = _planned_digest_provenance_by_line(runner, matches)
     for line_no, match in _first_match_by_line(matches).items():
         update_pending_update(
             runner.audit_conn,
@@ -286,6 +294,7 @@ def mark_matched_pending(
             service_key=_service_key(match),
             stack_name=match.stack.name,
             service_name=match.service,
+            digest_provenance=provenance_by_line.get(line_no),
         )
 
 
@@ -348,6 +357,7 @@ def mark_successful_pending(
         if line_no in failed:
             continue
         reason = _line_status_reason(line_no, matches, stack_statuses)
+        digest_provenance = _applied_digest_provenance_for_match(runner, match)
         update_pending_update(
             runner.audit_conn,
             run_id=runner.audit_run_id,
@@ -357,6 +367,7 @@ def mark_successful_pending(
             service_key=_service_key(match),
             stack_name=match.stack.name,
             service_name=match.service,
+            digest_provenance=digest_provenance,
         )
 
 
@@ -374,6 +385,7 @@ def record_update_events(
             match.stack.index,
             StackStatus("failure", "missing"),
         )
+        digest_provenance = _digest_provenance_for_event(runner, match)
         insert_event(
             runner.audit_conn,
             run_id=runner.audit_run_id,
@@ -381,8 +393,19 @@ def record_update_events(
             stack_name=match.stack.name,
             image=match.compose_image,
             target_image=runner._target_image_for_match(match),
+            old_digest=(
+                digest_from_image(match.compose_image)
+                if digest_provenance is not None
+                else ""
+            ),
+            new_digest=(
+                digest_provenance.target_digest
+                if digest_provenance is not None
+                else ""
+            ),
             status=status.status,
             metadata_json=json.dumps({"reason": status.reason}, sort_keys=True),
+            digest_provenance=digest_provenance,
         )
 
 
@@ -398,13 +421,77 @@ def record_known_images(
         if status is None or status.status != "success":
             continue
         image = runner._target_image_for_match(match)
+        digest_provenance = _applied_digest_provenance_for_match(runner, match)
         upsert_known_image(
             runner.audit_conn,
             service_key=_service_key(match),
             image=image,
             image_id=runner.docker.image_id(image),
             digest=runner.docker.image_digest(image),
+            digest_provenance=digest_provenance,
         )
+
+
+def _planned_digest_provenance_by_line(
+    runner: Any,
+    matches: Sequence[Match],
+) -> dict[int, DigestTagProvenance]:
+    by_line: dict[int, DigestTagProvenance] = {}
+    if not runner.options.digest_pin_updates:
+        return by_line
+    for stack in _stacks_to_update(matches):
+        stack_matches = [
+            match for match in matches if match.stack.index == stack.index
+        ]
+        updates = runner._digest_pin_updates(stack_matches)
+        by_key = {
+            (update.old_image, update.resolved_tag): update
+            for update in updates
+        }
+        for match in stack_matches:
+            resolved_tag = _digest_pin_match_tag(match)
+            if not resolved_tag:
+                continue
+            update = by_key.get((match.compose_image, resolved_tag))
+            if update is None:
+                continue
+            by_line.setdefault(
+                match.target.line_no,
+                digest_provenance_from_update(
+                    update,
+                    provenance_source="plan",
+                    provenance_confidence="verified",
+                ),
+            )
+    return by_line
+
+
+def _applied_digest_provenance_for_match(
+    runner: Any,
+    match: Match,
+) -> DigestTagProvenance | None:
+    update = runner.applied_digest_pins.get(
+        (match.stack.index, match.target.line_no, match.service)
+    )
+    if update is None:
+        return None
+    return digest_provenance_from_update(
+        update,
+        provenance_source="apply",
+        provenance_confidence="verified",
+    )
+
+
+def _digest_provenance_for_event(
+    runner: Any,
+    match: Match,
+) -> DigestTagProvenance | None:
+    applied = _applied_digest_provenance_for_match(runner, match)
+    if applied is not None:
+        return applied
+    return _planned_digest_provenance_by_line(runner, (match,)).get(
+        match.target.line_no
+    )
 
 
 def db_path(options: UpdaterOptions, environ: Mapping[str, str]) -> Path:

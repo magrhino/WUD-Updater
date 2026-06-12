@@ -14,6 +14,7 @@ import { createWudRouter } from "../src/router";
 import { useAuthStore } from "../src/stores/auth";
 import { useSettingsStore } from "../src/stores/settings";
 import { useRunsStore } from "../src/stores/runs";
+import { displayDigest } from "../src/utils/digestProvenance";
 import RunDetailView from "../src/views/RunDetailView.vue";
 import RunsView from "../src/views/RunsView.vue";
 import {
@@ -298,6 +299,8 @@ describe("RunDetailView", () => {
     const newDigest = "sha256:new-digest-value-12345";
     const newOnlyDigest = "sha256:new-only-digest-value";
     const oldOnlyDigest = "sha256:old-only-digest-value";
+    const provenanceDigest =
+      "sha256:2222222222222222222222222222222222222222222222222222222222222222";
     const oldImageId = "sha256:old-image-id-12345";
     const newImageId = "sha256:new-image-id-12345";
     const firstDetail = runDetail({
@@ -351,6 +354,24 @@ describe("RunDetailView", () => {
           image: "repo/fallback:1.0",
           old_digest: oldOnlyDigest,
         }),
+        runEvent({
+          id: 103,
+          run_id: 42,
+          service_name: "digest",
+          stack_name: "media",
+          image: "repo/digest@sha256:old",
+          target_image: `repo/digest@${provenanceDigest}`,
+          new_digest: provenanceDigest,
+          digest_provenance: {
+            source_image: "repo/digest:latest",
+            resolved_tag: "latest",
+            watch_tag: "latest",
+            target_digest: provenanceDigest,
+            final_image: `repo/digest@${provenanceDigest}`,
+            provenance_source: "apply",
+            provenance_confidence: "verified",
+          },
+        }),
       ],
     });
     const secondDetail = runDetail({
@@ -396,6 +417,13 @@ describe("RunDetailView", () => {
     expect(wrapper.text()).toContain("repo/api:1.0");
     expect(wrapper.text()).toContain("stack-only");
     expect(wrapper.text()).toContain("service");
+    expect(wrapper.text()).toContain("repo/digest: latest -> latest");
+    expect(wrapper.text()).toContain(
+      `Digest: ${displayDigest(provenanceDigest)}`,
+    );
+    expect(wrapper.text().indexOf("repo/digest: latest -> latest")).toBeLessThan(
+      wrapper.text().indexOf(`Digest: ${displayDigest(provenanceDigest)}`),
+    );
     expect(wrapper.text()).toContain(
       `Digest: ${oldDigest.substring(0, 15)}... -> ${newDigest.substring(0, 15)}...`,
     );

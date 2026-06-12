@@ -1851,10 +1851,29 @@ class PythonUpdateFromWudTests(FakeDockerTestCase):
         )
         self.assertNotRegex(calls, r"(?m)^manifest inspect docker\.io/repo/app:2\.0$")
         self.assertRegex(calls, r"compose -f docker-compose.yml pull app")
+        pending = self.db_rows("SELECT * FROM pending_updates")
         events = self.db_rows("SELECT * FROM update_events")
         known = self.db_rows("SELECT * FROM known_images")
         self.assertEqual(events[0]["target_image"], "repo/app@sha256:index")
+        self.assertEqual(events[0]["new_digest"], "sha256:index")
+        self.assertEqual(events[0]["digest_source_image"], "repo/app:1.0")
+        self.assertEqual(events[0]["digest_resolved_tag"], "2.0")
+        self.assertEqual(events[0]["digest_watch_tag"], "2.0")
+        self.assertEqual(events[0]["digest_target_digest"], "sha256:index")
+        self.assertEqual(events[0]["digest_final_image"], "repo/app@sha256:index")
+        self.assertEqual(events[0]["digest_provenance_source"], "apply")
+        self.assertEqual(events[0]["digest_provenance_confidence"], "verified")
+        self.assertEqual(pending[0]["digest_source_image"], "repo/app:1.0")
+        self.assertEqual(pending[0]["digest_resolved_tag"], "2.0")
+        self.assertEqual(pending[0]["digest_watch_tag"], "2.0")
+        self.assertEqual(pending[0]["digest_target_digest"], "sha256:index")
+        self.assertEqual(pending[0]["digest_final_image"], "repo/app@sha256:index")
+        self.assertEqual(pending[0]["digest_provenance_source"], "apply")
         self.assertEqual(known[0]["image"], "repo/app@sha256:index")
+        self.assertEqual(known[0]["digest_source_image"], "repo/app:1.0")
+        self.assertEqual(known[0]["digest_resolved_tag"], "2.0")
+        self.assertEqual(known[0]["digest_target_digest"], "sha256:index")
+        self.assertEqual(known[0]["digest_provenance_source"], "apply")
 
     def test_digest_pin_os_error_records_failure_without_tag_rollback(self) -> None:
         self.prepare_digest_pin_latest_update()
@@ -2307,7 +2326,7 @@ class PythonUpdateFromWudTests(FakeDockerTestCase):
         self.set_image_state(
             "repo/app@sha256:child",
             "sha256:new-config",
-            "sha256:child",
+            "sha256:docker-repodigest",
         )
         self.set_manifest_stdout(
             "docker.io/repo/app:latest",
@@ -2326,9 +2345,26 @@ class PythonUpdateFromWudTests(FakeDockerTestCase):
         self.assertIn("# wud-updater.resolved-tag=latest", content)
         self.assertIn("image: repo/app@sha256:child", content)
         events = self.db_rows("SELECT * FROM update_events")
+        pending = self.db_rows("SELECT * FROM pending_updates")
         known = self.db_rows("SELECT * FROM known_images")
         self.assertEqual(events[0]["target_image"], "repo/app@sha256:child")
+        self.assertEqual(events[0]["new_digest"], "sha256:child")
+        self.assertEqual(events[0]["digest_source_image"], "repo/app:latest")
+        self.assertEqual(events[0]["digest_resolved_tag"], "latest")
+        self.assertEqual(events[0]["digest_watch_tag"], "latest")
+        self.assertEqual(events[0]["digest_target_digest"], "sha256:child")
+        self.assertEqual(events[0]["digest_final_image"], "repo/app@sha256:child")
+        self.assertEqual(events[0]["digest_provenance_source"], "apply")
+        self.assertEqual(events[0]["digest_provenance_confidence"], "verified")
+        self.assertEqual(pending[0]["digest_source_image"], "repo/app:latest")
+        self.assertEqual(pending[0]["digest_resolved_tag"], "latest")
+        self.assertEqual(pending[0]["digest_target_digest"], "sha256:child")
+        self.assertEqual(pending[0]["digest_provenance_source"], "apply")
         self.assertEqual(known[0]["image"], "repo/app@sha256:child")
+        self.assertTrue(known[0]["digest"].endswith("@sha256:docker-repodigest"))
+        self.assertEqual(known[0]["digest_target_digest"], "sha256:child")
+        self.assertEqual(known[0]["digest_final_image"], "repo/app@sha256:child")
+        self.assertEqual(known[0]["digest_provenance_source"], "apply")
 
     def test_digest_pin_only_health_failure_rolls_back_compose(self) -> None:
         self.wud_file.write_text(

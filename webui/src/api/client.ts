@@ -1,6 +1,7 @@
 import { createDemoWebApi } from "./demo";
 
 export type {
+  DigestTagProvenance,
   // Pending updates
   PendingItem,
   PendingDiagnostic,

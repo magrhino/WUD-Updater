@@ -101,6 +101,7 @@ export function planStack(name: DemoStackName, items: DemoPendingItem[]): PlanSt
       digest: item.digest,
       desired_tag: item.desired_tag,
       action: item.action,
+      digest_provenance: item.digest_provenance ?? null,
     }));
   return {
     name,
@@ -168,6 +169,8 @@ export function runFromApply(
       demoServiceKey(item),
       "success",
       index + runId * 100,
+      undefined,
+      item.digest_provenance,
     ),
   );
   const events = selectedItems.map((item, index) =>
@@ -179,6 +182,7 @@ export function runFromApply(
       item.image,
       item.target_image,
       "success",
+      item.digest_provenance,
     ),
   );
   const summary: RunSummary = {

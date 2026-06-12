@@ -232,7 +232,7 @@ a {
   min-width: 0;
 }
 
-.self-update-banner-main > svg {
+.self-update-banner-main>svg {
   flex: 0 0 auto;
   color: var(--color-operational-teal);
 }
@@ -507,7 +507,7 @@ a {
   gap: 16px;
 }
 
-.section-heading > div {
+.section-heading>div {
   min-width: 0;
 }
 
@@ -564,17 +564,17 @@ a {
   min-width: 0;
 }
 
-.settings-safety-main > svg {
+.settings-safety-main>svg {
   flex: 0 0 auto;
   margin-top: 2px;
   color: var(--color-operational-teal);
 }
 
-.settings-safety-strip.is-mutable .settings-safety-main > svg {
+.settings-safety-strip.is-mutable .settings-safety-main>svg {
   color: var(--color-warning);
 }
 
-.settings-safety-main > div {
+.settings-safety-main>div {
   display: grid;
   gap: 3px;
   min-width: 0;
@@ -656,7 +656,7 @@ a {
   min-width: 0;
 }
 
-.settings-zone-heading > div {
+.settings-zone-heading>div {
   display: grid;
   gap: 3px;
   min-width: 0;
@@ -701,7 +701,7 @@ a {
   background: var(--color-panel-tint);
 }
 
-.settings-risk-facts > div {
+.settings-risk-facts>div {
   display: grid;
   gap: 3px;
   min-width: 0;
@@ -832,12 +832,10 @@ a {
   position: absolute;
   inset: 0;
   transform: translateX(-100%);
-  background: linear-gradient(
-    90deg,
-    transparent,
-    color-mix(in srgb, var(--color-surface) 68%, transparent),
-    transparent
-  );
+  background: linear-gradient(90deg,
+      transparent,
+      color-mix(in srgb, var(--color-surface) 68%, transparent),
+      transparent);
   animation: skeleton-scan 1.4s var(--ease-out-quart) infinite;
 }
 
@@ -879,7 +877,7 @@ a {
   border-top: 1px solid var(--color-border-subtle);
 }
 
-.settings-row > div {
+.settings-row>div {
   display: grid;
   gap: 3px;
   min-width: 0;
@@ -904,7 +902,7 @@ a {
   line-height: 1.45;
 }
 
-.settings-row > .n-tag {
+.settings-row>.n-tag {
   justify-self: start;
 }
 
@@ -942,7 +940,7 @@ a {
   background: var(--color-panel-tint);
 }
 
-.settings-preference-row > div {
+.settings-preference-row>div {
   display: grid;
   gap: 4px;
   min-width: 0;
@@ -959,7 +957,7 @@ a {
   font-size: 0.86rem;
 }
 
-.settings-preference-row > .settings-preference-controls {
+.settings-preference-row>.settings-preference-controls {
   display: flex;
   flex-wrap: wrap;
   justify-content: flex-end;
@@ -971,7 +969,7 @@ a {
   min-width: 180px;
 }
 
-.settings-preference-row > .settings-textarea-controls {
+.settings-preference-row>.settings-textarea-controls {
   align-items: stretch;
   flex-direction: column;
 }
@@ -990,7 +988,7 @@ a {
   border-top: 1px solid var(--color-border-subtle);
 }
 
-.settings-action-row > div {
+.settings-action-row>div {
   display: grid;
   gap: 4px;
   min-width: 0;
@@ -1025,7 +1023,7 @@ a {
   align-items: flex-start;
 }
 
-.settings-actions-grid .settings-action-row > div {
+.settings-actions-grid .settings-action-row>div {
   flex: 1 1 180px;
 }
 
@@ -1098,8 +1096,8 @@ a {
   color: #a73535;
 }
 
-.doctor-check-title > div,
-.doctor-suggestion > div {
+.doctor-check-title>div,
+.doctor-suggestion>div {
   display: grid;
   gap: 3px;
   min-width: 0;
@@ -1191,18 +1189,18 @@ a {
   min-width: 0;
 }
 
-.onboarding-next-main > svg {
+.onboarding-next-main>svg {
   flex: 0 0 auto;
   margin-top: 2px;
   color: var(--color-warning);
 }
 
-.onboarding-next-action.is-ready .onboarding-next-main > svg {
+.onboarding-next-action.is-ready .onboarding-next-main>svg {
   color: var(--color-action-blue);
 }
 
-.onboarding-next-main > div,
-.core-tour-main > div {
+.onboarding-next-main>div,
+.core-tour-main>div {
   display: grid;
   gap: 4px;
   min-width: 0;
@@ -1229,7 +1227,7 @@ a {
   flex: 1 1 auto;
 }
 
-.core-tour-main > .n-tag {
+.core-tour-main>.n-tag {
   flex: 0 0 auto;
   margin-top: 1px;
 }
@@ -1300,21 +1298,21 @@ a {
   min-width: 0;
 }
 
-.onboarding-check-main > svg {
+.onboarding-check-main>svg {
   flex: 0 0 auto;
   margin-top: 2px;
   color: var(--color-operational-teal);
 }
 
-.onboarding-check-row.status-warn .onboarding-check-main > svg {
+.onboarding-check-row.status-warn .onboarding-check-main>svg {
   color: #9a640c;
 }
 
-.onboarding-check-row.status-fail .onboarding-check-main > svg {
+.onboarding-check-row.status-fail .onboarding-check-main>svg {
   color: #a73535;
 }
 
-.onboarding-check-main > div {
+.onboarding-check-main>div {
   display: grid;
   gap: 5px;
   min-width: 0;
@@ -1349,7 +1347,7 @@ a {
   gap: 5px;
 }
 
-.onboarding-check-code-group > span,
+.onboarding-check-code-group>span,
 .onboarding-check-diagnostics summary {
   color: var(--color-text-secondary);
   font-size: 0.78rem;
@@ -1431,7 +1429,7 @@ a {
   background: var(--color-panel-tint);
 }
 
-.onboarding-suggestion > div {
+.onboarding-suggestion>div {
   display: grid;
   gap: 3px;
   min-width: 0;
@@ -1526,16 +1524,12 @@ a {
 }
 
 .apply-job-panel-success {
-  border-color: color-mix(
-    in srgb,
-    var(--color-border) 72%,
-    var(--color-operational-teal) 28%
-  );
-  background: color-mix(
-    in srgb,
-    var(--color-surface) 97%,
-    var(--color-operational-teal) 3%
-  );
+  border-color: color-mix(in srgb,
+      var(--color-border) 72%,
+      var(--color-operational-teal) 28%);
+  background: color-mix(in srgb,
+      var(--color-surface) 97%,
+      var(--color-operational-teal) 3%);
 }
 
 .apply-job-panel:focus-visible,
@@ -1568,11 +1562,9 @@ a {
   place-items: center;
   border-radius: 999px;
   color: var(--color-operational-teal);
-  background: color-mix(
-    in srgb,
-    var(--color-surface) 82%,
-    var(--color-operational-teal) 18%
-  );
+  background: color-mix(in srgb,
+      var(--color-surface) 82%,
+      var(--color-operational-teal) 18%);
   animation: apply-complete-pop 240ms var(--ease-out-quint);
 }
 
@@ -1609,43 +1601,31 @@ a {
   gap: 10px;
   min-width: 0;
   padding: 12px;
-  border: 1px solid color-mix(
-    in srgb,
-    var(--color-border-hover) 62%,
-    var(--color-operational-teal) 38%
-  );
+  border: 1px solid color-mix(in srgb,
+      var(--color-border-hover) 62%,
+      var(--color-operational-teal) 38%);
   border-radius: 7px;
-  background: color-mix(
-    in srgb,
-    var(--color-surface) 92%,
-    var(--color-operational-teal) 8%
-  );
+  background: color-mix(in srgb,
+      var(--color-surface) 92%,
+      var(--color-operational-teal) 8%);
 }
 
 .apply-job-now-success {
-  border-color: color-mix(
-    in srgb,
-    var(--color-border-hover) 70%,
-    var(--color-operational-teal) 30%
-  );
-  background: color-mix(
-    in srgb,
-    var(--color-surface) 96%,
-    var(--color-operational-teal) 4%
-  );
+  border-color: color-mix(in srgb,
+      var(--color-border-hover) 70%,
+      var(--color-operational-teal) 30%);
+  background: color-mix(in srgb,
+      var(--color-surface) 96%,
+      var(--color-operational-teal) 4%);
 }
 
 .apply-job-now-failure {
-  border-color: color-mix(
-    in srgb,
-    var(--color-border) 54%,
-    var(--color-error) 46%
-  );
-  background: color-mix(
-    in srgb,
-    var(--color-surface) 90%,
-    var(--color-error) 10%
-  );
+  border-color: color-mix(in srgb,
+      var(--color-border) 54%,
+      var(--color-error) 46%);
+  background: color-mix(in srgb,
+      var(--color-surface) 90%,
+      var(--color-error) 10%);
 }
 
 .apply-job-now-copy {
@@ -1799,16 +1779,12 @@ a {
 }
 
 .apply-progress-step-running {
-  border-color: color-mix(
-    in srgb,
-    var(--color-border-hover) 58%,
-    var(--color-operational-teal) 42%
-  );
-  background: color-mix(
-    in srgb,
-    var(--color-surface) 92%,
-    var(--color-operational-teal) 8%
-  );
+  border-color: color-mix(in srgb,
+      var(--color-border-hover) 58%,
+      var(--color-operational-teal) 42%);
+  background: color-mix(in srgb,
+      var(--color-surface) 92%,
+      var(--color-operational-teal) 8%);
 }
 
 .apply-progress-step-success,
@@ -1817,16 +1793,12 @@ a {
 }
 
 .apply-progress-step-failure {
-  border-color: color-mix(
-    in srgb,
-    var(--color-border) 52%,
-    var(--color-error) 48%
-  );
-  background: color-mix(
-    in srgb,
-    var(--color-surface) 90%,
-    var(--color-error) 10%
-  );
+  border-color: color-mix(in srgb,
+      var(--color-border) 52%,
+      var(--color-error) 48%);
+  background: color-mix(in srgb,
+      var(--color-surface) 90%,
+      var(--color-error) 10%);
 }
 
 .apply-progress-icon {
@@ -1846,11 +1818,9 @@ a {
 }
 
 .apply-progress-step-success .apply-progress-icon {
-  border-color: color-mix(
-    in srgb,
-    var(--color-operational-teal) 64%,
-    var(--color-border) 36%
-  );
+  border-color: color-mix(in srgb,
+      var(--color-operational-teal) 64%,
+      var(--color-border) 36%);
   color: var(--color-operational-teal);
 }
 
@@ -2047,18 +2017,13 @@ a {
   box-sizing: border-box;
   min-height: 30px;
   padding: 5px 10px;
-  border: 1px solid
-    color-mix(
-      in srgb,
+  border: 1px solid color-mix(in srgb,
       var(--color-border-hover) 42%,
-      var(--color-border-subtle)
-    );
+      var(--color-border-subtle));
   border-radius: 7px;
-  background: color-mix(
-    in srgb,
-    var(--color-surface) 94%,
-    var(--color-action-blue) 6%
-  );
+  background: color-mix(in srgb,
+      var(--color-surface) 94%,
+      var(--color-action-blue) 6%);
   color: var(--color-text-secondary);
   font-size: 0.875rem;
   line-height: 1.35;
@@ -2069,11 +2034,9 @@ a {
 
 .stack-title-block .n-checkbox:hover .stack-checkbox-label {
   border-color: var(--color-border-hover);
-  background: color-mix(
-    in srgb,
-    var(--color-surface) 90%,
-    var(--color-action-blue) 10%
-  );
+  background: color-mix(in srgb,
+      var(--color-surface) 90%,
+      var(--color-action-blue) 10%);
 }
 
 .stack-checkbox-label strong {
@@ -2273,18 +2236,13 @@ a {
   gap: 10px;
   min-width: 0;
   padding: 10px 12px;
-  border: 1px solid
-    color-mix(
-      in srgb,
+  border: 1px solid color-mix(in srgb,
       var(--color-border) 68%,
-      var(--color-warning) 32%
-    );
+      var(--color-warning) 32%);
   border-radius: 7px;
-  background: color-mix(
-    in srgb,
-    var(--color-surface) 86%,
-    var(--color-warning-bg) 14%
-  );
+  background: color-mix(in srgb,
+      var(--color-surface) 86%,
+      var(--color-warning-bg) 14%);
 }
 
 .pending-assistant-section {
@@ -2516,16 +2474,12 @@ body .n-switch:focus-within {
   gap: 8px;
   justify-items: center;
   padding: 18px;
-  border-color: color-mix(
-    in srgb,
-    var(--color-border-dashed) 70%,
-    var(--color-operational-teal) 30%
-  );
-  background: color-mix(
-    in srgb,
-    var(--color-surface) 92%,
-    var(--color-operational-teal) 8%
-  );
+  border-color: color-mix(in srgb,
+      var(--color-border-dashed) 70%,
+      var(--color-operational-teal) 30%);
+  background: color-mix(in srgb,
+      var(--color-surface) 92%,
+      var(--color-operational-teal) 8%);
   color: var(--color-text-secondary);
   text-align: center;
 }
@@ -2556,22 +2510,18 @@ body .n-switch:focus-within {
   place-items: center;
   border-radius: 999px;
   color: var(--color-operational-teal);
-  background: color-mix(
-    in srgb,
-    var(--color-surface) 82%,
-    var(--color-operational-teal) 18%
-  );
+  background: color-mix(in srgb,
+      var(--color-surface) 82%,
+      var(--color-operational-teal) 18%);
 }
 
 .clear-queue-mark::after {
   content: "";
   position: absolute;
   inset: -5px;
-  border: 1px solid color-mix(
-    in srgb,
-    var(--color-operational-teal) 46%,
-    transparent
-  );
+  border: 1px solid color-mix(in srgb,
+      var(--color-operational-teal) 46%,
+      transparent);
   border-radius: inherit;
   opacity: 0;
   animation: clear-queue-ring 850ms var(--ease-out-quint) 1;
@@ -2676,22 +2626,19 @@ code.pending-table-value {
 .policy-table .management-table-head,
 .policy-table .management-row {
   grid-template-columns:
-    minmax(180px, 1.5fr) minmax(86px, 0.6fr) minmax(72px, 0.4fr)
-    minmax(150px, 0.8fr) minmax(96px, 0.5fr) minmax(184px, auto);
+    minmax(180px, 1.5fr) minmax(86px, 0.6fr) minmax(72px, 0.4fr) minmax(150px, 0.8fr) minmax(96px, 0.5fr) minmax(184px, auto);
 }
 
 .snooze-table .management-table-head,
 .snooze-table .management-row {
   grid-template-columns:
-    minmax(160px, 1fr) minmax(220px, 1fr) minmax(150px, 1fr)
-    minmax(86px, 0.4fr) minmax(110px, auto);
+    minmax(160px, 1fr) minmax(220px, 1fr) minmax(150px, 1fr) minmax(86px, 0.4fr) minmax(110px, auto);
 }
 
 .exclusion-table .management-table-head,
 .exclusion-table .management-row {
   grid-template-columns:
-    minmax(160px, 1.2fr) minmax(100px, 0.5fr) minmax(90px, 0.5fr)
-    minmax(92px, 0.5fr) minmax(198px, auto);
+    minmax(160px, 1.2fr) minmax(100px, 0.5fr) minmax(90px, 0.5fr) minmax(92px, 0.5fr) minmax(198px, auto);
 }
 
 .table-actions {
@@ -2758,6 +2705,20 @@ code.pending-table-value {
   color: var(--color-code-text);
   font-family: var(--font-mono);
   font-size: 0.82rem;
+  overflow-wrap: anywhere;
+}
+
+.digest-provenance {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.digest-provenance-primary {
+  color: var(--color-ink);
+  font-weight: 600;
+  line-height: 1.25;
   overflow-wrap: anywhere;
 }
 
@@ -2832,9 +2793,9 @@ code.pending-table-value {
   grid-template-columns: minmax(56px, auto) minmax(120px, 0.7fr) minmax(0, 2fr);
 }
 
-.plan-line-row > span,
-.plan-line-row > strong,
-.plan-line-row > em {
+.plan-line-row>span,
+.plan-line-row>strong,
+.plan-line-row>em {
   padding-block: 2px;
 }
 
@@ -2851,12 +2812,12 @@ code.pending-table-value {
   gap: 6px;
 }
 
-.plan-line-heading > span {
+.plan-line-heading>span {
   min-width: 0;
   overflow-wrap: anywhere;
 }
 
-.plan-line-row em > span[aria-hidden="true"] {
+.plan-line-row em>span[aria-hidden="true"] {
   margin: 0 4px;
 }
 
@@ -2951,7 +2912,7 @@ code.pending-table-value {
   gap: 12px;
 }
 
-.apply-readiness-heading > div {
+.apply-readiness-heading>div {
   display: grid;
   gap: 3px;
   min-width: 0;
@@ -2972,7 +2933,7 @@ code.pending-table-value {
   line-height: 1.45;
 }
 
-.apply-readiness-passed > svg {
+.apply-readiness-passed>svg {
   flex: 0 0 auto;
   margin-top: 1px;
   color: var(--color-operational-teal);
@@ -3008,15 +2969,15 @@ code.pending-table-value {
   padding-bottom: 0;
 }
 
-.apply-readiness-row > svg {
+.apply-readiness-row>svg {
   color: var(--color-operational-teal);
 }
 
-.apply-readiness-row.status-warn > svg {
+.apply-readiness-row.status-warn>svg {
   color: var(--color-warning);
 }
 
-.apply-readiness-row.status-fail > svg {
+.apply-readiness-row.status-fail>svg {
   color: var(--color-error);
 }
 
@@ -3288,7 +3249,7 @@ code.pending-table-value {
     grid-template-columns: 1fr;
   }
 
-  .apply-job-now > .n-tag {
+  .apply-job-now>.n-tag {
     width: fit-content;
   }
 
@@ -3379,7 +3340,7 @@ code.pending-table-value {
     justify-content: flex-start;
   }
 
-  .settings-preference-row > .settings-preference-controls {
+  .settings-preference-row>.settings-preference-controls {
     justify-content: flex-start;
   }
 
@@ -3387,7 +3348,7 @@ code.pending-table-value {
     display: none;
   }
 
-  .settings-row > .n-tag {
+  .settings-row>.n-tag {
     width: fit-content;
   }
 
@@ -3466,11 +3427,11 @@ code.pending-table-value {
     gap: 5px;
   }
 
-  .stack-change-target > .n-tag {
+  .stack-change-target>.n-tag {
     width: fit-content;
   }
 
-  .stack-change-target > span[aria-hidden="true"] {
+  .stack-change-target>span[aria-hidden="true"] {
     display: none;
   }
 
@@ -3533,13 +3494,14 @@ code.pending-table-value {
     grid-template-columns: minmax(0, 1fr) auto;
   }
 
-  .preflight-modal .section-heading > .n-tag {
+  .preflight-modal .section-heading>.n-tag {
     width: fit-content;
     justify-self: start;
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
+
   *,
   *::before,
   *::after {

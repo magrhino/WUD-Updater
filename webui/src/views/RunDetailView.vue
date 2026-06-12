@@ -4,7 +4,12 @@ import { RouterLink, useRoute } from "vue-router";
 import { FileText } from "@lucide/vue";
 import { NAlert } from "naive-ui";
 
+import type { RunEventRecord } from "../api/client";
 import { useRunsStore } from "../stores/runs";
+import {
+  digestProvenanceDisplay,
+  displayDigest,
+} from "../utils/digestProvenance";
 
 const route = useRoute();
 const runs = useRunsStore();
@@ -22,6 +27,19 @@ onMounted(() => {
 watch(runId, () => {
   void load();
 });
+
+function eventDigestLabel(event: RunEventRecord): string {
+  if (event.digest_provenance?.target_digest) {
+    return displayDigest(event.digest_provenance.target_digest);
+  }
+  const oldDigest = event.old_digest ? shortEventDigest(event.old_digest) : "none";
+  const newDigest = event.new_digest ? shortEventDigest(event.new_digest) : "none";
+  return `${oldDigest} -> ${newDigest}`;
+}
+
+function shortEventDigest(value: string): string {
+  return `${value.substring(0, 15)}...`;
+}
 </script>
 
 <template>
@@ -94,7 +112,15 @@ watch(runId, () => {
               <em>{{ event.image }}</em>
             </div>
             <div style="font-size: 0.85em; color: var(--text-muted); display: flex; flex-direction: column; gap: 2px;">
-              <span v-if="event.old_digest || event.new_digest">Digest: {{ event.old_digest ? event.old_digest.substring(0, 15) + '...' : 'none' }} -> {{ event.new_digest ? event.new_digest.substring(0, 15) + '...' : 'none' }}</span>
+              <span
+                v-if="digestProvenanceDisplay(event.digest_provenance)"
+                :title="digestProvenanceDisplay(event.digest_provenance)?.title"
+              >
+                {{ digestProvenanceDisplay(event.digest_provenance)?.primary }}
+              </span>
+              <span v-if="event.old_digest || event.new_digest || event.digest_provenance">
+                Digest: {{ eventDigestLabel(event) }}
+              </span>
               <span v-if="event.old_image_id || event.new_image_id">Image ID: {{ event.old_image_id ? event.old_image_id.substring(0, 15) + '...' : 'none' }} -> {{ event.new_image_id ? event.new_image_id.substring(0, 15) + '...' : 'none' }}</span>
             </div>
           </div>

@@ -3,6 +3,7 @@ from __future__ import annotations
 import sqlite3
 import tempfile
 import unittest
+from collections.abc import Iterator, Mapping
 from pathlib import Path
 
 from wud_updater.db import (
@@ -20,9 +21,44 @@ from wud_updater.db import (
     update_pending_update,
     upsert_known_image,
 )
+from wud_updater.digest_provenance import (
+    DIGEST_PROVENANCE_SQL_COLUMNS,
+    DigestTagProvenance,
+    digest_provenance_from_row,
+    empty_digest_provenance_sql_values,
+)
 
 
 class DatabaseTests(unittest.TestCase):
+    def test_empty_digest_provenance_sql_values_returns_empty_columns(self) -> None:
+        self.assertEqual(
+            empty_digest_provenance_sql_values(),
+            dict.fromkeys(DIGEST_PROVENANCE_SQL_COLUMNS, ""),
+        )
+
+    def test_digest_provenance_from_row_treats_missing_columns_as_empty(self) -> None:
+        class SparseRow(Mapping[str, str]):
+            def __getitem__(self, key: str) -> str:
+                if key == "digest_source_image":
+                    return "repo/app:latest"
+                raise KeyError(key)
+
+            def __iter__(self) -> Iterator[str]:
+                return iter(("digest_source_image",))
+
+            def __len__(self) -> int:
+                return 1
+
+        self.assertEqual(
+            digest_provenance_from_row({"digest_source_image": "repo/app:latest"}),
+            DigestTagProvenance(source_image="repo/app:latest"),
+        )
+        self.assertEqual(
+            digest_provenance_from_row(SparseRow()),
+            DigestTagProvenance(source_image="repo/app:latest"),
+        )
+        self.assertIsNone(digest_provenance_from_row({}))
+
     def test_initial_db_creation_creates_expected_tables(self) -> None:
         with tempfile.TemporaryDirectory(prefix="wud-python-db.") as tmpdir:
             db_path = Path(tmpdir) / "state" / "wud-updater.sqlite"
@@ -99,7 +135,7 @@ class DatabaseTests(unittest.TestCase):
                 """
             ).fetchall()
 
-        self.assertEqual([row[0] for row in rows], [1, 2, 3, 4, 5, 6])
+        self.assertEqual([row[0] for row in rows], [1, 2, 3, 4, 5, 6, 7])
 
     def test_init_db_accepts_matching_version_zero_table(self) -> None:
         with sqlite3.connect(":memory:") as conn:
@@ -200,7 +236,7 @@ class DatabaseTests(unittest.TestCase):
 
         self.assertEqual(version, SCHEMA_VERSION)
         self.assertEqual(run[0], "success")
-        self.assertEqual(migration_versions, [1, 2, 3, 4, 5, 6])
+        self.assertEqual(migration_versions, [1, 2, 3, 4, 5, 6, 7])
 
     def test_init_db_migrates_v5_schema_and_preserves_policy_rows(self) -> None:
         with sqlite3.connect(":memory:") as conn:
@@ -264,7 +300,100 @@ class DatabaseTests(unittest.TestCase):
         self.assertEqual(policy["auto_update"], 0)
         self.assertIsNone(policy["auto_update_time"])
         self.assertEqual(policy["auto_update_days_json"], "[]")
-        self.assertEqual(migration_versions, [1, 2, 3, 4, 5, 6])
+        self.assertEqual(migration_versions, [1, 2, 3, 4, 5, 6, 7])
+
+    def test_init_db_migrates_v6_schema_and_preserves_digestless_rows(self) -> None:
+        with sqlite3.connect(":memory:") as conn:
+            conn.row_factory = sqlite3.Row
+            conn.executescript(V6_SCHEMA_SQL)
+            conn.execute("PRAGMA user_version = 6")
+            conn.execute(
+                """
+                INSERT INTO update_runs (id, started_at, status)
+                VALUES (1, '2026-06-01T12:00:00+00:00', 'success')
+                """
+            )
+            conn.execute(
+                """
+                INSERT INTO update_events (
+                    run_id,
+                    created_at,
+                    service_name,
+                    image,
+                    status
+                )
+                VALUES (
+                    1,
+                    '2026-06-01T12:01:00+00:00',
+                    'app',
+                    'repo/app:latest',
+                    'success'
+                )
+                """
+            )
+            conn.execute(
+                """
+                INSERT INTO pending_updates (
+                    run_id,
+                    line_no,
+                    raw,
+                    image,
+                    status,
+                    created_at,
+                    updated_at
+                )
+                VALUES (
+                    1,
+                    7,
+                    'repo/app:latest',
+                    'repo/app:latest',
+                    'resolved',
+                    '2026-06-01T12:00:00+00:00',
+                    '2026-06-01T12:01:00+00:00'
+                )
+                """
+            )
+            conn.execute(
+                """
+                INSERT INTO known_images (
+                    service_key,
+                    image,
+                    updated_at
+                )
+                VALUES (
+                    'stack/app',
+                    'repo/app:latest',
+                    '2026-06-01T12:01:00+00:00'
+                )
+                """
+            )
+
+            init_db(conn)
+            version = conn.execute("PRAGMA user_version").fetchone()[0]
+            event = conn.execute("SELECT * FROM update_events").fetchone()
+            pending = conn.execute("SELECT * FROM pending_updates").fetchone()
+            known = conn.execute("SELECT * FROM known_images").fetchone()
+            migration_versions = [
+                row[0]
+                for row in conn.execute(
+                    """
+                    SELECT version
+                    FROM schema_migrations
+                    ORDER BY version
+                    """
+                )
+            ]
+
+        self.assertEqual(version, SCHEMA_VERSION)
+        for row in (event, pending, known):
+            self.assertEqual(row["digest_source_image"], "")
+            self.assertEqual(row["digest_resolved_tag"], "")
+            self.assertEqual(row["digest_watch_tag"], "")
+            self.assertEqual(row["digest_target_digest"], "")
+            self.assertEqual(row["digest_final_image"], "")
+            self.assertEqual(row["digest_provenance_source"], "")
+            self.assertEqual(row["digest_provenance_confidence"], "")
+        self.assertEqual(migration_versions, [1, 2, 3, 4, 5, 6, 7])
 
     def test_init_db_rejects_malformed_existing_pending_updates(self) -> None:
         with sqlite3.connect(":memory:") as conn:
@@ -390,6 +519,15 @@ class DatabaseTests(unittest.TestCase):
                 image="repo/app:1.0",
                 target_image="repo/app:2.0",
                 status="updated",
+                digest_provenance=DigestTagProvenance(
+                    source_image="repo/app:latest",
+                    resolved_tag="latest",
+                    watch_tag="latest",
+                    target_digest="sha256:target",
+                    final_image="repo/app@sha256:target",
+                    provenance_source="apply",
+                    provenance_confidence="verified",
+                ),
             )
             row = conn.execute(
                 "SELECT * FROM update_events WHERE id = ?",
@@ -400,6 +538,12 @@ class DatabaseTests(unittest.TestCase):
         self.assertEqual(row["service_name"], "app")
         self.assertEqual(row["target_image"], "repo/app:2.0")
         self.assertEqual(row["metadata_json"], "{}")
+        self.assertEqual(row["digest_source_image"], "repo/app:latest")
+        self.assertEqual(row["digest_resolved_tag"], "latest")
+        self.assertEqual(row["digest_target_digest"], "sha256:target")
+        self.assertEqual(row["digest_final_image"], "repo/app@sha256:target")
+        self.assertEqual(row["digest_provenance_source"], "apply")
+        self.assertEqual(row["digest_provenance_confidence"], "verified")
 
     def test_active_snooze_lookup_returns_latest_unexpired_snooze(self) -> None:
         with sqlite3.connect(":memory:") as conn:
@@ -465,6 +609,15 @@ class DatabaseTests(unittest.TestCase):
                 status_reason="updated",
                 stack_name="stack",
                 service_name="app",
+                digest_provenance=DigestTagProvenance(
+                    source_image="repo/app:latest",
+                    resolved_tag="latest",
+                    watch_tag="latest",
+                    target_digest="sha256:target",
+                    final_image="repo/app@sha256:target",
+                    provenance_source="apply",
+                    provenance_confidence="verified",
+                ),
             )
             row = conn.execute(
                 "SELECT * FROM pending_updates WHERE id = ?",
@@ -478,6 +631,10 @@ class DatabaseTests(unittest.TestCase):
         self.assertEqual(row["service_name"], "app")
         self.assertEqual(row["status"], "resolved")
         self.assertEqual(row["status_reason"], "updated")
+        self.assertEqual(row["digest_source_image"], "repo/app:latest")
+        self.assertEqual(row["digest_watch_tag"], "latest")
+        self.assertEqual(row["digest_target_digest"], "sha256:target")
+        self.assertEqual(row["digest_provenance_source"], "apply")
 
     def test_known_image_upsert_replaces_service_state(self) -> None:
         with sqlite3.connect(":memory:") as conn:
@@ -499,6 +656,15 @@ class DatabaseTests(unittest.TestCase):
                 image_id="new",
                 digest="sha256:new",
                 updated_at="2026-05-18T12:01:00+00:00",
+                digest_provenance=DigestTagProvenance(
+                    source_image="repo/app:latest",
+                    resolved_tag="latest",
+                    watch_tag="latest",
+                    target_digest="sha256:target",
+                    final_image="repo/app@sha256:target",
+                    provenance_source="apply",
+                    provenance_confidence="verified",
+                ),
             )
             rows = conn.execute("SELECT * FROM known_images").fetchall()
 
@@ -507,6 +673,10 @@ class DatabaseTests(unittest.TestCase):
         self.assertEqual(rows[0]["image"], "repo/app:2.0")
         self.assertEqual(rows[0]["image_id"], "new")
         self.assertEqual(rows[0]["digest"], "sha256:new")
+        self.assertEqual(rows[0]["digest_source_image"], "repo/app:latest")
+        self.assertEqual(rows[0]["digest_resolved_tag"], "latest")
+        self.assertEqual(rows[0]["digest_target_digest"], "sha256:target")
+        self.assertEqual(rows[0]["digest_provenance_source"], "apply")
 
     def test_tag_exclusion_upsert_is_idempotent_and_active_lookup_merges_scopes(
         self,
@@ -722,6 +892,28 @@ CREATE TABLE release_note_cache (
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
     metadata_json TEXT NOT NULL DEFAULT '{}'
+);
+"""
+)
+
+V6_SCHEMA_SQL = (
+    V5_SCHEMA_SQL
+    + """
+ALTER TABLE service_policy
+    ADD COLUMN auto_update_time TEXT;
+ALTER TABLE service_policy
+    ADD COLUMN auto_update_days_json TEXT NOT NULL DEFAULT '[]';
+
+CREATE TABLE auto_update_schedule_runs (
+    schedule_key TEXT PRIMARY KEY,
+    service_key TEXT NOT NULL,
+    scheduled_for TEXT NOT NULL,
+    run_id INTEGER,
+    status TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    metadata_json TEXT NOT NULL DEFAULT '{}',
+    FOREIGN KEY (run_id) REFERENCES update_runs(id) ON DELETE SET NULL
 );
 """
 )

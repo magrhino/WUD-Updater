@@ -289,6 +289,12 @@ def pending_response(
     include_grouping: bool = True,
 ) -> PendingResponse:
     exists, parsed = parse_pending_file(settings)
+    grouping = (
+        _pending_grouping_response(settings, parsed)
+        if include_grouping
+        else PendingGrouping(status="unavailable")
+    )
+    provenance_by_line = _pending_grouping_provenance_by_line(grouping)
     items = [
         PendingItem(
             line_no=target.line_no,
@@ -301,6 +307,7 @@ def pending_response(
             allow_repo=target.allow_repo,
             digest=target.digest,
             desired_tag=target.desired_tag,
+            digest_provenance=provenance_by_line.get(target.line_no),
         )
         for target in parsed.targets
     ]
@@ -309,11 +316,7 @@ def pending_response(
         exists=exists,
         count=len(items),
         items=items,
-        grouping=(
-            _pending_grouping_response(settings, parsed)
-            if include_grouping
-            else PendingGrouping(status="unavailable")
-        ),
+        grouping=grouping,
         warnings=list(parsed.warnings),
     )
 
@@ -482,7 +485,26 @@ def _pending_grouped_item(item: Any) -> PendingGroupedItem:
             if item.diagnostic is None
             else PendingDiagnostic.model_validate(asdict(item.diagnostic))
         ),
+        digest_provenance=(
+            None
+            if item.digest_provenance is None
+            else asdict(item.digest_provenance)
+        ),
     )
+
+
+def _pending_grouping_provenance_by_line(
+    grouping: PendingGrouping,
+) -> dict[int, Any]:
+    by_line: dict[int, Any] = {}
+    for group in grouping.groups:
+        for item in group.items:
+            if item.digest_provenance is not None:
+                by_line[item.line_no] = item.digest_provenance
+    for item in grouping.unmatched:
+        if item.digest_provenance is not None:
+            by_line[item.line_no] = item.digest_provenance
+    return by_line
 
 
 def _cleanup_payload_lines(

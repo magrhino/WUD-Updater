@@ -3,6 +3,9 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { createDemoWebApi } from "../src/api/demo";
 import type { ApplyJobLogResponse, ApplyJobResponse } from "../src/api/client";
 
+const postgresDigest =
+  "sha256:1111111111111111111111111111111111111111111111111111111111111111";
+
 describe("demo web API", () => {
   afterEach(() => {
     vi.useRealTimers();
@@ -190,6 +193,20 @@ describe("demo web API", () => {
       items: [],
     });
     expect(plan.issues).toEqual([]);
+
+    const digestPlan = await api.createPlan([4], true, [], [], "csrf");
+    const digestLine = digestPlan.stacks[0]?.lines[0];
+
+    expect(digestLine).toMatchObject({
+      line_no: 4,
+      digest: postgresDigest,
+      target_image: `postgres@${postgresDigest}`,
+      digest_provenance: {
+        source_image: "postgres:16",
+        target_digest: postgresDigest,
+        final_image: `postgres@${postgresDigest}`,
+      },
+    });
   });
 
   it("blocks unmatched fixture lines and previews cleanup", async () => {
@@ -380,7 +397,7 @@ describe("demo web API", () => {
     const logs: ApplyJobLogResponse[] = [];
     const progress: ApplyJobResponse["progress"] = [];
 
-    const job = await api.createJob("demo-plan", [2], true, [], [], "csrf");
+    const job = await api.createJob("demo-plan", [4], true, [], [], "csrf");
     const source = api.openJobStream(job.job_id);
     source.addEventListener("job", (event) => {
       jobs.push(JSON.parse((event as MessageEvent<string>).data) as ApplyJobResponse);
@@ -411,7 +428,27 @@ describe("demo web API", () => {
     });
     await expect(api.runDetail(7)).resolves.toMatchObject({
       id: 7,
-      pending_updates: [{ service_key: "home/home-assistant" }],
+      pending_updates: [
+        {
+          service_key: "data/postgres",
+          target_digest: postgresDigest,
+          digest_provenance: {
+            source_image: "postgres:16",
+            target_digest: postgresDigest,
+          },
+        },
+      ],
+      events: [
+        {
+          stack_name: "data",
+          service_name: "postgres",
+          old_digest: postgresDigest,
+          new_digest: postgresDigest,
+          digest_provenance: {
+            final_image: `postgres@${postgresDigest}`,
+          },
+        },
+      ],
     });
 
     const applySummary = (await api.runs()).find((run) => run.id === 7);

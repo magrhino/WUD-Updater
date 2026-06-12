@@ -5,6 +5,7 @@ import type {
   PlanResponse,
   PlanTagUpdate,
 } from "../../api/client";
+import { digestProvenanceDisplay } from "../../utils/digestProvenance";
 
 export type PlanLineView = {
   stack: string;
@@ -132,5 +133,11 @@ export function planLineDigestPinLabel(line: PlanLine): string {
   if (line.action !== "digest-pin") {
     return "";
   }
-  return `${line.compose_image} -> ${line.target_image}`;
+  const provenance = digestProvenanceDisplay(line.digest_provenance);
+  if (!provenance) {
+    return `${line.compose_image} -> ${line.target_image}`;
+  }
+  return provenance.digest
+    ? `${provenance.primary} (${provenance.digest})`
+    : provenance.primary;
 }

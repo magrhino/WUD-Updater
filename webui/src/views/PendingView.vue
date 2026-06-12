@@ -35,6 +35,10 @@ import PendingRemovalModal from "../components/pending/PendingRemovalModal.vue";
 import { useUpdatesStore } from "../stores/updates";
 import { useRunsStore } from "../stores/runs";
 import { useSettingsStore } from "../stores/settings";
+import {
+  digestProvenanceDisplay,
+  displayDigest,
+} from "../utils/digestProvenance";
 import { safetyCues, type SafetyCue } from "./pending/safetyCues";
 import { createPendingColumns } from "./pending/tableColumns";
 import { pluralize } from "./pending/utils";
@@ -240,13 +244,6 @@ function rowKey(row: PendingItem): number {
 
 function displayValue(value: string): string {
   return value || "None";
-}
-
-function displayDigest(value: string): string {
-  if (!value || value.length <= 36) {
-    return value;
-  }
-  return `${value.slice(0, 20)}...${value.slice(-12)}`;
 }
 
 function previewImageLabel(value: string): string {
@@ -1309,7 +1306,22 @@ watch(
             <div>
               <dt>New digest</dt>
               <dd>
-                <code v-if="item.digest" class="digest-value" :title="item.digest">
+                <span
+                  v-if="digestProvenanceDisplay(item.digest_provenance)"
+                  class="digest-provenance"
+                  :title="digestProvenanceDisplay(item.digest_provenance)?.title"
+                >
+                  <span class="digest-provenance-primary">
+                    {{ digestProvenanceDisplay(item.digest_provenance)?.primary }}
+                  </span>
+                  <code
+                    v-if="digestProvenanceDisplay(item.digest_provenance)?.digest"
+                    class="digest-value"
+                  >
+                    {{ digestProvenanceDisplay(item.digest_provenance)?.digest }}
+                  </code>
+                </span>
+                <code v-else-if="item.digest" class="digest-value" :title="item.digest">
                   {{ displayDigest(item.digest) }}
                 </code>
                 <span v-else>None</span>
