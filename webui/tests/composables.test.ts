@@ -590,6 +590,47 @@ describe("usePendingPlanReviewState", () => {
       "1 digest-pin rewrite will pin approved tag updates after pull verification.",
     );
   });
+
+  it("surfaces digest-unpin notice without digest-pin notice", () => {
+    const { state, updates } = setupPendingPlanReview();
+
+    updates.plan = planResponse({
+      digest_pin_updates: false,
+      stacks: [
+        {
+          ...planResponse().stacks[0],
+          digest_unpin_updates: [
+            {
+              source_image: "repo/app@sha256:old",
+              resolved_tag: "latest",
+              tag_image: "repo/app:latest",
+              current_digest: "sha256:old",
+              target_digest: "sha256:new",
+              watch_tag: "latest",
+              marker: "wud-updater.resolved-tag=latest",
+              label_key: "wud.tag.include",
+              label_value: "^latest$",
+              services: ["app"],
+            },
+          ],
+          lines: [
+            {
+              ...planResponse().stacks[0].lines[0],
+              action: "digest-unpin",
+              compose_image: "repo/app@sha256:old",
+              target_image: "repo/app:latest",
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(state.preflightDigestPinNotice.value).toBe("");
+    expect(state.preflightDigestUnpinNotice.value).toBe(
+      "1 digest unpin migration will rewrite pinned Compose images back to their watched tag before pulling.",
+    );
+    expect(state.planDigestUnpinUpdates.value).toHaveLength(1);
+  });
 });
 
 describe("usePendingApplyJob", () => {

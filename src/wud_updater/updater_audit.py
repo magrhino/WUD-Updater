@@ -25,6 +25,7 @@ from .db import (
 from .digest_provenance import (
     DigestTagProvenance,
     digest_from_image,
+    digest_provenance_from_unpin_update,
     digest_provenance_from_update,
 )
 from .file_ops import (
@@ -437,6 +438,18 @@ def _planned_digest_provenance_by_line(
     matches: Sequence[Match],
 ) -> dict[int, DigestTagProvenance]:
     by_line: dict[int, DigestTagProvenance] = {}
+    for match in matches:
+        update = _planned_digest_unpin_for_match(runner, match)
+        if update is None:
+            continue
+        by_line.setdefault(
+            match.target.line_no,
+            digest_provenance_from_unpin_update(
+                update,
+                provenance_source="plan",
+                provenance_confidence="recovered",
+            ),
+        )
     if not runner.options.digest_pin_updates:
         return by_line
     for stack in _stacks_to_update(matches):
@@ -470,6 +483,15 @@ def _applied_digest_provenance_for_match(
     runner: Any,
     match: Match,
 ) -> DigestTagProvenance | None:
+    unpin = runner.applied_digest_unpins.get(
+        (match.stack.index, match.target.line_no, match.service)
+    )
+    if unpin is not None:
+        return digest_provenance_from_unpin_update(
+            unpin,
+            provenance_source="apply",
+            provenance_confidence="verified",
+        )
     update = runner.applied_digest_pins.get(
         (match.stack.index, match.target.line_no, match.service)
     )
@@ -480,6 +502,20 @@ def _applied_digest_provenance_for_match(
         provenance_source="apply",
         provenance_confidence="verified",
     )
+
+
+def _planned_digest_unpin_for_match(runner: Any, match: Match) -> Any | None:
+    for update in runner.options.digest_unpin_plan:
+        if update.old_image != match.compose_image:
+            continue
+        if update.tag_image != match.resolved:
+            continue
+        if update.target_digest != match.target.digest:
+            continue
+        if match.service and match.service not in update.services:
+            continue
+        return update
+    return None
 
 
 def _digest_provenance_for_event(

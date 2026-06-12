@@ -10,8 +10,10 @@ from .command import CommandError
 from .compose import ComposeStack
 from .updater_models import (
     AppliedDigestPinUpdate,
+    AppliedDigestUnpinUpdate,
     AppliedTagUpdate,
     DigestPinUpdate,
+    DigestUnpinUpdate,
     ImageState,
     Match,
     TagUpdate,
@@ -29,9 +31,11 @@ class _StackUpdateState:
     before: dict[str, ImageState]
     after: dict[str, ImageState]
     digest_pin_updates: tuple[DigestPinUpdate, ...]
+    digest_unpin_updates: tuple[DigestUnpinUpdate, ...]
     compose_tag_updates: tuple[TagUpdate, ...]
     applied_tags: tuple[AppliedTagUpdate, ...] = ()
     applied_digest_pins: tuple[AppliedDigestPinUpdate, ...] = ()
+    applied_digest_unpins: tuple[AppliedDigestUnpinUpdate, ...] = ()
     compose_backup: Path | None = None
 
     @property
@@ -64,7 +68,11 @@ class _StackUpdateState:
 
     @property
     def compose_rewrite_applied(self) -> bool:
-        return bool(self.applied_tags or self.applied_digest_pins)
+        return bool(
+            self.applied_tags
+            or self.applied_digest_pins
+            or self.applied_digest_unpins
+        )
 
 
 @dataclass(frozen=True)

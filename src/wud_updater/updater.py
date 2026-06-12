@@ -133,6 +133,7 @@ from .updater_models import (
     ComposeTagRewriteError as ComposeTagRewriteError,
     DigestPinCandidate,
     DigestPinUpdate,
+    DigestUnpinUpdate,
     FailureRecord,
     ImageState as ImageState,
     Match,
@@ -189,6 +190,10 @@ class UpdateFromWudRunner(
         self.audit_run_id: int | None = None
         self.audit_db_path: Path | None = None
         self.applied_digest_pins: dict[tuple[int, int, str], DigestPinUpdate] = {}
+        self.applied_digest_unpins: dict[
+            tuple[int, int, str],
+            DigestUnpinUpdate,
+        ] = {}
         self.digest_pin_update_cache: dict[
             tuple[DigestPinCandidate, ...],
             tuple[DigestPinUpdate, ...],
@@ -296,6 +301,14 @@ class UpdateFromWudRunner(
                     "preflight",
                     "failure",
                     "Digest-pin plan validation failed.",
+                    matches=matches,
+                )
+                return 1
+            if not self._validate_digest_unpin_plan(matches):
+                self._progress(
+                    "preflight",
+                    "failure",
+                    "Digest-unpin plan validation failed.",
                     matches=matches,
                 )
                 return 1

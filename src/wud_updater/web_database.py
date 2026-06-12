@@ -13,6 +13,7 @@ from .db import (
 )
 from .db import _user_version as db_user_version
 from .db import _validate_schema as validate_db_schema
+from .digest_provenance import DigestTagProvenance, digest_provenance_from_row
 from .web_models import WebSettings
 
 
@@ -46,6 +47,40 @@ def connect_readonly_db(settings: WebSettings) -> sqlite3.Connection:
         conn.close()
         raise
     return conn
+
+
+def known_digest_provenance_by_service(
+    settings: WebSettings,
+) -> dict[str, DigestTagProvenance]:
+    try:
+        conn = connect_readonly_db(settings)
+    except ReadOnlyDatabaseMissing:
+        return {}
+    with closing(conn):
+        rows = conn.execute(
+            """
+            SELECT
+                service_key,
+                digest_source_image,
+                digest_resolved_tag,
+                digest_watch_tag,
+                digest_target_digest,
+                digest_final_image,
+                digest_provenance_source,
+                digest_provenance_confidence
+            FROM known_images
+            WHERE digest_final_image != ''
+               OR digest_resolved_tag != ''
+               OR digest_watch_tag != ''
+            """
+        ).fetchall()
+    result: dict[str, DigestTagProvenance] = {}
+    for row in rows:
+        provenance = digest_provenance_from_row(row)
+        if provenance is None:
+            continue
+        result[str(row["service_key"])] = provenance
+    return result
 
 
 def _readonly_sqlite_uri(path: Path) -> str:

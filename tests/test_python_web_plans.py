@@ -6,6 +6,8 @@ from wud_updater import web_jobs
 from wud_updater import web_plans as plans_module
 from wud_updater import web_self_update as self_update_module
 from wud_updater.config import ConfigError
+from wud_updater.db import init_db, open_db, upsert_known_image
+from wud_updater.digest_provenance import DigestTagProvenance
 from wud_updater.locks import DirectoryLock, WudLockError, lock_dir_for
 from tests.web_test_helpers import (
     _client,
@@ -19,6 +21,34 @@ from tests.web_test_helpers import (
     _manifest_index_digest,
     _wait_apply_job,
 )
+
+
+def _seed_known_digest_provenance(
+    tmp_path: Path,
+    *,
+    service_key: str = "stack/app",
+    image: str = "repo/app@sha256:old",
+    tag: str = "latest",
+) -> None:
+    db_path = tmp_path / "state" / "wud.sqlite"
+    with open_db(db_path) as conn:
+        init_db(conn)
+        upsert_known_image(
+            conn,
+            service_key=service_key,
+            image=image,
+            image_id="sha256:old-id",
+            digest=image,
+            digest_provenance=DigestTagProvenance(
+                source_image=f"repo/app:{tag}",
+                resolved_tag=tag,
+                watch_tag=tag,
+                target_digest="sha256:old",
+                final_image=image,
+                provenance_source="apply",
+                provenance_confidence="verified",
+            ),
+        )
 
 
 def test_self_update_plan_endpoint_returns_pinned_tag_preview(
@@ -425,6 +455,139 @@ def test_plan_apply_preflight_ignores_unselected_compose_render_failure(
     assert body["can_apply"] is True
     assert checks["compose-renders"]["status"] == "PASS"
     assert "broken compose config" not in json.dumps(body["apply_preflight"])
+
+
+def test_plan_endpoint_normalizes_digest_line_when_pinning_disabled(
+    tmp_path: Path,
+) -> None:
+    fake_env, fake_root = _fake_docker_env(tmp_path)
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+            **fake_env,
+        },
+    )
+    wud_file = tmp_path / "state" / "images.todo"
+    wud_file.write_text("repo/app:latest@sha256:new\n", encoding="utf-8")
+    _make_fake_stack(
+        tmp_path,
+        fake_root,
+        "stack",
+        [("app", "repo/app:latest", "cid-app")],
+    )
+
+    response = client.post(
+        "/api/v1/plans",
+        json={"line_numbers": [1]},
+        headers=_csrf_headers(client),
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    line = body["stacks"][0]["lines"][0]
+    assert body["digest_pin_updates"] is False
+    assert body["stacks"][0]["digest_pin_updates"] == []
+    assert body["stacks"][0]["digest_unpin_updates"] == []
+    assert line["image"] == "repo/app:latest@sha256:new"
+    assert line["resolved_image"] == "repo/app:latest"
+    assert line["target_image"] == "repo/app:latest"
+    assert line["action"] == "update"
+    assert not any(
+        action["kind"] == "compose-digest-pin"
+        for action in body["stacks"][0]["actions"]
+    )
+
+
+def test_plan_endpoint_uses_known_image_provenance_for_digest_unpin(
+    tmp_path: Path,
+) -> None:
+    fake_env, fake_root = _fake_docker_env(tmp_path)
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+            **fake_env,
+        },
+    )
+    _seed_known_digest_provenance(tmp_path)
+    wud_file = tmp_path / "state" / "images.todo"
+    wud_file.write_text("repo/app:latest@sha256:new\n", encoding="utf-8")
+    _make_fake_stack(
+        tmp_path,
+        fake_root,
+        "stack",
+        [("app", "repo/app@sha256:old", "cid-app")],
+    )
+
+    response = client.post(
+        "/api/v1/plans",
+        json={"line_numbers": [1]},
+        headers=_csrf_headers(client),
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    stack = body["stacks"][0]
+    line = stack["lines"][0]
+    unpin = stack["digest_unpin_updates"][0]
+    assert body["status"] == "ready"
+    assert body["can_apply"] is True
+    assert stack["digest_pin_updates"] == []
+    assert unpin["source_image"] == "repo/app@sha256:old"
+    assert unpin["resolved_tag"] == "latest"
+    assert unpin["tag_image"] == "repo/app:latest"
+    assert unpin["current_digest"] == "sha256:old"
+    assert unpin["target_digest"] == "sha256:new"
+    assert unpin["services"] == ["app"]
+    assert stack["actions"][0]["kind"] == "compose-digest-unpin"
+    assert line["action"] == "digest-unpin"
+    assert line["target_image"] == "repo/app:latest"
+    assert line["digest_provenance"]["target_digest"] == "sha256:new"
+    assert line["digest_provenance"]["provenance_source"] == "plan"
+
+
+def test_plan_endpoint_blocks_conflicting_digest_unpin_db_provenance(
+    tmp_path: Path,
+) -> None:
+    fake_env, fake_root = _fake_docker_env(tmp_path)
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+            **fake_env,
+        },
+    )
+    _seed_known_digest_provenance(
+        tmp_path,
+        image="repo/app@sha256:other",
+    )
+    wud_file = tmp_path / "state" / "images.todo"
+    wud_file.write_text("repo/app:latest@sha256:new\n", encoding="utf-8")
+    _make_fake_stack(
+        tmp_path,
+        fake_root,
+        "stack",
+        [("app", "repo/app@sha256:old", "cid-app")],
+    )
+
+    response = client.post(
+        "/api/v1/plans",
+        json={"line_numbers": [1]},
+        headers=_csrf_headers(client),
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "blocked"
+    assert body["can_apply"] is False
+    assert any(
+        issue["code"] == "digest-unpin-db-provenance-conflict"
+        for issue in body["issues"]
+    )
 
 
 def test_plan_endpoint_returns_digest_pin_label_rewrite_details(
@@ -1308,6 +1471,93 @@ def test_apply_endpoint_rejects_failed_apply_preflight_without_mutation(
     calls = _fake_docker_calls(fake_root)
     assert " pull " not in calls
     assert " up -d " not in calls
+
+
+def test_apply_endpoint_applies_digest_unpin_plan_and_records_provenance(
+    tmp_path: Path,
+) -> None:
+    fake_env, fake_root = _fake_docker_env(tmp_path)
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+            **fake_env,
+        },
+    )
+    _seed_known_digest_provenance(tmp_path)
+    wud_file = tmp_path / "state" / "images.todo"
+    wud_file.write_text("repo/app:latest@sha256:new\n", encoding="utf-8")
+    compose_dir = _make_fake_stack(
+        tmp_path,
+        fake_root,
+        "stack",
+        [("app", "repo/app@sha256:old", "cid-app")],
+    )
+    compose_file = compose_dir / "docker-compose.yml"
+    compose_file.write_text(
+        "services:\n"
+        "  app:\n"
+        "    # wud-updater.resolved-tag=latest\n"
+        "    image: repo/app@sha256:old\n"
+        "    labels:\n"
+        "      - wud.tag.include=^latest$\n",
+        encoding="utf-8",
+    )
+    _write_fake_image_after_pull(
+        fake_root,
+        "repo/app:latest",
+        "sha256:new-id",
+        "sha256:new",
+    )
+    headers = _csrf_headers(client)
+    plan = client.post(
+        "/api/v1/plans",
+        json={"line_numbers": [1]},
+        headers=headers,
+    ).json()
+
+    apply_response = client.post(
+        "/api/v1/jobs",
+        json={
+            "plan_id": plan["plan_id"],
+            "line_numbers": [1],
+            "confirmation": "apply",
+        },
+        headers=headers,
+    )
+    job = _wait_apply_job(client, apply_response.json()["job_id"])
+
+    assert plan["status"] == "ready"
+    assert plan["stacks"][0]["digest_unpin_updates"][0]["tag_image"] == "repo/app:latest"
+    assert apply_response.status_code == 202
+    assert job["status"] == "success"
+    rendered = compose_file.read_text(encoding="utf-8")
+    assert "image: repo/app:latest" in rendered
+    assert "wud-updater.resolved-tag" not in rendered
+    assert "wud.tag.include=^latest$" in rendered
+    assert wud_file.read_text(encoding="utf-8") == ""
+    calls = _fake_docker_calls(fake_root)
+    assert " pull app" in calls
+    assert " up -d --remove-orphans --no-deps" in calls
+    assert " app" in calls
+    db_path = tmp_path / "state" / "wud.sqlite"
+    with open_db(db_path) as conn:
+        pending = conn.execute("SELECT * FROM pending_updates").fetchone()
+        event = conn.execute("SELECT * FROM update_events").fetchone()
+        known = conn.execute("SELECT * FROM known_images WHERE service_key = 'stack/app'").fetchone()
+    assert pending["status"] == "resolved"
+    assert pending["digest_source_image"] == "repo/app@sha256:old"
+    assert pending["digest_resolved_tag"] == "latest"
+    assert pending["digest_target_digest"] == "sha256:new"
+    assert event["image"] == "repo/app@sha256:old"
+    assert event["target_image"] == "repo/app:latest"
+    assert event["old_digest"] == "sha256:old"
+    assert event["new_digest"] == "sha256:new"
+    assert known["image"] == "repo/app:latest"
+    assert known["digest_source_image"] == "repo/app@sha256:old"
+    assert known["digest_target_digest"] == "sha256:new"
+    assert known["digest_provenance_source"] == "apply"
 
 
 def test_apply_endpoint_requires_and_uses_digest_pin_label_rewrite_approval(

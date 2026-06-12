@@ -13,7 +13,7 @@ from .images import (
     image_with_tag,
     normalize_digest,
 )
-from .updater_models import DigestPinUpdate
+from .updater_models import DigestPinUpdate, DigestUnpinUpdate
 
 
 DIGEST_PROVENANCE_SQL_COLUMNS = (
@@ -68,6 +68,27 @@ def digest_provenance_from_update(
         watch_tag=update.watch_tag,
         target_digest=update.planned_digest,
         final_image=update.final_image,
+        provenance_source=provenance_source,
+        provenance_confidence=provenance_confidence,
+    )
+
+
+def digest_provenance_from_unpin_update(
+    update: DigestUnpinUpdate,
+    *,
+    provenance_source: str,
+    provenance_confidence: str,
+) -> DigestTagProvenance:
+    return DigestTagProvenance(
+        source_image=update.old_image,
+        resolved_tag=update.resolved_tag,
+        watch_tag=update.watch_tag,
+        target_digest=update.target_digest,
+        final_image=(
+            image_with_digest(update.tag_image, update.target_digest)
+            if update.target_digest
+            else update.tag_image
+        ),
         provenance_source=provenance_source,
         provenance_confidence=provenance_confidence,
     )

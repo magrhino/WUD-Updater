@@ -33,6 +33,7 @@ export type {
   DigestPinLabelRewriteApprovalRequest,
   PlanDigestPinLabelRewrite,
   PlanDigestPinUpdate,
+  PlanDigestUnpinUpdate,
   PlanAction,
   PlanStack,
   PlanSkipped,

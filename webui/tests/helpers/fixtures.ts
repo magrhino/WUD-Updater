@@ -671,6 +671,7 @@ export function planResponse(overrides: Partial<PlanResponse> = {}): PlanRespons
     source_file: "/out/images.todo",
     mode: "stop",
     max_wait: 120,
+    digest_pin_updates: false,
     selected_line_numbers: [1],
     summary: {
       target_count: 1,
@@ -695,6 +696,7 @@ export function planResponse(overrides: Partial<PlanResponse> = {}): PlanRespons
         up_no_deps: true,
         tag_updates: [],
         digest_pin_updates: [],
+        digest_unpin_updates: [],
         actions: [{ kind: "pull", description: "pull app", cwd: "/docker/media", args: ["docker", "compose", "pull", "app"] }],
         lines: [
           {

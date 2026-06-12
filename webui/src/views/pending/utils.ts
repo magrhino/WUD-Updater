@@ -1,6 +1,7 @@
 import type {
   PlanAction,
   PlanDigestPinLabelRewrite,
+  PlanDigestUnpinUpdate,
   PlanLine,
   PlanResponse,
   PlanTagUpdate,
@@ -25,6 +26,11 @@ export type PlanTagUpdateView = {
 export type PlanDigestPinLabelRewriteView = {
   stack: string;
   rewrite: PlanDigestPinLabelRewrite;
+};
+
+export type PlanDigestUnpinUpdateView = {
+  stack: string;
+  update: PlanDigestUnpinUpdate;
 };
 
 export function pluralize(
@@ -113,6 +119,19 @@ export function planDigestPinLabelRewritesFromPlan(
   );
 }
 
+export function planDigestUnpinUpdatesFromPlan(
+  plan: PlanResponse | null | undefined,
+): PlanDigestUnpinUpdateView[] {
+  return (
+    plan?.stacks.flatMap((stack) =>
+      (stack.digest_unpin_updates ?? []).map((update) => ({
+        stack: stack.name,
+        update,
+      })),
+    ) ?? []
+  );
+}
+
 export function planLineServiceLabel(
   stackCount: number,
   stack: string,
@@ -140,4 +159,11 @@ export function planLineDigestPinLabel(line: PlanLine): string {
   return provenance.digest
     ? `${provenance.primary} (${provenance.digest})`
     : provenance.primary;
+}
+
+export function planLineDigestUnpinLabel(line: PlanLine): string {
+  if (line.action !== "digest-unpin") {
+    return "";
+  }
+  return `${line.compose_image} -> ${line.target_image}`;
 }

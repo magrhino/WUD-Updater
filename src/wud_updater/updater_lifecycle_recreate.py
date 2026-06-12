@@ -257,6 +257,12 @@ class _LifecycleRecreateMixin:
                     state.matches,
                     state.digest_pin_updates,
                 )
+            if state.digest_unpin_updates:
+                self._remember_applied_digest_unpins(
+                    stack,
+                    state.matches,
+                    state.digest_unpin_updates,
+                )
             return StackStatus("success", "updated")
 
         health_details = self._capture_health_details(stack, state.services)

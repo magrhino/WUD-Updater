@@ -197,6 +197,7 @@ from .web_models import (
     PlanCleanupItem as PlanCleanupItem,
     PlanDigestPinLabelRewrite as PlanDigestPinLabelRewrite,
     PlanDigestPinUpdate as PlanDigestPinUpdate,
+    PlanDigestUnpinUpdate as PlanDigestUnpinUpdate,
     PlanIssue as PlanIssue,
     PlanLine as PlanLine,
     PlanSkipped as PlanSkipped,
