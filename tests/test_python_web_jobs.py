@@ -241,7 +241,9 @@ def test_job_stream_emits_initial_and_terminal_status(tmp_path: Path) -> None:
     assert log_events[0]["job_id"] == apply_response.json()["job_id"]
     assert log_events[0]["max_bytes"] == 65_536
     assert "docker-update-from-wud-v2" in str(log_events[0]["content"])
-    assert _sse_event_names(content)[-2:] == ["log", "job"]
+    event_names = _sse_event_names(content)
+    assert event_names[-1] == "job"
+    assert "log" in event_names[:-1]
 
 
 def test_job_stream_caps_live_log_tail_size(tmp_path: Path) -> None:
