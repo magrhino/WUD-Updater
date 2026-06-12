@@ -1,4 +1,5 @@
 import type {
+  ApplyPreflightCheck,
   ApplyPreflightResponse,
   DoctorResponse,
   PendingCleanupLine,
@@ -214,68 +215,35 @@ export function runFromCleanup(
   runId: number,
   removedItems: DemoPendingItem[],
 ): DemoRunFixture {
-  const startedAt = "2026-05-30T20:12:26+00:00";
-  const finishedAt = "2026-05-30T20:12:26+00:00";
-  const logFile = "";
-  const pending_updates = removedItems.map((item, index) =>
-    pendingRecord(
-      item.line_no,
-      runId,
-      item.raw,
-      demoServiceKey(item),
-      "resolved",
-      index + runId * 100,
-      "removed-unmatched",
-    ),
-  );
-  const events = removedItems.map((item, index) =>
-    runEvent(
-      index + runId * 1000,
-      runId,
-      item.service,
-      item.stack,
-      item.image,
-      "",
-      "success",
-    ),
-  );
-  const summary: RunSummary = {
-    id: runId,
-    started_at: startedAt,
-    finished_at: finishedAt,
-    status: "success",
-    dry_run: false,
+  return runFromPendingRemoval(runId, removedItems, {
     mode: "web-pending-cleanup",
-    wud_file: DEMO_SOURCE_FILE,
-    log_file: logFile,
-    metadata: {
-      source: "demo",
-      operation: "remove_unmatched_pending",
-      line_numbers: removedItems.map((item) => item.line_no),
-    },
-    events,
-  };
-  return {
-    summary,
-    detail: {
-      ...summary,
-      pending_updates,
-      events,
-    },
-    log: {
-      run_id: runId,
-      log_file: logFile,
-      exists: true,
-      content: "Removed unmatched pending demo entries.\n",
-      truncated: false,
-      max_bytes: 262_144,
-    },
-  };
+    operation: "remove_unmatched_pending",
+    statusReason: "removed-unmatched",
+    logContent: "Removed unmatched pending demo entries.\n",
+  });
 }
 
 export function runFromRemoval(
   runId: number,
   removedItems: DemoPendingItem[],
+): DemoRunFixture {
+  return runFromPendingRemoval(runId, removedItems, {
+    mode: "web-pending-removal",
+    operation: "remove_selected_pending",
+    statusReason: "removed-selected",
+    logContent: "Removed selected pending demo entries.\n",
+  });
+}
+
+function runFromPendingRemoval(
+  runId: number,
+  removedItems: DemoPendingItem[],
+  options: {
+    mode: string;
+    operation: string;
+    statusReason: string;
+    logContent: string;
+  },
 ): DemoRunFixture {
   const startedAt = "2026-05-30T20:12:26+00:00";
   const finishedAt = "2026-05-30T20:12:26+00:00";
@@ -288,7 +256,7 @@ export function runFromRemoval(
       demoServiceKey(item),
       "resolved",
       index + runId * 100,
-      "removed-selected",
+      options.statusReason,
     ),
   );
   const events = removedItems.map((item, index) =>
@@ -308,12 +276,12 @@ export function runFromRemoval(
     finished_at: finishedAt,
     status: "success",
     dry_run: false,
-    mode: "web-pending-removal",
+    mode: options.mode,
     wud_file: DEMO_SOURCE_FILE,
     log_file: logFile,
     metadata: {
       source: "demo",
-      operation: "remove_selected_pending",
+      operation: options.operation,
       line_numbers: removedItems.map((item) => item.line_no),
     },
     events,
@@ -329,7 +297,7 @@ export function runFromRemoval(
       run_id: runId,
       log_file: logFile,
       exists: true,
-      content: "Removed selected pending demo entries.\n",
+      content: options.logContent,
       truncated: false,
       max_bytes: 262_144,
     },
@@ -403,64 +371,24 @@ export function demoApplyPreflight(
 ): ApplyPreflightResponse {
   const selectedReady = options.selectedReady ?? true;
   const checks: ApplyPreflightResponse["checks"] = [
-    {
-      status: "PASS",
-      code: "docker-reachable",
-      label: "Docker reachable",
-      detail: "",
-      source_check_codes: ["docker-daemon-info"],
-    },
-    {
-      status: "PASS",
-      code: "compose-renders",
-      label: "Compose renders",
-      detail: "",
-      source_check_codes: ["compose-discovery"],
-    },
-    {
-      status: "PASS",
-      code: "wud-file-writable",
-      label: "WUD file writable",
-      detail: "",
-      source_check_codes: ["wud-out-file"],
-    },
-    {
-      status: "PASS",
-      code: "database-ready",
-      label: "Database ready",
-      detail: "",
-      source_check_codes: ["webui-database"],
-    },
-    {
-      status: "PASS",
-      code: "logs-writable",
-      label: "Logs writable",
-      detail: "",
-      source_check_codes: ["wud-log-dir"],
-    },
-    {
-      status: "PASS",
-      code: "mutations-enabled",
-      label: "Mutations enabled",
-      detail: "",
-      source_check_codes: ["webui-mutation-gate"],
-    },
-    {
-      status: "PASS",
-      code: "bind-mounts-safe",
-      label: "Bind mounts safe",
-      detail: "",
-      source_check_codes: ["bind-mount-path-invalid"],
-    },
-    {
-      status: selectedReady ? "PASS" : "FAIL",
-      code: "selected-services-matched",
-      label: "Selected services matched",
-      detail: selectedReady
+    preflightCheck("PASS", "docker-reachable", "Docker reachable", ["docker-daemon-info"]),
+    preflightCheck("PASS", "compose-renders", "Compose renders", ["compose-discovery"]),
+    preflightCheck("PASS", "wud-file-writable", "WUD file writable", ["wud-out-file"]),
+    preflightCheck("PASS", "database-ready", "Database ready", ["webui-database"]),
+    preflightCheck("PASS", "logs-writable", "Logs writable", ["wud-log-dir"]),
+    preflightCheck("PASS", "mutations-enabled", "Mutations enabled", ["webui-mutation-gate"]),
+    preflightCheck("PASS", "bind-mounts-safe", "Bind mounts safe", [
+      "bind-mount-path-invalid",
+    ]),
+    preflightCheck(
+      selectedReady ? "PASS" : "FAIL",
+      "selected-services-matched",
+      "Selected services matched",
+      ["selected-services"],
+      selectedReady
         ? ""
         : options.selectedDetail || "Selected updates are not ready to apply.",
-      source_check_codes: ["selected-services"],
-    },
+    ),
   ];
   const failures = checks.filter((check) => check.status === "FAIL").length;
   const warnings = checks.filter((check) => check.status === "WARN").length;
@@ -469,6 +397,22 @@ export function demoApplyPreflight(
     failures,
     warnings,
     checks,
+  };
+}
+
+function preflightCheck(
+  status: ApplyPreflightCheck["status"],
+  code: string,
+  label: string,
+  sourceCheckCodes: string[],
+  detail = "",
+): ApplyPreflightCheck {
+  return {
+    status,
+    code,
+    label,
+    detail,
+    source_check_codes: sourceCheckCodes,
   };
 }
 
