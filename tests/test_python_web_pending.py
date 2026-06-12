@@ -39,6 +39,17 @@ def test_pending_endpoint_reads_wud_file_without_mutation(tmp_path: Path) -> Non
     assert [item["line_no"] for item in body["grouping"]["unmatched"]] == [2, 3]
     assert body["grouping"]["unmatched"][0]["action"] == "tag-update"
     assert body["grouping"]["unmatched"][1]["action"] == "recreate_stack"
+    unavailable_provenance = body["grouping"]["unmatched"][1]["digest_provenance"]
+    assert body["items"][1]["digest_provenance"] == unavailable_provenance
+    assert unavailable_provenance == {
+        "source_image": "redis:latest",
+        "resolved_tag": "latest",
+        "watch_tag": "latest",
+        "target_digest": "sha256:abc",
+        "final_image": "redis@sha256:abc",
+        "provenance_source": "compose",
+        "provenance_confidence": "recovered",
+    }
     assert body["grouping"]["warnings"]
     assert wud_file.read_text(encoding="utf-8") == original
 
@@ -209,6 +220,42 @@ def test_pending_endpoint_recovers_digest_pin_provenance_from_compose(
     assert item_provenance["final_image"] == "repo/app@sha256:child"
     assert item_provenance["provenance_source"] == "compose"
     assert item_provenance["provenance_confidence"] == "recovered"
+    _assert_pending_grouping_did_not_mutate(_fake_docker_calls(fake_root))
+
+
+def test_pending_endpoint_keeps_digest_pin_provenance_for_unmatched_item(
+    tmp_path: Path,
+) -> None:
+    fake_env, fake_root = _fake_docker_env(tmp_path)
+    client = _client(tmp_path, {"WUD_WEB_DEV_NO_AUTH": "true", **fake_env})
+    wud_file = tmp_path / "state" / "images.todo"
+    wud_file.write_text("repo/other:latest@sha256:child\n", encoding="utf-8")
+    _make_fake_stack(
+        tmp_path,
+        fake_root,
+        "stack",
+        [("app", "repo/app:latest", "cid-app")],
+    )
+
+    response = client.get("/api/v1/pending")
+
+    assert response.status_code == 200
+    body = response.json()
+    grouping = body["grouping"]
+    assert grouping["status"] == "ready"
+    assert grouping["groups"] == []
+    assert len(grouping["unmatched"]) == 1
+    unmatched_provenance = grouping["unmatched"][0]["digest_provenance"]
+    assert body["items"][0]["digest_provenance"] == unmatched_provenance
+    assert unmatched_provenance == {
+        "source_image": "repo/other:latest",
+        "resolved_tag": "latest",
+        "watch_tag": "latest",
+        "target_digest": "sha256:child",
+        "final_image": "repo/other@sha256:child",
+        "provenance_source": "compose",
+        "provenance_confidence": "recovered",
+    }
     _assert_pending_grouping_did_not_mutate(_fake_docker_calls(fake_root))
 
 

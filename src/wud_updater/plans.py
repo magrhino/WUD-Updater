@@ -1231,7 +1231,11 @@ def resolve_pending_groups(
         return PendingGroupingResult(
             status="unavailable",
             unmatched=tuple(
-                _pending_grouping_item(target, action=_target_action_name(target))
+                _pending_grouping_item(
+                    target,
+                    action=_target_action_name(target),
+                    digest_provenance=_pending_digest_provenance(target),
+                )
                 for target in parsed.targets
             ),
             warnings=(str(exc),),
@@ -1267,6 +1271,9 @@ def resolve_pending_groups(
                 targets_by_line[item.line_no],
                 action=item.reason,
                 diagnostic=diagnostics.get(item.line_no),
+                digest_provenance=_pending_digest_provenance(
+                    targets_by_line[item.line_no]
+                ),
             )
             for item in skipped
             if item.line_no in targets_by_line
@@ -1897,7 +1904,7 @@ def _pending_grouping_items(
                 compose_images=compose_images,
                 services=services,
                 action=_target_action_name(target, services, stack_action=stack_action),
-                digest_provenance=_pending_digest_provenance(target, compose_images),
+                digest_provenance=_pending_digest_provenance(target),
             )
         )
     return tuple(items)
@@ -1934,11 +1941,8 @@ def _pending_grouping_item(
     )
 
 
-def _pending_digest_provenance(
-    target: WudTarget,
-    compose_images: Sequence[str],
-) -> DigestTagProvenance | None:
-    if not target.digest or not compose_images:
+def _pending_digest_provenance(target: WudTarget) -> DigestTagProvenance | None:
+    if not target.first or not target.digest:
         return None
     return digest_provenance_from_digest_target(
         target.first,
