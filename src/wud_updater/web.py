@@ -69,6 +69,7 @@ from .web_models import (
     DeleteServicePolicyOperation as DeleteServicePolicyOperation,
     DeleteSnoozeOperation as DeleteSnoozeOperation,
     DiagnosticsSupportBundleResponse,
+    DigestTagProvenance as DigestTagProvenance,
     DoctorCheckResponse as DoctorCheckResponse,
     DoctorCheckStatus as DoctorCheckStatus,
     DoctorResponse,

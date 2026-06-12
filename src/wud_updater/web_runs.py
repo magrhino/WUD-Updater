@@ -12,6 +12,7 @@ from typing import Any
 from fastapi import HTTPException, Query, Request
 
 from .db import DatabaseError
+from .digest_provenance import digest_provenance_from_row
 from .web_auth import (
     _safe_exception_detail,
     _sanitize_support_bundle_value,
@@ -209,6 +210,7 @@ def _pending_update_from_row(row: sqlite3.Row) -> PendingUpdateRecord:
         created_at=str(row["created_at"]),
         updated_at=str(row["updated_at"]),
         metadata=_metadata_from_row(row),
+        digest_provenance=digest_provenance_from_row(row),
     )
 
 
@@ -227,6 +229,7 @@ def _event_from_row(row: sqlite3.Row) -> RunEventRecord:
         new_digest=str(row["new_digest"]),
         status=str(row["status"]),
         metadata=_metadata_from_row(row),
+        digest_provenance=digest_provenance_from_row(row),
     )
 
 

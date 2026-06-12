@@ -8,8 +8,13 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Generator
 
+from .digest_provenance import (
+    DIGEST_PROVENANCE_SQL_COLUMNS,
+    DigestTagProvenance,
+    digest_provenance_or_empty,
+)
 
-SCHEMA_VERSION = 6
+SCHEMA_VERSION = 7
 
 ColumnSchema = tuple[str, str, int, str | None, int]
 
@@ -44,6 +49,13 @@ EXPECTED_SCHEMA: dict[str, tuple[ColumnSchema, ...]] = {
         ("new_digest", "TEXT", 1, "''", 0),
         ("status", "TEXT", 1, None, 0),
         ("metadata_json", "TEXT", 1, "'{}'", 0),
+        ("digest_source_image", "TEXT", 1, "''", 0),
+        ("digest_resolved_tag", "TEXT", 1, "''", 0),
+        ("digest_watch_tag", "TEXT", 1, "''", 0),
+        ("digest_target_digest", "TEXT", 1, "''", 0),
+        ("digest_final_image", "TEXT", 1, "''", 0),
+        ("digest_provenance_source", "TEXT", 1, "''", 0),
+        ("digest_provenance_confidence", "TEXT", 1, "''", 0),
     ),
     "snoozes": (
         ("id", "INTEGER", 0, None, 1),
@@ -81,6 +93,13 @@ EXPECTED_SCHEMA: dict[str, tuple[ColumnSchema, ...]] = {
         ("digest", "TEXT", 1, "''", 0),
         ("updated_at", "TEXT", 1, None, 0),
         ("metadata_json", "TEXT", 1, "'{}'", 0),
+        ("digest_source_image", "TEXT", 1, "''", 0),
+        ("digest_resolved_tag", "TEXT", 1, "''", 0),
+        ("digest_watch_tag", "TEXT", 1, "''", 0),
+        ("digest_target_digest", "TEXT", 1, "''", 0),
+        ("digest_final_image", "TEXT", 1, "''", 0),
+        ("digest_provenance_source", "TEXT", 1, "''", 0),
+        ("digest_provenance_confidence", "TEXT", 1, "''", 0),
     ),
     "pending_updates": (
         ("id", "INTEGER", 0, None, 1),
@@ -98,6 +117,13 @@ EXPECTED_SCHEMA: dict[str, tuple[ColumnSchema, ...]] = {
         ("created_at", "TEXT", 1, None, 0),
         ("updated_at", "TEXT", 1, None, 0),
         ("metadata_json", "TEXT", 1, "'{}'", 0),
+        ("digest_source_image", "TEXT", 1, "''", 0),
+        ("digest_resolved_tag", "TEXT", 1, "''", 0),
+        ("digest_watch_tag", "TEXT", 1, "''", 0),
+        ("digest_target_digest", "TEXT", 1, "''", 0),
+        ("digest_final_image", "TEXT", 1, "''", 0),
+        ("digest_provenance_source", "TEXT", 1, "''", 0),
+        ("digest_provenance_confidence", "TEXT", 1, "''", 0),
     ),
     "release_note_cache": (
         ("cache_key", "TEXT", 0, None, 1),
@@ -160,6 +186,18 @@ WEB_SCHEMA_TABLES = frozenset(
     {"schema_migrations", "web_users", "web_sessions", "web_settings"}
 )
 
+EXPECTED_SCHEMA_V6 = {
+    name: (
+        tuple(
+            column
+            for column in columns
+            if name not in {"pending_updates", "update_events", "known_images"}
+            or column[0] not in DIGEST_PROVENANCE_SQL_COLUMNS
+        )
+    )
+    for name, columns in EXPECTED_SCHEMA.items()
+}
+
 EXPECTED_SCHEMA_V5 = {
     name: (
         tuple(
@@ -169,7 +207,7 @@ EXPECTED_SCHEMA_V5 = {
             or column[0] not in {"auto_update_time", "auto_update_days_json"}
         )
     )
-    for name, columns in EXPECTED_SCHEMA.items()
+    for name, columns in EXPECTED_SCHEMA_V6.items()
     if name != "auto_update_schedule_runs"
 }
 
@@ -242,11 +280,19 @@ def init_db(conn: sqlite3.Connection) -> None:
         _backfill_schema_migrations(conn, SCHEMA_VERSION)
         _validate_schema(conn)
         return
+    if version == 6:
+        _validate_schema(conn, expected_schema=EXPECTED_SCHEMA_V6)
+        _ensure_schema_migrations(conn)
+        _backfill_schema_migrations(conn, 6)
+        _migrate_v6_to_v7(conn)
+        _validate_schema(conn)
+        return
     if version == 5:
         _validate_schema(conn, expected_schema=EXPECTED_SCHEMA_V5)
         _ensure_schema_migrations(conn)
         _backfill_schema_migrations(conn, 5)
         _migrate_v5_to_v6(conn)
+        _migrate_v6_to_v7(conn)
         _validate_schema(conn)
         return
     if version == 4:
@@ -255,6 +301,7 @@ def init_db(conn: sqlite3.Connection) -> None:
         _backfill_schema_migrations(conn, 4)
         _migrate_v4_to_v5(conn)
         _migrate_v5_to_v6(conn)
+        _migrate_v6_to_v7(conn)
         _validate_schema(conn)
         return
     if version == 3:
@@ -264,6 +311,7 @@ def init_db(conn: sqlite3.Connection) -> None:
         _migrate_v3_to_v4(conn)
         _migrate_v4_to_v5(conn)
         _migrate_v5_to_v6(conn)
+        _migrate_v6_to_v7(conn)
         _validate_schema(conn)
         return
     if version == 2:
@@ -274,6 +322,7 @@ def init_db(conn: sqlite3.Connection) -> None:
         _migrate_v3_to_v4(conn)
         _migrate_v4_to_v5(conn)
         _migrate_v5_to_v6(conn)
+        _migrate_v6_to_v7(conn)
         _validate_schema(conn)
         return
     if version == 1:
@@ -285,6 +334,7 @@ def init_db(conn: sqlite3.Connection) -> None:
         _migrate_v3_to_v4(conn)
         _migrate_v4_to_v5(conn)
         _migrate_v5_to_v6(conn)
+        _migrate_v6_to_v7(conn)
         _validate_schema(conn)
         return
     if version != 0:
@@ -326,6 +376,13 @@ def init_db(conn: sqlite3.Connection) -> None:
                 new_digest TEXT NOT NULL DEFAULT '',
                 status TEXT NOT NULL,
                 metadata_json TEXT NOT NULL DEFAULT '{}',
+                digest_source_image TEXT NOT NULL DEFAULT '',
+                digest_resolved_tag TEXT NOT NULL DEFAULT '',
+                digest_watch_tag TEXT NOT NULL DEFAULT '',
+                digest_target_digest TEXT NOT NULL DEFAULT '',
+                digest_final_image TEXT NOT NULL DEFAULT '',
+                digest_provenance_source TEXT NOT NULL DEFAULT '',
+                digest_provenance_confidence TEXT NOT NULL DEFAULT '',
                 FOREIGN KEY (run_id) REFERENCES update_runs(id) ON DELETE CASCADE
             );
 
@@ -368,7 +425,14 @@ def init_db(conn: sqlite3.Connection) -> None:
                 image_id TEXT NOT NULL DEFAULT '',
                 digest TEXT NOT NULL DEFAULT '',
                 updated_at TEXT NOT NULL,
-                metadata_json TEXT NOT NULL DEFAULT '{}'
+                metadata_json TEXT NOT NULL DEFAULT '{}',
+                digest_source_image TEXT NOT NULL DEFAULT '',
+                digest_resolved_tag TEXT NOT NULL DEFAULT '',
+                digest_watch_tag TEXT NOT NULL DEFAULT '',
+                digest_target_digest TEXT NOT NULL DEFAULT '',
+                digest_final_image TEXT NOT NULL DEFAULT '',
+                digest_provenance_source TEXT NOT NULL DEFAULT '',
+                digest_provenance_confidence TEXT NOT NULL DEFAULT ''
             );
 
             CREATE TABLE IF NOT EXISTS pending_updates (
@@ -387,6 +451,13 @@ def init_db(conn: sqlite3.Connection) -> None:
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL,
                 metadata_json TEXT NOT NULL DEFAULT '{}',
+                digest_source_image TEXT NOT NULL DEFAULT '',
+                digest_resolved_tag TEXT NOT NULL DEFAULT '',
+                digest_watch_tag TEXT NOT NULL DEFAULT '',
+                digest_target_digest TEXT NOT NULL DEFAULT '',
+                digest_final_image TEXT NOT NULL DEFAULT '',
+                digest_provenance_source TEXT NOT NULL DEFAULT '',
+                digest_provenance_confidence TEXT NOT NULL DEFAULT '',
                 UNIQUE (run_id, line_no),
                 FOREIGN KEY (run_id) REFERENCES update_runs(id) ON DELETE CASCADE
             );
@@ -535,9 +606,11 @@ def insert_update_event(
     old_digest: str = "",
     new_digest: str = "",
     metadata_json: str = "{}",
+    digest_provenance: DigestTagProvenance | None = None,
 ) -> int:
     """Insert one per-service update event and return its row id."""
 
+    provenance = digest_provenance_or_empty(digest_provenance)
     with conn:
         cursor = conn.execute(
             """
@@ -553,9 +626,16 @@ def insert_update_event(
                 old_digest,
                 new_digest,
                 status,
-                metadata_json
+                metadata_json,
+                digest_source_image,
+                digest_resolved_tag,
+                digest_watch_tag,
+                digest_target_digest,
+                digest_final_image,
+                digest_provenance_source,
+                digest_provenance_confidence
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 run_id,
@@ -570,6 +650,13 @@ def insert_update_event(
                 new_digest,
                 status,
                 metadata_json,
+                provenance["digest_source_image"],
+                provenance["digest_resolved_tag"],
+                provenance["digest_watch_tag"],
+                provenance["digest_target_digest"],
+                provenance["digest_final_image"],
+                provenance["digest_provenance_source"],
+                provenance["digest_provenance_confidence"],
             ),
         )
     return int(cursor.lastrowid)
@@ -648,12 +735,14 @@ def insert_pending_update(
     created_at: str | None = None,
     updated_at: str | None = None,
     metadata_json: str = "{}",
+    digest_provenance: DigestTagProvenance | None = None,
 ) -> int:
     """Insert one parsed WUD target as explicit pending/update state."""
 
     now = utc_timestamp()
     created = created_at or now
     updated = updated_at or created
+    provenance = digest_provenance_or_empty(digest_provenance)
     with conn:
         cursor = conn.execute(
             """
@@ -671,9 +760,16 @@ def insert_pending_update(
                 status_reason,
                 created_at,
                 updated_at,
-                metadata_json
+                metadata_json,
+                digest_source_image,
+                digest_resolved_tag,
+                digest_watch_tag,
+                digest_target_digest,
+                digest_final_image,
+                digest_provenance_source,
+                digest_provenance_confidence
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 run_id,
@@ -690,6 +786,13 @@ def insert_pending_update(
                 created,
                 updated,
                 metadata_json,
+                provenance["digest_source_image"],
+                provenance["digest_resolved_tag"],
+                provenance["digest_watch_tag"],
+                provenance["digest_target_digest"],
+                provenance["digest_final_image"],
+                provenance["digest_provenance_source"],
+                provenance["digest_provenance_confidence"],
             ),
         )
     return int(cursor.lastrowid)
@@ -706,6 +809,7 @@ def update_pending_update(
     stack_name: str | None = None,
     service_name: str | None = None,
     updated_at: str | None = None,
+    digest_provenance: DigestTagProvenance | None = None,
 ) -> None:
     """Update explicit pending state for one parsed WUD target."""
 
@@ -720,6 +824,11 @@ def update_pending_update(
     if service_name is not None:
         assignments.append("service_name = ?")
         values.append(service_name)
+    if digest_provenance is not None:
+        provenance = digest_provenance.sql_values()
+        for column in DIGEST_PROVENANCE_SQL_COLUMNS:
+            assignments.append(f"{column} = ?")
+            values.append(provenance[column])
     values.extend([run_id, line_no])
     with conn:
         conn.execute(
@@ -742,10 +851,12 @@ def upsert_known_image(
     digest: str = "",
     updated_at: str | None = None,
     metadata_json: str = "{}",
+    digest_provenance: DigestTagProvenance | None = None,
 ) -> None:
     """Record the latest known image state for a service key."""
 
     updated = updated_at or utc_timestamp()
+    provenance = digest_provenance_or_empty(digest_provenance)
     with conn:
         conn.execute(
             """
@@ -755,17 +866,45 @@ def upsert_known_image(
                 image_id,
                 digest,
                 updated_at,
-                metadata_json
+                metadata_json,
+                digest_source_image,
+                digest_resolved_tag,
+                digest_watch_tag,
+                digest_target_digest,
+                digest_final_image,
+                digest_provenance_source,
+                digest_provenance_confidence
             )
-            VALUES (?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(service_key) DO UPDATE SET
                 image = excluded.image,
                 image_id = excluded.image_id,
                 digest = excluded.digest,
                 updated_at = excluded.updated_at,
-                metadata_json = excluded.metadata_json
+                metadata_json = excluded.metadata_json,
+                digest_source_image = excluded.digest_source_image,
+                digest_resolved_tag = excluded.digest_resolved_tag,
+                digest_watch_tag = excluded.digest_watch_tag,
+                digest_target_digest = excluded.digest_target_digest,
+                digest_final_image = excluded.digest_final_image,
+                digest_provenance_source = excluded.digest_provenance_source,
+                digest_provenance_confidence = excluded.digest_provenance_confidence
             """,
-            (service_key, image, image_id, digest, updated, metadata_json),
+            (
+                service_key,
+                image,
+                image_id,
+                digest,
+                updated,
+                metadata_json,
+                provenance["digest_source_image"],
+                provenance["digest_resolved_tag"],
+                provenance["digest_watch_tag"],
+                provenance["digest_target_digest"],
+                provenance["digest_final_image"],
+                provenance["digest_provenance_source"],
+                provenance["digest_provenance_confidence"],
+            ),
         )
 
 
@@ -977,6 +1116,7 @@ MIGRATION_NAMES = {
     4: "add web auth state",
     5: "add release note cache",
     6: "add auto update schedules",
+    7: "add digest tag provenance columns",
 }
 
 
@@ -1245,3 +1385,20 @@ def _migrate_v5_to_v6(conn: sqlite3.Connection) -> None:
         )
         conn.execute("PRAGMA user_version = 6")
     _record_schema_migration(conn, 6)
+
+
+def _migrate_v6_to_v7(conn: sqlite3.Connection) -> None:
+    for table_name in ("pending_updates", "update_events", "known_images"):
+        _validate_table_columns(conn, table_name, EXPECTED_SCHEMA_V6[table_name])
+    with conn:
+        for table_name in ("pending_updates", "update_events", "known_images"):
+            for column in DIGEST_PROVENANCE_SQL_COLUMNS:
+                conn.execute(
+                    f"""
+                    ALTER TABLE {_quote_identifier(table_name)}
+                        ADD COLUMN {_quote_identifier(column)}
+                        TEXT NOT NULL DEFAULT ''
+                    """
+                )
+        conn.execute("PRAGMA user_version = 7")
+    _record_schema_migration(conn, 7)

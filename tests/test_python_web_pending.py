@@ -158,6 +158,60 @@ def test_pending_endpoint_groups_items_by_compose_stack_without_mutation(
     _assert_pending_grouping_did_not_mutate(_fake_docker_calls(fake_root))
 
 
+def test_pending_endpoint_recovers_digest_pin_provenance_from_compose(
+    tmp_path: Path,
+) -> None:
+    fake_env, fake_root = _fake_docker_env(tmp_path)
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_DIGEST_PIN_UPDATES": "true",
+            **fake_env,
+        },
+    )
+    wud_file = tmp_path / "state" / "images.todo"
+    wud_file.write_text("repo/app:latest@sha256:child\n", encoding="utf-8")
+    compose_dir = _make_fake_stack(
+        tmp_path,
+        fake_root,
+        "stack",
+        [("app", "repo/app@sha256:old", "cid-app")],
+    )
+    (compose_dir / "docker-compose.yml").write_text(
+        "\n".join(
+            [
+                "services:",
+                "  app:",
+                "    # wud-updater.resolved-tag=latest",
+                "    image: repo/app@sha256:old",
+                "    labels:",
+                "      - wud.tag.include=^latest$$",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    response = client.get("/api/v1/pending")
+
+    assert response.status_code == 200
+    body = response.json()
+    item_provenance = body["items"][0]["digest_provenance"]
+    group_provenance = body["grouping"]["groups"][0]["items"][0][
+        "digest_provenance"
+    ]
+    assert item_provenance == group_provenance
+    assert item_provenance["source_image"] == "repo/app:latest"
+    assert item_provenance["resolved_tag"] == "latest"
+    assert item_provenance["watch_tag"] == "latest"
+    assert item_provenance["target_digest"] == "sha256:child"
+    assert item_provenance["final_image"] == "repo/app@sha256:child"
+    assert item_provenance["provenance_source"] == "compose"
+    assert item_provenance["provenance_confidence"] == "recovered"
+    _assert_pending_grouping_did_not_mutate(_fake_docker_calls(fake_root))
+
+
 def test_pending_endpoint_marks_recreate_stack_label_action(
     tmp_path: Path,
 ) -> None:

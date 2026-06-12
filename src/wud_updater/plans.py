@@ -12,6 +12,11 @@ from .command import CommandError, CommandRunner
 from .compose import COMPOSE_FILENAMES, ComposeCli, ComposeDiscoveryError, ComposeStack
 from .config import UpdaterConfig
 from .digest_verifier import DigestVerifier, DockerManifestResolver
+from .digest_provenance import (
+    DigestTagProvenance,
+    digest_provenance_from_digest_target,
+    digest_provenance_from_update,
+)
 from .docker_cli import DockerCli
 from .images import image_has_tag, image_matches_resolved_target, image_with_tag
 from .compose_rewrite import render_compose_digest_pins
@@ -160,6 +165,7 @@ class DryRunPlanLine:
     digest: str
     desired_tag: str
     action: str
+    digest_provenance: DigestTagProvenance | None = None
 
 
 @dataclass(frozen=True)
@@ -182,6 +188,7 @@ class DryRunPlanDigestPinUpdate:
     label_value: str
     services: tuple[str, ...]
     label_rewrites: tuple["DryRunPlanDigestPinLabelRewrite", ...] = ()
+    digest_provenance: DigestTagProvenance | None = None
 
 
 @dataclass(frozen=True)
@@ -295,6 +302,7 @@ class PendingGroupingItem:
     services: tuple[str, ...]
     action: str
     diagnostic: UnmatchedDiagnostic | None = None
+    digest_provenance: DigestTagProvenance | None = None
 
 
 @dataclass(frozen=True)
@@ -861,6 +869,11 @@ class _PlanBuilder(_UpdateScopeMixin):
                     label_key=update.label_key,
                     label_value=update.label_value,
                     services=update.services,
+                    digest_provenance=digest_provenance_from_update(
+                        update,
+                        provenance_source="plan",
+                        provenance_confidence="verified",
+                    ),
                     label_rewrites=tuple(
                         DryRunPlanDigestPinLabelRewrite(
                             service=item.service,
@@ -962,12 +975,18 @@ class _PlanBuilder(_UpdateScopeMixin):
             digest_pin = digest_pins.get((match.compose_image, digest_pin_tag))
             if digest_pin is not None:
                 target_image = digest_pin.final_image
+                digest_provenance = digest_provenance_from_update(
+                    digest_pin,
+                    provenance_source="plan",
+                    provenance_confidence="verified",
+                )
             else:
                 target_image = (
                     image_with_tag(match.compose_image, match.target.desired_tag)
                     if match.target.desired_tag
                     else match.resolved
                 )
+                digest_provenance = None
             lines.append(
                 DryRunPlanLine(
                     line_no=match.target.line_no,
@@ -986,6 +1005,7 @@ class _PlanBuilder(_UpdateScopeMixin):
                         if match.target.desired_tag
                         else "update"
                     ),
+                    digest_provenance=digest_provenance,
                 )
             )
         return tuple(lines)
@@ -1877,6 +1897,7 @@ def _pending_grouping_items(
                 compose_images=compose_images,
                 services=services,
                 action=_target_action_name(target, services, stack_action=stack_action),
+                digest_provenance=_pending_digest_provenance(target, compose_images),
             )
         )
     return tuple(items)
@@ -1890,6 +1911,7 @@ def _pending_grouping_item(
     compose_images: Sequence[str] = (),
     services: Sequence[str] = (),
     diagnostic: UnmatchedDiagnostic | None = None,
+    digest_provenance: DigestTagProvenance | None = None,
 ) -> PendingGroupingItem:
     resolved = resolved_image or target.first
     return PendingGroupingItem(
@@ -1908,6 +1930,21 @@ def _pending_grouping_item(
         services=tuple(services),
         action=action,
         diagnostic=diagnostic,
+        digest_provenance=digest_provenance,
+    )
+
+
+def _pending_digest_provenance(
+    target: WudTarget,
+    compose_images: Sequence[str],
+) -> DigestTagProvenance | None:
+    if not target.digest or not compose_images:
+        return None
+    return digest_provenance_from_digest_target(
+        target.first,
+        target.digest,
+        provenance_source="compose",
+        provenance_confidence="recovered",
     )
 
 

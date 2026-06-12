@@ -40,6 +40,7 @@ __all__ = (
     "DeleteServicePolicyOperation",
     "DeleteSnoozeOperation",
     "DiagnosticsSupportBundleResponse",
+    "DigestTagProvenance",
     "DigestPinLabelRewriteApprovalRequest",
     "DoctorCheckResponse",
     "DoctorCheckStatus",
@@ -296,6 +297,16 @@ class AdminRecoveryClaim:
     revoked_sessions: int
     audit_run_id: int
 
+class DigestTagProvenance(BaseModel):
+    source_image: str
+    resolved_tag: str
+    watch_tag: str
+    target_digest: str
+    final_image: str
+    provenance_source: str
+    provenance_confidence: str
+
+
 class PendingItem(BaseModel):
     line_no: int
     raw: str
@@ -307,6 +318,8 @@ class PendingItem(BaseModel):
     allow_repo: bool
     digest: str
     desired_tag: str
+    digest_provenance: DigestTagProvenance | None = None
+
 
 class PendingDiagnostic(BaseModel):
     code: str
@@ -571,6 +584,7 @@ class RunEventRecord(BaseModel):
     new_digest: str
     status: str
     metadata: dict[str, Any] = Field(default_factory=dict)
+    digest_provenance: DigestTagProvenance | None = None
 
 class RunSummary(BaseModel):
     id: int
@@ -600,6 +614,7 @@ class PendingUpdateRecord(BaseModel):
     created_at: str
     updated_at: str
     metadata: dict[str, Any] = Field(default_factory=dict)
+    digest_provenance: DigestTagProvenance | None = None
 
 class RunDetail(RunSummary):
     pending_updates: list[PendingUpdateRecord] = Field(default_factory=list)
@@ -681,6 +696,7 @@ class PlanLine(BaseModel):
     digest: str
     desired_tag: str
     action: str
+    digest_provenance: DigestTagProvenance | None = None
 
 class PlanTagUpdate(BaseModel):
     old_image: str
@@ -709,6 +725,7 @@ class PlanDigestPinUpdate(BaseModel):
     label_value: str
     services: list[str] = Field(default_factory=list)
     label_rewrites: list[PlanDigestPinLabelRewrite] = Field(default_factory=list)
+    digest_provenance: DigestTagProvenance | None = None
 
 class PlanAction(BaseModel):
     kind: str

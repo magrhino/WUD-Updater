@@ -2,6 +2,16 @@
 // Pending updates
 // ---------------------------------------------------------------------------
 
+export interface DigestTagProvenance {
+  source_image: string;
+  resolved_tag: string;
+  watch_tag: string;
+  target_digest: string;
+  final_image: string;
+  provenance_source: string;
+  provenance_confidence: string;
+}
+
 export interface PendingItem {
   line_no: number;
   raw: string;
@@ -13,6 +23,7 @@ export interface PendingItem {
   allow_repo: boolean;
   digest: string;
   desired_tag: string;
+  digest_provenance?: DigestTagProvenance | null;
 }
 
 export interface PendingDiagnostic {
@@ -203,6 +214,7 @@ export interface PlanLine {
   digest: string;
   desired_tag: string;
   action: string;
+  digest_provenance?: DigestTagProvenance | null;
 }
 
 export interface PlanTagUpdate {
@@ -243,6 +255,7 @@ export interface PlanDigestPinUpdate {
   label_value: string;
   services: string[];
   label_rewrites: PlanDigestPinLabelRewrite[];
+  digest_provenance?: DigestTagProvenance | null;
 }
 
 export interface PlanAction {
@@ -557,6 +570,7 @@ export interface RunEventRecord {
   new_digest: string;
   status: string;
   metadata: Record<string, unknown>;
+  digest_provenance?: DigestTagProvenance | null;
 }
 
 export interface RunSummary {
@@ -588,6 +602,7 @@ export interface PendingUpdateRecord {
   created_at: string;
   updated_at: string;
   metadata: Record<string, unknown>;
+  digest_provenance?: DigestTagProvenance | null;
 }
 
 export interface RunDetail extends RunSummary {

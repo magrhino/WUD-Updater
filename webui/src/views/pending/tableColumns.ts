@@ -3,6 +3,7 @@ import { AlertTriangle, ExternalLink } from "@lucide/vue";
 import { NInput, NTag, type DataTableColumns } from "naive-ui";
 
 import type { PendingItem, ReleaseNoteInfo } from "../../api/client";
+import { digestProvenanceDisplay } from "../../utils/digestProvenance";
 import type { SafetyCue } from "./safetyCues";
 
 export type PendingTableColumnsContext = {
@@ -65,14 +66,24 @@ export function createPendingColumns(
       title: "New digest",
       key: "digest",
       minWidth: 220,
-      render: (row) =>
-        row.digest
+      render: (row) => {
+        const provenance = digestProvenanceDisplay(row.digest_provenance);
+        if (provenance) {
+          return h("div", { class: "digest-provenance", title: provenance.title }, [
+            h("span", { class: "digest-provenance-primary" }, provenance.primary),
+            provenance.digest
+              ? h("code", { class: "digest-value" }, provenance.digest)
+              : null,
+          ]);
+        }
+        return row.digest
           ? h(
               "code",
               { class: "digest-value", title: row.digest },
               context.displayDigest(row.digest),
             )
-          : context.displayValue(""),
+          : context.displayValue("");
+      },
     },
     {
       title: "Safety cues",

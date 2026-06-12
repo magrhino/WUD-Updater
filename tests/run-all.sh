@@ -70,6 +70,7 @@ EOF
     src/wud_updater/config.py \
     src/wud_updater/container_identity.py \
     src/wud_updater/db.py \
+    src/wud_updater/digest_provenance.py \
     src/wud_updater/digest_verifier.py \
     src/wud_updater/doctor.py \
     src/wud_updater/docker_cli.py \

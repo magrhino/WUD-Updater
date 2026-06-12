@@ -2761,6 +2761,20 @@ code.pending-table-value {
   overflow-wrap: anywhere;
 }
 
+.digest-provenance {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.digest-provenance-primary {
+  color: var(--text-strong);
+  font-weight: 600;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
 .plan-summary {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));

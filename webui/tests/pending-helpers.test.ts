@@ -6,8 +6,13 @@ import type { PendingItem } from "../src/api/client";
 import PendingCleanupModal from "../src/components/pending/PendingCleanupModal.vue";
 import PendingPlanReviewModal from "../src/components/pending/PendingPlanReviewModal.vue";
 import PendingRemovalModal from "../src/components/pending/PendingRemovalModal.vue";
+import {
+  digestProvenanceDisplay,
+  displayDigest,
+} from "../src/utils/digestProvenance";
 import { safetyCues } from "../src/views/pending/safetyCues";
 import { createPendingColumns } from "../src/views/pending/tableColumns";
+import { planLineDigestPinLabel } from "../src/views/pending/utils";
 import {
   pendingGroupedItem,
   pendingResponse,
@@ -41,6 +46,47 @@ async function emitModalShowUpdate(wrapper: VueWrapper, value: boolean): Promise
 }
 
 describe("pending helper modules", () => {
+  it("formats digest provenance with tag context and truncated digest detail", () => {
+    const digest = "sha256:abcdefghijklmnopqrstuvwxyz0123456789";
+    const provenance = {
+      source_image: "repo/app:latest",
+      resolved_tag: "latest",
+      watch_tag: "latest",
+      target_digest: digest,
+      final_image: `repo/app@${digest}`,
+      provenance_source: "plan",
+      provenance_confidence: "verified",
+    };
+
+    expect(displayDigest(digest)).toBe(
+      "sha256:abcdefghijklm...yz0123456789",
+    );
+    expect(digestProvenanceDisplay(provenance)).toMatchObject({
+      primary: "repo/app: latest -> latest",
+      digest: "Digest: sha256:abcdefghijklm...yz0123456789",
+    });
+    expect(digestProvenanceDisplay(provenance)?.title).toContain(
+      `Digest: ${digest}`,
+    );
+    expect(
+      planLineDigestPinLabel({
+        line_no: 1,
+        raw: `repo/app:latest ${digest}`,
+        image: "repo/app:latest",
+        resolved_image: "repo/app:latest",
+        compose_image: "repo/app@sha256:old",
+        target_image: `repo/app@${digest}`,
+        service: "app",
+        digest,
+        desired_tag: "",
+        action: "digest-pin",
+        digest_provenance: provenance,
+      }),
+    ).toBe(
+      "repo/app: latest -> latest (Digest: sha256:abcdefghijklm...yz0123456789)",
+    );
+  });
+
   it("builds safety cues from versions, release notes, policies, and snoozes", () => {
     const major = pendingGroupedItem({
       line_no: 1,
@@ -184,6 +230,55 @@ describe("pending helper modules", () => {
     expect(wrapper.text()).toContain("Possible breaking change");
     expect(wrapper.find(".release-note-link").attributes("rel")).toBe(
       "noopener noreferrer",
+    );
+  });
+
+  it("renders digest provenance ahead of raw digest values in pending tables", () => {
+    const digest = "sha256:abcdefghijklmnopqrstuvwxyz0123456789";
+    const item = pendingGroupedItem({
+      line_no: 1,
+      image: "repo/app:latest",
+      repo: "repo/app",
+      desired_tag: "",
+      digest,
+      digest_provenance: {
+        source_image: "repo/app:latest",
+        resolved_tag: "latest",
+        watch_tag: "latest",
+        target_digest: digest,
+        final_image: `repo/app@${digest}`,
+        provenance_source: "compose",
+        provenance_confidence: "recovered",
+      },
+    });
+    const columns = createPendingColumns({
+      displayDigest: () => "raw digest fallback",
+      displayValue: (value) => value || "None",
+      releaseNoteFor: () => null,
+      releaseNoteReason: () => "",
+      releaseNoteStatus: () => "Not checked",
+      riskCues: () => [],
+      tagInputProps: (row) => ({ "aria-label": `New tag for ${row.image}` }),
+      tagOverrideValue: () => "",
+      updateTagOverride: vi.fn(),
+    });
+    const digestColumn = columns.find((column) => {
+      return (column as RenderColumn).key === "digest";
+    }) as RenderColumn | undefined;
+    const TestRenderer = defineComponent({
+      setup() {
+        return () => h("div", [digestColumn?.render?.(item) ?? null]);
+      },
+    });
+
+    const wrapper = mountWithApp(TestRenderer);
+    expect(wrapper.text()).toContain("repo/app: latest -> latest");
+    expect(wrapper.text()).toContain(
+      "Digest: sha256:abcdefghijklm...yz0123456789",
+    );
+    expect(wrapper.text()).not.toContain("raw digest fallback");
+    expect(wrapper.find(".digest-provenance").attributes("title")).toContain(
+      `Digest: ${digest}`,
     );
   });
 

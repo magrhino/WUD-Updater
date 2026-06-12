@@ -9,6 +9,7 @@ import type {
   CoreUpdateTourStatus,
   CoreUpdateTourStep,
   CsrfResponse,
+  DigestTagProvenance,
   DigestPinLabelRewriteApprovalRequest,
   DoctorResponse,
   ManagedSettingsUpdateResponse,
@@ -58,6 +59,17 @@ const DEMO_DB_PATH = "demo/logs/wud-updater.sqlite";
 const DEMO_LOG_DIR = "demo/logs";
 const DEMO_DOCKER_BASE = "demo/docker";
 const DEMO_CSRF_TOKEN = "demo-csrf-token";
+const DEMO_POSTGRES_DIGEST =
+  "sha256:1111111111111111111111111111111111111111111111111111111111111111";
+const DEMO_POSTGRES_DIGEST_PROVENANCE: DigestTagProvenance = {
+  source_image: "postgres:16",
+  resolved_tag: "16",
+  watch_tag: "16",
+  target_digest: DEMO_POSTGRES_DIGEST,
+  final_image: `postgres@${DEMO_POSTGRES_DIGEST}`,
+  provenance_source: "compose",
+  provenance_confidence: "recovered",
+};
 
 type DemoStackName = "data" | "home" | "media";
 
@@ -176,24 +188,22 @@ const INITIAL_PENDING: DemoPendingItem[] = [
   },
   {
     line_no: 4,
-    raw: "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
-    image:
-      "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+    raw: `postgres:16@${DEMO_POSTGRES_DIGEST}`,
+    image: `postgres:16@${DEMO_POSTGRES_DIGEST}`,
     key: "postgres:16",
     repo: "postgres",
     current_tag: "16",
     has_tag: true,
     allow_repo: false,
-    digest: "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+    digest: DEMO_POSTGRES_DIGEST,
     desired_tag: "",
-    resolved_image:
-      "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
-    target_image:
-      "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+    resolved_image: `postgres:16@${DEMO_POSTGRES_DIGEST}`,
+    target_image: DEMO_POSTGRES_DIGEST_PROVENANCE.final_image,
     compose_images: ["postgres:16"],
     services: ["postgres"],
     action: "recreate_stack",
     diagnostic: null,
+    digest_provenance: DEMO_POSTGRES_DIGEST_PROVENANCE,
     stack: "data",
     service: "postgres",
   },
@@ -1967,6 +1977,7 @@ function planStack(name: DemoStackName, items: DemoPendingItem[]): PlanStack {
       digest: item.digest,
       desired_tag: item.desired_tag,
       action: item.action,
+      digest_provenance: item.digest_provenance ?? null,
     }));
   return {
     name,
@@ -2034,6 +2045,8 @@ function runFromApply(
       demoServiceKey(item),
       "success",
       index + runId * 100,
+      undefined,
+      item.digest_provenance,
     ),
   );
   const events = selectedItems.map((item, index) =>
@@ -2045,6 +2058,7 @@ function runFromApply(
       item.image,
       item.target_image,
       "success",
+      item.digest_provenance,
     ),
   );
   const summary: RunSummary = {
@@ -2257,6 +2271,7 @@ function pendingRecord(
   statusReason = status === "failed"
     ? "container health check timed out"
     : "demo fixture",
+  digestProvenance: DigestTagProvenance | null | undefined = null,
 ): PendingUpdateRecord {
   const [stackName, serviceName] = serviceKey.split("/");
   const image = raw.split(" ")[0] ?? raw;
@@ -2267,7 +2282,7 @@ function pendingRecord(
     line_no: lineNo,
     raw,
     image,
-    target_digest: "",
+    target_digest: digestProvenance?.target_digest ?? "",
     desired_tag: desiredTag,
     service_key: serviceKey,
     stack_name: stackName ?? "",
@@ -2276,6 +2291,7 @@ function pendingRecord(
     status_reason: statusReason,
     created_at: "2026-05-28T12:00:00+00:00",
     updated_at: "2026-05-28T12:00:01+00:00",
+    digest_provenance: digestProvenance ?? null,
     metadata: { source: "demo" },
   };
 }
@@ -2288,7 +2304,10 @@ function runEvent(
   image: string,
   targetImage: string,
   status: string,
+  digestProvenance: DigestTagProvenance | null | undefined = null,
 ): RunEventRecord {
+  const oldDigest = digestProvenance ? explicitDigestFromImage(image) : "sha256:demo-old";
+  const newDigest = digestProvenance?.target_digest ?? "sha256:demo-new";
   return {
     id,
     run_id: runId,
@@ -2299,11 +2318,21 @@ function runEvent(
     target_image: targetImage,
     old_image_id: "sha256:demo-old",
     new_image_id: "sha256:demo-new",
-    old_digest: "sha256:demo-old",
-    new_digest: "sha256:demo-new",
+    old_digest: oldDigest,
+    new_digest: newDigest,
     status,
+    digest_provenance: digestProvenance ?? null,
     metadata: { source: "demo" },
   };
+}
+
+function explicitDigestFromImage(image: string): string {
+  const marker = "@sha256:";
+  const markerIndex = image.indexOf(marker);
+  if (markerIndex === -1) {
+    return "";
+  }
+  return `sha256:${image.slice(markerIndex + marker.length)}`;
 }
 
 function releaseNote(options: {
