@@ -33,7 +33,7 @@ ensure_python_runtime_deps() {
     return 0
   fi
 
-  if [ -x "$venv_python" ] && python_has_runtime_deps "$venv_python"; then
+  if [[ -x "$venv_python" ]] && python_has_runtime_deps "$venv_python"; then
     echo "Python runtime dependencies already available in: $venv_dir"
     return 0
   fi
@@ -63,7 +63,7 @@ link_one() {
   local src="$1"
   local dst="$2"
 
-  if [ -e "$dst" ] && [ ! -L "$dst" ]; then
+  if [[ -e "$dst" && ! -L "$dst" ]]; then
     echo "Refusing to replace existing non-symlink: $dst" >&2
     echo "Move it aside or set a different target before rerunning install.sh." >&2
     return 1
