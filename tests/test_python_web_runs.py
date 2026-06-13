@@ -12,6 +12,7 @@ from wud_updater.db import (
     insert_update_event,
     insert_update_run,
 )
+from wud_updater.digest_provenance import DigestTagProvenance
 from wud_updater.web_models import LogTail
 from tests.web_test_helpers import (
     _client,
@@ -152,6 +153,75 @@ def test_runs_endpoints_read_existing_sqlite_state(tmp_path: Path) -> None:
     assert detail["metadata"] == {"source": "test"}
     assert detail["pending_updates"][0]["image"] == "nginx:1.25"
     assert detail["events"][0]["service_name"] == "web"
+
+
+def test_runs_endpoints_serialize_digest_provenance(tmp_path: Path) -> None:
+    client = _client(tmp_path, {"WUD_WEB_DEV_NO_AUTH": "true"})
+    db_path = tmp_path / "state" / "wud.sqlite"
+    provenance = DigestTagProvenance(
+        source_image="repo/app:latest",
+        resolved_tag="latest",
+        watch_tag="latest",
+        target_digest="sha256:new",
+        final_image="repo/app@sha256:new",
+        provenance_source="apply",
+        provenance_confidence="verified",
+    )
+    expected_provenance = {
+        "source_image": "repo/app:latest",
+        "resolved_tag": "latest",
+        "watch_tag": "latest",
+        "target_digest": "sha256:new",
+        "final_image": "repo/app@sha256:new",
+        "provenance_source": "apply",
+        "provenance_confidence": "verified",
+    }
+    with open_db(db_path) as conn:
+        init_db(conn)
+        run_id = insert_update_run(
+            conn,
+            started_at="2026-05-27T12:00:00+00:00",
+            status="success",
+            dry_run=False,
+            mode="apply",
+            wud_file="/out/images.todo",
+            log_file="/logs/run.log",
+        )
+        insert_pending_update(
+            conn,
+            run_id=run_id,
+            line_no=1,
+            raw="repo/app:latest@sha256:new",
+            image="repo/app:latest",
+            target_digest="sha256:new",
+            service_key="stack/app",
+            stack_name="stack",
+            service_name="app",
+            status="success",
+            digest_provenance=provenance,
+        )
+        insert_update_event(
+            conn,
+            run_id=run_id,
+            service_name="app",
+            stack_name="stack",
+            image="repo/app:latest",
+            target_image="repo/app@sha256:new",
+            new_digest="sha256:new",
+            status="success",
+            digest_provenance=provenance,
+        )
+
+    runs_response = client.get("/api/v1/runs")
+    detail_response = client.get(f"/api/v1/runs/{run_id}")
+
+    assert runs_response.status_code == 200
+    assert detail_response.status_code == 200
+    run = runs_response.json()[0]
+    detail = detail_response.json()
+    assert run["events"][0]["digest_provenance"] == expected_provenance
+    assert detail["events"][0]["digest_provenance"] == expected_provenance
+    assert detail["pending_updates"][0]["digest_provenance"] == expected_provenance
 
 
 def test_runs_endpoints_sanitize_run_and_event_metadata(tmp_path: Path) -> None:

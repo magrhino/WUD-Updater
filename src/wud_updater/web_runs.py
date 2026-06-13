@@ -6,6 +6,7 @@ import json
 import os
 import sqlite3
 from contextlib import closing
+from dataclasses import asdict
 from pathlib import Path
 from typing import Any
 
@@ -23,6 +24,7 @@ from .web_database import (
     connect_readonly_db as _connect_readonly_db,
 )
 from .web_models import (
+    DigestTagProvenance,
     LogTail,
     PendingUpdateRecord,
     RunDetail,
@@ -210,7 +212,7 @@ def _pending_update_from_row(row: sqlite3.Row) -> PendingUpdateRecord:
         created_at=str(row["created_at"]),
         updated_at=str(row["updated_at"]),
         metadata=_metadata_from_row(row),
-        digest_provenance=digest_provenance_from_row(row),
+        digest_provenance=_digest_provenance_from_row(row),
     )
 
 
@@ -229,8 +231,15 @@ def _event_from_row(row: sqlite3.Row) -> RunEventRecord:
         new_digest=str(row["new_digest"]),
         status=str(row["status"]),
         metadata=_metadata_from_row(row),
-        digest_provenance=digest_provenance_from_row(row),
+        digest_provenance=_digest_provenance_from_row(row),
     )
+
+
+def _digest_provenance_from_row(row: sqlite3.Row) -> DigestTagProvenance | None:
+    provenance = digest_provenance_from_row(row)
+    if provenance is None:
+        return None
+    return DigestTagProvenance.model_validate(asdict(provenance))
 
 
 def _sanitize_run_summary(settings: WebSettings, run: RunSummary) -> RunSummary:
