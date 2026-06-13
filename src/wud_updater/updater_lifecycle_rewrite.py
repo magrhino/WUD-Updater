@@ -16,6 +16,7 @@ from .updater_models import (
     AppliedTagUpdate,
     ComposeTagRewriteError,
     Match,
+    STALE_PENDING_DIGEST_REASON,
     StackStatus,
 )
 
@@ -418,11 +419,20 @@ class _LifecycleRewriteMixin:
                 force_recreate=force_recreate,
                 no_deps=no_deps,
             )
-            if rollback_up.ok and (rollback_up.wait_handled or self._wait_for_health(stack, services)):
+            if rollback_up.ok and (
+                rollback_up.wait_handled or self._wait_for_health(stack, services)
+            ):
                 rollback_result = "restored-and-healthy"
-                self.log.warn(
-                    f"[{stack.name}] Rolled back to previous tag; leaving WUD entry pending for manual review."
-                )
+                if reason == STALE_PENDING_DIGEST_REASON:
+                    self.log.warn(
+                        f"[{stack.name}] Rolled back to previous tag; stale WUD "
+                        "digest entry was removed and should be refreshed by WUD."
+                    )
+                else:
+                    self.log.warn(
+                        f"[{stack.name}] Rolled back to previous tag; leaving "
+                        "WUD entry pending for manual review."
+                    )
             else:
                 rollback_error = rollback_up.command_error
                 self.log.error(f"[{stack.name}] Rollback failed; manual review required.")
@@ -430,6 +440,9 @@ class _LifecycleRewriteMixin:
             self.log.error(f"[{stack.name}] Rollback failed; manual review required.")
 
         report_error = rollback_error or command_error
+        note = f"tag rollback={rollback_result}"
+        if reason == STALE_PENDING_DIGEST_REASON:
+            note += "; stale pending digest entry was removed"
         self._record_failure(
             stack,
             matches,
@@ -438,7 +451,7 @@ class _LifecycleRewriteMixin:
             services=services,
             command_error=report_error,
             health_details=failure_health,
-            note=f"tag rollback={rollback_result}",
+            note=note,
         )
         self._write_tag_incident_log(
             stack,

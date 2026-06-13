@@ -29,6 +29,7 @@ from .updater_models import (
     DigestPinUpdate,
     DigestUnpinUpdate,
     Match,
+    STALE_PENDING_DIGEST_REASON,
     TagUpdate,
     UpdaterError,
 )
@@ -61,11 +62,14 @@ class _LifecycleDigestMixin:
         for line_no, target, expected_image, allow_repo, expected in sorted(requirements):
             matched = False
             digest_result: DigestCheckResult | None = None
+            stale_result: DigestCheckResult | None = None
             for image in images:
                 if not image_matches_resolved_target(image, expected_image, allow_repo):
                     continue
                 matched = True
                 digest_result = self.digest_verifier.verify(image, expected)
+                if digest_result.reason == "stale-digest":
+                    stale_result = digest_result
                 if digest_result.ok:
                     break
             if digest_result is not None and digest_result.status == "untrusted":
@@ -81,12 +85,50 @@ class _LifecycleDigestMixin:
                 )
                 if digest_result is not None:
                     self._log_digest_mismatch(stack.name, digest_result)
+                if stale_result is not None:
+                    self._mark_stale_pending_digest(
+                        stack,
+                        line_no,
+                        target,
+                        expected,
+                        stale_result,
+                    )
                 if not matched:
                     self.log.plain(
                         "ERROR",
                         f"[{stack.name}] No compose image matched line {line_no} while checking expected digest",
                     )
         return ok
+
+    def _mark_stale_pending_digest(
+        self,
+        stack: ComposeStack,
+        line_no: int,
+        target: str,
+        expected: str,
+        result: DigestCheckResult,
+    ) -> None:
+        self.stale_pending_digest_lines.add((stack.index, line_no))
+        current = normalize_digest(result.tag_digest)
+        current_text = f"; current tag digest is {current}" if current else ""
+        self.log.plain(
+            "ERROR",
+            f"[{stack.name}] Pending WUD entry for line {line_no} is stale: "
+            f"{target} requested {expected}{current_text}. "
+            "The queued digest was not restored; refresh or replace the pending entry.",
+        )
+
+    def _expected_digest_failure_reason(
+        self,
+        stack: ComposeStack,
+        matches: Sequence[Match],
+    ) -> str:
+        if any(
+            (stack.index, match.target.line_no) in self.stale_pending_digest_lines
+            for match in matches
+        ):
+            return STALE_PENDING_DIGEST_REASON
+        return "expected-digest-not-reached"
 
     def _verify_digest_pin_updates(
         self,

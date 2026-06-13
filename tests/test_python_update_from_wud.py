@@ -666,7 +666,7 @@ class PythonUpdateFromWudTests(FakeDockerTestCase):
         self.assertIn("manifest inspect quay.io/acme/app@sha256:child", calls)
         self.assertRegex(calls, r"compose -f docker-compose.yml up -d .* app")
 
-    def test_non_ghcr_stale_digest_restores_line_and_skips_recreate(self) -> None:
+    def test_non_ghcr_stale_digest_removes_line_and_reports_stale_input(self) -> None:
         self.wud_file.write_text("quay.io/acme/app:latest@sha256:stale\n", encoding="utf-8")
         self.make_stack("app", [("app", "quay.io/acme/app:latest", "cid-app")])
         self.set_image_state("quay.io/acme/app:latest", "sha256:old", "sha256:old-index")
@@ -687,19 +687,23 @@ class PythonUpdateFromWudTests(FakeDockerTestCase):
         status, stdout, stderr = self.run_direct()
 
         self.assertEqual(status, 1, stderr + stdout)
-        self.assertEqual(
-            self.wud_file.read_text(encoding="utf-8"),
-            "quay.io/acme/app:latest@sha256:stale\n",
-        )
+        self.assertEqual(self.wud_file.read_text(encoding="utf-8"), "")
         calls = self.calls()
         self.assertIn("manifest inspect quay.io/acme/app:latest", calls)
         self.assertIn("manifest inspect quay.io/acme/app@sha256:stale", calls)
         self.assertNotRegex(calls, r"compose -f .* up -d")
+        log_text = sorted(self.log_dir.glob("update-from-wud-v2-*.log"))[-1].read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("Pending WUD entry for line 1 is stale", log_text)
+        report = self.latest_error_report().read_text(encoding="utf-8")
+        self.assertIn("reason=stale-pending-digest", report)
+        self.assertIn("wud_entries_restored=no", report)
         pending = self.db_rows("SELECT * FROM pending_updates")
         runs = self.db_rows("SELECT * FROM update_runs")
         self.assertEqual(runs[0]["status"], "failure")
         self.assertEqual(pending[0]["status"], "failed")
-        self.assertEqual(pending[0]["status_reason"], "expected-digest-not-reached")
+        self.assertEqual(pending[0]["status_reason"], "stale-pending-digest")
 
     def test_ghcr_platform_digest_allows_registryless_wud_line(self) -> None:
         self.wud_file.write_text("acme/app:latest@sha256:child\n", encoding="utf-8")
@@ -728,7 +732,7 @@ class PythonUpdateFromWudTests(FakeDockerTestCase):
         self.assertIn("manifest inspect ghcr.io/acme/app@sha256:child", calls)
         self.assertRegex(calls, r"compose -f docker-compose.yml up -d .* app")
 
-    def test_ghcr_stale_digest_restores_line_and_skips_recreate(self) -> None:
+    def test_ghcr_stale_digest_removes_line_and_reports_stale_input(self) -> None:
         self.wud_file.write_text("acme/app:latest@sha256:stale\n", encoding="utf-8")
         self.make_stack("app", [("app", "ghcr.io/acme/app:latest", "cid-app")])
         self.set_image_state("ghcr.io/acme/app:latest", "sha256:old", "sha256:old-index")
@@ -749,10 +753,7 @@ class PythonUpdateFromWudTests(FakeDockerTestCase):
         status, stdout, stderr = self.run_direct()
 
         self.assertEqual(status, 1, stderr + stdout)
-        self.assertEqual(
-            self.wud_file.read_text(encoding="utf-8"),
-            "acme/app:latest@sha256:stale\n",
-        )
+        self.assertEqual(self.wud_file.read_text(encoding="utf-8"), "")
         calls = self.calls()
         self.assertIn("manifest inspect ghcr.io/acme/app:latest", calls)
         self.assertIn("manifest inspect ghcr.io/acme/app@sha256:stale", calls)
@@ -760,7 +761,14 @@ class PythonUpdateFromWudTests(FakeDockerTestCase):
         log_text = sorted(self.log_dir.glob("update-from-wud-v2-*.log"))[-1].read_text(
             encoding="utf-8"
         )
+        self.assertIn("Pending WUD entry for line 1 is stale", log_text)
         self.assertIn("Digest verification reason: stale-digest", log_text)
+        report = self.latest_error_report().read_text(encoding="utf-8")
+        self.assertIn("reason=stale-pending-digest", report)
+        self.assertIn("wud_entries_restored=no", report)
+        pending = self.db_rows("SELECT * FROM pending_updates")
+        self.assertEqual(pending[0]["status"], "failed")
+        self.assertEqual(pending[0]["status_reason"], "stale-pending-digest")
 
     def test_multi_stack_failure_keeps_failure_reason_in_pending_audit(self) -> None:
         self.wud_file.write_text("repo/app:latest\n", encoding="utf-8")
@@ -3059,6 +3067,48 @@ class PythonUpdateFromWudTests(FakeDockerTestCase):
         calls = self.calls()
         self.assertIn("manifest inspect ghcr.io/acme/app:2.0", calls)
         self.assertIn("manifest inspect ghcr.io/acme/app@sha256:child", calls)
+
+    def test_stale_digest_after_tag_rewrite_rolls_back_without_restore(self) -> None:
+        self.wud_file.write_text(
+            "acme/app:1.0@sha256:stale tag=2.0\n",
+            encoding="utf-8",
+        )
+        stack_dir = self.make_stack("app", [("app", "ghcr.io/acme/app:1.0", "cid-app")])
+        self.set_image_state("ghcr.io/acme/app:1.0", "sha256:old", "sha256:old")
+        self.set_image_after_pull(
+            "ghcr.io/acme/app:2.0",
+            "sha256:config",
+            "sha256:index",
+        )
+        self.set_manifest_stdout("ghcr.io/acme/app:2.0", manifest_index("sha256:child"))
+        self.set_manifest_stdout(
+            "ghcr.io/acme/app@sha256:stale",
+            manifest_image("sha256:config"),
+        )
+
+        status, stdout, stderr = self.run_direct(allow_tag_updates=True)
+
+        self.assertEqual(status, 1, stderr + stdout)
+        self.assertEqual(self.wud_file.read_text(encoding="utf-8"), "")
+        self.assertIn(
+            "image: ghcr.io/acme/app:1.0",
+            (stack_dir / "docker-compose.yml").read_text(encoding="utf-8"),
+        )
+        calls = self.calls()
+        self.assertRegex(calls, r"compose -f docker-compose.yml pull app")
+        self.assertRegex(calls, r"compose -f docker-compose.yml up -d .* app")
+        log_text = sorted(self.log_dir.glob("update-from-wud-v2-*.log"))[-1].read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("Rolled back to previous tag", log_text)
+        self.assertIn("stale WUD digest entry was removed", log_text)
+        report = self.latest_error_report().read_text(encoding="utf-8")
+        self.assertIn("reason=stale-pending-digest", report)
+        self.assertIn("wud_entries_restored=no", report)
+        self.assertIn("stale pending digest entry was removed", report)
+        pending = self.db_rows("SELECT * FROM pending_updates")
+        self.assertEqual(pending[0]["status"], "failed")
+        self.assertEqual(pending[0]["status_reason"], "stale-pending-digest")
 
     def test_tag_backup_failure_restores_line_without_traceback(self) -> None:
         self.wud_file.write_text("repo/app:1.0 tag=2.0\n", encoding="utf-8")

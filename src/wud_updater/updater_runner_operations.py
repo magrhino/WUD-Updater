@@ -497,6 +497,20 @@ class _RunnerOperationsMixin:
             return update.final_image
         return _target_image_for_match(match)
 
+    def _stale_pending_digest_line_numbers(
+        self,
+        matches: Sequence[Match],
+        line_numbers: Iterable[int],
+    ) -> set[int]:
+        candidates = set(line_numbers)
+        return {
+            match.target.line_no
+            for match in matches
+            if match.target.line_no in candidates
+            and (match.stack.index, match.target.line_no)
+            in self.stale_pending_digest_lines
+        }
+
     def _mark_failed_lines_restored(self, failed_lines: Iterable[int]) -> None:
         restored = set(failed_lines)
         for failure in self.failures:

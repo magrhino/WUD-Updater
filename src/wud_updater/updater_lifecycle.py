@@ -28,7 +28,13 @@ from .updater_lifecycle_scope import (
     _stack_level_scope_message as _stack_level_scope_message,
 )
 from .updater_lifecycle_state import _StackUpdateState
-from .updater_models import Match, StackStatus, UpdateScope, UpdaterError
+from .updater_models import (
+    Match,
+    STALE_PENDING_DIGEST_REASON,
+    StackStatus,
+    UpdateScope,
+    UpdaterError,
+)
 
 
 class StackLifecycleExecutor(
@@ -192,19 +198,27 @@ class StackLifecycleExecutor(
 
         state.after = self._image_state(state.images)
         if not self._verify_expected_digests(stack, matches, state.images):
+            reason = self._expected_digest_failure_reason(stack, matches)
+            note = (
+                "Stale pending digest entry was removed; refresh or replace it "
+                "before retrying."
+                if reason == STALE_PENDING_DIGEST_REASON
+                else ""
+            )
             if state.compose_rewrite_applied and state.compose_backup is not None:
                 return self._handle_compose_rewrite_failure(
                     state,
-                    "expected-digest-not-reached",
+                    reason,
                     phase="digest",
                 )
             self._record_failure(
                 stack,
                 state.matches,
                 phase="digest",
-                reason="expected-digest-not-reached",
+                reason=reason,
                 services=state.pull_services,
                 health_details=self._capture_health_details(stack, state.pull_services),
+                note=note,
             )
             self._progress(
                 "pull",
@@ -214,7 +228,7 @@ class StackLifecycleExecutor(
                 services=state.pull_services,
                 matches=state.matches,
             )
-            return StackStatus("failure", "expected-digest-not-reached")
+            return StackStatus("failure", reason)
 
         if state.digest_pin_updates and not self._verify_digest_pin_updates(
             stack,
