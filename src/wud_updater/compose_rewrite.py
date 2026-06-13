@@ -6,7 +6,7 @@ import os
 import re
 import shutil
 import tempfile
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from io import StringIO
 from pathlib import Path
 
@@ -34,6 +34,21 @@ from .updater_models import (
 DIGEST_PIN_MARKER_PREFIX = "wud-updater.resolved-tag="
 WUD_TAG_INCLUDE_LABEL = "wud.tag.include"
 _JS_REGEX_SPECIAL_RE = re.compile(r"([\\^$.*+?()[\]{}|])")
+
+
+class _CommentTokenList:
+    __slots__ = ("_replace", "tokens")
+
+    def __init__(
+        self,
+        tokens: list[object],
+        replace: Callable[[list[object]], None],
+    ) -> None:
+        self.tokens = tokens
+        self._replace = replace
+
+    def replace(self, tokens: list[object]) -> None:
+        self._replace(tokens)
 
 
 def apply_compose_tag_updates(
@@ -870,15 +885,7 @@ def _service_resolved_tag_marker(
 ) -> str:
     values: set[str] = set()
     for token in _service_comment_tokens(services, service, service_config):
-        value = getattr(token, "value", "")
-        text = value.strip()
-        if text.startswith("#"):
-            text = text[1:].strip()
-        if not text.startswith(DIGEST_PIN_MARKER_PREFIX):
-            continue
-        marker_value = text.removeprefix(DIGEST_PIN_MARKER_PREFIX).strip()
-        if marker_value:
-            values.add(marker_value)
+        values.update(_comment_token_resolved_tag_markers(token))
     if not values:
         return ""
     if len(values) > 1:
@@ -900,20 +907,16 @@ def _remove_service_resolved_tag_marker(
     service_config: CommentedMap,
     marker: str,
 ) -> None:
-    removed = False
-    for tokens in _service_comment_token_lists(services, service, service_config):
+    for token_list in _service_comment_token_lists(services, service, service_config):
         kept = []
-        for token in tokens:
-            value = getattr(token, "value", "")
-            text = value.strip()
-            cleaned = text[1:].strip() if text.startswith("#") else text
-            if cleaned == marker:
-                removed = True
+        for token in token_list.tokens:
+            if _comment_token_matches_marker(token, marker):
                 continue
             kept.append(token)
-        tokens[:] = kept
+        token_list.replace(kept)
     _empty_detached_service_comment_lists(services, service, service_config)
-    if not removed and _service_resolved_tag_marker(services, service, service_config):
+    remaining_marker = _service_resolved_tag_marker(services, service, service_config)
+    if remaining_marker:
         raise ComposeTagRewriteError(
             f"Service {service} resolved-tag marker is attached ambiguously."
         )
@@ -927,7 +930,7 @@ def _service_comment_tokens(
     tokens: list[object] = []
     seen: set[int] = set()
     for token_list in _service_comment_token_lists(services, service, service_config):
-        for token in token_list:
+        for token in token_list.tokens:
             token_id = id(token)
             if token_id in seen:
                 continue
@@ -940,15 +943,102 @@ def _service_comment_token_lists(
     services: CommentedMap,
     service: str,
     service_config: CommentedMap,
-) -> tuple[list[object], ...]:
-    token_lists: list[list[object]] = []
-    comment = getattr(service_config.ca, "comment", None)
-    if comment and len(comment) > 1 and comment[1]:
-        token_lists.append(comment[1])
-    item = services.ca.items.get(service)
-    if item and len(item) > 3 and item[3]:
-        token_lists.append(item[3])
+) -> tuple[_CommentTokenList, ...]:
+    token_lists: list[_CommentTokenList] = []
+    _append_comment_slots(token_lists, getattr(service_config.ca, "comment", None))
+    _append_comment_slots(token_lists, services.ca.items.get(service))
+    for key in service_config:
+        _append_comment_slots(token_lists, service_config.ca.items.get(key))
+    _append_comment_token_list(
+        token_lists,
+        getattr(service_config.ca, "end", None),
+    )
     return tuple(token_lists)
+
+
+def _comment_token_resolved_tag_markers(token: object) -> set[str]:
+    values: set[str] = set()
+    for line in str(getattr(token, "value", "")).splitlines():
+        text = line.strip()
+        if text.startswith("#"):
+            text = text[1:].strip()
+        if not text.startswith(DIGEST_PIN_MARKER_PREFIX):
+            continue
+        marker_value = text.removeprefix(DIGEST_PIN_MARKER_PREFIX).strip()
+        if marker_value:
+            values.add(marker_value)
+    return values
+
+
+def _comment_token_matches_marker(token: object, marker: str) -> bool:
+    text = str(getattr(token, "value", "")).strip()
+    cleaned = text[1:].strip() if text.startswith("#") else text
+    return cleaned == marker
+
+
+def _append_comment_slots(
+    token_lists: list[_CommentTokenList],
+    slots: list[object] | None,
+) -> None:
+    if not slots:
+        return
+    for index, slot in enumerate(slots):
+        if isinstance(slot, list):
+            _append_comment_token_list(
+                token_lists,
+                slot,
+                lambda kept, slots=slots, index=index, slot=slot: (
+                    _replace_comment_slot_list(slots, index, slot, kept)
+                ),
+            )
+        elif _is_comment_token(slot):
+            _append_standalone_comment_token(token_lists, slots, index, slot)
+
+
+def _append_comment_token_list(
+    token_lists: list[_CommentTokenList],
+    tokens: list[object] | None,
+    replace: Callable[[list[object]], None] | None = None,
+) -> None:
+    if not tokens or not any(_is_comment_token(token) for token in tokens):
+        return
+    if replace is None:
+        def replace_comment_tokens(kept: list[object]) -> None:
+            tokens[:] = kept
+
+        replace = replace_comment_tokens
+    token_lists.append(_CommentTokenList(tokens, replace))
+
+
+def _append_standalone_comment_token(
+    token_lists: list[_CommentTokenList],
+    slots: list[object],
+    index: int,
+    token: object,
+) -> None:
+    token_lists.append(
+        _CommentTokenList(
+            [token],
+            lambda kept, slots=slots, index=index: slots.__setitem__(
+                index,
+                kept[0] if kept else None,
+            ),
+        )
+    )
+
+
+def _replace_comment_slot_list(
+    slots: list[object],
+    index: int,
+    original: list[object],
+    kept: list[object],
+) -> None:
+    original[:] = kept
+    slots[index] = original if kept else None
+
+
+def _is_comment_token(value: object) -> bool:
+    return isinstance(getattr(value, "value", None), str)
 
 
 def _empty_detached_service_comment_lists(

@@ -1061,6 +1061,49 @@ class ComposeDigestUnpinTests(ComposeRewriteTestCase):
             compose_file.read_text(encoding="utf-8"),
         )
 
+    def test_render_removes_resolved_tag_marker_from_image_comment_slot(self) -> None:
+        compose_file = self.write_compose(
+            "services:\n"
+            "  app:\n"
+            "    # wud-updater.resolved-tag=latest\n"
+            "    image: repo/app@sha256:old\n"
+            "    # wud-updater.resolved-tag=latest\n"
+            "    labels:\n"
+            "    - wud.tag.include=^latest$$\n"
+        )
+
+        rendered, applied = render_compose_digest_unpins(
+            compose_file,
+            (self.digest_unpin_update(),),
+            stack_name="stack",
+        )
+
+        self.assertEqual(applied[0].replacements, 1)
+        self.assertIn("image: repo/app:latest", rendered)
+        self.assertNotIn("wud-updater.resolved-tag", rendered)
+
+    def test_remove_resolved_tag_marker_rejects_partial_cleanup(self) -> None:
+        parsed = YAML(typ="rt").load(
+            "services:\n"
+            "  app:\n"
+            "    # wud-updater.resolved-tag=latest\n"
+            "    # wud-updater.resolved-tag=other\n"
+            "    image: repo/app@sha256:old\n"
+        )
+        services = parsed["services"]
+        service_config = services["app"]
+
+        with self.assertRaisesRegex(
+            ComposeTagRewriteError,
+            "resolved-tag marker is attached ambiguously",
+        ):
+            compose_rewrite._remove_service_resolved_tag_marker(
+                services,
+                "app",
+                service_config,
+                "wud-updater.resolved-tag=latest",
+            )
+
     def test_apply_rejects_empty_digest_unpin_render_without_write(self) -> None:
         original = "services:\n  app:\n    image: repo/app@sha256:old\n"
         compose_file = self.write_compose(original)

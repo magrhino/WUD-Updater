@@ -6,7 +6,7 @@ from wud_updater import web_jobs
 from wud_updater import web_plans as plans_module
 from wud_updater import web_self_update as self_update_module
 from wud_updater.config import ConfigError
-from wud_updater.db import init_db, open_db, upsert_known_image
+from wud_updater.db import DatabaseError, init_db, open_db, upsert_known_image
 from wud_updater.digest_provenance import DigestTagProvenance
 from wud_updater.locks import DirectoryLock, WudLockError, lock_dir_for
 from tests.web_test_helpers import (
@@ -547,6 +547,97 @@ def test_plan_endpoint_uses_known_image_provenance_for_digest_unpin(
     assert line["target_image"] == "repo/app:latest"
     assert line["digest_provenance"]["target_digest"] == "sha256:new"
     assert line["digest_provenance"]["provenance_source"] == "plan"
+
+
+def test_plan_endpoint_treats_digest_provenance_lookup_failure_as_best_effort(
+    tmp_path: Path,
+    monkeypatch,
+    caplog,
+) -> None:
+    fake_env, fake_root = _fake_docker_env(tmp_path)
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+            **fake_env,
+        },
+    )
+    wud_file = tmp_path / "state" / "images.todo"
+    wud_file.write_text("repo/app:latest\n", encoding="utf-8")
+    _make_fake_stack(
+        tmp_path,
+        fake_root,
+        "stack",
+        [("app", "repo/app:latest", "cid-app")],
+    )
+
+    def fail_connect(_settings):
+        raise DatabaseError("database schema version 1 requires migration")
+
+    monkeypatch.setattr(
+        plans_module.web_database,
+        "connect_readonly_db",
+        fail_connect,
+    )
+    caplog.set_level("WARNING", logger="wud_updater.web_database")
+
+    response = client.post(
+        "/api/v1/plans",
+        json={"line_numbers": [1]},
+        headers=_csrf_headers(client),
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "ready"
+    assert body["issues"] == []
+    assert any(
+        "failed to read digest provenance from database" in record.message
+        for record in caplog.records
+    )
+
+
+def test_known_digest_provenance_closes_connection_after_query_failure(
+    tmp_path: Path,
+    monkeypatch,
+    caplog,
+) -> None:
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+        },
+    )
+
+    class FailingConnection:
+        closed = False
+
+        def execute(self, _query: str):
+            raise DatabaseError("known_images table is missing")
+
+        def close(self) -> None:
+            self.closed = True
+
+    conn = FailingConnection()
+    monkeypatch.setattr(
+        plans_module.web_database,
+        "connect_readonly_db",
+        lambda _settings: conn,
+    )
+    caplog.set_level("WARNING", logger="wud_updater.web_database")
+
+    result = plans_module.web_database.known_digest_provenance_by_service(
+        client.app.state.web_settings,
+    )
+
+    assert result == {}
+    assert conn.closed is True
+    assert any(
+        "failed to read digest provenance from database" in record.message
+        for record in caplog.records
+    )
 
 
 def test_plan_endpoint_blocks_conflicting_digest_unpin_db_provenance(
