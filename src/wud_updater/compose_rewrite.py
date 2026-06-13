@@ -81,20 +81,28 @@ def apply_compose_tag_updates(
                     f"Service {service} image is inherited and needs manual review."
                 )
             _reject_yaml_anchor_or_alias_image_value(services, service, service_config)
-            span = _service_image_scalar_span(
+            span_start, span_end, replacement_prefix = _service_image_scalar_rewrite(
                 services,
                 service,
                 update.old_image,
                 source,
                 line_offsets,
             )
+            span = (span_start, span_end)
             if span in seen_spans:
                 raise ComposeTagRewriteError(
                     f"Service {service} image for {update.old_image} was "
                     "selected more than once."
                 )
             seen_spans.add(span)
-            spans.append((*span, update.new_image, update))
+            spans.append(
+                (
+                    span_start,
+                    span_end,
+                    f"{replacement_prefix}{update.new_image}",
+                    update,
+                )
+            )
             counts[id(update)] += 1
 
     rendered = source
@@ -176,6 +184,7 @@ def render_compose_digest_pins(
     source = compose_path.read_text(encoding="utf-8")
     yaml = YAML(typ="rt")
     yaml.preserve_quotes = True
+    yaml.width = 4096
     try:
         parsed = yaml.load(source)
     except YAMLError as exc:
@@ -460,6 +469,23 @@ def _service_image_scalar_span(
     source: str,
     line_offsets: Sequence[int],
 ) -> tuple[int, int]:
+    start, end, _replacement_prefix = _service_image_scalar_rewrite(
+        services,
+        service,
+        old_image,
+        source,
+        line_offsets,
+    )
+    return start, end
+
+
+def _service_image_scalar_rewrite(
+    services: CommentedMap,
+    service: str,
+    old_image: str,
+    source: str,
+    line_offsets: Sequence[int],
+) -> tuple[int, int, str]:
     service_config = services.get(service)
     if not isinstance(service_config, CommentedMap):
         raise ComposeTagRewriteError(
@@ -491,12 +517,7 @@ def _service_image_scalar_span(
             f"Service {service} image source location is invalid."
         )
 
-    line_start = line_offsets[line_no]
-    line_end = source.find("\n", line_start)
-    if line_end == -1:
-        line_end = len(source)
-    line = source[line_start:line_end]
-    body = line[:-1] if line.endswith("\r") else line
+    line_start, _line_end, body = _source_line(source, line_offsets, line_no)
     pattern = re.compile(
         r"^([ \t]*(?:[\"']image[\"']|image)[ \t]*:[ \t]*)"
         r"([\"']?)"
@@ -506,14 +527,104 @@ def _service_image_scalar_span(
     )
     match = pattern.fullmatch(body)
     if match is None:
-        raise ComposeTagRewriteError(
-            f"Service {service} image uses unsupported YAML syntax for automatic "
-            "rewrite."
+        try:
+            key_line_no, _key_col = service_config.lc.key("image")
+        except (AttributeError, KeyError, TypeError, ValueError) as exc:
+            raise ComposeTagRewriteError(
+                f"Service {service} image source location is unavailable."
+            ) from exc
+        multiline_span = _multiline_plain_image_scalar_rewrite(
+            source,
+            line_offsets,
+            key_line_no,
+            line_no,
+            old_image,
         )
+        if multiline_span is None:
+            raise ComposeTagRewriteError(
+                f"Service {service} image uses unsupported YAML syntax for automatic "
+                "rewrite."
+            )
+        return multiline_span
 
     start = line_start + len(match.group(1)) + len(match.group(2))
     end = start + len(old_image)
-    return start, end
+    return start, end, ""
+
+
+def _multiline_plain_image_scalar_rewrite(
+    source: str,
+    line_offsets: Sequence[int],
+    key_line_no: int,
+    value_line_no: int,
+    old_image: str,
+) -> tuple[int, int, str] | None:
+    if key_line_no < 0 or key_line_no >= len(line_offsets):
+        return None
+    if value_line_no != key_line_no + 1:
+        return None
+
+    key_line_start, _key_line_end, key_body = _source_line(
+        source,
+        line_offsets,
+        key_line_no,
+    )
+    key_match = re.fullmatch(
+        r"^([ \t]*)(?:[\"']image[\"']|image)[ \t]*:([ \t]*)$",
+        key_body,
+    )
+    if key_match is None:
+        return None
+
+    value_line_start, _value_line_end, value_body = _source_line(
+        source,
+        line_offsets,
+        value_line_no,
+    )
+    value_match = re.fullmatch(
+        r"^([ \t]+)" + re.escape(old_image) + r"([ \t]*)$",
+        value_body,
+    )
+    if value_match is None:
+        return None
+    if len(value_match.group(1)) <= len(key_match.group(1)):
+        return None
+
+    next_line_no = value_line_no + 1
+    if next_line_no < len(line_offsets):
+        _next_start, _next_end, next_body = _source_line(
+            source,
+            line_offsets,
+            next_line_no,
+        )
+        next_stripped = next_body.strip()
+        if next_stripped and _line_indent_width(next_body) > len(key_match.group(1)):
+            return None
+
+    trailing_space = key_match.group(2)
+    start = key_line_start + len(key_body)
+    replacement_prefix = "" if trailing_space else " "
+    value_start = value_line_start + len(value_match.group(1))
+    end = value_start + len(old_image)
+    return start, end, replacement_prefix
+
+
+def _source_line(
+    source: str,
+    line_offsets: Sequence[int],
+    line_no: int,
+) -> tuple[int, int, str]:
+    line_start = line_offsets[line_no]
+    line_end = source.find("\n", line_start)
+    if line_end == -1:
+        line_end = len(source)
+    line = source[line_start:line_end]
+    body = line[:-1] if line.endswith("\r") else line
+    return line_start, line_end, body
+
+
+def _line_indent_width(line: str) -> int:
+    return len(line) - len(line.lstrip(" \t"))
 
 
 def _direct_service_config(services: CommentedMap, service: str) -> CommentedMap:

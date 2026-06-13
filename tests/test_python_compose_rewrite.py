@@ -337,6 +337,103 @@ class ComposeTagUpdateTests(ComposeRewriteTestCase):
 
                 self.assertEqual(compose_file.read_text(encoding="utf-8"), original)
 
+    def test_rewrites_multiline_digest_image_to_one_line_tag(self) -> None:
+        digest = (
+            "d771c6193517d7ccbbf9bf5142e235234fc5888a583eab8c4538589351374a79"
+        )
+        old_image = f"ghcr.io/vavallee/bindery@sha256:{digest}"
+        new_image = "ghcr.io/vavallee/bindery:latest"
+        original = (
+            "services:\n"
+            "  bindery:\n"
+            "    image:\n"
+            f"      {old_image}\n"
+            "    container_name: bindery\n"
+        )
+        compose_file = self.write_compose(original)
+
+        applied = apply_compose_tag_updates(
+            compose_file,
+            (
+                TagUpdate(
+                    old_image=old_image,
+                    desired_tag="latest",
+                    new_image=new_image,
+                    services=("bindery",),
+                ),
+            ),
+        )
+
+        self.assertEqual(applied[0].replacements, 1)
+        self.assertEqual(
+            compose_file.read_text(encoding="utf-8"),
+            (
+                "services:\n"
+                "  bindery:\n"
+                f"    image: {new_image}\n"
+                "    container_name: bindery\n"
+            ),
+        )
+
+    def test_rejects_commented_multiline_image_key_without_write(self) -> None:
+        digest = (
+            "d771c6193517d7ccbbf9bf5142e235234fc5888a583eab8c4538589351374a79"
+        )
+        old_image = f"ghcr.io/vavallee/bindery@sha256:{digest}"
+        original = (
+            "services:\n"
+            "  bindery:\n"
+            "    image: # managed\n"
+            f"      {old_image}\n"
+        )
+        compose_file = self.write_compose(original)
+
+        with self.assertRaisesRegex(
+            ComposeTagRewriteError,
+            "unsupported YAML syntax",
+        ):
+            apply_compose_tag_updates(
+                compose_file,
+                (
+                    TagUpdate(
+                        old_image=old_image,
+                        desired_tag="latest",
+                        new_image="ghcr.io/vavallee/bindery:latest",
+                        services=("bindery",),
+                    ),
+                ),
+            )
+
+        self.assertEqual(compose_file.read_text(encoding="utf-8"), original)
+
+    def test_rejects_block_scalar_image_without_write(self) -> None:
+        digest = (
+            "d771c6193517d7ccbbf9bf5142e235234fc5888a583eab8c4538589351374a79"
+        )
+        old_image = f"ghcr.io/vavallee/bindery@sha256:{digest}"
+        original = (
+            "services:\n"
+            "  bindery:\n"
+            "    image: |\n"
+            f"      {old_image}\n"
+        )
+        compose_file = self.write_compose(original)
+
+        with self.assertRaises(ComposeTagRewriteError):
+            apply_compose_tag_updates(
+                compose_file,
+                (
+                    TagUpdate(
+                        old_image=old_image,
+                        desired_tag="latest",
+                        new_image="ghcr.io/vavallee/bindery:latest",
+                        services=("bindery",),
+                    ),
+                ),
+            )
+
+        self.assertEqual(compose_file.read_text(encoding="utf-8"), original)
+
 
 class ComposeTagExclusionTests(ComposeRewriteTestCase):
     def test_render_merges_custom_label_with_existing_exact_tags(self) -> None:
@@ -621,6 +718,35 @@ class ComposeDigestPinTests(ComposeRewriteTestCase):
         self.assertEqual(applied[0].final_image, "repo/app@sha256:pin")
         self.assertIn("# wud-updater.resolved-tag=2.0", content)
         self.assertIn("image: repo/app@sha256:pin", content)
+
+    def test_render_keeps_real_digest_image_on_one_line(self) -> None:
+        digest = (
+            "d771c6193517d7ccbbf9bf5142e235234fc5888a583eab8c4538589351374a79"
+        )
+        compose_file = self.write_compose(
+            "services:\n"
+            "  bindery:\n"
+            "    image: ghcr.io/vavallee/bindery:latest\n"
+        )
+
+        rendered, applied = render_compose_digest_pins(
+            compose_file,
+            (
+                self.digest_pin_update(
+                    old_image="ghcr.io/vavallee/bindery:latest",
+                    resolved_tag="latest",
+                    planned_digest=f"sha256:{digest}",
+                    services=("bindery",),
+                ),
+            ),
+        )
+
+        self.assertEqual(applied[0].replacements, 1)
+        self.assertIn(
+            f"image: ghcr.io/vavallee/bindery@sha256:{digest}",
+            rendered,
+        )
+        self.assertNotIn("image: \n", rendered)
 
     def test_apply_rejects_empty_digest_pin_render_without_write(self) -> None:
         original = "services:\n  app:\n    image: repo/app:1.0\n"
