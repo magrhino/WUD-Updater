@@ -14,12 +14,29 @@ from .config import UpdaterConfig
 from .digest_verifier import DigestVerifier, DockerManifestResolver
 from .digest_provenance import (
     DigestTagProvenance,
+    digest_from_image,
     digest_provenance_from_digest_target,
+    digest_provenance_from_unpin_update,
     digest_provenance_from_update,
 )
 from .docker_cli import DockerCli
-from .images import image_has_tag, image_matches_resolved_target, image_with_tag
-from .compose_rewrite import render_compose_digest_pins
+from .images import (
+    image_has_tag,
+    image_matches_resolved_target,
+    image_tag,
+    image_with_tag,
+    normalize_digest,
+    repo_key,
+    tag_value_valid,
+)
+from .compose_rewrite import (
+    WUD_TAG_INCLUDE_LABEL,
+    compose_unescape_dollars,
+    exact_tags_regex,
+    render_compose_digest_pins,
+    render_compose_digest_unpins,
+    service_resolved_tag_marker,
+)
 from .updater_digest_pin import (
     _digest_pin_candidates,
     _digest_pin_match_tag,
@@ -27,6 +44,7 @@ from .updater_digest_pin import (
     _resolve_digest_pin_candidate,
     digest_pin_update_from_values,
 )
+from .updater_digest_unpin import digest_unpin_update_from_values
 from .updater_matching import (
     _ordered_unique,
     _scope_plan_label,
@@ -41,6 +59,7 @@ from .updater_models import (
     DigestPinLabelRewriteApproval,
     DigestPinLabelRewriteApprovalRequired,
     DigestPinUpdate,
+    DigestUnpinUpdate,
     Match,
     TagOverride,
     UpdateScope,
@@ -192,6 +211,21 @@ class DryRunPlanDigestPinUpdate:
 
 
 @dataclass(frozen=True)
+class DryRunPlanDigestUnpinUpdate:
+    source_image: str
+    resolved_tag: str
+    tag_image: str
+    current_digest: str
+    target_digest: str
+    watch_tag: str
+    marker: str
+    label_key: str
+    label_value: str
+    services: tuple[str, ...]
+    digest_provenance: DigestTagProvenance | None = None
+
+
+@dataclass(frozen=True)
 class DryRunPlanDigestPinLabelRewrite:
     service: str
     label_key: str
@@ -225,6 +259,7 @@ class DryRunPlanStack:
     up_no_deps: bool
     tag_updates: tuple[DryRunPlanTagUpdate, ...] = ()
     digest_pin_updates: tuple[DryRunPlanDigestPinUpdate, ...] = ()
+    digest_unpin_updates: tuple[DryRunPlanDigestUnpinUpdate, ...] = ()
     actions: tuple[DryRunPlanAction, ...] = ()
     lines: tuple[DryRunPlanLine, ...] = ()
 
@@ -334,6 +369,9 @@ class _PlanBuilder(_UpdateScopeMixin):
     digest_pin_label_rewrite_approvals: Sequence[DigestPinLabelRewriteApproval] = ()
     host_docker_base: Path | None = None
     command_runner: CommandRunner | None = None
+    known_digest_provenance_by_service: Mapping[str, DigestTagProvenance] = field(
+        default_factory=dict,
+    )
     docker: DockerCli = field(init=False)
     compose: ComposeCli = field(init=False)
     digest_pin_updates_by_stack: dict[int, tuple[DigestPinUpdate, ...]] = field(
@@ -344,6 +382,14 @@ class _PlanBuilder(_UpdateScopeMixin):
         int,
         dict[tuple[str, str], tuple[DigestPinLabelRewrite, ...]],
     ] = field(init=False, default_factory=dict)
+    digest_unpin_updates_by_stack: dict[int, tuple[DigestUnpinUpdate, ...]] = field(
+        init=False,
+        default_factory=dict,
+    )
+    digest_unpin_issues: list[DryRunPlanIssue] = field(
+        init=False,
+        default_factory=list,
+    )
 
     def __post_init__(self) -> None:
         runner = self.command_runner or CommandRunner()
@@ -398,6 +444,7 @@ class _PlanBuilder(_UpdateScopeMixin):
             issues.extend(
                 self._unmatched_issues(parsed.targets, matches, skipped, diagnostics)
             )
+            issues.extend(self.digest_unpin_issues)
             cleanup_skipped = skipped
             cleanup_diagnostics = diagnostics
             if not self.allow_tag_updates and any(
@@ -427,6 +474,7 @@ class _PlanBuilder(_UpdateScopeMixin):
             issues.extend(self._tag_update_plan_issues(matches))
             issues.extend(self._manifest_issues(matches))
             issues.extend(self._digest_pin_plan_issues(matches))
+            issues.extend(self._digest_unpin_plan_issues(matches))
             issues.extend(self._preflight_issues(matches))
 
         plan_stacks = self._plan_stacks(matches)
@@ -511,13 +559,309 @@ class _PlanBuilder(_UpdateScopeMixin):
         parsed: ParsedWudFile,
         stacks: Sequence[ComposeStack],
     ) -> tuple[list[Match], list[DryRunPlanSkipped]]:
-        return _match_targets(
+        self.digest_unpin_updates_by_stack = {}
+        self.digest_unpin_issues = []
+        matches, skipped = _match_targets(
             parsed,
             stacks,
             self.docker,
             allow_tag_updates=self.allow_tag_updates,
             allow_digest_pin_rematch=self.config.digest_pin_updates,
         )
+        if not self.config.digest_pin_updates:
+            matches, skipped = self._add_digest_unpin_matches(
+                parsed,
+                stacks,
+                matches,
+                skipped,
+            )
+        return matches, skipped
+
+    def _add_digest_unpin_matches(
+        self,
+        parsed: ParsedWudFile,
+        stacks: Sequence[ComposeStack],
+        matches: Sequence[Match],
+        skipped: Sequence[DryRunPlanSkipped],
+    ) -> tuple[list[Match], list[DryRunPlanSkipped]]:
+        skipped_by_line = {item.line_no: item for item in skipped}
+        targets_by_line = {target.line_no: target for target in parsed.targets}
+        updated_matches = list(matches)
+        matched_lines = {match.target.line_no for match in matches}
+        seen = {
+            (
+                match.stack.index,
+                match.target.line_no,
+                match.resolved,
+                match.compose_image,
+                match.service,
+            )
+            for match in matches
+        }
+
+        for line_no, item in list(skipped_by_line.items()):
+            if item.reason != "unmatched" or line_no in matched_lines:
+                continue
+            target = targets_by_line.get(line_no)
+            if target is None or not _digest_unpin_candidate_target(target):
+                continue
+            updates = self._digest_unpin_updates_for_target(target, stacks)
+            if not updates:
+                continue
+            skipped_by_line.pop(line_no, None)
+            for stack_index, stack_updates in updates.items():
+                stack = next(
+                    (candidate for candidate in stacks if candidate.index == stack_index),
+                    None,
+                )
+                if stack is None:
+                    continue
+                for update in stack_updates:
+                    for service in update.services:
+                        key = (
+                            stack.index,
+                            target.line_no,
+                            update.tag_image,
+                            update.old_image,
+                            service,
+                        )
+                        if key in seen:
+                            continue
+                        updated_matches.append(
+                            Match(
+                                stack,
+                                target,
+                                update.tag_image,
+                                update.old_image,
+                                service,
+                            )
+                        )
+                        seen.add(key)
+
+        updated_matches.sort(
+            key=lambda match: (
+                match.stack.index,
+                match.target.line_no,
+                match.target.first,
+                match.resolved,
+                match.compose_image,
+                match.service,
+            )
+        )
+        return updated_matches, [
+            skipped_by_line[line_no] for line_no in sorted(skipped_by_line)
+        ]
+
+    def _digest_unpin_updates_for_target(
+        self,
+        target: WudTarget,
+        stacks: Sequence[ComposeStack],
+    ) -> dict[int, tuple[DigestUnpinUpdate, ...]]:
+        tag = image_tag(target.first)
+        grouped: dict[tuple[int, str, str], set[str]] = {}
+        stack_by_index = {stack.index: stack for stack in stacks}
+        for stack in stacks:
+            for service_image in stack.service_images:
+                if not service_image.service:
+                    continue
+                if not _digest_unpin_service_matches_target(service_image.image, target):
+                    continue
+                recovered = self._recover_digest_unpin_tag(
+                    target,
+                    stack,
+                    service_image.service,
+                    service_image.image,
+                    service_image.labels,
+                    tag,
+                )
+                if recovered is None:
+                    continue
+                grouped.setdefault(
+                    (stack.index, service_image.image, recovered),
+                    set(),
+                ).add(service_image.service)
+
+        by_stack: dict[int, list[DigestUnpinUpdate]] = {}
+        for (stack_index, old_image, resolved_tag), services in sorted(grouped.items()):
+            update = digest_unpin_update_from_values(
+                old_image=old_image,
+                resolved_tag=resolved_tag,
+                target_digest=target.digest,
+                services=tuple(sorted(services)),
+            )
+            stack = stack_by_index.get(stack_index)
+            if stack is not None:
+                by_stack.setdefault(stack_index, []).append(update)
+                self.digest_unpin_updates_by_stack.setdefault(stack_index, ())
+
+        for stack_index, updates in by_stack.items():
+            existing = list(self.digest_unpin_updates_by_stack.get(stack_index, ()))
+            existing.extend(updates)
+            self.digest_unpin_updates_by_stack[stack_index] = tuple(
+                _unique_digest_unpin_updates(existing)
+            )
+        return {stack_index: tuple(updates) for stack_index, updates in by_stack.items()}
+
+    def _recover_digest_unpin_tag(
+        self,
+        target: WudTarget,
+        stack: ComposeStack,
+        service: str,
+        image: str,
+        labels: Sequence[tuple[str, str]],
+        target_tag: str,
+    ) -> str | None:
+        service_key = f"{stack.name}/{service}"
+        provenance = self.known_digest_provenance_by_service.get(service_key)
+        if provenance is not None:
+            tag = provenance.watch_tag or provenance.resolved_tag
+            if provenance.final_image and provenance.final_image != image:
+                self.digest_unpin_issues.append(
+                    _digest_unpin_issue(
+                        "digest-unpin-db-provenance-conflict",
+                        (
+                            f"Known digest provenance for {service_key} points to "
+                            f"{provenance.final_image}, but Compose currently uses "
+                            f"{image}."
+                        ),
+                        target,
+                        stack,
+                        service,
+                    )
+                )
+                return None
+            if not tag or not tag_value_valid(tag):
+                self.digest_unpin_issues.append(
+                    _digest_unpin_issue(
+                        "digest-unpin-tag-missing",
+                        (
+                            f"Known digest provenance for {service_key} does not "
+                            "include a valid tag."
+                        ),
+                        target,
+                        stack,
+                        service,
+                    )
+                )
+                return None
+            if tag != target_tag:
+                self.digest_unpin_issues.append(
+                    _digest_unpin_issue(
+                        "digest-unpin-db-provenance-conflict",
+                        (
+                            f"Known digest provenance for {service_key} recovered "
+                            f"tag {tag}, but the pending line targets {target_tag}."
+                        ),
+                        target,
+                        stack,
+                        service,
+                    )
+                )
+                return None
+            return tag
+
+        marker_tag = ""
+        try:
+            marker_tag = service_resolved_tag_marker(
+                stack.directory / stack.file,
+                service,
+                expected_image=image,
+            )
+        except ComposeTagRewriteError as exc:
+            self.digest_unpin_issues.append(
+                _digest_unpin_issue(
+                    "digest-unpin-marker-unsupported",
+                    f"Could not read resolved-tag marker for {service_key}: {exc}",
+                    target,
+                    stack,
+                    service,
+                )
+            )
+            return None
+
+        label_tag = self._digest_unpin_label_tag(
+            target,
+            stack,
+            service,
+            labels,
+            target_tag,
+        )
+        if label_tag is None:
+            return None
+        if marker_tag and label_tag and marker_tag != label_tag:
+            self.digest_unpin_issues.append(
+                _digest_unpin_issue(
+                    "digest-unpin-provenance-conflict",
+                    (
+                        f"Resolved-tag marker for {service_key} is {marker_tag}, "
+                        f"but {WUD_TAG_INCLUDE_LABEL} targets {label_tag}."
+                    ),
+                    target,
+                    stack,
+                    service,
+                )
+            )
+            return None
+        tag = marker_tag or label_tag
+        if not tag:
+            self.digest_unpin_issues.append(
+                _digest_unpin_issue(
+                    "digest-unpin-tag-missing",
+                    (
+                        f"Digest-pinned service {service_key} has no known tag "
+                        "provenance for a safe unpin."
+                    ),
+                    target,
+                    stack,
+                    service,
+                )
+            )
+            return None
+        if tag != target_tag:
+            self.digest_unpin_issues.append(
+                _digest_unpin_issue(
+                    "digest-unpin-provenance-conflict",
+                    (
+                        f"Recovered tag for {service_key} is {tag}, but the "
+                        f"pending line targets {target_tag}."
+                    ),
+                    target,
+                    stack,
+                    service,
+                )
+            )
+            return None
+        return tag
+
+    def _digest_unpin_label_tag(
+        self,
+        target: WudTarget,
+        stack: ComposeStack,
+        service: str,
+        labels: Sequence[tuple[str, str]],
+        target_tag: str,
+    ) -> str | None:
+        raw = _label_value(labels, WUD_TAG_INCLUDE_LABEL)
+        if not raw:
+            return ""
+        value = compose_unescape_dollars(raw)
+        if value == exact_tags_regex((target_tag,)):
+            return target_tag
+        if tag_value_valid(value) and value == target_tag:
+            return target_tag
+        self.digest_unpin_issues.append(
+            _digest_unpin_issue(
+                "digest-unpin-label-conflict",
+                (
+                    f'{stack.name}/{service} {WUD_TAG_INCLUDE_LABEL} is "{value}", '
+                    f'expected "{exact_tags_regex((target_tag,))}".'
+                ),
+                target,
+                stack,
+                service,
+            )
+        )
+        return None
 
     def _unmatched_issues(
         self,
@@ -775,6 +1119,35 @@ class _PlanBuilder(_UpdateScopeMixin):
             self.digest_pin_updates_by_stack[stack.index] = tuple(stack_updates)
         return issues
 
+    def _digest_unpin_plan_issues(
+        self,
+        matches: Sequence[Match],
+    ) -> list[DryRunPlanIssue]:
+        issues: list[DryRunPlanIssue] = []
+        stack_by_index = {stack.index: stack for stack in _stacks_to_update(matches)}
+        for stack_index, updates in sorted(self.digest_unpin_updates_by_stack.items()):
+            if not updates:
+                continue
+            stack = stack_by_index.get(stack_index)
+            if stack is None:
+                continue
+            try:
+                render_compose_digest_unpins(
+                    stack.directory / stack.file,
+                    updates,
+                    stack_name=stack.name,
+                )
+            except ComposeTagRewriteError as exc:
+                issues.append(
+                    DryRunPlanIssue(
+                        severity="error",
+                        code="compose-digest-unpin-unsupported",
+                        message=f"Compose digest-unpin rewrite is not safe: {exc}",
+                        stack=stack.name,
+                    )
+                )
+        return issues
+
     def _preflight_issues(self, matches: Sequence[Match]) -> list[DryRunPlanIssue]:
         issues: list[DryRunPlanIssue] = []
         for stack in _stacks_to_update(matches):
@@ -854,6 +1227,10 @@ class _PlanBuilder(_UpdateScopeMixin):
                 for update in tag_updates
             )
             digest_pin_updates = self.digest_pin_updates_by_stack.get(stack.index, ())
+            digest_unpin_updates = self.digest_unpin_updates_by_stack.get(
+                stack.index,
+                (),
+            )
             label_rewrites_by_update = self.digest_pin_label_rewrites_by_stack.get(
                 stack.index,
                 {},
@@ -893,6 +1270,26 @@ class _PlanBuilder(_UpdateScopeMixin):
                 )
                 for update in digest_pin_updates
             )
+            plan_digest_unpin_updates = tuple(
+                DryRunPlanDigestUnpinUpdate(
+                    source_image=update.old_image,
+                    resolved_tag=update.resolved_tag,
+                    tag_image=update.tag_image,
+                    current_digest=update.current_digest,
+                    target_digest=update.target_digest,
+                    watch_tag=update.watch_tag,
+                    marker=update.marker,
+                    label_key=update.label_key,
+                    label_value=update.label_value,
+                    services=update.services,
+                    digest_provenance=digest_provenance_from_unpin_update(
+                        update,
+                        provenance_source="plan",
+                        provenance_confidence="recovered",
+                    ),
+                )
+                for update in digest_unpin_updates
+            )
             stacks.append(
                 DryRunPlanStack(
                     name=stack.name,
@@ -909,13 +1306,19 @@ class _PlanBuilder(_UpdateScopeMixin):
                     up_no_deps=scope.up_no_deps,
                     tag_updates=plan_tag_updates,
                     digest_pin_updates=plan_digest_pin_updates,
+                    digest_unpin_updates=plan_digest_unpin_updates,
                     actions=self._actions(
                         stack,
                         scope,
                         plan_tag_updates,
                         plan_digest_pin_updates,
+                        plan_digest_unpin_updates,
                     ),
-                    lines=self._plan_lines(stack_matches, digest_pin_updates),
+                    lines=self._plan_lines(
+                        stack_matches,
+                        digest_pin_updates,
+                        digest_unpin_updates,
+                    ),
                 )
             )
         return tuple(stacks)
@@ -934,8 +1337,16 @@ class _PlanBuilder(_UpdateScopeMixin):
         for line_no in sorted(targets_by_line):
             target = targets_by_line[line_no]
             line_matches = matches_by_line.get(line_no, [])
-            resolved = line_matches[0].resolved if line_matches else target.first
-            action = _target_action(target, bool(line_matches), skipped_by_line.get(line_no))
+            resolved = (
+                self._normalized_resolved_image(line_matches[0])
+                if line_matches
+                else target.first
+            )
+            action = (
+                "digest-unpin"
+                if any(self._match_digest_unpin(match) for match in line_matches)
+                else _target_action(target, bool(line_matches), skipped_by_line.get(line_no))
+            )
             targets.append(
                 DryRunPlanTarget(
                     line_no=target.line_no,
@@ -954,12 +1365,17 @@ class _PlanBuilder(_UpdateScopeMixin):
         self,
         matches: Sequence[Match],
         digest_pin_updates: Sequence[DigestPinUpdate] = (),
+        digest_unpin_updates: Sequence[DigestUnpinUpdate] = (),
     ) -> tuple[DryRunPlanLine, ...]:
         seen: set[tuple[int, str, str, str]] = set()
         lines: list[DryRunPlanLine] = []
         digest_pins = {
             (update.old_image, update.resolved_tag): update
             for update in digest_pin_updates
+        }
+        digest_unpins = {
+            (update.old_image, update.resolved_tag, update.target_digest): update
+            for update in digest_unpin_updates
         }
         for match in matches:
             key = (
@@ -973,26 +1389,43 @@ class _PlanBuilder(_UpdateScopeMixin):
             seen.add(key)
             digest_pin_tag = _digest_pin_match_tag(match)
             digest_pin = digest_pins.get((match.compose_image, digest_pin_tag))
+            digest_unpin = digest_unpins.get(
+                (
+                    match.compose_image,
+                    image_tag(match.target.first),
+                    normalize_digest(match.target.digest),
+                )
+            )
             if digest_pin is not None:
                 target_image = digest_pin.final_image
+                resolved_image = digest_pin.resolved_image
                 digest_provenance = digest_provenance_from_update(
                     digest_pin,
                     provenance_source="plan",
                     provenance_confidence="verified",
                 )
+            elif digest_unpin is not None:
+                target_image = digest_unpin.tag_image
+                resolved_image = digest_unpin.tag_image
+                digest_provenance = digest_provenance_from_unpin_update(
+                    digest_unpin,
+                    provenance_source="plan",
+                    provenance_confidence="recovered",
+                )
             else:
                 target_image = (
                     image_with_tag(match.compose_image, match.target.desired_tag)
                     if match.target.desired_tag
-                    else match.resolved
+                    else self._normalized_resolved_image(match)
                 )
+                resolved_image = target_image
                 digest_provenance = None
             lines.append(
                 DryRunPlanLine(
                     line_no=match.target.line_no,
                     raw=match.target.raw,
                     image=match.target.first,
-                    resolved_image=match.resolved,
+                    resolved_image=resolved_image,
                     compose_image=match.compose_image,
                     target_image=target_image,
                     service=match.service,
@@ -1001,6 +1434,8 @@ class _PlanBuilder(_UpdateScopeMixin):
                     action=(
                         "digest-pin"
                         if digest_pin is not None
+                        else "digest-unpin"
+                        if digest_unpin is not None
                         else "tag-update"
                         if match.target.desired_tag
                         else "update"
@@ -1010,12 +1445,37 @@ class _PlanBuilder(_UpdateScopeMixin):
             )
         return tuple(lines)
 
+    def _normalized_resolved_image(self, match: Match) -> str:
+        if (
+            not self.config.digest_pin_updates
+            and match.target.digest
+            and image_has_tag(match.target.first)
+        ):
+            return image_with_tag(match.compose_image, image_tag(match.target.first))
+        return match.resolved
+
+    def _match_digest_unpin(self, match: Match) -> DigestUnpinUpdate | None:
+        updates = self.digest_unpin_updates_by_stack.get(match.stack.index, ())
+        key = (
+            match.compose_image,
+            image_tag(match.target.first),
+            normalize_digest(match.target.digest),
+        )
+        for update in updates:
+            if (update.old_image, update.resolved_tag, update.target_digest) != key:
+                continue
+            if match.service and match.service not in update.services:
+                continue
+            return update
+        return None
+
     def _actions(
         self,
         stack: ComposeStack,
         scope: UpdateScope,
         tag_updates: Sequence[DryRunPlanTagUpdate],
         digest_pin_updates: Sequence[DryRunPlanDigestPinUpdate],
+        digest_unpin_updates: Sequence[DryRunPlanDigestUnpinUpdate],
     ) -> tuple[DryRunPlanAction, ...]:
         actions: list[DryRunPlanAction] = []
         for update in tag_updates:
@@ -1024,6 +1484,18 @@ class _PlanBuilder(_UpdateScopeMixin):
                     kind="compose-tag-update",
                     description=(
                         f"Rewrite {update.old_image} to {update.new_image} "
+                        f"for {', '.join(update.services)}"
+                    ),
+                    cwd=str(stack.directory),
+                )
+            )
+        for update in digest_unpin_updates:
+            actions.append(
+                DryRunPlanAction(
+                    kind="compose-digest-unpin",
+                    description=(
+                        f"Unpin {update.source_image} to {update.tag_image}, "
+                        f"remove {update.marker}, and preserve {update.label_key} "
                         f"for {', '.join(update.services)}"
                     ),
                     cwd=str(stack.directory),
@@ -1149,6 +1621,7 @@ def build_dry_run_plan(
     ] = (),
     host_docker_base: Path | None = None,
     environ: Mapping[str, str] | None = None,
+    known_digest_provenance_by_service: Mapping[str, DigestTagProvenance] | None = None,
 ) -> DryRunPlan:
     runner = CommandRunner(env=environ) if environ is not None else CommandRunner()
     return _PlanBuilder(
@@ -1159,6 +1632,7 @@ def build_dry_run_plan(
         digest_pin_label_rewrite_approvals=digest_pin_label_rewrite_approvals,
         host_docker_base=host_docker_base,
         command_runner=runner,
+        known_digest_provenance_by_service=known_digest_provenance_by_service or {},
     ).build()
 
 
@@ -1216,6 +1690,7 @@ def resolve_pending_groups(
     *,
     host_docker_base: Path | None = None,
     environ: Mapping[str, str] | None = None,
+    known_digest_provenance_by_service: Mapping[str, DigestTagProvenance] | None = None,
 ) -> PendingGroupingResult:
     runner = CommandRunner(env=environ) if environ is not None else CommandRunner()
     docker = DockerCli(runner=runner)
@@ -1241,13 +1716,15 @@ def resolve_pending_groups(
             warnings=(str(exc),),
         )
 
-    matches, skipped = _match_targets(
-        parsed,
-        stacks,
-        docker,
+    scope_builder = _PlanBuilder(
+        config,
+        (),
         allow_tag_updates=True,
-        allow_digest_pin_rematch=config.digest_pin_updates,
+        host_docker_base=host_docker_base,
+        command_runner=runner,
+        known_digest_provenance_by_service=known_digest_provenance_by_service or {},
     )
+    matches, skipped = scope_builder._build_matches(parsed, stacks)
     diagnostics = _unmatched_diagnostics(
         config,
         parsed.targets,
@@ -1255,17 +1732,15 @@ def resolve_pending_groups(
         docker,
         host_docker_base=host_docker_base,
     )
-    scope_builder = _PlanBuilder(
-        config,
-        (),
-        allow_tag_updates=True,
-        host_docker_base=host_docker_base,
-        command_runner=runner,
-    )
     targets_by_line = {target.line_no: target for target in parsed.targets}
     return PendingGroupingResult(
         status="ready",
-        groups=_pending_stack_groups(matches, scope_builder=scope_builder),
+        groups=_pending_stack_groups(
+            matches,
+            scope_builder=scope_builder,
+            digest_unpin_updates_by_stack=scope_builder.digest_unpin_updates_by_stack,
+            digest_pin_updates_enabled=config.digest_pin_updates,
+        ),
         unmatched=tuple(
             _pending_grouping_item(
                 targets_by_line[item.line_no],
@@ -1851,6 +2326,8 @@ def _pending_stack_groups(
     matches: Sequence[Match],
     *,
     scope_builder: _PlanBuilder | None = None,
+    digest_unpin_updates_by_stack: Mapping[int, Sequence[DigestUnpinUpdate]] | None = None,
+    digest_pin_updates_enabled: bool = True,
 ) -> tuple[PendingStackGroup, ...]:
     groups: list[PendingStackGroup] = []
     for stack in _stacks_to_update(matches):
@@ -1863,7 +2340,14 @@ def _pending_stack_groups(
             scope = scope_builder._update_scope(stack, stack_matches)
             if scope.services is None:
                 stack_action = "recreate_stack"
-        items = _pending_grouping_items(stack_matches, stack_action=stack_action)
+        items = _pending_grouping_items(
+            stack_matches,
+            stack_action=stack_action,
+            digest_unpin_updates=digest_unpin_updates_by_stack.get(stack.index, ())
+            if digest_unpin_updates_by_stack is not None
+            else (),
+            digest_pin_updates_enabled=digest_pin_updates_enabled,
+        )
         groups.append(
             PendingStackGroup(
                 name=stack.name,
@@ -1887,15 +2371,29 @@ def _pending_grouping_items(
     matches: Sequence[Match],
     *,
     stack_action: str = "",
+    digest_unpin_updates: Sequence[DigestUnpinUpdate] = (),
+    digest_pin_updates_enabled: bool = True,
 ) -> tuple[PendingGroupingItem, ...]:
     items: list[PendingGroupingItem] = []
     for line_no in sorted({match.target.line_no for match in matches}):
         line_matches = [match for match in matches if match.target.line_no == line_no]
         target = line_matches[0].target
-        resolved = line_matches[0].resolved
+        resolved = _pending_normalized_resolved(
+            line_matches[0],
+            digest_pin_updates_enabled=digest_pin_updates_enabled,
+        )
         compose_images = _ordered_unique(match.compose_image for match in line_matches)
         services = _ordered_unique(
             match.service for match in line_matches if match.service
+        )
+        digest_unpin = _pending_digest_unpin_for_matches(
+            line_matches,
+            digest_unpin_updates,
+        )
+        action = (
+            "digest-unpin"
+            if digest_unpin is not None
+            else _target_action_name(target, services, stack_action=stack_action)
         )
         items.append(
             _pending_grouping_item(
@@ -1903,8 +2401,20 @@ def _pending_grouping_items(
                 resolved_image=resolved,
                 compose_images=compose_images,
                 services=services,
-                action=_target_action_name(target, services, stack_action=stack_action),
-                digest_provenance=_pending_digest_provenance(target),
+                action=action,
+                digest_provenance=(
+                    digest_provenance_from_unpin_update(
+                        digest_unpin,
+                        provenance_source="plan",
+                        provenance_confidence="recovered",
+                    )
+                    if digest_unpin is not None
+                    else _pending_digest_provenance(target)
+                ),
+                target_image=(
+                    digest_unpin.tag_image if digest_unpin is not None else ""
+                ),
+                digest_pin_updates_enabled=digest_pin_updates_enabled,
             )
         )
     return tuple(items)
@@ -1919,6 +2429,8 @@ def _pending_grouping_item(
     services: Sequence[str] = (),
     diagnostic: UnmatchedDiagnostic | None = None,
     digest_provenance: DigestTagProvenance | None = None,
+    target_image: str = "",
+    digest_pin_updates_enabled: bool = True,
 ) -> PendingGroupingItem:
     resolved = resolved_image or target.first
     return PendingGroupingItem(
@@ -1932,7 +2444,13 @@ def _pending_grouping_item(
         digest=target.digest,
         desired_tag=target.desired_tag,
         resolved_image=resolved,
-        target_image=_pending_target_image(target, resolved, compose_images),
+        target_image=target_image
+        or _pending_target_image(
+            target,
+            resolved,
+            compose_images,
+            digest_pin_updates_enabled=digest_pin_updates_enabled,
+        ),
         compose_images=tuple(compose_images),
         services=tuple(services),
         action=action,
@@ -1952,12 +2470,54 @@ def _pending_digest_provenance(target: WudTarget) -> DigestTagProvenance | None:
     )
 
 
+def _pending_digest_unpin_for_matches(
+    matches: Sequence[Match],
+    updates: Sequence[DigestUnpinUpdate],
+) -> DigestUnpinUpdate | None:
+    for match in matches:
+        key = (
+            match.compose_image,
+            image_tag(match.target.first),
+            normalize_digest(match.target.digest),
+        )
+        for update in updates:
+            if (update.old_image, update.resolved_tag, update.target_digest) != key:
+                continue
+            if match.service and match.service not in update.services:
+                continue
+            return update
+    return None
+
+
+def _pending_normalized_resolved(
+    match: Match,
+    *,
+    digest_pin_updates_enabled: bool,
+) -> str:
+    if (
+        not digest_pin_updates_enabled
+        and match.target.digest
+        and image_has_tag(match.target.first)
+    ):
+        return image_with_tag(match.compose_image, image_tag(match.target.first))
+    return match.resolved
+
+
 def _pending_target_image(
     target: WudTarget,
     resolved_image: str,
     compose_images: Sequence[str],
+    *,
+    digest_pin_updates_enabled: bool = True,
 ) -> str:
     if not target.desired_tag:
+        if (
+            not digest_pin_updates_enabled
+            and target.digest
+            and image_has_tag(target.first)
+        ):
+            base_image = compose_images[0] if compose_images else resolved_image
+            return image_with_tag(base_image, image_tag(target.first))
         return resolved_image
     base_image = compose_images[0] if compose_images else resolved_image
     return image_with_tag(base_image, target.desired_tag)
@@ -2085,6 +2645,66 @@ def _skipped(target: WudTarget, reason: str) -> DryRunPlanSkipped:
         desired_tag=target.desired_tag,
         reason=reason,
     )
+
+
+def _digest_unpin_candidate_target(target: WudTarget) -> bool:
+    if not target.digest or not image_has_tag(target.first):
+        return False
+    return tag_value_valid(image_tag(target.first))
+
+
+def _digest_unpin_service_matches_target(image: str, target: WudTarget) -> bool:
+    if not digest_from_image(image):
+        return False
+    return repo_key(image) == target.repo
+
+
+def _digest_unpin_issue(
+    code: str,
+    message: str,
+    target: WudTarget,
+    stack: ComposeStack,
+    service: str,
+) -> DryRunPlanIssue:
+    return DryRunPlanIssue(
+        severity="error",
+        code=code,
+        message=message,
+        line_no=target.line_no,
+        stack=stack.name,
+        service=service,
+        hint=(
+            "Review the Compose image, WUD tag include label, and digest tag "
+            "provenance before applying this pending update."
+        ),
+    )
+
+
+def _label_value(labels: Sequence[tuple[str, str]], key: str) -> str:
+    for label_key, label_value in labels:
+        if label_key == key:
+            return label_value
+    return ""
+
+
+def _unique_digest_unpin_updates(
+    updates: Sequence[DigestUnpinUpdate],
+) -> tuple[DigestUnpinUpdate, ...]:
+    unique: dict[tuple[str, str, str], DigestUnpinUpdate] = {}
+    for update in updates:
+        key = (update.old_image, update.resolved_tag, update.target_digest)
+        existing = unique.get(key)
+        if existing is None:
+            unique[key] = update
+            continue
+        services = tuple(sorted({*existing.services, *update.services}))
+        unique[key] = digest_unpin_update_from_values(
+            old_image=update.old_image,
+            resolved_tag=update.resolved_tag,
+            target_digest=update.target_digest,
+            services=services,
+        )
+    return tuple(unique[key] for key in sorted(unique))
 
 
 def _target_action(

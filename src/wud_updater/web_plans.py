@@ -8,7 +8,7 @@ from typing import Protocol
 
 from fastapi import HTTPException, Request
 
-from . import web_diagnostics, web_jobs, web_scheduler
+from . import web_database, web_diagnostics, web_jobs, web_scheduler
 from .config import ConfigError, UpdaterConfig
 from .images import tag_value_valid
 from .locks import DirectoryLock
@@ -138,6 +138,9 @@ def build_web_plan(
         ),
         host_docker_base=settings.host_docker_base,
         environ=settings.command_env,
+        known_digest_provenance_by_service=(
+            web_database.known_digest_provenance_by_service(settings)
+        ),
     )
 
 

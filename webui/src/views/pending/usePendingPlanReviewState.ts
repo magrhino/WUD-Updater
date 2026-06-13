@@ -19,6 +19,7 @@ import {
   pendingPlanContextLabel,
   planActionsFromPlan,
   planDigestPinLabelRewritesFromPlan,
+  planDigestUnpinUpdatesFromPlan,
   planLinesFromPlan,
   planTagUpdatesFromPlan,
   pluralize,
@@ -241,6 +242,9 @@ export function usePendingPlanReviewState(
   const planDigestPinLabelRewrites = computed(() =>
     planDigestPinLabelRewritesFromPlan(updates.plan),
   );
+  const planDigestUnpinUpdates = computed(() =>
+    planDigestUnpinUpdatesFromPlan(updates.plan),
+  );
   const unmatchedReviewSummary = computed(() =>
     staleReviewSummary(options.unmatchedItems.value, "pending line", "pending lines"),
   );
@@ -365,11 +369,18 @@ export function usePendingPlanReviewState(
   const plannedDigestPinLines = computed(() =>
     planLines.value.filter(({ line }) => line.action === "digest-pin"),
   );
+  const plannedDigestUnpinLines = computed(() =>
+    planLines.value.filter(({ line }) => line.action === "digest-unpin"),
+  );
   const visibleTagRewriteCount = computed(
     () => planTagUpdates.value.length || plannedTagRewriteLines.value.length,
   );
   const visibleDigestPinCount = computed(
     () => planDigestPinUpdates.value.length || plannedDigestPinLines.value.length,
+  );
+  const visibleDigestUnpinCount = computed(
+    () =>
+      planDigestUnpinUpdates.value.length || plannedDigestUnpinLines.value.length,
   );
   const preflightTagRewriteNotice = computed(() => {
     if (
@@ -386,6 +397,12 @@ export function usePendingPlanReviewState(
       return "";
     }
     return `${pluralize(visibleDigestPinCount.value, "digest-pin rewrite")} will pin approved tag updates after pull verification.`;
+  });
+  const preflightDigestUnpinNotice = computed(() => {
+    if (!visibleDigestUnpinCount.value || !updates.plan) {
+      return "";
+    }
+    return `${pluralize(visibleDigestUnpinCount.value, "digest unpin migration")} will rewrite pinned Compose images back to their watched tag before pulling.`;
   });
 
   function applyPreflightCheckDetail(check: ApplyPreflightCheck): string {
@@ -513,8 +530,10 @@ export function usePendingPlanReviewState(
     planAlertType,
     planContextLabel,
     planDigestPinLabelRewrites,
+    planDigestUnpinUpdates,
     planLines,
     preflightDigestPinNotice,
+    preflightDigestUnpinNotice,
     preflightServiceImpactLabel,
     preflightSummary,
     preflightTagRewriteNotice,

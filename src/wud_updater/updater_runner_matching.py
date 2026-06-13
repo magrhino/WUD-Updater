@@ -7,7 +7,8 @@ from dataclasses import replace
 
 from . import updater_audit
 from .compose import ComposeStack
-from .images import image_has_tag
+from .digest_provenance import digest_from_image
+from .images import image_has_tag, image_tag, normalize_digest, repo_key
 from .line_specs import parse_line_spec
 from .updater_matching import _services_for_target_match
 from .updater_models import Match, UpdaterError, UpdaterProgressEvent
@@ -176,6 +177,36 @@ class _RunnerMatchingMixin:
             else:
                 candidates.append((resolved, image, ""))
 
+        if not candidates:
+            candidates.extend(self._digest_unpin_plan_candidates(target, stack))
+
+        return candidates
+
+    def _digest_unpin_plan_candidates(
+        self,
+        target: WudTarget,
+        stack: ComposeStack,
+    ) -> list[tuple[str, str, str]]:
+        if not target.digest or not image_has_tag(target.first):
+            return []
+        target_tag = image_tag(target.first)
+        target_digest = normalize_digest(target.digest)
+        candidates: list[tuple[str, str, str]] = []
+        for update in self.options.digest_unpin_plan:
+            if update.resolved_tag != target_tag:
+                continue
+            if update.target_digest != target_digest:
+                continue
+            if repo_key(update.old_image) != target.repo:
+                continue
+            if not digest_from_image(update.old_image):
+                continue
+            for service in update.services:
+                if any(
+                    item.service == service and item.image == update.old_image
+                    for item in stack.service_images
+                ):
+                    candidates.append((update.tag_image, update.old_image, service))
         return candidates
 
     def _append_match_if_new(

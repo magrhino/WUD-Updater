@@ -171,8 +171,10 @@ const {
   planActions,
   planAlertType,
   planDigestPinLabelRewrites,
+  planDigestUnpinUpdates,
   planLines,
   preflightDigestPinNotice,
+  preflightDigestUnpinNotice,
   preflightServiceImpactLabel,
   preflightSummary,
   preflightTagRewriteNotice,
@@ -1449,8 +1451,10 @@ watch(
       :plan-actions="planActions"
       :plan-alert-type="planAlertType"
       :plan-digest-pin-label-rewrites="planDigestPinLabelRewrites"
+      :plan-digest-unpin-updates="planDigestUnpinUpdates"
       :plan-lines="planLines"
       :preflight-digest-pin-notice="preflightDigestPinNotice"
+      :preflight-digest-unpin-notice="preflightDigestUnpinNotice"
       :preflight-service-impact-label="preflightServiceImpactLabel"
       :preflight-summary="preflightSummary"
       :preflight-tag-rewrite-notice="preflightTagRewriteNotice"

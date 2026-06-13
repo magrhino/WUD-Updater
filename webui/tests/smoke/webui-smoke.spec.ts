@@ -135,6 +135,7 @@ function planResponse(overrides: Record<string, unknown> = {}) {
     source_file: "/out/images.todo",
     mode: "stop",
     max_wait: 120,
+    digest_pin_updates: false,
     selected_line_numbers: [1],
     summary: {
       target_count: 1,
@@ -158,6 +159,8 @@ function planResponse(overrides: Record<string, unknown> = {}) {
         force_recreate: false,
         up_no_deps: true,
         tag_updates: [],
+        digest_pin_updates: [],
+        digest_unpin_updates: [],
         actions: [
           {
             kind: "pull",

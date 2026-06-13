@@ -27,6 +27,7 @@ from .updater_digest_pin import (
 from .updater_models import (
     DigestPinCandidate,
     DigestPinUpdate,
+    DigestUnpinUpdate,
     Match,
     TagUpdate,
     UpdaterError,
@@ -262,6 +263,35 @@ class _LifecycleDigestMixin:
         result = tuple(updates)
         self.digest_pin_update_cache[candidates] = result
         return result
+
+    def _digest_unpin_updates(
+        self,
+        matches: Sequence[Match],
+    ) -> tuple[DigestUnpinUpdate, ...]:
+        if not self.options.digest_unpin_plan:
+            return ()
+        updates: list[DigestUnpinUpdate] = []
+        seen: set[tuple[str, str, str]] = set()
+        for update in self.options.digest_unpin_plan:
+            services = tuple(
+                sorted(
+                    {
+                        match.service
+                        for match in matches
+                        if match.compose_image == update.old_image
+                        and match.resolved == update.tag_image
+                        and match.service in update.services
+                    }
+                )
+            )
+            if not services:
+                continue
+            key = (update.old_image, update.resolved_tag, update.target_digest)
+            if key in seen:
+                continue
+            seen.add(key)
+            updates.append(replace(update, services=services))
+        return tuple(updates)
 
     def _resolve_digest_pin(self, image: str) -> DigestResolveResult:
         resolver = DockerManifestResolver(self.docker, verbose=True)

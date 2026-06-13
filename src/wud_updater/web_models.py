@@ -81,6 +81,7 @@ __all__ = (
     "PlanCleanupItem",
     "PlanDigestPinLabelRewrite",
     "PlanDigestPinUpdate",
+    "PlanDigestUnpinUpdate",
     "PlanIssue",
     "PlanLine",
     "PlanRequest",
@@ -727,6 +728,19 @@ class PlanDigestPinUpdate(BaseModel):
     label_rewrites: list[PlanDigestPinLabelRewrite] = Field(default_factory=list)
     digest_provenance: DigestTagProvenance | None = None
 
+class PlanDigestUnpinUpdate(BaseModel):
+    source_image: str
+    resolved_tag: str
+    tag_image: str
+    current_digest: str
+    target_digest: str
+    watch_tag: str
+    marker: str
+    label_key: str
+    label_value: str
+    services: list[str] = Field(default_factory=list)
+    digest_provenance: DigestTagProvenance | None = None
+
 class PlanAction(BaseModel):
     kind: str
     description: str
@@ -746,6 +760,7 @@ class PlanStack(BaseModel):
     up_no_deps: bool
     tag_updates: list[PlanTagUpdate] = Field(default_factory=list)
     digest_pin_updates: list[PlanDigestPinUpdate] = Field(default_factory=list)
+    digest_unpin_updates: list[PlanDigestUnpinUpdate] = Field(default_factory=list)
     actions: list[PlanAction] = Field(default_factory=list)
     lines: list[PlanLine] = Field(default_factory=list)
 

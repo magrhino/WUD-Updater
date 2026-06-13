@@ -22,9 +22,11 @@ from .locks import DirectoryLock, WudLockError
 from .plans import DryRunPlan
 from .updater import UpdateFromWudRunner
 from .updater_digest_pin import digest_pin_update_from_values
+from .updater_digest_unpin import digest_unpin_update_from_values
 from .updater_models import (
     DigestPinLabelRewriteApproval,
     DigestPinUpdate,
+    DigestUnpinUpdate,
     TagOverride,
     UpdaterOptions,
     UpdaterProgressEvent,
@@ -150,6 +152,7 @@ def _submit_apply_job_state(
             tag_overrides,
             digest_pin_label_rewrite_approvals,
             _digest_pin_updates_from_plan(plan),
+            _digest_unpin_updates_from_plan(plan),
             jobs,
             apply_condition,
             job.id,
@@ -329,6 +332,7 @@ def _run_apply_job(
     tag_overrides: tuple[TagOverride, ...],
     digest_pin_label_rewrite_approvals: tuple[DigestPinLabelRewriteApproval, ...],
     digest_pin_plan: tuple[DigestPinUpdate, ...],
+    digest_unpin_plan: tuple[DigestUnpinUpdate, ...],
     jobs: dict[str, WebApplyJob],
     apply_condition: Condition,
     job_id: str,
@@ -358,6 +362,7 @@ def _run_apply_job(
             tag_overrides=tag_overrides,
             digest_pin_label_rewrite_approvals=digest_pin_label_rewrite_approvals,
             digest_pin_plan=digest_pin_plan,
+            digest_unpin_plan=digest_unpin_plan,
             plan_id=plan_id,
             effective_config_loader=effective_config_loader,
             update_mode_override=update_mode_override,
@@ -490,6 +495,7 @@ def _apply_options(
     effective_config_loader: EffectiveConfigLoader,
     digest_pin_label_rewrite_approvals: tuple[DigestPinLabelRewriteApproval, ...] = (),
     digest_pin_plan: tuple[DigestPinUpdate, ...] = (),
+    digest_unpin_plan: tuple[DigestUnpinUpdate, ...] = (),
     update_mode_override: str | None = None,
     metadata_extra: Mapping[str, Any] | None = None,
 ) -> UpdaterOptions:
@@ -523,6 +529,7 @@ def _apply_options(
         tag_overrides=tag_overrides,
         digest_pin_label_rewrite_approvals=digest_pin_label_rewrite_approvals,
         digest_pin_plan=digest_pin_plan,
+        digest_unpin_plan=digest_unpin_plan,
         only_lines=line_spec,
         remove_lines_before_run=line_spec,
         compose_ignore_paths=config.compose_ignore_paths,
@@ -551,6 +558,23 @@ def _digest_pin_updates_from_plan(
                     old_image=item.source_image,
                     resolved_tag=item.resolved_tag,
                     planned_digest=item.planned_digest,
+                    services=tuple(item.services),
+                )
+            )
+    return tuple(updates)
+
+
+def _digest_unpin_updates_from_plan(
+    plan: DryRunPlan,
+) -> tuple[DigestUnpinUpdate, ...]:
+    updates: list[DigestUnpinUpdate] = []
+    for stack in plan.stacks:
+        for item in stack.digest_unpin_updates:
+            updates.append(
+                digest_unpin_update_from_values(
+                    old_image=item.source_image,
+                    resolved_tag=item.resolved_tag,
+                    target_digest=item.target_digest,
                     services=tuple(item.services),
                 )
             )

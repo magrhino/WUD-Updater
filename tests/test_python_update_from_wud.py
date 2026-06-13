@@ -2087,7 +2087,7 @@ class PythonUpdateFromWudTests(FakeDockerTestCase):
         self.assertEqual(digest_pin.planned_digest, "sha256:child")
         self.assertEqual(digest_pin.final_image, "repo/app@sha256:child")
 
-    def test_digest_pin_plan_does_not_rematch_label_when_digest_pin_disabled(self) -> None:
+    def test_digest_pin_plan_uses_label_fallback_for_unpin_when_disabled(self) -> None:
         self.wud_file.write_text(
             "repo/app:latest@sha256:child\n",
             encoding="utf-8",
@@ -2122,11 +2122,16 @@ class PythonUpdateFromWudTests(FakeDockerTestCase):
             environ=self.env,
         )
 
-        self.assertEqual(plan.status, "blocked")
+        self.assertEqual(plan.status, "ready")
         self.assertFalse(plan.digest_pin_updates)
-        self.assertEqual(plan.summary.matched_target_count, 0)
-        self.assertEqual(plan.stacks, ())
-        self.assertEqual(plan.targets[0].action, "unmatched")
+        self.assertEqual(plan.summary.matched_target_count, 1)
+        self.assertEqual(plan.targets[0].action, "digest-unpin")
+        self.assertEqual(plan.stacks[0].lines[0].action, "digest-unpin")
+        self.assertEqual(plan.stacks[0].lines[0].target_image, "repo/app:latest")
+        self.assertEqual(
+            plan.stacks[0].digest_unpin_updates[0].source_image,
+            "repo/app@sha256:old",
+        )
 
     def test_digest_pin_plan_blocks_stale_tagged_digest_only_latest_child(self) -> None:
         self.wud_file.write_text(
@@ -2630,7 +2635,7 @@ class PythonUpdateFromWudTests(FakeDockerTestCase):
         self.assertEqual(pending[0]["status"], "pending")
         self.assertEqual(pending[0]["status_reason"], "unmatched")
 
-    def test_digest_pin_plan_does_not_rematch_existing_pin_when_disabled(self) -> None:
+    def test_digest_pin_plan_adds_unpin_for_existing_pin_when_disabled(self) -> None:
         self.wud_file.write_text(
             "repo/app:latest@sha256:child\n",
             encoding="utf-8",
@@ -2667,11 +2672,13 @@ class PythonUpdateFromWudTests(FakeDockerTestCase):
             environ=self.env,
         )
 
-        self.assertEqual(plan.status, "blocked")
+        self.assertEqual(plan.status, "ready")
         self.assertFalse(plan.digest_pin_updates)
-        self.assertEqual(plan.summary.matched_target_count, 0)
-        self.assertEqual(plan.targets[0].action, "unmatched")
-        self.assertEqual(plan.issues[0].code, "unmatched")
+        self.assertEqual(plan.summary.matched_target_count, 1)
+        self.assertEqual(plan.targets[0].action, "digest-unpin")
+        self.assertEqual(plan.issues, ())
+        self.assertEqual(plan.stacks[0].lines[0].action, "digest-unpin")
+        self.assertEqual(plan.stacks[0].digest_unpin_updates[0].tag_image, "repo/app:latest")
 
     def test_network_mode_consumer_tag_update_stays_service_scoped(self) -> None:
         compose_file = self.prepare_network_mode_media_stack(

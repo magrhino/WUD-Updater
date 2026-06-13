@@ -12,7 +12,7 @@ from typing import Any, Protocol
 
 from fastapi import HTTPException, Request
 
-from . import web_jobs
+from . import web_database, web_jobs
 from .command import CommandRunner
 from .compose import ComposeCli, ComposeDiscoveryError
 from .config import ConfigError, UpdaterConfig
@@ -442,6 +442,9 @@ def _pending_grouping_response(
         parsed,
         host_docker_base=settings.host_docker_base,
         environ=settings.command_env,
+        known_digest_provenance_by_service=(
+            web_database.known_digest_provenance_by_service(settings)
+        ),
     )
     return PendingGrouping(
         status=grouping.status,

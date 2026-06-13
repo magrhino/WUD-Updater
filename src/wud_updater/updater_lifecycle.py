@@ -52,6 +52,7 @@ class StackLifecycleExecutor(
         state = state_or_status
         for step in (
             self._apply_compose_tag_updates,
+            self._apply_compose_digest_unpin_updates,
             self._pull_and_verify_images,
             self._apply_compose_digest_pin_updates,
             self._finish_pull_phase,
@@ -75,6 +76,7 @@ class StackLifecycleExecutor(
         tag_updates = self._tag_updates(matches)
         try:
             digest_pin_updates = self._digest_pin_updates(matches)
+            digest_unpin_updates = self._digest_unpin_updates(matches)
         except UpdaterError as exc:
             self.log.error(f"[{stack.name}] {exc}")
             self._record_failure(
@@ -100,6 +102,7 @@ class StackLifecycleExecutor(
             before=before,
             after=dict(before),
             digest_pin_updates=digest_pin_updates,
+            digest_unpin_updates=digest_unpin_updates,
             compose_tag_updates=compose_tag_updates,
         )
 
@@ -161,7 +164,7 @@ class StackLifecycleExecutor(
                 project_directory=stack.project_directory,
             )
         except CommandError as exc:
-            if state.applied_tags and state.compose_backup is not None:
+            if state.compose_rewrite_applied and state.compose_backup is not None:
                 return self._handle_compose_rewrite_failure(
                     state,
                     "pull-failed",
@@ -189,7 +192,7 @@ class StackLifecycleExecutor(
 
         state.after = self._image_state(state.images)
         if not self._verify_expected_digests(stack, matches, state.images):
-            if state.applied_tags and state.compose_backup is not None:
+            if state.compose_rewrite_applied and state.compose_backup is not None:
                 return self._handle_compose_rewrite_failure(
                     state,
                     "expected-digest-not-reached",
@@ -218,7 +221,7 @@ class StackLifecycleExecutor(
             state.digest_pin_updates,
             state.images,
         ):
-            if state.applied_tags and state.compose_backup is not None:
+            if state.compose_rewrite_applied and state.compose_backup is not None:
                 return self._handle_compose_rewrite_failure(
                     state,
                     "digest-pin-verification-failed",
@@ -256,7 +259,12 @@ class StackLifecycleExecutor(
         )
 
         changes = _updated_images(state.before, state.after)
-        update_needed = bool(state.applied_tags or state.applied_digest_pins or changes)
+        update_needed = bool(
+            state.applied_tags
+            or state.applied_digest_pins
+            or state.applied_digest_unpins
+            or changes
+        )
         for image, image_state in changes:
             target = image_state.digest if image_state.digest else image_state.image_id
             self.log.info(f"[{stack.name}] Image updated: {image} -> {target}")

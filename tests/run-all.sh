@@ -87,6 +87,7 @@ EOF
     src/wud_updater/updates.py \
     src/wud_updater/updater_audit.py \
     src/wud_updater/updater_digest_pin.py \
+    src/wud_updater/updater_digest_unpin.py \
     src/wud_updater/updater_lifecycle.py \
     src/wud_updater/updater_lifecycle_digest.py \
     src/wud_updater/updater_lifecycle_health.py \

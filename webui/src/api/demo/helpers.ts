@@ -121,8 +121,9 @@ export function planStack(name: DemoStackName, items: DemoPendingItem[]): PlanSt
         desired_tag: line.desired_tag,
         new_image: line.target_image,
         services: [line.service],
-      })),
+    })),
     digest_pin_updates: [],
+    digest_unpin_updates: [],
     actions:
       lines.length > 0
         ? [

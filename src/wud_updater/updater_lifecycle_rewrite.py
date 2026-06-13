@@ -12,6 +12,7 @@ from .compose import ComposeStack, ServiceImage
 from .updater_lifecycle_state import _StackUpdateState
 from .updater_models import (
     AppliedDigestPinUpdate,
+    AppliedDigestUnpinUpdate,
     AppliedTagUpdate,
     ComposeTagRewriteError,
     Match,
@@ -130,7 +131,7 @@ class _LifecycleRewriteMixin:
             self.log.error(
                 f"[{stack.name}] Could not safely write digest-pinned compose image(s): {exc}"
             )
-            if state.applied_tags and state.compose_backup is not None:
+            if state.compose_rewrite_applied and state.compose_backup is not None:
                 return self._handle_compose_rewrite_failure(
                     state,
                     "compose-digest-pin-failed",
@@ -149,7 +150,7 @@ class _LifecycleRewriteMixin:
             self.log.error(
                 f"[{stack.name}] Could not write digest-pinned compose image(s): {exc}"
             )
-            if state.applied_tags and state.compose_backup is not None:
+            if state.compose_rewrite_applied and state.compose_backup is not None:
                 return self._handle_compose_rewrite_failure(
                     state,
                     "compose-digest-pin-failed",
@@ -169,7 +170,7 @@ class _LifecycleRewriteMixin:
             self.log.error(
                 f"[{stack.name}] Could not write digest-pinned compose image(s); leaving WUD entry pending for manual review."
             )
-            if state.applied_tags and state.compose_backup is not None:
+            if state.compose_rewrite_applied and state.compose_backup is not None:
                 return self._handle_compose_rewrite_failure(
                     state,
                     "compose-digest-pin-failed",
@@ -212,6 +213,113 @@ class _LifecycleRewriteMixin:
 
         self._set_current_stack(state, refreshed)
         state.after = self._image_state(state.images)
+        return None
+
+    def _apply_compose_digest_unpin_updates(
+        self,
+        state: _StackUpdateState,
+    ) -> StackStatus | None:
+        if not state.digest_unpin_updates:
+            return None
+
+        stack = state.stack
+        status = self._ensure_compose_backup(state, "digest-unpin rewrite")
+        if status is not None:
+            return status
+
+        compose_path = stack.directory / stack.file
+        try:
+            state.applied_digest_unpins = compose_rewrite.apply_compose_digest_unpins(
+                compose_path,
+                state.digest_unpin_updates,
+                stack_name=stack.name,
+            )
+        except ComposeTagRewriteError as exc:
+            self.log.error(
+                f"[{stack.name}] Could not safely unpin digest-pinned compose image(s): {exc}"
+            )
+            if state.compose_rewrite_applied and state.compose_backup is not None:
+                return self._handle_compose_rewrite_failure(
+                    state,
+                    "compose-digest-unpin-failed",
+                    phase="compose-digest-unpin",
+                )
+            self._record_failure(
+                stack,
+                state.matches,
+                phase="compose-digest-unpin",
+                reason="compose-digest-unpin-failed",
+                services=state.pull_services,
+                note=str(exc),
+            )
+            return StackStatus("failure", "compose-digest-unpin-failed")
+        except OSError as exc:
+            self.log.error(
+                f"[{stack.name}] Could not unpin digest-pinned compose image(s): {exc}"
+            )
+            if state.compose_rewrite_applied and state.compose_backup is not None:
+                return self._handle_compose_rewrite_failure(
+                    state,
+                    "compose-digest-unpin-failed",
+                    phase="compose-digest-unpin",
+                )
+            self._record_failure(
+                stack,
+                state.matches,
+                phase="compose-digest-unpin",
+                reason="compose-digest-unpin-failed",
+                services=state.pull_services,
+                note=str(exc),
+            )
+            return StackStatus("failure", "compose-digest-unpin-failed")
+
+        if not state.applied_digest_unpins:
+            self.log.error(
+                f"[{stack.name}] Could not unpin digest-pinned compose image(s); "
+                "leaving WUD entry pending for manual review."
+            )
+            if state.compose_rewrite_applied and state.compose_backup is not None:
+                return self._handle_compose_rewrite_failure(
+                    state,
+                    "compose-digest-unpin-failed",
+                    phase="compose-digest-unpin",
+                )
+            self._record_failure(
+                stack,
+                state.matches,
+                phase="compose-digest-unpin",
+                reason="compose-digest-unpin-failed",
+                services=state.pull_services,
+                note="No compose image lines were digest unpinned.",
+            )
+            return StackStatus("failure", "compose-digest-unpin-failed")
+
+        for applied in state.applied_digest_unpins:
+            self.log.info(
+                f"[{stack.name}] Compose digest unpinned: "
+                f"{applied.old_image} -> {applied.tag_image} "
+                f"(resolved-tag={applied.resolved_tag})"
+            )
+
+        refreshed = self.runner._refresh_stack_images(state.current_stack)
+        if refreshed is None:
+            return self._handle_compose_rewrite_failure(
+                state,
+                "compose-digest-unpin-refresh-failed",
+                phase="compose-digest-unpin",
+            )
+        if not self._validate_applied_digest_unpins(
+            stack,
+            state.applied_digest_unpins,
+            refreshed.service_images,
+        ):
+            return self._handle_compose_rewrite_failure(
+                state,
+                "compose-digest-unpin-validation-failed",
+                phase="compose-digest-unpin",
+            )
+
+        self._set_current_stack(state, refreshed)
         return None
 
     def _ensure_compose_backup(
@@ -458,9 +566,38 @@ class _LifecycleRewriteMixin:
                 )
         return ok
 
+    def _validate_applied_digest_unpins(
+        self,
+        stack: ComposeStack,
+        applied_unpins: Sequence[AppliedDigestUnpinUpdate],
+        service_images: Sequence[ServiceImage],
+    ) -> bool:
+        ok = True
+        image_by_service = {(item.service, item.image) for item in service_images}
+        for applied in applied_unpins:
+            if not applied.services:
+                continue
+            expected_replacements = len(applied.services)
+            if applied.replacements != expected_replacements:
+                ok = False
+                self.log.error(
+                    f"[{stack.name}] Compose digest-unpin rewrite touched "
+                    f"{applied.replacements} image line(s) for {applied.old_image}, "
+                    f"expected {expected_replacements}."
+                )
+            for service in applied.services:
+                if (service, applied.tag_image) in image_by_service:
+                    continue
+                ok = False
+                self.log.error(
+                    f"[{stack.name}] Compose service {service} did not resolve "
+                    f"to unpinned image {applied.tag_image}."
+                )
+        return ok
+
 
 def _tag_update_failure_progress_phase(phase: str) -> str:
-    if phase in {"pull", "digest", "compose-digest-pin"}:
+    if phase in {"pull", "digest", "compose-digest-pin", "compose-digest-unpin"}:
         return "pull"
     if phase in {"up", "stop", "down", "unpause"}:
         return "recreate"
@@ -478,6 +615,8 @@ def _tag_update_failure_progress_message(stack_name: str, phase: str, reason: st
         )
     if phase == "compose-digest-pin":
         return f"[{stack_name}] Compose digest-pin rewrite failed after pull."
+    if phase == "compose-digest-unpin":
+        return f"[{stack_name}] Compose digest-unpin rewrite failed before pull."
     if phase in {"up", "stop", "down", "unpause"}:
         return f"[{stack_name}] Compose {phase} failed after tag rewrite."
     if phase == "health":

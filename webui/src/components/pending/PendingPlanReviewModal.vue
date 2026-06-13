@@ -13,11 +13,13 @@ import type {
 } from "../../api/client";
 import {
   planLineDigestPinLabel,
+  planLineDigestUnpinLabel,
   planLineServiceLabel,
   planLineTagRewriteLabel,
   pluralize,
   type PlanActionView,
   type PlanDigestPinLabelRewriteView,
+  type PlanDigestUnpinUpdateView,
   type PlanLineView,
 } from "../../views/pending/utils";
 import CoreUpdateTourPanel from "../CoreUpdateTourPanel.vue";
@@ -58,8 +60,10 @@ defineProps<{
   planActions: PlanActionView[];
   planAlertType: TagType;
   planDigestPinLabelRewrites: PlanDigestPinLabelRewriteView[];
+  planDigestUnpinUpdates: PlanDigestUnpinUpdateView[];
   planLines: PlanLineView[];
   preflightDigestPinNotice: string;
+  preflightDigestUnpinNotice: string;
   preflightServiceImpactLabel: string;
   preflightSummary: string;
   preflightTagRewriteNotice: string;
@@ -220,6 +224,41 @@ function handleModalShowUpdate(value: boolean): void {
       >
         {{ preflightDigestPinNotice }}
       </n-alert>
+      <n-alert
+        v-if="preflightDigestUnpinNotice"
+        class="preflight-block"
+        type="info"
+      >
+        {{ preflightDigestUnpinNotice }}
+      </n-alert>
+
+      <section
+        v-if="planDigestUnpinUpdates.length"
+        class="preflight-impact preflight-block"
+        aria-labelledby="digest-unpin-updates-title"
+      >
+        <div class="preflight-impact-heading">
+          <strong id="digest-unpin-updates-title">Digest unpin migration</strong>
+          <n-tag size="small" type="info">
+            {{ pluralize(planDigestUnpinUpdates.length, "rewrite") }}
+          </n-tag>
+        </div>
+        <div class="compact-list">
+          <div
+            v-for="item in planDigestUnpinUpdates"
+            :key="`${item.stack}-${item.update.source_image}-${item.update.resolved_tag}`"
+            class="list-row plan-line-row"
+          >
+            <span>Unpin</span>
+            <strong>{{ item.stack }} / {{ item.update.services.join(", ") }}</strong>
+            <em>
+              <code>{{ item.update.source_image }}</code>
+              <span aria-hidden="true"> -> </span>
+              <code>{{ item.update.tag_image }}</code>
+            </em>
+          </div>
+        </div>
+      </section>
 
       <section
         v-if="planDigestPinLabelRewrites.length"
@@ -360,6 +399,13 @@ function handleModalShowUpdate(value: boolean): void {
                 <n-tag size="small" type="info">Digest pin</n-tag>
                 {{ planLineDigestPinLabel(line) }}
               </span>
+              <span
+                v-else-if="planLineDigestUnpinLabel(line)"
+                class="tag-rewrite-detail"
+              >
+                <n-tag size="small" type="info">Digest unpin</n-tag>
+                {{ planLineDigestUnpinLabel(line) }}
+              </span>
               <template v-else>
                 <code>{{ line.compose_image }}</code>
                 <span aria-hidden="true"> -> </span>
@@ -410,6 +456,13 @@ function handleModalShowUpdate(value: boolean): void {
                 >
                   <n-tag size="small" type="info">Digest pin</n-tag>
                   {{ planLineDigestPinLabel(line) }}
+                </span>
+                <span
+                  v-else-if="planLineDigestUnpinLabel(line)"
+                  class="tag-rewrite-detail"
+                >
+                  <n-tag size="small" type="info">Digest unpin</n-tag>
+                  {{ planLineDigestUnpinLabel(line) }}
                 </span>
                 <template v-else>
                   <code>{{ line.compose_image }}</code>

@@ -45,6 +45,7 @@ class UpdaterOptions:
     log_dir_label: str | None = None
     metadata_json: str = "{}"
     digest_pin_plan: tuple["DigestPinUpdate", ...] = ()
+    digest_unpin_plan: tuple["DigestUnpinUpdate", ...] = ()
     digest_pin_label_rewrite_approvals: tuple[
         "DigestPinLabelRewriteApproval", ...
     ] = ()
@@ -80,6 +81,20 @@ class DigestPinUpdate:
     resolved_image: str
     planned_digest: str
     final_image: str
+    watch_tag: str
+    marker: str
+    label_key: str
+    label_value: str
+    services: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class DigestUnpinUpdate:
+    old_image: str
+    resolved_tag: str
+    tag_image: str
+    current_digest: str
+    target_digest: str
     watch_tag: str
     marker: str
     label_key: str
@@ -155,6 +170,11 @@ class AppliedTagUpdate(TagUpdate):
 class AppliedDigestPinUpdate(DigestPinUpdate):
     replacements: int
     label_rewrites: tuple[DigestPinLabelRewrite, ...] = ()
+
+
+@dataclass(frozen=True)
+class AppliedDigestUnpinUpdate(DigestUnpinUpdate):
+    replacements: int
 
 
 class DigestPinLabelRewriteApprovalRequired(ComposeTagRewriteError):

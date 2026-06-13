@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import sqlite3
 from contextlib import closing
 from pathlib import Path
@@ -13,11 +14,15 @@ from .db import (
 )
 from .db import _user_version as db_user_version
 from .db import _validate_schema as validate_db_schema
+from .digest_provenance import DigestTagProvenance, digest_provenance_from_row
 from .web_models import WebSettings
 
 
 class ReadOnlyDatabaseMissing(RuntimeError):
     """Raised when the read-only WebUI database does not exist."""
+
+
+LOGGER = logging.getLogger(__name__)
 
 
 def database_ready(settings: WebSettings) -> tuple[bool, str]:
@@ -46,6 +51,42 @@ def connect_readonly_db(settings: WebSettings) -> sqlite3.Connection:
         conn.close()
         raise
     return conn
+
+
+def known_digest_provenance_by_service(
+    settings: WebSettings,
+) -> dict[str, DigestTagProvenance]:
+    try:
+        with closing(connect_readonly_db(settings)) as conn:
+            rows = conn.execute(
+                """
+                SELECT
+                    service_key,
+                    digest_source_image,
+                    digest_resolved_tag,
+                    digest_watch_tag,
+                    digest_target_digest,
+                    digest_final_image,
+                    digest_provenance_source,
+                    digest_provenance_confidence
+                FROM known_images
+                WHERE digest_final_image != ''
+                   OR digest_resolved_tag != ''
+                   OR digest_watch_tag != ''
+                """
+            ).fetchall()
+    except ReadOnlyDatabaseMissing:
+        return {}
+    except Exception as exc:
+        LOGGER.warning("failed to read digest provenance from database: %s", exc)
+        return {}
+    result: dict[str, DigestTagProvenance] = {}
+    for row in rows:
+        provenance = digest_provenance_from_row(row)
+        if provenance is None:
+            continue
+        result[str(row["service_key"])] = provenance
+    return result
 
 
 def _readonly_sqlite_uri(path: Path) -> str:

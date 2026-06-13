@@ -14,9 +14,10 @@ from zoneinfo import ZoneInfo
 
 from fastapi import FastAPI
 
-from . import web_jobs
+from . import web_database, web_jobs
 from .config import UpdaterConfig
 from .db import active_snooze, init_db, open_db, utc_timestamp
+from .digest_provenance import DigestTagProvenance
 from .plans import DryRunPlan, build_dry_run_plan, resolve_pending_groups
 from .web_auth import _immediate_transaction
 from .web_models import (
@@ -234,11 +235,15 @@ def _auto_update_candidate(
         return None
 
     effective_config = effective_config_loader(settings)
+    known_digest_provenance_by_service = (
+        web_database.known_digest_provenance_by_service(settings)
+    )
     grouping = resolve_pending_groups(
         effective_config,
         parsed,
         host_docker_base=settings.host_docker_base,
         environ=settings.command_env,
+        known_digest_provenance_by_service=known_digest_provenance_by_service,
     )
     if grouping.status != "ready":
         return None
@@ -252,6 +257,7 @@ def _auto_update_candidate(
         selection.line_numbers,
         update_mode_override=selection.update_mode,
         base_config=effective_config,
+        known_digest_provenance_by_service=known_digest_provenance_by_service,
     )
     if not _plan_can_auto_apply(plan, settings):
         return None
@@ -264,6 +270,7 @@ def _build_auto_update_plan(
     *,
     update_mode_override: str | None,
     base_config: UpdaterConfig,
+    known_digest_provenance_by_service: Mapping[str, DigestTagProvenance],
 ) -> DryRunPlan:
     config = (
         base_config
@@ -278,6 +285,7 @@ def _build_auto_update_plan(
         digest_pin_label_rewrite_approvals=(),
         host_docker_base=settings.host_docker_base,
         environ=settings.command_env,
+        known_digest_provenance_by_service=known_digest_provenance_by_service,
     )
 
 

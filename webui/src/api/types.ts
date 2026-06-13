@@ -258,6 +258,20 @@ export interface PlanDigestPinUpdate {
   digest_provenance?: DigestTagProvenance | null;
 }
 
+export interface PlanDigestUnpinUpdate {
+  source_image: string;
+  resolved_tag: string;
+  tag_image: string;
+  current_digest: string;
+  target_digest: string;
+  watch_tag: string;
+  marker: string;
+  label_key: string;
+  label_value: string;
+  services: string[];
+  digest_provenance?: DigestTagProvenance | null;
+}
+
 export interface PlanAction {
   kind: string;
   description: string;
@@ -278,6 +292,7 @@ export interface PlanStack {
   up_no_deps: boolean;
   tag_updates: PlanTagUpdate[];
   digest_pin_updates: PlanDigestPinUpdate[];
+  digest_unpin_updates: PlanDigestUnpinUpdate[];
   actions: PlanAction[];
   lines: PlanLine[];
 }

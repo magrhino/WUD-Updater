@@ -14,13 +14,16 @@ from .compose import (
     ServiceImage,
 )
 from .digest_verifier import DigestCheckResult, DigestResolveResult
+from .images import normalize_digest
 from .updater_digest_pin import _digest_pin_match_tag
 from .updater_matching import _target_image_for_match, _update_services
 from .updater_models import (
     AppliedDigestPinUpdate,
+    AppliedDigestUnpinUpdate,
     AppliedTagUpdate,
     DigestPinCandidate,
     DigestPinUpdate,
+    DigestUnpinUpdate,
     FailureRecord,
     ImageState,
     Match,
@@ -303,6 +306,18 @@ class _RunnerOperationsMixin:
             service_images,
         )
 
+    def _validate_applied_digest_unpins(
+        self,
+        stack: ComposeStack,
+        applied_unpins: Sequence[AppliedDigestUnpinUpdate],
+        service_images: Sequence[ServiceImage],
+    ) -> bool:
+        return self.lifecycle._validate_applied_digest_unpins(
+            stack,
+            applied_unpins,
+            service_images,
+        )
+
     def _verify_expected_digests(
         self,
         stack: ComposeStack,
@@ -350,6 +365,12 @@ class _RunnerOperationsMixin:
     ) -> tuple[DigestPinUpdate, ...]:
         return self.lifecycle._digest_pin_updates(matches)
 
+    def _digest_unpin_updates(
+        self,
+        matches: Sequence[Match],
+    ) -> tuple[DigestUnpinUpdate, ...]:
+        return self.lifecycle._digest_unpin_updates(matches)
+
     def _resolve_digest_pin(self, image: str) -> DigestResolveResult:
         return self.lifecycle._resolve_digest_pin(image)
 
@@ -367,6 +388,9 @@ class _RunnerOperationsMixin:
 
     def _validate_digest_pin_plan(self, matches: Sequence[Match]) -> bool:
         return updater_preflight.validate_digest_pin_plan(self, matches)
+
+    def _validate_digest_unpin_plan(self, matches: Sequence[Match]) -> bool:
+        return updater_preflight.validate_digest_unpin_plan(self, matches)
 
     def _refresh_stack_images(self, stack: ComposeStack) -> ComposeStack | None:
         return self.lifecycle._refresh_stack_images(stack)
@@ -436,7 +460,36 @@ class _RunnerOperationsMixin:
                 (stack.index, match.target.line_no, match.service)
             ] = update
 
+    def _remember_applied_digest_unpins(
+        self,
+        stack: ComposeStack,
+        matches: Sequence[Match],
+        updates: Sequence[DigestUnpinUpdate],
+    ) -> None:
+        by_key = {
+            (update.old_image, update.tag_image, update.target_digest): update
+            for update in updates
+        }
+        for match in matches:
+            update = by_key.get(
+                (
+                    match.compose_image,
+                    match.resolved,
+                    normalize_digest(match.target.digest),
+                )
+            )
+            if update is None:
+                continue
+            self.applied_digest_unpins[
+                (stack.index, match.target.line_no, match.service)
+            ] = update
+
     def _target_image_for_match(self, match: Match) -> str:
+        unpin = self.applied_digest_unpins.get(
+            (match.stack.index, match.target.line_no, match.service)
+        )
+        if unpin is not None:
+            return unpin.tag_image
         update = self.applied_digest_pins.get(
             (match.stack.index, match.target.line_no, match.service)
         )

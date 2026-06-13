@@ -353,6 +353,27 @@ def validate_digest_pin_plan(runner: Any, matches: Sequence[Match]) -> bool:
     return ok
 
 
+def validate_digest_unpin_plan(runner: Any, matches: Sequence[Match]) -> bool:
+    if not runner.options.digest_unpin_plan:
+        return True
+    ok = True
+    try:
+        for stack in _stacks_to_update(matches):
+            stack_matches = [
+                match for match in matches if match.stack.index == stack.index
+            ]
+            stack_updates = runner._digest_unpin_updates(stack_matches)
+            compose_rewrite.render_compose_digest_unpins(
+                stack.directory / stack.file,
+                stack_updates,
+                stack_name=stack.name,
+            )
+    except (ComposeTagRewriteError, UpdaterError) as exc:
+        ok = False
+        runner.log.error(f"Digest-unpin plan is not safe to apply: {exc}")
+    return ok
+
+
 def finish_preflight_failure(
     runner: Any,
     parsed: ParsedWudFile,

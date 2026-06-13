@@ -6,7 +6,7 @@ import os
 import re
 import shutil
 import tempfile
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from io import StringIO
 from pathlib import Path
 
@@ -17,6 +17,7 @@ from ruamel.yaml.error import YAMLError
 from .images import image_tag, tag_value_valid
 from .updater_models import (
     AppliedDigestPinUpdate,
+    AppliedDigestUnpinUpdate,
     AppliedTagExclusion,
     AppliedTagUpdate,
     ComposeTagRewriteError,
@@ -24,6 +25,7 @@ from .updater_models import (
     DigestPinLabelRewriteApproval,
     DigestPinLabelRewriteApprovalRequired,
     DigestPinUpdate,
+    DigestUnpinUpdate,
     TagExclusionUpdate,
     TagUpdate,
 )
@@ -32,6 +34,21 @@ from .updater_models import (
 DIGEST_PIN_MARKER_PREFIX = "wud-updater.resolved-tag="
 WUD_TAG_INCLUDE_LABEL = "wud.tag.include"
 _JS_REGEX_SPECIAL_RE = re.compile(r"([\\^$.*+?()[\]{}|])")
+
+
+class _CommentTokenList:
+    __slots__ = ("_replace", "tokens")
+
+    def __init__(
+        self,
+        tokens: list[object],
+        replace: Callable[[list[object]], None],
+    ) -> None:
+        self.tokens = tokens
+        self._replace = replace
+
+    def replace(self, tokens: list[object]) -> None:
+        self._replace(tokens)
 
 
 def apply_compose_tag_updates(
@@ -158,6 +175,25 @@ def apply_compose_digest_pins(
     if updates and not rendered:
         raise ComposeTagRewriteError("Compose digest-pin rewrite produced no output.")
     _atomic_replace_compose(compose_path, rendered, prefix="digest-pin")
+    return applied
+
+
+def apply_compose_digest_unpins(
+    compose_path: Path,
+    updates: Sequence[DigestUnpinUpdate],
+    *,
+    stack_name: str = "",
+) -> tuple[AppliedDigestUnpinUpdate, ...]:
+    """Rewrite digest-pinned images back to tag images plus WUD watch metadata."""
+
+    rendered, applied = render_compose_digest_unpins(
+        compose_path,
+        updates,
+        stack_name=stack_name,
+    )
+    if updates and not rendered:
+        raise ComposeTagRewriteError("Compose digest-unpin rewrite produced no output.")
+    _atomic_replace_compose(compose_path, rendered, prefix="digest-unpin")
     return applied
 
 
@@ -296,6 +332,133 @@ def render_compose_digest_pins(
     return output.getvalue(), applied
 
 
+def render_compose_digest_unpins(
+    compose_path: Path,
+    updates: Sequence[DigestUnpinUpdate],
+    *,
+    stack_name: str = "",
+) -> tuple[str, tuple[AppliedDigestUnpinUpdate, ...]]:
+    """Return Compose YAML with digest-pinned images rewritten to tag images."""
+
+    if not updates:
+        return compose_path.read_text(encoding="utf-8"), ()
+
+    source = compose_path.read_text(encoding="utf-8")
+    yaml = YAML(typ="rt")
+    yaml.preserve_quotes = True
+    try:
+        parsed = yaml.load(source)
+    except YAMLError as exc:
+        raise ComposeTagRewriteError(
+            f"Compose file YAML could not be parsed: {exc}"
+        ) from exc
+    if not isinstance(parsed, CommentedMap):
+        raise ComposeTagRewriteError("Compose file is not a YAML mapping.")
+    services = parsed.get("services")
+    if not isinstance(services, CommentedMap):
+        raise ComposeTagRewriteError("Compose file has no services mapping.")
+
+    line_offsets = _line_start_offsets(source)
+    counts = {id(update): 0 for update in updates}
+    seen_spans: set[tuple[int, int]] = set()
+
+    for update in updates:
+        if not update.services:
+            raise ComposeTagRewriteError(
+                f"No compose service was mapped for {update.old_image}."
+            )
+        for service in update.services:
+            service_config = _direct_service_config(services, service)
+            _reject_yaml_anchor_or_alias_service_config(
+                services,
+                service,
+                service_config,
+            )
+            if not _commented_map_has_direct_key(service_config, "image"):
+                raise ComposeTagRewriteError(
+                    f"Service {service} image is inherited and needs manual review."
+                )
+            _reject_yaml_anchor_or_alias_image_value(services, service, service_config)
+            current_image = service_config.get("image")
+            if current_image != update.old_image:
+                raise ComposeTagRewriteError(
+                    f"Service {service} image is {current_image}, expected "
+                    f"{update.old_image}."
+                )
+            span = _service_image_scalar_span(
+                services,
+                service,
+                update.old_image,
+                source,
+                line_offsets,
+            )
+            if span in seen_spans:
+                raise ComposeTagRewriteError(
+                    f"Service {service} image for {update.old_image} was "
+                    "selected more than once."
+                )
+            seen_spans.add(span)
+
+            marker_tag = _service_resolved_tag_marker(
+                services,
+                service,
+                service_config,
+            )
+            if marker_tag and marker_tag != update.watch_tag:
+                label = f"{stack_name} " if stack_name else ""
+                raise ComposeTagRewriteError(
+                    f"{label}Service {service} resolved-tag marker is "
+                    f"{marker_tag}, expected {update.watch_tag}."
+                )
+
+            _materialize_inherited_service_labels(service_config, service)
+            labels = service_config.get("labels")
+            if labels is not None:
+                _reject_yaml_anchor_or_alias_labels(services, service, labels)
+            current_include = _get_service_label_value(service_config, update.label_key)
+            _validate_digest_unpin_include(
+                stack_name=stack_name,
+                service=service,
+                current_label_value=current_include,
+                update=update,
+            )
+            _set_service_label_value(
+                service_config,
+                update.label_key,
+                update.label_value,
+            )
+            _remove_service_resolved_tag_marker(
+                services,
+                service,
+                service_config,
+                update.marker,
+            )
+            service_config["image"] = update.tag_image
+            counts[id(update)] += 1
+
+    output = StringIO()
+    yaml.dump(parsed, output)
+    applied = tuple(
+        AppliedDigestUnpinUpdate(
+            old_image=update.old_image,
+            resolved_tag=update.resolved_tag,
+            tag_image=update.tag_image,
+            current_digest=update.current_digest,
+            target_digest=update.target_digest,
+            watch_tag=update.watch_tag,
+            marker=update.marker,
+            label_key=update.label_key,
+            label_value=update.label_value,
+            services=update.services,
+            replacements=counts[id(update)],
+        )
+        for update in updates
+    )
+    if any(item.replacements < 1 for item in applied):
+        return "", ()
+    return output.getvalue(), applied
+
+
 def render_compose_tag_exclusions(
     compose_path: Path,
     updates: Sequence[TagExclusionUpdate],
@@ -379,6 +542,37 @@ def render_compose_tag_exclusions(
     output = StringIO()
     yaml.dump(parsed, output)
     return output.getvalue(), tuple(applied)
+
+
+def service_resolved_tag_marker(
+    compose_path: Path,
+    service: str,
+    *,
+    expected_image: str = "",
+) -> str:
+    """Return the WUD digest-pin resolved tag marker for one service, if present."""
+
+    source = compose_path.read_text(encoding="utf-8")
+    yaml = YAML(typ="rt")
+    yaml.preserve_quotes = True
+    try:
+        parsed = yaml.load(source)
+    except YAMLError as exc:
+        raise ComposeTagRewriteError(
+            f"Compose file YAML could not be parsed: {exc}"
+        ) from exc
+    if not isinstance(parsed, CommentedMap):
+        raise ComposeTagRewriteError("Compose file is not a YAML mapping.")
+    services = parsed.get("services")
+    if not isinstance(services, CommentedMap):
+        raise ComposeTagRewriteError("Compose file has no services mapping.")
+    service_config = _direct_service_config(services, service)
+    if expected_image and service_config.get("image") != expected_image:
+        raise ComposeTagRewriteError(
+            f"Service {service} image is {service_config.get('image')}, "
+            f"expected {expected_image}."
+        )
+    return _service_resolved_tag_marker(services, service, service_config)
 
 
 def _atomic_replace_compose(compose_path: Path, rendered: str, *, prefix: str) -> None:
@@ -660,6 +854,204 @@ def _digest_pin_label_rewrite(
         approved=approved,
         reason="approved" if approved else "approval-required",
     )
+
+
+def _validate_digest_unpin_include(
+    *,
+    stack_name: str,
+    service: str,
+    current_label_value: str,
+    update: DigestUnpinUpdate,
+) -> None:
+    if not current_label_value:
+        return
+    current_regex = compose_unescape_dollars(current_label_value)
+    expected_regex = exact_tags_regex((update.watch_tag,))
+    if current_regex == expected_regex:
+        return
+    if tag_value_valid(current_regex) and current_regex == update.watch_tag:
+        return
+    label = f"{stack_name} " if stack_name else ""
+    raise ComposeTagRewriteError(
+        f'{label}Service {service} {update.label_key} is "{current_regex}", '
+        f'expected "{expected_regex}" for digest unpin.'
+    )
+
+
+def _service_resolved_tag_marker(
+    services: CommentedMap,
+    service: str,
+    service_config: CommentedMap,
+) -> str:
+    values: set[str] = set()
+    for token in _service_comment_tokens(services, service, service_config):
+        values.update(_comment_token_resolved_tag_markers(token))
+    if not values:
+        return ""
+    if len(values) > 1:
+        raise ComposeTagRewriteError(
+            f"Service {service} has conflicting resolved-tag markers: "
+            f"{', '.join(sorted(values))}."
+        )
+    tag = next(iter(values))
+    if not tag_value_valid(tag):
+        raise ComposeTagRewriteError(
+            f"Service {service} resolved-tag marker has invalid tag {tag}."
+        )
+    return tag
+
+
+def _remove_service_resolved_tag_marker(
+    services: CommentedMap,
+    service: str,
+    service_config: CommentedMap,
+    marker: str,
+) -> None:
+    for token_list in _service_comment_token_lists(services, service, service_config):
+        kept = []
+        for token in token_list.tokens:
+            if _comment_token_matches_marker(token, marker):
+                continue
+            kept.append(token)
+        token_list.replace(kept)
+    _empty_detached_service_comment_lists(services, service, service_config)
+    remaining_marker = _service_resolved_tag_marker(services, service, service_config)
+    if remaining_marker:
+        raise ComposeTagRewriteError(
+            f"Service {service} resolved-tag marker is attached ambiguously."
+        )
+
+
+def _service_comment_tokens(
+    services: CommentedMap,
+    service: str,
+    service_config: CommentedMap,
+) -> tuple[object, ...]:
+    tokens: list[object] = []
+    seen: set[int] = set()
+    for token_list in _service_comment_token_lists(services, service, service_config):
+        for token in token_list.tokens:
+            token_id = id(token)
+            if token_id in seen:
+                continue
+            tokens.append(token)
+            seen.add(token_id)
+    return tuple(tokens)
+
+
+def _service_comment_token_lists(
+    services: CommentedMap,
+    service: str,
+    service_config: CommentedMap,
+) -> tuple[_CommentTokenList, ...]:
+    token_lists: list[_CommentTokenList] = []
+    _append_comment_slots(token_lists, getattr(service_config.ca, "comment", None))
+    _append_comment_slots(token_lists, services.ca.items.get(service))
+    for key in service_config:
+        _append_comment_slots(token_lists, service_config.ca.items.get(key))
+    _append_comment_token_list(
+        token_lists,
+        getattr(service_config.ca, "end", None),
+    )
+    return tuple(token_lists)
+
+
+def _comment_token_resolved_tag_markers(token: object) -> set[str]:
+    values: set[str] = set()
+    for line in str(getattr(token, "value", "")).splitlines():
+        text = line.strip()
+        if text.startswith("#"):
+            text = text[1:].strip()
+        if not text.startswith(DIGEST_PIN_MARKER_PREFIX):
+            continue
+        marker_value = text.removeprefix(DIGEST_PIN_MARKER_PREFIX).strip()
+        if marker_value:
+            values.add(marker_value)
+    return values
+
+
+def _comment_token_matches_marker(token: object, marker: str) -> bool:
+    text = str(getattr(token, "value", "")).strip()
+    cleaned = text[1:].strip() if text.startswith("#") else text
+    return cleaned == marker
+
+
+def _append_comment_slots(
+    token_lists: list[_CommentTokenList],
+    slots: list[object] | None,
+) -> None:
+    if not slots:
+        return
+    for index, slot in enumerate(slots):
+        if isinstance(slot, list):
+            _append_comment_token_list(
+                token_lists,
+                slot,
+                lambda kept, slots=slots, index=index, slot=slot: (
+                    _replace_comment_slot_list(slots, index, slot, kept)
+                ),
+            )
+        elif _is_comment_token(slot):
+            _append_standalone_comment_token(token_lists, slots, index, slot)
+
+
+def _append_comment_token_list(
+    token_lists: list[_CommentTokenList],
+    tokens: list[object] | None,
+    replace: Callable[[list[object]], None] | None = None,
+) -> None:
+    if not tokens or not any(_is_comment_token(token) for token in tokens):
+        return
+    if replace is None:
+        def replace_comment_tokens(kept: list[object]) -> None:
+            tokens[:] = kept
+
+        replace = replace_comment_tokens
+    token_lists.append(_CommentTokenList(tokens, replace))
+
+
+def _append_standalone_comment_token(
+    token_lists: list[_CommentTokenList],
+    slots: list[object],
+    index: int,
+    token: object,
+) -> None:
+    token_lists.append(
+        _CommentTokenList(
+            [token],
+            lambda kept, slots=slots, index=index: slots.__setitem__(
+                index,
+                kept[0] if kept else None,
+            ),
+        )
+    )
+
+
+def _replace_comment_slot_list(
+    slots: list[object],
+    index: int,
+    original: list[object],
+    kept: list[object],
+) -> None:
+    original[:] = kept
+    slots[index] = original if kept else None
+
+
+def _is_comment_token(value: object) -> bool:
+    return isinstance(getattr(value, "value", None), str)
+
+
+def _empty_detached_service_comment_lists(
+    services: CommentedMap,
+    service: str,
+    service_config: CommentedMap,
+) -> None:
+    comment = getattr(service_config.ca, "comment", None)
+    if comment and len(comment) > 1 and comment[1] == []:
+        comment[1] = None
+    item = services.ca.items.get(service)
+    if item and len(item) > 3 and item[3] == []:
+        item[3] = None
 
 
 def _digest_pin_label_rewrite_approval_matches(

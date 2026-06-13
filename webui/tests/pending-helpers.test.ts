@@ -12,7 +12,10 @@ import {
 } from "../src/utils/digestProvenance";
 import { safetyCues } from "../src/views/pending/safetyCues";
 import { createPendingColumns } from "../src/views/pending/tableColumns";
-import { planLineDigestPinLabel } from "../src/views/pending/utils";
+import {
+  planLineDigestPinLabel,
+  planLineDigestUnpinLabel,
+} from "../src/views/pending/utils";
 import {
   pendingGroupedItem,
   pendingResponse,
@@ -38,6 +41,59 @@ function mountPendingModal(component: Component, props: Record<string, unknown>)
       },
     },
   });
+}
+
+function pendingPlanReviewModalProps(
+  overrides: Record<string, unknown> = {},
+): Record<string, unknown> {
+  return {
+    actionCommand: () => "docker compose pull app",
+    applyButtonLabel: "Apply 1 update",
+    applyDisabled: false,
+    applyPreflight: null,
+    applyPreflightAttentionChecks: [],
+    applyPreflightCheckDetail: () => "",
+    applyPreflightCheckLabel: () => "Ready",
+    applyPreflightCheckType: () => "success",
+    applyPreflightPassedChecks: [],
+    applyPreflightPassedText: "",
+    applyReadinessStatusLabel: "",
+    applyReadinessStatusType: "success",
+    applyReadinessSummary: "",
+    applyVisible: false,
+    cleanupAvailable: false,
+    cleanupButtonLabel: "Remove 0 unmatched entries",
+    cleanupDisabled: true,
+    cleanupDisabledMessage: "",
+    cleanupItems: [],
+    cleanupReviewSummary: "",
+    digestPinLabelApprovalApproved: () => false,
+    digestPinLabelApprovalIssues: [],
+    digestPinLabelIssueProposedRegex: () => "",
+    issueDetailString: () => "",
+    issueHint: () => "",
+    issueLabel: () => "",
+    issueType: () => "warning",
+    loading: false,
+    mutationDisabledMessage: "",
+    plan: planResponse(),
+    planActions: [],
+    planAlertType: "info",
+    planDigestPinLabelRewrites: [],
+    planDigestUnpinUpdates: [],
+    planLines: [],
+    preflightDigestPinNotice: "",
+    preflightDigestUnpinNotice: "",
+    preflightServiceImpactLabel: "",
+    preflightSummary: "1 service ready to update.",
+    preflightTagRewriteNotice: "",
+    preflightTitle: "Review selected updates",
+    show: true,
+    staleDiagnosticDetail: () => "",
+    staleDiagnosticLabel: () => "",
+    visiblePlanIssues: [],
+    ...overrides,
+  };
 }
 
 async function emitModalShowUpdate(wrapper: VueWrapper, value: boolean): Promise<void> {
@@ -84,6 +140,17 @@ describe("pending helper modules", () => {
       }),
     ).toBe(
       "repo/app: stable -> latest (Digest: sha256:abcdefghijklm...yz0123456789)",
+    );
+
+    expect(
+      planLineDigestUnpinLabel({
+        ...planResponse().stacks[0].lines[0],
+        action: "digest-unpin",
+        compose_image: `repo/app@${digest}`,
+        target_image: "repo/app:latest",
+      }),
+    ).toBe(
+      "repo/app@sha256:abcdefghijklmnopqrstuvwxyz0123456789 -> repo/app:latest",
     );
   });
 
@@ -286,51 +353,7 @@ describe("pending helper modules", () => {
     const modalCases = [
       {
         component: PendingPlanReviewModal,
-        props: {
-          actionCommand: () => "docker compose pull app",
-          applyButtonLabel: "Apply 1 update",
-          applyDisabled: false,
-          applyPreflight: null,
-          applyPreflightAttentionChecks: [],
-          applyPreflightCheckDetail: () => "",
-          applyPreflightCheckLabel: () => "Ready",
-          applyPreflightCheckType: () => "success",
-          applyPreflightPassedChecks: [],
-          applyPreflightPassedText: "",
-          applyReadinessStatusLabel: "",
-          applyReadinessStatusType: "success",
-          applyReadinessSummary: "",
-          applyVisible: false,
-          cleanupAvailable: false,
-          cleanupButtonLabel: "Remove 0 unmatched entries",
-          cleanupDisabled: true,
-          cleanupDisabledMessage: "",
-          cleanupItems: [],
-          cleanupReviewSummary: "",
-          digestPinLabelApprovalApproved: () => false,
-          digestPinLabelApprovalIssues: [],
-          digestPinLabelIssueProposedRegex: () => "",
-          issueDetailString: () => "",
-          issueHint: () => "",
-          issueLabel: () => "",
-          issueType: () => "warning",
-          loading: false,
-          mutationDisabledMessage: "",
-          plan: planResponse(),
-          planActions: [],
-          planAlertType: "info",
-          planDigestPinLabelRewrites: [],
-          planLines: [],
-          preflightDigestPinNotice: "",
-          preflightServiceImpactLabel: "",
-          preflightSummary: "1 service ready to update.",
-          preflightTagRewriteNotice: "",
-          preflightTitle: "Review selected updates",
-          show: true,
-          staleDiagnosticDetail: () => "",
-          staleDiagnosticLabel: () => "",
-          visiblePlanIssues: [],
-        },
+        props: pendingPlanReviewModalProps(),
       },
       {
         component: PendingCleanupModal,
@@ -370,5 +393,47 @@ describe("pending helper modules", () => {
       await emitModalShowUpdate(wrapper, false);
       expect(wrapper.emitted("close")).toHaveLength(1);
     }
+  });
+
+  it("renders digest-unpin notices and plan line labels", () => {
+    const plan = planResponse();
+    const line = {
+      ...plan.stacks[0].lines[0],
+      action: "digest-unpin" as const,
+      compose_image: "repo/app@sha256:old",
+      target_image: "repo/app:latest",
+    };
+    const update = {
+      source_image: "repo/app@sha256:old",
+      resolved_tag: "latest",
+      tag_image: "repo/app:latest",
+      current_digest: "sha256:old",
+      target_digest: "sha256:new",
+      watch_tag: "latest",
+      marker: "wud-updater.resolved-tag=latest",
+      label_key: "wud.tag.include",
+      label_value: "^latest$$",
+      services: ["app"],
+    };
+    const wrapper = mountPendingModal(
+      PendingPlanReviewModal,
+      pendingPlanReviewModalProps({
+        plan: {
+          ...plan,
+          status: "blocked",
+          stacks: [{ ...plan.stacks[0], lines: [line] }],
+        },
+        planDigestUnpinUpdates: [{ stack: "media", update }],
+        planLines: [{ stack: "media", line }],
+        preflightDigestUnpinNotice:
+          "1 digest unpin migration will rewrite pinned Compose images back to their watched tag before pulling.",
+      }),
+    );
+
+    expect(wrapper.text()).toContain("Digest unpin migration");
+    expect(wrapper.text()).toContain("1 digest unpin migration");
+    expect(wrapper.text()).toContain("repo/app@sha256:old");
+    expect(wrapper.text()).toContain("repo/app:latest");
+    expect(wrapper.text()).toContain("Digest unpin");
   });
 });

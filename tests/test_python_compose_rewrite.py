@@ -13,12 +13,14 @@ from wud_updater import compose_rewrite
 from wud_updater.compose import ComposeStack, ServiceImage
 from wud_updater.compose_rewrite import (
     apply_compose_digest_pins,
+    apply_compose_digest_unpins,
     apply_compose_tag_exclusions,
     apply_compose_tag_updates,
     compose_escape_dollars,
     exact_tags_regex,
     merge_wud_exclude_regex,
     render_compose_digest_pins,
+    render_compose_digest_unpins,
     render_compose_tag_exclusions,
     _is_simple_exact_tag_include,
 )
@@ -27,6 +29,7 @@ from wud_updater.updater_models import (
     DigestPinLabelRewriteApproval,
     DigestPinLabelRewriteApprovalRequired,
     DigestPinUpdate,
+    DigestUnpinUpdate,
     TagExclusionUpdate,
     TagUpdate,
 )
@@ -94,6 +97,28 @@ class ComposeRewriteTestCase(unittest.TestCase):
             resolved_image=f"{image_repo}:{resolved_tag}",
             planned_digest=planned_digest,
             final_image=f"{image_repo}@{planned_digest}",
+            watch_tag=resolved_tag,
+            marker=f"wud-updater.resolved-tag={resolved_tag}",
+            label_key="wud.tag.include",
+            label_value=compose_escape_dollars(exact_tags_regex((resolved_tag,))),
+            services=services,
+        )
+
+    def digest_unpin_update(
+        self,
+        *,
+        old_image: str = "repo/app@sha256:old",
+        resolved_tag: str = "latest",
+        target_digest: str = "sha256:new",
+        services: tuple[str, ...] = ("app",),
+    ) -> DigestUnpinUpdate:
+        image_repo = old_image.split("@", 1)[0].rsplit(":", 1)[0]
+        return DigestUnpinUpdate(
+            old_image=old_image,
+            resolved_tag=resolved_tag,
+            tag_image=f"{image_repo}:{resolved_tag}",
+            current_digest="sha256:old",
+            target_digest=target_digest,
             watch_tag=resolved_tag,
             marker=f"wud-updater.resolved-tag={resolved_tag}",
             label_key="wud.tag.include",
@@ -998,6 +1023,105 @@ class ComposeDigestPinTests(ComposeRewriteTestCase):
         with self.assertRaisesRegex(ComposeTagRewriteError, "inherited"):
             apply_compose_digest_pins(compose_file, (self.digest_pin_update(),))
 
+        self.assertEqual(compose_file.read_text(encoding="utf-8"), original)
+
+
+class ComposeDigestUnpinTests(ComposeRewriteTestCase):
+    def test_render_empty_updates_returns_source_without_applied_updates(self) -> None:
+        original = "services:\n  app:\n    image: repo/app@sha256:old\n"
+        compose_file = self.write_compose(original)
+
+        rendered, applied = render_compose_digest_unpins(compose_file, ())
+
+        self.assertEqual(rendered, original)
+        self.assertEqual(applied, ())
+
+    def test_render_writes_tag_image_and_removes_resolved_tag_marker(self) -> None:
+        compose_file = self.write_compose(
+            "services:\n"
+            "  app:\n"
+            "    # wud-updater.resolved-tag=latest\n"
+            "    image: repo/app@sha256:old\n"
+            "    labels:\n"
+            "    - wud.tag.include=^latest$$\n"
+        )
+
+        rendered, applied = render_compose_digest_unpins(
+            compose_file,
+            (self.digest_unpin_update(),),
+            stack_name="stack",
+        )
+
+        self.assertEqual(applied[0].replacements, 1)
+        self.assertIn("image: repo/app:latest", rendered)
+        self.assertIn("wud.tag.include=^latest$$", rendered)
+        self.assertNotIn("wud-updater.resolved-tag", rendered)
+        self.assertNotIn(
+            "repo/app:latest",
+            compose_file.read_text(encoding="utf-8"),
+        )
+
+    def test_render_removes_resolved_tag_marker_from_image_comment_slot(self) -> None:
+        compose_file = self.write_compose(
+            "services:\n"
+            "  app:\n"
+            "    # wud-updater.resolved-tag=latest\n"
+            "    image: repo/app@sha256:old\n"
+            "    # wud-updater.resolved-tag=latest\n"
+            "    labels:\n"
+            "    - wud.tag.include=^latest$$\n"
+        )
+
+        rendered, applied = render_compose_digest_unpins(
+            compose_file,
+            (self.digest_unpin_update(),),
+            stack_name="stack",
+        )
+
+        self.assertEqual(applied[0].replacements, 1)
+        self.assertIn("image: repo/app:latest", rendered)
+        self.assertNotIn("wud-updater.resolved-tag", rendered)
+
+    def test_remove_resolved_tag_marker_rejects_partial_cleanup(self) -> None:
+        parsed = YAML(typ="rt").load(
+            "services:\n"
+            "  app:\n"
+            "    # wud-updater.resolved-tag=latest\n"
+            "    # wud-updater.resolved-tag=other\n"
+            "    image: repo/app@sha256:old\n"
+        )
+        services = parsed["services"]
+        service_config = services["app"]
+
+        with self.assertRaisesRegex(
+            ComposeTagRewriteError,
+            "resolved-tag marker is attached ambiguously",
+        ):
+            compose_rewrite._remove_service_resolved_tag_marker(
+                services,
+                "app",
+                service_config,
+                "wud-updater.resolved-tag=latest",
+            )
+
+    def test_apply_rejects_empty_digest_unpin_render_without_write(self) -> None:
+        original = "services:\n  app:\n    image: repo/app@sha256:old\n"
+        compose_file = self.write_compose(original)
+
+        with (
+            mock.patch(
+                "wud_updater.compose_rewrite.render_compose_digest_unpins",
+                return_value=("", ()),
+            ),
+            mock.patch("wud_updater.compose_rewrite._atomic_replace_compose") as replace,
+        ):
+            with self.assertRaisesRegex(ComposeTagRewriteError, "produced no output"):
+                apply_compose_digest_unpins(
+                    compose_file,
+                    (self.digest_unpin_update(),),
+                )
+
+        replace.assert_not_called()
         self.assertEqual(compose_file.read_text(encoding="utf-8"), original)
 
 
