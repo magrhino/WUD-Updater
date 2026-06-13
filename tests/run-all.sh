@@ -11,8 +11,8 @@ run(){
 
 run_python_checks() {
   python_bin="${PYTHON_BIN:-}"
-  if [ -z "$python_bin" ]; then
-    if [ -x "$REPO_ROOT/.venv/bin/python" ]; then
+  if [[ -z "$python_bin" ]]; then
+    if [[ -x "$REPO_ROOT/.venv/bin/python" ]]; then
       python_bin="$REPO_ROOT/.venv/bin/python"
     elif command -v python3.14 >/dev/null 2>&1; then
       python_bin="python3.14"
@@ -333,7 +333,7 @@ run_all_checks() {
 }
 
 MODE="--all"
-if [ $# -gt 0 ]; then
+if [[ $# -gt 0 ]]; then
   MODE="$1"
 fi
 
