@@ -186,6 +186,7 @@ class UpdateFromWudRunner(
             environ=self.environ,
         )
         self.failures: list[FailureRecord] = []
+        self.stale_pending_digest_lines: set[tuple[int, int]] = set()
         self.audit_conn: sqlite3.Connection | None = None
         self.audit_run_id: int | None = None
         self.audit_db_path: Path | None = None
@@ -433,20 +434,44 @@ class UpdateFromWudRunner(
                 )
             )
             if failed_lines:
-                restore_failed_lines(
-                    opts.wud_file,
-                    audit_parsed,
+                stale_failed_lines = self._stale_pending_digest_line_numbers(
+                    matches,
                     failed_lines,
-                    lock=lock,
-                    owner=self.owner,
                 )
-                self._mark_failed_lines_restored(failed_lines)
+                restorable_failed_lines = [
+                    line_no
+                    for line_no in failed_lines
+                    if line_no not in stale_failed_lines
+                ]
+                if restorable_failed_lines:
+                    restore_failed_lines(
+                        opts.wud_file,
+                        audit_parsed,
+                        restorable_failed_lines,
+                        lock=lock,
+                        owner=self.owner,
+                    )
+                    self.log.warn(f"Restored failed WUD entries in {opts.wud_file}")
+                if stale_failed_lines:
+                    stale_lines = ", ".join(
+                        str(line) for line in sorted(stale_failed_lines)
+                    )
+                    self.log.warn(
+                        "Removed stale digest WUD entries from "
+                        f"{opts.wud_file}: lines {stale_lines}. "
+                        "Refresh or replace them before retrying."
+                    )
+                self._mark_failed_lines_restored(restorable_failed_lines)
                 self._mark_failed_pending(matches, stack_statuses, failed_lines)
-                self.log.warn(f"Restored failed WUD entries in {opts.wud_file}")
+                cleanup_message = (
+                    "Failed entries were reconciled; stale digest entries were removed."
+                    if stale_failed_lines
+                    else "Restored failed entries to the pending file."
+                )
                 self._progress(
                     "cleanup",
                     "failure",
-                    "Restored failed entries to the pending file.",
+                    cleanup_message,
                     matches=matches,
                 )
             else:

@@ -11,6 +11,9 @@ from .config import DEFAULT_MAX_WAIT, DEFAULT_UPDATE_MODE
 from .wud_file import WudTarget
 
 
+STALE_PENDING_DIGEST_REASON = "stale-pending-digest"
+
+
 class UpdaterError(RuntimeError):
     """Raised for a user-facing updater failure."""
 

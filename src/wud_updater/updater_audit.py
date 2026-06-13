@@ -44,6 +44,7 @@ from .updater_matching import (
 from .updater_digest_pin import _digest_pin_match_tag
 from .updater_models import (
     Match,
+    STALE_PENDING_DIGEST_REASON,
     StackStatus,
     TagExclusionUpdate,
     UpdaterError,
@@ -329,11 +330,17 @@ def mark_failed_pending(
 ) -> None:
     if runner.audit_conn is None or runner.audit_run_id is None:
         return
-    for line_no in failed_lines:
+    failed = list(dict.fromkeys(failed_lines))
+    stale_lines = runner._stale_pending_digest_line_numbers(matches, failed)
+    for line_no in failed:
         match = _failed_match_for_line(line_no, matches, stack_statuses)
         if match is None:
             continue
-        reason = _line_status_reason(line_no, matches, stack_statuses)
+        reason = (
+            STALE_PENDING_DIGEST_REASON
+            if line_no in stale_lines
+            else _line_status_reason(line_no, matches, stack_statuses)
+        )
         update_pending_update(
             runner.audit_conn,
             run_id=runner.audit_run_id,
