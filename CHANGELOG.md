@@ -4,6 +4,20 @@ All notable changes to WUD-Updater are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com) and versions follow
 [Semantic Versioning](https://semver.org).
 
+## [0.38.2](https://github.com/magrhino/WUD-Updater/compare/v0.38.1...v0.38.2) (2026-06-13)
+
+
+### Bug Fixes
+
+* **demo:** Refactor demo WebUI API into focused modules ([#273](https://github.com/magrhino/WUD-Updater/issues/273)) ([cbdfb4d](https://github.com/magrhino/WUD-Updater/commit/cbdfb4d462ec7677d62e55f47212f45275bbc856))
+* **digest:** Persist digest tag provenance in SQLite and expose it through the WebUI ([#274](https://github.com/magrhino/WUD-Updater/issues/274)) ([ab4bf84](https://github.com/magrhino/WUD-Updater/commit/ab4bf84577b69c290bfb1e724e8a35e1a3e2673f))
+* pending plan review and digest update flows ([#275](https://github.com/magrhino/WUD-Updater/issues/275)) ([795f972](https://github.com/magrhino/WUD-Updater/commit/795f9723bf8b87c83a5354c85fdc576e82a0730f))
+
+
+### Documentation
+
+* add vscode gitignore ([a8c17a7](https://github.com/magrhino/WUD-Updater/commit/a8c17a7ec8eec47217aac7e478bdd3f18e3e9642))
+
 ## [0.38.1](https://github.com/magrhino/WUD-Updater/compare/v0.38.0...v0.38.1) (2026-06-09)
 
 
