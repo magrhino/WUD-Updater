@@ -488,8 +488,8 @@ class DatabaseTests(unittest.TestCase):
                 status="success",
                 dry_run=True,
                 mode="stop",
-                wud_file="/tmp/images.todo",
-                log_file="/tmp/update.log",
+                wud_file="/srv/wud/images.todo",
+                log_file="/srv/wud/update.log",
             )
             row = conn.execute(
                 "SELECT * FROM update_runs WHERE id = ?",

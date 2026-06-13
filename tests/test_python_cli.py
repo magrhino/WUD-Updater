@@ -362,9 +362,9 @@ class CliTests(unittest.TestCase):
                     "--profile",
                     "webui",
                     "--config-file",
-                    "/tmp/webui.env",
+                    "/etc/wud/webui.env",
                     "--compose-override",
-                    "/tmp/override.yml",
+                    "/srv/wud/override.yml",
                     "--stack-root",
                     "/srv/docker",
                     "--log-dir",
@@ -401,8 +401,8 @@ class CliTests(unittest.TestCase):
         self.assertEqual(stderr, "")
         args = run_init.call_args.args[0]
         self.assertEqual(args.profile, "webui")
-        self.assertEqual(args.config_file, "/tmp/webui.env")
-        self.assertEqual(args.compose_override, "/tmp/override.yml")
+        self.assertEqual(args.config_file, "/etc/wud/webui.env")
+        self.assertEqual(args.compose_override, "/srv/wud/override.yml")
         self.assertEqual(args.stack_root, "/srv/docker")
         self.assertEqual(args.log_dir, "/srv/wud/logs")
         self.assertEqual(args.db_path, "/srv/wud/logs/wud.sqlite")

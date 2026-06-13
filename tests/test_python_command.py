@@ -219,13 +219,13 @@ class CommandRunnerTests(unittest.TestCase):
         with mock.patch.dict(os.environ, {"OS_VAR": "2"}, clear=True):
             runner.capture(
                 ["pwd"],
-                cwd=Path("/tmp"),
+                cwd=Path("/srv/wud"),
                 env={"CALL_VAR": "3"},
             )
 
         run_mock.assert_called_once()
         kwargs = run_mock.call_args.kwargs
-        self.assertEqual(kwargs["cwd"], "/tmp")
+        self.assertEqual(kwargs["cwd"], "/srv/wud")
         self.assertEqual(kwargs["env"]["OS_VAR"], "2")
         self.assertEqual(kwargs["env"]["BASE"], "1")
         self.assertEqual(kwargs["env"]["CALL_VAR"], "3")

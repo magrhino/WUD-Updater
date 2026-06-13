@@ -259,7 +259,7 @@ def test_managed_settings_rejects_uneditable_or_invalid_values_without_partial_w
     )
     path_key = client.post(
         "/api/v1/settings/managed",
-        json={"values": {"DOCKER_BASE": "/tmp/docker"}},
+        json={"values": {"DOCKER_BASE": "/srv/docker"}},
         headers=headers,
     )
     command_value = client.post(
