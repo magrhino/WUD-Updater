@@ -4,6 +4,13 @@ All notable changes to WUD-Updater are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com) and versions follow
 [Semantic Versioning](https://semver.org).
 
+## [0.38.3](https://github.com/magrhino/WUD-Updater/compare/v0.38.2...v0.38.3) (2026-06-13)
+
+
+### Bug Fixes
+
+* **compose:** support digest unpin for multiline images ([#278](https://github.com/magrhino/WUD-Updater/issues/278)) ([f0979d2](https://github.com/magrhino/WUD-Updater/commit/f0979d28897f522adf8aef923e64fe44ff75c5be))
+
 ## [0.38.2](https://github.com/magrhino/WUD-Updater/compare/v0.38.1...v0.38.2) (2026-06-13)
 
 
