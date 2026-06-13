@@ -123,10 +123,8 @@ class _LifecycleDigestMixin:
         stack: ComposeStack,
         matches: Sequence[Match],
     ) -> str:
-        if any(
-            (stack.index, match.target.line_no) in self.stale_pending_digest_lines
-            for match in matches
-        ):
+        match_lines = {(stack.index, match.target.line_no) for match in matches}
+        if match_lines and match_lines.issubset(self.stale_pending_digest_lines):
             return STALE_PENDING_DIGEST_REASON
         return "expected-digest-not-reached"
 

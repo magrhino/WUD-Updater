@@ -47,10 +47,13 @@ from wud_updater.updater_models import (
     ComposeTagRewriteError,
     DigestPinUpdate,
     ImageState,
+    Match,
+    STALE_PENDING_DIGEST_REASON,
     TagExclusionUpdate,
     UpdaterError,
     UpdaterOptions,
 )
+from wud_updater.wud_file import parse_wud_text
 
 
 MANIFEST_INDEX_TYPE = "application/vnd.oci.image.index.v1+json"
@@ -327,6 +330,59 @@ class PythonUpdateFromWudTests(FakeDockerTestCase):
         (self.fake_root / "images" / f"{safe}.after_digests").write_text(
             f"{image}@{digest}\n" if digest else "",
             encoding="utf-8",
+        )
+
+    def test_expected_digest_failure_reason_requires_all_matches_stale(self) -> None:
+        stack_dir = self.make_stack(
+            "app",
+            [
+                ("stale", "repo/stale:latest", "cid-stale"),
+                ("fresh", "repo/fresh:latest", "cid-fresh"),
+            ],
+        )
+        stack = ComposeStack(
+            index=2,
+            directory=stack_dir,
+            file="docker-compose.yml",
+            name="app",
+            images=("repo/stale:latest", "repo/fresh:latest"),
+            service_images=(
+                ServiceImage("stale", "repo/stale:latest"),
+                ServiceImage("fresh", "repo/fresh:latest"),
+            ),
+        )
+        targets = parse_wud_text(
+            "repo/stale:latest@sha256:stale\n"
+            "repo/fresh:latest@sha256:fresh\n"
+        ).targets
+        matches = (
+            Match(
+                stack=stack,
+                target=targets[0],
+                resolved="repo/stale:latest",
+                compose_image="repo/stale:latest",
+                service="stale",
+            ),
+            Match(
+                stack=stack,
+                target=targets[1],
+                resolved="repo/fresh:latest",
+                compose_image="repo/fresh:latest",
+                service="fresh",
+            ),
+        )
+        runner = self.make_runner()
+
+        runner.stale_pending_digest_lines.add((stack.index, targets[0].line_no))
+        self.assertEqual(
+            runner.lifecycle._expected_digest_failure_reason(stack, matches),
+            "expected-digest-not-reached",
+        )
+
+        runner.stale_pending_digest_lines.add((stack.index, targets[1].line_no))
+        self.assertEqual(
+            runner.lifecycle._expected_digest_failure_reason(stack, matches),
+            STALE_PENDING_DIGEST_REASON,
         )
 
     def run_direct(
