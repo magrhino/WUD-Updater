@@ -758,7 +758,7 @@ class PythonUpdateFromWudTests(FakeDockerTestCase):
         self.assertIn("manifest inspect ghcr.io/acme/app:latest", calls)
         self.assertIn("manifest inspect ghcr.io/acme/app@sha256:stale", calls)
         self.assertNotRegex(calls, r"compose -f .* up -d")
-        log_text = sorted(self.log_dir.glob("update-from-wud-v2-*.log"))[-1].read_text(
+        log_text = max(self.log_dir.glob("update-from-wud-v2-*.log")).read_text(
             encoding="utf-8"
         )
         self.assertIn("Pending WUD entry for line 1 is stale", log_text)
@@ -3097,7 +3097,7 @@ class PythonUpdateFromWudTests(FakeDockerTestCase):
         calls = self.calls()
         self.assertRegex(calls, r"compose -f docker-compose.yml pull app")
         self.assertRegex(calls, r"compose -f docker-compose.yml up -d .* app")
-        log_text = sorted(self.log_dir.glob("update-from-wud-v2-*.log"))[-1].read_text(
+        log_text = max(self.log_dir.glob("update-from-wud-v2-*.log")).read_text(
             encoding="utf-8"
         )
         self.assertIn("Rolled back to previous tag", log_text)
