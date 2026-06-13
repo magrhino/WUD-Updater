@@ -4,6 +4,15 @@ All notable changes to WUD-Updater are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com) and versions follow
 [Semantic Versioning](https://semver.org).
 
+## [0.38.4](https://github.com/magrhino/WUD-Updater/compare/v0.38.3...v0.38.4) (2026-06-13)
+
+
+### Bug Fixes
+
+* **shell:** Fix shell portability and update path-aware Python tests ([#285](https://github.com/magrhino/WUD-Updater/issues/285)) ([f997b56](https://github.com/magrhino/WUD-Updater/commit/f997b5630945357ad69d74c7cfe5572797b0afb2))
+* **updater:** Handle stale pending digest entries during WUD retries ([#284](https://github.com/magrhino/WUD-Updater/issues/284)) ([f525afb](https://github.com/magrhino/WUD-Updater/commit/f525afbfc7792e636f2620c2709d6b02897ede8f))
+* **webui:** serialize run history digest provenance ([#282](https://github.com/magrhino/WUD-Updater/issues/282)) ([66a3add](https://github.com/magrhino/WUD-Updater/commit/66a3add7d2ff37280d04513be077014587e95bdd))
+
 ## [0.38.3](https://github.com/magrhino/WUD-Updater/compare/v0.38.2...v0.38.3) (2026-06-13)
 
 
