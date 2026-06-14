@@ -28,6 +28,7 @@ from .web_models import (
 
 KEEP_CURRENT_CHOICE = "keep-current"
 SWITCH_TO_CONCRETE_CHOICE = "switch-to-concrete"
+_REGEX_SPECIAL_CHARS = "\\^$.*+?()[]{}|"
 
 
 class EffectiveConfigLoader(Protocol):
@@ -238,5 +239,24 @@ def _single_exact_tag(value: str) -> str:
         return normalized
     if not normalized.startswith("^") or not normalized.endswith("$"):
         return ""
-    tag = normalized[1:-1]
+    tag_chars: list[str] = []
+    index = 1
+    end = len(normalized) - 1
+    while index < end:
+        char = normalized[index]
+        if char == "\\":
+            index += 1
+            if index >= end:
+                return ""
+            escaped = normalized[index]
+            if escaped not in _REGEX_SPECIAL_CHARS:
+                return ""
+            tag_chars.append(escaped)
+            index += 1
+            continue
+        if char in _REGEX_SPECIAL_CHARS:
+            return ""
+        tag_chars.append(char)
+        index += 1
+    tag = "".join(tag_chars)
     return tag if tag_value_valid(tag) else ""

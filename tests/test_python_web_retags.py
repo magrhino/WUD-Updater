@@ -80,6 +80,7 @@ def test_retag_targets_endpoint_marks_ineligible_review_states(
             ("latest", "repo/latest:latest", "cid-latest"),
             ("concrete", "repo/concrete:1.0", "cid-concrete"),
             ("custom", "repo/custom:latest", "cid-custom"),
+            ("escaped", "repo/escaped:latest", "cid-escaped"),
         ],
     )
     (compose_dir / "docker-compose.yml").write_text(
@@ -94,6 +95,10 @@ def test_retag_targets_endpoint_marks_ineligible_review_states(
                 "    image: repo/custom:latest",
                 "    labels:",
                 "      - wud.tag.include=^latest|stable$",
+                "  escaped:",
+                "    image: repo/escaped:latest",
+                "    labels:",
+                "      - wud.tag.include=^2\\.0$$",
                 "",
             ]
         ),
@@ -113,6 +118,9 @@ def test_retag_targets_endpoint_marks_ineligible_review_states(
     assert items["custom"]["tracking_tag"] == ""
     assert items["custom"]["tracking_tag_source"] == "unsupported-label"
     assert items["custom"]["retag_reason"] == "unsupported-tracking-label"
+    assert items["escaped"]["tracking_tag"] == "2.0"
+    assert items["escaped"]["tracking_tag_source"] == "label"
+    assert items["escaped"]["retag_reason"] == "not-latest-tracking"
     _assert_pending_grouping_did_not_mutate(_fake_docker_calls(fake_root))
 
 
