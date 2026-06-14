@@ -9,6 +9,7 @@ import type {
   RunDetail,
   RunEventRecord,
   RunSummary,
+  RunVerificationSummary,
 } from "../src/api/client";
 import { createWudRouter } from "../src/router";
 import { useAuthStore } from "../src/stores/auth";
@@ -20,6 +21,7 @@ import RunsView from "../src/views/RunsView.vue";
 import {
   authSession,
   coreUpdateTourResponse,
+  runVerification,
   runSummary,
 } from "./helpers/fixtures";
 import { mountWithApp } from "./helpers/mount";
@@ -117,8 +119,18 @@ function runDetail(overrides: Partial<RunDetail> = {}): RunDetail {
       events: [runEvent({ run_id: id })],
     }),
     pending_updates: [pendingUpdate({ run_id: id })],
+    verification: runVerification(),
     ...overrides,
   };
+}
+
+function emptyVerification(): RunVerificationSummary {
+  return runVerification({
+    total_count: 0,
+    verified_count: 0,
+    needs_review_count: 0,
+    items: [],
+  });
 }
 
 function multiServiceEvents(runId: number): RunEventRecord[] {
@@ -373,6 +385,42 @@ describe("RunDetailView", () => {
           },
         }),
       ],
+      verification: runVerification({
+        status: "needs_review",
+        total_count: 2,
+        verified_count: 1,
+        needs_review_count: 1,
+        items: [
+          {
+            line_no: 7,
+            service_key: "media/api",
+            stack_name: "media",
+            service_name: "api",
+            image: "repo/api:1.0",
+            target_image: "repo/api:1.1",
+            image_status: "new_image_running",
+            container_status: "recreated",
+            health_status: "passed",
+            wud_status: "removed",
+            follow_up_needed: false,
+            summary: "new image running, container recreated, health passed, WUD line removed.",
+          },
+          {
+            line_no: 8,
+            service_key: "",
+            stack_name: "",
+            service_name: "",
+            image: "repo/fallback:1.0",
+            target_image: "repo/fallback:1.0",
+            image_status: "unknown",
+            container_status: "unknown",
+            health_status: "unknown",
+            wud_status: "restored",
+            follow_up_needed: true,
+            summary: "Manual review needed.",
+          },
+        ],
+      }),
     });
     const secondDetail = runDetail({
       id: 43,
@@ -382,6 +430,7 @@ describe("RunDetailView", () => {
       log_file: "",
       pending_updates: [],
       events: [],
+      verification: emptyVerification(),
     });
     const loadRunDetail = vi
       .spyOn(runs, "loadRunDetail")
@@ -413,6 +462,12 @@ describe("RunDetailView", () => {
     expect(wrapper.text()).toContain("#8");
     expect(wrapper.text()).toContain("repo/fallback:1.0");
     expect(wrapper.text()).toContain("skipped stale");
+    expect(wrapper.text()).toContain("Post-update verification");
+    expect(wrapper.text()).toContain("Needs review");
+    expect(wrapper.text()).toContain("New image running");
+    expect(wrapper.text()).toContain("Health passed");
+    expect(wrapper.text()).toContain("WUD line removed");
+    expect(wrapper.text()).toContain("Follow-up needed");
     expect(wrapper.text()).toContain("api");
     expect(wrapper.text()).toContain("repo/api:1.0");
     expect(wrapper.text()).toContain("stack-only");
@@ -456,6 +511,7 @@ describe("RunDetailView", () => {
         log_file: "",
         pending_updates: [],
         events: [],
+        verification: emptyVerification(),
       }),
     };
     vi.spyOn(runs, "loadRunDetail").mockResolvedValue();

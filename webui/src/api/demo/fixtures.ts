@@ -5,6 +5,7 @@ import type {
   ReleaseNoteInfo,
   RunEventRecord,
   RunSummary,
+  RunVerificationSummary,
   ServicePolicyRecord,
   SnoozeRecord,
   TagExclusionRuleRecord,
@@ -536,6 +537,7 @@ function demoRun(options: {
       ...summary,
       pending_updates: options.pending,
       events: options.events,
+      verification: demoRunVerification(options.pending, options.events),
     },
     log: {
       run_id: options.id,
@@ -545,6 +547,42 @@ function demoRun(options: {
       truncated: false,
       max_bytes: 262_144,
     },
+  };
+}
+
+export function demoRunVerification(
+  pending: PendingUpdateRecord[],
+  events: RunEventRecord[],
+): RunVerificationSummary {
+  const items = pending.map((item) => {
+    const event = events.find(
+      (candidate) =>
+        candidate.stack_name === item.stack_name &&
+        candidate.service_name === item.service_name,
+    );
+    const success = item.status !== "failed" && event?.status === "success";
+    return {
+      line_no: item.line_no,
+      service_key: item.service_key,
+      stack_name: item.stack_name,
+      service_name: item.service_name,
+      image: item.image,
+      target_image: event?.target_image || item.image,
+      image_status: success ? "new_image_running" as const : "unknown" as const,
+      container_status: success ? "recreated" as const : "unknown" as const,
+      health_status: success ? "passed" as const : "unknown" as const,
+      wud_status: item.status === "failed" ? "restored" as const : "removed" as const,
+      follow_up_needed: !success || item.status === "failed",
+      summary: success ? "Demo update verified." : "Manual review needed.",
+    };
+  });
+  const needsReviewCount = items.filter((item) => item.follow_up_needed).length;
+  return {
+    status: needsReviewCount ? "needs_review" : "verified",
+    total_count: items.length,
+    verified_count: items.length - needsReviewCount,
+    needs_review_count: needsReviewCount,
+    items,
   };
 }
 

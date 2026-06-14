@@ -13,6 +13,12 @@ import {
   type ApplyJobLogResponse,
   type ApplyJobProgressEvent,
   type ApplyJobResponse,
+  type RunVerificationContainerStatus,
+  type RunVerificationHealthStatus,
+  type RunVerificationImageStatus,
+  type RunVerificationItem,
+  type RunVerificationSummary,
+  type RunVerificationWudStatus,
 } from "../../api/client";
 import { useRunsStore } from "../../stores/runs";
 import { useUpdatesStore } from "../../stores/updates";
@@ -218,6 +224,10 @@ export function usePendingApplyJob(options: UsePendingApplyJobOptions) {
     }
     return !log.exists && !log.content;
   });
+  const applyJobRunDetail = computed(() => {
+    const runId = updates.applyJob?.run_id;
+    return runId ? runs.runDetails[runId] ?? null : null;
+  });
   const displayApplyJobProgressByPhase = computed(() => {
     const displayEvents = new Map<string, ApplyJobProgressEvent>();
     for (const event of updates.applyJob?.progress ?? []) {
@@ -291,6 +301,10 @@ export function usePendingApplyJob(options: UsePendingApplyJobOptions) {
     }
     return [...applyJobProgressSteps.value].reverse().find((step) => step.event) ?? null;
   });
+  const applyJobVerification = computed<RunVerificationSummary>(() =>
+    applyJobRunDetail.value?.verification ??
+    fallbackVerification(updates.applyJob, applyJobSnapshot.value),
+  );
   const applyJobNowTitle = computed(() => {
     if (!updates.applyJob) {
       return "";
@@ -499,7 +513,12 @@ export function usePendingApplyJob(options: UsePendingApplyJobOptions) {
   }
 
   async function refreshAfterTerminalJob(): Promise<void> {
-    await Promise.all([options.loadPendingAndReleaseNotes(), runs.loadRuns()]);
+    const runId = updates.applyJob?.run_id ?? null;
+    await Promise.all([
+      options.loadPendingAndReleaseNotes(),
+      runs.loadRuns(),
+      runId ? runs.loadRunDetail(runId).catch(() => undefined) : Promise.resolve(),
+    ]);
   }
 
   function createApplyJobSnapshot(): ApplyJobPlanSnapshot | null {
@@ -582,6 +601,7 @@ export function usePendingApplyJob(options: UsePendingApplyJobOptions) {
     applyJobSucceeded,
     applyJobTitle,
     applyJobUpdateLabel,
+    applyJobVerification,
     closeJobStream,
     createApplyJobSnapshot,
     focusApplyJobPanel,
@@ -646,6 +666,160 @@ function progressEventKey(event: ApplyJobProgressEvent): string {
     event.stack,
     event.message,
   ].join("\u0000");
+}
+
+function fallbackVerification(
+  job: ApplyJobResponse | null,
+  snapshot: ApplyJobPlanSnapshot | null,
+): RunVerificationSummary {
+  if (!job || !snapshot?.lines.length) {
+    return emptyVerification();
+  }
+  const items = snapshot.lines.map((line) => fallbackVerificationItem(job, line));
+  const needsReviewCount = items.filter((item) => item.follow_up_needed).length;
+  return {
+    status: needsReviewCount ? "needs_review" : "verified",
+    total_count: items.length,
+    verified_count: items.length - needsReviewCount,
+    needs_review_count: needsReviewCount,
+    items,
+  };
+}
+
+function emptyVerification(): RunVerificationSummary {
+  return {
+    status: "verified",
+    total_count: 0,
+    verified_count: 0,
+    needs_review_count: 0,
+    items: [],
+  };
+}
+
+function fallbackVerificationItem(
+  job: ApplyJobResponse,
+  line: ApplyJobSnapshotLine,
+): RunVerificationItem {
+  const pull = progressForLine(job.progress, "pull", line.lineNo);
+  const recreate = progressForLine(job.progress, "recreate", line.lineNo);
+  const health = progressForLine(job.progress, "health", line.lineNo);
+  const cleanup = progressForLine(job.progress, "cleanup", line.lineNo);
+  const imageStatus = fallbackImageStatus(job, pull);
+  const containerStatus = fallbackContainerStatus(recreate);
+  const healthStatus = fallbackHealthStatus(health);
+  const wudStatus = fallbackWudStatus(job, cleanup);
+  const followUpNeeded = verificationFollowUpNeeded(
+    imageStatus,
+    containerStatus,
+    healthStatus,
+    wudStatus,
+  );
+  return {
+    line_no: line.lineNo,
+    service_key: line.serviceLabel,
+    stack_name: "",
+    service_name: line.serviceLabel,
+    image: line.composeImage,
+    target_image: line.targetImage,
+    image_status: imageStatus,
+    container_status: containerStatus,
+    health_status: healthStatus,
+    wud_status: wudStatus,
+    follow_up_needed: followUpNeeded,
+    summary: followUpNeeded ? "Manual review needed." : "Update verified.",
+  };
+}
+
+function progressForLine(
+  progress: ApplyJobProgressEvent[],
+  phase: string,
+  lineNo: number,
+): ApplyJobProgressEvent | null {
+  return [...progress]
+    .reverse()
+    .find((event) => event.phase === phase && event.line_numbers.includes(lineNo)) ?? null;
+}
+
+function fallbackImageStatus(
+  job: ApplyJobResponse,
+  event: ApplyJobProgressEvent | null,
+): RunVerificationImageStatus {
+  if (event?.status === "failure" || job.status === "failure") {
+    return "failed";
+  }
+  if (event?.status === "success") {
+    return "new_image_running";
+  }
+  if (event?.status === "skipped") {
+    return "already_current";
+  }
+  return "unknown";
+}
+
+function fallbackContainerStatus(
+  event: ApplyJobProgressEvent | null,
+): RunVerificationContainerStatus {
+  if (event?.status === "success") {
+    return "recreated";
+  }
+  if (event?.status === "skipped") {
+    return "skipped";
+  }
+  if (event?.status === "failure") {
+    return "failed";
+  }
+  return "unknown";
+}
+
+function fallbackHealthStatus(
+  event: ApplyJobProgressEvent | null,
+): RunVerificationHealthStatus {
+  if (event?.status === "success") {
+    return "passed";
+  }
+  if (event?.status === "skipped") {
+    return "skipped";
+  }
+  if (event?.status === "failure") {
+    return event.message.toLowerCase().includes("no containers")
+      ? "service_disappeared"
+      : "timed_out";
+  }
+  return "unknown";
+}
+
+function fallbackWudStatus(
+  job: ApplyJobResponse,
+  event: ApplyJobProgressEvent | null,
+): RunVerificationWudStatus {
+  if (event?.status === "success" && job.status === "success") {
+    return "removed";
+  }
+  if (event?.status === "failure") {
+    return "restored";
+  }
+  return "unknown";
+}
+
+function verificationFollowUpNeeded(
+  imageStatus: RunVerificationImageStatus,
+  containerStatus: RunVerificationContainerStatus,
+  healthStatus: RunVerificationHealthStatus,
+  wudStatus: RunVerificationWudStatus,
+): boolean {
+  return (
+    imageStatus === "failed" ||
+    imageStatus === "unknown" ||
+    containerStatus === "failed" ||
+    containerStatus === "unknown" ||
+    healthStatus === "failed" ||
+    healthStatus === "timed_out" ||
+    healthStatus === "service_disappeared" ||
+    healthStatus === "unknown" ||
+    wudStatus === "restored" ||
+    wudStatus === "stale_removed" ||
+    wudStatus === "unknown"
+  );
 }
 
 function latestNonEmptyLogLine(log: string): string {

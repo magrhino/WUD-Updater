@@ -33,6 +33,7 @@ from .web_models import (
     RunSummary,
     WebSettings,
 )
+from .web_run_verification import verification_from_run_records
 
 DEFAULT_RUN_LIMIT = 50
 DEFAULT_LOG_TAIL_BYTES = 262_144
@@ -129,9 +130,12 @@ def api_run_detail(run_id: int, request: Request) -> RunDetail:
         run,
         events=[_event_from_row(row) for row in events],
     )
+    pending_updates = [_pending_update_from_row(row) for row in pending]
+    run_events = [_event_from_row(row) for row in events]
     detail = RunDetail(
         **summary.model_dump(),
-        pending_updates=[_pending_update_from_row(row) for row in pending],
+        pending_updates=pending_updates,
+        verification=verification_from_run_records(pending_updates, run_events),
     )
     return _sanitize_run_detail(settings, detail)
 

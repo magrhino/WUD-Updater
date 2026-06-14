@@ -197,6 +197,10 @@ class StackLifecycleExecutor(
             return StackStatus("failure", "pull-failed")
 
         state.after = self._image_state(state.images)
+        self.runner.stack_image_states[state.stack.index] = (
+            dict(state.before),
+            dict(state.after),
+        )
         if not self._verify_expected_digests(stack, matches, state.images):
             reason = self._expected_digest_failure_reason(stack, matches)
             note = (
@@ -263,6 +267,10 @@ class StackLifecycleExecutor(
 
     def _finish_pull_phase(self, state: _StackUpdateState) -> StackStatus | None:
         stack = state.stack
+        self.runner.stack_image_states[state.stack.index] = (
+            dict(state.before),
+            dict(state.after),
+        )
         self._progress(
             "pull",
             "success",

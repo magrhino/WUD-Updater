@@ -14,7 +14,13 @@ import type {
   TagOverrideRequest,
 } from "../types";
 import { DEMO_DOCKER_BASE, DEMO_SOURCE_FILE } from "./constants";
-import { DEMO_STACKS, GENERIC_UNMATCHED_DIAGNOSTIC, pendingRecord, runEvent } from "./fixtures";
+import {
+  DEMO_STACKS,
+  GENERIC_UNMATCHED_DIAGNOSTIC,
+  demoRunVerification,
+  pendingRecord,
+  runEvent,
+} from "./fixtures";
 import type { DemoPendingItem, DemoRunFixture, DemoStackName } from "./types";
 
 export function stripDemoFields(item: DemoPendingItem): PendingGroupedItem {
@@ -204,6 +210,7 @@ export function runFromApply(
       ...summary,
       pending_updates,
       events,
+      verification: demoRunVerification(pending_updates, events),
     },
     log: {
       run_id: runId,
@@ -297,6 +304,7 @@ function runFromPendingRemoval(
       ...summary,
       pending_updates,
       events,
+      verification: demoRunVerification(pending_updates, events),
     },
     log: {
       run_id: runId,

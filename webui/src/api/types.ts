@@ -620,8 +620,57 @@ export interface PendingUpdateRecord {
   digest_provenance?: DigestTagProvenance | null;
 }
 
+export type RunVerificationStatus = "verified" | "needs_review";
+export type RunVerificationImageStatus =
+  | "new_image_running"
+  | "already_current"
+  | "failed"
+  | "unknown";
+export type RunVerificationContainerStatus =
+  | "recreated"
+  | "skipped"
+  | "failed"
+  | "unknown";
+export type RunVerificationHealthStatus =
+  | "passed"
+  | "skipped"
+  | "timed_out"
+  | "service_disappeared"
+  | "failed"
+  | "unknown";
+export type RunVerificationWudStatus =
+  | "removed"
+  | "restored"
+  | "stale_removed"
+  | "removed_before_run"
+  | "unknown";
+
+export interface RunVerificationItem {
+  line_no: number;
+  service_key: string;
+  stack_name: string;
+  service_name: string;
+  image: string;
+  target_image: string;
+  image_status: RunVerificationImageStatus;
+  container_status: RunVerificationContainerStatus;
+  health_status: RunVerificationHealthStatus;
+  wud_status: RunVerificationWudStatus;
+  follow_up_needed: boolean;
+  summary: string;
+}
+
+export interface RunVerificationSummary {
+  status: RunVerificationStatus;
+  total_count: number;
+  verified_count: number;
+  needs_review_count: number;
+  items: RunVerificationItem[];
+}
+
 export interface RunDetail extends RunSummary {
   pending_updates: PendingUpdateRecord[];
+  verification: RunVerificationSummary;
 }
 
 export interface RunLogResponse {

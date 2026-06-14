@@ -18,6 +18,7 @@ import {
   pendingResponse,
   releaseNotesResponse,
   planResponse,
+  runVerification,
   runSummary,
   selfUpdateApplyResponse,
   selfUpdatePlanResponse,
@@ -939,10 +940,12 @@ describe("runs store focused coverage", () => {
     const existingDetail = {
       ...runSummary({ id: 5 }),
       pending_updates: [],
+      verification: runVerification({ items: [], total_count: 0, verified_count: 0 }),
     };
     const fetchMock = mockFetch({
       ...runSummary({ id: 7, status: "running" }),
       pending_updates: [],
+      verification: runVerification({ items: [], total_count: 0, verified_count: 0 }),
     });
     const runs = useRunsStore();
     runs.runDetails = { 5: existingDetail };

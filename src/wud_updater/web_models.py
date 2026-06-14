@@ -101,6 +101,13 @@ __all__ = (
     "RunEventRecord",
     "RunLogResponse",
     "RunSummary",
+    "RunVerificationContainerStatus",
+    "RunVerificationHealthStatus",
+    "RunVerificationImageStatus",
+    "RunVerificationItem",
+    "RunVerificationStatus",
+    "RunVerificationSummary",
+    "RunVerificationWudStatus",
     "SELF_UPDATE_RELEASE_NOTES_CAP",
     "SecretSettingStatus",
     "SelfUpdateApplyResponse",
@@ -617,8 +624,57 @@ class PendingUpdateRecord(BaseModel):
     metadata: dict[str, Any] = Field(default_factory=dict)
     digest_provenance: DigestTagProvenance | None = None
 
+RunVerificationStatus = Literal["verified", "needs_review"]
+RunVerificationImageStatus = Literal[
+    "new_image_running",
+    "already_current",
+    "failed",
+    "unknown",
+]
+RunVerificationContainerStatus = Literal["recreated", "skipped", "failed", "unknown"]
+RunVerificationHealthStatus = Literal[
+    "passed",
+    "skipped",
+    "timed_out",
+    "service_disappeared",
+    "failed",
+    "unknown",
+]
+RunVerificationWudStatus = Literal[
+    "removed",
+    "restored",
+    "stale_removed",
+    "removed_before_run",
+    "unknown",
+]
+
+
+class RunVerificationItem(BaseModel):
+    line_no: int
+    service_key: str = ""
+    stack_name: str = ""
+    service_name: str = ""
+    image: str = ""
+    target_image: str = ""
+    image_status: RunVerificationImageStatus = "unknown"
+    container_status: RunVerificationContainerStatus = "unknown"
+    health_status: RunVerificationHealthStatus = "unknown"
+    wud_status: RunVerificationWudStatus = "unknown"
+    follow_up_needed: bool = True
+    summary: str = ""
+
+
+class RunVerificationSummary(BaseModel):
+    status: RunVerificationStatus = "verified"
+    total_count: int = 0
+    verified_count: int = 0
+    needs_review_count: int = 0
+    items: list[RunVerificationItem] = Field(default_factory=list)
+
+
 class RunDetail(RunSummary):
     pending_updates: list[PendingUpdateRecord] = Field(default_factory=list)
+    verification: RunVerificationSummary = Field(default_factory=RunVerificationSummary)
 
 class RunLogResponse(BaseModel):
     run_id: int

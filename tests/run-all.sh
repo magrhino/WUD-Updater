@@ -116,6 +116,7 @@ EOF
     src/wud_updater/web_pending.py \
     src/wud_updater/web_plans.py \
     src/wud_updater/web_release_notes.py \
+    src/wud_updater/web_run_verification.py \
     src/wud_updater/web_runs.py \
     src/wud_updater/web_scheduler.py \
     src/wud_updater/web_self_update.py \

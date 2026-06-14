@@ -612,6 +612,11 @@ class PythonUpdateFromWudTests(FakeDockerTestCase):
         self.assertEqual(len(events), 1)
         self.assertEqual(events[0]["status"], "success")
         self.assertEqual(events[0]["service_name"], "app")
+        self.assertEqual(events[0]["old_image_id"], "old-app")
+        self.assertEqual(events[0]["new_image_id"], "new-app")
+        self.assertTrue(events[0]["old_digest"].endswith("@sha256:old-app"))
+        self.assertTrue(events[0]["new_digest"].endswith("@sha256:new-app"))
+        self.assertEqual(json.loads(events[0]["metadata_json"]), {"reason": "updated"})
         self.assertEqual(len(known), 1)
         self.assertEqual(known[0]["service_key"], "stack/app")
         self.assertEqual(known[0]["image"], "repo/app:latest")
@@ -2496,8 +2501,17 @@ class PythonUpdateFromWudTests(FakeDockerTestCase):
         self.assertIn("reason=health-failed", incident)
         self.assertIn("manual_review_required=no", incident)
         pending = self.db_rows("SELECT * FROM pending_updates")
+        events = self.db_rows("SELECT * FROM update_events")
         self.assertEqual(pending[0]["status"], "failed")
         self.assertEqual(pending[0]["status_reason"], "health-failed")
+        self.assertEqual(
+            json.loads(events[0]["metadata_json"]),
+            {
+                "failure_phase": "health",
+                "health_evidence": "timed_out",
+                "reason": "health-failed",
+            },
+        )
 
     def test_digest_pin_apply_revalidates_tagged_digest_with_verbose_docker(self) -> None:
         self.wud_file.write_text(
