@@ -116,6 +116,7 @@ EOF
     src/wud_updater/web_pending.py \
     src/wud_updater/web_plans.py \
     src/wud_updater/web_release_notes.py \
+    src/wud_updater/web_retags.py \
     src/wud_updater/web_runs.py \
     src/wud_updater/web_scheduler.py \
     src/wud_updater/web_self_update.py \
@@ -151,6 +152,7 @@ EOF
     tests/test_python_web_pending.py \
     tests/test_python_web_plans.py \
     tests/test_python_web_release_notes.py \
+    tests/test_python_web_retags.py \
     tests/test_python_web_runs.py \
     tests/test_python_web_scheduler.py \
     tests/test_python_web_self_update.py \

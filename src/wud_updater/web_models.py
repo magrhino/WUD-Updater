@@ -385,6 +385,35 @@ class UpdateTargetsResponse(BaseModel):
     items: list[UpdateTargetItem] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
 
+RetagTargetsStatus = Literal["ready", "unavailable"]
+
+class RetagTargetItem(BaseModel):
+    service_key: str
+    stack: str
+    service: str
+    image: str
+    image_repo: str
+    current_tag: str
+    tracking_tag: str
+    tracking_tag_source: str
+    proposed_tag: str
+    final_image: str
+    retag_available: bool
+    retag_reason: str
+    choices: list[str] = Field(default_factory=list)
+    label_key: str
+    label_value: str
+    directory: str
+    compose_file: str
+    project_directory: str
+    digest_provenance: DigestTagProvenance | None = None
+
+class RetagTargetsResponse(BaseModel):
+    status: RetagTargetsStatus
+    count: int
+    items: list[RetagTargetItem] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+
 class ReleaseNoteLink(BaseModel):
     label: str
     url: str

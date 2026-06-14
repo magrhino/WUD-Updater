@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import sqlite3
 from contextlib import closing
+from dataclasses import dataclass
 from pathlib import Path
 from urllib.parse import quote
 
@@ -20,6 +21,12 @@ from .web_models import WebSettings
 
 class ReadOnlyDatabaseMissing(RuntimeError):
     """Raised when the read-only WebUI database does not exist."""
+
+
+@dataclass(frozen=True)
+class KnownDigestState:
+    image: str
+    digest_provenance: DigestTagProvenance
 
 
 LOGGER = logging.getLogger(__name__)
@@ -86,6 +93,46 @@ def known_digest_provenance_by_service(
         if provenance is None:
             continue
         result[str(row["service_key"])] = provenance
+    return result
+
+
+def known_digest_state_by_service(
+    settings: WebSettings,
+) -> dict[str, KnownDigestState]:
+    try:
+        with closing(connect_readonly_db(settings)) as conn:
+            rows = conn.execute(
+                """
+                SELECT
+                    service_key,
+                    image,
+                    digest_source_image,
+                    digest_resolved_tag,
+                    digest_watch_tag,
+                    digest_target_digest,
+                    digest_final_image,
+                    digest_provenance_source,
+                    digest_provenance_confidence
+                FROM known_images
+                WHERE digest_final_image != ''
+                   OR digest_resolved_tag != ''
+                   OR digest_watch_tag != ''
+                """
+            ).fetchall()
+    except ReadOnlyDatabaseMissing:
+        return {}
+    except Exception as exc:
+        LOGGER.warning("failed to read digest state from database: %s", exc)
+        return {}
+    result: dict[str, KnownDigestState] = {}
+    for row in rows:
+        provenance = digest_provenance_from_row(row)
+        if provenance is None:
+            continue
+        result[str(row["service_key"])] = KnownDigestState(
+            image=str(row["image"]),
+            digest_provenance=provenance,
+        )
     return result
 
 

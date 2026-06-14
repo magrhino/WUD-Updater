@@ -30,6 +30,7 @@ from . import (
     web_pending,
     web_plans,
     web_release_notes,
+    web_retags,
     web_runs,
     web_scheduler,
     web_self_update,
@@ -90,6 +91,8 @@ from .web_models import (
     PlanResponse,
     ReadyResponse,
     ReleaseNotesResponse,
+    RetagTargetItem as RetagTargetItem,
+    RetagTargetsResponse,
     RunDetail,
     RunEventRecord as RunEventRecord,
     RunLogResponse,
@@ -260,6 +263,7 @@ AutoUpdateScheduleReservationError = (
 # this module. New code and monkeypatches should target the owning web_* module.
 api_pending = web_pending.api_pending
 api_update_targets = web_pending.api_update_targets
+api_retag_targets = web_retags.api_retag_targets
 api_pending_cleanup = web_pending.api_pending_cleanup
 api_pending_removal_plan = web_pending.api_pending_removal_plan
 api_pending_removal = web_pending.api_pending_removal
@@ -437,6 +441,7 @@ def create_app(
     )
     web_pending.configure(effective_config_loader=_effective_config)
     web_plans.configure(effective_config_loader=_effective_config)
+    web_retags.configure(effective_config_loader=_effective_config)
 
     app.add_api_route(
         "/healthz",
@@ -592,6 +597,12 @@ def create_app(
         web_pending.api_update_targets,
         methods=["GET"],
         response_model=UpdateTargetsResponse,
+    )
+    router.add_api_route(
+        "/retag-targets",
+        web_retags.api_retag_targets,
+        methods=["GET"],
+        response_model=RetagTargetsResponse,
     )
     router.add_api_route(
         "/pending/cleanup",
