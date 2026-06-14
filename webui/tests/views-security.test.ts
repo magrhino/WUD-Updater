@@ -33,6 +33,7 @@ import {
   planResponse,
   releaseNoteInfo,
   releaseNotesResponse,
+  runVerification,
   runSummary,
   servicePolicy,
   settingsResponse,
@@ -1638,6 +1639,23 @@ describe("mutating WebUI views", () => {
       .spyOn(updates, "refreshReleaseNotes")
       .mockResolvedValue();
     const loadRuns = vi.spyOn(runs, "loadRuns").mockResolvedValue();
+    const loadRunDetail = vi
+      .spyOn(runs, "loadRunDetail")
+      .mockImplementation(async (runId: number) => {
+        runs.runDetails = {
+          ...runs.runDetails,
+          [runId]: {
+            ...runSummary({
+              id: runId,
+              dry_run: false,
+              mode: "apply",
+              log_file: "/out/logs/job-test.log",
+            }),
+            pending_updates: [],
+            verification: runVerification(),
+          },
+        };
+      });
     vi.spyOn(updates, "createPlan").mockImplementation(async () => {
       updates.plan = planResponse();
     });
@@ -1686,6 +1704,7 @@ describe("mutating WebUI views", () => {
     const panelProgress = wrapper.find(
       '[aria-labelledby="apply-job-progress-title"]',
     ).element;
+    const panelVerification = wrapper.find(".run-verification-panel").element;
     const panelDetails = wrapper.find(".apply-job-details").element;
     expect(focus.mock.contexts).toContain(panel);
     expect(
@@ -1696,6 +1715,12 @@ describe("mutating WebUI views", () => {
     ).toBe(true);
     expect(
       Boolean(panelProgress.compareDocumentPosition(panelDetails) & Node.DOCUMENT_POSITION_FOLLOWING),
+    ).toBe(true);
+    expect(
+      Boolean(panelProgress.compareDocumentPosition(panelVerification) & Node.DOCUMENT_POSITION_FOLLOWING),
+    ).toBe(true);
+    expect(
+      Boolean(panelVerification.compareDocumentPosition(panelDetails) & Node.DOCUMENT_POSITION_FOLLOWING),
     ).toBe(true);
     expect(wrapper.find(".apply-job-details").attributes("open")).toBeUndefined();
     expect(applyPanel.text()).toContain("repo/app:1.0");
@@ -1736,10 +1761,15 @@ describe("mutating WebUI views", () => {
     expect(loadReleaseNotes).toHaveBeenCalled();
     expect(refreshReleaseNotes).toHaveBeenCalled();
     expect(loadRuns).toHaveBeenCalled();
+    expect(loadRunDetail).toHaveBeenCalledWith(10);
     expect(wrapper.find(".apply-job-panel").text()).toContain("Apply complete");
     expect(wrapper.find(".apply-job-panel").text()).toContain("repo/app:1.0");
     expect(wrapper.find(".apply-job-panel").text()).toContain("#10");
     expect(wrapper.find(".apply-job-panel").text()).toContain("Update complete");
+    expect(wrapper.find(".apply-job-panel").text()).toContain("Verification");
+    expect(wrapper.find(".apply-job-panel").text()).toContain("Verified");
+    expect(wrapper.find(".apply-job-panel").text()).toContain("New image running");
+    expect(wrapper.find(".apply-job-panel").text()).toContain("WUD line removed");
     expect(wrapper.find(".apply-job-details").attributes("open")).toBe("");
     expect(wrapper.find(".apply-job-live-log-body").attributes("style")).toContain(
       "display: none",

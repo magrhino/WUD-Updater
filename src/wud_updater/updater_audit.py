@@ -33,6 +33,7 @@ from .file_ops import (
     OwnerConfigError,
     apply_configured_owner as _apply_configured_owner,
 )
+from .images import image_repo_ref
 from .updater_matching import (
     _failed_line_numbers,
     _failed_match_for_line,
@@ -43,6 +44,8 @@ from .updater_matching import (
 )
 from .updater_digest_pin import _digest_pin_match_tag
 from .updater_models import (
+    FailureRecord,
+    ImageState,
     Match,
     STALE_PENDING_DIGEST_REASON,
     StackStatus,
@@ -394,25 +397,22 @@ def record_update_events(
             StackStatus("failure", "missing"),
         )
         digest_provenance = _digest_provenance_for_event(runner, match)
+        target_image = runner._target_image_for_match(match)
+        old_state, new_state = _image_states_for_match(runner, match, target_image)
+        metadata = _event_metadata_for_match(runner, match, status)
         insert_event(
             runner.audit_conn,
             run_id=runner.audit_run_id,
             service_name=match.service,
             stack_name=match.stack.name,
             image=match.compose_image,
-            target_image=runner._target_image_for_match(match),
-            old_digest=(
-                digest_from_image(match.compose_image)
-                if digest_provenance is not None
-                else ""
-            ),
-            new_digest=(
-                digest_provenance.target_digest
-                if digest_provenance is not None
-                else ""
-            ),
+            target_image=target_image,
+            old_image_id="" if old_state is None else old_state.image_id,
+            new_image_id="" if new_state is None else new_state.image_id,
+            old_digest=_old_event_digest(match, digest_provenance, old_state),
+            new_digest=_new_event_digest(digest_provenance, new_state),
             status=status.status,
-            metadata_json=json.dumps({"reason": status.reason}, sort_keys=True),
+            metadata_json=json.dumps(metadata, sort_keys=True),
             digest_provenance=digest_provenance,
         )
 
@@ -509,6 +509,101 @@ def _applied_digest_provenance_for_match(
         provenance_source="apply",
         provenance_confidence="verified",
     )
+
+
+def _event_metadata_for_match(
+    runner: Any,
+    match: Match,
+    status: StackStatus,
+) -> dict[str, str]:
+    metadata = {"reason": status.reason}
+    failure = _failure_for_match(runner, match, status)
+    if failure is None:
+        return metadata
+    metadata["failure_phase"] = failure.phase
+    health_evidence = _health_evidence(failure)
+    if health_evidence:
+        metadata["health_evidence"] = health_evidence
+    return metadata
+
+
+def _old_event_digest(
+    match: Match,
+    digest_provenance: DigestTagProvenance | None,
+    old_state: ImageState | None,
+) -> str:
+    old_digest = old_state.digest if old_state is not None else ""
+    if old_digest:
+        return old_digest
+    if digest_provenance is not None:
+        return digest_from_image(match.compose_image)
+    return ""
+
+
+def _new_event_digest(
+    digest_provenance: DigestTagProvenance | None,
+    new_state: ImageState | None,
+) -> str:
+    if digest_provenance is not None:
+        return digest_provenance.target_digest
+    return new_state.digest if new_state is not None else ""
+
+
+def _failure_for_match(
+    runner: Any,
+    match: Match,
+    status: StackStatus,
+) -> FailureRecord | None:
+    for failure in reversed(runner.failures):
+        if failure.reason != status.reason:
+            continue
+        if match in failure.matches:
+            return failure
+    return None
+
+
+def _health_evidence(failure: FailureRecord) -> str:
+    if not failure.health_details:
+        return ""
+    if "docker compose ps -q returned no containers" in failure.health_details:
+        return "service_disappeared"
+    if failure.reason == "health-failed":
+        return "timed_out"
+    return ""
+
+
+def _image_states_for_match(
+    runner: Any,
+    match: Match,
+    target_image: str,
+) -> tuple[ImageState | None, ImageState | None]:
+    states = runner.stack_image_states.get(match.stack.index)
+    if states is None:
+        return None, None
+    before, after = states
+    old_state = _image_state_for_reference(before, match.compose_image)
+    new_state = (
+        _image_state_for_reference(after, target_image)
+        or _image_state_for_reference(after, match.resolved)
+        or _image_state_for_reference(after, match.compose_image)
+    )
+    return old_state, new_state
+
+
+def _image_state_for_reference(
+    states: Mapping[str, ImageState],
+    image: str,
+) -> ImageState | None:
+    if not image:
+        return None
+    state = states.get(image)
+    if state is not None:
+        return state
+    repository = image_repo_ref(image)
+    for candidate, candidate_state in states.items():
+        if image_repo_ref(candidate) == repository:
+            return candidate_state
+    return None
 
 
 def _planned_digest_unpin_for_match(runner: Any, match: Match) -> Any | None:

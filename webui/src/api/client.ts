@@ -80,6 +80,13 @@ export type {
   RunSummary,
   PendingUpdateRecord,
   RunDetail,
+  RunVerificationContainerStatus,
+  RunVerificationHealthStatus,
+  RunVerificationImageStatus,
+  RunVerificationItem,
+  RunVerificationStatus,
+  RunVerificationSummary,
+  RunVerificationWudStatus,
   RunLogResponse,
   LogTail,
   // Diagnostics

@@ -5,6 +5,7 @@ import { FileText } from "@lucide/vue";
 import { NAlert } from "naive-ui";
 
 import type { RunEventRecord } from "../api/client";
+import RunVerificationPanel from "../components/RunVerificationPanel.vue";
 import { useRunsStore } from "../stores/runs";
 import {
   digestProvenanceDisplay,
@@ -78,6 +79,11 @@ function shortEventDigest(value: string): string {
           <strong>{{ run.pending_updates.length }}</strong>
         </article>
       </div>
+
+      <RunVerificationPanel
+        :verification="run.verification"
+        title="Post-update verification"
+      />
 
       <section class="section-panel">
         <div class="section-heading">

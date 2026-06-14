@@ -13,11 +13,21 @@ from wud_updater.db import (
     insert_update_run,
 )
 from wud_updater.digest_provenance import DigestTagProvenance
+from wud_updater.updater_models import STALE_PENDING_DIGEST_REASON
 from wud_updater.web_models import LogTail
 from tests.web_test_helpers import (
     _client,
     _insert_run,
 )
+
+
+EMPTY_VERIFICATION = {
+    "status": "verified",
+    "total_count": 0,
+    "verified_count": 0,
+    "needs_review_count": 0,
+    "items": [],
+}
 
 
 def test_runs_list_returns_empty_without_creating_missing_database(
@@ -153,6 +163,179 @@ def test_runs_endpoints_read_existing_sqlite_state(tmp_path: Path) -> None:
     assert detail["metadata"] == {"source": "test"}
     assert detail["pending_updates"][0]["image"] == "nginx:1.25"
     assert detail["events"][0]["service_name"] == "web"
+    assert detail["verification"] == EMPTY_VERIFICATION
+
+
+def test_run_detail_derives_persistent_verification_summary(tmp_path: Path) -> None:
+    client = _client(tmp_path, {"WUD_WEB_DEV_NO_AUTH": "true"})
+    db_path = tmp_path / "state" / "wud.sqlite"
+    with open_db(db_path) as conn:
+        init_db(conn)
+        run_id = insert_update_run(
+            conn,
+            started_at="2026-05-27T12:00:00+00:00",
+            status="failure",
+            dry_run=False,
+            mode="stop",
+            wud_file="/out/images.todo",
+            log_file="/logs/run.log",
+        )
+        cases = [
+            {
+                "line_no": 1,
+                "service": "verified",
+                "pending_status": "resolved",
+                "pending_reason": "updated",
+                "event_status": "success",
+                "event_metadata": {"reason": "updated"},
+                "old_image_id": "sha256:old-verified",
+                "new_image_id": "sha256:new-verified",
+                "old_digest": "sha256:old-verified",
+                "new_digest": "sha256:new-verified",
+            },
+            {
+                "line_no": 2,
+                "service": "current",
+                "pending_status": "resolved",
+                "pending_reason": "already-current",
+                "event_status": "success",
+                "event_metadata": {"reason": "already-current"},
+            },
+            {
+                "line_no": 3,
+                "service": "timeout",
+                "pending_status": "failed",
+                "pending_reason": "health-failed",
+                "event_status": "failure",
+                "event_metadata": {"reason": "health-failed"},
+            },
+            {
+                "line_no": 4,
+                "service": "disappeared",
+                "pending_status": "failed",
+                "pending_reason": "health-failed",
+                "event_status": "failure",
+                "event_metadata": {
+                    "reason": "health-failed",
+                    "health_evidence": "service_disappeared",
+                },
+            },
+            {
+                "line_no": 5,
+                "service": "stale",
+                "pending_status": "failed",
+                "pending_reason": STALE_PENDING_DIGEST_REASON,
+                "event_status": "",
+                "event_metadata": {},
+            },
+            {
+                "line_no": 6,
+                "service": "restored",
+                "pending_status": "failed",
+                "pending_reason": "pull-failed",
+                "event_status": "failure",
+                "event_metadata": {"reason": "pull-failed"},
+            },
+        ]
+        for case in cases:
+            service = case["service"]
+            line_no = int(case["line_no"])
+            insert_pending_update(
+                conn,
+                run_id=run_id,
+                line_no=line_no,
+                raw=f"repo/{service}:1.0",
+                image=f"repo/{service}:1.0",
+                service_key=f"media/{service}",
+                stack_name="media",
+                service_name=service,
+                status=str(case["pending_status"]),
+                status_reason=str(case["pending_reason"]),
+            )
+            if case["event_status"]:
+                insert_update_event(
+                    conn,
+                    run_id=run_id,
+                    service_name=service,
+                    stack_name="media",
+                    image=f"repo/{service}:1.0",
+                    target_image=f"repo/{service}:1.1",
+                    old_image_id=str(case.get("old_image_id", "")),
+                    new_image_id=str(case.get("new_image_id", "")),
+                    old_digest=str(case.get("old_digest", "")),
+                    new_digest=str(case.get("new_digest", "")),
+                    status=str(case["event_status"]),
+                    metadata_json=json.dumps(case["event_metadata"], sort_keys=True),
+                )
+
+    response = client.get(f"/api/v1/runs/{run_id}")
+
+    assert response.status_code == 200
+    verification = response.json()["verification"]
+    assert verification["status"] == "needs_review"
+    assert verification["total_count"] == 6
+    assert verification["verified_count"] == 2
+    assert verification["needs_review_count"] == 4
+    items = {item["line_no"]: item for item in verification["items"]}
+    assert items[1]["image_status"] == "new_image_running"
+    assert items[1]["container_status"] == "recreated"
+    assert items[1]["health_status"] == "passed"
+    assert items[1]["wud_status"] == "removed"
+    assert items[1]["follow_up_needed"] is False
+    assert items[2]["image_status"] == "already_current"
+    assert items[2]["container_status"] == "skipped"
+    assert items[2]["health_status"] == "skipped"
+    assert items[2]["follow_up_needed"] is False
+    assert items[3]["health_status"] == "timed_out"
+    assert items[3]["wud_status"] == "restored"
+    assert items[4]["health_status"] == "service_disappeared"
+    assert items[5]["wud_status"] == "stale_removed"
+    assert items[6]["wud_status"] == "restored"
+
+
+def test_run_detail_skips_verification_for_non_updater_audit_modes(
+    tmp_path: Path,
+) -> None:
+    client = _client(tmp_path, {"WUD_WEB_DEV_NO_AUTH": "true"})
+    db_path = tmp_path / "state" / "wud.sqlite"
+    with open_db(db_path) as conn:
+        init_db(conn)
+        run_id = insert_update_run(
+            conn,
+            started_at="2026-05-27T12:00:00+00:00",
+            status="success",
+            dry_run=False,
+            mode="web-pending-cleanup",
+            wud_file="/out/images.todo",
+            log_file="",
+        )
+        insert_pending_update(
+            conn,
+            run_id=run_id,
+            line_no=1,
+            raw="repo/old:latest",
+            image="repo/old:latest",
+            service_key="",
+            stack_name="",
+            service_name="",
+            status="resolved",
+            status_reason="removed-unmatched",
+        )
+        insert_update_event(
+            conn,
+            run_id=run_id,
+            service_name="repo/old:latest",
+            image="repo/old:latest",
+            status="success",
+            metadata_json='{"operation":"remove_unmatched_pending"}',
+        )
+
+    response = client.get(f"/api/v1/runs/{run_id}")
+
+    assert response.status_code == 200
+    detail = response.json()
+    assert detail["mode"] == "web-pending-cleanup"
+    assert detail["verification"] == EMPTY_VERIFICATION
 
 
 def test_runs_endpoints_serialize_digest_provenance(tmp_path: Path) -> None:

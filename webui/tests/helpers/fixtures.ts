@@ -14,6 +14,7 @@ import type {
   PlanResponse,
   ReleaseNoteInfo,
   ReleaseNotesResponse,
+  RunVerificationSummary,
   RunSummary,
   ServicePolicyRecord,
   SelfUpdateApplyResponse,
@@ -770,6 +771,34 @@ export function runSummary(overrides: Partial<RunSummary> = {}): RunSummary {
     log_file: "",
     metadata: {},
     events: [],
+    ...overrides,
+  };
+}
+
+export function runVerification(
+  overrides: Partial<RunVerificationSummary> = {},
+): RunVerificationSummary {
+  return {
+    status: "verified",
+    total_count: 1,
+    verified_count: 1,
+    needs_review_count: 0,
+    items: [
+      {
+        line_no: 1,
+        service_key: "media/app",
+        stack_name: "media",
+        service_name: "app",
+        image: "repo/app:1.0",
+        target_image: "repo/app:1.1",
+        image_status: "new_image_running",
+        container_status: "recreated",
+        health_status: "passed",
+        wud_status: "removed",
+        follow_up_needed: false,
+        summary: "new image running, container recreated, health passed, WUD line removed.",
+      },
+    ],
     ...overrides,
   };
 }
