@@ -26,6 +26,7 @@ from wud_updater.db import (  # noqa: E402
     upsert_known_image,
     upsert_tag_exclusion_rule,
 )
+from wud_updater.digest_provenance import DigestTagProvenance  # noqa: E402
 
 
 PENDING_LINES = (
@@ -33,10 +34,14 @@ PENDING_LINES = (
     "ghcr.io/home-assistant/home-assistant:2026.5.1 tag=2026.5.3",
     "lscr.io/linuxserver/radarr:5.21.1 tag=5.22.4",
     "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
-    "ghcr.io/magrhino/wud-updater:v0.16.0 tag=v0.16.1",
+    "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
     "ghcr.io/gethomepage/homepage:v0.9.12 tag=v0.10.9",
     "vaultwarden/server:1.31.0 tag=1.32.0",
     "containrrr/watchtower:1.7.1 tag=1.7.2",
+)
+
+DEMO_WUD_UPDATER_DIGEST = (
+    "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
 )
 
 DEMO_STACKS = (
@@ -50,7 +55,7 @@ DEMO_STACKS = (
         "name": "media",
         "services": (
             ("radarr", "lscr.io/linuxserver/radarr:5.21.1"),
-            ("wud-updater", "ghcr.io/magrhino/wud-updater:v0.16.0"),
+            ("wud-updater", "ghcr.io/magrhino/wud-updater:latest"),
         ),
     },
     {
@@ -73,6 +78,30 @@ DEMO_CONTAINER_LABELS = {
     },
 }
 
+DEMO_COMPOSE_LABELS = {
+    ("media", "wud-updater"): {
+        "wud.tag.include": "^latest$$",
+    },
+}
+
+DEMO_KNOWN_IMAGES = (
+    {
+        "service_key": "media/wud-updater",
+        "image": "ghcr.io/magrhino/wud-updater:latest",
+        "image_id": "sha256:demo-wud-updater-current",
+        "digest": DEMO_WUD_UPDATER_DIGEST,
+        "digest_provenance": DigestTagProvenance(
+            source_image="ghcr.io/magrhino/wud-updater:latest",
+            resolved_tag="v0.16.1",
+            watch_tag="latest",
+            target_digest=DEMO_WUD_UPDATER_DIGEST,
+            final_image=f"ghcr.io/magrhino/wud-updater@{DEMO_WUD_UPDATER_DIGEST}",
+            provenance_source="demo",
+            provenance_confidence="verified",
+        ),
+    },
+)
+
 DEMO_PULL_TARGETS = (
     (
         "ghcr.io/home-assistant/home-assistant:2026.5.3",
@@ -92,7 +121,7 @@ DEMO_PULL_TARGETS = (
     (
         "ghcr.io/magrhino/wud-updater:v0.16.1",
         "sha256:demo-wud-updater-new",
-        "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        DEMO_WUD_UPDATER_DIGEST,
     ),
 )
 
@@ -541,6 +570,17 @@ def _write_demo_management_state(conn) -> None:
             metadata_json='{"source":"demo"}',
         )
 
+    for known in DEMO_KNOWN_IMAGES:
+        upsert_known_image(
+            conn,
+            service_key=str(known["service_key"]),
+            image=str(known["image"]),
+            image_id=str(known["image_id"]),
+            digest=str(known["digest"]),
+            metadata_json='{"source":"demo"}',
+            digest_provenance=known["digest_provenance"],
+        )
+
 
 def _reset_directory(path: Path) -> None:
     if path.exists():
@@ -571,7 +611,7 @@ def _write_demo_stacks(docker_base: Path, fake_docker_root: Path) -> None:
         stack_dir = docker_base / stack_name
         stack_dir.mkdir(parents=True, exist_ok=True)
         (stack_dir / ".fake-docker-id").write_text(f"{stack_name}\n", encoding="utf-8")
-        _write_compose_file(stack_dir / "docker-compose.yml", services)
+        _write_compose_file(stack_dir / "docker-compose.yml", stack_name, services)
         _write_fake_stack_state(fake_docker_root, stack_name, services, containers)
 
     for container_id, labels in DEMO_CONTAINER_LABELS.items():
@@ -605,7 +645,11 @@ def _write_demo_stacks(docker_base: Path, fake_docker_root: Path) -> None:
     (fake_docker_root / "calls.log").write_text("", encoding="utf-8")
 
 
-def _write_compose_file(path: Path, services: tuple[tuple[str, str], ...]) -> None:
+def _write_compose_file(
+    path: Path,
+    stack_name: str,
+    services: tuple[tuple[str, str], ...],
+) -> None:
     lines = ["services:\n"]
     for service, image in services:
         lines.extend(
@@ -615,6 +659,12 @@ def _write_compose_file(path: Path, services: tuple[tuple[str, str], ...]) -> No
                 "    restart: unless-stopped\n",
             ]
         )
+        labels = DEMO_COMPOSE_LABELS.get((stack_name, service), {})
+        if labels:
+            lines.append("    labels:\n")
+            lines.extend(
+                f"      - {key}={value}\n" for key, value in labels.items()
+            )
     path.write_text("".join(lines), encoding="utf-8")
 
 

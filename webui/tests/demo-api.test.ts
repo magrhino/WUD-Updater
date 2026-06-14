@@ -112,6 +112,16 @@ describe("demo web API", () => {
       "vaultwarden/server",
       "containrrr/watchtower",
     ]);
+    expect(pending.items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          line_no: 5,
+          image: "ghcr.io/magrhino/wud-updater:latest",
+          current_tag: "latest",
+          desired_tag: "v0.25.1",
+        }),
+      ]),
+    );
     expect(pending.source_file.startsWith("/")).toBe(false);
     expect(pending.grouping.groups.every((group) => !group.directory.startsWith("/"))).toBe(
       true,
@@ -162,6 +172,7 @@ describe("demo web API", () => {
           service_key: "media/wud-updater",
           retag_available: true,
           retag_reason: "eligible",
+          label_value: "^latest$$",
           choices: ["keep-current", "switch-to-concrete"],
         }),
         expect.objectContaining({
