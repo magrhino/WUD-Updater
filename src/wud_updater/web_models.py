@@ -97,6 +97,15 @@ __all__ = (
     "ReleaseNoteLink",
     "ReleaseNotesResponse",
     "ResetAdminClaimRequest",
+    "RetagApplyRequest",
+    "RetagChoiceRequest",
+    "RetagPlanDigestPinUpdate",
+    "RetagPlanIssue",
+    "RetagPlanLabelRewrite",
+    "RetagPlanRequest",
+    "RetagPlanResponse",
+    "RetagPlanStack",
+    "RetagPlanStatus",
     "RunDetail",
     "RunEventRecord",
     "RunLogResponse",
@@ -387,6 +396,8 @@ class UpdateTargetsResponse(BaseModel):
 
 RetagTargetsStatus = Literal["ready", "unavailable"]
 
+RetagPlanStatus = Literal["ready", "empty", "blocked", "unavailable"]
+
 class RetagTargetItem(BaseModel):
     service_key: str
     stack: str
@@ -412,6 +423,72 @@ class RetagTargetsResponse(BaseModel):
     status: RetagTargetsStatus
     count: int
     items: list[RetagTargetItem] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+
+class RetagChoiceRequest(BaseModel):
+    service_key: str = Field(min_length=1, max_length=512)
+    choice: Literal["keep-current", "switch-to-concrete"]
+
+class RetagPlanRequest(BaseModel):
+    choices: list[RetagChoiceRequest] = Field(min_length=1)
+
+class RetagApplyRequest(BaseModel):
+    plan_id: str = Field(min_length=1)
+    choices: list[RetagChoiceRequest] = Field(min_length=1)
+    confirmation: Literal["apply-retags"]
+
+class RetagPlanIssue(BaseModel):
+    severity: str
+    code: str
+    message: str
+    service_key: str = ""
+    stack: str = ""
+    service: str = ""
+    hint: str = ""
+    details: dict[str, Any] = Field(default_factory=dict)
+
+class RetagPlanLabelRewrite(BaseModel):
+    service: str
+    label_key: str
+    current_label_value: str
+    planned_tag: str
+    proposed_label_value: str
+    proposed_label_regex: str
+    approved: bool
+    reason: str
+
+class RetagPlanDigestPinUpdate(BaseModel):
+    service_key: str
+    stack: str
+    service: str
+    source_image: str
+    resolved_tag: str
+    planned_digest: str
+    final_image: str
+    watch_tag: str
+    marker: str
+    label_key: str
+    label_value: str
+    label_rewrites: list[RetagPlanLabelRewrite] = Field(default_factory=list)
+    digest_provenance: DigestTagProvenance | None = None
+
+class RetagPlanStack(BaseModel):
+    stack: str
+    directory: str
+    compose_file: str
+    project_directory: str
+    services: list[str] = Field(default_factory=list)
+    digest_pin_updates: list[RetagPlanDigestPinUpdate] = Field(default_factory=list)
+
+class RetagPlanResponse(BaseModel):
+    plan_id: str
+    status: RetagPlanStatus
+    can_apply: bool
+    external_recreate_required: bool = False
+    selected_count: int = 0
+    keep_current_count: int = 0
+    stacks: list[RetagPlanStack] = Field(default_factory=list)
+    issues: list[RetagPlanIssue] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
 
 class ReleaseNoteLink(BaseModel):

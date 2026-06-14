@@ -193,6 +193,42 @@ describe("demo web API", () => {
     expect(retagTargets.items.every((item) => !item.directory.startsWith("/"))).toBe(
       true,
     );
+    await expect(
+      api.createRetagPlan(
+        [
+          {
+            service_key: "media/wud-updater",
+            choice: "switch-to-concrete",
+          },
+          { service_key: "media/radarr", choice: "keep-current" },
+        ],
+        "csrf",
+      ),
+    ).resolves.toMatchObject({
+      status: "ready",
+      can_apply: true,
+      selected_count: 1,
+      keep_current_count: 1,
+      stacks: [
+        expect.objectContaining({
+          stack: "media",
+          services: ["wud-updater"],
+          digest_pin_updates: [
+            expect.objectContaining({
+              service_key: "media/wud-updater",
+              final_image: expect.stringContaining("@sha256:"),
+            }),
+          ],
+        }),
+      ],
+    });
+    await expect(
+      api.applyRetagPlan(
+        "demo-retag-plan",
+        [{ service_key: "media/wud-updater", choice: "switch-to-concrete" }],
+        "csrf",
+      ),
+    ).rejects.toThrow("Demo mode does not apply retag changes.");
 
     const runs = await api.runs();
     const seededRun = runs.find((run) => run.id === 1);

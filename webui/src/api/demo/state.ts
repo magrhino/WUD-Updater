@@ -18,6 +18,10 @@ import type {
   PlanResponse,
   PlanStatus,
   ReleaseNotesResponse,
+  RetagChoiceRequest,
+  RetagPlanIssue,
+  RetagPlanResponse,
+  RetagTargetItem,
   RetagTargetsResponse,
   RunDetail,
   RunLogResponse,
@@ -524,6 +528,99 @@ export class DemoApiState {
       items: clone(DEMO_RETAG_TARGETS),
       warnings: [
         "Demo retag data is fixture-backed and does not inspect local Compose files.",
+      ],
+    };
+  }
+
+  createRetagPlan(choices: RetagChoiceRequest[]): RetagPlanResponse {
+    const targetsByKey = new Map(
+      DEMO_RETAG_TARGETS.map((item) => [item.service_key, item]),
+    );
+    const selected: RetagTargetItem[] = [];
+    const issues: RetagPlanIssue[] = [];
+    let keepCurrentCount = 0;
+    for (const choice of choices) {
+      const target = targetsByKey.get(choice.service_key);
+      if (!target) {
+        issues.push({
+          severity: "error",
+          code: "retag-choice-unknown",
+          message: `${choice.service_key} is not present in demo retag fixtures.`,
+          service_key: choice.service_key,
+          stack: "",
+          service: "",
+          hint: "",
+          details: {},
+        });
+        continue;
+      }
+      if (choice.choice === "keep-current") {
+        keepCurrentCount += 1;
+        continue;
+      }
+      if (!target.retag_available) {
+        issues.push({
+          severity: "error",
+          code: "retag-target-not-eligible",
+          message: `${choice.service_key} cannot switch to concrete tracking: ${target.retag_reason}`,
+          service_key: target.service_key,
+          stack: target.stack,
+          service: target.service,
+          hint: "",
+          details: {},
+        });
+        continue;
+      }
+      selected.push(target);
+    }
+    const status = issues.length ? "blocked" : selected.length ? "ready" : "empty";
+    const stacks = Array.from(new Set(selected.map((item) => item.stack))).map(
+      (stackName) => {
+        const stackItems = selected.filter((item) => item.stack === stackName);
+        const first = stackItems[0];
+        return {
+          stack: stackName,
+          directory: first?.directory ?? "",
+          compose_file: first?.compose_file ?? "",
+          project_directory: first?.project_directory ?? "",
+          services: stackItems.map((item) => item.service).sort(),
+          digest_pin_updates: stackItems
+            .map((item) => ({
+              service_key: item.service_key,
+              stack: item.stack,
+              service: item.service,
+              source_image: item.image,
+              resolved_tag: item.proposed_tag,
+              planned_digest: item.final_image.split("@", 2)[1] ?? "",
+              final_image: item.final_image,
+              watch_tag: item.tracking_tag,
+              marker: `wud-updater.resolved-tag=${item.proposed_tag}`,
+              label_key: item.label_key,
+              label_value: item.label_value,
+              label_rewrites: [],
+              digest_provenance: item.digest_provenance ?? null,
+            }))
+            .sort((left, right) =>
+              left.service_key.localeCompare(right.service_key),
+            ),
+        };
+      },
+    );
+
+    return {
+      plan_id: `demo-retag-plan-${status}-${selected
+        .map((item) => item.service_key)
+        .sort()
+        .join("-")}`,
+      status,
+      can_apply: status === "ready" && selected.length > 0,
+      external_recreate_required: false,
+      selected_count: selected.length,
+      keep_current_count: keepCurrentCount,
+      stacks,
+      issues,
+      warnings: [
+        "Demo retag preview is fixture-backed and does not inspect local Compose files.",
       ],
     };
   }

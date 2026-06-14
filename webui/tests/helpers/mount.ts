@@ -275,6 +275,52 @@ export const naiveStubs: Record<string, Component> = {
       };
     },
   },
+  NRadioButton: {
+    props: {
+      disabled: Boolean,
+      title: String,
+      value: String,
+    },
+    setup(props, { slots }) {
+      const group = inject<{
+        value: Ref<string | undefined>;
+        update: (value: string) => void;
+      } | null>("n-radio-group", null);
+      return () =>
+        h("label", [
+          h("input", {
+            type: "radio",
+            checked: group?.value.value === props.value,
+            disabled: props.disabled,
+            title: props.title,
+            value: props.value,
+            onChange: () => {
+              if (props.value) {
+                group?.update(props.value);
+              }
+            },
+          }),
+          slots.default?.(),
+        ]);
+    },
+  },
+  NRadioGroup: {
+    props: {
+      value: String,
+    },
+    emits: ["update:value"],
+    setup(props, { emit, slots }) {
+      const value = ref(props.value);
+      provide("n-radio-group", {
+        value,
+        update: (next: string) => {
+          value.value = next;
+          emit("update:value", next);
+        },
+      });
+      return () => h("div", { role: "radiogroup" }, [slots.default?.()]);
+    },
+  },
   NSelect: {
     props: {
       disabled: Boolean,

@@ -7,6 +7,7 @@ import type {
   CsrfResponse,
   DigestPinLabelRewriteApprovalRequest,
   PendingCleanupLine,
+  RetagChoiceRequest,
   SelfUpdateApplyResponse,
   SelfUpdatePlanResponse,
   SelfUpdatePrepareResponse,
@@ -61,6 +62,17 @@ export function createDemoWebApi(): WebApi {
     pending: async () => state.pendingResponse(),
     updateTargets: async () => state.updateTargets(),
     retagTargets: async () => state.retagTargets(),
+    createRetagPlan: async (
+      choices: RetagChoiceRequest[],
+      _csrfToken: string,
+    ) => state.createRetagPlan(choices),
+    applyRetagPlan: async (
+      _planId: string,
+      _choices: RetagChoiceRequest[],
+      _csrfToken: string,
+    ) => {
+      throw new Error("Demo mode does not apply retag changes.");
+    },
     diagnosticsSupportBundle: async () => ({
       wud_updater_version: "demo-v0.0.0",
       settings: state.settings(),

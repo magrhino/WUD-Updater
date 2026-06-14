@@ -2641,7 +2641,84 @@ body .n-switch:focus-within {
 .retag-choice-cell {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: 6px;
+}
+
+.retag-plan-panel {
+  display: grid;
+  gap: 12px;
+}
+
+.retag-plan-heading {
+  align-items: flex-start;
+}
+
+.retag-plan-tags {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.retag-plan-stacks {
+  display: grid;
+  gap: 10px;
+}
+
+.retag-plan-stack {
+  display: grid;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 8px;
+  background: var(--color-panel-tint);
+}
+
+.retag-plan-stack-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.retag-plan-stack-heading code,
+.retag-plan-update-list code {
+  color: var(--color-code-text);
+  font-family: var(--font-mono);
+  overflow-wrap: anywhere;
+}
+
+.retag-plan-update-list {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.retag-plan-update-list li {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.retag-plan-update-list li div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.retag-plan-update-list li span {
+  color: var(--color-muted-text);
+  font-size: 0.84rem;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.retag-plan-empty {
+  min-height: 140px;
 }
 
 .retag-state svg {

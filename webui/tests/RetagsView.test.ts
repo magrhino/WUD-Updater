@@ -3,8 +3,11 @@ import { flushPromises } from "@vue/test-utils";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import RetagsView from "../src/views/RetagsView.vue";
+import { useAuthStore } from "../src/stores/auth";
 import { useUpdatesStore } from "../src/stores/updates";
 import {
+  authSession,
+  retagPlanResponse,
   retagTarget,
   retagTargetsResponse,
 } from "./helpers/fixtures";
@@ -15,9 +18,11 @@ describe("RetagsView", () => {
     setActivePinia(createPinia());
   });
 
-  it("renders retag review rows and the disabled preview affordance", async () => {
+  it("renders retag choices and previews selected changes", async () => {
     const pinia = createPinia();
     setActivePinia(pinia);
+    const auth = useAuthStore();
+    auth.session = authSession({ mutations_enabled: true });
     const updates = useUpdatesStore();
     updates.retagTargets = retagTargetsResponse(
       [
@@ -40,6 +45,13 @@ describe("RetagsView", () => {
     const loadRetagTargets = vi
       .spyOn(updates, "loadRetagTargets")
       .mockResolvedValue();
+    const createRetagPlan = vi.spyOn(updates, "createRetagPlan").mockImplementation(
+      async () => {
+        const plan = retagPlanResponse();
+        updates.retagPlan = plan;
+        return plan;
+      },
+    );
 
     const wrapper = mountWithApp(RetagsView, { pinia });
     await flushPromises();
@@ -56,13 +68,52 @@ describe("RetagsView", () => {
     expect(text).toContain("Candidate ready");
     expect(text).toContain("media/radarr");
     expect(text).toContain("Missing provenance");
-    expect(text).toContain("Preview/apply is not available");
+
+    const switchControls = wrapper.findAll('input[value="switch-to-concrete"]');
+    expect(switchControls).toHaveLength(2);
+    expect(switchControls[0].attributes("disabled")).toBeUndefined();
+    expect(switchControls[1].attributes("disabled")).toBeDefined();
+    await switchControls[0].setValue();
+    expect(updates.retagChoices["media/app"]).toBe("switch-to-concrete");
+
+    await wrapper
+      .findAll("button")
+      .find((button) => button.text().includes("Preview retag changes"))
+      ?.trigger("click");
+    await flushPromises();
+
+    expect(createRetagPlan).toHaveBeenCalledTimes(1);
+    expect(wrapper.text()).toContain("Selected retag changes");
+    expect(wrapper.text()).toContain("repo/app:latest -> repo/app@sha256:abc123");
+    const applyButton = wrapper
+      .findAll("button")
+      .find((button) => button.text().includes("Apply selected retags"));
+    expect(applyButton).toBeDefined();
+    expect(applyButton?.attributes("disabled")).toBeUndefined();
+  });
+
+  it("disables switch and apply controls in read-only mode", async () => {
+    const pinia = createPinia();
+    setActivePinia(pinia);
+    const auth = useAuthStore();
+    auth.session = authSession({ mutations_enabled: false });
+    const updates = useUpdatesStore();
+    updates.retagTargets = retagTargetsResponse();
+    updates.retagPlan = retagPlanResponse();
+    vi.spyOn(updates, "loadRetagTargets").mockResolvedValue();
+
+    const wrapper = mountWithApp(RetagsView, { pinia });
+    await flushPromises();
+
+    expect(wrapper.text()).toContain("Read-only mode keeps retag switch/apply disabled.");
     expect(
-      wrapper
-        .findAll("button")
-        .find((button) => button.text().includes("Preview retag changes"))
-        ?.attributes("disabled"),
+      wrapper.find('input[value="switch-to-concrete"]').attributes("disabled"),
     ).toBeDefined();
+    const applyButton = wrapper
+      .findAll("button")
+      .find((button) => button.text().includes("Apply selected retags"));
+    expect(applyButton).toBeDefined();
+    expect(applyButton?.attributes("disabled")).toBeDefined();
   });
 
   it("filters retag targets by search text and review status", async () => {

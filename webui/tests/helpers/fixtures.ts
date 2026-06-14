@@ -14,6 +14,7 @@ import type {
   PlanResponse,
   ReleaseNoteInfo,
   ReleaseNotesResponse,
+  RetagPlanResponse,
   RetagTargetItem,
   RetagTargetsResponse,
   RunSummary,
@@ -595,6 +596,67 @@ export function retagTargetsResponse(
     status: "ready",
     count: items.length,
     items,
+    warnings: [],
+    ...overrides,
+  };
+}
+
+export function retagPlanResponse(
+  overrides: Partial<RetagPlanResponse> = {},
+): RetagPlanResponse {
+  return {
+    plan_id: "retag-plan-test",
+    status: "ready",
+    can_apply: true,
+    external_recreate_required: false,
+    selected_count: 1,
+    keep_current_count: 1,
+    stacks: [
+      {
+        stack: "media",
+        directory: "/docker/media",
+        compose_file: "docker-compose.yml",
+        project_directory: "/docker/media",
+        services: ["app"],
+        digest_pin_updates: [
+          {
+            service_key: "media/app",
+            stack: "media",
+            service: "app",
+            source_image: "repo/app:latest",
+            resolved_tag: "1.1",
+            planned_digest: "sha256:abc123",
+            final_image: "repo/app@sha256:abc123",
+            watch_tag: "latest",
+            marker: "wud-updater.resolved-tag=1.1",
+            label_key: "wud.tag.include",
+            label_value: "^1\\.1$$",
+            label_rewrites: [
+              {
+                service: "app",
+                label_key: "wud.tag.include",
+                current_label_value: "^latest$$",
+                planned_tag: "1.1",
+                proposed_label_value: "^1\\.1$$",
+                proposed_label_regex: "^1\\.1$",
+                approved: false,
+                reason: "exact-regex-normalized",
+              },
+            ],
+            digest_provenance: {
+              source_image: "repo/app:latest",
+              resolved_tag: "1.1",
+              watch_tag: "latest",
+              target_digest: "sha256:abc123",
+              final_image: "repo/app@sha256:abc123",
+              provenance_source: "test",
+              provenance_confidence: "high",
+            },
+          },
+        ],
+      },
+    ],
+    issues: [],
     warnings: [],
     ...overrides,
   };

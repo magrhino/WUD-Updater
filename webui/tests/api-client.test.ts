@@ -156,6 +156,15 @@ describe("webApi", () => {
       webApi.pending(),
       webApi.updateTargets(),
       webApi.retagTargets(),
+      webApi.createRetagPlan(
+        [{ service_key: "media/app", choice: "switch-to-concrete" }],
+        "csrf",
+      ),
+      webApi.applyRetagPlan(
+        "retag-plan",
+        [{ service_key: "media/app", choice: "switch-to-concrete" }],
+        "csrf",
+      ),
       webApi.cleanupPending("cleanup", [{ line_no: 1, raw: "repo/app:1.0" }], "csrf"),
       webApi.createRemovalPlan([1], "csrf"),
       webApi.removeSelectedPending("removal", [{ line_no: 1, raw: "repo/app:1.0" }], "csrf"),
@@ -178,7 +187,7 @@ describe("webApi", () => {
       webApi.runLog(1),
     ]);
 
-    expect(fetchMock).toHaveBeenCalledTimes(37);
+    expect(fetchMock).toHaveBeenCalledTimes(39);
     for (const call of fetchMock.mock.calls) {
       expect(requestInit(call).credentials).toBe("include");
     }
@@ -201,6 +210,34 @@ describe("webApi", () => {
         "x-wud-csrf-token",
       ),
     ).toBeNull();
+  });
+
+  it("serializes retag preview and apply payloads exactly", async () => {
+    const fetchMock = mockFetch({});
+    const choices = [
+      { service_key: "media/app", choice: "switch-to-concrete" as const },
+      { service_key: "media/radarr", choice: "keep-current" as const },
+    ];
+
+    await webApi.createRetagPlan(choices, "csrf-retag");
+    await webApi.applyRetagPlan("retag-plan-id", choices, "csrf-retag");
+
+    expect(fetchMock.mock.calls[0][0]).toBe("/api/v1/retag-plans");
+    expect(requestInit(fetchMock.mock.calls[0]).method).toBe("POST");
+    expect(
+      (requestInit(fetchMock.mock.calls[0]).headers as Headers).get(
+        "x-wud-csrf-token",
+      ),
+    ).toBe("csrf-retag");
+    expect(JSON.parse(String(requestInit(fetchMock.mock.calls[0]).body))).toEqual({
+      choices,
+    });
+    expect(fetchMock.mock.calls[1][0]).toBe("/api/v1/retag-plans/apply");
+    expect(JSON.parse(String(requestInit(fetchMock.mock.calls[1]).body))).toEqual({
+      plan_id: "retag-plan-id",
+      choices,
+      confirmation: "apply-retags",
+    });
   });
 
   it("sends csrf headers on mutating requests", async () => {
@@ -242,6 +279,15 @@ describe("webApi", () => {
       selfUpdatePlanStatus(),
     );
     await webApi.restartContainer("csrf-token");
+    await webApi.createRetagPlan(
+      [{ service_key: "media/app", choice: "switch-to-concrete" }],
+      "csrf-token",
+    );
+    await webApi.applyRetagPlan(
+      "retag-plan",
+      [{ service_key: "media/app", choice: "switch-to-concrete" }],
+      "csrf-token",
+    );
     await webApi.createPlan([1], false, [], [], "csrf-token");
     await webApi.createJob("plan", [1], false, [], [], "csrf-token");
     await webApi.applyPlan("plan", [1], false, [], [], "csrf-token");

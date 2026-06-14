@@ -17,6 +17,8 @@ import {
   onboardingDismissResponse,
   pendingResponse,
   releaseNotesResponse,
+  retagPlanResponse,
+  retagTarget,
   retagTargetsResponse,
   planResponse,
   runSummary,
@@ -275,6 +277,59 @@ describe("settings store", () => {
 
     expect(updates.retagTargets?.items[0]?.service_key).toBe("media/app");
     expect(fetchMock.mock.calls[0][0]).toBe("/api/v1/retag-targets");
+  });
+
+  it("previews retag choices through the updates store", async () => {
+    const fetchMock = mockFetch(retagPlanResponse());
+    const auth = useAuthStore();
+    const ensureCsrf = vi.spyOn(auth, "ensureCsrf").mockResolvedValue("csrf-retag");
+        const connection = useConnectionStore();
+    const settings = useSettingsStore();
+    const updates = useUpdatesStore();
+    const runs = useRunsStore();
+    updates.retagTargets = retagTargetsResponse([
+      retagTarget(),
+      retagTarget({ service_key: "media/radarr", service: "radarr" }),
+    ]);
+    updates.setRetagChoice("media/app", "switch-to-concrete");
+
+    const plan = await updates.createRetagPlan();
+
+    expect(ensureCsrf).toHaveBeenCalledTimes(1);
+    expect(plan.plan_id).toBe("retag-plan-test");
+    expect(updates.retagPlan?.selected_count).toBe(1);
+    expect(fetchMock.mock.calls[0][0]).toBe("/api/v1/retag-plans");
+    expect(JSON.parse(String((fetchMock.mock.calls[0][1] as RequestInit).body))).toEqual({
+      choices: [
+        { service_key: "media/app", choice: "switch-to-concrete" },
+        { service_key: "media/radarr", choice: "keep-current" },
+      ],
+    });
+  });
+
+  it("applies a retag plan as a tracked apply job", async () => {
+    const fetchMock = mockFetch(applyJobResponse({ job_id: "retag-job" }));
+    const auth = useAuthStore();
+    const ensureCsrf = vi.spyOn(auth, "ensureCsrf").mockResolvedValue("csrf-retag");
+        const connection = useConnectionStore();
+    const settings = useSettingsStore();
+    const updates = useUpdatesStore();
+    const runs = useRunsStore();
+    updates.retagTargets = retagTargetsResponse();
+    updates.retagChoices = { "media/app": "switch-to-concrete" };
+    updates.retagPlan = retagPlanResponse();
+
+    const job = await updates.applyRetagPlan();
+
+    expect(ensureCsrf).toHaveBeenCalledTimes(1);
+    expect(job.job_id).toBe("retag-job");
+    expect(updates.applyJob?.job_id).toBe("retag-job");
+    expect(fetchMock.mock.calls[0][0]).toBe("/api/v1/retag-plans/apply");
+    expect(JSON.parse(String((fetchMock.mock.calls[0][1] as RequestInit).body))).toEqual({
+      plan_id: "retag-plan-test",
+      choices: [{ service_key: "media/app", choice: "switch-to-concrete" }],
+      confirmation: "apply-retags",
+    });
   });
 
   it("surfaces retag target loading errors", async () => {

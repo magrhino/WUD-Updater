@@ -7,12 +7,19 @@ import {
   NButton,
   NDataTable,
   NInput,
+  NRadioButton,
+  NRadioGroup,
   NSelect,
   NTag,
   type DataTableColumns,
 } from "naive-ui";
 
-import type { RetagTargetItem } from "../api/client";
+import type {
+  RetagPlanDigestPinUpdate,
+  RetagTargetChoice,
+  RetagTargetItem,
+} from "../api/client";
+import { useAuthStore } from "../stores/auth";
 import { useUpdatesStore } from "../stores/updates";
 import {
   digestProvenanceDisplay,
@@ -23,10 +30,14 @@ type RetagFilter = "all" | "available" | "attention";
 type TagType = "default" | "success" | "warning" | "error" | "info";
 
 const updates = useUpdatesStore();
+const auth = useAuthStore();
 const breakpoints = useBreakpoints(breakpointsTailwind);
 const isMobile = breakpoints.smaller("md");
 const searchQuery = ref("");
 const statusFilter = ref<RetagFilter>("all");
+const isDemoMode =
+  import.meta.env.MODE === "demo" ||
+  import.meta.env.VITE_WUD_DEMO_MODE === "true";
 
 const filterOptions = [
   { label: "All services", value: "all" },
@@ -62,8 +73,36 @@ const availableCount = computed(
   () => rows.value.filter((item) => item.retag_available).length,
 );
 const attentionCount = computed(() => rows.value.length - availableCount.value);
+const selectedSwitchCount = computed(
+  () =>
+    rows.value.filter(
+      (item) => retagChoice(item) === "switch-to-concrete",
+    ).length,
+);
 const unavailable = computed(() => updates.retagTargets?.status === "unavailable");
 const loaded = computed(() => updates.retagTargets !== null);
+const mutationsEnabled = computed(() => auth.session?.mutations_enabled === true);
+const retagMutationDisabled = computed(
+  () => !mutationsEnabled.value || isDemoMode,
+);
+const retagMutationNotice = computed(() => {
+  if (isDemoMode) {
+    return "Demo mode keeps retag apply disabled.";
+  }
+  if (!mutationsEnabled.value) {
+    return "Read-only mode keeps retag switch/apply disabled.";
+  }
+  return "";
+});
+const previewDisabled = computed(
+  () => updates.loading || unavailable.value || rows.value.length === 0,
+);
+const applyDisabled = computed(
+  () =>
+    updates.loading ||
+    retagMutationDisabled.value ||
+    updates.retagPlan?.can_apply !== true,
+);
 const initialLoading = computed(
   () => !loaded.value && !updates.error && updates.loading,
 );
@@ -159,17 +198,42 @@ const columns = computed<DataTableColumns<RetagTargetItem>>(() => [
     },
   },
   {
-    title: "Default choice",
+    title: "Choice",
     key: "choices",
-    minWidth: 150,
+    minWidth: 230,
     render: (row) =>
       h("div", { class: "retag-choice-cell" }, [
         h(
-          NTag,
-          { size: "small", bordered: false },
-          { default: () => "Keep current" },
+          NRadioGroup,
+          {
+            value: retagChoice(row),
+            size: "small",
+            onUpdateValue: (value: string) => onRetagChoiceUpdate(row, value),
+          },
+          {
+            default: () => [
+              h(
+                NRadioButton,
+                { value: "keep-current" },
+                { default: () => "Keep" },
+              ),
+              h(
+                NRadioButton,
+                {
+                  value: "switch-to-concrete",
+                  disabled:
+                    !canSwitchToConcrete(row) || retagMutationDisabled.value,
+                  title:
+                    !canSwitchToConcrete(row)
+                      ? reasonDetail(row.retag_reason)
+                      : retagMutationNotice.value,
+                },
+                { default: () => "Switch" },
+              ),
+            ],
+          },
         ),
-        row.choices.includes("switch-to-concrete")
+        canSwitchToConcrete(row)
           ? h(
               NTag,
               { size: "small", type: "info", bordered: false },
@@ -182,6 +246,32 @@ const columns = computed<DataTableColumns<RetagTargetItem>>(() => [
 
 function rowKey(row: RetagTargetItem): string {
   return row.service_key;
+}
+
+function retagChoice(item: RetagTargetItem): RetagTargetChoice {
+  return updates.retagChoices[item.service_key] ?? "keep-current";
+}
+
+function canSwitchToConcrete(item: RetagTargetItem): boolean {
+  return item.retag_available && item.choices.includes("switch-to-concrete");
+}
+
+function onRetagChoiceUpdate(
+  item: RetagTargetItem,
+  choice: string,
+): void {
+  if (choice !== "keep-current" && choice !== "switch-to-concrete") {
+    return;
+  }
+  updates.setRetagChoice(item.service_key, choice);
+}
+
+async function previewRetagChanges(): Promise<void> {
+  await updates.createRetagPlan().catch(() => undefined);
+}
+
+async function applyRetagChanges(): Promise<void> {
+  await updates.applyRetagPlan().catch(() => undefined);
 }
 
 function reasonLabel(code: string): string {
@@ -250,6 +340,39 @@ function searchableText(item: RetagTargetItem): string {
     .toLowerCase();
 }
 
+function planStatusType(): TagType {
+  if (updates.retagPlan?.status === "ready") {
+    return "success";
+  }
+  if (updates.retagPlan?.status === "blocked") {
+    return "error";
+  }
+  if (updates.retagPlan?.status === "unavailable") {
+    return "warning";
+  }
+  return "default";
+}
+
+function planLocation(stack: { directory: string; compose_file: string }): string {
+  return [stack.directory, stack.compose_file].filter(Boolean).join("/");
+}
+
+function digestPinSummary(update: RetagPlanDigestPinUpdate): string {
+  return `${update.source_image} -> ${update.final_image}`;
+}
+
+function labelRewriteSummary(update: RetagPlanDigestPinUpdate): string {
+  if (!update.label_rewrites.length) {
+    return "No label rewrite";
+  }
+  return update.label_rewrites
+    .map(
+      (rewrite) =>
+        `${rewrite.label_key}: ${rewrite.current_label_value} -> ${rewrite.proposed_label_value}`,
+    )
+    .join("; ");
+}
+
 onMounted(() => {
   void updates.loadRetagTargets().catch(() => undefined);
 });
@@ -280,12 +403,22 @@ onMounted(() => {
           <n-button
             type="primary"
             size="small"
-            disabled
-            title="Retag preview and apply endpoints are not available yet"
+            :disabled="previewDisabled"
+            :loading="updates.loading"
+            @click="previewRetagChanges"
           >
             Preview retag changes
           </n-button>
-          <span>Preview/apply is not available in this frontend pass.</span>
+          <n-button
+            v-if="updates.retagPlan"
+            size="small"
+            :disabled="applyDisabled"
+            :loading="updates.loading"
+            @click="applyRetagChanges"
+          >
+            Apply selected retags
+          </n-button>
+          <span v-if="retagMutationNotice">{{ retagMutationNotice }}</span>
         </div>
       </div>
 
@@ -303,9 +436,88 @@ onMounted(() => {
           <strong>{{ attentionCount }}</strong>
         </div>
         <div>
-          <span>Status</span>
-          <strong>{{ unavailable ? "Unavailable" : "Ready" }}</strong>
+          <span>Selected switches</span>
+          <strong>{{ selectedSwitchCount }}</strong>
         </div>
+      </div>
+    </section>
+
+    <section
+      v-if="updates.retagPlan"
+      class="section-panel retag-plan-panel"
+      aria-label="Retag plan preview"
+    >
+      <div class="section-heading retag-plan-heading">
+        <div>
+          <p class="eyebrow">Preview</p>
+          <h2>Selected retag changes</h2>
+        </div>
+        <div class="retag-plan-tags">
+          <n-tag size="small" :type="planStatusType()" :bordered="false">
+            {{ updates.retagPlan.status }}
+          </n-tag>
+          <n-tag size="small" :bordered="false">
+            {{ updates.retagPlan.selected_count }} selected
+          </n-tag>
+          <n-tag size="small" :bordered="false">
+            {{ updates.retagPlan.keep_current_count }} keep current
+          </n-tag>
+        </div>
+      </div>
+
+      <n-alert
+        v-for="warning in updates.retagPlan.warnings"
+        :key="warning"
+        type="warning"
+        :show-icon="false"
+      >
+        {{ warning }}
+      </n-alert>
+
+      <n-alert
+        v-for="issue in updates.retagPlan.issues"
+        :key="`${issue.code}-${issue.service_key}-${issue.message}`"
+        :type="issue.severity === 'error' ? 'error' : 'warning'"
+        :show-icon="false"
+      >
+        {{ issue.message }}
+      </n-alert>
+
+      <div v-if="updates.retagPlan.stacks.length" class="retag-plan-stacks">
+        <div
+          v-for="stack in updates.retagPlan.stacks"
+          :key="`${stack.stack}-${stack.compose_file}`"
+          class="retag-plan-stack"
+        >
+          <div class="retag-plan-stack-heading">
+            <strong>{{ stack.stack }}</strong>
+            <code>{{ planLocation(stack) }}</code>
+          </div>
+          <ul class="retag-plan-update-list">
+            <li
+              v-for="update in stack.digest_pin_updates"
+              :key="update.service_key"
+            >
+              <div>
+                <strong>{{ update.service_key }}</strong>
+                <span>{{ update.service }}</span>
+              </div>
+              <code>{{ digestPinSummary(update) }}</code>
+              <span>{{ labelRewriteSummary(update) }}</span>
+            </li>
+          </ul>
+        </div>
+      </div>
+
+      <div
+        v-else
+        class="empty-state retag-state retag-plan-empty"
+        role="status"
+        aria-live="polite"
+      >
+        <Info :size="20" aria-hidden="true" />
+        <strong>No retag changes selected</strong>
+        <span>Current tracking remains unchanged for every service.</span>
       </div>
     </section>
 
@@ -444,7 +656,26 @@ onMounted(() => {
             </div>
             <div>
               <dt>Choice</dt>
-              <dd>Keep current</dd>
+              <dd>
+                <n-radio-group
+                  :value="retagChoice(item)"
+                  size="small"
+                  @update:value="onRetagChoiceUpdate(item, String($event))"
+                >
+                  <n-radio-button value="keep-current">Keep</n-radio-button>
+                  <n-radio-button
+                    value="switch-to-concrete"
+                    :disabled="!canSwitchToConcrete(item) || retagMutationDisabled"
+                    :title="
+                      !canSwitchToConcrete(item)
+                        ? reasonDetail(item.retag_reason)
+                        : retagMutationNotice
+                    "
+                  >
+                    Switch
+                  </n-radio-button>
+                </n-radio-group>
+              </dd>
             </div>
           </dl>
         </article>
