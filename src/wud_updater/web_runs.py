@@ -128,12 +128,9 @@ def api_run_detail(run_id: int, request: Request) -> RunDetail:
             detail=_safe_exception_detail(settings, "could not read database", exc),
         ) from exc
 
-    summary = _run_summary_from_row(
-        run,
-        events=[_event_from_row(row) for row in events],
-    )
-    pending_updates = [_pending_update_from_row(row) for row in pending]
     run_events = [_event_from_row(row) for row in events]
+    summary = _run_summary_from_row(run, events=run_events)
+    pending_updates = [_pending_update_from_row(row) for row in pending]
     detail = RunDetail(
         **summary.model_dump(),
         pending_updates=pending_updates,

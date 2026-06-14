@@ -48,13 +48,17 @@ function statusTagType(status: string): TagType {
   return "default";
 }
 
+function fallbackStatusLabel(status: string): string {
+  return status || "Unknown";
+}
+
 function imageLabel(status: RunVerificationImageStatus): string {
   return {
     new_image_running: "New image running",
     already_current: "Already current",
     failed: "Image failed",
     unknown: "Image unknown",
-  }[status];
+  }[status] ?? fallbackStatusLabel(status);
 }
 
 function containerLabel(status: RunVerificationContainerStatus): string {
@@ -63,7 +67,7 @@ function containerLabel(status: RunVerificationContainerStatus): string {
     skipped: "Recreate skipped",
     failed: "Recreate failed",
     unknown: "Container unknown",
-  }[status];
+  }[status] ?? fallbackStatusLabel(status);
 }
 
 function healthLabel(status: RunVerificationHealthStatus): string {
@@ -74,7 +78,7 @@ function healthLabel(status: RunVerificationHealthStatus): string {
     service_disappeared: "Service disappeared",
     failed: "Health failed",
     unknown: "Health unknown",
-  }[status];
+  }[status] ?? fallbackStatusLabel(status);
 }
 
 function wudLabel(status: RunVerificationWudStatus): string {
@@ -84,7 +88,7 @@ function wudLabel(status: RunVerificationWudStatus): string {
     stale_removed: "Stale line removed",
     removed_before_run: "Removed before run",
     unknown: "WUD line unknown",
-  }[status];
+  }[status] ?? fallbackStatusLabel(status);
 }
 </script>
 

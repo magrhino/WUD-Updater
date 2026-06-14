@@ -502,6 +502,37 @@ describe("RunDetailView", () => {
     expect(wrapper.text()).toContain("No log path");
   });
 
+  it("renders fallback labels for unexpected verification statuses", async () => {
+    const { pinia, router, runs } = await setupRoute("/runs/12");
+    const unexpectedItem = {
+      ...runVerification().items[0],
+      image_status: "registry_pending",
+      container_status: "container_pending",
+      health_status: "probe_pending",
+      wud_status: "file_pending",
+    } as unknown as RunVerificationSummary["items"][number];
+    runs.runDetails = {
+      12: runDetail({
+        id: 12,
+        verification: runVerification({
+          status: "needs_review",
+          verified_count: 0,
+          needs_review_count: 1,
+          items: [unexpectedItem],
+        }),
+      }),
+    };
+    vi.spyOn(runs, "loadRunDetail").mockResolvedValue();
+
+    const wrapper = mountWithApp(RunDetailView, { pinia, router });
+    await flushPromises();
+
+    expect(wrapper.text()).toContain("registry_pending");
+    expect(wrapper.text()).toContain("container_pending");
+    expect(wrapper.text()).toContain("probe_pending");
+    expect(wrapper.text()).toContain("file_pending");
+  });
+
   it("renders error and empty detail states", async () => {
     const { pinia, router, settings, runs } = await setupRoute("/runs/9");
     runs.error = "run detail failed to load";
