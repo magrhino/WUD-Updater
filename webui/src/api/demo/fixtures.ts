@@ -537,7 +537,10 @@ function demoRun(options: {
       ...summary,
       pending_updates: options.pending,
       events: options.events,
-      verification: demoRunVerification(options.pending, options.events),
+      verification: demoRunVerification(options.pending, options.events, {
+        dryRun: options.dryRun,
+        mode: options.mode,
+      }),
     },
     log: {
       run_id: options.id,
@@ -553,7 +556,11 @@ function demoRun(options: {
 export function demoRunVerification(
   pending: PendingUpdateRecord[],
   events: RunEventRecord[],
+  options: { dryRun?: boolean; mode?: string } = {},
 ): RunVerificationSummary {
+  if (options.dryRun || !isUpdaterRunMode(options.mode ?? "stop")) {
+    return emptyRunVerification();
+  }
   const items = pending.map((item) => {
     const event = events.find(
       (candidate) =>
@@ -584,6 +591,20 @@ export function demoRunVerification(
     needs_review_count: needsReviewCount,
     items,
   };
+}
+
+export function emptyRunVerification(): RunVerificationSummary {
+  return {
+    status: "verified",
+    total_count: 0,
+    verified_count: 0,
+    needs_review_count: 0,
+    items: [],
+  };
+}
+
+function isUpdaterRunMode(mode: string): boolean {
+  return mode === "pause" || mode === "stop" || mode === "live";
 }
 
 export function pendingRecord(

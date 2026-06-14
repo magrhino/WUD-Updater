@@ -210,7 +210,10 @@ export function runFromApply(
       ...summary,
       pending_updates,
       events,
-      verification: demoRunVerification(pending_updates, events),
+      verification: demoRunVerification(pending_updates, events, {
+        dryRun: false,
+        mode: plan.mode,
+      }),
     },
     log: {
       run_id: runId,
@@ -304,7 +307,10 @@ function runFromPendingRemoval(
       ...summary,
       pending_updates,
       events,
-      verification: demoRunVerification(pending_updates, events),
+      verification: demoRunVerification(pending_updates, events, {
+        dryRun: false,
+        mode: options.mode,
+      }),
     },
     log: {
       run_id: runId,
