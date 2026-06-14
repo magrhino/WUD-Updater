@@ -14,6 +14,8 @@ import type {
   PlanResponse,
   ReleaseNoteInfo,
   ReleaseNotesResponse,
+  RetagTargetItem,
+  RetagTargetsResponse,
   RunSummary,
   ServicePolicyRecord,
   SelfUpdateApplyResponse,
@@ -547,6 +549,54 @@ export function updateTargetsResponse(
     count: items.length,
     items,
     warnings: [],
+  };
+}
+
+export function retagTarget(
+  overrides: Partial<RetagTargetItem> = {},
+): RetagTargetItem {
+  return {
+    service_key: "media/app",
+    stack: "media",
+    service: "app",
+    image: "repo/app:latest",
+    image_repo: "repo/app",
+    current_tag: "latest",
+    tracking_tag: "latest",
+    tracking_tag_source: "label",
+    proposed_tag: "1.1",
+    final_image: "repo/app@sha256:abc123",
+    retag_available: true,
+    retag_reason: "eligible",
+    choices: ["keep-current", "switch-to-concrete"],
+    label_key: "wud.tag.include",
+    label_value: "latest",
+    directory: "/docker/media",
+    compose_file: "docker-compose.yml",
+    project_directory: "/docker/media",
+    digest_provenance: {
+      source_image: "repo/app:latest",
+      resolved_tag: "1.1",
+      watch_tag: "latest",
+      target_digest: "sha256:abc123",
+      final_image: "repo/app@sha256:abc123",
+      provenance_source: "test",
+      provenance_confidence: "high",
+    },
+    ...overrides,
+  };
+}
+
+export function retagTargetsResponse(
+  items = [retagTarget()],
+  overrides: Partial<Omit<RetagTargetsResponse, "items">> = {},
+): RetagTargetsResponse {
+  return {
+    status: "ready",
+    count: items.length,
+    items,
+    warnings: [],
+    ...overrides,
   };
 }
 

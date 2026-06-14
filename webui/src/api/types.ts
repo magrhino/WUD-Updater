@@ -134,6 +134,42 @@ export interface UpdateTargetsResponse {
 }
 
 // ---------------------------------------------------------------------------
+// Retag targets
+// ---------------------------------------------------------------------------
+
+export type RetagTargetsStatus = "ready" | "unavailable";
+export type RetagTargetChoice = "keep-current" | "switch-to-concrete";
+
+export interface RetagTargetItem {
+  service_key: string;
+  stack: string;
+  service: string;
+  image: string;
+  image_repo: string;
+  current_tag: string;
+  tracking_tag: string;
+  tracking_tag_source: string;
+  proposed_tag: string;
+  final_image: string;
+  retag_available: boolean;
+  retag_reason: string;
+  choices: RetagTargetChoice[];
+  label_key: string;
+  label_value: string;
+  directory: string;
+  compose_file: string;
+  project_directory: string;
+  digest_provenance?: DigestTagProvenance | null;
+}
+
+export interface RetagTargetsResponse {
+  status: RetagTargetsStatus;
+  count: number;
+  items: RetagTargetItem[];
+  warnings: string[];
+}
+
+// ---------------------------------------------------------------------------
 // Release notes
 // ---------------------------------------------------------------------------
 

@@ -60,6 +60,7 @@ export function createDemoWebApi(): WebApi {
     ) => state.updateCoreUpdateTour(status, step),
     pending: async () => state.pendingResponse(),
     updateTargets: async () => state.updateTargets(),
+    retagTargets: async () => state.retagTargets(),
     diagnosticsSupportBundle: async () => ({
       wud_updater_version: "demo-v0.0.0",
       settings: state.settings(),

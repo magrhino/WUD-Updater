@@ -18,6 +18,7 @@ import type {
   PlanResponse,
   PlanStatus,
   ReleaseNotesResponse,
+  RetagTargetsResponse,
   RunDetail,
   RunLogResponse,
   RunSummary,
@@ -45,6 +46,7 @@ import {
   DEMO_VERSION,
 } from "./constants";
 import {
+  DEMO_RETAG_TARGETS,
   DEMO_STACKS,
   DEMO_UPDATE_TARGETS,
   INITIAL_PENDING,
@@ -512,6 +514,17 @@ export class DemoApiState {
       count: DEMO_UPDATE_TARGETS.length,
       items: clone(DEMO_UPDATE_TARGETS),
       warnings: [],
+    };
+  }
+
+  retagTargets(): RetagTargetsResponse {
+    return {
+      status: "ready",
+      count: DEMO_RETAG_TARGETS.length,
+      items: clone(DEMO_RETAG_TARGETS),
+      warnings: [
+        "Demo retag data is fixture-backed and does not inspect local Compose files.",
+      ],
     };
   }
 

@@ -19,6 +19,11 @@ export type {
   UpdateTargetsStatus,
   UpdateTargetItem,
   UpdateTargetsResponse,
+  // Retag targets
+  RetagTargetsStatus,
+  RetagTargetChoice,
+  RetagTargetItem,
+  RetagTargetsResponse,
   // Release notes
   ReleaseNoteLink,
   ReleaseNoteInfo,
@@ -126,6 +131,7 @@ import type {
   CoreUpdateTourResponse,
   PendingResponse,
   UpdateTargetsResponse,
+  RetagTargetsResponse,
   DiagnosticsSupportBundleResponse,
   PendingCleanupLine,
   PendingCleanupResponse,
@@ -396,6 +402,7 @@ const pendingApi = {
 
 const updatesApi = {
   updateTargets: () => apiRequest<UpdateTargetsResponse>("/update-targets"),
+  retagTargets: () => apiRequest<RetagTargetsResponse>("/retag-targets"),
   releaseNotes: () => apiRequest<ReleaseNotesResponse>("/release-notes"),
   refreshReleaseNotes: (csrfToken: string) =>
     apiRequest<ReleaseNotesResponse>("/release-notes/refresh", {

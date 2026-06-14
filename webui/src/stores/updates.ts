@@ -13,6 +13,7 @@ import {
   type PlanResponse,
   type PendingResponse,
   type ReleaseNotesResponse,
+  type RetagTargetsResponse,
   type SelfUpdateApplyResponse,
   type SelfUpdatePlanResponse,
   type SelfUpdatePrepareResponse,
@@ -36,6 +37,7 @@ const TERMINAL_APPLY_JOB_STATUSES = new Set<ApplyJobResponse["status"]>([
 export const useUpdatesStore = defineStore("updates", () => {
   const pending = ref<PendingResponse | null>(null);
   const updateTargets = ref<UpdateTargetsResponse | null>(null);
+  const retagTargets = ref<RetagTargetsResponse | null>(null);
   const releaseNotes = ref<ReleaseNotesResponse | null>(null);
   const selfUpdate = ref<SelfUpdateResponse | null>(null);
   const selfUpdatePlan = ref<SelfUpdatePlanResponse | null>(null);
@@ -82,6 +84,12 @@ export const useUpdatesStore = defineStore("updates", () => {
   async function loadUpdateTargets(): Promise<void> {
     await loadWithState(async () => {
       updateTargets.value = await webApi.updateTargets();
+    });
+  }
+
+  async function loadRetagTargets(): Promise<void> {
+    await loadWithState(async () => {
+      retagTargets.value = await webApi.retagTargets();
     });
   }
 
@@ -421,6 +429,7 @@ export const useUpdatesStore = defineStore("updates", () => {
   return {
     pending,
     updateTargets,
+    retagTargets,
     releaseNotes,
     selfUpdate,
     selfUpdatePlan,
@@ -439,6 +448,7 @@ export const useUpdatesStore = defineStore("updates", () => {
     error,
     loadPending,
     loadUpdateTargets,
+    loadRetagTargets,
     loadReleaseNotes,
     refreshReleaseNotes,
     loadSelfUpdate,

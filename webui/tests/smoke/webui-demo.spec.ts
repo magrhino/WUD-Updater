@@ -99,6 +99,20 @@ test("static demo renders seeded audit log records", async ({ page }) => {
   await expect(page.getByText("admin")).toBeVisible();
 });
 
+test("static demo renders retag review fixtures", async ({ page }) => {
+  await page.goto(demoRoute("/#/retags"));
+
+  await expect(page.getByRole("heading", { name: "Retags", level: 1 })).toBeVisible();
+  await expect(page.getByText("Compose service tracking")).toBeVisible();
+  await expect(page.getByText("media/wud-updater")).toBeVisible();
+  await expect(page.getByText("Retag available").first()).toBeVisible();
+  await expect(page.getByText("home/home-assistant")).toBeVisible();
+  await expect(page.getByText("Missing provenance")).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Preview retag changes" }),
+  ).toBeDisabled();
+});
+
 test("static demo mobile layout stays within the viewport", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto(demoRoute("/#/pending"));

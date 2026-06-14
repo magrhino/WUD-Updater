@@ -153,6 +153,36 @@ describe("demo web API", () => {
       ]),
     });
 
+    const retagTargets = await api.retagTargets();
+    expect(retagTargets).toMatchObject({
+      status: "ready",
+      count: 4,
+      items: expect.arrayContaining([
+        expect.objectContaining({
+          service_key: "media/wud-updater",
+          retag_available: true,
+          retag_reason: "eligible",
+          choices: ["keep-current", "switch-to-concrete"],
+        }),
+        expect.objectContaining({
+          service_key: "home/home-assistant",
+          retag_available: false,
+          retag_reason: "missing-provenance",
+        }),
+        expect.objectContaining({
+          service_key: "data/postgres",
+          retag_reason: "not-latest-tracking",
+        }),
+        expect.objectContaining({
+          service_key: "media/radarr",
+          retag_reason: "stale-provenance",
+        }),
+      ]),
+    });
+    expect(retagTargets.items.every((item) => !item.directory.startsWith("/"))).toBe(
+      true,
+    );
+
     const runs = await api.runs();
     const seededRun = runs.find((run) => run.id === 1);
     expect(seededRun?.events).toHaveLength(2);

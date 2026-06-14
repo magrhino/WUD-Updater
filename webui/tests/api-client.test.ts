@@ -155,6 +155,7 @@ describe("webApi", () => {
       webApi.updateCoreUpdateTour("in_progress", "dashboard", "csrf"),
       webApi.pending(),
       webApi.updateTargets(),
+      webApi.retagTargets(),
       webApi.cleanupPending("cleanup", [{ line_no: 1, raw: "repo/app:1.0" }], "csrf"),
       webApi.createRemovalPlan([1], "csrf"),
       webApi.removeSelectedPending("removal", [{ line_no: 1, raw: "repo/app:1.0" }], "csrf"),
@@ -177,10 +178,29 @@ describe("webApi", () => {
       webApi.runLog(1),
     ]);
 
-    expect(fetchMock).toHaveBeenCalledTimes(36);
+    expect(fetchMock).toHaveBeenCalledTimes(37);
     for (const call of fetchMock.mock.calls) {
       expect(requestInit(call).credentials).toBe("include");
     }
+  });
+
+  it("loads retag targets through a read-only GET request", async () => {
+    const fetchMock = mockFetch({
+      status: "ready",
+      count: 0,
+      items: [],
+      warnings: [],
+    });
+
+    await webApi.retagTargets();
+
+    expect(fetchMock.mock.calls[0][0]).toBe("/api/v1/retag-targets");
+    expect(requestInit(fetchMock.mock.calls[0]).method).toBeUndefined();
+    expect(
+      (requestInit(fetchMock.mock.calls[0]).headers as Headers).get(
+        "x-wud-csrf-token",
+      ),
+    ).toBeNull();
   });
 
   it("sends csrf headers on mutating requests", async () => {

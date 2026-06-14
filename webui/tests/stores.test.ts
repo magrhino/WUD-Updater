@@ -17,6 +17,7 @@ import {
   onboardingDismissResponse,
   pendingResponse,
   releaseNotesResponse,
+  retagTargetsResponse,
   planResponse,
   runSummary,
   selfUpdateApplyResponse,
@@ -261,6 +262,36 @@ describe("settings store", () => {
 
     expect(updates.updateTargets?.items[0]?.service_key).toBe("media/app");
     expect(fetchMock.mock.calls[0][0]).toBe("/api/v1/update-targets");
+  });
+
+  it("loads retag targets for read-only review", async () => {
+    const fetchMock = mockFetch(retagTargetsResponse());
+        const connection = useConnectionStore();
+    const settings = useSettingsStore();
+    const updates = useUpdatesStore();
+    const runs = useRunsStore();
+
+    await updates.loadRetagTargets();
+
+    expect(updates.retagTargets?.items[0]?.service_key).toBe("media/app");
+    expect(fetchMock.mock.calls[0][0]).toBe("/api/v1/retag-targets");
+  });
+
+  it("surfaces retag target loading errors", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(jsonResponse({ detail: "retag targets unavailable" }, 503));
+    vi.stubGlobal("fetch", fetchMock);
+        const connection = useConnectionStore();
+    const settings = useSettingsStore();
+    const updates = useUpdatesStore();
+    const runs = useRunsStore();
+
+    await expect(updates.loadRetagTargets()).rejects.toThrow(
+      "retag targets unavailable",
+    );
+
+    expect(updates.error).toBe("retag targets unavailable");
   });
 
   it("keeps fulfilled pending safety cue data when another cue source fails", async () => {
