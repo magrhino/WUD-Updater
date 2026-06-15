@@ -254,7 +254,7 @@ def build_retag_plan(
             )
         )
 
-    selected, preview_issues = _preview_retag_updates(selected)
+    selected, preview_issues = _preview_retag_updates(settings, selected)
     issues.extend(preview_issues)
     compose_hashes = _compose_hashes(selected)
     status = _retag_plan_status(selected, choices, issues)
@@ -349,6 +349,7 @@ def _validated_choice_map(
 
 
 def _preview_retag_updates(
+    settings: WebSettings,
     selected: Sequence[_RetagPlanUpdate],
 ) -> tuple[tuple[_RetagPlanUpdate, ...], list[RetagPlanIssue]]:
     issues: list[RetagPlanIssue] = []
@@ -367,7 +368,11 @@ def _preview_retag_updates(
                     RetagPlanIssue(
                         severity="error",
                         code="retag-compose-preview-failed",
-                        message=f"Could not safely preview retag for {item.service_key}: {exc}",
+                        message=_safe_exception_detail(
+                            settings,
+                            f"Could not safely preview retag for {item.service_key}",
+                            exc,
+                        ),
                         service_key=item.service_key,
                         stack=stack.name,
                         service=item.update.services[0] if item.update.services else "",
@@ -627,15 +632,6 @@ def _run_retag_apply_job(
         if isinstance(exc, _RetagApplyFailed):
             successful_updates = exc.successful_updates
         safe_error = _safe_retag_apply_error(settings, exc)
-        if run_id is not None:
-            _finish_retag_audit_run(
-                settings,
-                run_id,
-                build,
-                status="failure",
-                error=safe_error,
-                successful_updates=successful_updates,
-            )
         web_jobs._append_apply_job_progress(
             jobs,
             apply_condition,
@@ -655,6 +651,15 @@ def _run_retag_apply_job(
             finished_at=utc_timestamp(),
             error=safe_error,
         )
+        if run_id is not None:
+            _finish_retag_audit_run(
+                settings,
+                run_id,
+                build,
+                status="failure",
+                error=safe_error,
+                successful_updates=successful_updates,
+            )
     finally:
         close = getattr(wud_lock, "close", None)
         if close is not None:

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import sqlite3
+import time
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -18,6 +20,8 @@ from tests.web_test_helpers import (
 )
 from wud_updater.db import init_db, open_db, upsert_known_image
 from wud_updater.digest_provenance import DigestTagProvenance
+from wud_updater import web_database
+from wud_updater import web_retags as web_retags_module
 from wud_updater.web_models import WebApplyJob
 
 
@@ -59,6 +63,33 @@ def test_retag_targets_endpoint_returns_eligible_digest_pinned_service(
     assert item["digest_provenance"]["resolved_tag"] == "2.0"
     assert (compose_dir / "docker-compose.yml").read_text(encoding="utf-8") == before
     _assert_pending_grouping_did_not_mutate(_fake_docker_calls(fixture.fake_root))
+
+
+def test_known_digest_state_reads_any_non_empty_provenance_column(
+    tmp_path: Path,
+) -> None:
+    client = _client(tmp_path, {"WUD_WEB_DEV_NO_AUTH": "true"})
+    with open_db(tmp_path / "state" / "wud.sqlite") as conn:
+        init_db(conn)
+        upsert_known_image(
+            conn,
+            service_key="stack/app",
+            image="repo/app:latest",
+            digest_provenance=DigestTagProvenance(
+                source_image="repo/app:latest",
+            ),
+        )
+
+    state = web_database.known_digest_state_by_service(
+        client.app.state.web_settings,
+    )
+    provenance = web_database.known_digest_provenance_by_service(
+        client.app.state.web_settings,
+    )
+
+    assert state["stack/app"].image == "repo/app:latest"
+    assert state["stack/app"].digest_provenance.source_image == "repo/app:latest"
+    assert provenance["stack/app"].source_image == "repo/app:latest"
 
 
 def test_retag_targets_endpoint_marks_ineligible_review_states(
@@ -285,6 +316,37 @@ def test_retag_plan_keep_current_is_empty_noop(tmp_path: Path) -> None:
     _assert_pending_grouping_did_not_mutate(_fake_docker_calls(fixture.fake_root))
 
 
+def test_retag_plan_sanitizes_compose_preview_errors(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fixture = _make_retag_fixture(tmp_path)
+    headers = _csrf_headers(fixture.client)
+
+    def fail_preview(*_args: object, **_kwargs: object) -> None:
+        raise RuntimeError(f"invalid compose at {tmp_path}/secret/docker-compose.yml")
+
+    monkeypatch.setattr(
+        web_retags_module,
+        "render_compose_digest_pins",
+        fail_preview,
+    )
+
+    response = fixture.client.post(
+        "/api/v1/retag-plans",
+        json={"choices": [_switch_choice()]},
+        headers=headers,
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "blocked"
+    message = body["issues"][0]["message"]
+    assert "Could not safely preview retag for stack/app" in message
+    assert "[REDACTED_PATH]" in message
+    assert str(tmp_path) not in message
+
+
 def test_retag_apply_rejects_stale_plan(tmp_path: Path) -> None:
     fixture = _make_retag_fixture(
         tmp_path,
@@ -464,12 +526,51 @@ def test_retag_apply_restores_compose_when_pull_fails(tmp_path: Path) -> None:
     calls = _fake_docker_calls(fixture.fake_root)
     assert "compose -f docker-compose.yml pull app" in calls
     assert "compose -f docker-compose.yml up -d --remove-orphans --force-recreate --no-deps app" in calls
-    with open_db(tmp_path / "state" / "wud.sqlite") as conn:
-        run = conn.execute(
-            "SELECT status FROM update_runs WHERE id = ?",
-            (job["run_id"],),
-        ).fetchone()
+    run = _wait_run_status(
+        tmp_path / "state" / "wud.sqlite",
+        job["run_id"],
+        "failure",
+    )
     assert run["status"] == "failure"
+
+
+def test_retag_apply_marks_job_failed_before_failure_audit_finalization(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fixture = _make_retag_fixture(
+        tmp_path,
+        env={
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+            "WUD_UPDATE_MODE": "live",
+            "WUD_MAX_WAIT": "0",
+        },
+    )
+    (fixture.fake_root / "stacks" / "stack" / "pull_fail").write_text(
+        "pull failed\n",
+        encoding="utf-8",
+    )
+    headers = _csrf_headers(fixture.client)
+    plan = _create_retag_plan(fixture.client, headers)
+    original_finish = web_retags_module._finish_retag_audit_run
+
+    def fail_failure_finish(*args: object, **kwargs: object) -> None:
+        if kwargs.get("status") == "failure":
+            raise RuntimeError("audit finalization failed")
+        original_finish(*args, **kwargs)
+
+    monkeypatch.setattr(
+        web_retags_module,
+        "_finish_retag_audit_run",
+        fail_failure_finish,
+    )
+
+    response = _apply_retag_plan(fixture.client, headers, plan)
+
+    assert response.status_code == 202
+    job = _wait_apply_job(fixture.client, response.json()["job_id"])
+    assert job["status"] == "failure"
+    assert job["error"]
 
 
 def test_retag_apply_records_partial_stack_success_when_later_stack_fails(
@@ -565,11 +666,9 @@ def test_retag_apply_records_partial_stack_success_when_later_stack_fails(
     assert (bravo_dir / "docker-compose.yml").read_text(
         encoding="utf-8"
     ) == bravo_before
-    with open_db(tmp_path / "state" / "wud.sqlite") as conn:
-        run = conn.execute(
-            "SELECT status FROM update_runs WHERE id = ?",
-            (job["run_id"],),
-        ).fetchone()
+    db_path = tmp_path / "state" / "wud.sqlite"
+    run = _wait_run_status(db_path, job["run_id"], "failure")
+    with open_db(db_path) as conn:
         events = conn.execute(
             """
             SELECT stack_name, service_name, status, digest_provenance_confidence
@@ -761,6 +860,29 @@ def _apply_retag_plan(
             "confirmation": "apply-retags",
         },
         headers=headers,
+    )
+
+
+def _wait_run_status(
+    db_path: Path,
+    run_id: object,
+    status: str,
+) -> sqlite3.Row:
+    deadline = time.time() + 5
+    last_status = None
+    while time.time() < deadline:
+        with open_db(db_path) as conn:
+            row = conn.execute(
+                "SELECT status FROM update_runs WHERE id = ?",
+                (run_id,),
+            ).fetchone()
+        if row is not None:
+            last_status = row["status"]
+            if last_status == status:
+                return row
+        time.sleep(0.02)
+    raise AssertionError(
+        f"run {run_id} did not reach status {status}; last status was {last_status}"
     )
 
 

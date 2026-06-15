@@ -8,6 +8,7 @@ import type {
   PlanLine,
   PlanResponse,
   PlanStack,
+  RetagPlanResponse,
   RunSummary,
   SettingsEntrySource,
   SettingsResponse,
@@ -213,6 +214,68 @@ export function runFromApply(
       verification: demoRunVerification(pending_updates, events, {
         dryRun: false,
         mode: plan.mode,
+      }),
+    },
+    log: {
+      run_id: runId,
+      log_file: logFile,
+      exists: true,
+      content: logContent,
+      truncated: false,
+      max_bytes: 262_144,
+    },
+  };
+}
+
+export function runFromRetagApply(
+  runId: number,
+  plan: RetagPlanResponse,
+  startedAt: string,
+  finishedAt: string,
+  logFile: string,
+  logContent: string,
+): DemoRunFixture {
+  const updates = plan.stacks.flatMap((stack) =>
+    stack.digest_pin_updates.map((update) => ({ stack, update })),
+  );
+  const events = updates.map(({ stack, update }, index) =>
+    runEvent(
+      index + runId * 1000,
+      runId,
+      update.service,
+      stack.stack,
+      update.source_image,
+      update.final_image,
+      "success",
+      update.digest_provenance,
+    ),
+  );
+  const summary: RunSummary = {
+    id: runId,
+    started_at: startedAt,
+    finished_at: finishedAt,
+    status: "success",
+    dry_run: false,
+    mode: "web-retag",
+    wud_file: DEMO_SOURCE_FILE,
+    log_file: logFile,
+    metadata: {
+      source: "demo",
+      operation: "retag",
+      plan_id: plan.plan_id,
+      selected_count: plan.selected_count,
+    },
+    events,
+  };
+  return {
+    summary,
+    detail: {
+      ...summary,
+      pending_updates: [],
+      events,
+      verification: demoRunVerification([], events, {
+        dryRun: false,
+        mode: "web-retag",
       }),
     },
     log: {

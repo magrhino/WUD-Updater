@@ -5,6 +5,10 @@ import type { ApplyJobLogResponse, ApplyJobResponse } from "../src/api/client";
 
 const postgresDigest =
   "sha256:1111111111111111111111111111111111111111111111111111111111111111";
+const radarrDigest =
+  "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+const wudUpdaterDigest =
+  "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc";
 
 describe("demo web API", () => {
   afterEach(() => {
@@ -193,18 +197,31 @@ describe("demo web API", () => {
     expect(retagTargets.items.every((item) => !item.directory.startsWith("/"))).toBe(
       true,
     );
-    await expect(
-      api.createRetagPlan(
-        [
-          {
-            service_key: "media/wud-updater",
-            choice: "switch-to-concrete",
-          },
-          { service_key: "media/radarr", choice: "keep-current" },
-        ],
-        "csrf",
-      ),
-    ).resolves.toMatchObject({
+    expect(
+      retagTargets.items.find((item) => item.service_key === "media/wud-updater"),
+    ).toMatchObject({
+      final_image: `ghcr.io/magrhino/wud-updater@${wudUpdaterDigest}`,
+      digest_provenance: expect.objectContaining({
+        target_digest: wudUpdaterDigest,
+      }),
+    });
+    expect(
+      retagTargets.items.find((item) => item.service_key === "media/radarr"),
+    ).toMatchObject({
+      final_image: `lscr.io/linuxserver/radarr@${radarrDigest}`,
+      digest_provenance: expect.objectContaining({
+        target_digest: radarrDigest,
+      }),
+    });
+    const retagChoices = [
+      {
+        service_key: "media/wud-updater",
+        choice: "switch-to-concrete" as const,
+      },
+      { service_key: "media/radarr", choice: "keep-current" as const },
+    ];
+    const retagPlan = await api.createRetagPlan(retagChoices, "csrf");
+    expect(retagPlan).toMatchObject({
       status: "ready",
       can_apply: true,
       selected_count: 1,
@@ -224,11 +241,18 @@ describe("demo web API", () => {
     });
     await expect(
       api.applyRetagPlan(
-        "demo-retag-plan",
-        [{ service_key: "media/wud-updater", choice: "switch-to-concrete" }],
+        retagPlan.plan_id,
+        retagChoices,
         "csrf",
       ),
-    ).rejects.toThrow("Demo mode does not apply retag changes.");
+    ).resolves.toMatchObject({
+      job_id: expect.stringMatching(/^demo-retag-job-/),
+      status: "queued",
+      selected_line_numbers: [],
+    });
+    await expect(
+      api.applyRetagPlan("demo-retag-plan", retagChoices, "csrf"),
+    ).rejects.toThrow("Demo retag plan is stale.");
 
     const runs = await api.runs();
     const seededRun = runs.find((run) => run.id === 1);
@@ -534,6 +558,77 @@ describe("demo web API", () => {
     expect(applySummary?.events[0]).toMatchObject({
       service_name: applyDetail.events[0]?.service_name,
       status: applyDetail.events[0]?.status,
+    });
+  });
+
+  it("streams retag apply jobs and records demo run history", async () => {
+    vi.useFakeTimers();
+    const api = createDemoWebApi();
+    const jobs: ApplyJobResponse[] = [];
+    const logs: ApplyJobLogResponse[] = [];
+    const progress: ApplyJobResponse["progress"] = [];
+    const choices = [
+      {
+        service_key: "media/wud-updater",
+        choice: "switch-to-concrete" as const,
+      },
+    ];
+    const plan = await api.createRetagPlan(choices, "csrf");
+    const job = await api.applyRetagPlan(plan.plan_id, choices, "csrf");
+    const source = api.openJobStream(job.job_id);
+    source.addEventListener("job", (event) => {
+      jobs.push(JSON.parse((event as MessageEvent<string>).data) as ApplyJobResponse);
+    });
+    source.addEventListener("log", (event) => {
+      logs.push(
+        JSON.parse((event as MessageEvent<string>).data) as ApplyJobLogResponse,
+      );
+    });
+    source.addEventListener("progress", (event) => {
+      progress.push(
+        JSON.parse((event as MessageEvent<string>).data) as ApplyJobResponse["progress"][number],
+      );
+    });
+
+    await vi.advanceTimersByTimeAsync(200);
+    source.close();
+
+    expect(jobs.map((item) => item.status)).toEqual(["running", "success"]);
+    expect(progress.map((item) => item.phase)).toEqual([
+      "compose-digest-pin",
+      "pull",
+      "pull",
+      "recreate",
+      "recreate",
+      "health",
+      "completion",
+    ]);
+    expect(logs.at(-1)?.content).toContain("Retag changes applied.");
+    expect((await api.pending()).count).toBe(7);
+    expect((await api.runs())[0]).toMatchObject({
+      id: 7,
+      status: "success",
+      mode: "web-retag",
+      events: [
+        expect.objectContaining({
+          service_name: "wud-updater",
+          target_image: `ghcr.io/magrhino/wud-updater@${wudUpdaterDigest}`,
+        }),
+      ],
+    });
+    await expect(api.runDetail(7)).resolves.toMatchObject({
+      id: 7,
+      mode: "web-retag",
+      pending_updates: [],
+      events: [
+        expect.objectContaining({
+          service_name: "wud-updater",
+          target_image: `ghcr.io/magrhino/wud-updater@${wudUpdaterDigest}`,
+        }),
+      ],
+    });
+    await expect(api.runLog(7)).resolves.toMatchObject({
+      content: expect.stringContaining("Retag changes applied."),
     });
   });
 

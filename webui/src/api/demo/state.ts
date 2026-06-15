@@ -75,6 +75,7 @@ import {
   planStack,
   repoKey,
   runFromApply,
+  runFromRetagApply,
   runFromCleanup,
   runFromRemoval,
   settingEntry,
@@ -627,6 +628,46 @@ export class DemoApiState {
     };
   }
 
+  createRetagJob(
+    planId: string,
+    choices: RetagChoiceRequest[],
+  ): ApplyJobResponse {
+    const plan = this.createRetagPlan(choices);
+    if (plan.plan_id !== planId) {
+      throw new Error("Demo retag plan is stale.");
+    }
+    const jobId = `demo-retag-job-${this.nextJob++}`;
+    const job: ApplyJobResponse = {
+      job_id: jobId,
+      status: plan.can_apply ? "queued" : "failure",
+      run_id: null,
+      log_file: "",
+      started_at: null,
+      finished_at: null,
+      error: plan.can_apply ? "" : "Demo retag plan is not applyable.",
+      selected_line_numbers: [],
+      progress: [],
+    };
+    const log: ApplyJobLogResponse = {
+      job_id: jobId,
+      log_file: "",
+      exists: true,
+      content: "",
+      truncated: false,
+      max_bytes: 65_536,
+      error: "",
+    };
+    this.jobs.set(jobId, {
+      job,
+      log,
+      lineNumbers: [],
+      plan: null,
+      retagPlan: plan,
+      completed: false,
+    });
+    return clone(job);
+  }
+
   releaseNotes(): ReleaseNotesResponse {
     const activeLines = new Set(this.pending.map((item) => item.line_no));
     const items = INITIAL_RELEASE_NOTES.filter((item) => activeLines.has(item.line_no));
@@ -968,6 +1009,7 @@ export class DemoApiState {
       log,
       lineNumbers: plan.selected_line_numbers,
       plan,
+      retagPlan: null,
       completed: false,
     });
     return clone(job);
@@ -975,8 +1017,14 @@ export class DemoApiState {
 
   completeJob(jobId: string): DemoJobRecord | null {
     const record = this.jobs.get(jobId);
-    if (!record || record.completed || !record.plan) {
+    if (!record || record.completed) {
       return record ?? null;
+    }
+    if (record.retagPlan) {
+      return this.completeRetagJob(record);
+    }
+    if (!record.plan) {
+      return record;
     }
     if (!record.plan.can_apply) {
       record.completed = true;
@@ -1013,6 +1061,43 @@ export class DemoApiState {
     };
     this.runs.unshift(
       runFromApply(runId, selectedItems, record.plan, startedAt, finishedAt, logFile, logContent),
+    );
+    return record;
+  }
+
+  private completeRetagJob(record: DemoJobRecord): DemoJobRecord {
+    const plan = record.retagPlan;
+    if (!plan) {
+      return record;
+    }
+    if (!plan.can_apply) {
+      record.completed = true;
+      return record;
+    }
+
+    const startedAt = "2026-05-30T20:12:26+00:00";
+    const finishedAt = "2026-05-30T20:12:28+00:00";
+    const logFile = `${DEMO_LOG_DIR}/retag-demo-${record.job.job_id}.log`;
+    const runId = this.nextRun++;
+    const logContent = this.retagApplyLog(plan, startedAt, finishedAt, logFile);
+
+    record.completed = true;
+    record.job = {
+      ...record.job,
+      status: "success",
+      run_id: runId,
+      log_file: logFile,
+      started_at: startedAt,
+      finished_at: finishedAt,
+      error: "",
+    };
+    record.log = {
+      ...record.log,
+      log_file: logFile,
+      content: logContent,
+    };
+    this.runs.unshift(
+      runFromRetagApply(runId, plan, startedAt, finishedAt, logFile, logContent),
     );
     return record;
   }
@@ -1249,6 +1334,39 @@ export class DemoApiState {
     }
     lines.push(
       `[${finishedAt}] [INFO] Successful WUD entries were removed before update.`,
+      `[${finishedAt}] [INFO] Done. See log: ${logFile}`,
+      "",
+    );
+    return lines.join("\n");
+  }
+
+  private retagApplyLog(
+    plan: RetagPlanResponse,
+    startedAt: string,
+    finishedAt: string,
+    logFile: string,
+  ): string {
+    const lines = [
+      `[${startedAt}] [INFO] demo retag apply`,
+      `[${startedAt}] [INFO] Log file: ${logFile}`,
+      `[${startedAt}] [INFO] Selected retags: ${plan.selected_count}`,
+    ];
+    for (const stack of plan.stacks) {
+      lines.push(
+        `[${startedAt}] [INFO] [${stack.stack}] Writing retag Compose metadata.`,
+        `[${startedAt}] [INFO] [${stack.stack}] Pulling retagged service image(s): ${stack.services.join(", ")}`,
+      );
+      for (const update of stack.digest_pin_updates) {
+        lines.push(
+          `[${startedAt}] [INFO] [${stack.stack}] ${update.service}: ${update.source_image} -> ${update.final_image}`,
+        );
+      }
+      lines.push(
+        `[${finishedAt}] [INFO] [${stack.stack}] Retagged service container(s) recreated.`,
+      );
+    }
+    lines.push(
+      `[${finishedAt}] [INFO] Retag changes applied.`,
       `[${finishedAt}] [INFO] Done. See log: ${logFile}`,
       "",
     );

@@ -548,7 +548,6 @@ vi.spyOn(settings, "loadTagExclusions").mockResolvedValue(undefined as any);
         const connection = useConnectionStore();
     const settings = useSettingsStore();
     const updates = useUpdatesStore();
-    const runs = useRunsStore();
     updates.retagTargets = retagTargetsResponse();
     vi.spyOn(connection, "loadStatus").mockResolvedValue();
     vi.spyOn(settings, "loadSettings").mockResolvedValue();

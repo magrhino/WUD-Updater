@@ -562,7 +562,7 @@ function pluralize(count: number, noun: string, plural = `${noun}s`): string {
 }
 
 onMounted(() => {
-  void updates.loadRetagTargets().catch(() => undefined);
+  updates.loadRetagTargets().catch(() => undefined);
 });
 </script>
 

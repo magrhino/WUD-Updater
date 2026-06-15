@@ -67,12 +67,10 @@ export function createDemoWebApi(): WebApi {
       _csrfToken: string,
     ) => state.createRetagPlan(choices),
     applyRetagPlan: async (
-      _planId: string,
-      _choices: RetagChoiceRequest[],
+      planId: string,
+      choices: RetagChoiceRequest[],
       _csrfToken: string,
-    ) => {
-      throw new Error("Demo mode does not apply retag changes.");
-    },
+    ) => state.createRetagJob(planId, choices),
     diagnosticsSupportBundle: async () => ({
       wud_updater_version: "demo-v0.0.0",
       settings: state.settings(),
@@ -213,18 +211,25 @@ class DemoJobStream extends EventTarget {
       this.queue(() => this.onerror?.(new Event("error")), 0);
       return;
     }
-    if (record.job.status === "failure" || record.plan?.can_apply === false) {
+    if (
+      record.job.status === "failure" ||
+      record.plan?.can_apply === false ||
+      record.retagPlan?.can_apply === false
+    ) {
       this.queue(() => {
         this.emit("job", record.job);
         this.close();
       }, 0);
       return;
     }
+    const isRetagJob = Boolean(record.retagPlan);
     this.queue(() => {
       this.emitProgress(
-        "preflight",
+        isRetagJob ? "compose-digest-pin" : "preflight",
         "success",
-        "Demo preflight checks passed.",
+        isRetagJob
+          ? "Demo retag Compose metadata was prepared."
+          : "Demo preflight checks passed.",
       );
       record.job = {
         ...record.job,
@@ -240,7 +245,7 @@ class DemoJobStream extends EventTarget {
       this.emitProgress(
         "pull",
         "running",
-        "Pulling selected demo images.",
+        isRetagJob ? "Pulling retagged demo images." : "Pulling selected demo images.",
       );
       this.emit("log", record.log);
     }, 40);
@@ -249,8 +254,16 @@ class DemoJobStream extends EventTarget {
       this.emitProgress("recreate", "running", "Recreating selected services.");
       this.emitProgress("recreate", "success", "Services were recreated.");
       this.emitProgress("health", "success", "Demo services reported healthy.");
-      this.emitProgress("cleanup", "success", "Pending entries were reconciled.");
-      this.emitProgress("completion", "success", "Updater completed successfully.");
+      if (!isRetagJob) {
+        this.emitProgress("cleanup", "success", "Pending entries were reconciled.");
+      }
+      this.emitProgress(
+        "completion",
+        "success",
+        isRetagJob
+          ? "Retag changes applied."
+          : "Updater completed successfully.",
+      );
       const completed = this.state.completeJob(this.jobId);
       if (!completed) {
         this.onerror?.(new Event("error"));
@@ -281,9 +294,10 @@ class DemoJobStream extends EventTarget {
   ): void {
     const record = this.state.jobs.get(this.jobId);
     const stack = record?.plan?.stacks[0];
+    const retagStack = record?.retagPlan?.stacks[0];
     const event = this.state.appendJobProgress(this.jobId, phase, status, message, {
-      stack: stack?.name,
-      services: stack?.services,
+      stack: stack?.name ?? retagStack?.stack,
+      services: stack?.services ?? retagStack?.services,
       lineNumbers: record?.lineNumbers,
     });
     if (event) {
