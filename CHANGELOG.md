@@ -4,6 +4,14 @@ All notable changes to WUD-Updater are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com) and versions follow
 [Semantic Versioning](https://semver.org).
 
+## [0.39.0](https://github.com/magrhino/WUD-Updater/compare/v0.38.4...v0.39.0) (2026-06-15)
+
+
+### Features
+
+* **retags:** Add Retags management support to the WebUI and backend ([#289](https://github.com/magrhino/WUD-Updater/issues/289)) ([60bea75](https://github.com/magrhino/WUD-Updater/commit/60bea75295822abc863cdfd077018423a0d304b8))
+* **webui:** add post-update verification ([#287](https://github.com/magrhino/WUD-Updater/issues/287)) ([58abcce](https://github.com/magrhino/WUD-Updater/commit/58abccece8126cd551f9a6526726381463fb9a0f))
+
 ## [0.38.4](https://github.com/magrhino/WUD-Updater/compare/v0.38.3...v0.38.4) (2026-06-13)
 
 
