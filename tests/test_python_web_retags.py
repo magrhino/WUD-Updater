@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import sqlite3
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, fields
 from pathlib import Path
 
 from fastapi.testclient import TestClient
@@ -65,10 +65,16 @@ def test_retag_targets_endpoint_returns_eligible_digest_pinned_service(
     _assert_pending_grouping_did_not_mutate(_fake_docker_calls(fixture.fake_root))
 
 
+@pytest.mark.parametrize(
+    "provenance_field",
+    [field.name for field in fields(DigestTagProvenance)],
+)
 def test_known_digest_state_reads_any_non_empty_provenance_column(
     tmp_path: Path,
+    provenance_field: str,
 ) -> None:
     client = _client(tmp_path, {"WUD_WEB_DEV_NO_AUTH": "true"})
+    provenance_value = f"value-for-{provenance_field}"
     with open_db(tmp_path / "state" / "wud.sqlite") as conn:
         init_db(conn)
         upsert_known_image(
@@ -76,7 +82,7 @@ def test_known_digest_state_reads_any_non_empty_provenance_column(
             service_key="stack/app",
             image="repo/app:latest",
             digest_provenance=DigestTagProvenance(
-                source_image="repo/app:latest",
+                **{provenance_field: provenance_value},
             ),
         )
 
@@ -88,8 +94,16 @@ def test_known_digest_state_reads_any_non_empty_provenance_column(
     )
 
     assert state["stack/app"].image == "repo/app:latest"
-    assert state["stack/app"].digest_provenance.source_image == "repo/app:latest"
-    assert provenance["stack/app"].source_image == "repo/app:latest"
+    assert (
+        getattr(state["stack/app"].digest_provenance, provenance_field)
+        == provenance_value
+    )
+    assert getattr(provenance["stack/app"], provenance_field) == provenance_value
+    for field in fields(DigestTagProvenance):
+        if field.name == provenance_field:
+            continue
+        assert getattr(state["stack/app"].digest_provenance, field.name) == ""
+        assert getattr(provenance["stack/app"], field.name) == ""
 
 
 def test_retag_targets_endpoint_marks_ineligible_review_states(

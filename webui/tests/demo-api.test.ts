@@ -10,6 +10,15 @@ const radarrDigest =
 const wudUpdaterDigest =
   "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc";
 
+function completedRunId(jobs: ApplyJobResponse[]): number {
+  const runId = jobs.at(-1)?.run_id;
+  expect(runId).toEqual(expect.any(Number));
+  if (typeof runId !== "number") {
+    throw new Error("Expected completed demo job to include a run id");
+  }
+  return runId;
+}
+
 describe("demo web API", () => {
   afterEach(() => {
     vi.useRealTimers();
@@ -239,19 +248,18 @@ describe("demo web API", () => {
         }),
       ],
     });
-    await expect(
-      api.applyRetagPlan(
-        retagPlan.plan_id,
-        retagChoices,
-        "csrf",
-      ),
-    ).resolves.toMatchObject({
+    const retagJob = await api.applyRetagPlan(
+      retagPlan.plan_id,
+      retagChoices,
+      "csrf",
+    );
+    expect(retagJob).toMatchObject({
       job_id: expect.stringMatching(/^demo-retag-job-/),
       status: "queued",
       selected_line_numbers: [],
     });
     await expect(
-      api.applyRetagPlan("demo-retag-plan", retagChoices, "csrf"),
+      api.applyRetagPlan(`${retagPlan.plan_id}-stale`, retagChoices, "csrf"),
     ).rejects.toThrow("Demo retag plan is stale.");
 
     const runs = await api.runs();
@@ -344,8 +352,8 @@ describe("demo web API", () => {
       code: "unmatched",
       line_no: 6,
     });
+    expect(plan.cleanup.cleanup_id).toBeTruthy();
     expect(plan.cleanup).toMatchObject({
-      cleanup_id: "demo-cleanup",
       can_remove_unmatched: true,
       items: [
         {
@@ -369,25 +377,34 @@ describe("demo web API", () => {
     const pending = await api.pending();
     const line = pending.grouping.unmatched[0];
     const matchedLine = pending.items.find((item) => item.line_no === 2);
+    const cleanupPlan = await api.createPlan(
+      [line.line_no],
+      true,
+      [],
+      [],
+      "csrf",
+    );
+    const cleanupId = cleanupPlan.cleanup.cleanup_id;
 
     expect(matchedLine).toBeDefined();
+    expect(cleanupId).toBeTruthy();
     await expect(
       api.cleanupPending(
-        "demo-cleanup",
+        cleanupId,
         [{ line_no: matchedLine?.line_no ?? 0, raw: matchedLine?.raw ?? "" }],
         "csrf",
       ),
     ).rejects.toThrow("cleanup is stale");
 
     const cleanup = await api.cleanupPending(
-      "demo-cleanup",
+      cleanupId,
       [{ line_no: line.line_no, raw: line.raw }],
       "csrf",
     );
 
     expect(cleanup).toMatchObject({
       status: "success",
-      audit_run_id: 7,
+      audit_run_id: expect.any(Number),
       removed_count: 1,
       removed: [{ line_no: line.line_no, raw: line.raw, reason: "unmatched" }],
     });
@@ -419,7 +436,7 @@ describe("demo web API", () => {
     });
     await expect(
       api.cleanupPending(
-        "demo-cleanup",
+        cleanupId,
         [{ line_no: line.line_no, raw: line.raw }],
         "csrf",
       ),
@@ -433,8 +450,8 @@ describe("demo web API", () => {
 
     expect(matchedLine).toBeDefined();
     const plan = await api.createRemovalPlan([matchedLine?.line_no ?? 0], "csrf");
+    expect(plan.removal_id).toBeTruthy();
     expect(plan).toMatchObject({
-      removal_id: "demo-removal",
       can_remove: true,
       selected_line_numbers: [matchedLine?.line_no],
       lines: [{ line_no: matchedLine?.line_no, raw: matchedLine?.raw }],
@@ -448,7 +465,7 @@ describe("demo web API", () => {
 
     expect(removal).toMatchObject({
       status: "success",
-      audit_run_id: 7,
+      audit_run_id: expect.any(Number),
       removed_count: 1,
       removed: [
         { line_no: matchedLine?.line_no, raw: matchedLine?.raw, reason: "selected" },
@@ -498,7 +515,8 @@ describe("demo web API", () => {
     const logs: ApplyJobLogResponse[] = [];
     const progress: ApplyJobResponse["progress"] = [];
 
-    const job = await api.createJob("demo-plan", [4], true, [], [], "csrf");
+    const plan = await api.createPlan([4], true, [], [], "csrf");
+    const job = await api.createJob(plan.plan_id, [4], true, [], [], "csrf");
     const source = api.openJobStream(job.job_id);
     source.addEventListener("job", (event) => {
       jobs.push(JSON.parse((event as MessageEvent<string>).data) as ApplyJobResponse);
@@ -522,13 +540,14 @@ describe("demo web API", () => {
     expect(jobs.at(-1)?.progress.at(-1)?.status).toBe("success");
     expect(logs.at(-1)?.content).toContain("Done. See log");
     expect((await api.pending()).count).toBe(6);
+    const runId = completedRunId(jobs);
     expect((await api.runs())[0]).toMatchObject({
-      id: 7,
+      id: runId,
       status: "success",
       wud_file: "demo/out/images.todo",
     });
-    await expect(api.runDetail(7)).resolves.toMatchObject({
-      id: 7,
+    await expect(api.runDetail(runId)).resolves.toMatchObject({
+      id: runId,
       pending_updates: [
         {
           service_key: "data/postgres",
@@ -552,8 +571,8 @@ describe("demo web API", () => {
       ],
     });
 
-    const applySummary = (await api.runs()).find((run) => run.id === 7);
-    const applyDetail = await api.runDetail(7);
+    const applySummary = (await api.runs()).find((run) => run.id === runId);
+    const applyDetail = await api.runDetail(runId);
     expect(applySummary?.events).toHaveLength(applyDetail.events.length);
     expect(applySummary?.events[0]).toMatchObject({
       service_name: applyDetail.events[0]?.service_name,
@@ -605,8 +624,9 @@ describe("demo web API", () => {
     ]);
     expect(logs.at(-1)?.content).toContain("Retag changes applied.");
     expect((await api.pending()).count).toBe(7);
+    const runId = completedRunId(jobs);
     expect((await api.runs())[0]).toMatchObject({
-      id: 7,
+      id: runId,
       status: "success",
       mode: "web-retag",
       events: [
@@ -616,8 +636,8 @@ describe("demo web API", () => {
         }),
       ],
     });
-    await expect(api.runDetail(7)).resolves.toMatchObject({
-      id: 7,
+    await expect(api.runDetail(runId)).resolves.toMatchObject({
+      id: runId,
       mode: "web-retag",
       pending_updates: [],
       events: [
@@ -627,7 +647,7 @@ describe("demo web API", () => {
         }),
       ],
     });
-    await expect(api.runLog(7)).resolves.toMatchObject({
+    await expect(api.runLog(runId)).resolves.toMatchObject({
       content: expect.stringContaining("Retag changes applied."),
     });
   });
@@ -736,7 +756,15 @@ describe("demo web API", () => {
       },
     ];
 
-    const job = await api.createJob("demo-plan", [3], true, [], approvals, "csrf");
+    const plan = await api.createPlan([3], true, [], approvals, "csrf");
+    const job = await api.createJob(
+      plan.plan_id,
+      [3],
+      true,
+      [],
+      approvals,
+      "csrf",
+    );
 
     expect(job.job_id).toBeTruthy();
     expect(["queued", "running"]).toContain(job.status);
@@ -755,7 +783,15 @@ describe("demo web API", () => {
       },
     ];
 
-    const job = await api.applyPlan("demo-plan", [3], true, [], approvals, "csrf");
+    const plan = await api.createPlan([3], true, [], approvals, "csrf");
+    const job = await api.applyPlan(
+      plan.plan_id,
+      [3],
+      true,
+      [],
+      approvals,
+      "csrf",
+    );
 
     expect(job.job_id).toBeTruthy();
     expect(["queued", "running"]).toContain(job.status);
