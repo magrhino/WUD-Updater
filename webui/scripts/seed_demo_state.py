@@ -29,12 +29,14 @@ from wud_updater.db import (  # noqa: E402
 from wud_updater.digest_provenance import DigestTagProvenance  # noqa: E402
 
 
+DEMO_WUD_UPDATER_LATEST_IMAGE = "ghcr.io/magrhino/wud-updater:latest"
+
 PENDING_LINES = (
     "# Demo WUD pending update file for local WebUI development.",
     "ghcr.io/home-assistant/home-assistant:2026.5.1 tag=2026.5.3",
     "lscr.io/linuxserver/radarr:5.21.1 tag=5.22.4",
     "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
-    "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
+    f"{DEMO_WUD_UPDATER_LATEST_IMAGE} tag=v0.16.1",
     "ghcr.io/gethomepage/homepage:v0.9.12 tag=v0.10.9",
     "vaultwarden/server:1.31.0 tag=1.32.0",
     "containrrr/watchtower:1.7.1 tag=1.7.2",
@@ -55,7 +57,7 @@ DEMO_STACKS = (
         "name": "media",
         "services": (
             ("radarr", "lscr.io/linuxserver/radarr:5.21.1"),
-            ("wud-updater", "ghcr.io/magrhino/wud-updater:latest"),
+            ("wud-updater", DEMO_WUD_UPDATER_LATEST_IMAGE),
         ),
     },
     {
@@ -87,11 +89,11 @@ DEMO_COMPOSE_LABELS = {
 DEMO_KNOWN_IMAGES = (
     {
         "service_key": "media/wud-updater",
-        "image": "ghcr.io/magrhino/wud-updater:latest",
+        "image": DEMO_WUD_UPDATER_LATEST_IMAGE,
         "image_id": "sha256:demo-wud-updater-current",
         "digest": DEMO_WUD_UPDATER_DIGEST,
         "digest_provenance": DigestTagProvenance(
-            source_image="ghcr.io/magrhino/wud-updater:latest",
+            source_image=DEMO_WUD_UPDATER_LATEST_IMAGE,
             resolved_tag="v0.16.1",
             watch_tag="latest",
             target_digest=DEMO_WUD_UPDATER_DIGEST,

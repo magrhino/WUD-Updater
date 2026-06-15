@@ -326,9 +326,9 @@ const columns = computed<DataTableColumns<RetagTargetItem>>(() => [
                   disabled:
                     !canSwitchToConcrete(row) || retagMutationDisabled.value,
                   title:
-                    !canSwitchToConcrete(row)
-                      ? reasonDetail(row.retag_reason)
-                      : retagMutationNotice.value,
+                    canSwitchToConcrete(row)
+                      ? retagMutationNotice.value
+                      : reasonDetail(row.retag_reason),
                 },
                 { default: () => "Switch" },
               ),
@@ -619,10 +619,9 @@ onMounted(() => {
       :mask-closable="false"
       @update:show="handleRetagConfirmShowUpdate"
     >
-      <section
+      <dialog
+        open
         class="preflight-modal retag-confirm-modal"
-        role="dialog"
-        aria-modal="true"
         aria-labelledby="retag-confirm-title"
       >
         <div class="section-heading">
@@ -711,7 +710,7 @@ onMounted(() => {
             Confirm and apply
           </n-button>
         </div>
-      </section>
+      </dialog>
     </n-modal>
 
     <section class="section-panel retag-summary-panel">
@@ -830,16 +829,15 @@ onMounted(() => {
         </div>
       </div>
 
-      <div
+      <output
         v-else
         class="empty-state retag-state retag-plan-empty"
-        role="status"
         aria-live="polite"
       >
         <Info :size="20" aria-hidden="true" />
         <strong>No retag changes selected</strong>
         <span>Current tracking remains unchanged for every service.</span>
-      </div>
+      </output>
     </section>
 
     <section class="section-panel retag-controls-panel">
@@ -863,16 +861,15 @@ onMounted(() => {
       </div>
     </section>
 
-    <div
+    <output
       v-if="initialLoading"
       class="empty-state retag-state"
-      role="status"
       aria-live="polite"
     >
       <Info :size="24" aria-hidden="true" />
       <strong>Loading retag targets</strong>
       <span>Reading discovered Compose services and stored digest provenance.</span>
-    </div>
+    </output>
 
     <div
       v-else-if="initialLoadFailed"
@@ -884,39 +881,36 @@ onMounted(() => {
       <span>The backend could not load retag review state.</span>
     </div>
 
-    <div
+    <output
       v-else-if="unavailable"
       class="empty-state retag-state"
-      role="status"
       aria-live="polite"
     >
       <AlertTriangle :size="24" aria-hidden="true" />
       <strong>Compose discovery unavailable</strong>
       <span>Resolve the warning above, then refresh this view.</span>
-    </div>
+    </output>
 
     <template v-else-if="updates.retagTargets">
-      <div
+      <output
         v-if="!rows.length"
         class="empty-state retag-state"
-        role="status"
         aria-live="polite"
       >
         <CheckCircle2 :size="24" aria-hidden="true" />
         <strong>No Compose services found</strong>
         <span>Retag review has no discovered services to show.</span>
-      </div>
+      </output>
 
-      <div
+      <output
         v-else-if="!filteredRows.length"
         class="empty-state retag-state"
-        role="status"
         aria-live="polite"
       >
         <Info :size="24" aria-hidden="true" />
         <strong>No matches</strong>
         <span>Adjust the search text or status filter.</span>
-      </div>
+      </output>
 
       <n-data-table
         v-else-if="!isMobile"

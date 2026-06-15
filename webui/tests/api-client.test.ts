@@ -27,6 +27,14 @@ function requestInit(call: unknown[]): RequestInit {
   return call[1] as RequestInit;
 }
 
+function jsonRequestBody(call: unknown[]): unknown {
+  const body = requestInit(call).body;
+  if (typeof body !== "string") {
+    throw new TypeError("Expected request body to be a string");
+  }
+  return JSON.parse(body);
+}
+
 function selfUpdateStatus(): SelfUpdateResponse {
   return {
     status: "available",
@@ -229,11 +237,11 @@ describe("webApi", () => {
         "x-wud-csrf-token",
       ),
     ).toBe("csrf-retag");
-    expect(JSON.parse(String(requestInit(fetchMock.mock.calls[0]).body))).toEqual({
+    expect(jsonRequestBody(fetchMock.mock.calls[0])).toEqual({
       choices,
     });
     expect(fetchMock.mock.calls[1][0]).toBe("/api/v1/retag-plans/apply");
-    expect(JSON.parse(String(requestInit(fetchMock.mock.calls[1]).body))).toEqual({
+    expect(jsonRequestBody(fetchMock.mock.calls[1])).toEqual({
       plan_id: "retag-plan-id",
       choices,
       confirmation: "apply-retags",

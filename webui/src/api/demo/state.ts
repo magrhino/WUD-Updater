@@ -574,7 +574,12 @@ export class DemoApiState {
       }
       selected.push(target);
     }
-    const status = issues.length ? "blocked" : selected.length ? "ready" : "empty";
+    let status: RetagPlanResponse["status"] = "empty";
+    if (issues.length) {
+      status = "blocked";
+    } else if (selected.length) {
+      status = "ready";
+    }
     const stacks = Array.from(new Set(selected.map((item) => item.stack))).map(
       (stackName) => {
         const stackItems = selected.filter((item) => item.stack === stackName);

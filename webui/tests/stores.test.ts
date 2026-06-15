@@ -49,6 +49,14 @@ function mockFetch(body: unknown = {}): ReturnType<typeof vi.fn> {
   return fetchMock;
 }
 
+function jsonRequestBody(call: unknown[]): unknown {
+  const body = (call[1] as RequestInit).body;
+  if (typeof body !== "string") {
+    throw new TypeError("Expected request body to be a string");
+  }
+  return JSON.parse(body);
+}
+
 function deferred<T>() {
   let resolve!: (value: T | PromiseLike<T>) => void;
   let reject!: (reason?: unknown) => void;
@@ -256,10 +264,7 @@ describe("settings store", () => {
 
   it("loads update targets for management selectors", async () => {
     const fetchMock = mockFetch(updateTargetsResponse());
-        const connection = useConnectionStore();
-    const settings = useSettingsStore();
     const updates = useUpdatesStore();
-    const runs = useRunsStore();
 
     await updates.loadUpdateTargets();
 
@@ -269,10 +274,7 @@ describe("settings store", () => {
 
   it("loads retag targets for read-only review", async () => {
     const fetchMock = mockFetch(retagTargetsResponse());
-        const connection = useConnectionStore();
-    const settings = useSettingsStore();
     const updates = useUpdatesStore();
-    const runs = useRunsStore();
 
     await updates.loadRetagTargets();
 
@@ -284,10 +286,7 @@ describe("settings store", () => {
     const fetchMock = mockFetch(retagPlanResponse());
     const auth = useAuthStore();
     const ensureCsrf = vi.spyOn(auth, "ensureCsrf").mockResolvedValue("csrf-retag");
-        const connection = useConnectionStore();
-    const settings = useSettingsStore();
     const updates = useUpdatesStore();
-    const runs = useRunsStore();
     updates.retagTargets = retagTargetsResponse([
       retagTarget(),
       retagTarget({ service_key: "media/radarr", service: "radarr" }),
@@ -300,7 +299,7 @@ describe("settings store", () => {
     expect(plan.plan_id).toBe("retag-plan-test");
     expect(updates.retagPlan?.selected_count).toBe(1);
     expect(fetchMock.mock.calls[0][0]).toBe("/api/v1/retag-plans");
-    expect(JSON.parse(String((fetchMock.mock.calls[0][1] as RequestInit).body))).toEqual({
+    expect(jsonRequestBody(fetchMock.mock.calls[0])).toEqual({
       choices: [
         { service_key: "media/app", choice: "switch-to-concrete" },
         { service_key: "media/radarr", choice: "keep-current" },
@@ -312,10 +311,7 @@ describe("settings store", () => {
     const fetchMock = mockFetch(applyJobResponse({ job_id: "retag-job" }));
     const auth = useAuthStore();
     const ensureCsrf = vi.spyOn(auth, "ensureCsrf").mockResolvedValue("csrf-retag");
-        const connection = useConnectionStore();
-    const settings = useSettingsStore();
     const updates = useUpdatesStore();
-    const runs = useRunsStore();
     updates.retagTargets = retagTargetsResponse();
     updates.retagChoices = { "media/app": "switch-to-concrete" };
     updates.retagPlan = retagPlanResponse();
@@ -326,7 +322,7 @@ describe("settings store", () => {
     expect(job.job_id).toBe("retag-job");
     expect(updates.applyJob?.job_id).toBe("retag-job");
     expect(fetchMock.mock.calls[0][0]).toBe("/api/v1/retag-plans/apply");
-    expect(JSON.parse(String((fetchMock.mock.calls[0][1] as RequestInit).body))).toEqual({
+    expect(jsonRequestBody(fetchMock.mock.calls[0])).toEqual({
       plan_id: "retag-plan-test",
       choices: [{ service_key: "media/app", choice: "switch-to-concrete" }],
       confirmation: "apply-retags",
@@ -338,10 +334,7 @@ describe("settings store", () => {
       .fn()
       .mockResolvedValue(jsonResponse({ detail: "retag targets unavailable" }, 503));
     vi.stubGlobal("fetch", fetchMock);
-        const connection = useConnectionStore();
-    const settings = useSettingsStore();
     const updates = useUpdatesStore();
-    const runs = useRunsStore();
 
     await expect(updates.loadRetagTargets()).rejects.toThrow(
       "retag targets unavailable",
@@ -398,10 +391,7 @@ describe("settings store", () => {
     const fetchMock = mockFetch(stateOperationResponse());
     const auth = useAuthStore();
     const ensureCsrf = vi.spyOn(auth, "ensureCsrf").mockResolvedValue("csrf-state");
-        const connection = useConnectionStore();
-    const settings = useSettingsStore();
-    const updates = useUpdatesStore();
-    const runs = useRunsStore();
+    const connection = useConnectionStore();
 
     await connection.stateOperation({
       kind: "delete_service_policy",

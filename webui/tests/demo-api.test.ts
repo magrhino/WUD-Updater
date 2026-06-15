@@ -14,7 +14,7 @@ function completedRunId(jobs: ApplyJobResponse[]): number {
   const runId = jobs.at(-1)?.run_id;
   expect(runId).toEqual(expect.any(Number));
   if (typeof runId !== "number") {
-    throw new Error("Expected completed demo job to include a run id");
+    throw new TypeError("Expected completed demo job to include a run id");
   }
   return runId;
 }

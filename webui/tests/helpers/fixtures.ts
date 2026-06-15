@@ -631,15 +631,15 @@ export function retagPlanResponse(
             watch_tag: "latest",
             marker: "wud-updater.resolved-tag=1.1",
             label_key: "wud.tag.include",
-            label_value: "^1\\.1$$",
+            label_value: String.raw`^1\.1$$`,
             label_rewrites: [
               {
                 service: "app",
                 label_key: "wud.tag.include",
                 current_label_value: "^latest$$",
                 planned_tag: "1.1",
-                proposed_label_value: "^1\\.1$$",
-                proposed_label_regex: "^1\\.1$",
+                proposed_label_value: String.raw`^1\.1$$`,
+                proposed_label_regex: String.raw`^1\.1$`,
                 approved: false,
                 reason: "exact-regex-normalized",
               },

@@ -43,7 +43,11 @@ from .updater_lifecycle_health import (
     HEALTH_LOG_FORMAT,
     _cid_is_ok,
 )
-from .updater_models import DigestPinUpdate, UpdaterProgressEvent
+from .updater_models import (
+    AppliedDigestPinUpdate,
+    DigestPinUpdate,
+    UpdaterProgressEvent,
+)
 from .web_auth import _safe_exception_detail, _settings
 from .web_models import (
     ApplyJobResponse,
@@ -277,12 +281,7 @@ def _retag_target_records(
     settings: WebSettings,
 ) -> tuple[_RetagTargetRecord, ...] | RetagTargetsResponse:
     config = _effective_config(settings)
-    runner = (
-        CommandRunner(env=settings.command_env)
-        if settings.command_env is not None
-        else CommandRunner()
-    )
-    compose = ComposeCli(runner=runner)
+    compose = ComposeCli(runner=_command_runner(settings))
     try:
         stacks = compose.discover_stacks(
             config.docker_base,
@@ -299,34 +298,57 @@ def _retag_target_records(
     known_by_service = web_database.known_digest_state_by_service(settings)
     records: list[_RetagTargetRecord] = []
     for stack in stacks:
-        project_directory = (
-            "" if stack.project_directory is None else str(stack.project_directory)
-        )
         for service_image in stack.service_images:
-            service_key = f"{stack.name}/{service_image.service}"
-            known = known_by_service.get(service_key)
-            provenance = None if known is None else known.digest_provenance
-            item = _retag_target_item(
-                service_key=service_key,
-                stack=stack.name,
-                service_image=service_image,
-                directory=str(stack.directory),
-                compose_file=stack.file,
-                project_directory=project_directory,
-                known_image="" if known is None else known.image,
-                provenance=provenance,
-            )
             records.append(
-                _RetagTargetRecord(
-                    item=item,
-                    stack=stack,
-                    service_image=service_image,
-                    known_image="" if known is None else known.image,
-                    provenance=provenance,
+                _retag_target_record(
+                    stack,
+                    service_image,
+                    known_by_service.get(
+                        _retag_service_key(stack.name, service_image.service)
+                    ),
                 )
             )
 
     return tuple(records)
+
+
+def _command_runner(settings: WebSettings) -> CommandRunner:
+    if settings.command_env is not None:
+        return CommandRunner(env=settings.command_env)
+    return CommandRunner()
+
+
+def _retag_service_key(stack_name: str, service_name: str) -> str:
+    return f"{stack_name}/{service_name}"
+
+
+def _retag_target_record(
+    stack: ComposeStack,
+    service_image: ServiceImage,
+    known: web_database.KnownDigestState | None,
+) -> _RetagTargetRecord:
+    service_key = _retag_service_key(stack.name, service_image.service)
+    provenance = None if known is None else known.digest_provenance
+    known_image = "" if known is None else known.image
+    item = _retag_target_item(
+        service_key=service_key,
+        stack=stack.name,
+        service_image=service_image,
+        directory=str(stack.directory),
+        compose_file=stack.file,
+        project_directory=(
+            "" if stack.project_directory is None else str(stack.project_directory)
+        ),
+        known_image=known_image,
+        provenance=provenance,
+    )
+    return _RetagTargetRecord(
+        item=item,
+        stack=stack,
+        service_image=service_image,
+        known_image=known_image,
+        provenance=provenance,
+    )
 
 
 def _validated_choice_map(
@@ -356,71 +378,110 @@ def _preview_retag_updates(
     updated_by_key = {item.service_key: item for item in selected}
     for stack in _ordered_retag_stacks(selected):
         stack_updates = [item for item in selected if item.stack.index == stack.index]
-        try:
-            _rendered, applied = render_compose_digest_pins(
-                stack.directory / stack.file,
-                tuple(item.update for item in stack_updates),
-                stack_name=stack.name,
-            )
-        except Exception as exc:
-            for item in stack_updates:
-                issues.append(
-                    RetagPlanIssue(
-                        severity="error",
-                        code="retag-compose-preview-failed",
-                        message=_safe_exception_detail(
-                            settings,
-                            f"Could not safely preview retag for {item.service_key}",
-                            exc,
-                        ),
-                        service_key=item.service_key,
-                        stack=stack.name,
-                        service=item.update.services[0] if item.update.services else "",
-                    )
-                )
-            continue
-        applied_by_service = {
-            f"{stack.name}/{service}": applied_item
-            for applied_item in applied
-            for service in applied_item.services
-        }
-        for item in stack_updates:
-            applied_item = applied_by_service.get(item.service_key)
-            if applied_item is None:
-                issues.append(
-                    RetagPlanIssue(
-                        severity="error",
-                        code="retag-compose-preview-empty",
-                        message=f"Could not preview a Compose rewrite for {item.service_key}.",
-                        service_key=item.service_key,
-                        stack=stack.name,
-                        service=item.update.services[0] if item.update.services else "",
-                    )
-                )
-                continue
-            updated_by_key[item.service_key] = _RetagPlanUpdate(
-                service_key=item.service_key,
-                stack=item.stack,
-                update=item.update,
-                provenance=item.provenance,
-                label_rewrites=tuple(
-                    RetagPlanLabelRewrite(
-                        service=rewrite.service,
-                        label_key=rewrite.label_key,
-                        current_label_value=rewrite.current_label_value,
-                        planned_tag=rewrite.planned_tag,
-                        proposed_label_value=rewrite.proposed_label_value,
-                        proposed_label_regex=rewrite.proposed_label_regex,
-                        approved=rewrite.approved,
-                        reason=rewrite.reason,
-                    )
-                    for rewrite in applied_item.label_rewrites
-                ),
-            )
+        updated, stack_issues = _preview_retag_stack(settings, stack, stack_updates)
+        issues.extend(stack_issues)
+        for item in updated:
+            updated_by_key[item.service_key] = item
     return (
         tuple(updated_by_key[item.service_key] for item in selected),
         issues,
     )
+
+
+def _preview_retag_stack(
+    settings: WebSettings,
+    stack: ComposeStack,
+    stack_updates: Sequence[_RetagPlanUpdate],
+) -> tuple[list[_RetagPlanUpdate], list[RetagPlanIssue]]:
+    issues: list[RetagPlanIssue] = []
+    updated: list[_RetagPlanUpdate] = []
+    try:
+        _rendered, applied = render_compose_digest_pins(
+            stack.directory / stack.file,
+            tuple(item.update for item in stack_updates),
+            stack_name=stack.name,
+        )
+    except Exception as exc:
+        return [], _retag_preview_failed_issues(settings, stack, stack_updates, exc)
+
+    applied_by_service = {
+        _retag_service_key(stack.name, service): applied_item
+        for applied_item in applied
+        for service in applied_item.services
+    }
+    for item in stack_updates:
+        applied_item = applied_by_service.get(item.service_key)
+        if applied_item is None:
+            issues.append(_retag_preview_empty_issue(stack, item))
+            continue
+        updated.append(_retag_update_with_label_rewrites(item, applied_item))
+    return updated, issues
+
+
+def _retag_preview_failed_issues(
+    settings: WebSettings,
+    stack: ComposeStack,
+    stack_updates: Sequence[_RetagPlanUpdate],
+    exc: Exception,
+) -> list[RetagPlanIssue]:
+    return [
+        RetagPlanIssue(
+            severity="error",
+            code="retag-compose-preview-failed",
+            message=_safe_exception_detail(
+                settings,
+                f"Could not safely preview retag for {item.service_key}",
+                exc,
+            ),
+            service_key=item.service_key,
+            stack=stack.name,
+            service=_retag_update_service(item),
+        )
+        for item in stack_updates
+    ]
+
+
+def _retag_preview_empty_issue(
+    stack: ComposeStack,
+    item: _RetagPlanUpdate,
+) -> RetagPlanIssue:
+    return RetagPlanIssue(
+        severity="error",
+        code="retag-compose-preview-empty",
+        message=f"Could not preview a Compose rewrite for {item.service_key}.",
+        service_key=item.service_key,
+        stack=stack.name,
+        service=_retag_update_service(item),
+    )
+
+
+def _retag_update_with_label_rewrites(
+    item: _RetagPlanUpdate,
+    applied_item: AppliedDigestPinUpdate,
+) -> _RetagPlanUpdate:
+    return _RetagPlanUpdate(
+        service_key=item.service_key,
+        stack=item.stack,
+        update=item.update,
+        provenance=item.provenance,
+        label_rewrites=tuple(
+            RetagPlanLabelRewrite(
+                service=rewrite.service,
+                label_key=rewrite.label_key,
+                current_label_value=rewrite.current_label_value,
+                planned_tag=rewrite.planned_tag,
+                proposed_label_value=rewrite.proposed_label_value,
+                proposed_label_regex=rewrite.proposed_label_regex,
+                approved=rewrite.approved,
+                reason=rewrite.reason,
+            )
+            for rewrite in applied_item.label_rewrites
+        ),
+    )
+
+
+def _retag_update_service(item: _RetagPlanUpdate) -> str:
+    return item.update.services[0] if item.update.services else ""
 
 
 def _retag_plan_status(
