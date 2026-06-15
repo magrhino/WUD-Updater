@@ -583,7 +583,9 @@ export class DemoApiState {
           directory: first?.directory ?? "",
           compose_file: first?.compose_file ?? "",
           project_directory: first?.project_directory ?? "",
-          services: stackItems.map((item) => item.service).sort(),
+          services: stackItems
+            .map((item) => item.service)
+            .sort((left, right) => left.localeCompare(right)),
           digest_pin_updates: stackItems
             .map((item) => ({
               service_key: item.service_key,
@@ -610,7 +612,7 @@ export class DemoApiState {
     return {
       plan_id: `demo-retag-plan-${status}-${selected
         .map((item) => item.service_key)
-        .sort()
+        .sort((left, right) => left.localeCompare(right))
         .join("-")}`,
       status,
       can_apply: status === "ready" && selected.length > 0,

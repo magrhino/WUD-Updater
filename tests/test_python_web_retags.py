@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from pathlib import Path
 
+from fastapi.testclient import TestClient
+from httpx import Response
 import pytest
 
 from tests.web_test_helpers import (
@@ -18,33 +21,19 @@ from wud_updater.digest_provenance import DigestTagProvenance
 from wud_updater.web_models import WebApplyJob
 
 
+@dataclass(frozen=True)
+class _RetagFixture:
+    client: TestClient
+    compose_dir: Path
+    fake_root: Path
+
+
 def test_retag_targets_endpoint_returns_eligible_digest_pinned_service(
     tmp_path: Path,
 ) -> None:
-    fake_env, fake_root = _fake_docker_env(tmp_path)
-    client = _client(tmp_path, {"WUD_WEB_DEV_NO_AUTH": "true", **fake_env})
-    compose_dir = _make_fake_stack(
-        tmp_path,
-        fake_root,
-        "stack",
-        [("app", "repo/app@sha256:old", "cid-app")],
-    )
-    _write_compose(
-        compose_dir,
-        "app",
-        "repo/app@sha256:old",
-        label_value="^latest$$",
-    )
-    _seed_known_image(
-        tmp_path,
-        service_key="stack/app",
-        image="repo/app@sha256:old",
-        source_image="repo/app:latest",
-        resolved_tag="2.0",
-        watch_tag="latest",
-        target_digest="sha256:old",
-        final_image="repo/app@sha256:old",
-    )
+    fixture = _make_retag_fixture(tmp_path)
+    client = fixture.client
+    compose_dir = fixture.compose_dir
     before = (compose_dir / "docker-compose.yml").read_text(encoding="utf-8")
 
     response = client.get("/api/v1/retag-targets")
@@ -69,7 +58,7 @@ def test_retag_targets_endpoint_returns_eligible_digest_pinned_service(
     assert item["choices"] == ["keep-current", "switch-to-concrete"]
     assert item["digest_provenance"]["resolved_tag"] == "2.0"
     assert (compose_dir / "docker-compose.yml").read_text(encoding="utf-8") == before
-    _assert_pending_grouping_did_not_mutate(_fake_docker_calls(fake_root))
+    _assert_pending_grouping_did_not_mutate(_fake_docker_calls(fixture.fake_root))
 
 
 def test_retag_targets_endpoint_marks_ineligible_review_states(
@@ -211,49 +200,20 @@ def test_retag_targets_endpoint_returns_unavailable_when_discovery_fails(
 def test_retag_plan_and_apply_rewrites_pulls_recreates_and_audits(
     tmp_path: Path,
 ) -> None:
-    fake_env, fake_root = _fake_docker_env(tmp_path)
-    client = _client(
+    fixture = _make_retag_fixture(
         tmp_path,
-        {
-            "WUD_WEB_DEV_NO_AUTH": "true",
+        env={
             "WUD_WEB_MUTATIONS_ENABLED": "true",
             "WUD_UPDATE_MODE": "live",
             "WUD_MAX_WAIT": "0",
-            **fake_env,
         },
     )
-    compose_dir = _make_fake_stack(
-        tmp_path,
-        fake_root,
-        "stack",
-        [("app", "repo/app@sha256:old", "cid-app")],
-    )
-    _write_compose(
-        compose_dir,
-        "app",
-        "repo/app@sha256:old",
-        label_value="^latest$$",
-    )
-    _seed_known_image(
-        tmp_path,
-        service_key="stack/app",
-        image="repo/app@sha256:old",
-        source_image="repo/app:latest",
-        resolved_tag="2.0",
-        watch_tag="latest",
-        target_digest="sha256:old",
-        final_image="repo/app@sha256:old",
-    )
+    client = fixture.client
+    compose_dir = fixture.compose_dir
     headers = _csrf_headers(client)
 
-    plan_response = client.post(
-        "/api/v1/retag-plans",
-        json={"choices": [{"service_key": "stack/app", "choice": "switch-to-concrete"}]},
-        headers=headers,
-    )
+    plan = _create_retag_plan(client, headers)
 
-    assert plan_response.status_code == 200
-    plan = plan_response.json()
     assert plan["status"] == "ready"
     assert plan["can_apply"] is True
     assert plan["selected_count"] == 1
@@ -261,15 +221,7 @@ def test_retag_plan_and_apply_rewrites_pulls_recreates_and_audits(
     assert plan["stacks"][0]["services"] == ["app"]
     assert plan["stacks"][0]["digest_pin_updates"][0]["resolved_tag"] == "2.0"
 
-    apply_response = client.post(
-        "/api/v1/retag-plans/apply",
-        json={
-            "plan_id": plan["plan_id"],
-            "choices": [{"service_key": "stack/app", "choice": "switch-to-concrete"}],
-            "confirmation": "apply-retags",
-        },
-        headers=headers,
-    )
+    apply_response = _apply_retag_plan(client, headers, plan)
 
     assert apply_response.status_code == 202
     job = _wait_apply_job(client, apply_response.json()["job_id"])
@@ -278,7 +230,7 @@ def test_retag_plan_and_apply_rewrites_pulls_recreates_and_audits(
     assert "# wud-updater.resolved-tag=2.0" in content
     assert "image: repo/app@sha256:old" in content
     assert "wud.tag.include=^2\\.0$$" in content
-    calls = _fake_docker_calls(fake_root)
+    calls = _fake_docker_calls(fixture.fake_root)
     assert "compose -f docker-compose.yml pull app" in calls
     assert "compose -f docker-compose.yml up -d --remove-orphans --force-recreate --no-deps app" in calls
 
@@ -309,37 +261,13 @@ def test_retag_plan_and_apply_rewrites_pulls_recreates_and_audits(
 
 
 def test_retag_plan_keep_current_is_empty_noop(tmp_path: Path) -> None:
-    fake_env, fake_root = _fake_docker_env(tmp_path)
-    client = _client(
+    fixture = _make_retag_fixture(
         tmp_path,
-        {
-            "WUD_WEB_DEV_NO_AUTH": "true",
+        env={
             "WUD_WEB_MUTATIONS_ENABLED": "true",
-            **fake_env,
         },
     )
-    compose_dir = _make_fake_stack(
-        tmp_path,
-        fake_root,
-        "stack",
-        [("app", "repo/app@sha256:old", "cid-app")],
-    )
-    _write_compose(
-        compose_dir,
-        "app",
-        "repo/app@sha256:old",
-        label_value="^latest$$",
-    )
-    _seed_known_image(
-        tmp_path,
-        service_key="stack/app",
-        image="repo/app@sha256:old",
-        source_image="repo/app:latest",
-        resolved_tag="2.0",
-        watch_tag="latest",
-        target_digest="sha256:old",
-        final_image="repo/app@sha256:old",
-    )
+    client = fixture.client
     headers = _csrf_headers(client)
 
     response = client.post(
@@ -354,47 +282,20 @@ def test_retag_plan_keep_current_is_empty_noop(tmp_path: Path) -> None:
     assert body["can_apply"] is False
     assert body["selected_count"] == 0
     assert body["keep_current_count"] == 1
-    _assert_pending_grouping_did_not_mutate(_fake_docker_calls(fake_root))
+    _assert_pending_grouping_did_not_mutate(_fake_docker_calls(fixture.fake_root))
 
 
 def test_retag_apply_rejects_stale_plan(tmp_path: Path) -> None:
-    fake_env, fake_root = _fake_docker_env(tmp_path)
-    client = _client(
+    fixture = _make_retag_fixture(
         tmp_path,
-        {
-            "WUD_WEB_DEV_NO_AUTH": "true",
+        env={
             "WUD_WEB_MUTATIONS_ENABLED": "true",
-            **fake_env,
         },
     )
-    compose_dir = _make_fake_stack(
-        tmp_path,
-        fake_root,
-        "stack",
-        [("app", "repo/app@sha256:old", "cid-app")],
-    )
-    _write_compose(
-        compose_dir,
-        "app",
-        "repo/app@sha256:old",
-        label_value="^latest$$",
-    )
-    _seed_known_image(
-        tmp_path,
-        service_key="stack/app",
-        image="repo/app@sha256:old",
-        source_image="repo/app:latest",
-        resolved_tag="2.0",
-        watch_tag="latest",
-        target_digest="sha256:old",
-        final_image="repo/app@sha256:old",
-    )
+    client = fixture.client
+    compose_dir = fixture.compose_dir
     headers = _csrf_headers(client)
-    plan = client.post(
-        "/api/v1/retag-plans",
-        json={"choices": [{"service_key": "stack/app", "choice": "switch-to-concrete"}]},
-        headers=headers,
-    ).json()
+    plan = _create_retag_plan(client, headers)
     _write_compose(
         compose_dir,
         "app",
@@ -406,7 +307,7 @@ def test_retag_apply_rejects_stale_plan(tmp_path: Path) -> None:
         "/api/v1/retag-plans/apply",
         json={
             "plan_id": plan["plan_id"],
-            "choices": [{"service_key": "stack/app", "choice": "switch-to-concrete"}],
+            "choices": [_switch_choice()],
             "confirmation": "apply-retags",
         },
         headers=headers,
@@ -419,43 +320,15 @@ def test_retag_apply_rejects_stale_plan(tmp_path: Path) -> None:
 def test_retag_apply_cleans_up_job_when_executor_submit_fails(
     tmp_path: Path,
 ) -> None:
-    fake_env, fake_root = _fake_docker_env(tmp_path)
-    client = _client(
+    fixture = _make_retag_fixture(
         tmp_path,
-        {
-            "WUD_WEB_DEV_NO_AUTH": "true",
+        env={
             "WUD_WEB_MUTATIONS_ENABLED": "true",
-            **fake_env,
         },
     )
-    compose_dir = _make_fake_stack(
-        tmp_path,
-        fake_root,
-        "stack",
-        [("app", "repo/app@sha256:old", "cid-app")],
-    )
-    _write_compose(
-        compose_dir,
-        "app",
-        "repo/app@sha256:old",
-        label_value="^latest$$",
-    )
-    _seed_known_image(
-        tmp_path,
-        service_key="stack/app",
-        image="repo/app@sha256:old",
-        source_image="repo/app:latest",
-        resolved_tag="2.0",
-        watch_tag="latest",
-        target_digest="sha256:old",
-        final_image="repo/app@sha256:old",
-    )
+    client = fixture.client
     headers = _csrf_headers(client)
-    plan = client.post(
-        "/api/v1/retag-plans",
-        json={"choices": [{"service_key": "stack/app", "choice": "switch-to-concrete"}]},
-        headers=headers,
-    ).json()
+    plan = _create_retag_plan(client, headers)
 
     class FailingExecutor:
         def submit(self, *_args: object, **_kwargs: object) -> None:
@@ -468,9 +341,7 @@ def test_retag_apply_cleans_up_job_when_executor_submit_fails(
             "/api/v1/retag-plans/apply",
             json={
                 "plan_id": plan["plan_id"],
-                "choices": [
-                    {"service_key": "stack/app", "choice": "switch-to-concrete"},
-                ],
+                "choices": [_switch_choice()],
                 "confirmation": "apply-retags",
             },
             headers=headers,
@@ -566,66 +437,31 @@ def test_retag_apply_enforces_csrf_read_only_and_active_job(tmp_path: Path) -> N
 
 
 def test_retag_apply_restores_compose_when_pull_fails(tmp_path: Path) -> None:
-    fake_env, fake_root = _fake_docker_env(tmp_path)
-    client = _client(
+    fixture = _make_retag_fixture(
         tmp_path,
-        {
-            "WUD_WEB_DEV_NO_AUTH": "true",
+        env={
             "WUD_WEB_MUTATIONS_ENABLED": "true",
             "WUD_UPDATE_MODE": "live",
             "WUD_MAX_WAIT": "0",
-            **fake_env,
         },
     )
-    compose_dir = _make_fake_stack(
-        tmp_path,
-        fake_root,
-        "stack",
-        [("app", "repo/app@sha256:old", "cid-app")],
-    )
-    _write_compose(
-        compose_dir,
-        "app",
-        "repo/app@sha256:old",
-        label_value="^latest$$",
-    )
-    _seed_known_image(
-        tmp_path,
-        service_key="stack/app",
-        image="repo/app@sha256:old",
-        source_image="repo/app:latest",
-        resolved_tag="2.0",
-        watch_tag="latest",
-        target_digest="sha256:old",
-        final_image="repo/app@sha256:old",
-    )
-    (fake_root / "stacks" / "stack" / "pull_fail").write_text(
+    client = fixture.client
+    compose_dir = fixture.compose_dir
+    (fixture.fake_root / "stacks" / "stack" / "pull_fail").write_text(
         "pull failed\n",
         encoding="utf-8",
     )
     before = (compose_dir / "docker-compose.yml").read_text(encoding="utf-8")
     headers = _csrf_headers(client)
-    plan = client.post(
-        "/api/v1/retag-plans",
-        json={"choices": [{"service_key": "stack/app", "choice": "switch-to-concrete"}]},
-        headers=headers,
-    ).json()
+    plan = _create_retag_plan(client, headers)
 
-    response = client.post(
-        "/api/v1/retag-plans/apply",
-        json={
-            "plan_id": plan["plan_id"],
-            "choices": [{"service_key": "stack/app", "choice": "switch-to-concrete"}],
-            "confirmation": "apply-retags",
-        },
-        headers=headers,
-    )
+    response = _apply_retag_plan(client, headers, plan)
 
     assert response.status_code == 202
     job = _wait_apply_job(client, response.json()["job_id"])
     assert job["status"] == "failure"
     assert (compose_dir / "docker-compose.yml").read_text(encoding="utf-8") == before
-    calls = _fake_docker_calls(fake_root)
+    calls = _fake_docker_calls(fixture.fake_root)
     assert "compose -f docker-compose.yml pull app" in calls
     assert "compose -f docker-compose.yml up -d --remove-orphans --force-recreate --no-deps app" in calls
     with open_db(tmp_path / "state" / "wud.sqlite") as conn:
@@ -778,59 +614,23 @@ def test_retag_apply_records_partial_stack_success_when_later_stack_fails(
 
 
 def test_retag_apply_redacts_rollback_failure_paths(tmp_path: Path) -> None:
-    fake_env, fake_root = _fake_docker_env(tmp_path)
-    client = _client(
+    fixture = _make_retag_fixture(
         tmp_path,
-        {
-            "WUD_WEB_DEV_NO_AUTH": "true",
+        env={
             "WUD_WEB_MUTATIONS_ENABLED": "true",
             "WUD_UPDATE_MODE": "live",
             "WUD_MAX_WAIT": "0",
-            **fake_env,
         },
     )
-    compose_dir = _make_fake_stack(
-        tmp_path,
-        fake_root,
-        "stack",
-        [("app", "repo/app@sha256:old", "cid-app")],
-    )
-    _write_compose(
-        compose_dir,
-        "app",
-        "repo/app@sha256:old",
-        label_value="^latest$$",
-    )
-    _seed_known_image(
-        tmp_path,
-        service_key="stack/app",
-        image="repo/app@sha256:old",
-        source_image="repo/app:latest",
-        resolved_tag="2.0",
-        watch_tag="latest",
-        target_digest="sha256:old",
-        final_image="repo/app@sha256:old",
-    )
-    (fake_root / "stacks" / "stack" / "up_fail").write_text(
+    client = fixture.client
+    (fixture.fake_root / "stacks" / "stack" / "up_fail").write_text(
         "up failed\n",
         encoding="utf-8",
     )
     headers = _csrf_headers(client)
-    plan = client.post(
-        "/api/v1/retag-plans",
-        json={"choices": [{"service_key": "stack/app", "choice": "switch-to-concrete"}]},
-        headers=headers,
-    ).json()
+    plan = _create_retag_plan(client, headers)
 
-    response = client.post(
-        "/api/v1/retag-plans/apply",
-        json={
-            "plan_id": plan["plan_id"],
-            "choices": [{"service_key": "stack/app", "choice": "switch-to-concrete"}],
-            "confirmation": "apply-retags",
-        },
-        headers=headers,
-    )
+    response = _apply_retag_plan(client, headers, plan)
 
     assert response.status_code == 202
     job = _wait_apply_job(client, response.json()["job_id"])
@@ -849,66 +649,31 @@ def test_retag_apply_redacts_rollback_failure_paths(tmp_path: Path) -> None:
 def test_retag_apply_unpauses_before_rollback_when_pause_mode_up_fails(
     tmp_path: Path,
 ) -> None:
-    fake_env, fake_root = _fake_docker_env(tmp_path)
-    client = _client(
+    fixture = _make_retag_fixture(
         tmp_path,
-        {
-            "WUD_WEB_DEV_NO_AUTH": "true",
+        env={
             "WUD_WEB_MUTATIONS_ENABLED": "true",
             "WUD_UPDATE_MODE": "pause",
             "WUD_MAX_WAIT": "0",
-            **fake_env,
         },
     )
-    compose_dir = _make_fake_stack(
-        tmp_path,
-        fake_root,
-        "stack",
-        [("app", "repo/app@sha256:old", "cid-app")],
-    )
-    _write_compose(
-        compose_dir,
-        "app",
-        "repo/app@sha256:old",
-        label_value="^latest$$",
-    )
-    _seed_known_image(
-        tmp_path,
-        service_key="stack/app",
-        image="repo/app@sha256:old",
-        source_image="repo/app:latest",
-        resolved_tag="2.0",
-        watch_tag="latest",
-        target_digest="sha256:old",
-        final_image="repo/app@sha256:old",
-    )
-    (fake_root / "stacks" / "stack" / "up_fail").write_text(
+    client = fixture.client
+    compose_dir = fixture.compose_dir
+    (fixture.fake_root / "stacks" / "stack" / "up_fail").write_text(
         "up failed\n",
         encoding="utf-8",
     )
     before = (compose_dir / "docker-compose.yml").read_text(encoding="utf-8")
     headers = _csrf_headers(client)
-    plan = client.post(
-        "/api/v1/retag-plans",
-        json={"choices": [{"service_key": "stack/app", "choice": "switch-to-concrete"}]},
-        headers=headers,
-    ).json()
+    plan = _create_retag_plan(client, headers)
 
-    response = client.post(
-        "/api/v1/retag-plans/apply",
-        json={
-            "plan_id": plan["plan_id"],
-            "choices": [{"service_key": "stack/app", "choice": "switch-to-concrete"}],
-            "confirmation": "apply-retags",
-        },
-        headers=headers,
-    )
+    response = _apply_retag_plan(client, headers, plan)
 
     assert response.status_code == 202
     job = _wait_apply_job(client, response.json()["job_id"])
     assert job["status"] == "failure"
     assert (compose_dir / "docker-compose.yml").read_text(encoding="utf-8") == before
-    calls = _fake_docker_calls(fake_root).splitlines()
+    calls = _fake_docker_calls(fixture.fake_root).splitlines()
     up_call = "compose -f docker-compose.yml up -d --remove-orphans --force-recreate --no-deps app"
 
     def call_index(needle: str, *, start: int = 0) -> int:
@@ -921,6 +686,82 @@ def test_retag_apply_unpauses_before_rollback_when_pause_mode_up_fails(
     unpause = call_index("compose -f docker-compose.yml unpause app")
     rollback_up = call_index(up_call, start=first_up + 1)
     assert pause < first_up < unpause < rollback_up
+
+
+def _make_retag_fixture(
+    tmp_path: Path,
+    *,
+    env: dict[str, str] | None = None,
+    image: str = "repo/app@sha256:old",
+    label_value: str = "^latest$$",
+) -> _RetagFixture:
+    fake_env, fake_root = _fake_docker_env(tmp_path)
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            **(env or {}),
+            **fake_env,
+        },
+    )
+    compose_dir = _make_fake_stack(
+        tmp_path,
+        fake_root,
+        "stack",
+        [("app", image, "cid-app")],
+    )
+    _write_compose(
+        compose_dir,
+        "app",
+        image,
+        label_value=label_value,
+    )
+    _seed_known_image(
+        tmp_path,
+        service_key="stack/app",
+        image=image,
+        source_image="repo/app:latest",
+        resolved_tag="2.0",
+        watch_tag="latest",
+        target_digest="sha256:old",
+        final_image="repo/app@sha256:old",
+    )
+    return _RetagFixture(client=client, compose_dir=compose_dir, fake_root=fake_root)
+
+
+def _switch_choice(service_key: str = "stack/app") -> dict[str, str]:
+    return {"service_key": service_key, "choice": "switch-to-concrete"}
+
+
+def _create_retag_plan(
+    client: TestClient,
+    headers: dict[str, str],
+    choices: list[dict[str, str]] | None = None,
+) -> dict[str, object]:
+    response = client.post(
+        "/api/v1/retag-plans",
+        json={"choices": choices or [_switch_choice()]},
+        headers=headers,
+    )
+    assert response.status_code == 200
+    return response.json()
+
+
+def _apply_retag_plan(
+    client: TestClient,
+    headers: dict[str, str],
+    plan: dict[str, object],
+    choices: list[dict[str, str]] | None = None,
+) -> Response:
+    return client.post(
+        "/api/v1/retag-plans/apply",
+        json={
+            "plan_id": plan["plan_id"],
+            "choices": choices or [_switch_choice()],
+            "confirmation": "apply-retags",
+        },
+        headers=headers,
+    )
 
 
 def _seed_known_image(
