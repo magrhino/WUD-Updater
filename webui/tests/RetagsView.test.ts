@@ -3,9 +3,11 @@ import { flushPromises } from "@vue/test-utils";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import RetagsView from "../src/views/RetagsView.vue";
+import { webApi } from "../src/api/client";
 import { useAuthStore } from "../src/stores/auth";
 import { useUpdatesStore } from "../src/stores/updates";
 import {
+  applyJobResponse,
   authSession,
   retagPlanResponse,
   retagTarget,
@@ -15,6 +17,7 @@ import { mountWithApp } from "./helpers/mount";
 
 describe("RetagsView", () => {
   beforeEach(() => {
+    vi.restoreAllMocks();
     setActivePinia(createPinia());
   });
 
@@ -114,6 +117,66 @@ describe("RetagsView", () => {
       .find((button) => button.text().includes("Apply selected retags"));
     expect(applyButton).toBeDefined();
     expect(applyButton?.attributes("disabled")).toBeDefined();
+  });
+
+  it("tracks retag apply jobs after submit", async () => {
+    const pinia = createPinia();
+    setActivePinia(pinia);
+    const auth = useAuthStore();
+    auth.session = authSession({ mutations_enabled: true });
+    const updates = useUpdatesStore();
+    updates.retagTargets = retagTargetsResponse();
+    updates.retagPlan = retagPlanResponse();
+    vi.spyOn(updates, "loadRetagTargets").mockResolvedValue();
+    const openJobStream = vi.spyOn(webApi, "openJobStream").mockReturnValue({
+      addEventListener: vi.fn(),
+      close: vi.fn(),
+      onerror: null,
+      onmessage: null,
+      onopen: null,
+      readyState: 1,
+      url: "",
+      withCredentials: true,
+      CONNECTING: 0,
+      OPEN: 1,
+      CLOSED: 2,
+      dispatchEvent: vi.fn(),
+      removeEventListener: vi.fn(),
+    } as unknown as EventSource);
+    const applyRetagPlan = vi.spyOn(updates, "applyRetagPlan").mockImplementation(
+      async () => {
+        const job = applyJobResponse({
+          job_id: "retag-job",
+          selected_line_numbers: [],
+          status: "queued",
+        });
+        updates.setApplyJob(job);
+        return job;
+      },
+    );
+
+    const wrapper = mountWithApp(RetagsView, { pinia });
+    await flushPromises();
+
+    const applyButton = wrapper
+      .findAll("button")
+      .find((button) => button.text().includes("Apply selected retags"));
+    expect(applyButton).toBeDefined();
+    expect(applyButton?.attributes("disabled")).toBeUndefined();
+
+    await applyButton?.trigger("click");
+    await flushPromises();
+
+    expect(applyRetagPlan).toHaveBeenCalledTimes(1);
+    expect(openJobStream).toHaveBeenCalledWith("retag-job");
+    expect(wrapper.text()).toContain("Applying 1 retag");
+    expect(wrapper.text()).toContain("Waiting for the updater job to start.");
+    expect(wrapper.text()).toContain("repo/app:latest -> repo/app@sha256:abc123");
+    expect(wrapper.text()).toContain("wud.tag.include");
+    const disabledApplyButton = wrapper
+      .findAll("button")
+      .find((button) => button.text().includes("Apply selected retags"));
+    expect(disabledApplyButton?.attributes("disabled")).toBeDefined();
   });
 
   it("filters retag targets by search text and review status", async () => {

@@ -791,14 +791,25 @@ def _recreate_retag_services(
         except CommandError as exc:
             pre_up_error = exc
 
-    wait_handled = _compose_up_retag_services(compose, stack, services, config)
     if config.update_mode == "pause":
+        try:
+            wait_handled = _compose_up_retag_services(compose, stack, services, config)
+        except Exception:
+            compose.unpause(
+                stack.directory,
+                stack.file,
+                services,
+                project_directory=stack.project_directory,
+            )
+            raise
         compose.unpause(
             stack.directory,
             stack.file,
             services,
             project_directory=stack.project_directory,
         )
+    else:
+        wait_handled = _compose_up_retag_services(compose, stack, services, config)
     if pre_up_error is not None:
         raise pre_up_error
 

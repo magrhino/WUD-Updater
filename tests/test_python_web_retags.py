@@ -571,6 +571,83 @@ def test_retag_apply_restores_compose_when_pull_fails(tmp_path: Path) -> None:
     assert run["status"] == "failure"
 
 
+def test_retag_apply_unpauses_before_rollback_when_pause_mode_up_fails(
+    tmp_path: Path,
+) -> None:
+    fake_env, fake_root = _fake_docker_env(tmp_path)
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+            "WUD_UPDATE_MODE": "pause",
+            "WUD_MAX_WAIT": "0",
+            **fake_env,
+        },
+    )
+    compose_dir = _make_fake_stack(
+        tmp_path,
+        fake_root,
+        "stack",
+        [("app", "repo/app@sha256:old", "cid-app")],
+    )
+    _write_compose(
+        compose_dir,
+        "app",
+        "repo/app@sha256:old",
+        label_value="^latest$$",
+    )
+    _seed_known_image(
+        tmp_path,
+        service_key="stack/app",
+        image="repo/app@sha256:old",
+        source_image="repo/app:latest",
+        resolved_tag="2.0",
+        watch_tag="latest",
+        target_digest="sha256:old",
+        final_image="repo/app@sha256:old",
+    )
+    (fake_root / "stacks" / "stack" / "up_fail").write_text(
+        "up failed\n",
+        encoding="utf-8",
+    )
+    before = (compose_dir / "docker-compose.yml").read_text(encoding="utf-8")
+    headers = _csrf_headers(client)
+    plan = client.post(
+        "/api/v1/retag-plans",
+        json={"choices": [{"service_key": "stack/app", "choice": "switch-to-concrete"}]},
+        headers=headers,
+    ).json()
+
+    response = client.post(
+        "/api/v1/retag-plans/apply",
+        json={
+            "plan_id": plan["plan_id"],
+            "choices": [{"service_key": "stack/app", "choice": "switch-to-concrete"}],
+            "confirmation": "apply-retags",
+        },
+        headers=headers,
+    )
+
+    assert response.status_code == 202
+    job = _wait_apply_job(client, response.json()["job_id"])
+    assert job["status"] == "failure"
+    assert (compose_dir / "docker-compose.yml").read_text(encoding="utf-8") == before
+    calls = _fake_docker_calls(fake_root).splitlines()
+    up_call = "compose -f docker-compose.yml up -d --remove-orphans --force-recreate --no-deps app"
+
+    def call_index(needle: str, *, start: int = 0) -> int:
+        return next(
+            index for index, call in enumerate(calls[start:], start) if needle in call
+        )
+
+    pause = call_index("compose -f docker-compose.yml pause app")
+    first_up = call_index(up_call)
+    unpause = call_index("compose -f docker-compose.yml unpause app")
+    rollback_up = call_index(up_call, start=first_up + 1)
+    assert pause < first_up < unpause < rollback_up
+
+
 def _seed_known_image(
     tmp_path: Path,
     *,

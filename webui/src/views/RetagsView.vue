@@ -15,16 +15,24 @@ import {
 } from "naive-ui";
 
 import type {
+  RetagPlanResponse,
   RetagPlanDigestPinUpdate,
   RetagTargetChoice,
   RetagTargetItem,
 } from "../api/client";
+import PendingApplyJobPanel from "../components/pending/PendingApplyJobPanel.vue";
 import { useAuthStore } from "../stores/auth";
 import { useUpdatesStore } from "../stores/updates";
 import {
   digestProvenanceDisplay,
   displayDigest,
 } from "../utils/digestProvenance";
+import {
+  usePendingApplyJob,
+  type ApplyJobPlanSnapshot,
+  type ApplyJobProgressPhase,
+  type PendingApplyJobPanelRef,
+} from "./pending/usePendingApplyJob";
 
 type RetagFilter = "all" | "available" | "attention";
 type TagType = "default" | "success" | "warning" | "error" | "info";
@@ -35,6 +43,8 @@ const breakpoints = useBreakpoints(breakpointsTailwind);
 const isMobile = breakpoints.smaller("md");
 const searchQuery = ref("");
 const statusFilter = ref<RetagFilter>("all");
+const applyJobPanelRef = ref<PendingApplyJobPanelRef | null>(null);
+const showRetagApplyJobPanel = ref(false);
 const isDemoMode =
   import.meta.env.MODE === "demo" ||
   import.meta.env.VITE_WUD_DEMO_MODE === "true";
@@ -67,6 +77,74 @@ const reasonDetails: Record<string, string> = {
   "unsupported-tracking-label": "The tracking label is not a single exact tag.",
 };
 
+const retagApplyJobProgressPhases: ApplyJobProgressPhase[] = [
+  {
+    key: "compose-digest-pin",
+    label: "Write Compose",
+    waitingMessage: "Waiting to write retag Compose metadata.",
+  },
+  {
+    key: "pull",
+    label: "Pull images",
+    waitingMessage: "Waiting for retagged image pulls to begin.",
+  },
+  {
+    key: "recreate",
+    label: "Recreate",
+    waitingMessage: "Waiting to recreate retagged services.",
+  },
+  {
+    key: "health",
+    label: "Health wait",
+    waitingMessage: "Waiting for retagged service health checks.",
+  },
+  {
+    key: "completion",
+    label: "Complete",
+    waitingMessage: "Waiting for the retag apply result.",
+  },
+];
+
+const {
+  applyJobActive,
+  applyJobAlertType,
+  applyJobImpactLabel,
+  applyJobLatestLogMessage,
+  applyJobLiveLogExpanded,
+  applyJobLiveLogToggleLabel,
+  applyJobLiveLogVisible,
+  applyJobLogEmptyMessage,
+  applyJobLogText,
+  applyJobLogTitle,
+  applyJobLogWaiting,
+  applyJobNowDescriptionIds,
+  applyJobNowDetail,
+  applyJobNowMessage,
+  applyJobNowStatusLabel,
+  applyJobNowTitle,
+  applyJobPanelStatusLabel,
+  applyJobProgressSteps,
+  applyJobProgressSummary,
+  applyJobSnapshot,
+  applyJobStartedLabel,
+  applyJobStatusMessage,
+  applyJobSucceeded,
+  applyJobTitle,
+  applyJobUpdateLabel,
+  focusApplyJobPanel,
+  subscribeApplyJob,
+} = usePendingApplyJob({
+  applyJobPanelRef,
+  refreshAfterTerminalJob: async () => {
+    await updates.loadRetagTargets();
+  },
+  progressPhases: retagApplyJobProgressPhases,
+  updateNoun: "retag",
+  completeNowTitle: "Retag complete",
+  successStatusMessage: (updateLabel) =>
+    `${updateLabel} finished. Retag targets and run history were refreshed.`,
+});
+
 const rows = computed(() => updates.retagTargets?.items ?? []);
 const totalCount = computed(() => updates.retagTargets?.count ?? rows.value.length);
 const availableCount = computed(
@@ -95,11 +173,16 @@ const retagMutationNotice = computed(() => {
   return "";
 });
 const previewDisabled = computed(
-  () => updates.loading || unavailable.value || rows.value.length === 0,
+  () =>
+    updates.loading ||
+    applyJobActive.value ||
+    unavailable.value ||
+    rows.value.length === 0,
 );
 const applyDisabled = computed(
   () =>
     updates.loading ||
+    applyJobActive.value ||
     retagMutationDisabled.value ||
     updates.retagPlan?.can_apply !== true,
 );
@@ -271,7 +354,50 @@ async function previewRetagChanges(): Promise<void> {
 }
 
 async function applyRetagChanges(): Promise<void> {
-  await updates.applyRetagPlan().catch(() => undefined);
+  if (applyDisabled.value) {
+    return;
+  }
+  const snapshot = createRetagApplyJobSnapshot();
+  const job = await updates.applyRetagPlan().catch(() => undefined);
+  if (!job) {
+    return;
+  }
+  applyJobSnapshot.value = snapshot;
+  showRetagApplyJobPanel.value = true;
+  subscribeApplyJob(job.job_id);
+  await focusApplyJobPanel();
+}
+
+function createRetagApplyJobSnapshot(): ApplyJobPlanSnapshot | null {
+  const plan = updates.retagPlan;
+  if (!plan) {
+    return null;
+  }
+  const lines = plan.stacks.flatMap((stack) =>
+    stack.digest_pin_updates.map((update) => {
+      const rewrite = labelRewriteSummary(update);
+      return {
+        key: update.service_key,
+        lineNo: null,
+        scopeLabel: stack.stack || "Retag",
+        serviceLabel: update.service_key,
+        tagRewriteLabel: "",
+        digestPinLabel:
+          rewrite === "No label rewrite"
+            ? digestPinSummary(update)
+            : `${digestPinSummary(update)}; ${rewrite}`,
+        composeImage: update.source_image,
+        targetImage: update.final_image,
+      };
+    }),
+  );
+  return {
+    contextLabel: retagPlanContextLabel(plan),
+    serviceCount: plan.selected_count || lines.length,
+    stackCount: plan.stacks.length,
+    sourceFile: retagPlanSourceFile(plan),
+    lines,
+  };
 }
 
 function reasonLabel(code: string): string {
@@ -357,6 +483,27 @@ function planLocation(stack: { directory: string; compose_file: string }): strin
   return [stack.directory, stack.compose_file].filter(Boolean).join("/");
 }
 
+function retagPlanContextLabel(plan: RetagPlanResponse): string {
+  if (plan.stacks.length === 1) {
+    return plan.stacks[0].stack || "retag plan";
+  }
+  if (plan.stacks.length > 1) {
+    return `${plan.stacks.length} stacks`;
+  }
+  return "retag plan";
+}
+
+function retagPlanSourceFile(plan: RetagPlanResponse): string {
+  const locations = plan.stacks.map(planLocation).filter(Boolean);
+  if (locations.length === 1) {
+    return locations[0];
+  }
+  if (locations.length > 1) {
+    return `${locations.length} Compose files`;
+  }
+  return "Retag plan";
+}
+
 function digestPinSummary(update: RetagPlanDigestPinUpdate): string {
   return `${update.source_image} -> ${update.final_image}`;
 }
@@ -393,6 +540,38 @@ onMounted(() => {
       {{ warning }}
     </n-alert>
 
+    <PendingApplyJobPanel
+      v-if="showRetagApplyJobPanel && updates.applyJob"
+      ref="applyJobPanelRef"
+      v-model:live-log-expanded="applyJobLiveLogExpanded"
+      :active="applyJobActive"
+      :alert-type="applyJobAlertType"
+      :impact-label="applyJobImpactLabel"
+      :job="updates.applyJob"
+      :latest-log-message="applyJobLatestLogMessage"
+      :live-log-toggle-label="applyJobLiveLogToggleLabel"
+      :live-log-visible="applyJobLiveLogVisible"
+      :log="updates.applyJobLog"
+      :log-empty-message="applyJobLogEmptyMessage"
+      :log-text="applyJobLogText"
+      :log-title="applyJobLogTitle"
+      :log-waiting="applyJobLogWaiting"
+      :now-description-ids="applyJobNowDescriptionIds"
+      :now-detail="applyJobNowDetail"
+      :now-message="applyJobNowMessage"
+      :now-status-label="applyJobNowStatusLabel"
+      :now-title="applyJobNowTitle"
+      :panel-status-label="applyJobPanelStatusLabel"
+      :progress-steps="applyJobProgressSteps"
+      :progress-summary="applyJobProgressSummary"
+      :snapshot="applyJobSnapshot"
+      :started-label="applyJobStartedLabel"
+      :status-message="applyJobStatusMessage"
+      :succeeded="applyJobSucceeded"
+      :title="applyJobTitle"
+      :update-label="applyJobUpdateLabel"
+    />
+
     <section class="section-panel retag-summary-panel">
       <div class="section-heading retag-heading">
         <div>
@@ -413,7 +592,7 @@ onMounted(() => {
             v-if="updates.retagPlan"
             size="small"
             :disabled="applyDisabled"
-            :loading="updates.loading"
+            :loading="updates.loading || applyJobActive"
             @click="applyRetagChanges"
           >
             Apply selected retags

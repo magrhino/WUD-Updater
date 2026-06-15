@@ -27,7 +27,8 @@ import {
 
 export type ApplyJobSnapshotLine = {
   key: string;
-  lineNo: number;
+  lineNo: number | null;
+  scopeLabel?: string;
   serviceLabel: string;
   tagRewriteLabel: string;
   digestPinLabel: string;
@@ -43,7 +44,7 @@ export type ApplyJobPlanSnapshot = {
   lines: ApplyJobSnapshotLine[];
 };
 
-type ApplyJobProgressPhase = {
+export type ApplyJobProgressPhase = {
   key: string;
   label: string;
   waitingMessage: string;
@@ -64,7 +65,12 @@ export type PendingApplyJobPanelRef = {
 
 export type UsePendingApplyJobOptions = {
   applyJobPanelRef: Ref<PendingApplyJobPanelRef | null>;
-  loadPendingAndReleaseNotes: () => Promise<void>;
+  loadPendingAndReleaseNotes?: () => Promise<void>;
+  refreshAfterTerminalJob?: () => Promise<void>;
+  progressPhases?: ApplyJobProgressPhase[];
+  updateNoun?: string;
+  completeNowTitle?: string;
+  successStatusMessage?: (updateLabel: string) => string;
 };
 
 export const terminalJobStatuses = new Set<ApplyJobResponse["status"]>([
@@ -114,6 +120,8 @@ export function usePendingApplyJob(options: UsePendingApplyJobOptions) {
   const applyJobSnapshot = ref<ApplyJobPlanSnapshot | null>(null);
   const planContextLabel = computed(() => pendingPlanContextLabel(updates.plan));
   const planLines = computed(() => planLinesFromPlan(updates.plan));
+  const progressPhases = options.progressPhases ?? applyJobProgressPhases;
+  const updateNoun = options.updateNoun ?? "update";
 
   const applyJobAlertType = computed(() => {
     if (updates.applyJob?.status === "failure") {
@@ -135,7 +143,7 @@ export function usePendingApplyJob(options: UsePendingApplyJobOptions) {
       0,
   );
   const applyJobUpdateLabel = computed(() =>
-    pluralize(applyJobUpdateCount.value, "update"),
+    pluralize(applyJobUpdateCount.value, updateNoun),
   );
   const applyJobTitle = computed(() => {
     if (!updates.applyJob) {
@@ -163,7 +171,9 @@ export function usePendingApplyJob(options: UsePendingApplyJobOptions) {
       return "Updater command is running.";
     }
     if (updates.applyJob.status === "success") {
-      return `${applyJobUpdateLabel.value} finished. Pending updates and run history were refreshed.`;
+      return options.successStatusMessage
+        ? options.successStatusMessage(applyJobUpdateLabel.value)
+        : `${applyJobUpdateLabel.value} finished. Pending updates and run history were refreshed.`;
     }
     if (updates.applyJob.error) {
       return updates.applyJob.error;
@@ -229,7 +239,7 @@ export function usePendingApplyJob(options: UsePendingApplyJobOptions) {
     return displayEvents;
   });
   const applyJobProgressSteps = computed<ApplyJobProgressStep[]>(() =>
-    applyJobProgressPhases.map((phase) => {
+    progressPhases.map((phase) => {
       const event = displayApplyJobProgressByPhase.value.get(phase.key) ?? null;
       const status = event?.status ?? "pending";
       return {
@@ -300,7 +310,7 @@ export function usePendingApplyJob(options: UsePendingApplyJobOptions) {
       return step ? `Failed: ${step.label}` : "Apply failed";
     }
     if (updates.applyJob.status === "success") {
-      return "Update complete";
+      return options.completeNowTitle ?? "Update complete";
     }
     if (step?.status === "running") {
       return `Running: ${step.label}`;
@@ -499,7 +509,8 @@ export function usePendingApplyJob(options: UsePendingApplyJobOptions) {
   }
 
   async function refreshAfterTerminalJob(): Promise<void> {
-    await Promise.all([options.loadPendingAndReleaseNotes(), runs.loadRuns()]);
+    const refresh = options.refreshAfterTerminalJob ?? options.loadPendingAndReleaseNotes;
+    await Promise.all([refresh?.() ?? Promise.resolve(), runs.loadRuns()]);
   }
 
   function createApplyJobSnapshot(): ApplyJobPlanSnapshot | null {
