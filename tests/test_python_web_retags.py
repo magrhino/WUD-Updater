@@ -240,6 +240,8 @@ def test_retag_targets_endpoint_returns_unavailable_when_discovery_fails(
     assert body["count"] == 0
     assert body["items"] == []
     assert body["warnings"]
+    assert "[REDACTED_PATH]" in body["warnings"][0]
+    assert str(tmp_path) not in body["warnings"][0]
 
 
 def test_retag_plan_and_apply_rewrites_pulls_recreates_and_audits(

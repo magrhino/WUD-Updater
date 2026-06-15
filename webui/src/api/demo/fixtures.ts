@@ -664,6 +664,9 @@ export function demoRunVerification(
   events: RunEventRecord[],
   options: { dryRun?: boolean; mode?: string } = {},
 ): RunVerificationSummary {
+  if (!options.dryRun && options.mode === "web-retag") {
+    return demoRetagRunVerification(events);
+  }
   if (options.dryRun || !isUpdaterRunMode(options.mode ?? "stop")) {
     return emptyRunVerification();
   }
@@ -687,6 +690,37 @@ export function demoRunVerification(
       wud_status: item.status === "failed" ? "restored" as const : "removed" as const,
       follow_up_needed: !success || item.status === "failed",
       summary: success ? "Demo update verified." : "Manual review needed.",
+    };
+  });
+  const needsReviewCount = items.filter((item) => item.follow_up_needed).length;
+  return {
+    status: needsReviewCount ? "needs_review" : "verified",
+    total_count: items.length,
+    verified_count: items.length - needsReviewCount,
+    needs_review_count: needsReviewCount,
+    items,
+  };
+}
+
+function demoRetagRunVerification(events: RunEventRecord[]): RunVerificationSummary {
+  const items = events.map((event, index) => {
+    const success = event.status === "success";
+    const serviceKey = event.stack_name && event.service_name
+      ? `${event.stack_name}/${event.service_name}`
+      : event.service_name;
+    return {
+      line_no: index + 1,
+      service_key: serviceKey,
+      stack_name: event.stack_name,
+      service_name: event.service_name,
+      image: event.image,
+      target_image: event.target_image || event.image,
+      image_status: success ? "new_image_running" as const : "unknown" as const,
+      container_status: success ? "recreated" as const : "unknown" as const,
+      health_status: success ? "passed" as const : "unknown" as const,
+      wud_status: success ? "removed" as const : "unknown" as const,
+      follow_up_needed: !success,
+      summary: success ? "Demo retag verified." : "Manual review needed.",
     };
   });
   const needsReviewCount = items.filter((item) => item.follow_up_needed).length;

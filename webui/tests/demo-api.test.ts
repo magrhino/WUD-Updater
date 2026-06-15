@@ -646,9 +646,36 @@ describe("demo web API", () => {
           target_image: `ghcr.io/magrhino/wud-updater@${wudUpdaterDigest}`,
         }),
       ],
+      verification: expect.objectContaining({
+        total_count: 1,
+        verified_count: 1,
+        items: [
+          expect.objectContaining({
+            service_key: "media/wud-updater",
+            target_image: `ghcr.io/magrhino/wud-updater@${wudUpdaterDigest}`,
+            follow_up_needed: false,
+          }),
+        ],
+      }),
     });
     await expect(api.runLog(runId)).resolves.toMatchObject({
       content: expect.stringContaining("Retag changes applied."),
+    });
+  });
+
+  it("reports polished retag apply errors for blocked demo plans", async () => {
+    const api = createDemoWebApi();
+    const choices = [
+      {
+        service_key: "media/wud-updater",
+        choice: "keep-current" as const,
+      },
+    ];
+    const plan = await api.createRetagPlan(choices, "csrf");
+
+    await expect(api.applyRetagPlan(plan.plan_id, choices, "csrf")).resolves.toMatchObject({
+      status: "failure",
+      error: "Demo retag plan is not applicable.",
     });
   });
 

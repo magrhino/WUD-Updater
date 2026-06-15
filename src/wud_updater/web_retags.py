@@ -292,7 +292,13 @@ def _retag_target_records(
         return RetagTargetsResponse(
             status="unavailable",
             count=0,
-            warnings=[str(exc)],
+            warnings=[
+                _safe_exception_detail(
+                    settings,
+                    "could not discover retag targets",
+                    exc,
+                )
+            ],
         )
 
     known_by_service = web_database.known_digest_state_by_service(settings)

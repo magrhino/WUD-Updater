@@ -655,7 +655,7 @@ export class DemoApiState {
       log_file: "",
       started_at: null,
       finished_at: null,
-      error: plan.can_apply ? "" : "Demo retag plan is not applyable.",
+      error: plan.can_apply ? "" : "Demo retag plan is not applicable.",
       selected_line_numbers: [],
       progress: [],
     };
