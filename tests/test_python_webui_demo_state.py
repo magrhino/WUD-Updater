@@ -64,6 +64,11 @@ class WebuiDemoStateTests(unittest.TestCase):
                     encoding="utf-8"
                 ),
             )
+            media_compose = (docker_base / "media" / "docker-compose.yml").read_text(
+                encoding="utf-8"
+            )
+            self.assertIn("ghcr.io/magrhino/wud-updater:latest", media_compose)
+            self.assertIn("wud.tag.include=^latest$$", media_compose)
             self.assertTrue((fake_docker_root / "calls.log").exists())
             self.assertTrue((fake_docker_root / "containers.tsv").exists())
             self.assertTrue(
@@ -110,7 +115,7 @@ class WebuiDemoStateTests(unittest.TestCase):
                 text=True,
                 capture_output=True,
             )
-            self.assertIn("ghcr.io/magrhino/wud-updater:v0.16.0", result.stdout)
+            self.assertIn("ghcr.io/magrhino/wud-updater:latest", result.stdout)
             with sqlite3.connect(db_path) as conn:
                 run_count = conn.execute("SELECT COUNT(*) FROM update_runs").fetchone()
                 pending_count = conn.execute(
@@ -146,6 +151,13 @@ class WebuiDemoStateTests(unittest.TestCase):
                     ORDER BY id
                     """
                 ).fetchall()
+                retag_candidates = conn.execute(
+                    """
+                    SELECT image, digest_resolved_tag, digest_watch_tag, digest_final_image
+                    FROM known_images
+                    WHERE service_key = 'media/wud-updater'
+                    """
+                ).fetchall()
 
         self.assertEqual(run_count[0], 6)
         self.assertEqual(pending_count[0], 4)
@@ -163,6 +175,17 @@ class WebuiDemoStateTests(unittest.TestCase):
         self.assertEqual(
             [row[0] for row in audit_modes],
             ["web-auth", "web-state", "web-settings"],
+        )
+        self.assertEqual(len(retag_candidates), 1)
+        self.assertEqual(
+            retag_candidates[0],
+            (
+                "ghcr.io/magrhino/wud-updater:latest",
+                "v0.16.1",
+                "latest",
+                "ghcr.io/magrhino/wud-updater@sha256:"
+                "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+            ),
         )
 
 

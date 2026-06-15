@@ -14,6 +14,7 @@ import {
   Monitor,
   Moon,
   RefreshCw,
+  Repeat2,
   Settings2,
   SlidersHorizontal,
   Stethoscope,
@@ -176,6 +177,12 @@ const navItems: NavItem[] = [
     activeRouteNames: ["pending"],
   },
   {
+    to: "/retags",
+    label: "Retags",
+    icon: Repeat2,
+    activeRouteNames: ["retags"],
+  },
+  {
     to: "/runs",
     label: "History",
     icon: Clock3,
@@ -266,6 +273,8 @@ async function refreshCurrentView(): Promise<void> {
     ]);
   } else if (route.name === "pending") {
     await updates.loadPending();
+  } else if (route.name === "retags") {
+    await updates.loadRetagTargets();
   } else if (route.name === "runs" || route.name === "audit") {
     await runs.loadRuns();
   } else if (route.name === "policies") {

@@ -33,7 +33,8 @@ import {
 
 export type ApplyJobSnapshotLine = {
   key: string;
-  lineNo: number;
+  lineNo: number | null;
+  scopeLabel?: string;
   serviceLabel: string;
   tagRewriteLabel: string;
   digestPinLabel: string;
@@ -49,7 +50,9 @@ export type ApplyJobPlanSnapshot = {
   lines: ApplyJobSnapshotLine[];
 };
 
-type ApplyJobProgressPhase = {
+type VerificationSnapshotLine = ApplyJobSnapshotLine & { lineNo: number };
+
+export type ApplyJobProgressPhase = {
   key: string;
   label: string;
   waitingMessage: string;
@@ -70,7 +73,12 @@ export type PendingApplyJobPanelRef = {
 
 export type UsePendingApplyJobOptions = {
   applyJobPanelRef: Ref<PendingApplyJobPanelRef | null>;
-  loadPendingAndReleaseNotes: () => Promise<void>;
+  loadPendingAndReleaseNotes?: () => Promise<void>;
+  refreshAfterTerminalJob?: () => Promise<void>;
+  progressPhases?: ApplyJobProgressPhase[];
+  updateNoun?: string;
+  completeNowTitle?: string;
+  successStatusMessage?: (updateLabel: string) => string;
 };
 
 export const terminalJobStatuses = new Set<ApplyJobResponse["status"]>([
@@ -120,6 +128,8 @@ export function usePendingApplyJob(options: UsePendingApplyJobOptions) {
   const applyJobSnapshot = ref<ApplyJobPlanSnapshot | null>(null);
   const planContextLabel = computed(() => pendingPlanContextLabel(updates.plan));
   const planLines = computed(() => planLinesFromPlan(updates.plan));
+  const progressPhases = options.progressPhases ?? applyJobProgressPhases;
+  const updateNoun = options.updateNoun ?? "update";
 
   const applyJobAlertType = computed(() => {
     if (updates.applyJob?.status === "failure") {
@@ -141,7 +151,7 @@ export function usePendingApplyJob(options: UsePendingApplyJobOptions) {
       0,
   );
   const applyJobUpdateLabel = computed(() =>
-    pluralize(applyJobUpdateCount.value, "update"),
+    pluralize(applyJobUpdateCount.value, updateNoun),
   );
   const applyJobTitle = computed(() => {
     if (!updates.applyJob) {
@@ -169,7 +179,9 @@ export function usePendingApplyJob(options: UsePendingApplyJobOptions) {
       return "Updater command is running.";
     }
     if (updates.applyJob.status === "success") {
-      return `${applyJobUpdateLabel.value} finished. Pending updates and run history were refreshed.`;
+      return options.successStatusMessage
+        ? options.successStatusMessage(applyJobUpdateLabel.value)
+        : `${applyJobUpdateLabel.value} finished. Pending updates and run history were refreshed.`;
     }
     if (updates.applyJob.error) {
       return updates.applyJob.error;
@@ -239,7 +251,7 @@ export function usePendingApplyJob(options: UsePendingApplyJobOptions) {
     return displayEvents;
   });
   const applyJobProgressSteps = computed<ApplyJobProgressStep[]>(() =>
-    applyJobProgressPhases.map((phase) => {
+    progressPhases.map((phase) => {
       const event = displayApplyJobProgressByPhase.value.get(phase.key) ?? null;
       const status = event?.status ?? "pending";
       return {
@@ -314,7 +326,7 @@ export function usePendingApplyJob(options: UsePendingApplyJobOptions) {
       return step ? `Failed: ${step.label}` : "Apply failed";
     }
     if (updates.applyJob.status === "success") {
-      return "Update complete";
+      return options.completeNowTitle ?? "Update complete";
     }
     if (step?.status === "running") {
       return `Running: ${step.label}`;
@@ -513,9 +525,10 @@ export function usePendingApplyJob(options: UsePendingApplyJobOptions) {
   }
 
   async function refreshAfterTerminalJob(): Promise<void> {
+    const refresh = options.refreshAfterTerminalJob ?? options.loadPendingAndReleaseNotes;
     const runId = updates.applyJob?.run_id ?? null;
     await Promise.all([
-      options.loadPendingAndReleaseNotes(),
+      refresh?.() ?? Promise.resolve(),
       runs.loadRuns(),
       runId ? runs.loadRunDetail(runId).catch(() => undefined) : Promise.resolve(),
     ]);
@@ -675,7 +688,13 @@ function fallbackVerification(
   if (!job || !snapshot?.lines.length) {
     return emptyVerification();
   }
-  const items = snapshot.lines.map((line) => fallbackVerificationItem(job, line));
+  const lines = snapshot.lines.filter(
+    (line): line is VerificationSnapshotLine => line.lineNo !== null,
+  );
+  if (!lines.length) {
+    return emptyVerification();
+  }
+  const items = lines.map((line) => fallbackVerificationItem(job, line));
   const needsReviewCount = items.filter((item) => item.follow_up_needed).length;
   return {
     status: needsReviewCount ? "needs_review" : "verified",
@@ -698,7 +717,7 @@ function emptyVerification(): RunVerificationSummary {
 
 function fallbackVerificationItem(
   job: ApplyJobResponse,
-  line: ApplyJobSnapshotLine,
+  line: VerificationSnapshotLine,
 ): RunVerificationItem {
   const pull = progressForLine(job.progress, "pull", line.lineNo);
   const recreate = progressForLine(job.progress, "recreate", line.lineNo);

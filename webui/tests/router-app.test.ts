@@ -16,6 +16,7 @@ import { themeStorageKey } from "../src/theme";
 import {
   authSession,
   coreUpdateTourResponse,
+  retagTargetsResponse,
   selfUpdateApplyResponse,
   selfUpdatePlanResponse,
   selfUpdatePrepareResponse,
@@ -537,5 +538,39 @@ vi.spyOn(settings, "loadTagExclusions").mockResolvedValue(undefined as any);
     loadRuns.mockClear();
     await wrapper.find('button[aria-label="Refresh current view"]').trigger("click");
     expect(loadRuns).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows retag navigation and refreshes the retags route", async () => {
+    const pinia = createPinia();
+    setActivePinia(pinia);
+    const auth = useAuthStore();
+    auth.session = authSession({ mutations_enabled: false });
+        const connection = useConnectionStore();
+    const settings = useSettingsStore();
+    const updates = useUpdatesStore();
+    updates.retagTargets = retagTargetsResponse();
+    vi.spyOn(connection, "loadStatus").mockResolvedValue();
+    vi.spyOn(settings, "loadSettings").mockResolvedValue();
+    vi.spyOn(settings, "loadCoreUpdateTour").mockResolvedValue();
+    vi.spyOn(updates, "loadSelfUpdate").mockResolvedValue();
+    const loadRetagTargets = vi
+      .spyOn(updates, "loadRetagTargets")
+      .mockResolvedValue();
+    const router = createWudRouter(createMemoryHistory());
+    await router.push("/retags");
+    await router.isReady();
+
+    const wrapper = mountWithApp(App, { pinia, router });
+    await flushPromises();
+
+    const navItems = wrapper.findAll(".nav-item");
+    const retagsItem = navItems.find((item) => item.text().includes("Retags"));
+    expect(router.currentRoute.value.name).toBe("retags");
+    expect(retagsItem?.classes()).toContain("nav-item-active");
+    expect(retagsItem?.attributes("aria-current")).toBe("page");
+    expect(wrapper.find("h1").text()).toBe("Retags");
+    loadRetagTargets.mockClear();
+    await wrapper.find('button[aria-label="Refresh current view"]').trigger("click");
+    expect(loadRetagTargets).toHaveBeenCalledTimes(1);
   });
 });

@@ -744,6 +744,33 @@ class ComposeDigestPinTests(ComposeRewriteTestCase):
         self.assertIn("# wud-updater.resolved-tag=2.0", content)
         self.assertIn("image: repo/app@sha256:pin", content)
 
+    def test_apply_retags_only_selected_service_when_image_is_shared(self) -> None:
+        compose_file = self.write_compose(
+            "services:\n"
+            "  app:\n"
+            "    image: repo/app:1.0\n"
+            "    labels:\n"
+            "    - wud.tag.include=^1\\.0$$\n"
+            "  sibling:\n"
+            "    image: repo/app:1.0\n"
+            "    labels:\n"
+            "    - wud.tag.include=^1\\.0$$\n"
+        )
+
+        applied = apply_compose_digest_pins(
+            compose_file,
+            (self.digest_pin_update(services=("app",)),),
+        )
+
+        content = compose_file.read_text(encoding="utf-8")
+        self.assertEqual(len(applied), 1)
+        self.assertEqual(applied[0].services, ("app",))
+        self.assertIn("# wud-updater.resolved-tag=2.0", content)
+        self.assertEqual(content.count("image: repo/app@sha256:pin"), 1)
+        self.assertIn("  sibling:\n    image: repo/app:1.0", content)
+        self.assertEqual(content.count("wud.tag.include=^2\\.0$$"), 1)
+        self.assertEqual(content.count("wud.tag.include=^1\\.0$$"), 1)
+
     def test_render_keeps_real_digest_image_on_one_line(self) -> None:
         digest = (
             "d771c6193517d7ccbbf9bf5142e235234fc5888a583eab8c4538589351374a79"

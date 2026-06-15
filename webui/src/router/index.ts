@@ -39,6 +39,12 @@ export const routes: RouteRecordRaw[] = [
     meta: { requiresAuth: true, title: "Pending updates" },
   },
   {
+    path: "/retags",
+    name: "retags",
+    component: () => import("../views/RetagsView.vue"),
+    meta: { requiresAuth: true, title: "Retags" },
+  },
+  {
     path: "/runs",
     name: "runs",
     component: () => import("../views/RunsView.vue"),

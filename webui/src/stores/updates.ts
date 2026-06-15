@@ -13,6 +13,10 @@ import {
   type PlanResponse,
   type PendingResponse,
   type ReleaseNotesResponse,
+  type RetagChoiceRequest,
+  type RetagPlanResponse,
+  type RetagTargetChoice,
+  type RetagTargetsResponse,
   type SelfUpdateApplyResponse,
   type SelfUpdatePlanResponse,
   type SelfUpdatePrepareResponse,
@@ -36,6 +40,9 @@ const TERMINAL_APPLY_JOB_STATUSES = new Set<ApplyJobResponse["status"]>([
 export const useUpdatesStore = defineStore("updates", () => {
   const pending = ref<PendingResponse | null>(null);
   const updateTargets = ref<UpdateTargetsResponse | null>(null);
+  const retagTargets = ref<RetagTargetsResponse | null>(null);
+  const retagChoices = ref<Record<string, RetagTargetChoice>>({});
+  const retagPlan = ref<RetagPlanResponse | null>(null);
   const releaseNotes = ref<ReleaseNotesResponse | null>(null);
   const selfUpdate = ref<SelfUpdateResponse | null>(null);
   const selfUpdatePlan = ref<SelfUpdatePlanResponse | null>(null);
@@ -83,6 +90,84 @@ export const useUpdatesStore = defineStore("updates", () => {
     await loadWithState(async () => {
       updateTargets.value = await webApi.updateTargets();
     });
+  }
+
+  async function loadRetagTargets(): Promise<void> {
+    await loadWithState(async () => {
+      retagTargets.value = await webApi.retagTargets();
+      resetRetagChoices();
+      retagPlan.value = null;
+    });
+  }
+
+  function resetRetagChoices(): void {
+    retagChoices.value = Object.fromEntries(
+      (retagTargets.value?.items ?? []).map((item) => [
+        item.service_key,
+        "keep-current" satisfies RetagTargetChoice,
+      ]),
+    );
+  }
+
+  function setRetagChoice(
+    serviceKey: string,
+    choice: RetagTargetChoice,
+  ): void {
+    retagChoices.value = {
+      ...retagChoices.value,
+      [serviceKey]: choice,
+    };
+    retagPlan.value = null;
+  }
+
+  function retagChoiceRequests(): RetagChoiceRequest[] {
+    const items = retagTargets.value?.items ?? [];
+    return items
+      .map((item) => ({
+        service_key: item.service_key,
+        choice: retagChoices.value[item.service_key] ?? "keep-current",
+      }))
+      .sort((left, right) => left.service_key.localeCompare(right.service_key));
+  }
+
+  async function createRetagPlan(): Promise<RetagPlanResponse> {
+    const auth = useAuthStore();
+    let response: RetagPlanResponse | null = null;
+    await loadWithState(async () => {
+      retagPlan.value = null;
+      applyJob.value = null;
+      applyJobLog.value = null;
+      response = await webApi.createRetagPlan(
+        retagChoiceRequests(),
+        await auth.ensureCsrf(),
+      );
+      retagPlan.value = response;
+    });
+    if (response === null) {
+      throw new Error("Retag plan did not return a response");
+    }
+    return response;
+  }
+
+  async function applyRetagPlan(): Promise<ApplyJobResponse> {
+    const auth = useAuthStore();
+    const planToApply = retagPlan.value;
+    if (planToApply === null) {
+      throw new Error("Retag preview must be loaded before applying");
+    }
+    await loadWithState(async () => {
+      applyJobLog.value = null;
+      const job = await webApi.applyRetagPlan(
+        planToApply.plan_id,
+        retagChoiceRequests(),
+        await auth.ensureCsrf(),
+      );
+      setApplyJob(job);
+    });
+    if (applyJob.value === null) {
+      throw new Error("Apply job was not created");
+    }
+    return applyJob.value;
   }
 
   async function loadReleaseNotes(): Promise<void> {
@@ -421,6 +506,9 @@ export const useUpdatesStore = defineStore("updates", () => {
   return {
     pending,
     updateTargets,
+    retagTargets,
+    retagChoices,
+    retagPlan,
     releaseNotes,
     selfUpdate,
     selfUpdatePlan,
@@ -439,6 +527,12 @@ export const useUpdatesStore = defineStore("updates", () => {
     error,
     loadPending,
     loadUpdateTargets,
+    loadRetagTargets,
+    resetRetagChoices,
+    setRetagChoice,
+    retagChoiceRequests,
+    createRetagPlan,
+    applyRetagPlan,
     loadReleaseNotes,
     refreshReleaseNotes,
     loadSelfUpdate,

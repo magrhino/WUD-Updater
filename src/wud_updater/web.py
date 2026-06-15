@@ -30,6 +30,7 @@ from . import (
     web_pending,
     web_plans,
     web_release_notes,
+    web_retags,
     web_runs,
     web_scheduler,
     web_self_update,
@@ -90,6 +91,9 @@ from .web_models import (
     PlanResponse,
     ReadyResponse,
     ReleaseNotesResponse,
+    RetagPlanResponse,
+    RetagTargetItem as RetagTargetItem,
+    RetagTargetsResponse,
     RunDetail,
     RunEventRecord as RunEventRecord,
     RunLogResponse,
@@ -217,6 +221,14 @@ from .web_models import (
     ReleaseNoteInfo as ReleaseNoteInfo,
     ReleaseNoteLink as ReleaseNoteLink,
     ResetAdminClaimRequest as ResetAdminClaimRequest,
+    RetagApplyRequest as RetagApplyRequest,
+    RetagChoiceRequest as RetagChoiceRequest,
+    RetagPlanDigestPinUpdate as RetagPlanDigestPinUpdate,
+    RetagPlanIssue as RetagPlanIssue,
+    RetagPlanLabelRewrite as RetagPlanLabelRewrite,
+    RetagPlanRequest as RetagPlanRequest,
+    RetagPlanStack as RetagPlanStack,
+    RetagPlanStatus as RetagPlanStatus,
     ContainerRestartRequest as ContainerRestartRequest,
     SELF_UPDATE_RELEASE_NOTES_CAP as SELF_UPDATE_RELEASE_NOTES_CAP,
     SelfUpdateAuditStatus as SelfUpdateAuditStatus,
@@ -267,6 +279,7 @@ AutoUpdateScheduleReservationError = (
 # this module. New code and monkeypatches should target the owning web_* module.
 api_pending = web_pending.api_pending
 api_update_targets = web_pending.api_update_targets
+api_retag_targets = web_retags.api_retag_targets
 api_pending_cleanup = web_pending.api_pending_cleanup
 api_pending_removal_plan = web_pending.api_pending_removal_plan
 api_pending_removal = web_pending.api_pending_removal
@@ -444,6 +457,7 @@ def create_app(
     )
     web_pending.configure(effective_config_loader=_effective_config)
     web_plans.configure(effective_config_loader=_effective_config)
+    web_retags.configure(effective_config_loader=_effective_config)
 
     app.add_api_route(
         "/healthz",
@@ -599,6 +613,25 @@ def create_app(
         web_pending.api_update_targets,
         methods=["GET"],
         response_model=UpdateTargetsResponse,
+    )
+    router.add_api_route(
+        "/retag-targets",
+        web_retags.api_retag_targets,
+        methods=["GET"],
+        response_model=RetagTargetsResponse,
+    )
+    router.add_api_route(
+        "/retag-plans",
+        web_retags.api_create_retag_plan,
+        methods=["POST"],
+        response_model=RetagPlanResponse,
+    )
+    router.add_api_route(
+        "/retag-plans/apply",
+        web_retags.api_apply_retag_plan,
+        methods=["POST"],
+        response_model=ApplyJobResponse,
+        status_code=202,
     )
     router.add_api_route(
         "/pending/cleanup",

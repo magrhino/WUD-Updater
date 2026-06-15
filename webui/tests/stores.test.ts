@@ -17,6 +17,9 @@ import {
   onboardingDismissResponse,
   pendingResponse,
   releaseNotesResponse,
+  retagPlanResponse,
+  retagTarget,
+  retagTargetsResponse,
   planResponse,
   runVerification,
   runSummary,
@@ -44,6 +47,14 @@ function mockFetch(body: unknown = {}): ReturnType<typeof vi.fn> {
   const fetchMock = vi.fn().mockImplementation(() => Promise.resolve(jsonResponse(body)));
   vi.stubGlobal("fetch", fetchMock);
   return fetchMock;
+}
+
+function jsonRequestBody(call: unknown[]): unknown {
+  const body = (call[1] as RequestInit).body;
+  if (typeof body !== "string") {
+    throw new TypeError("Expected request body to be a string");
+  }
+  return JSON.parse(body);
 }
 
 function deferred<T>() {
@@ -253,15 +264,83 @@ describe("settings store", () => {
 
   it("loads update targets for management selectors", async () => {
     const fetchMock = mockFetch(updateTargetsResponse());
-        const connection = useConnectionStore();
-    const settings = useSettingsStore();
     const updates = useUpdatesStore();
-    const runs = useRunsStore();
 
     await updates.loadUpdateTargets();
 
     expect(updates.updateTargets?.items[0]?.service_key).toBe("media/app");
     expect(fetchMock.mock.calls[0][0]).toBe("/api/v1/update-targets");
+  });
+
+  it("loads retag targets for read-only review", async () => {
+    const fetchMock = mockFetch(retagTargetsResponse());
+    const updates = useUpdatesStore();
+
+    await updates.loadRetagTargets();
+
+    expect(updates.retagTargets?.items[0]?.service_key).toBe("media/app");
+    expect(fetchMock.mock.calls[0][0]).toBe("/api/v1/retag-targets");
+  });
+
+  it("previews retag choices through the updates store", async () => {
+    const fetchMock = mockFetch(retagPlanResponse());
+    const auth = useAuthStore();
+    const ensureCsrf = vi.spyOn(auth, "ensureCsrf").mockResolvedValue("csrf-retag");
+    const updates = useUpdatesStore();
+    updates.retagTargets = retagTargetsResponse([
+      retagTarget(),
+      retagTarget({ service_key: "media/radarr", service: "radarr" }),
+    ]);
+    updates.setRetagChoice("media/app", "switch-to-concrete");
+
+    const plan = await updates.createRetagPlan();
+
+    expect(ensureCsrf).toHaveBeenCalledTimes(1);
+    expect(plan.plan_id).toBe("retag-plan-test");
+    expect(updates.retagPlan?.selected_count).toBe(1);
+    expect(fetchMock.mock.calls[0][0]).toBe("/api/v1/retag-plans");
+    expect(jsonRequestBody(fetchMock.mock.calls[0])).toEqual({
+      choices: [
+        { service_key: "media/app", choice: "switch-to-concrete" },
+        { service_key: "media/radarr", choice: "keep-current" },
+      ],
+    });
+  });
+
+  it("applies a retag plan as a tracked apply job", async () => {
+    const fetchMock = mockFetch(applyJobResponse({ job_id: "retag-job" }));
+    const auth = useAuthStore();
+    const ensureCsrf = vi.spyOn(auth, "ensureCsrf").mockResolvedValue("csrf-retag");
+    const updates = useUpdatesStore();
+    updates.retagTargets = retagTargetsResponse();
+    updates.retagChoices = { "media/app": "switch-to-concrete" };
+    updates.retagPlan = retagPlanResponse();
+
+    const job = await updates.applyRetagPlan();
+
+    expect(ensureCsrf).toHaveBeenCalledTimes(1);
+    expect(job.job_id).toBe("retag-job");
+    expect(updates.applyJob?.job_id).toBe("retag-job");
+    expect(fetchMock.mock.calls[0][0]).toBe("/api/v1/retag-plans/apply");
+    expect(jsonRequestBody(fetchMock.mock.calls[0])).toEqual({
+      plan_id: "retag-plan-test",
+      choices: [{ service_key: "media/app", choice: "switch-to-concrete" }],
+      confirmation: "apply-retags",
+    });
+  });
+
+  it("surfaces retag target loading errors", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(jsonResponse({ detail: "retag targets unavailable" }, 503));
+    vi.stubGlobal("fetch", fetchMock);
+    const updates = useUpdatesStore();
+
+    await expect(updates.loadRetagTargets()).rejects.toThrow(
+      "retag targets unavailable",
+    );
+
+    expect(updates.error).toBe("retag targets unavailable");
   });
 
   it("keeps fulfilled pending safety cue data when another cue source fails", async () => {
@@ -312,10 +391,7 @@ describe("settings store", () => {
     const fetchMock = mockFetch(stateOperationResponse());
     const auth = useAuthStore();
     const ensureCsrf = vi.spyOn(auth, "ensureCsrf").mockResolvedValue("csrf-state");
-        const connection = useConnectionStore();
-    const settings = useSettingsStore();
-    const updates = useUpdatesStore();
-    const runs = useRunsStore();
+    const connection = useConnectionStore();
 
     await connection.stateOperation({
       kind: "delete_service_policy",

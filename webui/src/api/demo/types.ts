@@ -3,6 +3,7 @@ import type {
   ApplyJobResponse,
   PendingGroupedItem,
   PlanResponse,
+  RetagPlanResponse,
   RunDetail,
   RunLogResponse,
   RunSummary,
@@ -26,6 +27,7 @@ export type DemoJobRecord = {
   log: ApplyJobLogResponse;
   lineNumbers: number[];
   plan: PlanResponse | null;
+  retagPlan?: RetagPlanResponse | null;
   completed: boolean;
 };
 

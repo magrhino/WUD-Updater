@@ -3,6 +3,7 @@ import type {
   PendingGroupedItem,
   PendingUpdateRecord,
   ReleaseNoteInfo,
+  RetagTargetItem,
   RunEventRecord,
   RunSummary,
   RunVerificationSummary,
@@ -15,7 +16,9 @@ import {
   DEMO_DOCKER_BASE,
   DEMO_LOG_DIR,
   DEMO_POSTGRES_DIGEST,
+  DEMO_RADARR_DIGEST,
   DEMO_SOURCE_FILE,
+  DEMO_WUD_UPDATER_DIGEST,
 } from "./constants";
 import type { DemoPendingItem, DemoRunFixture, DemoStack, DemoStackName } from "./types";
 
@@ -140,18 +143,18 @@ export const INITIAL_PENDING: DemoPendingItem[] = [
   },
   {
     line_no: 5,
-    raw: "ghcr.io/magrhino/wud-updater:v0.25.0 tag=v0.25.1",
-    image: "ghcr.io/magrhino/wud-updater:v0.25.0",
-    key: "magrhino/wud-updater:v0.25.0",
+    raw: "ghcr.io/magrhino/wud-updater:latest tag=v0.25.1",
+    image: "ghcr.io/magrhino/wud-updater:latest",
+    key: "magrhino/wud-updater:latest",
     repo: "magrhino/wud-updater",
-    current_tag: "v0.25.0",
+    current_tag: "latest",
     has_tag: true,
     allow_repo: false,
     digest: "",
     desired_tag: "v0.25.1",
-    resolved_image: "ghcr.io/magrhino/wud-updater:v0.25.0",
+    resolved_image: "ghcr.io/magrhino/wud-updater:latest",
     target_image: "ghcr.io/magrhino/wud-updater:v0.25.1",
-    compose_images: ["ghcr.io/magrhino/wud-updater:v0.25.0"],
+    compose_images: ["ghcr.io/magrhino/wud-updater:latest"],
     services: ["wud-updater"],
     action: "tag-update",
     diagnostic: null,
@@ -333,12 +336,115 @@ export const DEMO_UPDATE_TARGETS: UpdateTargetItem[] = [
     service_key: "media/wud-updater",
     stack: "media",
     service: "wud-updater",
-    image: "ghcr.io/magrhino/wud-updater:v0.25.0",
+    image: "ghcr.io/magrhino/wud-updater:latest",
     image_repo: "magrhino/wud-updater",
-    current_tag: "v0.25.0",
+    current_tag: "latest",
     directory: `${DEMO_DOCKER_BASE}/media`,
     compose_file: "docker-compose.yml",
     project_directory: "",
+  },
+];
+
+export const DEMO_RETAG_TARGETS: RetagTargetItem[] = [
+  {
+    service_key: "media/wud-updater",
+    stack: "media",
+    service: "wud-updater",
+    image: "ghcr.io/magrhino/wud-updater:latest",
+    image_repo: "magrhino/wud-updater",
+    current_tag: "latest",
+    tracking_tag: "latest",
+    tracking_tag_source: "label",
+    proposed_tag: "v0.26.0",
+    final_image: `ghcr.io/magrhino/wud-updater@${DEMO_WUD_UPDATER_DIGEST}`,
+    retag_available: true,
+    retag_reason: "eligible",
+    choices: ["keep-current", "switch-to-concrete"],
+    label_key: "wud.tag.include",
+    label_value: "^latest$$",
+    directory: `${DEMO_DOCKER_BASE}/media`,
+    compose_file: "docker-compose.yml",
+    project_directory: "",
+    digest_provenance: {
+      source_image: "ghcr.io/magrhino/wud-updater:latest",
+      resolved_tag: "v0.26.0",
+      watch_tag: "latest",
+      target_digest: DEMO_WUD_UPDATER_DIGEST,
+      final_image: `ghcr.io/magrhino/wud-updater@${DEMO_WUD_UPDATER_DIGEST}`,
+      provenance_source: "demo",
+      provenance_confidence: "high",
+    },
+  },
+  {
+    service_key: "home/home-assistant",
+    stack: "home",
+    service: "home-assistant",
+    image: "ghcr.io/home-assistant/home-assistant:latest",
+    image_repo: "home-assistant/home-assistant",
+    current_tag: "latest",
+    tracking_tag: "latest",
+    tracking_tag_source: "image",
+    proposed_tag: "",
+    final_image: "",
+    retag_available: false,
+    retag_reason: "missing-provenance",
+    choices: ["keep-current"],
+    label_key: "wud.tag.include",
+    label_value: "",
+    directory: `${DEMO_DOCKER_BASE}/home`,
+    compose_file: "docker-compose.yml",
+    project_directory: "",
+    digest_provenance: null,
+  },
+  {
+    service_key: "data/postgres",
+    stack: "data",
+    service: "postgres",
+    image: "postgres:16",
+    image_repo: "postgres",
+    current_tag: "16",
+    tracking_tag: "16",
+    tracking_tag_source: "label",
+    proposed_tag: "",
+    final_image: "",
+    retag_available: false,
+    retag_reason: "not-latest-tracking",
+    choices: ["keep-current"],
+    label_key: "wud.tag.include",
+    label_value: "16",
+    directory: `${DEMO_DOCKER_BASE}/data`,
+    compose_file: "docker-compose.yml",
+    project_directory: "",
+    digest_provenance: null,
+  },
+  {
+    service_key: "media/radarr",
+    stack: "media",
+    service: "radarr",
+    image: "lscr.io/linuxserver/radarr:latest",
+    image_repo: "linuxserver/radarr",
+    current_tag: "latest",
+    tracking_tag: "latest",
+    tracking_tag_source: "label",
+    proposed_tag: "5.22.4",
+    final_image: `lscr.io/linuxserver/radarr@${DEMO_RADARR_DIGEST}`,
+    retag_available: false,
+    retag_reason: "stale-provenance",
+    choices: ["keep-current"],
+    label_key: "wud.tag.include",
+    label_value: "latest",
+    directory: `${DEMO_DOCKER_BASE}/media`,
+    compose_file: "docker-compose.yml",
+    project_directory: "",
+    digest_provenance: {
+      source_image: "lscr.io/linuxserver/radarr:latest",
+      resolved_tag: "5.22.4",
+      watch_tag: "latest",
+      target_digest: DEMO_RADARR_DIGEST,
+      final_image: `lscr.io/linuxserver/radarr@${DEMO_RADARR_DIGEST}`,
+      provenance_source: "demo",
+      provenance_confidence: "stale",
+    },
   },
 ];
 
@@ -558,6 +664,9 @@ export function demoRunVerification(
   events: RunEventRecord[],
   options: { dryRun?: boolean; mode?: string } = {},
 ): RunVerificationSummary {
+  if (!options.dryRun && options.mode === "web-retag") {
+    return demoRetagRunVerification(events);
+  }
   if (options.dryRun || !isUpdaterRunMode(options.mode ?? "stop")) {
     return emptyRunVerification();
   }
@@ -581,6 +690,37 @@ export function demoRunVerification(
       wud_status: item.status === "failed" ? "restored" as const : "removed" as const,
       follow_up_needed: !success || item.status === "failed",
       summary: success ? "Demo update verified." : "Manual review needed.",
+    };
+  });
+  const needsReviewCount = items.filter((item) => item.follow_up_needed).length;
+  return {
+    status: needsReviewCount ? "needs_review" : "verified",
+    total_count: items.length,
+    verified_count: items.length - needsReviewCount,
+    needs_review_count: needsReviewCount,
+    items,
+  };
+}
+
+function demoRetagRunVerification(events: RunEventRecord[]): RunVerificationSummary {
+  const items = events.map((event, index) => {
+    const success = event.status === "success";
+    const serviceKey = event.stack_name && event.service_name
+      ? `${event.stack_name}/${event.service_name}`
+      : event.service_name;
+    return {
+      line_no: index + 1,
+      service_key: serviceKey,
+      stack_name: event.stack_name,
+      service_name: event.service_name,
+      image: event.image,
+      target_image: event.target_image || event.image,
+      image_status: success ? "new_image_running" as const : "unknown" as const,
+      container_status: success ? "recreated" as const : "unknown" as const,
+      health_status: success ? "passed" as const : "unknown" as const,
+      wud_status: success ? "removed" as const : "unknown" as const,
+      follow_up_needed: !success,
+      summary: success ? "Demo retag verified." : "Manual review needed.",
     };
   });
   const needsReviewCount = items.filter((item) => item.follow_up_needed).length;

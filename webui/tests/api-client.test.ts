@@ -27,6 +27,14 @@ function requestInit(call: unknown[]): RequestInit {
   return call[1] as RequestInit;
 }
 
+function jsonRequestBody(call: unknown[]): unknown {
+  const body = requestInit(call).body;
+  if (typeof body !== "string") {
+    throw new TypeError("Expected request body to be a string");
+  }
+  return JSON.parse(body);
+}
+
 function selfUpdateStatus(): SelfUpdateResponse {
   return {
     status: "available",
@@ -155,6 +163,16 @@ describe("webApi", () => {
       webApi.updateCoreUpdateTour("in_progress", "dashboard", "csrf"),
       webApi.pending(),
       webApi.updateTargets(),
+      webApi.retagTargets(),
+      webApi.createRetagPlan(
+        [{ service_key: "media/app", choice: "switch-to-concrete" }],
+        "csrf",
+      ),
+      webApi.applyRetagPlan(
+        "retag-plan",
+        [{ service_key: "media/app", choice: "switch-to-concrete" }],
+        "csrf",
+      ),
       webApi.cleanupPending("cleanup", [{ line_no: 1, raw: "repo/app:1.0" }], "csrf"),
       webApi.createRemovalPlan([1], "csrf"),
       webApi.removeSelectedPending("removal", [{ line_no: 1, raw: "repo/app:1.0" }], "csrf"),
@@ -177,10 +195,57 @@ describe("webApi", () => {
       webApi.runLog(1),
     ]);
 
-    expect(fetchMock).toHaveBeenCalledTimes(36);
+    expect(fetchMock).toHaveBeenCalledTimes(39);
     for (const call of fetchMock.mock.calls) {
       expect(requestInit(call).credentials).toBe("include");
     }
+  });
+
+  it("loads retag targets through a read-only GET request", async () => {
+    const fetchMock = mockFetch({
+      status: "ready",
+      count: 0,
+      items: [],
+      warnings: [],
+    });
+
+    await webApi.retagTargets();
+
+    expect(fetchMock.mock.calls[0][0]).toBe("/api/v1/retag-targets");
+    expect(requestInit(fetchMock.mock.calls[0]).method).toBeUndefined();
+    expect(
+      (requestInit(fetchMock.mock.calls[0]).headers as Headers).get(
+        "x-wud-csrf-token",
+      ),
+    ).toBeNull();
+  });
+
+  it("serializes retag preview and apply payloads exactly", async () => {
+    const fetchMock = mockFetch({});
+    const choices = [
+      { service_key: "media/app", choice: "switch-to-concrete" as const },
+      { service_key: "media/radarr", choice: "keep-current" as const },
+    ];
+
+    await webApi.createRetagPlan(choices, "csrf-retag");
+    await webApi.applyRetagPlan("retag-plan-id", choices, "csrf-retag");
+
+    expect(fetchMock.mock.calls[0][0]).toBe("/api/v1/retag-plans");
+    expect(requestInit(fetchMock.mock.calls[0]).method).toBe("POST");
+    expect(
+      (requestInit(fetchMock.mock.calls[0]).headers as Headers).get(
+        "x-wud-csrf-token",
+      ),
+    ).toBe("csrf-retag");
+    expect(jsonRequestBody(fetchMock.mock.calls[0])).toEqual({
+      choices,
+    });
+    expect(fetchMock.mock.calls[1][0]).toBe("/api/v1/retag-plans/apply");
+    expect(jsonRequestBody(fetchMock.mock.calls[1])).toEqual({
+      plan_id: "retag-plan-id",
+      choices,
+      confirmation: "apply-retags",
+    });
   });
 
   it("sends csrf headers on mutating requests", async () => {
@@ -222,6 +287,15 @@ describe("webApi", () => {
       selfUpdatePlanStatus(),
     );
     await webApi.restartContainer("csrf-token");
+    await webApi.createRetagPlan(
+      [{ service_key: "media/app", choice: "switch-to-concrete" }],
+      "csrf-token",
+    );
+    await webApi.applyRetagPlan(
+      "retag-plan",
+      [{ service_key: "media/app", choice: "switch-to-concrete" }],
+      "csrf-token",
+    );
     await webApi.createPlan([1], false, [], [], "csrf-token");
     await webApi.createJob("plan", [1], false, [], [], "csrf-token");
     await webApi.applyPlan("plan", [1], false, [], [], "csrf-token");

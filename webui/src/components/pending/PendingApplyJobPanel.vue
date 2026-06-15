@@ -90,6 +90,15 @@ function progressTagType(
   }
   return "default";
 }
+
+function snapshotLineScope(
+  line: ApplyJobPlanSnapshot["lines"][number],
+): string {
+  if (line.scopeLabel) {
+    return line.scopeLabel;
+  }
+  return line.lineNo === null ? "Apply" : `#${line.lineNo}`;
+}
 </script>
 
 <template>
@@ -238,7 +247,7 @@ function progressTagType(
               :key="line.key"
               class="list-row plan-line-row"
             >
-              <span>#{{ line.lineNo }}</span>
+              <span>{{ snapshotLineScope(line) }}</span>
               <strong>{{ line.serviceLabel }}</strong>
               <em>
                 <span v-if="line.tagRewriteLabel" class="tag-rewrite-detail">

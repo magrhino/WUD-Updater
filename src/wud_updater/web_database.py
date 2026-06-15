@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import sqlite3
 from contextlib import closing
+from dataclasses import dataclass
 from pathlib import Path
 from urllib.parse import quote
 
@@ -14,7 +15,11 @@ from .db import (
 )
 from .db import _user_version as db_user_version
 from .db import _validate_schema as validate_db_schema
-from .digest_provenance import DigestTagProvenance, digest_provenance_from_row
+from .digest_provenance import (
+    DIGEST_PROVENANCE_SQL_COLUMNS,
+    DigestTagProvenance,
+    digest_provenance_from_row,
+)
 from .web_models import WebSettings
 
 
@@ -22,7 +27,16 @@ class ReadOnlyDatabaseMissing(RuntimeError):
     """Raised when the read-only WebUI database does not exist."""
 
 
+@dataclass(frozen=True)
+class KnownDigestState:
+    image: str
+    digest_provenance: DigestTagProvenance
+
+
 LOGGER = logging.getLogger(__name__)
+_DIGEST_PROVENANCE_NON_EMPTY_WHERE = " OR ".join(
+    f"{column} != ''" for column in DIGEST_PROVENANCE_SQL_COLUMNS
+)
 
 
 def database_ready(settings: WebSettings) -> tuple[bool, str]:
@@ -59,7 +73,7 @@ def known_digest_provenance_by_service(
     try:
         with closing(connect_readonly_db(settings)) as conn:
             rows = conn.execute(
-                """
+                f"""
                 SELECT
                     service_key,
                     digest_source_image,
@@ -70,9 +84,7 @@ def known_digest_provenance_by_service(
                     digest_provenance_source,
                     digest_provenance_confidence
                 FROM known_images
-                WHERE digest_final_image != ''
-                   OR digest_resolved_tag != ''
-                   OR digest_watch_tag != ''
+                WHERE {_DIGEST_PROVENANCE_NON_EMPTY_WHERE}
                 """
             ).fetchall()
     except ReadOnlyDatabaseMissing:
@@ -86,6 +98,44 @@ def known_digest_provenance_by_service(
         if provenance is None:
             continue
         result[str(row["service_key"])] = provenance
+    return result
+
+
+def known_digest_state_by_service(
+    settings: WebSettings,
+) -> dict[str, KnownDigestState]:
+    try:
+        with closing(connect_readonly_db(settings)) as conn:
+            rows = conn.execute(
+                f"""
+                SELECT
+                    service_key,
+                    image,
+                    digest_source_image,
+                    digest_resolved_tag,
+                    digest_watch_tag,
+                    digest_target_digest,
+                    digest_final_image,
+                    digest_provenance_source,
+                    digest_provenance_confidence
+                FROM known_images
+                WHERE {_DIGEST_PROVENANCE_NON_EMPTY_WHERE}
+                """
+            ).fetchall()
+    except ReadOnlyDatabaseMissing:
+        return {}
+    except Exception as exc:
+        LOGGER.warning("failed to read digest state from database: %s", exc)
+        return {}
+    result: dict[str, KnownDigestState] = {}
+    for row in rows:
+        provenance = digest_provenance_from_row(row)
+        if provenance is None:
+            continue
+        result[str(row["service_key"])] = KnownDigestState(
+            image=str(row["image"]),
+            digest_provenance=provenance,
+        )
     return result
 
 

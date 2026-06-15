@@ -7,3 +7,7 @@ export const DEMO_DOCKER_BASE = "demo/docker";
 export const DEMO_CSRF_TOKEN = "demo-csrf-token";
 export const DEMO_POSTGRES_DIGEST =
   "sha256:1111111111111111111111111111111111111111111111111111111111111111";
+export const DEMO_RADARR_DIGEST =
+  "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+export const DEMO_WUD_UPDATER_DIGEST =
+  "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc";

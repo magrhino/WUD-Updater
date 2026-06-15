@@ -134,6 +134,108 @@ export interface UpdateTargetsResponse {
 }
 
 // ---------------------------------------------------------------------------
+// Retag targets
+// ---------------------------------------------------------------------------
+
+export type RetagTargetsStatus = "ready" | "unavailable";
+export type RetagTargetChoice = "keep-current" | "switch-to-concrete";
+
+export interface RetagTargetItem {
+  service_key: string;
+  stack: string;
+  service: string;
+  image: string;
+  image_repo: string;
+  current_tag: string;
+  tracking_tag: string;
+  tracking_tag_source: string;
+  proposed_tag: string;
+  final_image: string;
+  retag_available: boolean;
+  retag_reason: string;
+  choices: RetagTargetChoice[];
+  label_key: string;
+  label_value: string;
+  directory: string;
+  compose_file: string;
+  project_directory: string;
+  digest_provenance?: DigestTagProvenance | null;
+}
+
+export interface RetagTargetsResponse {
+  status: RetagTargetsStatus;
+  count: number;
+  items: RetagTargetItem[];
+  warnings: string[];
+}
+
+export type RetagPlanStatus = "ready" | "empty" | "blocked" | "unavailable";
+
+export interface RetagChoiceRequest {
+  service_key: string;
+  choice: RetagTargetChoice;
+}
+
+export interface RetagPlanIssue {
+  severity: string;
+  code: string;
+  message: string;
+  service_key: string;
+  stack: string;
+  service: string;
+  hint: string;
+  details: Record<string, unknown>;
+}
+
+export interface RetagPlanLabelRewrite {
+  service: string;
+  label_key: string;
+  current_label_value: string;
+  planned_tag: string;
+  proposed_label_value: string;
+  proposed_label_regex: string;
+  approved: boolean;
+  reason: string;
+}
+
+export interface RetagPlanDigestPinUpdate {
+  service_key: string;
+  stack: string;
+  service: string;
+  source_image: string;
+  resolved_tag: string;
+  planned_digest: string;
+  final_image: string;
+  watch_tag: string;
+  marker: string;
+  label_key: string;
+  label_value: string;
+  label_rewrites: RetagPlanLabelRewrite[];
+  digest_provenance?: DigestTagProvenance | null;
+}
+
+export interface RetagPlanStack {
+  stack: string;
+  directory: string;
+  compose_file: string;
+  project_directory: string;
+  services: string[];
+  digest_pin_updates: RetagPlanDigestPinUpdate[];
+}
+
+export interface RetagPlanResponse {
+  plan_id: string;
+  status: RetagPlanStatus;
+  can_apply: boolean;
+  external_recreate_required: boolean;
+  selected_count: number;
+  keep_current_count: number;
+  stacks: RetagPlanStack[];
+  issues: RetagPlanIssue[];
+  warnings: string[];
+}
+
+// ---------------------------------------------------------------------------
 // Release notes
 // ---------------------------------------------------------------------------
 

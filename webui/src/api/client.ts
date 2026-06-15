@@ -19,6 +19,18 @@ export type {
   UpdateTargetsStatus,
   UpdateTargetItem,
   UpdateTargetsResponse,
+  // Retag targets
+  RetagTargetsStatus,
+  RetagTargetChoice,
+  RetagTargetItem,
+  RetagTargetsResponse,
+  RetagPlanStatus,
+  RetagChoiceRequest,
+  RetagPlanIssue,
+  RetagPlanLabelRewrite,
+  RetagPlanDigestPinUpdate,
+  RetagPlanStack,
+  RetagPlanResponse,
   // Release notes
   ReleaseNoteLink,
   ReleaseNoteInfo,
@@ -133,6 +145,9 @@ import type {
   CoreUpdateTourResponse,
   PendingResponse,
   UpdateTargetsResponse,
+  RetagTargetsResponse,
+  RetagChoiceRequest,
+  RetagPlanResponse,
   DiagnosticsSupportBundleResponse,
   PendingCleanupLine,
   PendingCleanupResponse,
@@ -403,6 +418,27 @@ const pendingApi = {
 
 const updatesApi = {
   updateTargets: () => apiRequest<UpdateTargetsResponse>("/update-targets"),
+  retagTargets: () => apiRequest<RetagTargetsResponse>("/retag-targets"),
+  createRetagPlan: (choices: RetagChoiceRequest[], csrfToken: string) =>
+    apiRequest<RetagPlanResponse>("/retag-plans", {
+      method: "POST",
+      headers: { "x-wud-csrf-token": csrfToken },
+      body: JSON.stringify({ choices }),
+    }),
+  applyRetagPlan: (
+    planId: string,
+    choices: RetagChoiceRequest[],
+    csrfToken: string,
+  ) =>
+    apiRequest<ApplyJobResponse>("/retag-plans/apply", {
+      method: "POST",
+      headers: { "x-wud-csrf-token": csrfToken },
+      body: JSON.stringify({
+        plan_id: planId,
+        choices,
+        confirmation: "apply-retags",
+      }),
+    }),
   releaseNotes: () => apiRequest<ReleaseNotesResponse>("/release-notes"),
   refreshReleaseNotes: (csrfToken: string) =>
     apiRequest<ReleaseNotesResponse>("/release-notes/refresh", {

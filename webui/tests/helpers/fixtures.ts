@@ -14,6 +14,9 @@ import type {
   PlanResponse,
   ReleaseNoteInfo,
   ReleaseNotesResponse,
+  RetagPlanResponse,
+  RetagTargetItem,
+  RetagTargetsResponse,
   RunVerificationSummary,
   RunSummary,
   ServicePolicyRecord,
@@ -548,6 +551,115 @@ export function updateTargetsResponse(
     count: items.length,
     items,
     warnings: [],
+  };
+}
+
+export function retagTarget(
+  overrides: Partial<RetagTargetItem> = {},
+): RetagTargetItem {
+  return {
+    service_key: "media/app",
+    stack: "media",
+    service: "app",
+    image: "repo/app:latest",
+    image_repo: "repo/app",
+    current_tag: "latest",
+    tracking_tag: "latest",
+    tracking_tag_source: "label",
+    proposed_tag: "1.1",
+    final_image: "repo/app@sha256:abc123",
+    retag_available: true,
+    retag_reason: "eligible",
+    choices: ["keep-current", "switch-to-concrete"],
+    label_key: "wud.tag.include",
+    label_value: "latest",
+    directory: "/docker/media",
+    compose_file: "docker-compose.yml",
+    project_directory: "/docker/media",
+    digest_provenance: {
+      source_image: "repo/app:latest",
+      resolved_tag: "1.1",
+      watch_tag: "latest",
+      target_digest: "sha256:abc123",
+      final_image: "repo/app@sha256:abc123",
+      provenance_source: "test",
+      provenance_confidence: "high",
+    },
+    ...overrides,
+  };
+}
+
+export function retagTargetsResponse(
+  items = [retagTarget()],
+  overrides: Partial<Omit<RetagTargetsResponse, "items">> = {},
+): RetagTargetsResponse {
+  return {
+    status: "ready",
+    count: items.length,
+    items,
+    warnings: [],
+    ...overrides,
+  };
+}
+
+export function retagPlanResponse(
+  overrides: Partial<RetagPlanResponse> = {},
+): RetagPlanResponse {
+  return {
+    plan_id: "retag-plan-test",
+    status: "ready",
+    can_apply: true,
+    external_recreate_required: false,
+    selected_count: 1,
+    keep_current_count: 1,
+    stacks: [
+      {
+        stack: "media",
+        directory: "/docker/media",
+        compose_file: "docker-compose.yml",
+        project_directory: "/docker/media",
+        services: ["app"],
+        digest_pin_updates: [
+          {
+            service_key: "media/app",
+            stack: "media",
+            service: "app",
+            source_image: "repo/app:latest",
+            resolved_tag: "1.1",
+            planned_digest: "sha256:abc123",
+            final_image: "repo/app@sha256:abc123",
+            watch_tag: "latest",
+            marker: "wud-updater.resolved-tag=1.1",
+            label_key: "wud.tag.include",
+            label_value: String.raw`^1\.1$$`,
+            label_rewrites: [
+              {
+                service: "app",
+                label_key: "wud.tag.include",
+                current_label_value: "^latest$$",
+                planned_tag: "1.1",
+                proposed_label_value: String.raw`^1\.1$$`,
+                proposed_label_regex: String.raw`^1\.1$`,
+                approved: false,
+                reason: "exact-regex-normalized",
+              },
+            ],
+            digest_provenance: {
+              source_image: "repo/app:latest",
+              resolved_tag: "1.1",
+              watch_tag: "latest",
+              target_digest: "sha256:abc123",
+              final_image: "repo/app@sha256:abc123",
+              provenance_source: "test",
+              provenance_confidence: "high",
+            },
+          },
+        ],
+      },
+    ],
+    issues: [],
+    warnings: [],
+    ...overrides,
   };
 }
 
