@@ -6,6 +6,7 @@ import type {
   RetagTargetItem,
   RunEventRecord,
   RunSummary,
+  RunVerificationSummary,
   ServicePolicyRecord,
   SnoozeRecord,
   TagExclusionRuleRecord,
@@ -640,6 +641,10 @@ function demoRun(options: {
       ...summary,
       pending_updates: options.pending,
       events: options.events,
+      verification: demoRunVerification(options.pending, options.events, {
+        dryRun: options.dryRun,
+        mode: options.mode,
+      }),
     },
     log: {
       run_id: options.id,
@@ -650,6 +655,60 @@ function demoRun(options: {
       max_bytes: 262_144,
     },
   };
+}
+
+export function demoRunVerification(
+  pending: PendingUpdateRecord[],
+  events: RunEventRecord[],
+  options: { dryRun?: boolean; mode?: string } = {},
+): RunVerificationSummary {
+  if (options.dryRun || !isUpdaterRunMode(options.mode ?? "stop")) {
+    return emptyRunVerification();
+  }
+  const items = pending.map((item) => {
+    const event = events.find(
+      (candidate) =>
+        candidate.stack_name === item.stack_name &&
+        candidate.service_name === item.service_name,
+    );
+    const success = item.status !== "failed" && event?.status === "success";
+    return {
+      line_no: item.line_no,
+      service_key: item.service_key,
+      stack_name: item.stack_name,
+      service_name: item.service_name,
+      image: item.image,
+      target_image: event?.target_image || item.image,
+      image_status: success ? "new_image_running" as const : "unknown" as const,
+      container_status: success ? "recreated" as const : "unknown" as const,
+      health_status: success ? "passed" as const : "unknown" as const,
+      wud_status: item.status === "failed" ? "restored" as const : "removed" as const,
+      follow_up_needed: !success || item.status === "failed",
+      summary: success ? "Demo update verified." : "Manual review needed.",
+    };
+  });
+  const needsReviewCount = items.filter((item) => item.follow_up_needed).length;
+  return {
+    status: needsReviewCount ? "needs_review" : "verified",
+    total_count: items.length,
+    verified_count: items.length - needsReviewCount,
+    needs_review_count: needsReviewCount,
+    items,
+  };
+}
+
+export function emptyRunVerification(): RunVerificationSummary {
+  return {
+    status: "verified",
+    total_count: 0,
+    verified_count: 0,
+    needs_review_count: 0,
+    items: [],
+  };
+}
+
+function isUpdaterRunMode(mode: string): boolean {
+  return mode === "pause" || mode === "stop" || mode === "live";
 }
 
 export function pendingRecord(

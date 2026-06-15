@@ -3,7 +3,12 @@ import { ref } from "vue";
 import { Check, CheckCircle2, ChevronDown, ChevronUp, Play, X } from "@lucide/vue";
 import { NAlert, NButton, NTag } from "naive-ui";
 
-import type { ApplyJobLogResponse, ApplyJobResponse } from "../../api/client";
+import type {
+  ApplyJobLogResponse,
+  ApplyJobResponse,
+  RunVerificationSummary,
+} from "../../api/client";
+import RunVerificationPanel from "../RunVerificationPanel.vue";
 import type {
   ApplyJobPlanSnapshot,
   ApplyJobProgressStep,
@@ -39,6 +44,7 @@ const props = defineProps<{
   succeeded: boolean;
   title: string;
   updateLabel: string;
+  verification: RunVerificationSummary;
   job: ApplyJobResponse;
 }>();
 
@@ -184,6 +190,11 @@ function snapshotLineScope(
         </li>
       </ol>
     </section>
+
+    <RunVerificationPanel
+      :verification="verification"
+      title="Verification"
+    />
 
     <details class="apply-job-details" :open="!active">
       <summary>

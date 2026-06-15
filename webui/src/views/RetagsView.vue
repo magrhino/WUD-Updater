@@ -133,6 +133,7 @@ const {
   applyJobSucceeded,
   applyJobTitle,
   applyJobUpdateLabel,
+  applyJobVerification,
   focusApplyJobPanel,
   subscribeApplyJob,
 } = usePendingApplyJob({
@@ -610,6 +611,7 @@ onMounted(() => {
       :succeeded="applyJobSucceeded"
       :title="applyJobTitle"
       :update-label="applyJobUpdateLabel"
+      :verification="applyJobVerification"
     />
 
     <n-modal

@@ -231,6 +231,7 @@ const {
   applyJobSucceeded,
   applyJobTitle,
   applyJobUpdateLabel,
+  applyJobVerification,
   createApplyJobSnapshot,
   focusApplyJobPanel,
   reconnectObservedApplyJob,
@@ -782,6 +783,7 @@ watch(
       :succeeded="applyJobSucceeded"
       :title="applyJobTitle"
       :update-label="applyJobUpdateLabel"
+      :verification="applyJobVerification"
     />
 
     <div class="section-heading pending-heading">

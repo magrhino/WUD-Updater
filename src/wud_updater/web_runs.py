@@ -12,6 +12,7 @@ from typing import Any
 
 from fastapi import HTTPException, Query, Request
 
+from .config import VALID_UPDATE_MODES
 from .db import DatabaseError
 from .digest_provenance import digest_provenance_from_row
 from .web_auth import (
@@ -31,8 +32,10 @@ from .web_models import (
     RunEventRecord,
     RunLogResponse,
     RunSummary,
+    RunVerificationSummary,
     WebSettings,
 )
+from .web_run_verification import verification_from_run_records
 
 DEFAULT_RUN_LIMIT = 50
 DEFAULT_LOG_TAIL_BYTES = 262_144
@@ -125,15 +128,25 @@ def api_run_detail(run_id: int, request: Request) -> RunDetail:
             detail=_safe_exception_detail(settings, "could not read database", exc),
         ) from exc
 
-    summary = _run_summary_from_row(
-        run,
-        events=[_event_from_row(row) for row in events],
-    )
+    run_events = [_event_from_row(row) for row in events]
+    summary = _run_summary_from_row(run, events=run_events)
+    pending_updates = [_pending_update_from_row(row) for row in pending]
     detail = RunDetail(
         **summary.model_dump(),
-        pending_updates=[_pending_update_from_row(row) for row in pending],
+        pending_updates=pending_updates,
+        verification=_verification_for_run(summary, pending_updates, run_events),
     )
     return _sanitize_run_detail(settings, detail)
+
+
+def _verification_for_run(
+    run: RunSummary,
+    pending_updates: list[PendingUpdateRecord],
+    events: list[RunEventRecord],
+) -> RunVerificationSummary:
+    if run.dry_run or run.mode not in VALID_UPDATE_MODES:
+        return RunVerificationSummary()
+    return verification_from_run_records(pending_updates, events)
 
 
 def api_run_log(
