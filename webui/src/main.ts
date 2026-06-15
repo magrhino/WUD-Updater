@@ -16,6 +16,10 @@ import {
 import App from "./App.vue";
 import { router } from "./router";
 import { applyThemeCssVars, detectInitialEffectiveTheme } from "./theme";
+import "./assets/styles/foundation.css";
+import "./assets/styles/base.css";
+import "./assets/styles/transitions.css";
+import "./assets/styles/utilities.css";
 import "./styles.css";
 
 const naive = create({

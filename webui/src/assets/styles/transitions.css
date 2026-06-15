@@ -1,0 +1,21 @@
+.route-shift-enter-active {
+  transition:
+    opacity var(--motion-base) var(--ease-out-quart),
+    transform var(--motion-route) var(--ease-out-quint);
+}
+
+.route-shift-leave-active {
+  transition:
+    opacity var(--motion-fast) var(--ease-out-quart),
+    transform var(--motion-fast) var(--ease-out-quart);
+}
+
+.route-shift-enter-from {
+  opacity: 0;
+  transform: translateY(5px);
+}
+
+.route-shift-leave-to {
+  opacity: 0;
+  transform: translateY(-3px);
+}
