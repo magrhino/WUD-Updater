@@ -177,3 +177,52 @@ onMounted(() => {
     </section>
   </section>
 </template>
+
+<style scoped>
+.shortcut-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.shortcut-card {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  min-height: 58px;
+  padding: 12px;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 7px;
+  background: var(--color-panel-tint);
+  transition:
+    border-color var(--motion-base) var(--ease-out-quart),
+    transform var(--motion-fast) var(--ease-out-quart);
+}
+
+.shortcut-card:hover {
+  border-color: var(--color-border-hover);
+  transform: translateY(-1px);
+}
+
+.shortcut-card:active {
+  transform: translateY(0);
+}
+
+.shortcut-card svg {
+  color: var(--color-operational-teal);
+}
+
+.shortcut-card span,
+.shortcut-card strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 920px) {
+  .shortcut-grid {
+    grid-template-columns: 1fr;
+  }
+}
+</style>
