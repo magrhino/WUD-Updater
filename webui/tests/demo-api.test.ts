@@ -652,6 +652,34 @@ describe("demo web API", () => {
     });
   });
 
+  it("deduplicates retag choices by service key before planning", async () => {
+    const api = createDemoWebApi();
+
+    const plan = await api.createRetagPlan(
+      [
+        {
+          service_key: "media/wud-updater",
+          choice: "switch-to-concrete" as const,
+        },
+        {
+          service_key: "media/wud-updater",
+          choice: "switch-to-concrete" as const,
+        },
+        { service_key: "media/wud-updater", choice: "keep-current" as const },
+      ],
+      "csrf",
+    );
+
+    expect(plan).toMatchObject({
+      status: "ready",
+      selected_count: 1,
+      keep_current_count: 0,
+    });
+    expect(plan.stacks).toHaveLength(1);
+    expect(plan.stacks[0]?.services).toEqual(["wud-updater"]);
+    expect(plan.stacks[0]?.digest_pin_updates).toHaveLength(1);
+  });
+
   it("keeps policy, snooze, and tag exclusion mutations in memory", async () => {
     const api = createDemoWebApi();
 

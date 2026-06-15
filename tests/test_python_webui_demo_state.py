@@ -151,13 +151,13 @@ class WebuiDemoStateTests(unittest.TestCase):
                     ORDER BY id
                     """
                 ).fetchall()
-                retag_candidate = conn.execute(
+                retag_candidates = conn.execute(
                     """
                     SELECT image, digest_resolved_tag, digest_watch_tag, digest_final_image
                     FROM known_images
                     WHERE service_key = 'media/wud-updater'
                     """
-                ).fetchone()
+                ).fetchall()
 
         self.assertEqual(run_count[0], 6)
         self.assertEqual(pending_count[0], 4)
@@ -176,8 +176,9 @@ class WebuiDemoStateTests(unittest.TestCase):
             [row[0] for row in audit_modes],
             ["web-auth", "web-state", "web-settings"],
         )
+        self.assertEqual(len(retag_candidates), 1)
         self.assertEqual(
-            retag_candidate,
+            retag_candidates[0],
             (
                 "ghcr.io/magrhino/wud-updater:latest",
                 "v0.16.1",

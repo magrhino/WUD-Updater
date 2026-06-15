@@ -540,7 +540,13 @@ export class DemoApiState {
     const selected: RetagTargetItem[] = [];
     const issues: RetagPlanIssue[] = [];
     let keepCurrentCount = 0;
+    const choicesByServiceKey = new Map<string, RetagChoiceRequest>();
     for (const choice of choices) {
+      if (!choicesByServiceKey.has(choice.service_key)) {
+        choicesByServiceKey.set(choice.service_key, choice);
+      }
+    }
+    for (const choice of choicesByServiceKey.values()) {
       const target = targetsByKey.get(choice.service_key);
       if (!target) {
         issues.push({
