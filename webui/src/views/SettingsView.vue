@@ -539,10 +539,10 @@ onMounted(() => {
       <div class="settings-zone-grid settings-actions-grid">
         <section class="section-panel">
           <div class="section-heading">
-            <div class="settings-heading-main">
+            <div class="section-heading-main">
               <p class="eyebrow">Maintenance</p>
               <h2>Container</h2>
-              <p class="settings-section-copy">
+              <p class="section-copy">
                 Restart the running WebUI container after a helper image update or
                 runtime configuration change.
               </p>
@@ -620,10 +620,10 @@ onMounted(() => {
 
       <section class="section-panel">
         <div class="section-heading">
-          <div class="settings-heading-main">
+          <div class="section-heading-main">
             <p class="eyebrow">Managed preferences</p>
             <h2>WebUI preferences</h2>
-            <p class="settings-section-copy">
+            <p class="section-copy">
               Browser-facing preferences persisted in SQLite. Runtime configuration,
               paths, and secrets stay controlled by server config.
             </p>
@@ -835,10 +835,10 @@ onMounted(() => {
 
       <section class="section-panel">
         <div class="section-heading">
-          <div class="settings-heading-main">
+          <div class="section-heading-main">
             <p class="eyebrow">Overview</p>
             <h2>Runtime settings</h2>
-            <p class="settings-section-copy">
+            <p class="section-copy">
               Secret names are shown, raw values stay hidden.
             </p>
           </div>
@@ -847,26 +847,26 @@ onMounted(() => {
         <div v-if="!settingsData && !settings.loading" class="empty-state">
           Settings are unavailable.
         </div>
-        <div v-else-if="!settingsData" class="settings-loading" aria-busy="true">
+        <div v-else-if="!settingsData" class="skeleton-list" aria-busy="true">
           <span class="sr-only">Loading settings.</span>
-          <span aria-hidden="true" class="settings-skeleton-row"></span>
-          <span aria-hidden="true" class="settings-skeleton-row"></span>
-          <span aria-hidden="true" class="settings-skeleton-row"></span>
+          <span aria-hidden="true" class="skeleton-row"></span>
+          <span aria-hidden="true" class="skeleton-row"></span>
+          <span aria-hidden="true" class="skeleton-row"></span>
         </div>
-        <div v-else class="settings-summary-grid" aria-label="Settings summary">
-          <div class="settings-summary-item">
+        <div v-else class="summary-grid" aria-label="Settings summary">
+          <div class="summary-item">
             <span>Configured values</span>
             <strong>{{ configuredEntryCount }}</strong>
           </div>
-          <div class="settings-summary-item">
+          <div class="summary-item">
             <span>Not explicitly set</span>
             <strong>{{ inheritedEntryCount }}</strong>
           </div>
-          <div class="settings-summary-item">
+          <div class="summary-item">
             <span>Runtime scoped</span>
             <strong>{{ runtimeScopedEntryCount }}</strong>
           </div>
-          <div class="settings-summary-item">
+          <div class="summary-item">
             <span>Secrets configured</span>
             <strong>{{ configuredSecretCount }} / {{ secrets.length }}</strong>
           </div>
@@ -885,7 +885,7 @@ onMounted(() => {
           <p class="eyebrow">Updater</p>
           <h2>Paths</h2>
         </div>
-        <div class="settings-heading-meta">
+        <div class="section-heading-meta">
           <n-tag size="small">{{ entryCountLabel(pathEntries) }}</n-tag>
           <ChevronDown :size="18" class="settings-disclosure-chevron" />
         </div>
@@ -926,7 +926,7 @@ onMounted(() => {
           <p class="eyebrow">Updater</p>
           <h2>Behavior</h2>
         </div>
-        <div class="settings-heading-meta">
+        <div class="section-heading-meta">
           <n-tag size="small">{{ entryCountLabel(behaviorEntries) }}</n-tag>
           <ChevronDown :size="18" class="settings-disclosure-chevron" />
         </div>
@@ -967,7 +967,7 @@ onMounted(() => {
           <p class="eyebrow">WebUI</p>
           <h2>Safety status</h2>
         </div>
-        <div class="settings-heading-meta">
+        <div class="section-heading-meta">
           <n-tag size="small">{{ entryCountLabel(webuiEntries) }}</n-tag>
           <ShieldCheck :size="20" class="section-heading-icon" />
           <ChevronDown :size="18" class="settings-disclosure-chevron" />
@@ -1009,7 +1009,7 @@ onMounted(() => {
           <p class="eyebrow">Secrets</p>
           <h2>Configured values</h2>
         </div>
-        <div class="settings-heading-meta">
+        <div class="section-heading-meta">
           <n-tag size="small">{{ configuredSecretCount }} configured</n-tag>
           <n-tag v-if="missingSecretCount" size="small">{{ missingSecretCount }} missing</n-tag>
           <KeyRound :size="20" class="section-heading-icon" />
@@ -1043,10 +1043,10 @@ onMounted(() => {
 
     <section id="settings-diagnostics" class="section-panel">
       <div class="section-heading">
-        <div class="settings-heading-main">
+        <div class="section-heading-main">
           <p class="eyebrow">Diagnostics</p>
           <h2>Support Bundle</h2>
-          <p class="settings-section-copy">
+          <p class="section-copy">
             Generate a redacted support bundle containing application settings, update state, and recent logs for troubleshooting. Raw environment variables, private paths, and secrets are automatically scrubbed.
           </p>
         </div>

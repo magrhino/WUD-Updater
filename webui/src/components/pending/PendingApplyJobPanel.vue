@@ -163,7 +163,7 @@ function snapshotLineScope(
     </section>
 
     <section class="apply-job-progress-steps" aria-labelledby="apply-job-progress-title">
-      <div class="apply-job-impact-heading">
+      <div class="panel-subheading">
         <strong id="apply-job-progress-title">Update progress</strong>
         <n-tag size="small">{{ progressSummary }}</n-tag>
       </div>
@@ -237,7 +237,7 @@ function snapshotLineScope(
           class="apply-job-impact"
           aria-labelledby="apply-job-impact-title"
         >
-          <div class="apply-job-impact-heading">
+          <div class="panel-subheading">
             <strong id="apply-job-impact-title">Services and images</strong>
             <n-tag size="small">{{ pluralize(snapshot?.lines.length ?? 0, "service") }}</n-tag>
           </div>
@@ -274,7 +274,7 @@ function snapshotLineScope(
     </details>
 
     <section class="apply-job-live-log" aria-labelledby="apply-job-log-title">
-      <div class="apply-job-impact-heading apply-job-live-log-heading">
+      <div class="panel-subheading apply-job-live-log-heading">
         <div class="apply-job-log-heading-copy">
           <strong id="apply-job-log-title">Live log</strong>
           <span class="apply-job-log-note">Raw command output</span>

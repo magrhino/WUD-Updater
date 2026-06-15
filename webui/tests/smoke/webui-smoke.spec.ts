@@ -747,13 +747,13 @@ test("login mark uses sidebar foreground token in light and dark themes", async 
   await page.goto("/#/login");
   await expect(page.getByRole("heading", { name: "Sign in" })).toBeVisible();
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
-  await expectSidebarForegroundToken(page, ".login-mark");
+  await expectSidebarForegroundToken(page, ".auth-mark");
 
   await page.evaluate(() => localStorage.setItem("theme-preference", "light"));
   await page.reload();
   await expect(page.getByRole("heading", { name: "Sign in" })).toBeVisible();
   await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
-  await expectSidebarForegroundToken(page, ".login-mark");
+  await expectSidebarForegroundToken(page, ".auth-mark");
 });
 
 test("mutation-enabled pending flow creates jobs only after confirmation", async ({

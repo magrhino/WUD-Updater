@@ -122,15 +122,15 @@ function statusIcon(status: DoctorCheckStatus): Component {
 
     <section class="section-panel">
       <div class="section-heading">
-        <div class="settings-heading-main">
+        <div class="section-heading-main">
           <p class="eyebrow">Deployment checks</p>
           <h2>Doctor results</h2>
-          <p class="settings-section-copy">
+          <p class="section-copy">
             Docker access, mounted paths, Compose rendering, database readiness, and
             browser safety checks from the same doctor logic used by the CLI.
           </p>
         </div>
-        <div class="settings-heading-meta">
+        <div class="section-heading-meta">
           <n-tag v-if="doctor" size="small" :type="doctor.ok ? 'success' : 'error'">
             {{
               doctor.ok
@@ -153,26 +153,26 @@ function statusIcon(status: DoctorCheckStatus): Component {
         </div>
       </div>
 
-      <div v-if="!doctor && connection.loading" class="settings-loading" aria-busy="true">
+      <div v-if="!doctor && connection.loading" class="skeleton-list" aria-busy="true">
         <span class="sr-only">Loading doctor results.</span>
-        <span aria-hidden="true" class="settings-skeleton-row"></span>
-        <span aria-hidden="true" class="settings-skeleton-row"></span>
-        <span aria-hidden="true" class="settings-skeleton-row"></span>
+        <span aria-hidden="true" class="skeleton-row"></span>
+        <span aria-hidden="true" class="skeleton-row"></span>
+        <span aria-hidden="true" class="skeleton-row"></span>
       </div>
-      <div v-else-if="doctor" class="settings-summary-grid" aria-label="Doctor summary">
-        <div class="settings-summary-item">
+      <div v-else-if="doctor" class="summary-grid" aria-label="Doctor summary">
+        <div class="summary-item">
           <span>Failures</span>
           <strong>{{ doctor.failures }}</strong>
         </div>
-        <div class="settings-summary-item">
+        <div class="summary-item">
           <span>Warnings</span>
           <strong>{{ doctor.warnings }}</strong>
         </div>
-        <div class="settings-summary-item">
+        <div class="summary-item">
           <span>Passing checks</span>
           <strong>{{ passCount }}</strong>
         </div>
-        <div class="settings-summary-item">
+        <div class="summary-item">
           <span>Total checks</span>
           <strong>{{ checks.length }}</strong>
         </div>

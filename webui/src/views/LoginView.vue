@@ -38,10 +38,10 @@ async function submit(event: Event): Promise<void> {
 </script>
 
 <template>
-  <section class="login-page">
-    <div class="login-panel">
-      <div class="login-heading">
-        <div class="login-mark">
+  <section class="auth-page">
+    <div class="auth-panel">
+      <div class="auth-heading">
+        <div class="auth-mark">
           <LogIn :size="24" />
         </div>
         <div>

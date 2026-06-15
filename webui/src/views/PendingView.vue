@@ -1399,9 +1399,9 @@ watch(
       aria-live="polite"
       aria-label="Loading pending updates"
     >
-      <span aria-hidden="true" class="settings-skeleton-row"></span>
-      <span aria-hidden="true" class="settings-skeleton-row"></span>
-      <span aria-hidden="true" class="settings-skeleton-row"></span>
+      <span aria-hidden="true" class="skeleton-row"></span>
+      <span aria-hidden="true" class="skeleton-row"></span>
+      <span aria-hidden="true" class="skeleton-row"></span>
     </section>
 
     <div

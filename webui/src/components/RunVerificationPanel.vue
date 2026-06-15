@@ -98,7 +98,7 @@ function wudLabel(status: RunVerificationWudStatus): string {
     class="run-verification-panel"
     aria-label="Post-update verification"
   >
-    <div class="apply-job-impact-heading">
+    <div class="panel-subheading">
       <strong>{{ title || "Verification" }}</strong>
       <n-tag size="small" :type="overallTagType(verification.status)">
         {{ overallLabel(verification.status) }}

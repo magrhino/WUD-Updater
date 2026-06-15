@@ -1,5 +1,5 @@
 .section-heading h2,
-.login-heading h1 {
+.auth-heading h1 {
   margin: 0;
   color: var(--color-ink);
   font-size: 1.35rem;
@@ -59,7 +59,7 @@
 
 .metric-card,
 .section-panel,
-.login-panel,
+.auth-panel,
 .mobile-card {
   border: 1px solid var(--color-border);
   border-radius: 8px;
@@ -151,13 +151,13 @@
   color: var(--color-operational-teal);
 }
 
-.settings-heading-main {
+.section-heading-main {
   display: grid;
   gap: 4px;
   min-width: 0;
 }
 
-.settings-heading-meta {
+.section-heading-meta {
   display: flex;
   flex: 0 0 auto;
   flex-wrap: wrap;
@@ -166,7 +166,7 @@
   gap: 8px;
 }
 
-.settings-heading-meta .section-heading-icon {
+.section-heading-meta .section-heading-icon {
   margin-top: 0;
 }
 
@@ -408,7 +408,7 @@
   transform: rotate(180deg);
 }
 
-.settings-section-copy {
+.section-copy {
   max-width: 72ch;
   margin: 2px 0 0;
   color: var(--color-text-secondary);
@@ -416,7 +416,7 @@
   line-height: 1.45;
 }
 
-.settings-summary-grid {
+.summary-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 12px;
@@ -425,20 +425,20 @@
   border-top: 1px solid var(--color-border-subtle);
 }
 
-.settings-summary-item {
+.summary-item {
   display: grid;
   gap: 3px;
   min-width: 0;
 }
 
-.settings-summary-item span {
+.summary-item span {
   min-width: 0;
   color: var(--color-muted-text);
   font-size: 0.82rem;
   overflow-wrap: anywhere;
 }
 
-.settings-summary-item strong {
+.summary-item strong {
   min-width: 0;
   color: var(--color-ink);
   font-size: 1.08rem;
@@ -446,13 +446,13 @@
   overflow-wrap: anywhere;
 }
 
-.settings-loading {
+.skeleton-list {
   display: grid;
   gap: 8px;
   margin-top: 14px;
 }
 
-.settings-skeleton-row {
+.skeleton-row {
   position: relative;
   overflow: hidden;
   min-height: 42px;
@@ -461,7 +461,7 @@
   background: var(--color-panel-tint);
 }
 
-.settings-skeleton-row::after {
+.skeleton-row::after {
   content: "";
   position: absolute;
   inset: 0;
@@ -785,7 +785,7 @@
   align-items: flex-start;
 }
 
-.onboarding-heading .settings-heading-main {
+.onboarding-heading .section-heading-main {
   flex: 1 1 240px;
 }
 
@@ -1134,7 +1134,7 @@
   box-shadow: var(--shadow-panel-lift);
 }
 
-.pending-loading-state .settings-skeleton-row {
+.pending-loading-state .skeleton-row {
   min-height: 48px;
 }
 
@@ -1553,7 +1553,7 @@
   overflow-wrap: anywhere;
 }
 
-.apply-job-impact-heading {
+.panel-subheading {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -1934,7 +1934,7 @@
   font-size: 0.82rem;
 }
 
-.pending-assistant {
+.cleanup-assistant {
   display: grid;
   gap: 10px;
   min-width: 0;
@@ -1948,7 +1948,7 @@
       var(--color-warning-bg) 14%);
 }
 
-.pending-assistant-section {
+.cleanup-assistant-section {
   display: grid;
   gap: 6px;
   min-width: 0;
@@ -1957,13 +1957,13 @@
   line-height: 1.4;
 }
 
-.pending-assistant-section strong {
+.cleanup-assistant-section strong {
   color: var(--color-ink);
   font-size: 0.78rem;
   text-transform: uppercase;
 }
 
-.pending-assistant-section ul {
+.cleanup-assistant-section ul {
   display: grid;
   gap: 4px;
   min-width: 0;
@@ -1971,7 +1971,7 @@
   padding-left: 18px;
 }
 
-.pending-assistant-section li {
+.cleanup-assistant-section li {
   min-width: 0;
   overflow-wrap: anywhere;
 }
@@ -2924,7 +2924,7 @@ code.pending-table-value {
   overflow-wrap: anywhere;
 }
 
-.login-page {
+.auth-page {
   display: grid;
   min-height: 100vh;
   place-items: center;
@@ -2932,19 +2932,19 @@ code.pending-table-value {
   background: var(--color-login-bg);
 }
 
-.login-panel {
+.auth-panel {
   width: min(100%, 420px);
   padding: 24px;
 }
 
-.login-heading {
+.auth-heading {
   display: flex;
   align-items: center;
   gap: 14px;
   margin-bottom: 22px;
 }
 
-.login-mark {
+.auth-mark {
   display: grid;
   width: 44px;
   height: 44px;
@@ -2996,7 +2996,7 @@ code.pending-table-value {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .settings-summary-grid {
+  .summary-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
@@ -3125,7 +3125,7 @@ code.pending-table-value {
     border: 0;
   }
 
-  .settings-summary-grid {
+  .summary-grid {
     grid-template-columns: 1fr;
   }
 
@@ -3148,7 +3148,7 @@ code.pending-table-value {
     border-bottom: 0;
   }
 
-  .settings-heading-meta {
+  .section-heading-meta {
     justify-content: flex-start;
   }
 
@@ -3331,7 +3331,7 @@ code.pending-table-value {
     transform: none !important;
   }
 
-  .settings-skeleton-row::after {
+  .skeleton-row::after {
     display: none;
   }
 
