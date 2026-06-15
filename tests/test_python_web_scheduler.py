@@ -1077,7 +1077,7 @@ def test_auto_update_selection_prefers_earliest_scheduled_mode() -> None:
     assert selection.scheduled_for == earlier
 
 
-def test_auto_update_selection_skips_dependency_blocked_services() -> None:
+def test_auto_update_selection_requires_dependency_in_same_selection() -> None:
     scheduled = datetime(2026, 5, 30, 14, 0, tzinfo=timezone.utc)
     settings = SimpleNamespace(config=SimpleNamespace(update_mode="live"))
     grouping = SimpleNamespace(
@@ -1094,6 +1094,11 @@ def test_auto_update_selection_skips_dependency_blocked_services() -> None:
                         desired_tag="",
                         line_no=2,
                         services=("worker",),
+                    ),
+                    SimpleNamespace(
+                        desired_tag="",
+                        line_no=3,
+                        services=("db",),
                     ),
                 ),
             ),
@@ -1122,7 +1127,12 @@ def test_auto_update_selection_skips_dependency_blocked_services() -> None:
         settings,
         grouping,
         policies,
-        blocked_service_keys=("stack/app",),
+        dependency_snoozes=(
+            {
+                "service_key": "stack/app",
+                "wait_for_service_key": "stack/db",
+            },
+        ),
     )
 
     assert selection is not None

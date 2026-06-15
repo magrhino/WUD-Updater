@@ -11,7 +11,7 @@ from typing import Any
 
 from fastapi import HTTPException, Query, Request
 
-from . import web_scheduler
+from . import web_pending, web_scheduler
 from .db import (
     DatabaseError,
     dependency_snooze_satisfied,
@@ -108,8 +108,13 @@ def api_snoozes(
                 ORDER BY created_at DESC, id DESC
                 """
             ).fetchall()
+            pending_service_keys = _pending_service_keys(settings)
             dependency_records = [
-                _dependency_snooze_from_row(conn, row)
+                _dependency_snooze_from_row(
+                    conn,
+                    row,
+                    pending_service_keys=pending_service_keys,
+                )
                 for row in dependency_rows
             ]
     except ReadOnlyDatabaseMissing:
@@ -228,11 +233,17 @@ def _snooze_from_row(row: sqlite3.Row, *, now: str) -> SnoozeRecord:
 def _dependency_snooze_from_row(
     conn: sqlite3.Connection,
     row: sqlite3.Row,
+    *,
+    pending_service_keys: Sequence[str] = (),
 ) -> SnoozeRecord:
-    active = not dependency_snooze_satisfied(
-        conn,
-        wait_for_service_key=str(row["wait_for_service_key"]),
-        created_at=str(row["created_at"]),
+    wait_for_service_key = str(row["wait_for_service_key"])
+    active = (
+        wait_for_service_key not in set(pending_service_keys)
+        and not dependency_snooze_satisfied(
+            conn,
+            wait_for_service_key=wait_for_service_key,
+            created_at=str(row["created_at"]),
+        )
     )
     return SnoozeRecord(
         id=int(row["id"]),
@@ -242,9 +253,27 @@ def _dependency_snooze_from_row(
         created_at=str(row["created_at"]),
         active=active,
         kind="dependency",
-        wait_for_service_key=str(row["wait_for_service_key"]),
+        wait_for_service_key=wait_for_service_key,
         metadata=_metadata_from_row(row),
     )
+
+
+def _pending_service_keys(settings: WebSettings) -> tuple[str, ...]:
+    try:
+        pending = web_pending.pending_response(settings)
+    except HTTPException:
+        return ()
+    if pending.grouping is None or pending.grouping.status != "ready":
+        return ()
+    service_keys: set[str] = set()
+    for group in pending.grouping.groups:
+        for item in group.items:
+            service_keys.update(
+                f"{group.name}/{service}"
+                for service in item.services
+                if service
+            )
+    return tuple(sorted(service_keys))
 
 
 def _tag_exclusion_from_row(row: sqlite3.Row) -> TagExclusionRuleRecord:
