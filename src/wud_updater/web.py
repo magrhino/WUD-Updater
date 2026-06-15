@@ -64,9 +64,11 @@ from .web_models import (
     CoreUpdateTourStatus as CoreUpdateTourStatus,
     CoreUpdateTourStep as CoreUpdateTourStep,
     CoreUpdateTourUpdateRequest as CoreUpdateTourUpdateRequest,
+    CreateDependencySnoozeOperation as CreateDependencySnoozeOperation,
     CreateSnoozeOperation as CreateSnoozeOperation,
     CsrfResponse,
     DEFAULT_CORE_UPDATE_TOUR_STEP as DEFAULT_CORE_UPDATE_TOUR_STEP,
+    DeleteDependencySnoozeOperation as DeleteDependencySnoozeOperation,
     DeleteServicePolicyOperation as DeleteServicePolicyOperation,
     DeleteSnoozeOperation as DeleteSnoozeOperation,
     DiagnosticsSupportBundleResponse,
@@ -116,6 +118,7 @@ from .web_models import (
     SettingsEntrySource as SettingsEntrySource,
     SettingsResponse,
     SetupStatusResponse,
+    SnoozeKind as SnoozeKind,
     SnoozeRecord,
     SnoozeState as SnoozeState,
     StateOperation as StateOperation,
@@ -349,6 +352,7 @@ api_tag_exclusions = web_state.api_tag_exclusions
 _auto_update_days_from_row = web_state._auto_update_days_from_row
 _service_policy_from_row = web_state._service_policy_from_row
 _snooze_from_row = web_state._snooze_from_row
+_dependency_snooze_from_row = web_state._dependency_snooze_from_row
 _tag_exclusion_from_row = web_state._tag_exclusion_from_row
 _apply_state_operation = web_state._apply_state_operation
 _upsert_service_policy = web_state._upsert_service_policy
@@ -358,10 +362,13 @@ _normalized_auto_update_days = web_state._normalized_auto_update_days
 _delete_service_policy = web_state._delete_service_policy
 _create_snooze = web_state._create_snooze
 _delete_snooze = web_state._delete_snooze
+_create_dependency_snooze = web_state._create_dependency_snooze
+_delete_dependency_snooze = web_state._delete_dependency_snooze
 _upsert_tag_exclusion = web_state._upsert_tag_exclusion
 _set_tag_exclusion_status = web_state._set_tag_exclusion_status
 _service_policy_row = web_state._service_policy_row
 _snooze_row = web_state._snooze_row
+_dependency_snooze_row = web_state._dependency_snooze_row
 _tag_exclusion_row = web_state._tag_exclusion_row
 _tag_exclusion_unique_row = web_state._tag_exclusion_unique_row
 _required_state_text = web_state._required_state_text
@@ -377,6 +384,7 @@ _state_audit_service_name = web_state._state_audit_service_name
 _state_audit_image = web_state._state_audit_image
 _service_policy_summary = web_state._service_policy_summary
 _snooze_summary = web_state._snooze_summary
+_dependency_snooze_summary = web_state._dependency_snooze_summary
 _tag_exclusion_summary = web_state._tag_exclusion_summary
 _json_object = web_state._json_object
 _json_list = web_state._json_list

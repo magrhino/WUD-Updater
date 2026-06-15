@@ -811,6 +811,7 @@ export interface DiagnosticsSupportBundleResponse {
 
 export type ServicePolicyUpdateMode = "" | "pause" | "stop" | "live";
 export type AutoUpdateDay = "mon" | "tue" | "wed" | "thu" | "fri" | "sat" | "sun";
+export type SnoozeKind = "time" | "dependency";
 export type SnoozeState = "active" | "expired" | "all";
 export type TagExclusionScope = "image_repo" | "service";
 export type TagExclusionMatchType = "exact";
@@ -832,10 +833,12 @@ export interface ServicePolicyRecord {
 export interface SnoozeRecord {
   id: number;
   service_key: string;
-  snoozed_until: string;
+  snoozed_until: string | null;
   reason: string;
   created_at: string;
   active: boolean;
+  kind: SnoozeKind;
+  wait_for_service_key: string;
   metadata: Record<string, unknown>;
 }
 
@@ -875,6 +878,16 @@ export type StateOperation =
     }
   | {
       kind: "delete_snooze";
+      snooze_id: number;
+    }
+  | {
+      kind: "create_dependency_snooze";
+      service_key: string;
+      wait_for_service_key: string;
+      reason?: string;
+    }
+  | {
+      kind: "delete_dependency_snooze";
       snooze_id: number;
     }
   | {

@@ -739,6 +739,15 @@ describe("demo web API", () => {
       },
       "csrf",
     );
+    const dependencySnooze = await api.stateOperation(
+      {
+        kind: "create_dependency_snooze",
+        service_key: "media/radarr",
+        wait_for_service_key: "media/prowlarr",
+        reason: "demo dependency",
+      },
+      "csrf",
+    );
     await api.stateOperation(
       {
         kind: "upsert_tag_exclusion",
@@ -769,6 +778,26 @@ describe("demo web API", () => {
       expect.objectContaining({
         service_key: "home/home-assistant",
         reason: "demo test",
+      }),
+    );
+    expect(await api.snoozes("active")).toContainEqual(
+      expect.objectContaining({
+        service_key: "media/radarr",
+        wait_for_service_key: "media/prowlarr",
+        snoozed_until: null,
+        kind: "dependency",
+      }),
+    );
+    await api.stateOperation(
+      {
+        kind: "delete_dependency_snooze",
+        snooze_id: Number(dependencySnooze.resource_id),
+      },
+      "csrf",
+    );
+    expect(await api.snoozes("all")).not.toContainEqual(
+      expect.objectContaining({
+        id: Number(dependencySnooze.resource_id),
       }),
     );
     expect(await api.tagExclusions("active")).toContainEqual(

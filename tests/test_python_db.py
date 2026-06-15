@@ -9,10 +9,13 @@ from pathlib import Path
 from wud_updater.db import (
     DatabaseError,
     SCHEMA_VERSION,
+    active_dependency_snooze_rows,
     active_snooze,
     active_tag_exclusion_rules,
+    blocking_dependency_snooze_rows,
     open_db,
     init_db,
+    insert_dependency_snooze,
     insert_pending_update,
     insert_snooze,
     insert_update_event,
@@ -135,7 +138,7 @@ class DatabaseTests(unittest.TestCase):
                 """
             ).fetchall()
 
-        self.assertEqual([row[0] for row in rows], [1, 2, 3, 4, 5, 6, 7])
+        self.assertEqual([row[0] for row in rows], [1, 2, 3, 4, 5, 6, 7, 8])
 
     def test_init_db_accepts_matching_version_zero_table(self) -> None:
         with sqlite3.connect(":memory:") as conn:
@@ -236,7 +239,7 @@ class DatabaseTests(unittest.TestCase):
 
         self.assertEqual(version, SCHEMA_VERSION)
         self.assertEqual(run[0], "success")
-        self.assertEqual(migration_versions, [1, 2, 3, 4, 5, 6, 7])
+        self.assertEqual(migration_versions, [1, 2, 3, 4, 5, 6, 7, 8])
 
     def test_init_db_migrates_v5_schema_and_preserves_policy_rows(self) -> None:
         with sqlite3.connect(":memory:") as conn:
@@ -300,7 +303,7 @@ class DatabaseTests(unittest.TestCase):
         self.assertEqual(policy["auto_update"], 0)
         self.assertIsNone(policy["auto_update_time"])
         self.assertEqual(policy["auto_update_days_json"], "[]")
-        self.assertEqual(migration_versions, [1, 2, 3, 4, 5, 6, 7])
+        self.assertEqual(migration_versions, [1, 2, 3, 4, 5, 6, 7, 8])
 
     def test_init_db_migrates_v6_schema_and_preserves_digestless_rows(self) -> None:
         with sqlite3.connect(":memory:") as conn:
@@ -393,7 +396,7 @@ class DatabaseTests(unittest.TestCase):
             self.assertEqual(row["digest_final_image"], "")
             self.assertEqual(row["digest_provenance_source"], "")
             self.assertEqual(row["digest_provenance_confidence"], "")
-        self.assertEqual(migration_versions, [1, 2, 3, 4, 5, 6, 7])
+        self.assertEqual(migration_versions, [1, 2, 3, 4, 5, 6, 7, 8])
 
     def test_init_db_rejects_malformed_existing_pending_updates(self) -> None:
         with sqlite3.connect(":memory:") as conn:
@@ -585,6 +588,56 @@ class DatabaseTests(unittest.TestCase):
         self.assertIsNotNone(row)
         self.assertEqual(row["reason"], "maintenance")
         self.assertIsNone(missing)
+
+    def test_dependency_snooze_helpers_return_only_unsatisfied_blockers(self) -> None:
+        with sqlite3.connect(":memory:") as conn:
+            conn.row_factory = sqlite3.Row
+            init_db(conn)
+            run_id = insert_update_run(
+                conn,
+                started_at="2026-05-18T12:00:00+00:00",
+                status="success",
+            )
+            insert_dependency_snooze(
+                conn,
+                service_key="stack/app",
+                wait_for_service_key="stack/db",
+                reason="wait for db",
+                created_at="2026-05-18T11:00:00+00:00",
+            )
+            insert_dependency_snooze(
+                conn,
+                service_key="stack/worker",
+                wait_for_service_key="stack/cache",
+                reason="wait for cache",
+                created_at="2026-05-18T11:00:00+00:00",
+            )
+            insert_update_event(
+                conn,
+                run_id=run_id,
+                service_name="cache",
+                stack_name="stack",
+                image="repo/cache:latest",
+                status="success",
+                created_at="2026-05-18T12:30:00+00:00",
+            )
+
+            active_rows = active_dependency_snooze_rows(conn)
+            blocking_rows = blocking_dependency_snooze_rows(
+                conn,
+                pending_service_keys=("stack/app", "stack/worker"),
+            )
+            unblocked_rows = blocking_dependency_snooze_rows(
+                conn,
+                pending_service_keys=("stack/app", "stack/db"),
+            )
+
+        self.assertEqual([row["service_key"] for row in active_rows], ["stack/app"])
+        self.assertEqual(
+            [row["service_key"] for row in blocking_rows],
+            ["stack/app"],
+        )
+        self.assertEqual(unblocked_rows, ())
 
     def test_pending_update_helpers_insert_and_update_status(self) -> None:
         with sqlite3.connect(":memory:") as conn:

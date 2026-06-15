@@ -34,9 +34,11 @@ __all__ = (
     "CoreUpdateTourStatus",
     "CoreUpdateTourStep",
     "CoreUpdateTourUpdateRequest",
+    "CreateDependencySnoozeOperation",
     "CreateSnoozeOperation",
     "CsrfResponse",
     "DEFAULT_CORE_UPDATE_TOUR_STEP",
+    "DeleteDependencySnoozeOperation",
     "DeleteServicePolicyOperation",
     "DeleteSnoozeOperation",
     "DiagnosticsSupportBundleResponse",
@@ -137,6 +139,7 @@ __all__ = (
     "SettingsResponse",
     "SetupClaimRequest",
     "SetupStatusResponse",
+    "SnoozeKind",
     "SnoozeRecord",
     "SnoozeState",
     "StateOperation",
@@ -206,6 +209,8 @@ CoreUpdateTourStep = Literal[
     "pending_apply",
     "runs_history",
 ]
+
+SnoozeKind = Literal["time", "dependency"]
 
 SnoozeState = Literal["active", "expired", "all"]
 
@@ -1062,10 +1067,12 @@ class ServicePolicyRecord(BaseModel):
 class SnoozeRecord(BaseModel):
     id: int
     service_key: str
-    snoozed_until: str
+    snoozed_until: str | None
     reason: str
     created_at: str
     active: bool
+    kind: SnoozeKind = "time"
+    wait_for_service_key: str = ""
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 class TagExclusionRuleRecord(BaseModel):
@@ -1104,6 +1111,16 @@ class DeleteSnoozeOperation(BaseModel):
     kind: Literal["delete_snooze"]
     snooze_id: int = Field(ge=1)
 
+class CreateDependencySnoozeOperation(BaseModel):
+    kind: Literal["create_dependency_snooze"]
+    service_key: str = Field(min_length=1, max_length=512)
+    wait_for_service_key: str = Field(min_length=1, max_length=512)
+    reason: str = Field(default="", max_length=1024)
+
+class DeleteDependencySnoozeOperation(BaseModel):
+    kind: Literal["delete_dependency_snooze"]
+    snooze_id: int = Field(ge=1)
+
 class UpsertTagExclusionOperation(BaseModel):
     kind: Literal["upsert_tag_exclusion"]
     scope: TagExclusionScope
@@ -1123,6 +1140,8 @@ StateOperation = Annotated[
     | DeleteServicePolicyOperation
     | CreateSnoozeOperation
     | DeleteSnoozeOperation
+    | CreateDependencySnoozeOperation
+    | DeleteDependencySnoozeOperation
     | UpsertTagExclusionOperation
     | SetTagExclusionStatusOperation,
     Field(discriminator="kind"),

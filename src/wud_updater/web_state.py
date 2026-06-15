@@ -12,7 +12,13 @@ from typing import Any
 from fastapi import HTTPException, Query, Request
 
 from . import web_scheduler
-from .db import DatabaseError, init_db, open_db, utc_timestamp
+from .db import (
+    DatabaseError,
+    dependency_snooze_satisfied,
+    init_db,
+    open_db,
+    utc_timestamp,
+)
 from .images import repo_key, tag_value_valid
 from .compose_rewrite import js_regex_escape
 from .web_auth import (
@@ -27,7 +33,9 @@ from .web_database import (
     connect_readonly_db as _connect_readonly_db,
 )
 from .web_models import (
+    CreateDependencySnoozeOperation,
     CreateSnoozeOperation,
+    DeleteDependencySnoozeOperation,
     DeleteServicePolicyOperation,
     DeleteSnoozeOperation,
     ServicePolicyRecord,
@@ -74,25 +82,36 @@ def api_snoozes(
 ) -> list[SnoozeRecord]:
     settings = _settings(request)
     now = utc_timestamp()
-    where = ""
-    params: tuple[object, ...] = ()
+    time_where = ""
+    time_params: tuple[object, ...] = ()
     if state == "active":
-        where = "WHERE snoozed_until > ?"
-        params = (now,)
+        time_where = "WHERE snoozed_until > ?"
+        time_params = (now,)
     elif state == "expired":
-        where = "WHERE snoozed_until <= ?"
-        params = (now,)
+        time_where = "WHERE snoozed_until <= ?"
+        time_params = (now,)
     try:
         with closing(_connect_readonly_db(settings)) as conn:
-            rows = conn.execute(
+            time_rows = conn.execute(
                 f"""
                 SELECT *
                 FROM snoozes
-                {where}
+                {time_where}
                 ORDER BY snoozed_until DESC, id DESC
                 """,
-                params,
+                time_params,
             ).fetchall()
+            dependency_rows = conn.execute(
+                """
+                SELECT *
+                FROM dependency_snoozes
+                ORDER BY created_at DESC, id DESC
+                """
+            ).fetchall()
+            dependency_records = [
+                _dependency_snooze_from_row(conn, row)
+                for row in dependency_rows
+            ]
     except ReadOnlyDatabaseMissing:
         return []
     except (OSError, sqlite3.Error, DatabaseError) as exc:
@@ -100,7 +119,15 @@ def api_snoozes(
             status_code=500,
             detail=_safe_exception_detail(settings, "could not read database", exc),
         ) from exc
-    return [_snooze_from_row(row, now=now) for row in rows]
+    records = [_snooze_from_row(row, now=now) for row in time_rows]
+    records.extend(
+        record
+        for record in dependency_records
+        if state == "all"
+        or (state == "active" and record.active)
+        or (state == "expired" and not record.active)
+    )
+    return records
 
 
 def api_tag_exclusions(
@@ -192,6 +219,30 @@ def _snooze_from_row(row: sqlite3.Row, *, now: str) -> SnoozeRecord:
         reason=str(row["reason"]),
         created_at=str(row["created_at"]),
         active=str(row["snoozed_until"]) > now,
+        kind="time",
+        wait_for_service_key="",
+        metadata=_metadata_from_row(row),
+    )
+
+
+def _dependency_snooze_from_row(
+    conn: sqlite3.Connection,
+    row: sqlite3.Row,
+) -> SnoozeRecord:
+    active = not dependency_snooze_satisfied(
+        conn,
+        wait_for_service_key=str(row["wait_for_service_key"]),
+        created_at=str(row["created_at"]),
+    )
+    return SnoozeRecord(
+        id=int(row["id"]),
+        service_key=str(row["service_key"]),
+        snoozed_until=None,
+        reason=str(row["reason"]),
+        created_at=str(row["created_at"]),
+        active=active,
+        kind="dependency",
+        wait_for_service_key=str(row["wait_for_service_key"]),
         metadata=_metadata_from_row(row),
     )
 
@@ -226,6 +277,10 @@ def _apply_state_operation(
         return _create_snooze(conn, settings, request, payload)
     if isinstance(payload, DeleteSnoozeOperation):
         return _delete_snooze(conn, settings, request, payload)
+    if isinstance(payload, CreateDependencySnoozeOperation):
+        return _create_dependency_snooze(conn, settings, request, payload)
+    if isinstance(payload, DeleteDependencySnoozeOperation):
+        return _delete_dependency_snooze(conn, settings, request, payload)
     if isinstance(payload, UpsertTagExclusionOperation):
         return _upsert_tag_exclusion(conn, settings, request, payload)
     if isinstance(payload, SetTagExclusionStatusOperation):
@@ -504,6 +559,103 @@ def _delete_snooze(
     )
 
 
+def _create_dependency_snooze(
+    conn: sqlite3.Connection,
+    settings: WebSettings,
+    request: Request,
+    payload: CreateDependencySnoozeOperation,
+) -> StateOperationResponse:
+    service_key = _required_state_text(payload.service_key, "service_key")
+    wait_for_service_key = _required_state_text(
+        payload.wait_for_service_key,
+        "wait_for_service_key",
+    )
+    if service_key == wait_for_service_key:
+        raise HTTPException(
+            status_code=422,
+            detail="wait_for_service_key must be different from service_key",
+        )
+    reason = payload.reason.strip()
+    cursor = conn.execute(
+        """
+        INSERT INTO dependency_snoozes (
+            service_key,
+            wait_for_service_key,
+            reason,
+            created_at,
+            metadata_json
+        )
+        VALUES (?, ?, ?, ?, '{}')
+        """,
+        (service_key, wait_for_service_key, reason, utc_timestamp()),
+    )
+    snooze_id = int(cursor.lastrowid)
+    after_row = _dependency_snooze_row(conn, snooze_id)
+    if after_row is None:
+        raise HTTPException(status_code=500, detail="dependency snooze was not saved")
+    target = {
+        "id": snooze_id,
+        "service_key": service_key,
+        "wait_for_service_key": wait_for_service_key,
+    }
+    audit_run_id = _insert_state_audit(
+        conn,
+        settings,
+        request,
+        operation=payload.kind,
+        resource_type="dependency_snooze",
+        resource_id=str(snooze_id),
+        target=target,
+        before=None,
+        after=_dependency_snooze_summary(after_row),
+    )
+    return StateOperationResponse(
+        operation=payload.kind,
+        status="success",
+        audit_run_id=audit_run_id,
+        resource_type="dependency_snooze",
+        resource_id=str(snooze_id),
+        resource=_dependency_snooze_from_row(conn, after_row),
+    )
+
+
+def _delete_dependency_snooze(
+    conn: sqlite3.Connection,
+    settings: WebSettings,
+    request: Request,
+    payload: DeleteDependencySnoozeOperation,
+) -> StateOperationResponse:
+    before_row = _dependency_snooze_row(conn, payload.snooze_id)
+    if before_row is None:
+        raise HTTPException(status_code=404, detail="dependency snooze not found")
+    conn.execute(
+        "DELETE FROM dependency_snoozes WHERE id = ?",
+        (payload.snooze_id,),
+    )
+    audit_run_id = _insert_state_audit(
+        conn,
+        settings,
+        request,
+        operation=payload.kind,
+        resource_type="dependency_snooze",
+        resource_id=str(payload.snooze_id),
+        target={
+            "id": payload.snooze_id,
+            "service_key": str(before_row["service_key"]),
+            "wait_for_service_key": str(before_row["wait_for_service_key"]),
+        },
+        before=_dependency_snooze_summary(before_row),
+        after=None,
+    )
+    return StateOperationResponse(
+        operation=payload.kind,
+        status="success",
+        audit_run_id=audit_run_id,
+        resource_type="dependency_snooze",
+        resource_id=str(payload.snooze_id),
+    )
+
+
 def _upsert_tag_exclusion(
     conn: sqlite3.Connection,
     settings: WebSettings,
@@ -663,6 +815,21 @@ def _snooze_row(conn: sqlite3.Connection, snooze_id: int) -> sqlite3.Row | None:
         """
         SELECT *
         FROM snoozes
+        WHERE id = ?
+        LIMIT 1
+        """,
+        (snooze_id,),
+    ).fetchone()
+
+
+def _dependency_snooze_row(
+    conn: sqlite3.Connection,
+    snooze_id: int,
+) -> sqlite3.Row | None:
+    return conn.execute(
+        """
+        SELECT *
+        FROM dependency_snoozes
         WHERE id = ?
         LIMIT 1
         """,
@@ -991,6 +1158,22 @@ def _snooze_summary(row: sqlite3.Row | None) -> dict[str, Any] | None:
         "snoozed_until": str(row["snoozed_until"]),
         "reason": str(row["reason"]),
         "created_at": str(row["created_at"]),
+        "kind": "time",
+        "wait_for_service_key": "",
+    }
+
+
+def _dependency_snooze_summary(row: sqlite3.Row | None) -> dict[str, Any] | None:
+    if row is None:
+        return None
+    return {
+        "id": int(row["id"]),
+        "service_key": str(row["service_key"]),
+        "snoozed_until": None,
+        "reason": str(row["reason"]),
+        "created_at": str(row["created_at"]),
+        "kind": "dependency",
+        "wait_for_service_key": str(row["wait_for_service_key"]),
     }
 
 

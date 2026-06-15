@@ -12,6 +12,7 @@ import {
   type ServicePolicyRecord,
   type ServicePolicyUpdateMode,
   type SettingsResponse,
+  type SnoozeKind,
   type SnoozeRecord,
   type SnoozeState,
   type StateOperation,
@@ -253,11 +254,39 @@ export const useSettingsStore = defineStore("settings", () => {
   async function deleteSnooze(
     snoozeId: number,
     state: SnoozeState,
+    kind: SnoozeKind = "time",
+  ): Promise<void> {
+    const operation: StateOperation =
+      kind === "dependency"
+        ? {
+            kind: "delete_dependency_snooze",
+            snooze_id: snoozeId,
+          }
+        : {
+            kind: "delete_snooze",
+            snooze_id: snoozeId,
+          };
+    await mutateAndReload(
+      operation,
+      async () => {
+        snoozeStateFilter.value = state;
+        snoozes.value = await webApi.snoozes(state);
+      },
+    );
+  }
+
+  async function createDependencySnooze(
+    serviceKey: string,
+    waitForServiceKey: string,
+    reason: string,
+    state: SnoozeState,
   ): Promise<void> {
     await mutateAndReload(
       {
-        kind: "delete_snooze",
-        snooze_id: snoozeId,
+        kind: "create_dependency_snooze",
+        service_key: serviceKey,
+        wait_for_service_key: waitForServiceKey,
+        reason,
       },
       async () => {
         snoozeStateFilter.value = state;
@@ -334,6 +363,7 @@ export const useSettingsStore = defineStore("settings", () => {
     upsertServicePolicy,
     deleteServicePolicy,
     createSnooze,
+    createDependencySnooze,
     deleteSnooze,
     upsertTagExclusion,
     setTagExclusionStatus,

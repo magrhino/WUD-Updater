@@ -256,6 +256,8 @@ export const INITIAL_SNOOZES: SnoozeRecord[] = [
     reason: "demo maintenance window",
     created_at: "2026-05-28T12:00:00+00:00",
     active: true,
+    kind: "time",
+    wait_for_service_key: "",
     metadata: { source: "demo" },
   },
   {
@@ -265,6 +267,19 @@ export const INITIAL_SNOOZES: SnoozeRecord[] = [
     reason: "expired demo snooze",
     created_at: "2020-01-01T00:00:00+00:00",
     active: false,
+    kind: "time",
+    wait_for_service_key: "",
+    metadata: { source: "demo" },
+  },
+  {
+    id: 3,
+    service_key: "media/sonarr",
+    snoozed_until: null,
+    reason: "wait for indexer update",
+    created_at: "2026-05-28T12:00:00+00:00",
+    active: true,
+    kind: "dependency",
+    wait_for_service_key: "media/prowlarr",
     metadata: { source: "demo" },
   },
 ];

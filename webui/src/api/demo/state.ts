@@ -117,7 +117,7 @@ export class DemoApiState {
   nextJob = 1;
   nextRun = 7;
   nextAudit = 100;
-  nextSnooze = 3;
+  nextSnooze = 4;
   nextTagExclusion = 3;
 
   session(): AuthSessionResponse {
@@ -1224,10 +1224,36 @@ export class DemoApiState {
         reason: operation.reason ?? "",
         created_at: nowIso(),
         active: new Date(operation.snoozed_until).getTime() > Date.now(),
+        kind: "time",
+        wait_for_service_key: "",
         metadata: { source: "demo" },
       };
       this.snoozes.unshift(snooze);
       return this.operationResponse(operation.kind, "snooze", String(snooze.id), snooze);
+    }
+
+    if (operation.kind === "create_dependency_snooze") {
+      if (operation.service_key === operation.wait_for_service_key) {
+        throw new Error("wait_for_service_key must be different from service_key");
+      }
+      const snooze: SnoozeRecord = {
+        id: this.nextSnooze++,
+        service_key: operation.service_key,
+        snoozed_until: null,
+        reason: operation.reason ?? "",
+        created_at: nowIso(),
+        active: true,
+        kind: "dependency",
+        wait_for_service_key: operation.wait_for_service_key,
+        metadata: { source: "demo" },
+      };
+      this.snoozes.unshift(snooze);
+      return this.operationResponse(
+        operation.kind,
+        "dependency_snooze",
+        String(snooze.id),
+        snooze,
+      );
     }
 
     if (operation.kind === "delete_snooze") {
@@ -1237,6 +1263,18 @@ export class DemoApiState {
       return this.operationResponse(
         operation.kind,
         "snooze",
+        String(operation.snooze_id),
+        null,
+      );
+    }
+
+    if (operation.kind === "delete_dependency_snooze") {
+      this.snoozes = this.snoozes.filter(
+        (snooze) => snooze.id !== operation.snooze_id,
+      );
+      return this.operationResponse(
+        operation.kind,
+        "dependency_snooze",
         String(operation.snooze_id),
         null,
       );

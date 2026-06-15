@@ -126,6 +126,9 @@ class WebuiDemoStateTests(unittest.TestCase):
                     "SELECT COUNT(*) FROM service_policy"
                 ).fetchone()
                 snooze_count = conn.execute("SELECT COUNT(*) FROM snoozes").fetchone()
+                dependency_snooze_count = conn.execute(
+                    "SELECT COUNT(*) FROM dependency_snoozes"
+                ).fetchone()
                 tag_exclusion_count = conn.execute(
                     "SELECT COUNT(*) FROM tag_exclusion_rules"
                 ).fetchone()
@@ -164,6 +167,7 @@ class WebuiDemoStateTests(unittest.TestCase):
         self.assertEqual(event_count[0], 6)
         self.assertEqual(policy_count[0], 2)
         self.assertEqual(snooze_count[0], 2)
+        self.assertEqual(dependency_snooze_count[0], 1)
         self.assertEqual(tag_exclusion_count[0], 2)
         self.assertEqual(
             active_exclusions[0][0],

@@ -19,6 +19,7 @@ if str(SRC_ROOT) not in sys.path:
 from wud_updater.db import (  # noqa: E402
     open_db,
     init_db,
+    insert_dependency_snooze,
     insert_snooze,
     insert_pending_update,
     insert_update_event,
@@ -158,6 +159,15 @@ DEMO_SNOOZES = (
         "snoozed_until": "2020-01-01T00:00:00+00:00",
         "reason": "expired demo snooze",
         "created_at": "2020-01-01T00:00:00+00:00",
+    },
+)
+
+DEMO_DEPENDENCY_SNOOZES = (
+    {
+        "service_key": "media/sonarr",
+        "wait_for_service_key": "media/prowlarr",
+        "reason": "wait for indexer update",
+        "created_at": "2026-05-28T12:00:00+00:00",
     },
 )
 
@@ -552,6 +562,16 @@ def _write_demo_management_state(conn) -> None:
             conn,
             service_key=str(snooze["service_key"]),
             snoozed_until=str(snooze["snoozed_until"]),
+            reason=str(snooze["reason"]),
+            created_at=str(snooze["created_at"]),
+            metadata_json='{"source":"demo"}',
+        )
+
+    for snooze in DEMO_DEPENDENCY_SNOOZES:
+        insert_dependency_snooze(
+            conn,
+            service_key=str(snooze["service_key"]),
+            wait_for_service_key=str(snooze["wait_for_service_key"]),
             reason=str(snooze["reason"]),
             created_at=str(snooze["created_at"]),
             metadata_json='{"source":"demo"}',

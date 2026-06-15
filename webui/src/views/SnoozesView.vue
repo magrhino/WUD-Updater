@@ -13,7 +13,7 @@ import {
   NTag,
 } from "naive-ui";
 
-import type { SnoozeRecord, SnoozeState } from "../api/client";
+import type { SnoozeKind, SnoozeRecord, SnoozeState } from "../api/client";
 import { useUpdateTargetOptions } from "../composables/useUpdateTargetOptions";
 import { useAuthStore } from "../stores/auth";
 import { useSettingsStore } from "../stores/settings";
@@ -26,16 +26,22 @@ const { serviceKeyOptions } = useUpdateTargetOptions();
 const breakpoints = useBreakpoints({ managementDesktop: 1120 });
 const useManagementCards = breakpoints.smaller("managementDesktop");
 const snoozeState = ref<SnoozeState>("active");
+const snoozeKind = ref<SnoozeKind>("time");
 const showCreateConfirm = ref(false);
 const showDeleteConfirm = ref(false);
 const deleteTarget = ref<SnoozeRecord | null>(null);
 
 const snoozeForm = reactive({
   serviceKey: "",
+  waitForServiceKey: "",
   snoozedUntil: futureIso(24),
   reason: "",
 });
 
+const kindOptions = [
+  { label: "Until time", value: "time" },
+  { label: "Until another service is pending", value: "dependency" },
+];
 const stateOptions = [
   { label: "Active", value: "active" },
   { label: "Expired", value: "expired" },
@@ -49,7 +55,10 @@ const createDisabled = computed(
   () =>
     !mutationsEnabled.value ||
     !snoozeForm.serviceKey.trim() ||
-    !snoozeForm.snoozedUntil.trim() ||
+    (snoozeKind.value === "time" && !snoozeForm.snoozedUntil.trim()) ||
+    (snoozeKind.value === "dependency" &&
+      (!snoozeForm.waitForServiceKey.trim() ||
+        snoozeForm.waitForServiceKey.trim() === snoozeForm.serviceKey.trim())) ||
     settings.loading,
 );
 const viewError = computed(() => updates.error || settings.error);
@@ -64,6 +73,7 @@ function setFuture(hours: number): void {
 
 function resetSnoozeForm(): void {
   snoozeForm.serviceKey = "";
+  snoozeForm.waitForServiceKey = "";
   snoozeForm.snoozedUntil = futureIso(24);
   snoozeForm.reason = "";
 }
@@ -72,8 +82,24 @@ function setSnoozeServiceKey(value: string | number | null): void {
   snoozeForm.serviceKey = value === null ? "" : String(value);
 }
 
+function setWaitForServiceKey(value: string | number | null): void {
+  snoozeForm.waitForServiceKey = value === null ? "" : String(value);
+}
+
 function statusLabel(snooze: SnoozeRecord): string {
+  if (snooze.kind === "dependency") {
+    return snooze.active ? "waiting" : "satisfied";
+  }
   return snooze.active ? "active" : "expired";
+}
+
+function conditionLabel(snooze: SnoozeRecord): string {
+  if (snooze.kind === "dependency") {
+    return snooze.wait_for_service_key
+      ? `Until ${snooze.wait_for_service_key} is pending`
+      : "Dependency not set";
+  }
+  return snooze.snoozed_until ?? "None";
 }
 
 function openCreateConfirm(): void {
@@ -87,12 +113,21 @@ async function confirmCreate(): Promise<void> {
   if (createDisabled.value) {
     return;
   }
-  await settings.createSnooze(
-    snoozeForm.serviceKey.trim(),
-    snoozeForm.snoozedUntil.trim(),
-    snoozeForm.reason.trim(),
-    snoozeState.value,
-  );
+  if (snoozeKind.value === "dependency") {
+    await settings.createDependencySnooze(
+      snoozeForm.serviceKey.trim(),
+      snoozeForm.waitForServiceKey.trim(),
+      snoozeForm.reason.trim(),
+      snoozeState.value,
+    );
+  } else {
+    await settings.createSnooze(
+      snoozeForm.serviceKey.trim(),
+      snoozeForm.snoozedUntil.trim(),
+      snoozeForm.reason.trim(),
+      snoozeState.value,
+    );
+  }
   resetSnoozeForm();
 }
 
@@ -108,7 +143,11 @@ async function confirmDelete(): Promise<void> {
   if (deleteTarget.value === null) {
     return;
   }
-  await settings.deleteSnooze(deleteTarget.value.id, snoozeState.value);
+  await settings.deleteSnooze(
+    deleteTarget.value.id,
+    snoozeState.value,
+    deleteTarget.value.kind,
+  );
   deleteTarget.value = null;
 }
 
@@ -139,10 +178,18 @@ watch(snoozeState, (nextState) => {
         </div>
       </div>
       <n-form class="management-form" @submit.prevent="openCreateConfirm">
+        <n-form-item label="Snooze type" required>
+          <n-select
+            v-model:value="snoozeKind"
+            :options="kindOptions"
+            :disabled="settings.loading"
+            aria-label="Snooze type"
+          />
+        </n-form-item>
         <n-form-item
           label="Service key"
           required
-          feedback="Required to create a snooze. Use stack/service."
+          feedback="Service to hold back. Use stack/service."
         >
           <n-select
             :value="snoozeForm.serviceKey"
@@ -156,6 +203,24 @@ watch(snoozeState, (nextState) => {
           />
         </n-form-item>
         <n-form-item
+          v-if="snoozeKind === 'dependency'"
+          label="Wait for service"
+          required
+          feedback="The held service is bulk-selected again once this service is pending."
+        >
+          <n-select
+            :value="snoozeForm.waitForServiceKey"
+            filterable
+            tag
+            clearable
+            :options="serviceKeyOptions"
+            placeholder="stack/service"
+            :disabled="settings.loading"
+            @update:value="setWaitForServiceKey"
+          />
+        </n-form-item>
+        <n-form-item
+          v-else
           label="Snoozed until"
           required
           feedback="Use an ISO timestamp, or choose 1h, 1d, or 7d."
@@ -174,13 +239,31 @@ watch(snoozeState, (nextState) => {
           />
         </n-form-item>
         <div class="form-actions">
-          <n-button size="small" quaternary :disabled="settings.loading" @click="setFuture(1)">
+          <n-button
+            v-if="snoozeKind === 'time'"
+            size="small"
+            quaternary
+            :disabled="settings.loading"
+            @click="setFuture(1)"
+          >
             1h
           </n-button>
-          <n-button size="small" quaternary :disabled="settings.loading" @click="setFuture(24)">
+          <n-button
+            v-if="snoozeKind === 'time'"
+            size="small"
+            quaternary
+            :disabled="settings.loading"
+            @click="setFuture(24)"
+          >
             1d
           </n-button>
-          <n-button size="small" quaternary :disabled="settings.loading" @click="setFuture(168)">
+          <n-button
+            v-if="snoozeKind === 'time'"
+            size="small"
+            quaternary
+            :disabled="settings.loading"
+            @click="setFuture(168)"
+          >
             7d
           </n-button>
           <n-button quaternary :disabled="settings.loading" @click="resetSnoozeForm">
@@ -219,18 +302,18 @@ watch(snoozeState, (nextState) => {
       <div v-if="!useManagementCards" class="management-table snooze-table">
         <div class="management-table-head">
           <span>Service</span>
-          <span>Until</span>
+          <span>Condition</span>
           <span>Reason</span>
           <span>Status</span>
           <span>Actions</span>
         </div>
         <div
           v-for="snooze in settings.snoozes"
-          :key="snooze.id"
+          :key="`${snooze.kind}-${snooze.id}`"
           class="management-row"
         >
           <strong>{{ snooze.service_key }}</strong>
-          <span>{{ snooze.snoozed_until }}</span>
+          <span>{{ conditionLabel(snooze) }}</span>
           <span>{{ snooze.reason || "None" }}</span>
           <n-tag size="small" :type="snooze.active ? 'info' : 'default'">
             {{ statusLabel(snooze) }}
@@ -255,7 +338,7 @@ watch(snoozeState, (nextState) => {
       <div v-else class="mobile-list">
         <article
           v-for="snooze in settings.snoozes"
-          :key="snooze.id"
+          :key="`${snooze.kind}-${snooze.id}`"
           class="mobile-card"
         >
           <div class="mobile-card-title">
@@ -266,8 +349,8 @@ watch(snoozeState, (nextState) => {
           </div>
           <dl>
             <div>
-              <dt>Until</dt>
-              <dd>{{ snooze.snoozed_until }}</dd>
+              <dt>Condition</dt>
+              <dd>{{ conditionLabel(snooze) }}</dd>
             </div>
             <div>
               <dt>Reason</dt>
@@ -308,8 +391,19 @@ watch(snoozeState, (nextState) => {
           <strong>{{ snoozeForm.serviceKey.trim() }}</strong>
         </div>
         <div>
-          <span>Until</span>
-          <strong>{{ snoozeForm.snoozedUntil.trim() }}</strong>
+          <span>Type</span>
+          <strong>{{ snoozeKind === "dependency" ? "Dependency" : "Time" }}</strong>
+        </div>
+        <div>
+          <span>Condition</span>
+          <strong>
+            <template v-if="snoozeKind === 'dependency'">
+              Until {{ snoozeForm.waitForServiceKey.trim() }} is pending
+            </template>
+            <template v-else>
+              {{ snoozeForm.snoozedUntil.trim() }}
+            </template>
+          </strong>
         </div>
         <div>
           <span>Reason</span>
@@ -333,8 +427,8 @@ watch(snoozeState, (nextState) => {
           <strong>{{ deleteTarget.service_key }}</strong>
         </div>
         <div>
-          <span>Until</span>
-          <strong>{{ deleteTarget.snoozed_until }}</strong>
+          <span>Condition</span>
+          <strong>{{ conditionLabel(deleteTarget) }}</strong>
         </div>
       </div>
     </n-modal>

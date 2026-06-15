@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import sqlite3
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import replace
 from datetime import datetime, time as datetime_time, timedelta, timezone
 from threading import Event, Thread
@@ -16,7 +16,13 @@ from fastapi import FastAPI
 
 from . import web_database, web_jobs
 from .config import UpdaterConfig
-from .db import active_snooze, init_db, open_db, utc_timestamp
+from .db import (
+    active_snooze,
+    blocking_dependency_snooze_rows,
+    init_db,
+    open_db,
+    utc_timestamp,
+)
 from .digest_provenance import DigestTagProvenance
 from .plans import DryRunPlan, build_dry_run_plan, resolve_pending_groups
 from .web_auth import _immediate_transaction
@@ -248,7 +254,20 @@ def _auto_update_candidate(
     if grouping.status != "ready":
         return None
 
-    selection = _auto_update_selection(settings, grouping, policies)
+    pending_service_keys = _pending_service_keys(grouping)
+    blocked_service_keys = {
+        str(row["service_key"])
+        for row in blocking_dependency_snooze_rows(
+            conn,
+            pending_service_keys=pending_service_keys,
+        )
+    }
+    selection = _auto_update_selection(
+        settings,
+        grouping,
+        policies,
+        blocked_service_keys=blocked_service_keys,
+    )
     if selection is None:
         return None
 
@@ -387,9 +406,12 @@ def _auto_update_selection(
     settings: WebSettings,
     grouping: Any,
     policies: Mapping[str, AutoUpdatePolicy],
+    *,
+    blocked_service_keys: Iterable[str] = (),
 ) -> AutoUpdateSelection | None:
     if not policies:
         return None
+    blocked = set(blocked_service_keys)
     lines_by_mode: dict[str, list[int]] = {}
     services_by_mode: dict[str, set[str]] = {}
     schedules_by_mode: dict[str, set[str]] = {}
@@ -402,6 +424,8 @@ def _auto_update_selection(
                 f"{group.name}/{service}" for service in item.services if service
             )
             if not service_keys:
+                continue
+            if any(service_key in blocked for service_key in service_keys):
                 continue
             line_policies = [policies.get(service_key) for service_key in service_keys]
             if any(policy is None for policy in line_policies):
@@ -441,6 +465,16 @@ def _auto_update_selection(
         scheduled_for=scheduled_for_by_mode[mode],
         update_mode=mode,
     )
+
+
+def _pending_service_keys(grouping: Any) -> tuple[str, ...]:
+    service_keys: list[str] = []
+    for group in grouping.groups:
+        for item in group.items:
+            for service in item.services:
+                if service:
+                    service_keys.append(f"{group.name}/{service}")
+    return tuple(sorted(set(service_keys)))
 
 
 def _auto_update_schedule_key(

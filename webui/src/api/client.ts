@@ -106,6 +106,7 @@ export type {
   // Service policies, snoozes, and tag exclusions
   ServicePolicyUpdateMode,
   AutoUpdateDay,
+  SnoozeKind,
   SnoozeState,
   TagExclusionScope,
   TagExclusionMatchType,

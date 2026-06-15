@@ -84,8 +84,64 @@ const allLineNumbers = computed(
 const groupingReady = computed(
   () => updates.pending?.grouping.status === "ready",
 );
-const stackGroups = computed(() =>
+const rawStackGroups = computed(() =>
   groupingReady.value ? (updates.pending?.grouping.groups ?? []) : [],
+);
+const pendingServiceKeys = computed(() => {
+  const keys: string[] = [];
+  for (const group of rawStackGroups.value) {
+    for (const item of group.items) {
+      keys.push(...groupedItemServiceKeys(group, item));
+    }
+  }
+  return new Set(keys);
+});
+const activeDependencySnoozes = computed(() =>
+  settings.snoozes.filter(
+    (snooze) => snooze.kind === "dependency" && snooze.active,
+  ),
+);
+const dependencyBlockedServiceKeys = computed(() => {
+  const pending = pendingServiceKeys.value;
+  return new Set(
+    activeDependencySnoozes.value
+      .filter(
+        (snooze) =>
+          pending.has(snooze.service_key) &&
+          !pending.has(snooze.wait_for_service_key),
+      )
+      .map((snooze) => snooze.service_key),
+  );
+});
+const dependencySnoozedItems = computed(() => {
+  const blocked = dependencyBlockedServiceKeys.value;
+  return rawStackGroups.value.flatMap((group) =>
+    group.items
+      .filter((item) =>
+        groupedItemServiceKeys(group, item).some((key) => blocked.has(key)),
+      )
+      .map((item) => ({ group, item })),
+  );
+});
+const stackGroups = computed(() =>
+  rawStackGroups.value
+    .map((group) => {
+      const items = group.items.filter(
+        (item) =>
+          !groupedItemServiceKeys(group, item).some((key) =>
+            dependencyBlockedServiceKeys.value.has(key),
+          ),
+      );
+      const services = uniqueStrings(items.flatMap((item) => item.services));
+      return {
+        ...group,
+        items,
+        services,
+        services_label: services.length ? services.join(", ") : group.services_label,
+        line_numbers: items.map((item) => item.line_no),
+      };
+    })
+    .filter((group) => group.items.length > 0),
 );
 const unmatchedItems = computed(() =>
   groupingReady.value ? (updates.pending?.grouping.unmatched ?? []) : [],
@@ -108,7 +164,11 @@ const pendingHeadingText = computed(() =>
       : "Loading pending updates",
 );
 const selectableLineNumbers = computed(() =>
-  groupingReady.value ? stackLineNumbers.value : allLineNumbers.value,
+  groupingReady.value
+    ? stackLineNumbers.value
+    : activeDependencySnoozes.value.length
+      ? []
+      : allLineNumbers.value,
 );
 const selectAllLabel = computed(() =>
   groupingReady.value ? "Select all stack updates" : "Select all",
@@ -259,6 +319,19 @@ function releaseNoteFor(item: PendingItem): ReleaseNoteInfo | null {
 
 function uniqueSorted(values: number[]): number[] {
   return [...new Set(values)].sort((left, right) => left - right);
+}
+
+function uniqueStrings(values: string[]): string[] {
+  return [...new Set(values.filter(Boolean))].sort();
+}
+
+function groupedItemServiceKeys(
+  group: PendingStackGroup,
+  item: PendingGroupedItem,
+): string[] {
+  return item.services
+    .filter(Boolean)
+    .map((service) => `${group.name}/${service}`);
 }
 
 function fileName(value: string): string {
@@ -835,6 +908,9 @@ watch(
         <strong>{{ selectedLineNumbers.length }} selected</strong>
         <span v-if="groupingReady">
           {{ pluralize(stackGroups.length, "stack") }} available
+          <template v-if="dependencySnoozedItems.length">
+            - {{ pluralize(dependencySnoozedItems.length, "snoozed item") }}
+          </template>
           <template v-if="unmatchedItems.length">
             - {{ unmatchedReviewCountLabel }}
           </template>
@@ -1122,6 +1198,81 @@ watch(
           </details>
         </article>
 
+        <article v-if="dependencySnoozedItems.length" class="stack-card needs-review">
+          <div class="stack-card-header">
+            <div class="stack-title-block">
+              <strong>Snoozed pending entries</strong>
+              <span class="stack-path">
+                Excluded from bulk selection until the dependency service is pending.
+              </span>
+            </div>
+            <div class="stack-card-side">
+              <div class="stack-card-tags">
+                <n-tag size="small" type="default">
+                  {{ pluralize(dependencySnoozedItems.length, "item") }}
+                </n-tag>
+              </div>
+            </div>
+          </div>
+          <details class="stack-details">
+            <summary aria-label="Details for snoozed updates">Details</summary>
+            <div class="stack-items">
+              <div
+                v-for="{ group, item } in dependencySnoozedItems"
+                :key="`dependency-snoozed-${item.line_no}`"
+                class="pending-update-row"
+                :class="{ selected: selectedLineSet.has(item.line_no) }"
+              >
+                <div class="pending-update-main">
+                  <n-checkbox
+                    :checked="selectedLineSet.has(item.line_no)"
+                    :aria-label="`Select update ${item.image}`"
+                    @update:checked="toggleLine(item.line_no, Boolean($event))"
+                  >
+                    <span class="sr-only">Select update </span>
+                    <strong>{{ group.name }} / {{ groupedItemServices(item) }}</strong>
+                  </n-checkbox>
+                  <n-tag size="small" type="default">Snoozed</n-tag>
+                </div>
+                <div class="pending-update-detail">
+                  <code>{{ item.image }}</code>
+                  <span>-></span>
+                  <code>{{ groupedItemTarget(item) }}</code>
+                </div>
+                <div class="pending-update-meta">
+                  <span>Pending file line #{{ item.line_no }}</span>
+                  <span
+                    v-if="riskCues(item).length"
+                    class="risk-badges-container"
+                    aria-label="Safety cues"
+                  >
+                    <n-tag
+                      v-for="cue in riskCues(item)"
+                      :key="`${item.line_no}-${cue.key}`"
+                      size="small"
+                      :type="cue.type"
+                      class="safety-badge"
+                    >
+                      {{ cue.label }}
+                    </n-tag>
+                  </span>
+                </div>
+                <div v-if="item.desired_tag" class="pending-update-tag">
+                  <span>New tag</span>
+                  <n-input
+                    :value="tagOverrideValue(item)"
+                    size="small"
+                    class="tag-override-input"
+                    :placeholder="item.desired_tag"
+                    :input-props="tagInputProps(item)"
+                    @update:value="updateTagOverride(item, $event)"
+                  />
+                </div>
+              </div>
+            </div>
+          </details>
+        </article>
+
         <article v-if="unmatchedItems.length" class="stack-card needs-review">
           <div class="stack-card-header">
             <div class="stack-title-block">
@@ -1192,7 +1343,11 @@ watch(
         </article>
 
         <div
-          v-if="!stackGroups.length && !unmatchedItems.length"
+          v-if="
+            !stackGroups.length &&
+            !dependencySnoozedItems.length &&
+            !unmatchedItems.length
+          "
           class="empty-state clear-queue-state"
           role="status"
           aria-live="polite"

@@ -1004,6 +1004,59 @@ describe("mutating WebUI views", () => {
     expect(createPlan).toHaveBeenCalledWith([1], true, [], []);
   });
 
+  it("excludes dependency-snoozed items from bulk stack selection but allows direct selection", async () => {
+    const snoozedItem = pendingGroupedItem({
+      line_no: 1,
+      image: "repo/app:1.0",
+      repo: "repo/app",
+      services: ["app"],
+    });
+    const stackItem = pendingGroupedItem({
+      line_no: 2,
+      image: "repo/worker:1.0",
+      repo: "repo/worker",
+      services: ["worker"],
+    });
+    const { pinia, auth, connection, settings, updates, runs } = setupStores(true);
+    settings.snoozes = [
+      snooze({
+        service_key: "media/app",
+        wait_for_service_key: "media/db",
+        snoozed_until: null,
+        kind: "dependency",
+      }),
+    ];
+    updates.pending = {
+      ...pendingResponse([snoozedItem, stackItem]),
+      grouping: pendingGrouping([snoozedItem, stackItem]),
+    };
+    mockPendingLifecycle(settings, updates);
+    const createPlan = vi.spyOn(updates, "createPlan").mockResolvedValue();
+    const wrapper = mountPendingView(pinia);
+
+    await wrapper
+      .findAll("button")
+      .find((button) => button.text().includes("Select all stack updates"))
+      ?.trigger("click");
+    await wrapper
+      .findAll("button")
+      .find((button) => button.text().includes("Preview selected plan"))
+      ?.trigger("click");
+
+    expect(wrapper.text()).toContain("Snoozed pending entries");
+    expect(createPlan).toHaveBeenCalledWith([2], true, [], []);
+
+    await wrapper
+      .find('input[aria-label="Select update repo/app:1.0"]')
+      .setValue(true);
+    await wrapper
+      .findAll("button")
+      .find((button) => button.text().includes("Preview selected plan"))
+      ?.trigger("click");
+
+    expect(createPlan).toHaveBeenLastCalledWith([1, 2], true, [], []);
+  });
+
   it("selects tag update rows and enables tag rewrites when an override is edited", async () => {
     const item = pendingItem();
     const { pinia, auth, connection, settings, updates, runs } = setupStores(true);
@@ -2297,7 +2350,7 @@ describe("mutating WebUI views", () => {
       const wrapper = mountWithApp(SnoozesView, { pinia });
       await flushPromises();
 
-      emitSelectValue(wrapper, 0, null);
+      emitSelectValue(wrapper, 1, null);
       await nextTick();
 
       expect(
@@ -2328,6 +2381,47 @@ describe("mutating WebUI views", () => {
           ?.attributes("disabled"),
       ).toBeDefined();
     }
+  });
+
+  it("creates dependency snoozes from the snooze form", async () => {
+    const { pinia, auth, connection, settings, updates, runs } = setupStores(true);
+    settings.snoozes = [];
+    updates.updateTargets = updateTargetsResponse([
+      updateTarget({ service_key: "media/app", service: "app" }),
+      updateTarget({ service_key: "media/db", service: "db" }),
+    ]);
+    vi.spyOn(updates, "loadUpdateTargets").mockResolvedValue();
+    vi.spyOn(settings, "loadSnoozes").mockResolvedValue();
+    const createDependencySnooze = vi
+      .spyOn(settings, "createDependencySnooze")
+      .mockResolvedValue();
+    const wrapper = mountWithApp(SnoozesView, { pinia });
+    await flushPromises();
+
+    emitSelectValue(wrapper, 0, "dependency");
+    await nextTick();
+    emitSelectValue(wrapper, 1, "media/app");
+    emitSelectValue(wrapper, 2, "media/db");
+    await wrapper.find('input[placeholder="maintenance"]').setValue("wait for db");
+    await wrapper.find("form").trigger("submit");
+    await flushPromises();
+
+    const dialog = wrapper.find('[role="dialog"]');
+    expect(dialog.text()).toContain("Dependency");
+    expect(dialog.text()).toContain("Until media/db is pending");
+
+    await dialog
+      .findAll("button")
+      .find((button) => button.text().includes("Create snooze"))
+      ?.trigger("click");
+    await flushPromises();
+
+    expect(createDependencySnooze).toHaveBeenCalledWith(
+      "media/app",
+      "media/db",
+      "wait for db",
+      "active",
+    );
   });
 
   it("disables snooze mutations in read-only mode", async () => {
