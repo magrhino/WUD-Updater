@@ -88,3 +88,75 @@ async function dismissTour(): Promise<void> {
     </div>
   </section>
 </template>
+
+<style scoped>
+.core-tour-panel {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  min-width: 0;
+  margin-top: 14px;
+  padding: 12px;
+  border: 1px solid color-mix(in srgb, var(--color-border) 74%, var(--color-action-blue) 26%);
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--color-surface) 92%, var(--color-action-blue) 8%);
+}
+
+.core-tour-main {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: flex-start;
+  gap: 10px;
+  min-width: 0;
+}
+
+.core-tour-main > :deep(.n-tag) {
+  flex: 0 0 auto;
+  margin-top: 1px;
+}
+
+.core-tour-main>div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.core-tour-main h2,
+.core-tour-main p {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.core-tour-main h2 {
+  margin: 0;
+  color: var(--color-ink);
+  font-size: 1rem;
+  line-height: 1.25;
+}
+
+.core-tour-main p {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: 0.9rem;
+  line-height: 1.45;
+}
+
+.core-tour-actions {
+  display: flex;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+@media (max-width: 560px) {
+  .core-tour-panel {
+    display: grid;
+  }
+
+  .core-tour-actions {
+    justify-content: flex-start;
+  }
+}
+</style>
