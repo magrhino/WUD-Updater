@@ -1,0 +1,15 @@
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+  background: var(--color-body-bg);
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
