@@ -104,6 +104,9 @@ describe("RetagsView", () => {
     updates.retagTargets = retagTargetsResponse();
     updates.retagPlan = retagPlanResponse();
     vi.spyOn(updates, "loadRetagTargets").mockResolvedValue();
+    const applyRetagPlan = vi.spyOn(updates, "applyRetagPlan").mockResolvedValue(
+      applyJobResponse({ job_id: "blocked-retag-job" }),
+    );
 
     const wrapper = mountWithApp(RetagsView, { pinia });
     await flushPromises();
@@ -117,9 +120,12 @@ describe("RetagsView", () => {
       .find((button) => button.text().includes("Apply selected retags"));
     expect(applyButton).toBeDefined();
     expect(applyButton?.attributes("disabled")).toBeDefined();
+    await applyButton?.trigger("click");
+    await flushPromises();
+    expect(applyRetagPlan).not.toHaveBeenCalled();
   });
 
-  it("tracks retag apply jobs after submit", async () => {
+  it("confirms and tracks retag apply jobs after submit", async () => {
     const pinia = createPinia();
     setActivePinia(pinia);
     const auth = useAuthStore();
@@ -165,6 +171,22 @@ describe("RetagsView", () => {
     expect(applyButton?.attributes("disabled")).toBeUndefined();
 
     await applyButton?.trigger("click");
+    await flushPromises();
+
+    expect(applyRetagPlan).not.toHaveBeenCalled();
+    expect(wrapper.find('[role="dialog"]').exists()).toBe(true);
+    expect(wrapper.text()).toContain("Confirm retag apply");
+    expect(wrapper.text()).toContain("Review the selected Compose metadata changes");
+    expect(wrapper.text()).toContain("1 service in media");
+    expect(wrapper.text()).toContain("media/app");
+    expect(wrapper.text()).toContain("repo/app:latest -> repo/app@sha256:abc123");
+    expect(wrapper.text()).toContain("wud.tag.include: ^latest$$ -> ^1\\.1$$");
+
+    const confirmButton = wrapper
+      .findAll("button")
+      .find((button) => button.text().includes("Confirm and apply"));
+    expect(confirmButton).toBeDefined();
+    await confirmButton?.trigger("click");
     await flushPromises();
 
     expect(applyRetagPlan).toHaveBeenCalledTimes(1);

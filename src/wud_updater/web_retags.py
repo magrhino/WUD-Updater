@@ -92,6 +92,16 @@ class _RetagPlanBuild:
     updates: tuple[_RetagPlanUpdate, ...]
 
 
+class _RetagApplyFailed(RuntimeError):
+    def __init__(
+        self,
+        message: str,
+        successful_updates: Sequence[_RetagPlanUpdate],
+    ) -> None:
+        super().__init__(message)
+        self.successful_updates = tuple(successful_updates)
+
+
 class EffectiveConfigLoader(Protocol):
     def __call__(self, settings: WebSettings) -> UpdaterConfig: ...
 
@@ -579,9 +589,16 @@ def _run_retag_apply_job(
         started_at=utc_timestamp(),
     )
     run_id: int | None = None
+    successful_updates: tuple[_RetagPlanUpdate, ...] = ()
     try:
         run_id = _insert_retag_audit_run(settings, build, status="running")
-        _apply_retag_updates(settings, build, jobs, apply_condition, job_id)
+        successful_updates = _apply_retag_updates(
+            settings,
+            build,
+            jobs,
+            apply_condition,
+            job_id,
+        )
         _finish_retag_audit_run(settings, run_id, build, status="success")
         web_jobs._append_apply_job_progress(
             jobs,
@@ -602,13 +619,17 @@ def _run_retag_apply_job(
             finished_at=utc_timestamp(),
         )
     except Exception as exc:
+        if isinstance(exc, _RetagApplyFailed):
+            successful_updates = exc.successful_updates
+        safe_error = _safe_retag_apply_error(settings, exc)
         if run_id is not None:
             _finish_retag_audit_run(
                 settings,
                 run_id,
                 build,
                 status="failure",
-                error=str(exc),
+                error=safe_error,
+                successful_updates=successful_updates,
             )
         web_jobs._append_apply_job_progress(
             jobs,
@@ -617,7 +638,7 @@ def _run_retag_apply_job(
             UpdaterProgressEvent(
                 phase="completion",
                 status="failure",
-                message=str(exc),
+                message=safe_error,
             ),
         )
         web_jobs._update_apply_job(
@@ -627,7 +648,7 @@ def _run_retag_apply_job(
             status="failure",
             run_id=run_id,
             finished_at=utc_timestamp(),
-            error=str(exc),
+            error=safe_error,
         )
     finally:
         close = getattr(wud_lock, "close", None)
@@ -641,12 +662,13 @@ def _apply_retag_updates(
     jobs: dict[str, WebApplyJob],
     apply_condition: Condition,
     job_id: str,
-) -> None:
+) -> tuple[_RetagPlanUpdate, ...]:
     env = settings.command_env
     runner = CommandRunner(env=env) if env is not None else CommandRunner()
     compose = ComposeCli(runner=runner)
     docker = DockerCli(runner=runner)
     config = _effective_config(settings)
+    successful_updates: list[_RetagPlanUpdate] = []
     for stack in _ordered_retag_stacks(build.updates):
         stack_updates = [item for item in build.updates if item.stack.index == stack.index]
         services = tuple(
@@ -731,22 +753,30 @@ def _apply_retag_updates(
             if backup is not None:
                 _delete_path(backup)
                 backup = None
+            successful_updates.extend(stack_updates)
         except Exception as exc:
             if backup is not None:
-                _restore_retag_compose(
-                    compose,
-                    docker,
-                    config,
-                    stack,
-                    services,
-                    backup,
-                    jobs,
-                    apply_condition,
-                    job_id,
-                    original_error=str(exc),
-                )
+                try:
+                    _restore_retag_compose(
+                        compose,
+                        docker,
+                        config,
+                        stack,
+                        services,
+                        backup,
+                        jobs,
+                        apply_condition,
+                        job_id,
+                        original_error=str(exc),
+                    )
+                except Exception as restore_exc:
+                    raise _RetagApplyFailed(
+                        str(restore_exc),
+                        successful_updates,
+                    ) from restore_exc
                 backup = None
-            raise
+            raise _RetagApplyFailed(str(exc), successful_updates) from exc
+    return tuple(successful_updates)
 
 
 def _recreate_retag_services(
@@ -1025,12 +1055,19 @@ def _finish_retag_audit_run(
     *,
     status: str,
     error: str = "",
+    successful_updates: Sequence[_RetagPlanUpdate] = (),
 ) -> None:
     metadata = _retag_audit_metadata(build, status=status, error=error)
+    successful_service_keys = {item.service_key for item in successful_updates}
     with open_db(settings.config.db_path) as conn:
         init_db(conn)
         now = utc_timestamp()
         for item in build.updates:
+            item_status = (
+                "success"
+                if status == "success" or item.service_key in successful_service_keys
+                else "failure"
+            )
             insert_update_event(
                 conn,
                 run_id=run_id,
@@ -1039,7 +1076,7 @@ def _finish_retag_audit_run(
                 stack_name=item.stack.name,
                 image=item.update.old_image,
                 target_image=item.update.final_image,
-                status=status,
+                status=item_status,
                 metadata_json=_json_object(
                     {
                         "source": "webui",
@@ -1057,7 +1094,7 @@ def _finish_retag_audit_run(
                     final_image=item.update.final_image,
                     provenance_source="retag",
                     provenance_confidence=(
-                        "verified" if status == "success" else "planned"
+                        "verified" if item_status == "success" else "planned"
                     ),
                 ),
             )
@@ -1093,6 +1130,10 @@ def _retag_audit_metadata(
     if error:
         metadata["error"] = error
     return metadata
+
+
+def _safe_retag_apply_error(settings: WebSettings, exc: BaseException) -> str:
+    return _safe_exception_detail(settings, "retag apply failed", exc)
 
 
 def _progress(

@@ -571,6 +571,216 @@ def test_retag_apply_restores_compose_when_pull_fails(tmp_path: Path) -> None:
     assert run["status"] == "failure"
 
 
+def test_retag_apply_records_partial_stack_success_when_later_stack_fails(
+    tmp_path: Path,
+) -> None:
+    fake_env, fake_root = _fake_docker_env(tmp_path)
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+            "WUD_UPDATE_MODE": "live",
+            "WUD_MAX_WAIT": "0",
+            **fake_env,
+        },
+    )
+    alpha_dir = _make_fake_stack(
+        tmp_path,
+        fake_root,
+        "alpha",
+        [("app", "repo/alpha@sha256:old", "cid-alpha")],
+    )
+    bravo_dir = _make_fake_stack(
+        tmp_path,
+        fake_root,
+        "bravo",
+        [("app", "repo/bravo@sha256:old", "cid-bravo")],
+    )
+    _write_compose(
+        alpha_dir,
+        "app",
+        "repo/alpha@sha256:old",
+        label_value="^latest$$",
+    )
+    _write_compose(
+        bravo_dir,
+        "app",
+        "repo/bravo@sha256:old",
+        label_value="^latest$$",
+    )
+    _seed_known_image(
+        tmp_path,
+        service_key="alpha/app",
+        image="repo/alpha@sha256:old",
+        source_image="repo/alpha:latest",
+        resolved_tag="2.0",
+        watch_tag="latest",
+        target_digest="sha256:old",
+        final_image="repo/alpha@sha256:old",
+    )
+    _seed_known_image(
+        tmp_path,
+        service_key="bravo/app",
+        image="repo/bravo@sha256:old",
+        source_image="repo/bravo:latest",
+        resolved_tag="3.0",
+        watch_tag="latest",
+        target_digest="sha256:old",
+        final_image="repo/bravo@sha256:old",
+    )
+    (fake_root / "stacks" / "bravo" / "pull_fail").write_text(
+        "pull failed\n",
+        encoding="utf-8",
+    )
+    bravo_before = (bravo_dir / "docker-compose.yml").read_text(encoding="utf-8")
+    headers = _csrf_headers(client)
+    choices = [
+        {"service_key": "alpha/app", "choice": "switch-to-concrete"},
+        {"service_key": "bravo/app", "choice": "switch-to-concrete"},
+    ]
+    plan = client.post(
+        "/api/v1/retag-plans",
+        json={"choices": choices},
+        headers=headers,
+    ).json()
+
+    response = client.post(
+        "/api/v1/retag-plans/apply",
+        json={
+            "plan_id": plan["plan_id"],
+            "choices": choices,
+            "confirmation": "apply-retags",
+        },
+        headers=headers,
+    )
+
+    assert response.status_code == 202
+    job = _wait_apply_job(client, response.json()["job_id"])
+    assert job["status"] == "failure"
+    assert "wud.tag.include=^2\\.0$$" in (
+        alpha_dir / "docker-compose.yml"
+    ).read_text(encoding="utf-8")
+    assert (bravo_dir / "docker-compose.yml").read_text(
+        encoding="utf-8"
+    ) == bravo_before
+    with open_db(tmp_path / "state" / "wud.sqlite") as conn:
+        run = conn.execute(
+            "SELECT status FROM update_runs WHERE id = ?",
+            (job["run_id"],),
+        ).fetchone()
+        events = conn.execute(
+            """
+            SELECT stack_name, service_name, status, digest_provenance_confidence
+            FROM update_events
+            WHERE run_id = ?
+            ORDER BY stack_name, service_name
+            """,
+            (job["run_id"],),
+        ).fetchall()
+        known = conn.execute(
+            """
+            SELECT service_key, digest_provenance_source, digest_watch_tag
+            FROM known_images
+            WHERE service_key IN ('alpha/app', 'bravo/app')
+            ORDER BY service_key
+            """
+        ).fetchall()
+    assert run["status"] == "failure"
+    assert [
+        (
+            row["stack_name"],
+            row["service_name"],
+            row["status"],
+            row["digest_provenance_confidence"],
+        )
+        for row in events
+    ] == [
+        ("alpha", "app", "success", "verified"),
+        ("bravo", "app", "failure", "planned"),
+    ]
+    assert [
+        (
+            row["service_key"],
+            row["digest_provenance_source"],
+            row["digest_watch_tag"],
+        )
+        for row in known
+    ] == [
+        ("alpha/app", "retag", "2.0"),
+        ("bravo/app", "apply", "latest"),
+    ]
+
+
+def test_retag_apply_redacts_rollback_failure_paths(tmp_path: Path) -> None:
+    fake_env, fake_root = _fake_docker_env(tmp_path)
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+            "WUD_UPDATE_MODE": "live",
+            "WUD_MAX_WAIT": "0",
+            **fake_env,
+        },
+    )
+    compose_dir = _make_fake_stack(
+        tmp_path,
+        fake_root,
+        "stack",
+        [("app", "repo/app@sha256:old", "cid-app")],
+    )
+    _write_compose(
+        compose_dir,
+        "app",
+        "repo/app@sha256:old",
+        label_value="^latest$$",
+    )
+    _seed_known_image(
+        tmp_path,
+        service_key="stack/app",
+        image="repo/app@sha256:old",
+        source_image="repo/app:latest",
+        resolved_tag="2.0",
+        watch_tag="latest",
+        target_digest="sha256:old",
+        final_image="repo/app@sha256:old",
+    )
+    (fake_root / "stacks" / "stack" / "up_fail").write_text(
+        "up failed\n",
+        encoding="utf-8",
+    )
+    headers = _csrf_headers(client)
+    plan = client.post(
+        "/api/v1/retag-plans",
+        json={"choices": [{"service_key": "stack/app", "choice": "switch-to-concrete"}]},
+        headers=headers,
+    ).json()
+
+    response = client.post(
+        "/api/v1/retag-plans/apply",
+        json={
+            "plan_id": plan["plan_id"],
+            "choices": [{"service_key": "stack/app", "choice": "switch-to-concrete"}],
+            "confirmation": "apply-retags",
+        },
+        headers=headers,
+    )
+
+    assert response.status_code == 202
+    job = _wait_apply_job(client, response.json()["job_id"])
+    assert job["status"] == "failure"
+    visible_error = " ".join(
+        [
+            job["error"],
+            *[item["message"] for item in job["progress"]],
+        ]
+    )
+    assert "backup retained at" in visible_error
+    assert "[REDACTED_PATH]" in visible_error
+    assert str(tmp_path) not in visible_error
+
+
 def test_retag_apply_unpauses_before_rollback_when_pause_mode_up_fails(
     tmp_path: Path,
 ) -> None:

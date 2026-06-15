@@ -2721,6 +2721,16 @@ body .n-switch:focus-within {
   min-height: 140px;
 }
 
+.retag-confirm-metrics strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.retag-confirm-modal .plan-line-row em {
+  display: grid;
+  gap: 3px;
+}
+
 .retag-state svg {
   color: var(--color-operational-teal);
 }

@@ -7,6 +7,7 @@ import {
   NButton,
   NDataTable,
   NInput,
+  NModal,
   NRadioButton,
   NRadioGroup,
   NSelect,
@@ -45,6 +46,7 @@ const searchQuery = ref("");
 const statusFilter = ref<RetagFilter>("all");
 const applyJobPanelRef = ref<PendingApplyJobPanelRef | null>(null);
 const showRetagApplyJobPanel = ref(false);
+const showRetagConfirmModal = ref(false);
 const isDemoMode =
   import.meta.env.MODE === "demo" ||
   import.meta.env.VITE_WUD_DEMO_MODE === "true";
@@ -186,6 +188,24 @@ const applyDisabled = computed(
     retagMutationDisabled.value ||
     updates.retagPlan?.can_apply !== true,
 );
+const retagPlanStacks = computed(() => updates.retagPlan?.stacks ?? []);
+const retagPlanUpdates = computed(() =>
+  retagPlanStacks.value.flatMap((stack) =>
+    stack.digest_pin_updates.map((update) => ({ stack, update })),
+  ),
+);
+const retagConfirmImpactLabel = computed(() => {
+  const plan = updates.retagPlan;
+  if (!plan) {
+    return "";
+  }
+  const serviceCount = plan.selected_count || retagPlanUpdates.value.length;
+  const stackCount = plan.stacks.length;
+  if (stackCount > 1) {
+    return `${pluralize(serviceCount, "service")} across ${pluralize(stackCount, "stack")}`;
+  }
+  return `${pluralize(serviceCount, "service")} in ${retagPlanContextLabel(plan)}`;
+});
 const initialLoading = computed(
   () => !loaded.value && !updates.error && updates.loading,
 );
@@ -353,7 +373,24 @@ async function previewRetagChanges(): Promise<void> {
   await updates.createRetagPlan().catch(() => undefined);
 }
 
-async function applyRetagChanges(): Promise<void> {
+function openRetagApplyConfirm(): void {
+  if (applyDisabled.value) {
+    return;
+  }
+  showRetagConfirmModal.value = true;
+}
+
+function closeRetagApplyConfirm(): void {
+  showRetagConfirmModal.value = false;
+}
+
+function handleRetagConfirmShowUpdate(value: boolean): void {
+  if (!value) {
+    closeRetagApplyConfirm();
+  }
+}
+
+async function confirmRetagApply(): Promise<void> {
   if (applyDisabled.value) {
     return;
   }
@@ -364,6 +401,7 @@ async function applyRetagChanges(): Promise<void> {
   }
   applyJobSnapshot.value = snapshot;
   showRetagApplyJobPanel.value = true;
+  showRetagConfirmModal.value = false;
   subscribeApplyJob(job.job_id);
   await focusApplyJobPanel();
 }
@@ -520,6 +558,10 @@ function labelRewriteSummary(update: RetagPlanDigestPinUpdate): string {
     .join("; ");
 }
 
+function pluralize(count: number, noun: string, plural = `${noun}s`): string {
+  return `${count} ${count === 1 ? noun : plural}`;
+}
+
 onMounted(() => {
   void updates.loadRetagTargets().catch(() => undefined);
 });
@@ -572,6 +614,106 @@ onMounted(() => {
       :update-label="applyJobUpdateLabel"
     />
 
+    <n-modal
+      :show="showRetagConfirmModal"
+      :mask-closable="false"
+      @update:show="handleRetagConfirmShowUpdate"
+    >
+      <section
+        class="preflight-modal retag-confirm-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="retag-confirm-title"
+      >
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Confirm retag apply</p>
+            <h2 id="retag-confirm-title">Apply selected retags</h2>
+            <p class="preflight-summary-text">
+              Review the selected Compose metadata changes before starting the retag apply job.
+            </p>
+            <p v-if="retagConfirmImpactLabel" class="preflight-impact-text">
+              {{ retagConfirmImpactLabel }}
+            </p>
+          </div>
+          <n-tag v-if="updates.retagPlan" :type="planStatusType()">
+            {{ updates.retagPlan.status }}
+          </n-tag>
+        </div>
+
+        <n-alert
+          v-if="retagMutationNotice"
+          type="warning"
+          :show-icon="false"
+        >
+          {{ retagMutationNotice }}
+        </n-alert>
+
+        <div
+          v-if="updates.retagPlan"
+          class="preflight-metrics retag-confirm-metrics"
+          aria-label="Retag apply summary"
+        >
+          <div>
+            <span>Services</span>
+            <strong>{{ updates.retagPlan.selected_count }}</strong>
+          </div>
+          <div>
+            <span>Stacks</span>
+            <strong>{{ updates.retagPlan.stacks.length }}</strong>
+          </div>
+          <div>
+            <span>Keep current</span>
+            <strong>{{ updates.retagPlan.keep_current_count }}</strong>
+          </div>
+          <div>
+            <span>Source</span>
+            <strong>{{ retagPlanSourceFile(updates.retagPlan) }}</strong>
+          </div>
+        </div>
+
+        <section
+          class="preflight-impact preflight-block"
+          aria-labelledby="retag-confirm-services-title"
+        >
+          <div class="preflight-impact-heading">
+            <strong id="retag-confirm-services-title">Services and images</strong>
+            <n-tag size="small">{{ pluralize(retagPlanUpdates.length, "service") }}</n-tag>
+          </div>
+          <div v-if="retagPlanUpdates.length" class="compact-list">
+            <div
+              v-for="{ stack, update } in retagPlanUpdates"
+              :key="`confirm-${update.service_key}`"
+              class="list-row plan-line-row"
+            >
+              <span>{{ stack.stack }}</span>
+              <strong>{{ update.service_key }}</strong>
+              <em>
+                <code>{{ digestPinSummary(update) }}</code>
+                <span>{{ labelRewriteSummary(update) }}</span>
+              </em>
+            </div>
+          </div>
+          <div v-else class="empty-state">No retag changes selected.</div>
+        </section>
+
+        <div class="preflight-footer">
+          <n-button size="small" quaternary @click="closeRetagApplyConfirm">
+            Cancel
+          </n-button>
+          <n-button
+            type="primary"
+            size="small"
+            :disabled="applyDisabled"
+            :loading="updates.loading || applyJobActive"
+            @click="confirmRetagApply"
+          >
+            Confirm and apply
+          </n-button>
+        </div>
+      </section>
+    </n-modal>
+
     <section class="section-panel retag-summary-panel">
       <div class="section-heading retag-heading">
         <div>
@@ -593,7 +735,7 @@ onMounted(() => {
             size="small"
             :disabled="applyDisabled"
             :loading="updates.loading || applyJobActive"
-            @click="applyRetagChanges"
+            @click="openRetagApplyConfirm"
           >
             Apply selected retags
           </n-button>
