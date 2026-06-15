@@ -611,3 +611,193 @@ async function confirmSelfUpdate(): Promise<void> {
     </n-message-provider>
   </n-config-provider>
 </template>
+
+<style scoped>
+.app-shell {
+  display: grid;
+  grid-template-columns: 248px minmax(0, 1fr);
+  min-height: 100vh;
+}
+
+.app-shell.centered {
+  display: block;
+}
+
+.sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+  min-height: 100vh;
+  padding: 22px 16px;
+  background: var(--color-sidebar);
+  color: var(--color-sidebar-text);
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 40px;
+  padding: 0 10px;
+  font-weight: 700;
+}
+
+.nav-list {
+  display: grid;
+  gap: 6px;
+}
+
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 42px;
+  padding: 0 10px;
+  border-radius: 7px;
+  color: var(--color-sidebar-muted);
+  transition:
+    background-color var(--motion-base) var(--ease-out-quart),
+    color var(--motion-base) var(--ease-out-quart),
+    transform var(--motion-fast) var(--ease-out-quart);
+}
+
+.nav-item.router-link-active,
+.nav-item.nav-item-active,
+.nav-item:hover {
+  background: var(--color-sidebar-hover);
+  color: var(--color-sidebar-text);
+  transform: translateX(2px);
+}
+
+.sidebar-footer {
+  margin-top: auto;
+  padding: 0 10px;
+}
+
+.version-tag {
+  max-width: 100%;
+  border-color: rgba(247, 251, 252, 0.18);
+  background: rgba(247, 251, 252, 0.08);
+  color: var(--color-sidebar-muted);
+}
+
+.version-link {
+  display: inline-flex;
+  max-width: 100%;
+  color: inherit;
+  font-weight: 700;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+
+.version-link:hover,
+.version-link:focus-visible {
+  color: var(--color-sidebar-text);
+  text-decoration: underline;
+}
+
+.main-panel {
+  min-width: 0;
+  padding: 24px;
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 22px;
+}
+
+.topbar h1 {
+  margin: 0;
+  color: var(--color-ink);
+  font-size: 1.35rem;
+  line-height: 1.2;
+}
+
+.topbar-actions,
+:deep(.inline-actions) {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+@media (max-width: 920px) {
+  .app-shell {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .sidebar {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    min-height: auto;
+    flex-direction: row;
+    align-items: center;
+    gap: 12px;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    padding: 10px 12px;
+    overflow: hidden;
+  }
+
+  .brand span,
+  .sidebar-footer {
+    display: none;
+  }
+
+  .brand {
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  .nav-list {
+    flex: 1 1 auto;
+    grid-auto-flow: column;
+    min-width: 0;
+    max-width: 100%;
+    overflow-x: auto;
+  }
+
+  .nav-item {
+    flex: 0 0 auto;
+    min-height: 44px;
+    white-space: nowrap;
+  }
+
+  .nav-item span {
+    display: none;
+  }
+
+  .main-panel {
+    padding: 16px;
+  }
+
+  .topbar {
+    align-items: flex-start;
+  }
+}
+
+@media (max-width: 560px) {
+  .topbar {
+    display: grid;
+  }
+
+  .topbar-actions :deep(.n-button),
+  :deep(.inline-actions .n-button) {
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  .topbar-actions :deep(.n-button--circle),
+  :deep(.inline-actions .n-button--circle) {
+    min-width: 44px;
+  }
+
+  .topbar-actions {
+    justify-content: flex-start;
+  }
+}
+</style>
