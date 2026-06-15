@@ -1254,6 +1254,7 @@ onMounted(() => {
 
 .settings-zone,
 .settings-disclosure,
+#settings-diagnostics,
 #settings-docs {
   scroll-margin-top: 18px;
 }
