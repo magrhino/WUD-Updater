@@ -839,7 +839,7 @@ def _create_retag_plan(
 ) -> dict[str, object]:
     response = client.post(
         "/api/v1/retag-plans",
-        json={"choices": choices or [_switch_choice()]},
+        json={"choices": choices if choices is not None else [_switch_choice()]},
         headers=headers,
     )
     assert response.status_code == 200
@@ -856,7 +856,7 @@ def _apply_retag_plan(
         "/api/v1/retag-plans/apply",
         json={
             "plan_id": plan["plan_id"],
-            "choices": choices or [_switch_choice()],
+            "choices": choices if choices is not None else [_switch_choice()],
             "confirmation": "apply-retags",
         },
         headers=headers,
