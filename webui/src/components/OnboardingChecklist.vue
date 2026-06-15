@@ -192,15 +192,15 @@ function sourceCheckSummaryLabel(item: OnboardingChecklistItem): string {
     tabindex="-1"
   >
     <div class="section-heading onboarding-heading">
-      <div class="settings-heading-main">
+      <div class="section-heading-main">
         <p class="eyebrow">First run</p>
         <h2>Setup checklist</h2>
-        <p class="settings-section-copy">
+        <p class="section-copy">
           Confirm the WebUI can see WUD output, Docker, Compose stacks, persistent
           state, and the intended browser safety mode.
         </p>
       </div>
-      <div class="settings-heading-meta onboarding-actions">
+      <div class="section-heading-meta onboarding-actions">
         <n-tag v-if="failingItems" size="small" type="error">
           {{ failingItems }} failing
         </n-tag>

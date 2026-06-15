@@ -66,10 +66,10 @@ async function submit(): Promise<void> {
 </script>
 
 <template>
-  <section class="login-page">
-    <div class="login-panel">
-      <div class="login-heading">
-        <div class="login-mark">
+  <section class="auth-page">
+    <div class="auth-panel">
+      <div class="auth-heading">
+        <div class="auth-mark">
           <ShieldCheck :size="24" />
         </div>
         <div>
