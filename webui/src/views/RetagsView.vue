@@ -162,12 +162,10 @@ const selectedSwitchCount = computed(
 const unavailable = computed(() => updates.retagTargets?.status === "unavailable");
 const loaded = computed(() => updates.retagTargets !== null);
 const mutationsEnabled = computed(() => auth.session?.mutations_enabled === true);
-const retagMutationDisabled = computed(
-  () => !mutationsEnabled.value || isDemoMode,
-);
+const retagMutationDisabled = computed(() => !mutationsEnabled.value);
 const retagMutationNotice = computed(() => {
   if (isDemoMode) {
-    return "Demo mode keeps retag apply disabled.";
+    return "Demo mode previews retag apply without changing local Compose files.";
   }
   if (!mutationsEnabled.value) {
     return "Read-only mode keeps retag switch/apply disabled.";

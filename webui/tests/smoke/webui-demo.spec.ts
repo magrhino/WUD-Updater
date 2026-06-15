@@ -108,11 +108,18 @@ test("static demo renders retag review fixtures", async ({ page }) => {
   await expect(page.getByText("Retag available").first()).toBeVisible();
   await expect(page.getByText("home/home-assistant")).toBeVisible();
   await expect(page.getByText("Missing provenance")).toBeVisible();
-  await expect(page.getByText("Demo mode keeps retag apply disabled.")).toBeVisible();
+  await expect(
+    page.getByText("Demo mode previews retag apply without changing local Compose files."),
+  ).toBeVisible();
   await expect(
     page.getByRole("button", { name: "Preview retag changes" }),
   ).toBeEnabled();
-  await expect(page.getByRole("radio", { name: "Switch" }).first()).toBeDisabled();
+  const blockedServiceRow = page
+    .getByRole("row")
+    .filter({ hasText: "home/home-assistant" });
+  await expect(
+    blockedServiceRow.getByRole("radio", { name: "Switch" }),
+  ).toBeDisabled();
 });
 
 test("static demo mobile layout stays within the viewport", async ({ page }) => {

@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from tests.web_test_helpers import (
     _assert_pending_grouping_did_not_mutate,
     _client,
@@ -412,6 +414,69 @@ def test_retag_apply_rejects_stale_plan(tmp_path: Path) -> None:
 
     assert response.status_code == 409
     assert response.json()["detail"] == "retag plan is stale"
+
+
+def test_retag_apply_cleans_up_job_when_executor_submit_fails(
+    tmp_path: Path,
+) -> None:
+    fake_env, fake_root = _fake_docker_env(tmp_path)
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+            **fake_env,
+        },
+    )
+    compose_dir = _make_fake_stack(
+        tmp_path,
+        fake_root,
+        "stack",
+        [("app", "repo/app@sha256:old", "cid-app")],
+    )
+    _write_compose(
+        compose_dir,
+        "app",
+        "repo/app@sha256:old",
+        label_value="^latest$$",
+    )
+    _seed_known_image(
+        tmp_path,
+        service_key="stack/app",
+        image="repo/app@sha256:old",
+        source_image="repo/app:latest",
+        resolved_tag="2.0",
+        watch_tag="latest",
+        target_digest="sha256:old",
+        final_image="repo/app@sha256:old",
+    )
+    headers = _csrf_headers(client)
+    plan = client.post(
+        "/api/v1/retag-plans",
+        json={"choices": [{"service_key": "stack/app", "choice": "switch-to-concrete"}]},
+        headers=headers,
+    ).json()
+
+    class FailingExecutor:
+        def submit(self, *_args: object, **_kwargs: object) -> None:
+            raise RuntimeError("queue failed")
+
+    client.app.state.web_apply_executor = FailingExecutor()
+
+    with pytest.raises(RuntimeError, match="queue failed"):
+        client.post(
+            "/api/v1/retag-plans/apply",
+            json={
+                "plan_id": plan["plan_id"],
+                "choices": [
+                    {"service_key": "stack/app", "choice": "switch-to-concrete"},
+                ],
+                "confirmation": "apply-retags",
+            },
+            headers=headers,
+        )
+
+    assert client.app.state.web_apply_jobs == {}
 
 
 def test_retag_plan_rejects_duplicate_and_unknown_choices(tmp_path: Path) -> None:

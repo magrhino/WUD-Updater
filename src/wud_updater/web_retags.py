@@ -561,15 +561,20 @@ def _submit_retag_apply_job(
         jobs[job.id] = job
         response = web_jobs._apply_job_response(job)
         apply_condition.notify_all()
-        executor.submit(
-            _run_retag_apply_job,
-            settings,
-            build,
-            jobs,
-            apply_condition,
-            job.id,
-            wud_lock,
-        )
+        try:
+            executor.submit(
+                _run_retag_apply_job,
+                settings,
+                build,
+                jobs,
+                apply_condition,
+                job.id,
+                wud_lock,
+            )
+        except Exception:
+            del jobs[job.id]
+            apply_condition.notify_all()
+            raise
         return response
 
 

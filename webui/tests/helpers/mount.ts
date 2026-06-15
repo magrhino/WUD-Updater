@@ -1,4 +1,13 @@
-import { h, inject, provide, ref, type Component, type Ref, type VNodeChild } from "vue";
+import {
+  h,
+  inject,
+  provide,
+  ref,
+  watch,
+  type Component,
+  type Ref,
+  type VNodeChild,
+} from "vue";
 import { mount, type VueWrapper } from "@vue/test-utils";
 import { createPinia, setActivePinia, type Pinia } from "pinia";
 import type { Router } from "vue-router";
@@ -311,6 +320,12 @@ export const naiveStubs: Record<string, Component> = {
     emits: ["update:value"],
     setup(props, { emit, slots }) {
       const value = ref(props.value);
+      watch(
+        () => props.value,
+        (next) => {
+          value.value = next;
+        },
+      );
       provide("n-radio-group", {
         value,
         update: (next: string) => {
