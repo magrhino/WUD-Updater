@@ -76,7 +76,7 @@ function handleModalShowUpdate(value: boolean): void {
           <div v-if="assistantFindings.length" class="cleanup-assistant-section">
             <strong>Preflight found</strong>
             <ul>
-              <li v-for="finding in assistantFindings" :key="finding">
+              <li v-for="finding in assistantFindings" :key="finding" class="wrap-anywhere">
                 {{ finding }}
               </li>
             </ul>
@@ -84,7 +84,7 @@ function handleModalShowUpdate(value: boolean): void {
           <div v-if="assistantReasons.length" class="cleanup-assistant-section">
             <strong>Likely causes</strong>
             <ul>
-              <li v-for="reason in assistantReasons" :key="reason">
+              <li v-for="reason in assistantReasons" :key="reason" class="wrap-anywhere">
                 {{ reason }}
               </li>
             </ul>
@@ -92,7 +92,7 @@ function handleModalShowUpdate(value: boolean): void {
           <div v-if="assistantActions.length" class="cleanup-assistant-section">
             <strong>Recommended actions</strong>
             <ul>
-              <li v-for="action in assistantActions" :key="action">
+              <li v-for="action in assistantActions" :key="action" class="wrap-anywhere">
                 {{ action }}
               </li>
             </ul>
@@ -177,8 +177,4 @@ function handleModalShowUpdate(value: boolean): void {
   padding-left: 18px;
 }
 
-.cleanup-assistant-section li {
-  min-width: 0;
-  overflow-wrap: anywhere;
-}
 </style>

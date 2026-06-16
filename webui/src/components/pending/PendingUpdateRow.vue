@@ -65,22 +65,22 @@ function groupedItemTarget(item: PendingGroupedItem): string {
         @update:checked="emit('toggle', item.line_no, Boolean($event))"
       >
         <span class="sr-only">Select update</span>
-        <strong>{{ groupName ? `${groupName} / ${serviceLabel}` : serviceLabel }}</strong>
+        <strong class="wrap-anywhere">{{ groupName ? `${groupName} / ${serviceLabel}` : serviceLabel }}</strong>
       </n-checkbox>
       <n-tag size="small" :type="statusTagType">
         {{ statusLabel }}
       </n-tag>
     </div>
     <div class="pending-update-detail">
-      <code>{{ item.image }}</code>
+      <code class="wrap-anywhere">{{ item.image }}</code>
       <span>-></span>
-      <code>{{ groupedItemTarget(item) }}</code>
+      <code class="wrap-anywhere">{{ groupedItemTarget(item) }}</code>
     </div>
     <div class="pending-update-meta">
-      <span>Pending file line #{{ item.line_no }}</span>
+      <span class="wrap-anywhere">Pending file line #{{ item.line_no }}</span>
       <span
         v-if="riskCues.length"
-        class="risk-badges-container"
+        class="risk-badges-container wrap-anywhere"
         aria-label="Safety cues"
       >
         <n-tag
@@ -93,11 +93,11 @@ function groupedItemTarget(item: PendingGroupedItem): string {
           {{ cue.label }}
         </n-tag>
       </span>
-      <span v-if="tagRewriteLabel" class="tag-rewrite-detail">
+      <span v-if="tagRewriteLabel" class="tag-rewrite-detail wrap-anywhere">
         <n-tag size="small" type="warning">Tag rewrite</n-tag>
         {{ tagRewriteLabel }}
       </span>
-      <span v-if="metaDetail">{{ metaDetail }}</span>
+      <span v-if="metaDetail" class="wrap-anywhere">{{ metaDetail }}</span>
       <div v-if="showReleaseNotes && releaseNote?.links.length" class="release-notes-cell">
         <a
           v-for="link in releaseNote.links"
@@ -112,7 +112,7 @@ function groupedItemTarget(item: PendingGroupedItem): string {
         </a>
         <span
           v-if="releaseNote.breaking"
-          class="release-breaking-cue"
+          class="release-breaking-cue wrap-anywhere"
           :title="releaseNote.breaking_reasons.join(' ')"
           aria-label="Possible breaking change"
         >
@@ -122,10 +122,10 @@ function groupedItemTarget(item: PendingGroupedItem): string {
       </div>
       <span
         v-if="showReleaseNotes && !releaseNote?.links.length"
-        class="release-notes-muted"
+        class="release-notes-muted wrap-anywhere"
         :title="releaseNoteReason || undefined"
       >
-        <span class="release-notes-status">
+        <span class="release-notes-status wrap-anywhere">
           {{ releaseNoteStatus }}
         </span>
         <span v-if="releaseNoteReason" class="release-notes-reason">
@@ -180,11 +180,6 @@ function groupedItemTarget(item: PendingGroupedItem): string {
   min-width: 0;
 }
 
-.pending-update-main strong {
-  min-width: 0;
-  overflow-wrap: anywhere;
-}
-
 .pending-update-detail,
 .pending-update-meta,
 .pending-update-tag {
@@ -199,12 +194,6 @@ function groupedItemTarget(item: PendingGroupedItem): string {
   color: var(--color-code-text);
   font-family: var(--font-mono);
   font-size: 0.82rem;
-}
-
-.pending-update-detail code,
-.pending-update-meta span {
-  min-width: 0;
-  overflow-wrap: anywhere;
 }
 
 .pending-update-meta,

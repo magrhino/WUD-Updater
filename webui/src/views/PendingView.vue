@@ -909,8 +909,8 @@ watch(
 
     <div v-if="pendingLoaded" class="selection-toolbar">
       <div class="selection-summary">
-        <strong>{{ selectedLineNumbers.length }} selected</strong>
-        <span v-if="groupingReady">
+        <strong class="wrap-anywhere">{{ selectedLineNumbers.length }} selected</strong>
+        <span v-if="groupingReady" class="wrap-anywhere">
           {{ pluralize(stackGroups.length, "stack") }} available
           <template v-if="dependencySnoozedItems.length">
             - {{ pluralize(dependencySnoozedItems.length, "snoozed item") }}
@@ -919,7 +919,7 @@ watch(
             - {{ unmatchedReviewCountLabel }}
           </template>
         </span>
-        <span v-else>Pending file order</span>
+        <span v-else class="wrap-anywhere">Pending file order</span>
       </div>
       <n-flex
         class="inline-actions pending-actions"
@@ -943,8 +943,8 @@ watch(
 
     <div v-if="pendingLoaded && selectedLineNumbers.length" class="batch-action-bar">
       <div class="selection-summary">
-        <strong>{{ batchSummaryLabel }}</strong>
-        <span>
+        <strong class="wrap-anywhere">{{ batchSummaryLabel }}</strong>
+        <span class="wrap-anywhere">
           Preview the plan before anything changes.
           <template v-if="lineNumbersHaveTagUpdates(selectedLineNumbers)">
             Tag rewrites are confirmed before apply.
@@ -1020,11 +1020,11 @@ watch(
                 <span class="stack-checkbox-label">
                   <span class="sr-only">Select stack </span>
                   <span class="stack-checkbox-kicker" aria-hidden="true">Stack</span>
-                  <strong :title="group.directory">{{ group.name }}</strong>
+                  <strong class="wrap-anywhere" :title="group.directory">{{ group.name }}</strong>
                 </span>
               </n-checkbox>
               <div class="stack-identity" aria-label="Stack impact">
-                <span>
+                <span class="wrap-anywhere">
                   <span class="identity-label">Services</span>
                   {{ group.services_label }}
                 </span>
@@ -1063,8 +1063,8 @@ watch(
               :key="`${group.name}-${item.line_no}-preview`"
               class="stack-change-row"
             >
-              <strong class="stack-change-service">{{ groupedItemServices(item) }}</strong>
-              <span class="stack-change-target">
+              <strong class="stack-change-service wrap-anywhere">{{ groupedItemServices(item) }}</strong>
+              <span class="stack-change-target wrap-anywhere">
                 <n-tag
                   size="small"
                   :type="groupedItemActionTagType(item)"
@@ -1087,7 +1087,7 @@ watch(
                   </n-tag>
                 </span>
                 <code
-                  class="stack-change-value"
+                  class="stack-change-value wrap-anywhere"
                   data-label="Current"
                   :title="item.image"
                 >
@@ -1095,7 +1095,7 @@ watch(
                 </code>
                 <span aria-hidden="true">-></span>
                 <code
-                  class="stack-change-value"
+                  class="stack-change-value wrap-anywhere"
                   data-label="Target"
                   :title="groupedItemTarget(item)"
                 >
@@ -1103,7 +1103,7 @@ watch(
                 </code>
               </span>
             </div>
-            <span v-if="groupChangeOverflowCount(group)" class="stack-change-more">
+            <span v-if="groupChangeOverflowCount(group)" class="stack-change-more wrap-anywhere">
               +{{ groupChangeOverflowCount(group) }} more in Details
             </span>
           </div>
@@ -1144,8 +1144,8 @@ watch(
         <article v-if="dependencySnoozedItems.length" class="stack-card needs-review">
           <div class="stack-card-header">
             <div class="stack-title-block">
-              <strong>Snoozed pending entries</strong>
-              <span class="stack-path">
+              <strong class="wrap-anywhere">Snoozed pending entries</strong>
+              <span class="stack-path wrap-anywhere">
                 Excluded from bulk selection until the dependency service updates successfully.
               </span>
             </div>
@@ -1190,8 +1190,8 @@ watch(
         <article v-if="unmatchedItems.length" class="stack-card needs-review">
           <div class="stack-card-header">
             <div class="stack-title-block">
-              <strong>Stale pending entries</strong>
-              <span class="stack-path">{{ unmatchedReviewSummary }}</span>
+              <strong class="wrap-anywhere">Stale pending entries</strong>
+              <span class="stack-path wrap-anywhere">{{ unmatchedReviewSummary }}</span>
             </div>
             <div class="stack-card-side">
               <div class="stack-card-tags">
@@ -1606,12 +1606,6 @@ watch(
   min-width: 0;
 }
 
-.selection-summary strong,
-.selection-summary span {
-  min-width: 0;
-  overflow-wrap: anywhere;
-}
-
 .selection-summary strong {
   font-size: 0.95rem;
 }
@@ -1665,11 +1659,6 @@ watch(
   min-width: 0;
 }
 
-.stack-title-block strong {
-  min-width: 0;
-  overflow-wrap: anywhere;
-}
-
 .stack-title-block :deep(.n-checkbox__label) {
   padding-inline: 6px 0;
 }
@@ -1717,7 +1706,6 @@ watch(
 .stack-path {
   color: var(--color-muted-text);
   font-size: 0.82rem;
-  overflow-wrap: anywhere;
 }
 
 .stack-identity {
@@ -1726,11 +1714,6 @@ watch(
   color: var(--color-text-secondary);
   font-size: 0.84rem;
   line-height: 1.35;
-}
-
-.stack-identity span {
-  min-width: 0;
-  overflow-wrap: anywhere;
 }
 
 .identity-label {
@@ -1754,14 +1737,6 @@ watch(
   color: var(--color-text-secondary);
   font-size: 0.84rem;
   line-height: 1.4;
-}
-
-.stack-change-service,
-.stack-change-target,
-.stack-change-target code,
-.stack-change-more {
-  min-width: 0;
-  overflow-wrap: anywhere;
 }
 
 .stack-change-service {
