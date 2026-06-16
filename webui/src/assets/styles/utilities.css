@@ -91,3 +91,23 @@ body .n-switch:focus-within {
   color: var(--color-muted-text);
   background: var(--color-surface);
 }
+
+@media (max-width: 560px) {
+  a.text-link,
+  a.icon-link {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}
