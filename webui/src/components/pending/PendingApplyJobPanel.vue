@@ -119,7 +119,7 @@ function snapshotLineScope(
           <span v-if="succeeded" class="apply-job-complete-mark" aria-hidden="true">
             <CheckCircle2 :size="18" />
           </span>
-          <h2 id="apply-job-panel-title">{{ title }}</h2>
+          <h2 id="apply-job-panel-title" class="wrap-anywhere">{{ title }}</h2>
         </div>
         <p class="apply-job-summary" role="status" aria-live="polite">
           {{ statusMessage }}
@@ -148,9 +148,9 @@ function snapshotLineScope(
     >
       <div class="apply-job-now-copy">
         <span>Current status</span>
-        <strong id="apply-job-now-title">{{ nowTitle }}</strong>
-        <em id="apply-job-now-message">{{ nowMessage }}</em>
-        <small v-if="nowDetail" id="apply-job-now-detail">
+        <strong id="apply-job-now-title" class="wrap-anywhere">{{ nowTitle }}</strong>
+        <em id="apply-job-now-message" class="wrap-anywhere">{{ nowMessage }}</em>
+        <small v-if="nowDetail" id="apply-job-now-detail" class="wrap-anywhere">
           {{ nowDetail }}
         </small>
       </div>
@@ -159,7 +159,7 @@ function snapshotLineScope(
 
     <section class="apply-job-latest-log" aria-labelledby="apply-job-latest-log-title">
       <span id="apply-job-latest-log-title">Latest log line</span>
-      <code>{{ latestLogMessage }}</code>
+      <code class="wrap-anywhere">{{ latestLogMessage }}</code>
     </section>
 
     <section class="apply-job-progress-steps" aria-labelledby="apply-job-progress-title">
@@ -181,8 +181,8 @@ function snapshotLineScope(
           </span>
           <span class="apply-progress-copy">
             <strong>{{ step.label }}</strong>
-            <span>{{ step.message }}</span>
-            <em v-if="step.detail">{{ step.detail }}</em>
+            <span class="wrap-anywhere">{{ step.message }}</span>
+            <em v-if="step.detail" class="wrap-anywhere">{{ step.detail }}</em>
           </span>
           <n-tag size="small" :type="progressTagType(step.status)">
             {{ step.statusLabel }}
@@ -283,7 +283,7 @@ function snapshotLineScope(
         <div class="apply-job-log-heading-copy">
           <strong id="apply-job-log-title">Live log</strong>
           <span class="apply-job-log-note">Raw command output</span>
-          <span class="apply-job-log-path">{{ logTitle }}</span>
+          <span class="apply-job-log-path wrap-anywhere">{{ logTitle }}</span>
         </div>
         <n-button
           v-show="!active"
@@ -379,11 +379,6 @@ function snapshotLineScope(
   min-width: 0;
 }
 
-.apply-job-heading-title h2 {
-  min-width: 0;
-  overflow-wrap: anywhere;
-}
-
 .apply-job-complete-mark {
   display: inline-grid;
   flex: 0 0 auto;
@@ -475,7 +470,6 @@ function snapshotLineScope(
   color: var(--color-ink);
   font-size: 1rem;
   line-height: 1.25;
-  overflow-wrap: anywhere;
 }
 
 .apply-job-now-copy em,
@@ -484,7 +478,6 @@ function snapshotLineScope(
   font-size: 0.86rem;
   font-style: normal;
   line-height: 1.35;
-  overflow-wrap: anywhere;
 }
 
 .apply-job-latest-log {
@@ -507,7 +500,6 @@ function snapshotLineScope(
   color: var(--color-code-text);
   font-size: 0.82rem;
   line-height: 1.45;
-  overflow-wrap: anywhere;
   white-space: pre-wrap;
 }
 
@@ -656,7 +648,6 @@ function snapshotLineScope(
   font-size: 0.8rem;
   font-style: normal;
   line-height: 1.35;
-  overflow-wrap: anywhere;
 }
 
 .apply-job-live-log {
@@ -681,12 +672,10 @@ function snapshotLineScope(
 }
 
 .apply-job-log-path {
-  min-width: 0;
   max-width: 100%;
   color: var(--color-muted-text);
   font-family: var(--font-mono);
   font-size: 0.78rem;
-  overflow-wrap: anywhere;
 }
 
 .apply-job-log-note {

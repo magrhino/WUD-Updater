@@ -237,8 +237,8 @@ function statusIcon(status: DoctorCheckStatus): Component {
             <div class="doctor-check-title">
               <component :is="statusIcon(check.status)" :size="18" aria-hidden="true" />
               <div>
-                <strong>{{ check.name }}</strong>
-                <code>{{ check.code }}</code>
+                <strong class="wrap-anywhere">{{ check.name }}</strong>
+                <code class="wrap-anywhere">{{ check.code }}</code>
               </div>
             </div>
             <n-tag size="small" :type="statusTagType(check.status)">
@@ -246,7 +246,7 @@ function statusIcon(status: DoctorCheckStatus): Component {
             </n-tag>
           </div>
 
-          <p v-if="check.detail" class="doctor-check-detail">{{ check.detail }}</p>
+          <p v-if="check.detail" class="doctor-check-detail wrap-anywhere">{{ check.detail }}</p>
 
           <div v-if="check.suggestions.length" class="doctor-suggestion-list">
             <div
@@ -255,9 +255,9 @@ function statusIcon(status: DoctorCheckStatus): Component {
               class="doctor-suggestion"
             >
               <div>
-                <strong>{{ suggestion.label }}</strong>
-                <span v-if="suggestion.description">{{ suggestion.description }}</span>
-                <code v-if="suggestion.snippet">{{ suggestion.snippet }}</code>
+                <strong class="wrap-anywhere">{{ suggestion.label }}</strong>
+                <span v-if="suggestion.description" class="wrap-anywhere">{{ suggestion.description }}</span>
+                <code v-if="suggestion.snippet" class="wrap-anywhere">{{ suggestion.snippet }}</code>
               </div>
               <n-button
                 v-if="suggestion.snippet"
@@ -340,21 +340,13 @@ function statusIcon(status: DoctorCheckStatus): Component {
   min-width: 0;
 }
 
-.doctor-check-title strong,
-.doctor-suggestion strong {
-  min-width: 0;
-  overflow-wrap: anywhere;
-}
-
 .doctor-check-title code,
 .doctor-suggestion code {
-  min-width: 0;
   color: var(--color-code-text);
   font-family: var(--font-mono);
   font-size: 0.82rem;
   line-height: 1.45;
   white-space: pre-wrap;
-  overflow-wrap: anywhere;
 }
 
 .doctor-check-detail,
@@ -363,7 +355,6 @@ function statusIcon(status: DoctorCheckStatus): Component {
   color: var(--color-text-secondary);
   font-size: 0.9rem;
   line-height: 1.45;
-  overflow-wrap: anywhere;
 }
 
 .doctor-suggestion-list {

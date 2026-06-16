@@ -663,25 +663,25 @@ onMounted(() => {
           <n-gi>
             <div class="preflight-metric">
               <span>Services</span>
-              <strong>{{ updates.retagPlan.selected_count }}</strong>
+              <strong class="wrap-anywhere">{{ updates.retagPlan.selected_count }}</strong>
             </div>
           </n-gi>
           <n-gi>
             <div class="preflight-metric">
               <span>Stacks</span>
-              <strong>{{ updates.retagPlan.stacks.length }}</strong>
+              <strong class="wrap-anywhere">{{ updates.retagPlan.stacks.length }}</strong>
             </div>
           </n-gi>
           <n-gi>
             <div class="preflight-metric">
               <span>Keep current</span>
-              <strong>{{ updates.retagPlan.keep_current_count }}</strong>
+              <strong class="wrap-anywhere">{{ updates.retagPlan.keep_current_count }}</strong>
             </div>
           </n-gi>
           <n-gi>
             <div class="preflight-metric">
               <span>Source</span>
-              <strong>{{ retagPlanSourceFile(updates.retagPlan) }}</strong>
+              <strong class="wrap-anywhere">{{ retagPlanSourceFile(updates.retagPlan) }}</strong>
             </div>
           </n-gi>
         </n-grid>
@@ -760,19 +760,19 @@ onMounted(() => {
       <div class="retag-summary-strip" aria-label="Retag review summary">
         <div>
           <span>Total services</span>
-          <strong>{{ totalCount }}</strong>
+          <strong class="wrap-anywhere">{{ totalCount }}</strong>
         </div>
         <div>
           <span>Retag candidates</span>
-          <strong>{{ availableCount }}</strong>
+          <strong class="wrap-anywhere">{{ availableCount }}</strong>
         </div>
         <div>
           <span>Needs attention</span>
-          <strong>{{ attentionCount }}</strong>
+          <strong class="wrap-anywhere">{{ attentionCount }}</strong>
         </div>
         <div>
           <span>Selected switches</span>
-          <strong>{{ selectedSwitchCount }}</strong>
+          <strong class="wrap-anywhere">{{ selectedSwitchCount }}</strong>
         </div>
       </div>
     </section>
@@ -826,7 +826,7 @@ onMounted(() => {
         >
           <div class="retag-plan-stack-heading">
             <strong>{{ stack.stack }}</strong>
-            <code>{{ planLocation(stack) }}</code>
+            <code class="wrap-anywhere">{{ planLocation(stack) }}</code>
           </div>
           <ul class="retag-plan-update-list">
             <li
@@ -835,10 +835,10 @@ onMounted(() => {
             >
               <div>
                 <strong>{{ update.service_key }}</strong>
-                <span>{{ update.service }}</span>
+                <span class="wrap-anywhere">{{ update.service }}</span>
               </div>
-              <code>{{ digestPinSummary(update) }}</code>
-              <span>{{ labelRewriteSummary(update) }}</span>
+              <code class="wrap-anywhere">{{ digestPinSummary(update) }}</code>
+              <span class="wrap-anywhere">{{ labelRewriteSummary(update) }}</span>
             </li>
           </ul>
         </div>
@@ -961,7 +961,7 @@ onMounted(() => {
             <div>
               <dt>Image</dt>
               <dd>
-                <code>{{ item.image }}</code>
+                <code class="wrap-anywhere">{{ item.image }}</code>
               </dd>
             </div>
             <div>
@@ -975,13 +975,13 @@ onMounted(() => {
             <div>
               <dt>Final image</dt>
               <dd>
-                <code>{{ item.final_image ? displayDigest(item.final_image) : "None" }}</code>
+                <code class="wrap-anywhere">{{ item.final_image ? displayDigest(item.final_image) : "None" }}</code>
               </dd>
             </div>
             <div>
               <dt>Location</dt>
               <dd>
-                <code>{{ composeLocation(item) }}</code>
+                <code class="wrap-anywhere">{{ composeLocation(item) }}</code>
               </dd>
             </div>
             <div>
@@ -1068,11 +1068,9 @@ onMounted(() => {
 }
 
 .retag-summary-strip strong {
-  min-width: 0;
   color: var(--color-ink);
   font-size: 1.1rem;
   line-height: 1.2;
-  overflow-wrap: anywhere;
 }
 
 .retag-controls {
@@ -1127,7 +1125,6 @@ onMounted(() => {
 .retag-plan-update-list code {
   color: var(--color-code-text);
   font-family: var(--font-mono);
-  overflow-wrap: anywhere;
 }
 
 .retag-plan-update-list {
@@ -1154,16 +1151,10 @@ onMounted(() => {
   color: var(--color-muted-text);
   font-size: 0.84rem;
   line-height: 1.35;
-  overflow-wrap: anywhere;
 }
 
 .retag-plan-empty {
   min-height: 140px;
-}
-
-.retag-confirm-metrics strong {
-  min-width: 0;
-  overflow-wrap: anywhere;
 }
 
 .retag-confirm-modal .plan-line-row em {
@@ -1189,7 +1180,6 @@ onMounted(() => {
 .retag-card code {
   font-family: var(--font-mono);
   font-size: 0.82rem;
-  overflow-wrap: anywhere;
 }
 
 @media (max-width: 920px) {

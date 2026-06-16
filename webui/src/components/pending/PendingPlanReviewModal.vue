@@ -158,7 +158,7 @@ function handleModalShowUpdate(value: boolean): void {
           class="apply-readiness-passed"
         >
           <CheckCircle2 :size="16" aria-hidden="true" />
-          <p>
+          <p class="wrap-anywhere">
             <strong>
               {{ pluralize(applyPreflightPassedChecks.length, "check") }} passed:
             </strong>
@@ -188,13 +188,13 @@ function handleModalShowUpdate(value: boolean): void {
               aria-hidden="true"
             />
             <XCircle v-else :size="16" aria-hidden="true" />
-            <strong>{{ check.label }}</strong>
+            <strong class="wrap-anywhere">{{ check.label }}</strong>
             <n-tag size="small" :type="applyPreflightCheckType(check.status)">
               {{ applyPreflightCheckLabel(check.status) }}
             </n-tag>
             <span
               v-if="applyPreflightCheckDetail(check)"
-              class="apply-readiness-detail"
+              class="apply-readiness-detail wrap-anywhere"
             >
               {{ applyPreflightCheckDetail(check) }}
             </span>
@@ -496,7 +496,7 @@ function handleModalShowUpdate(value: boolean): void {
               class="plan-action"
             >
               <n-tag size="small">{{ action.kind }}</n-tag>
-              <code>{{ actionCommand(action) }}</code>
+              <code class="wrap-anywhere">{{ actionCommand(action) }}</code>
             </div>
           </div>
         </details>
@@ -587,8 +587,6 @@ function handleModalShowUpdate(value: boolean): void {
 }
 
 .plan-action code {
-  min-width: 0;
-  overflow-wrap: anywhere;
   color: var(--color-code-text);
   font-family: var(--font-mono);
   font-size: 0.82rem;
@@ -645,9 +643,7 @@ function handleModalShowUpdate(value: boolean): void {
 }
 
 .apply-readiness-passed p {
-  min-width: 0;
   margin: 0;
-  overflow-wrap: anywhere;
 }
 
 .apply-readiness-passed strong {
@@ -686,17 +682,11 @@ function handleModalShowUpdate(value: boolean): void {
   color: var(--color-error);
 }
 
-.apply-readiness-row strong {
-  min-width: 0;
-  overflow-wrap: anywhere;
-}
-
 .apply-readiness-detail {
   grid-column: 2 / -1;
   color: var(--color-text-secondary);
   font-size: 0.84rem;
   line-height: 1.45;
-  overflow-wrap: anywhere;
 }
 
 @media (max-width: 560px) {

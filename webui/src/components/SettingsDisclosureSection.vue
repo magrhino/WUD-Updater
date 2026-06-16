@@ -81,14 +81,14 @@ const props = defineProps<{
           class="settings-row"
         >
           <td>
-            <strong>{{ entry.name }}</strong>
-            <span>{{ entry.detail }}</span>
+            <strong class="wrap-anywhere">{{ entry.name }}</strong>
+            <span class="wrap-anywhere">{{ entry.detail }}</span>
           </td>
           <td>
-            <code v-if="entry.valueKind === 'code'">
+            <code v-if="entry.valueKind === 'code'" class="wrap-anywhere">
               {{ entry.value }}
             </code>
-            <span v-else :class="entry.valueClass">
+            <span v-else class="wrap-anywhere" :class="entry.valueClass">
               {{ entry.value }}
             </span>
           </td>
@@ -179,13 +179,6 @@ const props = defineProps<{
 .settings-row td:first-child {
   display: grid;
   gap: 3px;
-}
-
-.settings-row strong,
-.settings-row span,
-.settings-row code {
-  min-width: 0;
-  overflow-wrap: anywhere;
 }
 
 .settings-row span {

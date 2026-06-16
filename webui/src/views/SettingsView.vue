@@ -545,8 +545,8 @@ onMounted(() => {
       <div class="settings-safety-main">
         <component :is="mutationStatusIcon" :size="18" aria-hidden="true" />
         <div>
-          <strong>{{ mutationStatusLabel }}</strong>
-          <span>{{ mutationStatusDetail }}</span>
+          <strong class="wrap-anywhere">{{ mutationStatusLabel }}</strong>
+          <span class="wrap-anywhere">{{ mutationStatusDetail }}</span>
         </div>
       </div>
       <div class="settings-safety-meta">
@@ -625,28 +625,28 @@ onMounted(() => {
             >
               <n-gi>
                 <div class="settings-risk-fact">
-                  <span>Target</span>
-                  <strong>{{ restartContainerTarget || "Unavailable" }}</strong>
+                  <span class="wrap-anywhere">Target</span>
+                  <strong class="wrap-anywhere">{{ restartContainerTarget || "Unavailable" }}</strong>
                 </div>
               </n-gi>
               <n-gi>
                 <div class="settings-risk-fact">
-                  <span>Permission</span>
-                  <strong>{{ mutationsEnabled ? "Allowed" : "Read-only" }}</strong>
+                  <span class="wrap-anywhere">Permission</span>
+                  <strong class="wrap-anywhere">{{ mutationsEnabled ? "Allowed" : "Read-only" }}</strong>
                 </div>
               </n-gi>
               <n-gi>
                 <div class="settings-risk-fact">
-                  <span>Impact</span>
-                  <strong>Temporary disconnect</strong>
+                  <span class="wrap-anywhere">Impact</span>
+                  <strong class="wrap-anywhere">Temporary disconnect</strong>
                 </div>
               </n-gi>
             </n-grid>
             <div class="settings-action-row">
               <div>
-                <strong>Restart WebUI container</strong>
-                <span>The current browser session will temporarily lose connection.</span>
-                <code v-if="restartContainerTarget">{{ restartContainerTarget }}</code>
+                <strong class="wrap-anywhere">Restart WebUI container</strong>
+                <span class="wrap-anywhere">The current browser session will temporarily lose connection.</span>
+                <code v-if="restartContainerTarget" class="wrap-anywhere">{{ restartContainerTarget }}</code>
               </div>
               <n-button
                 type="warning"
@@ -715,8 +715,8 @@ onMounted(() => {
         <div class="settings-preference-list">
           <div class="settings-preference-row">
             <div>
-              <strong>Theme preference</strong>
-              <span>
+              <strong class="wrap-anywhere">Theme preference</strong>
+              <span class="wrap-anywhere">
                 Source:
                 {{ themePreferenceEntry?.source === "configured" ? "Configured" : "Default" }}
               </span>
@@ -730,8 +730,8 @@ onMounted(() => {
           </div>
           <div class="settings-preference-row">
             <div>
-              <strong>Onboarding checklist</strong>
-              <span>
+              <strong class="wrap-anywhere">Onboarding checklist</strong>
+              <span class="wrap-anywhere">
                 Source:
                 {{
                   onboardingChecklistEntry?.source === "configured"
@@ -762,8 +762,8 @@ onMounted(() => {
           </div>
           <div class="settings-preference-row">
             <div>
-              <strong>Compose ignore paths</strong>
-              <span>
+              <strong class="wrap-anywhere">Compose ignore paths</strong>
+              <span class="wrap-anywhere">
                 Source:
                 {{
                   composeIgnorePathsEntry?.source === "configured"
@@ -793,8 +793,8 @@ onMounted(() => {
           </div>
           <div class="settings-preference-row">
             <div>
-              <strong>Digest-pin updates</strong>
-              <span>
+              <strong class="wrap-anywhere">Digest-pin updates</strong>
+              <span class="wrap-anywhere">
                 Source:
                 {{
                   digestPinUpdatesEntry?.source === "configured"
@@ -822,8 +822,8 @@ onMounted(() => {
           </div>
           <div class="settings-preference-row">
             <div>
-              <strong>Core update tour</strong>
-              <span>
+              <strong class="wrap-anywhere">Core update tour</strong>
+              <span class="wrap-anywhere">
                 State: {{ coreUpdateTourStatusLabel }}. Step:
                 {{ coreUpdateTourStepLabel }}.
               </span>
@@ -856,8 +856,8 @@ onMounted(() => {
         </div>
         <div class="settings-action-row settings-preference-actions">
           <div>
-            <strong>No restart required</strong>
-            <span>Managed values apply to new WebUI requests immediately.</span>
+            <strong class="wrap-anywhere">No restart required</strong>
+            <span class="wrap-anywhere">Managed values apply to new WebUI requests immediately.</span>
           </div>
           <n-flex
             class="settings-button-group"
@@ -900,10 +900,10 @@ onMounted(() => {
           <h2>Effective configuration</h2>
         </div>
         <div v-if="settingsData" class="settings-source-legend" aria-label="Source label legend">
-          <span><strong>Default</strong> fallback</span>
-          <span><strong>Configured</strong> explicit</span>
-          <span><strong>Runtime derived</strong> computed</span>
-          <span><strong>Request scoped</strong> current request</span>
+          <span class="wrap-anywhere"><strong>Default</strong> fallback</span>
+          <span class="wrap-anywhere"><strong>Configured</strong> explicit</span>
+          <span class="wrap-anywhere"><strong>Runtime derived</strong> computed</span>
+          <span class="wrap-anywhere"><strong>Request scoped</strong> current request</span>
         </div>
       </div>
 
@@ -1137,7 +1137,7 @@ onMounted(() => {
       </n-alert>
       <p class="settings-dialog-copy">
         Target container:
-        <code>{{ restartContainerTarget || "unavailable" }}</code>
+        <code class="wrap-anywhere">{{ restartContainerTarget || "unavailable" }}</code>
       </p>
     </n-modal>
   </section>
@@ -1198,7 +1198,6 @@ onMounted(() => {
   color: var(--color-text-secondary);
   font-size: 0.9rem;
   line-height: 1.45;
-  overflow-wrap: anywhere;
 }
 
 .settings-safety-meta {
@@ -1306,12 +1305,6 @@ onMounted(() => {
   min-width: 0;
 }
 
-.settings-risk-fact span,
-.settings-risk-fact strong {
-  min-width: 0;
-  overflow-wrap: anywhere;
-}
-
 .settings-risk-fact span {
   color: var(--color-muted-text);
   font-size: 0.78rem;
@@ -1333,11 +1326,6 @@ onMounted(() => {
   color: var(--color-muted-text);
   font-size: 0.78rem;
   line-height: 1.35;
-}
-
-.settings-source-legend span {
-  min-width: 0;
-  overflow-wrap: anywhere;
 }
 
 .settings-source-legend strong {
@@ -1377,12 +1365,6 @@ onMounted(() => {
   display: grid;
   gap: 4px;
   min-width: 0;
-}
-
-.settings-preference-row strong,
-.settings-preference-row span {
-  min-width: 0;
-  overflow-wrap: anywhere;
 }
 
 .settings-preference-row span {
@@ -1425,14 +1407,6 @@ onMounted(() => {
   display: grid;
   gap: 4px;
   min-width: 0;
-}
-
-.settings-action-row strong,
-.settings-action-row span,
-.settings-action-row code,
-.settings-dialog-copy code {
-  min-width: 0;
-  overflow-wrap: anywhere;
 }
 
 .settings-action-row span,

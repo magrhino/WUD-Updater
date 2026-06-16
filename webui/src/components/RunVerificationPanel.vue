@@ -118,8 +118,8 @@ function wudLabel(status: RunVerificationWudStatus): string {
       >
         <div class="run-verification-main">
           <span>#{{ item.line_no }}</span>
-          <strong>{{ item.service_key || item.service_name || item.image }}</strong>
-          <em>{{ item.target_image || item.image }}</em>
+          <strong class="wrap-anywhere">{{ item.service_key || item.service_name || item.image }}</strong>
+          <em class="wrap-anywhere">{{ item.target_image || item.image }}</em>
         </div>
         <div class="run-verification-tags">
           <n-tag size="small" :type="statusTagType(item.image_status)">
@@ -195,18 +195,14 @@ function wudLabel(status: RunVerificationWudStatus): string {
 }
 
 .run-verification-main strong {
-  min-width: 0;
   color: var(--color-ink);
   font-size: 0.86rem;
-  overflow-wrap: anywhere;
 }
 
 .run-verification-main em {
-  min-width: 0;
   color: var(--color-muted-text);
   font-size: 0.8rem;
   font-style: normal;
-  overflow-wrap: anywhere;
 }
 
 .run-verification-tags {
