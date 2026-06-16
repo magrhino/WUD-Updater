@@ -79,6 +79,12 @@ EOF
     src/wud_updater/init_config.py \
     src/wud_updater/line_specs.py \
     src/wud_updater/locks.py \
+    src/wud_updater/plan_actions.py \
+    src/wud_updater/plan_digest_unpin.py \
+    src/wud_updater/plan_identity.py \
+    src/wud_updater/plan_issues.py \
+    src/wud_updater/plan_matching.py \
+    src/wud_updater/plan_models.py \
     src/wud_updater/plans.py \
     src/wud_updater/release_notes.py \
     src/wud_updater/self_update.py \

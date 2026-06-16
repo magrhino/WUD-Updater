@@ -2,19 +2,15 @@
 
 from __future__ import annotations
 
-import hashlib
-import json
 from collections.abc import Mapping, Sequence
-from dataclasses import asdict, dataclass, field, replace
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 
-from .command import CommandError, CommandRunner
-from .compose import COMPOSE_FILENAMES, ComposeCli, ComposeDiscoveryError, ComposeStack
+from .command import CommandRunner
+from .compose import ComposeCli, ComposeDiscoveryError, ComposeStack
 from .config import UpdaterConfig
-from .digest_verifier import DigestVerifier, DockerManifestResolver
 from .digest_provenance import (
     DigestTagProvenance,
-    digest_from_image,
     digest_provenance_from_digest_target,
     digest_provenance_from_unpin_update,
     digest_provenance_from_update,
@@ -22,342 +18,91 @@ from .digest_provenance import (
 from .docker_cli import DockerCli
 from .images import (
     image_has_tag,
-    image_matches_resolved_target,
     image_tag,
     image_with_tag,
     normalize_digest,
-    repo_key,
-    tag_value_valid,
 )
-from .compose_rewrite import (
-    WUD_TAG_INCLUDE_LABEL,
-    compose_unescape_dollars,
-    exact_tags_regex,
-    render_compose_digest_pins,
-    render_compose_digest_unpins,
-    service_resolved_tag_marker,
-)
-from .updater_digest_pin import (
-    _digest_pin_candidates,
-    _digest_pin_match_tag,
-    _digest_pin_resolve_error,
-    _resolve_digest_pin_candidate,
-    digest_pin_update_from_values,
-)
-from .updater_digest_unpin import digest_unpin_update_from_values
+from .updater_digest_pin import _digest_pin_match_tag
 from .updater_matching import (
     _ordered_unique,
     _scope_plan_label,
-    _services_for_target_match,
     _stacks_to_update,
 )
 from .updater_lifecycle_scope import _UpdateScopeMixin
-from .updater_planning import _container_bind_mount_path_issue, _tag_updates
+from .updater_planning import _tag_updates
 from .updater_models import (
-    ComposeTagRewriteError,
     DigestPinLabelRewrite,
     DigestPinLabelRewriteApproval,
-    DigestPinLabelRewriteApprovalRequired,
     DigestPinUpdate,
     DigestUnpinUpdate,
     Match,
     TagOverride,
-    UpdateScope,
-    UpdaterError,
+)
+from .plan_actions import render_plan_actions
+from .plan_digest_unpin import recover_digest_unpin_matches
+from .plan_identity import _file_sha256, _plan_id
+from .plan_issues import (
+    digest_pin_plan_issues,
+    digest_unpin_plan_issues,
+    manifest_issues,
+    preflight_issues,
+    tag_update_plan_issues,
+    unmatched_issues,
+)
+from .plan_matching import (
+    _cleanup_for_skipped,
+    _match_targets,
+    _unmatched_diagnostics,
+)
+from .plan_models import (
+    DryRunPlan,
+    DryRunPlanAction,
+    DryRunPlanCleanup,
+    DryRunPlanCleanupItem,
+    DryRunPlanDigestPinLabelRewrite,
+    DryRunPlanDigestPinUpdate,
+    DryRunPlanDigestUnpinUpdate,
+    DryRunPlanIssue,
+    DryRunPlanLine,
+    DryRunPlanSkipped,
+    DryRunPlanStack,
+    DryRunPlanSummary,
+    DryRunPlanTagUpdate,
+    DryRunPlanTarget,
+    PendingGroupingItem,
+    PendingGroupingResult,
+    PendingStackGroup,
+    PlanFileMissing,
+    PlanInputError,
+    UnmatchedDiagnostic,
 )
 from .wud_file import ParsedWudFile, WudTarget, parse_wud_file
 
-
-class PlanInputError(ValueError):
-    """Raised when a requested plan cannot be built from the submitted lines."""
-
-
-class PlanFileMissing(FileNotFoundError):
-    """Raised when the WUD file is missing for a selected-line plan."""
-
-
-COMPOSE_PROJECT_LABEL = "com.docker.compose.project"
-COMPOSE_WORKING_DIR_LABEL = "com.docker.compose.project.working_dir"
-COMPOSE_CONFIG_FILES_LABEL = "com.docker.compose.project.config_files"
-COMPOSE_SERVICE_LABEL = "com.docker.compose.service"
-UNMATCHED_HINT = (
-    "Preflight found a matching running container, but its Docker Compose "
-    "labels do not point to an active supported Compose file. Restore or "
-    "rename the active Compose file, update discovery settings if the stack "
-    "moved, or remove the stale WUD line."
-)
-GENERIC_UNMATCHED_MESSAGE = (
-    "This pending update no longer matches any discovered Compose service."
-)
-GENERIC_UNMATCHED_HINT = (
-    "Preflight did not find a matching Compose service or running Docker "
-    "container. Likely causes are service removal, image rename, or a tag "
-    "that was already applied."
-)
-GENERIC_UNMATCHED_FINDINGS = (
-    "No discovered Compose service matched this pending line.",
-    "No running Docker container matched this pending line.",
-)
-GENERIC_UNMATCHED_POSSIBLE_REASONS = (
-    "The Compose service was removed or renamed.",
-    "The Compose image name changed.",
-    "The update tag was already applied and WUD left the old pending line behind.",
-)
-GENERIC_UNMATCHED_RECOMMENDED_ACTIONS = (
-    "Remove the stale WUD line when the service is intentionally gone or already updated.",
-    "If the service should still be managed, update the WUD line or stack image to the current service/image name.",
-)
-COMPOSE_LABEL_UNDISCOVERED_HINT = (
-    "Preflight found a matching running container and active Compose labels, "
-    "but Compose discovery did not include that stack. Check Docker base and "
-    "ignored paths before removing the WUD line."
-)
-COMPOSE_LABEL_UNDISCOVERED_POSSIBLE_REASONS = (
-    "The stack moved outside the configured Docker base.",
-    "The stack is excluded by Compose ignore paths.",
-    "Compose discovery is pointed at a different project directory.",
-)
-COMPOSE_LABEL_UNDISCOVERED_RECOMMENDED_ACTIONS = (
-    "Update Docker base or ignore paths so discovery includes the stack.",
-    "Move the stack back under the discovered Docker base if it should be managed.",
-    "Remove the stale WUD line if the stack is intentionally unmanaged.",
-)
-MATCHING_CONTAINER_UNLABELED_HINT = (
-    "Preflight found a matching running container, but Docker did not report "
-    "Compose config labels for it. The line cannot be tied to a discovered stack."
-)
-MATCHING_CONTAINER_UNLABELED_POSSIBLE_REASONS = (
-    "The container is not managed by Docker Compose.",
-    "Compose labels are missing or unavailable on the running container.",
-)
-MATCHING_CONTAINER_UNLABELED_RECOMMENDED_ACTIONS = (
-    "Inspect the container source before removing the line.",
-    "Remove the stale WUD line if this container should not be managed by WUD-Updater.",
-)
-
-
-@dataclass(frozen=True)
-class DryRunPlanIssue:
-    severity: str
-    code: str
-    message: str
-    line_no: int | None = None
-    stack: str = ""
-    service: str = ""
-    hint: str = ""
-    details: Mapping[str, object] = field(default_factory=dict)
-
-
-@dataclass(frozen=True)
-class UnmatchedDiagnostic:
-    code: str
-    message: str
-    hint: str = ""
-    stack: str = ""
-    service: str = ""
-    compose_file: str = ""
-    found_files: tuple[str, ...] = ()
-    details: Mapping[str, object] = field(default_factory=dict)
-
-
-@dataclass(frozen=True)
-class DryRunPlanTarget:
-    line_no: int
-    raw: str
-    image: str
-    resolved_image: str
-    digest: str
-    desired_tag: str
-    matched: bool
-    action: str
-
-
-@dataclass(frozen=True)
-class DryRunPlanLine:
-    line_no: int
-    raw: str
-    image: str
-    resolved_image: str
-    compose_image: str
-    target_image: str
-    service: str
-    digest: str
-    desired_tag: str
-    action: str
-    digest_provenance: DigestTagProvenance | None = None
-
-
-@dataclass(frozen=True)
-class DryRunPlanTagUpdate:
-    old_image: str
-    desired_tag: str
-    new_image: str
-    services: tuple[str, ...]
-
-
-@dataclass(frozen=True)
-class DryRunPlanDigestPinUpdate:
-    source_image: str
-    resolved_tag: str
-    planned_digest: str
-    final_image: str
-    watch_tag: str
-    marker: str
-    label_key: str
-    label_value: str
-    services: tuple[str, ...]
-    label_rewrites: tuple["DryRunPlanDigestPinLabelRewrite", ...] = ()
-    digest_provenance: DigestTagProvenance | None = None
-
-
-@dataclass(frozen=True)
-class DryRunPlanDigestUnpinUpdate:
-    source_image: str
-    resolved_tag: str
-    tag_image: str
-    current_digest: str
-    target_digest: str
-    watch_tag: str
-    marker: str
-    label_key: str
-    label_value: str
-    services: tuple[str, ...]
-    digest_provenance: DigestTagProvenance | None = None
-
-
-@dataclass(frozen=True)
-class DryRunPlanDigestPinLabelRewrite:
-    service: str
-    label_key: str
-    current_label_value: str
-    planned_tag: str
-    proposed_label_value: str
-    proposed_label_regex: str
-    approved: bool
-    reason: str
-
-
-@dataclass(frozen=True)
-class DryRunPlanAction:
-    kind: str
-    description: str
-    cwd: str
-    args: tuple[str, ...] = ()
-
-
-@dataclass(frozen=True)
-class DryRunPlanStack:
-    name: str
-    directory: str
-    compose_file: str
-    project_directory: str
-    services_label: str
-    services: tuple[str, ...]
-    pull_services: tuple[str, ...]
-    stop_services: tuple[str, ...]
-    force_recreate: bool
-    up_no_deps: bool
-    tag_updates: tuple[DryRunPlanTagUpdate, ...] = ()
-    digest_pin_updates: tuple[DryRunPlanDigestPinUpdate, ...] = ()
-    digest_unpin_updates: tuple[DryRunPlanDigestUnpinUpdate, ...] = ()
-    actions: tuple[DryRunPlanAction, ...] = ()
-    lines: tuple[DryRunPlanLine, ...] = ()
-
-
-@dataclass(frozen=True)
-class DryRunPlanSkipped:
-    line_no: int
-    raw: str
-    image: str
-    desired_tag: str
-    reason: str
-
-
-@dataclass(frozen=True)
-class DryRunPlanSummary:
-    target_count: int
-    matched_target_count: int
-    stack_count: int
-    service_count: int
-    skipped_count: int
-    issue_count: int
-
-
-@dataclass(frozen=True)
-class DryRunPlanCleanupItem:
-    line_no: int
-    raw: str
-    image: str
-    desired_tag: str
-    digest: str
-    reason: str
-    diagnostic: UnmatchedDiagnostic | None = None
-
-
-@dataclass(frozen=True)
-class DryRunPlanCleanup:
-    cleanup_id: str = ""
-    can_remove_unmatched: bool = False
-    items: tuple[DryRunPlanCleanupItem, ...] = ()
-
-
-@dataclass(frozen=True)
-class DryRunPlan:
-    plan_id: str
-    dry_run: bool
-    can_apply: bool
-    status: str
-    source_file: str
-    mode: str
-    max_wait: int
-    digest_pin_updates: bool
-    selected_line_numbers: tuple[int, ...]
-    summary: DryRunPlanSummary
-    targets: tuple[DryRunPlanTarget, ...] = ()
-    stacks: tuple[DryRunPlanStack, ...] = ()
-    skipped: tuple[DryRunPlanSkipped, ...] = ()
-    issues: tuple[DryRunPlanIssue, ...] = ()
-    cleanup: DryRunPlanCleanup = field(default_factory=DryRunPlanCleanup)
-
-
-@dataclass(frozen=True)
-class PendingGroupingItem:
-    line_no: int
-    raw: str
-    image: str
-    key: str
-    repo: str
-    has_tag: bool
-    allow_repo: bool
-    digest: str
-    desired_tag: str
-    resolved_image: str
-    target_image: str
-    compose_images: tuple[str, ...]
-    services: tuple[str, ...]
-    action: str
-    diagnostic: UnmatchedDiagnostic | None = None
-    digest_provenance: DigestTagProvenance | None = None
-
-
-@dataclass(frozen=True)
-class PendingStackGroup:
-    name: str
-    directory: str
-    compose_file: str
-    project_directory: str
-    services_label: str
-    services: tuple[str, ...]
-    line_numbers: tuple[int, ...]
-    items: tuple[PendingGroupingItem, ...]
-
-
-@dataclass(frozen=True)
-class PendingGroupingResult:
-    status: str
-    groups: tuple[PendingStackGroup, ...] = ()
-    unmatched: tuple[PendingGroupingItem, ...] = ()
-    warnings: tuple[str, ...] = ()
+__all__ = [
+    "DryRunPlan",
+    "DryRunPlanAction",
+    "DryRunPlanCleanup",
+    "DryRunPlanCleanupItem",
+    "DryRunPlanDigestPinLabelRewrite",
+    "DryRunPlanDigestPinUpdate",
+    "DryRunPlanDigestUnpinUpdate",
+    "DryRunPlanIssue",
+    "DryRunPlanLine",
+    "DryRunPlanSkipped",
+    "DryRunPlanStack",
+    "DryRunPlanSummary",
+    "DryRunPlanTagUpdate",
+    "DryRunPlanTarget",
+    "PendingGroupingItem",
+    "PendingGroupingResult",
+    "PendingStackGroup",
+    "PlanFileMissing",
+    "PlanInputError",
+    "UnmatchedDiagnostic",
+    "build_dry_run_plan",
+    "build_unmatched_cleanup",
+    "resolve_pending_groups",
+]
 
 
 @dataclass
@@ -385,10 +130,6 @@ class _PlanBuilder(_UpdateScopeMixin):
     digest_unpin_updates_by_stack: dict[int, tuple[DigestUnpinUpdate, ...]] = field(
         init=False,
         default_factory=dict,
-    )
-    digest_unpin_issues: list[DryRunPlanIssue] = field(
-        init=False,
-        default_factory=list,
     )
 
     def __post_init__(self) -> None:
@@ -433,7 +174,7 @@ class _PlanBuilder(_UpdateScopeMixin):
                 )
             )
         else:
-            matches, skipped = self._build_matches(parsed, stacks)
+            matches, skipped, digest_unpin_issues = self._build_matches(parsed, stacks)
             diagnostics = _unmatched_diagnostics(
                 self.config,
                 parsed.targets,
@@ -441,10 +182,8 @@ class _PlanBuilder(_UpdateScopeMixin):
                 self.docker,
                 host_docker_base=self.host_docker_base,
             )
-            issues.extend(
-                self._unmatched_issues(parsed.targets, matches, skipped, diagnostics)
-            )
-            issues.extend(self.digest_unpin_issues)
+            issues.extend(unmatched_issues(parsed.targets, matches, skipped, diagnostics))
+            issues.extend(digest_unpin_issues)
             cleanup_skipped = skipped
             cleanup_diagnostics = diagnostics
             if not self.allow_tag_updates and any(
@@ -471,11 +210,28 @@ class _PlanBuilder(_UpdateScopeMixin):
                 cleanup_diagnostics,
                 host_docker_base=self.host_docker_base,
             )
-            issues.extend(self._tag_update_plan_issues(matches))
-            issues.extend(self._manifest_issues(matches))
-            issues.extend(self._digest_pin_plan_issues(matches))
-            issues.extend(self._digest_unpin_plan_issues(matches))
-            issues.extend(self._preflight_issues(matches))
+            issues.extend(tag_update_plan_issues(matches))
+            issues.extend(manifest_issues(self.docker, matches))
+            digest_pin_result = digest_pin_plan_issues(
+                self.config,
+                self.docker,
+                matches,
+                self.digest_pin_label_rewrite_approvals,
+            )
+            self.digest_pin_updates_by_stack = dict(digest_pin_result.updates_by_stack)
+            self.digest_pin_label_rewrites_by_stack = {
+                stack_index: dict(rewrites_by_update)
+                for stack_index, rewrites_by_update in (
+                    digest_pin_result.label_rewrites_by_stack.items()
+                )
+            }
+            issues.extend(digest_pin_result.issues)
+            issues.extend(
+                digest_unpin_plan_issues(matches, self.digest_unpin_updates_by_stack)
+            )
+            issues.extend(
+                preflight_issues(self.config, self.compose, matches, self._update_scope)
+            )
 
         plan_stacks = self._plan_stacks(matches)
         targets = self._plan_targets(targets_by_line, matches, skipped)
@@ -558,9 +314,8 @@ class _PlanBuilder(_UpdateScopeMixin):
         self,
         parsed: ParsedWudFile,
         stacks: Sequence[ComposeStack],
-    ) -> tuple[list[Match], list[DryRunPlanSkipped]]:
+    ) -> tuple[list[Match], list[DryRunPlanSkipped], tuple[DryRunPlanIssue, ...]]:
         self.digest_unpin_updates_by_stack = {}
-        self.digest_unpin_issues = []
         matches, skipped = _match_targets(
             parsed,
             stacks,
@@ -568,646 +323,18 @@ class _PlanBuilder(_UpdateScopeMixin):
             allow_tag_updates=self.allow_tag_updates,
             allow_digest_pin_rematch=self.config.digest_pin_updates,
         )
-        if not self.config.digest_pin_updates:
-            matches, skipped = self._add_digest_unpin_matches(
-                parsed,
-                stacks,
-                matches,
-                skipped,
-            )
-        return matches, skipped
+        if self.config.digest_pin_updates:
+            return matches, skipped, ()
 
-    def _add_digest_unpin_matches(
-        self,
-        parsed: ParsedWudFile,
-        stacks: Sequence[ComposeStack],
-        matches: Sequence[Match],
-        skipped: Sequence[DryRunPlanSkipped],
-    ) -> tuple[list[Match], list[DryRunPlanSkipped]]:
-        skipped_by_line = {item.line_no: item for item in skipped}
-        targets_by_line = {target.line_no: target for target in parsed.targets}
-        updated_matches = list(matches)
-        matched_lines = {match.target.line_no for match in matches}
-        seen = {
-            (
-                match.stack.index,
-                match.target.line_no,
-                match.resolved,
-                match.compose_image,
-                match.service,
-            )
-            for match in matches
-        }
-
-        for line_no, item in list(skipped_by_line.items()):
-            if item.reason != "unmatched" or line_no in matched_lines:
-                continue
-            target = targets_by_line.get(line_no)
-            if target is None or not _digest_unpin_candidate_target(target):
-                continue
-            updates = self._digest_unpin_updates_for_target(target, stacks)
-            if not updates:
-                continue
-            skipped_by_line.pop(line_no, None)
-            for stack_index, stack_updates in updates.items():
-                stack = next(
-                    (candidate for candidate in stacks if candidate.index == stack_index),
-                    None,
-                )
-                if stack is None:
-                    continue
-                for update in stack_updates:
-                    for service in update.services:
-                        key = (
-                            stack.index,
-                            target.line_no,
-                            update.tag_image,
-                            update.old_image,
-                            service,
-                        )
-                        if key in seen:
-                            continue
-                        updated_matches.append(
-                            Match(
-                                stack,
-                                target,
-                                update.tag_image,
-                                update.old_image,
-                                service,
-                            )
-                        )
-                        seen.add(key)
-
-        updated_matches.sort(
-            key=lambda match: (
-                match.stack.index,
-                match.target.line_no,
-                match.target.first,
-                match.resolved,
-                match.compose_image,
-                match.service,
-            )
+        result = recover_digest_unpin_matches(
+            parsed,
+            stacks,
+            matches,
+            skipped,
+            self.known_digest_provenance_by_service,
         )
-        return updated_matches, [
-            skipped_by_line[line_no] for line_no in sorted(skipped_by_line)
-        ]
-
-    def _digest_unpin_updates_for_target(
-        self,
-        target: WudTarget,
-        stacks: Sequence[ComposeStack],
-    ) -> dict[int, tuple[DigestUnpinUpdate, ...]]:
-        tag = image_tag(target.first)
-        grouped: dict[tuple[int, str, str], set[str]] = {}
-        stack_by_index = {stack.index: stack for stack in stacks}
-        for stack in stacks:
-            for service_image in stack.service_images:
-                if not service_image.service:
-                    continue
-                if not _digest_unpin_service_matches_target(service_image.image, target):
-                    continue
-                recovered = self._recover_digest_unpin_tag(
-                    target,
-                    stack,
-                    service_image.service,
-                    service_image.image,
-                    service_image.labels,
-                    tag,
-                )
-                if recovered is None:
-                    continue
-                grouped.setdefault(
-                    (stack.index, service_image.image, recovered),
-                    set(),
-                ).add(service_image.service)
-
-        by_stack: dict[int, list[DigestUnpinUpdate]] = {}
-        for (stack_index, old_image, resolved_tag), services in sorted(grouped.items()):
-            update = digest_unpin_update_from_values(
-                old_image=old_image,
-                resolved_tag=resolved_tag,
-                target_digest=target.digest,
-                services=tuple(sorted(services)),
-            )
-            stack = stack_by_index.get(stack_index)
-            if stack is not None:
-                by_stack.setdefault(stack_index, []).append(update)
-                self.digest_unpin_updates_by_stack.setdefault(stack_index, ())
-
-        for stack_index, updates in by_stack.items():
-            existing = list(self.digest_unpin_updates_by_stack.get(stack_index, ()))
-            existing.extend(updates)
-            self.digest_unpin_updates_by_stack[stack_index] = tuple(
-                _unique_digest_unpin_updates(existing)
-            )
-        return {stack_index: tuple(updates) for stack_index, updates in by_stack.items()}
-
-    def _recover_digest_unpin_tag(
-        self,
-        target: WudTarget,
-        stack: ComposeStack,
-        service: str,
-        image: str,
-        labels: Sequence[tuple[str, str]],
-        target_tag: str,
-    ) -> str | None:
-        service_key = f"{stack.name}/{service}"
-        provenance = self.known_digest_provenance_by_service.get(service_key)
-        if provenance is not None:
-            tag = provenance.watch_tag or provenance.resolved_tag
-            if provenance.final_image and provenance.final_image != image:
-                self.digest_unpin_issues.append(
-                    _digest_unpin_issue(
-                        "digest-unpin-db-provenance-conflict",
-                        (
-                            f"Known digest provenance for {service_key} points to "
-                            f"{provenance.final_image}, but Compose currently uses "
-                            f"{image}."
-                        ),
-                        target,
-                        stack,
-                        service,
-                    )
-                )
-                return None
-            if not tag or not tag_value_valid(tag):
-                self.digest_unpin_issues.append(
-                    _digest_unpin_issue(
-                        "digest-unpin-tag-missing",
-                        (
-                            f"Known digest provenance for {service_key} does not "
-                            "include a valid tag."
-                        ),
-                        target,
-                        stack,
-                        service,
-                    )
-                )
-                return None
-            if tag != target_tag:
-                self.digest_unpin_issues.append(
-                    _digest_unpin_issue(
-                        "digest-unpin-db-provenance-conflict",
-                        (
-                            f"Known digest provenance for {service_key} recovered "
-                            f"tag {tag}, but the pending line targets {target_tag}."
-                        ),
-                        target,
-                        stack,
-                        service,
-                    )
-                )
-                return None
-            return tag
-
-        marker_tag = ""
-        try:
-            marker_tag = service_resolved_tag_marker(
-                stack.directory / stack.file,
-                service,
-                expected_image=image,
-            )
-        except ComposeTagRewriteError as exc:
-            self.digest_unpin_issues.append(
-                _digest_unpin_issue(
-                    "digest-unpin-marker-unsupported",
-                    f"Could not read resolved-tag marker for {service_key}: {exc}",
-                    target,
-                    stack,
-                    service,
-                )
-            )
-            return None
-
-        label_tag = self._digest_unpin_label_tag(
-            target,
-            stack,
-            service,
-            labels,
-            target_tag,
-        )
-        if label_tag is None:
-            return None
-        if marker_tag and label_tag and marker_tag != label_tag:
-            self.digest_unpin_issues.append(
-                _digest_unpin_issue(
-                    "digest-unpin-provenance-conflict",
-                    (
-                        f"Resolved-tag marker for {service_key} is {marker_tag}, "
-                        f"but {WUD_TAG_INCLUDE_LABEL} targets {label_tag}."
-                    ),
-                    target,
-                    stack,
-                    service,
-                )
-            )
-            return None
-        tag = marker_tag or label_tag
-        if not tag:
-            self.digest_unpin_issues.append(
-                _digest_unpin_issue(
-                    "digest-unpin-tag-missing",
-                    (
-                        f"Digest-pinned service {service_key} has no known tag "
-                        "provenance for a safe unpin."
-                    ),
-                    target,
-                    stack,
-                    service,
-                )
-            )
-            return None
-        if tag != target_tag:
-            self.digest_unpin_issues.append(
-                _digest_unpin_issue(
-                    "digest-unpin-provenance-conflict",
-                    (
-                        f"Recovered tag for {service_key} is {tag}, but the "
-                        f"pending line targets {target_tag}."
-                    ),
-                    target,
-                    stack,
-                    service,
-                )
-            )
-            return None
-        return tag
-
-    def _digest_unpin_label_tag(
-        self,
-        target: WudTarget,
-        stack: ComposeStack,
-        service: str,
-        labels: Sequence[tuple[str, str]],
-        target_tag: str,
-    ) -> str | None:
-        raw = _label_value(labels, WUD_TAG_INCLUDE_LABEL)
-        if not raw:
-            return ""
-        value = compose_unescape_dollars(raw)
-        if value == exact_tags_regex((target_tag,)):
-            return target_tag
-        if tag_value_valid(value) and value == target_tag:
-            return target_tag
-        self.digest_unpin_issues.append(
-            _digest_unpin_issue(
-                "digest-unpin-label-conflict",
-                (
-                    f'{stack.name}/{service} {WUD_TAG_INCLUDE_LABEL} is "{value}", '
-                    f'expected "{exact_tags_regex((target_tag,))}".'
-                ),
-                target,
-                stack,
-                service,
-            )
-        )
-        return None
-
-    def _unmatched_issues(
-        self,
-        targets: Sequence[WudTarget],
-        matches: Sequence[Match],
-        skipped: Sequence[DryRunPlanSkipped],
-        diagnostics: Mapping[int, UnmatchedDiagnostic],
-    ) -> list[DryRunPlanIssue]:
-        matched_lines = {match.target.line_no for match in matches}
-        skipped_reasons = {item.line_no: item.reason for item in skipped}
-        issues: list[DryRunPlanIssue] = []
-        for target in targets:
-            if target.line_no in matched_lines:
-                continue
-            reason = skipped_reasons.get(target.line_no, "unmatched")
-            severity = "warning" if reason == "tag-updates-disabled" else "error"
-            diagnostic = diagnostics.get(target.line_no)
-            message = (
-                "Tag update entries require allow_tag_updates=true."
-                if reason == "tag-updates-disabled"
-                else (
-                    diagnostic.message
-                    if diagnostic is not None
-                    else GENERIC_UNMATCHED_MESSAGE
-                )
-            )
-            issues.append(
-                DryRunPlanIssue(
-                    severity=severity,
-                    code=diagnostic.code if diagnostic is not None else reason,
-                    message=message,
-                    line_no=target.line_no,
-                    stack="" if diagnostic is None else diagnostic.stack,
-                    service="" if diagnostic is None else diagnostic.service,
-                    hint="" if diagnostic is None else diagnostic.hint,
-                    details={} if diagnostic is None else diagnostic.details,
-                )
-            )
-        return issues
-
-    def _tag_update_plan_issues(
-        self,
-        matches: Sequence[Match],
-    ) -> list[DryRunPlanIssue]:
-        desired_by_service: dict[tuple[int, str, str], set[str]] = {}
-        issues: list[DryRunPlanIssue] = []
-        for match in matches:
-            if not match.target.desired_tag:
-                continue
-            if not match.service:
-                issues.append(
-                    DryRunPlanIssue(
-                        severity="error",
-                        code="tag-update-service-unmapped",
-                        message=(
-                            "Tag update cannot be safely rewritten because the "
-                            "Compose service image could not be mapped."
-                        ),
-                        line_no=match.target.line_no,
-                        stack=match.stack.name,
-                    )
-                )
-                continue
-            key = (match.stack.index, match.service, match.compose_image)
-            desired_by_service.setdefault(key, set()).add(match.target.desired_tag)
-
-        for stack_index, service, image in sorted(desired_by_service):
-            desired = desired_by_service[(stack_index, service, image)]
-            if len(desired) <= 1:
-                continue
-            stack_name = next(
-                (
-                    match.stack.name
-                    for match in matches
-                    if match.stack.index == stack_index
-                ),
-                str(stack_index),
-            )
-            issues.append(
-                DryRunPlanIssue(
-                    severity="error",
-                    code="conflicting-tag-updates",
-                    message=(
-                        f"Conflicting tag updates for service {service} image "
-                        f"{image}: {', '.join(sorted(desired))}."
-                    ),
-                    stack=stack_name,
-                    service=service,
-                )
-            )
-        return issues
-
-    def _manifest_issues(self, matches: Sequence[Match]) -> list[DryRunPlanIssue]:
-        issues: list[DryRunPlanIssue] = []
-        for update in _tag_updates(matches):
-            try:
-                self.docker.manifest_inspect(update.new_image)
-            except CommandError as exc:
-                detail = _first_error_line(exc)
-                suffix = f": {detail}" if detail else ""
-                issues.append(
-                    DryRunPlanIssue(
-                        severity="error",
-                        code="tag-manifest-unavailable",
-                        message=(
-                            f"Invalid or unavailable remote tag "
-                            f"{update.old_image} -> {update.new_image}{suffix}"
-                        ),
-                    )
-                )
-        return issues
-
-    def _digest_pin_plan_issues(
-        self,
-        matches: Sequence[Match],
-    ) -> list[DryRunPlanIssue]:
-        self.digest_pin_updates_by_stack = {}
-        self.digest_pin_label_rewrites_by_stack = {}
-        if not self.config.digest_pin_updates:
-            return []
-
-        issues: list[DryRunPlanIssue] = []
-        for stack in _stacks_to_update(matches):
-            stack_matches = [
-                match for match in matches if match.stack.index == stack.index
-            ]
-            for match in stack_matches:
-                if _digest_pin_match_tag(match):
-                    continue
-                issues.append(
-                    DryRunPlanIssue(
-                        severity="error",
-                        code="digest-pin-tag-required",
-                        message=(
-                            "Digest-pin updates require a safe resolved tag. "
-                            "This line cannot be digest-pinned automatically."
-                        ),
-                        line_no=match.target.line_no,
-                        stack=match.stack.name,
-                        service=match.service,
-                    )
-                )
-
-            stack_updates: list[DigestPinUpdate] = []
-            resolver = DockerManifestResolver(self.docker, verbose=True)
-            verifier = DigestVerifier(
-                self.docker,
-                primary_resolver=resolver,
-                fallback_resolver=resolver,
-            )
-            try:
-                candidates = _digest_pin_candidates(stack_matches)
-            except UpdaterError as exc:
-                issues.append(
-                    DryRunPlanIssue(
-                        severity="error",
-                        code="digest-pin-conflict",
-                        message=f"Digest-pin plan is not safe to apply: {exc}",
-                        stack=stack.name,
-                    )
-                )
-                candidates = ()
-            for candidate in candidates:
-                result = _resolve_digest_pin_candidate(verifier, candidate)
-                if not result.ok:
-                    code = (
-                        "digest-pin-digest-stale"
-                        if result.reason == "stale-digest"
-                        else "digest-pin-digest-unavailable"
-                    )
-                    issues.append(
-                        DryRunPlanIssue(
-                            severity="error",
-                            code=code,
-                            message=(
-                                _digest_pin_resolve_error(
-                                    candidate.resolved_image,
-                                    result,
-                                )
-                                + (f" ({result.error})" if result.error else "")
-                            ),
-                            stack=stack.name,
-                        )
-                    )
-                    continue
-                stack_updates.append(
-                    digest_pin_update_from_values(
-                        old_image=candidate.old_image,
-                        resolved_tag=candidate.resolved_tag,
-                        planned_digest=result.digest,
-                        services=candidate.services,
-                    )
-                )
-
-            if stack_updates:
-                try:
-                    _rendered, applied = render_compose_digest_pins(
-                        stack.directory / stack.file,
-                        stack_updates,
-                        label_rewrite_approvals=(
-                            self.digest_pin_label_rewrite_approvals
-                        ),
-                        stack_name=stack.name,
-                    )
-                    self.digest_pin_label_rewrites_by_stack[stack.index] = {
-                        (item.old_image, item.resolved_tag): item.label_rewrites
-                        for item in applied
-                    }
-                except DigestPinLabelRewriteApprovalRequired as exc:
-                    issues.append(
-                        DryRunPlanIssue(
-                            severity="error",
-                            code="compose-digest-pin-label-rewrite-unapproved",
-                            message=(
-                                f'{stack.name} {exc.label_key} is '
-                                f'"{exc.current_label_value}"; approve replacing it '
-                                f'with "{exc.proposed_label_regex}" before pinning '
-                                "the digest."
-                            ),
-                            stack=stack.name,
-                            service=exc.service,
-                            hint=(
-                                "Approve the label rewrite to replace the current "
-                                "include rule with the exact planned tag, or edit "
-                                "the Compose label manually."
-                            ),
-                            details={
-                                "stack": stack.name,
-                                "service": exc.service,
-                                "compose_file": stack.file,
-                                "label_key": exc.label_key,
-                                "current_label_value": exc.current_label_value,
-                                "planned_tag": exc.planned_tag,
-                                "proposed_label_value": exc.proposed_label_value,
-                                "proposed_label_regex": exc.proposed_label_regex,
-                                "explanation": (
-                                    "WUD-Updater can only overwrite this include "
-                                    "rule after explicit approval because it is not "
-                                    "an empty label, an exact tag regex, or a plain "
-                                    "tag matching the current/planned update."
-                                ),
-                            },
-                        )
-                    )
-                except ComposeTagRewriteError as exc:
-                    issues.append(
-                        DryRunPlanIssue(
-                            severity="error",
-                            code="compose-digest-pin-unsupported",
-                            message=f"Compose digest-pin rewrite is not safe: {exc}",
-                            stack=stack.name,
-                        )
-                    )
-            self.digest_pin_label_rewrites_by_stack.setdefault(stack.index, {})
-            self.digest_pin_updates_by_stack[stack.index] = tuple(stack_updates)
-        return issues
-
-    def _digest_unpin_plan_issues(
-        self,
-        matches: Sequence[Match],
-    ) -> list[DryRunPlanIssue]:
-        issues: list[DryRunPlanIssue] = []
-        stack_by_index = {stack.index: stack for stack in _stacks_to_update(matches)}
-        for stack_index, updates in sorted(self.digest_unpin_updates_by_stack.items()):
-            if not updates:
-                continue
-            stack = stack_by_index.get(stack_index)
-            if stack is None:
-                continue
-            try:
-                render_compose_digest_unpins(
-                    stack.directory / stack.file,
-                    updates,
-                    stack_name=stack.name,
-                )
-            except ComposeTagRewriteError as exc:
-                issues.append(
-                    DryRunPlanIssue(
-                        severity="error",
-                        code="compose-digest-unpin-unsupported",
-                        message=f"Compose digest-unpin rewrite is not safe: {exc}",
-                        stack=stack.name,
-                    )
-                )
-        return issues
-
-    def _preflight_issues(self, matches: Sequence[Match]) -> list[DryRunPlanIssue]:
-        issues: list[DryRunPlanIssue] = []
-        for stack in _stacks_to_update(matches):
-            stack_matches = [
-                match for match in matches if match.stack.index == stack.index
-            ]
-            scope = self._update_scope(stack, stack_matches)
-            scoped_services = set(scope.services or ())
-
-            runtime_issues = self.compose.try_service_runtime_port_issues(
-                stack.directory,
-                stack.file,
-                project_directory=stack.project_directory,
-            )
-            runtime_scope = scoped_services or {issue.service for issue in runtime_issues}
-            for issue in runtime_issues:
-                if issue.service not in runtime_scope:
-                    continue
-                issues.append(
-                    DryRunPlanIssue(
-                        severity="error",
-                        code="compose-port-invalid",
-                        message=(
-                            f"Compose service {issue.service} has invalid "
-                            f"{issue.field} value {issue.value!r}: {issue.reason}."
-                        ),
-                        stack=stack.name,
-                        service=issue.service,
-                    )
-                )
-
-            mounts = self.compose.try_service_bind_mounts(
-                stack.directory,
-                stack.file,
-                project_directory=stack.project_directory,
-            )
-            mount_scope = scoped_services or {mount.service for mount in mounts}
-            for mount in mounts:
-                if mount.service not in mount_scope:
-                    continue
-                issue = _container_bind_mount_path_issue(
-                    mount,
-                    docker_base=self.config.docker_base,
-                )
-                if not issue:
-                    continue
-                target = f" -> {mount.target}" if mount.target else ""
-                issues.append(
-                    DryRunPlanIssue(
-                        severity="error",
-                        code="bind-mount-path-invalid",
-                        message=(
-                            f"Compose bind mount resolves to {mount.source}"
-                            f"{target}; {issue}."
-                        ),
-                        stack=stack.name,
-                        service=mount.service,
-                    )
-                )
-        return issues
+        self.digest_unpin_updates_by_stack = dict(result.updates_by_stack)
+        return list(result.matches), list(result.skipped), result.issues
 
     def _plan_stacks(self, matches: Sequence[Match]) -> tuple[DryRunPlanStack, ...]:
         stacks: list[DryRunPlanStack] = []
@@ -1307,7 +434,9 @@ class _PlanBuilder(_UpdateScopeMixin):
                     tag_updates=plan_tag_updates,
                     digest_pin_updates=plan_digest_pin_updates,
                     digest_unpin_updates=plan_digest_unpin_updates,
-                    actions=self._actions(
+                    actions=render_plan_actions(
+                        self.config,
+                        self.compose,
                         stack,
                         scope,
                         plan_tag_updates,
@@ -1469,147 +598,6 @@ class _PlanBuilder(_UpdateScopeMixin):
             return update
         return None
 
-    def _actions(
-        self,
-        stack: ComposeStack,
-        scope: UpdateScope,
-        tag_updates: Sequence[DryRunPlanTagUpdate],
-        digest_pin_updates: Sequence[DryRunPlanDigestPinUpdate],
-        digest_unpin_updates: Sequence[DryRunPlanDigestUnpinUpdate],
-    ) -> tuple[DryRunPlanAction, ...]:
-        actions: list[DryRunPlanAction] = []
-        for update in tag_updates:
-            actions.append(
-                DryRunPlanAction(
-                    kind="compose-tag-update",
-                    description=(
-                        f"Rewrite {update.old_image} to {update.new_image} "
-                        f"for {', '.join(update.services)}"
-                    ),
-                    cwd=str(stack.directory),
-                )
-            )
-        for update in digest_unpin_updates:
-            actions.append(
-                DryRunPlanAction(
-                    kind="compose-digest-unpin",
-                    description=(
-                        f"Unpin {update.source_image} to {update.tag_image}, "
-                        f"remove {update.marker}, and preserve {update.label_key} "
-                        f"for {', '.join(update.services)}"
-                    ),
-                    cwd=str(stack.directory),
-                )
-            )
-        actions.append(
-            self._compose_action(
-                stack,
-                "pull",
-                ("pull",),
-                scope.pull_services,
-                "Pull matched image updates",
-            )
-        )
-        for update in digest_pin_updates:
-            actions.append(
-                DryRunPlanAction(
-                    kind="compose-digest-pin",
-                    description=(
-                        f"Pin {update.source_image} to {update.final_image}, "
-                        f"write {update.marker}, and set {update.label_key} "
-                        f"for {', '.join(update.services)}"
-                    ),
-                    cwd=str(stack.directory),
-                )
-            )
-        stop_services = (
-            scope.stop_services if scope.stop_services is not None else scope.services
-        )
-        if self.config.update_mode == "pause":
-            actions.append(
-                self._compose_action(
-                    stack,
-                    "pause",
-                    ("pause",),
-                    scope.services,
-                    "Pause affected services before recreate",
-                )
-            )
-        elif self.config.update_mode == "stop":
-            actions.append(
-                self._compose_action(
-                    stack,
-                    "stop",
-                    ("stop",),
-                    stop_services,
-                    "Stop affected services before recreate",
-                )
-            )
-
-        up_args = ["up", "-d", "--remove-orphans"]
-        if scope.force_recreate:
-            up_args.append("--force-recreate")
-        if scope.services and scope.up_no_deps:
-            up_args.append("--no-deps")
-        wait_handled = False
-        if self.config.update_mode != "pause" and self.compose.up_wait_supported(
-            stack.directory,
-            stack.file,
-            project_directory=stack.project_directory,
-        ):
-            up_args.extend(["--wait", "--wait-timeout", str(self.config.max_wait)])
-            wait_handled = True
-        actions.append(
-            self._compose_action(
-                stack,
-                "up",
-                tuple(up_args),
-                scope.services,
-                "Recreate services with updated images",
-            )
-        )
-        if self.config.update_mode == "pause":
-            actions.append(
-                self._compose_action(
-                    stack,
-                    "unpause",
-                    ("unpause",),
-                    scope.services,
-                    "Unpause services before health check",
-                )
-            )
-        if not wait_handled:
-            actions.append(
-                DryRunPlanAction(
-                    kind="health-wait",
-                    description=f"Wait up to {self.config.max_wait}s for health",
-                    cwd=str(stack.directory),
-                )
-            )
-        return tuple(actions)
-
-    def _compose_action(
-        self,
-        stack: ComposeStack,
-        kind: str,
-        compose_args: Sequence[str],
-        services: Sequence[str] | None,
-        description: str,
-    ) -> DryRunPlanAction:
-        return DryRunPlanAction(
-            kind=kind,
-            description=description,
-            cwd=str(stack.directory),
-            args=tuple(
-                _compose_args(
-                    stack.file,
-                    *compose_args,
-                    *_service_args(services),
-                    project_directory=stack.project_directory,
-                )
-            ),
-        )
-
 def build_dry_run_plan(
     config: UpdaterConfig,
     *,
@@ -1724,7 +712,7 @@ def resolve_pending_groups(
         command_runner=runner,
         known_digest_provenance_by_service=known_digest_provenance_by_service or {},
     )
-    matches, skipped = scope_builder._build_matches(parsed, stacks)
+    matches, skipped, _digest_unpin_issues = scope_builder._build_matches(parsed, stacks)
     diagnostics = _unmatched_diagnostics(
         config,
         parsed.targets,
@@ -1754,558 +742,6 @@ def resolve_pending_groups(
             if item.line_no in targets_by_line
         ),
     )
-
-
-def _match_targets(
-    parsed: ParsedWudFile,
-    stacks: Sequence[ComposeStack],
-    docker: DockerCli,
-    *,
-    allow_tag_updates: bool,
-    allow_digest_pin_rematch: bool,
-) -> tuple[list[Match], list[DryRunPlanSkipped]]:
-    container_images = {item.name: item.image for item in docker.try_container_images()}
-    matches: list[Match] = []
-    skipped: list[DryRunPlanSkipped] = []
-    seen: set[tuple[int, int, str, str, str]] = set()
-
-    for target in parsed.targets:
-        if target.desired_tag and not allow_tag_updates:
-            skipped.append(_skipped(target, "tag-updates-disabled"))
-            continue
-
-        resolved = container_images.get(target.first, target.first)
-        allow_repo = (
-            target.allow_repo or resolved != target.first or not image_has_tag(resolved)
-        )
-
-        for stack in stacks:
-            for image in stack.images:
-                services = _services_for_target_match(
-                    stack.service_images,
-                    image,
-                    target,
-                    resolved,
-                    allow_repo,
-                    allow_digest_pin_rematch=allow_digest_pin_rematch,
-                )
-                if services is None:
-                    continue
-                if services:
-                    for service in services:
-                        key = (stack.index, target.line_no, resolved, image, service)
-                        if key in seen:
-                            continue
-                        matches.append(Match(stack, target, resolved, image, service))
-                        seen.add(key)
-                else:
-                    key = (stack.index, target.line_no, resolved, image, "")
-                    if key in seen:
-                        continue
-                    matches.append(Match(stack, target, resolved, image, ""))
-                    seen.add(key)
-
-    matches.sort(
-        key=lambda item: (
-            item.stack.index,
-            item.target.line_no,
-            item.target.first,
-            item.resolved,
-            item.compose_image,
-            item.service,
-        )
-    )
-    matched_lines = {match.target.line_no for match in matches}
-    skipped_lines = {item.line_no for item in skipped}
-    for target in parsed.targets:
-        if target.line_no not in matched_lines and target.line_no not in skipped_lines:
-            skipped.append(_skipped(target, "unmatched"))
-    return matches, skipped
-
-
-def _unmatched_diagnostics(
-    config: UpdaterConfig,
-    targets: Sequence[WudTarget],
-    skipped: Sequence[DryRunPlanSkipped],
-    docker: DockerCli,
-    *,
-    host_docker_base: Path | None,
-) -> dict[int, UnmatchedDiagnostic]:
-    skipped_reasons = {item.line_no: item.reason for item in skipped}
-    unmatched_targets = [
-        target for target in targets if skipped_reasons.get(target.line_no) == "unmatched"
-    ]
-    if not unmatched_targets:
-        return {}
-
-    containers = docker.try_container_images()
-    diagnostics: dict[int, UnmatchedDiagnostic] = {}
-    for target in unmatched_targets:
-        diagnostics[target.line_no] = _generic_unmatched_diagnostic()
-        for container in containers:
-            if not _container_matches_target(container.name, container.image, target):
-                continue
-            diagnostic = _compose_label_diagnostic(
-                config,
-                docker,
-                container.name,
-                container.image,
-                host_docker_base=host_docker_base,
-            )
-            diagnostics[target.line_no] = diagnostic
-            break
-    return diagnostics
-
-
-def _container_matches_target(
-    container_name: str,
-    container_image: str,
-    target: WudTarget,
-) -> bool:
-    if container_name == target.first:
-        return True
-    allow_repo = target.allow_repo or not image_has_tag(target.first)
-    return image_matches_resolved_target(container_image, target.first, allow_repo)
-
-
-def _compose_label_diagnostic(
-    config: UpdaterConfig,
-    docker: DockerCli,
-    container_name: str,
-    container_image: str,
-    *,
-    host_docker_base: Path | None,
-) -> UnmatchedDiagnostic:
-    working_dir = _container_label(docker, container_name, COMPOSE_WORKING_DIR_LABEL)
-    config_files = _split_compose_config_files(
-        _container_label(docker, container_name, COMPOSE_CONFIG_FILES_LABEL)
-    )
-    if not config_files:
-        return _matching_container_unlabeled_diagnostic(container_name, container_image)
-
-    project = _container_label(docker, container_name, COMPOSE_PROJECT_LABEL)
-    service = _container_label(docker, container_name, COMPOSE_SERVICE_LABEL)
-    stack = project or _stack_name_from_label_path(working_dir) or _stack_name_from_label_path(
-        config_files[0]
-    )
-    references = tuple(
-        _display_label_path(path, config, host_docker_base=host_docker_base)
-        for path in config_files
-    )
-    local_paths = tuple(
-        _local_label_path(
-            path,
-            working_dir,
-            config,
-            host_docker_base=host_docker_base,
-        )
-        for path in config_files
-    )
-    if any(path is not None and path.is_file() for path in local_paths):
-        return _compose_label_undiscovered_diagnostic(
-            container_name,
-            container_image,
-            references,
-            stack=stack,
-            service=service,
-        )
-
-    found_files = _nonstandard_compose_files(
-        local_paths,
-        config,
-        host_docker_base=host_docker_base,
-    )
-    reference_label = _join_display_values(references)
-    if found_files:
-        message = (
-            "No active Compose file matched this WUD entry. Docker labels "
-            f"reference {reference_label}, but only archived/nonstandard "
-            f"compose files were found: {_join_display_values(found_files)}."
-        )
-    else:
-        message = (
-            "No active Compose file matched this WUD entry. Docker labels "
-            f"reference {reference_label}, but the active compose file was not found."
-        )
-    findings = (
-        f"Running container {container_name} still matches this pending line.",
-        f"Docker labels reference {_join_display_values(references)}.",
-        (
-            "The referenced Compose file was not found, but archived/nonstandard "
-            f"file(s) were found: {_join_display_values(found_files)}."
-            if found_files
-            else "The referenced Compose file was not found."
-        ),
-    )
-    possible_reasons = (
-        (
-            "The active Compose file was renamed to an archived or nonstandard filename.",
-            "The stack was moved or the Compose file path changed after the container was created.",
-        )
-        if found_files
-        else (
-            "The referenced Compose file was deleted or moved.",
-            "The stack path is no longer mounted or reachable from WUD-Updater.",
-            "The stack moved outside the configured Docker base.",
-        )
-    )
-    recommended_actions = (
-        "Restore or rename the active Compose file to a supported Compose filename.",
-        "Update Docker base or ignore paths if the stack moved.",
-        "Remove the stale WUD line if the stack is intentionally gone.",
-    )
-    details = _stale_pending_assistant_details(
-        preflight_findings=findings,
-        possible_reasons=possible_reasons,
-        recommended_actions=recommended_actions,
-        referenced_compose_files=references,
-        found_compose_files=found_files,
-    )
-    return UnmatchedDiagnostic(
-        code="compose-label-active-file-missing",
-        message=message,
-        hint=UNMATCHED_HINT,
-        stack=stack,
-        service=service,
-        compose_file=references[0] if references else "",
-        found_files=found_files,
-        details=details,
-    )
-
-
-def _compose_label_undiscovered_diagnostic(
-    container_name: str,
-    container_image: str,
-    references: Sequence[str],
-    *,
-    stack: str,
-    service: str,
-) -> UnmatchedDiagnostic:
-    reference_label = _join_display_values(references)
-    findings = (
-        f"Running container {container_name} still matches this pending line.",
-        f"Docker labels reference active Compose file {reference_label}.",
-        "Compose discovery did not include that stack.",
-    )
-    return UnmatchedDiagnostic(
-        code="compose-label-undiscovered-active-file",
-        message=(
-            "A running container still matches this WUD entry and its Compose "
-            f"file exists, but Compose discovery did not include {reference_label}."
-        ),
-        hint=COMPOSE_LABEL_UNDISCOVERED_HINT,
-        stack=stack,
-        service=service,
-        compose_file=references[0] if references else "",
-        details=_stale_pending_assistant_details(
-            preflight_findings=findings,
-            possible_reasons=COMPOSE_LABEL_UNDISCOVERED_POSSIBLE_REASONS,
-            recommended_actions=COMPOSE_LABEL_UNDISCOVERED_RECOMMENDED_ACTIONS,
-            running_container=container_name,
-            running_image=container_image,
-            referenced_compose_files=references,
-        ),
-    )
-
-
-def _matching_container_unlabeled_diagnostic(
-    container_name: str,
-    container_image: str,
-) -> UnmatchedDiagnostic:
-    findings = (
-        f"Running container {container_name} still matches this pending line.",
-        "Docker did not report Compose config labels for that container.",
-    )
-    return UnmatchedDiagnostic(
-        code="matching-container-without-compose-labels",
-        message=(
-            "A running container still matches this WUD entry, but Docker did "
-            "not report Compose labels that tie it to a discovered stack."
-        ),
-        hint=MATCHING_CONTAINER_UNLABELED_HINT,
-        details=_stale_pending_assistant_details(
-            preflight_findings=findings,
-            possible_reasons=MATCHING_CONTAINER_UNLABELED_POSSIBLE_REASONS,
-            recommended_actions=MATCHING_CONTAINER_UNLABELED_RECOMMENDED_ACTIONS,
-            running_container=container_name,
-            running_image=container_image,
-        ),
-    )
-
-
-def _generic_unmatched_diagnostic() -> UnmatchedDiagnostic:
-    return UnmatchedDiagnostic(
-        code="unmatched",
-        message=GENERIC_UNMATCHED_MESSAGE,
-        hint=GENERIC_UNMATCHED_HINT,
-        details=_stale_pending_assistant_details(
-            preflight_findings=GENERIC_UNMATCHED_FINDINGS,
-            possible_reasons=GENERIC_UNMATCHED_POSSIBLE_REASONS,
-            recommended_actions=GENERIC_UNMATCHED_RECOMMENDED_ACTIONS,
-        ),
-    )
-
-
-def _stale_pending_assistant_details(
-    *,
-    preflight_findings: Sequence[str],
-    possible_reasons: Sequence[str],
-    recommended_actions: Sequence[str],
-    **extra: object,
-) -> Mapping[str, object]:
-    return {
-        "preflight_findings": tuple(preflight_findings),
-        "possible_reasons": tuple(possible_reasons),
-        "recommended_actions": tuple(recommended_actions),
-        **extra,
-    }
-
-
-def _container_label(docker: DockerCli, container_name: str, label: str) -> str:
-    fmt = f'{{{{ index .Config.Labels "{label}" }}}}'
-    for value in docker.try_inspect(container_name, fmt):
-        cleaned = value.strip()
-        if cleaned and cleaned != "<no value>":
-            return cleaned
-    return ""
-
-
-def _split_compose_config_files(value: str) -> tuple[str, ...]:
-    return tuple(item.strip() for item in value.split(",") if item.strip())
-
-
-def _local_label_path(
-    value: str,
-    working_dir: str,
-    config: UpdaterConfig,
-    *,
-    host_docker_base: Path | None,
-) -> Path | None:
-    raw = Path(value)
-    if raw.is_absolute():
-        return _map_absolute_label_path(
-            raw,
-            config,
-            host_docker_base=host_docker_base,
-        )
-    local_working_dir = _local_working_dir(
-        working_dir,
-        config,
-        host_docker_base=host_docker_base,
-    )
-    if local_working_dir is None:
-        return None
-    return local_working_dir / value
-
-
-def _local_working_dir(
-    value: str,
-    config: UpdaterConfig,
-    *,
-    host_docker_base: Path | None,
-) -> Path | None:
-    if not value:
-        return None
-    raw = Path(value)
-    if raw.is_absolute():
-        return _map_absolute_label_path(
-            raw,
-            config,
-            host_docker_base=host_docker_base,
-        )
-    return None
-
-
-def _map_absolute_label_path(
-    path: Path,
-    config: UpdaterConfig,
-    *,
-    host_docker_base: Path | None,
-) -> Path | None:
-    if host_docker_base is not None:
-        try:
-            return config.docker_base / path.relative_to(host_docker_base)
-        except ValueError:
-            pass
-    try:
-        path.relative_to(config.docker_base)
-    except ValueError:
-        return None
-    return path
-
-
-def _display_label_path(
-    value: str,
-    config: UpdaterConfig,
-    *,
-    host_docker_base: Path | None,
-) -> str:
-    raw = Path(value)
-    if raw.is_absolute():
-        if host_docker_base is not None:
-            try:
-                return path_display(host_docker_base, raw)
-            except ValueError:
-                pass
-        try:
-            return path_display(config.docker_base, raw)
-        except ValueError:
-            return raw.name
-    cleaned = value.strip().lstrip("./")
-    if cleaned.startswith("../"):
-        return raw.name
-    return cleaned or raw.name
-
-
-def path_display(base: Path, path: Path) -> str:
-    return path.relative_to(base).as_posix()
-
-
-def _stack_name_from_label_path(value: str) -> str:
-    if not value:
-        return ""
-    path = Path(value)
-    if path.name:
-        if path.suffix in {".yml", ".yaml"}:
-            return path.parent.name
-        return path.name
-    return ""
-
-
-def _nonstandard_compose_files(
-    local_paths: Sequence[Path | None],
-    config: UpdaterConfig,
-    *,
-    host_docker_base: Path | None,
-) -> tuple[str, ...]:
-    found: list[str] = []
-    seen: set[str] = set()
-    for local_path in local_paths:
-        if local_path is None:
-            continue
-        directory = local_path.parent
-        try:
-            entries = sorted(directory.iterdir())
-        except OSError:
-            continue
-        for entry in entries:
-            if not entry.is_file():
-                continue
-            if not _nonstandard_compose_filename(entry.name):
-                continue
-            display = _display_local_path(
-                entry,
-                config,
-                host_docker_base=host_docker_base,
-            )
-            if display in seen:
-                continue
-            found.append(display)
-            seen.add(display)
-    return tuple(found)
-
-
-def _nonstandard_compose_filename(name: str) -> bool:
-    lowered = name.lower()
-    return (
-        "compose" in lowered
-        and (lowered.endswith(".yml") or lowered.endswith(".yaml"))
-        and lowered not in COMPOSE_FILENAMES
-    )
-
-
-def _display_local_path(
-    path: Path,
-    config: UpdaterConfig,
-    *,
-    host_docker_base: Path | None,
-) -> str:
-    try:
-        return path_display(config.docker_base, path)
-    except ValueError:
-        pass
-    if host_docker_base is not None:
-        try:
-            return path_display(host_docker_base, path)
-        except ValueError:
-            pass
-    return path.name
-
-
-def _join_display_values(values: Sequence[str]) -> str:
-    if not values:
-        return "an unknown compose file"
-    if len(values) == 1:
-        return values[0]
-    return ", ".join(values)
-
-
-def _cleanup_for_skipped(
-    config: UpdaterConfig,
-    targets: Sequence[WudTarget],
-    skipped: Sequence[DryRunPlanSkipped],
-    diagnostics: Mapping[int, UnmatchedDiagnostic],
-    *,
-    host_docker_base: Path | None,
-) -> DryRunPlanCleanup:
-    skipped_reasons = {item.line_no: item.reason for item in skipped}
-    items = tuple(
-        DryRunPlanCleanupItem(
-            line_no=target.line_no,
-            raw=target.raw,
-            image=target.first,
-            desired_tag=target.desired_tag,
-            digest=target.digest,
-            reason=skipped_reasons[target.line_no],
-            diagnostic=diagnostics.get(target.line_no),
-        )
-        for target in targets
-        if skipped_reasons.get(target.line_no) == "unmatched"
-    )
-    if not items:
-        return DryRunPlanCleanup()
-    return DryRunPlanCleanup(
-        cleanup_id=_cleanup_id(
-            config,
-            items,
-            host_docker_base=host_docker_base,
-        ),
-        can_remove_unmatched=True,
-        items=items,
-    )
-
-
-def _cleanup_id(
-    config: UpdaterConfig,
-    items: Sequence[DryRunPlanCleanupItem],
-    *,
-    host_docker_base: Path | None,
-) -> str:
-    payload = {
-        "version": 1,
-        "docker_base": str(config.docker_base),
-        "digest_pin_updates": config.digest_pin_updates,
-        "host_docker_base": "" if host_docker_base is None else str(host_docker_base),
-        "items": [
-            {
-                "line_no": item.line_no,
-                "raw": item.raw,
-                "image": item.image,
-                "desired_tag": item.desired_tag,
-                "digest": item.digest,
-                "reason": item.reason,
-            }
-            for item in items
-        ],
-        "source_file": str(config.wud_out_file),
-    }
-    canonical = json.dumps(
-        payload,
-        sort_keys=True,
-        separators=(",", ":"),
-        ensure_ascii=True,
-    )
-    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
 def _parsed_for_selected_lines(
@@ -2547,72 +983,6 @@ def _read_wud_file(path: Path) -> ParsedWudFile:
         raise PlanFileMissing(f"WUD file not found: {path}") from exc
 
 
-def _file_sha256(path: Path) -> str:
-    try:
-        data = path.read_bytes()
-    except FileNotFoundError as exc:
-        raise PlanFileMissing(f"WUD file not found: {path}") from exc
-    return hashlib.sha256(data).hexdigest()
-
-
-def _plan_id(
-    plan: DryRunPlan,
-    *,
-    config: UpdaterConfig,
-    allow_tag_updates: bool,
-    tag_overrides: Sequence[TagOverride],
-    digest_pin_label_rewrite_approvals: Sequence[DigestPinLabelRewriteApproval],
-    host_docker_base: Path | None,
-    wud_file_hash: str,
-) -> str:
-    plan_payload = asdict(plan)
-    plan_payload.pop("plan_id", None)
-    plan_payload.pop("can_apply", None)
-    payload = {
-        "version": 1,
-        "allow_tag_updates": allow_tag_updates,
-        "tag_overrides": [
-            {"line_no": item.line_no, "tag": item.tag}
-            for item in sorted(tag_overrides, key=lambda item: item.line_no)
-        ],
-        "digest_pin_label_rewrite_approvals": [
-            {
-                "stack": item.stack,
-                "service": item.service,
-                "label_key": item.label_key,
-                "current_label_value": item.current_label_value,
-                "planned_tag": item.planned_tag,
-                "proposed_label_value": item.proposed_label_value,
-            }
-            for item in sorted(
-                digest_pin_label_rewrite_approvals,
-                key=lambda item: (
-                    item.stack,
-                    item.service,
-                    item.label_key,
-                    item.current_label_value,
-                    item.planned_tag,
-                    item.proposed_label_value,
-                ),
-            )
-        ],
-        "docker_base": str(config.docker_base),
-        "host_docker_base": "" if host_docker_base is None else str(host_docker_base),
-        "max_wait": config.max_wait,
-        "mode": config.update_mode,
-        "plan": plan_payload,
-        "source_file": str(config.wud_out_file),
-        "wud_file_sha256": wud_file_hash,
-    }
-    canonical = json.dumps(
-        payload,
-        sort_keys=True,
-        separators=(",", ":"),
-        ensure_ascii=True,
-    )
-    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
-
-
 def _selected_line_numbers(line_numbers: Sequence[int]) -> tuple[int, ...]:
     selected = tuple(sorted(set(line_numbers)))
     if not selected:
@@ -2635,76 +1005,6 @@ def _validate_selected_targets(
         raise PlanInputError(
             "line_numbers must reference actionable WUD target lines: " + values
         )
-
-
-def _skipped(target: WudTarget, reason: str) -> DryRunPlanSkipped:
-    return DryRunPlanSkipped(
-        line_no=target.line_no,
-        raw=target.raw,
-        image=target.first,
-        desired_tag=target.desired_tag,
-        reason=reason,
-    )
-
-
-def _digest_unpin_candidate_target(target: WudTarget) -> bool:
-    if not target.digest or not image_has_tag(target.first):
-        return False
-    return tag_value_valid(image_tag(target.first))
-
-
-def _digest_unpin_service_matches_target(image: str, target: WudTarget) -> bool:
-    if not digest_from_image(image):
-        return False
-    return repo_key(image) == target.repo
-
-
-def _digest_unpin_issue(
-    code: str,
-    message: str,
-    target: WudTarget,
-    stack: ComposeStack,
-    service: str,
-) -> DryRunPlanIssue:
-    return DryRunPlanIssue(
-        severity="error",
-        code=code,
-        message=message,
-        line_no=target.line_no,
-        stack=stack.name,
-        service=service,
-        hint=(
-            "Review the Compose image, WUD tag include label, and digest tag "
-            "provenance before applying this pending update."
-        ),
-    )
-
-
-def _label_value(labels: Sequence[tuple[str, str]], key: str) -> str:
-    for label_key, label_value in labels:
-        if label_key == key:
-            return label_value
-    return ""
-
-
-def _unique_digest_unpin_updates(
-    updates: Sequence[DigestUnpinUpdate],
-) -> tuple[DigestUnpinUpdate, ...]:
-    unique: dict[tuple[str, str, str], DigestUnpinUpdate] = {}
-    for update in updates:
-        key = (update.old_image, update.resolved_tag, update.target_digest)
-        existing = unique.get(key)
-        if existing is None:
-            unique[key] = update
-            continue
-        services = tuple(sorted({*existing.services, *update.services}))
-        unique[key] = digest_unpin_update_from_values(
-            old_image=update.old_image,
-            resolved_tag=update.resolved_tag,
-            target_digest=update.target_digest,
-            services=services,
-        )
-    return tuple(unique[key] for key in sorted(unique))
 
 
 def _target_action(
@@ -2741,28 +1041,3 @@ def _service_count(stacks: Sequence[DryRunPlanStack]) -> int:
         for service in stack.services or stack.pull_services:
             services.add((stack.name, service))
     return len(services)
-
-
-def _first_error_line(exc: CommandError) -> str:
-    for line in (*exc.result.stderr_lines, *exc.result.stdout_lines):
-        if line.strip():
-            return line.strip()
-    return ""
-
-
-def _compose_args(
-    file: str,
-    *args: str,
-    project_directory: str | Path | None = None,
-) -> list[str]:
-    command = ["docker", "compose"]
-    if project_directory is not None:
-        command.extend(["--project-directory", str(project_directory)])
-    command.extend(["-f", file, *args])
-    return command
-
-
-def _service_args(services: Sequence[str] | None) -> tuple[str, ...]:
-    if services is None:
-        return ()
-    return tuple(service for service in services if service)
