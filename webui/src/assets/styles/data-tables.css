@@ -90,7 +90,6 @@ code.pending-table-value {
 
 .audit-status-value .audit-status-tag {
   flex: 0 0 auto;
-  grid-template-columns: max-content 0;
 }
 
 .tag-override-input {
