@@ -6,33 +6,18 @@
   border-top: 1px solid var(--color-border-subtle);
 }
 
-.preflight-details summary {
+.preflight-details .disclosure-summary {
   display: inline-flex;
   align-items: center;
   gap: 6px;
   width: fit-content;
   min-height: 32px;
-  cursor: pointer;
   color: var(--color-action-blue);
   font-size: 0.86rem;
   font-weight: 700;
 }
 
-.preflight-details summary::before {
-  content: "";
-  width: 0;
-  height: 0;
-  border-top: 4px solid transparent;
-  border-bottom: 4px solid transparent;
-  border-left: 5px solid currentcolor;
-  transition: transform 180ms ease-out;
-}
-
-.preflight-details[open] summary::before {
-  transform: rotate(90deg);
-}
-
-.preflight-details[open] summary {
+.preflight-details[open] .disclosure-summary {
   margin-bottom: 8px;
 }
 
@@ -201,7 +186,7 @@
     min-height: 44px;
   }
 
-  .preflight-details summary {
+  .preflight-details .disclosure-summary {
     min-height: 44px;
   }
 

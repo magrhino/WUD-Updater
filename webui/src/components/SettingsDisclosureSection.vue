@@ -29,7 +29,7 @@ const props = defineProps<{
 
 <template>
   <details :id="props.id" class="section-panel settings-disclosure" :open="props.open">
-    <summary class="section-heading settings-disclosure-summary">
+    <summary class="section-heading settings-disclosure-summary disclosure-summary">
       <div>
         <p class="eyebrow">{{ props.eyebrow }}</p>
         <h2>{{ props.title }}</h2>
@@ -113,15 +113,6 @@ const props = defineProps<{
 .settings-disclosure {
   display: block;
   scroll-margin-top: 18px;
-}
-
-.settings-disclosure-summary {
-  list-style: none;
-  cursor: pointer;
-}
-
-.settings-disclosure-summary::-webkit-details-marker {
-  display: none;
 }
 
 .settings-disclosure-summary:focus-visible {

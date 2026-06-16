@@ -444,7 +444,9 @@ function handleModalShowUpdate(value: boolean): void {
           class="preflight-details"
           :open="plan.status === 'blocked'"
         >
-          <summary>Services and images</summary>
+          <summary class="disclosure-summary disclosure-summary-triangle">
+            Services and images
+          </summary>
           <div v-if="planLines.length" class="compact-list">
             <div
               v-for="{ stack, line } in planLines"
@@ -484,7 +486,9 @@ function handleModalShowUpdate(value: boolean): void {
         </details>
 
         <details v-if="planActions.length" class="preflight-details">
-          <summary>Commands</summary>
+          <summary class="disclosure-summary disclosure-summary-triangle">
+            Commands
+          </summary>
           <div class="plan-actions">
             <div
               v-for="{ stack, action } in planActions"
@@ -498,7 +502,9 @@ function handleModalShowUpdate(value: boolean): void {
         </details>
 
         <details v-if="plan.skipped.length" class="preflight-details" open>
-          <summary>Skipped</summary>
+          <summary class="disclosure-summary disclosure-summary-triangle">
+            Skipped
+          </summary>
           <div class="compact-list">
             <div v-for="item in plan.skipped" :key="item.line_no" class="list-row">
               <span>#{{ item.line_no }}</span>
@@ -509,7 +515,9 @@ function handleModalShowUpdate(value: boolean): void {
         </details>
 
         <details class="preflight-details">
-          <summary>Source lines</summary>
+          <summary class="disclosure-summary disclosure-summary-triangle">
+            Source lines
+          </summary>
           <div class="compact-list">
             <div
               v-for="lineNo in plan.selected_line_numbers"
