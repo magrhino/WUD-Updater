@@ -3,8 +3,8 @@ import { nextTick } from "vue";
 function prefersReducedMotion(): boolean {
   return (
     typeof globalThis.window !== "undefined" &&
-    typeof globalThis.matchMedia === "function" &&
-    globalThis.matchMedia("(prefers-reduced-motion: reduce)").matches
+    typeof globalThis.window.matchMedia === "function" &&
+    globalThis.window.matchMedia("(prefers-reduced-motion: reduce)").matches
   );
 }
 
