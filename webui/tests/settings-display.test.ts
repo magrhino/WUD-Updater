@@ -16,7 +16,7 @@ import { settingsResponse } from "./helpers/fixtures";
 
 describe("settings display helpers", () => {
   it("maps settings entries to disclosure rows", () => {
-    const configured = settingsResponse().updater[0]!;
+    const configured = settingsResponse().updater[0];
     const requestScoped = settingsResponse().webui.find(
       (entry) => entry.source === "request",
     )!;

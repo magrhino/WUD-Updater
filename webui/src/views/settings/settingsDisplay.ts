@@ -139,15 +139,13 @@ export function managedOptions(
 }
 
 export function coreUpdateTourStatusLabel(
-  status: CoreUpdateTourStatus | undefined,
+  status: CoreUpdateTourStatus = "not_started",
 ): string {
-  const value = status ?? "not_started";
-  return CORE_UPDATE_TOUR_STATUS_LABELS[value] ?? value;
+  return CORE_UPDATE_TOUR_STATUS_LABELS[status] ?? status;
 }
 
 export function coreUpdateTourStepLabel(
-  step: CoreUpdateTourStep | undefined,
+  step: CoreUpdateTourStep = "dashboard",
 ): string {
-  const value = step ?? "dashboard";
-  return CORE_UPDATE_TOUR_STEP_LABELS[value] ?? value;
+  return CORE_UPDATE_TOUR_STEP_LABELS[step] ?? step;
 }

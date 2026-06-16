@@ -3,8 +3,8 @@ import { useClipboard } from "@vueuse/core";
 
 import { useConnectionStore } from "../../stores/connection";
 
-function diagnosticsOperationError(exc: unknown, fallback: string): string {
-  return exc instanceof Error ? exc.message : fallback;
+function diagnosticsOperationError(error_: unknown, fallback: string): string {
+  return error_ instanceof Error ? error_.message : fallback;
 }
 
 export function useSettingsDiagnostics() {
@@ -21,9 +21,9 @@ export function useSettingsDiagnostics() {
     try {
       const bundle = await connection.diagnosticsSupportBundle();
       return JSON.stringify(bundle, null, 2);
-    } catch (exc) {
+    } catch (error_) {
       diagnosticsError.value = diagnosticsOperationError(
-        exc,
+        error_,
         "Failed to load support bundle",
       );
       return null;
@@ -42,10 +42,10 @@ export function useSettingsDiagnostics() {
       // Since copied is a ref updated by useClipboard asynchronously,
       // we just assume success if it didn't throw and set a generic message.
       diagnosticsMessage.value = "Diagnostics copied to clipboard.";
-    } catch (exc) {
+    } catch (error_) {
       diagnosticsMessage.value = "";
       diagnosticsError.value = diagnosticsOperationError(
-        exc,
+        error_,
         "Failed to copy support bundle",
       );
     }
@@ -67,7 +67,7 @@ export function useSettingsDiagnostics() {
       URL.revokeObjectURL(url);
       url = null;
       diagnosticsMessage.value = "Diagnostics downloaded successfully.";
-    } catch (exc) {
+    } catch (error_) {
       if (url !== null) {
         try {
           URL.revokeObjectURL(url);
@@ -77,7 +77,7 @@ export function useSettingsDiagnostics() {
       }
       diagnosticsMessage.value = "";
       diagnosticsError.value = diagnosticsOperationError(
-        exc,
+        error_,
         "Failed to download support bundle",
       );
     }

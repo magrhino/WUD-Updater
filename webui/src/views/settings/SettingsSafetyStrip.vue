@@ -17,15 +17,14 @@ const {
   <div
     class="settings-safety-strip"
     :class="{ 'is-mutable': mutationsEnabled, 'is-read-only': !mutationsEnabled }"
-    role="status"
   >
-    <div class="settings-safety-main">
+    <output class="settings-safety-main">
       <component :is="mutationStatusIcon" :size="18" aria-hidden="true" />
-      <div>
+      <span>
         <strong class="wrap-anywhere">{{ mutationStatusLabel }}</strong>
         <span class="wrap-anywhere">{{ mutationStatusDetail }}</span>
-      </div>
-    </div>
+      </span>
+    </output>
     <div class="settings-safety-meta">
       <n-tag size="small" :type="mutationStatusTagType">
         {{ mutationStatusLabel }}
@@ -76,19 +75,20 @@ const {
   color: var(--color-warning);
 }
 
-.settings-safety-main>div {
+.settings-safety-main>span {
   display: grid;
   gap: 3px;
   min-width: 0;
 }
 
 .settings-safety-main strong,
-.settings-safety-main span,
+.settings-safety-main>span,
+.settings-safety-main>span>span,
 .settings-safety-meta {
   min-width: 0;
 }
 
-.settings-safety-main span {
+.settings-safety-main>span>span {
   color: var(--color-text-secondary);
   font-size: 0.9rem;
   line-height: 1.45;

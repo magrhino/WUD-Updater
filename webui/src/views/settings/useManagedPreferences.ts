@@ -138,9 +138,9 @@ export function useManagedPreferences() {
       const response = await settings.updateManagedSettings(values);
       preferencesMessage.value = `Preferences saved. Audit run #${response.audit_run_id}.`;
       hydratePreferenceForm();
-    } catch (exc) {
+    } catch (error_) {
       preferencesError.value =
-        exc instanceof Error ? exc.message : "Preferences could not be saved";
+        error_ instanceof Error ? error_.message : "Preferences could not be saved";
     }
   }
 
@@ -161,10 +161,10 @@ export function useManagedPreferences() {
       } else {
         preferencesMessage.value = `Onboarding checklist marked visible. Audit run #${response.audit_run_id}.`;
       }
-    } catch (exc) {
+    } catch (error_) {
       preferencesError.value =
-        exc instanceof Error
-          ? exc.message
+        error_ instanceof Error
+          ? error_.message
           : "Onboarding checklist could not be relaunched";
     }
   }
@@ -178,9 +178,9 @@ export function useManagedPreferences() {
     try {
       await settings.updateCoreUpdateTour("in_progress", "dashboard");
       await router?.push({ name: "dashboard" });
-    } catch (exc) {
+    } catch (error_) {
       preferencesError.value =
-        exc instanceof Error ? exc.message : "Core update tour could not be started";
+        error_ instanceof Error ? error_.message : "Core update tour could not be started";
     }
   }
 
@@ -196,10 +196,10 @@ export function useManagedPreferences() {
         settings.coreUpdateTour?.step ?? "dashboard",
       );
       preferencesMessage.value = "Core update tour dismissed.";
-    } catch (exc) {
+    } catch (error_) {
       preferencesError.value =
-        exc instanceof Error
-          ? exc.message
+        error_ instanceof Error
+          ? error_.message
           : "Core update tour could not be dismissed";
     }
   }

@@ -32,9 +32,9 @@ export function useSettingsRestart() {
       const response = await connection.restartContainer();
       restartDialogVisible.value = false;
       restartMessage.value = `Restart requested for ${response.container}. The WebUI may disconnect while the container comes back.`;
-    } catch (exc) {
+    } catch (error_) {
       restartError.value =
-        exc instanceof Error ? exc.message : "Container restart failed";
+        error_ instanceof Error ? error_.message : "Container restart failed";
     }
   }
 
