@@ -1150,6 +1150,56 @@ describe("settings store management coverage", () => {
     expect(settings.error).toBe("");
   });
 
+  it("creates and deletes dependency snoozes through state operations", async () => {
+    const auth = useAuthStore();
+    vi.spyOn(auth, "ensureCsrf").mockResolvedValue("csrf-dependency-snooze");
+    const stateOperation = vi
+      .spyOn(webApi, "stateOperation")
+      .mockResolvedValue(stateOperationResponse());
+    vi.spyOn(webApi, "snoozes").mockResolvedValue([
+      snooze({
+        service_key: "media/radarr",
+        wait_for_service_key: "media/prowlarr",
+        snoozed_until: null,
+        kind: "dependency",
+      }),
+    ]);
+    const settings = useSettingsStore();
+
+    await settings.createDependencySnooze(
+      "media/radarr",
+      "media/prowlarr",
+      "wait for indexer",
+      "active",
+    );
+    await settings.deleteSnooze(42, "active", "dependency");
+
+    expect(stateOperation).toHaveBeenNthCalledWith(
+      1,
+      {
+        kind: "create_dependency_snooze",
+        service_key: "media/radarr",
+        wait_for_service_key: "media/prowlarr",
+        reason: "wait for indexer",
+      },
+      "csrf-dependency-snooze",
+    );
+    expect(stateOperation).toHaveBeenNthCalledWith(
+      2,
+      {
+        kind: "delete_dependency_snooze",
+        snooze_id: 42,
+      },
+      "csrf-dependency-snooze",
+    );
+    expect(webApi.snoozes).toHaveBeenCalledWith("active");
+    expect(settings.snoozes[0]).toMatchObject({
+      service_key: "media/radarr",
+      wait_for_service_key: "media/prowlarr",
+      kind: "dependency",
+    });
+  });
+
   it("updates tag exclusions through state operations and reloads the selected filter", async () => {
     const auth = useAuthStore();
     vi.spyOn(auth, "ensureCsrf").mockResolvedValue("csrf-tag");

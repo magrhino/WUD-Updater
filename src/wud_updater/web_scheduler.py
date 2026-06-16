@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import sqlite3
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import replace
 from datetime import datetime, time as datetime_time, timedelta, timezone
 from threading import Event, Thread
@@ -16,7 +16,13 @@ from fastapi import FastAPI
 
 from . import web_database, web_jobs
 from .config import UpdaterConfig
-from .db import active_snooze, init_db, open_db, utc_timestamp
+from .db import (
+    active_dependency_snooze_rows,
+    active_snooze,
+    init_db,
+    open_db,
+    utc_timestamp,
+)
 from .digest_provenance import DigestTagProvenance
 from .plans import DryRunPlan, build_dry_run_plan, resolve_pending_groups
 from .web_auth import _immediate_transaction
@@ -33,6 +39,7 @@ AUTO_UPDATE_POLL_SECONDS = 60.0
 AUTO_UPDATE_GRACE_SECONDS = 300
 AUTO_UPDATE_DAYS = ("mon", "tue", "wed", "thu", "fri", "sat", "sun")
 LOGGER = logging.getLogger(__name__)
+AutoUpdateCandidate = tuple[int, tuple[str, ...], tuple[AutoUpdatePolicy, ...]]
 
 
 class AutoUpdateScheduleReservationError(RuntimeError):
@@ -248,7 +255,17 @@ def _auto_update_candidate(
     if grouping.status != "ready":
         return None
 
-    selection = _auto_update_selection(settings, grouping, policies)
+    pending_service_keys = _pending_service_keys(grouping)
+    dependency_snoozes = active_dependency_snooze_rows(
+        conn,
+        service_keys=pending_service_keys,
+    )
+    selection = _auto_update_selection(
+        settings,
+        grouping,
+        policies,
+        dependency_snoozes=dependency_snoozes,
+    )
     if selection is None:
         return None
 
@@ -387,6 +404,8 @@ def _auto_update_selection(
     settings: WebSettings,
     grouping: Any,
     policies: Mapping[str, AutoUpdatePolicy],
+    *,
+    dependency_snoozes: Iterable[Any] = (),
 ) -> AutoUpdateSelection | None:
     if not policies:
         return None
@@ -394,6 +413,7 @@ def _auto_update_selection(
     services_by_mode: dict[str, set[str]] = {}
     schedules_by_mode: dict[str, set[str]] = {}
     scheduled_for_by_mode: dict[str, datetime] = {}
+    candidates_by_mode: dict[str, list[AutoUpdateCandidate]] = {}
     for group in grouping.groups:
         for item in group.items:
             if item.desired_tag:
@@ -415,15 +435,24 @@ def _auto_update_selection(
                 for policy in concrete
             ):
                 continue
-            lines_by_mode.setdefault(mode, []).append(item.line_no)
-            services_by_mode.setdefault(mode, set()).update(service_keys)
-            schedules_by_mode.setdefault(mode, set()).update(
-                policy.schedule_key for policy in concrete
+            candidates_by_mode.setdefault(mode, []).append(
+                (item.line_no, service_keys, concrete)
             )
             current = scheduled_for_by_mode.get(mode)
             scheduled_for = min(policy.scheduled_for for policy in concrete)
             scheduled_for_by_mode[mode] = (
                 scheduled_for if current is None else min(current, scheduled_for)
+            )
+    for mode, candidates in candidates_by_mode.items():
+        eligible = _dependency_eligible_auto_update_candidates(
+            candidates,
+            dependency_snoozes=dependency_snoozes,
+        )
+        for line_no, service_keys, concrete in eligible:
+            lines_by_mode.setdefault(mode, []).append(line_no)
+            services_by_mode.setdefault(mode, set()).update(service_keys)
+            schedules_by_mode.setdefault(mode, set()).update(
+                policy.schedule_key for policy in concrete
             )
     eligible_modes = [
         mode
@@ -441,6 +470,53 @@ def _auto_update_selection(
         scheduled_for=scheduled_for_by_mode[mode],
         update_mode=mode,
     )
+
+
+def _dependency_eligible_auto_update_candidates(
+    candidates: Sequence[AutoUpdateCandidate],
+    *,
+    dependency_snoozes: Iterable[Any],
+) -> tuple[AutoUpdateCandidate, ...]:
+    waits_by_service = _dependency_waits_by_service(dependency_snoozes)
+    return tuple(
+        candidate
+        for candidate in candidates
+        if all(service_key not in waits_by_service for service_key in candidate[1])
+    )
+
+
+def _dependency_waits_by_service(
+    dependency_snoozes: Iterable[Any],
+) -> dict[str, tuple[str, ...]]:
+    waits: dict[str, list[str]] = {}
+    for row in dependency_snoozes:
+        service_key = _dependency_snooze_value(row, "service_key")
+        wait_for_service_key = _dependency_snooze_value(row, "wait_for_service_key")
+        if service_key and wait_for_service_key:
+            waits.setdefault(service_key, []).append(wait_for_service_key)
+    return {
+        service_key: tuple(dict.fromkeys(wait_for_service_keys))
+        for service_key, wait_for_service_keys in waits.items()
+    }
+
+
+def _dependency_snooze_value(row: Any, key: str) -> str:
+    if isinstance(row, Mapping):
+        return str(row.get(key, ""))
+    try:
+        return str(row[key])
+    except (IndexError, KeyError, TypeError):
+        return str(getattr(row, key, ""))
+
+
+def _pending_service_keys(grouping: Any) -> tuple[str, ...]:
+    service_keys: list[str] = []
+    for group in grouping.groups:
+        for item in group.items:
+            for service in item.services:
+                if service:
+                    service_keys.append(f"{group.name}/{service}")
+    return tuple(sorted(set(service_keys)))
 
 
 def _auto_update_schedule_key(

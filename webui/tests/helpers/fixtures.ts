@@ -940,6 +940,8 @@ export function snooze(overrides: Partial<SnoozeRecord> = {}): SnoozeRecord {
     reason: "maintenance",
     created_at: "2026-05-28T12:00:00+00:00",
     active: true,
+    kind: "time",
+    wait_for_service_key: "",
     metadata: {},
     ...overrides,
   };

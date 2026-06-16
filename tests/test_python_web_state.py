@@ -572,7 +572,9 @@ def test_state_read_endpoints_return_empty_without_creating_missing_database(
     assert not db_path.exists()
 
 
-def test_state_read_endpoints_list_existing_sqlite_rows(tmp_path: Path) -> None:
+def test_state_read_endpoints_list_existing_sqlite_rows(
+    tmp_path: Path,
+) -> None:
     db_path = tmp_path / "state" / "wud.sqlite"
     now = datetime.now(timezone.utc).replace(microsecond=0)
     past = (now - timedelta(hours=1)).isoformat()
@@ -632,6 +634,65 @@ def test_state_read_endpoints_list_existing_sqlite_rows(tmp_path: Path) -> None:
                 """,
                 (past, past),
             )
+            cursor = conn.execute(
+                """
+                INSERT INTO update_runs (
+                    started_at,
+                    finished_at,
+                    status,
+                    dry_run,
+                    mode,
+                    wud_file,
+                    log_file,
+                    metadata_json
+                )
+                VALUES (?, ?, 'success', 0, 'apply', '', '', '{}')
+                """,
+                (now.isoformat(), now.isoformat()),
+            )
+            run_id = int(cursor.lastrowid)
+            conn.execute(
+                """
+                INSERT INTO update_events (
+                    run_id,
+                    created_at,
+                    service_name,
+                    stack_name,
+                    image,
+                    target_image,
+                    status,
+                    metadata_json
+                )
+                VALUES (?, ?, 'db', 'stack', 'repo/db:latest', '', 'success', '{}')
+                """,
+                (run_id, now.isoformat()),
+            )
+            conn.execute(
+                """
+                INSERT INTO dependency_snoozes (
+                    service_key,
+                    wait_for_service_key,
+                    reason,
+                    created_at,
+                    metadata_json
+                )
+                VALUES ('stack/worker', 'stack/cache', 'wait for cache', ?, '{}')
+                """,
+                (past,),
+            )
+            conn.execute(
+                """
+                INSERT INTO dependency_snoozes (
+                    service_key,
+                    wait_for_service_key,
+                    reason,
+                    created_at,
+                    metadata_json
+                )
+                VALUES ('stack/satisfied', 'stack/db', 'wait for db', ?, '{}')
+                """,
+                (past,),
+            )
             conn.execute(
                 """
                 INSERT INTO tag_exclusion_rules (
@@ -689,11 +750,32 @@ def test_state_read_endpoints_list_existing_sqlite_rows(tmp_path: Path) -> None:
     assert policies.json()[0]["auto_update_days"] == ["mon", "wed"]
     assert policies.json()[0]["metadata"] == {"source": "test"}
     assert active_snoozes.status_code == 200
-    assert [row["service_key"] for row in active_snoozes.json()] == ["stack/app"]
+    assert [row["service_key"] for row in active_snoozes.json()] == [
+        "stack/app",
+        "stack/worker",
+    ]
     assert active_snoozes.json()[0]["active"] is True
+    assert active_snoozes.json()[0]["kind"] == "time"
     assert expired_snoozes.status_code == 200
-    assert [row["service_key"] for row in expired_snoozes.json()] == ["stack/old"]
+    assert [row["service_key"] for row in expired_snoozes.json()] == [
+        "stack/old",
+        "stack/satisfied",
+    ]
+    expired_by_service = {
+        row["service_key"]: row
+        for row in expired_snoozes.json()
+    }
     assert expired_snoozes.json()[0]["active"] is False
+    assert expired_by_service["stack/satisfied"]["active"] is False
+    assert expired_by_service["stack/satisfied"]["kind"] == "dependency"
+    assert expired_by_service["stack/satisfied"]["wait_for_service_key"] == "stack/db"
+    active_by_service = {
+        row["service_key"]: row
+        for row in active_snoozes.json()
+    }
+    assert active_by_service["stack/worker"]["active"] is True
+    assert active_by_service["stack/worker"]["kind"] == "dependency"
+    assert active_by_service["stack/worker"]["wait_for_service_key"] == "stack/cache"
     assert all_exclusions.status_code == 200
     assert [row["status"] for row in all_exclusions.json()] == [
         "active",
@@ -788,6 +870,25 @@ def test_state_operations_write_rows_and_audit_entries(tmp_path: Path) -> None:
         json={"kind": "delete_snooze", "snooze_id": snooze_id},
         headers=headers,
     )
+    dependency_snooze = client.post(
+        "/api/v1/state/operations",
+        json={
+            "kind": "create_dependency_snooze",
+            "service_key": "stack/app",
+            "wait_for_service_key": "stack/db",
+            "reason": "wait for db",
+        },
+        headers=headers,
+    )
+    dependency_snooze_id = dependency_snooze.json()["resource"]["id"]
+    deleted_dependency_snooze = client.post(
+        "/api/v1/state/operations",
+        json={
+            "kind": "delete_dependency_snooze",
+            "snooze_id": dependency_snooze_id,
+        },
+        headers=headers,
+    )
     exclusion = client.post(
         "/api/v1/state/operations",
         json={
@@ -819,8 +920,15 @@ def test_state_operations_write_rows_and_audit_entries(tmp_path: Path) -> None:
     assert deleted_policy.json()["resource"] is None
     assert snooze.status_code == 200
     assert snooze.json()["resource"]["reason"] == "maintenance"
+    assert snooze.json()["resource"]["kind"] == "time"
     assert deleted_snooze.status_code == 200
     assert deleted_snooze.json()["resource"] is None
+    assert dependency_snooze.status_code == 200
+    assert dependency_snooze.json()["resource"]["kind"] == "dependency"
+    assert dependency_snooze.json()["resource"]["wait_for_service_key"] == "stack/db"
+    assert dependency_snooze.json()["resource"]["active"] is True
+    assert deleted_dependency_snooze.status_code == 200
+    assert deleted_dependency_snooze.json()["resource"] is None
     assert exclusion.status_code == 200
     assert exclusion.json()["resource"]["regex_fragment"] == "2\\.0"
     assert disabled_exclusion.status_code == 200
@@ -830,6 +938,9 @@ def test_state_operations_write_rows_and_audit_entries(tmp_path: Path) -> None:
     with open_db(db_path) as conn:
         service_policies = conn.execute("SELECT * FROM service_policy").fetchall()
         snoozes = conn.execute("SELECT * FROM snoozes").fetchall()
+        dependency_snoozes = conn.execute(
+            "SELECT * FROM dependency_snoozes"
+        ).fetchall()
         tag_exclusion = conn.execute(
             "SELECT * FROM tag_exclusion_rules WHERE id = ?",
             (rule_id,),
@@ -846,6 +957,8 @@ def test_state_operations_write_rows_and_audit_entries(tmp_path: Path) -> None:
         "delete_service_policy",
         "create_snooze",
         "delete_snooze",
+        "create_dependency_snooze",
+        "delete_dependency_snooze",
         "upsert_tag_exclusion",
         "set_tag_exclusion_status",
     ]
@@ -853,8 +966,9 @@ def test_state_operations_write_rows_and_audit_entries(tmp_path: Path) -> None:
     event_metadata = [json.loads(row["metadata_json"]) for row in events]
     assert service_policies == []
     assert snoozes == []
+    assert dependency_snoozes == []
     assert tag_exclusion["status"] == "disabled"
-    assert [row["mode"] for row in runs] == ["web-state"] * 6
+    assert [row["mode"] for row in runs] == ["web-state"] * 8
     assert [item["operation"] for item in run_metadata] == operation_kinds
     assert [item["operation"] for item in event_metadata] == operation_kinds
     assert event_metadata[0]["before"] is None
@@ -1042,6 +1156,11 @@ def test_state_operations_validate_inputs(tmp_path: Path) -> None:
             "snoozed_until": past,
         },
         {
+            "kind": "create_dependency_snooze",
+            "service_key": "stack/app",
+            "wait_for_service_key": "stack/app",
+        },
+        {
             "kind": "upsert_tag_exclusion",
             "scope": "global",
             "image_repo": "repo/app",
@@ -1071,7 +1190,9 @@ def test_state_operations_validate_inputs(tmp_path: Path) -> None:
         for payload in invalid_payloads
     ]
 
-    assert [response.status_code for response in responses] == [422] * 6
+    assert [response.status_code for response in responses] == [422] * len(
+        invalid_payloads
+    )
 
 
 def test_managed_digest_pin_updates_persists_true_and_reloads(

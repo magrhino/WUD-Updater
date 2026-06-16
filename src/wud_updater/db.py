@@ -6,7 +6,7 @@ import sqlite3
 from contextlib import closing, contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Generator
+from typing import Generator, Iterable
 
 from .digest_provenance import (
     DIGEST_PROVENANCE_SQL_COLUMNS,
@@ -14,7 +14,7 @@ from .digest_provenance import (
     digest_provenance_or_empty,
 )
 
-SCHEMA_VERSION = 7
+SCHEMA_VERSION = 8
 
 ColumnSchema = tuple[str, str, int, str | None, int]
 
@@ -61,6 +61,14 @@ EXPECTED_SCHEMA: dict[str, tuple[ColumnSchema, ...]] = {
         ("id", "INTEGER", 0, None, 1),
         ("service_key", "TEXT", 1, None, 0),
         ("snoozed_until", "TEXT", 1, None, 0),
+        ("reason", "TEXT", 1, "''", 0),
+        ("created_at", "TEXT", 1, None, 0),
+        ("metadata_json", "TEXT", 1, "'{}'", 0),
+    ),
+    "dependency_snoozes": (
+        ("id", "INTEGER", 0, None, 1),
+        ("service_key", "TEXT", 1, None, 0),
+        ("wait_for_service_key", "TEXT", 1, None, 0),
         ("reason", "TEXT", 1, "''", 0),
         ("created_at", "TEXT", 1, None, 0),
         ("metadata_json", "TEXT", 1, "'{}'", 0),
@@ -186,6 +194,12 @@ WEB_SCHEMA_TABLES = frozenset(
     {"schema_migrations", "web_users", "web_sessions", "web_settings"}
 )
 
+EXPECTED_SCHEMA_V7 = {
+    name: columns
+    for name, columns in EXPECTED_SCHEMA.items()
+    if name != "dependency_snoozes"
+}
+
 EXPECTED_SCHEMA_V6 = {
     name: (
         tuple(
@@ -195,7 +209,7 @@ EXPECTED_SCHEMA_V6 = {
             or column[0] not in DIGEST_PROVENANCE_SQL_COLUMNS
         )
     )
-    for name, columns in EXPECTED_SCHEMA.items()
+    for name, columns in EXPECTED_SCHEMA_V7.items()
 }
 
 EXPECTED_SCHEMA_V5 = {
@@ -280,11 +294,19 @@ def init_db(conn: sqlite3.Connection) -> None:
         _backfill_schema_migrations(conn, SCHEMA_VERSION)
         _validate_schema(conn)
         return
+    if version == 7:
+        _validate_schema(conn, expected_schema=EXPECTED_SCHEMA_V7)
+        _ensure_schema_migrations(conn)
+        _backfill_schema_migrations(conn, 7)
+        _migrate_v7_to_v8(conn)
+        _validate_schema(conn)
+        return
     if version == 6:
         _validate_schema(conn, expected_schema=EXPECTED_SCHEMA_V6)
         _ensure_schema_migrations(conn)
         _backfill_schema_migrations(conn, 6)
         _migrate_v6_to_v7(conn)
+        _migrate_v7_to_v8(conn)
         _validate_schema(conn)
         return
     if version == 5:
@@ -293,6 +315,7 @@ def init_db(conn: sqlite3.Connection) -> None:
         _backfill_schema_migrations(conn, 5)
         _migrate_v5_to_v6(conn)
         _migrate_v6_to_v7(conn)
+        _migrate_v7_to_v8(conn)
         _validate_schema(conn)
         return
     if version == 4:
@@ -302,6 +325,7 @@ def init_db(conn: sqlite3.Connection) -> None:
         _migrate_v4_to_v5(conn)
         _migrate_v5_to_v6(conn)
         _migrate_v6_to_v7(conn)
+        _migrate_v7_to_v8(conn)
         _validate_schema(conn)
         return
     if version == 3:
@@ -312,6 +336,7 @@ def init_db(conn: sqlite3.Connection) -> None:
         _migrate_v4_to_v5(conn)
         _migrate_v5_to_v6(conn)
         _migrate_v6_to_v7(conn)
+        _migrate_v7_to_v8(conn)
         _validate_schema(conn)
         return
     if version == 2:
@@ -323,6 +348,7 @@ def init_db(conn: sqlite3.Connection) -> None:
         _migrate_v4_to_v5(conn)
         _migrate_v5_to_v6(conn)
         _migrate_v6_to_v7(conn)
+        _migrate_v7_to_v8(conn)
         _validate_schema(conn)
         return
     if version == 1:
@@ -335,6 +361,7 @@ def init_db(conn: sqlite3.Connection) -> None:
         _migrate_v4_to_v5(conn)
         _migrate_v5_to_v6(conn)
         _migrate_v6_to_v7(conn)
+        _migrate_v7_to_v8(conn)
         _validate_schema(conn)
         return
     if version != 0:
@@ -390,6 +417,15 @@ def init_db(conn: sqlite3.Connection) -> None:
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 service_key TEXT NOT NULL,
                 snoozed_until TEXT NOT NULL,
+                reason TEXT NOT NULL DEFAULT '',
+                created_at TEXT NOT NULL,
+                metadata_json TEXT NOT NULL DEFAULT '{}'
+            );
+
+            CREATE TABLE IF NOT EXISTS dependency_snoozes (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                service_key TEXT NOT NULL,
+                wait_for_service_key TEXT NOT NULL,
                 reason TEXT NOT NULL DEFAULT '',
                 created_at TEXT NOT NULL,
                 metadata_json TEXT NOT NULL DEFAULT '{}'
@@ -466,6 +502,10 @@ def init_db(conn: sqlite3.Connection) -> None:
                 ON update_events (run_id);
             CREATE INDEX IF NOT EXISTS idx_snoozes_service_key_until
                 ON snoozes (service_key, snoozed_until);
+            CREATE INDEX IF NOT EXISTS idx_dependency_snoozes_service_key
+                ON dependency_snoozes (service_key, created_at);
+            CREATE INDEX IF NOT EXISTS idx_dependency_snoozes_wait_for_service_key
+                ON dependency_snoozes (wait_for_service_key, created_at);
             CREATE INDEX IF NOT EXISTS idx_pending_updates_run_id
                 ON pending_updates (run_id);
             CREATE INDEX IF NOT EXISTS idx_pending_updates_status
@@ -696,6 +736,40 @@ def insert_snooze(
     return int(cursor.lastrowid)
 
 
+def insert_dependency_snooze(
+    conn: sqlite3.Connection,
+    *,
+    service_key: str,
+    wait_for_service_key: str,
+    reason: str = "",
+    created_at: str | None = None,
+    metadata_json: str = "{}",
+) -> int:
+    """Insert one dependency snooze and return its row id."""
+
+    with conn:
+        cursor = conn.execute(
+            """
+            INSERT INTO dependency_snoozes (
+                service_key,
+                wait_for_service_key,
+                reason,
+                created_at,
+                metadata_json
+            )
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            (
+                service_key,
+                wait_for_service_key,
+                reason,
+                created_at or utc_timestamp(),
+                metadata_json,
+            ),
+        )
+    return int(cursor.lastrowid)
+
+
 def active_snooze(
     conn: sqlite3.Connection,
     *,
@@ -716,6 +790,79 @@ def active_snooze(
         (service_key, now or utc_timestamp()),
     )) as cursor:
         return cursor.fetchone()
+
+
+def dependency_snooze_satisfied(
+    conn: sqlite3.Connection,
+    *,
+    wait_for_service_key: str,
+    created_at: str,
+) -> bool:
+    """Return true when the dependency service updated after snooze creation."""
+
+    row = conn.execute(
+        """
+        SELECT 1
+        FROM update_events
+        WHERE stack_name || '/' || service_name = ?
+          AND status = 'success'
+          AND created_at >= ?
+        LIMIT 1
+        """,
+        (wait_for_service_key, created_at),
+    ).fetchone()
+    return row is not None
+
+
+def active_dependency_snooze_rows(
+    conn: sqlite3.Connection,
+    *,
+    service_keys: Iterable[str] | None = None,
+) -> tuple[sqlite3.Row, ...]:
+    """Return unsatisfied dependency snoozes, optionally scoped by target service."""
+
+    keys = tuple(dict.fromkeys(service_keys or ()))
+    if keys:
+        placeholders = ", ".join("?" for _ in keys)
+        rows = conn.execute(
+            f"""
+            SELECT *
+            FROM dependency_snoozes
+            WHERE service_key IN ({placeholders})
+            ORDER BY created_at DESC, id DESC
+            """,
+            keys,
+        ).fetchall()
+    else:
+        rows = conn.execute(
+            """
+            SELECT *
+            FROM dependency_snoozes
+            ORDER BY created_at DESC, id DESC
+            """
+        ).fetchall()
+    return tuple(
+        row
+        for row in rows
+        if not dependency_snooze_satisfied(
+            conn,
+            wait_for_service_key=str(row["wait_for_service_key"]),
+            created_at=str(row["created_at"]),
+        )
+    )
+
+
+def blocking_dependency_snooze_rows(
+    conn: sqlite3.Connection,
+    *,
+    pending_service_keys: Iterable[str],
+) -> tuple[sqlite3.Row, ...]:
+    """Return active dependency snoozes for pending target services."""
+
+    pending = set(pending_service_keys)
+    if not pending:
+        return ()
+    return active_dependency_snooze_rows(conn, service_keys=pending)
 
 
 def insert_pending_update(
@@ -1117,6 +1264,7 @@ MIGRATION_NAMES = {
     5: "add release note cache",
     6: "add auto update schedules",
     7: "add digest tag provenance columns",
+    8: "add dependency snoozes",
 }
 
 
@@ -1402,3 +1550,36 @@ def _migrate_v6_to_v7(conn: sqlite3.Connection) -> None:
                 )
         conn.execute("PRAGMA user_version = 7")
     _record_schema_migration(conn, 7)
+
+
+def _migrate_v7_to_v8(conn: sqlite3.Connection) -> None:
+    object_type = _sqlite_object_type(conn, "dependency_snoozes")
+    if object_type is not None:
+        if object_type != "table":
+            raise DatabaseError(
+                f"Expected dependency_snoozes to be a table, found {object_type}"
+            )
+        _validate_table_columns(
+            conn,
+            "dependency_snoozes",
+            EXPECTED_SCHEMA["dependency_snoozes"],
+        )
+    with conn:
+        conn.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS dependency_snoozes (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                service_key TEXT NOT NULL,
+                wait_for_service_key TEXT NOT NULL,
+                reason TEXT NOT NULL DEFAULT '',
+                created_at TEXT NOT NULL,
+                metadata_json TEXT NOT NULL DEFAULT '{}'
+            );
+            CREATE INDEX IF NOT EXISTS idx_dependency_snoozes_service_key
+                ON dependency_snoozes (service_key, created_at);
+            CREATE INDEX IF NOT EXISTS idx_dependency_snoozes_wait_for_service_key
+                ON dependency_snoozes (wait_for_service_key, created_at);
+            """
+        )
+        conn.execute("PRAGMA user_version = 8")
+    _record_schema_migration(conn, 8)

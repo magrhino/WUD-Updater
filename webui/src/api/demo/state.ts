@@ -117,7 +117,7 @@ export class DemoApiState {
   nextJob = 1;
   nextRun = 7;
   nextAudit = 100;
-  nextSnooze = 3;
+  nextSnooze = 4;
   nextTagExclusion = 3;
 
   session(): AuthSessionResponse {
@@ -1150,8 +1150,15 @@ export class DemoApiState {
   }
 
   snoozeRecords(state: SnoozeState): SnoozeRecord[] {
+    const records = this.snoozes.map((snooze) => {
+      const active =
+        snooze.kind === "dependency" && snooze.wait_for_service_key
+          ? this.dependencySnoozeActive(snooze)
+          : snooze.active;
+      return { ...snooze, active };
+    });
     return clone(
-      this.snoozes.filter((snooze) => {
+      records.filter((snooze) => {
         if (state === "active") {
           return snooze.active;
         }
@@ -1163,6 +1170,30 @@ export class DemoApiState {
     );
   }
 
+  private dependencySnoozeActive(snooze: SnoozeRecord): boolean {
+    const [stackName, serviceName] = snooze.wait_for_service_key.split("/", 2);
+    if (!stackName || !serviceName) {
+      return snooze.active;
+    }
+    const createdAt = Date.parse(snooze.created_at);
+    if (Number.isNaN(createdAt)) {
+      return snooze.active;
+    }
+    const satisfied = this.runs.some((run) =>
+      run.summary.events.some((event) => {
+        const eventCreatedAt = Date.parse(event.created_at);
+        return (
+          event.status === "success" &&
+          event.stack_name === stackName &&
+          event.service_name === serviceName &&
+          !Number.isNaN(eventCreatedAt) &&
+          eventCreatedAt >= createdAt
+        );
+      }),
+    );
+    return !satisfied;
+  }
+
   tagExclusionRecords(status: TagExclusionStatusFilter): TagExclusionRuleRecord[] {
     return clone(
       this.tagExclusions.filter((rule) =>
@@ -1171,37 +1202,43 @@ export class DemoApiState {
     );
   }
 
+  private upsertServicePolicy(
+    operation: Extract<StateOperation, { kind: "upsert_service_policy" }>,
+  ): StateOperationResponse {
+    const existing = this.policies.find(
+      (policy) => policy.service_key === operation.service_key,
+    );
+    const policy: ServicePolicyRecord = {
+      service_key: operation.service_key,
+      update_mode: operation.update_mode ?? existing?.update_mode ?? "",
+      auto_update: operation.auto_update ?? existing?.auto_update ?? false,
+      snooze_default_seconds:
+        "snooze_default_seconds" in operation
+          ? (operation.snooze_default_seconds ?? null)
+          : (existing?.snooze_default_seconds ?? null),
+      auto_update_time:
+        "auto_update_time" in operation
+          ? (operation.auto_update_time ?? null)
+          : (existing?.auto_update_time ?? null),
+      auto_update_days:
+        "auto_update_days" in operation
+          ? (operation.auto_update_days ?? [])
+          : (existing?.auto_update_days ?? []),
+      created_at: existing?.created_at ?? nowIso(),
+      updated_at: nowIso(),
+      metadata: { source: "demo" },
+    };
+    this.policies = upsertBy(
+      this.policies,
+      policy,
+      (item) => item.service_key === policy.service_key,
+    );
+    return this.operationResponse(operation.kind, "service_policy", policy.service_key, policy);
+  }
+
   stateOperation(operation: StateOperation): StateOperationResponse {
     if (operation.kind === "upsert_service_policy") {
-      const existing = this.policies.find(
-        (policy) => policy.service_key === operation.service_key,
-      );
-      const policy: ServicePolicyRecord = {
-        service_key: operation.service_key,
-        update_mode: operation.update_mode ?? existing?.update_mode ?? "",
-        auto_update: operation.auto_update ?? existing?.auto_update ?? false,
-        snooze_default_seconds:
-          "snooze_default_seconds" in operation
-            ? (operation.snooze_default_seconds ?? null)
-            : (existing?.snooze_default_seconds ?? null),
-        auto_update_time:
-          "auto_update_time" in operation
-            ? (operation.auto_update_time ?? null)
-            : (existing?.auto_update_time ?? null),
-        auto_update_days:
-          "auto_update_days" in operation
-            ? (operation.auto_update_days ?? [])
-            : (existing?.auto_update_days ?? []),
-        created_at: existing?.created_at ?? nowIso(),
-        updated_at: nowIso(),
-        metadata: { source: "demo" },
-      };
-      this.policies = upsertBy(
-        this.policies,
-        policy,
-        (item) => item.service_key === policy.service_key,
-      );
-      return this.operationResponse(operation.kind, "service_policy", policy.service_key, policy);
+      return this.upsertServicePolicy(operation);
     }
 
     if (operation.kind === "delete_service_policy") {
@@ -1224,19 +1261,59 @@ export class DemoApiState {
         reason: operation.reason ?? "",
         created_at: nowIso(),
         active: new Date(operation.snoozed_until).getTime() > Date.now(),
+        kind: "time",
+        wait_for_service_key: "",
         metadata: { source: "demo" },
       };
       this.snoozes.unshift(snooze);
       return this.operationResponse(operation.kind, "snooze", String(snooze.id), snooze);
     }
 
+    if (operation.kind === "create_dependency_snooze") {
+      if (operation.service_key === operation.wait_for_service_key) {
+        throw new Error("wait_for_service_key must be different from service_key");
+      }
+      const snooze: SnoozeRecord = {
+        id: this.nextSnooze++,
+        service_key: operation.service_key,
+        snoozed_until: null,
+        reason: operation.reason ?? "",
+        created_at: nowIso(),
+        active: true,
+        kind: "dependency",
+        wait_for_service_key: operation.wait_for_service_key,
+        metadata: { source: "demo" },
+      };
+      this.snoozes.unshift(snooze);
+      return this.operationResponse(
+        operation.kind,
+        "dependency_snooze",
+        String(snooze.id),
+        snooze,
+      );
+    }
+
     if (operation.kind === "delete_snooze") {
       this.snoozes = this.snoozes.filter(
-        (snooze) => snooze.id !== operation.snooze_id,
+        (snooze) =>
+          snooze.id !== operation.snooze_id || snooze.kind === "dependency",
       );
       return this.operationResponse(
         operation.kind,
         "snooze",
+        String(operation.snooze_id),
+        null,
+      );
+    }
+
+    if (operation.kind === "delete_dependency_snooze") {
+      this.snoozes = this.snoozes.filter(
+        (snooze) =>
+          snooze.id !== operation.snooze_id || snooze.kind !== "dependency",
+      );
+      return this.operationResponse(
+        operation.kind,
+        "dependency_snooze",
         String(operation.snooze_id),
         null,
       );
