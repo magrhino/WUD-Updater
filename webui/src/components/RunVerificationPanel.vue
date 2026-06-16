@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { NTag } from "naive-ui";
+import { NFlex, NTag } from "naive-ui";
 
 import type {
   RunVerificationContainerStatus,
@@ -98,12 +98,12 @@ function wudLabel(status: RunVerificationWudStatus): string {
     class="run-verification-panel"
     aria-label="Post-update verification"
   >
-    <div class="panel-subheading">
+    <n-flex class="panel-subheading" align="center" justify="space-between" :size="8">
       <strong>{{ title || "Verification" }}</strong>
       <n-tag size="small" :type="overallTagType(verification.status)">
         {{ overallLabel(verification.status) }}
       </n-tag>
-    </div>
+    </n-flex>
     <div class="run-verification-summary">
       <span>{{ verification.verified_count }} verified</span>
       <span v-if="verification.needs_review_count">

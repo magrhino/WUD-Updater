@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, type Component } from "vue";
-import { useClipboard } from "@vueuse/core";
+import { useClipboard, useMediaQuery } from "@vueuse/core";
 import { useRouter } from "vue-router";
 import {
   ArrowRight,
@@ -13,7 +13,7 @@ import {
   XCircle,
   X,
 } from "@lucide/vue";
-import { NButton, NTag } from "naive-ui";
+import { NButton, NFlex, NTag } from "naive-ui";
 
 import type { DoctorCheckStatus, OnboardingChecklistItem } from "../api/client";
 import { useSettingsStore } from "../stores/settings";
@@ -23,6 +23,7 @@ const router = useRouter();
 const copiedSnippet = ref("");
 const dismissing = ref(false);
 const { copy, copied, isSupported } = useClipboard({ legacy: true });
+const compactActions = useMediaQuery("(max-width: 560px)");
 const tourRouteByStep = {
   dashboard: "dashboard",
   pending_select: "pending",
@@ -200,7 +201,12 @@ function sourceCheckSummaryLabel(item: OnboardingChecklistItem): string {
           state, and the intended browser safety mode.
         </p>
       </div>
-      <div class="section-heading-meta onboarding-actions">
+      <n-flex
+        class="section-heading-meta onboarding-actions"
+        align="center"
+        :justify="compactActions ? 'flex-start' : 'flex-end'"
+        :size="8"
+      >
         <n-tag v-if="failingItems" size="small" type="error">
           {{ failingItems }} failing
         </n-tag>
@@ -232,7 +238,7 @@ function sourceCheckSummaryLabel(item: OnboardingChecklistItem): string {
           </template>
           Dismiss
         </n-button>
-      </div>
+      </n-flex>
     </div>
 
     <div

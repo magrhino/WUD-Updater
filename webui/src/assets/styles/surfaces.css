@@ -6,12 +6,6 @@
   line-height: 1.2;
 }
 
-.metric-grid {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 12px;
-}
-
 .metric-card,
 .section-panel,
 .auth-panel,
@@ -72,12 +66,7 @@
 }
 
 .section-heading-meta {
-  display: flex;
   flex: 0 0 auto;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 8px;
 }
 
 .section-heading-meta .section-heading-icon {
@@ -93,9 +82,6 @@
 }
 
 .summary-grid {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 12px;
   margin-top: 14px;
   padding-top: 12px;
   border-top: 1px solid var(--color-border-subtle);
@@ -122,39 +108,6 @@
   overflow-wrap: anywhere;
 }
 
-.skeleton-list {
-  display: grid;
-  gap: 8px;
-  margin-top: 14px;
-}
-
-.skeleton-row {
-  position: relative;
-  overflow: hidden;
-  min-height: 42px;
-  border: 1px solid var(--color-border-subtle);
-  border-radius: 7px;
-  background: var(--color-panel-tint);
-}
-
-.skeleton-row::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  transform: translateX(-100%);
-  background: linear-gradient(90deg,
-      transparent,
-      color-mix(in srgb, var(--color-surface) 68%, transparent),
-      transparent);
-  animation: skeleton-scan 1.4s var(--ease-out-quart) infinite;
-}
-
-@keyframes skeleton-scan {
-  100% {
-    transform: translateX(100%);
-  }
-}
-
 .core-tour-facts {
   display: flex;
   flex-wrap: wrap;
@@ -175,14 +128,6 @@
   font-size: 0.8rem;
   line-height: 1.2;
   overflow-wrap: anywhere;
-}
-
-.panel-subheading {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
 }
 
 .tag-rewrite-detail {
@@ -412,35 +357,13 @@
   overflow-wrap: anywhere;
 }
 
-@media (max-width: 920px) {
-  .metric-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .summary-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
-
 @media (max-width: 560px) {
-  .metric-grid {
-    grid-template-columns: 1fr;
-  }
-
   .section-heading {
     display: grid;
   }
 
   .list-row {
     grid-template-columns: 1fr;
-  }
-
-  .summary-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .section-heading-meta {
-    justify-content: flex-start;
   }
 
   .mobile-card .n-checkbox {
@@ -450,11 +373,5 @@
   .mobile-card .n-checkbox {
     display: inline-flex;
     align-items: center;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .skeleton-row::after {
-    display: none;
   }
 }

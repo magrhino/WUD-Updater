@@ -15,7 +15,9 @@ import {
   NButton,
   NCheckbox,
   NDataTable,
+  NFlex,
   NInput,
+  NSkeleton,
   NTag,
   type DataTableRowKey,
 } from "naive-ui";
@@ -794,21 +796,21 @@ watch(
     </n-alert>
     <n-alert v-if="pendingCleanupMessage" type="success">
       {{ pendingCleanupMessage }}
-      <span class="inline-actions recovery-actions">
+      <n-flex inline class="inline-actions recovery-actions" align="center" :size="8">
         <RouterLink
           class="text-link"
           :to="{ name: 'run-detail', params: { id: updates.pendingCleanup?.audit_run_id } }"
         >
           Details
         </RouterLink>
-      </span>
+      </n-flex>
     </n-alert>
     <n-alert
       v-if="updates.applyJobRecovery"
       type="warning"
     >
       {{ updates.applyJobRecovery }}
-      <span class="inline-actions recovery-actions">
+      <n-flex inline class="inline-actions recovery-actions" align="center" :size="8">
         <RouterLink class="text-link" to="/runs">Runs</RouterLink>
         <RouterLink
           v-if="latestRun"
@@ -824,7 +826,7 @@ watch(
         >
           Log
         </RouterLink>
-      </span>
+      </n-flex>
     </n-alert>
 
     <PendingApplyJobPanel
@@ -918,7 +920,12 @@ watch(
         </span>
         <span v-else>Pending file order</span>
       </div>
-      <div class="inline-actions pending-actions">
+      <n-flex
+        class="inline-actions pending-actions"
+        align="center"
+        :justify="isMobile ? 'flex-start' : 'flex-end'"
+        :size="8"
+      >
         <n-button
           size="small"
           quaternary
@@ -930,7 +937,7 @@ watch(
           </template>
           {{ selectAllLabel }}
         </n-button>
-      </div>
+      </n-flex>
     </div>
 
     <div v-if="pendingLoaded && selectedLineNumbers.length" class="batch-action-bar">
@@ -946,7 +953,12 @@ watch(
           </template>
         </span>
       </div>
-      <div class="inline-actions pending-actions">
+      <n-flex
+        class="inline-actions pending-actions"
+        align="center"
+        :justify="isMobile ? 'flex-start' : 'flex-end'"
+        :size="8"
+      >
         <n-button size="small" quaternary @click="clearSelection">
           <template #icon>
             <X :size="16" />
@@ -978,7 +990,7 @@ watch(
           </template>
           Preview selected plan
         </n-button>
-      </div>
+      </n-flex>
     </div>
 
     <n-alert
@@ -1555,9 +1567,9 @@ watch(
       aria-live="polite"
       aria-label="Loading pending updates"
     >
-      <span aria-hidden="true" class="skeleton-row"></span>
-      <span aria-hidden="true" class="skeleton-row"></span>
-      <span aria-hidden="true" class="skeleton-row"></span>
+      <n-skeleton aria-hidden="true" height="48px" />
+      <n-skeleton aria-hidden="true" height="48px" />
+      <n-skeleton aria-hidden="true" height="48px" />
     </section>
 
     <div
@@ -1701,10 +1713,6 @@ watch(
   border-radius: 8px;
   background: var(--color-surface);
   box-shadow: var(--shadow-panel-lift);
-}
-
-.pending-loading-state .skeleton-row {
-  min-height: 48px;
 }
 
 .pending-error-state {

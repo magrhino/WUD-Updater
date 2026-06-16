@@ -2,7 +2,7 @@
 import { computed, h, onMounted } from "vue";
 import { RouterLink } from "vue-router";
 import { breakpointsTailwind, useBreakpoints } from "@vueuse/core";
-import { NAlert, NDataTable, NTag, type DataTableColumns } from "naive-ui";
+import { NAlert, NDataTable, NEmpty, NTag, type DataTableColumns } from "naive-ui";
 
 import CoreUpdateTourPanel from "../components/CoreUpdateTourPanel.vue";
 import HistoryViewTabs from "../components/HistoryViewTabs.vue";
@@ -130,7 +130,12 @@ onMounted(() => {
           </div>
         </dl>
       </RouterLink>
-      <div v-if="!runs.runs.length" class="empty-state">No runs recorded.</div>
+      <n-empty
+        v-if="!runs.runs.length"
+        class="empty-state"
+        description="No runs recorded."
+        :show-icon="false"
+      />
     </div>
   </section>
 </template>

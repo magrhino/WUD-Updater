@@ -60,14 +60,6 @@
   font-size: 0.84rem;
 }
 
-.table-actions {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 8px;
-}
-
 .pending-table-value {
   display: inline-block;
   min-width: 0;
@@ -243,7 +235,4 @@ code.pending-table-value {
     max-width: none;
   }
 
-  .table-actions {
-    justify-content: flex-start;
-  }
 }
