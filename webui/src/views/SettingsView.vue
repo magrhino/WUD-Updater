@@ -36,21 +36,12 @@ import type {
   SettingsEntry,
 } from "../api/client";
 import OnboardingChecklist from "../components/OnboardingChecklist.vue";
-import SettingsDisclosureSection from "../components/SettingsDisclosureSection.vue";
+import SettingsDisclosureSection, {
+  type SettingsDisclosureRow,
+} from "../components/SettingsDisclosureSection.vue";
 import { useAuthStore } from "../stores/auth";
 import { useSettingsStore } from "../stores/settings";
 import { useConnectionStore } from "../stores/connection";
-
-type SettingsDisclosureRow = {
-  key: string;
-  name: string;
-  detail: string;
-  value: string;
-  valueKind: "code" | "text";
-  valueClass?: string;
-  tagLabel: string;
-  tagType: "default" | "primary" | "success" | "info" | "warning" | "error";
-};
 
 const auth = useAuthStore();
 const settings = useSettingsStore();
@@ -990,7 +981,7 @@ onMounted(() => {
       title="Paths"
       :open="!compactSettingsLayout"
       :compact="compactSettingsLayout"
-      aria-label="Updater path settings"
+      ariaLabel="Updater path settings"
       :header-tags="[{ label: entryCountLabel(pathEntries) }]"
       :table-headers="['Setting', 'Effective value', 'Source']"
       :entries="pathRows"
@@ -1004,7 +995,7 @@ onMounted(() => {
       title="Behavior"
       :open="!compactSettingsLayout"
       :compact="compactSettingsLayout"
-      aria-label="Updater behavior settings"
+      ariaLabel="Updater behavior settings"
       :header-tags="[{ label: entryCountLabel(behaviorEntries) }]"
       :table-headers="['Setting', 'Effective value', 'Source']"
       :entries="behaviorRows"
@@ -1018,7 +1009,7 @@ onMounted(() => {
       title="Safety status"
       :open="!compactSettingsLayout"
       :compact="compactSettingsLayout"
-      aria-label="WebUI safety settings"
+      ariaLabel="WebUI safety settings"
       :header-tags="[{ label: entryCountLabel(webuiEntries) }]"
       :table-headers="['Setting', 'Effective value', 'Source']"
       :entries="webuiRows"
@@ -1033,7 +1024,7 @@ onMounted(() => {
       title="Configured values"
       :open="!compactSettingsLayout"
       :compact="compactSettingsLayout"
-      aria-label="Secret settings"
+      ariaLabel="Secret settings"
       :header-tags="[
         { label: `${configuredSecretCount} configured` },
         ...(missingSecretCount ? [{ label: `${missingSecretCount} missing` }] : []),

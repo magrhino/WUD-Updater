@@ -27,9 +27,9 @@ const props = defineProps<{
   title: string;
   open: boolean;
   compact: boolean;
-  "aria-label": string;
+  ariaLabel: string;
   headerTags: HeaderTag[];
-  tableHeaders: string[];
+  tableHeaders: [string, string, string];
   entries: SettingsDisclosureRow[];
   emptyDescription: string;
   icon?: Component;
@@ -71,38 +71,44 @@ const props = defineProps<{
         />
       </n-flex>
     </summary>
-    <div
+    <table
       v-if="props.entries.length"
       class="settings-list"
-      role="table"
-      :aria-label="props['aria-label']"
+      :aria-label="props.ariaLabel"
     >
-      <div class="settings-table-head" role="row">
-        <span role="columnheader">{{ props.tableHeaders[0] }}</span>
-        <span role="columnheader">{{ props.tableHeaders[1] }}</span>
-        <span role="columnheader">{{ props.tableHeaders[2] }}</span>
-      </div>
-      <div
-        v-for="entry in props.entries"
-        :key="entry.key"
-        class="settings-row"
-        role="row"
-      >
-        <div role="cell">
-          <strong>{{ entry.name }}</strong>
-          <span>{{ entry.detail }}</span>
-        </div>
-        <code v-if="entry.valueKind === 'code'" role="cell">
-          {{ entry.value }}
-        </code>
-        <span v-else :class="entry.valueClass" role="cell">
-          {{ entry.value }}
-        </span>
-        <n-tag size="small" :type="entry.tagType" role="cell">
-          {{ entry.tagLabel }}
-        </n-tag>
-      </div>
-    </div>
+      <thead class="settings-table-head">
+        <tr>
+          <th scope="col">{{ props.tableHeaders[0] }}</th>
+          <th scope="col">{{ props.tableHeaders[1] }}</th>
+          <th scope="col">{{ props.tableHeaders[2] }}</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr
+          v-for="entry in props.entries"
+          :key="entry.key"
+          class="settings-row"
+        >
+          <td>
+            <strong>{{ entry.name }}</strong>
+            <span>{{ entry.detail }}</span>
+          </td>
+          <td>
+            <code v-if="entry.valueKind === 'code'">
+              {{ entry.value }}
+            </code>
+            <span v-else :class="entry.valueClass">
+              {{ entry.value }}
+            </span>
+          </td>
+          <td>
+            <n-tag size="small" :type="entry.tagType">
+              {{ entry.tagLabel }}
+            </n-tag>
+          </td>
+        </tr>
+      </tbody>
+    </table>
     <n-empty
       v-else
       class="empty-state"
@@ -144,20 +150,17 @@ const props = defineProps<{
 }
 
 .settings-list {
-  display: grid;
+  width: 100%;
   margin-top: 14px;
   overflow: hidden;
   border: 1px solid var(--color-border);
   border-radius: 8px;
+  border-spacing: 0;
   background: var(--color-surface);
 }
 
 .settings-table-head {
-  display: grid;
-  grid-template-columns: minmax(160px, 0.8fr) minmax(0, 1.2fr) minmax(102px, auto);
-  align-items: center;
-  gap: 12px;
-  padding: 10px 12px;
+  display: block;
   color: var(--color-muted-text);
   font-size: 0.78rem;
   font-weight: 700;
@@ -165,6 +168,7 @@ const props = defineProps<{
   background: var(--color-table-head);
 }
 
+.settings-table-head tr,
 .settings-row {
   display: grid;
   grid-template-columns: minmax(160px, 0.8fr) minmax(0, 1.2fr) minmax(102px, auto);
@@ -175,10 +179,24 @@ const props = defineProps<{
   border-top: 1px solid var(--color-border-subtle);
 }
 
-.settings-row>div {
+.settings-table-head tr {
+  border-top: 0;
+}
+
+.settings-table-head th {
+  min-width: 0;
+  padding: 0;
+  text-align: left;
+}
+
+.settings-row td {
+  min-width: 0;
+  padding: 0;
+}
+
+.settings-row td:first-child {
   display: grid;
   gap: 3px;
-  min-width: 0;
 }
 
 .settings-row strong,
@@ -200,7 +218,7 @@ const props = defineProps<{
   line-height: 1.45;
 }
 
-.settings-row>:deep(.n-tag) {
+.settings-row td:last-child :deep(.n-tag) {
   justify-self: start;
 }
 
@@ -227,7 +245,7 @@ const props = defineProps<{
     border: 0;
   }
 
-  .settings-row>:deep(.n-tag) {
+  .settings-row td:last-child :deep(.n-tag) {
     width: fit-content;
   }
 }
