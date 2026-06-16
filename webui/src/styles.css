@@ -189,6 +189,8 @@
   display: grid;
   gap: 10px;
   min-width: 0;
+  padding: 0;
+  border-top: 1px solid var(--color-border-subtle);
 }
 
 .preflight-details summary {
@@ -990,11 +992,6 @@ code.pending-table-value {
 .preflight-details-list {
   display: grid;
   gap: 10px;
-}
-
-.preflight-details {
-  padding: 0;
-  border-top: 1px solid var(--color-border-subtle);
 }
 
 .preflight-footer {

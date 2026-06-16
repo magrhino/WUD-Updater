@@ -1894,11 +1894,6 @@ watch(
   .stack-title-block :deep(.n-checkbox),
   .pending-update-main :deep(.n-checkbox) {
     min-height: 44px;
-  }
-
-  .pending-actions :deep(.n-checkbox),
-  .stack-title-block :deep(.n-checkbox),
-  .pending-update-main :deep(.n-checkbox) {
     display: inline-flex;
     align-items: center;
   }
