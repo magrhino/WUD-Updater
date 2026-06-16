@@ -129,7 +129,13 @@ EOF
     tests/test_python_banner.py \
     tests/test_python_cli.py \
     tests/test_python_command.py \
-    tests/test_python_compose_rewrite.py \
+    tests/compose_rewrite_helpers.py \
+    tests/test_python_compose_digest_pins.py \
+    tests/test_python_compose_digest_unpins.py \
+    tests/test_python_compose_rewrite_core.py \
+    tests/test_python_compose_tag_exclusions.py \
+    tests/test_python_compose_tag_updates.py \
+    tests/test_python_compose_yaml_safety.py \
     tests/test_python_config.py \
     tests/test_python_db.py \
     tests/test_python_digest_verifier.py \
