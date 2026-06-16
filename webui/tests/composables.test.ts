@@ -11,6 +11,7 @@ import {
 import { useUpdateTargetOptions } from "../src/composables/useUpdateTargetOptions";
 import { useAuthStore } from "../src/stores/auth";
 import { useRunsStore } from "../src/stores/runs";
+import { useSettingsStore } from "../src/stores/settings";
 import { useUpdatesStore } from "../src/stores/updates";
 import {
   applyJobLogResponse,
@@ -18,7 +19,10 @@ import {
   applyPreflightResponse,
   authSession,
   pendingGroupedItem,
+  pendingItem,
+  pendingResponse,
   planResponse,
+  snooze,
   updateTarget,
   updateTargetsResponse,
 } from "./helpers/fixtures";
@@ -29,6 +33,8 @@ import {
 import {
   usePendingPlanReviewState,
 } from "../src/views/pending/usePendingPlanReviewState";
+import { usePendingQueueState } from "../src/views/pending/usePendingQueueState";
+import { usePendingSelectionState } from "../src/views/pending/usePendingSelectionState";
 
 describe("useUpdateTargetOptions", () => {
   beforeEach(() => {
@@ -268,6 +274,88 @@ function mockApplyJobStream() {
     },
   };
 }
+
+describe("usePendingQueueState", () => {
+  beforeEach(() => {
+    setActivePinia(createPinia());
+  });
+
+  it("filters dependency-snoozed entries out of selectable stack groups", () => {
+    const updates = useUpdatesStore();
+    const settings = useSettingsStore();
+    const blocked = pendingGroupedItem({
+      line_no: 1,
+      image: "repo/app:1.0",
+      services: ["app"],
+    });
+    const allowed = pendingGroupedItem({
+      line_no: 2,
+      image: "repo/worker:1.0",
+      repo: "repo/worker",
+      services: ["worker"],
+    });
+    updates.pending = pendingResponse([blocked, allowed]);
+    settings.snoozes = [
+      snooze({
+        kind: "dependency",
+        service_key: "media/app",
+        active: true,
+      }),
+    ];
+
+    const state = usePendingQueueState();
+
+    expect(state.dependencySnoozedItems.value.map(({ item }) => item.line_no)).toEqual([1]);
+    expect(state.stackGroups.value).toHaveLength(1);
+    expect(state.stackGroups.value[0]?.items.map((item) => item.line_no)).toEqual([2]);
+    expect(state.selectableLineNumbers.value).toEqual([2]);
+    expect(state.pendingSourceLabel.value).toBe("images.todo");
+  });
+});
+
+describe("usePendingSelectionState", () => {
+  beforeEach(() => {
+    setActivePinia(createPinia());
+  });
+
+  it("syncs tag overrides with pending items and builds apply payloads", () => {
+    const updates = useUpdatesStore();
+    const onSelectionChanged = vi.fn();
+    updates.pending = pendingResponse([
+      pendingItem({
+        line_no: 1,
+        image: "repo/app:1.0",
+        desired_tag: "1.1",
+      }),
+      pendingItem({
+        line_no: 2,
+        image: "repo/worker:1.0",
+        repo: "repo/worker",
+        desired_tag: "",
+      }),
+    ]);
+    const state = usePendingSelectionState({
+      pendingItems: computed(() => updates.pending?.items ?? []),
+      selectableLineNumbers: computed(() => [1, 2]),
+      onSelectionChanged,
+    });
+
+    const item = updates.pending.items[0];
+    state.updateTagOverride(item, "bad tag");
+    expect(state.selectedLineNumbers.value).toEqual([1]);
+    expect(state.tagOverrideErrorForLines([1])).toContain("invalid new tag");
+
+    state.updateTagOverride(item, "1.2");
+    expect(state.tagOverridesForLines([1])).toEqual([{ line_no: 1, tag: "1.2" }]);
+    expect(state.lineNumbersHaveTagUpdates([1, 2])).toBe(true);
+
+    state.selectAllVisible();
+    expect(state.selectedLineNumbers.value).toEqual([1, 2]);
+    state.updateCheckedRowKeys([2, 2, "bad-key"]);
+    expect(state.selectedLineNumbers.value).toEqual([2]);
+    expect(onSelectionChanged).toHaveBeenCalled();
+  });
+});
 
 describe("usePendingPlanReviewState", () => {
   beforeEach(() => {
