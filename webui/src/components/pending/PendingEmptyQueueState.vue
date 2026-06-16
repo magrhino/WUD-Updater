@@ -12,9 +12,8 @@ withDefaults(defineProps<{
 </script>
 
 <template>
-  <div
+  <output
     class="empty-state clear-queue-state"
-    role="status"
     aria-live="polite"
   >
     <span class="clear-queue-mark" aria-hidden="true">
@@ -39,5 +38,5 @@ withDefaults(defineProps<{
     >
       Review latest run #{{ latestRunId }}
     </RouterLink>
-  </div>
+  </output>
 </template>

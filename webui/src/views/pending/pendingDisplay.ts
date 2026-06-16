@@ -47,7 +47,14 @@ export function pendingSourceFileName(value: string): string {
   if (!trimmed || trimmed === "Pending file") {
     return "Pending file";
   }
-  return trimmed.split(/[\\/]/).filter(Boolean).at(-1) ?? trimmed;
+  const pathParts = trimmed.split(/[\\/]/);
+  for (let index = pathParts.length - 1; index >= 0; index -= 1) {
+    const part = pathParts[index];
+    if (part) {
+      return part;
+    }
+  }
+  return trimmed;
 }
 
 export function releaseNoteStatus(
@@ -74,7 +81,7 @@ export function releaseNoteReason(note: ReleaseNoteInfo | null): string {
   if (!error) {
     return "";
   }
-  const missingMapping = error.match(/^missing LSIO upstream mapping for (.+)$/);
+  const missingMapping = /^missing LSIO upstream mapping for (.+)$/.exec(error);
   if (missingMapping?.[1]) {
     return `Add a LinuxServer.io upstream map entry for ${missingMapping[1]}.`;
   }

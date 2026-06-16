@@ -15,7 +15,11 @@ export type UsePendingSelectionStateOptions = {
   onSelectionChanged?: () => void;
 };
 
-const tagValuePattern = /^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$/;
+const tagValuePattern = /^\w[\w.-]{0,127}$/;
+
+function tagOverrideKey(item: PendingItem): string {
+  return JSON.stringify([item.raw, item.image, item.repo, item.desired_tag]);
+}
 
 export function usePendingSelectionState(
   options: UsePendingSelectionStateOptions,
@@ -25,10 +29,6 @@ export function usePendingSelectionState(
   const tagOverrides = ref<Record<number, string>>({});
   const tagOverrideKeys = ref<Record<number, string>>({});
   const selectedLineSet = computed(() => new Set(selectedLineNumbers.value));
-
-  function tagOverrideKey(item: PendingItem): string {
-    return JSON.stringify([item.raw, item.image, item.repo, item.desired_tag]);
-  }
 
   function tagOverrideValue(item: PendingItem): string {
     return tagOverrides.value[item.line_no] ?? item.desired_tag;
@@ -96,7 +96,7 @@ export function usePendingSelectionState(
 
   function updateCheckedRowKeys(keys: DataTableRowKey[]): void {
     selectedLineNumbers.value = uniqueSorted(
-      keys.map((key) => Number(key)).filter((key) => Number.isFinite(key)),
+      keys.map(Number).filter((key) => Number.isFinite(key)),
     );
     markSelectionChanged();
   }

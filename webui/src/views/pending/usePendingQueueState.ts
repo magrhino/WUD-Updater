@@ -3,6 +3,7 @@ import { computed } from "vue";
 import type {
   PendingGroupedItem,
   PendingItem,
+  PendingResponse,
   PendingStackGroup,
   ReleaseNoteInfo,
 } from "../../api/client";
@@ -25,6 +26,86 @@ export type DependencySnoozedPendingItem = {
   group: PendingStackGroup;
   item: PendingGroupedItem;
 };
+
+function itemHasBlockedDependency(
+  group: PendingStackGroup,
+  item: PendingGroupedItem,
+  blocked: Set<string>,
+): boolean {
+  for (const key of groupedItemServiceKeys(group, item)) {
+    if (blocked.has(key)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function dependencySnoozedItemsForGroup(
+  group: PendingStackGroup,
+  blocked: Set<string>,
+): DependencySnoozedPendingItem[] {
+  const items: DependencySnoozedPendingItem[] = [];
+  for (const item of group.items) {
+    if (itemHasBlockedDependency(group, item, blocked)) {
+      items.push({ group, item });
+    }
+  }
+  return items;
+}
+
+function activeItemsForGroup(
+  group: PendingStackGroup,
+  blocked: Set<string>,
+): PendingGroupedItem[] {
+  const items: PendingGroupedItem[] = [];
+  for (const item of group.items) {
+    if (!itemHasBlockedDependency(group, item, blocked)) {
+      items.push(item);
+    }
+  }
+  return items;
+}
+
+function servicesLabel(services: string[], fallback: string): string {
+  if (services.length > 0) {
+    return services.join(", ");
+  }
+  return fallback;
+}
+
+function stackGroupWithItems(
+  group: PendingStackGroup,
+  items: PendingGroupedItem[],
+): PendingStackGroup {
+  const services = uniqueStrings(items.flatMap((item) => item.services));
+  return {
+    ...group,
+    items,
+    services,
+    services_label: servicesLabel(services, group.services_label),
+    line_numbers: items.map((item) => item.line_no),
+  };
+}
+
+function pendingHeadingTextFor(
+  pending: PendingResponse | null,
+  pendingLoadFailed: boolean,
+): string {
+  if (pending) {
+    return pluralize(pending.count, "pending update");
+  }
+  if (pendingLoadFailed) {
+    return "Pending updates unavailable";
+  }
+  return "Loading pending updates";
+}
+
+function pendingSourceDisplayFor(label: string): string {
+  if (label === "Pending file") {
+    return "Pending file";
+  }
+  return `Source ${label}`;
+}
 
 export function usePendingQueueState() {
   const updates = useUpdatesStore();
@@ -65,33 +146,17 @@ export function usePendingQueueState() {
   const dependencySnoozedItems = computed<DependencySnoozedPendingItem[]>(() => {
     const blocked = dependencyBlockedServiceKeys.value;
     return rawStackGroups.value.flatMap((group) =>
-      group.items
-        .filter((item) =>
-          groupedItemServiceKeys(group, item).some((key) => blocked.has(key)),
-        )
-        .map((item) => ({ group, item })),
+      dependencySnoozedItemsForGroup(group, blocked),
     );
   });
   const stackGroups = computed(() =>
     rawStackGroups.value
-      .map((group) => {
-        const items = group.items.filter(
-          (item) =>
-            !groupedItemServiceKeys(group, item).some((key) =>
-              dependencyBlockedServiceKeys.value.has(key),
-            ),
-        );
-        const services = uniqueStrings(items.flatMap((item) => item.services));
-        return {
-          ...group,
-          items,
-          services,
-          services_label: services.length
-            ? services.join(", ")
-            : group.services_label,
-          line_numbers: items.map((item) => item.line_no),
-        };
-      })
+      .map((group) =>
+        stackGroupWithItems(
+          group,
+          activeItemsForGroup(group, dependencyBlockedServiceKeys.value),
+        ),
+      )
       .filter((group) => group.items.length > 0),
   );
   const unmatchedItems = computed(() =>
@@ -111,11 +176,7 @@ export function usePendingQueueState() {
     () => !pendingLoaded.value && !pendingLoadFailed.value,
   );
   const pendingHeadingText = computed(() =>
-    updates.pending
-      ? pluralize(updates.pending.count, "pending update")
-      : pendingLoadFailed.value
-        ? "Pending updates unavailable"
-        : "Loading pending updates",
+    pendingHeadingTextFor(updates.pending, pendingLoadFailed.value),
   );
   const selectableLineNumbers = computed(() => {
     if (groupingReady.value) {
@@ -144,9 +205,7 @@ export function usePendingQueueState() {
     pendingSourceFileName(pendingSourceFile.value),
   );
   const pendingSourceDisplay = computed(() =>
-    pendingSourceLabel.value !== "Pending file"
-      ? `Source ${pendingSourceLabel.value}`
-      : "Pending file",
+    pendingSourceDisplayFor(pendingSourceLabel.value),
   );
 
   function releaseNoteFor(item: PendingItem): ReleaseNoteInfo | null {

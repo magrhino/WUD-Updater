@@ -222,7 +222,11 @@ export function usePendingPlanActions(options: UsePendingPlanActionsOptions) {
   ): Promise<void> {
     await updates.loadPending(requestOptions);
     await updates.loadReleaseNotes().catch(() => undefined);
-    void updates.refreshReleaseNotes().catch(() => undefined);
+    refreshReleaseNotesInBackground();
+  }
+
+  function refreshReleaseNotesInBackground(): void {
+    updates.refreshReleaseNotes().catch(() => undefined);
   }
 
   async function retryPendingLoad(): Promise<void> {
