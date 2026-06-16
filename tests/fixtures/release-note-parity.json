@@ -1,0 +1,35 @@
+{
+  "ghcr_major": {
+    "image": "ghcr.io/acme/app:1.0.0",
+    "current_tag": "1.0.0",
+    "provider": "github",
+    "repo": "acme/app",
+    "release_tag": "v2.0.0",
+    "release_body": "Routine update",
+    "breaking": true
+  },
+  "oci_source": {
+    "image": "docker.io/acme/app:1.0.0",
+    "current_tag": "1.0.0",
+    "source": "https://github.com/acme/app",
+    "provider": "github",
+    "repo": "acme/app"
+  },
+  "lsio_radarr": {
+    "image": "linuxserver/radarr:latest",
+    "current_tag": "latest",
+    "provider": "lsio",
+    "lsio_repo": "linuxserver/docker-radarr",
+    "upstream_repo": "Radarr/Radarr",
+    "lsio_tag": "5.1.0-ls1",
+    "upstream_tag": "v5.1.0"
+  },
+  "lsio_remote_semver": {
+    "image": "linuxserver/radarr:latest",
+    "lsio_repo": "linuxserver/docker-radarr",
+    "upstream_repo": "Radarr/Radarr",
+    "lsio_tag": "1.2.3-ls14",
+    "upstream_tag": "v1.2.3-beta.1",
+    "lsio_body": "### Remote Changes:\n- Updated dependencies:\n  - package one\n- Updating to v1.2.3-beta.1.\n\nLinuxServer Changes:\n- Rebase to Alpine 3.20"
+  }
+}

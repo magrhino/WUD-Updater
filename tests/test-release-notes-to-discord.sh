@@ -5,6 +5,7 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
 SCRIPT="$REPO_ROOT/wud/release-notes-to-discord.sh"
 GITHUB_EMBED="$REPO_ROOT/wud/github-release-embed.sh"
 TAG_MANAGER="$REPO_ROOT/wud/tag-manager.sh"
+PARITY_SPEC="$REPO_ROOT/tests/fixtures/release-note-parity.json"
 TEST_TMP=""
 
 fail(){
@@ -18,10 +19,17 @@ fail(){
   exit 1
 }
 
+parity_value(){
+  jq -r "$1" "$PARITY_SPEC"
+}
+
 setup_case(){
   TEST_TMP="$(mktemp -d "${TMPDIR:-/tmp}/wud-release-notes-test.XXXXXX")"
   mkdir -p "$TEST_TMP/bin"
-  printf 'linuxserver/docker-radarr: Radarr/Radarr\n' > "$TEST_TMP/upstreams.txt"
+  printf '%s: %s\n' \
+    "$(parity_value '.lsio_radarr.lsio_repo')" \
+    "$(parity_value '.lsio_radarr.upstream_repo')" \
+    > "$TEST_TMP/upstreams.txt"
   write_fakes
 }
 
@@ -257,16 +265,24 @@ write_expected_legacy_lsio_payload(){
 test_ghcr_image_uses_github_release_engine(){
   setup_case
   local payload_file="$TEST_TMP/payload.json"
+  local image current repo tag breaking
 
-  FAKE_IMAGE_SOURCE="" run_notes "ghcr.io/acme/app:1.0.0" "1.0.0" "$payload_file"
+  image="$(parity_value '.ghcr_major.image')"
+  current="$(parity_value '.ghcr_major.current_tag')"
+  repo="$(parity_value '.ghcr_major.repo')"
+  tag="$(parity_value '.ghcr_major.release_tag')"
+  breaking="$(parity_value 'if .ghcr_major.breaking then "yes" else "no" end')"
+
+  FAKE_IMAGE_SOURCE="" run_notes "$image" "$current" "$payload_file"
 
   [[ -s "$payload_file" ]] || fail "webhook payload was not captured"
   assert_curl_policy_for_url "https://discord.test/webhook"
   jq -e '.allowed_mentions.parse == []' "$payload_file" >/dev/null || fail "allowed_mentions was not disabled"
   jq -e '.username == "GitHub Release Notes"' "$payload_file" >/dev/null || fail "release engine username missing"
   jq -e '.embeds[0].fields[] | select(.name == "Container" and .value == "container")' "$payload_file" >/dev/null || fail "container field was not preserved"
-  jq -e '.embeds[0].fields[] | select(.name == "Version" and .value == "1.0.0 -> v2.0.0")' "$payload_file" >/dev/null || fail "current to new field was not rendered"
-  jq -e '.embeds[0].fields[] | select(.name == "Breaking" and .value == "yes")' "$payload_file" >/dev/null || fail "major bump was not marked breaking"
+  jq -e --arg repo "$repo" '.embeds[0].fields[] | select(.name == "Repository" and .value == $repo)' "$payload_file" >/dev/null || fail "GHCR repo normalization changed"
+  jq -e --arg version "$current -> $tag" '.embeds[0].fields[] | select(.name == "Version" and .value == $version)' "$payload_file" >/dev/null || fail "current to new field was not rendered"
+  jq -e --arg breaking "$breaking" '.embeds[0].fields[] | select(.name == "Breaking" and .value == $breaking)' "$payload_file" >/dev/null || fail "major bump was not marked breaking"
   teardown_case
 }
 
@@ -343,11 +359,17 @@ test_legacy_github_release_embed_wrapper_accepts_compat_args(){
 test_oci_source_label_uses_github_release_engine(){
   setup_case
   local payload_file="$TEST_TMP/payload.json"
+  local image current source repo
 
-  FAKE_IMAGE_SOURCE="https://github.com/acme/app" run_notes "docker.io/acme/app:1.0.0" "1.0.0" "$payload_file"
+  image="$(parity_value '.oci_source.image')"
+  current="$(parity_value '.oci_source.current_tag')"
+  source="$(parity_value '.oci_source.source')"
+  repo="$(parity_value '.oci_source.repo')"
+
+  FAKE_IMAGE_SOURCE="$source" run_notes "$image" "$current" "$payload_file"
 
   [[ -s "$payload_file" ]] || fail "webhook payload was not captured"
-  jq -e '.embeds[0].fields[] | select(.name == "Repository" and .value == "acme/app")' "$payload_file" >/dev/null || fail "OCI source label repo was not used"
+  jq -e --arg repo "$repo" '.embeds[0].fields[] | select(.name == "Repository" and .value == $repo)' "$payload_file" >/dev/null || fail "OCI source label repo was not used"
   teardown_case
 }
 
@@ -439,7 +461,10 @@ test_legacy_tag_manager_lsio_env_uses_upstream_map(){
   setup_case
   local payload_file="$TEST_TMP/payload.json"
   local expected_file="$TEST_TMP/expected.json"
+  local image_name
 
+  image_name="$(parity_value '.lsio_radarr.image')"
+  image_name="${image_name%%:*}"
   PATH="$TEST_TMP/bin:$PATH" \
     DISCORD_WEBHOOK="https://discord.test/webhook" \
     FAKE_WEBHOOK_PAYLOAD="$payload_file" \
@@ -447,7 +472,7 @@ test_legacy_tag_manager_lsio_env_uses_upstream_map(){
     LOG_DIR="$TEST_TMP/logs" \
     RELEASE_EMBED="$GITHUB_EMBED" \
     UPSTREAM_MAP="$TEST_TMP/upstreams.txt" \
-    image_name="linuxserver/radarr" \
+    image_name="$image_name" \
     image_registry_url="docker.io" \
     update_available="true" \
     update_kind_kind="" \
