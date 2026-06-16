@@ -4,7 +4,6 @@ import { useClipboard, useMediaQuery } from "@vueuse/core";
 import { useRoute, useRouter } from "vue-router";
 import {
   AlertTriangle,
-  ChevronDown,
   Copy,
   Download,
   ExternalLink,
@@ -37,9 +36,21 @@ import type {
   SettingsEntry,
 } from "../api/client";
 import OnboardingChecklist from "../components/OnboardingChecklist.vue";
+import SettingsDisclosureSection from "../components/SettingsDisclosureSection.vue";
 import { useAuthStore } from "../stores/auth";
 import { useSettingsStore } from "../stores/settings";
 import { useConnectionStore } from "../stores/connection";
+
+type SettingsDisclosureRow = {
+  key: string;
+  name: string;
+  detail: string;
+  value: string;
+  valueKind: "code" | "text";
+  valueClass?: string;
+  tagLabel: string;
+  tagType: "default" | "primary" | "success" | "info" | "warning" | "error";
+};
 
 const auth = useAuthStore();
 const settings = useSettingsStore();
@@ -271,6 +282,34 @@ function sourceTagType(entry: SettingsEntry): "default" | "info" | "success" | "
 function secretLabel(secret: SecretSettingStatus): string {
   return secret.configured ? "Configured" : "Not configured";
 }
+
+function settingRows(entries: SettingsEntry[]): SettingsDisclosureRow[] {
+  return entries.map((entry) => ({
+    key: entry.name,
+    name: entry.name,
+    detail: `Default: ${displayValue(entry.default_value)}`,
+    value: displayValue(entry.value),
+    valueKind: "code",
+    tagLabel: sourceLabel(entry),
+    tagType: sourceTagType(entry),
+  }));
+}
+
+const pathRows = computed(() => settingRows(pathEntries.value));
+const behaviorRows = computed(() => settingRows(behaviorEntries.value));
+const webuiRows = computed(() => settingRows(webuiEntries.value));
+const secretRows = computed<SettingsDisclosureRow[]>(() =>
+  secrets.value.map((secret) => ({
+    key: secret.name,
+    name: secret.name,
+    detail: "Value never rendered",
+    value: "Raw value hidden",
+    valueKind: "text" as const,
+    valueClass: "settings-redacted-value",
+    tagLabel: secretLabel(secret),
+    tagType: secret.configured ? "success" : "default",
+  })),
+);
 
 function managedOptions(
   entry: ManagedSettingEntry | undefined,
@@ -944,212 +983,66 @@ onMounted(() => {
       </section>
     </div>
 
-    <details
+    <SettingsDisclosureSection
       v-if="settingsData"
       id="settings-paths"
-      class="section-panel settings-disclosure"
+      eyebrow="Updater"
+      title="Paths"
       :open="!compactSettingsLayout"
-    >
-      <summary class="section-heading settings-disclosure-summary">
-        <div>
-          <p class="eyebrow">Updater</p>
-          <h2>Paths</h2>
-        </div>
-        <n-flex
-          class="section-heading-meta"
-          align="center"
-          :justify="compactSettingsLayout ? 'flex-start' : 'flex-end'"
-          :size="8"
-        >
-          <n-tag size="small">{{ entryCountLabel(pathEntries) }}</n-tag>
-          <ChevronDown :size="18" class="settings-disclosure-chevron" />
-        </n-flex>
-      </summary>
-      <div
-        v-if="pathEntries.length"
-        class="settings-list"
-        role="table"
-        aria-label="Updater path settings"
-      >
-        <div class="settings-table-head" role="row">
-          <span role="columnheader">Setting</span>
-          <span role="columnheader">Effective value</span>
-          <span role="columnheader">Source</span>
-        </div>
-        <div v-for="entry in pathEntries" :key="entry.name" class="settings-row" role="row">
-          <div role="cell">
-            <strong>{{ entry.name }}</strong>
-            <span>Default: {{ displayValue(entry.default_value) }}</span>
-          </div>
-          <code role="cell">{{ displayValue(entry.value) }}</code>
-          <n-tag size="small" :type="sourceTagType(entry)" role="cell">
-            {{ sourceLabel(entry) }}
-          </n-tag>
-        </div>
-      </div>
-      <n-empty
-        v-else
-        class="empty-state"
-        description="Path settings are unavailable."
-        :show-icon="false"
-      />
-    </details>
+      :compact="compactSettingsLayout"
+      aria-label="Updater path settings"
+      :header-tags="[{ label: entryCountLabel(pathEntries) }]"
+      :table-headers="['Setting', 'Effective value', 'Source']"
+      :entries="pathRows"
+      empty-description="Path settings are unavailable."
+    />
 
-    <details
+    <SettingsDisclosureSection
       v-if="settingsData"
       id="settings-behavior"
-      class="section-panel settings-disclosure"
+      eyebrow="Updater"
+      title="Behavior"
       :open="!compactSettingsLayout"
-    >
-      <summary class="section-heading settings-disclosure-summary">
-        <div>
-          <p class="eyebrow">Updater</p>
-          <h2>Behavior</h2>
-        </div>
-        <n-flex
-          class="section-heading-meta"
-          align="center"
-          :justify="compactSettingsLayout ? 'flex-start' : 'flex-end'"
-          :size="8"
-        >
-          <n-tag size="small">{{ entryCountLabel(behaviorEntries) }}</n-tag>
-          <ChevronDown :size="18" class="settings-disclosure-chevron" />
-        </n-flex>
-      </summary>
-      <div
-        v-if="behaviorEntries.length"
-        class="settings-list"
-        role="table"
-        aria-label="Updater behavior settings"
-      >
-        <div class="settings-table-head" role="row">
-          <span role="columnheader">Setting</span>
-          <span role="columnheader">Effective value</span>
-          <span role="columnheader">Source</span>
-        </div>
-        <div v-for="entry in behaviorEntries" :key="entry.name" class="settings-row" role="row">
-          <div role="cell">
-            <strong>{{ entry.name }}</strong>
-            <span>Default: {{ displayValue(entry.default_value) }}</span>
-          </div>
-          <code role="cell">{{ displayValue(entry.value) }}</code>
-          <n-tag size="small" :type="sourceTagType(entry)" role="cell">
-            {{ sourceLabel(entry) }}
-          </n-tag>
-        </div>
-      </div>
-      <n-empty
-        v-else
-        class="empty-state"
-        description="Behavior settings are unavailable."
-        :show-icon="false"
-      />
-    </details>
+      :compact="compactSettingsLayout"
+      aria-label="Updater behavior settings"
+      :header-tags="[{ label: entryCountLabel(behaviorEntries) }]"
+      :table-headers="['Setting', 'Effective value', 'Source']"
+      :entries="behaviorRows"
+      empty-description="Behavior settings are unavailable."
+    />
 
-    <details
+    <SettingsDisclosureSection
       v-if="settingsData"
       id="settings-webui"
-      class="section-panel settings-disclosure"
+      eyebrow="WebUI"
+      title="Safety status"
       :open="!compactSettingsLayout"
-    >
-      <summary class="section-heading settings-disclosure-summary">
-        <div>
-          <p class="eyebrow">WebUI</p>
-          <h2>Safety status</h2>
-        </div>
-        <n-flex
-          class="section-heading-meta"
-          align="center"
-          :justify="compactSettingsLayout ? 'flex-start' : 'flex-end'"
-          :size="8"
-        >
-          <n-tag size="small">{{ entryCountLabel(webuiEntries) }}</n-tag>
-          <ShieldCheck :size="20" class="section-heading-icon" />
-          <ChevronDown :size="18" class="settings-disclosure-chevron" />
-        </n-flex>
-      </summary>
-      <div
-        v-if="webuiEntries.length"
-        class="settings-list"
-        role="table"
-        aria-label="WebUI safety settings"
-      >
-        <div class="settings-table-head" role="row">
-          <span role="columnheader">Setting</span>
-          <span role="columnheader">Effective value</span>
-          <span role="columnheader">Source</span>
-        </div>
-        <div v-for="entry in webuiEntries" :key="entry.name" class="settings-row" role="row">
-          <div role="cell">
-            <strong>{{ entry.name }}</strong>
-            <span>Default: {{ displayValue(entry.default_value) }}</span>
-          </div>
-          <code role="cell">{{ displayValue(entry.value) }}</code>
-          <n-tag size="small" :type="sourceTagType(entry)" role="cell">
-            {{ sourceLabel(entry) }}
-          </n-tag>
-        </div>
-      </div>
-      <n-empty
-        v-else
-        class="empty-state"
-        description="WebUI safety settings are unavailable."
-        :show-icon="false"
-      />
-    </details>
+      :compact="compactSettingsLayout"
+      aria-label="WebUI safety settings"
+      :header-tags="[{ label: entryCountLabel(webuiEntries) }]"
+      :table-headers="['Setting', 'Effective value', 'Source']"
+      :entries="webuiRows"
+      empty-description="WebUI safety settings are unavailable."
+      :icon="ShieldCheck"
+    />
 
-    <details
+    <SettingsDisclosureSection
       v-if="settingsData"
       id="settings-secrets"
-      class="section-panel settings-disclosure"
+      eyebrow="Secrets"
+      title="Configured values"
       :open="!compactSettingsLayout"
-    >
-      <summary class="section-heading settings-disclosure-summary">
-        <div>
-          <p class="eyebrow">Secrets</p>
-          <h2>Configured values</h2>
-        </div>
-        <n-flex
-          class="section-heading-meta"
-          align="center"
-          :justify="compactSettingsLayout ? 'flex-start' : 'flex-end'"
-          :size="8"
-        >
-          <n-tag size="small">{{ configuredSecretCount }} configured</n-tag>
-          <n-tag v-if="missingSecretCount" size="small">{{ missingSecretCount }} missing</n-tag>
-          <KeyRound :size="20" class="section-heading-icon" />
-          <ChevronDown :size="18" class="settings-disclosure-chevron" />
-        </n-flex>
-      </summary>
-      <div
-        v-if="secrets.length"
-        class="settings-list"
-        role="table"
-        aria-label="Secret settings"
-      >
-        <div class="settings-table-head" role="row">
-          <span role="columnheader">Secret</span>
-          <span role="columnheader">Value</span>
-          <span role="columnheader">Status</span>
-        </div>
-        <div v-for="secret in secrets" :key="secret.name" class="settings-row" role="row">
-          <div role="cell">
-            <strong>{{ secret.name }}</strong>
-            <span>Value never rendered</span>
-          </div>
-          <span class="settings-redacted-value" role="cell">Raw value hidden</span>
-          <n-tag size="small" :type="secret.configured ? 'success' : 'default'" role="cell">
-            {{ secretLabel(secret) }}
-          </n-tag>
-        </div>
-      </div>
-      <n-empty
-        v-else
-        class="empty-state"
-        description="No secret settings reported."
-        :show-icon="false"
-      />
-    </details>
+      :compact="compactSettingsLayout"
+      aria-label="Secret settings"
+      :header-tags="[
+        { label: `${configuredSecretCount} configured` },
+        ...(missingSecretCount ? [{ label: `${missingSecretCount} missing` }] : []),
+      ]"
+      :table-headers="['Secret', 'Value', 'Status']"
+      :entries="secretRows"
+      empty-description="No secret settings reported."
+      :icon="KeyRound"
+    />
 
     <section id="settings-diagnostics" class="section-panel">
       <div class="section-heading">
@@ -1363,7 +1256,6 @@ onMounted(() => {
 }
 
 .settings-zone,
-.settings-disclosure,
 #settings-diagnostics,
 #settings-docs {
   scroll-margin-top: 18px;
@@ -1460,101 +1352,6 @@ onMounted(() => {
 
 .settings-source-legend strong {
   color: var(--color-ink);
-}
-
-.settings-disclosure {
-  display: block;
-}
-
-.settings-disclosure-summary {
-  list-style: none;
-  cursor: pointer;
-}
-
-.settings-disclosure-summary::-webkit-details-marker {
-  display: none;
-}
-
-.settings-disclosure-summary:focus-visible {
-  outline: 2px solid var(--color-border-hover);
-  outline-offset: 4px;
-  border-radius: 7px;
-}
-
-.settings-disclosure-chevron {
-  flex: 0 0 auto;
-  color: var(--color-muted-text);
-  transition: transform 180ms ease-out;
-}
-
-.settings-disclosure[open] .settings-disclosure-chevron {
-  transform: rotate(180deg);
-}
-
-.settings-list {
-  display: grid;
-  margin-top: 14px;
-  overflow: hidden;
-  border: 1px solid var(--color-border);
-  border-radius: 8px;
-  background: var(--color-surface);
-}
-
-.settings-table-head {
-  display: grid;
-  grid-template-columns: minmax(160px, 0.8fr) minmax(0, 1.2fr) minmax(102px, auto);
-  align-items: center;
-  gap: 12px;
-  padding: 10px 12px;
-  color: var(--color-muted-text);
-  font-size: 0.78rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  background: var(--color-table-head);
-}
-
-.settings-row {
-  display: grid;
-  grid-template-columns: minmax(160px, 0.8fr) minmax(0, 1.2fr) minmax(102px, auto);
-  align-items: center;
-  gap: 12px;
-  min-width: 0;
-  padding: 10px 12px;
-  border-top: 1px solid var(--color-border-subtle);
-}
-
-.settings-row>div {
-  display: grid;
-  gap: 3px;
-  min-width: 0;
-}
-
-.settings-row strong,
-.settings-row span,
-.settings-row code {
-  min-width: 0;
-  overflow-wrap: anywhere;
-}
-
-.settings-row span {
-  color: var(--color-muted-text);
-  font-size: 0.82rem;
-}
-
-.settings-row code {
-  color: var(--color-code-text);
-  font-family: var(--font-mono);
-  font-size: 0.84rem;
-  line-height: 1.45;
-}
-
-.settings-row>:deep(.n-tag) {
-  justify-self: start;
-}
-
-.settings-redacted-value {
-  color: var(--color-text-secondary);
-  font-weight: 700;
 }
 
 .settings-doc-links {
@@ -1689,12 +1486,6 @@ onMounted(() => {
 }
 
 @media (max-width: 560px) {
-  .settings-row {
-    grid-template-columns: 1fr;
-    align-items: start;
-    gap: 7px;
-  }
-
   .settings-preference-row {
     grid-template-columns: 1fr;
   }
@@ -1721,17 +1512,6 @@ onMounted(() => {
     min-height: 44px;
   }
 
-  .settings-table-head {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    padding: 0;
-    overflow: hidden;
-    clip: rect(0, 0, 0, 0);
-    white-space: nowrap;
-    border: 0;
-  }
-
   .settings-action-row {
     display: grid;
     align-items: start;
@@ -1747,10 +1527,6 @@ onMounted(() => {
 
   .settings-overview-icon {
     display: none;
-  }
-
-  .settings-row>:deep(.n-tag) {
-    width: fit-content;
   }
 }
 </style>
