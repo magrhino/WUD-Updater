@@ -22,8 +22,10 @@ export function useSettingsDiagnostics() {
       const bundle = await connection.diagnosticsSupportBundle();
       return JSON.stringify(bundle, null, 2);
     } catch (exc) {
-      diagnosticsError.value =
-        exc instanceof Error ? exc.message : "Failed to load support bundle";
+      diagnosticsError.value = diagnosticsOperationError(
+        exc,
+        "Failed to load support bundle",
+      );
       return null;
     } finally {
       diagnosticsDownloading.value = false;
