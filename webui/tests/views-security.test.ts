@@ -2543,6 +2543,9 @@ describe("mutating WebUI views", () => {
         managed: settingsResponse().managed,
         audit_run_id: 77,
       });
+    const updateCoreUpdateTour = vi
+      .spyOn(settings, "updateCoreUpdateTour")
+      .mockResolvedValue(coreUpdateTourResponse());
 
     const wrapper = mountWithApp(SettingsView, { pinia });
     await flushPromises();
@@ -2555,14 +2558,25 @@ describe("mutating WebUI views", () => {
     const relaunchButton = wrapper
       .findAll("button")
       .find((button) => button.text().includes("Relaunch onboarding"));
+    const dismissTourButton = wrapper
+      .findAll("button")
+      .find((button) => button.text().includes("Dismiss tour"));
+    const replayTourButton = wrapper
+      .findAll("button")
+      .find((button) => button.text().includes("Replay tour"));
     expect(saveButton?.attributes("disabled")).toBeDefined();
     expect(relaunchButton?.attributes("disabled")).toBeDefined();
+    expect(dismissTourButton?.attributes("disabled")).toBeDefined();
+    expect(replayTourButton?.attributes("disabled")).toBeDefined();
     for (const select of wrapper.findAll("select")) {
       expect(select.attributes("disabled")).toBeDefined();
     }
     await saveButton?.trigger("click");
     await relaunchButton?.trigger("click");
+    await dismissTourButton?.trigger("click");
+    await replayTourButton?.trigger("click");
     expect(updateManagedSettings).not.toHaveBeenCalled();
+    expect(updateCoreUpdateTour).not.toHaveBeenCalled();
   });
 
   it("saves managed preference changes through the store", async () => {

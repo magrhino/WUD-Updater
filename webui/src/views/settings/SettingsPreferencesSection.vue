@@ -187,6 +187,7 @@ const {
           >
             <n-button
               size="small"
+              :disabled="preferenceControlsDisabled"
               :loading="settings.loading"
               @click="dismissCoreUpdateTour"
             >
@@ -195,6 +196,7 @@ const {
             <n-button
               size="small"
               type="primary"
+              :disabled="preferenceControlsDisabled"
               :loading="settings.loading"
               @click="replayCoreUpdateTour"
             >

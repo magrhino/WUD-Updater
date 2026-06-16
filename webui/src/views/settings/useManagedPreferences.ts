@@ -101,6 +101,9 @@ export function useManagedPreferences() {
   }
 
   async function saveManagedPreferences(): Promise<void> {
+    if (preferenceControlsDisabled.value) {
+      return;
+    }
     preferencesMessage.value = "";
     preferencesError.value = "";
     const values: Record<string, string> = {};
@@ -142,6 +145,9 @@ export function useManagedPreferences() {
   }
 
   async function relaunchOnboardingChecklist(): Promise<void> {
+    if (preferenceControlsDisabled.value) {
+      return;
+    }
     preferencesMessage.value = "";
     preferencesError.value = "";
     try {
@@ -164,6 +170,9 @@ export function useManagedPreferences() {
   }
 
   async function replayCoreUpdateTour(): Promise<void> {
+    if (preferenceControlsDisabled.value) {
+      return;
+    }
     preferencesMessage.value = "";
     preferencesError.value = "";
     try {
@@ -176,6 +185,9 @@ export function useManagedPreferences() {
   }
 
   async function dismissCoreUpdateTour(): Promise<void> {
+    if (preferenceControlsDisabled.value) {
+      return;
+    }
     preferencesMessage.value = "";
     preferencesError.value = "";
     try {
