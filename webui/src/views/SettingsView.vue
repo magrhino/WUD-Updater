@@ -36,9 +36,8 @@ import type {
   SettingsEntry,
 } from "../api/client";
 import OnboardingChecklist from "../components/OnboardingChecklist.vue";
-import SettingsDisclosureSection, {
-  type SettingsDisclosureRow,
-} from "../components/SettingsDisclosureSection.vue";
+import SettingsDisclosureSection from "../components/SettingsDisclosureSection.vue";
+import type { SettingsDisclosureRow } from "../components/SettingsDisclosureSection.types";
 import { useAuthStore } from "../stores/auth";
 import { useSettingsStore } from "../stores/settings";
 import { useConnectionStore } from "../stores/connection";

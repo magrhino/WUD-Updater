@@ -3,18 +3,9 @@ import type { Component } from "vue";
 import { ChevronDown } from "@lucide/vue";
 import { NEmpty, NFlex, NTag } from "naive-ui";
 
-type TagType = "default" | "primary" | "success" | "info" | "warning" | "error";
+import type { SettingsDisclosureRow } from "./SettingsDisclosureSection.types";
 
-export type SettingsDisclosureRow = {
-  key: string;
-  name: string;
-  detail: string;
-  value: string;
-  valueKind: "code" | "text";
-  valueClass?: string;
-  tagLabel: string;
-  tagType: TagType;
-};
+type TagType = "default" | "primary" | "success" | "info" | "warning" | "error";
 
 type HeaderTag = {
   label: string;
