@@ -13,6 +13,19 @@ import {
 import { safetyCues } from "../src/views/pending/safetyCues";
 import { createPendingColumns } from "../src/views/pending/tableColumns";
 import {
+  groupedItemActionLabel,
+  groupedItemActionTagType,
+  groupedItemServiceKeys,
+  groupedItemTarget,
+  itemsBreakingCount,
+  pendingSourceFileName,
+  releaseNoteReason,
+  releaseNoteStatus,
+  tagInputProps,
+  uniqueSorted,
+  uniqueStrings,
+} from "../src/views/pending/pendingDisplay";
+import {
   planLineDigestPinLabel,
   planLineDigestUnpinLabel,
 } from "../src/views/pending/utils";
@@ -240,6 +253,50 @@ describe("pending helper modules", () => {
     expect(digestLabels).toContain("Mutable latest");
     expect(digestLabels).toContain("Stack restart");
     expect(digestLabels).toContain("No release notes");
+  });
+
+  it("formats pending queue display helpers without store dependencies", () => {
+    const item = pendingGroupedItem({
+      image: "repo/app:1.0",
+      target_image: "repo/app:2.0",
+      resolved_image: "repo/app:2.0",
+      services: ["app"],
+      action: "tag-update",
+    });
+    const breakingNote = releaseNoteInfo({
+      line_no: item.line_no,
+      breaking: true,
+      breaking_reasons: ["Major version update."],
+    });
+
+    expect(uniqueSorted([3, 1, 3, 2])).toEqual([1, 2, 3]);
+    expect(uniqueStrings(["worker", "", "api", "worker"])).toEqual([
+      "api",
+      "worker",
+    ]);
+    expect(pendingSourceFileName("/out/images.todo")).toBe("images.todo");
+    expect(groupedItemServiceKeys({ name: "media" }, item)).toEqual([
+      "media/app",
+    ]);
+    expect(groupedItemTarget(item)).toBe("repo/app:2.0");
+    expect(groupedItemActionLabel(item)).toBe("Tag update");
+    expect(groupedItemActionTagType(item)).toBe("warning");
+    expect(itemsBreakingCount([item], () => breakingNote)).toBe(1);
+    expect(tagInputProps(item)).toEqual({ "aria-label": "New tag for repo/app:1.0" });
+    expect(
+      releaseNoteReason(releaseNoteInfo({
+        links: [],
+        error: "missing LSIO upstream mapping for linuxserver/radarr",
+      })),
+    ).toBe(
+      "Add a LinuxServer.io upstream map entry for linuxserver/radarr.",
+    );
+    expect(
+      releaseNoteStatus(
+        releaseNoteInfo({ links: [], status: "error" }),
+        false,
+      ),
+    ).toBe("Check failed");
   });
 
   it("creates fallback table renderers for tags, digests, safety, and release notes", async () => {
