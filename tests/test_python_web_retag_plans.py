@@ -55,8 +55,10 @@ def test_retag_plan_helpers_render_ordered_stacks_and_stable_ids(
     )
 
 
-def test_retag_plan_status_reports_empty_and_blocked_states() -> None:
-    selected = (_update(Path("/tmp"), stack_index=1, stack_name="alpha", service="web"),)
+def test_retag_plan_status_reports_empty_and_blocked_states(
+    tmp_path: Path,
+) -> None:
+    selected = (_update(tmp_path, stack_index=1, stack_name="alpha", service="web"),)
 
     assert retag_plan_status((), {}, ()) == "empty"
     assert retag_plan_status(selected, {}, ()) == "empty"
