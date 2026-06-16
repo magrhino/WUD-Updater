@@ -465,5 +465,4 @@ class ComposeDigestPinTests(ComposeRewriteTestCase):
             (self.digest_pin_update(),),
         )
 
-        self.assertIn("wud.tag.include", rendered)
-        self.assertIn("2", rendered)
+        self.assertIn("wud.tag.include: ^2\\.0$$", rendered)

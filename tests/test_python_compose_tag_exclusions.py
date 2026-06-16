@@ -271,8 +271,21 @@ class ComposeTagExclusionTests(ComposeRewriteTestCase):
         compose_file = self.write_compose(
             "services:\n  app:\n    image: repo/app:1.0\n    labels:\n      wud.tag.exclude: \n"
         )
-        render_compose_tag_exclusions(
+        rendered, applied = render_compose_tag_exclusions(
             compose_file,
             (self.tag_exclusion_update(tag="2.0"),),
             existing_exact_tags={},
+        )
+
+        self.assertEqual(len(applied), 1)
+        self.assertEqual(applied[0].service, "app")
+        self.assertEqual(applied[0].image_repo, "repo/app")
+        self.assertEqual(applied[0].tags, ("2.0",))
+        self.assertEqual(
+            rendered,
+            "services:\n"
+            "  app:\n"
+            "    image: repo/app:1.0\n"
+            "    labels:\n"
+            "      wud.tag.exclude: ^2\\.0$$\n",
         )
