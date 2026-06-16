@@ -15,6 +15,7 @@ from wud_updater.db import (
 )
 
 from tests.web_test_helpers import (
+    DEFAULT_PASSWORD,
     _client,
     _fake_docker_calls,
     _fake_docker_env,
@@ -991,7 +992,7 @@ def test_state_operation_audit_records_bearer_and_session_actors(
 
     login = session_client.post(
         "/api/v1/auth/login",
-        json={"username": "admin", "password": "correct horse battery staple"},
+        json={"username": "admin", "password": DEFAULT_PASSWORD},
         headers=_csrf_headers(session_client),
     )
     bearer_response = bearer_client.post(
