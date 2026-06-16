@@ -64,6 +64,7 @@ from .web_models import (
     WebApplyJob,
     WebSettings,
 )
+from .web_metadata import json_object as _json_object
 
 
 KEEP_CURRENT_CHOICE = "keep-current"
@@ -1275,15 +1276,6 @@ def _delete_path(path: Path) -> None:
         path.unlink()
     except FileNotFoundError:
         pass
-
-
-def _json_object(payload: Mapping[str, object]) -> str:
-    return json.dumps(
-        payload,
-        sort_keys=True,
-        separators=(",", ":"),
-        ensure_ascii=True,
-    )
 
 
 def _effective_config(settings: WebSettings) -> UpdaterConfig:

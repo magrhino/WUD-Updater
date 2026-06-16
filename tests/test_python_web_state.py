@@ -15,6 +15,7 @@ from wud_updater.db import (
 )
 
 from tests.web_test_helpers import (
+    DEFAULT_PASSWORD,
     _client,
     _fake_docker_calls,
     _fake_docker_env,
@@ -970,10 +971,70 @@ def test_state_operations_write_rows_and_audit_entries(tmp_path: Path) -> None:
     assert tag_exclusion["status"] == "disabled"
     assert [row["mode"] for row in runs] == ["web-state"] * 8
     assert [item["operation"] for item in run_metadata] == operation_kinds
+    assert [item["actor_type"] for item in run_metadata] == ["dev"] * 8
     assert [item["operation"] for item in event_metadata] == operation_kinds
     assert event_metadata[0]["before"] is None
     assert event_metadata[1]["before"]["service_key"] == "stack/app"
     assert event_metadata[-1]["after"]["status"] == "disabled"
+
+
+def test_state_operation_audit_records_bearer_and_session_actors(
+    tmp_path: Path,
+) -> None:
+    env = {
+        "WUD_WEB_TOKEN": "secret",
+        "WUD_WEB_MUTATIONS_ENABLED": "true",
+    }
+    setup_client = _client(tmp_path, env)
+    _setup_admin(setup_client)
+    bearer_client = _client(tmp_path, env)
+    session_client = _client(tmp_path, env)
+
+    login = session_client.post(
+        "/api/v1/auth/login",
+        json={"username": "admin", "password": DEFAULT_PASSWORD},
+        headers=_csrf_headers(session_client),
+    )
+    bearer_response = bearer_client.post(
+        "/api/v1/state/operations",
+        json={
+            "kind": "upsert_service_policy",
+            "service_key": "stack/bearer",
+            "update_mode": "stop",
+        },
+        headers={
+            **_csrf_headers(bearer_client),
+            "Authorization": "Bearer secret",
+        },
+    )
+    session_response = session_client.post(
+        "/api/v1/state/operations",
+        json={
+            "kind": "upsert_service_policy",
+            "service_key": "stack/session",
+            "update_mode": "pause",
+        },
+        headers=_csrf_headers(session_client),
+    )
+
+    assert login.status_code == 200
+    assert bearer_response.status_code == 200
+    assert session_response.status_code == 200
+
+    with open_db(tmp_path / "state" / "wud.sqlite") as conn:
+        runs = conn.execute(
+            """
+            SELECT metadata_json
+            FROM update_runs
+            WHERE mode = 'web-state'
+            ORDER BY id
+            """
+        ).fetchall()
+
+    assert [json.loads(row["metadata_json"])["actor_type"] for row in runs] == [
+        "bearer",
+        "session",
+    ]
 
 
 def test_service_policy_upsert_preserves_omitted_existing_fields(

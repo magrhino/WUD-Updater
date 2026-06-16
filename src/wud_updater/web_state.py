@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import sqlite3
 from collections.abc import Mapping, Sequence
 from contextlib import closing
@@ -22,9 +21,8 @@ from .db import (
 from .images import repo_key, tag_value_valid
 from .compose_rewrite import js_regex_escape
 from .web_auth import (
-    SESSION_COOKIE,
-    _bearer_token_valid,
     _immediate_transaction,
+    _request_actor_type,
     _safe_exception_detail,
     _settings,
 )
@@ -50,9 +48,12 @@ from .web_models import (
     UpsertTagExclusionOperation,
     WebSettings,
 )
+from .web_metadata import json_list as _json_list
+from .web_metadata import json_object as _json_object
 from .web_runs import _metadata_from_row
 
 AUTO_UPDATE_DAYS = web_scheduler.AUTO_UPDATE_DAYS
+_state_actor_type = _request_actor_type
 
 
 def api_service_policies(request: Request) -> list[ServicePolicyRecord]:
@@ -1086,17 +1087,6 @@ def _insert_state_audit(
     return run_id
 
 
-def _state_actor_type(settings: WebSettings, request: Request) -> str:
-    if settings.dev_no_auth:
-        return "dev"
-    authorization = request.headers.get("authorization")
-    if _bearer_token_valid(settings, authorization):
-        return "bearer"
-    if request.cookies.get(SESSION_COOKIE):
-        return "session"
-    return "unknown"
-
-
 def _state_audit_stack_name(target: Mapping[str, Any]) -> str:
     service_key = str(target.get("service_key") or "")
     if "/" not in service_key:
@@ -1193,11 +1183,3 @@ def _tag_exclusion_summary(row: sqlite3.Row | None) -> dict[str, Any] | None:
         "created_at": str(row["created_at"]),
         "updated_at": str(row["updated_at"]),
     }
-
-
-def _json_object(value: Mapping[str, Any]) -> str:
-    return json.dumps(value, sort_keys=True, separators=(",", ":"))
-
-
-def _json_list(value: Sequence[str]) -> str:
-    return json.dumps(list(value), separators=(",", ":"))

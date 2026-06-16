@@ -55,6 +55,13 @@ def test_api_accepts_bearer_token(tmp_path: Path) -> None:
     assert response.json()["auth_required"] is True
 
 
+def test_request_actor_type_falls_back_to_unknown_without_auth(tmp_path: Path) -> None:
+    settings = _client(tmp_path, {"WUD_WEB_TOKEN": "secret"}).app.state.web_settings
+    request = SimpleNamespace(headers={}, cookies={})
+
+    assert web_auth_module._request_actor_type(settings, request) == "unknown"
+
+
 def test_csrf_endpoint_sets_double_submit_cookie(tmp_path: Path) -> None:
     client = _client(tmp_path)
 
