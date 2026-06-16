@@ -50,15 +50,16 @@ from .compose_rewrite import (
 from .updater_digest_pin import digest_pin_update_from_values
 from .updater_models import ComposeTagRewriteError, DigestPinUpdate, TagUpdate
 from .web_auth import (
-    SESSION_COOKIE,
     WebConfigError,
-    _bearer_token_valid,
     _immediate_transaction,
     _parse_bool,
     _redact_sensitive_text,
+    _request_actor_type,
     _safe_exception_detail,
     _settings,
 )
+from .web_metadata import json_object as _json_object
+from .web_metadata import json_object_or_empty
 from .web_models import (
     SELF_UPDATE_RELEASE_NOTES_CAP,
     ContainerRestartRequest,
@@ -1114,7 +1115,7 @@ def _insert_container_restart_audit(
     metadata = {
         "source": "webui",
         "operation": "restart_container",
-        "actor_type": _state_actor_type(settings, request),
+        "actor_type": _request_actor_type(settings, request),
         "resource_type": "container",
         "resource_id": container,
         "target": {"container": container},
@@ -1176,7 +1177,7 @@ def _insert_self_update_audit(
     metadata = {
         "source": "webui",
         "operation": "self_update",
-        "actor_type": _state_actor_type(settings, request),
+        "actor_type": _request_actor_type(settings, request),
         "resource_type": "container",
         "resource_id": status.restart_container,
         "current_tag": status.current_tag,
@@ -1333,11 +1334,7 @@ def _self_update_audit_metadata(
     ).fetchone()
     if row is None:
         return {}
-    try:
-        metadata = json.loads(str(row["metadata_json"] or "{}"))
-    except json.JSONDecodeError:
-        return {}
-    return metadata if isinstance(metadata, dict) else {}
+    return json_object_or_empty(row["metadata_json"])
 
 
 def _update_container_restart_audit(
@@ -1395,26 +1392,7 @@ def _container_restart_audit_metadata(
     ).fetchone()
     if row is None:
         return {}
-    try:
-        metadata = json.loads(str(row["metadata_json"] or "{}"))
-    except json.JSONDecodeError:
-        return {}
-    return metadata if isinstance(metadata, dict) else {}
-
-
-def _state_actor_type(settings: WebSettings, request: Request) -> str:
-    if settings.dev_no_auth:
-        return "dev"
-    authorization = request.headers.get("authorization")
-    if _bearer_token_valid(settings, authorization):
-        return "bearer"
-    if request.cookies.get(SESSION_COOKIE):
-        return "session"
-    return "unknown"
-
-
-def _json_object(value: Mapping[str, Any]) -> str:
-    return json.dumps(value, sort_keys=True, separators=(",", ":"))
+    return json_object_or_empty(row["metadata_json"])
 
 
 def _validate_restart_container_target(value: str) -> str:

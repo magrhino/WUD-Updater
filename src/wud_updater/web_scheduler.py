@@ -33,6 +33,8 @@ from .web_models import (
     AutoUpdateSelection,
     WebSettings,
 )
+from .web_metadata import json_object as _json_object
+from .web_metadata import json_object_or_empty
 from .wud_file import parse_wud_file
 
 AUTO_UPDATE_POLL_SECONDS = 60.0
@@ -717,11 +719,7 @@ def _auto_update_schedule_row_metadata(
     ).fetchone()
     if row is None:
         return {}
-    try:
-        metadata = json.loads(str(row["metadata_json"] or "{}"))
-    except json.JSONDecodeError:
-        return {}
-    return metadata if isinstance(metadata, dict) else {}
+    return json_object_or_empty(row["metadata_json"])
 
 
 def _auto_update_days_from_row(row: sqlite3.Row) -> tuple[str, ...]:
@@ -737,7 +735,3 @@ def _auto_update_days_from_row(row: sqlite3.Row) -> tuple[str, ...]:
         if isinstance(item, str) and item in AUTO_UPDATE_DAYS and item not in days:
             days.append(item)
     return tuple(days)
-
-
-def _json_object(value: Mapping[str, Any]) -> str:
-    return json.dumps(value, sort_keys=True, separators=(",", ":"))

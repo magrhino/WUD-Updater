@@ -111,6 +111,7 @@ EOF
     src/wud_updater/web_diagnostics.py \
     src/wud_updater/web_health.py \
     src/wud_updater/web_jobs.py \
+    src/wud_updater/web_metadata.py \
     src/wud_updater/web_models.py \
     src/wud_updater/web_onboarding.py \
     src/wud_updater/web_pending.py \
@@ -155,6 +156,7 @@ EOF
     tests/test_python_web_diagnostics.py \
     tests/test_python_web_health.py \
     tests/test_python_web_jobs.py \
+    tests/test_python_web_metadata.py \
     tests/test_python_web_onboarding.py \
     tests/test_python_web_pending.py \
     tests/test_python_web_plans.py \

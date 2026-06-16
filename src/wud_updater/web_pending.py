@@ -28,12 +28,12 @@ from .plans import (
     resolve_pending_groups,
 )
 from .web_auth import (
-    SESSION_COOKIE,
-    _bearer_token_valid,
     _immediate_transaction,
+    _request_actor_type,
     _safe_exception_detail,
     _settings,
 )
+from .web_metadata import json_object as _json_object
 from .web_models import (
     PendingCleanupLine,
     PendingCleanupRemovedLine,
@@ -643,7 +643,7 @@ def _insert_pending_cleanup_audit(
     metadata = {
         "source": "webui",
         "operation": "remove_unmatched_pending",
-        "actor_type": _state_actor_type(settings, request),
+        "actor_type": _request_actor_type(settings, request),
         "line_numbers": [item.line_no for item in removed],
     }
     cursor = conn.execute(
@@ -740,7 +740,6 @@ def _insert_pending_cleanup_audit(
         )
     return run_id
 
-
 def _insert_pending_removal_audit(
     conn: sqlite3.Connection,
     settings: WebSettings,
@@ -751,7 +750,7 @@ def _insert_pending_removal_audit(
     metadata = {
         "source": "webui",
         "operation": "remove_selected_pending",
-        "actor_type": _state_actor_type(settings, request),
+        "actor_type": _request_actor_type(settings, request),
         "line_numbers": [item.line_no for item in removed],
     }
     cursor = conn.execute(
@@ -837,18 +836,3 @@ def _insert_pending_removal_audit(
             ),
         )
     return run_id
-
-
-def _state_actor_type(settings: WebSettings, request: Request) -> str:
-    if settings.dev_no_auth:
-        return "dev"
-    authorization = request.headers.get("authorization")
-    if _bearer_token_valid(settings, authorization):
-        return "bearer"
-    if request.cookies.get(SESSION_COOKIE):
-        return "session"
-    return "unknown"
-
-
-def _json_object(value: dict[str, Any]) -> str:
-    return json.dumps(value, sort_keys=True, separators=(",", ":"))

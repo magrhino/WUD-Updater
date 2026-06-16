@@ -4,13 +4,12 @@ from __future__ import annotations
 
 import hashlib
 import ipaddress
-import json
 import re
 import secrets
 import sqlite3
 import sys
 import time
-from collections.abc import Awaitable, Callable, Iterator, Mapping, Sequence
+from collections.abc import Awaitable, Callable, Iterator, Sequence
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -25,6 +24,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 from .db import DatabaseError, init_db, open_db, utc_timestamp
+from .web_metadata import json_object as _json_object
 from .web_models import (
     AdminRecoveryClaim,
     AuthSessionResponse,
@@ -1167,10 +1167,6 @@ def _insert_auth_audit(
     return run_id
 
 
-def _json_object(value: Mapping[str, Any]) -> str:
-    return json.dumps(value, sort_keys=True, separators=(",", ":"))
-
-
 def _bearer_token_valid(settings: WebSettings, authorization: str | None) -> bool:
     if not settings.auth_token:
         return False
@@ -1180,6 +1176,17 @@ def _bearer_token_valid(settings: WebSettings, authorization: str | None) -> boo
         and scheme.lower() == "bearer"
         and secrets.compare_digest(token, settings.auth_token)
     )
+
+
+def _request_actor_type(settings: WebSettings, request: Request) -> str:
+    if settings.dev_no_auth:
+        return "dev"
+    authorization = request.headers.get("authorization")
+    if _bearer_token_valid(settings, authorization):
+        return "bearer"
+    if request.cookies.get(SESSION_COOKIE):
+        return "session"
+    return "unknown"
 
 
 def _normalize_username(value: str) -> str:
