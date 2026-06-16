@@ -1,9 +1,14 @@
-import { createPinia, setActivePinia } from "pinia";
-import { flushPromises } from "@vue/test-utils";
-import { createMemoryHistory } from "vue-router";
+import { createPinia, setActivePinia, type Pinia } from "pinia";
+import {
+  flushPromises,
+  type DOMWrapper,
+  type VueWrapper,
+} from "@vue/test-utils";
+import { createMemoryHistory, type Router } from "vue-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { nextTick } from "vue";
 
+import type { SetupStatusResponse } from "../src/api/types";
 import App from "../src/App.vue";
 import { createWudRouter } from "../src/router";
 import { useAuthStore } from "../src/stores/auth";
@@ -27,6 +32,156 @@ import {
 } from "./helpers/fixtures";
 import { mountWithApp } from "./helpers/mount";
 
+const adminPassword = "correct horse battery staple";
+
+type WrapperQuery = VueWrapper | DOMWrapper<Element>;
+
+type AppStores = {
+  pinia: Pinia;
+  connection: ReturnType<typeof useConnectionStore>;
+  settings: ReturnType<typeof useSettingsStore>;
+  updates: ReturnType<typeof useUpdatesStore>;
+  runs: ReturnType<typeof useRunsStore>;
+};
+
+async function createReadyRouter(path: string): Promise<Router> {
+  const router = createWudRouter(createMemoryHistory());
+  await router.push(path);
+  await router.isReady();
+  return router;
+}
+
+function unauthenticatedSession(setupRequired: boolean) {
+  return authSession({
+    authenticated: false,
+    setup_required: setupRequired,
+    username: null,
+  });
+}
+
+function setupStatusResponse(
+  overrides: Partial<SetupStatusResponse>,
+): SetupStatusResponse {
+  return {
+    setup_required: false,
+    claim_required: false,
+    authenticated: false,
+    auth_required: true,
+    dev_auth_bypass: false,
+    mutations_enabled: false,
+    password_min_length: 12,
+    ...overrides,
+  };
+}
+
+async function submitAdminCredentials(wrapper: VueWrapper): Promise<void> {
+  const inputs = wrapper.findAll("input");
+  await inputs[0].setValue("admin");
+  await inputs[1].setValue(adminPassword);
+  await inputs[2].setValue(adminPassword);
+  await wrapper.find("form").trigger("submit");
+  await flushPromises();
+}
+
+function createAppStores(mutationsEnabled = false): AppStores {
+  const pinia = createPinia();
+  setActivePinia(pinia);
+  const auth = useAuthStore();
+  auth.session = authSession({ mutations_enabled: mutationsEnabled });
+
+  return {
+    pinia,
+    connection: useConnectionStore(),
+    settings: useSettingsStore(),
+    updates: useUpdatesStore(),
+    runs: useRunsStore(),
+  };
+}
+
+async function mountAppAt(stores: AppStores, path = "/") {
+  const router = await createReadyRouter(path);
+  const wrapper = mountWithApp(App, { pinia: stores.pinia, router });
+  return { router, wrapper };
+}
+
+function stubAppShellLoads({
+  connection,
+  settings,
+  updates,
+  runs,
+}: AppStores): void {
+  vi.spyOn(connection, "loadStatus").mockResolvedValue(undefined);
+  vi.spyOn(updates, "loadPending").mockResolvedValue(undefined);
+  vi.spyOn(runs, "loadRuns").mockResolvedValue(undefined);
+  vi.spyOn(settings, "loadServicePolicies").mockResolvedValue(undefined);
+  vi.spyOn(settings, "loadSnoozes").mockResolvedValue(undefined);
+  vi.spyOn(settings, "loadTagExclusions").mockResolvedValue(undefined);
+}
+
+function buttonByText(wrapper: WrapperQuery, text: string) {
+  const button = wrapper
+    .findAll("button")
+    .find((candidate) => candidate.text().includes(text));
+  if (!button) {
+    throw new Error(`button containing "${text}" was not rendered`);
+  }
+  return button;
+}
+
+function buttonByAriaLabel(wrapper: WrapperQuery, label: string) {
+  const button = wrapper
+    .findAll("button")
+    .find((candidate) =>
+      candidate.attributes("aria-label")?.includes(label),
+    );
+  if (!button) {
+    throw new Error(
+      `button with aria label containing "${label}" was not rendered`,
+    );
+  }
+  return button;
+}
+
+async function clickButtonByText(
+  wrapper: WrapperQuery,
+  text: string,
+): Promise<void> {
+  await buttonByText(wrapper, text).trigger("click");
+  await flushPromises();
+}
+
+function expectTextToContain(wrapper: WrapperQuery, ...fragments: string[]): void {
+  const text = wrapper.text();
+  for (const fragment of fragments) {
+    expect(text).toContain(fragment);
+  }
+}
+
+async function expectNextTheme(
+  themeButton: () => DOMWrapper<HTMLButtonElement>,
+  preference: string,
+  activeTheme: string,
+  label: string,
+): Promise<void> {
+  await themeButton().trigger("click");
+  await nextTick();
+
+  expect(window.localStorage.getItem(themeStorageKey)).toBe(preference);
+  expect(document.documentElement.dataset.theme).toBe(activeTheme);
+  expect(themeButton().attributes("aria-label")).toContain(label);
+}
+
+function primePinnedSelfUpdate(stores: AppStores): void {
+  stores.connection.status = statusResponse({ version: "0.24.2" });
+  stores.settings.coreUpdateTour = coreUpdateTourResponse();
+  stores.updates.selfUpdate = selfUpdateResponse({
+    strategy: "prepare_tag_update",
+    current_image: "ghcr.io/magrhino/wud-updater:v0.24.2",
+    target_image: "ghcr.io/magrhino/wud-updater:v0.25.0",
+    external_recreate_required: true,
+  });
+}
+
 describe("router auth guard", () => {
   beforeEach(() => {
     setActivePinia(createPinia());
@@ -34,30 +189,16 @@ describe("router auth guard", () => {
 
   it("routes setup-required users to setup", async () => {
     const auth = useAuthStore();
-    auth.session = authSession({
-      authenticated: false,
-      setup_required: true,
-      username: null,
-    });
-    const router = createWudRouter(createMemoryHistory());
-
-    await router.push("/pending");
-    await router.isReady();
+    auth.session = unauthenticatedSession(true);
+    const router = await createReadyRouter("/pending");
 
     expect(router.currentRoute.value.name).toBe("setup");
   });
 
   it("routes unauthenticated users to login with redirect", async () => {
     const auth = useAuthStore();
-    auth.session = authSession({
-      authenticated: false,
-      setup_required: false,
-      username: null,
-    });
-    const router = createWudRouter(createMemoryHistory());
-
-    await router.push("/pending");
-    await router.isReady();
+    auth.session = unauthenticatedSession(false);
+    const router = await createReadyRouter("/pending");
 
     expect(router.currentRoute.value.name).toBe("login");
     expect(router.currentRoute.value.query.redirect).toBe("/pending");
@@ -66,10 +207,7 @@ describe("router auth guard", () => {
   it("routes authenticated users away from login and setup", async () => {
     const auth = useAuthStore();
     auth.session = authSession({ authenticated: true });
-    const router = createWudRouter(createMemoryHistory());
-
-    await router.push("/login");
-    await router.isReady();
+    const router = await createReadyRouter("/login");
 
     expect(router.currentRoute.value.name).toBe("dashboard");
 
@@ -80,15 +218,10 @@ describe("router auth guard", () => {
 
   it("allows unauthenticated users to open admin recovery", async () => {
     const auth = useAuthStore();
-    auth.session = authSession({
-      authenticated: false,
-      setup_required: false,
-      username: null,
-    });
-    const router = createWudRouter(createMemoryHistory());
-
-    await router.push("/reset-admin?claim=recovery&user=admin");
-    await router.isReady();
+    auth.session = unauthenticatedSession(false);
+    const router = await createReadyRouter(
+      "/reset-admin?claim=recovery&user=admin",
+    );
 
     expect(router.currentRoute.value.name).toBe("reset-admin");
     expect(router.currentRoute.value.query.claim).toBe("recovery");
@@ -98,42 +231,26 @@ describe("router auth guard", () => {
     const pinia = createPinia();
     setActivePinia(pinia);
     const auth = useAuthStore();
-    auth.session = authSession({
-      authenticated: false,
-      setup_required: true,
-      username: null,
-    });
-    auth.setupStatus = {
+    auth.session = unauthenticatedSession(true);
+    auth.setupStatus = setupStatusResponse({
       setup_required: true,
       claim_required: true,
-      authenticated: false,
-      auth_required: true,
-      dev_auth_bypass: false,
-      mutations_enabled: false,
-      password_min_length: 12,
-    };
+    });
     vi.spyOn(auth, "loadSetupStatus").mockResolvedValue();
     vi.spyOn(auth, "claimSetup").mockImplementation(async () => {
       auth.session = authSession({ authenticated: true, setup_required: false });
       auth.setupStatus = null;
     });
-    const router = createWudRouter(createMemoryHistory());
-    await router.push("/setup?claim=claim");
-    await router.isReady();
+    const router = await createReadyRouter("/setup?claim=claim");
     const replace = vi.spyOn(router, "replace").mockResolvedValue(undefined);
     const wrapper = mountWithApp(SetupView, { pinia, router });
 
-    const inputs = wrapper.findAll("input");
-    await inputs[0].setValue("admin");
-    await inputs[1].setValue("correct horse battery staple");
-    await inputs[2].setValue("correct horse battery staple");
-    await wrapper.find("form").trigger("submit");
-    await flushPromises();
+    await submitAdminCredentials(wrapper);
 
     expect(auth.claimSetup).toHaveBeenCalledWith(
       "claim",
       "admin",
-      "correct horse battery staple",
+      adminPassword,
     );
     expect(replace).toHaveBeenCalledWith({
       name: "settings",
@@ -145,42 +262,25 @@ describe("router auth guard", () => {
     const pinia = createPinia();
     setActivePinia(pinia);
     const auth = useAuthStore();
-    auth.session = authSession({
-      authenticated: false,
-      setup_required: false,
-      username: null,
-    });
-    auth.setupStatus = {
-      setup_required: false,
-      claim_required: false,
-      authenticated: false,
-      auth_required: true,
-      dev_auth_bypass: false,
-      mutations_enabled: false,
-      password_min_length: 12,
-    };
+    auth.session = unauthenticatedSession(false);
+    auth.setupStatus = setupStatusResponse({});
     vi.spyOn(auth, "loadSetupStatus").mockResolvedValue();
     vi.spyOn(auth, "resetAdmin").mockImplementation(async () => {
       auth.session = authSession({ authenticated: true, setup_required: false });
       auth.setupStatus = null;
     });
-    const router = createWudRouter(createMemoryHistory());
-    await router.push("/reset-admin?claim=recovery&user=admin");
-    await router.isReady();
+    const router = await createReadyRouter(
+      "/reset-admin?claim=recovery&user=admin",
+    );
     const replace = vi.spyOn(router, "replace").mockResolvedValue(undefined);
     const wrapper = mountWithApp(ResetAdminView, { pinia, router });
 
-    const inputs = wrapper.findAll("input");
-    await inputs[0].setValue("admin");
-    await inputs[1].setValue("correct horse battery staple");
-    await inputs[2].setValue("correct horse battery staple");
-    await wrapper.find("form").trigger("submit");
-    await flushPromises();
+    await submitAdminCredentials(wrapper);
 
     expect(auth.resetAdmin).toHaveBeenCalledWith(
       "recovery",
       "admin",
-      "correct horse battery staple",
+      adminPassword,
     );
     expect(replace).toHaveBeenCalledWith({ name: "dashboard" });
   });
@@ -192,27 +292,12 @@ describe("app shell", () => {
   });
 
   it("shows a linked release tag in the shell footer", async () => {
-    const pinia = createPinia();
-    setActivePinia(pinia);
-    const auth = useAuthStore();
-    auth.session = authSession({ mutations_enabled: true });
-        const connection = useConnectionStore();
-    const settings = useSettingsStore();
-    const updates = useUpdatesStore();
-    const runs = useRunsStore();
-    connection.status = statusResponse({ version: "0.24.2" });
-    settings.coreUpdateTour = coreUpdateTourResponse();
-    vi.spyOn(connection, "loadStatus").mockResolvedValue(undefined as any);
-vi.spyOn(updates, "loadPending").mockResolvedValue(undefined as any);
-vi.spyOn(runs, "loadRuns").mockResolvedValue(undefined as any);
-vi.spyOn(settings, "loadServicePolicies").mockResolvedValue(undefined as any);
-vi.spyOn(settings, "loadSnoozes").mockResolvedValue(undefined as any);
-vi.spyOn(settings, "loadTagExclusions").mockResolvedValue(undefined as any);
-    const router = createWudRouter(createMemoryHistory());
-    await router.push("/");
-    await router.isReady();
+    const stores = createAppStores(true);
+    stores.connection.status = statusResponse({ version: "0.24.2" });
+    stores.settings.coreUpdateTour = coreUpdateTourResponse();
+    stubAppShellLoads(stores);
 
-    const wrapper = mountWithApp(App, { pinia, router });
+    const { wrapper } = await mountAppAt(stores);
     const versionLink = wrapper.find(
       'a[href="https://github.com/magrhino/WUD-Updater/releases/tag/v0.24.2"]',
     );
@@ -221,7 +306,7 @@ vi.spyOn(settings, "loadTagExclusions").mockResolvedValue(undefined as any);
     expect(versionLink.text()).toBe("v0.24.2");
     expect(wrapper.text()).not.toContain("Mutations enabled");
 
-    connection.status = statusResponse({ version: "dev-build" });
+    stores.connection.status = statusResponse({ version: "dev-build" });
     await nextTick();
 
     const buildLink = wrapper.find(
@@ -232,74 +317,25 @@ vi.spyOn(settings, "loadTagExclusions").mockResolvedValue(undefined as any);
   });
 
   it("cycles theme preference from system to light to dark", async () => {
-    const pinia = createPinia();
-    setActivePinia(pinia);
-    const auth = useAuthStore();
-    auth.session = authSession({ mutations_enabled: false });
-        const connection = useConnectionStore();
-    const settings = useSettingsStore();
-    const updates = useUpdatesStore();
-    const runs = useRunsStore();
-    settings.coreUpdateTour = coreUpdateTourResponse();
-    vi.spyOn(connection, "loadStatus").mockResolvedValue(undefined as any);
-vi.spyOn(updates, "loadPending").mockResolvedValue(undefined as any);
-vi.spyOn(runs, "loadRuns").mockResolvedValue(undefined as any);
-vi.spyOn(settings, "loadServicePolicies").mockResolvedValue(undefined as any);
-vi.spyOn(settings, "loadSnoozes").mockResolvedValue(undefined as any);
-vi.spyOn(settings, "loadTagExclusions").mockResolvedValue(undefined as any);
-    const router = createWudRouter(createMemoryHistory());
-    await router.push("/");
-    await router.isReady();
+    const stores = createAppStores();
+    stores.settings.coreUpdateTour = coreUpdateTourResponse();
+    stubAppShellLoads(stores);
 
-    const wrapper = mountWithApp(App, { pinia, router });
-    const themeButton = () => {
-      const button = wrapper
-        .findAll("button")
-        .find((candidate) =>
-          candidate.attributes("aria-label")?.includes("theme"),
-        );
-      if (!button) {
-        throw new Error("theme button was not rendered");
-      }
-      return button;
-    };
+    const { wrapper } = await mountAppAt(stores);
+    const themeButton = () => buttonByAriaLabel(wrapper, "theme");
 
     expect(themeButton().attributes("aria-label")).toContain("System theme");
     expect(themeButton().attributes("title")).toBe("Theme: System theme (light)");
 
-    await themeButton().trigger("click");
-    await nextTick();
-
-    expect(window.localStorage.getItem(themeStorageKey)).toBe("light");
-    expect(document.documentElement.dataset.theme).toBe("light");
-    expect(themeButton().attributes("aria-label")).toContain("Light theme");
-
-    await themeButton().trigger("click");
-    await nextTick();
-
-    expect(window.localStorage.getItem(themeStorageKey)).toBe("dark");
-    expect(document.documentElement.dataset.theme).toBe("dark");
-    expect(themeButton().attributes("aria-label")).toContain("Dark theme");
-
-    await themeButton().trigger("click");
-    await nextTick();
-
-    expect(window.localStorage.getItem(themeStorageKey)).toBe("auto");
-    expect(document.documentElement.dataset.theme).toBe("light");
-    expect(themeButton().attributes("aria-label")).toContain("System theme");
+    await expectNextTheme(themeButton, "light", "light", "Light theme");
+    await expectNextTheme(themeButton, "dark", "dark", "Dark theme");
+    await expectNextTheme(themeButton, "auto", "light", "System theme");
   });
 
   it("hydrates configured managed theme preference after authentication", async () => {
-    const pinia = createPinia();
-    setActivePinia(pinia);
-    const auth = useAuthStore();
-    auth.session = authSession({ mutations_enabled: true });
-        const connection = useConnectionStore();
-    const settings = useSettingsStore();
-    const updates = useUpdatesStore();
-    const runs = useRunsStore();
-    settings.coreUpdateTour = coreUpdateTourResponse();
-    settings.settings = settingsResponse({
+    const stores = createAppStores(true);
+    stores.settings.coreUpdateTour = coreUpdateTourResponse();
+    stores.settings.settings = settingsResponse({
       managed: [
         {
           key: "theme_preference",
@@ -313,238 +349,146 @@ vi.spyOn(settings, "loadTagExclusions").mockResolvedValue(undefined as any);
         settingsResponse().managed[1]!,
       ],
     });
-    vi.spyOn(connection, "loadStatus").mockResolvedValue(undefined as any);
-vi.spyOn(updates, "loadPending").mockResolvedValue(undefined as any);
-vi.spyOn(runs, "loadRuns").mockResolvedValue(undefined as any);
-vi.spyOn(settings, "loadServicePolicies").mockResolvedValue(undefined as any);
-vi.spyOn(settings, "loadSnoozes").mockResolvedValue(undefined as any);
-vi.spyOn(settings, "loadTagExclusions").mockResolvedValue(undefined as any);
-    const router = createWudRouter(createMemoryHistory());
-    await router.push("/");
-    await router.isReady();
+    stubAppShellLoads(stores);
 
-    const wrapper = mountWithApp(App, { pinia, router });
+    const { wrapper } = await mountAppAt(stores);
     await nextTick();
 
     expect(window.localStorage.getItem(themeStorageKey)).toBe("dark");
     expect(document.documentElement.dataset.theme).toBe("dark");
-    expect(
-      wrapper.findAll("button").some((button) =>
-        button.attributes("aria-label")?.includes("Dark theme"),
-      ),
-    ).toBe(true);
+    expect(buttonByAriaLabel(wrapper, "Dark theme").exists()).toBe(true);
   });
 
   it("shows self-update banner and confirms release notes before applying", async () => {
-    const pinia = createPinia();
-    setActivePinia(pinia);
-    const auth = useAuthStore();
-    auth.session = authSession({ mutations_enabled: true });
-        const connection = useConnectionStore();
-    const settings = useSettingsStore();
-    const updates = useUpdatesStore();
-    const runs = useRunsStore();
-    connection.status = statusResponse({ version: "0.24.2" });
-    settings.coreUpdateTour = coreUpdateTourResponse();
-    updates.selfUpdate = selfUpdateResponse({
+    const stores = createAppStores(true);
+    stores.connection.status = statusResponse({ version: "0.24.2" });
+    stores.settings.coreUpdateTour = coreUpdateTourResponse();
+    stores.updates.selfUpdate = selfUpdateResponse({
       release_notes_truncated: true,
     });
-    vi.spyOn(connection, "loadStatus").mockResolvedValue(undefined as any);
-vi.spyOn(updates, "loadPending").mockResolvedValue(undefined as any);
-vi.spyOn(runs, "loadRuns").mockResolvedValue(undefined as any);
-vi.spyOn(settings, "loadServicePolicies").mockResolvedValue(undefined as any);
-vi.spyOn(settings, "loadSnoozes").mockResolvedValue(undefined as any);
-vi.spyOn(settings, "loadTagExclusions").mockResolvedValue(undefined as any);
+    stubAppShellLoads(stores);
     const applySelfUpdate = vi
-      .spyOn(updates, "applySelfUpdate")
+      .spyOn(stores.updates, "applySelfUpdate")
       .mockResolvedValue(selfUpdateApplyResponse());
-    const router = createWudRouter(createMemoryHistory());
-    await router.push("/");
-    await router.isReady();
 
-    const wrapper = mountWithApp(App, { pinia, router });
+    const { wrapper } = await mountAppAt(stores);
     await flushPromises();
 
-    const text = wrapper.text();
-    expect(text).toContain("Update available: v0.24.2 → v0.25.0");
-    expect(text).toContain("ghcr.io/magrhino/wud-updater:latest");
-    const updateButton = wrapper
-      .findAll("button")
-      .find((button) => button.text().includes("Pull image"));
-    await updateButton?.trigger("click");
-    await flushPromises();
+    expectTextToContain(
+      wrapper,
+      "Update available: v0.24.2 → v0.25.0",
+      "ghcr.io/magrhino/wud-updater:latest",
+    );
+    await clickButtonByText(wrapper, "Pull image");
 
     const dialog = wrapper.find('[role="dialog"]');
-    expect(dialog.text()).toContain("Update WUD-Updater");
-    expect(dialog.text()).toContain("Update Plan");
-    expect(dialog.text()).toContain("Release Notes");
+    expectTextToContain(
+      dialog,
+      "Update WUD-Updater",
+      "Update Plan",
+      "Release Notes",
+    );
     expect(dialog.text()).not.toContain("Adds self-update review");
     expect(applySelfUpdate).not.toHaveBeenCalled();
 
-    const notesTab = dialog
-      .findAll("button")
-      .find((button) => button.text().includes("Release Notes"));
-    await notesTab?.trigger("click");
-    await flushPromises();
+    await clickButtonByText(dialog, "Release Notes");
 
-    expect(dialog.text()).toContain("Release notes");
-    expect(dialog.text()).toContain("Cap 10");
-    expect(dialog.text()).toContain("Adds self-update review");
+    expectTextToContain(
+      dialog,
+      "Release notes",
+      "Cap 10",
+      "Adds self-update review",
+    );
 
-    const confirmButton = dialog
-      .findAll("button")
-      .find((button) => button.text().includes("Pull image"));
-    await confirmButton?.trigger("click");
-    await flushPromises();
+    await clickButtonByText(dialog, "Pull image");
 
     expect(applySelfUpdate).toHaveBeenCalledTimes(1);
   });
 
   it("shows pinned self-update tag prepare preview before applying", async () => {
-    const pinia = createPinia();
-    setActivePinia(pinia);
-    const auth = useAuthStore();
-    auth.session = authSession({ mutations_enabled: true });
-        const connection = useConnectionStore();
-    const settings = useSettingsStore();
-    const updates = useUpdatesStore();
-    const runs = useRunsStore();
-    connection.status = statusResponse({ version: "0.24.2" });
-    settings.coreUpdateTour = coreUpdateTourResponse();
-    updates.selfUpdate = selfUpdateResponse({
-      strategy: "prepare_tag_update",
-      current_image: "ghcr.io/magrhino/wud-updater:v0.24.2",
-      target_image: "ghcr.io/magrhino/wud-updater:v0.25.0",
-      external_recreate_required: true,
-    });
-    vi.spyOn(connection, "loadStatus").mockResolvedValue(undefined as any);
-vi.spyOn(updates, "loadPending").mockResolvedValue(undefined as any);
-vi.spyOn(runs, "loadRuns").mockResolvedValue(undefined as any);
-vi.spyOn(settings, "loadServicePolicies").mockResolvedValue(undefined as any);
-vi.spyOn(settings, "loadSnoozes").mockResolvedValue(undefined as any);
-vi.spyOn(settings, "loadTagExclusions").mockResolvedValue(undefined as any);
+    const stores = createAppStores(true);
+    primePinnedSelfUpdate(stores);
+    stubAppShellLoads(stores);
     const planSelfUpdate = vi
-      .spyOn(updates, "planSelfUpdate")
+      .spyOn(stores.updates, "planSelfUpdate")
       .mockImplementation(async () => {
         const plan = selfUpdatePlanResponse();
-        updates.selfUpdatePlan = plan;
+        stores.updates.selfUpdatePlan = plan;
         return plan;
       });
     const applySelfUpdate = vi
-      .spyOn(updates, "applySelfUpdate")
+      .spyOn(stores.updates, "applySelfUpdate")
       .mockResolvedValue(selfUpdatePrepareResponse());
-    const router = createWudRouter(createMemoryHistory());
-    await router.push("/");
-    await router.isReady();
 
-    const wrapper = mountWithApp(App, { pinia, router });
+    const { wrapper } = await mountAppAt(stores);
     await flushPromises();
 
-    const updateButton = wrapper
-      .findAll("button")
-      .find((button) => button.text().includes("Prepare tag update"));
-    await updateButton?.trigger("click");
-    await flushPromises();
+    await clickButtonByText(wrapper, "Prepare tag update");
 
     const dialog = wrapper.find('[role="dialog"]');
     expect(planSelfUpdate).toHaveBeenCalledTimes(1);
-    expect(dialog.text()).toContain("This updates the Compose image tag");
-    expect(dialog.text()).toContain("Compose tag update");
-    expect(dialog.text()).toContain("wud-updater");
-    expect(dialog.text()).toContain("ghcr.io/magrhino/wud-updater:v0.25.0");
+    expectTextToContain(
+      dialog,
+      "This updates the Compose image tag",
+      "Compose tag update",
+      "wud-updater",
+      "ghcr.io/magrhino/wud-updater:v0.25.0",
+    );
 
-    const confirmButton = dialog
-      .findAll("button")
-      .find((button) => button.text().includes("Prepare tag update"));
-    await confirmButton?.trigger("click");
-    await flushPromises();
+    await clickButtonByText(dialog, "Prepare tag update");
 
     expect(applySelfUpdate).toHaveBeenCalledTimes(1);
   });
 
   it("keeps pinned self-update confirmation disabled until preview loads", async () => {
-    const pinia = createPinia();
-    setActivePinia(pinia);
-    const auth = useAuthStore();
-    auth.session = authSession({ mutations_enabled: true });
-        const connection = useConnectionStore();
-    const settings = useSettingsStore();
-    const updates = useUpdatesStore();
-    const runs = useRunsStore();
-    connection.status = statusResponse({ version: "0.24.2" });
-    settings.coreUpdateTour = coreUpdateTourResponse();
-    updates.selfUpdate = selfUpdateResponse({
-      strategy: "prepare_tag_update",
-      current_image: "ghcr.io/magrhino/wud-updater:v0.24.2",
-      target_image: "ghcr.io/magrhino/wud-updater:v0.25.0",
-      external_recreate_required: true,
-    });
-    vi.spyOn(connection, "loadStatus").mockResolvedValue(undefined as any);
-vi.spyOn(updates, "loadPending").mockResolvedValue(undefined as any);
-vi.spyOn(runs, "loadRuns").mockResolvedValue(undefined as any);
-vi.spyOn(settings, "loadServicePolicies").mockResolvedValue(undefined as any);
-vi.spyOn(settings, "loadSnoozes").mockResolvedValue(undefined as any);
-vi.spyOn(settings, "loadTagExclusions").mockResolvedValue(undefined as any);
+    const stores = createAppStores(true);
+    primePinnedSelfUpdate(stores);
+    stubAppShellLoads(stores);
     let resolvePlan: (plan: ReturnType<typeof selfUpdatePlanResponse>) => void;
     const planPromise = new Promise<ReturnType<typeof selfUpdatePlanResponse>>(
       (resolve) => {
         resolvePlan = resolve;
       },
     );
-    vi.spyOn(updates, "planSelfUpdate").mockImplementation(async () => {
+    vi.spyOn(stores.updates, "planSelfUpdate").mockImplementation(async () => {
       const plan = await planPromise;
-      updates.selfUpdatePlan = plan;
+      stores.updates.selfUpdatePlan = plan;
       return plan;
     });
     const applySelfUpdate = vi
-      .spyOn(updates, "applySelfUpdate")
+      .spyOn(stores.updates, "applySelfUpdate")
       .mockResolvedValue(selfUpdatePrepareResponse());
-    const router = createWudRouter(createMemoryHistory());
-    await router.push("/");
-    await router.isReady();
 
-    const wrapper = mountWithApp(App, { pinia, router });
+    const { wrapper } = await mountAppAt(stores);
     await flushPromises();
 
-    const updateButton = wrapper
-      .findAll("button")
-      .find((button) => button.text().includes("Prepare tag update"));
-    await updateButton?.trigger("click");
-    await flushPromises();
+    await clickButtonByText(wrapper, "Prepare tag update");
 
     const dialog = wrapper.find('[role="dialog"]');
-    const confirmButton = dialog
-      .findAll("button")
-      .find((button) => button.text().includes("Prepare tag update"));
-    expect(confirmButton?.attributes("disabled")).toBeDefined();
-    await confirmButton?.trigger("click");
+    const confirmButton = buttonByText(dialog, "Prepare tag update");
+    expect(confirmButton.attributes("disabled")).toBeDefined();
+    await confirmButton.trigger("click");
     expect(applySelfUpdate).not.toHaveBeenCalled();
 
     resolvePlan!(selfUpdatePlanResponse());
     await flushPromises();
-    expect(confirmButton?.attributes("disabled")).toBeUndefined();
+    expect(confirmButton.attributes("disabled")).toBeUndefined();
   });
 
   it("shows settings navigation and refreshes the settings route", async () => {
-    const pinia = createPinia();
-    setActivePinia(pinia);
-    const auth = useAuthStore();
-    auth.session = authSession({ mutations_enabled: false });
-        const connection = useConnectionStore();
-    const settings = useSettingsStore();
-    const updates = useUpdatesStore();
-    const runs = useRunsStore();
-    vi.spyOn(connection, "loadStatus").mockResolvedValue();
-    const loadSettings = vi.spyOn(settings, "loadSettings").mockResolvedValue();
-    const loadOnboarding = vi.spyOn(settings, "loadOnboarding").mockResolvedValue();
-    const loadCoreUpdateTour = vi
-      .spyOn(settings, "loadCoreUpdateTour")
+    const stores = createAppStores();
+    vi.spyOn(stores.connection, "loadStatus").mockResolvedValue();
+    const loadSettings = vi
+      .spyOn(stores.settings, "loadSettings")
       .mockResolvedValue();
-    const router = createWudRouter(createMemoryHistory());
-    await router.push("/settings");
-    await router.isReady();
+    const loadOnboarding = vi
+      .spyOn(stores.settings, "loadOnboarding")
+      .mockResolvedValue();
+    const loadCoreUpdateTour = vi
+      .spyOn(stores.settings, "loadCoreUpdateTour")
+      .mockResolvedValue();
 
-    const wrapper = mountWithApp(App, { pinia, router });
+    const { wrapper } = await mountAppAt(stores, "/settings");
 
     expect(wrapper.text()).toContain("Settings");
     loadSettings.mockClear();
@@ -556,22 +500,12 @@ vi.spyOn(settings, "loadTagExclusions").mockResolvedValue(undefined as any);
   });
 
   it("refreshes the audit route from the shell", async () => {
-    const pinia = createPinia();
-    setActivePinia(pinia);
-    const auth = useAuthStore();
-    auth.session = authSession({ mutations_enabled: false });
-        const connection = useConnectionStore();
-    const settings = useSettingsStore();
-    const updates = useUpdatesStore();
-    const runs = useRunsStore();
-    vi.spyOn(connection, "loadStatus").mockResolvedValue();
-    vi.spyOn(settings, "loadSettings").mockResolvedValue();
-    const loadRuns = vi.spyOn(runs, "loadRuns").mockResolvedValue();
-    const router = createWudRouter(createMemoryHistory());
-    await router.push("/audit");
-    await router.isReady();
+    const stores = createAppStores();
+    vi.spyOn(stores.connection, "loadStatus").mockResolvedValue();
+    vi.spyOn(stores.settings, "loadSettings").mockResolvedValue();
+    const loadRuns = vi.spyOn(stores.runs, "loadRuns").mockResolvedValue();
 
-    const wrapper = mountWithApp(App, { pinia, router });
+    const { wrapper } = await mountAppAt(stores, "/audit");
     await flushPromises();
 
     const navItems = wrapper.findAll(".nav-item");
@@ -586,26 +520,17 @@ vi.spyOn(settings, "loadTagExclusions").mockResolvedValue(undefined as any);
   });
 
   it("shows retag navigation and refreshes the retags route", async () => {
-    const pinia = createPinia();
-    setActivePinia(pinia);
-    const auth = useAuthStore();
-    auth.session = authSession({ mutations_enabled: false });
-        const connection = useConnectionStore();
-    const settings = useSettingsStore();
-    const updates = useUpdatesStore();
-    updates.retagTargets = retagTargetsResponse();
-    vi.spyOn(connection, "loadStatus").mockResolvedValue();
-    vi.spyOn(settings, "loadSettings").mockResolvedValue();
-    vi.spyOn(settings, "loadCoreUpdateTour").mockResolvedValue();
-    vi.spyOn(updates, "loadSelfUpdate").mockResolvedValue();
+    const stores = createAppStores();
+    stores.updates.retagTargets = retagTargetsResponse();
+    vi.spyOn(stores.connection, "loadStatus").mockResolvedValue();
+    vi.spyOn(stores.settings, "loadSettings").mockResolvedValue();
+    vi.spyOn(stores.settings, "loadCoreUpdateTour").mockResolvedValue();
+    vi.spyOn(stores.updates, "loadSelfUpdate").mockResolvedValue();
     const loadRetagTargets = vi
-      .spyOn(updates, "loadRetagTargets")
+      .spyOn(stores.updates, "loadRetagTargets")
       .mockResolvedValue();
-    const router = createWudRouter(createMemoryHistory());
-    await router.push("/retags");
-    await router.isReady();
 
-    const wrapper = mountWithApp(App, { pinia, router });
+    const { router, wrapper } = await mountAppAt(stores, "/retags");
     await flushPromises();
 
     const navItems = wrapper.findAll(".nav-item");
