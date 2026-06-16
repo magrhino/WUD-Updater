@@ -1109,7 +1109,12 @@ watch(
           </div>
 
           <details class="stack-details">
-            <summary :aria-label="`Details for ${group.name}`">Details</summary>
+            <summary
+              class="disclosure-summary disclosure-summary-triangle"
+              :aria-label="`Details for ${group.name}`"
+            >
+              Details
+            </summary>
             <div class="stack-items">
               <PendingUpdateRow
                 v-for="item in group.items"
@@ -1153,7 +1158,12 @@ watch(
             </div>
           </div>
           <details class="stack-details">
-            <summary aria-label="Details for snoozed updates">Details</summary>
+            <summary
+              class="disclosure-summary disclosure-summary-triangle"
+              aria-label="Details for snoozed updates"
+            >
+              Details
+            </summary>
             <div class="stack-items">
               <PendingUpdateRow
                 v-for="{ group, item } in dependencySnoozedItems"
@@ -1195,7 +1205,12 @@ watch(
             </div>
           </div>
           <details class="stack-details">
-            <summary aria-label="Details for unmatched updates">Details</summary>
+            <summary
+              class="disclosure-summary disclosure-summary-triangle"
+              aria-label="Details for unmatched updates"
+            >
+              Details
+            </summary>
             <div class="stack-items">
               <PendingUpdateRow
                 v-for="item in unmatchedItems"
@@ -1793,33 +1808,18 @@ watch(
   min-width: 0;
 }
 
-.stack-details summary {
+.stack-details .disclosure-summary {
   display: inline-flex;
   align-items: center;
   gap: 6px;
   width: fit-content;
   min-height: 32px;
-  cursor: pointer;
   color: var(--color-action-blue);
   font-size: 0.86rem;
   font-weight: 700;
 }
 
-.stack-details summary::before {
-  content: "";
-  width: 0;
-  height: 0;
-  border-top: 4px solid transparent;
-  border-bottom: 4px solid transparent;
-  border-left: 5px solid currentColor;
-  transition: transform 180ms ease-out;
-}
-
-.stack-details[open] summary::before {
-  transform: rotate(90deg);
-}
-
-.stack-details[open] summary {
+.stack-details[open] .disclosure-summary {
   margin-bottom: 8px;
 }
 
@@ -1858,7 +1858,7 @@ watch(
     min-height: 44px;
   }
 
-  .stack-details summary {
+  .stack-details .disclosure-summary {
     min-height: 44px;
   }
 

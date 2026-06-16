@@ -197,7 +197,7 @@ function snapshotLineScope(
     />
 
     <details class="apply-job-details" :open="!active">
-      <summary>
+      <summary class="disclosure-summary disclosure-summary-triangle">
         <span>Applied scope</span>
         <n-tag size="small">{{ impactLabel || updateLabel }}</n-tag>
       </summary>
@@ -516,43 +516,22 @@ function snapshotLineScope(
   padding: 2px 0 0;
 }
 
-.apply-job-details summary {
+.apply-job-details .disclosure-summary {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 10px;
   min-width: 0;
-  cursor: pointer;
-  list-style: none;
 }
 
-.apply-job-details summary::-webkit-details-marker {
-  display: none;
-}
-
-.apply-job-details summary::before {
-  content: "";
-  flex: 0 0 auto;
-  width: 0;
-  height: 0;
-  border-top: 4px solid transparent;
-  border-bottom: 4px solid transparent;
-  border-left: 5px solid var(--color-action-blue);
-  transition: transform var(--motion-base) var(--ease-out-quart);
-}
-
-.apply-job-details summary span {
+.apply-job-details .disclosure-summary span {
   flex: 1 1 auto;
   min-width: 0;
   color: var(--color-ink);
   font-weight: 700;
 }
 
-.apply-job-details[open] summary::before {
-  transform: rotate(90deg);
-}
-
-.apply-job-details[open] summary {
+.apply-job-details[open] .disclosure-summary {
   margin-bottom: 8px;
 }
 
@@ -759,7 +738,7 @@ function snapshotLineScope(
     width: fit-content;
   }
 
-  .apply-job-details summary {
+  .apply-job-details .disclosure-summary {
     min-height: 44px;
   }
 }

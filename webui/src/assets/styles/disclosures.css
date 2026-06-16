@@ -1,0 +1,23 @@
+.disclosure-summary {
+  cursor: pointer;
+  list-style: none;
+}
+
+.disclosure-summary::-webkit-details-marker {
+  display: none;
+}
+
+.disclosure-summary-triangle::before {
+  content: "";
+  flex: 0 0 auto;
+  width: 0;
+  height: 0;
+  border-top: 4px solid transparent;
+  border-bottom: 4px solid transparent;
+  border-left: 5px solid var(--color-action-blue);
+  transition: transform 180ms ease-out;
+}
+
+details[open] > .disclosure-summary-triangle::before {
+  transform: rotate(90deg);
+}
