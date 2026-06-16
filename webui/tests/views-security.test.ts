@@ -2951,7 +2951,7 @@ describe("mutating WebUI views", () => {
   });
 
   it("replays and dismisses the core update tour from settings", async () => {
-    const { pinia, auth, connection, settings, updates, runs } = setupStores(true);
+    const { pinia, settings } = setupStores(true);
     settings.settings = settingsResponse();
     settings.onboarding = onboardingChecklistResponse({ visible: false });
     settings.coreUpdateTour = coreUpdateTourResponse({
@@ -2991,7 +2991,7 @@ describe("mutating WebUI views", () => {
   });
 
   it("shows the dashboard step of the core update tour", async () => {
-    const { pinia, auth, connection, settings, updates, runs } = setupStores(true);
+    const { pinia, connection, settings, updates, runs } = setupStores(true);
     connection.status = statusResponse({
       pending_count: 2,
       db_ready: true,
@@ -3035,7 +3035,7 @@ vi.spyOn(settings, "loadTagExclusions").mockResolvedValue(undefined as any);
   });
 
   it("closes the preflight modal before showing apply tour guidance", async () => {
-    const { pinia, auth, connection, settings, updates, runs } = setupStores(true);
+    const { pinia, settings, updates } = setupStores(true);
     updates.pending = pendingResponse();
     updates.releaseNotes = releaseNotesResponse([]);
     settings.coreUpdateTour = coreUpdateTourResponse({

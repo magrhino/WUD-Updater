@@ -162,13 +162,15 @@ const pendingHeadingText = computed(() =>
       ? "Pending updates unavailable"
       : "Loading pending updates",
 );
-const selectableLineNumbers = computed(() =>
-  groupingReady.value
-    ? stackLineNumbers.value
-    : activeDependencySnoozes.value.length
-      ? []
-      : allLineNumbers.value,
-);
+const selectableLineNumbers = computed(() => {
+  if (groupingReady.value) {
+    return stackLineNumbers.value;
+  }
+  if (activeDependencySnoozes.value.length) {
+    return [];
+  }
+  return allLineNumbers.value;
+});
 const selectAllLabel = computed(() =>
   groupingReady.value ? "Select all stack updates" : "Select all",
 );

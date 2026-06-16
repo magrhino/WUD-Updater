@@ -31,6 +31,7 @@ from wud_updater.digest_provenance import DigestTagProvenance  # noqa: E402
 
 
 DEMO_WUD_UPDATER_LATEST_IMAGE = "ghcr.io/magrhino/wud-updater:latest"
+DEMO_CREATED_AT = "2026-05-28T12:00:00+00:00"
 
 PENDING_LINES = (
     "# Demo WUD pending update file for local WebUI development.",
@@ -152,7 +153,7 @@ DEMO_SNOOZES = (
         "service_key": "media/radarr",
         "snoozed_until": "2099-01-01T00:00:00+00:00",
         "reason": "demo maintenance window",
-        "created_at": "2026-05-28T12:00:00+00:00",
+        "created_at": DEMO_CREATED_AT,
     },
     {
         "service_key": "data/postgres",
@@ -167,7 +168,7 @@ DEMO_DEPENDENCY_SNOOZES = (
         "service_key": "media/sonarr",
         "wait_for_service_key": "media/prowlarr",
         "reason": "wait for indexer update",
-        "created_at": "2026-05-28T12:00:00+00:00",
+        "created_at": DEMO_CREATED_AT,
     },
 )
 
@@ -526,7 +527,7 @@ def seed_demo_state(root: Path) -> dict[str, Path]:
 
 
 def _write_demo_management_state(conn) -> None:
-    created_at = "2026-05-28T12:00:00+00:00"
+    created_at = DEMO_CREATED_AT
     for policy in DEMO_SERVICE_POLICIES:
         with conn:
             conn.execute(

@@ -1202,37 +1202,43 @@ export class DemoApiState {
     );
   }
 
+  private upsertServicePolicy(
+    operation: Extract<StateOperation, { kind: "upsert_service_policy" }>,
+  ): StateOperationResponse {
+    const existing = this.policies.find(
+      (policy) => policy.service_key === operation.service_key,
+    );
+    const policy: ServicePolicyRecord = {
+      service_key: operation.service_key,
+      update_mode: operation.update_mode ?? existing?.update_mode ?? "",
+      auto_update: operation.auto_update ?? existing?.auto_update ?? false,
+      snooze_default_seconds:
+        "snooze_default_seconds" in operation
+          ? (operation.snooze_default_seconds ?? null)
+          : (existing?.snooze_default_seconds ?? null),
+      auto_update_time:
+        "auto_update_time" in operation
+          ? (operation.auto_update_time ?? null)
+          : (existing?.auto_update_time ?? null),
+      auto_update_days:
+        "auto_update_days" in operation
+          ? (operation.auto_update_days ?? [])
+          : (existing?.auto_update_days ?? []),
+      created_at: existing?.created_at ?? nowIso(),
+      updated_at: nowIso(),
+      metadata: { source: "demo" },
+    };
+    this.policies = upsertBy(
+      this.policies,
+      policy,
+      (item) => item.service_key === policy.service_key,
+    );
+    return this.operationResponse(operation.kind, "service_policy", policy.service_key, policy);
+  }
+
   stateOperation(operation: StateOperation): StateOperationResponse {
     if (operation.kind === "upsert_service_policy") {
-      const existing = this.policies.find(
-        (policy) => policy.service_key === operation.service_key,
-      );
-      const policy: ServicePolicyRecord = {
-        service_key: operation.service_key,
-        update_mode: operation.update_mode ?? existing?.update_mode ?? "",
-        auto_update: operation.auto_update ?? existing?.auto_update ?? false,
-        snooze_default_seconds:
-          "snooze_default_seconds" in operation
-            ? (operation.snooze_default_seconds ?? null)
-            : (existing?.snooze_default_seconds ?? null),
-        auto_update_time:
-          "auto_update_time" in operation
-            ? (operation.auto_update_time ?? null)
-            : (existing?.auto_update_time ?? null),
-        auto_update_days:
-          "auto_update_days" in operation
-            ? (operation.auto_update_days ?? [])
-            : (existing?.auto_update_days ?? []),
-        created_at: existing?.created_at ?? nowIso(),
-        updated_at: nowIso(),
-        metadata: { source: "demo" },
-      };
-      this.policies = upsertBy(
-        this.policies,
-        policy,
-        (item) => item.service_key === policy.service_key,
-      );
-      return this.operationResponse(operation.kind, "service_policy", policy.service_key, policy);
+      return this.upsertServicePolicy(operation);
     }
 
     if (operation.kind === "delete_service_policy") {
