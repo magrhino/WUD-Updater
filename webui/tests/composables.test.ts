@@ -311,6 +311,16 @@ describe("usePendingQueueState", () => {
     expect(state.selectableLineNumbers.value).toEqual([2]);
     expect(state.pendingSourceLabel.value).toBe("images.todo");
   });
+
+  it("treats whitespace-only pending source files as empty", () => {
+    const updates = useUpdatesStore();
+    updates.pending = { ...pendingResponse([]), source_file: "   " };
+
+    const state = usePendingQueueState();
+
+    expect(state.pendingSourceLabel.value).toBe("Pending file");
+    expect(state.pendingSourceDisplay.value).toBe("Pending file");
+  });
 });
 
 describe("usePendingSelectionState", () => {
@@ -341,6 +351,8 @@ describe("usePendingSelectionState", () => {
     });
 
     const item = updates.pending.items[0];
+    expect(state.tagOverridesForLines([1])).toEqual([]);
+
     state.updateTagOverride(item, "bad tag");
     expect(state.selectedLineNumbers.value).toEqual([1]);
     expect(state.tagOverrideErrorForLines([1])).toContain("invalid new tag");
@@ -354,6 +366,50 @@ describe("usePendingSelectionState", () => {
     state.updateCheckedRowKeys([2, 2, "bad-key"]);
     expect(state.selectedLineNumbers.value).toEqual([2]);
     expect(onSelectionChanged).toHaveBeenCalled();
+  });
+
+  it("clears stale tag overrides when pending items reload", async () => {
+    const updates = useUpdatesStore();
+    updates.pending = pendingResponse([
+      pendingItem({
+        line_no: 1,
+        image: "repo/app:1.0",
+        desired_tag: "1.1",
+      }),
+    ]);
+    const state = usePendingSelectionState({
+      pendingItems: computed(() => updates.pending?.items ?? []),
+      selectableLineNumbers: computed(() => [1]),
+    });
+
+    state.updateTagOverride(updates.pending.items[0], "1.2");
+    expect(state.tagOverridesForLines([1])).toEqual([
+      { line_no: 1, tag: "1.2" },
+    ]);
+
+    updates.pending = pendingResponse([
+      pendingItem({
+        line_no: 1,
+        image: "repo/app:1.0",
+        desired_tag: "1.1",
+      }),
+    ]);
+    await flushPromises();
+    expect(state.tagOverridesForLines([1])).toEqual([
+      { line_no: 1, tag: "1.2" },
+    ]);
+
+    updates.pending = pendingResponse([
+      pendingItem({
+        line_no: 1,
+        image: "repo/app:2.0",
+        desired_tag: "2.1",
+      }),
+    ]);
+    await flushPromises();
+
+    expect(state.tagOverrideValue(updates.pending.items[0])).toBe("2.1");
+    expect(state.tagOverridesForLines([1])).toEqual([]);
   });
 });
 

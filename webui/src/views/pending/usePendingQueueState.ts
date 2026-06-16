@@ -144,7 +144,7 @@ export function usePendingQueueState() {
     pendingSourceFileName(pendingSourceFile.value),
   );
   const pendingSourceDisplay = computed(() =>
-    updates.pending?.source_file
+    pendingSourceLabel.value !== "Pending file"
       ? `Source ${pendingSourceLabel.value}`
       : "Pending file",
   );

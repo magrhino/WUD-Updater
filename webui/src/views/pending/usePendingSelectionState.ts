@@ -23,7 +23,12 @@ export function usePendingSelectionState(
   const updates = useUpdatesStore();
   const selectedLineNumbers = ref<number[]>([]);
   const tagOverrides = ref<Record<number, string>>({});
+  const tagOverrideKeys = ref<Record<number, string>>({});
   const selectedLineSet = computed(() => new Set(selectedLineNumbers.value));
+
+  function tagOverrideKey(item: PendingItem): string {
+    return JSON.stringify([item.raw, item.image, item.repo, item.desired_tag]);
+  }
 
   function tagOverrideValue(item: PendingItem): string {
     return tagOverrides.value[item.line_no] ?? item.desired_tag;
@@ -49,17 +54,16 @@ export function usePendingSelectionState(
 
   function tagOverridesForLines(lineNumbers: number[]): TagOverrideRequest[] {
     return pendingItemsForLines(lineNumbers)
-      .filter((item) => item.desired_tag)
+      .filter(
+        (item) =>
+          item.desired_tag &&
+          tagOverrideKeys.value[item.line_no] === tagOverrideKey(item) &&
+          tagOverrideValue(item).trim() !== item.desired_tag,
+      )
       .map((item) => ({
         line_no: item.line_no,
         tag: tagOverrideValue(item).trim(),
-      }))
-      .filter((item) => {
-        const original = options.pendingItems.value.find(
-          (pendingItem) => pendingItem.line_no === item.line_no,
-        );
-        return original !== undefined && item.tag !== original.desired_tag;
-      });
+      }));
   }
 
   function lineNumbersHaveTagUpdates(lineNumbers: number[]): boolean {
@@ -76,6 +80,10 @@ export function usePendingSelectionState(
     tagOverrides.value = {
       ...tagOverrides.value,
       [item.line_no]: value,
+    };
+    tagOverrideKeys.value = {
+      ...tagOverrideKeys.value,
+      [item.line_no]: tagOverrideKey(item),
     };
     if (!selectedLineSet.value.has(item.line_no)) {
       selectedLineNumbers.value = uniqueSorted([
@@ -157,14 +165,22 @@ export function usePendingSelectionState(
     () => options.pendingItems.value,
     (items) => {
       const next: Record<number, string> = {};
+      const nextKeys: Record<number, string> = {};
       const pendingLineNumbers = new Set<number>();
       for (const item of items) {
         pendingLineNumbers.add(item.line_no);
-        if (item.desired_tag) {
-          next[item.line_no] = tagOverrides.value[item.line_no] ?? item.desired_tag;
+        const key = tagOverrideKey(item);
+        if (
+          item.desired_tag &&
+          tagOverrideKeys.value[item.line_no] === key &&
+          tagOverrides.value[item.line_no] !== undefined
+        ) {
+          next[item.line_no] = tagOverrides.value[item.line_no];
+          nextKeys[item.line_no] = key;
         }
       }
       tagOverrides.value = next;
+      tagOverrideKeys.value = nextKeys;
       selectedLineNumbers.value = uniqueSorted(
         selectedLineNumbers.value.filter((lineNo) =>
           pendingLineNumbers.has(lineNo),
