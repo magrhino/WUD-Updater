@@ -34,6 +34,7 @@ import PendingApplyJobPanel from "../components/pending/PendingApplyJobPanel.vue
 import PendingCleanupModal from "../components/pending/PendingCleanupModal.vue";
 import PendingPlanReviewModal from "../components/pending/PendingPlanReviewModal.vue";
 import PendingRemovalModal from "../components/pending/PendingRemovalModal.vue";
+import PendingUpdateRow from "../components/pending/PendingUpdateRow.vue";
 import { useUpdatesStore } from "../stores/updates";
 import { useRunsStore } from "../stores/runs";
 import { useSettingsStore } from "../stores/settings";
@@ -1110,103 +1111,27 @@ watch(
           <details class="stack-details">
             <summary :aria-label="`Details for ${group.name}`">Details</summary>
             <div class="stack-items">
-              <div
+              <PendingUpdateRow
                 v-for="item in group.items"
                 :key="`${group.name}-${item.line_no}`"
-                class="pending-update-row"
-                :class="{ selected: selectedLineSet.has(item.line_no) }"
-              >
-                <div class="pending-update-main">
-                  <n-checkbox
-                    :checked="selectedLineSet.has(item.line_no)"
-                    :aria-label="`Select update ${item.image}`"
-                    @update:checked="toggleLine(item.line_no, Boolean($event))"
-                  >
-                    <span class="sr-only">Select update </span>
-                    <strong>{{ groupedItemServices(item) }}</strong>
-                  </n-checkbox>
-                  <n-tag size="small" :type="groupedItemActionTagType(item)">
-                    {{ groupedItemActionLabel(item) }}
-                  </n-tag>
-                </div>
-                <div class="pending-update-detail">
-                  <code>{{ item.image }}</code>
-                  <span>-></span>
-                  <code>{{ groupedItemTarget(item) }}</code>
-                </div>
-                <div class="pending-update-meta">
-                  <span>Pending file line #{{ item.line_no }}</span>
-                  <span
-                    v-if="riskCues(item).length"
-                    class="risk-badges-container"
-                    aria-label="Safety cues"
-                  >
-                    <n-tag
-                      v-for="cue in riskCues(item)"
-                      :key="`${item.line_no}-${cue.key}`"
-                      size="small"
-                      :type="cue.type"
-                      class="safety-badge"
-                    >
-                      {{ cue.label }}
-                    </n-tag>
-                  </span>
-                  <span v-if="groupedItemTagRewriteLabel(item)" class="tag-rewrite-detail">
-                    <n-tag size="small" type="warning">Tag rewrite</n-tag>
-                    {{ groupedItemTagRewriteLabel(item) }}
-                  </span>
-                  <div v-if="releaseNoteFor(item)?.links.length" class="release-notes-cell">
-                    <a
-                      v-for="link in releaseNoteFor(item)?.links ?? []"
-                      :key="`${item.line_no}-${link.kind}-${link.url}`"
-                      class="release-note-link"
-                      :href="link.url"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                    >
-                      {{ link.label }}
-                      <ExternalLink :size="14" aria-hidden="true" />
-                    </a>
-                    <span
-                      v-if="releaseNoteFor(item)?.breaking"
-                      class="release-breaking-cue"
-                      :title="releaseNoteFor(item)?.breaking_reasons.join(' ')"
-                      aria-label="Possible breaking change"
-                    >
-                      <AlertTriangle :size="14" aria-hidden="true" />
-                      Possible breaking change
-                    </span>
-                  </div>
-                  <div v-if="item.diagnostic" class="pending-update-diagnostic">
-                    <n-alert type="warning" :title="item.diagnostic.message">
-                      {{ item.diagnostic.hint }}
-                    </n-alert>
-                  </div>
-                  <span
-                    v-if="!releaseNoteFor(item)?.links.length"
-                    class="release-notes-muted"
-                    :title="releaseNoteReason(releaseNoteFor(item)) || undefined"
-                  >
-                    <span class="release-notes-status">
-                      {{ releaseNoteStatus(releaseNoteFor(item)) }}
-                    </span>
-                    <span v-if="releaseNoteReason(releaseNoteFor(item))" class="release-notes-reason">
-                      {{ releaseNoteReason(releaseNoteFor(item)) }}
-                    </span>
-                  </span>
-                </div>
-                <div v-if="item.desired_tag" class="pending-update-tag">
-                  <span>New tag</span>
-                  <n-input
-                    :value="tagOverrideValue(item)"
-                    size="small"
-                    class="tag-override-input"
-                    :placeholder="item.desired_tag"
-                    :input-props="tagInputProps(item)"
-                    @update:value="updateTagOverride(item, $event)"
-                  />
-                </div>
-              </div>
+                :item="item"
+                :selected="selectedLineSet.has(item.line_no)"
+                :service-label="groupedItemServices(item)"
+                :status-label="groupedItemActionLabel(item)"
+                :status-tag-type="groupedItemActionTagType(item)"
+                :risk-cues="riskCues(item)"
+                :tag-rewrite-label="groupedItemTagRewriteLabel(item)"
+                :release-note="releaseNoteFor(item)"
+                :release-note-status="releaseNoteStatus(releaseNoteFor(item))"
+                :release-note-reason="releaseNoteReason(releaseNoteFor(item))"
+                show-release-notes
+                :show-diagnostic="Boolean(item.diagnostic)"
+                :tag-override-value="tagOverrideValue(item)"
+                :show-tag-input="Boolean(item.desired_tag)"
+                :tag-input-props="tagInputProps(item)"
+                @toggle="toggleLine"
+                @update-tag="(value) => updateTagOverride(item, value)"
+              />
             </div>
           </details>
         </article>
@@ -1230,58 +1155,24 @@ watch(
           <details class="stack-details">
             <summary aria-label="Details for snoozed updates">Details</summary>
             <div class="stack-items">
-              <div
+              <PendingUpdateRow
                 v-for="{ group, item } in dependencySnoozedItems"
                 :key="`dependency-snoozed-${item.line_no}`"
-                class="pending-update-row"
-                :class="{ selected: selectedLineSet.has(item.line_no) }"
-              >
-                <div class="pending-update-main">
-                  <n-checkbox
-                    :checked="selectedLineSet.has(item.line_no)"
-                    :aria-label="`Select update ${item.image}`"
-                    @update:checked="toggleLine(item.line_no, Boolean($event))"
-                  >
-                    <span class="sr-only">Select update </span>
-                    <strong>{{ group.name }} / {{ groupedItemServices(item) }}</strong>
-                  </n-checkbox>
-                  <n-tag size="small" type="default">Snoozed</n-tag>
-                </div>
-                <div class="pending-update-detail">
-                  <code>{{ item.image }}</code>
-                  <span>-></span>
-                  <code>{{ groupedItemTarget(item) }}</code>
-                </div>
-                <div class="pending-update-meta">
-                  <span>Pending file line #{{ item.line_no }}</span>
-                  <span
-                    v-if="riskCues(item).length"
-                    class="risk-badges-container"
-                    aria-label="Safety cues"
-                  >
-                    <n-tag
-                      v-for="cue in riskCues(item)"
-                      :key="`${item.line_no}-${cue.key}`"
-                      size="small"
-                      :type="cue.type"
-                      class="safety-badge"
-                    >
-                      {{ cue.label }}
-                    </n-tag>
-                  </span>
-                </div>
-                <div v-if="item.desired_tag" class="pending-update-tag">
-                  <span>New tag</span>
-                  <n-input
-                    :value="tagOverrideValue(item)"
-                    size="small"
-                    class="tag-override-input"
-                    :placeholder="item.desired_tag"
-                    :input-props="tagInputProps(item)"
-                    @update:value="updateTagOverride(item, $event)"
-                  />
-                </div>
-              </div>
+                :item="item"
+                :selected="selectedLineSet.has(item.line_no)"
+                :group-name="group.name"
+                :service-label="groupedItemServices(item)"
+                status-label="Snoozed"
+                status-tag-type="default"
+                :risk-cues="riskCues(item)"
+                :show-diagnostic="false"
+                :show-release-notes="false"
+                :tag-override-value="tagOverrideValue(item)"
+                :show-tag-input="Boolean(item.desired_tag)"
+                :tag-input-props="tagInputProps(item)"
+                @toggle="toggleLine"
+                @update-tag="(value) => updateTagOverride(item, value)"
+              />
             </div>
           </details>
         </article>
@@ -1306,51 +1197,24 @@ watch(
           <details class="stack-details">
             <summary aria-label="Details for unmatched updates">Details</summary>
             <div class="stack-items">
-              <div
+              <PendingUpdateRow
                 v-for="item in unmatchedItems"
                 :key="`unmatched-${item.line_no}`"
-                class="pending-update-row"
-                :class="{ selected: selectedLineSet.has(item.line_no) }"
-              >
-                <div class="pending-update-main">
-                  <n-checkbox
-                    :checked="selectedLineSet.has(item.line_no)"
-                    :aria-label="`Select update ${item.image}`"
-                    @update:checked="toggleLine(item.line_no, Boolean($event))"
-                  >
-                    <span class="sr-only">Select update </span>
-                    <strong>{{ item.repo }}</strong>
-                  </n-checkbox>
-                  <n-tag size="small" type="warning">
-                    {{ staleDiagnosticLabel(item) }}
-                  </n-tag>
-                </div>
-                <div class="pending-update-detail">
-                  <code>{{ item.image }}</code>
-                  <span>-></span>
-                  <code>{{ groupedItemTarget(item) }}</code>
-                </div>
-                <div class="pending-update-meta">
-                  <span>Pending file line #{{ item.line_no }}</span>
-                  <span>{{ staleDiagnosticDetail(item) }}</span>
-                </div>
-                <div v-if="item.diagnostic" class="pending-update-diagnostic">
-                  <n-alert type="warning" :title="item.diagnostic.message">
-                    {{ item.diagnostic.hint }}
-                  </n-alert>
-                </div>
-                <div v-if="item.desired_tag" class="pending-update-tag">
-                  <span>New tag</span>
-                  <n-input
-                    :value="tagOverrideValue(item)"
-                    size="small"
-                    class="tag-override-input"
-                    :placeholder="item.desired_tag"
-                    :input-props="tagInputProps(item)"
-                    @update:value="updateTagOverride(item, $event)"
-                  />
-                </div>
-              </div>
+                :item="item"
+                :selected="selectedLineSet.has(item.line_no)"
+                :service-label="item.repo"
+                :status-label="staleDiagnosticLabel(item)"
+                status-tag-type="warning"
+                :risk-cues="[]"
+                :meta-detail="staleDiagnosticDetail(item)"
+                :show-diagnostic="Boolean(item.diagnostic)"
+                :show-release-notes="false"
+                :tag-override-value="tagOverrideValue(item)"
+                :show-tag-input="Boolean(item.desired_tag)"
+                :tag-input-props="tagInputProps(item)"
+                @toggle="toggleLine"
+                @update-tag="(value) => updateTagOverride(item, value)"
+              />
             </div>
           </details>
         </article>
@@ -1765,8 +1629,7 @@ watch(
   background: var(--color-panel-tint);
 }
 
-.stack-card-header,
-.pending-update-main {
+.stack-card-header {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
@@ -1787,8 +1650,7 @@ watch(
   min-width: 0;
 }
 
-.stack-title-block strong,
-.pending-update-main strong {
+.stack-title-block strong {
   min-width: 0;
   overflow-wrap: anywhere;
 }
@@ -1966,53 +1828,6 @@ watch(
   border-top: 1px solid var(--color-border-subtle);
 }
 
-.pending-update-row {
-  display: grid;
-  gap: 8px;
-  min-width: 0;
-  padding: 10px 0;
-  border-bottom: 1px solid var(--color-border-subtle);
-}
-
-.pending-update-row:last-child {
-  border-bottom: 0;
-}
-
-.pending-update-row.selected {
-  padding-right: 10px;
-  padding-left: 10px;
-  border-radius: 7px;
-  background: var(--color-panel-tint);
-}
-
-.pending-update-detail,
-.pending-update-meta,
-.pending-update-tag {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px 8px;
-  min-width: 0;
-}
-
-.pending-update-detail {
-  color: var(--color-code-text);
-  font-family: var(--font-mono);
-  font-size: 0.82rem;
-}
-
-.pending-update-detail code,
-.pending-update-meta span {
-  min-width: 0;
-  overflow-wrap: anywhere;
-}
-
-.pending-update-meta,
-.pending-update-tag {
-  color: var(--color-muted-text);
-  font-size: 0.82rem;
-}
-
 .recovery-actions {
   flex-wrap: wrap;
   margin-top: 8px;
@@ -2020,11 +1835,6 @@ watch(
 
 .stack-change-risk-cues {
   display: inline-flex;
-}
-
-.pending-update-diagnostic {
-  margin-top: 8px;
-  width: 100%;
 }
 
 @media (max-width: 920px) {
@@ -2038,8 +1848,7 @@ watch(
 @media (max-width: 560px) {
   .selection-toolbar,
   .batch-action-bar,
-  .stack-card-header,
-  .pending-update-main {
+  .stack-card-header {
     display: grid;
   }
 
@@ -2049,14 +1858,12 @@ watch(
     min-height: 44px;
   }
 
-  .pending-update-tag .tag-override-input,
   .stack-details summary {
     min-height: 44px;
   }
 
   .pending-actions :deep(.n-checkbox),
-  .stack-title-block :deep(.n-checkbox),
-  .pending-update-main :deep(.n-checkbox) {
+  .stack-title-block :deep(.n-checkbox) {
     min-height: 44px;
     display: inline-flex;
     align-items: center;
