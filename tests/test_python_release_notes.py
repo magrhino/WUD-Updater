@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -18,8 +19,110 @@ from wud_updater.release_notes import (
 )
 from wud_updater.wud_file import parse_wud_text
 
+PARITY_SPEC = Path(__file__).with_name("fixtures") / "release-note-parity.json"
+
+
+def parity_case(name: str) -> dict[str, object]:
+    return json.loads(PARITY_SPEC.read_text(encoding="utf-8"))[name]
+
 
 class ReleaseNotesTests(unittest.TestCase):
+    def test_shared_parity_spec_covers_repo_routing(self) -> None:
+        ghcr = parity_case("ghcr_major")
+        parsed = parse_wud_text(str(ghcr["image"]))
+
+        contexts = release_note_contexts(parsed.targets, {})
+
+        self.assertEqual(contexts[0].provider, ghcr["provider"])
+        self.assertEqual(contexts[0].image_repo, ghcr["repo"])
+        self.assertEqual(contexts[0].upstream_repo, ghcr["repo"])
+        self.assertEqual(contexts[0].current_tag, ghcr["current_tag"])
+
+        oci = parity_case("oci_source")
+        parsed = parse_wud_text(str(oci["image"]))
+        contexts = release_note_contexts(
+            parsed.targets,
+            {},
+            source_resolver=lambda _target: str(oci["source"]),
+        )
+
+        self.assertEqual(contexts[0].provider, oci["provider"])
+        self.assertEqual(contexts[0].image_repo, oci["repo"])
+        self.assertEqual(contexts[0].upstream_repo, oci["repo"])
+
+        lsio = parity_case("lsio_radarr")
+        with tempfile.TemporaryDirectory() as tmp:
+            upstream_map = Path(tmp) / "upstreams.txt"
+            upstream_map.write_text(
+                f"{lsio['lsio_repo']}: {lsio['upstream_repo']}\n",
+                encoding="utf-8",
+            )
+            parsed = parse_wud_text(str(lsio["image"]))
+            contexts = release_note_contexts(
+                parsed.targets,
+                {"UPSTREAM_MAP": str(upstream_map)},
+            )
+
+        self.assertEqual(contexts[0].provider, lsio["provider"])
+        self.assertEqual(contexts[0].image_repo, lsio["lsio_repo"])
+        self.assertEqual(contexts[0].upstream_repo, lsio["upstream_repo"])
+
+    def test_shared_parity_spec_covers_breaking_and_lsio_semver(self) -> None:
+        ghcr = parity_case("ghcr_major")
+        breaking, _reasons = detect_breaking(
+            str(ghcr["release_body"]),
+            str(ghcr["current_tag"]),
+            str(ghcr["release_tag"]),
+        )
+
+        self.assertEqual(breaking, ghcr["breaking"])
+
+        lsio = parity_case("lsio_remote_semver")
+        with tempfile.TemporaryDirectory() as tmp:
+            upstream_map = Path(tmp) / "upstreams.txt"
+            upstream_map.write_text(
+                f"{lsio['lsio_repo']}: {lsio['upstream_repo']}\n",
+                encoding="utf-8",
+            )
+            parsed = parse_wud_text(str(lsio["image"]))
+            responses = {
+                f"https://api.github.com/repos/{lsio['lsio_repo']}/releases/latest": {
+                    "tag_name": lsio["lsio_tag"],
+                    "name": lsio["lsio_tag"],
+                    "html_url": (
+                        "https://github.com/"
+                        f"{lsio['lsio_repo']}/releases/tag/{lsio['lsio_tag']}"
+                    ),
+                    "body": lsio["lsio_body"],
+                    "published_at": "2026-01-02T00:00:00Z",
+                },
+                (
+                    "https://api.github.com/repos/"
+                    f"{lsio['upstream_repo']}/releases/tags/{lsio['upstream_tag']}"
+                ): {
+                    "tag_name": lsio["upstream_tag"],
+                    "name": lsio["upstream_tag"],
+                    "html_url": (
+                        "https://github.com/"
+                        f"{lsio['upstream_repo']}/releases/tag/{lsio['upstream_tag']}"
+                    ),
+                    "body": "Routine update",
+                    "published_at": "2026-01-02T00:00:00Z",
+                },
+            }
+            client = GitHubClient(fetch_json=lambda url: responses[url])
+            with open_db(":memory:") as conn:
+                init_db(conn)
+                items = refresh_release_notes(
+                    conn,
+                    parsed.targets,
+                    {"UPSTREAM_MAP": str(upstream_map)},
+                    client=client,
+                )
+
+        self.assertEqual(items[0].provider, "lsio")
+        self.assertEqual(items[0].release_tag, lsio["upstream_tag"])
+
     def test_detect_breaking_uses_keywords_and_major_bumps(self) -> None:
         breaking, reasons = detect_breaking(
             "This release includes a required migration.",
