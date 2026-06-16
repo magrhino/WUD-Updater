@@ -470,3 +470,11 @@ watch(statusFilter, (nextFilter) => {
     </n-modal>
   </section>
 </template>
+
+<style scoped>
+.exclusion-table .management-table-head,
+.exclusion-table .management-row {
+  grid-template-columns:
+    minmax(160px, 1.2fr) minmax(100px, 0.5fr) minmax(90px, 0.5fr) minmax(92px, 0.5fr) minmax(198px, auto);
+}
+</style>

@@ -1,0 +1,249 @@
+.management-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 14px;
+  margin-top: 16px;
+}
+
+.form-actions {
+  display: flex;
+  grid-column: 1 / -1;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.filter-control {
+  width: 156px;
+}
+
+.management-table {
+  display: grid;
+  margin-top: 16px;
+  overflow: hidden;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: var(--color-surface);
+}
+
+.management-table-head,
+.management-row {
+  display: grid;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  padding: 10px 12px;
+}
+
+.management-table-head {
+  color: var(--color-muted-text);
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  background: var(--color-table-head);
+}
+
+.management-row {
+  border-top: 1px solid var(--color-border-subtle);
+}
+
+.management-row strong,
+.management-row span,
+.management-row code {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.management-row code {
+  font-family: var(--font-mono);
+  font-size: 0.84rem;
+}
+
+.table-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.pending-table-value {
+  display: inline-block;
+  min-width: 0;
+  max-width: 100%;
+  color: var(--color-code-text);
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+code.pending-table-value {
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
+}
+
+.audit-status-value {
+  display: flex;
+  align-items: center;
+}
+
+.audit-status-value .audit-status-tag {
+  flex: 0 0 auto;
+}
+
+.tag-override-input {
+  max-width: 180px;
+}
+
+.digest-value {
+  color: var(--color-code-text);
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
+  overflow-wrap: anywhere;
+}
+
+.digest-provenance {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.digest-provenance-primary {
+  color: var(--color-ink);
+  font-weight: 600;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.release-notes-cell {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.release-note-link,
+.release-breaking-cue {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 24px;
+  border-radius: 999px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+
+.release-note-link {
+  color: var(--color-action-blue);
+}
+
+.release-note-link:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.release-breaking-cue {
+  padding: 0 8px;
+  color: var(--color-warning);
+  background: var(--color-warning-bg);
+}
+
+.release-notes-muted {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  color: var(--color-muted-text);
+  font-size: 0.82rem;
+}
+
+.release-notes-status {
+  font-weight: 700;
+}
+
+.release-notes-reason {
+  max-width: 34rem;
+  font-size: 0.78rem;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.risk-badges-container {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.risk-badges-muted {
+  color: var(--color-muted-text);
+  font-size: 0.82rem;
+}
+
+.safety-badge {
+  font-weight: 600;
+}
+
+.retag-table-cell {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.retag-table-cell span,
+.retag-service-cell strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.retag-table-cell span {
+  color: var(--color-muted-text);
+  font-size: 0.84rem;
+  line-height: 1.35;
+}
+
+.retag-service-cell strong {
+  color: var(--color-ink);
+}
+
+.retag-choice-cell {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+@media (max-width: 560px) {
+  .management-form {
+    grid-template-columns: 1fr;
+  }
+
+  .filter-control {
+    width: 100%;
+  }
+
+  .form-actions .n-button,
+  .table-actions .n-button {
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  .filter-control .n-base-selection,
+  .mobile-card .tag-override-input {
+    min-height: 44px;
+  }
+
+  .tag-override-input {
+    max-width: none;
+  }
+
+  .table-actions {
+    justify-content: flex-start;
+  }
+}

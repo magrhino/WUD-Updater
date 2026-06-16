@@ -452,3 +452,11 @@ onMounted(() => {
     </n-modal>
   </section>
 </template>
+
+<style scoped>
+.policy-table .management-table-head,
+.policy-table .management-row {
+  grid-template-columns:
+    minmax(180px, 1.5fr) minmax(86px, 0.6fr) minmax(72px, 0.4fr) minmax(150px, 0.8fr) minmax(96px, 0.5fr) minmax(184px, auto);
+}
+</style>

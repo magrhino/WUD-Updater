@@ -20,6 +20,7 @@ import "./assets/styles/foundation.css";
 import "./assets/styles/base.css";
 import "./assets/styles/transitions.css";
 import "./assets/styles/utilities.css";
+import "./assets/styles/data-tables.css";
 import "./styles.css";
 
 const naive = create({
