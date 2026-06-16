@@ -75,10 +75,15 @@ function setupStatusResponse(
 }
 
 async function submitAdminCredentials(wrapper: VueWrapper): Promise<void> {
-  const inputs = wrapper.findAll("input");
-  await inputs[0].setValue("admin");
-  await inputs[1].setValue(adminPassword);
-  await inputs[2].setValue(adminPassword);
+  await wrapper
+    .find('input[name="username"][autocomplete="username"]')
+    .setValue("admin");
+  await wrapper
+    .find('input[name="password"][autocomplete="new-password"]')
+    .setValue(adminPassword);
+  await wrapper
+    .find('input[name="confirm-password"][autocomplete="new-password"]')
+    .setValue(adminPassword);
   await wrapper.find("form").trigger("submit");
   await flushPromises();
 }
@@ -166,7 +171,7 @@ async function expectNextTheme(
   await themeButton().trigger("click");
   await nextTick();
 
-  expect(window.localStorage.getItem(themeStorageKey)).toBe(preference);
+  expect(globalThis.localStorage.getItem(themeStorageKey)).toBe(preference);
   expect(document.documentElement.dataset.theme).toBe(activeTheme);
   expect(themeButton().attributes("aria-label")).toContain(label);
 }
@@ -354,7 +359,7 @@ describe("app shell", () => {
     const { wrapper } = await mountAppAt(stores);
     await nextTick();
 
-    expect(window.localStorage.getItem(themeStorageKey)).toBe("dark");
+    expect(globalThis.localStorage.getItem(themeStorageKey)).toBe("dark");
     expect(document.documentElement.dataset.theme).toBe("dark");
     expect(buttonByAriaLabel(wrapper, "Dark theme").exists()).toBe(true);
   });

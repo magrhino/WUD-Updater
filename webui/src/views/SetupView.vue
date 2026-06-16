@@ -46,20 +46,40 @@ const {
       </n-alert>
 
       <n-form @submit.prevent="submit">
-        <n-form-item label="Username" required feedback="Required for setup.">
-          <n-input v-model:value="username" autocomplete="username" autofocus />
+        <n-form-item
+          label="Username"
+          required
+          feedback="Required for setup."
+          :label-props="{ for: 'setup-username' }"
+        >
+          <n-input
+            v-model:value="username"
+            autofocus
+            :input-props="{
+              id: 'setup-username',
+              name: 'username',
+              autocomplete: 'username',
+              required: true,
+            }"
+          />
         </n-form-item>
         <n-form-item
           :label="`Password (${passwordMinLength}+ characters)`"
           required
           :validation-status="passwordValidationStatus"
           :feedback="passwordFeedback"
+          :label-props="{ for: 'setup-password' }"
         >
           <n-input
             v-model:value="password"
             type="password"
             show-password-on="click"
-            autocomplete="new-password"
+            :input-props="{
+              id: 'setup-password',
+              name: 'password',
+              autocomplete: 'new-password',
+              required: true,
+            }"
           />
         </n-form-item>
         <n-form-item
@@ -67,13 +87,19 @@ const {
           required
           :validation-status="confirmPasswordValidationStatus"
           :feedback="confirmPasswordFeedback"
+          :label-props="{ for: 'setup-confirm-password' }"
         >
           <n-input
             v-model:value="confirmPassword"
             type="password"
             show-password-on="click"
-            autocomplete="new-password"
             :status="confirmPasswordValidationStatus"
+            :input-props="{
+              id: 'setup-confirm-password',
+              name: 'confirm-password',
+              autocomplete: 'new-password',
+              required: true,
+            }"
           />
         </n-form-item>
         <n-button
