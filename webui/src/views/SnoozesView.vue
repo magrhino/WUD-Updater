@@ -340,3 +340,11 @@ watch(snoozeState, (nextState) => {
     </n-modal>
   </section>
 </template>
+
+<style scoped>
+.snooze-table .management-table-head,
+.snooze-table .management-row {
+  grid-template-columns:
+    minmax(160px, 1fr) minmax(220px, 1fr) minmax(150px, 1fr) minmax(86px, 0.4fr) minmax(110px, auto);
+}
+</style>
