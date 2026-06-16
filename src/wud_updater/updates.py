@@ -16,7 +16,8 @@ from pathlib import Path
 
 from .banner import print_startup_banner
 from .config import COMPOSE_IGNORE_PATHS_ENV, DIGEST_PIN_UPDATES_ENV
-from .images import image_has_tag, image_with_tag, tag_value_valid
+from .images import image_with_tag, tag_value_valid
+from .line_specs import LineSpecError, parse_line_spec
 from .self_update import (
     ReleaseSelfUpdate,
     github_release_self_update,
@@ -24,6 +25,7 @@ from .self_update import (
     self_update_enabled,
 )
 from .terminal import TerminalRenderer
+from .wud_file import WudTarget, parse_wud_text
 
 from .truenas import (
     DEFAULT_TRUENAS_STATUS_TIMEOUT,
@@ -40,8 +42,6 @@ DEFAULT_UPDATE_MODE = "stop"
 DEFAULT_MAX_WAIT = "180"
 DEFAULT_LOCK_TIMEOUT = "30"
 _SECONDS_RE = re.compile(r"^[0-9]+$")
-_DISPLAY_RANGE_RE = re.compile(r"^([0-9]+)-([0-9]+)$")
-_DISPLAY_NUMBER_RE = re.compile(r"^[0-9]+$")
 _SHELL_SPACE_RE = re.compile(r"[ \t\n\r\v\f]")
 _LEGACY_SHA_SUFFIX_RE = re.compile(r"^(.*\S)\s+sha256=\S+$")
 _DOCKER_CLI_ENV_NAMES = (
@@ -62,6 +62,8 @@ class UpdatesError(RuntimeError):
 class TodoEntry:
     line_no: int
     raw: str
+    first: str
+    desired_tag: str
 
     @property
     def display_raw(self) -> str:
@@ -69,22 +71,6 @@ class TodoEntry:
         if match is None:
             return self.raw
         return match.group(1)
-
-    @property
-    def first(self) -> str:
-        return _first_token(self.raw)
-
-    @property
-    def desired_tag(self) -> str:
-        tag = ""
-        for token in _rest_tokens(self.raw):
-            if token.startswith("tag="):
-                tag = token.removeprefix("tag=")
-        if not image_has_tag(self.first):
-            return ""
-        if not tag_value_valid(tag):
-            return ""
-        return tag
 
 
 @dataclass(frozen=True)
@@ -1087,61 +1073,45 @@ def load_configured_environ(
 
 
 def _parse_todo_entries(text: str) -> list[TodoEntry]:
-    entries: list[TodoEntry] = []
-    for line_no, raw in enumerate(text.splitlines(), start=1):
-        trimmed = raw.lstrip()
-        if trimmed == "" or trimmed.startswith("#"):
-            continue
-        entries.append(TodoEntry(line_no=line_no, raw=raw))
-    return entries
-
-
-def _first_token(value: str) -> str:
-    stripped = value.strip()
-    if stripped == "":
-        return ""
-    match = _SHELL_SPACE_RE.search(stripped)
-    if match is None:
-        return stripped
-    return stripped[: match.start()]
-
-
-def _rest_tokens(value: str) -> list[str]:
-    first = _first_token(value)
-    if first == "":
-        return []
-    rest = value.strip()[len(first) :]
-    stripped = rest.strip()
-    if stripped == "":
-        return []
-    return [part for part in _SHELL_SPACE_RE.split(stripped) if part]
+    parsed = parse_wud_text(text)
+    return [_todo_entry_from_target(target) for target in parsed.targets]
 
 
 def _self_update_pull_image(target: str) -> str:
-    image = _first_token(target)
-    if image == "":
+    entry = _todo_entry_from_raw(1, target)
+    if entry is None:
         return ""
 
-    desired_tag = _self_update_desired_tag(target)
-
-    if desired_tag:
-        return image_with_tag(image, desired_tag)
-    return image
+    if entry.desired_tag:
+        return image_with_tag(entry.first, entry.desired_tag)
+    return entry.first
 
 
 def _self_update_desired_tag(target: str) -> str:
-    image = _first_token(target)
-    if image == "":
-        return ""
+    entry = _todo_entry_from_raw(1, target)
+    return "" if entry is None else entry.desired_tag
 
-    desired_tag = ""
-    for token in _rest_tokens(target):
-        if token.startswith("tag="):
-            desired_tag = token.removeprefix("tag=")
 
-    if desired_tag and image_has_tag(image) and tag_value_valid(desired_tag):
-        return desired_tag
-    return ""
+def _todo_entry_from_target(target: WudTarget) -> TodoEntry:
+    return TodoEntry(
+        line_no=target.line_no,
+        raw=target.raw,
+        first=target.first,
+        desired_tag=target.desired_tag,
+    )
+
+
+def _todo_entry_from_raw(line_no: int, raw: str) -> TodoEntry | None:
+    parsed = parse_wud_text(raw)
+    if not parsed.targets:
+        return None
+    target = parsed.targets[0]
+    return TodoEntry(
+        line_no=line_no,
+        raw=raw,
+        first=target.first,
+        desired_tag=target.desired_tag,
+    )
 
 
 def _docker_cli_env(environ: Mapping[str, str]) -> list[str]:
@@ -1186,7 +1156,9 @@ def _read_todo_entries_with_sudo(
         if not sep:
             continue
         try:
-            entries.append(TodoEntry(line_no=int(line_no, 10), raw=raw))
+            entry = _todo_entry_from_raw(int(line_no, 10), raw)
+            if entry is not None:
+                entries.append(entry)
         except ValueError:
             continue
     return entries
@@ -1219,37 +1191,12 @@ def _display_todo_entries(
 
 def _parse_display_spec(spec: str, max_value: int) -> list[int]:
     cleaned = _SHELL_SPACE_RE.sub("", spec)
-    if cleaned == "":
+    if cleaned == "" or any(part == "" for part in cleaned.split(",")):
         raise ValueError("empty selection")
-
-    result: list[int] = []
-    for part in cleaned.split(","):
-        if part == "":
-            raise ValueError("empty selection part")
-        range_match = _DISPLAY_RANGE_RE.fullmatch(part)
-        if range_match is not None:
-            start = int(range_match.group(1), 10)
-            end = int(range_match.group(2), 10)
-            if start < 1 or end < start or end > max_value:
-                raise ValueError("invalid range")
-            for value in range(start, end + 1):
-                if value not in result:
-                    result.append(value)
-            continue
-
-        if _DISPLAY_NUMBER_RE.fullmatch(part) is not None:
-            value = int(part, 10)
-            if value < 1 or value > max_value:
-                raise ValueError("invalid number")
-            if value not in result:
-                result.append(value)
-            continue
-
-        raise ValueError("invalid selection")
-
-    if not result:
-        raise ValueError("empty selection")
-    return result
+    try:
+        return parse_line_spec(cleaned, max_value, "selection")
+    except LineSpecError as exc:
+        raise ValueError(str(exc)) from exc
 
 
 def _complement_display_numbers(selected: Sequence[int], max_value: int) -> list[int]:

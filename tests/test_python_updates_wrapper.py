@@ -16,6 +16,9 @@ from wud_updater.updates import (
     UpdateSelectionState,
     UpdatesError,
     UpdatesFileLock,
+    _parse_display_spec,
+    _parse_todo_entries,
+    _self_update_desired_tag,
     run_updates_from_namespace,
 )
 
@@ -90,6 +93,33 @@ class PythonUpdatesWrapperTests(unittest.TestCase):
         self.assertFalse(self.sudo_log.exists())
         self.assertFalse(self.updater_log.exists())
         self.assertIn("Dry-run mode: not running updates", result.stdout)
+
+    def test_todo_entries_use_canonical_wud_parsing(self) -> None:
+        entries = _parse_todo_entries(
+            "# header\n"
+            "\n"
+            "repo/app:1.0 tag=2.0 sha256=abc\n"
+            "repo/db:latest\n"
+        )
+
+        self.assertEqual([entry.line_no for entry in entries], [3, 4])
+        self.assertEqual(entries[0].raw, "repo/app:1.0 tag=2.0 sha256=abc")
+        self.assertEqual(entries[0].display_raw, "repo/app:1.0 tag=2.0")
+        self.assertEqual(entries[0].first, "repo/app:1.0")
+        self.assertEqual(entries[0].desired_tag, "2.0")
+        self.assertEqual(entries[1].desired_tag, "")
+
+    def test_display_spec_uses_canonical_line_spec_rules(self) -> None:
+        self.assertEqual(_parse_display_spec(" 3,1-2 ", 3), [1, 2, 3])
+        with self.assertRaises(ValueError):
+            _parse_display_spec("1,", 3)
+
+    def test_self_update_desired_tag_uses_canonical_wud_parsing(self) -> None:
+        self.assertEqual(
+            _self_update_desired_tag("repo/app:1.0 note=ignored tag=2.0"),
+            "2.0",
+        )
+        self.assertEqual(_self_update_desired_tag("repo/app tag=2.0"), "")
 
     def test_self_update_yes_runs_wud_entry_before_remaining_updates(self) -> None:
         self.wud_file.write_text(
