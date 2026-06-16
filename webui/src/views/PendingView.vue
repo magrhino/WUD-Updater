@@ -1500,3 +1500,450 @@ watch(
     />
   </section>
 </template>
+
+<style scoped>
+.pending-heading {
+  align-items: center;
+}
+
+.pending-actions {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.selection-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 56px;
+  padding: 10px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: var(--color-surface);
+  box-shadow: var(--shadow-panel-lift);
+}
+
+.batch-action-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 58px;
+  padding: 10px 12px;
+  border: 1px solid var(--color-border-hover);
+  border-radius: 8px;
+  background: var(--color-surface);
+  box-shadow: var(--shadow-panel-lift);
+}
+
+.pending-loading-state {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: var(--color-surface);
+  box-shadow: var(--shadow-panel-lift);
+}
+
+.pending-loading-state .skeleton-row {
+  min-height: 48px;
+}
+
+.pending-error-state {
+  gap: 8px;
+  padding: 18px;
+  text-align: center;
+}
+
+.selection-summary {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.selection-summary strong,
+.selection-summary span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.selection-summary strong {
+  font-size: 0.95rem;
+}
+
+.selection-summary span {
+  color: var(--color-muted-text);
+  font-size: 0.82rem;
+}
+
+.stack-selection {
+  display: grid;
+  gap: 12px;
+}
+
+.stack-card {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: var(--color-surface);
+  box-shadow: var(--shadow-panel-lift);
+}
+
+.stack-card.selected {
+  border-color: var(--color-border-hover);
+}
+
+.stack-card.needs-review {
+  background: var(--color-panel-tint);
+}
+
+.stack-card-header,
+.pending-update-main {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+}
+
+.stack-card-side {
+  display: grid;
+  justify-items: end;
+  gap: 8px;
+  min-width: 0;
+}
+
+.stack-title-block {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.stack-title-block strong,
+.pending-update-main strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.stack-title-block :deep(.n-checkbox__label) {
+  padding-inline: 6px 0;
+}
+
+.stack-checkbox-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  box-sizing: border-box;
+  min-height: 30px;
+  padding: 5px 10px;
+  border: 1px solid color-mix(in srgb,
+      var(--color-border-hover) 42%,
+      var(--color-border-subtle));
+  border-radius: 7px;
+  background: color-mix(in srgb,
+      var(--color-surface) 94%,
+      var(--color-action-blue) 6%);
+  color: var(--color-text-secondary);
+  font-size: 0.875rem;
+  line-height: 1.35;
+  transition:
+    border-color var(--motion-base) var(--ease-out-quart),
+    background-color var(--motion-base) var(--ease-out-quart);
+}
+
+.stack-title-block :deep(.n-checkbox:hover) .stack-checkbox-label {
+  border-color: var(--color-border-hover);
+  background: color-mix(in srgb,
+      var(--color-surface) 90%,
+      var(--color-action-blue) 10%);
+}
+
+.stack-checkbox-label strong {
+  color: var(--color-ink);
+}
+
+.stack-checkbox-kicker {
+  color: var(--color-muted-text);
+  font-size: 0.76rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.stack-path {
+  color: var(--color-muted-text);
+  font-size: 0.82rem;
+  overflow-wrap: anywhere;
+}
+
+.stack-identity {
+  display: grid;
+  gap: 3px;
+  color: var(--color-text-secondary);
+  font-size: 0.84rem;
+  line-height: 1.35;
+}
+
+.stack-identity span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.identity-label {
+  margin-right: 6px;
+  color: var(--color-muted-text);
+  font-weight: 700;
+}
+
+.stack-change-preview {
+  display: grid;
+  gap: 8px;
+  padding-top: 10px;
+  border-top: 1px solid var(--color-border-subtle);
+}
+
+.stack-change-row {
+  display: grid;
+  grid-template-columns: minmax(120px, 0.32fr) minmax(0, 1fr);
+  gap: 10px;
+  min-width: 0;
+  color: var(--color-text-secondary);
+  font-size: 0.84rem;
+  line-height: 1.4;
+}
+
+.stack-change-service,
+.stack-change-target,
+.stack-change-target code,
+.stack-change-more {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.stack-change-service {
+  color: var(--color-ink);
+}
+
+.stack-change-target {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px 7px;
+}
+
+.stack-change-target code {
+  color: var(--color-code-text);
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
+}
+
+.stack-change-more {
+  color: var(--color-muted-text);
+  font-size: 0.82rem;
+}
+
+.stack-card-tags {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+  min-width: 0;
+}
+
+.stack-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+  min-width: 0;
+}
+
+.stack-details {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+.stack-details summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  width: fit-content;
+  min-height: 32px;
+  cursor: pointer;
+  color: var(--color-action-blue);
+  font-size: 0.86rem;
+  font-weight: 700;
+}
+
+.stack-details summary::before {
+  content: "";
+  width: 0;
+  height: 0;
+  border-top: 4px solid transparent;
+  border-bottom: 4px solid transparent;
+  border-left: 5px solid currentColor;
+  transition: transform 180ms ease-out;
+}
+
+.stack-details[open] summary::before {
+  transform: rotate(90deg);
+}
+
+.stack-details[open] summary {
+  margin-bottom: 8px;
+}
+
+.stack-items {
+  display: grid;
+  border-top: 1px solid var(--color-border-subtle);
+}
+
+.pending-update-row {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--color-border-subtle);
+}
+
+.pending-update-row:last-child {
+  border-bottom: 0;
+}
+
+.pending-update-row.selected {
+  padding-right: 10px;
+  padding-left: 10px;
+  border-radius: 7px;
+  background: var(--color-panel-tint);
+}
+
+.pending-update-detail,
+.pending-update-meta,
+.pending-update-tag {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+  min-width: 0;
+}
+
+.pending-update-detail {
+  color: var(--color-code-text);
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
+}
+
+.pending-update-detail code,
+.pending-update-meta span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.pending-update-meta,
+.pending-update-tag {
+  color: var(--color-muted-text);
+  font-size: 0.82rem;
+}
+
+.recovery-actions {
+  flex-wrap: wrap;
+  margin-top: 8px;
+}
+
+.stack-change-risk-cues {
+  display: inline-flex;
+}
+
+.pending-update-diagnostic {
+  margin-top: 8px;
+  width: 100%;
+}
+
+@media (max-width: 920px) {
+  .selection-toolbar,
+  .batch-action-bar,
+  .stack-card-header {
+    align-items: flex-start;
+  }
+}
+
+@media (max-width: 560px) {
+  .selection-toolbar,
+  .batch-action-bar,
+  .stack-card-header,
+  .pending-update-main {
+    display: grid;
+  }
+
+  .pending-actions :deep(.n-button),
+  .stack-card-actions :deep(.n-button) {
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  .pending-update-tag .tag-override-input,
+  .stack-details summary {
+    min-height: 44px;
+  }
+
+  .pending-actions :deep(.n-checkbox),
+  .stack-title-block :deep(.n-checkbox),
+  .pending-update-main :deep(.n-checkbox) {
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+  }
+
+  .stack-card-tags {
+    justify-content: flex-start;
+  }
+
+  .stack-change-row {
+    grid-template-columns: 1fr;
+    gap: 4px;
+  }
+
+  .stack-change-target {
+    display: grid;
+    align-items: start;
+    gap: 5px;
+  }
+
+  .stack-change-target > :deep(.n-tag) {
+    width: fit-content;
+  }
+
+  .stack-change-target > span[aria-hidden="true"] {
+    display: none;
+  }
+
+  .stack-change-target code {
+    display: block;
+  }
+
+  .stack-change-value::before {
+    content: attr(data-label);
+    display: block;
+    margin-bottom: 1px;
+    color: var(--color-muted-text);
+    font-family: var(--font-sans);
+    font-size: 0.74rem;
+    font-weight: 700;
+    line-height: 1.2;
+  }
+
+  .stack-card-side,
+  .stack-card-actions {
+    justify-items: start;
+    justify-content: flex-start;
+  }
+
+  .pending-actions {
+    justify-content: flex-start;
+  }
+}
+</style>

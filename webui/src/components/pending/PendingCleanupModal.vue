@@ -138,3 +138,47 @@ function handleModalShowUpdate(value: boolean): void {
     </section>
   </n-modal>
 </template>
+
+<style scoped>
+.cleanup-assistant {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid color-mix(in srgb,
+      var(--color-border) 68%,
+      var(--color-warning) 32%);
+  border-radius: 7px;
+  background: color-mix(in srgb,
+      var(--color-surface) 86%,
+      var(--color-warning-bg) 14%);
+}
+
+.cleanup-assistant-section {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  color: var(--color-text-secondary);
+  font-size: 0.83rem;
+  line-height: 1.4;
+}
+
+.cleanup-assistant-section strong {
+  color: var(--color-ink);
+  font-size: 0.78rem;
+  text-transform: uppercase;
+}
+
+.cleanup-assistant-section ul {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  margin: 0;
+  padding-left: 18px;
+}
+
+.cleanup-assistant-section li {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+</style>
