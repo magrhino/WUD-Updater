@@ -1,0 +1,119 @@
+from __future__ import annotations
+
+from pathlib import Path
+
+from wud_updater.compose import ComposeStack
+from wud_updater.digest_provenance import DigestTagProvenance
+from wud_updater.updater_models import DigestPinUpdate
+from wud_updater.web_models import RetagPlanIssue, RetagPlanResponse
+from wud_updater.web_retag_plans import (
+    RetagPlanUpdate,
+    ordered_retag_stacks,
+    retag_plan_id,
+    retag_plan_stacks,
+    retag_plan_status,
+)
+
+
+def test_retag_plan_helpers_render_ordered_stacks_and_stable_ids(
+    tmp_path: Path,
+) -> None:
+    alpha = _update(tmp_path, stack_index=1, stack_name="alpha", service="web")
+    bravo = _update(tmp_path, stack_index=2, stack_name="bravo", service="api")
+    selected = (bravo, alpha)
+
+    assert [stack.name for stack in ordered_retag_stacks(selected)] == [
+        "alpha",
+        "bravo",
+    ]
+
+    stacks = retag_plan_stacks(selected)
+    assert [stack.stack for stack in stacks] == ["alpha", "bravo"]
+    assert stacks[0].services == ["web"]
+    assert stacks[1].digest_pin_updates[0].service_key == "bravo/api"
+
+    plan = RetagPlanResponse(
+        plan_id="",
+        status=retag_plan_status(
+            selected,
+            {"alpha/web": "switch-to-concrete"},
+            (),
+        ),
+        can_apply=True,
+        selected_count=2,
+        stacks=stacks,
+    )
+
+    assert retag_plan_id(
+        plan,
+        updates=selected,
+        compose_hashes={"bravo": "2", "alpha": "1"},
+    ) == retag_plan_id(
+        plan,
+        updates=(alpha, bravo),
+        compose_hashes={"alpha": "1", "bravo": "2"},
+    )
+
+
+def test_retag_plan_status_reports_empty_and_blocked_states() -> None:
+    selected = (_update(Path("/tmp"), stack_index=1, stack_name="alpha", service="web"),)
+
+    assert retag_plan_status((), {}, ()) == "empty"
+    assert retag_plan_status(selected, {}, ()) == "empty"
+    assert (
+        retag_plan_status(
+            selected,
+            {"alpha/web": "switch-to-concrete"},
+            (
+                RetagPlanIssue(
+                    severity="error",
+                    code="retag-target-not-eligible",
+                    message="not eligible",
+                ),
+            ),
+        )
+        == "blocked"
+    )
+
+
+def _update(
+    tmp_path: Path,
+    *,
+    stack_index: int,
+    stack_name: str,
+    service: str,
+) -> RetagPlanUpdate:
+    stack_dir = tmp_path / stack_name
+    stack = ComposeStack(
+        index=stack_index,
+        directory=stack_dir,
+        file="compose.yml",
+        name=stack_name,
+        images=(f"example/{service}:latest",),
+        service_images=(),
+    )
+    return RetagPlanUpdate(
+        service_key=f"{stack_name}/{service}",
+        stack=stack,
+        update=DigestPinUpdate(
+            old_image=f"example/{service}:latest",
+            resolved_tag="latest",
+            resolved_image=f"example/{service}:latest",
+            planned_digest="sha256:" + "a" * 64,
+            final_image=f"example/{service}@sha256:" + "a" * 64,
+            watch_tag="latest",
+            marker="wud.tag.include=latest",
+            label_key="wud.tag.include",
+            label_value="latest",
+            services=(service,),
+        ),
+        provenance=DigestTagProvenance(
+            source_image=f"example/{service}:latest",
+            resolved_tag="latest",
+            watch_tag="latest",
+            target_digest="sha256:" + "a" * 64,
+            final_image=f"example/{service}@sha256:" + "a" * 64,
+            provenance_source="apply",
+            provenance_confidence="verified",
+        ),
+    )

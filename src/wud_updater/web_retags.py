@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
-import json
 import secrets
 import shutil
 import time
@@ -45,7 +43,6 @@ from .updater_lifecycle_health import (
 )
 from .updater_models import (
     AppliedDigestPinUpdate,
-    DigestPinUpdate,
     UpdaterProgressEvent,
 )
 from .web_auth import _safe_exception_detail, _settings
@@ -53,24 +50,32 @@ from .web_models import (
     ApplyJobResponse,
     RetagApplyRequest,
     RetagChoiceRequest,
-    RetagPlanDigestPinUpdate,
     RetagPlanIssue,
     RetagPlanLabelRewrite,
     RetagPlanRequest,
     RetagPlanResponse,
-    RetagPlanStack,
     RetagTargetItem,
     RetagTargetsResponse,
     WebApplyJob,
     WebSettings,
 )
 from .web_metadata import json_object as _json_object
+from .web_retag_plans import (
+    RetagPlanBuild as _RetagPlanBuild,
+    RetagPlanUpdate as _RetagPlanUpdate,
+    ordered_retag_stacks as _ordered_retag_stacks,
+    retag_compose_hashes as _compose_hashes,
+    retag_plan_digest_update as _retag_plan_digest_update,
+    retag_plan_id as _retag_plan_id,
+    retag_plan_stacks as _retag_plan_stacks,
+    retag_plan_status as _retag_plan_status,
+    retag_update_service as _retag_update_service,
+)
 
 
 KEEP_CURRENT_CHOICE = "keep-current"
 SWITCH_TO_CONCRETE_CHOICE = "switch-to-concrete"
 _REGEX_SPECIAL_CHARS = "\\^$.*+?()[]{}|"
-RETAG_PLAN_VERSION = 1
 
 
 @dataclass(frozen=True)
@@ -80,21 +85,6 @@ class _RetagTargetRecord:
     service_image: ServiceImage
     known_image: str
     provenance: DigestTagProvenance | None
-
-
-@dataclass(frozen=True)
-class _RetagPlanUpdate:
-    service_key: str
-    stack: ComposeStack
-    update: DigestPinUpdate
-    provenance: DigestTagProvenance
-    label_rewrites: tuple[RetagPlanLabelRewrite, ...] = ()
-
-
-@dataclass(frozen=True)
-class _RetagPlanBuild:
-    response: RetagPlanResponse
-    updates: tuple[_RetagPlanUpdate, ...]
 
 
 class _RetagApplyFailed(RuntimeError):
@@ -485,131 +475,6 @@ def _retag_update_with_label_rewrites(
             for rewrite in applied_item.label_rewrites
         ),
     )
-
-
-def _retag_update_service(item: _RetagPlanUpdate) -> str:
-    return item.update.services[0] if item.update.services else ""
-
-
-def _retag_plan_status(
-    selected: Sequence[_RetagPlanUpdate],
-    choices: Mapping[str, str],
-    issues: Sequence[RetagPlanIssue],
-) -> str:
-    if issues:
-        return "blocked"
-    if not selected:
-        return "empty"
-    if not choices:
-        return "empty"
-    return "ready"
-
-
-def _retag_plan_stacks(
-    selected: Sequence[_RetagPlanUpdate],
-) -> list[RetagPlanStack]:
-    stacks: list[RetagPlanStack] = []
-    for stack in _ordered_retag_stacks(selected):
-        stack_updates = [item for item in selected if item.stack.index == stack.index]
-        stacks.append(
-            RetagPlanStack(
-                stack=stack.name,
-                directory=str(stack.directory),
-                compose_file=stack.file,
-                project_directory="" if stack.project_directory is None else str(stack.project_directory),
-                services=sorted(
-                    {
-                        service
-                        for item in stack_updates
-                        for service in item.update.services
-                    }
-                ),
-                digest_pin_updates=[
-                    _retag_plan_digest_update(item)
-                    for item in sorted(stack_updates, key=lambda value: value.service_key)
-                ],
-            )
-        )
-    return stacks
-
-
-def _retag_plan_digest_update(
-    item: _RetagPlanUpdate,
-) -> RetagPlanDigestPinUpdate:
-    update = item.update
-    service = update.services[0] if update.services else ""
-    return RetagPlanDigestPinUpdate(
-        service_key=item.service_key,
-        stack=item.stack.name,
-        service=service,
-        source_image=update.old_image,
-        resolved_tag=update.resolved_tag,
-        planned_digest=update.planned_digest,
-        final_image=update.final_image,
-        watch_tag=update.watch_tag,
-        marker=update.marker,
-        label_key=update.label_key,
-        label_value=update.label_value,
-        label_rewrites=list(item.label_rewrites),
-        digest_provenance=asdict(item.provenance),
-    )
-
-
-def _compose_hashes(
-    selected: Sequence[_RetagPlanUpdate],
-) -> dict[str, str]:
-    hashes: dict[str, str] = {}
-    for stack in _ordered_retag_stacks(selected):
-        path = stack.directory / stack.file
-        try:
-            hashes[str(path)] = hashlib.sha256(path.read_bytes()).hexdigest()
-        except OSError:
-            hashes[str(path)] = ""
-    return hashes
-
-
-def _retag_plan_id(
-    plan: RetagPlanResponse,
-    *,
-    updates: Sequence[_RetagPlanUpdate],
-    compose_hashes: Mapping[str, str],
-) -> str:
-    payload = {
-        "version": RETAG_PLAN_VERSION,
-        "status": plan.status,
-        "selected": [
-            {
-                "service_key": item.service_key,
-                "stack": item.stack.name,
-                "service": item.update.services[0] if item.update.services else "",
-                "source_image": item.update.old_image,
-                "resolved_tag": item.update.resolved_tag,
-                "planned_digest": item.update.planned_digest,
-                "final_image": item.update.final_image,
-                "label_value": item.update.label_value,
-                "provenance": asdict(item.provenance),
-            }
-            for item in sorted(updates, key=lambda value: value.service_key)
-        ],
-        "compose_hashes": dict(sorted(compose_hashes.items())),
-        "issues": [issue.model_dump() for issue in plan.issues],
-    }
-    canonical = json.dumps(
-        payload,
-        sort_keys=True,
-        separators=(",", ":"),
-        ensure_ascii=True,
-    )
-    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
-
-
-def _ordered_retag_stacks(
-    updates: Sequence[_RetagPlanUpdate],
-) -> tuple[ComposeStack, ...]:
-    stacks: dict[int, ComposeStack] = {}
-    for item in updates:
-        stacks[item.stack.index] = item.stack
-    return tuple(stacks[index] for index in sorted(stacks))
 
 
 def _submit_retag_apply_job(
