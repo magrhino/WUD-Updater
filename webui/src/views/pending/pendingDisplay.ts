@@ -28,7 +28,9 @@ export function uniqueSorted(values: number[]): number[] {
 }
 
 export function uniqueStrings(values: string[]): string[] {
-  return [...new Set(values.filter(Boolean))].sort();
+  return [...new Set(values.filter(Boolean))].sort((left, right) =>
+    left.localeCompare(right),
+  );
 }
 
 export function groupedItemServiceKeys(

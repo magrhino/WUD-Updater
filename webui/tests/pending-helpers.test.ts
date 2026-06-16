@@ -23,6 +23,7 @@ import {
   releaseNoteStatus,
   tagInputProps,
   uniqueSorted,
+  uniqueStrings,
 } from "../src/views/pending/pendingDisplay";
 import {
   planLineDigestPinLabel,
@@ -269,6 +270,10 @@ describe("pending helper modules", () => {
     });
 
     expect(uniqueSorted([3, 1, 3, 2])).toEqual([1, 2, 3]);
+    expect(uniqueStrings(["worker", "", "api", "worker"])).toEqual([
+      "api",
+      "worker",
+    ]);
     expect(pendingSourceFileName("/out/images.todo")).toBe("images.todo");
     expect(groupedItemServiceKeys({ name: "media" }, item)).toEqual([
       "media/app",
