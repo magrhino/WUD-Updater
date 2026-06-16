@@ -163,7 +163,7 @@ function snapshotLineScope(
     </section>
 
     <section class="apply-job-progress-steps" aria-labelledby="apply-job-progress-title">
-      <div class="apply-job-impact-heading">
+      <div class="panel-subheading">
         <strong id="apply-job-progress-title">Update progress</strong>
         <n-tag size="small">{{ progressSummary }}</n-tag>
       </div>
@@ -237,7 +237,7 @@ function snapshotLineScope(
           class="apply-job-impact"
           aria-labelledby="apply-job-impact-title"
         >
-          <div class="apply-job-impact-heading">
+          <div class="panel-subheading">
             <strong id="apply-job-impact-title">Services and images</strong>
             <n-tag size="small">{{ pluralize(snapshot?.lines.length ?? 0, "service") }}</n-tag>
           </div>
@@ -274,7 +274,7 @@ function snapshotLineScope(
     </details>
 
     <section class="apply-job-live-log" aria-labelledby="apply-job-log-title">
-      <div class="apply-job-impact-heading apply-job-live-log-heading">
+      <div class="panel-subheading apply-job-live-log-heading">
         <div class="apply-job-log-heading-copy">
           <strong id="apply-job-log-title">Live log</strong>
           <span class="apply-job-log-note">Raw command output</span>
@@ -333,3 +333,461 @@ function snapshotLineScope(
     </n-alert>
   </section>
 </template>
+
+<style scoped>
+.apply-job-panel {
+  display: grid;
+  gap: 10px;
+  scroll-margin-top: 88px;
+}
+
+.apply-job-panel-active {
+  position: sticky;
+  top: 12px;
+  z-index: 8;
+  border-color: var(--color-border-hover);
+}
+
+.apply-job-panel-success {
+  border-color: color-mix(in srgb,
+      var(--color-border) 72%,
+      var(--color-operational-teal) 28%);
+  background: color-mix(in srgb,
+      var(--color-surface) 97%,
+      var(--color-operational-teal) 3%);
+}
+
+.apply-job-panel:focus-visible,
+.apply-job-now:focus-visible {
+  outline: 2px solid var(--color-border-hover);
+  outline-offset: 3px;
+}
+
+.apply-job-heading {
+  align-items: center;
+}
+
+.apply-job-heading-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.apply-job-heading-title h2 {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.apply-job-complete-mark {
+  display: inline-grid;
+  flex: 0 0 auto;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border-radius: 999px;
+  color: var(--color-operational-teal);
+  background: color-mix(in srgb,
+      var(--color-surface) 82%,
+      var(--color-operational-teal) 18%);
+  animation: apply-complete-pop 240ms var(--ease-out-quint);
+}
+
+.apply-job-summary {
+  max-width: 68ch;
+  margin: 6px 0 0;
+  color: var(--color-muted-text);
+  font-size: 0.9rem;
+}
+
+.apply-job-progress {
+  position: relative;
+  height: 6px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--color-border-subtle);
+}
+
+.apply-job-progress span {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -42%;
+  width: 42%;
+  border-radius: inherit;
+  background: var(--color-operational-teal);
+  animation: apply-job-progress 1.35s ease-in-out infinite;
+}
+
+.apply-job-now {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid color-mix(in srgb,
+      var(--color-border-hover) 62%,
+      var(--color-operational-teal) 38%);
+  border-radius: 7px;
+  background: color-mix(in srgb,
+      var(--color-surface) 92%,
+      var(--color-operational-teal) 8%);
+}
+
+.apply-job-now-success {
+  border-color: color-mix(in srgb,
+      var(--color-border-hover) 70%,
+      var(--color-operational-teal) 30%);
+  background: color-mix(in srgb,
+      var(--color-surface) 96%,
+      var(--color-operational-teal) 4%);
+}
+
+.apply-job-now-failure {
+  border-color: color-mix(in srgb,
+      var(--color-border) 54%,
+      var(--color-error) 46%);
+  background: color-mix(in srgb,
+      var(--color-surface) 90%,
+      var(--color-error) 10%);
+}
+
+.apply-job-now-copy {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.apply-job-now-copy span {
+  color: var(--color-muted-text);
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.apply-job-now-copy strong {
+  color: var(--color-ink);
+  font-size: 1rem;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.apply-job-now-copy em,
+.apply-job-now-copy small {
+  color: var(--color-text-secondary);
+  font-size: 0.86rem;
+  font-style: normal;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.apply-job-latest-log {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 7px;
+  background: var(--color-surface);
+}
+
+.apply-job-latest-log span {
+  color: var(--color-muted-text);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.apply-job-latest-log code {
+  color: var(--color-code-text);
+  font-size: 0.82rem;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.apply-job-details {
+  min-width: 0;
+  padding: 2px 0 0;
+}
+
+.apply-job-details summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+  cursor: pointer;
+  list-style: none;
+}
+
+.apply-job-details summary::-webkit-details-marker {
+  display: none;
+}
+
+.apply-job-details summary::before {
+  content: "";
+  flex: 0 0 auto;
+  width: 0;
+  height: 0;
+  border-top: 4px solid transparent;
+  border-bottom: 4px solid transparent;
+  border-left: 5px solid var(--color-action-blue);
+  transition: transform var(--motion-base) var(--ease-out-quart);
+}
+
+.apply-job-details summary span {
+  flex: 1 1 auto;
+  min-width: 0;
+  color: var(--color-ink);
+  font-weight: 700;
+}
+
+.apply-job-details[open] summary::before {
+  transform: rotate(90deg);
+}
+
+.apply-job-details[open] summary {
+  margin-bottom: 8px;
+}
+
+.apply-job-grid {
+  display: grid;
+  grid-template-columns: minmax(220px, 0.8fr) minmax(0, 1.2fr);
+  gap: 12px;
+  align-items: start;
+}
+
+.apply-job-impact {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 7px;
+  background: var(--color-panel-tint);
+}
+
+.apply-job-impact .compact-list {
+  margin-top: 0;
+}
+
+.apply-job-progress-steps {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 7px;
+  background: var(--color-surface);
+}
+
+.apply-progress-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 8px;
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+.apply-progress-step {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 8px;
+  min-height: 0;
+  padding: 8px;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 7px;
+  background: var(--color-panel-tint);
+}
+
+.apply-progress-step-running {
+  border-color: color-mix(in srgb,
+      var(--color-border-hover) 58%,
+      var(--color-operational-teal) 42%);
+  background: color-mix(in srgb,
+      var(--color-surface) 92%,
+      var(--color-operational-teal) 8%);
+}
+
+.apply-progress-step-success,
+.apply-progress-step-skipped {
+  background: var(--color-surface);
+}
+
+.apply-progress-step-failure {
+  border-color: color-mix(in srgb,
+      var(--color-border) 52%,
+      var(--color-error) 48%);
+  background: color-mix(in srgb,
+      var(--color-surface) 90%,
+      var(--color-error) 10%);
+}
+
+.apply-progress-icon {
+  display: inline-grid;
+  width: 22px;
+  height: 22px;
+  place-items: center;
+  border: 1px solid var(--color-border-dashed);
+  border-radius: 999px;
+  color: var(--color-muted-text);
+  background: var(--color-surface);
+}
+
+.apply-progress-step-running .apply-progress-icon {
+  border-color: var(--color-operational-teal);
+  color: var(--color-operational-teal);
+}
+
+.apply-progress-step-success .apply-progress-icon {
+  border-color: color-mix(in srgb,
+      var(--color-operational-teal) 64%,
+      var(--color-border) 36%);
+  color: var(--color-operational-teal);
+}
+
+.apply-progress-step-failure .apply-progress-icon {
+  border-color: var(--color-error);
+  color: var(--color-error);
+}
+
+.apply-progress-copy {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.apply-progress-copy strong {
+  color: var(--color-ink);
+  font-size: 0.88rem;
+  line-height: 1.25;
+}
+
+.apply-progress-copy span,
+.apply-progress-copy em {
+  color: var(--color-muted-text);
+  font-size: 0.8rem;
+  font-style: normal;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.apply-job-live-log {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 7px;
+  background: var(--color-panel-tint);
+}
+
+.apply-job-live-log-heading {
+  align-items: flex-start;
+}
+
+.apply-job-log-heading-copy {
+  display: grid;
+  flex: 1 1 220px;
+  gap: 3px;
+  min-width: 0;
+}
+
+.apply-job-log-path {
+  min-width: 0;
+  max-width: 100%;
+  color: var(--color-muted-text);
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  overflow-wrap: anywhere;
+}
+
+.apply-job-log-note {
+  color: var(--color-muted-text);
+  font-size: 0.82rem;
+}
+
+.apply-job-log-toggle {
+  flex: 0 0 auto;
+}
+
+.apply-job-live-log-body {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.apply-job-log-viewer {
+  min-height: 160px;
+  max-height: 260px;
+  padding: 12px;
+  border-color: transparent;
+}
+
+@media (max-width: 920px) {
+  .apply-job-panel-active {
+    top: 76px;
+  }
+
+  .apply-job-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 560px) {
+  .apply-job-heading {
+    display: grid;
+  }
+
+  .apply-progress-list {
+    grid-template-columns: 1fr;
+  }
+
+  .apply-job-now {
+    grid-template-columns: 1fr;
+  }
+
+  .apply-job-now > :deep(.n-tag) {
+    width: fit-content;
+  }
+
+  .apply-job-details summary {
+    min-height: 44px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .apply-job-progress span {
+    left: 0;
+    width: 100%;
+    transform: none !important;
+  }
+}
+
+@keyframes apply-job-progress {
+  0% {
+    transform: translateX(0);
+  }
+
+  50% {
+    transform: translateX(150%);
+  }
+
+  100% {
+    transform: translateX(340%);
+  }
+}
+
+@keyframes apply-complete-pop {
+  0% {
+    transform: scale(0.88);
+  }
+
+  100% {
+    transform: scale(1);
+  }
+}
+</style>

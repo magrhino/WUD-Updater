@@ -192,15 +192,15 @@ function sourceCheckSummaryLabel(item: OnboardingChecklistItem): string {
     tabindex="-1"
   >
     <div class="section-heading onboarding-heading">
-      <div class="settings-heading-main">
+      <div class="section-heading-main">
         <p class="eyebrow">First run</p>
         <h2>Setup checklist</h2>
-        <p class="settings-section-copy">
+        <p class="section-copy">
           Confirm the WebUI can see WUD output, Docker, Compose stacks, persistent
           state, and the intended browser safety mode.
         </p>
       </div>
-      <div class="settings-heading-meta onboarding-actions">
+      <div class="section-heading-meta onboarding-actions">
         <n-tag v-if="failingItems" size="small" type="error">
           {{ failingItems }} failing
         </n-tag>
@@ -368,3 +368,272 @@ function sourceCheckSummaryLabel(item: OnboardingChecklistItem): string {
     </div>
   </section>
 </template>
+
+<style scoped>
+.onboarding-panel {
+  border-color: color-mix(in srgb, var(--color-border) 72%, var(--color-operational-teal) 28%);
+}
+
+.onboarding-heading {
+  align-items: flex-start;
+}
+
+.onboarding-heading .section-heading-main {
+  flex: 1 1 240px;
+}
+
+.onboarding-actions {
+  flex: 0 1 430px;
+  max-width: 100%;
+  min-width: min(100%, 240px);
+}
+
+.onboarding-next-action {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  min-width: 0;
+  margin-top: 14px;
+  padding: 12px;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 7px;
+  background: var(--color-panel-tint);
+}
+
+.onboarding-next-action.is-ready {
+  border-color: color-mix(in srgb, var(--color-border) 74%, var(--color-action-blue) 26%);
+  background: color-mix(in srgb, var(--color-surface) 92%, var(--color-action-blue) 8%);
+}
+
+.onboarding-next-main {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  min-width: 0;
+}
+
+.onboarding-next-main>svg {
+  flex: 0 0 auto;
+  margin-top: 2px;
+  color: var(--color-warning);
+}
+
+.onboarding-next-action.is-ready .onboarding-next-main>svg {
+  color: var(--color-action-blue);
+}
+
+.onboarding-next-main>div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.onboarding-next-main strong,
+.onboarding-next-main span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.onboarding-next-main span {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: 0.9rem;
+  line-height: 1.45;
+}
+
+.onboarding-check-list {
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.onboarding-check-row {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 7px;
+  background: var(--color-surface);
+}
+
+.onboarding-check-row.status-warn {
+  background: color-mix(in srgb, var(--color-panel-tint) 78%, #f6d57a 22%);
+}
+
+.onboarding-check-row.status-fail {
+  background: color-mix(in srgb, var(--color-surface) 88%, #c65454 12%);
+}
+
+.onboarding-check-main {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  min-width: 0;
+}
+
+.onboarding-check-main>svg {
+  flex: 0 0 auto;
+  margin-top: 2px;
+  color: var(--color-operational-teal);
+}
+
+.onboarding-check-row.status-warn .onboarding-check-main>svg {
+  color: #9a640c;
+}
+
+.onboarding-check-row.status-fail .onboarding-check-main>svg {
+  color: #a73535;
+}
+
+.onboarding-check-main>div {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.onboarding-check-title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.onboarding-check-title strong,
+.onboarding-check-main p,
+.onboarding-suggestion strong,
+.onboarding-suggestion span,
+.onboarding-suggestion code {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.onboarding-check-main p {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: 0.9rem;
+  line-height: 1.45;
+}
+
+.onboarding-check-code-group {
+  display: grid;
+  gap: 5px;
+}
+
+.onboarding-check-code-group>span,
+.onboarding-check-diagnostics summary {
+  color: var(--color-text-secondary);
+  font-size: 0.78rem;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.onboarding-check-codes,
+.onboarding-doc-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.onboarding-check-codes code {
+  padding: 2px 6px;
+  border-radius: 999px;
+  color: var(--color-code-text);
+  font-family: var(--font-mono);
+  font-size: 0.76rem;
+  background: var(--color-panel-tint);
+}
+
+.onboarding-check-codes.is-primary code {
+  border: 1px solid var(--color-border-subtle);
+}
+
+.onboarding-check-row.status-fail .onboarding-check-codes.is-primary code {
+  border-color: color-mix(in srgb, var(--color-border) 58%, #a73535 42%);
+  background: color-mix(in srgb, var(--color-surface) 80%, #c65454 20%);
+}
+
+.onboarding-check-row.status-warn .onboarding-check-codes.is-primary code {
+  border-color: color-mix(in srgb, var(--color-border) 58%, #9a640c 42%);
+  background: color-mix(in srgb, var(--color-surface) 78%, #f6d57a 22%);
+}
+
+.onboarding-check-diagnostics {
+  display: grid;
+  gap: 7px;
+  margin-top: 2px;
+}
+
+.onboarding-check-diagnostics summary {
+  width: fit-content;
+  cursor: pointer;
+}
+
+.onboarding-check-diagnostics summary:hover,
+.onboarding-check-diagnostics summary:focus-visible {
+  color: var(--color-ink);
+}
+
+.onboarding-check-diagnostics summary:focus-visible {
+  outline: 2px solid var(--color-action-blue);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+.onboarding-check-diagnostics[open] .onboarding-check-codes {
+  padding-top: 2px;
+}
+
+.onboarding-check-help {
+  display: grid;
+  gap: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--color-border-subtle);
+}
+
+.onboarding-suggestion {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 10px;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 7px;
+  background: var(--color-panel-tint);
+}
+
+.onboarding-suggestion>div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.onboarding-suggestion span {
+  color: var(--color-text-secondary);
+  font-size: 0.9rem;
+  line-height: 1.45;
+}
+
+.onboarding-suggestion code {
+  color: var(--color-code-text);
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
+  line-height: 1.45;
+  white-space: pre-wrap;
+}
+
+.onboarding-doc-links .text-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+@media (max-width: 560px) {
+  .onboarding-suggestion,
+  .onboarding-next-action {
+    display: grid;
+  }
+}
+</style>

@@ -72,8 +72,8 @@ function handleModalShowUpdate(value: boolean): void {
         <div class="preflight-impact-heading">
           <strong id="cleanup-guidance-title">Stale entry guidance</strong>
         </div>
-        <div class="pending-assistant">
-          <div v-if="assistantFindings.length" class="pending-assistant-section">
+        <div class="cleanup-assistant">
+          <div v-if="assistantFindings.length" class="cleanup-assistant-section">
             <strong>Preflight found</strong>
             <ul>
               <li v-for="finding in assistantFindings" :key="finding">
@@ -81,7 +81,7 @@ function handleModalShowUpdate(value: boolean): void {
               </li>
             </ul>
           </div>
-          <div v-if="assistantReasons.length" class="pending-assistant-section">
+          <div v-if="assistantReasons.length" class="cleanup-assistant-section">
             <strong>Likely causes</strong>
             <ul>
               <li v-for="reason in assistantReasons" :key="reason">
@@ -89,7 +89,7 @@ function handleModalShowUpdate(value: boolean): void {
               </li>
             </ul>
           </div>
-          <div v-if="assistantActions.length" class="pending-assistant-section">
+          <div v-if="assistantActions.length" class="cleanup-assistant-section">
             <strong>Recommended actions</strong>
             <ul>
               <li v-for="action in assistantActions" :key="action">
@@ -138,3 +138,47 @@ function handleModalShowUpdate(value: boolean): void {
     </section>
   </n-modal>
 </template>
+
+<style scoped>
+.cleanup-assistant {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid color-mix(in srgb,
+      var(--color-border) 68%,
+      var(--color-warning) 32%);
+  border-radius: 7px;
+  background: color-mix(in srgb,
+      var(--color-surface) 86%,
+      var(--color-warning-bg) 14%);
+}
+
+.cleanup-assistant-section {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  color: var(--color-text-secondary);
+  font-size: 0.83rem;
+  line-height: 1.4;
+}
+
+.cleanup-assistant-section strong {
+  color: var(--color-ink);
+  font-size: 0.78rem;
+  text-transform: uppercase;
+}
+
+.cleanup-assistant-section ul {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  margin: 0;
+  padding-left: 18px;
+}
+
+.cleanup-assistant-section li {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+</style>

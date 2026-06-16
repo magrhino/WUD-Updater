@@ -539,10 +539,10 @@ onMounted(() => {
       <div class="settings-zone-grid settings-actions-grid">
         <section class="section-panel">
           <div class="section-heading">
-            <div class="settings-heading-main">
+            <div class="section-heading-main">
               <p class="eyebrow">Maintenance</p>
               <h2>Container</h2>
-              <p class="settings-section-copy">
+              <p class="section-copy">
                 Restart the running WebUI container after a helper image update or
                 runtime configuration change.
               </p>
@@ -620,10 +620,10 @@ onMounted(() => {
 
       <section class="section-panel">
         <div class="section-heading">
-          <div class="settings-heading-main">
+          <div class="section-heading-main">
             <p class="eyebrow">Managed preferences</p>
             <h2>WebUI preferences</h2>
-            <p class="settings-section-copy">
+            <p class="section-copy">
               Browser-facing preferences persisted in SQLite. Runtime configuration,
               paths, and secrets stay controlled by server config.
             </p>
@@ -835,10 +835,10 @@ onMounted(() => {
 
       <section class="section-panel">
         <div class="section-heading">
-          <div class="settings-heading-main">
+          <div class="section-heading-main">
             <p class="eyebrow">Overview</p>
             <h2>Runtime settings</h2>
-            <p class="settings-section-copy">
+            <p class="section-copy">
               Secret names are shown, raw values stay hidden.
             </p>
           </div>
@@ -847,26 +847,26 @@ onMounted(() => {
         <div v-if="!settingsData && !settings.loading" class="empty-state">
           Settings are unavailable.
         </div>
-        <div v-else-if="!settingsData" class="settings-loading" aria-busy="true">
+        <div v-else-if="!settingsData" class="skeleton-list" aria-busy="true">
           <span class="sr-only">Loading settings.</span>
-          <span aria-hidden="true" class="settings-skeleton-row"></span>
-          <span aria-hidden="true" class="settings-skeleton-row"></span>
-          <span aria-hidden="true" class="settings-skeleton-row"></span>
+          <span aria-hidden="true" class="skeleton-row"></span>
+          <span aria-hidden="true" class="skeleton-row"></span>
+          <span aria-hidden="true" class="skeleton-row"></span>
         </div>
-        <div v-else class="settings-summary-grid" aria-label="Settings summary">
-          <div class="settings-summary-item">
+        <div v-else class="summary-grid" aria-label="Settings summary">
+          <div class="summary-item">
             <span>Configured values</span>
             <strong>{{ configuredEntryCount }}</strong>
           </div>
-          <div class="settings-summary-item">
+          <div class="summary-item">
             <span>Not explicitly set</span>
             <strong>{{ inheritedEntryCount }}</strong>
           </div>
-          <div class="settings-summary-item">
+          <div class="summary-item">
             <span>Runtime scoped</span>
             <strong>{{ runtimeScopedEntryCount }}</strong>
           </div>
-          <div class="settings-summary-item">
+          <div class="summary-item">
             <span>Secrets configured</span>
             <strong>{{ configuredSecretCount }} / {{ secrets.length }}</strong>
           </div>
@@ -885,7 +885,7 @@ onMounted(() => {
           <p class="eyebrow">Updater</p>
           <h2>Paths</h2>
         </div>
-        <div class="settings-heading-meta">
+        <div class="section-heading-meta">
           <n-tag size="small">{{ entryCountLabel(pathEntries) }}</n-tag>
           <ChevronDown :size="18" class="settings-disclosure-chevron" />
         </div>
@@ -926,7 +926,7 @@ onMounted(() => {
           <p class="eyebrow">Updater</p>
           <h2>Behavior</h2>
         </div>
-        <div class="settings-heading-meta">
+        <div class="section-heading-meta">
           <n-tag size="small">{{ entryCountLabel(behaviorEntries) }}</n-tag>
           <ChevronDown :size="18" class="settings-disclosure-chevron" />
         </div>
@@ -967,7 +967,7 @@ onMounted(() => {
           <p class="eyebrow">WebUI</p>
           <h2>Safety status</h2>
         </div>
-        <div class="settings-heading-meta">
+        <div class="section-heading-meta">
           <n-tag size="small">{{ entryCountLabel(webuiEntries) }}</n-tag>
           <ShieldCheck :size="20" class="section-heading-icon" />
           <ChevronDown :size="18" class="settings-disclosure-chevron" />
@@ -1009,7 +1009,7 @@ onMounted(() => {
           <p class="eyebrow">Secrets</p>
           <h2>Configured values</h2>
         </div>
-        <div class="settings-heading-meta">
+        <div class="section-heading-meta">
           <n-tag size="small">{{ configuredSecretCount }} configured</n-tag>
           <n-tag v-if="missingSecretCount" size="small">{{ missingSecretCount }} missing</n-tag>
           <KeyRound :size="20" class="section-heading-icon" />
@@ -1043,10 +1043,10 @@ onMounted(() => {
 
     <section id="settings-diagnostics" class="section-panel">
       <div class="section-heading">
-        <div class="settings-heading-main">
+        <div class="section-heading-main">
           <p class="eyebrow">Diagnostics</p>
           <h2>Support Bundle</h2>
-          <p class="settings-section-copy">
+          <p class="section-copy">
             Generate a redacted support bundle containing application settings, update state, and recent logs for troubleshooting. Raw environment variables, private paths, and secrets are automatically scrubbed.
           </p>
         </div>
@@ -1149,3 +1149,522 @@ onMounted(() => {
     </n-modal>
   </section>
 </template>
+
+<style scoped>
+.settings-safety-strip {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 12px 14px;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: var(--color-surface);
+}
+
+.settings-safety-strip.is-read-only {
+  border-color: color-mix(in srgb, var(--color-border) 72%, var(--color-operational-teal) 28%);
+  background: color-mix(in srgb, var(--color-surface) 90%, var(--color-operational-teal) 10%);
+}
+
+.settings-safety-strip.is-mutable {
+  border-color: color-mix(in srgb, var(--color-border) 68%, var(--color-warning) 32%);
+  background: color-mix(in srgb, var(--color-surface) 86%, var(--color-warning-bg) 14%);
+}
+
+.settings-safety-main {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  min-width: 0;
+}
+
+.settings-safety-main>svg {
+  flex: 0 0 auto;
+  margin-top: 2px;
+  color: var(--color-operational-teal);
+}
+
+.settings-safety-strip.is-mutable .settings-safety-main>svg {
+  color: var(--color-warning);
+}
+
+.settings-safety-main>div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.settings-safety-main strong,
+.settings-safety-main span,
+.settings-safety-meta {
+  min-width: 0;
+}
+
+.settings-safety-main span {
+  color: var(--color-text-secondary);
+  font-size: 0.9rem;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.settings-safety-meta {
+  display: flex;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.settings-jump-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-width: 0;
+}
+
+.settings-jump-button {
+  min-height: 32px;
+  padding: 0 10px;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 999px;
+  background: var(--color-surface);
+  color: var(--color-text-secondary);
+  font: inherit;
+  font-size: 0.86rem;
+  line-height: 1;
+  cursor: pointer;
+  transition:
+    border-color 180ms ease-out,
+    color 180ms ease-out,
+    background-color 180ms ease-out;
+}
+
+.settings-jump-button:hover,
+.settings-jump-button:focus-visible {
+  border-color: var(--color-border-hover);
+  background: var(--color-panel-tint);
+  color: var(--color-ink);
+}
+
+.settings-jump-button:focus-visible {
+  outline: 2px solid var(--color-border-hover);
+  outline-offset: 2px;
+}
+
+.settings-zone,
+.settings-disclosure,
+#settings-diagnostics,
+#settings-docs {
+  scroll-margin-top: 18px;
+}
+
+.settings-zone {
+  display: grid;
+  gap: 12px;
+}
+
+.settings-zone-heading {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  min-width: 0;
+}
+
+.settings-zone-heading>div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.settings-zone-heading h2,
+.settings-zone-heading p {
+  margin: 0;
+}
+
+.settings-zone-heading h2 {
+  color: var(--color-ink);
+  font-size: 1.08rem;
+  line-height: 1.25;
+}
+
+.settings-zone-heading p {
+  max-width: 72ch;
+  color: var(--color-text-secondary);
+  font-size: 0.9rem;
+  line-height: 1.45;
+}
+
+.settings-zone-grid {
+  display: grid;
+  gap: 16px;
+  align-items: start;
+}
+
+.settings-actions-grid {
+  grid-template-columns: minmax(300px, 0.72fr) minmax(0, 1.28fr);
+}
+
+.settings-risk-facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(104px, 1fr));
+  gap: 8px;
+  margin-top: 14px;
+  padding: 10px;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 7px;
+  background: var(--color-panel-tint);
+}
+
+.settings-risk-facts>div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.settings-risk-facts span,
+.settings-risk-facts strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.settings-risk-facts span {
+  color: var(--color-muted-text);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.settings-risk-facts strong {
+  color: var(--color-ink);
+  font-size: 0.9rem;
+}
+
+.settings-source-legend {
+  display: flex;
+  flex: 0 1 auto;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px 10px;
+  min-width: min(100%, 320px);
+  color: var(--color-muted-text);
+  font-size: 0.78rem;
+  line-height: 1.35;
+}
+
+.settings-source-legend span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.settings-source-legend strong {
+  color: var(--color-ink);
+}
+
+.settings-disclosure {
+  display: block;
+}
+
+.settings-disclosure-summary {
+  list-style: none;
+  cursor: pointer;
+}
+
+.settings-disclosure-summary::-webkit-details-marker {
+  display: none;
+}
+
+.settings-disclosure-summary:focus-visible {
+  outline: 2px solid var(--color-border-hover);
+  outline-offset: 4px;
+  border-radius: 7px;
+}
+
+.settings-disclosure-chevron {
+  flex: 0 0 auto;
+  color: var(--color-muted-text);
+  transition: transform 180ms ease-out;
+}
+
+.settings-disclosure[open] .settings-disclosure-chevron {
+  transform: rotate(180deg);
+}
+
+.settings-list {
+  display: grid;
+  margin-top: 14px;
+  overflow: hidden;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: var(--color-surface);
+}
+
+.settings-table-head {
+  display: grid;
+  grid-template-columns: minmax(160px, 0.8fr) minmax(0, 1.2fr) minmax(102px, auto);
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  color: var(--color-muted-text);
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  background: var(--color-table-head);
+}
+
+.settings-row {
+  display: grid;
+  grid-template-columns: minmax(160px, 0.8fr) minmax(0, 1.2fr) minmax(102px, auto);
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  padding: 10px 12px;
+  border-top: 1px solid var(--color-border-subtle);
+}
+
+.settings-row>div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.settings-row strong,
+.settings-row span,
+.settings-row code {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.settings-row span {
+  color: var(--color-muted-text);
+  font-size: 0.82rem;
+}
+
+.settings-row code {
+  color: var(--color-code-text);
+  font-family: var(--font-mono);
+  font-size: 0.84rem;
+  line-height: 1.45;
+}
+
+.settings-row>:deep(.n-tag) {
+  justify-self: start;
+}
+
+.settings-redacted-value {
+  color: var(--color-text-secondary);
+  font-weight: 700;
+}
+
+.settings-doc-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 18px;
+  margin-top: 14px;
+}
+
+.settings-doc-links .text-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.settings-preference-list {
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.settings-preference-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(220px, 280px);
+  align-items: center;
+  gap: 14px;
+  padding: 12px;
+  border: 1px solid var(--color-border-subtle);
+  background: var(--color-panel-tint);
+}
+
+.settings-preference-row>div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.settings-preference-row strong,
+.settings-preference-row span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.settings-preference-row span {
+  color: var(--color-muted-text);
+  font-size: 0.86rem;
+}
+
+.settings-preference-row>.settings-preference-controls {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.settings-preference-controls :deep(.n-select) {
+  flex: 1 1 180px;
+  min-width: 180px;
+}
+
+.settings-preference-row>.settings-textarea-controls {
+  align-items: stretch;
+  flex-direction: column;
+}
+
+.settings-textarea-controls :deep(.n-input) {
+  width: 100%;
+}
+
+.settings-action-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--color-border-subtle);
+}
+
+.settings-action-row>div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.settings-action-row strong,
+.settings-action-row span,
+.settings-action-row code,
+.settings-dialog-copy code {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.settings-action-row span,
+.settings-dialog-copy {
+  color: var(--color-muted-text);
+}
+
+.settings-action-row code,
+.settings-dialog-copy code {
+  color: var(--color-code-text);
+  font-family: var(--font-mono);
+  font-size: 0.84rem;
+}
+
+.settings-action-alert {
+  margin-top: 12px;
+}
+
+.settings-actions-grid .settings-action-row {
+  flex-wrap: wrap;
+  align-items: flex-start;
+}
+
+.settings-actions-grid .settings-action-row>div {
+  flex: 1 1 180px;
+}
+
+.settings-preference-actions {
+  align-items: end;
+}
+
+.settings-button-group {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.settings-dialog-copy {
+  margin: 0;
+  line-height: 1.45;
+}
+
+@media (max-width: 760px) {
+  .settings-actions-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 560px) {
+  .settings-row {
+    grid-template-columns: 1fr;
+    align-items: start;
+    gap: 7px;
+  }
+
+  .settings-preference-row {
+    grid-template-columns: 1fr;
+  }
+
+  .settings-safety-strip,
+  .settings-zone-heading {
+    display: grid;
+  }
+
+  .settings-safety-meta,
+  .settings-source-legend {
+    justify-content: flex-start;
+  }
+
+  .settings-jump-nav {
+    flex-wrap: nowrap;
+    max-width: 100%;
+    overflow-x: auto;
+    padding-bottom: 2px;
+  }
+
+  .settings-jump-button {
+    flex: 0 0 auto;
+    min-height: 44px;
+  }
+
+  .settings-risk-facts {
+    grid-template-columns: 1fr;
+  }
+
+  .settings-table-head {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  .settings-action-row {
+    display: grid;
+    align-items: start;
+  }
+
+  .settings-action-row :deep(.n-button) {
+    justify-self: start;
+  }
+
+  .settings-button-group {
+    justify-content: flex-start;
+  }
+
+  .settings-preference-row>.settings-preference-controls {
+    justify-content: flex-start;
+  }
+
+  .settings-overview-icon {
+    display: none;
+  }
+
+  .settings-row>:deep(.n-tag) {
+    width: fit-content;
+  }
+}
+</style>

@@ -122,15 +122,15 @@ function statusIcon(status: DoctorCheckStatus): Component {
 
     <section class="section-panel">
       <div class="section-heading">
-        <div class="settings-heading-main">
+        <div class="section-heading-main">
           <p class="eyebrow">Deployment checks</p>
           <h2>Doctor results</h2>
-          <p class="settings-section-copy">
+          <p class="section-copy">
             Docker access, mounted paths, Compose rendering, database readiness, and
             browser safety checks from the same doctor logic used by the CLI.
           </p>
         </div>
-        <div class="settings-heading-meta">
+        <div class="section-heading-meta">
           <n-tag v-if="doctor" size="small" :type="doctor.ok ? 'success' : 'error'">
             {{
               doctor.ok
@@ -153,26 +153,26 @@ function statusIcon(status: DoctorCheckStatus): Component {
         </div>
       </div>
 
-      <div v-if="!doctor && connection.loading" class="settings-loading" aria-busy="true">
+      <div v-if="!doctor && connection.loading" class="skeleton-list" aria-busy="true">
         <span class="sr-only">Loading doctor results.</span>
-        <span aria-hidden="true" class="settings-skeleton-row"></span>
-        <span aria-hidden="true" class="settings-skeleton-row"></span>
-        <span aria-hidden="true" class="settings-skeleton-row"></span>
+        <span aria-hidden="true" class="skeleton-row"></span>
+        <span aria-hidden="true" class="skeleton-row"></span>
+        <span aria-hidden="true" class="skeleton-row"></span>
       </div>
-      <div v-else-if="doctor" class="settings-summary-grid" aria-label="Doctor summary">
-        <div class="settings-summary-item">
+      <div v-else-if="doctor" class="summary-grid" aria-label="Doctor summary">
+        <div class="summary-item">
           <span>Failures</span>
           <strong>{{ doctor.failures }}</strong>
         </div>
-        <div class="settings-summary-item">
+        <div class="summary-item">
           <span>Warnings</span>
           <strong>{{ doctor.warnings }}</strong>
         </div>
-        <div class="settings-summary-item">
+        <div class="summary-item">
           <span>Passing checks</span>
           <strong>{{ passCount }}</strong>
         </div>
-        <div class="settings-summary-item">
+        <div class="summary-item">
           <span>Total checks</span>
           <strong>{{ checks.length }}</strong>
         </div>
@@ -245,3 +245,112 @@ function statusIcon(status: DoctorCheckStatus): Component {
     </section>
   </section>
 </template>
+
+<style scoped>
+.doctor-check-list {
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.doctor-check-row {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 7px;
+  background: var(--color-surface);
+}
+
+.doctor-check-row.status-warn {
+  background: color-mix(in srgb, var(--color-panel-tint) 78%, #f6d57a 22%);
+}
+
+.doctor-check-row.status-fail {
+  background: color-mix(in srgb, var(--color-surface) 88%, #c65454 12%);
+}
+
+.doctor-check-head,
+.doctor-suggestion {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.doctor-check-title {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  min-width: 0;
+}
+
+.doctor-check-title svg {
+  flex: 0 0 auto;
+  margin-top: 2px;
+  color: var(--color-operational-teal);
+}
+
+.doctor-check-row.status-warn .doctor-check-title svg {
+  color: #9a640c;
+}
+
+.doctor-check-row.status-fail .doctor-check-title svg {
+  color: #a73535;
+}
+
+.doctor-check-title>div,
+.doctor-suggestion>div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.doctor-check-title strong,
+.doctor-suggestion strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.doctor-check-title code,
+.doctor-suggestion code {
+  min-width: 0;
+  color: var(--color-code-text);
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.doctor-check-detail,
+.doctor-suggestion span {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: 0.9rem;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.doctor-suggestion-list {
+  display: grid;
+  gap: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--color-border-subtle);
+}
+
+.doctor-suggestion {
+  padding: 8px 10px;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 7px;
+  background: var(--color-panel-tint);
+}
+
+@media (max-width: 560px) {
+  .doctor-check-head,
+  .doctor-suggestion {
+    display: grid;
+  }
+}
+</style>

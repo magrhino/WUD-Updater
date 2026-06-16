@@ -551,3 +551,141 @@ function handleModalShowUpdate(value: boolean): void {
     </section>
   </n-modal>
 </template>
+
+<style scoped>
+.plan-actions {
+  display: grid;
+  gap: 8px;
+}
+
+.plan-action {
+  display: grid;
+  grid-template-columns: minmax(96px, auto) minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  min-height: 38px;
+  padding: 8px 10px;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 7px;
+  background: var(--color-panel-tint);
+}
+
+.plan-action code {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: var(--color-code-text);
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
+}
+
+.digest-pin-approval-row em {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.apply-readiness {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 7px;
+  background: var(--color-surface);
+}
+
+.apply-readiness-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.apply-readiness-heading > div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.apply-readiness-heading span {
+  color: var(--color-muted-text);
+  font-size: 0.84rem;
+}
+
+.apply-readiness-passed {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  min-width: 0;
+  color: var(--color-text-secondary);
+  font-size: 0.84rem;
+  line-height: 1.45;
+}
+
+.apply-readiness-passed > svg {
+  flex: 0 0 auto;
+  margin-top: 1px;
+  color: var(--color-operational-teal);
+}
+
+.apply-readiness-passed p {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.apply-readiness-passed strong {
+  color: var(--color-ink);
+}
+
+.apply-readiness-list {
+  display: grid;
+  border-top: 1px solid var(--color-border-subtle);
+}
+
+.apply-readiness-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--color-border-subtle);
+}
+
+.apply-readiness-row:last-child {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+
+.apply-readiness-row > svg {
+  color: var(--color-operational-teal);
+}
+
+.apply-readiness-row.status-warn > svg {
+  color: var(--color-warning);
+}
+
+.apply-readiness-row.status-fail > svg {
+  color: var(--color-error);
+}
+
+.apply-readiness-row strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.apply-readiness-detail {
+  grid-column: 2 / -1;
+  color: var(--color-text-secondary);
+  font-size: 0.84rem;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 560px) {
+  .plan-action {
+    grid-template-columns: 1fr;
+  }
+}
+</style>

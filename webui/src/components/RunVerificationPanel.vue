@@ -98,7 +98,7 @@ function wudLabel(status: RunVerificationWudStatus): string {
     class="run-verification-panel"
     aria-label="Post-update verification"
   >
-    <div class="apply-job-impact-heading">
+    <div class="panel-subheading">
       <strong>{{ title || "Verification" }}</strong>
       <n-tag size="small" :type="overallTagType(verification.status)">
         {{ overallLabel(verification.status) }}
@@ -145,3 +145,84 @@ function wudLabel(status: RunVerificationWudStatus): string {
     </div>
   </section>
 </template>
+
+<style scoped>
+.run-verification-panel {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 7px;
+  background: var(--color-surface);
+}
+
+.run-verification-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  color: var(--color-muted-text);
+  font-size: 0.8rem;
+}
+
+.run-verification-list {
+  display: grid;
+  gap: 8px;
+}
+
+.run-verification-row {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  padding: 8px;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 7px;
+  background: var(--color-panel-tint);
+}
+
+.run-verification-main {
+  display: grid;
+  grid-template-columns: auto minmax(0, 0.75fr) minmax(0, 1.25fr);
+  gap: 8px;
+  align-items: baseline;
+  min-width: 0;
+}
+
+.run-verification-main span {
+  color: var(--color-muted-text);
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.run-verification-main strong {
+  min-width: 0;
+  color: var(--color-ink);
+  font-size: 0.86rem;
+  overflow-wrap: anywhere;
+}
+
+.run-verification-main em {
+  min-width: 0;
+  color: var(--color-muted-text);
+  font-size: 0.8rem;
+  font-style: normal;
+  overflow-wrap: anywhere;
+}
+
+.run-verification-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 0;
+}
+
+@media (max-width: 920px) {
+  .run-verification-main {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .run-verification-main em {
+    grid-column: 2;
+  }
+}
+</style>
