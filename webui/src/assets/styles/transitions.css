@@ -19,3 +19,11 @@
   opacity: 0;
   transform: translateY(-3px);
 }
+
+@media (prefers-reduced-motion: reduce) {
+  .route-shift-enter-from,
+  .route-shift-leave-to {
+    opacity: 1;
+    transform: none;
+  }
+}
