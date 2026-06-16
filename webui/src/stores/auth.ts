@@ -2,11 +2,11 @@ import { computed, ref } from "vue";
 import { defineStore } from "pinia";
 
 import {
-  ApiError,
   type AuthSessionResponse,
   type SetupStatusResponse,
   webApi,
 } from "../api/client";
+import { runWithStoreState } from "./storeState";
 
 export const useAuthStore = defineStore("auth", () => {
   const session = ref<AuthSessionResponse | null>(null);
@@ -31,29 +31,35 @@ export const useAuthStore = defineStore("auth", () => {
   }
 
   async function loadSession(): Promise<void> {
-    loading.value = true;
-    error.value = "";
-    try {
-      session.value = await webApi.session();
-    } catch (exc) {
-      session.value = null;
-      error.value = errorMessage(exc);
-    } finally {
-      loading.value = false;
-    }
+    await runWithStoreState(
+      loading,
+      error,
+      async () => {
+        session.value = await webApi.session();
+      },
+      {
+        onError: () => {
+          session.value = null;
+        },
+        rethrow: false,
+      },
+    );
   }
 
   async function loadSetupStatus(): Promise<void> {
-    loading.value = true;
-    error.value = "";
-    try {
-      setupStatus.value = await webApi.setupStatus();
-    } catch (exc) {
-      setupStatus.value = null;
-      error.value = errorMessage(exc);
-    } finally {
-      loading.value = false;
-    }
+    await runWithStoreState(
+      loading,
+      error,
+      async () => {
+        setupStatus.value = await webApi.setupStatus();
+      },
+      {
+        onError: () => {
+          setupStatus.value = null;
+        },
+        rethrow: false,
+      },
+    );
   }
 
   async function claimSetup(
@@ -61,9 +67,7 @@ export const useAuthStore = defineStore("auth", () => {
     username: string,
     password: string,
   ): Promise<void> {
-    loading.value = true;
-    error.value = "";
-    try {
+    await runWithStoreState(loading, error, async () => {
       session.value = await webApi.setupClaim(
         claim,
         username,
@@ -71,12 +75,7 @@ export const useAuthStore = defineStore("auth", () => {
         await ensureCsrf(),
       );
       setupStatus.value = null;
-    } catch (exc) {
-      error.value = errorMessage(exc);
-      throw exc;
-    } finally {
-      loading.value = false;
-    }
+    });
   }
 
   async function resetAdmin(
@@ -84,9 +83,7 @@ export const useAuthStore = defineStore("auth", () => {
     username: string,
     password: string,
   ): Promise<void> {
-    loading.value = true;
-    error.value = "";
-    try {
+    await runWithStoreState(loading, error, async () => {
       session.value = await webApi.resetAdminClaim(
         claim,
         username,
@@ -94,39 +91,20 @@ export const useAuthStore = defineStore("auth", () => {
         await ensureCsrf(),
       );
       setupStatus.value = null;
-    } catch (exc) {
-      error.value = errorMessage(exc);
-      throw exc;
-    } finally {
-      loading.value = false;
-    }
+    });
   }
 
   async function login(username: string, password: string): Promise<void> {
-    loading.value = true;
-    error.value = "";
-    try {
+    await runWithStoreState(loading, error, async () => {
       session.value = await webApi.login(username, password, await ensureCsrf());
-    } catch (exc) {
-      error.value = errorMessage(exc);
-      throw exc;
-    } finally {
-      loading.value = false;
-    }
+    });
   }
 
   async function logout(): Promise<void> {
-    loading.value = true;
-    error.value = "";
-    try {
+    await runWithStoreState(loading, error, async () => {
       session.value = await webApi.logout(await ensureCsrf());
       csrfToken.value = "";
-    } catch (exc) {
-      error.value = errorMessage(exc);
-      throw exc;
-    } finally {
-      loading.value = false;
-    }
+    });
   }
 
   return {
@@ -146,10 +124,3 @@ export const useAuthStore = defineStore("auth", () => {
     logout,
   };
 });
-
-function errorMessage(exc: unknown): string {
-  if (exc instanceof ApiError || exc instanceof Error) {
-    return exc.message;
-  }
-  return "Request failed";
-}

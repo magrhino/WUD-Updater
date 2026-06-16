@@ -12,6 +12,7 @@ import { useSettingsStore } from "../src/stores/settings";
 import { useUpdatesStore, APPLY_JOB_RECOVERY_MESSAGE } from "../src/stores/updates";
 import { useRunsStore } from "../src/stores/runs";
 import SetupView from "../src/views/SetupView.vue";
+import ResetAdminView from "../src/views/ResetAdminView.vue";
 import { themeStorageKey } from "../src/theme";
 import {
   authSession,
@@ -138,6 +139,50 @@ describe("router auth guard", () => {
       name: "settings",
       query: { onboarding: "1" },
     });
+  });
+
+  it("routes admin reset success to Dashboard", async () => {
+    const pinia = createPinia();
+    setActivePinia(pinia);
+    const auth = useAuthStore();
+    auth.session = authSession({
+      authenticated: false,
+      setup_required: false,
+      username: null,
+    });
+    auth.setupStatus = {
+      setup_required: false,
+      claim_required: false,
+      authenticated: false,
+      auth_required: true,
+      dev_auth_bypass: false,
+      mutations_enabled: false,
+      password_min_length: 12,
+    };
+    vi.spyOn(auth, "loadSetupStatus").mockResolvedValue();
+    vi.spyOn(auth, "resetAdmin").mockImplementation(async () => {
+      auth.session = authSession({ authenticated: true, setup_required: false });
+      auth.setupStatus = null;
+    });
+    const router = createWudRouter(createMemoryHistory());
+    await router.push("/reset-admin?claim=recovery&user=admin");
+    await router.isReady();
+    const replace = vi.spyOn(router, "replace").mockResolvedValue(undefined);
+    const wrapper = mountWithApp(ResetAdminView, { pinia, router });
+
+    const inputs = wrapper.findAll("input");
+    await inputs[0].setValue("admin");
+    await inputs[1].setValue("correct horse battery staple");
+    await inputs[2].setValue("correct horse battery staple");
+    await wrapper.find("form").trigger("submit");
+    await flushPromises();
+
+    expect(auth.resetAdmin).toHaveBeenCalledWith(
+      "recovery",
+      "admin",
+      "correct horse battery staple",
+    );
+    expect(replace).toHaveBeenCalledWith({ name: "dashboard" });
   });
 });
 
