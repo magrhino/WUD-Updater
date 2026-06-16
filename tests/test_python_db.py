@@ -627,7 +627,20 @@ class DatabaseTests(unittest.TestCase):
                 conn,
                 pending_service_keys=("stack/app", "stack/worker"),
             )
-            unblocked_rows = blocking_dependency_snooze_rows(
+            dependency_pending_rows = blocking_dependency_snooze_rows(
+                conn,
+                pending_service_keys=("stack/app", "stack/db"),
+            )
+            insert_update_event(
+                conn,
+                run_id=run_id,
+                service_name="db",
+                stack_name="stack",
+                image="repo/db:latest",
+                status="success",
+                created_at="2026-05-18T13:00:00+00:00",
+            )
+            satisfied_rows = blocking_dependency_snooze_rows(
                 conn,
                 pending_service_keys=("stack/app", "stack/db"),
             )
@@ -637,7 +650,11 @@ class DatabaseTests(unittest.TestCase):
             [row["service_key"] for row in blocking_rows],
             ["stack/app"],
         )
-        self.assertEqual(unblocked_rows, ())
+        self.assertEqual(
+            [row["service_key"] for row in dependency_pending_rows],
+            ["stack/app"],
+        )
+        self.assertEqual(satisfied_rows, ())
 
     def test_pending_update_helpers_insert_and_update_status(self) -> None:
         with sqlite3.connect(":memory:") as conn:

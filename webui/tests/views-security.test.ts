@@ -1004,7 +1004,7 @@ describe("mutating WebUI views", () => {
     expect(createPlan).toHaveBeenCalledWith([1], true, [], []);
   });
 
-  it("excludes dependency-snoozed items from bulk stack selection but allows direct selection", async () => {
+  it("excludes dependency-snoozed items from bulk stack selection until success but allows direct selection", async () => {
     const snoozedItem = pendingGroupedItem({
       line_no: 1,
       image: "repo/app:1.0",
@@ -1013,9 +1013,9 @@ describe("mutating WebUI views", () => {
     });
     const stackItem = pendingGroupedItem({
       line_no: 2,
-      image: "repo/worker:1.0",
-      repo: "repo/worker",
-      services: ["worker"],
+      image: "repo/db:1.0",
+      repo: "repo/db",
+      services: ["db"],
     });
     const { pinia, auth, connection, settings, updates, runs } = setupStores(true);
     settings.snoozes = [
@@ -1044,6 +1044,9 @@ describe("mutating WebUI views", () => {
       ?.trigger("click");
 
     expect(wrapper.text()).toContain("Snoozed pending entries");
+    expect(wrapper.text()).toContain(
+      "Excluded from bulk selection until the dependency service updates successfully.",
+    );
     expect(createPlan).toHaveBeenCalledWith([2], true, [], []);
 
     await wrapper
@@ -2408,7 +2411,7 @@ describe("mutating WebUI views", () => {
 
     const dialog = wrapper.find('[role="dialog"]');
     expect(dialog.text()).toContain("Dependency");
-    expect(dialog.text()).toContain("Until media/db is pending");
+    expect(dialog.text()).toContain("Until media/db updates successfully");
 
     await dialog
       .findAll("button")

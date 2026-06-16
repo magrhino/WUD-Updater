@@ -477,26 +477,12 @@ def _dependency_eligible_auto_update_candidates(
     *,
     dependency_snoozes: Iterable[Any],
 ) -> tuple[AutoUpdateCandidate, ...]:
-    eligible = tuple(candidates)
     waits_by_service = _dependency_waits_by_service(dependency_snoozes)
-    while True:
-        eligible_services = {
-            service_key
-            for _line_no, service_keys, _policies in eligible
-            for service_key in service_keys
-        }
-        next_eligible = tuple(
-            candidate
-            for candidate in eligible
-            if all(
-                wait_for_service_key in eligible_services
-                for service_key in candidate[1]
-                for wait_for_service_key in waits_by_service.get(service_key, ())
-            )
-        )
-        if len(next_eligible) == len(eligible):
-            return eligible
-        eligible = next_eligible
+    return tuple(
+        candidate
+        for candidate in candidates
+        if all(service_key not in waits_by_service for service_key in candidate[1])
+    )
 
 
 def _dependency_waits_by_service(

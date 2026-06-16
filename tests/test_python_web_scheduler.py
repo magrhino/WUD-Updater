@@ -1077,7 +1077,7 @@ def test_auto_update_selection_prefers_earliest_scheduled_mode() -> None:
     assert selection.scheduled_for == earlier
 
 
-def test_auto_update_selection_requires_dependency_in_same_selection() -> None:
+def test_auto_update_selection_excludes_unsatisfied_dependency_snoozes() -> None:
     scheduled = datetime(2026, 5, 30, 14, 0, tzinfo=timezone.utc)
     settings = SimpleNamespace(config=SimpleNamespace(update_mode="live"))
     grouping = SimpleNamespace(
@@ -1121,6 +1121,14 @@ def test_auto_update_selection_requires_dependency_in_same_selection() -> None:
             schedule_key="stack/worker|2026-05-30|09:00|America/Chicago",
             scheduled_for=scheduled,
         ),
+        "stack/db": web_scheduler.AutoUpdatePolicy(
+            service_key="stack/db",
+            update_mode="live",
+            auto_update_time="09:00",
+            auto_update_days=("sat",),
+            schedule_key="stack/db|2026-05-30|09:00|America/Chicago",
+            scheduled_for=scheduled,
+        ),
     }
 
     selection = web_scheduler._auto_update_selection(
@@ -1136,5 +1144,5 @@ def test_auto_update_selection_requires_dependency_in_same_selection() -> None:
     )
 
     assert selection is not None
-    assert selection.line_numbers == (2,)
-    assert selection.service_keys == ("stack/worker",)
+    assert selection.line_numbers == (2, 3)
+    assert selection.service_keys == ("stack/db", "stack/worker")

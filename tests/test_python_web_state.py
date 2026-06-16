@@ -574,7 +574,6 @@ def test_state_read_endpoints_return_empty_without_creating_missing_database(
 
 def test_state_read_endpoints_list_existing_sqlite_rows(
     tmp_path: Path,
-    monkeypatch,
 ) -> None:
     db_path = tmp_path / "state" / "wud.sqlite"
     now = datetime.now(timezone.utc).replace(microsecond=0)
@@ -737,11 +736,6 @@ def test_state_read_endpoints_list_existing_sqlite_rows(
                 (now.isoformat(), now.isoformat(), now.isoformat(), now.isoformat()),
             )
     client = _client(tmp_path, {"WUD_WEB_DEV_NO_AUTH": "true"})
-    monkeypatch.setattr(
-        state_module,
-        "_pending_service_keys",
-        lambda _settings: ("stack/cache",),
-    )
 
     policies = client.get("/api/v1/service-policies")
     active_snoozes = client.get("/api/v1/snoozes")
@@ -756,23 +750,32 @@ def test_state_read_endpoints_list_existing_sqlite_rows(
     assert policies.json()[0]["auto_update_days"] == ["mon", "wed"]
     assert policies.json()[0]["metadata"] == {"source": "test"}
     assert active_snoozes.status_code == 200
-    assert [row["service_key"] for row in active_snoozes.json()] == ["stack/app"]
+    assert [row["service_key"] for row in active_snoozes.json()] == [
+        "stack/app",
+        "stack/worker",
+    ]
     assert active_snoozes.json()[0]["active"] is True
     assert active_snoozes.json()[0]["kind"] == "time"
     assert expired_snoozes.status_code == 200
     assert [row["service_key"] for row in expired_snoozes.json()] == [
         "stack/old",
         "stack/satisfied",
-        "stack/worker",
     ]
     expired_by_service = {
         row["service_key"]: row
         for row in expired_snoozes.json()
     }
     assert expired_snoozes.json()[0]["active"] is False
-    assert expired_by_service["stack/worker"]["active"] is False
-    assert expired_by_service["stack/worker"]["kind"] == "dependency"
-    assert expired_by_service["stack/worker"]["wait_for_service_key"] == "stack/cache"
+    assert expired_by_service["stack/satisfied"]["active"] is False
+    assert expired_by_service["stack/satisfied"]["kind"] == "dependency"
+    assert expired_by_service["stack/satisfied"]["wait_for_service_key"] == "stack/db"
+    active_by_service = {
+        row["service_key"]: row
+        for row in active_snoozes.json()
+    }
+    assert active_by_service["stack/worker"]["active"] is True
+    assert active_by_service["stack/worker"]["kind"] == "dependency"
+    assert active_by_service["stack/worker"]["wait_for_service_key"] == "stack/cache"
     assert all_exclusions.status_code == 200
     assert [row["status"] for row in all_exclusions.json()] == [
         "active",

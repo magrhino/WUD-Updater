@@ -40,7 +40,7 @@ const snoozeForm = reactive({
 
 const kindOptions = [
   { label: "Until time", value: "time" },
-  { label: "Until another service is pending", value: "dependency" },
+  { label: "Until another service updates successfully", value: "dependency" },
 ];
 const stateOptions = [
   { label: "Active", value: "active" },
@@ -96,7 +96,7 @@ function statusLabel(snooze: SnoozeRecord): string {
 function conditionLabel(snooze: SnoozeRecord): string {
   if (snooze.kind === "dependency") {
     return snooze.wait_for_service_key
-      ? `Until ${snooze.wait_for_service_key} is pending`
+      ? `Until ${snooze.wait_for_service_key} updates successfully`
       : "Dependency not set";
   }
   return snooze.snoozed_until ?? "None";
@@ -206,7 +206,7 @@ watch(snoozeState, (nextState) => {
           v-if="snoozeKind === 'dependency'"
           label="Wait for service"
           required
-          feedback="The held service is bulk-selected again once this service is pending."
+          feedback="The held service is released once this service updates successfully."
         >
           <n-select
             :value="snoozeForm.waitForServiceKey"
@@ -398,7 +398,7 @@ watch(snoozeState, (nextState) => {
           <span>Condition</span>
           <strong>
             <template v-if="snoozeKind === 'dependency'">
-              Until {{ snoozeForm.waitForServiceKey.trim() }} is pending
+              Until {{ snoozeForm.waitForServiceKey.trim() }} updates successfully
             </template>
             <template v-else>
               {{ snoozeForm.snoozedUntil.trim() }}

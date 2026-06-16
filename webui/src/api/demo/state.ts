@@ -1150,8 +1150,15 @@ export class DemoApiState {
   }
 
   snoozeRecords(state: SnoozeState): SnoozeRecord[] {
+    const records = this.snoozes.map((snooze) => {
+      const active =
+        snooze.kind === "dependency" && snooze.wait_for_service_key
+          ? this.dependencySnoozeActive(snooze)
+          : snooze.active;
+      return { ...snooze, active };
+    });
     return clone(
-      this.snoozes.filter((snooze) => {
+      records.filter((snooze) => {
         if (state === "active") {
           return snooze.active;
         }
@@ -1161,6 +1168,30 @@ export class DemoApiState {
         return true;
       }),
     );
+  }
+
+  private dependencySnoozeActive(snooze: SnoozeRecord): boolean {
+    const [stackName, serviceName] = snooze.wait_for_service_key.split("/", 2);
+    if (!stackName || !serviceName) {
+      return snooze.active;
+    }
+    const createdAt = Date.parse(snooze.created_at);
+    if (Number.isNaN(createdAt)) {
+      return snooze.active;
+    }
+    const satisfied = this.runs.some((run) =>
+      run.summary.events.some((event) => {
+        const eventCreatedAt = Date.parse(event.created_at);
+        return (
+          event.status === "success" &&
+          event.stack_name === stackName &&
+          event.service_name === serviceName &&
+          !Number.isNaN(eventCreatedAt) &&
+          eventCreatedAt >= createdAt
+        );
+      }),
+    );
+    return !satisfied;
   }
 
   tagExclusionRecords(status: TagExclusionStatusFilter): TagExclusionRuleRecord[] {
@@ -1258,7 +1289,8 @@ export class DemoApiState {
 
     if (operation.kind === "delete_snooze") {
       this.snoozes = this.snoozes.filter(
-        (snooze) => snooze.id !== operation.snooze_id,
+        (snooze) =>
+          snooze.id !== operation.snooze_id || snooze.kind === "dependency",
       );
       return this.operationResponse(
         operation.kind,
@@ -1270,7 +1302,8 @@ export class DemoApiState {
 
     if (operation.kind === "delete_dependency_snooze") {
       this.snoozes = this.snoozes.filter(
-        (snooze) => snooze.id !== operation.snooze_id,
+        (snooze) =>
+          snooze.id !== operation.snooze_id || snooze.kind !== "dependency",
       );
       return this.operationResponse(
         operation.kind,

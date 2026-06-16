@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { createDemoWebApi } from "../src/api/demo";
 import type { ApplyJobLogResponse, ApplyJobResponse } from "../src/api/client";
+import { DemoApiState } from "../src/api/demo/state";
 
 const postgresDigest =
   "sha256:1111111111111111111111111111111111111111111111111111111111111111";
@@ -806,6 +807,74 @@ describe("demo web API", () => {
         service_key: "media/wud-updater",
       }),
     );
+  });
+
+  it("computes dependency snooze activity from successful demo events", () => {
+    const state = new DemoApiState();
+    const baseDependency = state.snoozes.find(
+      (snooze) => snooze.kind === "dependency",
+    );
+    expect(baseDependency).toBeDefined();
+    if (!baseDependency) {
+      throw new Error("Expected demo dependency snooze fixture");
+    }
+
+    state.snoozes = [
+      {
+        ...baseDependency,
+        id: 50,
+        service_key: "media/app",
+        wait_for_service_key: "media/sonarr",
+        created_at: "2026-05-28T12:00:02+00:00",
+        active: false,
+      },
+      {
+        ...baseDependency,
+        id: 51,
+        service_key: "media/worker",
+        wait_for_service_key: "media/sonarr",
+        created_at: "2026-05-28T12:00:00+00:00",
+        active: true,
+      },
+    ];
+
+    expect(state.snoozeRecords("active")).toContainEqual(
+      expect.objectContaining({ id: 50, active: true }),
+    );
+    expect(state.snoozeRecords("expired")).toContainEqual(
+      expect.objectContaining({ id: 51, active: false }),
+    );
+  });
+
+  it("deletes demo snoozes by id and kind", () => {
+    const state = new DemoApiState();
+    const timeSnooze = state.snoozes.find((snooze) => snooze.kind === "time");
+    const dependencySnooze = state.snoozes.find(
+      (snooze) => snooze.kind === "dependency",
+    );
+    expect(timeSnooze).toBeDefined();
+    expect(dependencySnooze).toBeDefined();
+    if (!timeSnooze || !dependencySnooze) {
+      throw new Error("Expected demo snooze fixtures");
+    }
+
+    state.snoozes = [
+      { ...dependencySnooze, id: 99 },
+      { ...timeSnooze, id: 99 },
+    ];
+    state.stateOperation({ kind: "delete_snooze", snooze_id: 99 });
+    expect(state.snoozeRecords("all")).toEqual([
+      expect.objectContaining({ id: 99, kind: "dependency" }),
+    ]);
+
+    state.snoozes = [
+      { ...dependencySnooze, id: 99 },
+      { ...timeSnooze, id: 99 },
+    ];
+    state.stateOperation({ kind: "delete_dependency_snooze", snooze_id: 99 });
+    expect(state.snoozeRecords("all")).toEqual([
+      expect.objectContaining({ id: 99, kind: "time" }),
+    ]);
   });
 
   it("createPlan accepts and ignores digestPinLabelRewriteApprovals", async () => {

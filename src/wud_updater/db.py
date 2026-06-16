@@ -857,16 +857,12 @@ def blocking_dependency_snooze_rows(
     *,
     pending_service_keys: Iterable[str],
 ) -> tuple[sqlite3.Row, ...]:
-    """Return active dependency snoozes whose dependency is not pending."""
+    """Return active dependency snoozes for pending target services."""
 
     pending = set(pending_service_keys)
     if not pending:
         return ()
-    return tuple(
-        row
-        for row in active_dependency_snooze_rows(conn, service_keys=pending)
-        if str(row["wait_for_service_key"]) not in pending
-    )
+    return active_dependency_snooze_rows(conn, service_keys=pending)
 
 
 def insert_pending_update(

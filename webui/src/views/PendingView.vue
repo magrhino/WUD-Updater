@@ -107,8 +107,7 @@ const dependencyBlockedServiceKeys = computed(() => {
     activeDependencySnoozes.value
       .filter(
         (snooze) =>
-          pending.has(snooze.service_key) &&
-          !pending.has(snooze.wait_for_service_key),
+          pending.has(snooze.service_key),
       )
       .map((snooze) => snooze.service_key),
   );
@@ -1203,7 +1202,7 @@ watch(
             <div class="stack-title-block">
               <strong>Snoozed pending entries</strong>
               <span class="stack-path">
-                Excluded from bulk selection until the dependency service is pending.
+                Excluded from bulk selection until the dependency service updates successfully.
               </span>
             </div>
             <div class="stack-card-side">
