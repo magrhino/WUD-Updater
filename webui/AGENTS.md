@@ -48,6 +48,8 @@ Choose the smallest useful set:
 - Build-affecting change: `npm --prefix webui run build`
 - Static demo change: `npm --prefix webui run build:demo` and `npm --prefix webui run test:smoke:demo`
 - Browser auth/routing/smoke fixture change: install Chromium when needed, then `npm --prefix webui run test:smoke`
+- Browser validation: prefer the Playwright plugin. Start the relevant dev/demo server, navigate directly to the route, use targeted waits/clicks/evaluations, check console messages, and cover desktop/mobile widths when layout changes.
+- Keep Playwright output low-token: avoid full snapshots unless debugging, prefer `browser_evaluate` for compact state, write screenshots/snapshots to files, and remove generated `.playwright-mcp` or screenshot artifacts.
 - Local/demo tooling change: `node --check webui/scripts/dev-server.mjs` plus focused script tests; use `make webui-demo-state` or `make webui-dev` when validating those flows.
 - Backend API contract change: run the focused Python WebUI backend tests selected by `src/wud_updater/AGENTS.md`
 
