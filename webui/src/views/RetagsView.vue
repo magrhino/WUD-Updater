@@ -6,6 +6,9 @@ import {
   NAlert,
   NButton,
   NDataTable,
+  NFlex,
+  NGi,
+  NGrid,
   NInput,
   NModal,
   NRadioButton,
@@ -648,28 +651,40 @@ onMounted(() => {
           {{ retagMutationNotice }}
         </n-alert>
 
-        <div
+        <n-grid
           v-if="updates.retagPlan"
           class="preflight-metrics retag-confirm-metrics"
           aria-label="Retag apply summary"
+          responsive="self"
+          cols="2 560:4"
+          :x-gap="8"
+          :y-gap="8"
         >
-          <div>
-            <span>Services</span>
-            <strong>{{ updates.retagPlan.selected_count }}</strong>
-          </div>
-          <div>
-            <span>Stacks</span>
-            <strong>{{ updates.retagPlan.stacks.length }}</strong>
-          </div>
-          <div>
-            <span>Keep current</span>
-            <strong>{{ updates.retagPlan.keep_current_count }}</strong>
-          </div>
-          <div>
-            <span>Source</span>
-            <strong>{{ retagPlanSourceFile(updates.retagPlan) }}</strong>
-          </div>
-        </div>
+          <n-gi>
+            <div class="preflight-metric">
+              <span>Services</span>
+              <strong>{{ updates.retagPlan.selected_count }}</strong>
+            </div>
+          </n-gi>
+          <n-gi>
+            <div class="preflight-metric">
+              <span>Stacks</span>
+              <strong>{{ updates.retagPlan.stacks.length }}</strong>
+            </div>
+          </n-gi>
+          <n-gi>
+            <div class="preflight-metric">
+              <span>Keep current</span>
+              <strong>{{ updates.retagPlan.keep_current_count }}</strong>
+            </div>
+          </n-gi>
+          <n-gi>
+            <div class="preflight-metric">
+              <span>Source</span>
+              <strong>{{ retagPlanSourceFile(updates.retagPlan) }}</strong>
+            </div>
+          </n-gi>
+        </n-grid>
 
         <section
           class="preflight-impact preflight-block"
@@ -696,7 +711,7 @@ onMounted(() => {
           <div v-else class="empty-state">No retag changes selected.</div>
         </section>
 
-        <div class="preflight-footer">
+        <n-flex class="preflight-footer" justify="flex-end" :size="8">
           <n-button size="small" quaternary @click="closeRetagApplyConfirm">
             Cancel
           </n-button>
@@ -709,7 +724,7 @@ onMounted(() => {
           >
             Confirm and apply
           </n-button>
-        </div>
+        </n-flex>
       </dialog>
     </n-modal>
 

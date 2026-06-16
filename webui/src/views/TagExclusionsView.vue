@@ -5,6 +5,8 @@ import { Edit3, Save, ShieldOff } from "@lucide/vue";
 import {
   NAlert,
   NButton,
+  NEmpty,
+  NFlex,
   NForm,
   NFormItem,
   NModal,
@@ -323,7 +325,12 @@ watch(statusFilter, (nextFilter) => {
           <n-tag size="small" :type="rule.status === 'active' ? 'warning' : 'default'">
             {{ rule.status }}
           </n-tag>
-          <div class="table-actions">
+          <n-flex
+            class="table-actions"
+            align="center"
+            :justify="useManagementCards ? 'flex-start' : 'flex-end'"
+            :size="8"
+          >
             <n-button size="small" quaternary @click="editExclusion(rule)">
               <template #icon>
                 <Edit3 :size="15" />
@@ -347,7 +354,7 @@ watch(statusFilter, (nextFilter) => {
               </template>
               {{ rule.status === "active" ? "Disable" : "Enable" }}
             </n-button>
-          </div>
+          </n-flex>
         </div>
       </div>
 
@@ -377,7 +384,12 @@ watch(statusFilter, (nextFilter) => {
               <dd>{{ rule.image_repo }}</dd>
             </div>
           </dl>
-          <div class="table-actions">
+          <n-flex
+            class="table-actions"
+            align="center"
+            :justify="useManagementCards ? 'flex-start' : 'flex-end'"
+            :size="8"
+          >
             <n-button size="small" quaternary @click="editExclusion(rule)">
               <template #icon>
                 <Edit3 :size="15" />
@@ -401,10 +413,15 @@ watch(statusFilter, (nextFilter) => {
               </template>
               {{ rule.status === "active" ? "Disable" : "Enable" }}
             </n-button>
-          </div>
+          </n-flex>
         </article>
       </div>
-      <div v-if="!settings.tagExclusions.length" class="empty-state">No tag exclusions.</div>
+      <n-empty
+        v-if="!settings.tagExclusions.length"
+        class="empty-state"
+        description="No tag exclusions."
+        :show-icon="false"
+      />
     </section>
 
     <n-modal

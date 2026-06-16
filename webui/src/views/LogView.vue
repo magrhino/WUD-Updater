@@ -3,7 +3,7 @@ import { computed, onMounted, watch } from "vue";
 import { useRoute } from "vue-router";
 import { useClipboard } from "@vueuse/core";
 import { Copy, RefreshCw } from "@lucide/vue";
-import { NAlert, NButton } from "naive-ui";
+import { NAlert, NButton, NEmpty, NFlex } from "naive-ui";
 
 import { useRunsStore } from "../stores/runs";
 
@@ -38,7 +38,7 @@ watch(runId, () => {
         <p class="eyebrow value-eyebrow">{{ log?.log_file ?? "Run log" }}</p>
         <h2>#{{ runId }} log</h2>
       </div>
-      <div class="inline-actions">
+      <n-flex class="inline-actions" align="center" :size="8">
         <n-button
           quaternary
           circle
@@ -56,13 +56,18 @@ watch(runId, () => {
           </template>
           {{ copied ? "Copied" : "Copy log" }}
         </n-button>
-      </div>
+      </n-flex>
     </div>
 
     <n-alert v-if="log?.truncated" type="warning" :show-icon="false">
       Showing the last {{ log.max_bytes }} bytes.
     </n-alert>
-    <div v-if="log && !log.exists" class="empty-state">Log file not found.</div>
+    <n-empty
+      v-if="log && !log.exists"
+      class="empty-state"
+      description="Log file not found."
+      :show-icon="false"
+    />
     <pre v-else class="log-viewer">{{ logText }}</pre>
   </section>
 </template>

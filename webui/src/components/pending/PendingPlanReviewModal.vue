@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { AlertTriangle, Check, CheckCircle2, Play, Trash2, XCircle } from "@lucide/vue";
-import { NAlert, NButton, NModal, NTag } from "naive-ui";
+import { NAlert, NButton, NFlex, NGi, NGrid, NModal, NTag } from "naive-ui";
 
 import type {
   ApplyPreflightCheck,
@@ -112,24 +112,32 @@ function handleModalShowUpdate(value: boolean): void {
         <n-tag :type="planAlertType">{{ plan.status }}</n-tag>
       </div>
 
-      <div class="preflight-metrics">
-        <div>
-          <span>Targets</span>
-          <strong>{{ plan.summary.target_count }}</strong>
-        </div>
-        <div>
-          <span>Matched</span>
-          <strong>{{ plan.summary.matched_target_count }}</strong>
-        </div>
-        <div>
-          <span>Stacks</span>
-          <strong>{{ plan.summary.stack_count }}</strong>
-        </div>
-        <div>
-          <span>Issues</span>
-          <strong>{{ plan.summary.issue_count }}</strong>
-        </div>
-      </div>
+      <n-grid class="preflight-metrics" responsive="self" cols="2 560:4" :x-gap="8" :y-gap="8">
+        <n-gi>
+          <div class="preflight-metric">
+            <span>Targets</span>
+            <strong>{{ plan.summary.target_count }}</strong>
+          </div>
+        </n-gi>
+        <n-gi>
+          <div class="preflight-metric">
+            <span>Matched</span>
+            <strong>{{ plan.summary.matched_target_count }}</strong>
+          </div>
+        </n-gi>
+        <n-gi>
+          <div class="preflight-metric">
+            <span>Stacks</span>
+            <strong>{{ plan.summary.stack_count }}</strong>
+          </div>
+        </n-gi>
+        <n-gi>
+          <div class="preflight-metric">
+            <span>Issues</span>
+            <strong>{{ plan.summary.issue_count }}</strong>
+          </div>
+        </n-gi>
+      </n-grid>
 
       <section
         v-if="applyPreflight"
@@ -516,7 +524,7 @@ function handleModalShowUpdate(value: boolean): void {
         </details>
       </div>
 
-      <div class="preflight-footer">
+      <n-flex class="preflight-footer" justify="flex-end" :size="8">
         <n-button size="small" quaternary @click="emit('close')">
           Close
         </n-button>
@@ -547,7 +555,7 @@ function handleModalShowUpdate(value: boolean): void {
           </template>
           {{ applyButtonLabel }}
         </n-button>
-      </div>
+      </n-flex>
     </section>
   </n-modal>
 </template>

@@ -5,6 +5,8 @@ import { Edit3, Save, Trash2 } from "@lucide/vue";
 import {
   NAlert,
   NButton,
+  NEmpty,
+  NFlex,
   NForm,
   NFormItem,
   NInput,
@@ -329,7 +331,12 @@ onMounted(() => {
           <span>{{ policy.auto_update ? "Yes" : "No" }}</span>
           <span>{{ scheduleLabel(policy) }}</span>
           <span>{{ snoozeLabel(policy.snooze_default_seconds) }}</span>
-          <div class="table-actions">
+          <n-flex
+            class="table-actions"
+            align="center"
+            :justify="useManagementCards ? 'flex-start' : 'flex-end'"
+            :size="8"
+          >
             <n-button size="small" quaternary @click="editPolicy(policy)">
               <template #icon>
                 <Edit3 :size="15" />
@@ -348,7 +355,7 @@ onMounted(() => {
               </template>
               Delete
             </n-button>
-          </div>
+          </n-flex>
         </div>
       </div>
 
@@ -376,7 +383,12 @@ onMounted(() => {
               <dd>{{ snoozeLabel(policy.snooze_default_seconds) }}</dd>
             </div>
           </dl>
-          <div class="table-actions">
+          <n-flex
+            class="table-actions"
+            align="center"
+            :justify="useManagementCards ? 'flex-start' : 'flex-end'"
+            :size="8"
+          >
             <n-button size="small" quaternary @click="editPolicy(policy)">
               <template #icon>
                 <Edit3 :size="15" />
@@ -395,10 +407,15 @@ onMounted(() => {
               </template>
               Delete
             </n-button>
-          </div>
+          </n-flex>
         </article>
       </div>
-      <div v-if="!settings.servicePolicies.length" class="empty-state">No service policies.</div>
+      <n-empty
+        v-if="!settings.servicePolicies.length"
+        class="empty-state"
+        description="No service policies."
+        :show-icon="false"
+      />
     </section>
 
     <n-modal

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Trash2 } from "@lucide/vue";
-import { NAlert, NButton, NModal, NTag } from "naive-ui";
+import { NAlert, NButton, NFlex, NModal, NTag } from "naive-ui";
 
 import type { PendingRemovalPlanLine } from "../../api/client";
 import { pluralize } from "../../views/pending/utils";
@@ -72,7 +72,7 @@ function handleModalShowUpdate(value: boolean): void {
         </div>
       </section>
 
-      <div class="preflight-footer">
+      <n-flex class="preflight-footer" justify="flex-end" :size="8">
         <n-button size="small" quaternary @click="emit('close')">
           Cancel
         </n-button>
@@ -88,7 +88,7 @@ function handleModalShowUpdate(value: boolean): void {
           </template>
           {{ removalConfirmButtonLabel }}
         </n-button>
-      </div>
+      </n-flex>
     </section>
   </n-modal>
 </template>

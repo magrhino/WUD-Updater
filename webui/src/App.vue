@@ -21,6 +21,7 @@ import {
   Sun,
   Tags,
 } from "@lucide/vue";
+import { NFlex } from "naive-ui";
 
 import { useAuthStore } from "./stores/auth";
 import { useConnectionStore } from "./stores/connection";
@@ -370,7 +371,7 @@ async function confirmSelfUpdate(): Promise<void> {
             <div>
               <h1>{{ String(route.meta.title ?? route.name ?? "Dashboard") }}</h1>
             </div>
-            <div class="topbar-actions">
+            <n-flex class="topbar-actions" align="center" :size="8">
               <n-button
                 quaternary
                 circle
@@ -399,7 +400,7 @@ async function confirmSelfUpdate(): Promise<void> {
                 </template>
                 Sign out
               </n-button>
-            </div>
+            </n-flex>
           </header>
 
           <section
@@ -716,13 +717,6 @@ async function confirmSelfUpdate(): Promise<void> {
   line-height: 1.2;
 }
 
-.topbar-actions,
-:deep(.inline-actions) {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
 .self-update-banner,
 .self-update-message {
   margin-bottom: 16px;
@@ -967,10 +961,6 @@ async function confirmSelfUpdate(): Promise<void> {
   .topbar-actions :deep(.n-button--circle),
   :deep(.inline-actions .n-button--circle) {
     min-width: 44px;
-  }
-
-  .topbar-actions {
-    justify-content: flex-start;
   }
 
   .self-update-banner-actions,

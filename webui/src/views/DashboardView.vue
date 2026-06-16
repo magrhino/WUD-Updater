@@ -11,7 +11,7 @@ import {
   Settings2,
   Tags,
 } from "@lucide/vue";
-import { NAlert } from "naive-ui";
+import { NAlert, NEmpty, NGi, NGrid } from "naive-ui";
 
 import CoreUpdateTourPanel from "../components/CoreUpdateTourPanel.vue";
 import { useConnectionStore } from "../stores/connection";
@@ -75,29 +75,37 @@ onMounted(() => {
       </div>
     </CoreUpdateTourPanel>
 
-    <div class="metric-grid">
-      <article class="metric-card">
-        <ListChecks :size="22" />
-        <span>Pending</span>
-        <strong>{{ connection.status?.pending_count ?? updates.pending?.count ?? "0" }}</strong>
-      </article>
-      <article class="metric-card">
-        <Database :size="22" />
-        <span>Database</span>
-        <strong>{{ connection.status?.db_ready ? "Ready" : "Missing" }}</strong>
-      </article>
-      <article class="metric-card">
-        <Clock3 :size="22" />
-        <span>Last run</span>
-        <strong>{{ latestRun ? `#${latestRun.id}` : "None" }}</strong>
-      </article>
-      <article class="metric-card">
-        <CheckCircle2 v-if="connection.status?.ok" :size="22" />
-        <AlertTriangle v-else :size="22" />
-        <span>Status</span>
-        <strong>{{ connection.status?.ok ? "OK" : "Needs attention" }}</strong>
-      </article>
-    </div>
+    <n-grid responsive="self" cols="1 560:2 920:4" :x-gap="12" :y-gap="12">
+      <n-gi>
+        <article class="metric-card">
+          <ListChecks :size="22" />
+          <span>Pending</span>
+          <strong>{{ connection.status?.pending_count ?? updates.pending?.count ?? "0" }}</strong>
+        </article>
+      </n-gi>
+      <n-gi>
+        <article class="metric-card">
+          <Database :size="22" />
+          <span>Database</span>
+          <strong>{{ connection.status?.db_ready ? "Ready" : "Missing" }}</strong>
+        </article>
+      </n-gi>
+      <n-gi>
+        <article class="metric-card">
+          <Clock3 :size="22" />
+          <span>Last run</span>
+          <strong>{{ latestRun ? `#${latestRun.id}` : "None" }}</strong>
+        </article>
+      </n-gi>
+      <n-gi>
+        <article class="metric-card">
+          <CheckCircle2 v-if="connection.status?.ok" :size="22" />
+          <AlertTriangle v-else :size="22" />
+          <span>Status</span>
+          <strong>{{ connection.status?.ok ? "OK" : "Needs attention" }}</strong>
+        </article>
+      </n-gi>
+    </n-grid>
 
     <section class="section-panel">
       <div class="section-heading">
@@ -135,7 +143,12 @@ onMounted(() => {
         </div>
         <RouterLink to="/runs" class="text-link">View history</RouterLink>
       </div>
-      <div v-if="!runs.runs.length" class="empty-state">No runs recorded.</div>
+      <n-empty
+        v-if="!runs.runs.length"
+        class="empty-state"
+        description="No runs recorded."
+        :show-icon="false"
+      />
       <div v-else class="compact-list">
         <RouterLink
           v-for="run in runs.runs.slice(0, 5)"
@@ -157,32 +170,35 @@ onMounted(() => {
           <h2>Management</h2>
         </div>
       </div>
-      <div class="shortcut-grid">
-        <RouterLink to="/policies" class="shortcut-card">
-          <Settings2 :size="20" />
-          <span>Policies</span>
-          <strong>{{ settings.servicePolicies.length }}</strong>
-        </RouterLink>
-        <RouterLink to="/snoozes" class="shortcut-card">
-          <BellOff :size="20" />
-          <span>Active snoozes</span>
-          <strong>{{ settings.snoozes.length }}</strong>
-        </RouterLink>
-        <RouterLink to="/tag-exclusions" class="shortcut-card">
-          <Tags :size="20" />
-          <span>Active exclusions</span>
-          <strong>{{ settings.tagExclusions.length }}</strong>
-        </RouterLink>
-      </div>
+      <n-grid class="shortcut-grid" responsive="self" cols="1 920:3" :x-gap="10" :y-gap="10">
+        <n-gi>
+          <RouterLink to="/policies" class="shortcut-card">
+            <Settings2 :size="20" />
+            <span>Policies</span>
+            <strong>{{ settings.servicePolicies.length }}</strong>
+          </RouterLink>
+        </n-gi>
+        <n-gi>
+          <RouterLink to="/snoozes" class="shortcut-card">
+            <BellOff :size="20" />
+            <span>Active snoozes</span>
+            <strong>{{ settings.snoozes.length }}</strong>
+          </RouterLink>
+        </n-gi>
+        <n-gi>
+          <RouterLink to="/tag-exclusions" class="shortcut-card">
+            <Tags :size="20" />
+            <span>Active exclusions</span>
+            <strong>{{ settings.tagExclusions.length }}</strong>
+          </RouterLink>
+        </n-gi>
+      </n-grid>
     </section>
   </section>
 </template>
 
 <style scoped>
 .shortcut-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 10px;
   margin-top: 16px;
 }
 
@@ -220,9 +236,4 @@ onMounted(() => {
   overflow-wrap: anywhere;
 }
 
-@media (max-width: 920px) {
-  .shortcut-grid {
-    grid-template-columns: 1fr;
-  }
-}
 </style>

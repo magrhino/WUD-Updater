@@ -116,13 +116,7 @@
   overflow-wrap: anywhere;
 }
 
-.preflight-metrics {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 8px;
-}
-
-.preflight-metrics div {
+.preflight-metric {
   display: grid;
   gap: 3px;
   min-width: 0;
@@ -178,10 +172,6 @@
 }
 
 .preflight-footer {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: 8px;
   padding-top: 4px;
 }
 
@@ -224,10 +214,6 @@
     max-height: calc(100vh - 48px);
     max-height: calc(100svh - 48px);
     padding: 14px;
-  }
-
-  .preflight-metrics {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .preflight-footer {

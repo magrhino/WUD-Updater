@@ -16,7 +16,20 @@ import {
   ShieldCheck,
   SlidersHorizontal,
 } from "@lucide/vue";
-import { NAlert, NButton, NButtonGroup, NInput, NModal, NSelect, NTag } from "naive-ui";
+import {
+  NAlert,
+  NButton,
+  NButtonGroup,
+  NEmpty,
+  NFlex,
+  NGi,
+  NGrid,
+  NInput,
+  NModal,
+  NSelect,
+  NSkeleton,
+  NTag,
+} from "naive-ui";
 
 import type {
   ManagedSettingEntry,
@@ -536,79 +549,103 @@ onMounted(() => {
         </div>
       </div>
 
-      <div class="settings-zone-grid settings-actions-grid">
-        <section class="section-panel">
-          <div class="section-heading">
-            <div class="section-heading-main">
-              <p class="eyebrow">Maintenance</p>
-              <h2>Container</h2>
-              <p class="section-copy">
-                Restart the running WebUI container after a helper image update or
-                runtime configuration change.
-              </p>
+      <n-grid
+        class="settings-zone-grid settings-actions-grid"
+        item-responsive
+        responsive="self"
+        cols="1 760:12"
+        :x-gap="16"
+        :y-gap="16"
+      >
+        <n-gi span="1 760:5">
+          <section class="section-panel">
+            <div class="section-heading">
+              <div class="section-heading-main">
+                <p class="eyebrow">Maintenance</p>
+                <h2>Container</h2>
+                <p class="section-copy">
+                  Restart the running WebUI container after a helper image update or
+                  runtime configuration change.
+                </p>
+              </div>
+              <RefreshCw :size="20" class="section-heading-icon" />
             </div>
-            <RefreshCw :size="20" class="section-heading-icon" />
-          </div>
-          <n-alert
-            v-if="restartMessage"
-            type="success"
-            :show-icon="false"
-            class="settings-action-alert"
-          >
-            {{ restartMessage }}
-          </n-alert>
-          <n-alert
-            v-if="restartError"
-            type="error"
-            :show-icon="false"
-            class="settings-action-alert"
-          >
-            {{ restartError }}
-          </n-alert>
-          <div class="settings-risk-facts" aria-label="Container restart facts">
-            <div>
-              <span>Target</span>
-              <strong>{{ restartContainerTarget || "Unavailable" }}</strong>
-            </div>
-            <div>
-              <span>Permission</span>
-              <strong>{{ mutationsEnabled ? "Allowed" : "Read-only" }}</strong>
-            </div>
-            <div>
-              <span>Impact</span>
-              <strong>Temporary disconnect</strong>
-            </div>
-          </div>
-          <div class="settings-action-row">
-            <div>
-              <strong>Restart WebUI container</strong>
-              <span>The current browser session will temporarily lose connection.</span>
-              <code v-if="restartContainerTarget">{{ restartContainerTarget }}</code>
-            </div>
-            <n-button
-              type="warning"
-              :disabled="restartButtonDisabled"
-              :loading="connection.loading"
-              @click="openRestartDialog"
+            <n-alert
+              v-if="restartMessage"
+              type="success"
+              :show-icon="false"
+              class="settings-action-alert"
             >
-              <template #icon>
-                <RefreshCw :size="16" />
-              </template>
-              Restart container
-            </n-button>
-          </div>
-          <n-alert
-            v-if="restartDisabledReason"
-            type="info"
-            :show-icon="false"
-            class="settings-action-alert"
-          >
-            {{ restartDisabledReason }}
-          </n-alert>
-        </section>
+              {{ restartMessage }}
+            </n-alert>
+            <n-alert
+              v-if="restartError"
+              type="error"
+              :show-icon="false"
+              class="settings-action-alert"
+            >
+              {{ restartError }}
+            </n-alert>
+            <n-grid
+              class="settings-risk-facts"
+              aria-label="Container restart facts"
+              responsive="self"
+              :cols="compactSettingsLayout ? 1 : '1 220:2 340:3'"
+              :x-gap="8"
+              :y-gap="8"
+            >
+              <n-gi>
+                <div class="settings-risk-fact">
+                  <span>Target</span>
+                  <strong>{{ restartContainerTarget || "Unavailable" }}</strong>
+                </div>
+              </n-gi>
+              <n-gi>
+                <div class="settings-risk-fact">
+                  <span>Permission</span>
+                  <strong>{{ mutationsEnabled ? "Allowed" : "Read-only" }}</strong>
+                </div>
+              </n-gi>
+              <n-gi>
+                <div class="settings-risk-fact">
+                  <span>Impact</span>
+                  <strong>Temporary disconnect</strong>
+                </div>
+              </n-gi>
+            </n-grid>
+            <div class="settings-action-row">
+              <div>
+                <strong>Restart WebUI container</strong>
+                <span>The current browser session will temporarily lose connection.</span>
+                <code v-if="restartContainerTarget">{{ restartContainerTarget }}</code>
+              </div>
+              <n-button
+                type="warning"
+                :disabled="restartButtonDisabled"
+                :loading="connection.loading"
+                @click="openRestartDialog"
+              >
+                <template #icon>
+                  <RefreshCw :size="16" />
+                </template>
+                Restart container
+              </n-button>
+            </div>
+            <n-alert
+              v-if="restartDisabledReason"
+              type="info"
+              :show-icon="false"
+              class="settings-action-alert"
+            >
+              {{ restartDisabledReason }}
+            </n-alert>
+          </section>
+        </n-gi>
 
-        <OnboardingChecklist />
-      </div>
+        <n-gi span="1 760:7">
+          <OnboardingChecklist />
+        </n-gi>
+      </n-grid>
     </div>
 
     <div v-if="settingsData" id="settings-preferences" class="settings-zone">
@@ -762,7 +799,11 @@ onMounted(() => {
                 {{ coreUpdateTourStepLabel }}.
               </span>
             </div>
-            <div class="settings-button-group">
+            <n-flex
+              class="settings-button-group"
+              :justify="compactSettingsLayout ? 'flex-start' : 'flex-end'"
+              :size="8"
+            >
               <n-button
                 size="small"
                 :loading="settings.loading"
@@ -781,7 +822,7 @@ onMounted(() => {
                 </template>
                 Replay tour
               </n-button>
-            </div>
+            </n-flex>
           </div>
         </div>
         <div class="settings-action-row settings-preference-actions">
@@ -789,7 +830,11 @@ onMounted(() => {
             <strong>No restart required</strong>
             <span>Managed values apply to new WebUI requests immediately.</span>
           </div>
-          <div class="settings-button-group">
+          <n-flex
+            class="settings-button-group"
+            :justify="compactSettingsLayout ? 'flex-start' : 'flex-end'"
+            :size="8"
+          >
             <n-button :disabled="settings.loading || !preferencesDirty" @click="resetPreferenceForm">
               <template #icon>
                 <RotateCcw :size="16" />
@@ -807,7 +852,7 @@ onMounted(() => {
               </template>
               Save preferences
             </n-button>
-          </div>
+          </n-flex>
         </div>
         <n-alert
           v-if="preferencesDisabledReason"
@@ -844,33 +889,58 @@ onMounted(() => {
           </div>
           <SlidersHorizontal :size="20" class="section-heading-icon settings-overview-icon" />
         </div>
-        <div v-if="!settingsData && !settings.loading" class="empty-state">
-          Settings are unavailable.
-        </div>
-        <div v-else-if="!settingsData" class="skeleton-list" aria-busy="true">
+        <n-empty
+          v-if="!settingsData && !settings.loading"
+          class="empty-state"
+          description="Settings are unavailable."
+          :show-icon="false"
+        />
+        <n-flex
+          v-else-if="!settingsData"
+          vertical
+          :size="8"
+          style="margin-top: 14px"
+          aria-busy="true"
+        >
           <span class="sr-only">Loading settings.</span>
-          <span aria-hidden="true" class="skeleton-row"></span>
-          <span aria-hidden="true" class="skeleton-row"></span>
-          <span aria-hidden="true" class="skeleton-row"></span>
-        </div>
-        <div v-else class="summary-grid" aria-label="Settings summary">
-          <div class="summary-item">
-            <span>Configured values</span>
-            <strong>{{ configuredEntryCount }}</strong>
-          </div>
-          <div class="summary-item">
-            <span>Not explicitly set</span>
-            <strong>{{ inheritedEntryCount }}</strong>
-          </div>
-          <div class="summary-item">
-            <span>Runtime scoped</span>
-            <strong>{{ runtimeScopedEntryCount }}</strong>
-          </div>
-          <div class="summary-item">
-            <span>Secrets configured</span>
-            <strong>{{ configuredSecretCount }} / {{ secrets.length }}</strong>
-          </div>
-        </div>
+          <n-skeleton aria-hidden="true" height="42px" />
+          <n-skeleton aria-hidden="true" height="42px" />
+          <n-skeleton aria-hidden="true" height="42px" />
+        </n-flex>
+        <n-grid
+          v-else
+          class="summary-grid"
+          aria-label="Settings summary"
+          responsive="self"
+          cols="1 560:2 920:4"
+          :x-gap="12"
+          :y-gap="12"
+        >
+          <n-gi>
+            <div class="summary-item">
+              <span>Configured values</span>
+              <strong>{{ configuredEntryCount }}</strong>
+            </div>
+          </n-gi>
+          <n-gi>
+            <div class="summary-item">
+              <span>Not explicitly set</span>
+              <strong>{{ inheritedEntryCount }}</strong>
+            </div>
+          </n-gi>
+          <n-gi>
+            <div class="summary-item">
+              <span>Runtime scoped</span>
+              <strong>{{ runtimeScopedEntryCount }}</strong>
+            </div>
+          </n-gi>
+          <n-gi>
+            <div class="summary-item">
+              <span>Secrets configured</span>
+              <strong>{{ configuredSecretCount }} / {{ secrets.length }}</strong>
+            </div>
+          </n-gi>
+        </n-grid>
       </section>
     </div>
 
@@ -885,10 +955,15 @@ onMounted(() => {
           <p class="eyebrow">Updater</p>
           <h2>Paths</h2>
         </div>
-        <div class="section-heading-meta">
+        <n-flex
+          class="section-heading-meta"
+          align="center"
+          :justify="compactSettingsLayout ? 'flex-start' : 'flex-end'"
+          :size="8"
+        >
           <n-tag size="small">{{ entryCountLabel(pathEntries) }}</n-tag>
           <ChevronDown :size="18" class="settings-disclosure-chevron" />
-        </div>
+        </n-flex>
       </summary>
       <div
         v-if="pathEntries.length"
@@ -912,7 +987,12 @@ onMounted(() => {
           </n-tag>
         </div>
       </div>
-      <div v-else class="empty-state">Path settings are unavailable.</div>
+      <n-empty
+        v-else
+        class="empty-state"
+        description="Path settings are unavailable."
+        :show-icon="false"
+      />
     </details>
 
     <details
@@ -926,10 +1006,15 @@ onMounted(() => {
           <p class="eyebrow">Updater</p>
           <h2>Behavior</h2>
         </div>
-        <div class="section-heading-meta">
+        <n-flex
+          class="section-heading-meta"
+          align="center"
+          :justify="compactSettingsLayout ? 'flex-start' : 'flex-end'"
+          :size="8"
+        >
           <n-tag size="small">{{ entryCountLabel(behaviorEntries) }}</n-tag>
           <ChevronDown :size="18" class="settings-disclosure-chevron" />
-        </div>
+        </n-flex>
       </summary>
       <div
         v-if="behaviorEntries.length"
@@ -953,7 +1038,12 @@ onMounted(() => {
           </n-tag>
         </div>
       </div>
-      <div v-else class="empty-state">Behavior settings are unavailable.</div>
+      <n-empty
+        v-else
+        class="empty-state"
+        description="Behavior settings are unavailable."
+        :show-icon="false"
+      />
     </details>
 
     <details
@@ -967,11 +1057,16 @@ onMounted(() => {
           <p class="eyebrow">WebUI</p>
           <h2>Safety status</h2>
         </div>
-        <div class="section-heading-meta">
+        <n-flex
+          class="section-heading-meta"
+          align="center"
+          :justify="compactSettingsLayout ? 'flex-start' : 'flex-end'"
+          :size="8"
+        >
           <n-tag size="small">{{ entryCountLabel(webuiEntries) }}</n-tag>
           <ShieldCheck :size="20" class="section-heading-icon" />
           <ChevronDown :size="18" class="settings-disclosure-chevron" />
-        </div>
+        </n-flex>
       </summary>
       <div
         v-if="webuiEntries.length"
@@ -995,7 +1090,12 @@ onMounted(() => {
           </n-tag>
         </div>
       </div>
-      <div v-else class="empty-state">WebUI safety settings are unavailable.</div>
+      <n-empty
+        v-else
+        class="empty-state"
+        description="WebUI safety settings are unavailable."
+        :show-icon="false"
+      />
     </details>
 
     <details
@@ -1009,12 +1109,17 @@ onMounted(() => {
           <p class="eyebrow">Secrets</p>
           <h2>Configured values</h2>
         </div>
-        <div class="section-heading-meta">
+        <n-flex
+          class="section-heading-meta"
+          align="center"
+          :justify="compactSettingsLayout ? 'flex-start' : 'flex-end'"
+          :size="8"
+        >
           <n-tag size="small">{{ configuredSecretCount }} configured</n-tag>
           <n-tag v-if="missingSecretCount" size="small">{{ missingSecretCount }} missing</n-tag>
           <KeyRound :size="20" class="section-heading-icon" />
           <ChevronDown :size="18" class="settings-disclosure-chevron" />
-        </div>
+        </n-flex>
       </summary>
       <div
         v-if="secrets.length"
@@ -1038,7 +1143,12 @@ onMounted(() => {
           </n-tag>
         </div>
       </div>
-      <div v-else class="empty-state">No secret settings reported.</div>
+      <n-empty
+        v-else
+        class="empty-state"
+        description="No secret settings reported."
+        :show-icon="false"
+      />
     </details>
 
     <section id="settings-diagnostics" class="section-panel">
@@ -1297,19 +1407,10 @@ onMounted(() => {
 }
 
 .settings-zone-grid {
-  display: grid;
-  gap: 16px;
   align-items: start;
 }
 
-.settings-actions-grid {
-  grid-template-columns: minmax(300px, 0.72fr) minmax(0, 1.28fr);
-}
-
 .settings-risk-facts {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(104px, 1fr));
-  gap: 8px;
   margin-top: 14px;
   padding: 10px;
   border: 1px solid var(--color-border-subtle);
@@ -1317,25 +1418,25 @@ onMounted(() => {
   background: var(--color-panel-tint);
 }
 
-.settings-risk-facts>div {
+.settings-risk-fact {
   display: grid;
   gap: 3px;
   min-width: 0;
 }
 
-.settings-risk-facts span,
-.settings-risk-facts strong {
+.settings-risk-fact span,
+.settings-risk-fact strong {
   min-width: 0;
   overflow-wrap: anywhere;
 }
 
-.settings-risk-facts span {
+.settings-risk-fact span {
   color: var(--color-muted-text);
   font-size: 0.78rem;
   font-weight: 700;
 }
 
-.settings-risk-facts strong {
+.settings-risk-fact strong {
   color: var(--color-ink);
   font-size: 0.9rem;
 }
@@ -1576,13 +1677,6 @@ onMounted(() => {
   align-items: end;
 }
 
-.settings-button-group {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: 8px;
-}
-
 .settings-dialog-copy {
   margin: 0;
   line-height: 1.45;
@@ -1627,10 +1721,6 @@ onMounted(() => {
     min-height: 44px;
   }
 
-  .settings-risk-facts {
-    grid-template-columns: 1fr;
-  }
-
   .settings-table-head {
     position: absolute;
     width: 1px;
@@ -1649,10 +1739,6 @@ onMounted(() => {
 
   .settings-action-row :deep(.n-button) {
     justify-self: start;
-  }
-
-  .settings-button-group {
-    justify-content: flex-start;
   }
 
   .settings-preference-row>.settings-preference-controls {

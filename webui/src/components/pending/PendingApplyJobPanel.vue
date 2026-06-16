@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref } from "vue";
 import { Check, CheckCircle2, ChevronDown, ChevronUp, Play, X } from "@lucide/vue";
-import { NAlert, NButton, NTag } from "naive-ui";
+import { NAlert, NButton, NFlex, NTag } from "naive-ui";
 
 import type {
   ApplyJobLogResponse,
@@ -163,10 +163,10 @@ function snapshotLineScope(
     </section>
 
     <section class="apply-job-progress-steps" aria-labelledby="apply-job-progress-title">
-      <div class="panel-subheading">
+      <n-flex class="panel-subheading" align="center" justify="space-between" :size="8">
         <strong id="apply-job-progress-title">Update progress</strong>
         <n-tag size="small">{{ progressSummary }}</n-tag>
-      </div>
+      </n-flex>
       <ol class="apply-progress-list">
         <li
           v-for="step in progressSteps"
@@ -216,7 +216,7 @@ function snapshotLineScope(
           <div v-if="job.run_id" class="list-row">
             <span>Run</span>
             <strong>#{{ job.run_id }}</strong>
-            <em class="inline-actions">
+            <n-flex class="apply-job-run-links" align="center" :size="8">
               <RouterLink
                 class="text-link"
                 :to="{ name: 'run-detail', params: { id: job.run_id } }"
@@ -229,7 +229,7 @@ function snapshotLineScope(
               >
                 Log
               </RouterLink>
-            </em>
+            </n-flex>
           </div>
         </div>
 
@@ -237,10 +237,10 @@ function snapshotLineScope(
           class="apply-job-impact"
           aria-labelledby="apply-job-impact-title"
         >
-          <div class="panel-subheading">
+          <n-flex class="panel-subheading" align="center" justify="space-between" :size="8">
             <strong id="apply-job-impact-title">Services and images</strong>
             <n-tag size="small">{{ pluralize(snapshot?.lines.length ?? 0, "service") }}</n-tag>
-          </div>
+          </n-flex>
           <div v-if="snapshot?.lines.length" class="compact-list">
             <div
               v-for="line in snapshot.lines"
@@ -274,7 +274,12 @@ function snapshotLineScope(
     </details>
 
     <section class="apply-job-live-log" aria-labelledby="apply-job-log-title">
-      <div class="panel-subheading apply-job-live-log-heading">
+      <n-flex
+        class="panel-subheading apply-job-live-log-heading"
+        align="flex-start"
+        justify="space-between"
+        :size="8"
+      >
         <div class="apply-job-log-heading-copy">
           <strong id="apply-job-log-title">Live log</strong>
           <span class="apply-job-log-note">Raw command output</span>
@@ -295,7 +300,7 @@ function snapshotLineScope(
           </template>
           {{ liveLogExpanded ? "Hide output" : "Show output" }}
         </n-button>
-      </div>
+      </n-flex>
       <div v-show="liveLogVisible" class="apply-job-live-log-body">
         <n-alert
           v-if="log?.truncated"

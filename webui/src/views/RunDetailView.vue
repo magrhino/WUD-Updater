@@ -2,7 +2,7 @@
 import { computed, onMounted, watch } from "vue";
 import { RouterLink, useRoute } from "vue-router";
 import { FileText } from "@lucide/vue";
-import { NAlert } from "naive-ui";
+import { NAlert, NEmpty, NGi, NGrid } from "naive-ui";
 
 import type { RunEventRecord } from "../api/client";
 import RunVerificationPanel from "../components/RunVerificationPanel.vue";
@@ -61,24 +61,32 @@ function shortEventDigest(value: string): string {
     </div>
 
     <div v-if="run" class="content-stack">
-      <div class="metric-grid">
-        <article class="metric-card">
-          <span>Status</span>
-          <strong>{{ run.status }}</strong>
-        </article>
-        <article class="metric-card">
-          <span>Mode</span>
-          <strong>{{ run.mode }}</strong>
-        </article>
-        <article class="metric-card">
-          <span>Dry run</span>
-          <strong>{{ run.dry_run ? "Yes" : "No" }}</strong>
-        </article>
-        <article class="metric-card">
-          <span>Updates</span>
-          <strong>{{ run.pending_updates.length }}</strong>
-        </article>
-      </div>
+      <n-grid responsive="self" cols="1 560:2 920:4" :x-gap="12" :y-gap="12">
+        <n-gi>
+          <article class="metric-card">
+            <span>Status</span>
+            <strong>{{ run.status }}</strong>
+          </article>
+        </n-gi>
+        <n-gi>
+          <article class="metric-card">
+            <span>Mode</span>
+            <strong>{{ run.mode }}</strong>
+          </article>
+        </n-gi>
+        <n-gi>
+          <article class="metric-card">
+            <span>Dry run</span>
+            <strong>{{ run.dry_run ? "Yes" : "No" }}</strong>
+          </article>
+        </n-gi>
+        <n-gi>
+          <article class="metric-card">
+            <span>Updates</span>
+            <strong>{{ run.pending_updates.length }}</strong>
+          </article>
+        </n-gi>
+      </n-grid>
 
       <RunVerificationPanel
         :verification="run.verification"
@@ -92,7 +100,12 @@ function shortEventDigest(value: string): string {
             <h2>Pending records</h2>
           </div>
         </div>
-        <div v-if="!run.pending_updates.length" class="empty-state">No pending records.</div>
+        <n-empty
+          v-if="!run.pending_updates.length"
+          class="empty-state"
+          description="No pending records."
+          :show-icon="false"
+        />
         <div v-else class="compact-list">
           <div v-for="item in run.pending_updates" :key="item.id" class="list-row">
             <span>#{{ item.line_no }}</span>
@@ -109,7 +122,12 @@ function shortEventDigest(value: string): string {
             <h2>Events</h2>
           </div>
         </div>
-        <div v-if="!run.events.length" class="empty-state">No events recorded.</div>
+        <n-empty
+          v-if="!run.events.length"
+          class="empty-state"
+          description="No events recorded."
+          :show-icon="false"
+        />
         <div v-else class="compact-list">
           <div v-for="event in run.events" :key="event.id" class="list-row" style="flex-direction: column; align-items: flex-start; gap: 4px;">
             <div style="display: flex; gap: 8px; width: 100%;">

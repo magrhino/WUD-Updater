@@ -2,7 +2,7 @@
 import { computed, h, onMounted, ref } from "vue";
 import { RouterLink } from "vue-router";
 import { breakpointsTailwind, useBreakpoints } from "@vueuse/core";
-import { NAlert, NDataTable, NTag, type DataTableColumns } from "naive-ui";
+import { NAlert, NDataTable, NEmpty, NTag, type DataTableColumns } from "naive-ui";
 
 import HistoryViewTabs from "../components/HistoryViewTabs.vue";
 import type { RunSummary } from "../api/client";
@@ -179,7 +179,12 @@ onMounted(() => {
       size="small"
       class="data-surface"
     />
-    <div v-else-if="!isMobile" class="empty-state">No operator actions recorded recently.</div>
+    <n-empty
+      v-else-if="!isMobile"
+      class="empty-state"
+      description="No operator actions recorded recently."
+      :show-icon="false"
+    />
 
     <div v-else class="mobile-list">
       <RouterLink
@@ -221,9 +226,12 @@ onMounted(() => {
           </div>
         </dl>
       </RouterLink>
-      <div v-if="!isLoadingRuns && !auditRuns.length" class="empty-state">
-        No operator actions recorded recently.
-      </div>
+      <n-empty
+        v-if="!isLoadingRuns && !auditRuns.length"
+        class="empty-state"
+        description="No operator actions recorded recently."
+        :show-icon="false"
+      />
     </div>
   </section>
 </template>

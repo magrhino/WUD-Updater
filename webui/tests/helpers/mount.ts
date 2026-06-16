@@ -33,6 +33,18 @@ const passthrough = (tag: string) => ({
   },
 });
 
+const passthroughAttrs = (tag: string) => ({
+  setup(
+    _: unknown,
+    {
+      attrs,
+      slots,
+    }: { attrs: Record<string, unknown>; slots: Record<string, () => unknown> },
+  ) {
+    return () => h(tag, attrs, [slots.default?.()]);
+  },
+});
+
 const tabsInjectionKey = Symbol("tabs");
 
 function callUpdateValue(listener: unknown, value: string): void {
@@ -196,6 +208,20 @@ export const naiveStubs: Record<string, Component> = {
         );
     },
   },
+  NEmpty: {
+    props: {
+      description: String,
+      showIcon: Boolean,
+    },
+    setup(props, { attrs, slots }) {
+      return () =>
+        h("div", attrs, [
+          slots.default?.() ?? props.description,
+          slots.extra?.(),
+        ]);
+    },
+  },
+  NFlex: passthroughAttrs("div"),
   NForm: {
     emits: ["submit"],
     setup(_, { emit, slots }) {
@@ -225,6 +251,8 @@ export const naiveStubs: Record<string, Component> = {
         ]);
     },
   },
+  NGi: passthroughAttrs("div"),
+  NGrid: passthroughAttrs("div"),
   NInput: nInputStub,
   Input: nInputStub,
   NInputNumber: {
@@ -369,6 +397,11 @@ export const naiveStubs: Record<string, Component> = {
         );
     },
   },
+  NSkeleton: {
+    setup(_, { attrs }) {
+      return () => h("div", { ...attrs, "aria-hidden": "true" });
+    },
+  },
   NSwitch: {
     props: {
       disabled: Boolean,
@@ -455,13 +488,20 @@ Object.assign(naiveStubs, {
   Checkbox: naiveStubs.NCheckbox,
   ConfigProvider: naiveStubs.NConfigProvider,
   DataTable: naiveStubs.NDataTable,
+  Empty: naiveStubs.NEmpty,
+  Flex: naiveStubs.NFlex,
   Form: naiveStubs.NForm,
   FormItem: naiveStubs.NFormItem,
+  Gi: naiveStubs.NGi,
+  Grid: naiveStubs.NGrid,
+  GridItem: naiveStubs.NGi,
   Input: naiveStubs.NInput,
   InputNumber: naiveStubs.NInputNumber,
   MessageProvider: naiveStubs.NMessageProvider,
   Modal: naiveStubs.NModal,
+  NGridItem: naiveStubs.NGi,
   Select: naiveStubs.NSelect,
+  Skeleton: naiveStubs.NSkeleton,
   Switch: naiveStubs.NSwitch,
   TabPane: naiveStubs.NTabPane,
   Tabs: naiveStubs.NTabs,

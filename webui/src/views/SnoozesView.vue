@@ -5,6 +5,8 @@ import { Plus, Trash2 } from "@lucide/vue";
 import {
   NAlert,
   NButton,
+  NEmpty,
+  NFlex,
   NForm,
   NFormItem,
   NInput,
@@ -318,7 +320,12 @@ watch(snoozeState, (nextState) => {
           <n-tag size="small" :type="snooze.active ? 'info' : 'default'">
             {{ statusLabel(snooze) }}
           </n-tag>
-          <div class="table-actions">
+          <n-flex
+            class="table-actions"
+            align="center"
+            :justify="useManagementCards ? 'flex-start' : 'flex-end'"
+            :size="8"
+          >
             <n-button
               size="small"
               quaternary
@@ -331,7 +338,7 @@ watch(snoozeState, (nextState) => {
               </template>
               Delete
             </n-button>
-          </div>
+          </n-flex>
         </div>
       </div>
 
@@ -357,7 +364,12 @@ watch(snoozeState, (nextState) => {
               <dd>{{ snooze.reason || "None" }}</dd>
             </div>
           </dl>
-          <div class="table-actions">
+          <n-flex
+            class="table-actions"
+            align="center"
+            :justify="useManagementCards ? 'flex-start' : 'flex-end'"
+            :size="8"
+          >
             <n-button
               size="small"
               quaternary
@@ -370,10 +382,15 @@ watch(snoozeState, (nextState) => {
               </template>
               Delete
             </n-button>
-          </div>
+          </n-flex>
         </article>
       </div>
-      <div v-if="!settings.snoozes.length" class="empty-state">No snoozes.</div>
+      <n-empty
+        v-if="!settings.snoozes.length"
+        class="empty-state"
+        description="No snoozes."
+        :show-icon="false"
+      />
     </section>
 
     <n-modal

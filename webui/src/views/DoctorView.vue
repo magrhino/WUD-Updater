@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, type Component } from "vue";
-import { useClipboard } from "@vueuse/core";
+import { useClipboard, useMediaQuery } from "@vueuse/core";
 import {
   AlertTriangle,
   CheckCircle2,
@@ -9,7 +9,7 @@ import {
   Stethoscope,
   XCircle,
 } from "@lucide/vue";
-import { NAlert, NButton, NTag } from "naive-ui";
+import { NAlert, NButton, NEmpty, NFlex, NGi, NGrid, NSkeleton, NTag } from "naive-ui";
 
 import type { DoctorCheck, DoctorCheckStatus } from "../api/client";
 import { useConnectionStore } from "../stores/connection";
@@ -17,6 +17,7 @@ import { useConnectionStore } from "../stores/connection";
 const connection = useConnectionStore();
 const copiedSnippet = ref("");
 const { copy, copied, isSupported } = useClipboard({ legacy: true });
+const compactHeadingActions = useMediaQuery("(max-width: 560px)");
 
 const doctor = computed(() => connection.doctor);
 const checks = computed(() => doctor.value?.checks ?? []);
@@ -130,7 +131,12 @@ function statusIcon(status: DoctorCheckStatus): Component {
             browser safety checks from the same doctor logic used by the CLI.
           </p>
         </div>
-        <div class="section-heading-meta">
+        <n-flex
+          class="section-heading-meta"
+          align="center"
+          :justify="compactHeadingActions ? 'flex-start' : 'flex-end'"
+          :size="8"
+        >
           <n-tag v-if="doctor" size="small" :type="doctor.ok ? 'success' : 'error'">
             {{
               doctor.ok
@@ -150,36 +156,63 @@ function statusIcon(status: DoctorCheckStatus): Component {
             Refresh
           </n-button>
           <Stethoscope :size="20" class="section-heading-icon" />
-        </div>
+        </n-flex>
       </div>
 
-      <div v-if="!doctor && connection.loading" class="skeleton-list" aria-busy="true">
+      <n-flex
+        v-if="!doctor && connection.loading"
+        vertical
+        :size="8"
+        style="margin-top: 14px"
+        aria-busy="true"
+      >
         <span class="sr-only">Loading doctor results.</span>
-        <span aria-hidden="true" class="skeleton-row"></span>
-        <span aria-hidden="true" class="skeleton-row"></span>
-        <span aria-hidden="true" class="skeleton-row"></span>
-      </div>
-      <div v-else-if="doctor" class="summary-grid" aria-label="Doctor summary">
-        <div class="summary-item">
-          <span>Failures</span>
-          <strong>{{ doctor.failures }}</strong>
-        </div>
-        <div class="summary-item">
-          <span>Warnings</span>
-          <strong>{{ doctor.warnings }}</strong>
-        </div>
-        <div class="summary-item">
-          <span>Passing checks</span>
-          <strong>{{ passCount }}</strong>
-        </div>
-        <div class="summary-item">
-          <span>Total checks</span>
-          <strong>{{ checks.length }}</strong>
-        </div>
-      </div>
+        <n-skeleton aria-hidden="true" height="42px" />
+        <n-skeleton aria-hidden="true" height="42px" />
+        <n-skeleton aria-hidden="true" height="42px" />
+      </n-flex>
+      <n-grid
+        v-else-if="doctor"
+        class="summary-grid"
+        aria-label="Doctor summary"
+        responsive="self"
+        cols="1 560:2 920:4"
+        :x-gap="12"
+        :y-gap="12"
+      >
+        <n-gi>
+          <div class="summary-item">
+            <span>Failures</span>
+            <strong>{{ doctor.failures }}</strong>
+          </div>
+        </n-gi>
+        <n-gi>
+          <div class="summary-item">
+            <span>Warnings</span>
+            <strong>{{ doctor.warnings }}</strong>
+          </div>
+        </n-gi>
+        <n-gi>
+          <div class="summary-item">
+            <span>Passing checks</span>
+            <strong>{{ passCount }}</strong>
+          </div>
+        </n-gi>
+        <n-gi>
+          <div class="summary-item">
+            <span>Total checks</span>
+            <strong>{{ checks.length }}</strong>
+          </div>
+        </n-gi>
+      </n-grid>
     </section>
 
-    <div v-if="doctor && !checks.length" class="empty-state">No doctor checks reported.</div>
+    <n-empty
+      v-if="doctor && !checks.length"
+      class="empty-state"
+      description="No doctor checks reported."
+      :show-icon="false"
+    />
 
     <section
       v-for="[category, groupChecks] in groupedChecks"
