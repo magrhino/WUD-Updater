@@ -506,6 +506,8 @@ Boolean examples use `true` and `false`; legacy aliases `1`, `0`, `yes`, `no`,
 |---|---|---|
 | `DOCKER_BASE` | Host: `$HOME/docker`; container examples: `${HOST_DOCKER_BASE:-/srv/docker}` | Compose project search root. Containerized runs should mount this at the same absolute path the Docker daemon uses. |
 | `HOST_DOCKER_BASE` | unset | Optional daemon-visible host root matching `DOCKER_BASE` inside the helper. The path must also be mounted/readable inside the helper because Compose uses it as `--project-directory`. |
+| `WEBUI_LOG_DIR` | `./logs` | Host-side directory mounted at `/logs` by the long-running WebUI Compose examples; persists updater logs and SQLite state. |
+| `WEBUI_HTTP_BIND` | `127.0.0.1` | Host-side bind address used by the long-running WebUI Compose examples. Keep loopback for first run; use a LAN address or `0.0.0.0` only with `WUD_WEB_PUBLIC_ORIGIN` configured. |
 | `DOCKER_HOST` | Docker CLI default | Optional Docker daemon endpoint, such as the hardened example's socket proxy. |
 | `WUD_OUT_FILE` | Host: `$DOCKER_BASE/wud/out/images.todo`; container: `/out/images.todo` | Shared pending-update file. |
 | `WUD_LOG_DIR` | Host: `./logs`; container: `/logs` | Updater log directory. Set to `$DOCKER_BASE/logs` to keep the previous layout. |
@@ -514,6 +516,7 @@ Boolean examples use `true` and `false`; legacy aliases `1`, `0`, `yes`, `no`,
 | `WUD_MAX_WAIT` | `180` | Seconds to wait for health after recreation. |
 | `WUD_LOCK_TIMEOUT` | `30` | Seconds to wait for the shared todo-file lock. |
 | `WUD_TIMEZONE` | `UTC` | IANA timezone name, such as `America/Chicago`, used for WebUI auto-update policy schedules. |
+| `WUD_COMPOSE_IGNORE_PATHS` | `old` | Comma-separated relative directory names or paths excluded from Compose discovery. Set an empty value to disable archive ignores; when unset in the WebUI, the managed Settings value can control this. |
 | `WUD_DIGEST_PIN_UPDATES` | `false` | Opt-in digest-pin mode for approved tag updates. When `true`, supported tag updates resolve the planned tag/index digest and write Compose as `repo/app@sha256:<digest>` with `wud-updater.resolved-tag` and `wud.tag.include` metadata. Environment configuration overrides the managed WebUI setting. |
 | `OUT_UID` / `OUT_GID` | unset | Optional owner for rewritten todo files and updater logs. `OUT_GUID` is accepted as an alias for `OUT_GID`. |
 | `WUD_UPDATER` | Host: repo-local `bin/docker-update-from-wud`; image: `/app/bin/docker-update-from-wud` | Updater command invoked by `updates`. |
@@ -554,7 +557,7 @@ Container and installer values:
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `WUD_SYNC_SCRIPTS` | auto | Unset auto-syncs when the managed script directory exists and is writable. Set `true` to force startup sync or `false` to opt out. |
+| `WUD_SYNC_SCRIPTS` | `auto` | Set `auto` or leave unset to sync only when the managed script directory exists and is writable. Set `true` to force startup sync or `false` to opt out. |
 | `WUD_SCRIPTS_DIR` | `/managed-wud` | Optional managed script sync destination override. |
 | `WUD_APP_DIR` | `/app` | Application root inside the helper container. |
 | `BIN_DIR` | `$HOME/bin` | Host installer destination for the `updates` and `docker-update-from-wud` symlinks. |
