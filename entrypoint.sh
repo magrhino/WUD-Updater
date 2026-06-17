@@ -20,6 +20,17 @@ env_bool_enabled(){
   esac
 }
 
+env_auto_enabled(){
+  case "${1:-}" in
+    [Aa][Uu][Tt][Oo])
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
 startup_sync_status(){
   local command="${1:-}"
 
@@ -37,6 +48,12 @@ startup_sync_status(){
   if [[ -n "${WUD_SYNC_SCRIPTS+x}" ]]; then
     if env_bool_enabled "$WUD_SYNC_SCRIPTS"; then
       printf 'forced\n'
+    elif env_auto_enabled "$WUD_SYNC_SCRIPTS"; then
+      if [[ -d "$wud_scripts_dir" && -w "$wud_scripts_dir" ]]; then
+        printf 'auto-detected\n'
+      else
+        printf 'auto-not-detected\n'
+      fi
     else
       printf 'disabled\n'
     fi

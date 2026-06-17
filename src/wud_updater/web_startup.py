@@ -64,9 +64,11 @@ def _script_sync_summary(env: Mapping[str, str]) -> str:
 
     configured_sync = env.get("WUD_SYNC_SCRIPTS")
     if configured_sync is not None:
-        if configured_sync.strip().lower() in TRUE_VALUES:
+        normalized_sync = configured_sync.strip().lower()
+        if normalized_sync in TRUE_VALUES:
             return "forced by WUD_SYNC_SCRIPTS; entrypoint status unavailable"
-        return "disabled by WUD_SYNC_SCRIPTS"
+        if normalized_sync != "auto":
+            return "disabled by WUD_SYNC_SCRIPTS"
 
     default_dir = Path(DEFAULT_CONTAINER_SCRIPTS_DIR)
     if scripts_dir != default_dir:

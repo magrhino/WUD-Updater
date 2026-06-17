@@ -5,6 +5,7 @@ from types import SimpleNamespace
 import uvicorn
 
 from wud_updater import web as web_module
+from wud_updater import web_startup
 from tests.web_test_helpers import (
     _client,
     _web_env,
@@ -118,6 +119,19 @@ def test_web_startup_summary_uses_public_origin_when_setup_not_required(
     assert "Web URL: https://wud.example.test/" in stderr
     assert "Setup link:" not in stderr
     assert "Script sync: auto mode did not detect writable /managed-wud" in stderr
+
+
+def test_script_sync_summary_treats_explicit_auto_as_auto(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    scripts_dir = tmp_path / "managed-wud"
+    scripts_dir.mkdir()
+    monkeypatch.setattr(web_startup, "DEFAULT_CONTAINER_SCRIPTS_DIR", str(scripts_dir))
+
+    summary = web_startup._script_sync_summary({"WUD_SYNC_SCRIPTS": "auto"})
+
+    assert summary.startswith(f"auto fallback sees writable {scripts_dir}")
 
 
 def test_static_spa_mount_serves_index_when_configured(tmp_path: Path) -> None:

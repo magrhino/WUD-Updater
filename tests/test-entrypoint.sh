@@ -228,6 +228,17 @@ test_web_exports_auto_not_detected_script_sync_status(){
   teardown_case
 }
 
+test_web_exports_explicit_auto_script_sync_status(){
+  setup_case
+  mkdir -p "$TEST_TMP/managed-wud"
+  WUD_SYNC_SCRIPTS=auto PYTHON_BIN="$TEST_TMP/python" FAKE_PYTHON_PRINT_SCRIPT_SYNC_STATUS=1 run_entrypoint web
+  assert_status 0
+  assert_output "Synced WUD scripts to $TEST_TMP/managed-wud
+python [-m] [wud_updater.cli] [web] [--base] [$TEST_TMP/docker] [--file] [$TEST_TMP/out/images.todo] [--log-dir] [/logs] WUD_SCRIPT_SYNC_STATUS=[auto-detected]"
+  assert_synced_scripts
+  teardown_case
+}
+
 test_web_exports_forced_script_sync_status(){
   setup_case
   WUD_SYNC_SCRIPTS=true PYTHON_BIN="$TEST_TMP/python" FAKE_PYTHON_PRINT_SCRIPT_SYNC_STATUS=1 run_entrypoint web
@@ -288,6 +299,26 @@ updates [--yes]"
 test_startup_auto_sync_skips_missing_destination(){
   setup_case
   run_entrypoint updates --yes
+  assert_status 0
+  assert_output 'updates [--yes]'
+  [[ ! -e "$TEST_TMP/managed-wud/.wud-updater-managed" ]] || fail "missing destination enabled sync"
+  teardown_case
+}
+
+test_startup_explicit_auto_sync_runs_for_existing_destination(){
+  setup_case
+  mkdir -p "$TEST_TMP/managed-wud"
+  WUD_SYNC_SCRIPTS=auto run_entrypoint updates --yes
+  assert_status 0
+  assert_output "Synced WUD scripts to $TEST_TMP/managed-wud
+updates [--yes]"
+  assert_synced_scripts
+  teardown_case
+}
+
+test_startup_explicit_auto_sync_skips_missing_destination(){
+  setup_case
+  WUD_SYNC_SCRIPTS=auto run_entrypoint updates --yes
   assert_status 0
   assert_output 'updates [--yes]'
   [[ ! -e "$TEST_TMP/managed-wud/.wud-updater-managed" ]] || fail "missing destination enabled sync"
@@ -397,6 +428,7 @@ main(){
   run_test test_web_dispatch_injects_paths
   run_test test_web_exports_auto_detected_script_sync_status
   run_test test_web_exports_auto_not_detected_script_sync_status
+  run_test test_web_exports_explicit_auto_script_sync_status
   run_test test_web_exports_forced_script_sync_status
   run_test test_web_exports_disabled_script_sync_status
   run_test test_doctor_exports_skipped_script_sync_status
@@ -404,6 +436,8 @@ main(){
   run_test test_sync_command_copies_scripts_and_exits
   run_test test_startup_auto_sync_runs_for_existing_destination
   run_test test_startup_auto_sync_skips_missing_destination
+  run_test test_startup_explicit_auto_sync_runs_for_existing_destination
+  run_test test_startup_explicit_auto_sync_skips_missing_destination
   run_test test_startup_sync_true_runs_before_command
   run_test test_startup_sync_accepts_legacy_one
   run_test test_startup_sync_accepts_legacy_zero_as_disabled
