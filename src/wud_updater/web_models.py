@@ -101,6 +101,8 @@ __all__ = (
     "ResetAdminClaimRequest",
     "RetagApplyRequest",
     "RetagChoiceRequest",
+    "RetagTargetItem",
+    "RetagTargetsResponse",
     "RetagPlanDigestPinUpdate",
     "RetagPlanIssue",
     "RetagPlanLabelRewrite",

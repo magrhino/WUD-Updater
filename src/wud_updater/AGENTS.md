@@ -16,7 +16,8 @@ Prefer small modules with one clear reason to change:
 
 | Area | Preferred owner | Notes |
 |---|---|---|
-| Web app factory, startup, CLI handoff, compatibility imports | `web.py` | Do not add new route families or large helper clusters here. |
+| Web app factory, startup, CLI handoff | `web.py` | Do not add new route families or large helper clusters here. Keep legacy export resolution delegated to `web_compat.py`. |
+| Legacy `wud_updater.web` compatibility exports | `web_compat.py` | Preserve `web_models.__all__` re-exports and route/helper aliases while pointing new code at owning `web_*` modules. |
 | Web models and schemas | `web_models.py` | Preserve Pydantic fields, defaults, `Field(...)` constraints, and `Literal` precision. |
 | Web auth, setup, sessions, CSRF, Host/Origin safety | `web_auth.py` | Security-sensitive; preserve failure bodies, cookies, headers, and redaction. |
 | Web health, readiness, and doctor routes | `web_health.py` | Preserve unauthenticated `/healthz`, local-only `/readyz`, authenticated readiness, doctor option/env construction, and redaction. |

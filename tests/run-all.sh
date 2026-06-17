@@ -113,6 +113,7 @@ EOF
     src/wud_updater/updater_runner_output.py \
     src/wud_updater/updater_tag_exclusions.py \
     src/wud_updater/web_auth.py \
+    src/wud_updater/web_compat.py \
     src/wud_updater/web_database.py \
     src/wud_updater/web_diagnostics.py \
     src/wud_updater/web_health.py \
