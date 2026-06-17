@@ -3,7 +3,6 @@ import { createPinia, setActivePinia } from "pinia";
 import { createMemoryHistory } from "vue-router";
 import { vi } from "vitest";
 
-import { webApi } from "../../src/api/client";
 import { createWudRouter } from "../../src/router";
 import { useAuthStore } from "../../src/stores/auth";
 import { useConnectionStore } from "../../src/stores/connection";
@@ -13,8 +12,6 @@ import { useRunsStore } from "../../src/stores/runs";
 import PendingView from "../../src/views/PendingView.vue";
 import {
   applyPreflightResponse,
-  applyJobLogResponse,
-  applyJobResponse,
   authSession,
   coreUpdateTourResponse,
   pendingGroupedItem,
@@ -23,6 +20,8 @@ import {
   statusResponse,
 } from "./fixtures";
 import { mountWithApp, naiveStubs } from "./mount";
+
+export { mockApplyJobStream } from "./applyJobStream";
 
 export function setupStores(mutationsEnabled: boolean) {
   const pinia = createPinia();
@@ -154,79 +153,6 @@ export function pendingWithUnmatched(item = unmatchedPendingItem()) {
       ...pendingGrouping([]),
       groups: [],
       unmatched: [item],
-    },
-  };
-}
-
-export function mockApplyJobStream() {
-  const close = vi.fn();
-  let jobListener: ((event: MessageEvent<string>) => void) | null = null;
-  let logListener: ((event: MessageEvent<string>) => void) | null = null;
-  let progressListener: ((event: MessageEvent<string>) => void) | null = null;
-  vi.spyOn(webApi, "openJobStream").mockReturnValue({
-    addEventListener: vi.fn((type: string, listener: EventListener) => {
-      if (type === "job") {
-        jobListener = listener as (event: MessageEvent<string>) => void;
-      }
-      if (type === "log") {
-        logListener = listener as (event: MessageEvent<string>) => void;
-      }
-      if (type === "progress") {
-        progressListener = listener as (event: MessageEvent<string>) => void;
-      }
-    }),
-    close,
-    onerror: null,
-    onmessage: null,
-    onopen: null,
-    readyState: 1,
-    url: "",
-    withCredentials: true,
-    CONNECTING: 0,
-    OPEN: 1,
-    CLOSED: 2,
-    dispatchEvent: vi.fn(),
-    removeEventListener: vi.fn(),
-  } as unknown as EventSource);
-
-  return {
-    close,
-    emitJob(job: ReturnType<typeof applyJobResponse>): void {
-      jobListener?.(
-        new MessageEvent("job", {
-          data: JSON.stringify(job),
-        }),
-      );
-    },
-    emitLog(log: ReturnType<typeof applyJobLogResponse>): void {
-      logListener?.(
-        new MessageEvent("log", {
-          data: JSON.stringify(log),
-        }),
-      );
-    },
-    emitProgress(
-      progress: ReturnType<typeof applyJobResponse>["progress"][number],
-    ): void {
-      progressListener?.(
-        new MessageEvent("progress", {
-          data: JSON.stringify(progress),
-        }),
-      );
-    },
-    emitInvalidLog(): void {
-      logListener?.(
-        new MessageEvent("log", {
-          data: "{",
-        }),
-      );
-    },
-    get observed(): boolean {
-      return (
-        jobListener !== null &&
-        logListener !== null &&
-        progressListener !== null
-      );
     },
   };
 }
