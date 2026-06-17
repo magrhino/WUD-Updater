@@ -266,8 +266,8 @@ if [ "${update_available:-}" = "true" ]; then
     echo "Failed to read desired metadata for $OUT_FILE" >&2
     exit 1
   }
-  TMP="$(mktemp "${OUT_DIR}/.${OUT_BASE}.left.XXXXXX")"
-  SORTED_TMP="$(mktemp "${OUT_DIR}/.${OUT_BASE}.sorted.XXXXXX")"
+  TMP="$(mktemp "${OUT_DIR}/.${OUT_BASE}.left.XXXXXX")" || exit 1
+  SORTED_TMP="$(mktemp "${OUT_DIR}/.${OUT_BASE}.sorted.XXXXXX")" || exit 1
 
   # Remove existing lines for this image, with or without a digest suffix.
   if [ -e "$OUT_FILE" ]; then
