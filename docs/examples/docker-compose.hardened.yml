@@ -90,9 +90,7 @@ services:
       # The Docker CLI and Compose plugin use the same constrained proxy.
       DOCKER_HOST: tcp://socket-proxy-wud-updater:2375
       DOCKER_BASE: ${HOST_DOCKER_BASE:-/srv/docker}
-      WUD_OUT_FILE: /out/images.todo
-      WUD_LOG_DIR: /logs
-      WUD_DB_PATH: /logs/wud-updater.sqlite
+      WUD_OUT_FILE: "${WUD_OUT_FILE:-/out/images.todo}"
       WUD_TIMEZONE: "${WUD_TIMEZONE:-UTC}"
       WUD_WEB_HOST: 0.0.0.0
       WUD_WEB_PORT: "${WUD_WEB_PORT:-7417}"
@@ -101,8 +99,6 @@ services:
       WUD_WEB_ALLOWED_HOSTS: "${WUD_WEB_ALLOWED_HOSTS:-}"
       WUD_WEB_TRUSTED_PROXIES: "${WUD_WEB_TRUSTED_PROXIES:-}"
       WUD_WEB_SECURE_COOKIES: "${WUD_WEB_SECURE_COOKIES:-auto}"
-      # The Python wrapper avoids sudo inside the read-only WebUI container.
-      WUD_UPDATER_USE_SUDO: "false"
       HOME: /tmp
       OUT_UID: "${OUT_UID:-1000}"
       OUT_GID: "${OUT_GID:-1000}"

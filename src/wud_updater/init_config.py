@@ -358,13 +358,18 @@ def _compose_environment(answers: InitAnswers) -> dict[str, str]:
     environment = {
         "DOCKER_BASE": "${HOST_DOCKER_BASE:-/srv/docker}",
         "WUD_OUT_FILE": "/out/images.todo",
-        "WUD_LOG_DIR": "/logs",
-        "WUD_DB_PATH": "/logs/wud-updater.sqlite",
         "OUT_UID": "${OUT_UID:-1000}",
         "OUT_GID": "${OUT_GID:-1000}",
     }
     if answers.profile == "hardened":
-        environment["WUD_UPDATER_USE_SUDO"] = "false"
+        environment["WUD_OUT_FILE"] = "${WUD_OUT_FILE:-/out/images.todo}"
+    else:
+        environment.update(
+            {
+                "WUD_LOG_DIR": "/logs",
+                "WUD_DB_PATH": "/logs/wud-updater.sqlite",
+            }
+        )
     if answers.profile == "webui":
         environment.update(
             {

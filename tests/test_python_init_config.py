@@ -338,6 +338,34 @@ class InitConfigTests(unittest.TestCase):
         self.assertIn("${WEBUI_LOG_DIR:-./logs}:/logs", service["volumes"])
         self.assertIn("wud-scripts:/managed-wud", service["volumes"])
 
+    def test_hardened_compose_override_uses_image_defaults_for_log_and_db(self) -> None:
+        override_file = self.root / "override.yml"
+        answers = answers_from_namespace(
+            self._args(
+                profile="hardened",
+                compose_override=str(override_file),
+                stack_root=str(self.root / "docker"),
+                no_doctor=True,
+            ),
+            environ=self._env(),
+        )
+
+        run_init(answers, repo_root=self.root, environ=self._env())
+
+        parsed = YAML(typ="safe").load(override_file.read_text(encoding="utf-8"))
+        environment = parsed["services"]["wud-updater"]["environment"]
+        self.assertEqual(
+            environment["WUD_OUT_FILE"],
+            "${WUD_OUT_FILE:-/out/images.todo}",
+        )
+        self.assertNotIn("WUD_LOG_DIR", environment)
+        self.assertNotIn("WUD_DB_PATH", environment)
+        self.assertNotIn("WUD_UPDATER_USE_SUDO", environment)
+        self.assertIn(
+            "${WEBUI_LOG_DIR:-./logs}:/logs",
+            parsed["services"]["wud-updater"]["volumes"],
+        )
+
     def test_webui_compose_override_yaml_contains_readyz_healthcheck(self) -> None:
         override_file = self.root / "override.yml"
         answers = answers_from_namespace(
