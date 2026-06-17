@@ -78,7 +78,7 @@ mkdir -p "$bin_dir" "$(dirname "$wud_scripts_link")" "$wud_out_dir"
 ensure_python_runtime_deps
 
 chmod +x "$repo_dir/bin/updates" "$repo_dir/bin/docker-update-from-wud"
-find "$repo_dir/wud" -type f -name '*.sh' -exec chmod +x {} \;
+find "$repo_dir/wud" -type f -name '*.sh' -exec chmod +x {} +
 
 link_one "$repo_dir/bin/updates" "$bin_dir/updates"
 link_one "$repo_dir/bin/docker-update-from-wud" "$bin_dir/docker-update-from-wud"
