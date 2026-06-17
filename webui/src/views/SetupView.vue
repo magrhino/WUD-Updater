@@ -1,68 +1,28 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue";
-import { useRoute, useRouter } from "vue-router";
 import { ShieldCheck, UserPlus } from "@lucide/vue";
 import { NAlert, NButton, NForm, NFormItem, NInput } from "naive-ui";
 
-import { useAuthStore } from "../stores/auth";
+import { useAdminClaimForm } from "./useAdminClaimForm";
 
-const auth = useAuthStore();
-const route = useRoute();
-const router = useRouter();
-
-const username = ref("admin");
-const password = ref("");
-const confirmPassword = ref("");
-const submitting = ref(false);
-
-const claim = computed(() =>
-  typeof route.query.claim === "string" ? route.query.claim : "",
-);
-const passwordMinLength = computed(
-  () => auth.setupStatus?.password_min_length ?? 12,
-);
-const passwordsMatch = computed(
-  () => password.value.length > 0 && password.value === confirmPassword.value,
-);
-const passwordValidationStatus = computed<"error" | undefined>(() =>
-  password.value.length > 0 && password.value.length < passwordMinLength.value
-    ? "error"
-    : undefined,
-);
-const passwordFeedback = computed(() =>
-  passwordValidationStatus.value === "error"
-    ? `Use at least ${passwordMinLength.value} characters.`
-    : `Minimum ${passwordMinLength.value} characters.`,
-);
-const confirmPasswordValidationStatus = computed<"error" | undefined>(() =>
-  confirmPassword.value && !passwordsMatch.value ? "error" : undefined,
-);
-const confirmPasswordFeedback = computed(() =>
-  confirmPasswordValidationStatus.value === "error"
-    ? "Passwords do not match."
-    : "Repeat the new password.",
-);
-const canSubmit = computed(
-  () =>
-    Boolean(claim.value) &&
-    Boolean(username.value.trim()) &&
-    password.value.length >= passwordMinLength.value &&
-    passwordsMatch.value,
-);
-
-onMounted(async () => {
-  await auth.loadSetupStatus();
+const {
+  auth,
+  username,
+  password,
+  confirmPassword,
+  submitting,
+  claim,
+  passwordMinLength,
+  passwordValidationStatus,
+  passwordFeedback,
+  confirmPasswordValidationStatus,
+  confirmPasswordFeedback,
+  canSubmit,
+  submit,
+} = useAdminClaimForm({
+  initialUsername: "admin",
+  operation: "setup",
+  successRoute: { name: "settings", query: { onboarding: "1" } },
 });
-
-async function submit(): Promise<void> {
-  submitting.value = true;
-  try {
-    await auth.claimSetup(claim.value, username.value, password.value);
-    await router.replace({ name: "settings", query: { onboarding: "1" } });
-  } finally {
-    submitting.value = false;
-  }
-}
 </script>
 
 <template>
@@ -86,20 +46,40 @@ async function submit(): Promise<void> {
       </n-alert>
 
       <n-form @submit.prevent="submit">
-        <n-form-item label="Username" required feedback="Required for setup.">
-          <n-input v-model:value="username" autocomplete="username" autofocus />
+        <n-form-item
+          label="Username"
+          required
+          feedback="Required for setup."
+          :label-props="{ for: 'setup-username' }"
+        >
+          <n-input
+            v-model:value="username"
+            autofocus
+            :input-props="{
+              id: 'setup-username',
+              name: 'username',
+              autocomplete: 'username',
+              required: true,
+            }"
+          />
         </n-form-item>
         <n-form-item
           :label="`Password (${passwordMinLength}+ characters)`"
           required
           :validation-status="passwordValidationStatus"
           :feedback="passwordFeedback"
+          :label-props="{ for: 'setup-password' }"
         >
           <n-input
             v-model:value="password"
             type="password"
             show-password-on="click"
-            autocomplete="new-password"
+            :input-props="{
+              id: 'setup-password',
+              name: 'password',
+              autocomplete: 'new-password',
+              required: true,
+            }"
           />
         </n-form-item>
         <n-form-item
@@ -107,13 +87,19 @@ async function submit(): Promise<void> {
           required
           :validation-status="confirmPasswordValidationStatus"
           :feedback="confirmPasswordFeedback"
+          :label-props="{ for: 'setup-confirm-password' }"
         >
           <n-input
             v-model:value="confirmPassword"
             type="password"
             show-password-on="click"
-            autocomplete="new-password"
             :status="confirmPasswordValidationStatus"
+            :input-props="{
+              id: 'setup-confirm-password',
+              name: 'confirm-password',
+              autocomplete: 'new-password',
+              required: true,
+            }"
           />
         </n-form-item>
         <n-button

@@ -26,7 +26,7 @@ import {
   webApi,
 } from "../api/client";
 import { useAuthStore } from "./auth";
-import { errorMessage } from "./connection";
+import { errorMessage, runWithStoreState } from "./storeState";
 
 export const APPLY_JOB_RECOVERY_MESSAGE =
   "Last known apply job state is unavailable because the WebUI process restarted. Check Runs -> Latest run and the updater log before applying more updates.";
@@ -61,16 +61,7 @@ export const useUpdatesStore = defineStore("updates", () => {
   const error = ref("");
 
   async function loadWithState(work: () => Promise<void>): Promise<void> {
-    loading.value = true;
-    error.value = "";
-    try {
-      await work();
-    } catch (exc) {
-      error.value = errorMessage(exc);
-      throw exc;
-    } finally {
-      loading.value = false;
-    }
+    await runWithStoreState(loading, error, work);
   }
 
   async function loadPending(

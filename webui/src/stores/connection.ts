@@ -2,7 +2,6 @@
 import { ref } from "vue";
 import { defineStore } from "pinia";
 import {
-  ApiError,
   type ContainerRestartResponse,
   type DiagnosticsSupportBundleResponse,
   type DoctorResponse,
@@ -12,13 +11,9 @@ import {
   webApi,
 } from "../api/client";
 import { useAuthStore } from "./auth";
+import { runWithStoreState } from "./storeState";
 
-export function errorMessage(exc: unknown): string {
-  if (exc instanceof ApiError || exc instanceof Error) {
-    return exc.message;
-  }
-  return "Request failed";
-}
+export { errorMessage } from "./storeState";
 
 export const useConnectionStore = defineStore("connection", () => {
   const status = ref<StatusResponse | null>(null);
@@ -27,16 +22,7 @@ export const useConnectionStore = defineStore("connection", () => {
   const error = ref("");
 
   async function loadWithState(work: () => Promise<void>): Promise<void> {
-    loading.value = true;
-    error.value = "";
-    try {
-      await work();
-    } catch (exc) {
-      error.value = errorMessage(exc);
-      throw exc;
-    } finally {
-      loading.value = false;
-    }
+    await runWithStoreState(loading, error, work);
   }
 
   async function loadStatus(): Promise<void> {

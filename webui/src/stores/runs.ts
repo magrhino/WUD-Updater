@@ -7,7 +7,7 @@ import {
   type RunSummary,
   webApi,
 } from "../api/client";
-import { errorMessage } from "./connection";
+import { runWithStoreState } from "./storeState";
 
 export const useRunsStore = defineStore("runs", () => {
   const runs = ref<RunSummary[]>([]);
@@ -17,16 +17,7 @@ export const useRunsStore = defineStore("runs", () => {
   const error = ref("");
 
   async function loadWithState(work: () => Promise<void>): Promise<void> {
-    loading.value = true;
-    error.value = "";
-    try {
-      await work();
-    } catch (exc) {
-      error.value = errorMessage(exc);
-      throw exc;
-    } finally {
-      loading.value = false;
-    }
+    await runWithStoreState(loading, error, work);
   }
 
   async function loadRuns(): Promise<void> {
