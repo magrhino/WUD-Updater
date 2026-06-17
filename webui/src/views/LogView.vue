@@ -6,6 +6,7 @@ import { Copy, RefreshCw } from "@lucide/vue";
 import { NAlert, NButton, NEmpty, NFlex } from "naive-ui";
 
 import { useRunsStore } from "../stores/runs";
+import { runInBackground } from "../utils/promises";
 
 const route = useRoute();
 const runs = useRunsStore();
@@ -19,11 +20,11 @@ async function load(): Promise<void> {
 }
 
 onMounted(() => {
-  void load().catch(() => undefined);
+  runInBackground(load());
 });
 
 watch(runId, () => {
-  void load().catch(() => undefined);
+  runInBackground(load());
 });
 </script>
 

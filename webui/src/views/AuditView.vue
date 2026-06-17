@@ -7,6 +7,7 @@ import { NAlert, NDataTable, NEmpty, NTag, type DataTableColumns } from "naive-u
 import HistoryViewTabs from "../components/HistoryViewTabs.vue";
 import type { RunSummary } from "../api/client";
 import { useRunsStore } from "../stores/runs";
+import { runInBackground } from "../utils/promises";
 
 const runs = useRunsStore();
 const breakpoints = useBreakpoints(breakpointsTailwind);
@@ -91,7 +92,13 @@ function statusTagType(status: string): "success" | "warning" | "error" | "defau
 }
 
 function actionTagType(run: RunSummary): "info" | "warning" | "default" {
-  return run.dry_run ? "info" : CLI_UPDATE_MODES.has(run.mode) ? "warning" : "default";
+  if (run.dry_run) {
+    return "info";
+  }
+  if (CLI_UPDATE_MODES.has(run.mode)) {
+    return "warning";
+  }
+  return "default";
 }
 
 function formatTarget(run: RunSummary): string {
@@ -147,7 +154,7 @@ async function loadAuditRuns(): Promise<void> {
 }
 
 onMounted(() => {
-  void loadAuditRuns().catch(() => undefined);
+  runInBackground(loadAuditRuns());
 });
 </script>
 

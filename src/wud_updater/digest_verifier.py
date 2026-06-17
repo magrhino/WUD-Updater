@@ -21,10 +21,19 @@ DOCKER_HUB_REGISTRIES = frozenset(
 )
 DOCKER_HUB_HTTP_REGISTRY = "registry-1.docker.io"
 DEFAULT_REGISTRY_TIMEOUT = 5.0
+_SHA256_PREFIX = "sha256:"
+_STATUS_FAILED = "failed"
+_STATUS_VERIFIED = "verified"
+_STATUS_UNTRUSTED = "untrusted"
+_REASON_PLATFORM_MISMATCH = "platform-mismatch"
+_REASON_MANIFEST_CONFIG_MISSING = "manifest-config-missing"
+_DOCKER_MANIFEST_LIST_MEDIA_TYPE = (
+    "application/vnd.docker.distribution.manifest.list.v2+json"
+)
 MANIFEST_ACCEPT = ", ".join(
     (
         "application/vnd.oci.image.index.v1+json",
-        "application/vnd.docker.distribution.manifest.list.v2+json",
+        _DOCKER_MANIFEST_LIST_MEDIA_TYPE,
         "application/vnd.oci.image.manifest.v1+json",
         "application/vnd.docker.distribution.manifest.v2+json",
     )
@@ -32,7 +41,7 @@ MANIFEST_ACCEPT = ", ".join(
 INDEX_MEDIA_TYPES = frozenset(
     (
         "application/vnd.oci.image.index.v1+json",
-        "application/vnd.docker.distribution.manifest.list.v2+json",
+        _DOCKER_MANIFEST_LIST_MEDIA_TYPE,
     )
 )
 IMAGE_MANIFEST_MEDIA_TYPES = frozenset(
@@ -41,9 +50,7 @@ IMAGE_MANIFEST_MEDIA_TYPES = frozenset(
         "application/vnd.docker.distribution.manifest.v2+json",
     )
 )
-VERBOSE_MANIFEST_LIST_MEDIA_TYPE = (
-    "application/vnd.docker.distribution.manifest.list.v2+json"
-)
+VERBOSE_MANIFEST_LIST_MEDIA_TYPE = _DOCKER_MANIFEST_LIST_MEDIA_TYPE
 
 
 class ManifestLookupError(RuntimeError):
@@ -66,7 +73,7 @@ class RegistryImageRef:
         return self.registry == GHCR_REGISTRY
 
     def manifest_ref(self, reference: str) -> str:
-        if reference.startswith("sha256:"):
+        if reference.startswith(_SHA256_PREFIX):
             return f"{self.registry}/{self.repo}@{reference}"
         return f"{self.registry}/{self.repo}:{reference}"
 
@@ -190,7 +197,7 @@ class RegistryHttpManifestResolver:
                 accept=accept,
                 token=self._token(challenge),
             )
-        except (OSError, urllib.error.URLError) as exc:
+        except OSError as exc:
             raise ManifestLookupError(f"registry request failed for {url}: {exc}") from exc
         try:
             payload = json.loads(body.decode("utf-8"))
@@ -295,7 +302,7 @@ class DigestVerifier:
         if any(digest.rsplit("@", 1)[-1] == expected for digest in repo_digests):
             return DigestCheckResult(
                 ok=True,
-                status="verified",
+                status=_STATUS_VERIFIED,
                 reason="repo-digest-match",
                 seen_repo_digests=repo_digests,
                 local_image_id=local_image_id,
@@ -305,7 +312,7 @@ class DigestVerifier:
         if registry_image is None:
             return DigestCheckResult(
                 ok=False,
-                status="untrusted",
+                status=_STATUS_UNTRUSTED,
                 reason="repo-digest-mismatch",
                 seen_repo_digests=repo_digests,
                 local_image_id=local_image_id,
@@ -364,7 +371,7 @@ class DigestVerifier:
 
         return DigestCheckResult(
             ok=False,
-            status="failed",
+            status=_STATUS_FAILED,
             reason="stale-digest",
             seen_repo_digests=repo_digests,
             tag_digest=tag_document.digest,
@@ -377,7 +384,7 @@ class DigestVerifier:
         if registry_image is None:
             return DigestResolveResult(
                 ok=False,
-                status="untrusted",
+                status=_STATUS_UNTRUSTED,
                 reason="unsupported-image-reference",
             )
         try:
@@ -412,14 +419,14 @@ class DigestVerifier:
         if not expected:
             return DigestResolveResult(
                 ok=False,
-                status="failed",
+                status=_STATUS_FAILED,
                 reason="expected-digest-missing",
             )
         registry_image = parse_registry_image(image)
         if registry_image is None:
             return DigestResolveResult(
                 ok=False,
-                status="untrusted",
+                status=_STATUS_UNTRUSTED,
                 reason="unsupported-image-reference",
             )
         try:
@@ -440,7 +447,7 @@ class DigestVerifier:
         if tag_digest == expected:
             return DigestResolveResult(
                 ok=True,
-                status="verified",
+                status=_STATUS_VERIFIED,
                 reason="tag-digest-current",
                 digest=expected,
                 source=tag_document.source,
@@ -448,14 +455,14 @@ class DigestVerifier:
         if tag_document.is_index() and tag_document.platform_child_digest(expected):
             return DigestResolveResult(
                 ok=True,
-                status="verified",
+                status=_STATUS_VERIFIED,
                 reason="tag-child-digest-current",
                 digest=expected,
                 source=tag_document.source,
             )
         return DigestResolveResult(
             ok=False,
-            status="failed",
+            status=_STATUS_FAILED,
             reason="stale-digest",
             digest=tag_digest,
             source=tag_document.source,
@@ -504,7 +511,7 @@ class DigestVerifier:
         if expected_config and expected_config == local_image_id:
             return DigestCheckResult(
                 ok=True,
-                status="verified",
+                status=_STATUS_VERIFIED,
                 reason=_reason(image, "platform-manifest-match"),
                 seen_repo_digests=repo_digests,
                 tag_digest=tag_document.digest,
@@ -515,8 +522,8 @@ class DigestVerifier:
             )
         return DigestCheckResult(
             ok=False,
-            status="failed",
-            reason="platform-mismatch" if expected_config else "manifest-config-missing",
+            status=_STATUS_FAILED,
+            reason=_config_mismatch_reason(expected_config),
             seen_repo_digests=repo_digests,
             tag_digest=tag_document.digest,
             matched_child_digest=expected,
@@ -534,29 +541,60 @@ class DigestVerifier:
         local_image_id: str,
     ) -> DigestCheckResult:
         if tag_document.is_image_manifest():
-            config_digest = tag_document.config_digest()
-            if config_digest and config_digest == local_image_id:
-                return DigestCheckResult(
-                    ok=True,
-                    status="verified",
-                    reason=_reason(image, "tag-manifest-match"),
-                    seen_repo_digests=repo_digests,
-                    tag_digest=tag_document.digest or expected,
-                    expected_config_digest=config_digest,
-                    local_image_id=local_image_id,
-                    source=tag_document.source,
-                )
+            return self._verify_image_manifest_document(
+                image,
+                tag_document,
+                expected,
+                repo_digests,
+                local_image_id,
+            )
+        return self._verify_index_manifest_document(
+            image,
+            tag_document,
+            expected,
+            repo_digests,
+            local_image_id,
+        )
+
+    def _verify_image_manifest_document(
+        self,
+        image: RegistryImageRef,
+        tag_document: ManifestDocument,
+        expected: str,
+        repo_digests: tuple[str, ...],
+        local_image_id: str,
+    ) -> DigestCheckResult:
+        config_digest = tag_document.config_digest()
+        if config_digest and config_digest == local_image_id:
             return DigestCheckResult(
-                ok=False,
-                status="failed",
-                reason="platform-mismatch" if config_digest else "manifest-config-missing",
+                ok=True,
+                status=_STATUS_VERIFIED,
+                reason=_reason(image, "tag-manifest-match"),
                 seen_repo_digests=repo_digests,
                 tag_digest=tag_document.digest or expected,
                 expected_config_digest=config_digest,
                 local_image_id=local_image_id,
                 source=tag_document.source,
             )
+        return DigestCheckResult(
+            ok=False,
+            status=_STATUS_FAILED,
+            reason=_config_mismatch_reason(config_digest),
+            seen_repo_digests=repo_digests,
+            tag_digest=tag_document.digest or expected,
+            expected_config_digest=config_digest,
+            local_image_id=local_image_id,
+            source=tag_document.source,
+        )
 
+    def _verify_index_manifest_document(
+        self,
+        image: RegistryImageRef,
+        tag_document: ManifestDocument,
+        expected: str,
+        repo_digests: tuple[str, ...],
+        local_image_id: str,
+    ) -> DigestCheckResult:
         for child_digest in tag_document.child_digests():
             child = self._try_fetch(image, child_digest)
             if child is None:
@@ -565,7 +603,7 @@ class DigestVerifier:
             if config_digest and config_digest == local_image_id:
                 return DigestCheckResult(
                     ok=True,
-                    status="verified",
+                    status=_STATUS_VERIFIED,
                     reason=_reason(image, "index-manifest-match"),
                     seen_repo_digests=repo_digests,
                     tag_digest=tag_document.digest or expected,
@@ -576,8 +614,8 @@ class DigestVerifier:
                 )
         return DigestCheckResult(
             ok=False,
-            status="failed",
-            reason="platform-mismatch",
+            status=_STATUS_FAILED,
+            reason=_REASON_PLATFORM_MISMATCH,
             seen_repo_digests=repo_digests,
             tag_digest=tag_document.digest or expected,
             local_image_id=local_image_id,
@@ -644,7 +682,7 @@ def parse_ghcr_image(image: str) -> RegistryImageRef | None:
 
 
 def _failure_status(image: RegistryImageRef) -> str:
-    return "failed" if image.is_ghcr() else "untrusted"
+    return _STATUS_FAILED if image.is_ghcr() else _STATUS_UNTRUSTED
 
 
 def _manifest_unavailable_reason(image: RegistryImageRef) -> str:
@@ -697,14 +735,22 @@ def _same_manifest(left: Mapping[str, Any], right: Mapping[str, Any]) -> bool:
 
 def _payload_digest(payload: Mapping[str, Any]) -> str:
     digest = payload.get("digest")
-    if isinstance(digest, str) and digest.startswith("sha256:"):
+    if isinstance(digest, str) and digest.startswith(_SHA256_PREFIX):
         return digest
     descriptor = payload.get("Descriptor")
     if isinstance(descriptor, Mapping):
         digest = descriptor.get("digest")
-        if isinstance(digest, str) and digest.startswith("sha256:"):
+        if isinstance(digest, str) and digest.startswith(_SHA256_PREFIX):
             return digest
     return ""
+
+
+def _config_mismatch_reason(config_digest: str) -> str:
+    return (
+        _REASON_PLATFORM_MISMATCH
+        if config_digest
+        else _REASON_MANIFEST_CONFIG_MISSING
+    )
 
 
 def _normalize_verbose_manifest_payload(
@@ -734,7 +780,7 @@ def _normalize_verbose_manifest_payload(
             raise ManifestLookupError(
                 f"docker manifest inspect --verbose omitted descriptor digests for {manifest_ref}"
             )
-        manifests.append(dict(descriptor))
+        manifests.append({**descriptor})
 
     if not manifests:
         raise ManifestLookupError(

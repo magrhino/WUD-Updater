@@ -17,6 +17,7 @@ import { NButton, NFlex, NTag } from "naive-ui";
 
 import type { DoctorCheckStatus, OnboardingChecklistItem } from "../api/client";
 import { useSettingsStore } from "../stores/settings";
+import { runInBackground } from "../utils/promises";
 
 const settings = useSettingsStore();
 const router = useRouter();
@@ -63,29 +64,37 @@ const tourActionLabel = computed(() =>
     ? "Resume update tour"
     : "Start update tour",
 );
-const nextActionTitle = computed(() =>
-  firstFailingItem.value
-    ? `Next: fix ${firstFailingItem.value.title.toLowerCase()}`
-    : firstWarningItem.value
-      ? "Setup has warnings, update tour is available"
-    : "Setup is ready for the update tour",
-);
-const nextActionDetail = computed(() =>
-  firstFailingItem.value
-    ? firstFailingItem.value.detail
-    : firstWarningItem.value
-      ? `${firstWarningItem.value.detail} You can still follow the tour while resolving this warning.`
-    : "Use the core update tour to review pending updates, preview a plan, apply only when browser mutations are enabled, and verify the run log.",
-);
+const nextActionTitle = computed(() => nextChecklistActionTitle());
+const nextActionDetail = computed(() => nextChecklistActionDetail());
 
 onMounted(() => {
   if (settings.onboarding === null) {
-    void refreshOnboarding().catch(() => undefined);
+    runInBackground(refreshOnboarding());
   }
   if (settings.coreUpdateTour === null) {
-    void settings.loadCoreUpdateTour().catch(() => undefined);
+    runInBackground(settings.loadCoreUpdateTour());
   }
 });
+
+function nextChecklistActionTitle(): string {
+  if (firstFailingItem.value) {
+    return `Next: fix ${firstFailingItem.value.title.toLowerCase()}`;
+  }
+  if (firstWarningItem.value) {
+    return "Setup has warnings, update tour is available";
+  }
+  return "Setup is ready for the update tour";
+}
+
+function nextChecklistActionDetail(): string {
+  if (firstFailingItem.value) {
+    return firstFailingItem.value.detail;
+  }
+  if (firstWarningItem.value) {
+    return `${firstWarningItem.value.detail} You can still follow the tour while resolving this warning.`;
+  }
+  return "Use the core update tour to review pending updates, preview a plan, apply only when browser mutations are enabled, and verify the run log.";
+}
 
 async function refreshOnboarding(): Promise<void> {
   await settings.loadOnboarding();

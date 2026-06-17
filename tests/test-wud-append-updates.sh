@@ -3,6 +3,10 @@ set -Eeuo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
 SCRIPT="$REPO_ROOT/wud/append-updates.sh"
+APP_LATEST_IMAGE="repo/app:latest"
+OLD_LATEST_IMAGE="repo/old:latest"
+LOCK_CREATE_ERROR="Failed to create WUD file lock"
+STALE_DIGEST="sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
 TEST_TMP=""
 OUT_FILE=""
 LAST_STATUS=0
@@ -124,7 +128,7 @@ test_container_name_fallback(){
 test_digest_update_kind_fallback(){
   setup_case
   run_script update_available=true image_name=repo/app image_tag_value=latest update_kind_kind=digest update_kind_remote_value="repo/app@sha256:$(hex_digest)"
-  assert_file_equals "repo/app:latest@sha256:$(hex_digest)"
+  assert_file_equals "$APP_LATEST_IMAGE@sha256:$(hex_digest)"
   teardown_case
 }
 
@@ -141,16 +145,16 @@ repo/other:latest"
 test_invalid_digest_is_omitted(){
   setup_case
   run_script update_available=true image_name=repo/app image_tag_value=latest result_digest=not-a-digest
-  assert_file_equals 'repo/app:latest'
+  assert_file_equals "$APP_LATEST_IMAGE"
   teardown_case
 }
 
 test_dedupe_replaces_existing_image_line(){
   setup_case
   mkdir -p "$(dirname "$OUT_FILE")"
-  printf 'repo/other:latest\nrepo/app:latest sha256=sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\n' > "$OUT_FILE"
+  printf 'repo/other:latest\n%s sha256=%s\n' "$APP_LATEST_IMAGE" "$STALE_DIGEST" > "$OUT_FILE"
   run_script update_available=true image_name=repo/app image_tag_value=latest result_digest="$(hex_digest)"
-  assert_file_equals "repo/app:latest
+  assert_file_equals "$APP_LATEST_IMAGE
 repo/other:latest"
   teardown_case
 }
@@ -158,9 +162,9 @@ repo/other:latest"
 test_dedupe_replaces_existing_digest_pinned_line(){
   setup_case
   mkdir -p "$(dirname "$OUT_FILE")"
-  printf 'repo/other:latest\nrepo/app:latest@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\n' > "$OUT_FILE"
+  printf 'repo/other:latest\n%s@%s\n' "$APP_LATEST_IMAGE" "$STALE_DIGEST" > "$OUT_FILE"
   run_script update_available=true image_name=repo/app image_tag_value=latest update_kind_kind=digest update_kind_remote_value="repo/app@sha256:$(hex_digest)"
-  assert_file_equals "repo/app:latest@sha256:$(hex_digest)
+  assert_file_equals "$APP_LATEST_IMAGE@sha256:$(hex_digest)
 repo/other:latest"
   teardown_case
 }
@@ -168,7 +172,7 @@ repo/other:latest"
 test_existing_file_mode_and_owner_are_preserved(){
   setup_case
   mkdir -p "$(dirname "$OUT_FILE")"
-  printf 'repo/old:latest\n' > "$OUT_FILE"
+  printf '%s\n' "$OLD_LATEST_IMAGE" > "$OUT_FILE"
   chmod 660 "$OUT_FILE"
   local expected_owner expected_mode
   expected_owner="$(stat_owner_group "$OUT_FILE")"
@@ -177,8 +181,8 @@ test_existing_file_mode_and_owner_are_preserved(){
   run_script update_available=true image_name=repo/app image_tag_value=latest
 
   assert_status 0
-  assert_file_equals "repo/app:latest
-repo/old:latest"
+  assert_file_equals "$APP_LATEST_IMAGE
+$OLD_LATEST_IMAGE"
   [[ "$(stat_owner_group "$OUT_FILE")" == "$expected_owner" ]] || fail "owner was not preserved"
   [[ "$(stat_mode "$OUT_FILE")" == "$expected_mode" ]] || fail "mode was not preserved"
   teardown_case
@@ -187,7 +191,7 @@ repo/old:latest"
 test_existing_broader_mode_is_preserved(){
   setup_case
   mkdir -p "$(dirname "$OUT_FILE")"
-  printf 'repo/old:latest\n' > "$OUT_FILE"
+  printf '%s\n' "$OLD_LATEST_IMAGE" > "$OUT_FILE"
   chmod 664 "$OUT_FILE"
 
   run_script update_available=true image_name=repo/app image_tag_value=latest
@@ -202,7 +206,7 @@ test_new_file_defaults_to_group_writable_mode(){
   run_script update_available=true image_name=repo/app image_tag_value=latest
 
   assert_status 0
-  assert_file_equals 'repo/app:latest'
+  assert_file_equals "$APP_LATEST_IMAGE"
   [[ "$(stat_mode "$OUT_FILE")" == "660" ]] || fail "new file was not created with 660 mode"
   teardown_case
 }
@@ -216,7 +220,7 @@ test_owner_config_is_applied_to_rewritten_file(){
   run_script OUT_UID="$uid" OUT_GID="$gid" update_available=true image_name=repo/app image_tag_value=latest
 
   assert_status 0
-  assert_file_equals 'repo/app:latest'
+  assert_file_equals "$APP_LATEST_IMAGE"
   [[ "$(stat_owner_group "$OUT_FILE")" == "$uid:$gid" ]] || fail "owner config was not applied"
   [[ "$(stat_mode "$OUT_FILE")" == "660" ]] || fail "owner-configured new file did not use 660 mode"
   teardown_case
@@ -238,12 +242,12 @@ test_out_guid_alias_is_applied_to_rewritten_file(){
 test_owner_config_requires_uid_and_group_before_replace(){
   setup_case
   mkdir -p "$(dirname "$OUT_FILE")"
-  printf 'repo/old:latest\n' > "$OUT_FILE"
+  printf '%s\n' "$OLD_LATEST_IMAGE" > "$OUT_FILE"
 
   run_script OUT_UID="$(id -u)" update_available=true image_name=repo/app image_tag_value=latest
 
   assert_status 1
-  assert_file_equals 'repo/old:latest'
+  assert_file_equals "$OLD_LATEST_IMAGE"
   grep -q "OUT_UID and OUT_GID/OUT_GUID must be set together" "$TEST_TMP/output.log" || fail "missing owner config validation error"
   assert_no_temp_files
   teardown_case
@@ -253,7 +257,7 @@ test_lock_removed_after_success(){
   setup_case
   run_script update_available=true image_name=repo/app image_tag_value=latest
   assert_status 0
-  assert_file_equals 'repo/app:latest'
+  assert_file_equals "$APP_LATEST_IMAGE"
   [[ ! -d "$OUT_FILE.lock" ]] || fail "lock directory was left behind"
   assert_no_temp_files
   teardown_case
@@ -262,13 +266,13 @@ test_lock_removed_after_success(){
 test_lock_timeout_leaves_file_unchanged(){
   setup_case
   mkdir -p "$(dirname "$OUT_FILE")"
-  printf 'repo/old:latest\n' > "$OUT_FILE"
+  printf '%s\n' "$OLD_LATEST_IMAGE" > "$OUT_FILE"
   mkdir "$OUT_FILE.lock"
 
   run_script WUD_LOCK_TIMEOUT=0 update_available=true image_name=repo/app image_tag_value=latest
 
   assert_status 1
-  assert_file_equals 'repo/old:latest'
+  assert_file_equals "$OLD_LATEST_IMAGE"
   [[ -d "$OUT_FILE.lock" ]] || fail "pre-existing lock directory was removed"
   assert_no_temp_files
   teardown_case
@@ -277,7 +281,7 @@ test_lock_timeout_leaves_file_unchanged(){
 test_lock_retries_when_lock_released_during_status_check(){
   setup_case
   mkdir -p "$(dirname "$OUT_FILE")" "$TEST_TMP/bin"
-  printf 'repo/old:latest\n' > "$OUT_FILE"
+  printf '%s\n' "$OLD_LATEST_IMAGE" > "$OUT_FILE"
   local real_mkdir
   real_mkdir="$(command -v mkdir)"
   cat > "$TEST_TMP/bin/mkdir" <<'FAKE_MKDIR'
@@ -302,8 +306,8 @@ FAKE_MKDIR
   run_script PATH="$TEST_TMP/bin:$PATH" REAL_MKDIR="$real_mkdir" FAKE_LOCK_RACE_STATE="$TEST_TMP/mkdir-raced" WUD_LOCK_TIMEOUT=2 update_available=true image_name=repo/app image_tag_value=latest
 
   assert_status 0
-  assert_file_equals "repo/app:latest
-repo/old:latest"
+  assert_file_equals "$APP_LATEST_IMAGE
+$OLD_LATEST_IMAGE"
   assert_no_temp_files
   teardown_case
 }
@@ -311,14 +315,14 @@ repo/old:latest"
 test_lock_failure_when_dir_cannot_be_created(){
   setup_case
   mkdir -p "$(dirname "$OUT_FILE")"
-  printf 'repo/old:latest\n' > "$OUT_FILE"
+  printf '%s\n' "$OLD_LATEST_IMAGE" > "$OUT_FILE"
   touch "$OUT_FILE.lock"
 
   run_script WUD_LOCK_TIMEOUT=5 update_available=true image_name=repo/app image_tag_value=latest
 
   assert_status 1
-  assert_file_equals 'repo/old:latest'
-  grep -q "Failed to create WUD file lock" "$TEST_TMP/output.log" || fail "missing strict error check"
+  assert_file_equals "$OLD_LATEST_IMAGE"
+  grep -q "$LOCK_CREATE_ERROR" "$TEST_TMP/output.log" || fail "missing strict error check"
   assert_no_temp_files
   teardown_case
 }
@@ -327,7 +331,7 @@ test_lock_failure_in_readonly_dir(){
   setup_case
   OUT_FILE="$TEST_TMP/readonly_dir/images.todo"
   mkdir -p "$(dirname "$OUT_FILE")"
-  printf 'repo/old:latest\n' > "$OUT_FILE"
+  printf '%s\n' "$OLD_LATEST_IMAGE" > "$OUT_FILE"
   chmod 555 "$(dirname "$OUT_FILE")"
 
   run_script WUD_LOCK_TIMEOUT=5 update_available=true image_name=repo/app image_tag_value=latest
@@ -335,8 +339,8 @@ test_lock_failure_in_readonly_dir(){
   chmod 755 "$(dirname "$OUT_FILE")"
 
   assert_status 1
-  assert_file_equals 'repo/old:latest'
-  grep -q "Failed to create WUD file lock" "$TEST_TMP/output.log" || fail "missing strict error check"
+  assert_file_equals "$OLD_LATEST_IMAGE"
+  grep -q "$LOCK_CREATE_ERROR" "$TEST_TMP/output.log" || fail "missing strict error check"
   assert_no_temp_files
   teardown_case
 }
@@ -344,7 +348,7 @@ test_lock_failure_in_readonly_dir(){
 test_sort_failure_leaves_file_unchanged(){
   setup_case
   mkdir -p "$(dirname "$OUT_FILE")" "$TEST_TMP/bin"
-  printf 'repo/old:latest\n' > "$OUT_FILE"
+  printf '%s\n' "$OLD_LATEST_IMAGE" > "$OUT_FILE"
   cat > "$TEST_TMP/bin/sort" <<'FAKE_SORT'
 #!/usr/bin/env bash
 printf 'fake sort failed\n' >&2
@@ -355,7 +359,7 @@ FAKE_SORT
   run_script PATH="$TEST_TMP/bin:$PATH" update_available=true image_name=repo/app image_tag_value=latest
 
   assert_status 1
-  assert_file_equals 'repo/old:latest'
+  assert_file_equals "$OLD_LATEST_IMAGE"
   grep -q "Failed to sort update entries for $OUT_FILE" "$TEST_TMP/output.log" || fail "missing sort failure error"
   [[ ! -d "$OUT_FILE.lock" ]] || fail "lock directory was left behind"
   assert_no_temp_files
@@ -365,7 +369,7 @@ FAKE_SORT
 test_replace_failure_leaves_file_unchanged(){
   setup_case
   mkdir -p "$(dirname "$OUT_FILE")" "$TEST_TMP/bin"
-  printf 'repo/old:latest\n' > "$OUT_FILE"
+  printf '%s\n' "$OLD_LATEST_IMAGE" > "$OUT_FILE"
   cat > "$TEST_TMP/bin/mv" <<'FAKE_MV'
 #!/usr/bin/env bash
 printf 'fake mv failed\n' >&2
@@ -376,7 +380,7 @@ FAKE_MV
   run_script PATH="$TEST_TMP/bin:$PATH" update_available=true image_name=repo/app image_tag_value=latest
 
   assert_status 1
-  assert_file_equals 'repo/old:latest'
+  assert_file_equals "$OLD_LATEST_IMAGE"
   grep -q "Failed to replace $OUT_FILE" "$TEST_TMP/output.log" || fail "missing replace failure error"
   [[ ! -d "$OUT_FILE.lock" ]] || fail "lock directory was left behind"
   assert_no_temp_files

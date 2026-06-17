@@ -8,7 +8,7 @@ import { createWudRouter } from "../src/router";
 import { useAuthStore } from "../src/stores/auth";
 import { useConnectionStore } from "../src/stores/connection";
 import { useSettingsStore } from "../src/stores/settings";
-import { useUpdatesStore, APPLY_JOB_RECOVERY_MESSAGE } from "../src/stores/updates";
+import { useUpdatesStore } from "../src/stores/updates";
 import { useRunsStore } from "../src/stores/runs";
 import AuditView from "../src/views/AuditView.vue";
 import { authSession, runSummary } from "./helpers/fixtures";
@@ -33,7 +33,7 @@ function event(serviceName: string) {
 }
 
 function mockMediaQueries(matches: (query: string) => boolean): void {
-  window.matchMedia = vi.fn().mockImplementation((query: string) => ({
+  globalThis.window.matchMedia = vi.fn().mockImplementation((query: string) => ({
     matches: matches(query),
     media: query,
     onchange: null,
@@ -64,9 +64,9 @@ describe("AuditView", () => {
     setActivePinia(pinia);
     const auth = useAuthStore();
     auth.session = authSession({ authenticated: true });
-        const connection = useConnectionStore();
-    const settings = useSettingsStore();
-    const updates = useUpdatesStore();
+    useConnectionStore();
+    useSettingsStore();
+    useUpdatesStore();
     const runs = useRunsStore();
     runs.runs = [
       runSummary({
@@ -111,9 +111,9 @@ describe("AuditView", () => {
     setActivePinia(pinia);
     const auth = useAuthStore();
     auth.session = authSession({ authenticated: true });
-        const connection = useConnectionStore();
-    const settings = useSettingsStore();
-    const updates = useUpdatesStore();
+    useConnectionStore();
+    useSettingsStore();
+    useUpdatesStore();
     const runs = useRunsStore();
     runs.runs = [];
     let resolveRuns: () => void = () => undefined;

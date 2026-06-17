@@ -30,7 +30,7 @@ import {
 import { mountWithApp, naiveStubs } from "./helpers/mount";
 
 async function setupRoute(
-  to: RouteLocationRaw = { name: "dashboard" },
+  to?: RouteLocationRaw,
 ): Promise<{
   pinia: Pinia;
   router: Router;
@@ -49,7 +49,7 @@ async function setupRoute(
   const runs = useRunsStore();
   settings.coreUpdateTour = coreUpdateTourResponse();
   const router = createWudRouter(createMemoryHistory());
-  await router.push(to);
+  await router.push(to ?? { name: "dashboard" });
   await router.isReady();
   return { pinia, router, connection, settings, updates, runs };
 }

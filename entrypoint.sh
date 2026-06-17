@@ -9,7 +9,9 @@ wud_scripts_dir="${WUD_SCRIPTS_DIR-/managed-wud}"
 wud_scripts_marker=".wud-updater-managed"
 
 env_bool_enabled(){
-  case "${1:-}" in
+  local value="${1:-}"
+
+  case "$value" in
     1|[Tt][Rr][Uu][Ee]|[Yy][Ee][Ss]|[Oo][Nn])
       return 0
       ;;
@@ -26,6 +28,8 @@ has_arg(){
     case "$arg" in
       "$wanted"|"$wanted"=*)
         return 0
+        ;;
+      *)
         ;;
     esac
   done
@@ -55,10 +59,14 @@ normalize_absolute_path(){
 
   if ((${#normalized[@]} == 0)); then
     printf '/\n'
-    return
+    return $?
   fi
-  local IFS=/
-  printf '/%s\n' "${normalized[*]}"
+  path="${normalized[0]}"
+  for part in "${normalized[@]:1}"; do
+    path+="/$part"
+  done
+  printf '/%s\n' "$path"
+  return $?
 }
 
 canonicalize_dir_target(){
@@ -86,6 +94,7 @@ canonicalize_dir_target(){
 
   canon="$(cd "$probe" && pwd -P)" || return 1
   normalize_absolute_path "$canon$suffix"
+  return $?
 }
 
 path_is_or_under(){
@@ -93,6 +102,7 @@ path_is_or_under(){
 
   [[ -n "$parent" ]] || return 1
   [[ "$path" == "$parent" || "$path" == "$parent"/* ]]
+  return $?
 }
 
 dirname_path(){
@@ -102,13 +112,15 @@ dirname_path(){
     parent="${path%/*}"
     [[ -n "$parent" ]] || parent="/"
     printf '%s\n' "$parent"
-    return
+    return $?
   fi
   printf '.\n'
+  return $?
 }
 
 refuse_unsafe_wud_scripts_dir(){
   printf 'Refusing unsafe WUD_SCRIPTS_DIR: %s\n' "${wud_scripts_dir:-<empty>}" >&2
+  return $?
 }
 
 sync_wud_scripts(){
@@ -165,6 +177,7 @@ sync_wud_scripts(){
   find "$dst_canon" -type f -name '*.sh' -exec chmod +x {} +
   : > "$marker"
   printf 'Synced WUD scripts to %s\n' "$dst"
+  return $?
 }
 
 if [[ "$#" -eq 0 ]]; then

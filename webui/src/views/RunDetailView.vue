@@ -11,6 +11,7 @@ import {
   digestProvenanceDisplay,
   displayDigest,
 } from "../utils/digestProvenance";
+import { runInBackground } from "../utils/promises";
 
 const route = useRoute();
 const runs = useRunsStore();
@@ -22,11 +23,11 @@ async function load(): Promise<void> {
 }
 
 onMounted(() => {
-  void load();
+  runInBackground(load());
 });
 
 watch(runId, () => {
-  void load();
+  runInBackground(load());
 });
 
 function eventDigestLabel(event: RunEventRecord): string {
