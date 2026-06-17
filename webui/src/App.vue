@@ -1,28 +1,12 @@
 <script setup lang="ts">
-import { computed, ref, watch, type Component } from "vue";
-import { RouterLink, RouterView, useRoute, useRouter } from "vue-router";
-import {
-  Activity,
-  ArrowUpCircle,
-  BellOff,
-  Clock3,
-  ExternalLink,
-  Info,
-  LayoutDashboard,
-  ListChecks,
-  LogOut,
-  Monitor,
-  Moon,
-  RefreshCw,
-  Repeat2,
-  Settings2,
-  SlidersHorizontal,
-  Stethoscope,
-  Sun,
-  Tags,
-} from "@lucide/vue";
-import { NFlex } from "naive-ui";
+import { computed, ref, watch } from "vue";
+import { RouterView, useRoute, useRouter } from "vue-router";
+import { Monitor, Moon, Sun } from "@lucide/vue";
 
+import AppSelfUpdateBanner from "./components/app/AppSelfUpdateBanner.vue";
+import AppSelfUpdateDialog from "./components/app/AppSelfUpdateDialog.vue";
+import AppSidebar from "./components/app/AppSidebar.vue";
+import AppTopbar from "./components/app/AppTopbar.vue";
 import { useAuthStore } from "./stores/auth";
 import { useConnectionStore } from "./stores/connection";
 import { useSettingsStore } from "./stores/settings";
@@ -158,77 +142,6 @@ const selfUpdatePlanTagUpdates = computed(
   () => selfUpdatePlanStack.value?.tag_updates ?? [],
 );
 
-type NavItem = {
-  to: string;
-  label: string;
-  icon: Component;
-  activeRouteNames: string[];
-};
-
-const navItems: NavItem[] = [
-  {
-    to: "/",
-    label: "Dashboard",
-    icon: LayoutDashboard,
-    activeRouteNames: ["dashboard"],
-  },
-  {
-    to: "/pending",
-    label: "Pending",
-    icon: ListChecks,
-    activeRouteNames: ["pending"],
-  },
-  {
-    to: "/retags",
-    label: "Retags",
-    icon: Repeat2,
-    activeRouteNames: ["retags"],
-  },
-  {
-    to: "/runs",
-    label: "History",
-    icon: Clock3,
-    activeRouteNames: ["runs", "audit", "run-detail", "run-log"],
-  },
-  {
-    to: "/policies",
-    label: "Policies",
-    icon: Settings2,
-    activeRouteNames: ["policies"],
-  },
-  {
-    to: "/snoozes",
-    label: "Snoozes",
-    icon: BellOff,
-    activeRouteNames: ["snoozes"],
-  },
-  {
-    to: "/tag-exclusions",
-    label: "Exclusions",
-    icon: Tags,
-    activeRouteNames: ["tag-exclusions"],
-  },
-  {
-    to: "/settings",
-    label: "Settings",
-    icon: SlidersHorizontal,
-    activeRouteNames: ["settings"],
-  },
-  {
-    to: "/doctor",
-    label: "Doctor",
-    icon: Stethoscope,
-    activeRouteNames: ["doctor"],
-  },
-];
-
-function isNavItemActive(item: NavItem): boolean {
-  return (
-    typeof route.name === "string" &&
-    item.activeRouteNames.includes(route.name)
-  );
-}
-
 watch(
   showShell,
   (visible) => {
@@ -325,118 +238,36 @@ async function confirmSelfUpdate(): Promise<void> {
   <n-config-provider :theme="naiveTheme" :theme-overrides="themeOverrides">
     <n-message-provider>
       <div class="app-shell" :class="{ centered: !showShell }">
-        <aside v-if="showShell" class="sidebar">
-          <RouterLink class="brand" to="/" aria-label="WUD-Updater dashboard">
-            <Activity :size="22" />
-            <span>WUD-Updater</span>
-          </RouterLink>
-
-          <nav class="nav-list">
-            <RouterLink
-              v-for="item in navItems"
-              :key="item.to"
-              class="nav-item"
-              :class="{ 'nav-item-active': isNavItemActive(item) }"
-              :to="item.to"
-              :title="item.label"
-              :aria-label="item.label"
-              :aria-current="isNavItemActive(item) ? 'page' : undefined"
-            >
-              <component :is="item.icon" :size="18" />
-              <span>{{ item.label }}</span>
-            </RouterLink>
-          </nav>
-
-          <div class="sidebar-footer">
-            <n-tag
-              v-if="appVersionLabel"
-              class="version-tag"
-              size="small"
-            >
-              <a
-                class="version-link"
-                :href="appVersionHref"
-                target="_blank"
-                rel="noopener noreferrer"
-                :title="appVersionTitle"
-                :aria-label="appVersionTitle"
-              >
-                {{ appVersionLabel }}
-              </a>
-            </n-tag>
-          </div>
-        </aside>
+        <AppSidebar
+          v-if="showShell"
+          :version-label="appVersionLabel"
+          :version-href="appVersionHref"
+          :version-title="appVersionTitle"
+        />
 
         <main class="main-panel">
-          <header v-if="showShell" class="topbar">
-            <div>
-              <h1>{{ String(route.meta.title ?? route.name ?? "Dashboard") }}</h1>
-            </div>
-            <n-flex class="topbar-actions" align="center" :size="8">
-              <n-button
-                quaternary
-                circle
-                :title="themeButtonTitle"
-                :aria-label="themeButtonAriaLabel"
-                @click="cycleThemePreference"
-              >
-                <template #icon>
-                  <component :is="themePreferenceIcon" :size="18" />
-                </template>
-              </n-button>
-              <n-button
-                quaternary
-                circle
-                title="Refresh"
-                aria-label="Refresh current view"
-                @click="refreshCurrentView"
-              >
-                <template #icon>
-                  <RefreshCw :size="18" />
-                </template>
-              </n-button>
-              <n-button quaternary title="Sign out" @click="handleLogout">
-                <template #icon>
-                  <LogOut :size="18" />
-                </template>
-                Sign out
-              </n-button>
-            </n-flex>
-          </header>
+          <AppTopbar
+            v-if="showShell"
+            :title="String(route.meta.title ?? route.name ?? 'Dashboard')"
+            :theme-button-title="themeButtonTitle"
+            :theme-button-aria-label="themeButtonAriaLabel"
+            :theme-preference-icon="themePreferenceIcon"
+            @cycle-theme="cycleThemePreference"
+            @refresh="refreshCurrentView"
+            @logout="handleLogout"
+          />
 
-          <section
+          <AppSelfUpdateBanner
             v-if="selfUpdateVisible"
-            class="self-update-banner"
-            aria-label="WUD-Updater self-update"
-          >
-            <div class="self-update-banner-main">
-              <ArrowUpCircle :size="20" aria-hidden="true" />
-              <div>
-                <strong>
-                  Update available:
-                  {{ updates.selfUpdate?.current_tag }} &rarr; {{ updates.selfUpdate?.latest_tag }}
-                </strong>
-                <span>{{ selfUpdateFacts }}</span>
-              </div>
-            </div>
-            <div class="self-update-banner-actions">
-              <span
-                v-if="selfUpdateDisabledReason"
-                class="self-update-disabled"
-              >
-                {{ selfUpdateDisabledReason }}
-              </span>
-              <n-button
-                type="primary"
-                size="small"
-                :disabled="selfUpdateButtonDisabled"
-                :title="selfUpdateActionTitle"
-                @click="openSelfUpdateDialog"
-              >
-                {{ selfUpdateActionLabel }}
-              </n-button>
-            </div>
-          </section>
+            :current-tag="updates.selfUpdate?.current_tag"
+            :latest-tag="updates.selfUpdate?.latest_tag"
+            :facts="selfUpdateFacts"
+            :disabled-reason="selfUpdateDisabledReason"
+            :button-disabled="selfUpdateButtonDisabled"
+            :action-title="selfUpdateActionTitle"
+            :action-label="selfUpdateActionLabel"
+            @open="openSelfUpdateDialog"
+          />
 
           <n-alert
             v-if="updates.selfUpdateMessage"
@@ -464,151 +295,19 @@ async function confirmSelfUpdate(): Promise<void> {
           </RouterView>
         </main>
 
-        <n-modal
+        <AppSelfUpdateDialog
           v-model:show="selfUpdateDialogVisible"
-          preset="dialog"
-          title="Update WUD-Updater"
-          :positive-text="selfUpdateActionLabel"
-          negative-text="Cancel"
-          :positive-button-props="{
-            type: 'warning',
-            loading: updates.loading,
-            disabled: selfUpdateConfirmDisabled,
-          }"
-          @positive-click="confirmSelfUpdate"
-        >
-          <div class="self-update-modal">
-            <n-alert
-              v-if="selfUpdateStrategy === 'prepare_tag_update'"
-              type="warning"
-            >
-              This updates the Compose image tag and pulls the image. Recreate
-              the WUD-Updater container from outside the WebUI to run it.
-            </n-alert>
-            <n-alert v-else type="warning">
-              This pulls the WUD-Updater image only. Recreate the container
-              outside the WebUI to run the new version.
-            </n-alert>
-
-            <n-tabs type="line" animated>
-              <n-tab-pane name="overview" tab="Update Plan">
-                <div style="display: grid; gap: 14px; margin-top: 14px;">
-                  <div class="self-update-facts">
-                    <div>
-                      <span>Image</span>
-                      <code>{{ updates.selfUpdate?.target_image || "unavailable" }}</code>
-                    </div>
-                    <div>
-                      <span>Container</span>
-                      <code>{{ updates.selfUpdate?.restart_container || "unavailable" }}</code>
-                    </div>
-                  </div>
-
-                  <div
-                    v-if="selfUpdateStrategy === 'prepare_tag_update'"
-                    class="self-update-plan"
-                    style="display: grid; gap: 14px;"
-                  >
-                    <div class="self-update-notes-heading">
-                      <strong>Compose tag update</strong>
-                      <span v-if="updates.loading" class="self-update-disabled">
-                        Loading preview
-                      </span>
-                    </div>
-                    <template v-if="selfUpdatePlanStack">
-                      <div class="self-update-facts">
-                        <div>
-                          <span>Stack</span>
-                          <code>{{ selfUpdatePlanStack.name }}</code>
-                        </div>
-                        <div>
-                          <span>Services</span>
-                          <code>{{ selfUpdatePlanStack.services.join(", ") }}</code>
-                        </div>
-                      </div>
-                      <div class="self-update-tag-updates">
-                        <div
-                          v-for="item in selfUpdatePlanTagUpdates"
-                          :key="`${item.old_image}:${item.desired_tag}`"
-                        >
-                          <span>{{ item.old_image }} &rarr;</span>
-                          <code>{{ item.new_image }}</code>
-                        </div>
-                      </div>
-                    </template>
-                    <n-alert v-else type="info">
-                      Generating Compose tag-update preview.
-                    </n-alert>
-                  </div>
-                </div>
-              </n-tab-pane>
-
-              <n-tab-pane name="notes" tab="Release Notes">
-                <div style="display: grid; gap: 14px; margin-top: 14px;">
-                  <div class="self-update-notes-heading">
-                    <strong>Release notes</strong>
-                    <n-tooltip trigger="hover">
-                      <template #trigger>
-                        <button
-                          type="button"
-                          class="self-update-cap"
-                          :title="selfUpdateReleaseCapTitle"
-                        >
-                          <Info :size="14" aria-hidden="true" />
-                          Cap {{ updates.selfUpdate?.release_notes_cap ?? 10 }}
-                        </button>
-                      </template>
-                      {{ selfUpdateReleaseCapTitle }}
-                    </n-tooltip>
-                  </div>
-
-                  <div
-                    v-if="updates.selfUpdate?.release_notes.length"
-                    class="self-update-notes"
-                  >
-                    <article
-                      v-for="note in updates.selfUpdate.release_notes"
-                      :key="note.tag"
-                      class="self-update-note"
-                    >
-                      <div class="self-update-note-title">
-                        <a
-                          :href="note.url"
-                          target="_blank"
-                          rel="noopener noreferrer"
-                        >
-                          {{ note.title || note.tag }}
-                          <ExternalLink :size="14" aria-hidden="true" />
-                        </a>
-                        <span>{{ note.published_at || note.tag }}</span>
-                      </div>
-                      <n-tag v-if="note.breaking" type="warning" size="small">
-                        Review required
-                      </n-tag>
-                      <p>{{ note.body || "No release-note body was published." }}</p>
-                      <small v-if="note.body_truncated">
-                        Release note body truncated in the WebUI. Open GitHub for the full text.
-                      </small>
-                    </article>
-                  </div>
-                  <p v-else class="self-update-empty-notes">
-                    Release notes are unavailable from the WebUI. Open GitHub releases before updating.
-                  </p>
-
-                  <a
-                    class="text-link self-update-github-link"
-                    :href="selfUpdateReleasesUrl"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
-                    Open GitHub releases
-                    <ExternalLink :size="14" aria-hidden="true" />
-                  </a>
-                </div>
-              </n-tab-pane>
-            </n-tabs>
-          </div>
-        </n-modal>
+          :strategy="selfUpdateStrategy"
+          :action-label="selfUpdateActionLabel"
+          :loading="updates.loading"
+          :confirm-disabled="selfUpdateConfirmDisabled"
+          :self-update="updates.selfUpdate"
+          :plan-stack="selfUpdatePlanStack"
+          :tag-updates="selfUpdatePlanTagUpdates"
+          :release-cap-title="selfUpdateReleaseCapTitle"
+          :releases-url="selfUpdateReleasesUrl"
+          @confirm="confirmSelfUpdate"
+        />
       </div>
     </n-message-provider>
   </n-config-provider>
@@ -625,265 +324,13 @@ async function confirmSelfUpdate(): Promise<void> {
   display: block;
 }
 
-.sidebar {
-  display: flex;
-  flex-direction: column;
-  gap: 28px;
-  min-height: 100vh;
-  padding: 22px 16px;
-  background: var(--color-sidebar);
-  color: var(--color-sidebar-text);
-}
-
-.brand {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-height: 40px;
-  padding: 0 10px;
-  font-weight: 700;
-}
-
-.nav-list {
-  display: grid;
-  gap: 6px;
-}
-
-.nav-item {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-height: 42px;
-  padding: 0 10px;
-  border-radius: 7px;
-  color: var(--color-sidebar-muted);
-  transition:
-    background-color var(--motion-base) var(--ease-out-quart),
-    color var(--motion-base) var(--ease-out-quart),
-    transform var(--motion-fast) var(--ease-out-quart);
-}
-
-.nav-item.router-link-active,
-.nav-item.nav-item-active,
-.nav-item:hover {
-  background: var(--color-sidebar-hover);
-  color: var(--color-sidebar-text);
-  transform: translateX(2px);
-}
-
-.sidebar-footer {
-  margin-top: auto;
-  padding: 0 10px;
-}
-
-.version-tag {
-  max-width: 100%;
-  border-color: rgba(247, 251, 252, 0.18);
-  background: rgba(247, 251, 252, 0.08);
-  color: var(--color-sidebar-muted);
-}
-
-.version-link {
-  display: inline-flex;
-  max-width: 100%;
-  color: inherit;
-  font-weight: 700;
-  line-height: 1.2;
-  overflow-wrap: anywhere;
-}
-
-.version-link:hover,
-.version-link:focus-visible {
-  color: var(--color-sidebar-text);
-  text-decoration: underline;
-}
-
 .main-panel {
   min-width: 0;
   padding: 24px;
 }
 
-.topbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  margin-bottom: 22px;
-}
-
-.topbar h1 {
-  margin: 0;
-  color: var(--color-ink);
-  font-size: 1.35rem;
-  line-height: 1.2;
-}
-
-.self-update-banner,
 .self-update-message {
   margin-bottom: 16px;
-}
-
-.self-update-banner {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 14px;
-  padding: 12px 14px;
-  border: 1px solid color-mix(in srgb, var(--color-operational-teal) 34%, var(--color-border));
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--color-operational-teal) 8%, var(--color-surface));
-  color: var(--color-ink);
-}
-
-.self-update-banner-main,
-.self-update-banner-actions {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-width: 0;
-}
-
-.self-update-banner-main>svg {
-  flex: 0 0 auto;
-  color: var(--color-operational-teal);
-}
-
-.self-update-banner-main div {
-  display: grid;
-  gap: 2px;
-  min-width: 0;
-}
-
-.self-update-banner-main span,
-.self-update-disabled {
-  color: var(--color-muted-text);
-  font-size: 0.86rem;
-  overflow-wrap: anywhere;
-}
-
-.self-update-disabled {
-  max-width: 42ch;
-}
-
-.self-update-modal {
-  display: grid;
-  gap: 14px;
-}
-
-.self-update-facts {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
-}
-
-.self-update-facts div {
-  display: grid;
-  gap: 4px;
-  min-width: 0;
-  padding: 10px;
-  border: 1px solid var(--color-border-subtle);
-  border-radius: 7px;
-  background: var(--color-panel-tint);
-}
-
-.self-update-facts span,
-.self-update-note-title span,
-.self-update-empty-notes,
-.self-update-note small {
-  color: var(--color-muted-text);
-  font-size: 0.84rem;
-}
-
-.self-update-facts code,
-.self-update-note p {
-  overflow-wrap: anywhere;
-}
-
-.self-update-plan {
-  display: grid;
-  gap: 10px;
-}
-
-.self-update-tag-updates {
-  display: grid;
-  gap: 8px;
-}
-
-.self-update-tag-updates div {
-  display: grid;
-  gap: 4px;
-  padding: 10px;
-  border: 1px solid var(--color-border-subtle);
-  border-radius: 7px;
-  background: var(--color-surface);
-}
-
-.self-update-tag-updates span {
-  color: var(--color-muted-text);
-  font-size: 0.84rem;
-  overflow-wrap: anywhere;
-}
-
-.self-update-tag-updates code {
-  overflow-wrap: anywhere;
-}
-
-.self-update-notes-heading,
-.self-update-note-title,
-.self-update-github-link,
-.self-update-cap {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.self-update-notes-heading {
-  justify-content: space-between;
-}
-
-.self-update-cap {
-  border: 0;
-  padding: 0;
-  color: var(--color-muted-text);
-  background: transparent;
-  font: inherit;
-  font-size: 0.84rem;
-  cursor: help;
-}
-
-.self-update-notes {
-  display: grid;
-  gap: 10px;
-  max-height: min(44vh, 420px);
-  overflow: auto;
-}
-
-.self-update-note {
-  display: grid;
-  gap: 8px;
-  padding: 10px;
-  border: 1px solid var(--color-border-subtle);
-  border-radius: 7px;
-  background: var(--color-surface);
-}
-
-.self-update-note-title {
-  justify-content: space-between;
-  gap: 10px;
-}
-
-.self-update-note-title a {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  color: var(--color-action-blue);
-  font-weight: 700;
-}
-
-.self-update-note p,
-.self-update-empty-notes {
-  margin: 0;
-  white-space: pre-wrap;
 }
 
 @media (max-width: 920px) {
@@ -891,88 +338,19 @@ async function confirmSelfUpdate(): Promise<void> {
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .sidebar {
-    position: sticky;
-    top: 0;
-    z-index: 10;
-    min-height: auto;
-    flex-direction: row;
-    align-items: center;
-    gap: 12px;
-    width: 100%;
-    max-width: 100%;
-    min-width: 0;
-    padding: 10px 12px;
-    overflow: hidden;
-  }
-
-  .brand span,
-  .sidebar-footer {
-    display: none;
-  }
-
-  .brand {
-    min-width: 44px;
-    min-height: 44px;
-  }
-
-  .nav-list {
-    flex: 1 1 auto;
-    grid-auto-flow: column;
-    min-width: 0;
-    max-width: 100%;
-    overflow-x: auto;
-  }
-
-  .nav-item {
-    flex: 0 0 auto;
-    min-height: 44px;
-    white-space: nowrap;
-  }
-
-  .nav-item span {
-    display: none;
-  }
-
   .main-panel {
     padding: 16px;
-  }
-
-  .topbar {
-    align-items: flex-start;
-  }
-
-  .self-update-banner {
-    align-items: flex-start;
-    flex-direction: column;
-  }
-
-  .self-update-banner-actions {
-    width: 100%;
   }
 }
 
 @media (max-width: 560px) {
-  .topbar {
-    display: grid;
-  }
-
-  .topbar-actions :deep(.n-button),
   :deep(.inline-actions .n-button) {
     min-width: 44px;
     min-height: 44px;
   }
 
-  .topbar-actions :deep(.n-button--circle),
   :deep(.inline-actions .n-button--circle) {
     min-width: 44px;
-  }
-
-  .self-update-banner-actions,
-  .self-update-facts,
-  .self-update-note-title {
-    display: grid;
-    grid-template-columns: 1fr;
   }
 }
 </style>
