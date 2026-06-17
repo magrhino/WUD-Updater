@@ -5,6 +5,7 @@ import tempfile
 import unittest
 from collections.abc import Iterator, Mapping
 from pathlib import Path
+from unittest.mock import patch
 
 from wud_updater.db import (
     DatabaseError,
@@ -15,6 +16,7 @@ from wud_updater.db import (
     active_snooze,
     active_tag_exclusion_rules,
     blocking_dependency_snooze_rows,
+    connect_db,
     open_db,
     init_db,
     insert_dependency_snooze,
@@ -34,7 +36,34 @@ from wud_updater.digest_provenance import (
 )
 
 
+class FakeConnection:
+    def __init__(self) -> None:
+        self.row_factory = None
+        self.statements: list[str] = []
+
+    def execute(self, statement: str) -> None:
+        self.statements.append(statement)
+
+
 class DatabaseTests(unittest.TestCase):
+    def test_connect_db_sets_driver_timeout_and_connection_pragmas(self) -> None:
+        conn = FakeConnection()
+
+        with patch("wud_updater.db.sqlite3.connect", return_value=conn) as connect:
+            result = connect_db(":memory:")
+
+        self.assertIs(result, conn)
+        connect.assert_called_once_with(Path(":memory:"), timeout=5.0)
+        self.assertIs(conn.row_factory, sqlite3.Row)
+        self.assertEqual(
+            conn.statements,
+            [
+                "PRAGMA foreign_keys = ON",
+                "PRAGMA journal_mode = WAL",
+            ],
+        )
+        self.assertNotIn("PRAGMA busy_timeout = 5000", conn.statements)
+
     def test_empty_digest_provenance_sql_values_returns_empty_columns(self) -> None:
         self.assertEqual(
             empty_digest_provenance_sql_values(),
