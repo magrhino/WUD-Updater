@@ -6,7 +6,7 @@ import sqlite3
 from contextlib import closing, contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Generator, Iterable
+from typing import Callable, Generator, Iterable
 
 from .digest_provenance import (
     DIGEST_PROVENANCE_SQL_COLUMNS,
@@ -17,8 +17,10 @@ from .digest_provenance import (
 SCHEMA_VERSION = 8
 
 ColumnSchema = tuple[str, str, int, str | None, int]
+SchemaDefinition = dict[str, tuple[ColumnSchema, ...]]
+Migration = Callable[[sqlite3.Connection], None]
 
-EXPECTED_SCHEMA: dict[str, tuple[ColumnSchema, ...]] = {
+EXPECTED_SCHEMA: SchemaDefinition = {
     "schema_migrations": (
         ("version", "INTEGER", 0, None, 1),
         ("name", "TEXT", 1, None, 0),
@@ -249,6 +251,17 @@ EXPECTED_SCHEMA_V1 = {
     if name != "pending_updates"
 }
 
+_EXPECTED_SCHEMAS_BY_VERSION: dict[int, SchemaDefinition] = {
+    1: EXPECTED_SCHEMA_V1,
+    2: EXPECTED_SCHEMA_V2,
+    3: EXPECTED_SCHEMA_V3,
+    4: EXPECTED_SCHEMA_V4,
+    5: EXPECTED_SCHEMA_V5,
+    6: EXPECTED_SCHEMA_V6,
+    7: EXPECTED_SCHEMA_V7,
+    SCHEMA_VERSION: EXPECTED_SCHEMA,
+}
+
 
 class DatabaseError(RuntimeError):
     """Raised when the SQLite schema cannot be initialized safely."""
@@ -261,11 +274,10 @@ def connect_db(path: str | Path) -> sqlite3.Connection:
     if str(db_path) != ":memory:":
         db_path.parent.mkdir(parents=True, exist_ok=True)
 
-    conn = sqlite3.connect(db_path)
+    conn = sqlite3.connect(db_path, timeout=5.0)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
     conn.execute("PRAGMA journal_mode = WAL")
-    conn.execute("PRAGMA busy_timeout = 5000")
     return conn
 
 
@@ -288,82 +300,20 @@ def init_db(conn: sqlite3.Connection) -> None:
     """Create or validate the current database schema."""
 
     version = _user_version(conn)
-    if version == SCHEMA_VERSION:
-        _validate_schema(conn)
+    if version > 0:
+        expected_schema = _EXPECTED_SCHEMAS_BY_VERSION.get(version)
+        if expected_schema is None:
+            raise DatabaseError(f"Unsupported database schema version: {version}")
+
+        _validate_schema(conn, expected_schema=expected_schema)
         _ensure_schema_migrations(conn)
-        _backfill_schema_migrations(conn, SCHEMA_VERSION)
+        _backfill_schema_migrations(conn, version)
+        for target_version in range(version + 1, SCHEMA_VERSION + 1):
+            migration = _MIGRATIONS_BY_TARGET_VERSION[target_version]
+            migration(conn)
         _validate_schema(conn)
         return
-    if version == 7:
-        _validate_schema(conn, expected_schema=EXPECTED_SCHEMA_V7)
-        _ensure_schema_migrations(conn)
-        _backfill_schema_migrations(conn, 7)
-        _migrate_v7_to_v8(conn)
-        _validate_schema(conn)
-        return
-    if version == 6:
-        _validate_schema(conn, expected_schema=EXPECTED_SCHEMA_V6)
-        _ensure_schema_migrations(conn)
-        _backfill_schema_migrations(conn, 6)
-        _migrate_v6_to_v7(conn)
-        _migrate_v7_to_v8(conn)
-        _validate_schema(conn)
-        return
-    if version == 5:
-        _validate_schema(conn, expected_schema=EXPECTED_SCHEMA_V5)
-        _ensure_schema_migrations(conn)
-        _backfill_schema_migrations(conn, 5)
-        _migrate_v5_to_v6(conn)
-        _migrate_v6_to_v7(conn)
-        _migrate_v7_to_v8(conn)
-        _validate_schema(conn)
-        return
-    if version == 4:
-        _validate_schema(conn, expected_schema=EXPECTED_SCHEMA_V4)
-        _ensure_schema_migrations(conn)
-        _backfill_schema_migrations(conn, 4)
-        _migrate_v4_to_v5(conn)
-        _migrate_v5_to_v6(conn)
-        _migrate_v6_to_v7(conn)
-        _migrate_v7_to_v8(conn)
-        _validate_schema(conn)
-        return
-    if version == 3:
-        _validate_schema(conn, expected_schema=EXPECTED_SCHEMA_V3)
-        _ensure_schema_migrations(conn)
-        _backfill_schema_migrations(conn, 3)
-        _migrate_v3_to_v4(conn)
-        _migrate_v4_to_v5(conn)
-        _migrate_v5_to_v6(conn)
-        _migrate_v6_to_v7(conn)
-        _migrate_v7_to_v8(conn)
-        _validate_schema(conn)
-        return
-    if version == 2:
-        _validate_schema(conn, expected_schema=EXPECTED_SCHEMA_V2)
-        _ensure_schema_migrations(conn)
-        _backfill_schema_migrations(conn, 2)
-        _migrate_v2_to_v3(conn)
-        _migrate_v3_to_v4(conn)
-        _migrate_v4_to_v5(conn)
-        _migrate_v5_to_v6(conn)
-        _migrate_v6_to_v7(conn)
-        _migrate_v7_to_v8(conn)
-        _validate_schema(conn)
-        return
-    if version == 1:
-        _validate_schema(conn, expected_schema=EXPECTED_SCHEMA_V1)
-        _ensure_schema_migrations(conn)
-        _backfill_schema_migrations(conn, 1)
-        _migrate_v1_to_v2(conn)
-        _migrate_v2_to_v3(conn)
-        _migrate_v3_to_v4(conn)
-        _migrate_v4_to_v5(conn)
-        _migrate_v5_to_v6(conn)
-        _migrate_v6_to_v7(conn)
-        _migrate_v7_to_v8(conn)
-        _validate_schema(conn)
-        return
+
     if version != 0:
         raise DatabaseError(f"Unsupported database schema version: {version}")
 
@@ -1583,3 +1533,14 @@ def _migrate_v7_to_v8(conn: sqlite3.Connection) -> None:
         )
         conn.execute("PRAGMA user_version = 8")
     _record_schema_migration(conn, 8)
+
+
+_MIGRATIONS_BY_TARGET_VERSION: dict[int, Migration] = {
+    2: _migrate_v1_to_v2,
+    3: _migrate_v2_to_v3,
+    4: _migrate_v3_to_v4,
+    5: _migrate_v4_to_v5,
+    6: _migrate_v5_to_v6,
+    7: _migrate_v6_to_v7,
+    8: _migrate_v7_to_v8,
+}
