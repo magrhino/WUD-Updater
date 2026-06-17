@@ -4,6 +4,13 @@ All notable changes to WUD-Updater are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com) and versions follow
 [Semantic Versioning](https://semver.org).
 
+## [0.41.0](https://github.com/magrhino/WUD-Updater/compare/v0.40.0...v0.41.0) (2026-06-17)
+
+
+### Features
+
+* **first-run:** reduce WUD Compose configuration ([#330](https://github.com/magrhino/WUD-Updater/issues/330)) ([b20d400](https://github.com/magrhino/WUD-Updater/commit/b20d4006aeaf26188c8437ea76bf668fff9d1f26))
+
 ## [0.40.0](https://github.com/magrhino/WUD-Updater/compare/v0.39.0...v0.40.0) (2026-06-17)
 
 
