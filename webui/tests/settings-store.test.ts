@@ -158,6 +158,25 @@ describe("settings store", () => {
     ).toBe("csrf-tour");
   });
 
+  it("coalesces concurrent core update tour ensure requests", async () => {
+    const tourRequest = deferred<Response>();
+    const fetchMock = vi.fn().mockReturnValue(tourRequest.promise);
+    vi.stubGlobal("fetch", fetchMock);
+    const settings = useSettingsStore();
+
+    const firstEnsure = settings.ensureCoreUpdateTour();
+    const secondEnsure = settings.ensureCoreUpdateTour();
+    const thirdEnsure = settings.ensureCoreUpdateTour();
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    tourRequest.resolve(jsonResponse(coreUpdateTourResponse()));
+    await Promise.all([firstEnsure, secondEnsure, thirdEnsure]);
+    expect(settings.coreUpdateTour?.status).toBe("not_started");
+
+    await settings.ensureCoreUpdateTour();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
   it("keeps fulfilled pending safety cue data when another cue source fails", async () => {
     const existingPolicy = servicePolicy({ service_key: "media/app" });
     const loadedSnooze = snooze({ service_key: "media/radarr" });

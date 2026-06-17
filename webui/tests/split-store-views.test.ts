@@ -327,15 +327,15 @@ describe("OnboardingChecklist split-store coverage", () => {
     settings.onboarding = null;
     settings.coreUpdateTour = null;
     const loadOnboarding = vi.spyOn(settings, "loadOnboarding").mockResolvedValue();
-    const loadCoreUpdateTour = vi
-      .spyOn(settings, "loadCoreUpdateTour")
+    const ensureCoreUpdateTour = vi
+      .spyOn(settings, "ensureCoreUpdateTour")
       .mockResolvedValue();
 
     mountWithApp(OnboardingChecklist, { pinia, router });
     await flushPromises();
 
     expect(loadOnboarding).toHaveBeenCalledTimes(1);
-    expect(loadCoreUpdateTour).toHaveBeenCalledTimes(1);
+    expect(ensureCoreUpdateTour).toHaveBeenCalledTimes(1);
   });
 
   it("starts the update tour once setup has no failing checks", async () => {

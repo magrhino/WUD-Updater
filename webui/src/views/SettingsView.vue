@@ -45,9 +45,7 @@ useRouteRefresh(refreshSettings);
 
 async function loadInitialSettings(): Promise<void> {
   await settings.loadSettings();
-  if (settings.coreUpdateTour === null) {
-    await settings.loadCoreUpdateTour();
-  }
+  await settings.ensureCoreUpdateTour();
 }
 
 async function refreshSettings(): Promise<void> {

@@ -62,9 +62,7 @@ async function dismissTour(): Promise<void> {
 }
 
 onMounted(() => {
-  if (settings.coreUpdateTour === null) {
-    runInBackground(settings.loadCoreUpdateTour());
-  }
+  runInBackground(settings.ensureCoreUpdateTour());
 });
 </script>
 

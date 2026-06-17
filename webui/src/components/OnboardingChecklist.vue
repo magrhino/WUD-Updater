@@ -71,9 +71,7 @@ onMounted(() => {
   if (settings.onboarding === null) {
     runInBackground(refreshOnboarding());
   }
-  if (settings.coreUpdateTour === null) {
-    runInBackground(settings.loadCoreUpdateTour());
-  }
+  runInBackground(settings.ensureCoreUpdateTour());
 });
 
 function nextChecklistActionTitle(): string {
