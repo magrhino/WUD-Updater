@@ -9,6 +9,8 @@ from pathlib import Path
 from wud_updater.db import (
     DatabaseError,
     SCHEMA_VERSION,
+    _EXPECTED_SCHEMAS_BY_VERSION,
+    _MIGRATIONS_BY_TARGET_VERSION,
     active_dependency_snooze_rows,
     active_snooze,
     active_tag_exclusion_rules,
@@ -139,6 +141,16 @@ class DatabaseTests(unittest.TestCase):
             ).fetchall()
 
         self.assertEqual([row[0] for row in rows], [1, 2, 3, 4, 5, 6, 7, 8])
+
+    def test_migration_registries_cover_supported_versions(self) -> None:
+        self.assertEqual(
+            set(_EXPECTED_SCHEMAS_BY_VERSION),
+            set(range(1, SCHEMA_VERSION + 1)),
+        )
+        self.assertEqual(
+            set(_MIGRATIONS_BY_TARGET_VERSION),
+            set(range(2, SCHEMA_VERSION + 1)),
+        )
 
     def test_init_db_accepts_matching_version_zero_table(self) -> None:
         with sqlite3.connect(":memory:") as conn:
