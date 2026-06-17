@@ -4,6 +4,13 @@ All notable changes to WUD-Updater are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com) and versions follow
 [Semantic Versioning](https://semver.org).
 
+## [0.42.1](https://github.com/magrhino/WUD-Updater/compare/v0.42.0...v0.42.1) (2026-06-17)
+
+
+### Bug Fixes
+
+* **deps:** align Pydantic runtime pins ([c006bfb](https://github.com/magrhino/WUD-Updater/commit/c006bfb3895234df9afa1d6ab57bf3e753c1ffd3))
+
 ## [0.42.0](https://github.com/magrhino/WUD-Updater/compare/v0.41.0...v0.42.0) (2026-06-17)
 
 
