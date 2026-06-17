@@ -219,16 +219,17 @@ def test_onboarding_checklist_hides_when_required_items_pass(
 def test_onboarding_suggests_observed_lan_public_origin(
     tmp_path: Path,
 ) -> None:
+    observed_host = "192.0.2.44"
     client = _doctor_client(
         tmp_path,
-        {"WUD_WEB_ALLOWED_HOSTS": "10.44.88.4"},
+        {"WUD_WEB_ALLOWED_HOSTS": observed_host},
     )
     response = client.post(
         "/api/v1/onboarding/checklist",
         headers=_csrf_headers_for_origin(
             client,
-            host="10.44.88.4",
-            origin="http://10.44.88.4",
+            host=observed_host,
+            origin=f"http://{observed_host}",
         ),
     )
     body = response.json()
@@ -237,7 +238,7 @@ def test_onboarding_suggests_observed_lan_public_origin(
 
     assert response.status_code == 200
     assert browser_item["status"] == "WARN"
-    assert "WUD_WEB_PUBLIC_ORIGIN=http://10.44.88.4" in snippets
+    assert f"WUD_WEB_PUBLIC_ORIGIN=http://{observed_host}" in snippets
 
 
 def test_onboarding_does_not_suggest_loopback_public_origin(
