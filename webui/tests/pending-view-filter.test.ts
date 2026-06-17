@@ -8,6 +8,7 @@ import type {
   PendingStackGroup,
 } from "../src/api/client";
 import {
+  coreUpdateTourResponse,
   pendingGroupedItem,
   pendingResponse,
   releaseNoteInfo,
@@ -193,6 +194,28 @@ describe("pending view search filter", () => {
     expect(wrapper.text()).not.toContain("No pending updates match search");
     expect(wrapper.text()).toContain("linuxserver/radarr:4.0");
     expect(wrapper.text()).toContain("postgres:16");
+  });
+
+  it("labels stack counts as matched only while search is active", async () => {
+    const { pinia, settings, updates } = setupStores(false);
+    updates.pending = pendingWithGroups([
+      stackGroup("media", [radarrItem()]),
+      stackGroup("data", [postgresItem()]),
+    ]);
+    settings.coreUpdateTour = coreUpdateTourResponse({
+      status: "in_progress",
+      step: "pending_select",
+    });
+    mockPendingLifecycle(settings, updates);
+    const wrapper = mountPendingView(pinia);
+    await flushPromises();
+
+    expect(wrapper.text()).toContain("2 stacks");
+    expect(wrapper.text()).not.toContain("2 stacks matched");
+
+    await setPendingSearch(wrapper, "postgres");
+
+    expect(wrapper.text()).toContain("1 stack matched");
   });
 
   it("keeps hidden selected rows clear when filtering", async () => {

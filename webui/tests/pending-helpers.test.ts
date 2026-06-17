@@ -29,6 +29,7 @@ import {
   filterPendingStackGroups,
   normalizePendingSearch,
   pendingItemMatchesSearch,
+  type PendingSearchContext,
 } from "../src/views/pending/pendingFilter";
 import {
   planLineDigestPinLabel,
@@ -381,6 +382,38 @@ describe("pending helper modules", () => {
     );
     expect(groupMatchedGroups[0].items).toEqual([app, db]);
     expect(groupMatchedGroups[0].visibleLineNumbers).toEqual([7, 8]);
+  });
+
+  it("matches diagnostic details without recursing through circular references", () => {
+    const detailNode: Record<string, unknown> = {
+      finding: "Circular diagnostic marker",
+    };
+    detailNode.self = detailNode;
+    const item = pendingGroupedItem({
+      diagnostic: {
+        code: "compose-label-active-file-missing",
+        message: "Container worker was created from stack media.",
+        hint: "Restore docker-compose.yml before applying.",
+        stack: "media",
+        service: "worker",
+        compose_file: "docker-compose.yml",
+        found_files: [],
+        details: {
+          nested: detailNode,
+          again: detailNode,
+        },
+      },
+    });
+    const context: PendingSearchContext = {
+      releaseNoteFor: () => null,
+      releaseNoteReason,
+      releaseNoteStatus: (value) => releaseNoteStatus(value, false),
+      riskCues: () => [],
+    };
+
+    expect(pendingItemMatchesSearch(item, "circular diagnostic", context)).toBe(
+      true,
+    );
   });
 
   it("creates fallback table renderers for tags, digests, safety, and release notes", async () => {

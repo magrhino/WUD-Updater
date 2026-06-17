@@ -424,7 +424,13 @@ onMounted(() => {
       next-step="pending_preflight"
     >
       <div class="core-tour-facts">
-        <span v-if="pendingLoaded">{{ pluralize(filteredStackGroups.length, "stack") }} matched</span>
+        <span v-if="pendingLoaded">
+          {{
+            pendingSearchActive
+              ? `${pluralize(filteredStackGroups.length, "stack")} matched`
+              : pluralize(filteredStackGroups.length, "stack")
+          }}
+        </span>
         <span v-else>Loading stack matches</span>
         <span v-if="pendingLoaded">{{ visibleUnmatchedReviewCountLabel }}</span>
         <span v-else>Waiting for pending file</span>

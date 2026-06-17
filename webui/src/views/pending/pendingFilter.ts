@@ -233,7 +233,7 @@ function searchableText(values: string[]): string {
   return values.filter(Boolean).join(" ").toLowerCase();
 }
 
-function flattenUnknown(value: unknown): string[] {
+function flattenUnknown(value: unknown, seen = new WeakSet<object>()): string[] {
   if (value === null || value === undefined) {
     return [];
   }
@@ -244,13 +244,17 @@ function flattenUnknown(value: unknown): string[] {
   ) {
     return [String(value)];
   }
-  if (Array.isArray(value)) {
-    return value.flatMap((item) => flattenUnknown(item));
-  }
   if (typeof value === "object") {
+    if (seen.has(value)) {
+      return [];
+    }
+    seen.add(value);
+    if (Array.isArray(value)) {
+      return value.flatMap((item) => flattenUnknown(item, seen));
+    }
     return Object.entries(value).flatMap(([key, entry]) => [
       key,
-      ...flattenUnknown(entry),
+      ...flattenUnknown(entry, seen),
     ]);
   }
   return [];
