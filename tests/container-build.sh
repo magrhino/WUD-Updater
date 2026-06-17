@@ -29,22 +29,30 @@ cleanup(){
 trap cleanup EXIT
 
 run(){
-  printf '==> %s\n' "$*"
-  "$@"
+  local description="$*"
+  local -a command=("$@")
+
+  printf '==> %s\n' "$description"
+  "${command[@]}"
 }
 
 run_quiet(){
+  local description="$*"
   local output
-  printf '==> %s\n' "$*"
-  if ! output="$("$@" 2>&1)"; then
+  local -a command=("$@")
+
+  printf '==> %s\n' "$description"
+  if ! output="$("${command[@]}" 2>&1)"; then
     printf '%s\n' "$output" >&2
     return 1
   fi
 }
 
 need_cmd(){
-  command -v "$1" >/dev/null 2>&1 || {
-    printf 'Missing required command: %s\n' "$1" >&2
+  local cmd="$1"
+
+  command -v "$cmd" >/dev/null 2>&1 || {
+    printf 'Missing required command: %s\n' "$cmd" >&2
     exit 127
   }
 }

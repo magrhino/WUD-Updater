@@ -6,7 +6,7 @@ import re
 
 
 _SHELL_SPACE = " \t\n\r\v\f"
-_TAG_VALUE_RE = re.compile(r"^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$")
+_TAG_VALUE_RE = re.compile(r"^\w[\w.-]{0,127}$", re.ASCII)
 
 
 def trim(value: str) -> str:

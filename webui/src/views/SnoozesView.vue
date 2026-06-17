@@ -20,6 +20,7 @@ import { useUpdateTargetOptions } from "../composables/useUpdateTargetOptions";
 import { useAuthStore } from "../stores/auth";
 import { useSettingsStore } from "../stores/settings";
 import { useUpdatesStore } from "../stores/updates";
+import { runInBackground } from "../utils/promises";
 
 const settings = useSettingsStore();
 const updates = useUpdatesStore();
@@ -154,12 +155,12 @@ async function confirmDelete(): Promise<void> {
 }
 
 onMounted(() => {
-  void updates.loadUpdateTargets().catch(() => undefined);
-  void settings.loadSnoozes(snoozeState.value).catch(() => undefined);
+  runInBackground(updates.loadUpdateTargets());
+  runInBackground(settings.loadSnoozes(snoozeState.value));
 });
 
 watch(snoozeState, (nextState) => {
-  void settings.loadSnoozes(nextState).catch(() => undefined);
+  runInBackground(settings.loadSnoozes(nextState));
 });
 </script>
 

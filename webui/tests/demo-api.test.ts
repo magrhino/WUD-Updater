@@ -886,7 +886,7 @@ describe("demo web API", () => {
         label_key: "wud.tag.include",
         current_label_value: "^beta|^stable",
         planned_tag: "2.0",
-        proposed_label_value: "^2\\.0$$",
+        proposed_label_value: String.raw`^2\.0$$`,
       },
     ];
 
@@ -905,7 +905,7 @@ describe("demo web API", () => {
         label_key: "wud.tag.include",
         current_label_value: "^beta|^stable",
         planned_tag: "2.0",
-        proposed_label_value: "^2\\.0$$",
+        proposed_label_value: String.raw`^2\.0$$`,
       },
     ];
 
@@ -932,7 +932,7 @@ describe("demo web API", () => {
         label_key: "wud.tag.include",
         current_label_value: "^beta|^stable",
         planned_tag: "2.0",
-        proposed_label_value: "^2\\.0$$",
+        proposed_label_value: String.raw`^2\.0$$`,
       },
     ];
 

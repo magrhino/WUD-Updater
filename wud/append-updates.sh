@@ -20,6 +20,7 @@ cleanup() {
   if [ "$LOCK_HELD" = "1" ]; then
     rmdir "$LOCK_DIR" 2>/dev/null || true
   fi
+  return 0
 }
 trap 'rc=$?; cleanup; exit "$rc"' 0
 trap 'exit 1' 1 2 15
@@ -31,6 +32,8 @@ acquire_lock() {
     ''|*[!0-9]*)
       echo "WUD_LOCK_TIMEOUT must be an integer number of seconds" >&2
       return 1
+      ;;
+    *)
       ;;
   esac
 
@@ -54,30 +57,37 @@ acquire_lock() {
   done
 
   LOCK_HELD=1
+  return 0
 }
 
 stat_mode() {
-  if stat -c '%a' "$1" >/dev/null 2>&1; then
-    stat -c '%a' "$1"
+  stat_path="$1"
+  if stat -c '%a' "$stat_path" >/dev/null 2>&1; then
+    stat -c '%a' "$stat_path"
   else
-    stat -f '%Lp' "$1"
+    stat -f '%Lp' "$stat_path"
   fi
+  return $?
 }
 
 stat_uid() {
-  if stat -c '%u' "$1" >/dev/null 2>&1; then
-    stat -c '%u' "$1"
+  stat_path="$1"
+  if stat -c '%u' "$stat_path" >/dev/null 2>&1; then
+    stat -c '%u' "$stat_path"
   else
-    stat -f '%u' "$1"
+    stat -f '%u' "$stat_path"
   fi
+  return $?
 }
 
 stat_gid() {
-  if stat -c '%g' "$1" >/dev/null 2>&1; then
-    stat -c '%g' "$1"
+  stat_path="$1"
+  if stat -c '%g' "$stat_path" >/dev/null 2>&1; then
+    stat -c '%g' "$stat_path"
   else
-    stat -f '%g' "$1"
+    stat -f '%g' "$stat_path"
   fi
+  return $?
 }
 
 validate_owner_config() {
@@ -85,24 +95,36 @@ validate_owner_config() {
     OUT_GID="$OUT_GUID"
   fi
 
-  if [ -n "$OUT_UID" ] || [ -n "$OUT_GID" ]; then
-    if [ -z "$OUT_UID" ] || [ -z "$OUT_GID" ]; then
+  case "${OUT_UID}:${OUT_GID}" in
+    :)
+      return 0
+      ;;
+    :*|*:)
       echo "OUT_UID and OUT_GID/OUT_GUID must be set together" >&2
       return 1
-    fi
-    case "$OUT_UID" in
-      *[!0-9]*)
-        echo "OUT_UID must be numeric" >&2
-        return 1
-        ;;
-    esac
-    case "$OUT_GID" in
-      *[!0-9]*)
-        echo "OUT_GID/OUT_GUID must be numeric" >&2
-        return 1
-        ;;
-    esac
-  fi
+      ;;
+    *)
+      ;;
+  esac
+
+  case "$OUT_UID" in
+    *[!0-9]*)
+      echo "OUT_UID must be numeric" >&2
+      return 1
+      ;;
+    *)
+      ;;
+  esac
+  case "$OUT_GID" in
+    *[!0-9]*)
+      echo "OUT_GID/OUT_GUID must be numeric" >&2
+      return 1
+      ;;
+    *)
+      ;;
+  esac
+
+  return 0
 }
 
 desired_metadata() {
@@ -124,60 +146,67 @@ desired_metadata() {
     FILE_UID="$OUT_UID"
     FILE_GID="$OUT_GID"
   fi
+  return 0
 }
 
 apply_metadata() {
-  file="$1"
-  actual_uid="$(stat_uid "$file")" || return 1
-  actual_gid="$(stat_gid "$file")" || return 1
+  metadata_file="$1"
+  actual_uid="$(stat_uid "$metadata_file")" || return 1
+  actual_gid="$(stat_gid "$metadata_file")" || return 1
 
   if [ "$actual_uid" != "$FILE_UID" ] || [ "$actual_gid" != "$FILE_GID" ]; then
-    if ! chown "${FILE_UID}:${FILE_GID}" "$file"; then
-      echo "Failed to set owner ${FILE_UID}:${FILE_GID} on $file" >&2
+    if ! chown "${FILE_UID}:${FILE_GID}" "$metadata_file"; then
+      echo "Failed to set owner ${FILE_UID}:${FILE_GID} on $metadata_file" >&2
       return 1
     fi
   fi
-  if ! chmod "$FILE_MODE" "$file"; then
-    echo "Failed to set mode $FILE_MODE on $file" >&2
+  if ! chmod "$FILE_MODE" "$metadata_file"; then
+    echo "Failed to set mode $FILE_MODE on $metadata_file" >&2
     return 1
   fi
 
-  actual_uid="$(stat_uid "$file")" || return 1
-  actual_gid="$(stat_gid "$file")" || return 1
-  actual_mode="$(stat_mode "$file")" || return 1
+  actual_uid="$(stat_uid "$metadata_file")" || return 1
+  actual_gid="$(stat_gid "$metadata_file")" || return 1
+  actual_mode="$(stat_mode "$metadata_file")" || return 1
   if [ "$actual_uid" != "$FILE_UID" ] || [ "$actual_gid" != "$FILE_GID" ] || [ "$actual_mode" != "$FILE_MODE" ]; then
-    echo "Metadata verification failed for $file: wanted ${FILE_MODE} ${FILE_UID}:${FILE_GID}, got ${actual_mode} ${actual_uid}:${actual_gid}" >&2
+    echo "Metadata verification failed for $metadata_file: wanted ${FILE_MODE} ${FILE_UID}:${FILE_GID}, got ${actual_mode} ${actual_uid}:${actual_gid}" >&2
     return 1
   fi
+  return 0
 }
 
 tag_from_remote() {
-  tag="$1"
-  [ -n "$tag" ] || return 1
+  remote_tag="$1"
+  [ -n "$remote_tag" ] || return 1
 
-  tag="${tag%%@sha256:*}"
-  case "$tag" in
+  remote_tag="${remote_tag%%@sha256:*}"
+  case "$remote_tag" in
     *:*)
-      tag="${tag##*:}"
+      remote_tag="${remote_tag##*:}"
+      ;;
+    *)
       ;;
   esac
 
-  case "$tag" in
+  case "$remote_tag" in
     ''|*[!A-Za-z0-9_.-]*|[!A-Za-z0-9_]*)
       return 1
       ;;
+    *)
+      ;;
   esac
 
-  printf '%s' "$tag"
+  printf '%s' "$remote_tag"
+  return $?
 }
 
 digest_from_remote() {
-  digest="$1"
-  [ -n "$digest" ] || return 1
+  remote_digest="$1"
+  [ -n "$remote_digest" ] || return 1
 
-  case "$digest" in
+  case "$remote_digest" in
     *@sha256:*)
-      digest="sha256:${digest##*@sha256:}"
+      remote_digest="sha256:${remote_digest##*@sha256:}"
       ;;
     sha256:*)
       ;;
@@ -186,15 +215,18 @@ digest_from_remote() {
       ;;
   esac
 
-  hex="${digest#sha256:}"
-  [ "${#hex}" -eq 64 ] || return 1
-  case "$hex" in
+  digest_hex="${remote_digest#sha256:}"
+  [ "${#digest_hex}" -eq 64 ] || return 1
+  case "$digest_hex" in
     *[!0-9A-Fa-f]*)
       return 1
       ;;
+    *)
+      ;;
   esac
 
-  printf 'sha256:%s' "$hex"
+  printf 'sha256:%s' "$digest_hex"
+  return $?
 }
 
 # Only act when there is an update (true)
@@ -209,18 +241,23 @@ if [ "${update_available:-}" = "true" ]; then
   [ -n "$IMAGE" ] || exit 0
 
   LINE="${IMAGE}"
-  if [ "${update_kind_kind:-}" = "tag" ]; then
-    REMOTE_TAG_SOURCE="${update_kind_remote_value:-}"
-    [ -n "$REMOTE_TAG_SOURCE" ] || REMOTE_TAG_SOURCE="${result_tag:-}"
-    if REMOTE_TAG="$(tag_from_remote "$REMOTE_TAG_SOURCE")"; then
-      LINE="${IMAGE} tag=${REMOTE_TAG}"
-    fi
-  elif [ "${update_kind_kind:-}" = "digest" ]; then
-    REMOTE_DIGEST_SOURCE="${update_kind_remote_value:-}"
-    if REMOTE_DIGEST="$(digest_from_remote "$REMOTE_DIGEST_SOURCE")"; then
-      LINE="${IMAGE}@${REMOTE_DIGEST}"
-    fi
-  fi
+  case "${update_kind_kind:-}" in
+    tag)
+      REMOTE_TAG_SOURCE="${update_kind_remote_value:-}"
+      [ -n "$REMOTE_TAG_SOURCE" ] || REMOTE_TAG_SOURCE="${result_tag:-}"
+      if REMOTE_TAG="$(tag_from_remote "$REMOTE_TAG_SOURCE")"; then
+        LINE="${IMAGE} tag=${REMOTE_TAG}"
+      fi
+      ;;
+    digest)
+      REMOTE_DIGEST_SOURCE="${update_kind_remote_value:-}"
+      if REMOTE_DIGEST="$(digest_from_remote "$REMOTE_DIGEST_SOURCE")"; then
+        LINE="${IMAGE}@${REMOTE_DIGEST}"
+      fi
+      ;;
+    *)
+      ;;
+  esac
 
   umask 077
   acquire_lock || exit $?

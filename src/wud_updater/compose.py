@@ -22,6 +22,8 @@ COMPOSE_FILENAMES = frozenset(
     }
 )
 _WAIT_FLAG_RE = re.compile(r"(^|\s)--wait([=,\s]|$)")
+_COMPOSE_CONFIG_JSON_OBJECT_ERROR = "Compose config JSON is not an object."
+_COMPOSE_CONFIG_SERVICES_OBJECT_ERROR = "Compose config JSON has no services object."
 
 
 @dataclass(frozen=True)
@@ -709,13 +711,7 @@ def _sorted_unique_nonblank(lines: Iterable[str]) -> list[str]:
 
 
 def _service_image_pairs_from_config_json(config_json: str) -> tuple[ServiceImage, ...]:
-    parsed = json.loads(config_json)
-    if not isinstance(parsed, dict):
-        raise ValueError("Compose config JSON is not an object.")
-    services = parsed.get("services")
-    if not isinstance(services, dict):
-        raise ValueError("Compose config JSON has no services object.")
-
+    services = _services_from_config_json(config_json)
     pairs: set[ServiceImage] = set()
     for service, config in services.items():
         if not isinstance(service, str) or not isinstance(config, dict):
@@ -752,13 +748,7 @@ def _service_labels(labels: object) -> tuple[tuple[str, str], ...]:
 
 
 def _service_bind_mounts_from_config_json(config_json: str) -> tuple[ComposeBindMount, ...]:
-    parsed = json.loads(config_json)
-    if not isinstance(parsed, dict):
-        raise ValueError("Compose config JSON is not an object.")
-    services = parsed.get("services")
-    if not isinstance(services, dict):
-        raise ValueError("Compose config JSON has no services object.")
-
+    services = _services_from_config_json(config_json)
     mounts: set[ComposeBindMount] = set()
     for service, config in services.items():
         if not isinstance(service, str) or not isinstance(config, dict):
@@ -785,13 +775,7 @@ def _service_bind_mounts_from_config_json(config_json: str) -> tuple[ComposeBind
 def _service_runtime_port_issues_from_config_json(
     config_json: str,
 ) -> tuple[ComposeRuntimePortIssue, ...]:
-    parsed = json.loads(config_json)
-    if not isinstance(parsed, dict):
-        raise ValueError("Compose config JSON is not an object.")
-    services = parsed.get("services")
-    if not isinstance(services, dict):
-        raise ValueError("Compose config JSON has no services object.")
-
+    services = _services_from_config_json(config_json)
     issues: list[ComposeRuntimePortIssue] = []
     for service, config in services.items():
         if not isinstance(service, str) or not isinstance(config, dict):
@@ -815,6 +799,16 @@ def _service_runtime_port_issues_from_config_json(
             for item in ports:
                 issues.extend(_runtime_port_issues(service, item))
     return tuple(issues)
+
+
+def _services_from_config_json(config_json: str) -> dict[object, object]:
+    parsed = json.loads(config_json)
+    if not isinstance(parsed, dict):
+        raise ValueError(_COMPOSE_CONFIG_JSON_OBJECT_ERROR)
+    services = parsed.get("services")
+    if not isinstance(services, dict):
+        raise ValueError(_COMPOSE_CONFIG_SERVICES_OBJECT_ERROR)
+    return services
 
 
 def _runtime_expose_issue(value: object) -> str:

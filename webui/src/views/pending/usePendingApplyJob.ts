@@ -22,6 +22,7 @@ import {
 } from "../../api/client";
 import { useRunsStore } from "../../stores/runs";
 import { useUpdatesStore } from "../../stores/updates";
+import { runInBackground } from "../../utils/promises";
 import {
   pendingPlanContextLabel,
   planLineDigestPinLabel,
@@ -386,20 +387,20 @@ export function usePendingApplyJob(options: UsePendingApplyJobOptions) {
     const source = webApi.openJobStream(jobId);
     jobEventSource.value = source;
     source.addEventListener("job", (event) => {
-      void handleJobEvent(event as MessageEvent<string>);
+      runInBackground(handleJobEvent(event as MessageEvent<string>));
     });
     source.addEventListener("progress", (event) => {
       handleJobProgressEvent(event as MessageEvent<string>);
     });
     source.addEventListener("log", (event) => {
-      void handleJobLogEvent(event as MessageEvent<string>);
+      runInBackground(handleJobLogEvent(event as MessageEvent<string>));
     });
     source.onerror = () => {
       if (updates.applyJob && terminalJobStatuses.has(updates.applyJob.status)) {
         closeJobStream();
         return;
       }
-      void recoverOrRefreshApplyJob(jobId);
+      runInBackground(recoverOrRefreshApplyJob(jobId));
     };
   }
 
@@ -573,7 +574,7 @@ export function usePendingApplyJob(options: UsePendingApplyJobOptions) {
   watch(
     () => [updates.applyJob?.status, updates.applyJob?.run_id] as const,
     () => {
-      void loadTerminalApplyJobLogIfMissing();
+      runInBackground(loadTerminalApplyJobLogIfMissing());
     },
     { immediate: true },
   );

@@ -14,7 +14,7 @@ import { createWudRouter } from "../src/router";
 import { useAuthStore } from "../src/stores/auth";
 import { useConnectionStore } from "../src/stores/connection";
 import { useSettingsStore } from "../src/stores/settings";
-import { useUpdatesStore, APPLY_JOB_RECOVERY_MESSAGE } from "../src/stores/updates";
+import { useUpdatesStore } from "../src/stores/updates";
 import { useRunsStore } from "../src/stores/runs";
 import SetupView from "../src/views/SetupView.vue";
 import ResetAdminView from "../src/views/ResetAdminView.vue";
@@ -351,7 +351,7 @@ describe("app shell", () => {
           allowed_values: ["system", "light", "dark"],
           restart_required: false,
         },
-        settingsResponse().managed[1]!,
+        settingsResponse().managed[1],
       ],
     });
     stubAppShellLoads(stores);

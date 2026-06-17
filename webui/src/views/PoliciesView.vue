@@ -27,6 +27,7 @@ import { useAuthStore } from "../stores/auth";
 import { useSettingsStore } from "../stores/settings";
 import { useConnectionStore } from "../stores/connection";
 import { useUpdatesStore } from "../stores/updates";
+import { runInBackground } from "../utils/promises";
 
 const settings = useSettingsStore();
 const connection = useConnectionStore();
@@ -204,10 +205,10 @@ async function confirmDelete(): Promise<void> {
 
 onMounted(() => {
   if (connection.status === null) {
-    void connection.loadStatus().catch(() => undefined);
+    runInBackground(connection.loadStatus());
   }
-  void updates.loadUpdateTargets().catch(() => undefined);
-  void settings.loadServicePolicies().catch(() => undefined);
+  runInBackground(updates.loadUpdateTargets());
+  runInBackground(settings.loadServicePolicies());
 });
 </script>
 

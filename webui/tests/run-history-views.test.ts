@@ -27,7 +27,7 @@ import {
 import { mountWithApp } from "./helpers/mount";
 
 function mockMediaQueries(matches: (query: string) => boolean): void {
-  window.matchMedia = vi.fn().mockImplementation((query: string) => ({
+  globalThis.window.matchMedia = vi.fn().mockImplementation((query: string) => ({
     matches: matches(query),
     media: query,
     onchange: null,
@@ -66,7 +66,7 @@ async function setupRoute(path: string): Promise<{
   return { pinia, router, settings, runs };
 }
 
-function runEvent(overrides: Partial<RunEventRecord> = {}): RunEventRecord {
+function runEvent(overrides?: Partial<RunEventRecord>): RunEventRecord {
   return {
     id: 1,
     run_id: 1,
@@ -81,12 +81,12 @@ function runEvent(overrides: Partial<RunEventRecord> = {}): RunEventRecord {
     new_digest: "",
     status: "success",
     metadata: {},
-    ...overrides,
+    ...(overrides ?? {}),
   };
 }
 
 function pendingUpdate(
-  overrides: Partial<PendingUpdateRecord> = {},
+  overrides?: Partial<PendingUpdateRecord>,
 ): PendingUpdateRecord {
   return {
     id: 1,
@@ -104,12 +104,13 @@ function pendingUpdate(
     created_at: "2026-05-28T12:00:00+00:00",
     updated_at: "2026-05-28T12:00:00+00:00",
     metadata: {},
-    ...overrides,
+    ...(overrides ?? {}),
   };
 }
 
-function runDetail(overrides: Partial<RunDetail> = {}): RunDetail {
-  const id = overrides.id ?? 42;
+function runDetail(overrides?: Partial<RunDetail>): RunDetail {
+  const resolvedOverrides = overrides ?? {};
+  const id = resolvedOverrides.id ?? 42;
   return {
     ...runSummary({
       id,
@@ -120,7 +121,7 @@ function runDetail(overrides: Partial<RunDetail> = {}): RunDetail {
     }),
     pending_updates: [pendingUpdate({ run_id: id })],
     verification: runVerification(),
-    ...overrides,
+    ...resolvedOverrides,
   };
 }
 
@@ -168,15 +169,15 @@ function actionRuns(): RunSummary[] {
 
   return cases.map((item, index) => {
     const id = index + 1;
-    const events =
-      id === 1
-        ? multiServiceEvents(id)
-        : id === 3
-          ? [
-              runEvent({ id: 10, run_id: id, service_name: "api" }),
-              runEvent({ id: 11, run_id: id, service_name: "worker" }),
-            ]
-          : [];
+    let events: RunEventRecord[] = [];
+    if (id === 1) {
+      events = multiServiceEvents(id);
+    } else if (id === 3) {
+      events = [
+        runEvent({ id: 10, run_id: id, service_name: "api" }),
+        runEvent({ id: 11, run_id: id, service_name: "worker" }),
+      ];
+    }
     return runSummary({
       id,
       dry_run: item.dryRun,
@@ -252,7 +253,7 @@ describe("RunsView", () => {
 
   it("renders mobile run cards with running and finished states", async () => {
     mockMobileViewport();
-    const { pinia, router, settings, runs } = await setupRoute("/runs");
+    const { pinia, router, runs } = await setupRoute("/runs");
     runs.runs = [
       runSummary({
         id: 21,
@@ -289,7 +290,7 @@ describe("RunsView", () => {
 
   it("renders the mobile empty state when there are no runs", async () => {
     mockMobileViewport();
-    const { pinia, router, settings, runs } = await setupRoute("/runs");
+    const { pinia, router, runs } = await setupRoute("/runs");
     runs.runs = [];
     vi.spyOn(runs, "loadRuns").mockResolvedValue();
 
@@ -306,7 +307,7 @@ describe("RunDetailView", () => {
   });
 
   it("loads run detail, renders evidence, and reloads when the route id changes", async () => {
-    const { pinia, router, settings, runs } = await setupRoute("/runs/42");
+    const { pinia, router, runs } = await setupRoute("/runs/42");
     const oldDigest = "sha256:old-digest-value-12345";
     const newDigest = "sha256:new-digest-value-12345";
     const newOnlyDigest = "sha256:new-only-digest-value";
@@ -534,7 +535,7 @@ describe("RunDetailView", () => {
   });
 
   it("renders error and empty detail states", async () => {
-    const { pinia, router, settings, runs } = await setupRoute("/runs/9");
+    const { pinia, router, runs } = await setupRoute("/runs/9");
     runs.error = "run detail failed to load";
     runs.runDetails = {
       9: runDetail({

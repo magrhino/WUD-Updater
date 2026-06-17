@@ -121,9 +121,9 @@ function snapshotLineScope(
           </span>
           <h2 id="apply-job-panel-title" class="wrap-anywhere">{{ title }}</h2>
         </div>
-        <p class="apply-job-summary" role="status" aria-live="polite">
+        <output class="apply-job-summary" aria-live="polite">
           {{ statusMessage }}
-        </p>
+        </output>
       </div>
       <n-tag :type="alertType">{{ panelStatusLabel }}</n-tag>
     </div>
@@ -132,30 +132,29 @@ function snapshotLineScope(
       <span />
     </div>
 
-    <section
+    <output
       id="apply-job-panel-status"
       class="apply-job-now"
       :class="{
         'apply-job-now-success': job.status === 'success',
         'apply-job-now-failure': job.status === 'failure',
       }"
-      role="status"
       aria-live="polite"
       aria-atomic="true"
       tabindex="-1"
       aria-labelledby="apply-job-now-title"
       :aria-describedby="nowDescriptionIds"
     >
-      <div class="apply-job-now-copy">
+      <span class="apply-job-now-copy">
         <span>Current status</span>
         <strong id="apply-job-now-title" class="wrap-anywhere">{{ nowTitle }}</strong>
         <em id="apply-job-now-message" class="wrap-anywhere">{{ nowMessage }}</em>
         <small v-if="nowDetail" id="apply-job-now-detail" class="wrap-anywhere">
           {{ nowDetail }}
         </small>
-      </div>
+      </span>
       <n-tag size="small" :type="alertType">{{ nowStatusLabel }}</n-tag>
-    </section>
+    </output>
 
     <section class="apply-job-latest-log" aria-labelledby="apply-job-latest-log-title">
       <span id="apply-job-latest-log-title">Latest log line</span>
@@ -394,6 +393,7 @@ function snapshotLineScope(
 }
 
 .apply-job-summary {
+  display: block;
   max-width: 68ch;
   margin: 6px 0 0;
   color: var(--color-muted-text);

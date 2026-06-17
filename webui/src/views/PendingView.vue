@@ -22,6 +22,7 @@ import { useRunsStore } from "../stores/runs";
 import { useSettingsStore } from "../stores/settings";
 import { useUpdatesStore } from "../stores/updates";
 import { displayDigest } from "../utils/digestProvenance";
+import { runInBackground } from "../utils/promises";
 import {
   displayValue,
   releaseNoteReason,
@@ -272,9 +273,9 @@ function releaseNoteStatus(note: ReleaseNoteInfo | null): string {
 }
 
 onMounted(() => {
-  void retryPendingLoad();
-  void settings.loadPendingSafetyCues();
-  void reconnectObservedApplyJob();
+  runInBackground(retryPendingLoad());
+  runInBackground(settings.loadPendingSafetyCues());
+  runInBackground(reconnectObservedApplyJob());
 });
 </script>
 
@@ -488,17 +489,16 @@ onMounted(() => {
       />
     </template>
 
-    <section
+    <output
       v-else-if="pendingLoading"
       class="pending-loading-state"
-      role="status"
       aria-live="polite"
       aria-label="Loading pending updates"
     >
       <n-skeleton aria-hidden="true" height="48px" />
       <n-skeleton aria-hidden="true" height="48px" />
       <n-skeleton aria-hidden="true" height="48px" />
-    </section>
+    </output>
 
     <div
       v-else-if="pendingLoadFailed"

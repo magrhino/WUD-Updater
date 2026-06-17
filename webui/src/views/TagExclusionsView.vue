@@ -24,6 +24,12 @@ import { useUpdateTargetOptions } from "../composables/useUpdateTargetOptions";
 import { useAuthStore } from "../stores/auth";
 import { useSettingsStore } from "../stores/settings";
 import { useUpdatesStore } from "../stores/updates";
+import { runInBackground } from "../utils/promises";
+
+type TagExclusionTarget = Pick<
+  TagExclusionRuleRecord,
+  "scope" | "service_key" | "image_repo"
+>;
 
 const settings = useSettingsStore();
 const updates = useUpdatesStore();
@@ -102,7 +108,7 @@ function scopeLabel(rule: TagExclusionRuleRecord): string {
 }
 
 function targetLabel(
-  rule: Pick<TagExclusionRuleRecord, "scope" | "service_key" | "image_repo">,
+  rule: TagExclusionTarget,
 ): string {
   return rule.scope === "service" ? rule.service_key : rule.image_repo;
 }
@@ -183,12 +189,12 @@ async function confirmStatusChange(): Promise<void> {
 }
 
 onMounted(() => {
-  void updates.loadUpdateTargets().catch(() => undefined);
-  void settings.loadTagExclusions(statusFilter.value).catch(() => undefined);
+  runInBackground(updates.loadUpdateTargets());
+  runInBackground(settings.loadTagExclusions(statusFilter.value));
 });
 
 watch(statusFilter, (nextFilter) => {
-  void settings.loadTagExclusions(nextFilter).catch(() => undefined);
+  runInBackground(settings.loadTagExclusions(nextFilter));
 });
 </script>
 

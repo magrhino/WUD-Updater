@@ -7,7 +7,7 @@ import json
 import os
 import shutil
 import subprocess
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
@@ -31,6 +31,8 @@ class TrueNasStatusSnapshot:
 
 DEFAULT_TRUENAS_STATUS_TIMEOUT = "5"
 TRUENAS_MIDDLEWARE_MOUNT = "/var/run/middleware"
+_INVALID_STATUS_RESPONSE = "invalid status response"
+
 
 def run_truenas_status_export_from_namespace(
     _args: argparse.Namespace,
@@ -66,8 +68,6 @@ def _run_truenas_status_helper(
     options: "UpdatesOptions",
     environ: Mapping[str, str],
 ) -> TrueNasCallResult:
-    from .updates import _format_os_error
-
     if not _has_command("docker", environ):
         return TrueNasCallResult(ok=False, reason="docker not available")
 
@@ -83,8 +83,36 @@ def _run_truenas_status_helper(
     except UpdatesError as exc:
         return TrueNasCallResult(ok=False, reason=str(exc))
 
+    inspect_result = _docker_inspect_current_container(
+        candidates,
+        environ,
+        helper_timeout,
+    )
+    if not inspect_result.ok:
+        return inspect_result
+
+    container = inspect_result.data
+    image = (
+        _inspected_container_image(container) if isinstance(container, Mapping) else ""
+    )
+    if image == "":
+        return TrueNasCallResult(
+            ok=False,
+            reason="docker inspect returned no image",
+        )
+
+    return _run_truenas_status_container(image, options, environ, helper_timeout)
+
+
+def _docker_inspect_current_container(
+    candidates: Sequence[str],
+    environ: Mapping[str, str],
+    helper_timeout: int,
+) -> TrueNasCallResult:
+    from .updates import _format_os_error
+
     inspect_failure = ""
-    inspect_result = None
+    inspect_result: subprocess.CompletedProcess[str] | None = None
     for candidate in candidates:
         try:
             candidate_result = subprocess.run(
@@ -115,8 +143,12 @@ def _run_truenas_status_helper(
     if inspect_result is None:
         return TrueNasCallResult(ok=False, reason=inspect_failure)
 
+    return _truenas_container_from_inspect_stdout(inspect_result.stdout)
+
+
+def _truenas_container_from_inspect_stdout(stdout: str) -> TrueNasCallResult:
     try:
-        inspect_data = json.loads(inspect_result.stdout)
+        inspect_data = json.loads(stdout)
     except json.JSONDecodeError:
         return TrueNasCallResult(
             ok=False,
@@ -128,13 +160,16 @@ def _run_truenas_status_helper(
             ok=False,
             reason="docker inspect returned no container",
         )
+    return TrueNasCallResult(ok=True, data=container)
 
-    image = _inspected_container_image(container)
-    if image == "":
-        return TrueNasCallResult(
-            ok=False,
-            reason="docker inspect returned no image",
-        )
+
+def _run_truenas_status_container(
+    image: str,
+    options: "UpdatesOptions",
+    environ: Mapping[str, str],
+    helper_timeout: int,
+) -> TrueNasCallResult:
+    from .updates import _format_os_error
 
     run_command = [
         "docker",
@@ -244,13 +279,13 @@ def _truenas_status_result_from_stdout(stdout: str) -> TrueNasCallResult:
         return TrueNasCallResult(ok=False, reason="invalid JSON response")
 
     if not isinstance(payload, dict):
-        return TrueNasCallResult(ok=False, reason="invalid status response")
+        return TrueNasCallResult(ok=False, reason=_INVALID_STATUS_RESPONSE)
     return TrueNasCallResult(ok=True, data=payload)
 
 
 def _truenas_snapshot_from_payload(payload: object | None) -> TrueNasStatusSnapshot:
     if not isinstance(payload, dict):
-        return _truenas_unavailable_snapshot("invalid status response")
+        return _truenas_unavailable_snapshot(_INVALID_STATUS_RESPONSE)
 
     return TrueNasStatusSnapshot(
         update=_truenas_result_from_payload(payload.get("update")),
@@ -260,7 +295,7 @@ def _truenas_snapshot_from_payload(payload: object | None) -> TrueNasStatusSnaps
 
 def _truenas_result_from_payload(value: object) -> TrueNasCallResult:
     if not isinstance(value, dict):
-        return TrueNasCallResult(ok=False, reason="invalid status response")
+        return TrueNasCallResult(ok=False, reason=_INVALID_STATUS_RESPONSE)
     ok = value.get("ok")
     if ok is True:
         return TrueNasCallResult(ok=True, data=value.get("data"))
@@ -270,7 +305,7 @@ def _truenas_result_from_payload(value: object) -> TrueNasCallResult:
             ok=False,
             reason=reason if isinstance(reason, str) and reason else "unknown error",
         )
-    return TrueNasCallResult(ok=False, reason="invalid status response")
+    return TrueNasCallResult(ok=False, reason=_INVALID_STATUS_RESPONSE)
 
 
 def _truenas_status_payload_json(snapshot: TrueNasStatusSnapshot) -> str:
@@ -461,9 +496,10 @@ def _truenas_active_alerts(data: object | None) -> list[str] | None:
 
     alerts: list[str] = []
     for item in data:
+        if isinstance(item, str) and item:
+            alerts.append(item)
+            continue
         if isinstance(item, str):
-            if item:
-                alerts.append(item)
             continue
         if not isinstance(item, dict):
             continue

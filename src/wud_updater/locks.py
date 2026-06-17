@@ -14,7 +14,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 
-_SECONDS_RE = re.compile(r"^[0-9]+$")
+_SECONDS_RE = re.compile(r"^\d+$", re.ASCII)
 
 
 class WudLockError(RuntimeError):

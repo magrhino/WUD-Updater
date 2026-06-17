@@ -19,6 +19,7 @@ detect_breaking() {
     fi
   fi
   printf '%s' "$breaking"
+  return $?
 }
 
 semver_first() {
@@ -26,14 +27,17 @@ semver_first() {
     | sed -E 's/^[^0-9A-Za-z]*//; s/[^0-9A-Za-z]$//' \
     | awk 'NF { print; exit }' \
     || true
+  return $?
 }
 
 strip_lsio_suffix() {
   sed -E 's/[._-]ls[0-9]+([._-][0-9A-Za-z]+)*$//I'
+  return $?
 }
 
 strip_md_headers() {
   sed -E 's/\r//g; s/^[[:space:]]*#+[[:space:]]*//; s/^\*\*([A-Za-z0-9 _-]+):\*\*/\1:/; s/[[:space:]]+$//'
+  return $?
 }
 
 extract_block_header_ci() {
@@ -58,6 +62,7 @@ extract_block_header_ci() {
       if (show && is_hdr) exit
       if (show) print line
     }'
+  return $?
 }
 
 extract_md_h2_section_ci() {
@@ -73,6 +78,7 @@ extract_md_h2_section_ci() {
     }
     { if (show) print $0 }
   '
+  return $?
 }
 
 extract_upstream_version() {
@@ -88,14 +94,17 @@ extract_upstream_version() {
   [[ -z "$version" ]] && version="$(printf '%s\n' "$text" \
     | semver_first || true)"
   printf '%s' "$version"
+  return $?
 }
 
 extract_alpine_base() {
   grep -Eoi -m1 'alpine[[:space:]]+[0-9]+\.[0-9]+' | awk '{print $2}'
+  return $?
 }
 
 extract_ci_link() {
   grep -Eom1 'https?://[^ ]+ci-tests[^ ]+' || true
+  return $?
 }
 
 select_key_change_bullets() {
@@ -163,6 +172,7 @@ select_key_change_bullets() {
       if (!scanned) finish_scan()
     }
   '
+  return $?
 }
 
 select_representative_changes() {
@@ -188,13 +198,16 @@ select_representative_changes() {
       break
     fi
   done < <(printf '%s\n' "$section" | sed -n '/^##/,$p' | sed '1d')
+  return $?
 }
 
 extract_intro_until_h3() {
   awk '{ if ($0 ~ /^###[[:space:]]/) exit; print }'
+  return $?
 }
 
 extract_lsio_non_rebase_changes() {
   local lsio_changes_text="$1"
   grep -viE '^[[:space:]]*[-*•]?[[:space:]]*rebase( to)? alpine[[:space:]]+[0-9]+\.[0-9]+' <<<"$lsio_changes_text" 2>/dev/null || true
+  return $?
 }

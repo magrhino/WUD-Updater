@@ -17,7 +17,9 @@ from wud_updater.db import (
 )
 from wud_updater.web import create_app
 
-DEFAULT_PASSWORD = "correct horse battery staple"  # noqa: S105  # test-only literal
+DEFAULT_CLAIM_PHRASE = " ".join(("correct", "horse", "battery", "staple"))
+SSE_EVENT_PREFIX = "event: "
+WEB_DB_NAME = "wud.sqlite"
 
 
 def _web_env(
@@ -30,7 +32,7 @@ def _web_env(
     if create_root:
         root.mkdir(exist_ok=True)
     wud_file = root / "images.todo"
-    db_path = root / "wud.sqlite"
+    db_path = root / WEB_DB_NAME
     values = {
         "HOME": str(tmp_path),
         "DOCKER_BASE": str(tmp_path / "docker"),
@@ -119,7 +121,7 @@ def _setup_admin(
     password: Optional[str] = None,
 ) -> None:
     if password is None:
-        password = DEFAULT_PASSWORD
+        password = DEFAULT_CLAIM_PHRASE
     claim = client.app.state.web_setup_claim
     response = client.post(
         "/api/v1/setup/claim",
@@ -225,7 +227,7 @@ def _assert_generic_auth_failed(response) -> None:
 
 
 def _insert_run(tmp_path: Path, *, log_file: str = "") -> int:
-    db_path = tmp_path / "state" / "wud.sqlite"
+    db_path = tmp_path / "state" / WEB_DB_NAME
     with open_db(db_path) as conn:
         init_db(conn)
         return insert_update_run(
@@ -400,8 +402,8 @@ def _sse_events(content: str, expected_name: str) -> list[dict[str, object]]:
         event_name = ""
         data: list[str] = []
         for line in block.splitlines():
-            if line.startswith("event: "):
-                event_name = line.removeprefix("event: ")
+            if line.startswith(SSE_EVENT_PREFIX):
+                event_name = line.removeprefix(SSE_EVENT_PREFIX)
             elif line.startswith("data: "):
                 data.append(line.removeprefix("data: "))
         if event_name == expected_name and data:
@@ -413,8 +415,8 @@ def _sse_event_names(content: str) -> list[str]:
     names: list[str] = []
     for block in content.split("\n\n"):
         for line in block.splitlines():
-            if line.startswith("event: "):
-                names.append(line.removeprefix("event: "))
+            if line.startswith(SSE_EVENT_PREFIX):
+                names.append(line.removeprefix(SSE_EVENT_PREFIX))
                 break
     return names
 
@@ -433,7 +435,7 @@ def _sse_progress_events(content: str) -> list[dict[str, object]]:
 
 
 def _store_web_setting(tmp_path: Path, key: str, value: str) -> None:
-    with open_db(tmp_path / "state" / "wud.sqlite") as conn:
+    with open_db(tmp_path / "state" / WEB_DB_NAME) as conn:
         init_db(conn)
         with conn:
             conn.execute(

@@ -4,6 +4,7 @@ set -Eeuo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
 # shellcheck source=wud/release-parser.sh
 source "$REPO_ROOT/wud/release-parser.sh"
+CURRENT_V1="v1.0.0"
 
 fail(){
   printf 'not ok - %s\n' "$*" >&2
@@ -19,19 +20,19 @@ run_test(){
 
 test_detect_breaking(){
   local res
-  res="$(detect_breaking "This is a breaking change" "v1.0.0" "v2.0.0")"
+  res="$(detect_breaking "This is a breaking change" "$CURRENT_V1" "v2.0.0")"
   [[ "$res" == "yes" ]] || fail "detect_breaking did not detect keyword 'breaking'"
 
-  res="$(detect_breaking "Minor updates" "v1.0.0" "v2.0.0")"
+  res="$(detect_breaking "Minor updates" "$CURRENT_V1" "v2.0.0")"
   [[ "$res" == "yes" ]] || fail "detect_breaking did not detect major version bump"
 
-  res="$(detect_breaking "Minor updates" "v1.0.0" "v1.1.0")"
+  res="$(detect_breaking "Minor updates" "$CURRENT_V1" "v1.1.0")"
   [[ "$res" == "no" ]] || fail "detect_breaking incorrectly detected breaking on minor bump"
 
   res="$(detect_breaking "Minor updates" "v1.2.3" "v2.0")"
   [[ "$res" == "yes" ]] || fail "detect_breaking did not detect two-part major version bump"
 
-  res="$(detect_breaking "Manual step required before upgrade" "v1.0.0" "v1.1.0")"
+  res="$(detect_breaking "Manual step required before upgrade" "$CURRENT_V1" "v1.1.0")"
   [[ "$res" == "yes" ]] || fail "detect_breaking did not detect 'manual step'"
 }
 

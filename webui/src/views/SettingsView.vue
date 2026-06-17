@@ -13,6 +13,7 @@ import SettingsPreferencesSection from "./settings/SettingsPreferencesSection.vu
 import SettingsRuntimeSections from "./settings/SettingsRuntimeSections.vue";
 import SettingsSafetyStrip from "./settings/SettingsSafetyStrip.vue";
 import { focusOnboardingChecklist } from "./settings/settingsDom";
+import { runInBackground } from "../utils/promises";
 
 const settings = useSettingsStore();
 const route = useRoute();
@@ -29,20 +30,22 @@ watch(
   shouldFocusOnboardingChecklist,
   (shouldFocus) => {
     if (shouldFocus) {
-      void focusOnboardingChecklist();
+      runInBackground(focusOnboardingChecklist());
     }
   },
   { immediate: true, flush: "post" },
 );
 
 onMounted(() => {
-  void (async () => {
-    await settings.loadSettings();
-    if (settings.coreUpdateTour === null) {
-      await settings.loadCoreUpdateTour();
-    }
-  })().catch(() => undefined);
+  runInBackground(loadInitialSettings());
 });
+
+async function loadInitialSettings(): Promise<void> {
+  await settings.loadSettings();
+  if (settings.coreUpdateTour === null) {
+    await settings.loadCoreUpdateTour();
+  }
+}
 </script>
 
 <template>

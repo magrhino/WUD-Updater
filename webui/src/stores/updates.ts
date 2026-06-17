@@ -166,9 +166,9 @@ export const useUpdatesStore = defineStore("updates", () => {
     releaseNotesError.value = "";
     try {
       releaseNotes.value = await webApi.releaseNotes();
-    } catch (exc) {
-      releaseNotesError.value = errorMessage(exc);
-      throw exc;
+    } catch (caughtError) {
+      releaseNotesError.value = errorMessage(caughtError);
+      throw caughtError;
     } finally {
       releaseNotesLoading.value = false;
     }
@@ -180,9 +180,9 @@ export const useUpdatesStore = defineStore("updates", () => {
     releaseNotesError.value = "";
     try {
       releaseNotes.value = await webApi.refreshReleaseNotes(await auth.ensureCsrf());
-    } catch (exc) {
-      releaseNotesError.value = errorMessage(exc);
-      throw exc;
+    } catch (caughtError) {
+      releaseNotesError.value = errorMessage(caughtError);
+      throw caughtError;
     } finally {
       releaseNotesLoading.value = false;
     }
@@ -193,9 +193,9 @@ export const useUpdatesStore = defineStore("updates", () => {
     try {
       selfUpdate.value = await webApi.selfUpdate();
       selfUpdatePlan.value = null;
-    } catch (exc) {
-      selfUpdateError.value = errorMessage(exc);
-      throw exc;
+    } catch (caughtError) {
+      selfUpdateError.value = errorMessage(caughtError);
+      throw caughtError;
     }
   }
 
@@ -208,9 +208,9 @@ export const useUpdatesStore = defineStore("updates", () => {
         response = await webApi.planSelfUpdate(await auth.ensureCsrf());
         selfUpdatePlan.value = response;
       });
-    } catch (exc) {
-      selfUpdateError.value = errorMessage(exc);
-      throw exc;
+    } catch (caughtError) {
+      selfUpdateError.value = errorMessage(caughtError);
+      throw caughtError;
     }
     if (response === null) {
       throw new Error("Self-update plan did not return a response");
@@ -258,9 +258,9 @@ export const useUpdatesStore = defineStore("updates", () => {
           // Keep the success visible even if the follow-up status check fails.
         }
       });
-    } catch (exc) {
-      selfUpdateError.value = errorMessage(exc);
-      throw exc;
+    } catch (caughtError) {
+      selfUpdateError.value = errorMessage(caughtError);
+      throw caughtError;
     }
     if (response === null) {
       throw new Error("Self-update did not return a response");
@@ -434,17 +434,17 @@ export const useUpdatesStore = defineStore("updates", () => {
       const job = await webApi.job(jobId);
       setApplyJob(job);
       return job;
-    } catch (exc) {
+    } catch (caughtError) {
       if (
         options.recoverMissing &&
-        exc instanceof ApiError &&
-        exc.status === 404
+        caughtError instanceof ApiError &&
+        caughtError.status === 404
       ) {
         markApplyJobRecovery();
         return null;
       }
-      error.value = errorMessage(exc);
-      throw exc;
+      error.value = errorMessage(caughtError);
+      throw caughtError;
     }
   }
 
@@ -467,8 +467,8 @@ export const useUpdatesStore = defineStore("updates", () => {
       };
       setApplyJobLog(log);
       return log;
-    } catch (exc) {
-      error.value = errorMessage(exc);
+    } catch (caughtError) {
+      error.value = errorMessage(caughtError);
       return null;
     }
   }
@@ -576,7 +576,7 @@ function removeRememberedApplyJobId(): void {
 
 function sessionStorageAvailable(): Storage | null {
   try {
-    return typeof window === "undefined" ? null : window.sessionStorage;
+    return "sessionStorage" in globalThis ? globalThis.sessionStorage : null;
   } catch {
     return null;
   }
