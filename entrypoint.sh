@@ -13,7 +13,7 @@ env_bool_enabled(){
   local value="${1:-}"
 
   case "$value" in
-    1|[Tt][Rr][Uu][Ee]|[Yy][Ee][Ss]|[Oo][Nn])
+    1|[Tt][Rr][Uu][Ee]|[Yy][Ee][Ss]|[Oo][Nn]|[Ee][Nn][Aa][Bb][Ll][Ee][Dd])
       return 0
       ;;
     *)

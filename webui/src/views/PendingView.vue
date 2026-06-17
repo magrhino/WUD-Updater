@@ -16,6 +16,8 @@ import PendingCleanupModal from "../components/pending/PendingCleanupModal.vue";
 import PendingFallbackQueue from "../components/pending/PendingFallbackQueue.vue";
 import PendingPlanReviewModal from "../components/pending/PendingPlanReviewModal.vue";
 import PendingRemovalModal from "../components/pending/PendingRemovalModal.vue";
+import PendingSearchEmptyState from "../components/pending/PendingSearchEmptyState.vue";
+import PendingSearchPanel from "../components/pending/PendingSearchPanel.vue";
 import PendingSelectionToolbar from "../components/pending/PendingSelectionToolbar.vue";
 import PendingStackSelection from "../components/pending/PendingStackSelection.vue";
 import { useRunsStore } from "../stores/runs";
@@ -38,6 +40,8 @@ import {
 import { usePendingPlanActions } from "./pending/usePendingPlanActions";
 import { usePendingPlanReviewState } from "./pending/usePendingPlanReviewState";
 import { usePendingQueueState } from "./pending/usePendingQueueState";
+import { usePendingSearchResultState } from "./pending/usePendingSearchResultState";
+import { usePendingSearchState } from "./pending/usePendingSearchState";
 import { usePendingSelectionState } from "./pending/usePendingSelectionState";
 
 const updates = useUpdatesStore();
@@ -66,6 +70,32 @@ const {
   stackGroups,
   unmatchedItems,
 } = usePendingQueueState();
+const {
+  clearPendingSearch,
+  filteredDependencySnoozedItems,
+  filteredPendingItems,
+  filteredStackGroups,
+  filteredUnmatchedItems,
+  pendingSearchActive,
+  pendingSearchEmpty,
+  pendingSearchQuery,
+  pendingSearchResultLabel,
+  visibleLineNumbers,
+  visibleSelectableLineNumbers,
+  visibleSelectAllLabel,
+} = usePendingSearchState({
+  pendingItems,
+  groupingReady,
+  dependencySnoozedItems,
+  selectableLineNumbers,
+  selectAllLabel,
+  stackGroups,
+  unmatchedItems,
+  releaseNoteFor,
+  releaseNoteReason,
+  releaseNoteStatus,
+  riskCues,
+});
 
 let clearPreflightHandler: () => void = () => undefined;
 let loadPendingAndReleaseNotesHandler: () => Promise<void> = async () => undefined;
@@ -89,7 +119,7 @@ const {
   updateTagOverride,
 } = usePendingSelectionState({
   pendingItems,
-  selectableLineNumbers,
+  selectableLineNumbers: visibleSelectableLineNumbers,
   onSelectionChanged: () => clearPreflightHandler(),
 });
 
@@ -190,6 +220,21 @@ const {
   stackGroups,
   tagOverrideErrorForLines,
   unmatchedItems,
+});
+const {
+  selectedHiddenCount,
+  visibleUnmatchedIssueSummary,
+  visibleUnmatchedReviewCountLabel,
+  visibleUnmatchedReviewSummary,
+} = usePendingSearchResultState({
+  pendingSearchActive,
+  visibleLineNumbers,
+  selectedLineNumbers,
+  filteredUnmatchedItems,
+  unmatchedItems,
+  unmatchedIssueSummary,
+  unmatchedReviewCountLabel,
+  unmatchedReviewSummary,
 });
 
 const {
@@ -379,9 +424,15 @@ onMounted(() => {
       next-step="pending_preflight"
     >
       <div class="core-tour-facts">
-        <span v-if="pendingLoaded">{{ pluralize(stackGroups.length, "stack") }} matched</span>
+        <span v-if="pendingLoaded">
+          {{
+            pendingSearchActive
+              ? `${pluralize(filteredStackGroups.length, "stack")} matched`
+              : pluralize(filteredStackGroups.length, "stack")
+          }}
+        </span>
         <span v-else>Loading stack matches</span>
-        <span v-if="pendingLoaded">{{ unmatchedReviewCountLabel }}</span>
+        <span v-if="pendingLoaded">{{ visibleUnmatchedReviewCountLabel }}</span>
         <span v-else>Waiting for pending file</span>
         <span>{{ mutationStateLabel }}</span>
       </div>
@@ -405,9 +456,17 @@ onMounted(() => {
       next-to="/runs"
     />
 
+    <PendingSearchPanel
+      v-if="pendingLoaded"
+      v-model:query="pendingSearchQuery"
+      :active="pendingSearchActive"
+      :result-label="pendingSearchResultLabel"
+      @clear="clearPendingSearch"
+    />
+
     <PendingSelectionToolbar
       :batch-summary-label="batchSummaryLabel"
-      :dependency-snoozed-count="dependencySnoozedItems.length"
+      :dependency-snoozed-count="filteredDependencySnoozedItems.length"
       :grouping-ready="groupingReady"
       :has-selected-tag-updates="selectedHasTagUpdates"
       :is-mobile="isMobile"
@@ -416,11 +475,12 @@ onMounted(() => {
       :removal-button-label="removalButtonLabel"
       :remove-selected-disabled="removeSelectedDisabled"
       :remove-selected-disabled-message="removeSelectedDisabledMessage"
-      :selectable-count="selectableLineNumbers.length"
-      :select-all-label="selectAllLabel"
+      :selectable-count="visibleSelectableLineNumbers.length"
+      :select-all-label="visibleSelectAllLabel"
       :selected-count="selectedLineNumbers.length"
-      :stack-count="stackGroups.length"
-      :unmatched-review-count-label="unmatchedItems.length ? unmatchedReviewCountLabel : ''"
+      :selected-hidden-count="selectedHiddenCount"
+      :stack-count="filteredStackGroups.length"
+      :unmatched-review-count-label="visibleUnmatchedReviewCountLabel"
       :update-selected-disabled="updateSelectedDisabled"
       @clear-selection="clearSelection"
       @select-all="selectAllVisible"
@@ -435,9 +495,16 @@ onMounted(() => {
       {{ selectedTagOverrideError }}
     </n-alert>
 
+    <PendingSearchEmptyState
+      v-if="pendingSearchEmpty"
+      :query="pendingSearchQuery"
+      @clear="clearPendingSearch"
+    />
+
     <template v-if="groupingReady">
       <PendingStackSelection
-        :dependency-snoozed-items="dependencySnoozedItems"
+        v-if="!pendingSearchEmpty"
+        :dependency-snoozed-items="filteredDependencySnoozedItems"
         :latest-run-id="latestRunId"
         :loading="updates.loading"
         :pending-source-label="pendingSourceLabel"
@@ -447,7 +514,7 @@ onMounted(() => {
         :risk-cues="riskCues"
         :selected-line-set="selectedLineSet"
         :show-setup-link="showSetupLink"
-        :stack-groups="stackGroups"
+        :stack-groups="filteredStackGroups"
         :stack-has-selection="stackHasSelection"
         :stack-indeterminate="stackIndeterminate"
         :stack-selected="stackSelected"
@@ -455,9 +522,9 @@ onMounted(() => {
         :stale-diagnostic-label="staleDiagnosticLabel"
         :tag-input-props="tagInputProps"
         :tag-override-value="tagOverrideValue"
-        :unmatched-issue-summary="unmatchedIssueSummary"
-        :unmatched-items="unmatchedItems"
-        :unmatched-review-summary="unmatchedReviewSummary"
+        :unmatched-issue-summary="visibleUnmatchedIssueSummary"
+        :unmatched-items="filteredUnmatchedItems"
+        :unmatched-review-summary="visibleUnmatchedReviewSummary"
         :update-disabled="updateDisabled"
         @preview-stack="startStackUpdate"
         @toggle-line="toggleLine"
@@ -468,9 +535,10 @@ onMounted(() => {
 
     <template v-else-if="updates.pending">
       <PendingFallbackQueue
+        v-if="!pendingSearchEmpty"
         :columns="columns"
         :is-mobile="isMobile"
-        :items="pendingItems"
+        :items="filteredPendingItems"
         :latest-run-id="latestRunId"
         :loading="updates.loading"
         :pending-source-label="pendingSourceLabel"
