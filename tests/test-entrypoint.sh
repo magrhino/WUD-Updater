@@ -228,6 +228,18 @@ test_web_exports_auto_not_detected_script_sync_status(){
   teardown_case
 }
 
+test_web_exports_auto_not_detected_for_unsearchable_destination(){
+  setup_case
+  mkdir -p "$TEST_TMP/managed-wud"
+  chmod 200 "$TEST_TMP/managed-wud"
+  PYTHON_BIN="$TEST_TMP/python" FAKE_PYTHON_PRINT_SCRIPT_SYNC_STATUS=1 run_entrypoint web
+  chmod 700 "$TEST_TMP/managed-wud"
+  assert_status 0
+  assert_output "python [-m] [wud_updater.cli] [web] [--base] [$TEST_TMP/docker] [--file] [$TEST_TMP/out/images.todo] [--log-dir] [/logs] WUD_SCRIPT_SYNC_STATUS=[auto-not-detected]"
+  [[ ! -e "$TEST_TMP/managed-wud/.wud-updater-managed" ]] || fail "unsearchable destination enabled sync"
+  teardown_case
+}
+
 test_web_exports_explicit_auto_script_sync_status(){
   setup_case
   mkdir -p "$TEST_TMP/managed-wud"
@@ -428,6 +440,7 @@ main(){
   run_test test_web_dispatch_injects_paths
   run_test test_web_exports_auto_detected_script_sync_status
   run_test test_web_exports_auto_not_detected_script_sync_status
+  run_test test_web_exports_auto_not_detected_for_unsearchable_destination
   run_test test_web_exports_explicit_auto_script_sync_status
   run_test test_web_exports_forced_script_sync_status
   run_test test_web_exports_disabled_script_sync_status

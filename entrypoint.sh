@@ -53,7 +53,7 @@ startup_sync_status(){
     if env_bool_enabled "$WUD_SYNC_SCRIPTS"; then
       printf 'forced\n'
     elif env_auto_enabled "$WUD_SYNC_SCRIPTS"; then
-      if [[ -d "$wud_scripts_dir" && -w "$wud_scripts_dir" ]]; then
+      if [[ -d "$wud_scripts_dir" && -w "$wud_scripts_dir" && -x "$wud_scripts_dir" ]]; then
         printf 'auto-detected\n'
       else
         printf 'auto-not-detected\n'
@@ -64,7 +64,7 @@ startup_sync_status(){
     return
   fi
 
-  if [[ -d "$wud_scripts_dir" && -w "$wud_scripts_dir" ]]; then
+  if [[ -d "$wud_scripts_dir" && -w "$wud_scripts_dir" && -x "$wud_scripts_dir" ]]; then
     printf 'auto-detected\n'
   else
     printf 'auto-not-detected\n'
