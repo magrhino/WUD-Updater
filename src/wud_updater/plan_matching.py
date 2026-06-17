@@ -98,37 +98,15 @@ def _match_targets(
         if target.desired_tag and not allow_tag_updates:
             skipped.append(_skipped(target, "tag-updates-disabled"))
             continue
-
-        resolved = container_images.get(target.first, target.first)
-        allow_repo = (
-            target.allow_repo or resolved != target.first or not image_has_tag(resolved)
+        matches.extend(
+            _matches_for_target(
+                target,
+                stacks,
+                container_images,
+                allow_digest_pin_rematch=allow_digest_pin_rematch,
+                seen=seen,
+            )
         )
-
-        for stack in stacks:
-            for image in stack.images:
-                services = _services_for_target_match(
-                    stack.service_images,
-                    image,
-                    target,
-                    resolved,
-                    allow_repo,
-                    allow_digest_pin_rematch=allow_digest_pin_rematch,
-                )
-                if services is None:
-                    continue
-                if services:
-                    for service in services:
-                        key = (stack.index, target.line_no, resolved, image, service)
-                        if key in seen:
-                            continue
-                        matches.append(Match(stack, target, resolved, image, service))
-                        seen.add(key)
-                else:
-                    key = (stack.index, target.line_no, resolved, image, "")
-                    if key in seen:
-                        continue
-                    matches.append(Match(stack, target, resolved, image, ""))
-                    seen.add(key)
 
     matches.sort(
         key=lambda item: (
@@ -146,6 +124,63 @@ def _match_targets(
         if target.line_no not in matched_lines and target.line_no not in skipped_lines:
             skipped.append(_skipped(target, "unmatched"))
     return matches, skipped
+
+
+def _matches_for_target(
+    target: WudTarget,
+    stacks: Sequence[ComposeStack],
+    container_images: Mapping[str, str],
+    *,
+    allow_digest_pin_rematch: bool,
+    seen: set[tuple[int, int, str, str, str]],
+) -> list[Match]:
+    resolved = container_images.get(target.first, target.first)
+    allow_repo = (
+        target.allow_repo or resolved != target.first or not image_has_tag(resolved)
+    )
+    matches: list[Match] = []
+
+    for stack in stacks:
+        for image in stack.images:
+            services = _services_for_target_match(
+                stack.service_images,
+                image,
+                target,
+                resolved,
+                allow_repo,
+                allow_digest_pin_rematch=allow_digest_pin_rematch,
+            )
+            if services is None:
+                continue
+            matches.extend(
+                _deduped_matches_for_services(
+                    stack,
+                    target,
+                    resolved,
+                    image,
+                    services or ("",),
+                    seen,
+                )
+            )
+    return matches
+
+
+def _deduped_matches_for_services(
+    stack: ComposeStack,
+    target: WudTarget,
+    resolved: str,
+    image: str,
+    services: Sequence[str],
+    seen: set[tuple[int, int, str, str, str]],
+) -> list[Match]:
+    matches: list[Match] = []
+    for service in services:
+        key = (stack.index, target.line_no, resolved, image, service)
+        if key in seen:
+            continue
+        matches.append(Match(stack, target, resolved, image, service))
+        seen.add(key)
+    return matches
 
 
 def _unmatched_diagnostics(
@@ -534,7 +569,7 @@ def _nonstandard_compose_filename(name: str) -> bool:
     lowered = name.lower()
     return (
         "compose" in lowered
-        and (lowered.endswith(".yml") or lowered.endswith(".yaml"))
+        and lowered.endswith((".yml", ".yaml"))
         and lowered not in COMPOSE_FILENAMES
     )
 

@@ -6,7 +6,12 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 
 from .command import CommandError
-from .compose import ComposeCli, ComposeStack
+from .compose import (
+    ComposeBindMount,
+    ComposeCli,
+    ComposeRuntimePortIssue,
+    ComposeStack,
+)
 from .compose_rewrite import render_compose_digest_pins, render_compose_digest_unpins
 from .config import UpdaterConfig
 from .digest_verifier import DigestVerifier, DockerManifestResolver
@@ -61,18 +66,11 @@ def unmatched_issues(
         reason = skipped_reasons.get(target.line_no, "unmatched")
         severity = "warning" if reason == "tag-updates-disabled" else "error"
         diagnostic = diagnostics.get(target.line_no)
-        message = (
-            "Tag update entries require allow_tag_updates=true."
-            if reason == "tag-updates-disabled"
-            else (
-                diagnostic.message if diagnostic is not None else GENERIC_UNMATCHED_MESSAGE
-            )
-        )
         issues.append(
             DryRunPlanIssue(
                 severity=severity,
                 code=diagnostic.code if diagnostic is not None else reason,
-                message=message,
+                message=_unmatched_issue_message(reason, diagnostic),
                 line_no=target.line_no,
                 stack="" if diagnostic is None else diagnostic.stack,
                 service="" if diagnostic is None else diagnostic.service,
@@ -81,6 +79,17 @@ def unmatched_issues(
             )
         )
     return issues
+
+
+def _unmatched_issue_message(
+    reason: str,
+    diagnostic: UnmatchedDiagnostic | None,
+) -> str:
+    if reason == "tag-updates-disabled":
+        return "Tag update entries require allow_tag_updates=true."
+    if diagnostic is not None:
+        return diagnostic.message
+    return GENERIC_UNMATCHED_MESSAGE
 
 
 def tag_update_plan_issues(
@@ -178,131 +187,23 @@ def digest_pin_plan_issues(
         stack_matches = [
             match for match in matches if match.stack.index == stack.index
         ]
-        for match in stack_matches:
-            if _digest_pin_match_tag(match):
-                continue
-            issues.append(
-                DryRunPlanIssue(
-                    severity="error",
-                    code="digest-pin-tag-required",
-                    message=(
-                        "Digest-pin updates require a safe resolved tag. "
-                        "This line cannot be digest-pinned automatically."
-                    ),
-                    line_no=match.target.line_no,
-                    stack=match.stack.name,
-                    service=match.service,
-                )
-            )
-
-        stack_updates: list[DigestPinUpdate] = []
-        resolver = DockerManifestResolver(docker, verbose=True)
-        verifier = DigestVerifier(
+        issues.extend(_digest_pin_tag_issues(stack_matches))
+        stack_updates, update_issues = _digest_pin_stack_updates(
             docker,
-            primary_resolver=resolver,
-            fallback_resolver=resolver,
+            stack,
+            stack_matches,
         )
-        try:
-            candidates = _digest_pin_candidates(stack_matches)
-        except UpdaterError as exc:
-            issues.append(
-                DryRunPlanIssue(
-                    severity="error",
-                    code="digest-pin-conflict",
-                    message=f"Digest-pin plan is not safe to apply: {exc}",
-                    stack=stack.name,
-                )
-            )
-            candidates = ()
-        for candidate in candidates:
-            result = _resolve_digest_pin_candidate(verifier, candidate)
-            if not result.ok:
-                code = (
-                    "digest-pin-digest-stale"
-                    if result.reason == "stale-digest"
-                    else "digest-pin-digest-unavailable"
-                )
-                issues.append(
-                    DryRunPlanIssue(
-                        severity="error",
-                        code=code,
-                        message=(
-                            _digest_pin_resolve_error(
-                                candidate.resolved_image,
-                                result,
-                            )
-                            + (f" ({result.error})" if result.error else "")
-                        ),
-                        stack=stack.name,
-                    )
-                )
-                continue
-            stack_updates.append(
-                digest_pin_update_from_values(
-                    old_image=candidate.old_image,
-                    resolved_tag=candidate.resolved_tag,
-                    planned_digest=result.digest,
-                    services=candidate.services,
-                )
-            )
+        issues.extend(update_issues)
 
         if stack_updates:
-            try:
-                _rendered, applied = render_compose_digest_pins(
-                    stack.directory / stack.file,
-                    stack_updates,
-                    label_rewrite_approvals=digest_pin_label_rewrite_approvals,
-                    stack_name=stack.name,
-                )
-                label_rewrites_by_stack[stack.index] = {
-                    (item.old_image, item.resolved_tag): item.label_rewrites
-                    for item in applied
-                }
-            except DigestPinLabelRewriteApprovalRequired as exc:
-                issues.append(
-                    DryRunPlanIssue(
-                        severity="error",
-                        code="compose-digest-pin-label-rewrite-unapproved",
-                        message=(
-                            f'{stack.name} {exc.label_key} is '
-                            f'"{exc.current_label_value}"; approve replacing it '
-                            f'with "{exc.proposed_label_regex}" before pinning '
-                            "the digest."
-                        ),
-                        stack=stack.name,
-                        service=exc.service,
-                        hint=(
-                            "Approve the label rewrite to replace the current "
-                            "include rule with the exact planned tag, or edit "
-                            "the Compose label manually."
-                        ),
-                        details={
-                            "stack": stack.name,
-                            "service": exc.service,
-                            "compose_file": stack.file,
-                            "label_key": exc.label_key,
-                            "current_label_value": exc.current_label_value,
-                            "planned_tag": exc.planned_tag,
-                            "proposed_label_value": exc.proposed_label_value,
-                            "proposed_label_regex": exc.proposed_label_regex,
-                            "explanation": (
-                                "WUD-Updater can only overwrite this include "
-                                "rule after explicit approval because it is not "
-                                "an empty label, an exact tag regex, or a plain "
-                                "tag matching the current/planned update."
-                            ),
-                        },
-                    )
-                )
-            except ComposeTagRewriteError as exc:
-                issues.append(
-                    DryRunPlanIssue(
-                        severity="error",
-                        code="compose-digest-pin-unsupported",
-                        message=f"Compose digest-pin rewrite is not safe: {exc}",
-                        stack=stack.name,
-                    )
-                )
+            label_rewrites, render_issues = _digest_pin_render_issues(
+                stack,
+                stack_updates,
+                digest_pin_label_rewrite_approvals,
+            )
+            issues.extend(render_issues)
+            if label_rewrites:
+                label_rewrites_by_stack[stack.index] = label_rewrites
         label_rewrites_by_stack.setdefault(stack.index, {})
         updates_by_stack[stack.index] = tuple(stack_updates)
     return DigestPinPlanIssueResult(
@@ -310,6 +211,160 @@ def digest_pin_plan_issues(
         updates_by_stack,
         label_rewrites_by_stack,
     )
+
+
+def _digest_pin_tag_issues(
+    matches: Sequence[Match],
+) -> list[DryRunPlanIssue]:
+    issues: list[DryRunPlanIssue] = []
+    for match in matches:
+        if _digest_pin_match_tag(match):
+            continue
+        issues.append(
+            DryRunPlanIssue(
+                severity="error",
+                code="digest-pin-tag-required",
+                message=(
+                    "Digest-pin updates require a safe resolved tag. "
+                    "This line cannot be digest-pinned automatically."
+                ),
+                line_no=match.target.line_no,
+                stack=match.stack.name,
+                service=match.service,
+            )
+        )
+    return issues
+
+
+def _digest_pin_stack_updates(
+    docker: DockerCli,
+    stack: ComposeStack,
+    matches: Sequence[Match],
+) -> tuple[list[DigestPinUpdate], list[DryRunPlanIssue]]:
+    issues: list[DryRunPlanIssue] = []
+    updates: list[DigestPinUpdate] = []
+    resolver = DockerManifestResolver(docker, verbose=True)
+    verifier = DigestVerifier(
+        docker,
+        primary_resolver=resolver,
+        fallback_resolver=resolver,
+    )
+    try:
+        candidates = _digest_pin_candidates(matches)
+    except UpdaterError as exc:
+        issues.append(
+            DryRunPlanIssue(
+                severity="error",
+                code="digest-pin-conflict",
+                message=f"Digest-pin plan is not safe to apply: {exc}",
+                stack=stack.name,
+            )
+        )
+        return updates, issues
+
+    for candidate in candidates:
+        result = _resolve_digest_pin_candidate(verifier, candidate)
+        if not result.ok:
+            code = (
+                "digest-pin-digest-stale"
+                if result.reason == "stale-digest"
+                else "digest-pin-digest-unavailable"
+            )
+            issues.append(
+                DryRunPlanIssue(
+                    severity="error",
+                    code=code,
+                    message=(
+                        _digest_pin_resolve_error(
+                            candidate.resolved_image,
+                            result,
+                        )
+                        + (f" ({result.error})" if result.error else "")
+                    ),
+                    stack=stack.name,
+                )
+            )
+            continue
+        updates.append(
+            digest_pin_update_from_values(
+                old_image=candidate.old_image,
+                resolved_tag=candidate.resolved_tag,
+                planned_digest=result.digest,
+                services=candidate.services,
+            )
+        )
+    return updates, issues
+
+
+def _digest_pin_render_issues(
+    stack: ComposeStack,
+    stack_updates: Sequence[DigestPinUpdate],
+    digest_pin_label_rewrite_approvals: Sequence[DigestPinLabelRewriteApproval],
+) -> tuple[
+    dict[tuple[str, str], tuple[DigestPinLabelRewrite, ...]],
+    list[DryRunPlanIssue],
+]:
+    issues: list[DryRunPlanIssue] = []
+    try:
+        _rendered, applied = render_compose_digest_pins(
+            stack.directory / stack.file,
+            stack_updates,
+            label_rewrite_approvals=digest_pin_label_rewrite_approvals,
+            stack_name=stack.name,
+        )
+        return (
+            {
+                (item.old_image, item.resolved_tag): item.label_rewrites
+                for item in applied
+            },
+            issues,
+        )
+    except DigestPinLabelRewriteApprovalRequired as exc:
+        issues.append(
+            DryRunPlanIssue(
+                severity="error",
+                code="compose-digest-pin-label-rewrite-unapproved",
+                message=(
+                    f'{stack.name} {exc.label_key} is '
+                    f'"{exc.current_label_value}"; approve replacing it '
+                    f'with "{exc.proposed_label_regex}" before pinning '
+                    "the digest."
+                ),
+                stack=stack.name,
+                service=exc.service,
+                hint=(
+                    "Approve the label rewrite to replace the current "
+                    "include rule with the exact planned tag, or edit "
+                    "the Compose label manually."
+                ),
+                details={
+                    "stack": stack.name,
+                    "service": exc.service,
+                    "compose_file": stack.file,
+                    "label_key": exc.label_key,
+                    "current_label_value": exc.current_label_value,
+                    "planned_tag": exc.planned_tag,
+                    "proposed_label_value": exc.proposed_label_value,
+                    "proposed_label_regex": exc.proposed_label_regex,
+                    "explanation": (
+                        "WUD-Updater can only overwrite this include "
+                        "rule after explicit approval because it is not "
+                        "an empty label, an exact tag regex, or a plain "
+                        "tag matching the current/planned update."
+                    ),
+                },
+            )
+        )
+    except ComposeTagRewriteError as exc:
+        issues.append(
+            DryRunPlanIssue(
+                severity="error",
+                code="compose-digest-pin-unsupported",
+                message=f"Compose digest-pin rewrite is not safe: {exc}",
+                stack=stack.name,
+            )
+        )
+    return {}, issues
 
 
 def digest_unpin_plan_issues(
@@ -361,51 +416,85 @@ def preflight_issues(
             stack.file,
             project_directory=stack.project_directory,
         )
-        runtime_scope = scoped_services or {issue.service for issue in runtime_issues}
-        for issue in runtime_issues:
-            if issue.service not in runtime_scope:
-                continue
-            issues.append(
-                DryRunPlanIssue(
-                    severity="error",
-                    code="compose-port-invalid",
-                    message=(
-                        f"Compose service {issue.service} has invalid "
-                        f"{issue.field} value {issue.value!r}: {issue.reason}."
-                    ),
-                    stack=stack.name,
-                    service=issue.service,
-                )
+        issues.extend(
+            _runtime_port_preflight_issues(
+                stack,
+                scoped_services,
+                runtime_issues,
             )
+        )
 
         mounts = compose.try_service_bind_mounts(
             stack.directory,
             stack.file,
             project_directory=stack.project_directory,
         )
-        mount_scope = scoped_services or {mount.service for mount in mounts}
-        for mount in mounts:
-            if mount.service not in mount_scope:
-                continue
-            issue = _container_bind_mount_path_issue(
-                mount,
-                docker_base=config.docker_base,
+        issues.extend(
+            _bind_mount_preflight_issues(
+                config,
+                stack,
+                scoped_services,
+                mounts,
             )
-            if not issue:
-                continue
-            target = f" -> {mount.target}" if mount.target else ""
-            issues.append(
-                DryRunPlanIssue(
-                    severity="error",
-                    code="bind-mount-path-invalid",
-                    message=(
-                        f"Compose bind mount resolves to {mount.source}"
-                        f"{target}; {issue}."
-                    ),
-                    stack=stack.name,
-                    service=mount.service,
-                )
+        )
+    return issues
+
+
+def _runtime_port_preflight_issues(
+    stack: ComposeStack,
+    scoped_services: set[str],
+    runtime_issues: Sequence[ComposeRuntimePortIssue],
+) -> list[DryRunPlanIssue]:
+    issues: list[DryRunPlanIssue] = []
+    runtime_scope = scoped_services or {issue.service for issue in runtime_issues}
+    for issue in runtime_issues:
+        if issue.service not in runtime_scope:
+            continue
+        issues.append(
+            DryRunPlanIssue(
+                severity="error",
+                code="compose-port-invalid",
+                message=(
+                    f"Compose service {issue.service} has invalid "
+                    f"{issue.field} value {issue.value!r}: {issue.reason}."
+                ),
+                stack=stack.name,
+                service=issue.service,
             )
+        )
+    return issues
+
+
+def _bind_mount_preflight_issues(
+    config: UpdaterConfig,
+    stack: ComposeStack,
+    scoped_services: set[str],
+    mounts: Sequence[ComposeBindMount],
+) -> list[DryRunPlanIssue]:
+    issues: list[DryRunPlanIssue] = []
+    mount_scope = scoped_services or {mount.service for mount in mounts}
+    for mount in mounts:
+        if mount.service not in mount_scope:
+            continue
+        issue = _container_bind_mount_path_issue(
+            mount,
+            docker_base=config.docker_base,
+        )
+        if not issue:
+            continue
+        target = f" -> {mount.target}" if mount.target else ""
+        issues.append(
+            DryRunPlanIssue(
+                severity="error",
+                code="bind-mount-path-invalid",
+                message=(
+                    f"Compose bind mount resolves to {mount.source}"
+                    f"{target}; {issue}."
+                ),
+                stack=stack.name,
+                service=mount.service,
+            )
+        )
     return issues
 
 

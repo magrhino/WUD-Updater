@@ -76,26 +76,13 @@ def recover_digest_unpin_matches(
             if stack is None:
                 continue
             for update in stack_updates:
-                for service in update.services:
-                    key = (
-                        stack.index,
-                        target.line_no,
-                        update.tag_image,
-                        update.old_image,
-                        service,
-                    )
-                    if key in seen:
-                        continue
-                    updated_matches.append(
-                        Match(
-                            stack,
-                            target,
-                            update.tag_image,
-                            update.old_image,
-                            service,
-                        )
-                    )
-                    seen.add(key)
+                _append_digest_unpin_update_matches(
+                    update,
+                    stack,
+                    target,
+                    updated_matches,
+                    seen,
+                )
 
     updated_matches.sort(
         key=lambda match: (
@@ -113,6 +100,35 @@ def recover_digest_unpin_matches(
         updates_by_stack=updates_by_stack,
         issues=tuple(issues),
     )
+
+
+def _append_digest_unpin_update_matches(
+    update: DigestUnpinUpdate,
+    stack: ComposeStack,
+    target: WudTarget,
+    updated_matches: list[Match],
+    seen: set[tuple[int, int, str, str, str]],
+) -> None:
+    for service in update.services:
+        key = (
+            stack.index,
+            target.line_no,
+            update.tag_image,
+            update.old_image,
+            service,
+        )
+        if key in seen:
+            continue
+        updated_matches.append(
+            Match(
+                stack,
+                target,
+                update.tag_image,
+                update.old_image,
+                service,
+            )
+        )
+        seen.add(key)
 
 
 def _digest_unpin_updates_for_target(
