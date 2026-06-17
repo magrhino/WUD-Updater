@@ -16,6 +16,7 @@ defineProps<{
   selectableCount: number;
   selectAllLabel: string;
   selectedCount: number;
+  selectedHiddenCount: number;
   stackCount: number;
   unmatchedReviewCountLabel: string;
   updateSelectedDisabled: boolean;
@@ -40,6 +41,9 @@ const emit = defineEmits<{
         </template>
         <template v-if="unmatchedReviewCountLabel">
           - {{ unmatchedReviewCountLabel }}
+        </template>
+        <template v-if="selectedHiddenCount">
+          - {{ selectedHiddenCount === 1 ? "1 selected update hidden by search" : `${selectedHiddenCount} selected updates hidden by search` }}
         </template>
       </span>
       <span v-else class="wrap-anywhere">Pending file order</span>
@@ -74,6 +78,9 @@ const emit = defineEmits<{
         </template>
         <template v-if="removeSelectedDisabledMessage">
           {{ removeSelectedDisabledMessage }}
+        </template>
+        <template v-if="selectedHiddenCount">
+          {{ selectedHiddenCount === 1 ? "1 selected update remains selected outside the current search." : `${selectedHiddenCount} selected updates remain selected outside the current search.` }}
         </template>
       </span>
     </div>

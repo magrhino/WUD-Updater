@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
 import { breakpointsTailwind, useBreakpoints } from "@vueuse/core";
+import { Search, X } from "@lucide/vue";
 import {
   NAlert,
   NButton,
   NFlex,
+  NInput,
   NSkeleton,
   NTag,
 } from "naive-ui";
@@ -29,6 +31,12 @@ import {
   releaseNoteStatus as pendingReleaseNoteStatus,
   tagInputProps,
 } from "./pending/pendingDisplay";
+import {
+  filterDependencySnoozedItems,
+  filterPendingItems,
+  filterPendingStackGroups,
+  normalizePendingSearch,
+} from "./pending/pendingFilter";
 import { createPendingColumns } from "./pending/tableColumns";
 import { pluralize } from "./pending/utils";
 import {
@@ -46,6 +54,7 @@ const settings = useSettingsStore();
 const breakpoints = useBreakpoints(breakpointsTailwind);
 const isMobile = breakpoints.smaller("md");
 const applyJobPanelRef = ref<PendingApplyJobPanelRef | null>(null);
+const pendingSearchQuery = ref("");
 
 const pendingItems = computed(() => updates.pending?.items ?? []);
 const {
@@ -66,6 +75,73 @@ const {
   stackGroups,
   unmatchedItems,
 } = usePendingQueueState();
+const pendingSearchText = computed(() =>
+  normalizePendingSearch(pendingSearchQuery.value),
+);
+const pendingSearchActive = computed(() => Boolean(pendingSearchText.value));
+const pendingSearchContext = {
+  releaseNoteFor,
+  releaseNoteReason,
+  releaseNoteStatus,
+  riskCues,
+};
+const filteredStackGroups = computed(() =>
+  filterPendingStackGroups(
+    stackGroups.value,
+    pendingSearchText.value,
+    pendingSearchContext,
+  ),
+);
+const filteredUnmatchedItems = computed(() =>
+  filterPendingItems(
+    unmatchedItems.value,
+    pendingSearchText.value,
+    pendingSearchContext,
+  ),
+);
+const filteredDependencySnoozedItems = computed(() =>
+  filterDependencySnoozedItems(
+    dependencySnoozedItems.value,
+    pendingSearchText.value,
+    pendingSearchContext,
+  ),
+);
+const filteredPendingItems = computed(() =>
+  filterPendingItems(
+    pendingItems.value,
+    pendingSearchText.value,
+    pendingSearchContext,
+  ),
+);
+const visibleLineNumbers = computed(() => {
+  if (groupingReady.value) {
+    return [
+      ...filteredStackGroups.value.flatMap((group) => group.line_numbers),
+      ...filteredDependencySnoozedItems.value.map(({ item }) => item.line_no),
+      ...filteredUnmatchedItems.value.map((item) => item.line_no),
+    ];
+  }
+  return filteredPendingItems.value.map((item) => item.line_no);
+});
+const visibleSelectableLineNumbers = computed(() => {
+  const visibleLines = new Set(visibleLineNumbers.value);
+  return selectableLineNumbers.value.filter((lineNo) => visibleLines.has(lineNo));
+});
+const visibleSelectAllLabel = computed(() =>
+  pendingSearchActive.value ? "Select visible updates" : selectAllLabel.value,
+);
+const pendingSearchEmpty = computed(
+  () =>
+    pendingSearchActive.value &&
+    pendingItems.value.length > 0 &&
+    visibleLineNumbers.value.length === 0,
+);
+const pendingSearchResultLabel = computed(() => {
+  if (!pendingSearchActive.value) {
+    return "";
+  }
+  return `${pluralize(visibleLineNumbers.value.length, "visible update")} matched`;
+});
 
 let clearPreflightHandler: () => void = () => undefined;
 let loadPendingAndReleaseNotesHandler: () => Promise<void> = async () => undefined;
@@ -89,8 +165,16 @@ const {
   updateTagOverride,
 } = usePendingSelectionState({
   pendingItems,
-  selectableLineNumbers,
+  selectableLineNumbers: visibleSelectableLineNumbers,
   onSelectionChanged: () => clearPreflightHandler(),
+});
+const selectedHiddenCount = computed(() => {
+  if (!pendingSearchActive.value) {
+    return 0;
+  }
+  const visibleLines = new Set(visibleLineNumbers.value);
+  return selectedLineNumbers.value.filter((lineNo) => !visibleLines.has(lineNo))
+    .length;
 });
 
 const columns = computed(() =>
@@ -191,6 +275,28 @@ const {
   tagOverrideErrorForLines,
   unmatchedItems,
 });
+const visibleUnmatchedReviewSummary = computed(() => {
+  if (!pendingSearchActive.value) {
+    return unmatchedReviewSummary.value;
+  }
+  const count = filteredUnmatchedItems.value.length;
+  const verb = count === 1 ? "needs" : "need";
+  return `${pluralize(count, "pending line", "pending lines")} matched search and ${verb} review.`;
+});
+const visibleUnmatchedIssueSummary = computed(() =>
+  pendingSearchActive.value &&
+  filteredUnmatchedItems.value.length !== unmatchedItems.value.length
+    ? ""
+    : unmatchedIssueSummary.value,
+);
+const visibleUnmatchedReviewCountLabel = computed(() => {
+  if (!pendingSearchActive.value) {
+    return unmatchedItems.value.length ? unmatchedReviewCountLabel.value : "";
+  }
+  return filteredUnmatchedItems.value.length
+    ? `${pluralize(filteredUnmatchedItems.value.length, "stale item")} visible`
+    : "";
+});
 
 const {
   applyJobActive,
@@ -270,6 +376,10 @@ loadPendingAndReleaseNotesHandler = () => loadPendingAndReleaseNotes();
 
 function releaseNoteStatus(note: ReleaseNoteInfo | null): string {
   return pendingReleaseNoteStatus(note, updates.releaseNotesLoading);
+}
+
+function clearPendingSearch(): void {
+  pendingSearchQuery.value = "";
 }
 
 onMounted(() => {
@@ -379,9 +489,9 @@ onMounted(() => {
       next-step="pending_preflight"
     >
       <div class="core-tour-facts">
-        <span v-if="pendingLoaded">{{ pluralize(stackGroups.length, "stack") }} matched</span>
+        <span v-if="pendingLoaded">{{ pluralize(filteredStackGroups.length, "stack") }} matched</span>
         <span v-else>Loading stack matches</span>
-        <span v-if="pendingLoaded">{{ unmatchedReviewCountLabel }}</span>
+        <span v-if="pendingLoaded">{{ visibleUnmatchedReviewCountLabel }}</span>
         <span v-else>Waiting for pending file</span>
         <span>{{ mutationStateLabel }}</span>
       </div>
@@ -405,9 +515,41 @@ onMounted(() => {
       next-to="/runs"
     />
 
+    <section
+      v-if="pendingLoaded"
+      class="pending-filter-panel"
+      aria-label="Pending update search"
+    >
+      <n-input
+        v-model:value="pendingSearchQuery"
+        clearable
+        class="pending-search-input"
+        placeholder="Search stack, service, image, tag, digest, action, or release note"
+        :input-props="{ 'aria-label': 'Search pending updates' }"
+      >
+        <template #prefix>
+          <Search :size="16" aria-hidden="true" />
+        </template>
+      </n-input>
+      <span v-if="pendingSearchActive" class="pending-filter-status">
+        {{ pendingSearchResultLabel }}
+      </span>
+      <n-button
+        v-if="pendingSearchActive"
+        size="small"
+        quaternary
+        @click="clearPendingSearch"
+      >
+        <template #icon>
+          <X :size="16" />
+        </template>
+        Clear search
+      </n-button>
+    </section>
+
     <PendingSelectionToolbar
       :batch-summary-label="batchSummaryLabel"
-      :dependency-snoozed-count="dependencySnoozedItems.length"
+      :dependency-snoozed-count="filteredDependencySnoozedItems.length"
       :grouping-ready="groupingReady"
       :has-selected-tag-updates="selectedHasTagUpdates"
       :is-mobile="isMobile"
@@ -416,11 +558,12 @@ onMounted(() => {
       :removal-button-label="removalButtonLabel"
       :remove-selected-disabled="removeSelectedDisabled"
       :remove-selected-disabled-message="removeSelectedDisabledMessage"
-      :selectable-count="selectableLineNumbers.length"
-      :select-all-label="selectAllLabel"
+      :selectable-count="visibleSelectableLineNumbers.length"
+      :select-all-label="visibleSelectAllLabel"
       :selected-count="selectedLineNumbers.length"
-      :stack-count="stackGroups.length"
-      :unmatched-review-count-label="unmatchedItems.length ? unmatchedReviewCountLabel : ''"
+      :selected-hidden-count="selectedHiddenCount"
+      :stack-count="filteredStackGroups.length"
+      :unmatched-review-count-label="visibleUnmatchedReviewCountLabel"
       :update-selected-disabled="updateSelectedDisabled"
       @clear-selection="clearSelection"
       @select-all="selectAllVisible"
@@ -435,9 +578,27 @@ onMounted(() => {
       {{ selectedTagOverrideError }}
     </n-alert>
 
+    <div
+      v-if="pendingSearchEmpty"
+      class="empty-state pending-filter-empty-state"
+      aria-live="polite"
+    >
+      <strong>No pending updates match search</strong>
+      <span class="wrap-anywhere">
+        No stack, service, image, tag, digest, action, safety cue, or release-note text matched "{{ pendingSearchQuery.trim() }}".
+      </span>
+      <n-button size="small" secondary @click="clearPendingSearch">
+        <template #icon>
+          <X :size="16" />
+        </template>
+        Clear search
+      </n-button>
+    </div>
+
     <template v-if="groupingReady">
       <PendingStackSelection
-        :dependency-snoozed-items="dependencySnoozedItems"
+        v-if="!pendingSearchEmpty"
+        :dependency-snoozed-items="filteredDependencySnoozedItems"
         :latest-run-id="latestRunId"
         :loading="updates.loading"
         :pending-source-label="pendingSourceLabel"
@@ -447,7 +608,7 @@ onMounted(() => {
         :risk-cues="riskCues"
         :selected-line-set="selectedLineSet"
         :show-setup-link="showSetupLink"
-        :stack-groups="stackGroups"
+        :stack-groups="filteredStackGroups"
         :stack-has-selection="stackHasSelection"
         :stack-indeterminate="stackIndeterminate"
         :stack-selected="stackSelected"
@@ -455,9 +616,9 @@ onMounted(() => {
         :stale-diagnostic-label="staleDiagnosticLabel"
         :tag-input-props="tagInputProps"
         :tag-override-value="tagOverrideValue"
-        :unmatched-issue-summary="unmatchedIssueSummary"
-        :unmatched-items="unmatchedItems"
-        :unmatched-review-summary="unmatchedReviewSummary"
+        :unmatched-issue-summary="visibleUnmatchedIssueSummary"
+        :unmatched-items="filteredUnmatchedItems"
+        :unmatched-review-summary="visibleUnmatchedReviewSummary"
         :update-disabled="updateDisabled"
         @preview-stack="startStackUpdate"
         @toggle-line="toggleLine"
@@ -468,9 +629,10 @@ onMounted(() => {
 
     <template v-else-if="updates.pending">
       <PendingFallbackQueue
+        v-if="!pendingSearchEmpty"
         :columns="columns"
         :is-mobile="isMobile"
-        :items="pendingItems"
+        :items="filteredPendingItems"
         :latest-run-id="latestRunId"
         :loading="updates.loading"
         :pending-source-label="pendingSourceLabel"
@@ -618,8 +780,52 @@ onMounted(() => {
   text-align: center;
 }
 
+.pending-filter-panel {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: var(--color-surface);
+  box-shadow: var(--shadow-panel-lift);
+}
+
+.pending-search-input {
+  flex: 1 1 320px;
+  min-width: 180px;
+}
+
+.pending-filter-status {
+  flex: 0 0 auto;
+  color: var(--color-muted-text);
+  font-size: 0.82rem;
+}
+
+.pending-filter-empty-state {
+  gap: 8px;
+  padding: 18px;
+  text-align: center;
+}
+
+.pending-filter-empty-state span {
+  max-width: 66ch;
+  line-height: 1.45;
+}
+
 .recovery-actions {
   flex-wrap: wrap;
   margin-top: 8px;
+}
+
+@media (max-width: 560px) {
+  .pending-filter-panel {
+    display: grid;
+  }
+
+  .pending-search-input {
+    min-height: 44px;
+  }
 }
 </style>

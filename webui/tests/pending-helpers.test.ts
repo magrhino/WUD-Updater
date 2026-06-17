@@ -26,6 +26,11 @@ import {
   uniqueStrings,
 } from "../src/views/pending/pendingDisplay";
 import {
+  filterPendingStackGroups,
+  normalizePendingSearch,
+  pendingItemMatchesSearch,
+} from "../src/views/pending/pendingFilter";
+import {
   planLineDigestPinLabel,
   planLineDigestUnpinLabel,
 } from "../src/views/pending/utils";
@@ -297,6 +302,83 @@ describe("pending helper modules", () => {
         false,
       ),
     ).toBe("Check failed");
+  });
+
+  it("matches pending search fields from items, groups, safety cues, diagnostics, and release notes", () => {
+    const app = pendingGroupedItem({
+      line_no: 7,
+      raw: "repo/app:latest sha256=feedface",
+      image: "repo/app:latest",
+      repo: "repo/app",
+      key: "repo/app",
+      current_tag: "latest",
+      desired_tag: "",
+      digest: "sha256:feedface",
+      services: ["worker"],
+      action: "digest-pin",
+      diagnostic: {
+        code: "compose-label-active-file-missing",
+        message: "Container worker was created from stack media.",
+        hint: "Restore docker-compose.archive.yml before applying.",
+        stack: "media",
+        service: "worker",
+        compose_file: "docker-compose.yml",
+        found_files: ["docker-compose.archive.yml"],
+        details: {
+          preflight_findings: ["Docker labels reference docker-compose.yml."],
+        },
+      },
+    });
+    const db = pendingGroupedItem({
+      line_no: 8,
+      image: "postgres:16",
+      repo: "postgres",
+      services: ["db"],
+    });
+    const group = {
+      name: "media",
+      directory: "/docker/media",
+      compose_file: "docker-compose.yml",
+      project_directory: "/docker/media",
+      services_label: "worker, db",
+      services: ["worker", "db"],
+      line_numbers: [7, 8],
+      items: [app, db],
+    };
+    const note = releaseNoteInfo({
+      line_no: 7,
+      links: [],
+      status: "unsupported",
+      error: "no supported GitHub release source found",
+    });
+    const context = {
+      releaseNoteFor: () => note,
+      releaseNoteReason,
+      releaseNoteStatus: (value: typeof note | null) =>
+        releaseNoteStatus(value, false),
+      riskCues: () => [
+        { key: "mutable-latest", label: "Mutable latest", type: "warning" as const },
+      ],
+    };
+
+    expect(normalizePendingSearch("  Mutable   Latest ")).toBe("mutable latest");
+    expect(pendingItemMatchesSearch(app, "digest pin", context)).toBe(true);
+    expect(pendingItemMatchesSearch(app, "feedface", context)).toBe(true);
+    expect(pendingItemMatchesSearch(app, "docker-compose.archive", context)).toBe(true);
+    expect(pendingItemMatchesSearch(app, "Only GHCR", context)).toBe(true);
+    expect(pendingItemMatchesSearch(app, "mutable latest", context)).toBe(true);
+
+    const itemMatchedGroups = filterPendingStackGroups([group], "worker", context);
+    expect(itemMatchedGroups).toHaveLength(1);
+    expect(itemMatchedGroups[0].items).toEqual([app]);
+    expect(itemMatchedGroups[0].line_numbers).toEqual([7]);
+
+    const groupMatchedGroups = filterPendingStackGroups(
+      [group],
+      "docker/media",
+      context,
+    );
+    expect(groupMatchedGroups[0].items).toEqual([app, db]);
   });
 
   it("creates fallback table renderers for tags, digests, safety, and release notes", async () => {
