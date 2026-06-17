@@ -43,6 +43,8 @@ startup_sync_status(){
       printf 'skipped-doctor\n'
       return
       ;;
+    *)
+      ;;
   esac
 
   if [[ -n "${WUD_SYNC_SCRIPTS+x}" ]]; then
@@ -75,6 +77,8 @@ has_arg(){
       "$wanted"|"$wanted"=*)
         return 0
         ;;
+      *)
+        ;;
     esac
   done
   return 1
@@ -105,8 +109,11 @@ normalize_absolute_path(){
     printf '/\n'
     return
   fi
-  local IFS=/
-  printf '/%s\n' "${normalized[*]}"
+  printf '/%s' "${normalized[0]}"
+  for part in "${normalized[@]:1}"; do
+    printf '/%s' "$part"
+  done
+  printf '\n'
 }
 
 canonicalize_dir_target(){
