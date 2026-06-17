@@ -116,7 +116,7 @@ const filteredPendingItems = computed(() =>
 const visibleLineNumbers = computed(() => {
   if (groupingReady.value) {
     return [
-      ...filteredStackGroups.value.flatMap((group) => group.line_numbers),
+      ...filteredStackGroups.value.flatMap((group) => group.visibleLineNumbers),
       ...filteredDependencySnoozedItems.value.map(({ item }) => item.line_no),
       ...filteredUnmatchedItems.value.map((item) => item.line_no),
     ];

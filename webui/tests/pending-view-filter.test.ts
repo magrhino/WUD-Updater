@@ -92,8 +92,11 @@ function cacheDigestItem(): PendingGroupedItem {
   });
 }
 
-function mountFilteredPendingView(response: PendingResponse) {
-  const { pinia, settings, updates } = setupStores(false);
+function mountFilteredPendingView(
+  response: PendingResponse,
+  mutationsEnabled = false,
+) {
+  const { pinia, settings, updates } = setupStores(mutationsEnabled);
   updates.pending = response;
   mockPendingLifecycle(settings, updates);
   const wrapper = mountPendingView(pinia);
@@ -142,6 +145,24 @@ describe("pending view search filter", () => {
     expect(wrapper.text()).toContain("repo/cache:latest");
     expect(wrapper.text()).toContain("1 visible update matched");
     expect(wrapper.text()).not.toContain("linuxserver/radarr:4.0");
+  });
+
+  it("keeps stack preview scoped to the full stack after filtering", async () => {
+    const { wrapper, updates } = mountFilteredPendingView(
+      pendingWithGroups([stackGroup("media", [radarrItem(), postgresItem()])]),
+      true,
+    );
+    const createPlan = vi.spyOn(updates, "createPlan").mockResolvedValue();
+    await flushPromises();
+
+    await searchInput(wrapper).setValue("postgres");
+    await flushPromises();
+    await wrapper
+      .findAll("button")
+      .find((button) => button.text().includes("Preview media plan"))
+      ?.trigger("click");
+
+    expect(createPlan).toHaveBeenCalledWith([1, 2], true, [], []);
   });
 
   it("shows and clears an empty filtered result state", async () => {

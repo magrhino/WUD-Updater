@@ -24,6 +24,10 @@ type DependencySnoozedSearchItem = {
   item: PendingGroupedItem;
 };
 
+export type FilteredPendingStackGroup = PendingStackGroup & {
+  visibleLineNumbers: number[];
+};
+
 export function normalizePendingSearch(value: string): string {
   return value.trim().replace(/\s+/g, " ").toLowerCase();
 }
@@ -62,19 +66,19 @@ export function filterPendingStackGroups(
   groups: PendingStackGroup[],
   query: string,
   context: PendingSearchContext,
-): PendingStackGroup[] {
+): FilteredPendingStackGroup[] {
   const normalizedQuery = normalizePendingSearch(query);
   if (!normalizedQuery) {
-    return groups;
+    return groups.map((group) => stackGroupWithMatchedItems(group, group.items));
   }
   return groups.flatMap((group) => {
     if (pendingGroupMatchesSearch(group, normalizedQuery)) {
-      return [group];
+      return [stackGroupWithMatchedItems(group, group.items)];
     }
     const items = group.items.filter((item) =>
       pendingItemMatchesSearch(item, normalizedQuery, context),
     );
-    return items.length ? [stackGroupWithItems(group, items)] : [];
+    return items.length ? [stackGroupWithMatchedItems(group, items)] : [];
   });
 }
 
@@ -106,17 +110,23 @@ export function filterDependencySnoozedItems<
   );
 }
 
-function stackGroupWithItems(
+function stackGroupWithMatchedItems(
   group: PendingStackGroup,
   items: PendingGroupedItem[],
-): PendingStackGroup {
+): FilteredPendingStackGroup {
+  if (items === group.items) {
+    return {
+      ...group,
+      visibleLineNumbers: group.line_numbers,
+    };
+  }
   const services = uniqueStrings(items.flatMap((item) => item.services));
   return {
     ...group,
     items,
     services,
     services_label: services.length ? services.join(", ") : group.services_label,
-    line_numbers: items.map((item) => item.line_no),
+    visibleLineNumbers: items.map((item) => item.line_no),
   };
 }
 

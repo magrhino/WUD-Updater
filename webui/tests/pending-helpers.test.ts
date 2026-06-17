@@ -371,7 +371,8 @@ describe("pending helper modules", () => {
     const itemMatchedGroups = filterPendingStackGroups([group], "worker", context);
     expect(itemMatchedGroups).toHaveLength(1);
     expect(itemMatchedGroups[0].items).toEqual([app]);
-    expect(itemMatchedGroups[0].line_numbers).toEqual([7]);
+    expect(itemMatchedGroups[0].visibleLineNumbers).toEqual([7]);
+    expect(itemMatchedGroups[0].line_numbers).toEqual([7, 8]);
 
     const groupMatchedGroups = filterPendingStackGroups(
       [group],
@@ -379,6 +380,7 @@ describe("pending helper modules", () => {
       context,
     );
     expect(groupMatchedGroups[0].items).toEqual([app, db]);
+    expect(groupMatchedGroups[0].visibleLineNumbers).toEqual([7, 8]);
   });
 
   it("creates fallback table renderers for tags, digests, safety, and release notes", async () => {
