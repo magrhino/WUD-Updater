@@ -5,7 +5,8 @@ app_dir="${WUD_APP_DIR:-/app}"
 docker_base="${DOCKER_BASE:-/host/docker}"
 wud_out_file="${WUD_OUT_FILE:-/out/images.todo}"
 wud_log_dir="${WUD_LOG_DIR:-/logs}"
-wud_scripts_dir="${WUD_SCRIPTS_DIR-/managed-wud}"
+wud_scripts_default_dir="/managed-wud"
+wud_scripts_dir="${WUD_SCRIPTS_DIR-$wud_scripts_default_dir}"
 wud_scripts_marker=".wud-updater-managed"
 
 env_bool_enabled(){
@@ -19,6 +20,55 @@ env_bool_enabled(){
       return 1
       ;;
   esac
+}
+
+env_auto_enabled(){
+  case "${1:-}" in
+    [Aa][Uu][Tt][Oo])
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+startup_sync_status(){
+  local command="${1:-}"
+
+  case "$command" in
+    sync-wud-scripts)
+      printf 'manual-command\n'
+      return
+      ;;
+    doctor)
+      printf 'skipped-doctor\n'
+      return
+      ;;
+    *)
+      ;;
+  esac
+
+  if [[ -n "${WUD_SYNC_SCRIPTS+x}" ]]; then
+    if env_bool_enabled "$WUD_SYNC_SCRIPTS"; then
+      printf 'forced\n'
+    elif env_auto_enabled "$WUD_SYNC_SCRIPTS"; then
+      if [[ -d "$wud_scripts_dir" && -w "$wud_scripts_dir" && -x "$wud_scripts_dir" ]]; then
+        printf 'auto-detected\n'
+      else
+        printf 'auto-not-detected\n'
+      fi
+    else
+      printf 'disabled\n'
+    fi
+    return
+  fi
+
+  if [[ -d "$wud_scripts_dir" && -w "$wud_scripts_dir" && -x "$wud_scripts_dir" ]]; then
+    printf 'auto-detected\n'
+  else
+    printf 'auto-not-detected\n'
+  fi
 }
 
 has_arg(){
@@ -186,10 +236,12 @@ elif [[ "$1" == -* ]]; then
   set -- updates "$@"
 fi
 
-if env_bool_enabled "${WUD_SYNC_SCRIPTS:-}" &&
-  [[ "$1" != "sync-wud-scripts" && "$1" != "doctor" ]]; then
+wud_script_sync_status="$(startup_sync_status "$1")"
+if [[ "$wud_script_sync_status" == "forced" ||
+  "$wud_script_sync_status" == "auto-detected" ]]; then
   sync_wud_scripts
 fi
+export WUD_SCRIPT_SYNC_STATUS="$wud_script_sync_status"
 
 case "$1" in
   sync-wud-scripts)

@@ -398,8 +398,7 @@ def _browser_access_onboarding_item(
         status = "WARN"
         detail = (
             "Browser origin is derived from the request. Configure "
-            "WUD_WEB_PUBLIC_ORIGIN and WUD_WEB_ALLOWED_HOSTS before LAN or "
-            "reverse-proxy exposure."
+            "WUD_WEB_PUBLIC_ORIGIN before LAN or reverse-proxy exposure."
         )
     return OnboardingChecklistItem(
         key="browser-access",

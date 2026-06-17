@@ -57,7 +57,7 @@ class DoctorOptions:
     updater: str
     host_docker_base: Path | None = None
     docker_host: str = ""
-    sync_scripts: bool = False
+    sync_scripts: str = "auto"
     updater_use_sudo: bool = True
     truenas_status_check: bool = False
     truenas_status_timeout: str = DEFAULT_TRUENAS_STATUS_TIMEOUT
@@ -516,15 +516,31 @@ class Doctor:
             self._record("PASS", "packaged WUD scripts", str(scripts))
 
     def _check_script_sync(self) -> None:
-        if not self.options.sync_scripts:
+        if self.options.sync_scripts == "disabled":
             self._record("WARN", "WUD script sync", "WUD_SYNC_SCRIPTS is disabled")
+            return
+        if self.options.sync_scripts == "auto" and not (
+            self.options.scripts_dir.is_dir()
+            and os.access(self.options.scripts_dir, os.W_OK | os.X_OK)
+        ):
+            self._record(
+                "WARN",
+                "WUD script sync",
+                "auto-sync inactive; "
+                f"{self.options.scripts_dir} is not a writable directory",
+            )
             return
 
         issue = self._script_sync_issue()
         if issue:
             self._record("FAIL", "WUD script sync", issue)
         else:
-            self._record("PASS", "WUD script sync", str(self.options.scripts_dir))
+            suffix = " (auto)" if self.options.sync_scripts == "auto" else ""
+            self._record(
+                "PASS",
+                "WUD script sync",
+                f"{self.options.scripts_dir}{suffix}",
+            )
 
     def _script_sync_issue(self) -> str:
         dst = self.options.scripts_dir
@@ -822,9 +838,9 @@ def _suggestions_for(status: str, name: str) -> tuple[DoctorSuggestion, ...]:
                 label="Check script sync",
                 description=(
                     "Verify the packaged WUD scripts are executable and "
-                    "WUD_SCRIPTS_DIR points at a managed writable directory."
+                    "the managed script volume is mounted at /managed-wud."
                 ),
-                snippet="WUD_SYNC_SCRIPTS=true\nWUD_SCRIPTS_DIR=/managed-wud",
+                snippet="wud-scripts:/managed-wud",
             ),
         )
     if name.startswith("compose "):
@@ -922,10 +938,8 @@ def options_from_namespace(
         updater=updater,
         host_docker_base=Path(host_docker_base) if host_docker_base else None,
         docker_host=environ.get("DOCKER_HOST") or "",
-        sync_scripts=_resolve_bool_env(
+        sync_scripts=_resolve_script_sync_mode(
             environ.get("WUD_SYNC_SCRIPTS"),
-            "WUD_SYNC_SCRIPTS",
-            default=False,
         ),
         updater_use_sudo=_resolve_bool_env(
             environ.get("WUD_UPDATER_USE_SUDO"),
@@ -999,6 +1013,24 @@ def _resolve_bool_env(value: str | None, label: str, *, default: bool) -> bool:
         return False
     raise DoctorConfigError(
         f"{label} must be one of true, false, 1, 0, yes, no, on, or off"
+    )
+
+
+def _resolve_script_sync_mode(value: str | None) -> str:
+    if value is None:
+        return "auto"
+    if value == "":
+        return "disabled"
+
+    normalized = value.strip().lower()
+    if normalized == "auto":
+        return "auto"
+    if normalized in {"1", "true", "yes", "on"}:
+        return "enabled"
+    if normalized in {"0", "false", "no", "off"}:
+        return "disabled"
+    raise DoctorConfigError(
+        "WUD_SYNC_SCRIPTS must be one of auto, true, false, 1, 0, yes, no, on, or off"
     )
 
 

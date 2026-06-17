@@ -77,8 +77,8 @@ class InitConfigTests(unittest.TestCase):
         self.assertIn("WUD_WEB_PUBLIC_ORIGIN=", content)
         self.assertIn("WUD_WEB_ALLOWED_HOSTS=", content)
 
-    def test_webui_lan_requires_allowed_hosts_in_non_interactive_mode(self) -> None:
-        with self.assertRaisesRegex(InitConfigError, "--allowed-hosts"):
+    def test_webui_lan_requires_public_origin_in_non_interactive_mode(self) -> None:
+        with self.assertRaisesRegex(InitConfigError, "--public-origin"):
             answers_from_namespace(
                 self._args(
                     profile="webui",
@@ -88,7 +88,7 @@ class InitConfigTests(unittest.TestCase):
                 environ=self._env(),
             )
 
-        with self.assertRaisesRegex(InitConfigError, "--allowed-hosts"):
+        with self.assertRaisesRegex(InitConfigError, "--public-origin"):
             answers_from_namespace(
                 self._args(
                     profile="webui",
@@ -99,8 +99,8 @@ class InitConfigTests(unittest.TestCase):
                 environ=self._env(),
             )
 
-    def test_webui_lan_interactive_reprompts_for_allowed_hosts(self) -> None:
-        replies = iter(["", "wud.lan,192.168.1.20"])
+    def test_webui_lan_interactive_reprompts_for_public_origin(self) -> None:
+        replies = iter(["", "http://wud.lan:7417"])
         stream = StringIO()
 
         answers = answers_from_namespace(
@@ -122,8 +122,9 @@ class InitConfigTests(unittest.TestCase):
             ),
         )
 
-        self.assertEqual(answers.allowed_hosts, "wud.lan,192.168.1.20")
-        self.assertIn("Allowed WebUI hostnames/IPs is required.", stream.getvalue())
+        self.assertEqual(answers.public_origin, "http://wud.lan:7417")
+        self.assertEqual(answers.allowed_hosts, "")
+        self.assertIn("Browser-visible WebUI origin is required.", stream.getvalue())
 
     def test_webui_lan_env_can_enable_mutations_explicitly(self) -> None:
         answers = answers_from_namespace(
@@ -131,7 +132,7 @@ class InitConfigTests(unittest.TestCase):
                 profile="webui",
                 stack_root=str(self.root / "docker"),
                 web_exposure="lan",
-                allowed_hosts="wud.lan,192.168.1.20",
+                public_origin="http://wud.lan:7417",
                 enable_web_mutations=True,
                 no_doctor=True,
             ),
@@ -141,10 +142,11 @@ class InitConfigTests(unittest.TestCase):
         content = generate_files(answers)[0].content
 
         self.assertIn("WEBUI_HTTP_BIND=0.0.0.0", content)
-        self.assertIn("WUD_WEB_ALLOWED_HOSTS=wud.lan,192.168.1.20", content)
+        self.assertIn("WUD_WEB_PUBLIC_ORIGIN=http://wud.lan:7417", content)
+        self.assertIn("WUD_WEB_ALLOWED_HOSTS=", content)
         self.assertIn("WUD_WEB_MUTATIONS_ENABLED=true", content)
 
-    def test_webui_reverse_proxy_derives_allowed_hosts_from_origin(self) -> None:
+    def test_webui_reverse_proxy_uses_public_origin_without_allowed_hosts(self) -> None:
         answers = answers_from_namespace(
             self._args(
                 profile="webui",
@@ -160,10 +162,25 @@ class InitConfigTests(unittest.TestCase):
 
         self.assertIn("WEBUI_HTTP_BIND=127.0.0.1", content)
         self.assertIn("WUD_WEB_PUBLIC_ORIGIN=https://wud.example.test", content)
-        self.assertIn(
-            "WUD_WEB_ALLOWED_HOSTS=wud.example.test,127.0.0.1,localhost",
-            content,
+        self.assertIn("WUD_WEB_ALLOWED_HOSTS=", content)
+
+    def test_webui_lan_preserves_explicit_allowed_host_aliases(self) -> None:
+        answers = answers_from_namespace(
+            self._args(
+                profile="webui",
+                stack_root=str(self.root / "docker"),
+                web_exposure="lan",
+                public_origin="http://wud.lan:7417",
+                allowed_hosts="updates.lan,192.168.1.20",
+                no_doctor=True,
+            ),
+            environ=self._env(),
         )
+
+        content = generate_files(answers)[0].content
+
+        self.assertIn("WUD_WEB_PUBLIC_ORIGIN=http://wud.lan:7417", content)
+        self.assertIn("WUD_WEB_ALLOWED_HOSTS=updates.lan,192.168.1.20", content)
 
     def test_uid_gid_can_come_from_environment_or_cli_override(self) -> None:
         env_answers = answers_from_namespace(
@@ -320,6 +337,34 @@ class InitConfigTests(unittest.TestCase):
         )
         self.assertIn("${WEBUI_LOG_DIR:-./logs}:/logs", service["volumes"])
         self.assertIn("wud-scripts:/managed-wud", service["volumes"])
+
+    def test_hardened_compose_override_uses_image_defaults_for_log_and_db(self) -> None:
+        override_file = self.root / "override.yml"
+        answers = answers_from_namespace(
+            self._args(
+                profile="hardened",
+                compose_override=str(override_file),
+                stack_root=str(self.root / "docker"),
+                no_doctor=True,
+            ),
+            environ=self._env(),
+        )
+
+        run_init(answers, repo_root=self.root, environ=self._env())
+
+        parsed = YAML(typ="safe").load(override_file.read_text(encoding="utf-8"))
+        environment = parsed["services"]["wud-updater"]["environment"]
+        self.assertEqual(
+            environment["WUD_OUT_FILE"],
+            "${WUD_OUT_FILE:-/out/images.todo}",
+        )
+        self.assertNotIn("WUD_LOG_DIR", environment)
+        self.assertNotIn("WUD_DB_PATH", environment)
+        self.assertNotIn("WUD_UPDATER_USE_SUDO", environment)
+        self.assertIn(
+            "${WEBUI_LOG_DIR:-./logs}:/logs",
+            parsed["services"]["wud-updater"]["volumes"],
+        )
 
     def test_webui_compose_override_yaml_contains_readyz_healthcheck(self) -> None:
         override_file = self.root / "override.yml"

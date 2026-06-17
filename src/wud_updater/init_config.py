@@ -358,13 +358,18 @@ def _compose_environment(answers: InitAnswers) -> dict[str, str]:
     environment = {
         "DOCKER_BASE": "${HOST_DOCKER_BASE:-/srv/docker}",
         "WUD_OUT_FILE": "/out/images.todo",
-        "WUD_LOG_DIR": "/logs",
-        "WUD_DB_PATH": "/logs/wud-updater.sqlite",
         "OUT_UID": "${OUT_UID:-1000}",
         "OUT_GID": "${OUT_GID:-1000}",
     }
     if answers.profile == "hardened":
-        environment["WUD_UPDATER_USE_SUDO"] = "false"
+        environment["WUD_OUT_FILE"] = "${WUD_OUT_FILE:-/out/images.todo}"
+    else:
+        environment.update(
+            {
+                "WUD_LOG_DIR": "/logs",
+                "WUD_DB_PATH": "/logs/wud-updater.sqlite",
+            }
+        )
     if answers.profile == "webui":
         environment.update(
             {
@@ -588,30 +593,19 @@ def _resolve_web_values(
     if web_exposure == "loopback":
         return web_bind, public_origin, allowed_hosts, trusted_proxies
 
-    if web_exposure == "lan":
-        allowed_hosts = allowed_hosts.strip()
-        while not allowed_hosts:
-            if non_interactive:
-                raise InitConfigError(
-                    "--allowed-hosts is required for --web-exposure lan"
-                )
-            allowed_hosts = prompter.text("Allowed WebUI hostnames/IPs").strip()
-            if not allowed_hosts:
-                print("Allowed WebUI hostnames/IPs is required.", file=prompter.stream)
-        return web_bind, public_origin, allowed_hosts, trusted_proxies
-
-    if not public_origin:
+    public_origin = public_origin.strip()
+    while not public_origin:
         if non_interactive:
             raise InitConfigError(
-                "--public-origin is required for --web-exposure reverse-proxy"
+                f"--public-origin is required for --web-exposure {web_exposure}"
             )
-        public_origin = prompter.text("Browser-visible WebUI origin")
+        public_origin = prompter.text("Browser-visible WebUI origin").strip()
+        if not public_origin:
+            print("Browser-visible WebUI origin is required.", file=prompter.stream)
     _validate_public_origin(public_origin)
 
-    if not allowed_hosts:
-        host = urlparse(public_origin).hostname or ""
-        allowed_hosts = ",".join(item for item in (host, "127.0.0.1", "localhost") if item)
-    if not trusted_proxies and not non_interactive:
+    allowed_hosts = allowed_hosts.strip()
+    if web_exposure == "reverse-proxy" and not trusted_proxies and not non_interactive:
         trusted_proxies = prompter.text("Trusted proxy IP/CIDR list", "127.0.0.1/32")
     return web_bind, public_origin, allowed_hosts, trusted_proxies
 

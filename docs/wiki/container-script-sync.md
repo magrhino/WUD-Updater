@@ -6,9 +6,10 @@ sync with the image version.
 
 ## How It Works
 
-Set `WUD_SYNC_SCRIPTS=true` on the `wud-updater` service. Before running its normal
-command, the entrypoint copies packaged scripts from `/app/wud` into
-`WUD_SCRIPTS_DIR`, which defaults to `/managed-wud`.
+Before running its normal command, the entrypoint copies packaged scripts from
+`/app/wud` into the managed scripts directory when that directory exists and is
+writable. The destination defaults to `/managed-wud`, so the common Compose
+mount is enough to enable automatic sync.
 
 The WUD container should mount the same volume read-only at `/wud`:
 
@@ -19,12 +20,13 @@ services:
       - wud-scripts:/wud:ro
 
   wud-updater:
-    environment:
-      WUD_SYNC_SCRIPTS: "true"
-      WUD_SCRIPTS_DIR: /managed-wud
     volumes:
       - wud-scripts:/managed-wud
 ```
+
+Set `WUD_SYNC_SCRIPTS=false` to opt out of startup sync. Set
+`WUD_SYNC_SCRIPTS=true` to force sync, including when using a custom
+`WUD_SCRIPTS_DIR`.
 
 After the first sync, configure WUD to call:
 
@@ -57,9 +59,9 @@ Run a one-shot sync with:
 docker compose -f docs/examples/docker-compose.example.yml run --rm wud-updater sync-wud-scripts
 ```
 
-Run this once before relying on `/wud/on-update.sh` in a fresh empty script
-volume. During upgrades, recreating `wud-updater` with `WUD_SYNC_SCRIPTS=true`
-refreshes the scripts automatically.
+Run this once before relying on `/wud/on-update.sh` when you intentionally
+disabled startup sync. During upgrades, recreating `wud-updater` refreshes the
+scripts automatically when the managed script volume is mounted.
 
 For local image development, use
 `docs/examples/docker-compose.build.yml` instead of the deployment example.

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ipaddress
 from collections.abc import Callable, Iterator, Sequence
 from pathlib import Path
 from types import SimpleNamespace
@@ -25,11 +26,15 @@ from .doctor import (
     options_from_namespace as doctor_options_from_namespace,
 )
 from .web_auth import (
+    WebConfigError,
     _effective_origin,
+    _host_from_origin,
+    _parse_public_origin,
     _raw_client_is_loopback,
     _redact_sensitive_text,
     _secure_cookie,
     _settings,
+    _trusted_forwarded_origin,
 )
 from .web_database import database_ready
 from .web_models import (
@@ -324,16 +329,7 @@ def _web_doctor_checks(
             code="webui-public-origin",
             suggestions=()
             if settings.public_origin
-            else (
-                DoctorDataSuggestion(
-                    label="Set reverse proxy origin",
-                    description=(
-                        "Set WUD_WEB_PUBLIC_ORIGIN when the WebUI is served "
-                        "behind a reverse proxy."
-                    ),
-                    snippet="WUD_WEB_PUBLIC_ORIGIN=https://wud.example.test",
-                ),
-            ),
+            else _public_origin_suggestions(settings, request, effective_origin),
         )
     )
     secure_cookie = _secure_cookie(settings, request)
@@ -400,6 +396,63 @@ def _web_database_doctor_check(settings: WebSettings) -> DoctorDataCheck:
             ),
         ),
     )
+
+
+def _public_origin_suggestions(
+    settings: WebSettings,
+    request: Request,
+    effective_origin: str,
+) -> tuple[DoctorDataSuggestion, ...]:
+    observed_origin = _observed_lan_origin(settings, request, effective_origin)
+    if observed_origin:
+        return (
+            DoctorDataSuggestion(
+                label="Set observed public origin",
+                description=(
+                    "Persist the browser-visible origin that reached this "
+                    "request in the Compose env file."
+                ),
+                snippet=f"WUD_WEB_PUBLIC_ORIGIN={observed_origin}",
+            ),
+        )
+    return (
+        DoctorDataSuggestion(
+            label="Set reverse proxy origin",
+            description=(
+                "Set WUD_WEB_PUBLIC_ORIGIN when the WebUI is served behind a "
+                "LAN address or reverse proxy."
+            ),
+            snippet="WUD_WEB_PUBLIC_ORIGIN=https://wud.example.test",
+        ),
+    )
+
+
+def _observed_lan_origin(
+    settings: WebSettings,
+    request: Request,
+    effective_origin: str,
+) -> str:
+    forwarded_origin = _trusted_forwarded_origin(request, settings)
+    candidate = forwarded_origin or effective_origin
+    try:
+        origin = _parse_public_origin(candidate)
+    except WebConfigError:
+        return ""
+    host = _host_from_origin(origin)
+    if not host or _host_is_loopback(host):
+        return ""
+    if not forwarded_origin and host not in settings.allowed_hosts:
+        return ""
+    return origin
+
+
+def _host_is_loopback(host: str) -> bool:
+    if host == "localhost":
+        return True
+    try:
+        return ipaddress.ip_address(host).is_loopback
+    except ValueError:
+        return False
 
 
 def _web_doctor_check(

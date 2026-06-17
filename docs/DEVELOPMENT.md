@@ -134,8 +134,8 @@ Useful WebUI development variables:
 | `WUD_WEB_STATIC_DIR` | Optional built SPA directory override for manual backend testing. |
 | `WUD_WEB_DEV_NO_AUTH` | Development-only auth bypass used by tests and the local demo wrapper. |
 | `WUD_WEB_ALLOWED_ORIGINS` | Extra allowed origins for login, logout, setup, and mutation CSRF/Origin checks. |
-| `WUD_WEB_PUBLIC_ORIGIN` | Browser-visible origin used for setup links, reverse proxies, and secure-cookie auto-detection. |
-| `WUD_WEB_ALLOWED_HOSTS` | Accepted HTTP `Host` names when exposing the WebUI outside loopback. |
+| `WUD_WEB_PUBLIC_ORIGIN` | Browser-visible origin used for setup links, LAN or reverse-proxy exposure, allowed-host derivation, and secure-cookie auto-detection. |
+| `WUD_WEB_ALLOWED_HOSTS` | Optional extra HTTP `Host` names accepted in addition to loopback, the configured public origin, and the bind host. |
 | `WUD_WEB_TRUSTED_PROXIES` | Proxy IP/CIDR entries whose forwarded headers are trusted. |
 | `WUD_WEB_SECURE_COOKIES` | Cookie Secure mode: `auto`, `true`, or `false`; keep `auto` outside local HTTP tests. |
 

@@ -130,6 +130,7 @@ EOF
     src/wud_updater/web_scheduler.py \
     src/wud_updater/web_self_update.py \
     src/wud_updater/web_settings.py \
+    src/wud_updater/web_startup.py \
     src/wud_updater/web_state.py \
     src/wud_updater/web_static.py \
     src/wud_updater/web.py \
