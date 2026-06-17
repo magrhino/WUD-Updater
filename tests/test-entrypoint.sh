@@ -347,6 +347,16 @@ updates [--yes]"
   teardown_case
 }
 
+test_startup_sync_accepts_enabled(){
+  setup_case
+  WUD_SYNC_SCRIPTS=enabled run_entrypoint updates --yes
+  assert_status 0
+  assert_output "Synced WUD scripts to $TEST_TMP/managed-wud
+updates [--yes]"
+  assert_synced_scripts
+  teardown_case
+}
+
 test_startup_sync_accepts_legacy_one(){
   setup_case
   WUD_SYNC_SCRIPTS=1 run_entrypoint updates --yes
@@ -452,6 +462,7 @@ main(){
   run_test test_startup_explicit_auto_sync_runs_for_existing_destination
   run_test test_startup_explicit_auto_sync_skips_missing_destination
   run_test test_startup_sync_true_runs_before_command
+  run_test test_startup_sync_accepts_enabled
   run_test test_startup_sync_accepts_legacy_one
   run_test test_startup_sync_accepts_legacy_zero_as_disabled
   run_test test_sync_removes_stale_files

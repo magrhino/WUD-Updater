@@ -107,6 +107,25 @@ function searchInput(wrapper: ReturnType<typeof mountPendingView>) {
   return wrapper.find('input[aria-label="Search pending updates"]');
 }
 
+async function mountDefaultPendingView() {
+  const mounted = mountFilteredPendingView(
+    pendingWithGroups([
+      stackGroup("media", [radarrItem()]),
+      stackGroup("data", [postgresItem()]),
+    ]),
+  );
+  await flushPromises();
+  return mounted;
+}
+
+async function setPendingSearch(
+  wrapper: ReturnType<typeof mountPendingView>,
+  value: string,
+) {
+  await searchInput(wrapper).setValue(value);
+  await flushPromises();
+}
+
 describe("pending view search filter", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
@@ -114,16 +133,9 @@ describe("pending view search filter", () => {
   });
 
   it("filters grouped pending updates by service and image text", async () => {
-    const wrapper = mountFilteredPendingView(
-      pendingWithGroups([
-        stackGroup("media", [radarrItem()]),
-        stackGroup("data", [postgresItem()]),
-      ]),
-    ).wrapper;
-    await flushPromises();
+    const { wrapper } = await mountDefaultPendingView();
 
-    await searchInput(wrapper).setValue("postgres");
-    await flushPromises();
+    await setPendingSearch(wrapper, "postgres");
 
     expect(wrapper.text()).toContain("postgres:16");
     expect(wrapper.text()).toContain("1 visible update matched");
@@ -139,8 +151,7 @@ describe("pending view search filter", () => {
     ).wrapper;
     await flushPromises();
 
-    await searchInput(wrapper).setValue("feedface");
-    await flushPromises();
+    await setPendingSearch(wrapper, "feedface");
 
     expect(wrapper.text()).toContain("repo/cache:latest");
     expect(wrapper.text()).toContain("1 visible update matched");
@@ -155,8 +166,7 @@ describe("pending view search filter", () => {
     const createPlan = vi.spyOn(updates, "createPlan").mockResolvedValue();
     await flushPromises();
 
-    await searchInput(wrapper).setValue("postgres");
-    await flushPromises();
+    await setPendingSearch(wrapper, "postgres");
     await wrapper
       .findAll("button")
       .find((button) => button.text().includes("Preview media plan"))
@@ -166,16 +176,9 @@ describe("pending view search filter", () => {
   });
 
   it("shows and clears an empty filtered result state", async () => {
-    const wrapper = mountFilteredPendingView(
-      pendingWithGroups([
-        stackGroup("media", [radarrItem()]),
-        stackGroup("data", [postgresItem()]),
-      ]),
-    ).wrapper;
-    await flushPromises();
+    const { wrapper } = await mountDefaultPendingView();
 
-    await searchInput(wrapper).setValue("not-a-pending-update");
-    await flushPromises();
+    await setPendingSearch(wrapper, "not-a-pending-update");
 
     expect(wrapper.text()).toContain("No pending updates match search");
     expect(wrapper.text()).toContain("not-a-pending-update");
@@ -193,17 +196,10 @@ describe("pending view search filter", () => {
   });
 
   it("keeps hidden selected rows clear when filtering", async () => {
-    const wrapper = mountFilteredPendingView(
-      pendingWithGroups([
-        stackGroup("media", [radarrItem()]),
-        stackGroup("data", [postgresItem()]),
-      ]),
-    ).wrapper;
-    await flushPromises();
+    const { wrapper } = await mountDefaultPendingView();
 
     await wrapper.find('input[aria-label="Select stack media"]').setValue(true);
-    await searchInput(wrapper).setValue("postgres");
-    await flushPromises();
+    await setPendingSearch(wrapper, "postgres");
 
     expect(wrapper.text()).toContain("1 selected");
     expect(wrapper.text()).toContain("1 selected update hidden by search");
@@ -234,8 +230,7 @@ describe("pending view search filter", () => {
     ]);
     await flushPromises();
 
-    await searchInput(wrapper).setValue("Only GHCR");
-    await flushPromises();
+    await setPendingSearch(wrapper, "Only GHCR");
 
     expect(wrapper.text()).toContain("postgres:16");
     expect(wrapper.text()).toContain("Only GHCR and mapped LinuxServer.io images");
