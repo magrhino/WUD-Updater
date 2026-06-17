@@ -1,0 +1,124 @@
+from __future__ import annotations
+import json
+from pathlib import Path
+from wud_updater import web_self_update as self_update_module
+from tests.web_test_helpers import (
+    _client,
+)
+
+def test_self_update_get_reports_available_up_to_date_disabled_and_unavailable(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(self_update_module, "current_tag", lambda: "v0.24.2")
+    monkeypatch.setattr(
+        self_update_module,
+        "_fetch_self_update_release_notes",
+        lambda *_args, **_kwargs: ([], False, []),
+    )
+    monkeypatch.setattr(self_update_module, "fetch_latest_release_tag", lambda: "v0.25.0")
+    available = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_RESTART_CONTAINER": "wud-updater",
+        },
+    ).get("/api/v1/self-update")
+
+    assert available.status_code == 200
+    body = available.json()
+    assert body["status"] == "available"
+    assert body["current_tag"] == "v0.24.2"
+    assert body["latest_tag"] == "v0.25.0"
+    assert body["target_image"] == "ghcr.io/magrhino/wud-updater:v0.25.0"
+    assert body["can_update"] is False
+    assert "Read-only mode" in body["disabled_reason"]
+
+    monkeypatch.setattr(self_update_module, "fetch_latest_release_tag", lambda: "v0.24.2")
+    up_to_date = _client(
+        tmp_path,
+        {"WUD_WEB_DEV_NO_AUTH": "true"},
+    ).get("/api/v1/self-update")
+    assert up_to_date.json()["status"] == "up_to_date"
+
+    disabled = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_UPDATER_RELEASE_CHECK": "false",
+        },
+    ).get("/api/v1/self-update")
+    assert disabled.json()["status"] == "disabled"
+
+    monkeypatch.setattr(self_update_module, "fetch_latest_release_tag", lambda: None)
+    unavailable = _client(
+        tmp_path,
+        {"WUD_WEB_DEV_NO_AUTH": "true"},
+    ).get("/api/v1/self-update")
+    assert unavailable.json()["status"] == "unavailable"
+    assert unavailable.json()["warnings"]
+
+
+def test_self_update_get_can_use_local_demo_fixture(tmp_path: Path) -> None:
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+            "WUD_WEB_RESTART_CONTAINER": "demo-wud-updater",
+            "WUD_WEB_DEMO_SELF_UPDATE": "true",
+        },
+    )
+
+    response = client.get("/api/v1/self-update")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "available"
+    assert body["current_tag"] == "v0.25.0"
+    assert body["latest_tag"] == "v0.26.0"
+    assert body["target_image"] == "ghcr.io/magrhino/wud-updater:latest"
+    assert body["restart_container"] == "demo-wud-updater"
+    assert body["can_update"] is True
+    assert body["release_notes_truncated"] is True
+    assert len(body["release_notes"]) == 10
+
+
+def test_self_update_release_notes_are_between_versions_and_capped(
+    monkeypatch,
+) -> None:
+    class FakeResponse:
+        def __enter__(self) -> "FakeResponse":
+            return self
+
+        def __exit__(self, *_args: object) -> None:
+            return None
+
+        def read(self, _limit: int) -> bytes:
+            releases = [
+                {
+                    "tag_name": f"v0.{minor}.0",
+                    "name": f"v0.{minor}.0",
+                    "html_url": f"https://example.test/v0.{minor}.0",
+                    "body": "Routine update",
+                    "published_at": f"2026-05-{minor:02d}T00:00:00Z",
+                }
+                for minor in range(10, 25)
+            ]
+            return json.dumps(releases).encode("utf-8")
+
+    monkeypatch.setattr(self_update_module.urllib.request, "urlopen", lambda *_args, **_kwargs: FakeResponse())
+
+    notes, truncated, warnings = self_update_module._fetch_self_update_release_notes(
+        "v0.12.0",
+        "v0.24.0",
+        {},
+        cap=10,
+    )
+
+    assert warnings == []
+    assert truncated is True
+    assert len(notes) == 10
+    assert notes[0].tag == "v0.24.0"
+    assert notes[-1].tag == "v0.15.0"
+    assert all(note.tag not in {"v0.12.0", "v0.11.0"} for note in notes)

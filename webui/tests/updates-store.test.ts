@@ -1,0 +1,569 @@
+import { createPinia, setActivePinia } from "pinia";
+import { flushPromises } from "@vue/test-utils";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+import { webApi } from "../src/api/client";
+import { useAuthStore } from "../src/stores/auth";
+import { useConnectionStore, errorMessage } from "../src/stores/connection";
+import { useSettingsStore } from "../src/stores/settings";
+import { useUpdatesStore, APPLY_JOB_RECOVERY_MESSAGE } from "../src/stores/updates";
+import { useRunsStore } from "../src/stores/runs";
+import {
+  applyJobLogResponse,
+  applyJobResponse,
+  coreUpdateTourResponse,
+  doctorResponse,
+  onboardingChecklistResponse,
+  onboardingDismissResponse,
+  pendingResponse,
+  releaseNotesResponse,
+  retagPlanResponse,
+  retagTarget,
+  retagTargetsResponse,
+  planResponse,
+  runVerification,
+  runSummary,
+  selfUpdateApplyResponse,
+  selfUpdatePlanResponse,
+  selfUpdatePrepareResponse,
+  selfUpdateResponse,
+  settingsResponse,
+  servicePolicy,
+  statusResponse,
+  stateOperationResponse,
+  snooze,
+  tagExclusion,
+  updateTargetsResponse,
+} from "./helpers/fixtures";
+
+function jsonResponse(body: unknown, status = 200): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { "content-type": "application/json" },
+  });
+}
+
+function mockFetch(body: unknown = {}): ReturnType<typeof vi.fn> {
+  const fetchMock = vi.fn().mockImplementation(() => Promise.resolve(jsonResponse(body)));
+  vi.stubGlobal("fetch", fetchMock);
+  return fetchMock;
+}
+
+function jsonRequestBody(call: unknown[]): unknown {
+  const body = (call[1] as RequestInit).body;
+  if (typeof body !== "string") {
+    throw new TypeError("Expected request body to be a string");
+  }
+  return JSON.parse(body);
+}
+
+function deferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, resolve, reject };
+}
+
+
+import {
+  deferred,
+  jsonRequestBody,
+  jsonResponse,
+  mockFetch,
+} from "./helpers/storeActions";
+
+describe("updates store", () => {
+  beforeEach(() => {
+    setActivePinia(createPinia());
+  });
+
+  it("passes csrf from auth store to plan creation", async () => {
+    const fetchMock = mockFetch(planResponse());
+    const auth = useAuthStore();
+    const ensureCsrf = vi.spyOn(auth, "ensureCsrf").mockResolvedValue("csrf-plan");
+        const connection = useConnectionStore();
+    const settings = useSettingsStore();
+    const updates = useUpdatesStore();
+    const runs = useRunsStore();
+
+    await updates.createPlan([1], true, [{ line_no: 1, tag: "1.1" }]);
+
+    expect(ensureCsrf).toHaveBeenCalledTimes(1);
+    expect(updates.plan?.plan_id).toBe("plan-test");
+    expect(
+      ((fetchMock.mock.calls[0][1] as RequestInit).headers as Headers).get(
+        "x-wud-csrf-token",
+      ),
+    ).toBe("csrf-plan");
+  });
+
+  it("passes csrf from auth store to pending cleanup", async () => {
+    const fetchMock = mockFetch({
+      status: "success",
+      audit_run_id: 12,
+      removed_count: 1,
+      removed: [
+        {
+          line_no: 3,
+          raw: "repo/old:latest",
+          image: "repo/old:latest",
+          reason: "unmatched",
+        },
+      ],
+    });
+    const auth = useAuthStore();
+    const ensureCsrf = vi
+      .spyOn(auth, "ensureCsrf")
+      .mockResolvedValue("csrf-cleanup");
+        const connection = useConnectionStore();
+    const settings = useSettingsStore();
+    const updates = useUpdatesStore();
+    const runs = useRunsStore();
+
+    await updates.cleanupPending("cleanup-test", [
+      { line_no: 3, raw: "repo/old:latest" },
+    ]);
+
+    expect(ensureCsrf).toHaveBeenCalledTimes(1);
+    expect(updates.pendingCleanup?.audit_run_id).toBe(12);
+    expect(JSON.parse(String((fetchMock.mock.calls[0][1] as RequestInit).body))).toEqual({
+      cleanup_id: "cleanup-test",
+      lines: [{ line_no: 3, raw: "repo/old:latest" }],
+      confirmation: "remove_unmatched",
+    });
+    expect(
+      ((fetchMock.mock.calls[0][1] as RequestInit).headers as Headers).get(
+        "x-wud-csrf-token",
+      ),
+    ).toBe("csrf-cleanup");
+  });
+
+  it("preserves cleanup success while refreshing pending state when requested", async () => {
+    mockFetch(pendingResponse());
+        const connection = useConnectionStore();
+    const settings = useSettingsStore();
+    const updates = useUpdatesStore();
+    const runs = useRunsStore();
+    updates.pendingCleanup = {
+      status: "success",
+      audit_run_id: 12,
+      removed_count: 1,
+      removed: [
+        {
+          line_no: 3,
+          raw: "repo/old:latest",
+          image: "repo/old:latest",
+          reason: "unmatched",
+        },
+      ],
+    };
+
+    await updates.loadPending({ preserveCleanup: true });
+
+    expect(updates.pendingCleanup?.audit_run_id).toBe(12);
+
+    await updates.loadPending();
+
+    expect(updates.pendingCleanup).toBeNull();
+  });
+
+  it("loads update targets for management selectors", async () => {
+    const fetchMock = mockFetch(updateTargetsResponse());
+    const updates = useUpdatesStore();
+
+    await updates.loadUpdateTargets();
+
+    expect(updates.updateTargets?.items[0]?.service_key).toBe("media/app");
+    expect(fetchMock.mock.calls[0][0]).toBe("/api/v1/update-targets");
+  });
+
+  it("loads retag targets for read-only review", async () => {
+    const fetchMock = mockFetch(retagTargetsResponse());
+    const updates = useUpdatesStore();
+
+    await updates.loadRetagTargets();
+
+    expect(updates.retagTargets?.items[0]?.service_key).toBe("media/app");
+    expect(fetchMock.mock.calls[0][0]).toBe("/api/v1/retag-targets");
+  });
+
+  it("previews retag choices through the updates store", async () => {
+    const fetchMock = mockFetch(retagPlanResponse());
+    const auth = useAuthStore();
+    const ensureCsrf = vi.spyOn(auth, "ensureCsrf").mockResolvedValue("csrf-retag");
+    const updates = useUpdatesStore();
+    updates.retagTargets = retagTargetsResponse([
+      retagTarget(),
+      retagTarget({ service_key: "media/radarr", service: "radarr" }),
+    ]);
+    updates.setRetagChoice("media/app", "switch-to-concrete");
+
+    const plan = await updates.createRetagPlan();
+
+    expect(ensureCsrf).toHaveBeenCalledTimes(1);
+    expect(plan.plan_id).toBe("retag-plan-test");
+    expect(updates.retagPlan?.selected_count).toBe(1);
+    expect(fetchMock.mock.calls[0][0]).toBe("/api/v1/retag-plans");
+    expect(jsonRequestBody(fetchMock.mock.calls[0])).toEqual({
+      choices: [
+        { service_key: "media/app", choice: "switch-to-concrete" },
+        { service_key: "media/radarr", choice: "keep-current" },
+      ],
+    });
+  });
+
+  it("applies a retag plan as a tracked apply job", async () => {
+    const fetchMock = mockFetch(applyJobResponse({ job_id: "retag-job" }));
+    const auth = useAuthStore();
+    const ensureCsrf = vi.spyOn(auth, "ensureCsrf").mockResolvedValue("csrf-retag");
+    const updates = useUpdatesStore();
+    updates.retagTargets = retagTargetsResponse();
+    updates.retagChoices = { "media/app": "switch-to-concrete" };
+    updates.retagPlan = retagPlanResponse();
+
+    const job = await updates.applyRetagPlan();
+
+    expect(ensureCsrf).toHaveBeenCalledTimes(1);
+    expect(job.job_id).toBe("retag-job");
+    expect(updates.applyJob?.job_id).toBe("retag-job");
+    expect(fetchMock.mock.calls[0][0]).toBe("/api/v1/retag-plans/apply");
+    expect(jsonRequestBody(fetchMock.mock.calls[0])).toEqual({
+      plan_id: "retag-plan-test",
+      choices: [{ service_key: "media/app", choice: "switch-to-concrete" }],
+      confirmation: "apply-retags",
+    });
+  });
+
+  it("surfaces retag target loading errors", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(jsonResponse({ detail: "retag targets unavailable" }, 503));
+    vi.stubGlobal("fetch", fetchMock);
+    const updates = useUpdatesStore();
+
+    await expect(updates.loadRetagTargets()).rejects.toThrow(
+      "retag targets unavailable",
+    );
+
+    expect(updates.error).toBe("retag targets unavailable");
+  });
+
+  it("passes csrf from auth store to release-note refresh", async () => {
+    const fetchMock = mockFetch(releaseNotesResponse());
+    const auth = useAuthStore();
+    const ensureCsrf = vi.spyOn(auth, "ensureCsrf").mockResolvedValue("csrf-notes");
+        const connection = useConnectionStore();
+    const settings = useSettingsStore();
+    const updates = useUpdatesStore();
+    const runs = useRunsStore();
+
+    await updates.refreshReleaseNotes();
+
+    expect(ensureCsrf).toHaveBeenCalledTimes(1);
+    expect(updates.releaseNotes?.items[0].release_tag).toBe("v2.0.0");
+    expect(fetchMock.mock.calls[0][0]).toBe("/api/v1/release-notes/refresh");
+    expect(
+      ((fetchMock.mock.calls[0][1] as RequestInit).headers as Headers).get(
+        "x-wud-csrf-token",
+      ),
+    ).toBe("csrf-notes");
+  });
+
+  it("loads self-update status for the shell banner", async () => {
+    const fetchMock = mockFetch(selfUpdateResponse());
+        const connection = useConnectionStore();
+    const settings = useSettingsStore();
+    const updates = useUpdatesStore();
+    const runs = useRunsStore();
+
+    await updates.loadSelfUpdate();
+
+    expect(fetchMock.mock.calls[0][0]).toBe("/api/v1/self-update");
+    expect(updates.selfUpdate?.latest_tag).toBe("v0.25.0");
+  });
+
+  it("loads self-update tag prepare plan", async () => {
+    const fetchMock = mockFetch(selfUpdatePlanResponse());
+    const auth = useAuthStore();
+    const ensureCsrf = vi.spyOn(auth, "ensureCsrf").mockResolvedValue("csrf-plan");
+        const connection = useConnectionStore();
+    const settings = useSettingsStore();
+    const updates = useUpdatesStore();
+    const runs = useRunsStore();
+
+    const response = await updates.planSelfUpdate();
+
+    expect(ensureCsrf).toHaveBeenCalledTimes(1);
+    expect(fetchMock.mock.calls[0][0]).toBe("/api/v1/self-update/plan");
+    expect(updates.selfUpdatePlan?.plan.plan_id).toBe("self-update-plan-test");
+    expect(response.external_recreate_required).toBe(true);
+    expect(
+      ((fetchMock.mock.calls[0][1] as RequestInit).headers as Headers).get(
+        "x-wud-csrf-token",
+      ),
+    ).toBe("csrf-plan");
+  });
+
+  it("passes csrf from auth store to self-update apply", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse(selfUpdateApplyResponse()))
+      .mockResolvedValueOnce(jsonResponse(selfUpdateResponse()));
+    vi.stubGlobal("fetch", fetchMock);
+    const auth = useAuthStore();
+    const ensureCsrf = vi
+      .spyOn(auth, "ensureCsrf")
+      .mockResolvedValue("csrf-self-update");
+        const connection = useConnectionStore();
+    const settings = useSettingsStore();
+    const updates = useUpdatesStore();
+    const runs = useRunsStore();
+    updates.selfUpdate = selfUpdateResponse();
+
+    const response = await updates.applySelfUpdate();
+
+    expect(ensureCsrf).toHaveBeenCalledTimes(1);
+    expect(response.container).toBe("wud-updater");
+    expect(updates.selfUpdateMessage).toBe(
+      "Image pulled. Recreate the WUD-Updater container to run the new version. Tagged deployments are recommended for predictable updates.",
+    );
+    expect(fetchMock.mock.calls[0][0]).toBe("/api/v1/self-update");
+    expect(JSON.parse(String((fetchMock.mock.calls[0][1] as RequestInit).body))).toEqual({
+      confirmation: "pull_image",
+      current_tag: "v0.24.2",
+      latest_tag: "v0.25.0",
+      target_image: "ghcr.io/magrhino/wud-updater:latest",
+      restart_container: "wud-updater",
+    });
+    expect(
+      ((fetchMock.mock.calls[0][1] as RequestInit).headers as Headers).get(
+        "x-wud-csrf-token",
+      ),
+    ).toBe("csrf-self-update");
+  });
+
+  it("prepares pinned self-update tags from cached plan", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse(selfUpdatePrepareResponse()))
+      .mockResolvedValueOnce(jsonResponse(selfUpdateResponse({ strategy: "prepare_tag_update" })));
+    vi.stubGlobal("fetch", fetchMock);
+    const auth = useAuthStore();
+    const ensureCsrf = vi
+      .spyOn(auth, "ensureCsrf")
+      .mockResolvedValue("csrf-self-update");
+        const connection = useConnectionStore();
+    const settings = useSettingsStore();
+    const updates = useUpdatesStore();
+    const runs = useRunsStore();
+    updates.selfUpdate = selfUpdateResponse({
+      strategy: "prepare_tag_update",
+      current_image: "ghcr.io/magrhino/wud-updater:v0.24.2",
+      target_image: "ghcr.io/magrhino/wud-updater:v0.25.0",
+      external_recreate_required: true,
+    });
+    updates.selfUpdatePlan = selfUpdatePlanResponse();
+
+    const response = await updates.applySelfUpdate();
+
+    expect(ensureCsrf).toHaveBeenCalledTimes(1);
+    expect(response.status).toBe("tag_prepared");
+    expect(updates.selfUpdateMessage).toBe(
+      "Tag updated and image pulled. Recreate the WUD-Updater container from outside the WebUI to run the new version. Tagged deployments are recommended for predictable updates.",
+    );
+    expect(fetchMock.mock.calls[0][0]).toBe("/api/v1/self-update/prepare");
+    expect(JSON.parse(String((fetchMock.mock.calls[0][1] as RequestInit).body))).toEqual({
+      confirmation: "prepare_tag_update",
+      plan_id: "self-update-plan-test",
+      current_tag: "v0.24.2",
+      latest_tag: "v0.25.0",
+      target_image: "ghcr.io/magrhino/wud-updater:v0.25.0",
+      restart_container: "wud-updater",
+    });
+  });
+
+  it("requires a loaded self-update tag prepare plan before applying", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    const auth = useAuthStore();
+    const ensureCsrf = vi
+      .spyOn(auth, "ensureCsrf")
+      .mockResolvedValue("csrf-self-update");
+        const connection = useConnectionStore();
+    const settings = useSettingsStore();
+    const updates = useUpdatesStore();
+    const runs = useRunsStore();
+    updates.selfUpdate = selfUpdateResponse({
+      strategy: "prepare_tag_update",
+      current_image: "ghcr.io/magrhino/wud-updater:v0.24.2",
+      target_image: "ghcr.io/magrhino/wud-updater:v0.25.0",
+      external_recreate_required: true,
+    });
+
+    await expect(updates.applySelfUpdate()).rejects.toThrow(
+      "Self-update tag update preview must be loaded before applying",
+    );
+
+    expect(ensureCsrf).not.toHaveBeenCalled();
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(updates.selfUpdateError).toBe(
+      "Self-update tag update preview must be loaded before applying",
+    );
+  });
+
+  it("remembers active apply jobs and clears terminal jobs", async () => {
+    mockFetch(applyJobResponse({ job_id: "job-active", status: "running" }));
+    const auth = useAuthStore();
+    vi.spyOn(auth, "ensureCsrf").mockResolvedValue("csrf-job");
+        const connection = useConnectionStore();
+    const settings = useSettingsStore();
+    const updates = useUpdatesStore();
+    const runs = useRunsStore();
+
+    await updates.createJob("plan-test", [1], false, []);
+
+    expect(updates.rememberedApplyJobId).toBe("job-active");
+    expect(window.sessionStorage.getItem("applyJobId")).toBe("job-active");
+
+    updates.setApplyJobLog(applyJobLogResponse({ job_id: "job-active" }));
+    expect(updates.applyJobLog?.content).toContain("docker-update-from-wud-v2");
+
+    updates.setApplyJob(applyJobResponse({ job_id: "job-active", status: "success" }));
+
+    expect(updates.rememberedApplyJobId).toBe("");
+    expect(window.sessionStorage.getItem("applyJobId")).toBeNull();
+  });
+
+  it("applies plans through the plan apply endpoint", async () => {
+    const auth = useAuthStore();
+    vi.spyOn(auth, "ensureCsrf").mockResolvedValue("csrf-plan-apply");
+    const applyPlan = vi
+      .spyOn(webApi, "applyPlan")
+      .mockResolvedValue(applyJobResponse({ job_id: "job-plan", status: "running" }));
+    const createJob = vi
+      .spyOn(webApi, "createJob")
+      .mockRejectedValue(new Error("wrong endpoint"));
+    const updates = useUpdatesStore();
+
+    const job = await updates.applyPlan("plan-test", [1], false, [], []);
+
+    expect(applyPlan).toHaveBeenCalledWith(
+      "plan-test",
+      [1],
+      false,
+      [],
+      [],
+      "csrf-plan-apply",
+    );
+    expect(createJob).not.toHaveBeenCalled();
+    expect(job.job_id).toBe("job-plan");
+    expect(updates.applyJob?.job_id).toBe("job-plan");
+    expect(updates.rememberedApplyJobId).toBe("job-plan");
+  });
+
+  it("loads a terminal apply job log from the persisted run log", async () => {
+    const fetchMock = mockFetch({
+      run_id: 10,
+      log_file: "/out/logs/run-10.log",
+      exists: true,
+      content: "fallback run log\n",
+      truncated: false,
+      max_bytes: 65_536,
+    });
+        const connection = useConnectionStore();
+    const settings = useSettingsStore();
+    const updates = useUpdatesStore();
+    const runs = useRunsStore();
+
+    const log = await updates.loadApplyJobLogFromRun(
+      applyJobResponse({
+        job_id: "job-terminal",
+        run_id: 10,
+        log_file: "/out/logs/job-terminal.log",
+      }),
+    );
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/v1/runs/10/log?tail_bytes=65536",
+      expect.any(Object),
+    );
+    expect(log).toEqual({
+      job_id: "job-terminal",
+      log_file: "/out/logs/run-10.log",
+      exists: true,
+      content: "fallback run log\n",
+      truncated: false,
+      max_bytes: 65_536,
+      error: "",
+    });
+    expect(updates.applyJobLog?.content).toBe("fallback run log\n");
+  });
+
+  it("marks recovery when a remembered apply job is missing", async () => {
+    window.sessionStorage.setItem("applyJobId", "job-lost");
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(jsonResponse({ detail: "apply job not found" }, 404));
+    vi.stubGlobal("fetch", fetchMock);
+        const connection = useConnectionStore();
+    const settings = useSettingsStore();
+    const updates = useUpdatesStore();
+    const runs = useRunsStore();
+
+    const job = await updates.loadApplyJob("job-lost", { recoverMissing: true });
+
+    expect(job).toBeNull();
+    expect(updates.applyJob).toBeNull();
+    expect(updates.applyJobLog).toBeNull();
+    expect(updates.applyJobRecovery).toBe(APPLY_JOB_RECOVERY_MESSAGE);
+    expect(updates.rememberedApplyJobId).toBe("");
+    expect(runs.error).toBe("");
+    expect(window.sessionStorage.getItem("applyJobId")).toBeNull();
+  });
+});
+
+describe("connection store focused coverage", () => {
+  beforeEach(() => {
+    setActivePinia(createPinia());
+  });
+
+  it("loads release notes with independent loading state", async () => {
+    const fetchMock = mockFetch(releaseNotesResponse());
+    const updates = useUpdatesStore();
+
+    await updates.loadReleaseNotes();
+
+    expect(fetchMock.mock.calls[0][0]).toBe("/api/v1/release-notes");
+    expect(updates.releaseNotes?.items[0]?.release_tag).toBe("v2.0.0");
+    expect(updates.releaseNotesLoading).toBe(false);
+    expect(updates.releaseNotesError).toBe("");
+    expect(updates.loading).toBe(false);
+  });
+
+  it("surfaces release note errors without changing main loading state", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(jsonResponse({ detail: "notes unavailable" }, 503)),
+    );
+    const updates = useUpdatesStore();
+
+    await expect(updates.loadReleaseNotes()).rejects.toMatchObject({
+      message: "notes unavailable",
+    });
+
+    expect(updates.releaseNotesError).toBe("notes unavailable");
+    expect(updates.releaseNotesLoading).toBe(false);
+    expect(updates.loading).toBe(false);
+  });
+
+  it("sets stream errors through the updates store action", () => {
+    const updates = useUpdatesStore();
+
+    updates.setError("Job status stream returned invalid data.");
+
+    expect(updates.error).toBe("Job status stream returned invalid data.");
+  });
+});

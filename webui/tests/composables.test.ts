@@ -3,11 +3,7 @@ import { computed, ref } from "vue";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { flushPromises } from "@vue/test-utils";
 
-import {
-  webApi,
-  type ApplyJobProgressEvent,
-  type PlanIssue,
-} from "../src/api/client";
+import type { ApplyJobProgressEvent, PlanIssue } from "../src/api/client";
 import { useUpdateTargetOptions } from "../src/composables/useUpdateTargetOptions";
 import { useAuthStore } from "../src/stores/auth";
 import { useRunsStore } from "../src/stores/runs";
@@ -35,6 +31,7 @@ import {
 } from "../src/views/pending/usePendingPlanReviewState";
 import { usePendingQueueState } from "../src/views/pending/usePendingQueueState";
 import { usePendingSelectionState } from "../src/views/pending/usePendingSelectionState";
+import { mockApplyJobStream } from "./helpers/applyJobStream";
 
 describe("useUpdateTargetOptions", () => {
   beforeEach(() => {
@@ -227,51 +224,6 @@ function digestPinApprovalIssue(
       proposed_label_value: "1.1",
     },
     ...overrides,
-  };
-}
-
-function mockApplyJobStream() {
-  const close = vi.fn();
-  let jobListener: ((event: MessageEvent<string>) => void) | null = null;
-  let logListener: ((event: MessageEvent<string>) => void) | null = null;
-  let progressListener: ((event: MessageEvent<string>) => void) | null = null;
-  vi.spyOn(webApi, "openJobStream").mockReturnValue({
-    addEventListener: vi.fn((type: string, listener: EventListener) => {
-      if (type === "job") {
-        jobListener = listener as (event: MessageEvent<string>) => void;
-      }
-      if (type === "log") {
-        logListener = listener as (event: MessageEvent<string>) => void;
-      }
-      if (type === "progress") {
-        progressListener = listener as (event: MessageEvent<string>) => void;
-      }
-    }),
-    close,
-    onerror: null,
-    onmessage: null,
-    onopen: null,
-    readyState: 1,
-    url: "",
-    withCredentials: true,
-    CONNECTING: 0,
-    OPEN: 1,
-    CLOSED: 2,
-    dispatchEvent: vi.fn(),
-    removeEventListener: vi.fn(),
-  } as unknown as EventSource);
-
-  return {
-    close,
-    emitJobData(data: string): void {
-      jobListener?.(new MessageEvent("job", { data }));
-    },
-    emitLogData(data: string): void {
-      logListener?.(new MessageEvent("log", { data }));
-    },
-    emitProgressData(data: string): void {
-      progressListener?.(new MessageEvent("progress", { data }));
-    },
   };
 }
 

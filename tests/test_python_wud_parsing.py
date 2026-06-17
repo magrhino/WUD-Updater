@@ -9,6 +9,7 @@ from wud_updater.images import (
     image_matches_resolved_target,
     image_tag,
     image_with_tag,
+    image_with_digest,
     image_repo_ref,
     normalize_digest,
     strip_digest,
@@ -238,6 +239,42 @@ class WudFileParsingTests(unittest.TestCase):
 
             self.assertEqual([target.line_no for target in parsed.targets], [2])
             self.assertEqual(path.read_text(encoding="utf-8"), "repo/a:latest\nrepo/b:latest\n")
+
+
+class ImageWithDigestTests(unittest.TestCase):
+    def test_basic_image_with_digest(self) -> None:
+        self.assertEqual(
+            image_with_digest("repo/app:1.0", "sha256:abc123"),
+            "repo/app@sha256:abc123",
+        )
+
+    def test_image_with_digest_strips_existing_tag(self) -> None:
+        self.assertEqual(
+            image_with_digest("repo/app:2.0", "sha256:digest"),
+            "repo/app@sha256:digest",
+        )
+
+    def test_image_with_digest_preserves_registry(self) -> None:
+        self.assertEqual(
+            image_with_digest("ghcr.io/org/app:1.0", "sha256:abc"),
+            "ghcr.io/org/app@sha256:abc",
+        )
+
+    def test_image_with_digest_strips_existing_digest(self) -> None:
+        self.assertEqual(
+            image_with_digest("repo/app@sha256:old", "sha256:new"),
+            "repo/app@sha256:new",
+        )
+
+    def test_image_with_digest_normalizes_bare_hash(self) -> None:
+        result = image_with_digest("repo/app:1.0", "abc123")
+        self.assertIn("sha256:abc123", result)
+
+    def test_image_with_digest_docker_hub_registry(self) -> None:
+        self.assertEqual(
+            image_with_digest("docker.io/library/nginx:latest", "sha256:hash"),
+            "docker.io/library/nginx@sha256:hash",
+        )
 
 
 if __name__ == "__main__":

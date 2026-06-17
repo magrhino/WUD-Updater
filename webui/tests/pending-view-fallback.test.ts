@@ -1,0 +1,636 @@
+import { createPinia, setActivePinia } from "pinia";
+import { flushPromises } from "@vue/test-utils";
+import { nextTick } from "vue";
+import { createMemoryHistory } from "vue-router";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+import { ApiError, webApi } from "../src/api/client";
+import { createWudRouter } from "../src/router";
+import DashboardView from "../src/views/DashboardView.vue";
+import DoctorView from "../src/views/DoctorView.vue";
+import PendingView from "../src/views/PendingView.vue";
+import PoliciesView from "../src/views/PoliciesView.vue";
+import SettingsView from "../src/views/SettingsView.vue";
+import SnoozesView from "../src/views/SnoozesView.vue";
+import TagExclusionsView from "../src/views/TagExclusionsView.vue";
+import { useAuthStore } from "../src/stores/auth";
+import { useConnectionStore } from "../src/stores/connection";
+import { useSettingsStore } from "../src/stores/settings";
+import { useUpdatesStore, APPLY_JOB_RECOVERY_MESSAGE } from "../src/stores/updates";
+import { useRunsStore } from "../src/stores/runs";
+import {
+  applyPreflightResponse,
+  applyJobLogResponse,
+  applyJobResponse,
+  authSession,
+  coreUpdateTourResponse,
+  doctorResponse,
+  onboardingChecklistResponse,
+  pendingGroupedItem,
+  pendingGrouping,
+  pendingItem,
+  pendingResponse,
+  planResponse,
+  releaseNoteInfo,
+  releaseNotesResponse,
+  runVerification,
+  runSummary,
+  servicePolicy,
+  settingsResponse,
+  snooze,
+  statusResponse,
+  tagExclusion,
+  updateTarget,
+  updateTargetsResponse,
+} from "./helpers/fixtures";
+import { mountWithApp, naiveStubs } from "./helpers/mount";
+
+
+import {
+  buttonByText,
+  emitSelectValue,
+  failedApplyPreflight,
+  mockApplyJobStream,
+  mockMobileViewport,
+  mockPendingLifecycle,
+  mountPendingView,
+  pendingWithUnmatched,
+  setupStores,
+  stalePendingPreflightFindings,
+  stalePendingPossibleReasons,
+  stalePendingRecommendedActions,
+  unmatchedPendingItem,
+} from "./helpers/viewSecurity";
+
+describe("pending view fallback and release notes", () => {
+  beforeEach(() => {
+    setActivePinia(createPinia());
+  });
+
+  it("keeps grouped update details collapsed by default", () => {
+    const { pinia, auth, connection, settings, updates, runs } = setupStores(true);
+    updates.pending = pendingResponse();
+    mockPendingLifecycle(settings, updates);
+    const wrapper = mountPendingView(pinia);
+
+    expect(wrapper.find("details.stack-details").attributes("open")).toBeUndefined();
+    expect(wrapper.text()).toContain("Details");
+    expect(wrapper.find('summary[aria-label="Details for media"]').exists()).toBe(true);
+  });
+
+  it("renders stack services and change preview text", () => {
+    const radarr = pendingGroupedItem({
+      line_no: 1,
+      image: "lscr.io/linuxserver/radarr:5.0",
+      repo: "lscr.io/linuxserver/radarr",
+      current_tag: "5.0",
+      desired_tag: "",
+      target_image: "lscr.io/linuxserver/radarr:5.1",
+      services: ["radarr"],
+      action: "recreate_service",
+    });
+    const updater = pendingGroupedItem({
+      line_no: 2,
+      image: "ghcr.io/example/wud-updater:1.0",
+      repo: "ghcr.io/example/wud-updater",
+      current_tag: "1.0",
+      desired_tag: "2.0",
+      target_image: "ghcr.io/example/wud-updater:2.0",
+      services: ["wud-updater"],
+    });
+    const stackItem = pendingGroupedItem({
+      line_no: 3,
+      image: "redis:latest@sha256:abc",
+      repo: "redis",
+      current_tag: "latest",
+      desired_tag: "",
+      digest: "sha256:abc",
+      target_image: "redis:latest@sha256:abc",
+      compose_images: ["redis:latest"],
+      services: [],
+      action: "recreate_stack",
+    });
+    const { pinia, auth, connection, settings, updates, runs } = setupStores(true);
+    updates.releaseNotes = releaseNotesResponse([
+      releaseNoteInfo({
+        line_no: 1,
+        status: "error",
+        links: [],
+        error: "no supported GitHub release source found",
+      }),
+      releaseNoteInfo({
+        line_no: 2,
+        breaking: true,
+        breaking_reasons: ["Major version update."],
+      }),
+    ]);
+    settings.servicePolicies = [
+      servicePolicy({ service_key: "media/wud-updater", auto_update: true }),
+    ];
+    settings.snoozes = [snooze({ service_key: "media/radarr" })];
+    updates.pending = {
+      source_file: "/out/images.todo",
+      exists: true,
+      count: 3,
+      items: [radarr, updater, stackItem],
+      grouping: {
+        ...pendingGrouping([radarr, updater, stackItem]),
+        groups: [
+          {
+            ...pendingGrouping([radarr, updater, stackItem]).groups[0],
+            services_label: "radarr, wud-updater",
+            services: ["radarr", "wud-updater"],
+            line_numbers: [1, 2, 3],
+            items: [radarr, updater, stackItem],
+          },
+        ],
+      },
+      warnings: [],
+    };
+    mockPendingLifecycle(settings, updates);
+    const wrapper = mountPendingView(pinia);
+    const card = wrapper.find(".stack-card");
+
+    expect(card.find(".stack-identity").text()).toContain(
+      "Services radarr, wud-updater",
+    );
+    const previewText = card.find(".stack-change-preview").text();
+    expect(previewText).toContain("radarr");
+    expect(previewText).toContain("Recreate service");
+    expect(previewText).toContain("No release notes");
+    expect(previewText).toContain("Snoozed");
+    expect(previewText).toContain("lscr.io/linuxserver/radarr:5.0");
+    expect(previewText).toContain("lscr.io/linuxserver/radarr:5.1");
+    expect(previewText).toContain("wud-updater");
+    expect(previewText).toContain("Tag update");
+    expect(previewText).toContain("Major bump");
+    expect(previewText).toContain("Possible breaking");
+    expect(previewText).toContain("Auto-update");
+    expect(previewText).toContain("ghcr.io/example/wud-updater:1.0");
+    expect(previewText).toContain("ghcr.io/example/wud-updater:2.0");
+    expect(card.text()).toContain("Recreate stack");
+    expect(card.text()).toContain("Mutable latest");
+    expect(card.text()).toContain("Digest-only");
+    expect(card.text()).toContain("Stack restart");
+    expect(card.find(".stack-card-tags").text()).not.toContain(
+      "radarr, wud-updater",
+    );
+  });
+
+  it("shows ready preflight service impact and row tag rewrites", async () => {
+    const { pinia, auth, connection, settings, updates, runs } = setupStores(true);
+    updates.pending = pendingResponse();
+    mockPendingLifecycle(settings, updates);
+    vi.spyOn(updates, "createPlan").mockImplementation(async () => {
+      updates.plan = planResponse({
+        selected_line_numbers: [1, 2],
+        summary: {
+          target_count: 2,
+          matched_target_count: 2,
+          stack_count: 1,
+          service_count: 2,
+          skipped_count: 0,
+          issue_count: 0,
+        },
+        stacks: [
+          {
+            ...planResponse().stacks[0],
+            services_label: "radarr, wud-updater",
+            services: ["radarr", "wud-updater"],
+            pull_services: ["radarr", "wud-updater"],
+            stop_services: ["radarr", "wud-updater"],
+            tag_updates: [
+              {
+                old_image: "lscr.io/linuxserver/radarr:5.0",
+                desired_tag: "5.1",
+                new_image: "lscr.io/linuxserver/radarr:5.1",
+                services: ["radarr"],
+              },
+            ],
+            lines: [
+              {
+                line_no: 1,
+                raw: "lscr.io/linuxserver/radarr:5.0",
+                image: "lscr.io/linuxserver/radarr:5.0",
+                resolved_image: "lscr.io/linuxserver/radarr:5.0",
+                compose_image: "lscr.io/linuxserver/radarr:5.0",
+                target_image: "lscr.io/linuxserver/radarr:5.1",
+                service: "radarr",
+                digest: "",
+                desired_tag: "5.1",
+                action: "tag-update",
+              },
+              {
+                line_no: 2,
+                raw: "ghcr.io/example/wud-updater:1.0",
+                image: "ghcr.io/example/wud-updater:1.0",
+                resolved_image: "ghcr.io/example/wud-updater:1.0",
+                compose_image: "ghcr.io/example/wud-updater:1.0",
+                target_image: "ghcr.io/example/wud-updater:1.1",
+                service: "wud-updater",
+                digest: "",
+                desired_tag: "",
+                action: "recreate_service",
+              },
+            ],
+          },
+        ],
+      });
+    });
+    const wrapper = mountPendingView(pinia);
+
+    await wrapper
+      .findAll("button")
+      .find((button) => button.text().includes("Preview media plan"))
+      ?.trigger("click");
+    await flushPromises();
+
+    const dialog = wrapper.find('[role="dialog"]');
+    const readiness = dialog.find(".apply-readiness");
+    const impact = dialog.find(".preflight-impact");
+    expect(dialog.find("#preflight-modal-title").text()).toBe("Review media plan");
+    expect(dialog.find(".preflight-impact-text").text()).toBe(
+      "radarr, wud-updater",
+    );
+    expect(readiness.exists()).toBe(true);
+    expect(readiness.text()).toContain("Apply readiness");
+    expect(readiness.text()).toContain("Ready");
+    expect(readiness.text()).toContain("8 checks passed");
+    expect(readiness.text()).toContain("Docker reachable");
+    expect(readiness.text()).toContain("Selected services matched");
+    expect(readiness.find(".apply-readiness-passed").exists()).toBe(true);
+    expect(readiness.findAll(".apply-readiness-row")).toHaveLength(0);
+    expect(readiness.text()).not.toContain("docker-daemon-info");
+    expect(impact.exists()).toBe(true);
+    expect(impact.text()).toContain("Services and images");
+    expect(impact.text()).toContain("radarr");
+    expect(impact.text()).toContain("wud-updater");
+    expect(impact.find(".tag-rewrite-detail").text()).toContain(
+      "lscr.io/linuxserver/radarr:5.0 -> lscr.io/linuxserver/radarr:5.1",
+    );
+    expect(
+      dialog
+        .findAll("details.preflight-details")
+        .some((details) => details.text().includes("Services and images")),
+    ).toBe(false);
+    expect(
+      dialog
+        .findAll("details.preflight-details")
+        .some((details) => details.text().includes("Commands")),
+    ).toBe(true);
+    expect(
+      dialog
+        .findAll("details.preflight-details")
+        .some((details) => details.text().includes("Source lines")),
+    ).toBe(true);
+  });
+
+  it("shows failed apply readiness and disables apply", async () => {
+    const { pinia, auth, connection, settings, updates, runs } = setupStores(true);
+    updates.pending = pendingResponse();
+    mockPendingLifecycle(settings, updates);
+    vi.spyOn(updates, "createPlan").mockImplementation(async () => {
+      updates.plan = planResponse({
+        can_apply: false,
+        apply_preflight: failedApplyPreflight(
+          "logs-writable",
+          "/logs is not a directory",
+        ),
+      });
+    });
+    const applyPlan = vi.spyOn(updates, "applyPlan");
+    const wrapper = mountPendingView(pinia);
+
+    await wrapper
+      .findAll("button")
+      .find((button) => button.text().includes("Preview media plan"))
+      ?.trigger("click");
+    await flushPromises();
+
+    const dialog = wrapper.find('[role="dialog"]');
+    const readiness = dialog.find(".apply-readiness");
+    expect(readiness.exists()).toBe(true);
+    expect(readiness.text()).toContain("Blocked");
+    expect(readiness.text()).toContain("7 checks passed");
+    expect(readiness.text()).toContain("Logs writable");
+    expect(readiness.text()).toContain("/logs is not a directory");
+    expect(readiness.find(".apply-readiness-passed").exists()).toBe(true);
+    expect(readiness.findAll(".apply-readiness-row")).toHaveLength(1);
+    expect(readiness.text()).not.toContain("docker-daemon-info");
+    expect(dialog.text()).toContain("Fix the failed apply readiness check");
+
+    const applyButton = dialog
+      .findAll("button")
+      .find((button) => button.text().includes("Apply 1 update"));
+    expect(applyButton?.attributes("disabled")).toBeDefined();
+    await applyButton?.trigger("click");
+
+    expect(applyPlan).not.toHaveBeenCalled();
+  });
+
+  it("falls back to pending file order when grouping is unavailable", () => {
+    const { pinia, auth, connection, settings, updates, runs } = setupStores(true);
+    updates.pending = {
+      ...pendingResponse(),
+      grouping: {
+        status: "unavailable",
+        groups: [],
+        unmatched: [],
+        warnings: [],
+      },
+    };
+    mockPendingLifecycle(settings, updates);
+    const wrapper = mountPendingView(pinia);
+
+    expect(wrapper.text()).toContain(
+      "Stack grouping is unavailable. Showing pending file order.",
+    );
+    expect(wrapper.find('[role="table"]').exists()).toBe(true);
+  });
+
+  it("shows safety cues in the mobile pending file order fallback", () => {
+    const restore = mockMobileViewport();
+    try {
+      const { pinia, auth, connection, settings, updates, runs } = setupStores(true);
+      updates.pending = {
+        ...pendingResponse([
+          pendingItem({
+            image: "redis:latest@sha256:abc",
+            repo: "redis",
+            current_tag: "latest",
+            desired_tag: "",
+            digest: "sha256:abc",
+          }),
+        ]),
+        grouping: {
+          status: "unavailable",
+          groups: [],
+          unmatched: [],
+          warnings: [],
+        },
+      };
+      mockPendingLifecycle(settings, updates);
+      const wrapper = mountPendingView(pinia);
+      const card = wrapper.find(".mobile-card");
+
+      expect(wrapper.find('[role="table"]').exists()).toBe(false);
+      expect(card.text()).toContain("Safety cues");
+      expect(card.text()).toContain("Digest-only");
+      expect(card.text()).toContain("Mutable latest");
+    } finally {
+      restore();
+    }
+  });
+
+  it("shows a pending loading skeleton before queue data is available", () => {
+    const { pinia, auth, connection, settings, updates, runs } = setupStores(true);
+    updates.pending = null;
+    updates.loading = true;
+    mockPendingLifecycle(settings, updates);
+    const wrapper = mountPendingView(pinia);
+
+    expect(wrapper.text()).toContain("Loading pending updates");
+    expect(wrapper.find(".pending-loading-state").exists()).toBe(true);
+    expect(wrapper.find(".selection-toolbar").exists()).toBe(false);
+  });
+
+  it("keeps failed pending loads recoverable without showing stale selection controls", async () => {
+    const { pinia, auth, connection, settings, updates, runs } = setupStores(true);
+    updates.pending = null;
+    const loadPending = vi
+      .spyOn(updates, "loadPending")
+      .mockImplementationOnce(async () => {
+        updates.error = ("Network request failed");
+        throw new Error("Network request failed");
+      })
+      .mockImplementationOnce(async () => {
+        updates.error = ("");
+        updates.pending = pendingResponse();
+      });
+    vi.spyOn(updates, "loadReleaseNotes").mockResolvedValue();
+    vi.spyOn(updates, "refreshReleaseNotes").mockResolvedValue();
+    const wrapper = mountPendingView(pinia);
+
+    await flushPromises();
+
+    expect(wrapper.text()).toContain("Pending updates unavailable");
+    expect(wrapper.text()).toContain("Pending updates did not load");
+    expect(wrapper.text()).toContain("Network request failed");
+    expect(wrapper.find(".selection-toolbar").exists()).toBe(false);
+
+    await wrapper
+      .findAll("button")
+      .find((button) => button.text().includes("Retry pending load"))
+      ?.trigger("click");
+    await flushPromises();
+
+    expect(loadPending).toHaveBeenCalledTimes(2);
+    expect(wrapper.text()).toContain("1 pending update");
+    expect(wrapper.find(".selection-toolbar").exists()).toBe(true);
+  });
+
+  it("shows pending safety cue loading failures", () => {
+    const { pinia, auth, connection, settings, updates, runs } = setupStores(true);
+    updates.pending = pendingResponse();
+    settings.pendingSafetyCueError = "service policies unavailable";
+    mockPendingLifecycle(settings, updates);
+    const wrapper = mountPendingView(pinia);
+
+    expect(wrapper.text()).toContain(
+      "Pending safety cues are unavailable: service policies unavailable",
+    );
+  });
+
+  it("deduplicates malformed pending line keys before selecting all stack updates", async () => {
+    const itemOne = pendingGroupedItem({
+      line_no: 1,
+      image: "repo/app:1.0",
+      repo: "repo/app",
+    });
+    const itemTwo = pendingGroupedItem({
+      line_no: 2,
+      image: "repo/worker:1.0",
+      repo: "repo/worker",
+    });
+    const { pinia, auth, connection, settings, updates, runs } = setupStores(true);
+    updates.pending = {
+      ...pendingResponse([itemOne, itemTwo]),
+      grouping: {
+        ...pendingGrouping([itemOne, itemTwo]),
+        groups: [
+          {
+            ...pendingGrouping([itemOne, itemTwo]).groups[0],
+            line_numbers: [1, 1, 2],
+            items: [itemOne, itemTwo],
+          },
+        ],
+      },
+    };
+    mockPendingLifecycle(settings, updates);
+    const wrapper = mountPendingView(pinia);
+
+    await wrapper
+      .findAll("button")
+      .find((button) => button.text().includes("Select all stack updates"))
+      ?.trigger("click");
+    await nextTick();
+
+    expect(wrapper.text()).toContain("2 selected");
+    expect(wrapper.text()).not.toContain("3 selected");
+  });
+
+  it("wraps long pending values in the fallback table", () => {
+    const longImage =
+      "registry.example.test/selfhosted/very-long-namespace-with-extra-segments/service-name-that-keeps-going:2026.06.01-build-with-extra-metadata";
+    const { pinia, auth, connection, settings, updates, runs } = setupStores(true);
+    updates.pending = {
+      ...pendingResponse([
+        pendingItem({
+          image: longImage,
+          repo: "registry.example.test/selfhosted/very-long-namespace-with-extra-segments/service-name-that-keeps-going",
+        }),
+      ]),
+      grouping: {
+        status: "unavailable",
+        groups: [],
+        unmatched: [],
+        warnings: [],
+      },
+    };
+    mockPendingLifecycle(settings, updates);
+    const wrapper = mountPendingView(pinia);
+
+    const wrappedValues = wrapper.findAll(".pending-table-value");
+    expect(wrappedValues.length).toBeGreaterThanOrEqual(2);
+    expect(wrappedValues[0].text()).toContain(longImage);
+    expect(wrappedValues[0].attributes("title")).toBe(longImage);
+  });
+
+  it("renders a clear queue state when no pending updates remain", () => {
+    const { pinia, auth, connection, settings, updates, runs } = setupStores(true);
+    updates.pending = pendingResponse([]);
+    runs.runs = [runSummary({ id: 42 })];
+    mockPendingLifecycle(settings, updates);
+    const wrapper = mountPendingView(pinia);
+
+    const clearState = wrapper.find(".clear-queue-state");
+    expect(clearState.exists()).toBe(true);
+    expect(clearState.text()).toContain("Update queue is clear");
+    expect(clearState.text()).toContain(
+      "images.todo has no updates waiting for review.",
+    );
+    expect(clearState.text()).toContain("Review latest run #42");
+    expect(clearState.find(".clear-queue-mark").exists()).toBe(true);
+  });
+
+  it("renders release-note links with breaking cues", () => {
+    const { pinia, auth, connection, settings, updates, runs } = setupStores(false);
+    updates.pending = pendingResponse();
+    updates.releaseNotes = releaseNotesResponse([
+      releaseNoteInfo({
+        breaking: true,
+        breaking_reasons: ["Major version changes from 1 to 2."],
+      }),
+    ]);
+    vi.spyOn(updates, "loadPending").mockResolvedValue();
+    vi.spyOn(updates, "loadReleaseNotes").mockResolvedValue();
+    vi.spyOn(updates, "refreshReleaseNotes").mockResolvedValue();
+    const wrapper = mountPendingView(pinia);
+
+    expect(wrapper.text()).toContain("GitHub release");
+    expect(wrapper.text()).toContain("Possible breaking change");
+    const link = wrapper.find(
+      'a[href="https://github.com/acme/app/releases/tag/v2.0.0"]',
+    );
+    expect(link.exists()).toBe(true);
+    expect(link.attributes("target")).toBe("_blank");
+    expect(link.attributes("rel")).toBe("noopener noreferrer");
+  });
+
+  it("renders both LSIO and upstream release-note links", () => {
+    const { pinia, auth, connection, settings, updates, runs } = setupStores(false);
+    updates.pending = pendingResponse([pendingItem({ image: "linuxserver/radarr:latest" })]);
+    updates.releaseNotes = releaseNotesResponse([
+      releaseNoteInfo({
+        provider: "lsio",
+        image_repo: "linuxserver/docker-radarr",
+        upstream_repo: "Radarr/Radarr",
+        links: [
+          {
+            label: "LSIO release",
+            url: "https://github.com/linuxserver/docker-radarr/releases/tag/5.1.0-ls1",
+            kind: "lsio_release",
+          },
+          {
+            label: "Upstream release",
+            url: "https://github.com/Radarr/Radarr/releases/tag/v5.1.0",
+            kind: "github_release",
+          },
+        ],
+      }),
+    ]);
+    vi.spyOn(updates, "loadPending").mockResolvedValue();
+    vi.spyOn(updates, "loadReleaseNotes").mockResolvedValue();
+    vi.spyOn(updates, "refreshReleaseNotes").mockResolvedValue();
+    const wrapper = mountPendingView(pinia);
+
+    expect(wrapper.text()).toContain("LSIO release");
+    expect(wrapper.text()).toContain("Upstream release");
+  });
+
+  it("renders unavailable release-note reasons without hiding LSIO links", () => {
+    const { pinia, auth, connection, settings, updates, runs } = setupStores(false);
+    updates.pending = pendingResponse([
+      pendingItem({
+        line_no: 1,
+        image: "advplyr/audiobookshelf:latest",
+        repo: "advplyr/audiobookshelf",
+      }),
+      pendingItem({
+        line_no: 2,
+        image: "linuxserver/calibre:latest",
+        repo: "linuxserver/calibre",
+      }),
+    ]);
+    updates.releaseNotes = releaseNotesResponse([
+      releaseNoteInfo({
+        line_no: 1,
+        status: "unsupported",
+        provider: "unsupported",
+        image_repo: "advplyr/audiobookshelf",
+        upstream_repo: "",
+        links: [],
+        error: "no supported GitHub release source found",
+      }),
+      releaseNoteInfo({
+        line_no: 2,
+        provider: "lsio",
+        image_repo: "linuxserver/docker-calibre",
+        upstream_repo: "kovidgoyal/calibre",
+        links: [
+          {
+            label: "LSIO release",
+            url: "https://github.com/linuxserver/docker-calibre/releases/tag/1.0.0-ls1",
+            kind: "lsio_release",
+          },
+          {
+            label: "Upstream project",
+            url: "https://github.com/kovidgoyal/calibre",
+            kind: "github_project",
+          },
+        ],
+      }),
+    ]);
+    vi.spyOn(updates, "loadPending").mockResolvedValue();
+    vi.spyOn(updates, "loadReleaseNotes").mockResolvedValue();
+    vi.spyOn(updates, "refreshReleaseNotes").mockResolvedValue();
+    const wrapper = mountPendingView(pinia);
+
+    expect(wrapper.text()).toContain("Unavailable");
+    expect(wrapper.text()).toContain(
+      "Only GHCR and mapped LinuxServer.io images have release-note links.",
+    );
+    expect(wrapper.text()).toContain("LSIO release");
+    expect(wrapper.text()).toContain("Upstream project");
+  });
+});

@@ -4,13 +4,25 @@ import unittest
 from collections.abc import Mapping
 from unittest import mock
 
+from wud_updater.command import CommandRunner
+
 from wud_updater.digest_verifier import (
     DigestVerifier,
+    DockerManifestResolver,
     ManifestDocument,
     ManifestLookupError,
     RegistryHttpManifestResolver,
+    _payload_digest,
     parse_ghcr_image,
     parse_registry_image,
+)
+from wud_updater.docker_cli import DockerCli
+from tests.update_from_wud_helpers import (
+    FakeDockerTestCase,
+    MANIFEST_INDEX_TYPE,
+    manifest_index,
+    manifest_index_digest,
+    verbose_manifest_item,
 )
 
 
@@ -520,6 +532,205 @@ class DigestVerifierTests(unittest.TestCase):
         self.assertEqual(result.status, "failed")
         self.assertEqual(result.reason, "manifest-unavailable")
         self.assertEqual(result.seen_repo_digests, ("ghcr.io/acme/app@sha256:other",))
+
+
+class PayloadDigestTests(unittest.TestCase):
+    def test_direct_digest_field(self) -> None:
+        payload = {"digest": "sha256:abc123", "other": "value"}
+        self.assertEqual(_payload_digest(payload), "sha256:abc123")
+
+    def test_descriptor_digest_field(self) -> None:
+        payload = {"Descriptor": {"digest": "sha256:desc456"}}
+        self.assertEqual(_payload_digest(payload), "sha256:desc456")
+
+    def test_direct_digest_takes_precedence_over_descriptor(self) -> None:
+        payload = {
+            "digest": "sha256:direct",
+            "Descriptor": {"digest": "sha256:descriptor"},
+        }
+        self.assertEqual(_payload_digest(payload), "sha256:direct")
+
+    def test_non_sha256_direct_digest_falls_through_to_descriptor(self) -> None:
+        payload = {
+            "digest": "md5:notsha",
+            "Descriptor": {"digest": "sha256:descriptor"},
+        }
+        self.assertEqual(_payload_digest(payload), "sha256:descriptor")
+
+    def test_no_digest_returns_empty_string(self) -> None:
+        self.assertEqual(_payload_digest({}), "")
+
+    def test_descriptor_without_sha256_returns_empty(self) -> None:
+        payload = {"Descriptor": {"digest": "notsha256"}}
+        self.assertEqual(_payload_digest(payload), "")
+
+    def test_non_string_digest_returns_empty(self) -> None:
+        self.assertEqual(_payload_digest({"digest": 12345}), "")
+
+    def test_non_mapping_descriptor_is_skipped(self) -> None:
+        payload = {"Descriptor": "not-a-mapping"}
+        self.assertEqual(_payload_digest(payload), "")
+
+    def test_descriptor_with_non_string_digest_returns_empty(self) -> None:
+        payload = {"Descriptor": {"digest": None}}
+        self.assertEqual(_payload_digest(payload), "")
+
+
+class DockerManifestResolverVerboseTests(FakeDockerTestCase):
+    def test_verbose_false_uses_regular_manifest_inspect(self) -> None:
+        self._set_manifest_stdout(
+            "docker.io/repo/app:1.0",
+            {"schemaVersion": 2, "mediaType": "application/vnd.oci.image.manifest.v1+json"},
+        )
+        command_runner = CommandRunner(env=self.env)
+        docker = DockerCli(runner=command_runner)
+        resolver = DockerManifestResolver(docker, verbose=False)
+
+        from wud_updater.digest_verifier import parse_registry_image
+        reg_image = parse_registry_image("docker.io/repo/app:1.0")
+        assert reg_image is not None
+        doc = resolver.fetch(reg_image, reg_image.tag)
+
+        self.assertEqual(doc.source, "docker-manifest")
+        self.assertEqual(doc.digest, "")
+        self.assertIn("manifest inspect docker.io/repo/app:1.0", self._calls())
+        self.assertNotIn("--verbose", self._calls())
+
+    def test_verbose_true_uses_verbose_manifest_inspect(self) -> None:
+        self._set_manifest_stdout(
+            "docker.io/repo/app:1.0",
+            manifest_index_digest("sha256:idx", "sha256:child"),
+        )
+        command_runner = CommandRunner(env=self.env)
+        docker = DockerCli(runner=command_runner)
+        resolver = DockerManifestResolver(docker, verbose=True)
+
+        from wud_updater.digest_verifier import parse_registry_image
+        reg_image = parse_registry_image("docker.io/repo/app:1.0")
+        assert reg_image is not None
+        doc = resolver.fetch(reg_image, reg_image.tag)
+
+        self.assertEqual(doc.source, "docker-manifest-verbose")
+        self.assertEqual(doc.digest, "sha256:idx")
+        self.assertIn("manifest inspect --verbose docker.io/repo/app:1.0", self._calls())
+
+    def test_verbose_true_with_direct_digest_field(self) -> None:
+        self._set_manifest_stdout(
+            "docker.io/repo/app:2.0",
+            {"digest": "sha256:direct", "schemaVersion": 2},
+        )
+        command_runner = CommandRunner(env=self.env)
+        docker = DockerCli(runner=command_runner)
+        resolver = DockerManifestResolver(docker, verbose=True)
+
+        from wud_updater.digest_verifier import parse_registry_image
+        reg_image = parse_registry_image("docker.io/repo/app:2.0")
+        assert reg_image is not None
+        doc = resolver.fetch(reg_image, reg_image.tag)
+
+        self.assertEqual(doc.source, "docker-manifest-verbose")
+        self.assertEqual(doc.digest, "sha256:direct")
+
+    def test_verbose_true_accepts_manifest_list_array(self) -> None:
+        self._set_manifest_stdout(
+            "docker.io/repo/app:3.0",
+            [
+                verbose_manifest_item("sha256:amd64"),
+                verbose_manifest_item("sha256:arm64", architecture="arm64"),
+            ],
+        )
+        command_runner = CommandRunner(env=self.env)
+        docker = DockerCli(runner=command_runner)
+        resolver = DockerManifestResolver(docker, verbose=True)
+
+        from wud_updater.digest_verifier import parse_registry_image
+        reg_image = parse_registry_image("docker.io/repo/app:3.0")
+        assert reg_image is not None
+        doc = resolver.fetch(reg_image, reg_image.tag)
+
+        self.assertEqual(doc.source, "docker-manifest-verbose")
+        self.assertEqual(doc.digest, "")
+        self.assertTrue(doc.is_index())
+        self.assertEqual(doc.child_digests(), ("sha256:amd64", "sha256:arm64"))
+
+
+class DigestVerifierResolveTagDigestTests(FakeDockerTestCase):
+    def _make_verifier(self) -> "DigestVerifier":
+        command_runner = CommandRunner(env=self.env)
+        docker = DockerCli(runner=command_runner)
+        resolver = DockerManifestResolver(docker, verbose=True)
+        return DigestVerifier(docker, primary_resolver=resolver, fallback_resolver=resolver)
+
+    def test_unsupported_image_reference_returns_not_ok(self) -> None:
+        verifier = self._make_verifier()
+        result = verifier.resolve_tag_digest("local-image-no-registry")
+        self.assertFalse(result.ok)
+        self.assertEqual(result.status, "untrusted")
+        self.assertEqual(result.reason, "unsupported-image-reference")
+
+    def test_failed_manifest_lookup_returns_not_ok(self) -> None:
+        self._set_manifest_failure("docker.io/repo/app:1.0", "manifest not found\n")
+        verifier = self._make_verifier()
+        result = verifier.resolve_tag_digest("repo/app:1.0")
+        self.assertFalse(result.ok)
+        self.assertIn("unavailable", result.reason)
+        self.assertIn("manifest", result.error.lower())
+
+    def test_manifest_without_digest_returns_not_ok(self) -> None:
+        self._set_manifest_stdout(
+            "docker.io/repo/app:1.0",
+            {"schemaVersion": 2},
+        )
+        verifier = self._make_verifier()
+        result = verifier.resolve_tag_digest("repo/app:1.0")
+        self.assertFalse(result.ok)
+        self.assertEqual(result.reason, "manifest-digest-missing")
+
+    def test_success_with_descriptor_digest(self) -> None:
+        self._set_manifest_stdout(
+            "docker.io/repo/app:2.0",
+            manifest_index_digest("sha256:resolved", "sha256:child"),
+        )
+        verifier = self._make_verifier()
+        result = verifier.resolve_tag_digest("repo/app:2.0")
+        self.assertTrue(result.ok)
+        self.assertEqual(result.status, "resolved")
+        self.assertEqual(result.reason, "tag-digest-resolved")
+        self.assertEqual(result.digest, "sha256:resolved")
+
+    def test_success_source_is_populated(self) -> None:
+        self._set_manifest_stdout(
+            "docker.io/repo/app:3.0",
+            manifest_index_digest("sha256:abc", "sha256:child"),
+        )
+        verifier = self._make_verifier()
+        result = verifier.resolve_tag_digest("repo/app:3.0")
+        self.assertTrue(result.ok)
+        self.assertIn("docker-manifest", result.source)
+
+    def test_verbose_manifest_list_uses_registry_header_for_index_digest(self) -> None:
+        self._set_manifest_stdout(
+            "docker.io/repo/app:4.0",
+            [
+                verbose_manifest_item("sha256:amd64"),
+                verbose_manifest_item("sha256:arm64", architecture="arm64"),
+            ],
+        )
+        verifier = self._make_verifier()
+
+        with mock.patch(
+            "wud_updater.digest_verifier.RegistryHttpManifestResolver.fetch",
+            return_value=ManifestDocument(
+                source="registry-http:registry-1.docker.io",
+                digest="sha256:index",
+                media_type=MANIFEST_INDEX_TYPE,
+                payload=manifest_index("sha256:amd64", "sha256:arm64"),
+            ),
+        ):
+            result = verifier.resolve_tag_digest("repo/app:4.0")
+
+        self.assertTrue(result.ok)
+        self.assertEqual(result.digest, "sha256:index")
 
 
 if __name__ == "__main__":
