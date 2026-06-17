@@ -48,6 +48,8 @@ def test_authenticated_get_does_not_touch_session_last_seen(tmp_path: Path) -> N
         headers=_csrf_headers(client),
     )
     assert login_response.status_code == 200
+    session_cookie = client.cookies.get(web_auth_module.SESSION_COOKIE)
+    assert session_cookie
 
     db_path = tmp_path / "state" / "wud.sqlite"
     sentinel = "2000-01-01T00:00:00+00:00"
@@ -60,7 +62,8 @@ def test_authenticated_get_does_not_touch_session_last_seen(tmp_path: Path) -> N
 
     with open_db(db_path) as conn:
         last_seen = conn.execute(
-            "SELECT last_seen_at FROM web_sessions LIMIT 1"
+            "SELECT last_seen_at FROM web_sessions WHERE id_hash = ?",
+            (web_auth_module._secret_hash(session_cookie),),
         ).fetchone()["last_seen_at"]
 
     assert status_response.status_code == 200

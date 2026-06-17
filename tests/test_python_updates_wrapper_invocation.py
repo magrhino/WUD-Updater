@@ -15,7 +15,7 @@ class UpdatesWrapperInvocationTests(UpdatesWrapperTestCase):
             str(self.root / "docker"),
             env_overrides={
                 "OUT_UID": "1000",
-                "OUT_GUID": "1001",
+                "OUT_GID": "1001",
                 "WUD_LOCK_TIMEOUT": "0",
             },
         )

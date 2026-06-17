@@ -53,7 +53,7 @@ class DigestPinUpdateFromValuesTests(unittest.TestCase):
         # The label value should be an escaped exact tag regex with $$ for Compose
         self.assertIn("2\\.0", update.label_value)
         self.assertIn("^", update.label_value)
-        self.assertIn("$", update.label_value)
+        self.assertIn("$$", update.label_value)
 
     def test_ghcr_registry_preserved_in_final_image(self) -> None:
         update = digest_pin_update_from_values(
