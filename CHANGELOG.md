@@ -4,6 +4,14 @@ All notable changes to WUD-Updater are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com) and versions follow
 [Semantic Versioning](https://semver.org).
 
+## [0.42.2](https://github.com/magrhino/WUD-Updater/compare/v0.42.1...v0.42.2) (2026-06-17)
+
+
+### Bug Fixes
+
+* **db:** refactor database migrations and sqlite timeout ([#335](https://github.com/magrhino/WUD-Updater/issues/335)) ([2dd8d88](https://github.com/magrhino/WUD-Updater/commit/2dd8d8852a2a8e5680a076595a0a0b8f224b176d))
+* **scripts:** harden shell script failure handling ([#337](https://github.com/magrhino/WUD-Updater/issues/337)) ([ca9881b](https://github.com/magrhino/WUD-Updater/commit/ca9881b2c82ae8768fd7b92169a08cfd10868f09))
+
 ## [0.42.1](https://github.com/magrhino/WUD-Updater/compare/v0.42.0...v0.42.1) (2026-06-17)
 
 
