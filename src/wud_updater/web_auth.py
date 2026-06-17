@@ -1451,8 +1451,8 @@ def _validate_bind_host_allowed(settings: WebSettings, host: str) -> None:
         return
     raise WebConfigError(
         f"WUD_WEB_ALLOWED_HOSTS must include {normalized} when binding "
-        "the WebUI to that host. Set WUD_WEB_ALLOWED_HOSTS to the browser-visible "
-        "hostname or IP address."
+        "the WebUI to that host. Set WUD_WEB_PUBLIC_ORIGIN to the "
+        "browser-visible origin, or add extra aliases to WUD_WEB_ALLOWED_HOSTS."
     )
 
 
@@ -1472,8 +1472,8 @@ def _print_setup_claim(
     if host in {"0.0.0.0", "::"} and not settings.public_origin:
         print("", file=sys.stderr)
         print(
-            "Set WUD_WEB_PUBLIC_ORIGIN and WUD_WEB_ALLOWED_HOSTS when exposing "
-            "the WebUI through a LAN address or reverse proxy.",
+            "Set WUD_WEB_PUBLIC_ORIGIN when exposing the WebUI through a "
+            "LAN address or reverse proxy.",
             file=sys.stderr,
         )
 

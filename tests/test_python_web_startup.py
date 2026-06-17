@@ -33,7 +33,8 @@ def test_web_startup_rejects_bind_host_missing_from_allowed_hosts(
     stderr = capsys.readouterr().err
 
     assert status == 1
-    assert "WUD_WEB_ALLOWED_HOSTS must include 192.0.2.10" in stderr
+    assert "WUD_WEB_PUBLIC_ORIGIN" in stderr
+    assert "WUD_WEB_ALLOWED_HOSTS" in stderr
 
 
 def test_static_spa_mount_serves_index_when_configured(tmp_path: Path) -> None:

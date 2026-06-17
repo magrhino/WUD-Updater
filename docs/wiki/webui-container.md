@@ -77,11 +77,12 @@ local audit history without storing or printing the raw recovery claim.
 
 For a local workstation, keep the default loopback port binding. For LAN or
 reverse-proxy exposure, change the port binding intentionally and set the
-browser-visible origin and accepted hosts in the env file:
+browser-visible origin in the env file. Add allowed hosts only for extra aliases
+that differ from the public origin host:
 
 ```dotenv
 WUD_WEB_PUBLIC_ORIGIN=https://wud.example.test
-WUD_WEB_ALLOWED_HOSTS=wud.example.test,127.0.0.1,localhost
+# WUD_WEB_ALLOWED_HOSTS=updates.example.test,192.168.1.20
 WUD_WEB_TRUSTED_PROXIES=127.0.0.1/32
 ```
 

@@ -92,6 +92,40 @@ class DoctorTests(unittest.TestCase):
         self.assertIn("Ignored paths: app", stdout)
         self.assertNotIn("./old", stdout)
 
+    def test_doctor_passes_script_sync_auto_when_env_is_unset(self) -> None:
+        env = self._doctor_env()
+        env.pop("WUD_SYNC_SCRIPTS")
+
+        stdout = StringIO()
+        with redirect_stdout(stdout):
+            status = run_doctor_from_namespace(
+                self._doctor_args(),
+                repo_root=self.root,
+                environ=env,
+            )
+
+        self.assertEqual(status, 0, stdout.getvalue())
+        self.assertIn(
+            f"[PASS] WUD script sync: {self.scripts_dir} (auto)",
+            stdout.getvalue(),
+        )
+
+    def test_doctor_warns_when_script_sync_auto_destination_is_missing(self) -> None:
+        self.scripts_dir.rmdir()
+        env = self._doctor_env()
+        env.pop("WUD_SYNC_SCRIPTS")
+
+        stdout = StringIO()
+        with redirect_stdout(stdout):
+            status = run_doctor_from_namespace(
+                self._doctor_args(),
+                repo_root=self.root,
+                environ=env,
+            )
+
+        self.assertEqual(status, 0, stdout.getvalue())
+        self.assertIn("[WARN] WUD script sync: auto-sync inactive", stdout.getvalue())
+
     def test_doctor_result_includes_structured_checks(self) -> None:
         for path in self.stack_dir.iterdir():
             path.unlink()

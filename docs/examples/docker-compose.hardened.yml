@@ -94,8 +94,6 @@ services:
       WUD_LOG_DIR: /logs
       WUD_DB_PATH: /logs/wud-updater.sqlite
       WUD_TIMEZONE: "${WUD_TIMEZONE:-UTC}"
-      WUD_SYNC_SCRIPTS: "true"
-      WUD_SCRIPTS_DIR: /managed-wud
       WUD_WEB_HOST: 0.0.0.0
       WUD_WEB_PORT: "${WUD_WEB_PORT:-7417}"
       WUD_WEB_MUTATIONS_ENABLED: "${WUD_WEB_MUTATIONS_ENABLED:-false}"

@@ -46,9 +46,9 @@ curl -fsSL \
 ```
 
 Review `.env` before starting: set `HOST_DOCKER_BASE` to your Compose stack
-root, then keep loopback-only browser access or set the WebUI network variables
-for LAN or reverse-proxy exposure. Start the service, then read the one-time
-setup link from the logs:
+root, then keep loopback-only browser access or set `WUD_WEB_PUBLIC_ORIGIN` for
+LAN or reverse-proxy exposure. Start the service, then read the one-time setup
+link from the logs:
 
 ```bash
 docker compose up -d

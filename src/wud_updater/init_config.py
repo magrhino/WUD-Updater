@@ -588,30 +588,19 @@ def _resolve_web_values(
     if web_exposure == "loopback":
         return web_bind, public_origin, allowed_hosts, trusted_proxies
 
-    if web_exposure == "lan":
-        allowed_hosts = allowed_hosts.strip()
-        while not allowed_hosts:
-            if non_interactive:
-                raise InitConfigError(
-                    "--allowed-hosts is required for --web-exposure lan"
-                )
-            allowed_hosts = prompter.text("Allowed WebUI hostnames/IPs").strip()
-            if not allowed_hosts:
-                print("Allowed WebUI hostnames/IPs is required.", file=prompter.stream)
-        return web_bind, public_origin, allowed_hosts, trusted_proxies
-
-    if not public_origin:
+    public_origin = public_origin.strip()
+    while not public_origin:
         if non_interactive:
             raise InitConfigError(
-                "--public-origin is required for --web-exposure reverse-proxy"
+                f"--public-origin is required for --web-exposure {web_exposure}"
             )
-        public_origin = prompter.text("Browser-visible WebUI origin")
+        public_origin = prompter.text("Browser-visible WebUI origin").strip()
+        if not public_origin:
+            print("Browser-visible WebUI origin is required.", file=prompter.stream)
     _validate_public_origin(public_origin)
 
-    if not allowed_hosts:
-        host = urlparse(public_origin).hostname or ""
-        allowed_hosts = ",".join(item for item in (host, "127.0.0.1", "localhost") if item)
-    if not trusted_proxies and not non_interactive:
+    allowed_hosts = allowed_hosts.strip()
+    if web_exposure == "reverse-proxy" and not trusted_proxies and not non_interactive:
         trusted_proxies = prompter.text("Trusted proxy IP/CIDR list", "127.0.0.1/32")
     return web_bind, public_origin, allowed_hosts, trusted_proxies
 

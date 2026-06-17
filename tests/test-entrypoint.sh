@@ -84,14 +84,20 @@ teardown_case(){
 }
 
 run_entrypoint(){
+  local -a env_args=(
+    "WUD_APP_DIR=$APP_DIR"
+    "DOCKER_BASE=$TEST_TMP/docker"
+    "WUD_OUT_FILE=$TEST_TMP/out/images.todo"
+    "WUD_SCRIPTS_DIR=${WUD_SCRIPTS_DIR-$TEST_TMP/managed-wud}"
+    "PYTHON_BIN=${PYTHON_BIN:-}"
+  )
+  if [[ -n "${WUD_SYNC_SCRIPTS+x}" ]]; then
+    env_args+=("WUD_SYNC_SCRIPTS=$WUD_SYNC_SCRIPTS")
+  fi
+
   LAST_STATUS=0
-  WUD_APP_DIR="$APP_DIR" \
-    DOCKER_BASE="$TEST_TMP/docker" \
-    WUD_OUT_FILE="$TEST_TMP/out/images.todo" \
-    WUD_SCRIPTS_DIR="${WUD_SCRIPTS_DIR-$TEST_TMP/managed-wud}" \
-    WUD_SYNC_SCRIPTS="${WUD_SYNC_SCRIPTS:-}" \
-    PYTHON_BIN="${PYTHON_BIN:-}" \
-    "$SCRIPT" "$@" > "$TEST_TMP/output.log" 2>&1 || LAST_STATUS=$?
+  env "${env_args[@]}" "$SCRIPT" "$@" > "$TEST_TMP/output.log" 2>&1 ||
+    LAST_STATUS=$?
 }
 
 assert_status(){
@@ -216,7 +222,27 @@ test_sync_command_copies_scripts_and_exits(){
   teardown_case
 }
 
-test_startup_sync_runs_before_command(){
+test_startup_auto_sync_runs_for_existing_destination(){
+  setup_case
+  mkdir -p "$TEST_TMP/managed-wud"
+  run_entrypoint updates --yes
+  assert_status 0
+  assert_output "Synced WUD scripts to $TEST_TMP/managed-wud
+updates [--yes]"
+  assert_synced_scripts
+  teardown_case
+}
+
+test_startup_auto_sync_skips_missing_destination(){
+  setup_case
+  run_entrypoint updates --yes
+  assert_status 0
+  assert_output 'updates [--yes]'
+  [[ ! -e "$TEST_TMP/managed-wud/.wud-updater-managed" ]] || fail "missing destination enabled sync"
+  teardown_case
+}
+
+test_startup_sync_true_runs_before_command(){
   setup_case
   WUD_SYNC_SCRIPTS=true run_entrypoint updates --yes
   assert_status 0
@@ -238,6 +264,7 @@ updates [--yes]"
 
 test_startup_sync_accepts_legacy_zero_as_disabled(){
   setup_case
+  mkdir -p "$TEST_TMP/managed-wud"
   WUD_SYNC_SCRIPTS=0 run_entrypoint updates --yes
   assert_status 0
   assert_output 'updates [--yes]'
@@ -318,7 +345,9 @@ main(){
   run_test test_web_dispatch_injects_paths
   run_test test_debug_command_executes_directly
   run_test test_sync_command_copies_scripts_and_exits
-  run_test test_startup_sync_runs_before_command
+  run_test test_startup_auto_sync_runs_for_existing_destination
+  run_test test_startup_auto_sync_skips_missing_destination
+  run_test test_startup_sync_true_runs_before_command
   run_test test_startup_sync_accepts_legacy_one
   run_test test_startup_sync_accepts_legacy_zero_as_disabled
   run_test test_sync_removes_stale_files

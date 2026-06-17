@@ -217,9 +217,9 @@ The env file keeps first-run defaults in one place. `HOST_DOCKER_BASE` must
 match the daemon-visible root that contains your Compose stack directories,
 `WEBUI_HTTP_BIND` controls the host-side published address and defaults to
 loopback, and `WEBUI_LOG_DIR` persists logs plus SQLite state. For LAN or
-reverse-proxy exposure, also review `WUD_WEB_PUBLIC_ORIGIN`,
-`WUD_WEB_ALLOWED_HOSTS`, `WUD_WEB_TRUSTED_PROXIES`, and
-`WUD_WEB_SECURE_COOKIES`.
+reverse-proxy exposure, set `WUD_WEB_PUBLIC_ORIGIN`; use
+`WUD_WEB_ALLOWED_HOSTS` only for extra host aliases, and review
+`WUD_WEB_TRUSTED_PROXIES` plus `WUD_WEB_SECURE_COOKIES` for reverse proxies.
 
 Open the setup link, create the first admin username and a password with at
 least 12 characters, then sign in at `http://127.0.0.1:7417`. See
@@ -285,8 +285,6 @@ services:
       DOCKER_BASE: ${HOST_DOCKER_BASE:-/srv/docker}
       WUD_OUT_FILE: /out/images.todo
       WUD_LOG_DIR: /logs
-      WUD_SYNC_SCRIPTS: "true"
-      WUD_SCRIPTS_DIR: /managed-wud
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - ${HOST_DOCKER_BASE:-/srv/docker}:${HOST_DOCKER_BASE:-/srv/docker}
@@ -301,9 +299,10 @@ volumes:
 
 ## WUD Script Sync
 
-Set `WUD_SYNC_SCRIPTS=true` to copy packaged WUD scripts from `/app/wud` into a
-managed shared volume before normal command execution. The destination defaults
-to `/managed-wud`; set `WUD_SCRIPTS_DIR` to override it.
+When the managed script volume is mounted at `/managed-wud`, the container
+automatically copies packaged WUD scripts from `/app/wud` before normal command
+execution. Set `WUD_SYNC_SCRIPTS=false` to opt out, or set
+`WUD_SYNC_SCRIPTS=true` to force a sync when using a custom destination.
 
 The sync refuses unsafe destinations:
 
@@ -460,7 +459,7 @@ docker compose --env-file "$HOME/.config/wud-updater/hardened.env" \
   up -d
 ```
 
-For LAN or reverse-proxy WebUI exposure, pass the browser-visible host values
+For LAN or reverse-proxy WebUI exposure, pass the browser-visible origin
 explicitly:
 
 ```bash
@@ -528,8 +527,8 @@ Boolean examples use `true` and `false`; legacy aliases `1`, `0`, `yes`, `no`,
 | `WUD_WEB_TOKEN` | unset | Optional bearer token for API clients after first-run setup. This token is not accepted by the browser login form and does not bypass setup. |
 | `WUD_WEB_DEV_NO_AUTH` | `false` | Explicitly disables WebUI API auth for tests or local development only. |
 | `WUD_WEB_ALLOWED_ORIGINS` | same origin only | Comma-separated extra origins accepted by the CSRF/Origin checks for login, logout, and future mutating WebUI routes. |
-| `WUD_WEB_PUBLIC_ORIGIN` | unset | Public `http://` or `https://` origin used for setup links, CSRF origin checks, and secure-cookie auto-detection when the WebUI is behind a reverse proxy. |
-| `WUD_WEB_ALLOWED_HOSTS` | loopback, configured public origin, and bind host | Comma-separated hostnames or IPs accepted in the HTTP `Host` header. Set this when exposing the WebUI by LAN address or DNS name. |
+| `WUD_WEB_PUBLIC_ORIGIN` | unset | Public `http://` or `https://` origin used for setup links, CSRF origin checks, allowed-host derivation, and secure-cookie auto-detection. Set this for LAN or reverse-proxy exposure. |
+| `WUD_WEB_ALLOWED_HOSTS` | loopback, configured public origin, and bind host | Optional comma-separated hostnames or IPs accepted in the HTTP `Host` header in addition to the public origin. Use this for extra LAN aliases or proxy-facing hostnames. |
 | `WUD_WEB_TRUSTED_PROXIES` | unset | Comma-separated proxy IP/CIDR entries whose `Forwarded` or `X-Forwarded-*` headers are trusted for scheme/host detection. |
 | `WUD_WEB_SECURE_COOKIES` | `auto` | Cookie `Secure` mode: `auto` enables it for effective HTTPS origins, `true` always enables it, and `false` disables it for local HTTP testing. |
 | `WUD_WEB_MUTATIONS_ENABLED` | `false` | Enables browser plan/apply update mutations and Settings container restart when set to `true`. Leave unset or `false` for read-only WebUI deployments. |
@@ -545,18 +544,18 @@ password of at least 12 characters, then use the normal sign-in page. Setup
 claim values, password hashes, and browser sessions are stored in the existing
 SQLite database; only hashed secrets are persisted.
 
-When publishing the WebUI through a reverse proxy, configure the proxy to
-preserve the original `Host` header or add the proxy-facing host to
-`WUD_WEB_ALLOWED_HOSTS`. Set `WUD_WEB_PUBLIC_ORIGIN` to the browser-visible
-origin and list only the proxy addresses in `WUD_WEB_TRUSTED_PROXIES`; forwarded
-headers from other clients are ignored.
+When publishing the WebUI through a reverse proxy, set
+`WUD_WEB_PUBLIC_ORIGIN` to the browser-visible origin. Configure the proxy to
+preserve that `Host` header, or add the proxy-facing host to
+`WUD_WEB_ALLOWED_HOSTS`. List only the proxy addresses in
+`WUD_WEB_TRUSTED_PROXIES`; forwarded headers from other clients are ignored.
 
 Container and installer values:
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `WUD_SYNC_SCRIPTS` | unset | Set to `true` in the helper container to sync packaged WUD scripts before normal commands. |
-| `WUD_SCRIPTS_DIR` | `/managed-wud` | Managed script sync destination. |
+| `WUD_SYNC_SCRIPTS` | auto | Unset auto-syncs when the managed script directory exists and is writable. Set `true` to force startup sync or `false` to opt out. |
+| `WUD_SCRIPTS_DIR` | `/managed-wud` | Optional managed script sync destination override. |
 | `WUD_APP_DIR` | `/app` | Application root inside the helper container. |
 | `BIN_DIR` | `$HOME/bin` | Host installer destination for the `updates` and `docker-update-from-wud` symlinks. |
 | `WUD_SCRIPTS_LINK` | `$DOCKER_BASE/wud/scripts` | Host installer symlink target for the mounted `wud/` scripts. |

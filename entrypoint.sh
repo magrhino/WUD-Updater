@@ -5,7 +5,8 @@ app_dir="${WUD_APP_DIR:-/app}"
 docker_base="${DOCKER_BASE:-/host/docker}"
 wud_out_file="${WUD_OUT_FILE:-/out/images.todo}"
 wud_log_dir="${WUD_LOG_DIR:-/logs}"
-wud_scripts_dir="${WUD_SCRIPTS_DIR-/managed-wud}"
+wud_scripts_default_dir="/managed-wud"
+wud_scripts_dir="${WUD_SCRIPTS_DIR-$wud_scripts_default_dir}"
 wud_scripts_marker=".wud-updater-managed"
 
 env_bool_enabled(){
@@ -17,6 +18,15 @@ env_bool_enabled(){
       return 1
       ;;
   esac
+}
+
+startup_sync_enabled(){
+  if [[ -n "${WUD_SYNC_SCRIPTS+x}" ]]; then
+    env_bool_enabled "$WUD_SYNC_SCRIPTS"
+    return
+  fi
+
+  [[ -d "$wud_scripts_dir" && -w "$wud_scripts_dir" ]]
 }
 
 has_arg(){
@@ -173,7 +183,7 @@ elif [[ "$1" == -* ]]; then
   set -- updates "$@"
 fi
 
-if env_bool_enabled "${WUD_SYNC_SCRIPTS:-}" &&
+if startup_sync_enabled &&
   [[ "$1" != "sync-wud-scripts" && "$1" != "doctor" ]]; then
   sync_wud_scripts
 fi
