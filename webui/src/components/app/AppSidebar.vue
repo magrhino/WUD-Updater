@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { type Component } from "vue";
+import { computed, onMounted, type Component } from "vue";
 import { RouterLink, useRoute } from "vue-router";
 import {
   Activity,
@@ -15,13 +15,41 @@ import {
 } from "@lucide/vue";
 import { NTag } from "naive-ui";
 
-defineProps<{
-  versionLabel: string;
-  versionHref: string;
-  versionTitle: string;
-}>();
+import { useConnectionStore } from "../../stores/connection";
+import { runInBackground } from "../../utils/promises";
 
 const route = useRoute();
+const connection = useConnectionStore();
+
+const RELEASES_URL = "https://github.com/magrhino/WUD-Updater/releases";
+const VERSION_RELEASE_RE = /^v?\d+\.\d+/;
+
+const appVersion = computed(() => connection.status?.version ?? "");
+const appVersionIsRelease = computed(() =>
+  VERSION_RELEASE_RE.test(appVersion.value),
+);
+const appVersionLabel = computed(() => {
+  if (!appVersion.value) {
+    return "";
+  }
+  if (appVersionIsRelease.value) {
+    return appVersion.value.startsWith("v")
+      ? appVersion.value
+      : `v${appVersion.value}`;
+  }
+  return appVersion.value;
+});
+const appVersionHref = computed(() => {
+  if (!appVersion.value || !appVersionIsRelease.value) {
+    return RELEASES_URL;
+  }
+  return `${RELEASES_URL}/tag/${appVersionLabel.value}`;
+});
+const appVersionTitle = computed(() =>
+  appVersionIsRelease.value
+    ? `Open ${appVersionLabel.value} release notes`
+    : "Open WUD-Updater releases",
+);
 
 type NavItem = {
   to: string;
@@ -93,6 +121,12 @@ function isNavItemActive(item: NavItem): boolean {
     item.activeRouteNames.includes(route.name)
   );
 }
+
+onMounted(() => {
+  if (connection.status === null) {
+    runInBackground(connection.loadStatus());
+  }
+});
 </script>
 
 <template>
@@ -120,19 +154,19 @@ function isNavItemActive(item: NavItem): boolean {
 
     <div class="sidebar-footer">
       <n-tag
-        v-if="versionLabel"
+        v-if="appVersionLabel"
         class="version-tag"
         size="small"
       >
         <a
           class="version-link"
-          :href="versionHref"
+          :href="appVersionHref"
           target="_blank"
           rel="noopener noreferrer"
-          :title="versionTitle"
-          :aria-label="versionTitle"
+          :title="appVersionTitle"
+          :aria-label="appVersionTitle"
         >
-          {{ versionLabel }}
+          {{ appVersionLabel }}
         </a>
       </n-tag>
     </div>

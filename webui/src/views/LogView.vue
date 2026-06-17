@@ -5,6 +5,7 @@ import { useClipboard } from "@vueuse/core";
 import { Copy, RefreshCw } from "@lucide/vue";
 import { NAlert, NButton, NEmpty, NFlex } from "naive-ui";
 
+import { useRouteRefresh } from "../components/app/routeRefresh";
 import { useRunsStore } from "../stores/runs";
 import { runInBackground } from "../utils/promises";
 
@@ -18,6 +19,8 @@ const { copy, copied, isSupported } = useClipboard({ source: logText });
 async function load(): Promise<void> {
   await runs.loadRunLog(runId.value);
 }
+
+useRouteRefresh(load);
 
 onMounted(() => {
   runInBackground(load());

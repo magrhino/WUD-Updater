@@ -9,6 +9,7 @@ import {
 } from "naive-ui";
 
 import type { RetagTargetChoice, RetagTargetItem } from "../api/client";
+import { useRouteRefresh } from "../components/app/routeRefresh";
 import PendingApplyJobPanel from "../components/pending/PendingApplyJobPanel.vue";
 import RetagConfirmModal from "../components/retags/RetagConfirmModal.vue";
 import RetagPlanPreview from "../components/retags/RetagPlanPreview.vue";
@@ -270,6 +271,8 @@ function createRetagApplyJobSnapshot(): ApplyJobPlanSnapshot | null {
     lines,
   };
 }
+
+useRouteRefresh(() => updates.loadRetagTargets());
 
 onMounted(() => {
   updates.loadRetagTargets().catch(() => undefined);

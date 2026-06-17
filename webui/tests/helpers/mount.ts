@@ -533,7 +533,6 @@ export function mountWithApp(component: Component, options: MountOptions = {}): 
               );
           },
         },
-        RouterView: passthrough("div"),
       },
     },
   });

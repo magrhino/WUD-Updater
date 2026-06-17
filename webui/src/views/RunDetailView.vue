@@ -5,6 +5,7 @@ import { FileText } from "@lucide/vue";
 import { NAlert, NEmpty, NGi, NGrid } from "naive-ui";
 
 import type { RunEventRecord } from "../api/client";
+import { useRouteRefresh } from "../components/app/routeRefresh";
 import RunVerificationPanel from "../components/RunVerificationPanel.vue";
 import { useRunsStore } from "../stores/runs";
 import {
@@ -21,6 +22,8 @@ const run = computed(() => runs.runDetails[runId.value] ?? null);
 async function load(): Promise<void> {
   await runs.loadRunDetail(runId.value);
 }
+
+useRouteRefresh(load);
 
 onMounted(() => {
   runInBackground(load());

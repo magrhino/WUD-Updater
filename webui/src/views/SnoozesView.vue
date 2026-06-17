@@ -16,6 +16,7 @@ import {
 } from "naive-ui";
 
 import type { SnoozeKind, SnoozeRecord, SnoozeState } from "../api/client";
+import { useRouteRefresh } from "../components/app/routeRefresh";
 import { useUpdateTargetOptions } from "../composables/useUpdateTargetOptions";
 import { useAuthStore } from "../stores/auth";
 import { useSettingsStore } from "../stores/settings";
@@ -162,6 +163,8 @@ onMounted(() => {
 watch(snoozeState, (nextState) => {
   runInBackground(settings.loadSnoozes(nextState));
 });
+
+useRouteRefresh(() => settings.loadSnoozes(snoozeState.value));
 </script>
 
 <template>
