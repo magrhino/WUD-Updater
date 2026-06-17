@@ -276,19 +276,19 @@ onMounted(() => {
   .nav-list {
     flex: 1 1 auto;
     grid-auto-flow: column;
+    grid-auto-columns: max-content;
     min-width: 0;
     max-width: 100%;
     overflow-x: auto;
+    overflow-y: hidden;
   }
 
   .nav-item {
     flex: 0 0 auto;
+    gap: 8px;
     min-height: 44px;
+    padding: 0 12px;
     white-space: nowrap;
-  }
-
-  .nav-item span {
-    display: none;
   }
 }
 </style>
