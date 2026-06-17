@@ -1,40 +1,15 @@
 import { createPinia, setActivePinia } from "pinia";
 import { flushPromises } from "@vue/test-utils";
 import { nextTick } from "vue";
-import { createMemoryHistory } from "vue-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { ApiError, webApi } from "../src/api/client";
-import { createWudRouter } from "../src/router";
-import DashboardView from "../src/views/DashboardView.vue";
-import DoctorView from "../src/views/DoctorView.vue";
-import PendingView from "../src/views/PendingView.vue";
 import PoliciesView from "../src/views/PoliciesView.vue";
 import SettingsView from "../src/views/SettingsView.vue";
 import SnoozesView from "../src/views/SnoozesView.vue";
 import TagExclusionsView from "../src/views/TagExclusionsView.vue";
-import { useAuthStore } from "../src/stores/auth";
-import { useConnectionStore } from "../src/stores/connection";
-import { useSettingsStore } from "../src/stores/settings";
-import { useUpdatesStore, APPLY_JOB_RECOVERY_MESSAGE } from "../src/stores/updates";
-import { useRunsStore } from "../src/stores/runs";
 import {
-  applyPreflightResponse,
-  applyJobLogResponse,
-  applyJobResponse,
-  authSession,
   coreUpdateTourResponse,
-  doctorResponse,
   onboardingChecklistResponse,
-  pendingGroupedItem,
-  pendingGrouping,
-  pendingItem,
-  pendingResponse,
-  planResponse,
-  releaseNoteInfo,
-  releaseNotesResponse,
-  runVerification,
-  runSummary,
   servicePolicy,
   settingsResponse,
   snooze,
@@ -43,23 +18,11 @@ import {
   updateTarget,
   updateTargetsResponse,
 } from "./helpers/fixtures";
-import { mountWithApp, naiveStubs } from "./helpers/mount";
-
-
+import { mountWithApp } from "./helpers/mount";
 import {
   buttonByText,
   emitSelectValue,
-  failedApplyPreflight,
-  mockApplyJobStream,
-  mockMobileViewport,
-  mockPendingLifecycle,
-  mountPendingView,
-  pendingWithUnmatched,
   setupStores,
-  stalePendingPreflightFindings,
-  stalePendingPossibleReasons,
-  stalePendingRecommendedActions,
-  unmatchedPendingItem,
 } from "./helpers/viewSecurity";
 
 describe("settings mutation views", () => {
@@ -68,7 +31,7 @@ describe("settings mutation views", () => {
   });
 
   it("disables policy mutations in read-only mode", async () => {
-    const { pinia, auth, connection, settings, updates, runs } = setupStores(false);
+    const { pinia, settings, updates } = setupStores(false);
     settings.servicePolicies = [servicePolicy()];
     updates.updateTargets = updateTargetsResponse();
     vi.spyOn(updates, "loadUpdateTargets").mockResolvedValue();
@@ -92,7 +55,7 @@ describe("settings mutation views", () => {
   });
 
   it("shows policy target loading errors from the updates store", async () => {
-    const { pinia, auth, connection, settings, updates, runs } = setupStores(true);
+    const { pinia, settings, updates } = setupStores(true);
     settings.servicePolicies = [];
     vi.spyOn(updates, "loadUpdateTargets").mockImplementation(async () => {
       updates.error = "update targets unavailable";
@@ -107,7 +70,7 @@ describe("settings mutation views", () => {
   });
 
   it("shows policy status loading errors from the connection store", async () => {
-    const { pinia, auth, connection, settings, updates, runs } = setupStores(true);
+    const { pinia, connection, settings, updates } = setupStores(true);
     connection.status = null;
     settings.servicePolicies = [];
     vi.spyOn(connection, "loadStatus").mockImplementation(async () => {
@@ -124,7 +87,7 @@ describe("settings mutation views", () => {
   });
 
   it("does not assume UTC while policy schedule timezone is loading", async () => {
-    const { pinia, auth, connection, settings, updates, runs } = setupStores(true);
+    const { pinia, connection, settings, updates } = setupStores(true);
     connection.status = null;
     settings.servicePolicies = [servicePolicy()];
     updates.updateTargets = updateTargetsResponse();
@@ -163,7 +126,7 @@ describe("settings mutation views", () => {
   });
 
   it("saves scheduled policy fields after server timezone is known", async () => {
-    const { pinia, auth, connection, settings, updates, runs } = setupStores(true);
+    const { pinia, connection, settings, updates } = setupStores(true);
     connection.status = statusResponse({
       mutations_enabled: true,
       timezone: "America/Chicago",
@@ -209,7 +172,7 @@ describe("settings mutation views", () => {
   });
 
   it("offers discovered services and image repositories on management forms", async () => {
-    const { pinia, auth, connection, settings, updates, runs } = setupStores(true);
+    const { pinia, settings, updates } = setupStores(true);
     updates.updateTargets = updateTargetsResponse([
       updateTarget({
         service_key: "media/radarr",
@@ -235,7 +198,7 @@ describe("settings mutation views", () => {
 
   it("keeps clearable management selects string-safe", async () => {
     {
-      const { pinia, auth, connection, settings, updates, runs } = setupStores(true);
+      const { pinia, settings, updates } = setupStores(true);
       settings.servicePolicies = [servicePolicy()];
       updates.updateTargets = updateTargetsResponse();
       vi.spyOn(updates, "loadUpdateTargets").mockResolvedValue();
@@ -255,7 +218,7 @@ describe("settings mutation views", () => {
     }
 
     {
-      const { pinia, auth, connection, settings, updates, runs } = setupStores(true);
+      const { pinia, settings, updates } = setupStores(true);
       settings.snoozes = [];
       updates.updateTargets = updateTargetsResponse();
       vi.spyOn(updates, "loadUpdateTargets").mockResolvedValue();
@@ -275,7 +238,7 @@ describe("settings mutation views", () => {
     }
 
     {
-      const { pinia, auth, connection, settings, updates, runs } = setupStores(true);
+      const { pinia, settings, updates } = setupStores(true);
       settings.tagExclusions = [];
       updates.updateTargets = updateTargetsResponse();
       vi.spyOn(updates, "loadUpdateTargets").mockResolvedValue();
@@ -297,7 +260,7 @@ describe("settings mutation views", () => {
   });
 
   it("creates dependency snoozes from the snooze form", async () => {
-    const { pinia, auth, connection, settings, updates, runs } = setupStores(true);
+    const { pinia, settings, updates } = setupStores(true);
     settings.snoozes = [];
     updates.updateTargets = updateTargetsResponse([
       updateTarget({ service_key: "media/app", service: "app" }),
@@ -338,7 +301,7 @@ describe("settings mutation views", () => {
   });
 
   it("disables snooze mutations in read-only mode", async () => {
-    const { pinia, auth, connection, settings, updates, runs } = setupStores(false);
+    const { pinia, settings, updates } = setupStores(false);
     settings.snoozes = [snooze()];
     updates.updateTargets = updateTargetsResponse();
     vi.spyOn(updates, "loadUpdateTargets").mockResolvedValue();
@@ -361,7 +324,7 @@ describe("settings mutation views", () => {
   });
 
   it("shows snooze target loading errors from the updates store", async () => {
-    const { pinia, auth, connection, settings, updates, runs } = setupStores(true);
+    const { pinia, settings, updates } = setupStores(true);
     settings.snoozes = [];
     vi.spyOn(updates, "loadUpdateTargets").mockImplementation(async () => {
       updates.error = "snooze targets unavailable";
@@ -376,7 +339,7 @@ describe("settings mutation views", () => {
   });
 
   it("disables tag exclusion mutations in read-only mode", async () => {
-    const { pinia, auth, connection, settings, updates, runs } = setupStores(false);
+    const { pinia, settings, updates } = setupStores(false);
     settings.tagExclusions = [tagExclusion()];
     updates.updateTargets = updateTargetsResponse();
     vi.spyOn(updates, "loadUpdateTargets").mockResolvedValue();
@@ -399,7 +362,7 @@ describe("settings mutation views", () => {
   });
 
   it("shows tag exclusion target loading errors from the updates store", async () => {
-    const { pinia, auth, connection, settings, updates, runs } = setupStores(true);
+    const { pinia, settings, updates } = setupStores(true);
     settings.tagExclusions = [];
     vi.spyOn(updates, "loadUpdateTargets").mockImplementation(async () => {
       updates.error = "tag targets unavailable";
@@ -414,7 +377,7 @@ describe("settings mutation views", () => {
   });
 
   it("renders read-only settings without exposing secret values or edit controls", async () => {
-    const { pinia, auth, connection, settings, updates, runs } = setupStores(false);
+    const { pinia, settings } = setupStores(false);
     settings.settings = settingsResponse();
     settings.onboarding = onboardingChecklistResponse({ visible: false });
     vi.spyOn(settings, "loadSettings").mockResolvedValue();
@@ -443,7 +406,7 @@ describe("settings mutation views", () => {
   });
 
   it("disables managed preference saves in read-only settings", async () => {
-    const { pinia, auth, connection, settings, updates, runs } = setupStores(false);
+    const { pinia, settings } = setupStores(false);
     settings.settings = settingsResponse();
     settings.onboarding = onboardingChecklistResponse({ visible: false });
     vi.spyOn(settings, "loadSettings").mockResolvedValue();
@@ -490,7 +453,7 @@ describe("settings mutation views", () => {
   });
 
   it("saves managed preference changes through the store", async () => {
-    const { pinia, auth, connection, settings, updates, runs } = setupStores(true);
+    const { pinia, settings } = setupStores(true);
     settings.settings = settingsResponse({
       webui: settingsResponse().webui.map((entry) =>
         entry.name === "WUD_WEB_MUTATIONS_ENABLED"
@@ -514,7 +477,7 @@ describe("settings mutation views", () => {
               allowed_values: ["system", "light", "dark"],
               restart_required: false,
             },
-            settingsResponse().managed[1]!,
+            settingsResponse().managed[1],
           ],
         }).managed,
         audit_run_id: 77,
@@ -536,18 +499,18 @@ describe("settings mutation views", () => {
   });
 
   it("relaunches the onboarding checklist from settings", async () => {
-    const { pinia, auth, connection, settings, updates, runs } = setupStores(true);
-    const visibleOnboardingEntry = settingsResponse().managed[1]!;
+    const { pinia, settings } = setupStores(true);
+    const visibleOnboardingEntry = settingsResponse().managed[1];
     const dismissedOnboardingEntry = {
       ...visibleOnboardingEntry,
       value: "dismissed",
       source: "configured" as const,
     };
     const visibleSettings = settingsResponse({
-      managed: [settingsResponse().managed[0]!, visibleOnboardingEntry],
+      managed: [settingsResponse().managed[0], visibleOnboardingEntry],
     });
     settings.settings = settingsResponse({
-      managed: [settingsResponse().managed[0]!, dismissedOnboardingEntry],
+      managed: [settingsResponse().managed[0], dismissedOnboardingEntry],
     });
     settings.onboarding = onboardingChecklistResponse({
       dismissed: true,
@@ -583,7 +546,7 @@ describe("settings mutation views", () => {
   });
 
   it("requires warning confirmation before restarting the WebUI container", async () => {
-    const { pinia, auth, connection, settings, updates, runs } = setupStores(true);
+    const { pinia, connection, settings } = setupStores(true);
     settings.settings = settingsResponse({
       webui: settingsResponse().webui.map((entry) =>
         entry.name === "WUD_WEB_MUTATIONS_ENABLED"
@@ -624,7 +587,7 @@ describe("settings mutation views", () => {
   });
 
   it("blocks container restart controls while restart is pending", async () => {
-    const { pinia, auth, connection, settings, updates, runs } = setupStores(true);
+    const { pinia, connection, settings } = setupStores(true);
     settings.settings = settingsResponse({
       webui: settingsResponse().webui.map((entry) =>
         entry.name === "WUD_WEB_MUTATIONS_ENABLED"
@@ -673,7 +636,7 @@ describe("settings mutation views", () => {
   });
 
   it("disables container restart in read-only settings", async () => {
-    const { pinia, auth, connection, settings, updates, runs } = setupStores(false);
+    const { pinia, connection, settings } = setupStores(false);
     settings.settings = settingsResponse();
     settings.onboarding = onboardingChecklistResponse({ visible: false });
     vi.spyOn(settings, "loadSettings").mockResolvedValue();

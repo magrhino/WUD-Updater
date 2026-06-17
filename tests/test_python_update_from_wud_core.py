@@ -205,7 +205,7 @@ class UpdateFromWudCoreTests(UpdateFromWudRunnerTestCase):
         self.assertEqual(runs[0]["status"], "success")
         self.assertEqual(pending[0]["status"], "resolved")
         self.assertEqual(pending[0]["status_reason"], "updated")
-        log_text = sorted(self.log_dir.glob("update-from-wud-v2-*.log"))[-1].read_text(
+        log_text = max(self.log_dir.glob("update-from-wud-v2-*.log")).read_text(
             encoding="utf-8"
         )
         self.assertIn("Digest verification was inconclusive", log_text)
@@ -262,7 +262,7 @@ class UpdateFromWudCoreTests(UpdateFromWudRunnerTestCase):
         self.assertIn("manifest inspect quay.io/acme/app:latest", calls)
         self.assertIn("manifest inspect quay.io/acme/app@sha256:stale", calls)
         self.assertNotRegex(calls, r"compose -f .* up -d")
-        log_text = sorted(self.log_dir.glob("update-from-wud-v2-*.log"))[-1].read_text(
+        log_text = max(self.log_dir.glob("update-from-wud-v2-*.log")).read_text(
             encoding="utf-8"
         )
         self.assertIn("Pending WUD entry for line 1 is stale", log_text)
