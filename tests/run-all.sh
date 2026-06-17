@@ -156,29 +156,66 @@ EOF
     tests/test_python_truenas.py \
     tests/test_python_updater_cli.py \
     tests/test_python_updater_logging.py \
-    tests/test_python_update_from_wud.py \
-    tests/test_python_updates_wrapper.py \
     tests/test_python_web.py \
-    tests/test_python_web_auth.py \
     tests/test_python_web_diagnostics.py \
     tests/test_python_web_health.py \
     tests/test_python_web_jobs.py \
     tests/test_python_web_metadata.py \
     tests/test_python_web_onboarding.py \
-    tests/test_python_web_pending.py \
-    tests/test_python_web_plans.py \
     tests/test_python_web_release_notes.py \
     tests/test_python_web_retag_plans.py \
     tests/test_python_web_retags.py \
     tests/test_python_web_runs.py \
-    tests/test_python_web_scheduler.py \
-    tests/test_python_web_self_update.py \
     tests/test_python_web_startup.py \
-    tests/test_python_web_state.py \
     tests/web_test_helpers.py \
     tests/test_python_webui_demo_state.py \
     tests/test_python_wud_file_ops.py \
     tests/test_python_wud_parsing.py \
+    tests/test_python_update_from_wud_audit_errors.py \
+    tests/test_python_update_from_wud_core.py \
+    tests/test_python_update_from_wud_digest_pins.py \
+    tests/test_python_update_from_wud_preflight.py \
+    tests/test_python_update_from_wud_recreate.py \
+    tests/test_python_update_from_wud_tag_exclusions.py \
+    tests/test_python_update_from_wud_tag_updates.py \
+    tests/test_python_updater_digest_pin.py \
+    tests/test_python_updates_wrapper_core.py \
+    tests/test_python_updates_wrapper_dispatch.py \
+    tests/test_python_updates_wrapper_interactive.py \
+    tests/test_python_updates_wrapper_invocation.py \
+    tests/test_python_updates_wrapper_models.py \
+    tests/test_python_updates_wrapper_self_update.py \
+    tests/test_python_updates_wrapper_truenas.py \
+    tests/test_python_web_apply_endpoint_execution.py \
+    tests/test_python_web_apply_endpoint_guards.py \
+    tests/test_python_web_auth_login_throttle.py \
+    tests/test_python_web_auth_scaffold.py \
+    tests/test_python_web_auth_session_reset.py \
+    tests/test_python_web_auth_setup.py \
+    tests/test_python_web_pending_cleanup.py \
+    tests/test_python_web_pending_read.py \
+    tests/test_python_web_pending_removal.py \
+    tests/test_python_web_pending_targets.py \
+    tests/test_python_web_plan_digest_pins.py \
+    tests/test_python_web_plan_preview.py \
+    tests/test_python_web_plan_tag_updates.py \
+    tests/test_python_web_scheduler_due_policy.py \
+    tests/test_python_web_scheduler_lifecycle.py \
+    tests/test_python_web_scheduler_reservations.py \
+    tests/test_python_web_scheduler_selection.py \
+    tests/test_python_web_self_update_plan.py \
+    tests/test_python_web_self_update_prepare.py \
+    tests/test_python_web_self_update_pull.py \
+    tests/test_python_web_self_update_restart.py \
+    tests/test_python_web_self_update_status.py \
+    tests/test_python_web_state_digest_pin_settings.py \
+    tests/test_python_web_state_operations.py \
+    tests/test_python_web_state_settings.py \
+    tests/test_python_web_state_status.py \
+    tests/update_from_wud_helpers.py \
+    tests/updates_wrapper_helpers.py \
+    tests/web_plan_test_helpers.py \
+    tests/web_scheduler_test_helpers.py \
     webui/scripts/seed_demo_state.py
 
   run "$python_bin" -m pytest --cov=wud_updater --cov-branch --cov-report=xml

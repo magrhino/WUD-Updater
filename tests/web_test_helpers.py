@@ -429,3 +429,17 @@ def _sse_log_events(content: str) -> list[dict[str, object]]:
 
 def _sse_progress_events(content: str) -> list[dict[str, object]]:
     return _sse_events(content, "progress")
+
+
+
+def _store_web_setting(tmp_path: Path, key: str, value: str) -> None:
+    with open_db(tmp_path / "state" / "wud.sqlite") as conn:
+        init_db(conn)
+        with conn:
+            conn.execute(
+                """
+                INSERT OR REPLACE INTO web_settings (key, value, updated_at)
+                VALUES (?, ?, ?)
+                """,
+                (key, value, "2026-06-08T00:00:00+00:00"),
+            )
