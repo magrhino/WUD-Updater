@@ -20,13 +20,34 @@ env_bool_enabled(){
   esac
 }
 
-startup_sync_enabled(){
+startup_sync_status(){
+  local command="${1:-}"
+
+  case "$command" in
+    sync-wud-scripts)
+      printf 'manual-command\n'
+      return
+      ;;
+    doctor)
+      printf 'skipped-doctor\n'
+      return
+      ;;
+  esac
+
   if [[ -n "${WUD_SYNC_SCRIPTS+x}" ]]; then
-    env_bool_enabled "$WUD_SYNC_SCRIPTS"
+    if env_bool_enabled "$WUD_SYNC_SCRIPTS"; then
+      printf 'forced\n'
+    else
+      printf 'disabled\n'
+    fi
     return
   fi
 
-  [[ -d "$wud_scripts_dir" && -w "$wud_scripts_dir" ]]
+  if [[ -d "$wud_scripts_dir" && -w "$wud_scripts_dir" ]]; then
+    printf 'auto-detected\n'
+  else
+    printf 'auto-not-detected\n'
+  fi
 }
 
 has_arg(){
@@ -183,10 +204,12 @@ elif [[ "$1" == -* ]]; then
   set -- updates "$@"
 fi
 
-if startup_sync_enabled &&
-  [[ "$1" != "sync-wud-scripts" && "$1" != "doctor" ]]; then
+wud_script_sync_status="$(startup_sync_status "$1")"
+if [[ "$wud_script_sync_status" == "forced" ||
+  "$wud_script_sync_status" == "auto-detected" ]]; then
   sync_wud_scripts
 fi
+export WUD_SCRIPT_SYNC_STATUS="$wud_script_sync_status"
 
 case "$1" in
   sync-wud-scripts)

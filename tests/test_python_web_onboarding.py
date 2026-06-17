@@ -14,6 +14,23 @@ from tests.web_test_helpers import (
 )
 
 
+def _csrf_headers_for_origin(
+    client,
+    *,
+    host: str,
+    origin: str,
+    extra_headers: dict[str, str] | None = None,
+) -> dict[str, str]:
+    base_headers = {"Host": host, **(extra_headers or {})}
+    response = client.get("/api/v1/auth/csrf", headers=base_headers)
+    assert response.status_code == 200
+    return {
+        **base_headers,
+        "Origin": origin,
+        "x-wud-csrf-token": response.json()["csrf_token"],
+    }
+
+
 def test_onboarding_endpoints_enforce_auth_csrf_and_post(
     tmp_path: Path,
 ) -> None:
@@ -197,6 +214,126 @@ def test_onboarding_checklist_hides_when_required_items_pass(
     assert body["all_passed"] is True
     assert body["visible"] is False
     assert set(required.values()) == {"PASS"}
+
+
+def test_onboarding_suggests_observed_lan_public_origin(
+    tmp_path: Path,
+) -> None:
+    client = _doctor_client(
+        tmp_path,
+        {"WUD_WEB_ALLOWED_HOSTS": "10.44.88.4"},
+    )
+    response = client.post(
+        "/api/v1/onboarding/checklist",
+        headers=_csrf_headers_for_origin(
+            client,
+            host="10.44.88.4",
+            origin="http://10.44.88.4",
+        ),
+    )
+    body = response.json()
+    browser_item = next(item for item in body["items"] if item["key"] == "browser-access")
+    snippets = {suggestion["snippet"] for suggestion in browser_item["suggestions"]}
+
+    assert response.status_code == 200
+    assert browser_item["status"] == "WARN"
+    assert "WUD_WEB_PUBLIC_ORIGIN=http://10.44.88.4" in snippets
+
+
+def test_onboarding_does_not_suggest_loopback_public_origin(
+    tmp_path: Path,
+) -> None:
+    client = _doctor_client(
+        tmp_path,
+        {"WUD_WEB_ALLOWED_HOSTS": "127.0.0.1"},
+        client=("127.0.0.1", 50000),
+    )
+    response = client.post(
+        "/api/v1/onboarding/checklist",
+        headers=_csrf_headers_for_origin(
+            client,
+            host="127.0.0.1",
+            origin="http://127.0.0.1",
+        ),
+    )
+    body = response.json()
+    browser_item = next(item for item in body["items"] if item["key"] == "browser-access")
+    snippets = {suggestion["snippet"] for suggestion in browser_item["suggestions"]}
+
+    assert response.status_code == 200
+    assert browser_item["status"] == "PASS"
+    assert all(
+        not snippet.startswith("WUD_WEB_PUBLIC_ORIGIN=http://127.0.0.1")
+        for snippet in snippets
+    )
+
+
+def test_onboarding_ignores_untrusted_forwarded_origin_snippet(
+    tmp_path: Path,
+) -> None:
+    client = _doctor_client(
+        tmp_path,
+        {
+            "WUD_WEB_ALLOWED_HOSTS": "internal.test,wud.example.test",
+            "WUD_WEB_TRUSTED_PROXIES": "10.0.0.1/32",
+        },
+        client=("192.0.2.1", 50000),
+    )
+    response = client.post(
+        "/api/v1/onboarding/checklist",
+        headers=_csrf_headers_for_origin(
+            client,
+            host="internal.test",
+            origin="http://internal.test",
+            extra_headers={
+                "X-Forwarded-Proto": "https",
+                "X-Forwarded-Host": "wud.example.test",
+            },
+        ),
+    )
+    body = response.json()
+    browser_item = next(item for item in body["items"] if item["key"] == "browser-access")
+    observed_suggestion = next(
+        suggestion
+        for suggestion in browser_item["suggestions"]
+        if suggestion["label"] == "Set observed public origin"
+    )
+
+    assert response.status_code == 200
+    assert observed_suggestion["snippet"] == "WUD_WEB_PUBLIC_ORIGIN=http://internal.test"
+
+
+def test_onboarding_uses_trusted_forwarded_origin_snippet(
+    tmp_path: Path,
+) -> None:
+    client = _doctor_client(
+        tmp_path,
+        {
+            "WUD_WEB_ALLOWED_HOSTS": "internal.test",
+            "WUD_WEB_TRUSTED_PROXIES": "10.0.0.1/32",
+            "WUD_WEB_SECURE_COOKIES": "false",
+        },
+        client=("10.0.0.1", 50000),
+    )
+    response = client.post(
+        "/api/v1/onboarding/checklist",
+        headers=_csrf_headers_for_origin(
+            client,
+            host="internal.test",
+            origin="https://wud.example.test",
+            extra_headers={
+                "X-Forwarded-Proto": "https",
+                "X-Forwarded-Host": "wud.example.test",
+            },
+        ),
+    )
+    body = response.json()
+    browser_item = next(item for item in body["items"] if item["key"] == "browser-access")
+    snippets = {suggestion["snippet"] for suggestion in browser_item["suggestions"]}
+
+    assert response.status_code == 200
+    assert "WUD_WEB_PUBLIC_ORIGIN=https://wud.example.test" in snippets
+
 
 def test_onboarding_checklist_stays_visible_when_mutations_enabled(
     tmp_path: Path,

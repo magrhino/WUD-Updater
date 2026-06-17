@@ -46,6 +46,9 @@ printf 'python'
 for arg in "$@"; do
   printf ' [%s]' "$arg"
 done
+if [[ "${FAKE_PYTHON_PRINT_SCRIPT_SYNC_STATUS:-}" == "1" ]]; then
+  printf ' WUD_SCRIPT_SYNC_STATUS=[%s]' "${WUD_SCRIPT_SYNC_STATUS-}"
+fi
 printf '\n'
 FAKE_PYTHON
   chmod +x "$TEST_TMP/python"
@@ -205,6 +208,55 @@ test_web_dispatch_injects_paths(){
   teardown_case
 }
 
+test_web_exports_auto_detected_script_sync_status(){
+  setup_case
+  mkdir -p "$TEST_TMP/managed-wud"
+  PYTHON_BIN="$TEST_TMP/python" FAKE_PYTHON_PRINT_SCRIPT_SYNC_STATUS=1 run_entrypoint web
+  assert_status 0
+  assert_output "Synced WUD scripts to $TEST_TMP/managed-wud
+python [-m] [wud_updater.cli] [web] [--base] [$TEST_TMP/docker] [--file] [$TEST_TMP/out/images.todo] [--log-dir] [/logs] WUD_SCRIPT_SYNC_STATUS=[auto-detected]"
+  assert_synced_scripts
+  teardown_case
+}
+
+test_web_exports_auto_not_detected_script_sync_status(){
+  setup_case
+  PYTHON_BIN="$TEST_TMP/python" FAKE_PYTHON_PRINT_SCRIPT_SYNC_STATUS=1 run_entrypoint web
+  assert_status 0
+  assert_output "python [-m] [wud_updater.cli] [web] [--base] [$TEST_TMP/docker] [--file] [$TEST_TMP/out/images.todo] [--log-dir] [/logs] WUD_SCRIPT_SYNC_STATUS=[auto-not-detected]"
+  [[ ! -e "$TEST_TMP/managed-wud/.wud-updater-managed" ]] || fail "missing destination enabled sync"
+  teardown_case
+}
+
+test_web_exports_forced_script_sync_status(){
+  setup_case
+  WUD_SYNC_SCRIPTS=true PYTHON_BIN="$TEST_TMP/python" FAKE_PYTHON_PRINT_SCRIPT_SYNC_STATUS=1 run_entrypoint web
+  assert_status 0
+  assert_output "Synced WUD scripts to $TEST_TMP/managed-wud
+python [-m] [wud_updater.cli] [web] [--base] [$TEST_TMP/docker] [--file] [$TEST_TMP/out/images.todo] [--log-dir] [/logs] WUD_SCRIPT_SYNC_STATUS=[forced]"
+  assert_synced_scripts
+  teardown_case
+}
+
+test_web_exports_disabled_script_sync_status(){
+  setup_case
+  mkdir -p "$TEST_TMP/managed-wud"
+  WUD_SYNC_SCRIPTS=0 PYTHON_BIN="$TEST_TMP/python" FAKE_PYTHON_PRINT_SCRIPT_SYNC_STATUS=1 run_entrypoint web
+  assert_status 0
+  assert_output "python [-m] [wud_updater.cli] [web] [--base] [$TEST_TMP/docker] [--file] [$TEST_TMP/out/images.todo] [--log-dir] [/logs] WUD_SCRIPT_SYNC_STATUS=[disabled]"
+  [[ ! -e "$TEST_TMP/managed-wud/.wud-updater-managed" ]] || fail "disabled sync created marker"
+  teardown_case
+}
+
+test_doctor_exports_skipped_script_sync_status(){
+  setup_case
+  WUD_SYNC_SCRIPTS=true PYTHON_BIN="$TEST_TMP/python" FAKE_PYTHON_PRINT_SCRIPT_SYNC_STATUS=1 run_entrypoint doctor --no-color
+  assert_status 0
+  assert_output "python [-m] [wud_updater.cli] [doctor] [--base] [$TEST_TMP/docker] [--file] [$TEST_TMP/out/images.todo] [--log-dir] [/logs] [--scripts-dir] [$TEST_TMP/managed-wud] [--no-color] WUD_SCRIPT_SYNC_STATUS=[skipped-doctor]"
+  [[ ! -e "$TEST_TMP/managed-wud/.wud-updater-managed" ]] || fail "doctor ran startup sync"
+  teardown_case
+}
+
 test_debug_command_executes_directly(){
   setup_case
   run_entrypoint /bin/sh -c "printf 'debug [%s]\n' \"\$1\"" shell arg
@@ -343,6 +395,11 @@ main(){
   run_test test_updater_dispatch_preserves_explicit_paths
   run_test test_updater_dispatch_preserves_explicit_log_dir
   run_test test_web_dispatch_injects_paths
+  run_test test_web_exports_auto_detected_script_sync_status
+  run_test test_web_exports_auto_not_detected_script_sync_status
+  run_test test_web_exports_forced_script_sync_status
+  run_test test_web_exports_disabled_script_sync_status
+  run_test test_doctor_exports_skipped_script_sync_status
   run_test test_debug_command_executes_directly
   run_test test_sync_command_copies_scripts_and_exits
   run_test test_startup_auto_sync_runs_for_existing_destination

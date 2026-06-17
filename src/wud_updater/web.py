@@ -35,6 +35,7 @@ from . import (
     web_scheduler,
     web_self_update,
     web_settings,
+    web_startup,
     web_state,
     web_static,
 )
@@ -144,7 +145,6 @@ from .web_auth import (
     _parse_secure_cookie_mode,
     _parse_trusted_proxies,
     _prepare_web_auth_state,
-    _print_setup_claim,
     _reset_admin_url,
     _setup_required,
     _settings,
@@ -864,8 +864,13 @@ def run_web_from_namespace(args: object) -> int:
 
     app = create_app(settings)
     setup_claim = str(getattr(app.state, "web_setup_claim", ""))
-    if setup_claim:
-        _print_setup_claim(settings, host=host, port=port, claim=setup_claim)
+    web_startup.print_web_startup_summary(
+        settings,
+        host=host,
+        port=port,
+        setup_claim=setup_claim,
+        environ=env,
+    )
     uvicorn.run(app, host=host, port=port)
     return 0
 
