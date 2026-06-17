@@ -4,6 +4,23 @@ All notable changes to WUD-Updater are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com) and versions follow
 [Semantic Versioning](https://semver.org).
 
+## [0.40.0](https://github.com/magrhino/WUD-Updater/compare/v0.39.0...v0.40.0) (2026-06-17)
+
+
+### Features
+
+* **snoozes:** Add dependency snooze support to the WebUI and backend ([#298](https://github.com/magrhino/WUD-Updater/issues/298)) ([f995092](https://github.com/magrhino/WUD-Updater/commit/f9950929858417916cfa789b0a7a992e96210d41))
+
+
+### Bug Fixes
+
+* **sonar:** SonarQube issues across updater and WebUI ([#326](https://github.com/magrhino/WUD-Updater/issues/326)) ([23b7788](https://github.com/magrhino/WUD-Updater/commit/23b77882391f481ff97b4b90df5c06e2ad553446))
+
+
+### Documentation
+
+* **webui:** prefer playwright plugin validation ([e80bd64](https://github.com/magrhino/WUD-Updater/commit/e80bd6440d25723e2bcc095a18fdb30e309463d3))
+
 ## [0.39.0](https://github.com/magrhino/WUD-Updater/compare/v0.38.4...v0.39.0) (2026-06-15)
 
 
