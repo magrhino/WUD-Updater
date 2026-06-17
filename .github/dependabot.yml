@@ -17,6 +17,11 @@ updates:
       default-days: 7
       semver-major-days: 14
     groups:
+      pydantic-runtime:
+        dependency-type: "production"
+        patterns:
+          - "pydantic"
+          - "pydantic-core"
       python-production:
         dependency-type: "production"
         update-types:

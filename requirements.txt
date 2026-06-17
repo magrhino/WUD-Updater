@@ -34,8 +34,10 @@ pydantic==2.13.4
     # via
     #   fastapi
     #   wud-updater (pyproject.toml)
-pydantic-core==2.47.0
-    # via pydantic
+pydantic-core==2.46.4
+    # via
+    #   pydantic
+    #   wud-updater (pyproject.toml)
 pygments==2.20.0
     # via rich
 rich==15.0.0
