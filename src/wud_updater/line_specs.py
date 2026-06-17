@@ -76,7 +76,7 @@ def _parse_line_range(
         raise LineSpecError(f"{label} line numbers must be 1 or greater: {spec}")
     if end < start:
         raise LineSpecError(f"{label} ranges must ascend: {spec}")
-    _check_line_number_bounds(end, spec, max_lines, label)
+    _check_line_number_bounds(end, max_lines, label)
     return range(start, end + 1)
 
 
@@ -89,13 +89,12 @@ def _parse_line_number(
     line_no = int(part, 10)
     if line_no < 1:
         raise LineSpecError(f"{label} line numbers must be 1 or greater: {spec}")
-    _check_line_number_bounds(line_no, spec, max_lines, label)
+    _check_line_number_bounds(line_no, max_lines, label)
     return line_no
 
 
 def _check_line_number_bounds(
     line_no: int,
-    spec: str | None,
     max_lines: int,
     label: str,
 ) -> None:
