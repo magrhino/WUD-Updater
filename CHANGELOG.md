@@ -4,6 +4,13 @@ All notable changes to WUD-Updater are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com) and versions follow
 [Semantic Versioning](https://semver.org).
 
+## [0.42.0](https://github.com/magrhino/WUD-Updater/compare/v0.41.0...v0.42.0) (2026-06-17)
+
+
+### Features
+
+* **ui:** pending search and selection state handling ([#332](https://github.com/magrhino/WUD-Updater/issues/332)) ([863a222](https://github.com/magrhino/WUD-Updater/commit/863a222861bb1db30bc242570e424deea6aad77f))
+
 ## [0.41.0](https://github.com/magrhino/WUD-Updater/compare/v0.40.0...v0.41.0) (2026-06-17)
 
 
