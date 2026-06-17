@@ -13,6 +13,7 @@ import { NAlert, NButton, NEmpty, NFlex, NGi, NGrid, NSkeleton, NTag } from "nai
 
 import type { DoctorCheck, DoctorCheckStatus } from "../api/client";
 import { useConnectionStore } from "../stores/connection";
+import { runInBackground } from "../utils/promises";
 
 const connection = useConnectionStore();
 const copiedSnippet = ref("");
@@ -37,7 +38,7 @@ const groupedChecks = computed(() => {
 
 onMounted(() => {
   if (connection.doctor === null) {
-    void connection.loadDoctor().catch(() => undefined);
+    runInBackground(connection.loadDoctor());
   }
 });
 

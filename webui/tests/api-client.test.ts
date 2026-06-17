@@ -17,8 +17,11 @@ function jsonResponse(body: unknown, status = 200): Response {
   });
 }
 
-function mockFetch(body: unknown = {}): ReturnType<typeof vi.fn> {
-  const fetchMock = vi.fn().mockImplementation(() => Promise.resolve(jsonResponse(body)));
+function mockFetch(body?: unknown): ReturnType<typeof vi.fn> {
+  const responseBody = body === undefined ? {} : body;
+  const fetchMock = vi
+    .fn()
+    .mockImplementation(() => Promise.resolve(jsonResponse(responseBody)));
   vi.stubGlobal("fetch", fetchMock);
   return fetchMock;
 }
@@ -334,38 +337,38 @@ describe("webApi", () => {
     await webApi.createJob("plan-id", [4], true, tagOverrides, [], "csrf");
     await webApi.applyPlan("plan-id", [4], true, tagOverrides, [], "csrf");
 
-    expect(JSON.parse(String(requestInit(fetchMock.mock.calls[0]).body))).toEqual({
+    expect(jsonRequestBody(fetchMock.mock.calls[0])).toEqual({
       cleanup_id: "cleanup-id",
       lines: [{ line_no: 3, raw: "repo/old:latest" }],
       confirmation: "remove_unmatched",
     });
-    expect(JSON.parse(String(requestInit(fetchMock.mock.calls[1]).body))).toEqual({
+    expect(jsonRequestBody(fetchMock.mock.calls[1])).toEqual({
       line_numbers: [3],
     });
-    expect(JSON.parse(String(requestInit(fetchMock.mock.calls[2]).body))).toEqual({
+    expect(jsonRequestBody(fetchMock.mock.calls[2])).toEqual({
       removal_id: "removal-id",
       lines: [{ line_no: 3, raw: "repo/old:latest" }],
       confirmation: "remove_selected",
     });
-    expect(JSON.parse(String(requestInit(fetchMock.mock.calls[3]).body))).toEqual({
+    expect(jsonRequestBody(fetchMock.mock.calls[3])).toEqual({
       values: {
         theme_preference: "dark",
         onboarding_checklist: "dismissed",
       },
     });
-    expect(JSON.parse(String(requestInit(fetchMock.mock.calls[4]).body))).toEqual({
+    expect(jsonRequestBody(fetchMock.mock.calls[4])).toEqual({
       status: "in_progress",
       step: "pending_preflight",
     });
     expect(requestInit(fetchMock.mock.calls[5]).body).toBeUndefined();
-    expect(JSON.parse(String(requestInit(fetchMock.mock.calls[6]).body))).toEqual({
+    expect(jsonRequestBody(fetchMock.mock.calls[6])).toEqual({
       confirmation: "pull_image",
       current_tag: "v0.24.2",
       latest_tag: "v0.25.0",
       target_image: "ghcr.io/magrhino/wud-updater:latest",
       restart_container: "wud-updater",
     });
-    expect(JSON.parse(String(requestInit(fetchMock.mock.calls[7]).body))).toEqual({
+    expect(jsonRequestBody(fetchMock.mock.calls[7])).toEqual({
       confirmation: "prepare_tag_update",
       plan_id: "self-plan",
       current_tag: "v0.24.2",
@@ -373,16 +376,16 @@ describe("webApi", () => {
       target_image: "ghcr.io/magrhino/wud-updater:latest",
       restart_container: "wud-updater",
     });
-    expect(JSON.parse(String(requestInit(fetchMock.mock.calls[8]).body))).toEqual({
+    expect(jsonRequestBody(fetchMock.mock.calls[8])).toEqual({
       confirmation: "restart_container",
     });
-    expect(JSON.parse(String(requestInit(fetchMock.mock.calls[9]).body))).toEqual({
+    expect(jsonRequestBody(fetchMock.mock.calls[9])).toEqual({
       line_numbers: [4],
       allow_tag_updates: true,
       tag_overrides: tagOverrides,
       digest_pin_label_rewrite_approvals: [],
     });
-    expect(JSON.parse(String(requestInit(fetchMock.mock.calls[10]).body))).toEqual({
+    expect(jsonRequestBody(fetchMock.mock.calls[10])).toEqual({
       plan_id: "plan-id",
       line_numbers: [4],
       allow_tag_updates: true,
@@ -390,7 +393,7 @@ describe("webApi", () => {
       digest_pin_label_rewrite_approvals: [],
       confirmation: "apply",
     });
-    expect(JSON.parse(String(requestInit(fetchMock.mock.calls[11]).body))).toEqual({
+    expect(jsonRequestBody(fetchMock.mock.calls[11])).toEqual({
       plan_id: "plan-id",
       line_numbers: [4],
       allow_tag_updates: true,
@@ -402,10 +405,8 @@ describe("webApi", () => {
 
   it("opens job streams with browser credentials", () => {
     const constructed: Array<{ url: string; init: EventSourceInit }> = [];
-    class MockEventSource {
-      constructor(url: string, init: EventSourceInit) {
-        constructed.push({ url, init });
-      }
+    function MockEventSource(this: EventSource, url: string, init: EventSourceInit) {
+      constructed.push({ url, init });
     }
     vi.stubGlobal("EventSource", MockEventSource);
 
@@ -435,14 +436,17 @@ describe("webApi", () => {
         label_key: "wud.tag.include",
         current_label_value: "^beta|^stable",
         planned_tag: "2.0",
-        proposed_label_value: "^2\\.0$$",
+        proposed_label_value: String.raw`^2\.0$$`,
       },
     ];
 
     await webApi.createPlan([1], false, [], approvals, "csrf-token");
 
-    const body = JSON.parse(String(requestInit(fetchMock.mock.calls[0]).body));
-    expect(body.digest_pin_label_rewrite_approvals).toEqual(approvals);
+    expect(jsonRequestBody(fetchMock.mock.calls[0])).toEqual(
+      expect.objectContaining({
+        digest_pin_label_rewrite_approvals: approvals,
+      }),
+    );
   });
 
   it("includes digest_pin_label_rewrite_approvals in createJob request", async () => {
@@ -454,16 +458,19 @@ describe("webApi", () => {
         label_key: "wud.tag.include",
         current_label_value: "^beta|^stable",
         planned_tag: "2.0",
-        proposed_label_value: "^2\\.0$$",
+        proposed_label_value: String.raw`^2\.0$$`,
       },
     ];
 
     await webApi.createJob("plan-id", [1], false, [], approvals, "csrf-token");
 
-    const body = JSON.parse(String(requestInit(fetchMock.mock.calls[0]).body));
-    expect(body.digest_pin_label_rewrite_approvals).toEqual(approvals);
-    expect(body.confirmation).toBe("apply");
-    expect(body.plan_id).toBe("plan-id");
+    expect(jsonRequestBody(fetchMock.mock.calls[0])).toEqual(
+      expect.objectContaining({
+        digest_pin_label_rewrite_approvals: approvals,
+        confirmation: "apply",
+        plan_id: "plan-id",
+      }),
+    );
   });
 
   it("includes digest_pin_label_rewrite_approvals in applyPlan request", async () => {
@@ -475,16 +482,19 @@ describe("webApi", () => {
         label_key: "wud.tag.include",
         current_label_value: "^beta|^stable",
         planned_tag: "2.0",
-        proposed_label_value: "^2\\.0$$",
+        proposed_label_value: String.raw`^2\.0$$`,
       },
     ];
 
     await webApi.applyPlan("plan-id", [1], false, [], approvals, "csrf-token");
 
-    const body = JSON.parse(String(requestInit(fetchMock.mock.calls[0]).body));
-    expect(body.digest_pin_label_rewrite_approvals).toEqual(approvals);
-    expect(body.confirmation).toBe("apply");
-    expect(body.plan_id).toBe("plan-id");
+    expect(jsonRequestBody(fetchMock.mock.calls[0])).toEqual(
+      expect.objectContaining({
+        digest_pin_label_rewrite_approvals: approvals,
+        confirmation: "apply",
+        plan_id: "plan-id",
+      }),
+    );
   });
 
   it("sends empty digest_pin_label_rewrite_approvals when none given", async () => {
@@ -492,7 +502,10 @@ describe("webApi", () => {
 
     await webApi.createPlan([1], false, [], [], "csrf-token");
 
-    const body = JSON.parse(String(requestInit(fetchMock.mock.calls[0]).body));
-    expect(body.digest_pin_label_rewrite_approvals).toEqual([]);
+    expect(jsonRequestBody(fetchMock.mock.calls[0])).toEqual(
+      expect.objectContaining({
+        digest_pin_label_rewrite_approvals: [],
+      }),
+    );
   });
 });

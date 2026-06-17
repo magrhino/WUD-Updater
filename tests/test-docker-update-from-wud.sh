@@ -4,6 +4,12 @@ set -Eeuo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
 SCRIPT="$REPO_ROOT/bin/docker-update-from-wud"
 FAKE_BIN="$REPO_ROOT/tests/fakes"
+APP_LATEST_IMAGE="repo/app:latest"
+OLD_DIGEST="sha256:old"
+NEW_DIGEST="sha256:new"
+QBIT_IMAGE="ghcr.io/linuxserver/qbittorrent:5.1.4"
+QBIT_NEW_IMAGE="ghcr.io/linuxserver/qbittorrent:5.2.0"
+RECREATE_STACK_LABEL="WUD-UPDATER-RECREATE-STACK"
 TEST_TMP=""
 BASE=""
 WUD_FILE=""
@@ -242,10 +248,10 @@ test_help_exits_successfully(){
 
 test_default_dispatch_uses_python_backend(){
   setup_case
-  printf 'repo/app:latest\n' > "$WUD_FILE"
-  make_single_service_stack app "$BASE/app" docker-compose.yml repo/app:latest
-  set_image_state repo/app:latest old sha256:old
-  set_image_after_pull repo/app:latest new sha256:new
+  printf '%s\n' "$APP_LATEST_IMAGE" > "$WUD_FILE"
+  make_single_service_stack app "$BASE/app" docker-compose.yml "$APP_LATEST_IMAGE"
+  set_image_state "$APP_LATEST_IMAGE" old "$OLD_DIGEST"
+  set_image_after_pull "$APP_LATEST_IMAGE" new "$NEW_DIGEST"
 
   run_script --dry-run
 
@@ -256,15 +262,15 @@ test_default_dispatch_uses_python_backend(){
 
 test_dry_run_no_mutation(){
   setup_case
-  printf 'repo/app:latest\n' > "$WUD_FILE"
-  make_single_service_stack app "$BASE/app" docker-compose.yml repo/app:latest
-  set_image_state repo/app:latest old sha256:old
-  set_image_after_pull repo/app:latest new sha256:new
+  printf '%s\n' "$APP_LATEST_IMAGE" > "$WUD_FILE"
+  make_single_service_stack app "$BASE/app" docker-compose.yml "$APP_LATEST_IMAGE"
+  set_image_state "$APP_LATEST_IMAGE" old "$OLD_DIGEST"
+  set_image_after_pull "$APP_LATEST_IMAGE" new "$NEW_DIGEST"
 
   run_script --dry-run
 
   assert_status 0
-  assert_file_equals "$WUD_FILE" 'repo/app:latest'
+  assert_file_equals "$WUD_FILE" "$APP_LATEST_IMAGE"
   assert_calls_not_contain 'compose -f .* pull'
   assert_calls_not_contain 'compose -f .* stop'
   assert_calls_not_contain 'compose -f .* down'
@@ -278,10 +284,10 @@ test_default_base_uses_home_docker(){
   BASE="$home_dir/docker"
   WUD_FILE="$BASE/wud/out/images.todo"
   mkdir -p "$BASE/wud/out" "$LOG_DIR"
-  printf 'repo/app:latest\n' > "$WUD_FILE"
-  make_single_service_stack app "$BASE/app" docker-compose.yml repo/app:latest
-  set_image_state repo/app:latest old sha256:old
-  set_image_after_pull repo/app:latest new sha256:new
+  printf '%s\n' "$APP_LATEST_IMAGE" > "$WUD_FILE"
+  make_single_service_stack app "$BASE/app" docker-compose.yml "$APP_LATEST_IMAGE"
+  set_image_state "$APP_LATEST_IMAGE" old "$OLD_DIGEST"
+  set_image_after_pull "$APP_LATEST_IMAGE" new "$NEW_DIGEST"
 
   run_script_with_home_defaults "$home_dir" --dry-run
 
@@ -294,15 +300,15 @@ test_default_base_uses_home_docker(){
 
 test_confirm_required_blocks_mutation(){
   setup_case
-  printf 'repo/app:latest\n' > "$WUD_FILE"
-  make_single_service_stack app "$BASE/app" docker-compose.yml repo/app:latest
-  set_image_state repo/app:latest old sha256:old
-  set_image_after_pull repo/app:latest new sha256:new
+  printf '%s\n' "$APP_LATEST_IMAGE" > "$WUD_FILE"
+  make_single_service_stack app "$BASE/app" docker-compose.yml "$APP_LATEST_IMAGE"
+  set_image_state "$APP_LATEST_IMAGE" old "$OLD_DIGEST"
+  set_image_after_pull "$APP_LATEST_IMAGE" new "$NEW_DIGEST"
 
   run_script
 
   assert_status 1
-  assert_file_equals "$WUD_FILE" 'repo/app:latest'
+  assert_file_equals "$WUD_FILE" "$APP_LATEST_IMAGE"
   assert_calls_not_contain 'compose -f .* pull'
   assert_calls_not_contain 'compose -f .* stop'
   assert_calls_not_contain 'compose -f .* down'
@@ -329,15 +335,15 @@ test_only_lines_updates_subset_and_keeps_unselected(){
 
 test_only_lines_keeps_unselected_duplicate_raw_line(){
   setup_case
-  printf 'repo/app:latest\nrepo/app:latest\n' > "$WUD_FILE"
-  make_single_service_stack app "$BASE/app" docker-compose.yml repo/app:latest
-  set_image_state repo/app:latest old sha256:old
-  set_image_after_pull repo/app:latest new sha256:new
+  printf '%s\n%s\n' "$APP_LATEST_IMAGE" "$APP_LATEST_IMAGE" > "$WUD_FILE"
+  make_single_service_stack app "$BASE/app" docker-compose.yml "$APP_LATEST_IMAGE"
+  set_image_state "$APP_LATEST_IMAGE" old "$OLD_DIGEST"
+  set_image_after_pull "$APP_LATEST_IMAGE" new "$NEW_DIGEST"
 
   run_script --yes --only-lines 1
 
   assert_status 0
-  assert_file_equals "$WUD_FILE" 'repo/app:latest'
+  assert_file_equals "$WUD_FILE" "$APP_LATEST_IMAGE"
   teardown_case
 }
 
@@ -421,15 +427,15 @@ test_parent_wud_lock_is_reused_and_released(){
 
 test_invalid_line_spec_fails_before_docker_calls(){
   setup_case
-  printf 'repo/app:latest\n' > "$WUD_FILE"
-  make_single_service_stack app "$BASE/app" docker-compose.yml repo/app:latest
-  set_image_state repo/app:latest old sha256:old
-  set_image_after_pull repo/app:latest new sha256:new
+  printf '%s\n' "$APP_LATEST_IMAGE" > "$WUD_FILE"
+  make_single_service_stack app "$BASE/app" docker-compose.yml "$APP_LATEST_IMAGE"
+  set_image_state "$APP_LATEST_IMAGE" old "$OLD_DIGEST"
+  set_image_after_pull "$APP_LATEST_IMAGE" new "$NEW_DIGEST"
 
   run_script --yes --only-lines 0
 
   assert_status 1
-  assert_file_equals "$WUD_FILE" 'repo/app:latest'
+  assert_file_equals "$WUD_FILE" "$APP_LATEST_IMAGE"
   [[ ! -s "$FAKE_ROOT/calls.log" ]] || fail "docker was called for invalid line spec"
   teardown_case
 }
@@ -454,10 +460,10 @@ test_one_line_two_stacks_one_fails_keeps_line(){
 
 test_sha_suffix_does_not_block_cleanup(){
   setup_case
-  printf 'repo/app:latest sha256=good\n' > "$WUD_FILE"
-  make_single_service_stack app "$BASE/app" docker-compose.yml repo/app:latest
-  set_image_state repo/app:latest old sha256:old
-  set_image_after_pull repo/app:latest new sha256:bad
+  printf '%s sha256=good\n' "$APP_LATEST_IMAGE" > "$WUD_FILE"
+  make_single_service_stack app "$BASE/app" docker-compose.yml "$APP_LATEST_IMAGE"
+  set_image_state "$APP_LATEST_IMAGE" old "$OLD_DIGEST"
+  set_image_after_pull "$APP_LATEST_IMAGE" new sha256:bad
 
   run_script --yes
 
@@ -471,8 +477,8 @@ test_tag_update_requires_explicit_flag(){
   setup_case
   printf 'repo/app:1.0 tag=2.0\n' > "$WUD_FILE"
   make_single_service_stack app "$BASE/app" docker-compose.yml repo/app:1.0
-  set_image_state repo/app:1.0 old sha256:old
-  set_image_after_pull repo/app:2.0 new sha256:new
+  set_image_state repo/app:1.0 old "$OLD_DIGEST"
+  set_image_after_pull repo/app:2.0 new "$NEW_DIGEST"
 
   run_script --yes
 
@@ -489,8 +495,8 @@ test_tag_update_dry_run_does_not_rewrite_compose(){
   setup_case
   printf 'repo/app:1.0 tag=2.0\n' > "$WUD_FILE"
   make_single_service_stack app "$BASE/app" docker-compose.yml repo/app:1.0
-  set_image_state repo/app:1.0 old sha256:old
-  set_image_after_pull repo/app:2.0 new sha256:new
+  set_image_state repo/app:1.0 old "$OLD_DIGEST"
+  set_image_after_pull repo/app:2.0 new "$NEW_DIGEST"
 
   run_script --dry-run --allow-tag-updates
 
@@ -507,8 +513,8 @@ test_allowed_tag_update_rewrites_compose_and_cleans_line(){
   setup_case
   printf 'repo/app:1.0 tag=2.0\n' > "$WUD_FILE"
   make_single_service_stack app "$BASE/app" docker-compose.yml repo/app:1.0
-  set_image_state repo/app:1.0 old sha256:old
-  set_image_after_pull repo/app:2.0 new sha256:new
+  set_image_state repo/app:1.0 old "$OLD_DIGEST"
+  set_image_after_pull repo/app:2.0 new "$NEW_DIGEST"
 
   run_script --yes --allow-tag-updates
 
@@ -524,8 +530,8 @@ test_tag_override_rewrites_compose_to_override(){
   setup_case
   printf 'repo/app:1.0 tag=wrong\n' > "$WUD_FILE"
   make_single_service_stack app "$BASE/app" docker-compose.yml repo/app:1.0
-  set_image_state repo/app:1.0 old sha256:old
-  set_image_after_pull repo/app:3.0 new sha256:new
+  set_image_state repo/app:1.0 old "$OLD_DIGEST"
+  set_image_after_pull repo/app:3.0 new "$NEW_DIGEST"
 
   run_script --yes --allow-tag-updates --tag-override 1=3.0
 
@@ -541,12 +547,12 @@ test_tag_update_uses_direct_service_image_map(){
   setup_case
   printf 'linuxserver/qbittorrent:5.1.4 tag=20.04.1\n' > "$WUD_FILE"
   make_stack media "$BASE/media" docker-compose.yml
-  cat > "$BASE/media/docker-compose.yml" <<'YAML'
+  cat > "$BASE/media/docker-compose.yml" <<YAML
 services:
   vpn:
     image: qmcgaw/gluetun:latest
   qbittorrent:
-    image: ghcr.io/linuxserver/qbittorrent:5.1.4
+    image: $QBIT_IMAGE
     depends_on:
       vpn:
         condition: service_started
@@ -560,14 +566,14 @@ YAML
   printf '%s\n' cid-qbittorrent > "$FAKE_ROOT/stacks/media/cids.txt"
   printf '%s\n' cid-qbittorrent > "$FAKE_ROOT/stacks/media/cids-qbittorrent.txt"
   printf '/cid-qbittorrent|running|healthy|0|0\n' > "$FAKE_ROOT/containers/cid-qbittorrent.summary"
-  set_image_state ghcr.io/linuxserver/qbittorrent:5.1.4 old sha256:old
-  set_image_after_pull ghcr.io/linuxserver/qbittorrent:5.2.0 new sha256:new
+  set_image_state "$QBIT_IMAGE" old "$OLD_DIGEST"
+  set_image_after_pull "$QBIT_NEW_IMAGE" new "$NEW_DIGEST"
 
   run_script --yes --allow-tag-updates --tag-override 1=5.2.0
 
   assert_status 0
   assert_file_equals "$WUD_FILE" ''
-  grep -q -- 'image: ghcr.io/linuxserver/qbittorrent:5.2.0' "$BASE/media/docker-compose.yml" || fail "compose file did not contain new qBittorrent tag"
+  grep -q -- "image: $QBIT_NEW_IMAGE" "$BASE/media/docker-compose.yml" || fail "compose file did not contain new qBittorrent tag"
   grep -q -- 'image: ghcr.io/example/sidecar:latest' "$BASE/media/docker-compose.yml" || fail "sidecar image changed unexpectedly"
   assert_calls_contain 'compose -f docker-compose.yml pull qbittorrent'
   assert_calls_contain 'compose -f docker-compose.yml stop qbittorrent'
@@ -579,16 +585,16 @@ YAML
 
 test_network_mode_consumer_tag_update_stays_service_scoped(){
   setup_case
-  printf 'ghcr.io/linuxserver/qbittorrent:5.1.4 tag=5.2.0\n' > "$WUD_FILE"
-  make_gluetun_qbittorrent_stack media ghcr.io/linuxserver/qbittorrent:5.1.4
-  set_image_state ghcr.io/linuxserver/qbittorrent:5.1.4 old-qbit sha256:old-qbit
-  set_image_after_pull ghcr.io/linuxserver/qbittorrent:5.2.0 new-qbit sha256:new-qbit
+  printf '%s tag=5.2.0\n' "$QBIT_IMAGE" > "$WUD_FILE"
+  make_gluetun_qbittorrent_stack media "$QBIT_IMAGE"
+  set_image_state "$QBIT_IMAGE" old-qbit sha256:old-qbit
+  set_image_after_pull "$QBIT_NEW_IMAGE" new-qbit sha256:new-qbit
 
   run_script --yes --allow-tag-updates
 
   assert_status 0
   assert_file_equals "$WUD_FILE" ''
-  grep -q -- 'image: ghcr.io/linuxserver/qbittorrent:5.2.0' "$BASE/media/docker-compose.yml" || fail "compose file did not contain new qBittorrent tag"
+  grep -q -- "image: $QBIT_NEW_IMAGE" "$BASE/media/docker-compose.yml" || fail "compose file did not contain new qBittorrent tag"
   assert_calls_contain 'compose -f docker-compose.yml pull qbittorrent'
   assert_calls_not_contain 'compose -f docker-compose.yml pull gluetun'
   assert_calls_not_contain 'compose -f docker-compose.yml pull mamapi'
@@ -602,18 +608,18 @@ test_network_mode_consumer_tag_update_stays_service_scoped(){
 
 test_network_mode_consumer_tag_update_rollback_uses_service_scope(){
   setup_case
-  printf 'ghcr.io/linuxserver/qbittorrent:5.1.4 tag=5.2.0\n' > "$WUD_FILE"
-  make_gluetun_qbittorrent_stack media ghcr.io/linuxserver/qbittorrent:5.1.4
-  set_image_state ghcr.io/linuxserver/qbittorrent:5.1.4 old-qbit sha256:old-qbit
-  set_image_after_pull ghcr.io/linuxserver/qbittorrent:5.2.0 new-qbit sha256:new-qbit
+  printf '%s tag=5.2.0\n' "$QBIT_IMAGE" > "$WUD_FILE"
+  make_gluetun_qbittorrent_stack media "$QBIT_IMAGE"
+  set_image_state "$QBIT_IMAGE" old-qbit sha256:old-qbit
+  set_image_after_pull "$QBIT_NEW_IMAGE" new-qbit sha256:new-qbit
   : > "$FAKE_ROOT/stacks/media/up_fail"
   printf 'network namespace recreate failed\n' > "$FAKE_ROOT/stacks/media/up_stderr"
 
   run_script --yes --allow-tag-updates
 
   assert_status 1
-  assert_file_equals "$WUD_FILE" 'ghcr.io/linuxserver/qbittorrent:5.1.4 tag=5.2.0'
-  grep -q -- 'image: ghcr.io/linuxserver/qbittorrent:5.1.4' "$BASE/media/docker-compose.yml" || fail "compose file was not rolled back"
+  assert_file_equals "$WUD_FILE" "$QBIT_IMAGE tag=5.2.0"
+  grep -q -- "image: $QBIT_IMAGE" "$BASE/media/docker-compose.yml" || fail "compose file was not rolled back"
   local up_count
   up_count="$(grep -Ec 'compose -f docker-compose.yml up -d --remove-orphans --no-deps qbittorrent$' "$FAKE_ROOT/calls.log")"
   [[ "$up_count" == "2" ]] || fail "expected update and rollback up scoped to qbittorrent, got $up_count"
@@ -626,7 +632,7 @@ test_network_mode_consumer_tag_update_rollback_uses_service_scope(){
 test_network_mode_provider_update_includes_consumers(){
   setup_case
   printf 'qmcgaw/gluetun:latest\n' > "$WUD_FILE"
-  make_gluetun_qbittorrent_stack media ghcr.io/linuxserver/qbittorrent:5.1.4
+  make_gluetun_qbittorrent_stack media "$QBIT_IMAGE"
   set_image_state qmcgaw/gluetun:latest old-gluetun sha256:old-gluetun
   set_image_after_pull qmcgaw/gluetun:latest new-gluetun sha256:new-gluetun
 
@@ -645,11 +651,11 @@ test_network_mode_provider_update_includes_consumers(){
 
 test_network_mode_provider_label_does_not_expand_consumer_update(){
   setup_case
-  printf 'ghcr.io/linuxserver/qbittorrent:5.1.4\n' > "$WUD_FILE"
-  make_gluetun_qbittorrent_stack media ghcr.io/linuxserver/qbittorrent:5.1.4
-  set_container_label cid-gluetun WUD-UPDATER-RECREATE-STACK true
-  set_image_state ghcr.io/linuxserver/qbittorrent:5.1.4 old-qbit sha256:old-qbit
-  set_image_after_pull ghcr.io/linuxserver/qbittorrent:5.1.4 new-qbit sha256:new-qbit
+  printf '%s\n' "$QBIT_IMAGE" > "$WUD_FILE"
+  make_gluetun_qbittorrent_stack media "$QBIT_IMAGE"
+  set_container_label cid-gluetun "$RECREATE_STACK_LABEL" true
+  set_image_state "$QBIT_IMAGE" old-qbit sha256:old-qbit
+  set_image_after_pull "$QBIT_IMAGE" new-qbit sha256:new-qbit
 
   run_script --yes --mode stop
 
@@ -673,7 +679,7 @@ test_manifest_validation_failure_prevents_tag_rewrite(){
   setup_case
   printf 'repo/app:1.0 tag=2.0\n' > "$WUD_FILE"
   make_single_service_stack app "$BASE/app" docker-compose.yml repo/app:1.0
-  set_image_state repo/app:1.0 old sha256:old
+  set_image_state repo/app:1.0 old "$OLD_DIGEST"
   set_manifest_failure repo/app:2.0 "manifest unknown"
 
   run_script --yes --allow-tag-updates
@@ -691,8 +697,8 @@ test_unhealthy_tag_update_rolls_back_and_writes_incident_log(){
   setup_case
   printf 'repo/app:1.0 tag=2.0\n' > "$WUD_FILE"
   make_single_service_stack app "$BASE/app" docker-compose.yml repo/app:1.0 cid-app
-  set_image_state repo/app:1.0 old sha256:old
-  set_image_after_pull repo/app:2.0 new sha256:new
+  set_image_state repo/app:1.0 old "$OLD_DIGEST"
+  set_image_after_pull repo/app:2.0 new "$NEW_DIGEST"
   printf 'new tag failed health check\n' > "$FAKE_ROOT/containers/cid-app.healthlog"
   cat > "$FAKE_ROOT/post-up-hook" <<'HOOK'
 #!/usr/bin/env bash
@@ -725,9 +731,9 @@ HOOK
 test_pinned_digest_mismatch_prevents_cleanup(){
   setup_case
   printf 'repo/app@sha256:good\n' > "$WUD_FILE"
-  make_single_service_stack app "$BASE/app" docker-compose.yml repo/app:latest
-  set_image_state repo/app:latest old sha256:old
-  set_image_after_pull repo/app:latest new sha256:bad
+  make_single_service_stack app "$BASE/app" docker-compose.yml "$APP_LATEST_IMAGE"
+  set_image_state "$APP_LATEST_IMAGE" old "$OLD_DIGEST"
+  set_image_after_pull "$APP_LATEST_IMAGE" new sha256:bad
 
   run_script --yes
 
@@ -740,9 +746,9 @@ test_pinned_digest_mismatch_prevents_cleanup(){
 test_pinned_digest_match_allows_cleanup(){
   setup_case
   printf 'repo/app@sha256:good\n' > "$WUD_FILE"
-  make_single_service_stack app "$BASE/app" docker-compose.yml repo/app:latest
-  set_image_state repo/app:latest old sha256:old
-  set_image_after_pull repo/app:latest new sha256:good
+  make_single_service_stack app "$BASE/app" docker-compose.yml "$APP_LATEST_IMAGE"
+  set_image_state "$APP_LATEST_IMAGE" old "$OLD_DIGEST"
+  set_image_after_pull "$APP_LATEST_IMAGE" new sha256:good
 
   run_script --yes
 
@@ -755,8 +761,8 @@ test_cleanup_removes_successful_raw_line_not_current_line_number(){
   setup_case
   printf 'repo/b:latest\n' > "$WUD_FILE"
   make_single_service_stack app "$BASE/app" docker-compose.yml repo/b:latest
-  set_image_state repo/b:latest old sha256:old
-  set_image_after_pull repo/b:latest new sha256:new
+  set_image_state repo/b:latest old "$OLD_DIGEST"
+  set_image_after_pull repo/b:latest new "$NEW_DIGEST"
   cat > "$FAKE_ROOT/post-pull-hook" <<'HOOK'
 #!/usr/bin/env bash
 set -Eeuo pipefail
@@ -774,14 +780,14 @@ HOOK
 
 test_cleanup_preserves_wud_file_owner_and_mode(){
   setup_case
-  printf 'repo/app:latest\n' > "$WUD_FILE"
+  printf '%s\n' "$APP_LATEST_IMAGE" > "$WUD_FILE"
   chmod 660 "$WUD_FILE"
   local expected_owner expected_mode
   expected_owner="$(stat_owner_group "$WUD_FILE")"
   expected_mode="$(stat_mode "$WUD_FILE")"
-  make_single_service_stack app "$BASE/app" docker-compose.yml repo/app:latest
-  set_image_state repo/app:latest old sha256:old
-  set_image_after_pull repo/app:latest new sha256:new
+  make_single_service_stack app "$BASE/app" docker-compose.yml "$APP_LATEST_IMAGE"
+  set_image_state "$APP_LATEST_IMAGE" old "$OLD_DIGEST"
+  set_image_after_pull "$APP_LATEST_IMAGE" new "$NEW_DIGEST"
 
   run_script --yes
 
@@ -797,10 +803,10 @@ test_out_owner_config_accepts_out_guid_for_logs_and_cleanup(){
   local uid gid log_file
   uid="$(id -u)"
   gid="$(id -g)"
-  printf 'repo/app:latest\n' > "$WUD_FILE"
-  make_single_service_stack app "$BASE/app" docker-compose.yml repo/app:latest
-  set_image_state repo/app:latest old sha256:old
-  set_image_after_pull repo/app:latest new sha256:new
+  printf '%s\n' "$APP_LATEST_IMAGE" > "$WUD_FILE"
+  make_single_service_stack app "$BASE/app" docker-compose.yml "$APP_LATEST_IMAGE"
+  set_image_state "$APP_LATEST_IMAGE" old "$OLD_DIGEST"
+  set_image_after_pull "$APP_LATEST_IMAGE" new "$NEW_DIGEST"
 
   run_script OUT_UID="$uid" OUT_GUID="$gid" --yes
 
@@ -817,7 +823,7 @@ test_out_owner_config_accepts_out_guid_for_logs_and_cleanup(){
 
 test_out_owner_config_requires_uid_and_group(){
   setup_case
-  printf 'repo/app:latest\n' > "$WUD_FILE"
+  printf '%s\n' "$APP_LATEST_IMAGE" > "$WUD_FILE"
 
   run_script OUT_UID="$(id -u)" --dry-run
 
@@ -830,11 +836,11 @@ test_stack_level_digest_cleanup_handles_no_service_map(){
   setup_case
   printf 'repo/app@sha256:good\n' > "$WUD_FILE"
   make_stack app "$BASE/app" docker-compose.yml
-  printf 'repo/app:latest\n' > "$FAKE_ROOT/stacks/app/images.txt"
+  printf '%s\n' "$APP_LATEST_IMAGE" > "$FAKE_ROOT/stacks/app/images.txt"
   printf 'cid-app\n' > "$FAKE_ROOT/stacks/app/cids.txt"
   printf '/cid-app|running|healthy|0|0\n' > "$FAKE_ROOT/containers/cid-app.summary"
-  set_image_state repo/app:latest old sha256:old
-  set_image_after_pull repo/app:latest new sha256:good
+  set_image_state "$APP_LATEST_IMAGE" old "$OLD_DIGEST"
+  set_image_after_pull "$APP_LATEST_IMAGE" new sha256:good
 
   run_script --yes --mode stop
 
@@ -848,33 +854,33 @@ test_stack_level_digest_cleanup_handles_no_service_map(){
 
 test_empty_health_ps_fails(){
   setup_case
-  printf 'repo/app:latest\n' > "$WUD_FILE"
-  make_single_service_stack app "$BASE/app" docker-compose.yml repo/app:latest ""
+  printf '%s\n' "$APP_LATEST_IMAGE" > "$WUD_FILE"
+  make_single_service_stack app "$BASE/app" docker-compose.yml "$APP_LATEST_IMAGE" ""
   : > "$FAKE_ROOT/stacks/app/cids.txt"
-  set_image_state repo/app:latest old sha256:old
-  set_image_after_pull repo/app:latest new sha256:new
+  set_image_state "$APP_LATEST_IMAGE" old "$OLD_DIGEST"
+  set_image_after_pull "$APP_LATEST_IMAGE" new "$NEW_DIGEST"
 
   run_script --yes
 
   assert_status 1
-  assert_file_equals "$WUD_FILE" 'repo/app:latest'
+  assert_file_equals "$WUD_FILE" "$APP_LATEST_IMAGE"
   teardown_case
 }
 
 test_up_failure_writes_error_report(){
   setup_case
-  printf 'repo/app:latest\n' > "$WUD_FILE"
-  make_single_service_stack app "$BASE/app" docker-compose.yml repo/app:latest ""
+  printf '%s\n' "$APP_LATEST_IMAGE" > "$WUD_FILE"
+  make_single_service_stack app "$BASE/app" docker-compose.yml "$APP_LATEST_IMAGE" ""
   : > "$FAKE_ROOT/stacks/app/cids.txt"
   : > "$FAKE_ROOT/stacks/app/up_fail"
   printf 'compose stderr failure\n' > "$FAKE_ROOT/stacks/app/up_stderr"
-  set_image_state repo/app:latest old sha256:old
-  set_image_after_pull repo/app:latest new sha256:new
+  set_image_state "$APP_LATEST_IMAGE" old "$OLD_DIGEST"
+  set_image_after_pull "$APP_LATEST_IMAGE" new "$NEW_DIGEST"
 
   run_script FAKE_COMPOSE_UP_WAIT=1 --yes
 
   assert_status 1
-  assert_file_equals "$WUD_FILE" 'repo/app:latest'
+  assert_file_equals "$WUD_FILE" "$APP_LATEST_IMAGE"
   grep -q -- 'error report:' "$TEST_TMP/output.log" || fail "missing error report path in output"
   local report
   report="$(latest_error_report_file)"
@@ -890,10 +896,10 @@ test_up_failure_writes_error_report(){
 
 test_comments_and_blank_lines_preserved(){
   setup_case
-  printf '# header\n\nrepo/app:latest\n# footer\n' > "$WUD_FILE"
-  make_single_service_stack app "$BASE/app" docker-compose.yml repo/app:latest
-  set_image_state repo/app:latest old sha256:old
-  set_image_after_pull repo/app:latest new sha256:new
+  printf '# header\n\n%s\n# footer\n' "$APP_LATEST_IMAGE" > "$WUD_FILE"
+  make_single_service_stack app "$BASE/app" docker-compose.yml "$APP_LATEST_IMAGE"
+  set_image_state "$APP_LATEST_IMAGE" old "$OLD_DIGEST"
+  set_image_after_pull "$APP_LATEST_IMAGE" new "$NEW_DIGEST"
 
   run_script --yes
 
@@ -910,10 +916,10 @@ test_paths_with_spaces(){
   WUD_FILE="$TEST_TMP/wud file.todo"
   LOG_DIR="$TEST_TMP/log dir"
   mkdir -p "$BASE" "$LOG_DIR"
-  printf 'repo/app:latest\n' > "$WUD_FILE"
-  make_single_service_stack app "$BASE/app" docker-compose.yml repo/app:latest
-  set_image_state repo/app:latest old sha256:old
-  set_image_after_pull repo/app:latest new sha256:new
+  printf '%s\n' "$APP_LATEST_IMAGE" > "$WUD_FILE"
+  make_single_service_stack app "$BASE/app" docker-compose.yml "$APP_LATEST_IMAGE"
+  set_image_state "$APP_LATEST_IMAGE" old "$OLD_DIGEST"
+  set_image_after_pull "$APP_LATEST_IMAGE" new "$NEW_DIGEST"
 
   run_script --yes
 
@@ -925,10 +931,10 @@ test_paths_with_spaces(){
 
 test_live_mode_does_not_stop_or_down(){
   setup_case
-  printf 'repo/app:latest\n' > "$WUD_FILE"
-  make_single_service_stack app "$BASE/app" docker-compose.yml repo/app:latest
-  set_image_state repo/app:latest old sha256:old
-  set_image_after_pull repo/app:latest new sha256:new
+  printf '%s\n' "$APP_LATEST_IMAGE" > "$WUD_FILE"
+  make_single_service_stack app "$BASE/app" docker-compose.yml "$APP_LATEST_IMAGE"
+  set_image_state "$APP_LATEST_IMAGE" old "$OLD_DIGEST"
+  set_image_after_pull "$APP_LATEST_IMAGE" new "$NEW_DIGEST"
 
   run_script --yes --mode live
 
@@ -941,10 +947,10 @@ test_live_mode_does_not_stop_or_down(){
 
 test_stop_mode_stops_before_up(){
   setup_case
-  printf 'repo/app:latest\n' > "$WUD_FILE"
-  make_single_service_stack app "$BASE/app" docker-compose.yml repo/app:latest
-  set_image_state repo/app:latest old sha256:old
-  set_image_after_pull repo/app:latest new sha256:new
+  printf '%s\n' "$APP_LATEST_IMAGE" > "$WUD_FILE"
+  make_single_service_stack app "$BASE/app" docker-compose.yml "$APP_LATEST_IMAGE"
+  set_image_state "$APP_LATEST_IMAGE" old "$OLD_DIGEST"
+  set_image_after_pull "$APP_LATEST_IMAGE" new "$NEW_DIGEST"
 
   run_script --yes --mode stop
 
@@ -958,12 +964,12 @@ test_stop_mode_stops_before_up(){
 
 test_service_scoped_update_only_touches_matched_service(){
   setup_case
-  printf 'repo/app:latest\n' > "$WUD_FILE"
+  printf '%s\n' "$APP_LATEST_IMAGE" > "$WUD_FILE"
   make_stack stack "$BASE/stack" docker-compose.yml
-  add_service stack app repo/app:latest cid-app
+  add_service stack app "$APP_LATEST_IMAGE" cid-app
   add_service stack db repo/db:latest cid-db
-  set_image_state repo/app:latest old-app sha256:old-app
-  set_image_after_pull repo/app:latest new-app sha256:new-app
+  set_image_state "$APP_LATEST_IMAGE" old-app sha256:old-app
+  set_image_after_pull "$APP_LATEST_IMAGE" new-app sha256:new-app
   set_image_state repo/db:latest old-db sha256:old-db
   set_image_after_pull repo/db:latest new-db sha256:new-db
 
@@ -983,13 +989,13 @@ test_service_scoped_update_only_touches_matched_service(){
 
 test_recreate_stack_label_forces_stack_level_update(){
   setup_case
-  printf 'repo/app:latest\n' > "$WUD_FILE"
+  printf '%s\n' "$APP_LATEST_IMAGE" > "$WUD_FILE"
   make_stack stack "$BASE/stack" docker-compose.yml
-  add_service stack app repo/app:latest cid-app
+  add_service stack app "$APP_LATEST_IMAGE" cid-app
   add_service stack db repo/db:latest cid-db
-  set_container_label cid-app WUD-UPDATER-RECREATE-STACK true
-  set_image_state repo/app:latest old-app sha256:old-app
-  set_image_after_pull repo/app:latest new-app sha256:new-app
+  set_container_label cid-app "$RECREATE_STACK_LABEL" true
+  set_image_state "$APP_LATEST_IMAGE" old-app sha256:old-app
+  set_image_after_pull "$APP_LATEST_IMAGE" new-app sha256:new-app
   set_image_state repo/db:latest old-db sha256:old-db
   set_image_after_pull repo/db:latest old-db sha256:old-db
 
@@ -997,7 +1003,7 @@ test_recreate_stack_label_forces_stack_level_update(){
 
   assert_status 0
   assert_file_equals "$WUD_FILE" ''
-  grep -q -- 'app (stack-level recreate: WUD-UPDATER-RECREATE-STACK=true)' "$TEST_TMP/output.log" || fail "plan did not report service pull with stack recreate label"
+  grep -q -- "app (stack-level recreate: ${RECREATE_STACK_LABEL}=true)" "$TEST_TMP/output.log" || fail "plan did not report service pull with stack recreate label"
   assert_calls_contain 'inspect cid-app'
   assert_calls_contain 'compose -f docker-compose.yml pull app'
   assert_calls_not_contain 'compose -f docker-compose.yml pull[[:space:]]*$'
@@ -1012,22 +1018,22 @@ test_recreate_stack_label_forces_stack_level_update(){
 
 test_recreate_stack_label_preserves_gluetun_network_stack(){
   setup_case
-  printf 'ghcr.io/linuxserver/qbittorrent:5.1.4\n' > "$WUD_FILE"
+  printf '%s\n' "$QBIT_IMAGE" > "$WUD_FILE"
   make_stack qbittorrent "$BASE/qbittorrent" docker-compose.yml
   add_service qbittorrent gluetun qmcgaw/gluetun:latest cid-gluetun
-  add_service qbittorrent qbittorrent ghcr.io/linuxserver/qbittorrent:5.1.4 cid-qbittorrent
+  add_service qbittorrent qbittorrent "$QBIT_IMAGE" cid-qbittorrent
   add_service qbittorrent mamapi ghcr.io/elforkhead/mamapi:latest cid-mamapi
   add_service qbittorrent speedtest-tracker ghcr.io/linuxserver/speedtest-tracker:latest cid-speedtest
   add_service qbittorrent thelounge ghcr.io/linuxserver/thelounge:latest cid-thelounge
-  set_container_label cid-qbittorrent WUD-UPDATER-RECREATE-STACK true
-  set_image_state ghcr.io/linuxserver/qbittorrent:5.1.4 old-qbit sha256:old-qbit
-  set_image_after_pull ghcr.io/linuxserver/qbittorrent:5.1.4 new-qbit sha256:new-qbit
+  set_container_label cid-qbittorrent "$RECREATE_STACK_LABEL" true
+  set_image_state "$QBIT_IMAGE" old-qbit sha256:old-qbit
+  set_image_after_pull "$QBIT_IMAGE" new-qbit sha256:new-qbit
 
   run_script --yes --mode stop
 
   assert_status 0
   assert_file_equals "$WUD_FILE" ''
-  grep -q -- 'qbittorrent (stack-level recreate: WUD-UPDATER-RECREATE-STACK=true)' "$TEST_TMP/output.log" || fail "plan did not report Gluetun stack recreate"
+  grep -q -- "qbittorrent (stack-level recreate: ${RECREATE_STACK_LABEL}=true)" "$TEST_TMP/output.log" || fail "plan did not report Gluetun stack recreate"
   assert_calls_contain 'inspect cid-qbittorrent'
   assert_calls_contain 'compose -f docker-compose.yml pull qbittorrent'
   assert_calls_not_contain 'compose -f docker-compose.yml pull gluetun'

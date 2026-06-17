@@ -29,6 +29,7 @@ import { useSettingsStore } from "./stores/settings";
 import { useUpdatesStore } from "./stores/updates";
 import { useRunsStore } from "./stores/runs";
 import { themePreferenceLabels, useWebuiTheme } from "./theme";
+import { runInBackground } from "./utils/promises";
 
 const route = useRoute();
 const router = useRouter();
@@ -232,16 +233,16 @@ watch(
   showShell,
   (visible) => {
     if (visible && connection.status === null) {
-      void connection.loadStatus().catch(() => undefined);
+      runInBackground(connection.loadStatus());
     }
     if (visible && settings.settings === null) {
-      void settings.loadSettings().catch(() => undefined);
+      runInBackground(settings.loadSettings());
     }
     if (visible && settings.coreUpdateTour === null) {
-      void settings.loadCoreUpdateTour().catch(() => undefined);
+      runInBackground(settings.loadCoreUpdateTour());
     }
     if (visible && updates.selfUpdate === null) {
-      void updates.loadSelfUpdate().catch(() => undefined);
+      runInBackground(updates.loadSelfUpdate());
     }
   },
   { immediate: true },
@@ -548,14 +549,14 @@ async function confirmSelfUpdate(): Promise<void> {
                     <strong>Release notes</strong>
                     <n-tooltip trigger="hover">
                       <template #trigger>
-                        <span
+                        <button
+                          type="button"
                           class="self-update-cap"
-                          tabindex="0"
                           :title="selfUpdateReleaseCapTitle"
                         >
                           <Info :size="14" aria-hidden="true" />
                           Cap {{ updates.selfUpdate?.release_notes_cap ?? 10 }}
-                        </span>
+                        </button>
                       </template>
                       {{ selfUpdateReleaseCapTitle }}
                     </n-tooltip>
@@ -841,7 +842,11 @@ async function confirmSelfUpdate(): Promise<void> {
 }
 
 .self-update-cap {
+  border: 0;
+  padding: 0;
   color: var(--color-muted-text);
+  background: transparent;
+  font: inherit;
   font-size: 0.84rem;
   cursor: help;
 }

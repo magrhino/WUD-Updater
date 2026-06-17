@@ -104,6 +104,9 @@ __all__ = [
     "resolve_pending_groups",
 ]
 
+_DigestProvenanceByService = Mapping[str, DigestTagProvenance]
+_DigestUnpinUpdatesByStack = Mapping[int, Sequence[DigestUnpinUpdate]]
+
 
 @dataclass
 class _PlanBuilder(_UpdateScopeMixin):
@@ -114,7 +117,7 @@ class _PlanBuilder(_UpdateScopeMixin):
     digest_pin_label_rewrite_approvals: Sequence[DigestPinLabelRewriteApproval] = ()
     host_docker_base: Path | None = None
     command_runner: CommandRunner | None = None
-    known_digest_provenance_by_service: Mapping[str, DigestTagProvenance] = field(
+    known_digest_provenance_by_service: _DigestProvenanceByService = field(
         default_factory=dict,
     )
     docker: DockerCli = field(init=False)
@@ -526,27 +529,15 @@ class _PlanBuilder(_UpdateScopeMixin):
                 )
             )
             if digest_pin is not None:
-                target_image = digest_pin.final_image
-                resolved_image = digest_pin.resolved_image
-                digest_provenance = digest_provenance_from_update(
-                    digest_pin,
-                    provenance_source="plan",
-                    provenance_confidence="verified",
+                target_image, resolved_image, digest_provenance = (
+                    _digest_pin_line_image_details(digest_pin)
                 )
             elif digest_unpin is not None:
-                target_image = digest_unpin.tag_image
-                resolved_image = digest_unpin.tag_image
-                digest_provenance = digest_provenance_from_unpin_update(
-                    digest_unpin,
-                    provenance_source="plan",
-                    provenance_confidence="recovered",
+                target_image, resolved_image, digest_provenance = (
+                    _digest_unpin_line_image_details(digest_unpin)
                 )
             else:
-                target_image = (
-                    image_with_tag(match.compose_image, match.target.desired_tag)
-                    if match.target.desired_tag
-                    else self._normalized_resolved_image(match)
-                )
+                target_image = self._target_image_for_match(match)
                 resolved_image = target_image
                 digest_provenance = None
             lines.append(
@@ -560,19 +551,16 @@ class _PlanBuilder(_UpdateScopeMixin):
                     service=match.service,
                     digest=match.target.digest,
                     desired_tag=match.target.desired_tag,
-                    action=(
-                        "digest-pin"
-                        if digest_pin is not None
-                        else "digest-unpin"
-                        if digest_unpin is not None
-                        else "tag-update"
-                        if match.target.desired_tag
-                        else "update"
-                    ),
+                    action=_plan_line_action(match, digest_pin, digest_unpin),
                     digest_provenance=digest_provenance,
                 )
             )
         return tuple(lines)
+
+    def _target_image_for_match(self, match: Match) -> str:
+        if match.target.desired_tag:
+            return image_with_tag(match.compose_image, match.target.desired_tag)
+        return self._normalized_resolved_image(match)
 
     def _normalized_resolved_image(self, match: Match) -> str:
         if (
@@ -598,6 +586,49 @@ class _PlanBuilder(_UpdateScopeMixin):
             return update
         return None
 
+
+def _digest_pin_line_image_details(
+    update: DigestPinUpdate,
+) -> tuple[str, str, DigestTagProvenance]:
+    return (
+        update.final_image,
+        update.resolved_image,
+        digest_provenance_from_update(
+            update,
+            provenance_source="plan",
+            provenance_confidence="verified",
+        ),
+    )
+
+
+def _digest_unpin_line_image_details(
+    update: DigestUnpinUpdate,
+) -> tuple[str, str, DigestTagProvenance]:
+    return (
+        update.tag_image,
+        update.tag_image,
+        digest_provenance_from_unpin_update(
+            update,
+            provenance_source="plan",
+            provenance_confidence="recovered",
+        ),
+    )
+
+
+def _plan_line_action(
+    match: Match,
+    digest_pin: DigestPinUpdate | None,
+    digest_unpin: DigestUnpinUpdate | None,
+) -> str:
+    if digest_pin is not None:
+        return "digest-pin"
+    if digest_unpin is not None:
+        return "digest-unpin"
+    if match.target.desired_tag:
+        return "tag-update"
+    return "update"
+
+
 def build_dry_run_plan(
     config: UpdaterConfig,
     *,
@@ -609,7 +640,7 @@ def build_dry_run_plan(
     ] = (),
     host_docker_base: Path | None = None,
     environ: Mapping[str, str] | None = None,
-    known_digest_provenance_by_service: Mapping[str, DigestTagProvenance] | None = None,
+    known_digest_provenance_by_service: _DigestProvenanceByService | None = None,
 ) -> DryRunPlan:
     runner = CommandRunner(env=environ) if environ is not None else CommandRunner()
     return _PlanBuilder(
@@ -678,7 +709,7 @@ def resolve_pending_groups(
     *,
     host_docker_base: Path | None = None,
     environ: Mapping[str, str] | None = None,
-    known_digest_provenance_by_service: Mapping[str, DigestTagProvenance] | None = None,
+    known_digest_provenance_by_service: _DigestProvenanceByService | None = None,
 ) -> PendingGroupingResult:
     runner = CommandRunner(env=environ) if environ is not None else CommandRunner()
     docker = DockerCli(runner=runner)
@@ -758,11 +789,26 @@ def _parsed_for_selected_lines(
     )
 
 
+def _digest_unpin_updates_for_stack(
+    stack_index: int,
+    updates_by_stack: _DigestUnpinUpdatesByStack | None,
+) -> Sequence[DigestUnpinUpdate]:
+    if updates_by_stack is None:
+        return ()
+    return updates_by_stack.get(stack_index, ())
+
+
+def _project_directory_text(project_directory: Path | None) -> str:
+    if project_directory is None:
+        return ""
+    return str(project_directory)
+
+
 def _pending_stack_groups(
     matches: Sequence[Match],
     *,
     scope_builder: _PlanBuilder | None = None,
-    digest_unpin_updates_by_stack: Mapping[int, Sequence[DigestUnpinUpdate]] | None = None,
+    digest_unpin_updates_by_stack: _DigestUnpinUpdatesByStack | None = None,
     digest_pin_updates_enabled: bool = True,
 ) -> tuple[PendingStackGroup, ...]:
     groups: list[PendingStackGroup] = []
@@ -779,9 +825,10 @@ def _pending_stack_groups(
         items = _pending_grouping_items(
             stack_matches,
             stack_action=stack_action,
-            digest_unpin_updates=digest_unpin_updates_by_stack.get(stack.index, ())
-            if digest_unpin_updates_by_stack is not None
-            else (),
+            digest_unpin_updates=_digest_unpin_updates_for_stack(
+                stack.index,
+                digest_unpin_updates_by_stack,
+            ),
             digest_pin_updates_enabled=digest_pin_updates_enabled,
         )
         groups.append(
@@ -789,11 +836,7 @@ def _pending_stack_groups(
                 name=stack.name,
                 directory=str(stack.directory),
                 compose_file=stack.file,
-                project_directory=(
-                    ""
-                    if stack.project_directory is None
-                    else str(stack.project_directory)
-                ),
+                project_directory=_project_directory_text(stack.project_directory),
                 services_label=_pending_services_label(services),
                 services=services,
                 line_numbers=tuple(item.line_no for item in items),
@@ -831,6 +874,7 @@ def _pending_grouping_items(
             if digest_unpin is not None
             else _target_action_name(target, services, stack_action=stack_action)
         )
+        digest_provenance = _pending_grouping_digest_provenance(target, digest_unpin)
         items.append(
             _pending_grouping_item(
                 target,
@@ -838,22 +882,33 @@ def _pending_grouping_items(
                 compose_images=compose_images,
                 services=services,
                 action=action,
-                digest_provenance=(
-                    digest_provenance_from_unpin_update(
-                        digest_unpin,
-                        provenance_source="plan",
-                        provenance_confidence="recovered",
-                    )
-                    if digest_unpin is not None
-                    else _pending_digest_provenance(target)
-                ),
-                target_image=(
-                    digest_unpin.tag_image if digest_unpin is not None else ""
-                ),
+                digest_provenance=digest_provenance,
+                target_image=_pending_digest_unpin_target_image(digest_unpin),
                 digest_pin_updates_enabled=digest_pin_updates_enabled,
             )
         )
     return tuple(items)
+
+
+def _pending_grouping_digest_provenance(
+    target: WudTarget,
+    digest_unpin: DigestUnpinUpdate | None,
+) -> DigestTagProvenance | None:
+    if digest_unpin is None:
+        return _pending_digest_provenance(target)
+    return digest_provenance_from_unpin_update(
+        digest_unpin,
+        provenance_source="plan",
+        provenance_confidence="recovered",
+    )
+
+
+def _pending_digest_unpin_target_image(
+    digest_unpin: DigestUnpinUpdate | None,
+) -> str:
+    if digest_unpin is None:
+        return ""
+    return digest_unpin.tag_image
 
 
 def _pending_grouping_item(
@@ -869,6 +924,13 @@ def _pending_grouping_item(
     digest_pin_updates_enabled: bool = True,
 ) -> PendingGroupingItem:
     resolved = resolved_image or target.first
+    resolved_target_image = _pending_grouping_target_image(
+        target_image,
+        target,
+        resolved,
+        compose_images,
+        digest_pin_updates_enabled=digest_pin_updates_enabled,
+    )
     return PendingGroupingItem(
         line_no=target.line_no,
         raw=target.raw,
@@ -880,18 +942,30 @@ def _pending_grouping_item(
         digest=target.digest,
         desired_tag=target.desired_tag,
         resolved_image=resolved,
-        target_image=target_image
-        or _pending_target_image(
-            target,
-            resolved,
-            compose_images,
-            digest_pin_updates_enabled=digest_pin_updates_enabled,
-        ),
+        target_image=resolved_target_image,
         compose_images=tuple(compose_images),
         services=tuple(services),
         action=action,
         diagnostic=diagnostic,
         digest_provenance=digest_provenance,
+    )
+
+
+def _pending_grouping_target_image(
+    target_image: str,
+    target: WudTarget,
+    resolved_image: str,
+    compose_images: Sequence[str],
+    *,
+    digest_pin_updates_enabled: bool,
+) -> str:
+    if target_image:
+        return target_image
+    return _pending_target_image(
+        target,
+        resolved_image,
+        compose_images,
+        digest_pin_updates_enabled=digest_pin_updates_enabled,
     )
 
 
@@ -946,17 +1020,23 @@ def _pending_target_image(
     *,
     digest_pin_updates_enabled: bool = True,
 ) -> str:
-    if not target.desired_tag:
-        if (
-            not digest_pin_updates_enabled
-            and target.digest
-            and image_has_tag(target.first)
-        ):
-            base_image = compose_images[0] if compose_images else resolved_image
-            return image_with_tag(base_image, image_tag(target.first))
-        return resolved_image
     base_image = compose_images[0] if compose_images else resolved_image
-    return image_with_tag(base_image, target.desired_tag)
+    if target.desired_tag:
+        return image_with_tag(base_image, target.desired_tag)
+    if _preserve_digest_tag(target, digest_pin_updates_enabled):
+        return image_with_tag(base_image, image_tag(target.first))
+    return resolved_image
+
+
+def _preserve_digest_tag(
+    target: WudTarget,
+    digest_pin_updates_enabled: bool,
+) -> bool:
+    return (
+        not digest_pin_updates_enabled
+        and bool(target.digest)
+        and image_has_tag(target.first)
+    )
 
 
 def _target_action_name(

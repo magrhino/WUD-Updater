@@ -13,13 +13,18 @@ const username = ref("");
 const password = ref("");
 const submitting = ref(false);
 
+function submittedForm(event: Event): HTMLFormElement | null {
+  if (event.currentTarget instanceof HTMLFormElement) {
+    return event.currentTarget;
+  }
+  if (event.target instanceof HTMLFormElement) {
+    return event.target;
+  }
+  return null;
+}
+
 async function submit(event: Event): Promise<void> {
-  const form =
-    event.currentTarget instanceof HTMLFormElement
-      ? event.currentTarget
-      : event.target instanceof HTMLFormElement
-        ? event.target
-        : null;
+  const form = submittedForm(event);
   const formData = form ? new FormData(form) : null;
   const submittedUsername = String(formData?.get("username") ?? username.value);
   const submittedPassword = String(formData?.get("password") ?? password.value);

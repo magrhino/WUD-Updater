@@ -201,15 +201,28 @@ type WudApiGlobal = typeof globalThis & {
 
 const API_VERSION_PATH = "api/v1";
 
+function trimTrailingSlashes(value: string): string {
+  let end = value.length;
+  while (end > 0 && value.charAt(end - 1) === "/") {
+    end -= 1;
+  }
+  return value.slice(0, end);
+}
+
+function startsWithHttpUrl(value: string): boolean {
+  const normalized = value.toLowerCase();
+  return normalized.startsWith("http://") || normalized.startsWith("https://");
+}
+
 export function normalizeApiPrefix(value: string | undefined): string {
   const trimmed = (value ?? "").trim();
   if (!trimmed) {
     return "/api/v1";
   }
-  const withoutTrailingSlash = trimmed.replace(/\/+$/, "");
+  const withoutTrailingSlash = trimTrailingSlashes(trimmed);
   if (
     withoutTrailingSlash.startsWith("/") ||
-    /^https?:\/\//i.test(withoutTrailingSlash)
+    startsWithHttpUrl(withoutTrailingSlash)
   ) {
     return withoutTrailingSlash;
   }
@@ -217,7 +230,7 @@ export function normalizeApiPrefix(value: string | undefined): string {
 }
 
 export function apiPrefixFromBasePath(basePath: string): string {
-  const normalizedBasePath = basePath.trim().replace(/\/+$/, "");
+  const normalizedBasePath = trimTrailingSlashes(basePath.trim());
   if (!normalizedBasePath || normalizedBasePath === "/") {
     return "/api/v1";
   }

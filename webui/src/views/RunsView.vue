@@ -8,6 +8,7 @@ import CoreUpdateTourPanel from "../components/CoreUpdateTourPanel.vue";
 import HistoryViewTabs from "../components/HistoryViewTabs.vue";
 import type { RunSummary } from "../api/client";
 import { useRunsStore } from "../stores/runs";
+import { runInBackground } from "../utils/promises";
 
 const runs = useRunsStore();
 const breakpoints = useBreakpoints(breakpointsTailwind);
@@ -60,7 +61,7 @@ const columns = computed<DataTableColumns<RunSummary>>(() => [
 ]);
 
 onMounted(() => {
-  void runs.loadRuns();
+  runInBackground(runs.loadRuns());
 });
 </script>
 

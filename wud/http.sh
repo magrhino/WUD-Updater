@@ -22,6 +22,7 @@ http_get_to_file() {
   shift 2
 
   curl "${_wud_http_curl_args[@]}" "$@" -o "$output_file" "$url"
+  return $?
 }
 
 http_effective_url() {
@@ -29,6 +30,7 @@ http_effective_url() {
   shift
 
   curl "${_wud_http_curl_args[@]}" "$@" -o /dev/null -w '%{url_effective}' "$url"
+  return $?
 }
 
 http_post_discord_json() {

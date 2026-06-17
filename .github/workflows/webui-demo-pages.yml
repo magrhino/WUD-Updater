@@ -12,9 +12,6 @@ on:
       - "docs/**"
   workflow_dispatch:
 
-permissions:
-  contents: read
-
 concurrency:
   group: webui-demo-pages
   cancel-in-progress: false
@@ -24,6 +21,8 @@ jobs:
     name: build
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    permissions:
+      contents: read
 
     steps:
       - name: Harden the runner (Audit all outbound calls)

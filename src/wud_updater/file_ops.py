@@ -11,7 +11,8 @@ from dataclasses import dataclass
 from pathlib import Path
 
 
-_NUMERIC_ID_RE = re.compile(r"^[0-9]+$")
+_NUMERIC_ID_RE = re.compile(r"^\d+$", re.ASCII)
+_OWNER_PAIR_ERROR = "OUT_UID and OUT_GID/OUT_GUID must be set together"
 
 
 class OwnerConfigError(ValueError):
@@ -46,9 +47,7 @@ class OwnerConfig:
 
         if _present(out_uid) or _present(gid_value):
             if not _present(out_uid) or not _present(gid_value):
-                raise OwnerConfigError(
-                    "OUT_UID and OUT_GID/OUT_GUID must be set together"
-                )
+                raise OwnerConfigError(_OWNER_PAIR_ERROR)
             return cls(
                 uid=_parse_numeric_id("OUT_UID", out_uid),
                 gid=_parse_numeric_id("OUT_GID/OUT_GUID", gid_value),
@@ -94,9 +93,7 @@ def desired_metadata(
 
     if owner.configured:
         if owner.uid is None or owner.gid is None:
-            raise OwnerConfigError(
-                "OUT_UID and OUT_GID/OUT_GUID must be set together"
-            )
+            raise OwnerConfigError(_OWNER_PAIR_ERROR)
         metadata = FileMetadata(mode=metadata.mode, uid=owner.uid, gid=owner.gid)
 
     return metadata
@@ -107,7 +104,7 @@ def apply_configured_owner(path: str | Path, owner: OwnerConfig | None = None) -
     if not owner.configured:
         return
     if owner.uid is None or owner.gid is None:
-        raise OwnerConfigError("OUT_UID and OUT_GID/OUT_GUID must be set together")
+        raise OwnerConfigError(_OWNER_PAIR_ERROR)
 
     target = Path(path)
     st = target.stat()
@@ -125,9 +122,7 @@ def preserve_file_metadata(
     owner = owner or OwnerConfig()
     if owner.configured:
         if owner.uid is None or owner.gid is None:
-            raise OwnerConfigError(
-                "OUT_UID and OUT_GID/OUT_GUID must be set together"
-            )
+            raise OwnerConfigError(_OWNER_PAIR_ERROR)
         metadata = FileMetadata(mode=metadata.mode, uid=owner.uid, gid=owner.gid)
     apply_metadata(dst, metadata)
 

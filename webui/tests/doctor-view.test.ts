@@ -1,66 +1,11 @@
 import { createPinia, setActivePinia } from "pinia";
 import { flushPromises } from "@vue/test-utils";
-import { nextTick } from "vue";
-import { createMemoryHistory } from "vue-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { ApiError, webApi } from "../src/api/client";
-import { createWudRouter } from "../src/router";
-import DashboardView from "../src/views/DashboardView.vue";
 import DoctorView from "../src/views/DoctorView.vue";
-import PendingView from "../src/views/PendingView.vue";
-import PoliciesView from "../src/views/PoliciesView.vue";
-import SettingsView from "../src/views/SettingsView.vue";
-import SnoozesView from "../src/views/SnoozesView.vue";
-import TagExclusionsView from "../src/views/TagExclusionsView.vue";
-import { useAuthStore } from "../src/stores/auth";
-import { useConnectionStore } from "../src/stores/connection";
-import { useSettingsStore } from "../src/stores/settings";
-import { useUpdatesStore, APPLY_JOB_RECOVERY_MESSAGE } from "../src/stores/updates";
-import { useRunsStore } from "../src/stores/runs";
-import {
-  applyPreflightResponse,
-  applyJobLogResponse,
-  applyJobResponse,
-  authSession,
-  coreUpdateTourResponse,
-  doctorResponse,
-  onboardingChecklistResponse,
-  pendingGroupedItem,
-  pendingGrouping,
-  pendingItem,
-  pendingResponse,
-  planResponse,
-  releaseNoteInfo,
-  releaseNotesResponse,
-  runVerification,
-  runSummary,
-  servicePolicy,
-  settingsResponse,
-  snooze,
-  statusResponse,
-  tagExclusion,
-  updateTarget,
-  updateTargetsResponse,
-} from "./helpers/fixtures";
-import { mountWithApp, naiveStubs } from "./helpers/mount";
-
-
-import {
-  buttonByText,
-  emitSelectValue,
-  failedApplyPreflight,
-  mockApplyJobStream,
-  mockMobileViewport,
-  mockPendingLifecycle,
-  mountPendingView,
-  pendingWithUnmatched,
-  setupStores,
-  stalePendingPreflightFindings,
-  stalePendingPossibleReasons,
-  stalePendingRecommendedActions,
-  unmatchedPendingItem,
-} from "./helpers/viewSecurity";
+import { doctorResponse } from "./helpers/fixtures";
+import { mountWithApp } from "./helpers/mount";
+import { setupStores } from "./helpers/viewSecurity";
 
 describe("doctor view", () => {
   beforeEach(() => {
@@ -68,7 +13,7 @@ describe("doctor view", () => {
   });
 
   it("renders doctor results with redacted details and copyable suggestions", async () => {
-    const { pinia, auth, connection, settings, updates, runs } = setupStores(false);
+    const { pinia, connection } = setupStores(false);
     connection.doctor = doctorResponse({
       checks: [
         {

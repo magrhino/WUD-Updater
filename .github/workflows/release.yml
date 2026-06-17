@@ -11,9 +11,6 @@ on:
         required: true
         type: string
 
-permissions:
-  contents: read
-
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: false
@@ -27,6 +24,7 @@ jobs:
     name: validate tag
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    permissions: {}
     outputs:
       tag: ${{ steps.tag.outputs.tag }}
       version: ${{ steps.tag.outputs.version }}
@@ -64,6 +62,8 @@ jobs:
     name: release gate
     runs-on: ubuntu-latest
     timeout-minutes: 90
+    permissions:
+      contents: read
     needs:
       - validate-tag
 

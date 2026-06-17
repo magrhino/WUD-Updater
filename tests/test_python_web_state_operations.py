@@ -13,7 +13,7 @@ from wud_updater.db import (
 )
 
 from tests.web_test_helpers import (
-    DEFAULT_PASSWORD,
+    DEFAULT_CLAIM_PHRASE,
     _client,
     _csrf_headers,
     _setup_admin,
@@ -464,7 +464,7 @@ def test_state_operation_audit_records_bearer_and_session_actors(
 
     login = session_client.post(
         "/api/v1/auth/login",
-        json={"username": "admin", "password": DEFAULT_PASSWORD},
+        json={"username": "admin", "password": DEFAULT_CLAIM_PHRASE},
         headers=_csrf_headers(session_client),
     )
     bearer_response = bearer_client.post(

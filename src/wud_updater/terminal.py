@@ -23,6 +23,13 @@ except ImportError:  # pragma: no cover - plain fallback is tested directly.
 
 RICH_AVAILABLE = Console is not None
 _BANNER_BOX_HORIZONTAL_OVERHEAD = 4
+_STYLE_INFO = "bold cyan"
+_STYLE_WARNING = "bold yellow"
+_STYLE_ERROR = "bold red"
+_STYLE_SUCCESS = "bold green"
+_STYLE_DIM = "dim"
+_STYLE_WHITE = "white"
+_STYLE_BLUE = "blue"
 
 
 class TerminalRenderer:
@@ -79,9 +86,9 @@ class TerminalRenderer:
             print(f"[{timestamp}] {message}", file=target)
             return
 
-        level_style = _LEVEL_STYLES.get(level, "bold cyan")
+        level_style = _LEVEL_STYLES.get(level, _STYLE_INFO)
         text = Text()
-        text.append(f"[{timestamp}]", style="dim")
+        text.append(f"[{timestamp}]", style=_STYLE_DIM)
         text.append(" ")
         text.append(f"{level:<5}", style=level_style)
         text.append(" ")
@@ -101,7 +108,7 @@ class TerminalRenderer:
             print(plain or message, file=target)
             return
 
-        style = _KIND_STYLES.get(kind, "bold cyan")
+        style = _KIND_STYLES.get(kind, _STYLE_INFO)
         prefix = _KIND_PREFIXES.get(kind, "")
         self._console(target).print(f"{prefix}{message}", style=style)
 
@@ -116,20 +123,16 @@ class TerminalRenderer:
             return
 
         count = len(rows)
-        summary = (
-            f"{count} pending image update{'s' if count != 1 else ''} from WUD"
-            if count
-            else "✓ No pending Docker updates!"
-        )
-        style = "bold yellow" if count else "bold green"
+        summary = _docker_update_summary(count)
+        style = _STYLE_WARNING if count else _STYLE_SUCCESS
         self.panel("Docker Updates", summary, body_style=style)
         if not rows:
             return
 
         table = self._table()
-        table.add_column("#", justify="right", style="dim", no_wrap=True)
-        table.add_column("Image / container target", style="white")
-        table.add_column("Status", style="bold yellow", no_wrap=True)
+        table.add_column("#", justify="right", style=_STYLE_DIM, no_wrap=True)
+        table.add_column("Image / container target", style=_STYLE_WHITE)
+        table.add_column("Status", style=_STYLE_WARNING, no_wrap=True)
         for number, target in rows:
             table.add_row(str(number), target, "pending")
         self._console(self.stream).print(table)
@@ -153,7 +156,7 @@ class TerminalRenderer:
         for index, (line, kind) in enumerate(lines):
             if index:
                 body.append("\n")
-            body.append(line, style=_KIND_STYLES.get(kind, "white"))
+            body.append(line, style=_KIND_STYLES.get(kind, _STYLE_WHITE))
         self.panel(title, body)
 
     def prompt_choice(self, question: str, choices: str) -> str:
@@ -164,11 +167,11 @@ class TerminalRenderer:
                 return ""
 
         console = self._console(self.stream)
-        console.print(question, style="bold cyan")
+        console.print(question, style=_STYLE_INFO)
         if Text is not None:
-            console.print(Text(f"  {choices}", style="blue"))
+            console.print(Text(f"  {choices}", style=_STYLE_BLUE))
         else:
-            console.print(f"  {choices}", style="blue", markup=False)
+            console.print(f"  {choices}", style=_STYLE_BLUE, markup=False)
         try:
             return input("Choice: ")
         except EOFError:
@@ -189,7 +192,7 @@ class TerminalRenderer:
         panel_options = {
             "title": f" {title} ",
             "title_align": "left",
-            "border_style": "bold cyan",
+            "border_style": _STYLE_INFO,
         }
         if body_style is not None:
             panel_options["style"] = body_style
@@ -217,19 +220,19 @@ class TerminalRenderer:
             )
             body = Text()
             if include_art:
-                body.append(art.rstrip("\n"), style="bold cyan")
+                body.append(art.rstrip("\n"), style=_STYLE_INFO)
                 body.append("\n\n")
-            body.append(f"WUD-Updater {local_tag}", style="bold green")
+            body.append(f"WUD-Updater {local_tag}", style=_STYLE_SUCCESS)
             if release_status is not None:
                 message, kind = release_status
                 body.append("\n")
-                body.append(message, style=_KIND_STYLES.get(kind, "white"))
+                body.append(message, style=_KIND_STYLES.get(kind, _STYLE_WHITE))
             console.print(
                 Panel(
                     body,
                     title=f" WUD-Updater {local_tag} ",
                     title_align="left",
-                    border_style="bold cyan",
+                    border_style=_STYLE_INFO,
                 )
             )
             return
@@ -247,10 +250,10 @@ class TerminalRenderer:
             return
 
         table = self._table(title="Targets")
-        table.add_column("Line", justify="right", style="dim", no_wrap=True)
-        table.add_column("Target", style="white")
-        table.add_column("Digest", style="dim")
-        table.add_column("Tag", style="blue")
+        table.add_column("Line", justify="right", style=_STYLE_DIM, no_wrap=True)
+        table.add_column("Target", style=_STYLE_WHITE)
+        table.add_column("Digest", style=_STYLE_DIM)
+        table.add_column("Tag", style=_STYLE_BLUE)
         for line_no, target, digest, tag in rows:
             table.add_row(str(line_no), target, digest, tag)
         self._console(self.stream).print(table)
@@ -266,11 +269,11 @@ class TerminalRenderer:
             if Text is None:
                 return
             body = Text()
-            body.append("Services: ", style="dim")
+            body.append("Services: ", style=_STYLE_DIM)
             body.append(services or "stack-level fallback")
             for line in lines:
                 body.append("\n")
-                body.append(line, style="white")
+                body.append(line, style=_STYLE_WHITE)
             self.panel(f"Stack: {name}", body)
 
     def stack_summary(
@@ -286,7 +289,7 @@ class TerminalRenderer:
         for index, (line, kind) in enumerate(lines):
             if index:
                 body.append("\n")
-            body.append(line, style=_KIND_STYLES.get(kind, "white"))
+            body.append(line, style=_KIND_STYLES.get(kind, _STYLE_WHITE))
         self.panel(f"Stack: {name}", body)
 
     def _table(self, *, title: str | None = None) -> Any:
@@ -295,8 +298,8 @@ class TerminalRenderer:
         table = Table(
             title=title,
             box=box.SIMPLE_HEAVY if box is not None else None,
-            header_style="bold cyan",
-            border_style="bold cyan",
+            header_style=_STYLE_INFO,
+            border_style=_STYLE_INFO,
         )
         return table
 
@@ -317,6 +320,13 @@ class TerminalRenderer:
 def _stream_is_tty(stream: TextIO) -> bool:
     isatty = getattr(stream, "isatty", None)
     return bool(isatty and isatty())
+
+
+def _docker_update_summary(count: int) -> str:
+    if not count:
+        return "✓ No pending Docker updates!"
+    suffix = "s" if count != 1 else ""
+    return f"{count} pending image update{suffix} from WUD"
 
 
 def _terminal_width(_stream: TextIO, explicit_width: int | None) -> int:
@@ -359,16 +369,16 @@ def _plain_banner_lines(
 
 
 _LEVEL_STYLES = {
-    "INFO": "bold cyan",
-    "WARN": "bold yellow",
-    "ERROR": "bold red",
+    "INFO": _STYLE_INFO,
+    "WARN": _STYLE_WARNING,
+    "ERROR": _STYLE_ERROR,
 }
 _KIND_STYLES = {
-    "info": "bold cyan",
-    "success": "bold green",
-    "warning": "bold yellow",
-    "error": "bold red",
-    "path": "dim",
+    "info": _STYLE_INFO,
+    "success": _STYLE_SUCCESS,
+    "warning": _STYLE_WARNING,
+    "error": _STYLE_ERROR,
+    "path": _STYLE_DIM,
 }
 _KIND_PREFIXES = {
     "success": "✓ ",

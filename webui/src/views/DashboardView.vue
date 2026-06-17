@@ -18,6 +18,7 @@ import { useConnectionStore } from "../stores/connection";
 import { useUpdatesStore } from "../stores/updates";
 import { useRunsStore } from "../stores/runs";
 import { useSettingsStore } from "../stores/settings";
+import { runInBackground } from "../utils/promises";
 
 const connection = useConnectionStore();
 const updates = useUpdatesStore();
@@ -32,14 +33,14 @@ const warnings = computed(() => [
 ]);
 
 onMounted(() => {
-  void Promise.all([
+  runInBackground(Promise.all([
     connection.loadStatus(),
     updates.loadPending(),
     runs.loadRuns(),
     settings.loadServicePolicies(),
     settings.loadSnoozes(),
     settings.loadTagExclusions(),
-  ]);
+  ]));
 });
 </script>
 
@@ -115,17 +116,16 @@ onMounted(() => {
         </div>
         <RouterLink to="/pending" class="text-link">View pending</RouterLink>
       </div>
-      <div
+      <output
         v-if="!updates.pending?.items.length"
         class="empty-state clear-queue-state clear-queue-state-compact"
-        role="status"
       >
         <span class="clear-queue-mark" aria-hidden="true">
           <CheckCircle2 :size="24" />
         </span>
         <strong>Queue clear</strong>
         <span>No pending updates are waiting for review.</span>
-      </div>
+      </output>
       <div v-else class="compact-list">
         <div v-for="item in updates.pending.items.slice(0, 5)" :key="item.line_no" class="list-row">
           <span>#{{ item.line_no }}</span>
