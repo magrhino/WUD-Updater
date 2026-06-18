@@ -182,6 +182,8 @@ def api_retag_targets(
 
 def api_refresh_retag_github_latest(request: Request) -> RetagTargetsResponse:
     settings = _settings(request)
+    if not settings.mutations_enabled:
+        raise HTTPException(status_code=403, detail="mutations are disabled")
     response = _refresh_retag_github_latest_candidates(settings)
     if response is not None:
         return response
@@ -200,6 +202,8 @@ def api_start_retag_plan_preview(
     request: Request,
 ) -> RetagPreviewJobResponse:
     settings = _settings(request)
+    if not settings.mutations_enabled:
+        raise HTTPException(status_code=403, detail="mutations are disabled")
     state = request.app.state
     job = _RetagPreviewJob(id=secrets.token_urlsafe(18), status="queued")
     _store_retag_preview_job(state, job)

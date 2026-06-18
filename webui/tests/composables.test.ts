@@ -177,6 +177,69 @@ describe("usePolledJob", () => {
     expect(job.polling.value).toBe(false);
   });
 
+  it("does not restore cleared state when start resolves after reset", async () => {
+    const success: TestPreviewJob = { id: "preview", status: "success" };
+    let resolveStart: (value: TestPreviewJob) => void = () => {};
+    const start = vi.fn().mockReturnValue(
+      new Promise<TestPreviewJob>((resolve) => {
+        resolveStart = resolve;
+      }),
+    );
+    const poll = vi.fn();
+    const job = usePolledJob<TestPreviewJob>(
+      start,
+      poll,
+      (value) => value.status !== "queued",
+      { intervalMs: 0 },
+    );
+
+    const run = job.run();
+    job.reset();
+    resolveStart(success);
+
+    await expect(run).resolves.toEqual(success);
+    expect(poll).not.toHaveBeenCalled();
+    expect(job.job.value).toBeNull();
+    expect(job.polling.value).toBe(false);
+  });
+
+  it("does not restore cleared state when poll resolves after reset", async () => {
+    vi.useFakeTimers();
+    const queued: TestPreviewJob = { id: "preview", status: "queued" };
+    const success: TestPreviewJob = { id: "preview", status: "success" };
+    let resolvePoll: (value: TestPreviewJob) => void = () => {};
+    const start = vi.fn().mockResolvedValue(queued);
+    const poll = vi.fn().mockReturnValue(
+      new Promise<TestPreviewJob>((resolve) => {
+        resolvePoll = resolve;
+      }),
+    );
+    const job = usePolledJob<TestPreviewJob>(
+      start,
+      poll,
+      (value) => value.status !== "queued",
+      { intervalMs: 25 },
+    );
+
+    try {
+      const run = job.run();
+      await flushPromises();
+      expect(job.job.value).toEqual(queued);
+
+      await vi.advanceTimersByTimeAsync(25);
+      expect(poll).toHaveBeenCalledWith(queued);
+
+      job.reset();
+      resolvePoll(success);
+
+      await expect(run).resolves.toEqual(success);
+      expect(job.job.value).toBeNull();
+      expect(job.polling.value).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("stops polling when reset while a run is waiting", async () => {
     vi.useFakeTimers();
     const queued: TestPreviewJob = { id: "preview", status: "queued" };

@@ -9,7 +9,6 @@ import { useSettingsStore } from "../src/stores/settings";
 import { useUpdatesStore, APPLY_JOB_RECOVERY_MESSAGE } from "../src/stores/updates";
 import { useRunsStore } from "../src/stores/runs";
 import {
-  deferred,
   jsonRequestBody,
   jsonResponse,
   mockFetch,

@@ -234,7 +234,14 @@ def test_retag_github_latest_fallback_refresh_enables_cached_candidate(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     fake_env, fake_root = _fake_docker_env(tmp_path)
-    client = _client(tmp_path, {"WUD_WEB_DEV_NO_AUTH": "true", **fake_env})
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+            **fake_env,
+        },
+    )
     _make_fake_stack(
         tmp_path,
         fake_root,
@@ -287,7 +294,14 @@ def test_retag_preview_refreshes_github_latest_before_building_plan(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     fake_env, fake_root = _fake_docker_env(tmp_path)
-    client = _client(tmp_path, {"WUD_WEB_DEV_NO_AUTH": "true", **fake_env})
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+            **fake_env,
+        },
+    )
     _make_fake_stack(
         tmp_path,
         fake_root,
@@ -321,10 +335,10 @@ def test_retag_preview_refreshes_github_latest_before_building_plan(
         },
         headers=_csrf_headers(client),
     )
+    assert started.status_code == 202
     job = _wait_retag_preview_job(client, started.json()["preview_job_id"])
 
     assert missing_csrf.status_code == 403
-    assert started.status_code == 202
     assert job["status"] == "success"
     assert [event["phase"] for event in job["progress"]] == ["refresh", "refresh", "preview"]
     plan = job["plan"]
@@ -341,7 +355,13 @@ def test_retag_preview_rejects_second_active_job(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    client = _client(tmp_path, {"WUD_WEB_DEV_NO_AUTH": "true"})
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+        },
+    )
     headers = _csrf_headers(client)
     started = Event()
     release = Event()
@@ -398,7 +418,14 @@ def test_retag_preview_warns_when_github_latest_candidate_changes_after_refresh(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     fake_env, fake_root = _fake_docker_env(tmp_path)
-    client = _client(tmp_path, {"WUD_WEB_DEV_NO_AUTH": "true", **fake_env})
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+            **fake_env,
+        },
+    )
     _make_fake_stack(
         tmp_path,
         fake_root,
@@ -445,6 +472,7 @@ def test_retag_preview_warns_when_github_latest_candidate_changes_after_refresh(
         },
         headers=headers,
     )
+    assert started.status_code == 202
     job = _wait_retag_preview_job(client, started.json()["preview_job_id"])
 
     assert job["status"] == "success"
@@ -532,6 +560,7 @@ def test_retag_github_latest_fallback_does_not_use_lsio_upstream_tag(
         tmp_path,
         {
             "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
             "UPSTREAM_MAP": str(upstream_map),
             **fake_env,
         },
@@ -545,6 +574,7 @@ def test_retag_github_latest_fallback_does_not_use_lsio_upstream_tag(
 
     class FailDigestVerifier:
         def __init__(self, *_args: object, **_kwargs: object) -> None:
+            # Test double accepts production constructor arguments but needs no setup.
             pass
 
         def resolve_tag_digest(self, image: str) -> DigestResolveResult:
@@ -577,6 +607,26 @@ def test_retag_github_latest_fallback_does_not_use_lsio_upstream_tag(
     assert item["retag_reason"] == "missing-provenance"
     assert "does not support LSIO" in item["candidate_warning"]
     assert item["choices"] == ["keep-current"]
+
+
+def test_retag_refresh_and_preview_require_mutations_enabled(tmp_path: Path) -> None:
+    client = _client(tmp_path, {"WUD_WEB_DEV_NO_AUTH": "true"})
+    headers = _csrf_headers(client)
+
+    refresh = client.post(
+        "/api/v1/retag-targets/github-latest/refresh",
+        headers=headers,
+    )
+    preview = client.post(
+        "/api/v1/retag-plans/preview",
+        json={"choices": [_switch_choice()]},
+        headers=headers,
+    )
+
+    assert refresh.status_code == 403
+    assert refresh.json()["detail"] == "mutations are disabled"
+    assert preview.status_code == 403
+    assert preview.json()["detail"] == "mutations are disabled"
 
 
 def test_retag_targets_do_not_treat_persisted_source_image_as_current(
@@ -1214,6 +1264,7 @@ def _patch_github_latest(
 
     class FakeGitHubClient:
         def __init__(self, *_args: object, **_kwargs: object) -> None:
+            # Test double accepts production constructor arguments but needs no setup.
             pass
 
         def get_json(self, request_url: str) -> object:
@@ -1230,6 +1281,7 @@ def _patch_digest_resolution(
 ) -> None:
     class FakeDigestVerifier:
         def __init__(self, *_args: object, **_kwargs: object) -> None:
+            # Test double accepts production constructor arguments but needs no setup.
             pass
 
         def resolve_tag_digest(self, image: str) -> DigestResolveResult:
@@ -1251,6 +1303,7 @@ def _patch_digest_resolution_map(
 ) -> None:
     class FakeDigestVerifier:
         def __init__(self, *_args: object, **_kwargs: object) -> None:
+            # Test double accepts production constructor arguments but needs no setup.
             pass
 
         def resolve_tag_digest(self, image: str) -> DigestResolveResult:

@@ -22,14 +22,18 @@ export function usePolledJob<TJob>(
     error.value = "";
     try {
       let current = await start();
-      job.value = current;
+      if (activeRunId === runId) {
+        job.value = current;
+      }
       while (!isTerminal(current)) {
         await delay(intervalMs);
         if (activeRunId !== runId) {
           break;
         }
         current = await poll(current);
-        job.value = current;
+        if (activeRunId === runId) {
+          job.value = current;
+        }
       }
       return current;
     } catch (caughtError) {

@@ -400,8 +400,9 @@ onMounted(() => {
           :options="filterOptions"
           aria-label="Retag status filter"
         />
-        <label class="retag-fallback-toggle">
+        <label class="retag-fallback-toggle" for="github-latest-fallback-switch">
           <n-switch
+            id="github-latest-fallback-switch"
             :value="updates.retagGithubLatestFallback"
             :disabled="updates.loading"
             aria-label="Use GitHub latest fallback"
