@@ -53,8 +53,6 @@ def read_fallback_list(
     values: list[str] = []
     in_section = False
     in_list = False
-    list_header = f"{field_name} = ["
-
     for raw_line in pyproject_content.splitlines():
         line = raw_line.strip()
         if not line or line.startswith("#"):
@@ -69,8 +67,10 @@ def read_fallback_list(
                 in_list = False
             else:
                 values.append(ast.literal_eval(line.rstrip(",")))
-        elif line == list_header:
-            in_list = True
+        else:
+            key, separator, value = line.partition("=")
+            if separator and key.strip() == field_name and value.strip() == "[":
+                in_list = True
 
     return values
 
@@ -140,7 +140,7 @@ def fallback_requirement_error(requirement: str) -> str | None:
         operator, expected = parsed_clause
         comparison = compare_versions(actual, expected)
         satisfied = (
-            (operator == "==" and actual == expected)
+            (operator == "==" and comparison == 0)
             or (operator == ">=" and comparison >= 0)
             or (operator == "<=" and comparison <= 0)
             or (operator == ">" and comparison > 0)

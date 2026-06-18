@@ -41,6 +41,24 @@ class DependencyPreflightPathTests(unittest.TestCase):
 
 
 class DependencyPreflightFallbackTests(unittest.TestCase):
+    def test_read_dependencies_fallback_accepts_list_header_spacing(self) -> None:
+        pyproject_content = """
+[project]
+dependencies=[
+    "demo-package>=1.2",
+]
+
+[project.optional-dependencies]
+dev =   [
+    "demo-dev>=2",
+]
+"""
+
+        self.assertEqual(
+            check_python_deps.read_dependencies_fallback(pyproject_content),
+            ["demo-package>=1.2", "demo-dev>=2"],
+        )
+
     def test_fallback_requirement_accepts_supported_specifiers(self) -> None:
         with mock.patch.object(
             check_python_deps.importlib.metadata,
@@ -51,6 +69,18 @@ class DependencyPreflightFallbackTests(unittest.TestCase):
                 check_python_deps.fallback_requirement_error(
                     "demo-package   >= 1.2,<2"
                 )
+            )
+
+        version.assert_called_once_with("demo-package")
+
+    def test_fallback_requirement_accepts_normalized_equality_specifier(self) -> None:
+        with mock.patch.object(
+            check_python_deps.importlib.metadata,
+            "version",
+            return_value="1.2.0",
+        ) as version:
+            self.assertIsNone(
+                check_python_deps.fallback_requirement_error("demo-package==1.2")
             )
 
         version.assert_called_once_with("demo-package")
