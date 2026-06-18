@@ -122,6 +122,17 @@ function isNavItemActive(item: NavItem): boolean {
   );
 }
 
+function scrollNavItemIntoView(event: FocusEvent): void {
+  if (!(event.currentTarget instanceof HTMLElement)) {
+    return;
+  }
+
+  event.currentTarget.scrollIntoView({
+    block: "nearest",
+    inline: "nearest",
+  });
+}
+
 onMounted(() => {
   if (connection.status === null) {
     runInBackground(connection.loadStatus());
@@ -146,6 +157,7 @@ onMounted(() => {
         :title="item.label"
         :aria-label="item.label"
         :aria-current="isNavItemActive(item) ? 'page' : undefined"
+        @focus="scrollNavItemIntoView"
       >
         <component :is="item.icon" :size="18" />
         <span>{{ item.label }}</span>
