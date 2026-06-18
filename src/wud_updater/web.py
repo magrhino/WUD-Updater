@@ -79,6 +79,7 @@ def create_app(
     app.state.web_settings = active_settings
     app.state.web_setup_claim = ""
     web_jobs.initialize_apply_job_state(app.state)
+    web_retags.initialize_retag_preview_state(app.state)
     app.state.web_login_throttle_lock = Lock()
     app.state.web_login_throttle = {}
     app.state.web_login_client_throttle = {}
@@ -102,6 +103,7 @@ def create_app(
 
     def shutdown_apply_executor() -> None:
         web_scheduler.shutdown_auto_update_scheduler_state(app.state)
+        web_retags.shutdown_retag_preview_state(app.state)
         web_jobs.shutdown_apply_job_state(app.state)
 
     router_shutdown = getattr(getattr(app, "router", None), "on_shutdown", None)
@@ -299,6 +301,19 @@ def create_app(
         web_retags.api_create_retag_plan,
         methods=["POST"],
         response_model=web_models.RetagPlanResponse,
+    )
+    router.add_api_route(
+        "/retag-plans/preview",
+        web_retags.api_start_retag_plan_preview,
+        methods=["POST"],
+        response_model=web_models.RetagPreviewJobResponse,
+        status_code=202,
+    )
+    router.add_api_route(
+        "/retag-plans/preview/{preview_job_id}",
+        web_retags.api_retag_plan_preview_job,
+        methods=["GET"],
+        response_model=web_models.RetagPreviewJobResponse,
     )
     router.add_api_route(
         "/retag-plans/apply",

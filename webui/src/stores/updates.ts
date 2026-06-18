@@ -15,6 +15,7 @@ import {
   type ReleaseNotesResponse,
   type RetagChoiceRequest,
   type RetagPlanResponse,
+  type RetagPreviewJobResponse,
   type RetagTargetChoice,
   type RetagTargetsResponse,
   type SelfUpdateApplyResponse,
@@ -25,6 +26,7 @@ import {
   type UpdateTargetsResponse,
   webApi,
 } from "../api/client";
+import { usePolledJob } from "../composables/usePolledJob";
 import { useAuthStore } from "./auth";
 import { errorMessage, runWithStoreState } from "./storeState";
 import {
@@ -41,6 +43,11 @@ const TERMINAL_APPLY_JOB_STATUSES = new Set<ApplyJobResponse["status"]>([
   "failure",
 ]);
 
+const TERMINAL_RETAG_PREVIEW_STATUSES = new Set<RetagPreviewJobResponse["status"]>([
+  "success",
+  "failure",
+]);
+
 export const useUpdatesStore = defineStore("updates", () => {
   const pending = ref<PendingResponse | null>(null);
   const updateTargets = ref<UpdateTargetsResponse | null>(null);
@@ -48,6 +55,18 @@ export const useUpdatesStore = defineStore("updates", () => {
   const retagChoices = ref<Record<string, RetagTargetChoice>>({});
   const retagPlan = ref<RetagPlanResponse | null>(null);
   const retagGithubLatestFallback = ref(false);
+  let retagPreviewStart: (() => Promise<RetagPreviewJobResponse>) | null = null;
+  const retagPreviewPoller = usePolledJob<RetagPreviewJobResponse>(
+    () => {
+      if (retagPreviewStart === null) {
+        throw new Error("Retag preview was not started");
+      }
+      return retagPreviewStart();
+    },
+    (job) => webApi.retagPreviewJob(job.preview_job_id),
+    (job) => TERMINAL_RETAG_PREVIEW_STATUSES.has(job.status),
+    { intervalMs: 400 },
+  );
   const releaseNotes = ref<ReleaseNotesResponse | null>(null);
   const selfUpdate = ref<SelfUpdateResponse | null>(null);
   const selfUpdatePlan = ref<SelfUpdatePlanResponse | null>(null);
@@ -100,6 +119,7 @@ export const useUpdatesStore = defineStore("updates", () => {
       });
       resetRetagChoices();
       retagPlan.value = null;
+      retagPreviewPoller.reset();
     });
   }
 
@@ -121,6 +141,7 @@ export const useUpdatesStore = defineStore("updates", () => {
       retagGithubLatestFallback.value = true;
       resetRetagChoices();
       retagPlan.value = null;
+      retagPreviewPoller.reset();
     });
   }
 
@@ -145,6 +166,7 @@ export const useUpdatesStore = defineStore("updates", () => {
       [serviceKey]: item ? normalizeRetagChoice(item, choice) : choice,
     };
     retagPlan.value = null;
+    retagPreviewPoller.reset();
   }
 
   function retagChoiceRequests(): RetagChoiceRequest[] {
@@ -164,12 +186,20 @@ export const useUpdatesStore = defineStore("updates", () => {
       retagPlan.value = null;
       applyJob.value = null;
       applyJobLog.value = null;
-      response = await webApi.createRetagPlan(
-        retagChoiceRequests(),
-        await auth.ensureCsrf(),
-        { github_latest_fallback: retagGithubLatestFallback.value },
-      );
-      retagPlan.value = response;
+      const choices = retagChoiceRequests();
+      const csrfToken = await auth.ensureCsrf();
+      const options = { github_latest_fallback: retagGithubLatestFallback.value };
+      retagPreviewStart = () =>
+        webApi.startRetagPreview(choices, csrfToken, options);
+      const job = await retagPreviewPoller.run();
+      if (job.status === "failure") {
+        throw new Error(job.error || "Retag preview failed");
+      }
+      if (job.plan === null) {
+        throw new Error("Retag preview did not return a plan");
+      }
+      response = job.plan;
+      retagPlan.value = job.plan;
     });
     if (response === null) {
       throw new Error("Retag plan did not return a response");
@@ -538,6 +568,9 @@ export const useUpdatesStore = defineStore("updates", () => {
     retagTargets,
     retagChoices,
     retagPlan,
+    retagPreviewJob: retagPreviewPoller.job,
+    retagPreviewPolling: retagPreviewPoller.polling,
+    retagPreviewError: retagPreviewPoller.error,
     retagGithubLatestFallback,
     releaseNotes,
     selfUpdate,

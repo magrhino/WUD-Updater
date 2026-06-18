@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { AlertTriangle, Check, CheckCircle2, Play, Trash2, XCircle } from "@lucide/vue";
-import { NAlert, NButton, NFlex, NGi, NGrid, NModal, NTag } from "naive-ui";
+import { NAlert, NButton, NTag } from "naive-ui";
 
 import type {
   ApplyPreflightCheck,
@@ -23,6 +23,10 @@ import {
   type PlanLineView,
 } from "../../views/pending/utils";
 import CoreUpdateTourPanel from "../CoreUpdateTourPanel.vue";
+import PreflightFooterActions from "../preflight/PreflightFooterActions.vue";
+import PreflightMetricsGrid from "../preflight/PreflightMetricsGrid.vue";
+import PreflightModalShell from "../preflight/PreflightModalShell.vue";
+import PreflightNoticeList from "../preflight/PreflightNoticeList.vue";
 
 type TagType = "default" | "error" | "info" | "success" | "warning";
 
@@ -80,64 +84,28 @@ const emit = defineEmits<{
   (event: "close"): void;
   (event: "open-cleanup"): void;
 }>();
-
-function handleModalShowUpdate(value: boolean): void {
-  if (!value) {
-    emit("close");
-  }
-}
 </script>
 
 <template>
-  <n-modal
+  <PreflightModalShell
     :show="show"
-    :mask-closable="false"
-    @update:show="handleModalShowUpdate"
+    eyebrow="Preflight"
+    title-id="preflight-modal-title"
+    :title="preflightTitle"
+    :summary="preflightSummary"
+    :impact-label="preflightServiceImpactLabel"
+    :status-label="plan.status"
+    :status-type="planAlertType"
+    @close="emit('close')"
   >
-    <section
-      class="preflight-modal"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="preflight-modal-title"
-    >
-      <div class="section-heading">
-        <div>
-          <p class="eyebrow">Preflight</p>
-          <h2 id="preflight-modal-title">{{ preflightTitle }}</h2>
-          <p class="preflight-summary-text">{{ preflightSummary }}</p>
-          <p v-if="preflightServiceImpactLabel" class="preflight-impact-text">
-            {{ preflightServiceImpactLabel }}
-          </p>
-        </div>
-        <n-tag :type="planAlertType">{{ plan.status }}</n-tag>
-      </div>
-
-      <n-grid class="preflight-metrics" responsive="self" cols="2 560:4" :x-gap="8" :y-gap="8">
-        <n-gi>
-          <div class="preflight-metric">
-            <span>Targets</span>
-            <strong>{{ plan.summary.target_count }}</strong>
-          </div>
-        </n-gi>
-        <n-gi>
-          <div class="preflight-metric">
-            <span>Matched</span>
-            <strong>{{ plan.summary.matched_target_count }}</strong>
-          </div>
-        </n-gi>
-        <n-gi>
-          <div class="preflight-metric">
-            <span>Stacks</span>
-            <strong>{{ plan.summary.stack_count }}</strong>
-          </div>
-        </n-gi>
-        <n-gi>
-          <div class="preflight-metric">
-            <span>Issues</span>
-            <strong>{{ plan.summary.issue_count }}</strong>
-          </div>
-        </n-gi>
-      </n-grid>
+    <PreflightMetricsGrid
+      :items="[
+        { label: 'Targets', value: plan.summary.target_count },
+        { label: 'Matched', value: plan.summary.matched_target_count },
+        { label: 'Stacks', value: plan.summary.stack_count },
+        { label: 'Issues', value: plan.summary.issue_count },
+      ]"
+    />
 
       <section
         v-if="applyPreflight"
@@ -425,18 +393,18 @@ function handleModalShowUpdate(value: boolean): void {
         <div v-else class="empty-state">No matched services.</div>
       </section>
 
-      <div v-if="visiblePlanIssues.length" class="warning-list preflight-block">
-        <n-alert
-          v-for="issue in visiblePlanIssues"
-          :key="`${issue.code}-${issue.line_no ?? ''}-${issue.stack}-${issue.service}`"
-          :type="issueType(issue)"
-        >
-          <span>{{ issueLabel(issue) }}</span>
-          <span v-if="issueHint(issue)" class="issue-hint">
-            {{ issueHint(issue) }}
-          </span>
-        </n-alert>
-      </div>
+      <PreflightNoticeList
+        v-if="visiblePlanIssues.length"
+        class="preflight-block"
+        :warnings="[]"
+        :issues="visiblePlanIssues.map((issue) => ({
+          severity: issueType(issue),
+          code: issue.code,
+          message: issueLabel(issue),
+          hint: issueHint(issue),
+          service_key: `${issue.line_no ?? ''}-${issue.stack}-${issue.service}`,
+        }))"
+      />
 
       <div class="preflight-details-list">
         <details
@@ -532,10 +500,7 @@ function handleModalShowUpdate(value: boolean): void {
         </details>
       </div>
 
-      <n-flex class="preflight-footer" justify="flex-end" :size="8">
-        <n-button size="small" quaternary @click="emit('close')">
-          Close
-        </n-button>
+      <PreflightFooterActions @secondary="emit('close')">
         <n-button
           v-if="cleanupAvailable"
           type="warning"
@@ -550,22 +515,23 @@ function handleModalShowUpdate(value: boolean): void {
           </template>
           {{ cleanupButtonLabel }}
         </n-button>
-        <n-button
-          v-if="applyVisible"
-          type="primary"
-          size="small"
-          :disabled="applyDisabled"
-          :loading="loading"
-          @click="emit('apply')"
-        >
-          <template #icon>
-            <Play :size="16" />
-          </template>
-          {{ applyButtonLabel }}
-        </n-button>
-      </n-flex>
-    </section>
-  </n-modal>
+        <template #primary>
+          <n-button
+            v-if="applyVisible"
+            type="primary"
+            size="small"
+            :disabled="applyDisabled"
+            :loading="loading"
+            @click="emit('apply')"
+          >
+            <template #icon>
+              <Play :size="16" />
+            </template>
+            {{ applyButtonLabel }}
+          </n-button>
+        </template>
+      </PreflightFooterActions>
+  </PreflightModalShell>
 </template>
 
 <style scoped>

@@ -230,6 +230,25 @@ describe("demo web API", () => {
       },
       { service_key: "media/radarr", choice: "keep-current" as const },
     ];
+    const retagPreview = await api.startRetagPreview(retagChoices, "csrf");
+    expect(retagPreview).toMatchObject({
+      preview_job_id: expect.stringMatching(/^demo-retag-preview-/),
+      status: "queued",
+      plan: null,
+    });
+    const polledRetagPreview = await api.retagPreviewJob(
+      retagPreview.preview_job_id,
+    );
+    expect(polledRetagPreview).toMatchObject({
+      status: "success",
+      plan: expect.objectContaining({
+        can_apply: true,
+        selected_count: 1,
+      }),
+      warnings: expect.arrayContaining([
+        "Demo retag preview is fixture-backed and does not inspect local Compose files.",
+      ]),
+    });
     const retagPlan = await api.createRetagPlan(retagChoices, "csrf");
     expect(retagPlan).toMatchObject({
       status: "ready",

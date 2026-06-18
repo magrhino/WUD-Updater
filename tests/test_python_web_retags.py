@@ -281,6 +281,127 @@ def test_retag_github_latest_fallback_refresh_enables_cached_candidate(
     _assert_pending_grouping_did_not_mutate(_fake_docker_calls(fake_root))
 
 
+def test_retag_preview_refreshes_github_latest_before_building_plan(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fake_env, fake_root = _fake_docker_env(tmp_path)
+    client = _client(tmp_path, {"WUD_WEB_DEV_NO_AUTH": "true", **fake_env})
+    _make_fake_stack(
+        tmp_path,
+        fake_root,
+        "stack",
+        [("app", "ghcr.io/acme/app:latest", "cid-app")],
+    )
+    digest = "sha256:" + "d" * 64
+    _patch_github_latest(
+        monkeypatch,
+        tag="v1.2.3",
+        url="https://github.com/acme/app/releases/tag/v1.2.3",
+    )
+    _patch_digest_resolution(
+        monkeypatch,
+        expected_image="ghcr.io/acme/app:v1.2.3",
+        digest=digest,
+    )
+
+    missing_csrf = client.post(
+        "/api/v1/retag-plans/preview",
+        json={
+            "choices": [_switch_choice()],
+            "github_latest_fallback": True,
+        },
+    )
+    started = client.post(
+        "/api/v1/retag-plans/preview",
+        json={
+            "choices": [_switch_choice()],
+            "github_latest_fallback": True,
+        },
+        headers=_csrf_headers(client),
+    )
+    job = _wait_retag_preview_job(client, started.json()["preview_job_id"])
+
+    assert missing_csrf.status_code == 403
+    assert started.status_code == 202
+    assert job["status"] == "success"
+    assert [event["phase"] for event in job["progress"]] == ["refresh", "refresh", "preview"]
+    plan = job["plan"]
+    assert plan["status"] == "ready"
+    assert plan["can_apply"] is True
+    update = plan["stacks"][0]["digest_pin_updates"][0]
+    assert update["resolved_tag"] == "v1.2.3"
+    assert update["planned_digest"] == digest
+    assert update["final_image"] == f"ghcr.io/acme/app@{digest}"
+    _assert_pending_grouping_did_not_mutate(_fake_docker_calls(fake_root))
+
+
+def test_retag_preview_warns_when_github_latest_candidate_changes_after_refresh(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fake_env, fake_root = _fake_docker_env(tmp_path)
+    client = _client(tmp_path, {"WUD_WEB_DEV_NO_AUTH": "true", **fake_env})
+    _make_fake_stack(
+        tmp_path,
+        fake_root,
+        "stack",
+        [("app", "ghcr.io/acme/app:latest", "cid-app")],
+    )
+    old_digest = "sha256:" + "e" * 64
+    new_digest = "sha256:" + "f" * 64
+    headers = _csrf_headers(client)
+    _patch_github_latest(
+        monkeypatch,
+        tag="v1.0.0",
+        url="https://github.com/acme/app/releases/tag/v1.0.0",
+    )
+    _patch_digest_resolution(
+        monkeypatch,
+        expected_image="ghcr.io/acme/app:v1.0.0",
+        digest=old_digest,
+    )
+    cached = client.post(
+        "/api/v1/retag-targets/github-latest/refresh",
+        headers=headers,
+    )
+    assert cached.status_code == 200
+
+    _patch_github_latest(
+        monkeypatch,
+        tag="v1.1.0",
+        url="https://github.com/acme/app/releases/tag/v1.1.0",
+    )
+    _patch_digest_resolution_map(
+        monkeypatch,
+        {
+            "ghcr.io/acme/app:v1.0.0": old_digest,
+            "ghcr.io/acme/app:v1.1.0": new_digest,
+        },
+    )
+
+    started = client.post(
+        "/api/v1/retag-plans/preview",
+        json={
+            "choices": [_switch_choice()],
+            "github_latest_fallback": True,
+        },
+        headers=headers,
+    )
+    job = _wait_retag_preview_job(client, started.json()["preview_job_id"])
+
+    assert job["status"] == "success"
+    plan = job["plan"]
+    assert plan["status"] == "ready"
+    assert plan["can_apply"] is True
+    assert any(
+        "tag v1.0.0 -> v1.1.0" in warning
+        for warning in plan["warnings"]
+    )
+    update = plan["stacks"][0]["digest_pin_updates"][0]
+    assert update["planned_digest"] == new_digest
+
+
 def test_retag_apply_rejects_plan_when_fallback_flag_changes(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -398,6 +519,38 @@ def test_retag_github_latest_fallback_does_not_use_lsio_upstream_tag(
     assert item["retag_available"] is False
     assert item["retag_reason"] == "missing-provenance"
     assert "does not support LSIO" in item["candidate_warning"]
+    assert item["choices"] == ["keep-current"]
+
+
+def test_retag_targets_do_not_treat_persisted_source_image_as_current(
+    tmp_path: Path,
+) -> None:
+    fake_env, fake_root = _fake_docker_env(tmp_path)
+    client = _client(tmp_path, {"WUD_WEB_DEV_NO_AUTH": "true", **fake_env})
+    _make_fake_stack(
+        tmp_path,
+        fake_root,
+        "stack",
+        [("app", "repo/app:latest", "cid-app")],
+    )
+    _seed_known_image(
+        tmp_path,
+        service_key="stack/app",
+        image="repo/app@sha256:old",
+        source_image="repo/app:latest",
+        resolved_tag="1.0.0",
+        watch_tag="latest",
+        target_digest="sha256:old",
+        final_image="repo/app@sha256:old",
+    )
+
+    response = client.get("/api/v1/retag-targets")
+
+    assert response.status_code == 200
+    item = response.json()["items"][0]
+    assert item["image"] == "repo/app:latest"
+    assert item["retag_available"] is False
+    assert item["retag_reason"] == "stale-provenance"
     assert item["choices"] == ["keep-current"]
 
 
@@ -1033,6 +1186,46 @@ def _patch_digest_resolution(
             )
 
     monkeypatch.setattr(web_retags_module, "DigestVerifier", FakeDigestVerifier)
+
+
+def _patch_digest_resolution_map(
+    monkeypatch: pytest.MonkeyPatch,
+    digests_by_image: dict[str, str],
+) -> None:
+    class FakeDigestVerifier:
+        def __init__(self, *_args: object, **_kwargs: object) -> None:
+            pass
+
+        def resolve_tag_digest(self, image: str) -> DigestResolveResult:
+            return DigestResolveResult(
+                ok=True,
+                status="resolved",
+                reason="tag-digest-resolved",
+                digest=digests_by_image[image],
+                source="test",
+            )
+
+    monkeypatch.setattr(web_retags_module, "DigestVerifier", FakeDigestVerifier)
+
+
+def _wait_retag_preview_job(
+    client: TestClient,
+    preview_job_id: str,
+) -> dict[str, object]:
+    deadline = time.time() + 5
+    last_status = None
+    while time.time() < deadline:
+        response = client.get(f"/api/v1/retag-plans/preview/{preview_job_id}")
+        assert response.status_code == 200
+        body = response.json()
+        last_status = body["status"]
+        if last_status in {"success", "failure"}:
+            return body
+        time.sleep(0.02)
+    raise AssertionError(
+        f"retag preview job {preview_job_id} did not finish; "
+        f"last status was {last_status}"
+    )
 
 
 def _make_retag_fixture(

@@ -110,6 +110,7 @@ __all__ = (
     "RetagPlanResponse",
     "RetagPlanStack",
     "RetagPlanStatus",
+    "RetagPreviewJobResponse",
     "RunDetail",
     "RunEventRecord",
     "RunLogResponse",
@@ -549,6 +550,14 @@ class RetagPlanResponse(BaseModel):
     stacks: list[RetagPlanStack] = Field(default_factory=list)
     issues: list[RetagPlanIssue] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
+
+class RetagPreviewJobResponse(BaseModel):
+    preview_job_id: str
+    status: ApplyJobStatus
+    plan: RetagPlanResponse | None = None
+    warnings: list[str] = Field(default_factory=list)
+    error: str = ""
+    progress: list["ApplyJobProgressEvent"] = Field(default_factory=list)
 
 class ReleaseNoteLink(BaseModel):
     label: str

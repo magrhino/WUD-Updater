@@ -9,6 +9,12 @@ import { useSettingsStore } from "../src/stores/settings";
 import { useUpdatesStore, APPLY_JOB_RECOVERY_MESSAGE } from "../src/stores/updates";
 import { useRunsStore } from "../src/stores/runs";
 import {
+  deferred,
+  jsonRequestBody,
+  jsonResponse,
+  mockFetch,
+} from "./helpers/storeActions";
+import {
   applyJobLogResponse,
   applyJobResponse,
   coreUpdateTourResponse,
@@ -18,6 +24,7 @@ import {
   pendingResponse,
   releaseNotesResponse,
   retagPlanResponse,
+  retagPreviewJobResponse,
   retagTarget,
   retagTargetsResponse,
   planResponse,
@@ -35,45 +42,6 @@ import {
   tagExclusion,
   updateTargetsResponse,
 } from "./helpers/fixtures";
-
-function jsonResponse(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { "content-type": "application/json" },
-  });
-}
-
-function mockFetch(body: unknown = {}): ReturnType<typeof vi.fn> {
-  const fetchMock = vi.fn().mockImplementation(() => Promise.resolve(jsonResponse(body)));
-  vi.stubGlobal("fetch", fetchMock);
-  return fetchMock;
-}
-
-function jsonRequestBody(call: unknown[]): unknown {
-  const body = (call[1] as RequestInit).body;
-  if (typeof body !== "string") {
-    throw new TypeError("Expected request body to be a string");
-  }
-  return JSON.parse(body);
-}
-
-function deferred<T>() {
-  let resolve!: (value: T | PromiseLike<T>) => void;
-  let reject!: (reason?: unknown) => void;
-  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
-    resolve = resolvePromise;
-    reject = rejectPromise;
-  });
-  return { promise, resolve, reject };
-}
-
-
-import {
-  deferred,
-  jsonRequestBody,
-  jsonResponse,
-  mockFetch,
-} from "./helpers/storeActions";
 
 describe("updates store", () => {
   beforeEach(() => {
@@ -213,7 +181,32 @@ describe("updates store", () => {
   });
 
   it("previews retag choices through the updates store", async () => {
-    const fetchMock = mockFetch(retagPlanResponse());
+    vi.useFakeTimers();
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        jsonResponse(
+          retagPreviewJobResponse({
+            status: "queued",
+            plan: null,
+            warnings: [],
+            progress: [
+              {
+                job_id: "retag-preview-test",
+                phase: "refresh",
+                status: "running",
+                message: "Refreshing retag candidates.",
+                created_at: "2026-01-02T00:00:00Z",
+                stack: "",
+                services: [],
+                line_numbers: [],
+              },
+            ],
+          }),
+        ),
+      )
+      .mockResolvedValueOnce(jsonResponse(retagPreviewJobResponse()));
+    vi.stubGlobal("fetch", fetchMock);
     const auth = useAuthStore();
     const ensureCsrf = vi.spyOn(auth, "ensureCsrf").mockResolvedValue("csrf-retag");
     const updates = useUpdatesStore();
@@ -223,23 +216,34 @@ describe("updates store", () => {
     ]);
     updates.setRetagChoice("media/app", "switch-to-concrete");
 
-    const plan = await updates.createRetagPlan();
+    try {
+      const planPromise = updates.createRetagPlan();
+      await flushPromises();
+      await vi.advanceTimersByTimeAsync(400);
+      const plan = await planPromise;
 
-    expect(ensureCsrf).toHaveBeenCalledTimes(1);
-    expect(plan.plan_id).toBe("retag-plan-test");
-    expect(updates.retagPlan?.selected_count).toBe(1);
-    expect(fetchMock.mock.calls[0][0]).toBe("/api/v1/retag-plans");
-    expect(jsonRequestBody(fetchMock.mock.calls[0])).toEqual({
-      choices: [
-        { service_key: "media/app", choice: "switch-to-concrete" },
-        { service_key: "media/radarr", choice: "keep-current" },
-      ],
-      github_latest_fallback: false,
-    });
+      expect(ensureCsrf).toHaveBeenCalledTimes(1);
+      expect(plan.plan_id).toBe("retag-plan-test");
+      expect(updates.retagPlan?.selected_count).toBe(1);
+      expect(updates.retagPreviewJob?.status).toBe("success");
+      expect(fetchMock.mock.calls[0][0]).toBe("/api/v1/retag-plans/preview");
+      expect(fetchMock.mock.calls[1][0]).toBe(
+        "/api/v1/retag-plans/preview/retag-preview-test",
+      );
+      expect(jsonRequestBody(fetchMock.mock.calls[0])).toEqual({
+        choices: [
+          { service_key: "media/app", choice: "switch-to-concrete" },
+          { service_key: "media/radarr", choice: "keep-current" },
+        ],
+        github_latest_fallback: false,
+      });
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("sends retag fallback state when previewing", async () => {
-    const fetchMock = mockFetch(retagPlanResponse());
+    const fetchMock = mockFetch(retagPreviewJobResponse());
     const auth = useAuthStore();
     vi.spyOn(auth, "ensureCsrf").mockResolvedValue("csrf-retag");
     const updates = useUpdatesStore();
@@ -256,7 +260,7 @@ describe("updates store", () => {
   });
 
   it("falls back to keep-current for stale ineligible retag choices", async () => {
-    const fetchMock = mockFetch(retagPlanResponse());
+    const fetchMock = mockFetch(retagPreviewJobResponse());
     const auth = useAuthStore();
     vi.spyOn(auth, "ensureCsrf").mockResolvedValue("csrf-retag");
     const updates = useUpdatesStore();

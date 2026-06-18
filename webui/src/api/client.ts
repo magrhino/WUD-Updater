@@ -35,6 +35,7 @@ export type {
   RetagPlanDigestPinUpdate,
   RetagPlanStack,
   RetagPlanResponse,
+  RetagPreviewJobResponse,
   // Release notes
   ReleaseNoteLink,
   ReleaseNoteInfo,
@@ -154,6 +155,7 @@ import type {
   RetagChoiceRequest,
   RetagPlanOptions,
   RetagPlanResponse,
+  RetagPreviewJobResponse,
   DiagnosticsSupportBundleResponse,
   PendingCleanupLine,
   PendingCleanupResponse,
@@ -461,6 +463,23 @@ const updatesApi = {
         github_latest_fallback: options.github_latest_fallback ?? false,
       }),
     }),
+  startRetagPreview: (
+    choices: RetagChoiceRequest[],
+    csrfToken: string,
+    options: RetagPlanOptions = {},
+  ) =>
+    apiRequest<RetagPreviewJobResponse>("/retag-plans/preview", {
+      method: "POST",
+      headers: { "x-wud-csrf-token": csrfToken },
+      body: JSON.stringify({
+        choices,
+        github_latest_fallback: options.github_latest_fallback ?? false,
+      }),
+    }),
+  retagPreviewJob: (previewJobId: string) =>
+    apiRequest<RetagPreviewJobResponse>(
+      `/retag-plans/preview/${encodeURIComponent(previewJobId)}`,
+    ),
   applyRetagPlan: (
     planId: string,
     choices: RetagChoiceRequest[],

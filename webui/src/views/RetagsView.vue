@@ -12,7 +12,7 @@ import type { RetagTargetChoice, RetagTargetItem } from "../api/client";
 import { useRouteRefresh } from "../components/app/routeRefresh";
 import PendingApplyJobPanel from "../components/pending/PendingApplyJobPanel.vue";
 import RetagConfirmModal from "../components/retags/RetagConfirmModal.vue";
-import RetagPlanPreview from "../components/retags/RetagPlanPreview.vue";
+import RetagPlanReviewModal from "../components/retags/RetagPlanReviewModal.vue";
 import RetagSummaryPanel from "../components/retags/RetagSummaryPanel.vue";
 import RetagTargetsMobileList from "../components/retags/RetagTargetsMobileList.vue";
 import RetagTargetsTable from "../components/retags/RetagTargetsTable.vue";
@@ -45,6 +45,7 @@ const statusFilter = ref<RetagFilter>("all");
 const applyJobPanelRef = ref<PendingApplyJobPanelRef | null>(null);
 const showRetagApplyJobPanel = ref(false);
 const showRetagConfirmModal = ref(false);
+const showRetagPreviewModal = ref(false);
 const isDemoMode =
   import.meta.env.MODE === "demo" ||
   import.meta.env.VITE_WUD_DEMO_MODE === "true";
@@ -215,6 +216,7 @@ function onRetagChoiceUpdate(
 }
 
 async function previewRetagChanges(): Promise<void> {
+  showRetagPreviewModal.value = true;
   await updates.createRetagPlan().catch(() => undefined);
 }
 
@@ -226,6 +228,14 @@ function openRetagApplyConfirm(): void {
   if (applyDisabled.value) {
     return;
   }
+  showRetagConfirmModal.value = true;
+}
+
+function openRetagApplyConfirmFromPreview(): void {
+  if (applyDisabled.value) {
+    return;
+  }
+  showRetagPreviewModal.value = false;
   showRetagConfirmModal.value = true;
 }
 
@@ -343,6 +353,19 @@ onMounted(() => {
       @confirm="confirmRetagApply"
     />
 
+    <RetagPlanReviewModal
+      :show="showRetagPreviewModal"
+      :plan="updates.retagPlan"
+      :preview-job="updates.retagPreviewJob"
+      :impact-label="retagConfirmImpactLabel"
+      :mutation-notice="retagMutationNotice"
+      :apply-disabled="applyDisabled"
+      :loading="updates.loading"
+      :apply-job-active="applyJobActive"
+      @close="showRetagPreviewModal = false"
+      @apply="openRetagApplyConfirmFromPreview"
+    />
+
     <RetagSummaryPanel
       :total-count="totalCount"
       :available-count="availableCount"
@@ -356,11 +379,6 @@ onMounted(() => {
       :mutation-notice="retagMutationNotice"
       @preview="previewRetagChanges"
       @apply="openRetagApplyConfirm"
-    />
-
-    <RetagPlanPreview
-      v-if="updates.retagPlan"
-      :plan="updates.retagPlan"
     />
 
     <section class="section-panel retag-controls-panel">

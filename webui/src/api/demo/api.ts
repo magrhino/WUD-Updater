@@ -63,6 +63,13 @@ export function createDemoWebApi(): WebApi {
     updateTargets: async () => state.updateTargets(),
     retagTargets: async () => state.retagTargets(),
     refreshRetagGithubLatest: async (_csrfToken: string) => state.retagTargets(),
+    startRetagPreview: async (
+      choices: RetagChoiceRequest[],
+      _csrfToken: string,
+      _options = {},
+    ) => state.createRetagPreviewJob(choices),
+    retagPreviewJob: async (previewJobId: string) =>
+      state.retagPreviewJob(previewJobId),
     createRetagPlan: async (
       choices: RetagChoiceRequest[],
       _csrfToken: string,

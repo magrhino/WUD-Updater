@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { flushPromises } from "@vue/test-utils";
 
 import type { ApplyJobProgressEvent, PlanIssue } from "../src/api/client";
+import { usePolledJob } from "../src/composables/usePolledJob";
 import { useUpdateTargetOptions } from "../src/composables/useUpdateTargetOptions";
 import { useAuthStore } from "../src/stores/auth";
 import { useRunsStore } from "../src/stores/runs";
@@ -119,6 +120,92 @@ describe("useUpdateTargetOptions", () => {
       { label: "4.0", value: "4.0" },
     ]);
     expect(options.tagOptionsForImageRepo("repo/missing")).toEqual([]);
+  });
+});
+
+type TestPreviewJob = {
+  id: string;
+  status: "queued" | "success" | "failure";
+};
+
+describe("usePolledJob", () => {
+  it("polls until the job reaches a terminal state", async () => {
+    vi.useFakeTimers();
+    const queued: TestPreviewJob = { id: "preview", status: "queued" };
+    const success: TestPreviewJob = { id: "preview", status: "success" };
+    const start = vi.fn().mockResolvedValue(queued);
+    const poll = vi.fn().mockResolvedValue(success);
+    const job = usePolledJob<TestPreviewJob>(
+      start,
+      poll,
+      (value) => value.status !== "queued",
+      { intervalMs: 25 },
+    );
+
+    try {
+      const run = job.run();
+      await flushPromises();
+      expect(job.polling.value).toBe(true);
+      expect(job.job.value).toEqual(queued);
+
+      await vi.advanceTimersByTimeAsync(25);
+
+      await expect(run).resolves.toEqual(success);
+      expect(poll).toHaveBeenCalledWith(queued);
+      expect(job.job.value).toEqual(success);
+      expect(job.polling.value).toBe(false);
+      expect(job.error.value).toBe("");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("captures start failures and clears polling", async () => {
+    const start = vi.fn().mockRejectedValue(new Error("preview failed"));
+    const poll = vi.fn();
+    const job = usePolledJob<TestPreviewJob>(
+      start,
+      poll,
+      (value) => value.status !== "queued",
+      { intervalMs: 0 },
+    );
+
+    await expect(job.run()).rejects.toThrow("preview failed");
+
+    expect(poll).not.toHaveBeenCalled();
+    expect(job.error.value).toBe("preview failed");
+    expect(job.polling.value).toBe(false);
+  });
+
+  it("stops polling when reset while a run is waiting", async () => {
+    vi.useFakeTimers();
+    const queued: TestPreviewJob = { id: "preview", status: "queued" };
+    const start = vi.fn().mockResolvedValue(queued);
+    const poll = vi.fn().mockResolvedValue({
+      id: "preview",
+      status: "success" satisfies TestPreviewJob["status"],
+    });
+    const job = usePolledJob<TestPreviewJob>(
+      start,
+      poll,
+      (value) => value.status !== "queued",
+      { intervalMs: 25 },
+    );
+
+    try {
+      const run = job.run();
+      await flushPromises();
+
+      job.reset();
+      await vi.advanceTimersByTimeAsync(25);
+
+      await expect(run).resolves.toEqual(queued);
+      expect(poll).not.toHaveBeenCalled();
+      expect(job.job.value).toBeNull();
+      expect(job.polling.value).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 

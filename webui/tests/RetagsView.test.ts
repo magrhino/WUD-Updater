@@ -102,7 +102,7 @@ describe("RetagsView", () => {
     await flushPromises();
 
     expect(createRetagPlan).toHaveBeenCalledTimes(1);
-    expect(wrapper.text()).toContain("Selected retag changes");
+    expect(wrapper.text()).toContain("Review retag preview");
     expect(wrapper.text()).toContain("repo/app:latest -> repo/app@sha256:abc123");
     const applyButton = wrapper
       .findAll("button")

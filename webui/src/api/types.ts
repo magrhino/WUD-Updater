@@ -271,6 +271,15 @@ export interface RetagPlanResponse {
   warnings: string[];
 }
 
+export interface RetagPreviewJobResponse {
+  preview_job_id: string;
+  status: ApplyJobStatus;
+  plan: RetagPlanResponse | null;
+  warnings: string[];
+  error: string;
+  progress: ApplyJobProgressEvent[];
+}
+
 // ---------------------------------------------------------------------------
 // Release notes
 // ---------------------------------------------------------------------------
