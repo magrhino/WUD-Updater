@@ -1,9 +1,43 @@
 from __future__ import annotations
 
+import tempfile
 import unittest
+from pathlib import Path
 from unittest import mock
 
 import check_python_deps
+
+
+class DependencyPreflightPathTests(unittest.TestCase):
+    def test_read_cli_file_allows_file_inside_cwd(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo_root = Path(tmpdir)
+            pyproject_path = repo_root / "pyproject.toml"
+            pyproject_path.write_text("[project]\ndependencies = []\n", encoding="utf-8")
+
+            with mock.patch.object(check_python_deps.Path, "cwd", return_value=repo_root):
+                self.assertEqual(
+                    check_python_deps.read_cli_file("pyproject.toml"),
+                    "[project]\ndependencies = []\n",
+                )
+                self.assertEqual(
+                    check_python_deps.read_cli_file(str(pyproject_path)),
+                    "[project]\ndependencies = []\n",
+                )
+
+    def test_read_cli_file_rejects_path_escape(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            temp_path = Path(tmpdir)
+            repo_root = temp_path / "repo"
+            repo_root.mkdir()
+            (temp_path / "pyproject.toml").write_text(
+                "[project]\ndependencies = []\n",
+                encoding="utf-8",
+            )
+
+            with mock.patch.object(check_python_deps.Path, "cwd", return_value=repo_root):
+                with self.assertRaisesRegex(ValueError, "current working directory"):
+                    check_python_deps.read_cli_file("../pyproject.toml")
 
 
 class DependencyPreflightFallbackTests(unittest.TestCase):

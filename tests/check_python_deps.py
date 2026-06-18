@@ -15,53 +15,78 @@ _VERSION_CHARS = frozenset(
 _SPECIFIER_OPERATORS = ("==", ">=", "<=", ">", "<")
 
 
-def read_dependencies_with_tomllib(pyproject_path: Path) -> list[str] | None:
+def read_cli_file(path_arg: str) -> str:
+    base_dir = Path.cwd().resolve()
+    candidate = Path(path_arg)
+    if not candidate.is_absolute():
+        candidate = base_dir / candidate
+    # Canonicalize before validating so CLI input cannot escape this checkout.
+    canonical_path = candidate.resolve()
+
+    try:
+        canonical_path.relative_to(base_dir)
+    except ValueError as exc:
+        raise ValueError(
+            "pyproject path must stay within the current working directory"
+        ) from exc
+
+    return canonical_path.read_text(encoding="utf-8")
+
+
+def read_dependencies_with_tomllib(pyproject_content: str) -> list[str] | None:
     try:
         import tomllib
     except ModuleNotFoundError:
         return None
 
-    data = tomllib.loads(pyproject_path.read_text(encoding="utf-8"))
+    data = tomllib.loads(pyproject_content)
     project = data.get("project", {})
     optional = project.get("optional-dependencies", {})
     return [*project.get("dependencies", []), *optional.get("dev", [])]
 
 
-def read_dependencies_fallback(pyproject_path: Path) -> list[str]:
-    dependencies: list[str] = []
-    dev_dependencies: list[str] = []
-    section = ""
-    target: list[str] | None = None
+def read_fallback_list(
+    pyproject_content: str,
+    section_name: str,
+    field_name: str,
+) -> list[str]:
+    values: list[str] = []
+    in_section = False
+    in_list = False
+    list_header = f"{field_name} = ["
 
-    for raw_line in pyproject_path.read_text(encoding="utf-8").splitlines():
+    for raw_line in pyproject_content.splitlines():
         line = raw_line.strip()
         if not line or line.startswith("#"):
             continue
         if line.startswith("[") and line.endswith("]"):
-            section = line[1:-1]
-            target = None
+            in_section = line[1:-1] == section_name
+            in_list = False
+        elif not in_section:
             continue
-        if target is not None:
+        elif in_list:
             if line == "]":
-                target = None
-                continue
-            target.append(ast.literal_eval(line.rstrip(",")))
-            continue
-        if section == "project" and line == "dependencies = [":
-            target = dependencies
-            continue
-        if section == "project.optional-dependencies" and line == "dev = [":
-            target = dev_dependencies
-            continue
+                in_list = False
+            else:
+                values.append(ast.literal_eval(line.rstrip(",")))
+        elif line == list_header:
+            in_list = True
 
-    return [*dependencies, *dev_dependencies]
+    return values
 
 
-def read_dependencies(pyproject_path: Path) -> list[str]:
-    dependencies = read_dependencies_with_tomllib(pyproject_path)
+def read_dependencies_fallback(pyproject_content: str) -> list[str]:
+    return [
+        *read_fallback_list(pyproject_content, "project", "dependencies"),
+        *read_fallback_list(pyproject_content, "project.optional-dependencies", "dev"),
+    ]
+
+
+def read_dependencies(pyproject_content: str) -> list[str]:
+    dependencies = read_dependencies_with_tomllib(pyproject_content)
     if dependencies is not None:
         return dependencies
-    return read_dependencies_fallback(pyproject_path)
+    return read_dependencies_fallback(pyproject_content)
 
 
 def compare_versions(actual: str, expected: str) -> int:
@@ -158,9 +183,15 @@ def main() -> int:
         print("Usage: check_python_deps.py pyproject.toml", file=sys.stderr)
         return 2
 
+    try:
+        pyproject_content = read_cli_file(sys.argv[1])
+    except ValueError as exc:
+        print(str(exc), file=sys.stderr)
+        return 2
+
     errors = [
         error
-        for requirement in read_dependencies(Path(sys.argv[1]))
+        for requirement in read_dependencies(pyproject_content)
         if (error := requirement_error(requirement))
     ]
     if not errors:
