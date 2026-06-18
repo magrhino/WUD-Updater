@@ -617,12 +617,19 @@ async function expectMobileNavFocusTraversal(page: Page) {
       }
       const itemRect = element.getBoundingClientRect();
       const navRect = navList.getBoundingClientRect();
+      const styles = getComputedStyle(element);
+      const outlineClearance = Math.max(
+        0,
+        (Number.parseFloat(styles.outlineWidth) || 0) +
+          (Number.parseFloat(styles.outlineOffset) || 0),
+      );
       return {
         label: element.textContent?.trim() ?? "",
         left: itemRect.left,
         right: itemRect.right,
         width: itemRect.width,
         height: itemRect.height,
+        outlineClearance,
         navLeft: navRect.left,
         navRight: navRect.right,
         scrollLeft: navList.scrollLeft,
@@ -636,15 +643,23 @@ async function expectMobileNavFocusTraversal(page: Page) {
     expect(step.label).toBe(mobileNavLabels[index]);
     expect(step.width, `${step.label} focused width`).toBeGreaterThan(0);
     expect(step.height, `${step.label} focused height`).toBeGreaterThan(0);
-    expect(step.left, `${step.label} focused left`).toBeGreaterThanOrEqual(
-      step.navLeft - 2,
-    );
-    expect(step.right, `${step.label} focused right`).toBeLessThanOrEqual(
-      step.navRight + 2,
-    );
-    expect(step.left, `${step.label} viewport left`).toBeGreaterThanOrEqual(0);
-    expect(step.right, `${step.label} viewport right`).toBeLessThanOrEqual(
-      step.viewportWidth + 2,
+    expect(
+      step.left - step.outlineClearance,
+      `${step.label} focus outline left`,
+    ).toBeGreaterThanOrEqual(step.navLeft - 1);
+    expect(
+      step.right + step.outlineClearance,
+      `${step.label} focus outline right`,
+    ).toBeLessThanOrEqual(step.navRight + 1);
+    expect(
+      step.left - step.outlineClearance,
+      `${step.label} viewport focus outline left`,
+    ).toBeGreaterThanOrEqual(0);
+    expect(
+      step.right + step.outlineClearance,
+      `${step.label} viewport focus outline right`,
+    ).toBeLessThanOrEqual(
+      step.viewportWidth + 1,
     );
   }
 

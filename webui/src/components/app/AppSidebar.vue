@@ -289,10 +289,13 @@ onMounted(() => {
     flex: 1 1 auto;
     grid-auto-flow: column;
     grid-auto-columns: max-content;
+    margin: -4px;
     min-width: 0;
     max-width: 100%;
+    padding: 4px;
     overflow-x: auto;
     overflow-y: hidden;
+    scroll-padding-inline: 4px;
   }
 
   .nav-item {
@@ -300,6 +303,7 @@ onMounted(() => {
     gap: 8px;
     min-height: 44px;
     padding: 0 12px;
+    scroll-margin-inline: 4px;
     white-space: nowrap;
   }
 }
