@@ -14,6 +14,11 @@ import {
   displayDigest,
 } from "../../utils/digestProvenance";
 import {
+  canSwitchToConcrete,
+  emitRetagChoice,
+  retagChoice,
+} from "./retagChoices";
+import {
   candidateLabel,
   currentTagLabel,
   reasonDetail,
@@ -117,9 +122,9 @@ const columns = computed<DataTableColumns<RetagTargetItem>>(() => [
         h(
           NRadioGroup,
           {
-            value: retagChoice(row),
+            value: retagChoice(row, props.choices),
             size: "small",
-            onUpdateValue: (value: string) => emitRetagChoice(row, value),
+            onUpdateValue: (value: string) => emitRetagChoice(emit, row, value),
           },
           {
             default: () => [
@@ -157,21 +162,6 @@ const columns = computed<DataTableColumns<RetagTargetItem>>(() => [
 
 function rowKey(row: RetagTargetItem): string {
   return row.service_key;
-}
-
-function retagChoice(item: RetagTargetItem): RetagTargetChoice {
-  return props.choices[item.service_key] ?? "keep-current";
-}
-
-function canSwitchToConcrete(item: RetagTargetItem): boolean {
-  return item.retag_available && item.choices.includes("switch-to-concrete");
-}
-
-function emitRetagChoice(item: RetagTargetItem, choice: string): void {
-  if (choice !== "keep-current" && choice !== "switch-to-concrete") {
-    return;
-  }
-  emit("choice-update", item, choice);
 }
 </script>
 

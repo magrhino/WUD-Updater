@@ -1,5 +1,9 @@
+import { createPinia, setActivePinia } from "pinia";
+import { effectScope, nextTick } from "vue";
 import { describe, expect, it, vi } from "vitest";
 
+import { useAuthStore } from "../src/stores/auth";
+import { useSettingsStore } from "../src/stores/settings";
 import {
   applyThemeCssVars,
   designTokens,
@@ -8,7 +12,22 @@ import {
   themeOverrides,
   themeOverridesByMode,
   themeStorageKey,
+  useWebuiTheme,
 } from "../src/theme";
+import { authSession, settingsResponse } from "./helpers/fixtures";
+
+function mockMatchMedia(prefersDark: boolean): void {
+  window.matchMedia = vi.fn().mockImplementation((query: string) => ({
+    matches: query === "(prefers-color-scheme: dark)" && prefersDark,
+    media: query,
+    onchange: null,
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+    addListener: vi.fn(),
+    removeListener: vi.fn(),
+    dispatchEvent: vi.fn(),
+  }));
+}
 
 describe("webui theme tokens", () => {
   it("maps light design tokens to CSS variables and Naive UI overrides", () => {
@@ -59,17 +78,43 @@ describe("webui theme tokens", () => {
     expect(detectInitialEffectiveTheme()).toBe("light");
 
     window.localStorage.setItem(themeStorageKey, "auto");
-    window.matchMedia = vi.fn().mockImplementation((query: string) => ({
-      matches: query === "(prefers-color-scheme: dark)",
-      media: query,
-      onchange: null,
-      addEventListener: vi.fn(),
-      removeEventListener: vi.fn(),
-      addListener: vi.fn(),
-      removeListener: vi.fn(),
-      dispatchEvent: vi.fn(),
-    }));
+    mockMatchMedia(true);
 
     expect(detectInitialEffectiveTheme()).toBe("dark");
+  });
+
+  it("reapplies a configured theme preference when authentication changes", async () => {
+    setActivePinia(createPinia());
+    mockMatchMedia(false);
+    window.localStorage.setItem(themeStorageKey, "light");
+
+    const scope = effectScope();
+    try {
+      const theme = scope.run(() => useWebuiTheme());
+      if (!theme) {
+        throw new Error("Theme composable did not initialize");
+      }
+      const auth = useAuthStore();
+      const settings = useSettingsStore();
+      const configuredSettings = settingsResponse();
+      settings.settings = {
+        ...configuredSettings,
+        managed: configuredSettings.managed.map((entry) =>
+          entry.key === "theme_preference"
+            ? { ...entry, value: "dark", source: "configured" }
+            : entry,
+        ),
+      };
+      await nextTick();
+
+      expect(theme.preference.value).toBe("light");
+
+      auth.session = authSession({ authenticated: true });
+      await nextTick();
+
+      expect(theme.preference.value).toBe("dark");
+    } finally {
+      scope.stop();
+    }
   });
 });

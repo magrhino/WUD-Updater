@@ -67,14 +67,6 @@ function deferred<T>() {
   return { promise, resolve, reject };
 }
 
-
-import {
-  deferred,
-  jsonRequestBody,
-  jsonResponse,
-  mockFetch,
-} from "./helpers/storeActions";
-
 describe("settings store", () => {
   beforeEach(() => {
     setActivePinia(createPinia());

@@ -4,6 +4,11 @@ import { NRadioButton, NRadioGroup, NTag } from "naive-ui";
 import type { RetagTargetChoice, RetagTargetItem } from "../../api/client";
 import { displayDigest } from "../../utils/digestProvenance";
 import {
+  canSwitchToConcrete,
+  emitRetagChoice,
+  retagChoice,
+} from "./retagChoices";
+import {
   candidateLabel,
   composeLocation,
   reasonDetail,
@@ -12,7 +17,7 @@ import {
   trackingLabel,
 } from "../../views/retags/display";
 
-const props = defineProps<{
+defineProps<{
   rows: RetagTargetItem[];
   choices: Record<string, RetagTargetChoice>;
   mutationDisabled: boolean;
@@ -22,21 +27,6 @@ const props = defineProps<{
 const emit = defineEmits<{
   "choice-update": [item: RetagTargetItem, choice: RetagTargetChoice];
 }>();
-
-function retagChoice(item: RetagTargetItem): RetagTargetChoice {
-  return props.choices[item.service_key] ?? "keep-current";
-}
-
-function canSwitchToConcrete(item: RetagTargetItem): boolean {
-  return item.retag_available && item.choices.includes("switch-to-concrete");
-}
-
-function emitRetagChoice(item: RetagTargetItem, choice: string): void {
-  if (choice !== "keep-current" && choice !== "switch-to-concrete") {
-    return;
-  }
-  emit("choice-update", item, choice);
-}
 </script>
 
 <template>
@@ -90,9 +80,9 @@ function emitRetagChoice(item: RetagTargetItem, choice: string): void {
           <dt>Choice</dt>
           <dd>
             <n-radio-group
-              :value="retagChoice(item)"
+              :value="retagChoice(item, choices)"
               size="small"
-              @update:value="emitRetagChoice(item, String($event))"
+              @update:value="emitRetagChoice(emit, item, String($event))"
             >
               <n-radio-button value="keep-current">Keep</n-radio-button>
               <n-radio-button

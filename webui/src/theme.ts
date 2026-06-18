@@ -381,10 +381,10 @@ export function useWebuiTheme(): {
   );
 
   watch(
-    managedThemePreference,
-    (entry) => {
+    [managedThemePreference, () => auth.authenticated],
+    ([entry, authenticated]) => {
       if (
-        auth.authenticated &&
+        authenticated &&
         entry?.source === "configured" &&
         (entry.value === "system" ||
           entry.value === "light" ||
