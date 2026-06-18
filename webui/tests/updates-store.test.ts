@@ -215,6 +215,31 @@ describe("updates store", () => {
     });
   });
 
+  it("falls back to keep-current for stale ineligible retag choices", async () => {
+    const fetchMock = mockFetch(retagPlanResponse());
+    const auth = useAuthStore();
+    vi.spyOn(auth, "ensureCsrf").mockResolvedValue("csrf-retag");
+    const updates = useUpdatesStore();
+    updates.retagTargets = retagTargetsResponse([
+      retagTarget({
+        retag_available: false,
+        retag_reason: "missing-provenance",
+        choices: ["keep-current"],
+        digest_provenance: null,
+      }),
+    ]);
+
+    updates.setRetagChoice("media/app", "switch-to-concrete");
+    expect(updates.retagChoices["media/app"]).toBe("keep-current");
+
+    updates.retagChoices = { "media/app": "switch-to-concrete" };
+    await updates.createRetagPlan();
+
+    expect(jsonRequestBody(fetchMock.mock.calls[0])).toEqual({
+      choices: [{ service_key: "media/app", choice: "keep-current" }],
+    });
+  });
+
   it("applies a retag plan as a tracked apply job", async () => {
     const fetchMock = mockFetch(applyJobResponse({ job_id: "retag-job" }));
     const auth = useAuthStore();

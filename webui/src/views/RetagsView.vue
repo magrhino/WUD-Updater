@@ -18,6 +18,7 @@ import RetagTargetsMobileList from "../components/retags/RetagTargetsMobileList.
 import RetagTargetsTable from "../components/retags/RetagTargetsTable.vue";
 import { useAuthStore } from "../stores/auth";
 import { useUpdatesStore } from "../stores/updates";
+import { retagChoice as selectedRetagChoice } from "../utils/retagChoices";
 import {
   digestPinSummary,
   labelRewriteSummary,
@@ -203,7 +204,7 @@ const filteredRows = computed(() => {
 });
 
 function retagChoice(item: RetagTargetItem): RetagTargetChoice {
-  return updates.retagChoices[item.service_key] ?? "keep-current";
+  return selectedRetagChoice(item, updates.retagChoices);
 }
 
 function onRetagChoiceUpdate(
