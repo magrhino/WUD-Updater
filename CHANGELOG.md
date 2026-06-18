@@ -4,6 +4,18 @@ All notable changes to WUD-Updater are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com) and versions follow
 [Semantic Versioning](https://semver.org).
 
+## [0.43.0](https://github.com/magrhino/WUD-Updater/compare/v0.42.5...v0.43.0) (2026-06-18)
+
+
+### Features
+
+* **webui:** enable default WUD API discovery ([#350](https://github.com/magrhino/WUD-Updater/issues/350)) ([18129a6](https://github.com/magrhino/WUD-Updater/commit/18129a6affa08cbf5f373e87f660d59198d50899))
+
+
+### Bug Fixes
+
+* **tests:** Check Python dependency versions before running tests ([#349](https://github.com/magrhino/WUD-Updater/issues/349)) ([5a777a8](https://github.com/magrhino/WUD-Updater/commit/5a777a87ec08962dfca2239c247c37302ce7630a))
+
 ## [0.42.5](https://github.com/magrhino/WUD-Updater/compare/v0.42.4...v0.42.5) (2026-06-18)
 
 
