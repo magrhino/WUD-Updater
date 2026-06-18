@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import io
 import tempfile
 import unittest
 from pathlib import Path
@@ -38,6 +39,33 @@ class DependencyPreflightPathTests(unittest.TestCase):
             with mock.patch.object(check_python_deps.Path, "cwd", return_value=repo_root):
                 with self.assertRaisesRegex(ValueError, "current working directory"):
                     check_python_deps.read_cli_file("../pyproject.toml")
+
+    def test_main_reports_expected_file_errors(self) -> None:
+        expected_errors = [
+            FileNotFoundError("missing pyproject.toml"),
+            PermissionError("unreadable pyproject.toml"),
+            ValueError("pyproject path must stay within the current working directory"),
+        ]
+
+        for expected_error in expected_errors:
+            with self.subTest(error=type(expected_error).__name__):
+                stderr = io.StringIO()
+                with (
+                    mock.patch.object(
+                        check_python_deps.sys,
+                        "argv",
+                        ["check_python_deps.py", "pyproject.toml"],
+                    ),
+                    mock.patch.object(check_python_deps.sys, "stderr", stderr),
+                    mock.patch.object(
+                        check_python_deps,
+                        "read_cli_file",
+                        side_effect=expected_error,
+                    ),
+                ):
+                    self.assertEqual(check_python_deps.main(), 2)
+
+                self.assertEqual(stderr.getvalue(), f"{expected_error}\n")
 
 
 class DependencyPreflightFallbackTests(unittest.TestCase):

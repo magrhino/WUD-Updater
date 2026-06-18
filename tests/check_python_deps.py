@@ -185,7 +185,7 @@ def main() -> int:
 
     try:
         pyproject_content = read_cli_file(sys.argv[1])
-    except ValueError as exc:
+    except (FileNotFoundError, PermissionError, ValueError) as exc:
         print(str(exc), file=sys.stderr)
         return 2
 
