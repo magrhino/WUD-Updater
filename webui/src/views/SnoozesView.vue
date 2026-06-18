@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from "vue";
-import { useBreakpoints } from "@vueuse/core";
 import { Plus, Trash2 } from "@lucide/vue";
 import {
   NAlert,
@@ -18,6 +17,7 @@ import {
 import type { SnoozeKind, SnoozeRecord, SnoozeState } from "../api/client";
 import { useRouteRefresh } from "../components/app/routeRefresh";
 import { useUpdateTargetOptions } from "../composables/useUpdateTargetOptions";
+import { useManagementCardsBreakpoint } from "../responsive";
 import { useAuthStore } from "../stores/auth";
 import { useSettingsStore } from "../stores/settings";
 import { useUpdatesStore } from "../stores/updates";
@@ -27,8 +27,7 @@ const settings = useSettingsStore();
 const updates = useUpdatesStore();
 const auth = useAuthStore();
 const { serviceKeyOptions } = useUpdateTargetOptions();
-const breakpoints = useBreakpoints({ managementDesktop: 1120 });
-const useManagementCards = breakpoints.smaller("managementDesktop");
+const useManagementCards = useManagementCardsBreakpoint();
 const snoozeState = ref<SnoozeState>("active");
 const snoozeKind = ref<SnoozeKind>("time");
 const showCreateConfirm = ref(false);

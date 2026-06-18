@@ -97,7 +97,7 @@ body .n-switch:focus-within {
   background: var(--color-surface);
 }
 
-@media (max-width: 560px) {
+@media (--wud-compact) {
   a.text-link,
   a.icon-link {
     display: inline-flex;
@@ -106,7 +106,7 @@ body .n-switch:focus-within {
   }
 }
 
-@media (prefers-reduced-motion: reduce) {
+@media (--wud-reduced-motion) {
   *,
   *::before,
   *::after {

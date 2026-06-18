@@ -1,12 +1,6 @@
 import { nextTick } from "vue";
 
-function prefersReducedMotion(): boolean {
-  return (
-    typeof globalThis.window !== "undefined" &&
-    typeof globalThis.window.matchMedia === "function" &&
-    globalThis.window.matchMedia("(prefers-reduced-motion: reduce)").matches
-  );
-}
+import { prefersReducedMotion } from "../../responsive";
 
 export function scrollToElementId(id: string): void {
   if (typeof document === "undefined") {

@@ -73,7 +73,7 @@ function updateQuery(value: string): void {
   font-size: 0.82rem;
 }
 
-@media (max-width: 560px) {
+@media (--wud-compact) {
   .pending-filter-panel {
     display: grid;
   }

@@ -250,7 +250,7 @@ const redactedSecretRows = computed(() => secretRows(secrets.value));
   color: var(--color-ink);
 }
 
-@media (max-width: 560px) {
+@media (--wud-compact) {
   .settings-zone-heading {
     display: grid;
   }

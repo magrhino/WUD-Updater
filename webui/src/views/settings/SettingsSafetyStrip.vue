@@ -102,7 +102,7 @@ const {
   gap: 8px;
 }
 
-@media (max-width: 560px) {
+@media (--wud-compact) {
   .settings-safety-strip {
     display: grid;
   }

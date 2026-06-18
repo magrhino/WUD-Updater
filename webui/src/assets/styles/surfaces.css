@@ -357,7 +357,7 @@
   overflow-wrap: anywhere;
 }
 
-@media (max-width: 560px) {
+@media (--wud-compact) {
   .section-heading {
     display: grid;
   }

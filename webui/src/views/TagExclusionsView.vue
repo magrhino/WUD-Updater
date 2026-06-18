@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from "vue";
-import { useBreakpoints } from "@vueuse/core";
 import { Edit3, Save, ShieldOff } from "@lucide/vue";
 import {
   NAlert,
@@ -22,6 +21,7 @@ import type {
 } from "../api/client";
 import { useRouteRefresh } from "../components/app/routeRefresh";
 import { useUpdateTargetOptions } from "../composables/useUpdateTargetOptions";
+import { useManagementCardsBreakpoint } from "../responsive";
 import { useAuthStore } from "../stores/auth";
 import { useSettingsStore } from "../stores/settings";
 import { useUpdatesStore } from "../stores/updates";
@@ -42,8 +42,7 @@ const {
   targetForImageRepo,
   targetForServiceKey,
 } = useUpdateTargetOptions();
-const breakpoints = useBreakpoints({ managementDesktop: 1120 });
-const useManagementCards = breakpoints.smaller("managementDesktop");
+const useManagementCards = useManagementCardsBreakpoint();
 const statusFilter = ref<TagExclusionStatusFilter>("active");
 const showSaveConfirm = ref(false);
 const showStatusConfirm = ref(false);

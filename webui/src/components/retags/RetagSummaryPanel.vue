@@ -130,7 +130,7 @@ defineEmits<{
   line-height: 1.2;
 }
 
-@media (max-width: 920px) {
+@media (--wud-app-shell) {
   .retag-summary-strip {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -140,7 +140,7 @@ defineEmits<{
   }
 }
 
-@media (max-width: 560px) {
+@media (--wud-compact) {
   .retag-preview-action {
     display: grid;
     justify-content: stretch;

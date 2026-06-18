@@ -822,6 +822,32 @@ describe("usePendingApplyJob", () => {
     expect(state.applyJobNowMessage.value).toBe("updater exited with status 1");
   });
 
+  it("keeps fallback verification stable when a job response omits progress events", () => {
+    const { state, updates } = setupPendingApplyJob();
+    updates.plan = planResponse();
+    state.applyJobSnapshot.value = state.createApplyJobSnapshot();
+    const job = applyJobResponse({ status: "success" });
+    (job as unknown as { progress: unknown }).progress = {};
+
+    updates.setApplyJob(job);
+
+    expect(state.applyJobVerification.value).toMatchObject({
+      status: "needs_review",
+      total_count: 1,
+      needs_review_count: 1,
+      items: [
+        {
+          line_no: 1,
+          image_status: "unknown",
+          container_status: "unknown",
+          health_status: "unknown",
+          wud_status: "unknown",
+          follow_up_needed: true,
+        },
+      ],
+    });
+  });
+
   it("handles stream errors and duplicate progress events", async () => {
     const { state, updates } = setupPendingApplyJob();
     const stream = mockApplyJobStream();

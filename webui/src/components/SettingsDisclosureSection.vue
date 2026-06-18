@@ -202,7 +202,7 @@ const props = defineProps<{
   font-weight: 700;
 }
 
-@media (max-width: 560px) {
+@media (--wud-compact) {
   .settings-row {
     grid-template-columns: 1fr;
     align-items: start;

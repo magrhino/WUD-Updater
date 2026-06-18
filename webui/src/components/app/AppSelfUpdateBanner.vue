@@ -96,7 +96,7 @@ defineEmits<{
   max-width: 42ch;
 }
 
-@media (max-width: 920px) {
+@media (--wud-app-shell) {
   .self-update-banner {
     align-items: flex-start;
     flex-direction: column;
@@ -107,7 +107,7 @@ defineEmits<{
   }
 }
 
-@media (max-width: 560px) {
+@media (--wud-compact) {
   .self-update-banner-actions {
     display: grid;
     grid-template-columns: 1fr;

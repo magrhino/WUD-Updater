@@ -54,7 +54,7 @@ import { SETTINGS_SECTION_LINKS } from "./settingsDisplay";
   outline-offset: 2px;
 }
 
-@media (max-width: 560px) {
+@media (--wud-compact) {
   .settings-jump-nav {
     flex-wrap: nowrap;
     max-width: 100%;

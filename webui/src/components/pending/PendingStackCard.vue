@@ -371,13 +371,13 @@ const emit = defineEmits<{
   display: inline-flex;
 }
 
-@media (max-width: 920px) {
+@media (--wud-app-shell) {
   .stack-card-header {
     align-items: flex-start;
   }
 }
 
-@media (max-width: 560px) {
+@media (--wud-compact) {
   .stack-card-header {
     display: grid;
   }

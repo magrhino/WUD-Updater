@@ -364,7 +364,7 @@ const {
   align-items: end;
 }
 
-@media (max-width: 560px) {
+@media (--wud-compact) {
   .settings-preference-row {
     grid-template-columns: 1fr;
   }

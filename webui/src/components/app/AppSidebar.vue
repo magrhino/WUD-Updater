@@ -259,7 +259,7 @@ onMounted(() => {
   text-decoration: underline;
 }
 
-@media (max-width: 920px) {
+@media (--wud-app-shell) {
   .sidebar {
     position: sticky;
     top: 0;

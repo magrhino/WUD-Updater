@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from "vue";
-import { useBreakpoints } from "@vueuse/core";
 import { Edit3, Save, Trash2 } from "@lucide/vue";
 import {
   NAlert,
@@ -24,6 +23,7 @@ import type {
   ServicePolicyUpdateMode,
 } from "../api/client";
 import { useUpdateTargetOptions } from "../composables/useUpdateTargetOptions";
+import { usePolicyManagementCardsBreakpoint } from "../responsive";
 import { useAuthStore } from "../stores/auth";
 import { useSettingsStore } from "../stores/settings";
 import { useConnectionStore } from "../stores/connection";
@@ -35,8 +35,7 @@ const connection = useConnectionStore();
 const updates = useUpdatesStore();
 const auth = useAuthStore();
 const { serviceKeyOptions } = useUpdateTargetOptions();
-const breakpoints = useBreakpoints({ managementDesktop: 1200 });
-const useManagementCards = breakpoints.smaller("managementDesktop");
+const useManagementCards = usePolicyManagementCardsBreakpoint();
 const showSaveConfirm = ref(false);
 const showDeleteConfirm = ref(false);
 const deleteTarget = ref<ServicePolicyRecord | null>(null);

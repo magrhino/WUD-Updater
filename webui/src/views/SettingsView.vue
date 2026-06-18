@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import { computed, onMounted, watch } from "vue";
-import { useMediaQuery } from "@vueuse/core";
 import { useRoute } from "vue-router";
 import { NAlert } from "naive-ui";
 
 import { useRouteRefresh } from "../components/app/routeRefresh";
+import { useCompactBreakpoint } from "../responsive";
 import { useSettingsStore } from "../stores/settings";
 import SettingsActionsSection from "./settings/SettingsActionsSection.vue";
 import SettingsDiagnosticsSection from "./settings/SettingsDiagnosticsSection.vue";
@@ -19,7 +19,7 @@ import { runInBackground } from "../utils/promises";
 const settings = useSettingsStore();
 const route = useRoute();
 const settingsData = computed(() => settings.settings);
-const compactSettingsLayout = useMediaQuery("(max-width: 560px)");
+const compactSettingsLayout = useCompactBreakpoint();
 const shouldFocusOnboardingChecklist = computed(
   () =>
     route?.query.onboarding === "1" &&

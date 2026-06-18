@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, type Component } from "vue";
-import { useClipboard, useMediaQuery } from "@vueuse/core";
+import { useClipboard } from "@vueuse/core";
 import {
   AlertTriangle,
   CheckCircle2,
@@ -13,13 +13,14 @@ import { NAlert, NButton, NEmpty, NFlex, NGi, NGrid, NSkeleton, NTag } from "nai
 
 import type { DoctorCheck, DoctorCheckStatus } from "../api/client";
 import { useRouteRefresh } from "../components/app/routeRefresh";
+import { useCompactBreakpoint } from "../responsive";
 import { useConnectionStore } from "../stores/connection";
 import { runInBackground } from "../utils/promises";
 
 const connection = useConnectionStore();
 const copiedSnippet = ref("");
 const { copy, copied, isSupported } = useClipboard({ legacy: true });
-const compactHeadingActions = useMediaQuery("(max-width: 560px)");
+const compactHeadingActions = useCompactBreakpoint();
 
 const doctor = computed(() => connection.doctor);
 const checks = computed(() => doctor.value?.checks ?? []);
@@ -375,7 +376,7 @@ function statusIcon(status: DoctorCheckStatus): Component {
   background: var(--color-panel-tint);
 }
 
-@media (max-width: 560px) {
+@media (--wud-compact) {
   .doctor-check-head,
   .doctor-suggestion {
     display: grid;

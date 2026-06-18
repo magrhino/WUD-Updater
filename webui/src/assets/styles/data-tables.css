@@ -211,7 +211,7 @@ code.pending-table-value {
   gap: 6px;
 }
 
-@media (max-width: 560px) {
+@media (--wud-compact) {
   .management-form {
     grid-template-columns: 1fr;
   }

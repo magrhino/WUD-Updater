@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, type Component } from "vue";
-import { useClipboard, useMediaQuery } from "@vueuse/core";
+import { useClipboard } from "@vueuse/core";
 import { useRouter } from "vue-router";
 import {
   ArrowRight,
@@ -16,6 +16,7 @@ import {
 import { NButton, NFlex, NTag } from "naive-ui";
 
 import type { DoctorCheckStatus, OnboardingChecklistItem } from "../api/client";
+import { useCompactBreakpoint } from "../responsive";
 import { useSettingsStore } from "../stores/settings";
 import { runInBackground } from "../utils/promises";
 
@@ -24,7 +25,7 @@ const router = useRouter();
 const copiedSnippet = ref("");
 const dismissing = ref(false);
 const { copy, copied, isSupported } = useClipboard({ legacy: true });
-const compactActions = useMediaQuery("(max-width: 560px)");
+const compactActions = useCompactBreakpoint();
 const tourRouteByStep = {
   dashboard: "dashboard",
   pending_select: "pending",
@@ -643,7 +644,7 @@ function sourceCheckSummaryLabel(item: OnboardingChecklistItem): string {
   gap: 6px;
 }
 
-@media (max-width: 560px) {
+@media (--wud-compact) {
   .onboarding-suggestion,
   .onboarding-next-action {
     display: grid;

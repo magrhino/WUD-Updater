@@ -689,7 +689,7 @@ function handleModalShowUpdate(value: boolean): void {
   line-height: 1.45;
 }
 
-@media (max-width: 560px) {
+@media (--wud-compact) {
   .plan-action {
     grid-template-columns: 1fr;
   }

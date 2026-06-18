@@ -1,19 +1,18 @@
 <script setup lang="ts">
 import { computed, h, onMounted } from "vue";
 import { RouterLink } from "vue-router";
-import { breakpointsTailwind, useBreakpoints } from "@vueuse/core";
 import { NAlert, NDataTable, NEmpty, NTag, type DataTableColumns } from "naive-ui";
 
 import CoreUpdateTourPanel from "../components/CoreUpdateTourPanel.vue";
 import HistoryViewTabs from "../components/HistoryViewTabs.vue";
 import { useRouteRefresh } from "../components/app/routeRefresh";
 import type { RunSummary } from "../api/client";
+import { useDataCardsBreakpoint } from "../responsive";
 import { useRunsStore } from "../stores/runs";
 import { runInBackground } from "../utils/promises";
 
 const runs = useRunsStore();
-const breakpoints = useBreakpoints(breakpointsTailwind);
-const isMobile = breakpoints.smaller("md");
+const isMobile = useDataCardsBreakpoint();
 
 function formatAction(run: RunSummary): string {
   const mode = run.mode || "Unknown";

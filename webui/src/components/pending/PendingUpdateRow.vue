@@ -207,7 +207,7 @@ function groupedItemTarget(item: PendingGroupedItem): string {
   width: 100%;
 }
 
-@media (max-width: 560px) {
+@media (--wud-compact) {
   .pending-update-main {
     display: grid;
   }

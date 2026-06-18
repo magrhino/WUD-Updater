@@ -236,6 +236,15 @@ WUD-Updater is flat by default. Depth is carried by borders, tonal layers, and l
 - **States:** Inactive items use Sidebar Muted. Active and hovered items use Sidebar Current with white text. Preserve both icon and label wherever space allows.
 - **Mobile:** Keep the brand mark visible and let nav items scroll horizontally. Do not collapse navigation into an invented custom control.
 
+### Responsive Breakpoints
+- **Compact (`--wud-compact`, 560px):** Stack dense control groups, tighten dialog and panel spacing, and switch small action rows to single-column treatment.
+- **Narrow actions (`--wud-narrow-actions`, 760px):** Reflow settings action controls before the full compact layout is needed.
+- **Data cards (`--wud-data-cards`, 768px):** Switch dense management tables and history tables to card/list views.
+- **App shell (`--wud-app-shell`, 920px):** Move the fixed sidebar into the sticky horizontal shell and adjust app-level navigation/action chrome.
+- **Management cards (`--wud-management-cards`, 1120px):** Switch broad settings management tables, such as snoozes and tag exclusions, to card views.
+- **Policy management cards (`--wud-policy-management-cards`, 1200px):** Keep policy management on its wider existing card threshold.
+- **Reduced motion (`--wud-reduced-motion`):** Remove nonessential transition duration and use instant or browser-default scroll behavior.
+
 ### Data Surfaces
 - **Tables:** Use Naive UI tables for wide data on desktop, then switch to mobile cards under the existing breakpoint behavior.
 - **Rows:** Use 1px borders, compact 8-12px spacing, and `overflow-wrap: anywhere` for image names, digests, and paths.

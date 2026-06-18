@@ -305,7 +305,7 @@ defineEmits<{
   white-space: pre-wrap;
 }
 
-@media (max-width: 560px) {
+@media (--wud-compact) {
   .self-update-facts,
   .self-update-note-title {
     display: grid;

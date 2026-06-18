@@ -72,7 +72,7 @@ const historyViews = [
   outline-offset: 2px;
 }
 
-@media (max-width: 920px) {
+@media (--wud-app-shell) {
   .history-view-tabs {
     width: 100%;
   }
