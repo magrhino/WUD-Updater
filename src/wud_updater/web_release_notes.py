@@ -186,37 +186,62 @@ def release_note_source_resolver(
         if github_repo_from_source(value):
             return value
 
-        repo = github_repo_from_ghcr_image(target.first)
-        if repo:
-            return f"https://github.com/{repo}"
+        image_source = ghcr_release_source(target.first)
+        if image_source:
+            return image_source
 
-        for container in running_images():
-            if container.name != target.first and not image_matches_resolved_target(
-                container.image,
-                target.first,
-                target.allow_repo,
-            ):
-                continue
-            matched_repo = github_repo_from_ghcr_image(container.image)
-            if matched_repo:
-                return f"https://github.com/{matched_repo}"
+        running_source = running_container_release_source(target, running_images())
+        if running_source:
+            return running_source
 
         if error is not None:
-            LOGGER.error(
-                "WebUI release-note fallback: Docker inspect failed for %s; "
-                "cannot read %s, so GitHub release links may be unavailable. "
-                "Command: %s. stderr: %s",
-                target.first,
-                OCI_SOURCE_LABEL,
-                error.result.display,
-                sanitize_stderr(
-                    settings,
-                    error.result.stderr.strip() or "<empty>",
-                ),
-            )
+            log_source_label_error(settings, target, error)
         return value
 
     return resolve
+
+
+def running_container_release_source(
+    target: WudTarget,
+    containers: list[ContainerImage],
+) -> str:
+    for container in containers:
+        if container.name != target.first and not image_matches_resolved_target(
+            container.image,
+            target.first,
+            target.allow_repo,
+        ):
+            continue
+        source = ghcr_release_source(container.image)
+        if source:
+            return source
+    return ""
+
+
+def ghcr_release_source(image: str) -> str:
+    repo = github_repo_from_ghcr_image(image)
+    if not repo:
+        return ""
+    return f"https://github.com/{repo}"
+
+
+def log_source_label_error(
+    settings: WebSettings,
+    target: WudTarget,
+    error: CommandError,
+) -> None:
+    LOGGER.error(
+        "WebUI release-note fallback: Docker inspect failed for %s; "
+        "cannot read %s, so GitHub release links may be unavailable. "
+        "Command: %s. stderr: %s",
+        target.first,
+        OCI_SOURCE_LABEL,
+        error.result.display,
+        sanitize_stderr(
+            settings,
+            error.result.stderr.strip() or "<empty>",
+        ),
+    )
 
 
 def sanitize_stderr(settings: WebSettings, value: str) -> str:

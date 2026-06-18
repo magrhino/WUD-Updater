@@ -209,7 +209,7 @@ def _refresh_snapshot(
             )
         _store_snapshot(base_url, snapshot)
         return snapshot
-    except (OSError, TimeoutError, ValueError, json.JSONDecodeError) as exc:
+    except (OSError, ValueError) as exc:
         snapshot = _snapshot(
             "unavailable",
             available=False,
@@ -261,7 +261,7 @@ def _refresh_snapshot(
             )
         _store_snapshot(base_url, snapshot)
         return snapshot
-    except (OSError, TimeoutError, ValueError, json.JSONDecodeError) as exc:
+    except (OSError, ValueError) as exc:
         snapshot = _snapshot(
             "error",
             available=True,
