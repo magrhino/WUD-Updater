@@ -287,7 +287,7 @@ export function usePendingApplyJob(options: UsePendingApplyJobOptions) {
     if (complete?.status === "success") {
       return "Complete";
     }
-    const lastProgress = progress[progress.length - 1];
+    const lastProgress = progress.at(-1)!;
     const lastPhase = applyJobProgressSteps.value.find(
       (step) => step.key === lastProgress.phase,
     );

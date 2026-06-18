@@ -46,9 +46,10 @@ export function usePolicyManagementCardsBreakpoint() {
 }
 
 export function prefersReducedMotion(): boolean {
+  const browserWindow = globalThis.window;
   return (
-    typeof window !== "undefined" &&
-    typeof window.matchMedia === "function" &&
-    window.matchMedia(responsiveMediaQueries.reducedMotion).matches
+    typeof browserWindow !== "undefined" &&
+    typeof browserWindow.matchMedia === "function" &&
+    browserWindow.matchMedia(responsiveMediaQueries.reducedMotion).matches
   );
 }
