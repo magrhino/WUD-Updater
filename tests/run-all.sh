@@ -36,29 +36,14 @@ EOF
 
   run "$python_bin" -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 10) else "Python 3.10 or newer is required")'
 
-  if ! command -v ruff >/dev/null 2>&1; then
-    cat >&2 <<EOF
-ruff is required to run the full test suite.
-Install the Python development dependencies in a virtual environment, for example:
-  $python_bin -m venv .venv
-  . .venv/bin/activate
-  python -m pip install -e '.[dev]'
-EOF
-    exit 127
+  if "$python_bin" -m ruff --version >/dev/null 2>&1; then
+    run "$python_bin" -m ruff --version
   fi
 
-  if ! "$python_bin" -c 'import pytest' >/dev/null 2>&1; then
-    cat >&2 <<EOF
-pytest is required to run the full test suite.
-Install the Python development dependencies in a virtual environment, for example:
-  $python_bin -m venv .venv
-  . .venv/bin/activate
-  python -m pip install -e '.[dev]'
-EOF
-    exit 127
-  fi
+  run "$python_bin" tests/check_python_deps.py "$REPO_ROOT/pyproject.toml"
+  run env PIP_DISABLE_PIP_VERSION_CHECK=1 PIP_NO_CACHE_DIR=1 "$python_bin" -m pip check
 
-  run ruff check .
+  run "$python_bin" -m ruff check .
 
   run "$python_bin" -m py_compile \
     src/wud_updater/__init__.py \
@@ -136,6 +121,7 @@ EOF
     src/wud_updater/web_static.py \
     src/wud_updater/web.py \
     src/wud_updater/wud_file.py \
+    tests/check_python_deps.py \
     tests/test_python_banner.py \
     tests/test_python_cli.py \
     tests/test_python_command.py \
