@@ -244,7 +244,7 @@ export function usePendingApplyJob(options: UsePendingApplyJobOptions) {
   });
   const displayApplyJobProgressByPhase = computed(() => {
     const displayEvents = new Map<string, ApplyJobProgressEvent>();
-    for (const event of updates.applyJob?.progress ?? []) {
+    for (const event of applyJobProgressEvents(updates.applyJob)) {
       displayEvents.set(
         event.phase,
         displayProgressEvent(displayEvents.get(event.phase) ?? null, event),
@@ -267,7 +267,7 @@ export function usePendingApplyJob(options: UsePendingApplyJobOptions) {
     }),
   );
   const applyJobProgressSummary = computed(() => {
-    const progress = updates.applyJob?.progress ?? [];
+    const progress = applyJobProgressEvents(updates.applyJob);
     if (!progress.length) {
       return applyJobActive.value ? "Starting" : "No progress events";
     }
@@ -435,7 +435,7 @@ export function usePendingApplyJob(options: UsePendingApplyJobOptions) {
     if (!job || job.job_id !== progress.job_id) {
       return;
     }
-    const progressEvents = job.progress ?? [];
+    const progressEvents = applyJobProgressEvents(job);
     const progressKey = progressEventKey(progress);
     if (progressEvents.some((item) => progressEventKey(item) === progressKey)) {
       return;
@@ -721,10 +721,11 @@ function fallbackVerificationItem(
   job: ApplyJobResponse,
   line: VerificationSnapshotLine,
 ): RunVerificationItem {
-  const pull = progressForLine(job.progress, "pull", line.lineNo);
-  const recreate = progressForLine(job.progress, "recreate", line.lineNo);
-  const health = progressForLine(job.progress, "health", line.lineNo);
-  const cleanup = progressForLine(job.progress, "cleanup", line.lineNo);
+  const progress = applyJobProgressEvents(job);
+  const pull = progressForLine(progress, "pull", line.lineNo);
+  const recreate = progressForLine(progress, "recreate", line.lineNo);
+  const health = progressForLine(progress, "health", line.lineNo);
+  const cleanup = progressForLine(progress, "cleanup", line.lineNo);
   const imageStatus = fallbackImageStatus(job, pull);
   const containerStatus = fallbackContainerStatus(recreate);
   const healthStatus = fallbackHealthStatus(health);
@@ -749,6 +750,12 @@ function fallbackVerificationItem(
     follow_up_needed: followUpNeeded,
     summary: followUpNeeded ? "Manual review needed." : "Update verified.",
   };
+}
+
+function applyJobProgressEvents(
+  job: ApplyJobResponse | null | undefined,
+): ApplyJobProgressEvent[] {
+  return Array.isArray(job?.progress) ? job.progress : [];
 }
 
 function progressForLine(
