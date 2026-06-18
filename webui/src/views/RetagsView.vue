@@ -357,6 +357,7 @@ onMounted(() => {
       :show="showRetagPreviewModal"
       :plan="updates.retagPlan"
       :preview-job="updates.retagPreviewJob"
+      :preview-error="updates.retagPreviewError || updates.error"
       :impact-label="retagConfirmImpactLabel"
       :mutation-notice="retagMutationNotice"
       :apply-disabled="applyDisabled"

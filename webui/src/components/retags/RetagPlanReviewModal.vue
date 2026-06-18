@@ -24,6 +24,7 @@ const props = defineProps<{
   previewJob: RetagPreviewJobResponse | null;
   impactLabel: string;
   mutationNotice: string;
+  previewError: string;
   applyDisabled: boolean;
   loading: boolean;
   applyJobActive: boolean;
@@ -50,6 +51,9 @@ const statusType = computed(() =>
 );
 
 const summary = computed(() => {
+  if (props.previewError) {
+    return props.previewError;
+  }
   if (props.previewJob?.status === "failure") {
     return props.previewJob.error || "Retag preview failed.";
   }
@@ -114,6 +118,14 @@ const uniqueWarnings = computed(() => [...new Set(warnings.value)]);
       {{ mutationNotice }}
     </n-alert>
 
+    <n-alert
+      v-if="previewError"
+      type="error"
+      :show-icon="false"
+    >
+      {{ previewError }}
+    </n-alert>
+
     <PreflightMetricsGrid :items="metrics" />
 
     <PreflightProgressDisplay
@@ -155,7 +167,7 @@ const uniqueWarnings = computed(() => [...new Set(warnings.value)]);
 
     <PreflightFooterActions
       primary-label="Apply selected retags"
-      :primary-disabled="!plan || applyDisabled"
+      :primary-disabled="Boolean(previewError) || !plan || applyDisabled"
       :primary-loading="loading || applyJobActive"
       secondary-label="Close"
       @primary="$emit('apply')"

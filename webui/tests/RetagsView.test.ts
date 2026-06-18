@@ -111,6 +111,39 @@ describe("RetagsView", () => {
     expect(applyButton?.attributes("disabled")).toBeUndefined();
   });
 
+  it("shows preview start failures in the review modal", async () => {
+    const pinia = createPinia();
+    setActivePinia(pinia);
+    const auth = useAuthStore();
+    auth.session = authSession({ mutations_enabled: true });
+    const updates = useUpdatesStore();
+    updates.retagTargets = retagTargetsResponse();
+    vi.spyOn(updates, "loadRetagTargets").mockResolvedValue();
+    vi.spyOn(updates, "createRetagPlan").mockImplementation(async () => {
+      updates.error = "retag preview is already running";
+      throw new Error("retag preview is already running");
+    });
+
+    const wrapper = mountWithApp(RetagsView, { pinia });
+    await flushPromises();
+
+    await wrapper
+      .findAll("button")
+      .find((button) => button.text().includes("Preview retag changes"))
+      ?.trigger("click");
+    await flushPromises();
+
+    expect(wrapper.text()).toContain("Review retag preview");
+    expect(wrapper.text()).toContain("retag preview is already running");
+    expect(wrapper.text()).not.toContain(
+      "Refreshing retag candidates and building a preview.",
+    );
+    const applyButton = wrapper
+      .findAll("button")
+      .find((button) => button.text().includes("Apply selected retags"));
+    expect(applyButton?.attributes("disabled")).toBeDefined();
+  });
+
   it("disables switch and apply controls in read-only mode", async () => {
     const pinia = createPinia();
     setActivePinia(pinia);
