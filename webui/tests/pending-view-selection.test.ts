@@ -2,6 +2,7 @@ import { createPinia, setActivePinia } from "pinia";
 import { flushPromises } from "@vue/test-utils";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import type { SnoozeKind } from "../src/api/client";
 import {
   pendingGroupedItem,
   pendingGrouping,
@@ -17,6 +18,50 @@ import {
   setupStores,
   unmatchedPendingItem,
 } from "./helpers/viewSecurity";
+
+async function selectAllAndPreview(
+  wrapper: ReturnType<typeof mountPendingView>,
+): Promise<void> {
+  await wrapper
+    .findAll("button")
+    .find((button) => button.text().includes("Select all stack updates"))
+    ?.trigger("click");
+  await wrapper
+    .findAll("button")
+    .find((button) => button.text().includes("Preview selected plan"))
+    ?.trigger("click");
+}
+
+function mountPendingWithSnooze(kind: SnoozeKind) {
+  const snoozedItem = pendingGroupedItem({
+    line_no: 1,
+    image: "repo/app:1.0",
+    repo: "repo/app",
+    services: ["app"],
+  });
+  const stackItem = pendingGroupedItem({
+    line_no: 2,
+    image: "repo/db:1.0",
+    repo: "repo/db",
+    services: ["db"],
+  });
+  const { pinia, settings, updates } = setupStores(true);
+  settings.snoozes = [
+    snooze({
+      service_key: "media/app",
+      wait_for_service_key: kind === "dependency" ? "media/db" : "",
+      snoozed_until: kind === "dependency" ? null : "2026-06-20T18:36:13+00:00",
+      kind,
+    }),
+  ];
+  updates.pending = {
+    ...pendingResponse([snoozedItem, stackItem]),
+    grouping: pendingGrouping([snoozedItem, stackItem]),
+  };
+  mockPendingLifecycle(settings, updates);
+  const createPlan = vi.spyOn(updates, "createPlan").mockResolvedValue();
+  return { createPlan, wrapper: mountPendingView(pinia) };
+}
 
 describe("pending view selection actions", () => {
   beforeEach(() => {
@@ -448,49 +493,13 @@ describe("pending view selection actions", () => {
     expect(createPlan).toHaveBeenCalledWith([1], true, [], []);
   });
 
-  it("excludes dependency-snoozed items from bulk stack selection until success but allows direct selection", async () => {
-    const snoozedItem = pendingGroupedItem({
-      line_no: 1,
-      image: "repo/app:1.0",
-      repo: "repo/app",
-      services: ["app"],
-    });
-    const stackItem = pendingGroupedItem({
-      line_no: 2,
-      image: "repo/db:1.0",
-      repo: "repo/db",
-      services: ["db"],
-    });
-    const { pinia, settings, updates } = setupStores(true);
-    settings.snoozes = [
-      snooze({
-        service_key: "media/app",
-        wait_for_service_key: "media/db",
-        snoozed_until: null,
-        kind: "dependency",
-      }),
-    ];
-    updates.pending = {
-      ...pendingResponse([snoozedItem, stackItem]),
-      grouping: pendingGrouping([snoozedItem, stackItem]),
-    };
-    mockPendingLifecycle(settings, updates);
-    const createPlan = vi.spyOn(updates, "createPlan").mockResolvedValue();
-    const wrapper = mountPendingView(pinia);
+  it("excludes time-snoozed items from bulk stack selection but allows direct selection", async () => {
+    const { createPlan, wrapper } = mountPendingWithSnooze("time");
 
-    await wrapper
-      .findAll("button")
-      .find((button) => button.text().includes("Select all stack updates"))
-      ?.trigger("click");
-    await wrapper
-      .findAll("button")
-      .find((button) => button.text().includes("Preview selected plan"))
-      ?.trigger("click");
+    await selectAllAndPreview(wrapper);
 
     expect(wrapper.text()).toContain("Snoozed pending entries");
-    expect(wrapper.text()).toContain(
-      "Excluded from bulk selection until the dependency service updates successfully.",
-    );
+    expect(wrapper.text()).toContain("Excluded from bulk selection while snoozed.");
     expect(createPlan).toHaveBeenCalledWith([2], true, [], []);
 
     await wrapper
@@ -502,6 +511,26 @@ describe("pending view selection actions", () => {
       ?.trigger("click");
 
     expect(createPlan).toHaveBeenLastCalledWith([1, 2], true, [], []);
+  });
+
+  it("excludes dependency-snoozed items from bulk stack selection", async () => {
+    const { createPlan, wrapper } = mountPendingWithSnooze("dependency");
+
+    await selectAllAndPreview(wrapper);
+
+    expect(wrapper.text()).toContain("Snoozed pending entries");
+    expect(createPlan).toHaveBeenCalledWith([2], true, [], []);
+  });
+
+  it("excludes future active snooze kinds from bulk stack selection", async () => {
+    const { createPlan, wrapper } = mountPendingWithSnooze(
+      "maintenance" as SnoozeKind,
+    );
+
+    await selectAllAndPreview(wrapper);
+
+    expect(wrapper.text()).toContain("Snoozed pending entries");
+    expect(createPlan).toHaveBeenCalledWith([2], true, [], []);
   });
 
   it("selects tag update rows and enables tag rewrites when an override is edited", async () => {

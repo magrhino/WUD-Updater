@@ -232,7 +232,7 @@ describe("usePendingQueueState", () => {
     setActivePinia(createPinia());
   });
 
-  it("filters dependency-snoozed entries out of selectable stack groups", () => {
+  it("filters snoozed entries out of selectable stack groups", () => {
     const updates = useUpdatesStore();
     const settings = useSettingsStore();
     const blocked = pendingGroupedItem({
@@ -249,7 +249,7 @@ describe("usePendingQueueState", () => {
     updates.pending = pendingResponse([blocked, allowed]);
     settings.snoozes = [
       snooze({
-        kind: "dependency",
+        kind: "time",
         service_key: "media/app",
         active: true,
       }),
@@ -257,7 +257,7 @@ describe("usePendingQueueState", () => {
 
     const state = usePendingQueueState();
 
-    expect(state.dependencySnoozedItems.value.map(({ item }) => item.line_no)).toEqual([1]);
+    expect(state.snoozedItems.value.map(({ item }) => item.line_no)).toEqual([1]);
     expect(state.stackGroups.value).toHaveLength(1);
     expect(state.stackGroups.value[0]?.items.map((item) => item.line_no)).toEqual([2]);
     expect(state.selectableLineNumbers.value).toEqual([2]);

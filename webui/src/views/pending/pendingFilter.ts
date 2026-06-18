@@ -19,7 +19,7 @@ export type PendingSearchContext = {
   riskCues: (item: PendingItem) => SafetyCue[];
 };
 
-type DependencySnoozedSearchItem = {
+type SnoozedSearchItem = {
   group: PendingStackGroup;
   item: PendingGroupedItem;
 };
@@ -96,8 +96,8 @@ export function filterPendingItems<T extends PendingItem>(
   );
 }
 
-export function filterDependencySnoozedItems<
-  T extends DependencySnoozedSearchItem,
+export function filterSnoozedItems<
+  T extends SnoozedSearchItem,
 >(items: T[], query: string, context: PendingSearchContext): T[] {
   const normalizedQuery = normalizePendingSearch(query);
   if (!normalizedQuery) {

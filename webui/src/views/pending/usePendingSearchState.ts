@@ -7,11 +7,11 @@ import type {
   ReleaseNoteInfo,
 } from "../../api/client";
 import type { SafetyCue } from "./safetyCues";
-import type { DependencySnoozedPendingItem } from "./usePendingQueueState";
+import type { SnoozedPendingItem } from "./snoozeSelection";
 import {
-  filterDependencySnoozedItems,
   filterPendingItems,
   filterPendingStackGroups,
+  filterSnoozedItems,
   normalizePendingSearch,
 } from "./pendingFilter";
 import { pluralize } from "./utils";
@@ -19,7 +19,7 @@ import { pluralize } from "./utils";
 type UsePendingSearchStateOptions = {
   pendingItems: ComputedRef<PendingItem[]>;
   groupingReady: ComputedRef<boolean>;
-  dependencySnoozedItems: ComputedRef<DependencySnoozedPendingItem[]>;
+  snoozedItems: ComputedRef<SnoozedPendingItem[]>;
   selectableLineNumbers: ComputedRef<number[]>;
   selectAllLabel: ComputedRef<string>;
   stackGroups: ComputedRef<PendingStackGroup[]>;
@@ -57,9 +57,9 @@ export function usePendingSearchState(options: UsePendingSearchStateOptions) {
       pendingSearchContext,
     ),
   );
-  const filteredDependencySnoozedItems = computed(() =>
-    filterDependencySnoozedItems(
-      options.dependencySnoozedItems.value,
+  const filteredSnoozedItems = computed(() =>
+    filterSnoozedItems(
+      options.snoozedItems.value,
       pendingSearchText.value,
       pendingSearchContext,
     ),
@@ -75,7 +75,7 @@ export function usePendingSearchState(options: UsePendingSearchStateOptions) {
     if (options.groupingReady.value) {
       return [
         ...filteredStackGroups.value.flatMap((group) => group.visibleLineNumbers),
-        ...filteredDependencySnoozedItems.value.map(({ item }) => item.line_no),
+        ...filteredSnoozedItems.value.map(({ item }) => item.line_no),
         ...filteredUnmatchedItems.value.map((item) => item.line_no),
       ];
     }
@@ -109,8 +109,8 @@ export function usePendingSearchState(options: UsePendingSearchStateOptions) {
 
   return {
     clearPendingSearch,
-    filteredDependencySnoozedItems,
     filteredPendingItems,
+    filteredSnoozedItems,
     filteredStackGroups,
     filteredUnmatchedItems,
     pendingSearchActive,

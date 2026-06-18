@@ -4,7 +4,6 @@ import { NButton, NFlex } from "naive-ui";
 
 defineProps<{
   batchSummaryLabel: string;
-  dependencySnoozedCount: number;
   groupingReady: boolean;
   hasSelectedTagUpdates: boolean;
   isMobile: boolean;
@@ -17,6 +16,7 @@ defineProps<{
   selectAllLabel: string;
   selectedCount: number;
   selectedHiddenCount: number;
+  snoozedCount: number;
   stackCount: number;
   unmatchedReviewCountLabel: string;
   updateSelectedDisabled: boolean;
@@ -36,8 +36,8 @@ const emit = defineEmits<{
       <strong class="wrap-anywhere">{{ selectedCount }} selected</strong>
       <span v-if="groupingReady" class="wrap-anywhere">
         {{ stackCount === 1 ? "1 stack" : `${stackCount} stacks` }} available
-        <template v-if="dependencySnoozedCount">
-          - {{ dependencySnoozedCount === 1 ? "1 snoozed item" : `${dependencySnoozedCount} snoozed items` }}
+        <template v-if="snoozedCount">
+          - {{ snoozedCount === 1 ? "1 snoozed item" : `${snoozedCount} snoozed items` }}
         </template>
         <template v-if="unmatchedReviewCountLabel">
           - {{ unmatchedReviewCountLabel }}
