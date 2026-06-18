@@ -34,15 +34,15 @@ export function useCompactBreakpoint() {
 }
 
 export function useDataCardsBreakpoint() {
-  return useBreakpoints(responsiveBreakpoints).smaller("dataCards");
+  return useBreakpoints(responsiveBreakpoints).smallerOrEqual("dataCards");
 }
 
 export function useManagementCardsBreakpoint() {
-  return useBreakpoints(responsiveBreakpoints).smaller("managementCards");
+  return useBreakpoints(responsiveBreakpoints).smallerOrEqual("managementCards");
 }
 
 export function usePolicyManagementCardsBreakpoint() {
-  return useBreakpoints(responsiveBreakpoints).smaller("policyManagementCards");
+  return useBreakpoints(responsiveBreakpoints).smallerOrEqual("policyManagementCards");
 }
 
 export function prefersReducedMotion(): boolean {

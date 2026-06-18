@@ -143,4 +143,21 @@ describe("responsive media tokens", () => {
 
     expect(offenders).toEqual([]);
   });
+
+  it("uses inclusive helpers for max-width breakpoint composables", () => {
+    const source = readFileSync(responsiveTsPath, "utf8");
+
+    expect(source).toContain(
+      'useBreakpoints(responsiveBreakpoints).smallerOrEqual("dataCards")',
+    );
+    expect(source).toContain(
+      'useBreakpoints(responsiveBreakpoints).smallerOrEqual("managementCards")',
+    );
+    expect(source).toContain(
+      'useBreakpoints(responsiveBreakpoints).smallerOrEqual("policyManagementCards")',
+    );
+    expect(source).not.toMatch(
+      /useBreakpoints\(responsiveBreakpoints\)\.smaller\("(dataCards|managementCards|policyManagementCards)"\)/,
+    );
+  });
 });
