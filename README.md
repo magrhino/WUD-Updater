@@ -101,7 +101,7 @@ should generally go to the WebUI/API first.
 
 ## Apprieciate my work on this?
 
-[![Buy Me a Coffee](https://img.shields.io/badge/Buy%20Me%20a%20Coffee-orange?logo=buy-me-a-coffee)](https://www.buymeacoffee.com/magrhino)   
+[![Buy Me a Coffee](https://img.shields.io/badge/Buy%20Me%20a%20Coffee-orange?logo=buy-me-a-coffee)](https://www.buymeacoffee.com/magrhino)
 
 or
 
