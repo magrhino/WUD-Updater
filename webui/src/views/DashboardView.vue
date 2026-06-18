@@ -132,7 +132,7 @@ onMounted(() => {
       </n-gi>
       <n-gi>
         <article class="metric-card">
-          <CheckCircle2 v-if="connection.status?.wud_api.metadata_available" :size="22" />
+          <CheckCircle2 v-if="connection.status?.wud_api?.metadata_available" :size="22" />
           <AlertTriangle v-else :size="22" />
           <span>WUD API</span>
           <strong>{{ wudApiLabel }}</strong>

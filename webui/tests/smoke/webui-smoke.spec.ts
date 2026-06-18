@@ -60,6 +60,7 @@ function pendingResponse() {
     allow_repo: false,
     digest: "",
     desired_tag: "1.1",
+    wud_metadata: null,
   };
   const groupedItem = {
     ...item,
