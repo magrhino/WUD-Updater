@@ -81,6 +81,13 @@ class ReleaseNoteContext:
     error: str = ""
 
 
+@dataclass(frozen=True)
+class GitHubLatestCandidate:
+    release_tag: str
+    link_label: str
+    link_url: str
+
+
 ReleaseNoteSourceResolver = Callable[[WudTarget], str]
 ReleaseNoteTargetTagResolver = Callable[[WudTarget], str]
 
@@ -168,6 +175,7 @@ def refresh_release_notes(
     source_resolver: ReleaseNoteSourceResolver | None = None,
     target_tag_resolver: ReleaseNoteTargetTagResolver | None = None,
     redact_error: Callable[[str], str] | None = None,
+    force: bool = False,
 ) -> list[ReleaseNoteInfo]:
     """Refresh missing or stale release-note metadata and return current rows."""
 
@@ -184,7 +192,11 @@ def refresh_release_notes(
         if context.provider == "unsupported":
             infos.append(cached)
             continue
-        if cached.status != "missing" and not _cache_stale(cached, timestamp):
+        if (
+            not force
+            and cached.status != "missing"
+            and not _cache_stale(cached, timestamp)
+        ):
             infos.append(cached)
             continue
         try:
@@ -305,6 +317,26 @@ def detect_breaking(body: str, current_tag: str, release_tag: str) -> tuple[bool
                 f"Major version changes from {current_major} to {release_major}."
             )
     return bool(reasons), reasons
+
+
+def github_latest_candidate_from_info(
+    info: ReleaseNoteInfo,
+) -> GitHubLatestCandidate | None:
+    """Return a Docker-retag candidate from GitHub release-note metadata."""
+
+    if info.provider != "github" or info.status != "ready" or not info.release_tag:
+        return None
+    release_link = next(
+        (link for link in info.links if link.kind == "github_release"),
+        None,
+    )
+    if release_link is None and info.links:
+        release_link = info.links[0]
+    return GitHubLatestCandidate(
+        release_tag=info.release_tag,
+        link_label="" if release_link is None else release_link.label,
+        link_url="" if release_link is None else release_link.url,
+    )
 
 
 def _context(

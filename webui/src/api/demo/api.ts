@@ -62,14 +62,17 @@ export function createDemoWebApi(): WebApi {
     pending: async () => state.pendingResponse(),
     updateTargets: async () => state.updateTargets(),
     retagTargets: async () => state.retagTargets(),
+    refreshRetagGithubLatest: async (_csrfToken: string) => state.retagTargets(),
     createRetagPlan: async (
       choices: RetagChoiceRequest[],
       _csrfToken: string,
+      _options = {},
     ) => state.createRetagPlan(choices),
     applyRetagPlan: async (
       planId: string,
       choices: RetagChoiceRequest[],
       _csrfToken: string,
+      _options = {},
     ) => state.createRetagJob(planId, choices),
     diagnosticsSupportBundle: async () => ({
       wud_updater_version: "demo-v0.0.0",

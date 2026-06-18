@@ -462,6 +462,10 @@ class RetagTargetItem(BaseModel):
     tracking_tag_source: str
     proposed_tag: str
     final_image: str
+    candidate_source: str = ""
+    candidate_warning: str = ""
+    candidate_link_label: str = ""
+    candidate_link_url: str = ""
     retag_available: bool
     retag_reason: str
     choices: list[str] = Field(default_factory=list)
@@ -484,10 +488,12 @@ class RetagChoiceRequest(BaseModel):
 
 class RetagPlanRequest(BaseModel):
     choices: list[RetagChoiceRequest] = Field(min_length=1)
+    github_latest_fallback: bool = False
 
 class RetagApplyRequest(BaseModel):
     plan_id: str = Field(min_length=1)
     choices: list[RetagChoiceRequest] = Field(min_length=1)
+    github_latest_fallback: bool = False
     confirmation: Literal["apply-retags"]
 
 class RetagPlanIssue(BaseModel):

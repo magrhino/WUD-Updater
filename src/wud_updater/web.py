@@ -289,6 +289,12 @@ def create_app(
         response_model=web_models.RetagTargetsResponse,
     )
     router.add_api_route(
+        "/retag-targets/github-latest/refresh",
+        web_retags.api_refresh_retag_github_latest,
+        methods=["POST"],
+        response_model=web_models.RetagTargetsResponse,
+    )
+    router.add_api_route(
         "/retag-plans",
         web_retags.api_create_retag_plan,
         methods=["POST"],

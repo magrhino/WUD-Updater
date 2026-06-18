@@ -62,7 +62,23 @@ const emit = defineEmits<{
         </div>
         <div>
           <dt>Candidate</dt>
-          <dd>{{ candidateLabel(item) }}</dd>
+          <dd>
+            <a
+              v-if="item.candidate_link_url"
+              :href="item.candidate_link_url"
+              target="_blank"
+              rel="noreferrer"
+            >
+              {{ candidateLabel(item) }}
+            </a>
+            <span v-else>{{ candidateLabel(item) }}</span>
+            <span
+              v-if="item.candidate_warning"
+              class="release-notes-reason"
+            >
+              {{ item.candidate_warning }}
+            </span>
+          </dd>
         </div>
         <div>
           <dt>Final image</dt>

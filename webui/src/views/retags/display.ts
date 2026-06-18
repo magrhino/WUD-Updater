@@ -70,7 +70,7 @@ export function currentTagLabel(item: RetagTargetItem): string {
 }
 
 export function candidateLabel(item: RetagTargetItem): string {
-  if (item.retag_available) {
+  if (item.retag_available || item.proposed_tag) {
     return `latest -> ${item.proposed_tag}`;
   }
   return reasonDetail(item.retag_reason);
@@ -91,6 +91,10 @@ export function searchableText(item: RetagTargetItem): string {
     item.tracking_tag,
     item.proposed_tag,
     item.final_image,
+    item.candidate_source,
+    item.candidate_warning,
+    item.candidate_link_label,
+    item.candidate_link_url,
     item.retag_reason,
     reasonLabel(item.retag_reason),
     reasonDetail(item.retag_reason),

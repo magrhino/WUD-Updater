@@ -179,6 +179,10 @@ export interface RetagTargetItem {
   tracking_tag_source: string;
   proposed_tag: string;
   final_image: string;
+  candidate_source: string;
+  candidate_warning: string;
+  candidate_link_label: string;
+  candidate_link_url: string;
   retag_available: boolean;
   retag_reason: string;
   choices: RetagTargetChoice[];
@@ -202,6 +206,10 @@ export type RetagPlanStatus = "ready" | "empty" | "blocked" | "unavailable";
 export interface RetagChoiceRequest {
   service_key: string;
   choice: RetagTargetChoice;
+}
+
+export interface RetagPlanOptions {
+  github_latest_fallback?: boolean;
 }
 
 export interface RetagPlanIssue {

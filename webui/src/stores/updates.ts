@@ -47,6 +47,7 @@ export const useUpdatesStore = defineStore("updates", () => {
   const retagTargets = ref<RetagTargetsResponse | null>(null);
   const retagChoices = ref<Record<string, RetagTargetChoice>>({});
   const retagPlan = ref<RetagPlanResponse | null>(null);
+  const retagGithubLatestFallback = ref(false);
   const releaseNotes = ref<ReleaseNotesResponse | null>(null);
   const selfUpdate = ref<SelfUpdateResponse | null>(null);
   const selfUpdatePlan = ref<SelfUpdatePlanResponse | null>(null);
@@ -87,9 +88,37 @@ export const useUpdatesStore = defineStore("updates", () => {
     });
   }
 
-  async function loadRetagTargets(): Promise<void> {
+  async function loadRetagTargets(
+    options: { githubLatestFallback?: boolean } = {},
+  ): Promise<void> {
+    const githubLatestFallback =
+      options.githubLatestFallback ?? retagGithubLatestFallback.value;
+    retagGithubLatestFallback.value = githubLatestFallback;
     await loadWithState(async () => {
-      retagTargets.value = await webApi.retagTargets();
+      retagTargets.value = await webApi.retagTargets({
+        github_latest_fallback: githubLatestFallback,
+      });
+      resetRetagChoices();
+      retagPlan.value = null;
+    });
+  }
+
+  async function setRetagGithubLatestFallback(enabled: boolean): Promise<void> {
+    retagGithubLatestFallback.value = enabled;
+    if (enabled) {
+      await refreshRetagGithubLatest();
+      return;
+    }
+    await loadRetagTargets({ githubLatestFallback: false });
+  }
+
+  async function refreshRetagGithubLatest(): Promise<void> {
+    const auth = useAuthStore();
+    await loadWithState(async () => {
+      retagTargets.value = await webApi.refreshRetagGithubLatest(
+        await auth.ensureCsrf(),
+      );
+      retagGithubLatestFallback.value = true;
       resetRetagChoices();
       retagPlan.value = null;
     });
@@ -138,6 +167,7 @@ export const useUpdatesStore = defineStore("updates", () => {
       response = await webApi.createRetagPlan(
         retagChoiceRequests(),
         await auth.ensureCsrf(),
+        { github_latest_fallback: retagGithubLatestFallback.value },
       );
       retagPlan.value = response;
     });
@@ -159,6 +189,7 @@ export const useUpdatesStore = defineStore("updates", () => {
         planToApply.plan_id,
         retagChoiceRequests(),
         await auth.ensureCsrf(),
+        { github_latest_fallback: retagGithubLatestFallback.value },
       );
       setApplyJob(job);
     });
@@ -507,6 +538,7 @@ export const useUpdatesStore = defineStore("updates", () => {
     retagTargets,
     retagChoices,
     retagPlan,
+    retagGithubLatestFallback,
     releaseNotes,
     selfUpdate,
     selfUpdatePlan,
@@ -526,6 +558,8 @@ export const useUpdatesStore = defineStore("updates", () => {
     loadPending,
     loadUpdateTargets,
     loadRetagTargets,
+    setRetagGithubLatestFallback,
+    refreshRetagGithubLatest,
     resetRetagChoices,
     setRetagChoice,
     retagChoiceRequests,

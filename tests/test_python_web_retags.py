@@ -19,6 +19,7 @@ from tests.web_test_helpers import (
     _wait_apply_job,
 )
 from wud_updater.db import init_db, open_db, upsert_known_image
+from wud_updater.digest_verifier import DigestResolveResult
 from wud_updater.digest_provenance import DigestTagProvenance
 from wud_updater import web_database
 from wud_updater import web_retags as web_retags_module
@@ -225,6 +226,179 @@ def test_retag_targets_endpoint_includes_service_without_pending_line(
     assert body["items"][0]["retag_reason"] == "missing-provenance"
     assert not (tmp_path / "state" / "images.todo").exists()
     _assert_pending_grouping_did_not_mutate(_fake_docker_calls(fake_root))
+
+
+def test_retag_github_latest_fallback_refresh_enables_cached_candidate(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fake_env, fake_root = _fake_docker_env(tmp_path)
+    client = _client(tmp_path, {"WUD_WEB_DEV_NO_AUTH": "true", **fake_env})
+    _make_fake_stack(
+        tmp_path,
+        fake_root,
+        "stack",
+        [("app", "ghcr.io/acme/app:latest", "cid-app")],
+    )
+    digest = "sha256:" + "b" * 64
+    _patch_github_latest(
+        monkeypatch,
+        tag="v1.2.3",
+        url="https://github.com/acme/app/releases/tag/v1.2.3",
+    )
+    _patch_digest_resolution(
+        monkeypatch,
+        expected_image="ghcr.io/acme/app:v1.2.3",
+        digest=digest,
+    )
+
+    missing_csrf = client.post("/api/v1/retag-targets/github-latest/refresh")
+    refresh = client.post(
+        "/api/v1/retag-targets/github-latest/refresh",
+        headers=_csrf_headers(client),
+    )
+    cached = client.get(
+        "/api/v1/retag-targets",
+        params={"github_latest_fallback": "true"},
+    )
+    plain = client.get("/api/v1/retag-targets")
+
+    assert missing_csrf.status_code == 403
+    assert missing_csrf.json()["detail"] == "origin header is required"
+    assert refresh.status_code == 200
+    item = refresh.json()["items"][0]
+    assert item["retag_available"] is True
+    assert item["retag_reason"] == "eligible"
+    assert item["proposed_tag"] == "v1.2.3"
+    assert item["final_image"] == f"ghcr.io/acme/app@{digest}"
+    assert item["candidate_source"] == "github-latest"
+    assert "will update latest tracking to v1.2.3" in item["candidate_warning"]
+    assert item["candidate_link_label"] == "GitHub release"
+    assert item["candidate_link_url"].endswith("/v1.2.3")
+    assert item["digest_provenance"]["provenance_source"] == "github-latest"
+    assert cached.json()["items"][0]["retag_available"] is True
+    assert plain.json()["items"][0]["retag_reason"] == "missing-provenance"
+    _assert_pending_grouping_did_not_mutate(_fake_docker_calls(fake_root))
+
+
+def test_retag_apply_rejects_plan_when_fallback_flag_changes(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fake_env, fake_root = _fake_docker_env(tmp_path)
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+            **fake_env,
+        },
+    )
+    _make_fake_stack(
+        tmp_path,
+        fake_root,
+        "stack",
+        [("app", "ghcr.io/acme/app:latest", "cid-app")],
+    )
+    _patch_github_latest(
+        monkeypatch,
+        tag="v1.2.3",
+        url="https://github.com/acme/app/releases/tag/v1.2.3",
+    )
+    _patch_digest_resolution(
+        monkeypatch,
+        expected_image="ghcr.io/acme/app:v1.2.3",
+        digest="sha256:" + "c" * 64,
+    )
+    headers = _csrf_headers(client)
+    refresh = client.post(
+        "/api/v1/retag-targets/github-latest/refresh",
+        headers=headers,
+    )
+    assert refresh.status_code == 200
+    choices = [_switch_choice()]
+    plan_response = client.post(
+        "/api/v1/retag-plans",
+        json={"choices": choices, "github_latest_fallback": True},
+        headers=headers,
+    )
+    assert plan_response.status_code == 200
+    plan = plan_response.json()
+    assert plan["status"] == "ready"
+
+    stale = client.post(
+        "/api/v1/retag-plans/apply",
+        json={
+            "plan_id": plan["plan_id"],
+            "choices": choices,
+            "confirmation": "apply-retags",
+        },
+        headers=headers,
+    )
+
+    assert stale.status_code == 409
+    assert stale.json()["detail"] == "retag plan is stale"
+
+
+def test_retag_github_latest_fallback_does_not_use_lsio_upstream_tag(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    upstream_map = tmp_path / "upstreams.txt"
+    upstream_map.write_text(
+        "linuxserver/docker-radarr: Radarr/Radarr\n",
+        encoding="utf-8",
+    )
+    fake_env, fake_root = _fake_docker_env(tmp_path)
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "UPSTREAM_MAP": str(upstream_map),
+            **fake_env,
+        },
+    )
+    _make_fake_stack(
+        tmp_path,
+        fake_root,
+        "stack",
+        [("radarr", "lscr.io/linuxserver/radarr:latest", "cid-radarr")],
+    )
+
+    class FailDigestVerifier:
+        def __init__(self, *_args: object, **_kwargs: object) -> None:
+            pass
+
+        def resolve_tag_digest(self, image: str) -> DigestResolveResult:
+            raise AssertionError(f"LSIO fallback should not resolve {image}")
+
+    monkeypatch.setattr(web_retags_module, "DigestVerifier", FailDigestVerifier)
+    _patch_github_latest(
+        monkeypatch,
+        tag="5.1.0-ls1",
+        url="https://github.com/linuxserver/docker-radarr/releases/tag/5.1.0-ls1",
+        extra={
+            "https://api.github.com/repos/Radarr/Radarr/releases/tags/v5.1.0": {
+                "tag_name": "v5.1.0",
+                "name": "v5.1.0",
+                "html_url": "https://github.com/Radarr/Radarr/releases/tag/v5.1.0",
+                "body": "Routine update",
+                "published_at": "2026-01-02T00:00:00Z",
+            }
+        },
+    )
+
+    response = client.post(
+        "/api/v1/retag-targets/github-latest/refresh",
+        headers=_csrf_headers(client),
+    )
+
+    assert response.status_code == 200
+    item = response.json()["items"][0]
+    assert item["retag_available"] is False
+    assert item["retag_reason"] == "missing-provenance"
+    assert "does not support LSIO" in item["candidate_warning"]
+    assert item["choices"] == ["keep-current"]
 
 
 def test_retag_targets_endpoint_returns_unavailable_when_discovery_fails(
@@ -801,6 +975,64 @@ def test_retag_apply_unpauses_before_rollback_when_pause_mode_up_fails(
     unpause = call_index("compose -f docker-compose.yml unpause app")
     rollback_up = call_index(up_call, start=first_up + 1)
     assert pause < first_up < unpause < rollback_up
+
+
+def _patch_github_latest(
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    tag: str,
+    url: str,
+    extra: dict[str, object] | None = None,
+) -> None:
+    responses = {
+        "https://api.github.com/repos/acme/app/releases/latest": {
+            "tag_name": tag,
+            "name": tag,
+            "html_url": url,
+            "body": "Routine update",
+            "published_at": "2026-01-02T00:00:00Z",
+        },
+        "https://api.github.com/repos/linuxserver/docker-radarr/releases/latest": {
+            "tag_name": tag,
+            "name": tag,
+            "html_url": url,
+            "body": "Remote Changes:\n- Updating to v5.1.0",
+            "published_at": "2026-01-02T00:00:00Z",
+        },
+        **(extra or {}),
+    }
+
+    class FakeGitHubClient:
+        def __init__(self, *_args: object, **_kwargs: object) -> None:
+            pass
+
+        def get_json(self, request_url: str) -> object:
+            return responses[request_url]
+
+    monkeypatch.setattr(web_retags_module, "GitHubClient", FakeGitHubClient)
+
+
+def _patch_digest_resolution(
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    expected_image: str,
+    digest: str,
+) -> None:
+    class FakeDigestVerifier:
+        def __init__(self, *_args: object, **_kwargs: object) -> None:
+            pass
+
+        def resolve_tag_digest(self, image: str) -> DigestResolveResult:
+            assert image == expected_image
+            return DigestResolveResult(
+                ok=True,
+                status="resolved",
+                reason="tag-digest-resolved",
+                digest=digest,
+                source="test",
+            )
+
+    monkeypatch.setattr(web_retags_module, "DigestVerifier", FakeDigestVerifier)
 
 
 def _make_retag_fixture(

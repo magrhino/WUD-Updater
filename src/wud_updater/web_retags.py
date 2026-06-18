@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import secrets
 import shutil
+import sqlite3
 import time
 from collections.abc import Mapping, Sequence
+from contextlib import closing
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from threading import Condition
@@ -25,6 +27,7 @@ from .compose_rewrite import (
 )
 from .config import ConfigError, UpdaterConfig
 from .db import (
+    DatabaseError,
     init_db,
     insert_update_event,
     insert_update_run,
@@ -33,8 +36,24 @@ from .db import (
     utc_timestamp,
 )
 from .digest_provenance import DigestTagProvenance, digest_from_image
+from .digest_verifier import DigestVerifier
 from .docker_cli import DockerCli
-from .images import image_tag, repo_key, tag_value_valid
+from .images import (
+    image_has_tag,
+    image_key,
+    image_tag,
+    image_with_digest,
+    image_with_tag,
+    repo_key,
+    tag_value_valid,
+)
+from .release_notes import (
+    GitHubClient,
+    ReleaseNoteInfo,
+    cached_release_notes,
+    github_latest_candidate_from_info,
+    refresh_release_notes,
+)
 from .updater_digest_pin import digest_pin_update_from_values
 from .updater_lifecycle_health import (
     CONTAINER_SUMMARY_FORMAT,
@@ -45,7 +64,8 @@ from .updater_models import (
     AppliedDigestPinUpdate,
     UpdaterProgressEvent,
 )
-from .web_auth import _safe_exception_detail, _settings
+from .web_auth import _redact_sensitive_text, _safe_exception_detail, _settings
+from .web_database import ReadOnlyDatabaseMissing
 from .web_models import (
     ApplyJobResponse,
     RetagApplyRequest,
@@ -59,6 +79,7 @@ from .web_models import (
     WebApplyJob,
     WebSettings,
 )
+from .web_release_notes import release_note_source_resolver
 from .web_metadata import json_object as _json_object
 from .web_retag_plans import (
     RetagPlanBuild as _RetagPlanBuild,
@@ -71,6 +92,7 @@ from .web_retag_plans import (
     retag_plan_status as _retag_plan_status,
     retag_update_service as _retag_update_service,
 )
+from .wud_file import WudTarget
 
 
 KEEP_CURRENT_CHOICE = "keep-current"
@@ -85,6 +107,15 @@ class _RetagTargetRecord:
     service_image: ServiceImage
     known_image: str
     provenance: DigestTagProvenance | None
+
+
+@dataclass(frozen=True)
+class _RetagGitHubLatestFallback:
+    provenance: DigestTagProvenance | None = None
+    proposed_tag: str = ""
+    warning: str = ""
+    link_label: str = ""
+    link_url: str = ""
 
 
 class _RetagApplyFailed(RuntimeError):
@@ -109,8 +140,22 @@ def configure(*, effective_config_loader: EffectiveConfigLoader) -> None:
     _effective_config_loader = effective_config_loader
 
 
-def api_retag_targets(request: Request) -> RetagTargetsResponse:
-    return retag_targets_response(_settings(request))
+def api_retag_targets(
+    request: Request,
+    github_latest_fallback: bool = False,
+) -> RetagTargetsResponse:
+    return retag_targets_response(
+        _settings(request),
+        github_latest_fallback=github_latest_fallback,
+    )
+
+
+def api_refresh_retag_github_latest(request: Request) -> RetagTargetsResponse:
+    settings = _settings(request)
+    response = _refresh_retag_github_latest_candidates(settings)
+    if response is not None:
+        return response
+    return retag_targets_response(settings, github_latest_fallback=True)
 
 
 def api_create_retag_plan(
@@ -135,7 +180,10 @@ def api_apply_retag_plan(
     try:
         build = build_retag_plan(
             settings,
-            RetagPlanRequest(choices=payload.choices),
+            RetagPlanRequest(
+                choices=payload.choices,
+                github_latest_fallback=payload.github_latest_fallback,
+            ),
         )
         plan = build.response
         if not secrets.compare_digest(plan.plan_id, payload.plan_id):
@@ -148,8 +196,15 @@ def api_apply_retag_plan(
         raise
 
 
-def retag_targets_response(settings: WebSettings) -> RetagTargetsResponse:
-    discovery = _retag_target_records(settings)
+def retag_targets_response(
+    settings: WebSettings,
+    *,
+    github_latest_fallback: bool = False,
+) -> RetagTargetsResponse:
+    discovery = _retag_target_records(
+        settings,
+        github_latest_fallback=github_latest_fallback,
+    )
     if isinstance(discovery, RetagTargetsResponse):
         return discovery
     items = [record.item for record in discovery]
@@ -165,7 +220,10 @@ def build_retag_plan(
     settings: WebSettings,
     payload: RetagPlanRequest,
 ) -> _RetagPlanBuild:
-    records_or_response = _retag_target_records(settings)
+    records_or_response = _retag_target_records(
+        settings,
+        github_latest_fallback=payload.github_latest_fallback,
+    )
     if isinstance(records_or_response, RetagTargetsResponse):
         plan = RetagPlanResponse(
             plan_id="",
@@ -270,14 +328,49 @@ def build_retag_plan(
 
 def _retag_target_records(
     settings: WebSettings,
+    *,
+    github_latest_fallback: bool = False,
 ) -> tuple[_RetagTargetRecord, ...] | RetagTargetsResponse:
+    stacks_or_response = _discover_retag_stacks(settings)
+    if isinstance(stacks_or_response, RetagTargetsResponse):
+        return stacks_or_response
+    stacks = stacks_or_response
+
+    known_by_service = web_database.known_digest_state_by_service(settings)
+    github_latest_by_service = (
+        _cached_github_latest_fallback_by_service(settings, stacks, known_by_service)
+        if github_latest_fallback
+        else {}
+    )
+    records: list[_RetagTargetRecord] = []
+    for stack in stacks:
+        for service_image in stack.service_images:
+            service_key = _retag_service_key(stack.name, service_image.service)
+            records.append(
+                _retag_target_record(
+                    stack,
+                    service_image,
+                    known_by_service.get(service_key),
+                    github_latest_by_service.get(service_key),
+                    github_latest_fallback=github_latest_fallback,
+                )
+            )
+
+    return tuple(records)
+
+
+def _discover_retag_stacks(
+    settings: WebSettings,
+) -> tuple[ComposeStack, ...] | RetagTargetsResponse:
     config = _effective_config(settings)
     compose = ComposeCli(runner=_command_runner(settings))
     try:
-        stacks = compose.discover_stacks(
-            config.docker_base,
-            project_base=settings.host_docker_base,
-            ignore_paths=config.compose_ignore_paths,
+        return tuple(
+            compose.discover_stacks(
+                config.docker_base,
+                project_base=settings.host_docker_base,
+                ignore_paths=config.compose_ignore_paths,
+            )
         )
     except ComposeDiscoveryError as exc:
         return RetagTargetsResponse(
@@ -292,21 +385,210 @@ def _retag_target_records(
             ],
         )
 
+
+def _refresh_retag_github_latest_candidates(
+    settings: WebSettings,
+) -> RetagTargetsResponse | None:
+    stacks_or_response = _discover_retag_stacks(settings)
+    if isinstance(stacks_or_response, RetagTargetsResponse):
+        return stacks_or_response
     known_by_service = web_database.known_digest_state_by_service(settings)
-    records: list[_RetagTargetRecord] = []
+    targets = [
+        target
+        for _service_key, _service_image, target in _github_latest_fallback_targets(
+            stacks_or_response,
+            known_by_service,
+        )
+    ]
+    if not targets:
+        return None
+    try:
+        with open_db(settings.config.db_path) as conn:
+            init_db(conn)
+            refresh_release_notes(
+                conn,
+                targets,
+                settings.command_env or {},
+                client=GitHubClient(
+                    token=(settings.command_env or {}).get("GITHUB_TOKEN", ""),
+                ),
+                source_resolver=release_note_source_resolver(settings),
+                redact_error=lambda value: _redact_sensitive_text(settings, value),
+                force=True,
+            )
+    except (OSError, sqlite3.Error, DatabaseError) as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=_safe_exception_detail(
+                settings,
+                "could not refresh retag GitHub latest candidates",
+                exc,
+            ),
+        ) from exc
+    return None
+
+
+def _cached_github_latest_fallback_by_service(
+    settings: WebSettings,
+    stacks: Sequence[ComposeStack],
+    known_by_service: Mapping[str, web_database.KnownDigestState],
+) -> dict[str, _RetagGitHubLatestFallback]:
+    target_rows = _github_latest_fallback_targets(stacks, known_by_service)
+    if not target_rows:
+        return {}
+    missing_cache = _RetagGitHubLatestFallback(
+        warning=(
+            "GitHub latest fallback is enabled, but no cached GitHub release "
+            "metadata is available. Refresh candidates and try again."
+        )
+    )
+    try:
+        with closing(web_database.connect_readonly_db(settings)) as conn:
+            infos = cached_release_notes(
+                conn,
+                [target for _service_key, _service_image, target in target_rows],
+                settings.command_env or {},
+                source_resolver=release_note_source_resolver(settings),
+            )
+    except ReadOnlyDatabaseMissing:
+        return {service_key: missing_cache for service_key, _image, _target in target_rows}
+    except (OSError, sqlite3.Error, DatabaseError) as exc:
+        warning = _safe_exception_detail(
+            settings,
+            "could not read cached GitHub latest candidates",
+            exc,
+        )
+        return {
+            service_key: _RetagGitHubLatestFallback(warning=warning)
+            for service_key, _image, _target in target_rows
+        }
+
+    result: dict[str, _RetagGitHubLatestFallback] = {}
+    for (service_key, service_image, _target), info in zip(target_rows, infos):
+        result[service_key] = _fallback_from_release_info(
+            settings,
+            service_image,
+            info,
+        )
+    return result
+
+
+def _github_latest_fallback_targets(
+    stacks: Sequence[ComposeStack],
+    known_by_service: Mapping[str, web_database.KnownDigestState],
+) -> list[tuple[str, ServiceImage, WudTarget]]:
+    rows: list[tuple[str, ServiceImage, WudTarget]] = []
     for stack in stacks:
         for service_image in stack.service_images:
-            records.append(
-                _retag_target_record(
-                    stack,
+            service_key = _retag_service_key(stack.name, service_image.service)
+            if service_key in known_by_service:
+                continue
+            label_value = _label_value(service_image.labels, WUD_TAG_INCLUDE_LABEL)
+            tracking_tag, tracking_tag_source = _tracking_tag(
+                service_image.image,
+                label_value=label_value,
+                provenance=None,
+            )
+            if tracking_tag_source == "unsupported-label" or tracking_tag != "latest":
+                continue
+            rows.append(
+                (
+                    service_key,
                     service_image,
-                    known_by_service.get(
-                        _retag_service_key(stack.name, service_image.service)
-                    ),
+                    _release_note_target_for_service(stack.index, service_image.image),
                 )
             )
+    return rows
 
-    return tuple(records)
+
+def _fallback_from_release_info(
+    settings: WebSettings,
+    service_image: ServiceImage,
+    info: ReleaseNoteInfo,
+) -> _RetagGitHubLatestFallback:
+    candidate = github_latest_candidate_from_info(info)
+    if candidate is None:
+        return _RetagGitHubLatestFallback(
+            warning=_github_latest_info_warning(info),
+        )
+    if not tag_value_valid(candidate.release_tag):
+        return _RetagGitHubLatestFallback(
+            proposed_tag=candidate.release_tag,
+            warning=(
+                f"GitHub latest release tag {candidate.release_tag} is not a "
+                "valid Docker tag value."
+            ),
+            link_label=candidate.link_label,
+            link_url=candidate.link_url,
+        )
+    resolved_image = image_with_tag(service_image.image, candidate.release_tag)
+    digest_result = DigestVerifier(
+        DockerCli(runner=_command_runner(settings)),
+    ).resolve_tag_digest(resolved_image)
+    if not digest_result.ok or not digest_result.digest:
+        reason = digest_result.reason or digest_result.status
+        return _RetagGitHubLatestFallback(
+            proposed_tag=candidate.release_tag,
+            warning=(
+                f"GitHub latest release tag {candidate.release_tag} was found, "
+                f"but {resolved_image} digest could not be resolved: {reason}."
+            ),
+            link_label=candidate.link_label,
+            link_url=candidate.link_url,
+        )
+    digest = digest_result.digest
+    return _RetagGitHubLatestFallback(
+        provenance=DigestTagProvenance(
+            source_image=service_image.image,
+            resolved_tag=candidate.release_tag,
+            watch_tag="latest",
+            target_digest=digest,
+            final_image=image_with_digest(service_image.image, digest),
+            provenance_source="github-latest",
+            provenance_confidence="recovered",
+        ),
+        proposed_tag=candidate.release_tag,
+        warning=(
+            "GitHub latest fallback will update latest tracking to "
+            f"{candidate.release_tag}."
+        ),
+        link_label=candidate.link_label,
+        link_url=candidate.link_url,
+    )
+
+
+def _github_latest_info_warning(info: ReleaseNoteInfo) -> str:
+    provider = str(getattr(info, "provider", ""))
+    status = str(getattr(info, "status", ""))
+    error = str(getattr(info, "error", ""))
+    if provider == "lsio":
+        return "GitHub latest fallback does not support LSIO upstream retag candidates."
+    if status == "missing":
+        return (
+            "GitHub latest fallback is enabled, but no cached GitHub release "
+            "metadata is available. Refresh candidates and try again."
+        )
+    if status == "unsupported":
+        return error or "No supported GitHub release source was found."
+    if status == "not_found":
+        return "No GitHub latest release was found for this image source."
+    if status == "error":
+        return error or "GitHub latest release metadata could not be refreshed."
+    return "GitHub latest release metadata is not ready for this service."
+
+
+def _release_note_target_for_service(line_no: int, image: str) -> WudTarget:
+    return WudTarget(
+        line_no=line_no,
+        raw=image,
+        first=image,
+        key=image_key(image),
+        repo=repo_key(image),
+        has_tag=image_has_tag(image),
+        allow_repo=False,
+        digest="",
+        desired_tag="",
+    )
 
 
 def _command_runner(settings: WebSettings) -> CommandRunner:
@@ -323,9 +605,14 @@ def _retag_target_record(
     stack: ComposeStack,
     service_image: ServiceImage,
     known: web_database.KnownDigestState | None,
+    github_latest: _RetagGitHubLatestFallback | None,
+    *,
+    github_latest_fallback: bool,
 ) -> _RetagTargetRecord:
     service_key = _retag_service_key(stack.name, service_image.service)
     provenance = None if known is None else known.digest_provenance
+    if provenance is None and github_latest is not None:
+        provenance = github_latest.provenance
     known_image = "" if known is None else known.image
     item = _retag_target_item(
         service_key=service_key,
@@ -338,6 +625,8 @@ def _retag_target_record(
         ),
         known_image=known_image,
         provenance=provenance,
+        github_latest=github_latest,
+        github_latest_fallback=github_latest_fallback,
     )
     return _RetagTargetRecord(
         item=item,
@@ -1169,6 +1458,8 @@ def _retag_target_item(
     project_directory: str,
     known_image: str,
     provenance: DigestTagProvenance | None,
+    github_latest: _RetagGitHubLatestFallback | None,
+    github_latest_fallback: bool,
 ) -> RetagTargetItem:
     label_value = _label_value(service_image.labels, WUD_TAG_INCLUDE_LABEL)
     tracking_tag, tracking_tag_source = _tracking_tag(
@@ -1187,6 +1478,30 @@ def _retag_target_item(
     choices = [KEEP_CURRENT_CHOICE]
     if retag_available:
         choices.append(SWITCH_TO_CONCRETE_CHOICE)
+    proposed_tag = "" if provenance is None else provenance.resolved_tag
+    final_image = "" if provenance is None else provenance.final_image
+    candidate_source = "provenance" if provenance is not None else ""
+    candidate_warning = ""
+    candidate_link_label = ""
+    candidate_link_url = ""
+    if github_latest is not None:
+        candidate_source = "github-latest"
+        candidate_warning = github_latest.warning
+        candidate_link_label = github_latest.link_label
+        candidate_link_url = github_latest.link_url
+        if not proposed_tag:
+            proposed_tag = github_latest.proposed_tag
+    elif (
+        github_latest_fallback
+        and provenance is None
+        and tracking_tag == "latest"
+        and retag_reason == "missing-provenance"
+    ):
+        candidate_source = "github-latest"
+        candidate_warning = (
+            "GitHub latest fallback is enabled, but no cached GitHub release "
+            "metadata is available. Refresh candidates and try again."
+        )
     return RetagTargetItem(
         service_key=service_key,
         stack=stack,
@@ -1196,8 +1511,12 @@ def _retag_target_item(
         current_tag=image_tag(service_image.image),
         tracking_tag=tracking_tag,
         tracking_tag_source=tracking_tag_source,
-        proposed_tag="" if provenance is None else provenance.resolved_tag,
-        final_image="" if provenance is None else provenance.final_image,
+        proposed_tag=proposed_tag,
+        final_image=final_image,
+        candidate_source=candidate_source,
+        candidate_warning=candidate_warning,
+        candidate_link_label=candidate_link_label,
+        candidate_link_url=candidate_link_url,
         retag_available=retag_available,
         retag_reason=retag_reason,
         choices=choices,
@@ -1269,7 +1588,7 @@ def _provenance_matches_image(
     known_image: str,
     provenance: DigestTagProvenance,
 ) -> bool:
-    return image in {known_image, provenance.final_image}
+    return image in {known_image, provenance.source_image, provenance.final_image}
 
 
 def _label_value(labels: tuple[tuple[str, str], ...], key: str) -> str:

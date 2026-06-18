@@ -5,6 +5,7 @@ import {
   NAlert,
   NInput,
   NSelect,
+  NSwitch,
 } from "naive-ui";
 
 import type { RetagTargetChoice, RetagTargetItem } from "../api/client";
@@ -217,6 +218,10 @@ async function previewRetagChanges(): Promise<void> {
   await updates.createRetagPlan().catch(() => undefined);
 }
 
+async function onGithubLatestFallbackUpdate(enabled: boolean): Promise<void> {
+  await updates.setRetagGithubLatestFallback(enabled).catch(() => undefined);
+}
+
 function openRetagApplyConfirm(): void {
   if (applyDisabled.value) {
     return;
@@ -376,6 +381,15 @@ onMounted(() => {
           :options="filterOptions"
           aria-label="Retag status filter"
         />
+        <label class="retag-fallback-toggle">
+          <n-switch
+            :value="updates.retagGithubLatestFallback"
+            :disabled="updates.loading"
+            aria-label="Use GitHub latest fallback"
+            @update:value="onGithubLatestFallbackUpdate"
+          />
+          <span>Use GitHub latest fallback</span>
+        </label>
       </div>
     </section>
 
@@ -461,6 +475,15 @@ onMounted(() => {
 
 .retag-controls :deep(.n-input) {
   max-width: 520px;
+}
+
+.retag-fallback-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--color-muted-text);
+  font-size: 0.9rem;
+  white-space: nowrap;
 }
 
 .retag-state svg {

@@ -29,7 +29,13 @@ describe("RetagsView", () => {
     const updates = useUpdatesStore();
     updates.retagTargets = retagTargetsResponse(
       [
-        retagTarget(),
+        retagTarget({
+          candidate_source: "github-latest",
+          candidate_warning:
+            "GitHub latest fallback will update latest tracking to 1.1.",
+          candidate_link_label: "GitHub release",
+          candidate_link_url: "https://github.com/acme/app/releases/tag/1.1",
+        }),
         retagTarget({
           service_key: "media/radarr",
           service: "radarr",
@@ -55,6 +61,9 @@ describe("RetagsView", () => {
         return plan;
       },
     );
+    const setRetagGithubLatestFallback = vi
+      .spyOn(updates, "setRetagGithubLatestFallback")
+      .mockResolvedValue();
 
     const wrapper = mountWithApp(RetagsView, { pinia });
     await flushPromises();
@@ -69,8 +78,15 @@ describe("RetagsView", () => {
     expect(text).toContain("media/app");
     expect(text).toContain("Retag available");
     expect(text).toContain("Candidate ready");
+    expect(text).toContain("Use GitHub latest fallback");
+    expect(text).toContain("GitHub latest fallback will update latest tracking to 1.1.");
     expect(text).toContain("media/radarr");
     expect(text).toContain("Missing provenance");
+
+    await wrapper
+      .find('input[aria-label="Use GitHub latest fallback"]')
+      .setValue(true);
+    expect(setRetagGithubLatestFallback).toHaveBeenCalledWith(true);
 
     const switchControls = wrapper.findAll('input[value="switch-to-concrete"]');
     expect(switchControls).toHaveLength(2);

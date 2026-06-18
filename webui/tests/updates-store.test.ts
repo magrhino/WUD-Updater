@@ -190,6 +190,28 @@ describe("updates store", () => {
     expect(fetchMock.mock.calls[0][0]).toBe("/api/v1/retag-targets");
   });
 
+  it("refreshes retag GitHub latest fallback candidates", async () => {
+    const fetchMock = mockFetch(retagTargetsResponse([
+      retagTarget({
+        candidate_source: "github-latest",
+        candidate_warning: "GitHub latest fallback will update latest tracking to v1.1.",
+        candidate_link_label: "GitHub release",
+        candidate_link_url: "https://github.com/acme/app/releases/tag/v1.1",
+      }),
+    ]));
+    const auth = useAuthStore();
+    vi.spyOn(auth, "ensureCsrf").mockResolvedValue("csrf-retag");
+    const updates = useUpdatesStore();
+
+    await updates.setRetagGithubLatestFallback(true);
+
+    expect(updates.retagGithubLatestFallback).toBe(true);
+    expect(updates.retagTargets?.items[0]?.candidate_source).toBe("github-latest");
+    expect(fetchMock.mock.calls[0][0]).toBe(
+      "/api/v1/retag-targets/github-latest/refresh",
+    );
+  });
+
   it("previews retag choices through the updates store", async () => {
     const fetchMock = mockFetch(retagPlanResponse());
     const auth = useAuthStore();
@@ -212,6 +234,24 @@ describe("updates store", () => {
         { service_key: "media/app", choice: "switch-to-concrete" },
         { service_key: "media/radarr", choice: "keep-current" },
       ],
+      github_latest_fallback: false,
+    });
+  });
+
+  it("sends retag fallback state when previewing", async () => {
+    const fetchMock = mockFetch(retagPlanResponse());
+    const auth = useAuthStore();
+    vi.spyOn(auth, "ensureCsrf").mockResolvedValue("csrf-retag");
+    const updates = useUpdatesStore();
+    updates.retagGithubLatestFallback = true;
+    updates.retagTargets = retagTargetsResponse();
+    updates.setRetagChoice("media/app", "switch-to-concrete");
+
+    await updates.createRetagPlan();
+
+    expect(jsonRequestBody(fetchMock.mock.calls[0])).toEqual({
+      choices: [{ service_key: "media/app", choice: "switch-to-concrete" }],
+      github_latest_fallback: true,
     });
   });
 
@@ -237,6 +277,7 @@ describe("updates store", () => {
 
     expect(jsonRequestBody(fetchMock.mock.calls[0])).toEqual({
       choices: [{ service_key: "media/app", choice: "keep-current" }],
+      github_latest_fallback: false,
     });
   });
 
@@ -258,6 +299,7 @@ describe("updates store", () => {
     expect(jsonRequestBody(fetchMock.mock.calls[0])).toEqual({
       plan_id: "retag-plan-test",
       choices: [{ service_key: "media/app", choice: "switch-to-concrete" }],
+      github_latest_fallback: false,
       confirmation: "apply-retags",
     });
   });
