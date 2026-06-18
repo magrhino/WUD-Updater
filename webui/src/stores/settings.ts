@@ -128,11 +128,9 @@ export const useSettingsStore = defineStore("settings", () => {
     if (coreUpdateTour.value !== null) {
       return;
     }
-    if (coreUpdateTourLoadPromise === null) {
-      coreUpdateTourLoadPromise = loadCoreUpdateTour().finally(() => {
-        coreUpdateTourLoadPromise = null;
-      });
-    }
+    coreUpdateTourLoadPromise ??= loadCoreUpdateTour().finally(() => {
+      coreUpdateTourLoadPromise = null;
+    });
     await coreUpdateTourLoadPromise;
   }
 

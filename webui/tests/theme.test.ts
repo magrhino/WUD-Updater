@@ -74,7 +74,7 @@ describe("webui theme tokens", () => {
     window.localStorage.setItem(themeStorageKey, "dark");
     expect(detectInitialEffectiveTheme()).toBe("dark");
 
-    window.localStorage.setItem(themeStorageKey, "light");
+    globalThis.localStorage.setItem(themeStorageKey, "light");
     expect(detectInitialEffectiveTheme()).toBe("light");
 
     window.localStorage.setItem(themeStorageKey, "auto");
@@ -86,7 +86,7 @@ describe("webui theme tokens", () => {
   it("reapplies a configured theme preference when authentication changes", async () => {
     setActivePinia(createPinia());
     mockMatchMedia(false);
-    window.localStorage.setItem(themeStorageKey, "light");
+    globalThis.localStorage.setItem(themeStorageKey, "light");
 
     const scope = effectScope();
     try {
