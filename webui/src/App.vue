@@ -108,7 +108,7 @@ async function handleLogout(): Promise<void> {
   padding: 24px;
 }
 
-@media (max-width: 920px) {
+@media (--wud-app-shell) {
   .app-shell {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -118,7 +118,7 @@ async function handleLogout(): Promise<void> {
   }
 }
 
-@media (max-width: 560px) {
+@media (--wud-compact) {
   :deep(.inline-actions .n-button) {
     min-width: 44px;
     min-height: 44px;

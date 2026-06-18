@@ -71,13 +71,13 @@ defineEmits<{
   line-height: 1.2;
 }
 
-@media (max-width: 920px) {
+@media (--wud-app-shell) {
   .topbar {
     align-items: flex-start;
   }
 }
 
-@media (max-width: 560px) {
+@media (--wud-compact) {
   .topbar {
     display: grid;
   }

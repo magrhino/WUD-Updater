@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
-import { breakpointsTailwind, useBreakpoints } from "@vueuse/core";
 import {
   NAlert,
   NButton,
@@ -21,6 +20,7 @@ import PendingSearchEmptyState from "../components/pending/PendingSearchEmptySta
 import PendingSearchPanel from "../components/pending/PendingSearchPanel.vue";
 import PendingSelectionToolbar from "../components/pending/PendingSelectionToolbar.vue";
 import PendingStackSelection from "../components/pending/PendingStackSelection.vue";
+import { useDataCardsBreakpoint } from "../responsive";
 import { useRunsStore } from "../stores/runs";
 import { useSettingsStore } from "../stores/settings";
 import { useUpdatesStore } from "../stores/updates";
@@ -48,8 +48,7 @@ import { usePendingSelectionState } from "./pending/usePendingSelectionState";
 const updates = useUpdatesStore();
 const runs = useRunsStore();
 const settings = useSettingsStore();
-const breakpoints = useBreakpoints(breakpointsTailwind);
-const isMobile = breakpoints.smaller("md");
+const isMobile = useDataCardsBreakpoint();
 const applyJobPanelRef = ref<PendingApplyJobPanelRef | null>(null);
 
 const pendingItems = computed(() => updates.pending?.items ?? []);

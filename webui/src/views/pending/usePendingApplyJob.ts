@@ -20,6 +20,7 @@ import {
   type RunVerificationSummary,
   type RunVerificationWudStatus,
 } from "../../api/client";
+import { prefersReducedMotion } from "../../responsive";
 import { useRunsStore } from "../../stores/runs";
 import { useUpdatesStore } from "../../stores/updates";
 import { runInBackground } from "../../utils/promises";
@@ -874,11 +875,4 @@ function scrollLogToBottom(element: HTMLElement | null): void {
     return;
   }
   element.scrollTop = element.scrollHeight;
-}
-
-function prefersReducedMotion(): boolean {
-  return (
-    typeof window !== "undefined" &&
-    window.matchMedia("(prefers-reduced-motion: reduce)").matches
-  );
 }

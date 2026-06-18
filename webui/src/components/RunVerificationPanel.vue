@@ -212,7 +212,7 @@ function wudLabel(status: RunVerificationWudStatus): string {
   min-width: 0;
 }
 
-@media (max-width: 920px) {
+@media (--wud-app-shell) {
   .run-verification-main {
     grid-template-columns: auto minmax(0, 1fr);
   }

@@ -20,7 +20,7 @@
   transform: translateY(-3px);
 }
 
-@media (prefers-reduced-motion: reduce) {
+@media (--wud-reduced-motion) {
   .route-shift-enter-from,
   .route-shift-leave-to {
     opacity: 1;

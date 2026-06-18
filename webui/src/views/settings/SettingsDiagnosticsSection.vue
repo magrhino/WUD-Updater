@@ -90,7 +90,7 @@ const {
   margin-top: 12px;
 }
 
-@media (max-width: 560px) {
+@media (--wud-compact) {
   .settings-action-row {
     display: grid;
     align-items: start;

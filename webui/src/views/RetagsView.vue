@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
-import { breakpointsTailwind, useBreakpoints } from "@vueuse/core";
 import { AlertTriangle, CheckCircle2, Info, Search } from "@lucide/vue";
 import {
   NAlert,
@@ -16,6 +15,7 @@ import RetagPlanPreview from "../components/retags/RetagPlanPreview.vue";
 import RetagSummaryPanel from "../components/retags/RetagSummaryPanel.vue";
 import RetagTargetsMobileList from "../components/retags/RetagTargetsMobileList.vue";
 import RetagTargetsTable from "../components/retags/RetagTargetsTable.vue";
+import { useDataCardsBreakpoint } from "../responsive";
 import { useAuthStore } from "../stores/auth";
 import { useUpdatesStore } from "../stores/updates";
 import { retagChoice as selectedRetagChoice } from "../utils/retagChoices";
@@ -38,8 +38,7 @@ type RetagFilter = "all" | "available" | "attention";
 
 const updates = useUpdatesStore();
 const auth = useAuthStore();
-const breakpoints = useBreakpoints(breakpointsTailwind);
-const isMobile = breakpoints.smaller("md");
+const isMobile = useDataCardsBreakpoint();
 const searchQuery = ref("");
 const statusFilter = ref<RetagFilter>("all");
 const applyJobPanelRef = ref<PendingApplyJobPanelRef | null>(null);
@@ -468,7 +467,7 @@ onMounted(() => {
   color: var(--color-operational-teal);
 }
 
-@media (max-width: 560px) {
+@media (--wud-compact) {
   .retag-controls {
     display: grid;
     justify-content: stretch;

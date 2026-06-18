@@ -700,7 +700,7 @@ function snapshotLineScope(
   border-color: transparent;
 }
 
-@media (max-width: 920px) {
+@media (--wud-app-shell) {
   .apply-job-panel-active {
     top: 76px;
   }
@@ -710,7 +710,7 @@ function snapshotLineScope(
   }
 }
 
-@media (max-width: 560px) {
+@media (--wud-compact) {
   .apply-job-heading {
     display: grid;
   }
@@ -732,7 +732,7 @@ function snapshotLineScope(
   }
 }
 
-@media (prefers-reduced-motion: reduce) {
+@media (--wud-reduced-motion) {
   .apply-job-progress span {
     left: 0;
     width: 100%;

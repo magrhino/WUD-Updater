@@ -268,13 +268,13 @@ const {
   line-height: 1.45;
 }
 
-@media (max-width: 760px) {
+@media (--wud-narrow-actions) {
   .settings-actions-grid {
     grid-template-columns: 1fr;
   }
 }
 
-@media (max-width: 560px) {
+@media (--wud-compact) {
   .settings-zone-heading {
     display: grid;
   }

@@ -180,7 +180,7 @@
   overflow-wrap: anywhere;
 }
 
-@media (max-width: 560px) {
+@media (--wud-compact) {
   .preflight-footer .n-button {
     min-width: 44px;
     min-height: 44px;

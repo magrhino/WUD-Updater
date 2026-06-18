@@ -172,14 +172,14 @@ const emit = defineEmits<{
   font-size: 0.82rem;
 }
 
-@media (max-width: 920px) {
+@media (--wud-app-shell) {
   .selection-toolbar,
   .batch-action-bar {
     align-items: flex-start;
   }
 }
 
-@media (max-width: 560px) {
+@media (--wud-compact) {
   .selection-toolbar,
   .batch-action-bar {
     display: grid;

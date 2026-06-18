@@ -1,0 +1,7 @@
+@custom-media --wud-compact (max-width: 560px);
+@custom-media --wud-narrow-actions (max-width: 760px);
+@custom-media --wud-data-cards (max-width: 768px);
+@custom-media --wud-app-shell (max-width: 920px);
+@custom-media --wud-management-cards (max-width: 1120px);
+@custom-media --wud-policy-management-cards (max-width: 1200px);
+@custom-media --wud-reduced-motion (prefers-reduced-motion: reduce);
