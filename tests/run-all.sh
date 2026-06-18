@@ -128,6 +128,7 @@ EOF
     tests/test_python_cli.py \
     tests/test_python_command.py \
     tests/compose_rewrite_helpers.py \
+    tests/test_python_check_python_deps.py \
     tests/test_python_compose_digest_pins.py \
     tests/test_python_compose_digest_unpins.py \
     tests/test_python_compose_rewrite_core.py \

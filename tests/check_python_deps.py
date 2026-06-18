@@ -6,6 +6,14 @@ import re
 import sys
 from pathlib import Path
 
+_REQUIREMENT_NAME_CHARS = frozenset(
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_.-"
+)
+_VERSION_CHARS = frozenset(
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_.!+-"
+)
+_SPECIFIER_OPERATORS = ("==", ">=", "<=", ">", "<")
+
 
 def read_dependencies_with_tomllib(pyproject_path: Path) -> list[str] | None:
     try:
@@ -65,23 +73,46 @@ def compare_versions(actual: str, expected: str) -> int:
     return (actual_parts > expected_parts) - (actual_parts < expected_parts)
 
 
+def split_fallback_requirement(requirement: str) -> tuple[str, str] | None:
+    name_end = 0
+    while (
+        name_end < len(requirement)
+        and requirement[name_end] in _REQUIREMENT_NAME_CHARS
+    ):
+        name_end += 1
+
+    if name_end == 0:
+        return None
+
+    return requirement[:name_end], requirement[name_end:].strip()
+
+
+def split_fallback_clause(clause: str) -> tuple[str, str] | None:
+    for operator in _SPECIFIER_OPERATORS:
+        if clause.startswith(operator):
+            expected = clause[len(operator) :].strip()
+            if expected and all(char in _VERSION_CHARS for char in expected):
+                return operator, expected
+            return None
+    return None
+
+
 def fallback_requirement_error(requirement: str) -> str | None:
-    match = re.match(r"^([A-Za-z0-9_.-]+)\s*(.*)$", requirement)
-    if not match:
+    parsed = split_fallback_requirement(requirement)
+    if not parsed:
         return f"unsupported requirement format: {requirement}"
 
-    name = match.group(1)
-    specifier = match.group(2).strip()
+    name, specifier = parsed
     try:
         actual = importlib.metadata.version(name)
     except importlib.metadata.PackageNotFoundError:
         return f"missing {name} (required: {specifier or 'installed'})"
 
     for clause in filter(None, (part.strip() for part in specifier.split(","))):
-        clause_match = re.match(r"^(==|>=|<=|>|<)\s*([A-Za-z0-9_.!+-]+)$", clause)
-        if not clause_match:
+        parsed_clause = split_fallback_clause(clause)
+        if not parsed_clause:
             return f"unsupported version specifier for {name}: {clause}"
-        operator, expected = clause_match.groups()
+        operator, expected = parsed_clause
         comparison = compare_versions(actual, expected)
         satisfied = (
             (operator == "==" and actual == expected)
