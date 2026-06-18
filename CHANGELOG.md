@@ -4,6 +4,15 @@ All notable changes to WUD-Updater are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com) and versions follow
 [Semantic Versioning](https://semver.org).
 
+## [0.42.3](https://github.com/magrhino/WUD-Updater/compare/v0.42.2...v0.42.3) (2026-06-18)
+
+
+### Bug Fixes
+
+* **scripts:** Release Please PRs in CodeRabbit reviews ([#339](https://github.com/magrhino/WUD-Updater/issues/339)) ([6c9fb93](https://github.com/magrhino/WUD-Updater/commit/6c9fb9360aaf4b83aa0cf229e5fcfedac65c3c9d))
+* **webui:** fix app layout issues ([#341](https://github.com/magrhino/WUD-Updater/issues/341)) ([62a9315](https://github.com/magrhino/WUD-Updater/commit/62a93152626bc4229390343dddf25fc2ca7f57ae))
+* **webui:** fix mobile sidebar focus scrolling and narrow-width layout ([#344](https://github.com/magrhino/WUD-Updater/issues/344)) ([ce6d1af](https://github.com/magrhino/WUD-Updater/commit/ce6d1af94ba00a357b143d3ea3be7deefd5826b2))
+
 ## [0.42.2](https://github.com/magrhino/WUD-Updater/compare/v0.42.1...v0.42.2) (2026-06-17)
 
 
