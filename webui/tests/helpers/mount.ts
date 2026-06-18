@@ -346,7 +346,7 @@ export const naiveStubs: Record<string, Component> = {
       value: String,
     },
     emits: ["update:value"],
-    setup(props, { emit, slots }) {
+    setup(props, { attrs, emit, slots }) {
       const value = ref(props.value);
       watch(
         () => props.value,
@@ -359,6 +359,10 @@ export const naiveStubs: Record<string, Component> = {
         update: (next: string) => {
           value.value = next;
           emit("update:value", next);
+          callUpdateValue(
+            (attrs as Record<string, unknown>).onUpdateValue,
+            next,
+          );
         },
       });
       return () => h("div", { role: "radiogroup" }, [slots.default?.()]);
@@ -500,6 +504,8 @@ Object.assign(naiveStubs, {
   MessageProvider: naiveStubs.NMessageProvider,
   Modal: naiveStubs.NModal,
   NGridItem: naiveStubs.NGi,
+  RadioButton: naiveStubs.NRadioButton,
+  RadioGroup: naiveStubs.NRadioGroup,
   Select: naiveStubs.NSelect,
   Skeleton: naiveStubs.NSkeleton,
   Switch: naiveStubs.NSwitch,
@@ -533,7 +539,6 @@ export function mountWithApp(component: Component, options: MountOptions = {}): 
               );
           },
         },
-        RouterView: passthrough("div"),
       },
     },
   });

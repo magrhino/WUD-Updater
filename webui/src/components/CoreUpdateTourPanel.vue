@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, onMounted } from "vue";
 import { useRouter, type RouteLocationRaw } from "vue-router";
 import { ArrowRight, CheckCircle2, X } from "@lucide/vue";
 import { NButton, NTag } from "naive-ui";
 
 import type { CoreUpdateTourStep } from "../api/client";
 import { useSettingsStore } from "../stores/settings";
+import { runInBackground } from "../utils/promises";
 
 const props = withDefaults(
   defineProps<{
@@ -59,6 +60,10 @@ async function advanceTour(): Promise<void> {
 async function dismissTour(): Promise<void> {
   await settings.updateCoreUpdateTour("dismissed", props.step);
 }
+
+onMounted(() => {
+  runInBackground(settings.ensureCoreUpdateTour());
+});
 </script>
 
 <template>

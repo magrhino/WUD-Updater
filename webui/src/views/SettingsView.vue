@@ -4,6 +4,7 @@ import { useMediaQuery } from "@vueuse/core";
 import { useRoute } from "vue-router";
 import { NAlert } from "naive-ui";
 
+import { useRouteRefresh } from "../components/app/routeRefresh";
 import { useSettingsStore } from "../stores/settings";
 import SettingsActionsSection from "./settings/SettingsActionsSection.vue";
 import SettingsDiagnosticsSection from "./settings/SettingsDiagnosticsSection.vue";
@@ -40,11 +41,19 @@ onMounted(() => {
   runInBackground(loadInitialSettings());
 });
 
+useRouteRefresh(refreshSettings);
+
 async function loadInitialSettings(): Promise<void> {
   await settings.loadSettings();
-  if (settings.coreUpdateTour === null) {
-    await settings.loadCoreUpdateTour();
-  }
+  await settings.ensureCoreUpdateTour();
+}
+
+async function refreshSettings(): Promise<void> {
+  await Promise.all([
+    settings.loadSettings(),
+    settings.loadOnboarding(),
+    settings.loadCoreUpdateTour(),
+  ]);
 }
 </script>
 

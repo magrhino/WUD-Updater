@@ -5,6 +5,7 @@ import { breakpointsTailwind, useBreakpoints } from "@vueuse/core";
 import { NAlert, NDataTable, NEmpty, NTag, type DataTableColumns } from "naive-ui";
 
 import HistoryViewTabs from "../components/HistoryViewTabs.vue";
+import { useRouteRefresh } from "../components/app/routeRefresh";
 import type { RunSummary } from "../api/client";
 import { useRunsStore } from "../stores/runs";
 import { runInBackground } from "../utils/promises";
@@ -156,6 +157,8 @@ async function loadAuditRuns(): Promise<void> {
 onMounted(() => {
   runInBackground(loadAuditRuns());
 });
+
+useRouteRefresh(loadAuditRuns);
 </script>
 
 <template>

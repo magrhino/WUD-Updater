@@ -1,11 +1,16 @@
 import {
   computed,
+  watch,
   watchEffect,
   type ComputedRef,
   type WritableComputedRef,
 } from "vue";
 import { useColorMode } from "@vueuse/core";
 import { darkTheme, type GlobalTheme, type GlobalThemeOverrides } from "naive-ui";
+
+import { useAuthStore } from "./stores/auth";
+import { useSettingsStore } from "./stores/settings";
+import { runInBackground } from "./utils/promises";
 
 export type EffectiveTheme = "light" | "dark";
 export type ThemePreference = "system" | EffectiveTheme;
@@ -355,10 +360,42 @@ export function useWebuiTheme(): {
   const activeThemeOverrides = computed(
     () => themeOverridesByMode[effectiveTheme.value],
   );
+  const auth = useAuthStore();
+  const settings = useSettingsStore();
+  const managedThemePreference = computed(() =>
+    settings.settings?.managed.find((entry) => entry.key === "theme_preference"),
+  );
 
   watchEffect(() => {
     applyThemeCssVars(effectiveTheme.value);
   });
+
+  watch(
+    () => auth.authenticated,
+    (authenticated) => {
+      if (authenticated && settings.settings === null) {
+        runInBackground(settings.loadSettings());
+      }
+    },
+    { immediate: true },
+  );
+
+  watch(
+    [managedThemePreference, () => auth.authenticated],
+    ([entry, authenticated]) => {
+      if (
+        authenticated &&
+        entry?.source === "configured" &&
+        (entry.value === "system" ||
+          entry.value === "light" ||
+          entry.value === "dark") &&
+        preference.value !== entry.value
+      ) {
+        preference.value = entry.value;
+      }
+    },
+    { immediate: true },
+  );
 
   return {
     preference,

@@ -27,6 +27,10 @@ import {
 } from "../api/client";
 import { useAuthStore } from "./auth";
 import { errorMessage, runWithStoreState } from "./storeState";
+import {
+  normalizeRetagChoice,
+  retagChoice as selectedRetagChoice,
+} from "../utils/retagChoices";
 
 export const APPLY_JOB_RECOVERY_MESSAGE =
   "Last known apply job state is unavailable because the WebUI process restarted. Check Runs -> Latest run and the updater log before applying more updates.";
@@ -104,9 +108,12 @@ export const useUpdatesStore = defineStore("updates", () => {
     serviceKey: string,
     choice: RetagTargetChoice,
   ): void {
+    const item = retagTargets.value?.items.find(
+      (target) => target.service_key === serviceKey,
+    );
     retagChoices.value = {
       ...retagChoices.value,
-      [serviceKey]: choice,
+      [serviceKey]: item ? normalizeRetagChoice(item, choice) : choice,
     };
     retagPlan.value = null;
   }
@@ -116,7 +123,7 @@ export const useUpdatesStore = defineStore("updates", () => {
     return items
       .map((item) => ({
         service_key: item.service_key,
-        choice: retagChoices.value[item.service_key] ?? "keep-current",
+        choice: selectedRetagChoice(item, retagChoices.value),
       }))
       .sort((left, right) => left.service_key.localeCompare(right.service_key));
   }

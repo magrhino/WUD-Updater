@@ -11,6 +11,7 @@ import {
 
 import type { ReleaseNoteInfo } from "../api/client";
 import CoreUpdateTourPanel from "../components/CoreUpdateTourPanel.vue";
+import { useRouteRefresh } from "../components/app/routeRefresh";
 import PendingApplyJobPanel from "../components/pending/PendingApplyJobPanel.vue";
 import PendingCleanupModal from "../components/pending/PendingCleanupModal.vue";
 import PendingFallbackQueue from "../components/pending/PendingFallbackQueue.vue";
@@ -312,6 +313,7 @@ const {
 
 clearPreflightHandler = clearPreflight;
 loadPendingAndReleaseNotesHandler = () => loadPendingAndReleaseNotes();
+useRouteRefresh(() => updates.loadPending());
 
 function releaseNoteStatus(note: ReleaseNoteInfo | null): string {
   return pendingReleaseNoteStatus(note, updates.releaseNotesLoading);

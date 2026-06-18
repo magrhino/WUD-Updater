@@ -17,6 +17,7 @@ import {
   NTag,
 } from "naive-ui";
 
+import { useRouteRefresh } from "../components/app/routeRefresh";
 import type {
   AutoUpdateDay,
   ServicePolicyRecord,
@@ -210,6 +211,8 @@ onMounted(() => {
   runInBackground(updates.loadUpdateTargets());
   runInBackground(settings.loadServicePolicies());
 });
+
+useRouteRefresh(() => settings.loadServicePolicies());
 </script>
 
 <template>

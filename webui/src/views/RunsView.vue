@@ -6,6 +6,7 @@ import { NAlert, NDataTable, NEmpty, NTag, type DataTableColumns } from "naive-u
 
 import CoreUpdateTourPanel from "../components/CoreUpdateTourPanel.vue";
 import HistoryViewTabs from "../components/HistoryViewTabs.vue";
+import { useRouteRefresh } from "../components/app/routeRefresh";
 import type { RunSummary } from "../api/client";
 import { useRunsStore } from "../stores/runs";
 import { runInBackground } from "../utils/promises";
@@ -63,6 +64,8 @@ const columns = computed<DataTableColumns<RunSummary>>(() => [
 onMounted(() => {
   runInBackground(runs.loadRuns());
 });
+
+useRouteRefresh(() => runs.loadRuns());
 </script>
 
 <template>

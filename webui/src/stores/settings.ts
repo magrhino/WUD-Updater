@@ -37,6 +37,7 @@ export const useSettingsStore = defineStore("settings", () => {
   const loading = ref(false);
   const error = ref("");
   const pendingSafetyCueError = ref("");
+  let coreUpdateTourLoadPromise: Promise<void> | null = null;
 
   async function loadWithState(work: () => Promise<void>): Promise<void> {
     await runWithStoreState(loading, error, work);
@@ -121,6 +122,16 @@ export const useSettingsStore = defineStore("settings", () => {
     await loadWithState(async () => {
       coreUpdateTour.value = await webApi.coreUpdateTour();
     });
+  }
+
+  async function ensureCoreUpdateTour(): Promise<void> {
+    if (coreUpdateTour.value !== null) {
+      return;
+    }
+    coreUpdateTourLoadPromise ??= loadCoreUpdateTour().finally(() => {
+      coreUpdateTourLoadPromise = null;
+    });
+    await coreUpdateTourLoadPromise;
   }
 
   async function updateCoreUpdateTour(
@@ -346,6 +357,7 @@ export const useSettingsStore = defineStore("settings", () => {
     loadOnboarding,
     dismissOnboarding,
     loadCoreUpdateTour,
+    ensureCoreUpdateTour,
     updateCoreUpdateTour,
     loadPendingSafetyCues,
     loadServicePolicies,

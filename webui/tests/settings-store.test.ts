@@ -4,36 +4,18 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { webApi } from "../src/api/client";
 import { useAuthStore } from "../src/stores/auth";
-import { useConnectionStore, errorMessage } from "../src/stores/connection";
+import { useConnectionStore } from "../src/stores/connection";
 import { useSettingsStore } from "../src/stores/settings";
-import { useUpdatesStore, APPLY_JOB_RECOVERY_MESSAGE } from "../src/stores/updates";
 import { useRunsStore } from "../src/stores/runs";
 import {
-  applyJobLogResponse,
-  applyJobResponse,
   coreUpdateTourResponse,
-  doctorResponse,
   onboardingChecklistResponse,
   onboardingDismissResponse,
-  pendingResponse,
-  releaseNotesResponse,
-  retagPlanResponse,
-  retagTarget,
-  retagTargetsResponse,
-  planResponse,
-  runVerification,
-  runSummary,
-  selfUpdateApplyResponse,
-  selfUpdatePlanResponse,
-  selfUpdatePrepareResponse,
-  selfUpdateResponse,
   settingsResponse,
   servicePolicy,
-  statusResponse,
   stateOperationResponse,
   snooze,
   tagExclusion,
-  updateTargetsResponse,
 } from "./helpers/fixtures";
 
 function jsonResponse(body: unknown, status = 200): Response {
@@ -67,14 +49,6 @@ function deferred<T>() {
   return { promise, resolve, reject };
 }
 
-
-import {
-  deferred,
-  jsonRequestBody,
-  jsonResponse,
-  mockFetch,
-} from "./helpers/storeActions";
-
 describe("settings store", () => {
   beforeEach(() => {
     setActivePinia(createPinia());
@@ -90,10 +64,7 @@ describe("settings store", () => {
     const ensureCsrf = vi
       .spyOn(auth, "ensureCsrf")
       .mockResolvedValue("csrf-onboarding");
-        const connection = useConnectionStore();
     const settings = useSettingsStore();
-    const updates = useUpdatesStore();
-    const runs = useRunsStore();
 
     await settings.loadOnboarding();
     await settings.dismissOnboarding();
@@ -128,10 +99,7 @@ describe("settings store", () => {
     const ensureCsrf = vi
       .spyOn(auth, "ensureCsrf")
       .mockResolvedValue("csrf-tour");
-        const connection = useConnectionStore();
     const settings = useSettingsStore();
-    const updates = useUpdatesStore();
-    const runs = useRunsStore();
 
     await settings.loadCoreUpdateTour();
     await settings.updateCoreUpdateTour("in_progress", "pending_select");
@@ -147,7 +115,7 @@ describe("settings store", () => {
     );
     expect((fetchMock.mock.calls[0][1] as RequestInit).method).toBeUndefined();
     expect((fetchMock.mock.calls[1][1] as RequestInit).method).toBe("POST");
-    expect(JSON.parse(String((fetchMock.mock.calls[1][1] as RequestInit).body))).toEqual({
+    expect(jsonRequestBody(fetchMock.mock.calls[1])).toEqual({
       status: "in_progress",
       step: "pending_select",
     });
@@ -158,6 +126,25 @@ describe("settings store", () => {
     ).toBe("csrf-tour");
   });
 
+  it("coalesces concurrent core update tour ensure requests", async () => {
+    const tourRequest = deferred<Response>();
+    const fetchMock = vi.fn().mockReturnValue(tourRequest.promise);
+    vi.stubGlobal("fetch", fetchMock);
+    const settings = useSettingsStore();
+
+    const firstEnsure = settings.ensureCoreUpdateTour();
+    const secondEnsure = settings.ensureCoreUpdateTour();
+    const thirdEnsure = settings.ensureCoreUpdateTour();
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    tourRequest.resolve(jsonResponse(coreUpdateTourResponse()));
+    await Promise.all([firstEnsure, secondEnsure, thirdEnsure]);
+    expect(settings.coreUpdateTour?.status).toBe("not_started");
+
+    await settings.ensureCoreUpdateTour();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
   it("keeps fulfilled pending safety cue data when another cue source fails", async () => {
     const existingPolicy = servicePolicy({ service_key: "media/app" });
     const loadedSnooze = snooze({ service_key: "media/radarr" });
@@ -165,10 +152,7 @@ describe("settings store", () => {
       new Error("service policies unavailable"),
     );
     vi.spyOn(webApi, "snoozes").mockResolvedValue([loadedSnooze]);
-        const connection = useConnectionStore();
     const settings = useSettingsStore();
-    const updates = useUpdatesStore();
-    const runs = useRunsStore();
     settings.servicePolicies = [existingPolicy];
     settings.error = "old failure";
 
@@ -187,10 +171,7 @@ describe("settings store", () => {
     const loadedSnooze = snooze({ service_key: "media/radarr" });
     vi.spyOn(webApi, "servicePolicies").mockResolvedValue([loadedPolicy]);
     vi.spyOn(webApi, "snoozes").mockResolvedValue([loadedSnooze]);
-        const connection = useConnectionStore();
     const settings = useSettingsStore();
-    const updates = useUpdatesStore();
-    const runs = useRunsStore();
     settings.error = "old failure";
     settings.pendingSafetyCueError = "old safety cue failure";
 
@@ -214,7 +195,7 @@ describe("settings store", () => {
     });
 
     expect(ensureCsrf).toHaveBeenCalledTimes(1);
-    expect(JSON.parse(String((fetchMock.mock.calls[0][1] as RequestInit).body))).toEqual({
+    expect(jsonRequestBody(fetchMock.mock.calls[0])).toEqual({
       kind: "delete_service_policy",
       service_key: "media/app",
     });
@@ -306,9 +287,6 @@ describe("settings store", () => {
 
   it("clears stale errors and loading state on successful loads", async () => {
     mockFetch([]);
-        const connection = useConnectionStore();
-    const settings = useSettingsStore();
-    const updates = useUpdatesStore();
     const runs = useRunsStore();
     runs.error = "old failure";
     runs.loading = true;
@@ -322,10 +300,7 @@ describe("settings store", () => {
 
   it("loads read-only settings", async () => {
     const fetchMock = mockFetch(settingsResponse());
-        const connection = useConnectionStore();
     const settings = useSettingsStore();
-    const updates = useUpdatesStore();
-    const runs = useRunsStore();
 
     await settings.loadSettings();
 
@@ -367,10 +342,7 @@ describe("settings store", () => {
     const ensureCsrf = vi
       .spyOn(auth, "ensureCsrf")
       .mockResolvedValue("csrf-settings");
-        const connection = useConnectionStore();
     const settings = useSettingsStore();
-    const updates = useUpdatesStore();
-    const runs = useRunsStore();
     settings.settings = settingsResponse();
 
     const response = await settings.updateManagedSettings({
@@ -392,7 +364,7 @@ describe("settings store", () => {
   it("keeps managed settings saves successful when onboarding refresh fails", async () => {
     const updatedSettings = settingsResponse({
       managed: [
-        settingsResponse().managed[0]!,
+        settingsResponse().managed[0],
         {
           key: "onboarding_checklist",
           value: "dismissed",
@@ -413,9 +385,7 @@ describe("settings store", () => {
     vi.stubGlobal("fetch", fetchMock);
     const auth = useAuthStore();
     vi.spyOn(auth, "ensureCsrf").mockResolvedValue("csrf-settings");
-        const connection = useConnectionStore();
     const settings = useSettingsStore();
-    const updates = useUpdatesStore();
     const runs = useRunsStore();
     settings.settings = settingsResponse();
     settings.onboarding = onboardingChecklistResponse({ visible: true });
@@ -437,9 +407,6 @@ describe("settings store", () => {
   it("surfaces backend errors and always clears loading state", async () => {
     const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ detail: "db missing" }, 503));
     vi.stubGlobal("fetch", fetchMock);
-        const connection = useConnectionStore();
-    const settings = useSettingsStore();
-    const updates = useUpdatesStore();
     const runs = useRunsStore();
 
     await expect(runs.loadRuns()).rejects.toMatchObject({ message: "db missing" });

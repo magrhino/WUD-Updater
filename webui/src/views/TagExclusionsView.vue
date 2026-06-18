@@ -20,6 +20,7 @@ import type {
   TagExclusionStatus,
   TagExclusionStatusFilter,
 } from "../api/client";
+import { useRouteRefresh } from "../components/app/routeRefresh";
 import { useUpdateTargetOptions } from "../composables/useUpdateTargetOptions";
 import { useAuthStore } from "../stores/auth";
 import { useSettingsStore } from "../stores/settings";
@@ -196,6 +197,8 @@ onMounted(() => {
 watch(statusFilter, (nextFilter) => {
   runInBackground(settings.loadTagExclusions(nextFilter));
 });
+
+useRouteRefresh(() => settings.loadTagExclusions(statusFilter.value));
 </script>
 
 <template>

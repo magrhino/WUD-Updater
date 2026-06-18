@@ -14,6 +14,7 @@ import {
 import { NAlert, NEmpty, NGi, NGrid } from "naive-ui";
 
 import CoreUpdateTourPanel from "../components/CoreUpdateTourPanel.vue";
+import { useRouteRefresh } from "../components/app/routeRefresh";
 import { useConnectionStore } from "../stores/connection";
 import { useUpdatesStore } from "../stores/updates";
 import { useRunsStore } from "../stores/runs";
@@ -32,15 +33,21 @@ const warnings = computed(() => [
   ...(updates.pending?.warnings ?? []),
 ]);
 
-onMounted(() => {
-  runInBackground(Promise.all([
+async function loadDashboard(): Promise<void> {
+  await Promise.all([
     connection.loadStatus(),
     updates.loadPending(),
     runs.loadRuns(),
     settings.loadServicePolicies(),
     settings.loadSnoozes(),
     settings.loadTagExclusions(),
-  ]));
+  ]);
+}
+
+useRouteRefresh(loadDashboard);
+
+onMounted(() => {
+  runInBackground(loadDashboard());
 });
 </script>
 

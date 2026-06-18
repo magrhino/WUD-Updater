@@ -12,6 +12,7 @@ import {
 import { NAlert, NButton, NEmpty, NFlex, NGi, NGrid, NSkeleton, NTag } from "naive-ui";
 
 import type { DoctorCheck, DoctorCheckStatus } from "../api/client";
+import { useRouteRefresh } from "../components/app/routeRefresh";
 import { useConnectionStore } from "../stores/connection";
 import { runInBackground } from "../utils/promises";
 
@@ -45,6 +46,8 @@ onMounted(() => {
 async function refreshDoctor(): Promise<void> {
   await connection.loadDoctor();
 }
+
+useRouteRefresh(refreshDoctor);
 
 async function copySuggestion(snippet: string): Promise<void> {
   if (!snippet.trim()) {
