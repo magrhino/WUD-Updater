@@ -127,7 +127,6 @@ describe("pending view fallback and release notes", () => {
     settings.servicePolicies = [
       servicePolicy({ service_key: "media/wud-updater", auto_update: true }),
     ];
-    settings.snoozes = [snooze({ service_key: "media/radarr" })];
     updates.pending = {
       source_file: "/out/images.todo",
       exists: true,
@@ -158,7 +157,6 @@ describe("pending view fallback and release notes", () => {
     expect(previewText).toContain("radarr");
     expect(previewText).toContain("Recreate service");
     expect(previewText).toContain("No release notes");
-    expect(previewText).toContain("Snoozed");
     expect(previewText).toContain("lscr.io/linuxserver/radarr:5.0");
     expect(previewText).toContain("lscr.io/linuxserver/radarr:5.1");
     expect(previewText).toContain("wud-updater");
@@ -175,6 +173,74 @@ describe("pending view fallback and release notes", () => {
     expect(card.find(".stack-card-tags").text()).not.toContain(
       "radarr, wud-updater",
     );
+  });
+
+  it("renders active snoozes in the snoozed pending section", () => {
+    const radarr = pendingGroupedItem({
+      line_no: 1,
+      image: "lscr.io/linuxserver/radarr:5.0",
+      repo: "lscr.io/linuxserver/radarr",
+      current_tag: "5.0",
+      desired_tag: "",
+      target_image: "lscr.io/linuxserver/radarr:5.1",
+      services: ["radarr"],
+      action: "recreate_service",
+    });
+    const updater = pendingGroupedItem({
+      line_no: 2,
+      image: "ghcr.io/example/wud-updater:1.0",
+      repo: "ghcr.io/example/wud-updater",
+      current_tag: "1.0",
+      desired_tag: "2.0",
+      target_image: "ghcr.io/example/wud-updater:2.0",
+      services: ["wud-updater"],
+    });
+    const { pinia, auth, connection, settings, updates, runs } = setupStores(true);
+    settings.snoozes = [snooze({ service_key: "media/radarr" })];
+    updates.pending = {
+      source_file: "/out/images.todo",
+      exists: true,
+      count: 2,
+      items: [radarr, updater],
+      grouping: {
+        ...pendingGrouping([radarr, updater]),
+        groups: [
+          {
+            ...pendingGrouping([radarr, updater]).groups[0],
+            services_label: "radarr, wud-updater",
+            services: ["radarr", "wud-updater"],
+            line_numbers: [1, 2],
+            items: [radarr, updater],
+          },
+        ],
+      },
+      warnings: [],
+    };
+    mockPendingLifecycle(settings, updates);
+    const wrapper = mountPendingView(pinia);
+    const stackCard = wrapper
+      .findAll(".stack-card")
+      .find((card) => card.find(".stack-identity").exists());
+    const snoozedCard = wrapper
+      .findAll(".stack-card")
+      .find((card) => card.text().includes("Snoozed pending entries"));
+
+    expect(stackCard?.find(".stack-identity").text()).toContain(
+      "Services wud-updater",
+    );
+    expect(stackCard?.find(".stack-identity").text()).not.toContain("radarr");
+    expect(stackCard?.find(".stack-change-preview").text()).not.toContain(
+      "lscr.io/linuxserver/radarr:5.0",
+    );
+    expect(snoozedCard?.text()).toContain("Snoozed pending entries");
+    expect(snoozedCard?.text()).toContain(
+      "Excluded from bulk selection while snoozed.",
+    );
+    expect(snoozedCard?.text()).toContain("media / radarr");
+    expect(snoozedCard?.text()).toContain("Snoozed");
+    expect(snoozedCard?.text()).toContain("lscr.io/linuxserver/radarr:5.0");
+    expect(snoozedCard?.text()).toContain("lscr.io/linuxserver/radarr:5.1");
+    expect(snoozedCard?.text()).toContain("Pending file line #1");
   });
 
   it("shows ready preflight service impact and row tag rewrites", async () => {
