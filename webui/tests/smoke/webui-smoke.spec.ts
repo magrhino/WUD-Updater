@@ -15,6 +15,17 @@ type FixtureState = {
 
 const appOrigin = process.env.PLAYWRIGHT_BASE_URL ?? "http://127.0.0.1:5173";
 const csrfToken = "csrf-smoke";
+const mobileNavLabels = [
+  "Dashboard",
+  "Pending",
+  "Retags",
+  "History",
+  "Policies",
+  "Snoozes",
+  "Exclusions",
+  "Settings",
+  "Doctor",
+];
 
 function authSession(state: FixtureState) {
   return {
@@ -522,6 +533,145 @@ async function expectSidebarForegroundToken(page: Page, selector: string) {
     .toBe(true);
 }
 
+async function mobileShellLayout(page: Page) {
+  return page.evaluate(() => {
+    const bounds = (selector: string) => {
+      const element = document.querySelector(selector);
+      if (!(element instanceof HTMLElement)) {
+        throw new Error(`Missing mobile shell element: ${selector}`);
+      }
+      const rect = element.getBoundingClientRect();
+      return {
+        left: rect.left,
+        right: rect.right,
+        top: rect.top,
+        bottom: rect.bottom,
+        width: rect.width,
+        height: rect.height,
+      };
+    };
+
+    return {
+      innerWidth: window.innerWidth,
+      documentScrollWidth: document.documentElement.scrollWidth,
+      sidebar: bounds(".sidebar"),
+      navList: bounds(".nav-list"),
+      mainPanel: bounds(".main-panel"),
+      labels: Array.from(document.querySelectorAll<HTMLElement>(".nav-item span")).map(
+        (element) => {
+          const rect = element.getBoundingClientRect();
+          return {
+            text: element.textContent?.trim() ?? "",
+            width: rect.width,
+            height: rect.height,
+          };
+        },
+      ),
+    };
+  });
+}
+
+async function expectMobileShellLayout(page: Page, viewportWidth: number) {
+  const snapshot = await mobileShellLayout(page);
+  expect(snapshot.innerWidth).toBe(viewportWidth);
+  expect(snapshot.documentScrollWidth).toBeLessThanOrEqual(viewportWidth);
+  expect(snapshot.labels.map((label) => label.text)).toEqual(mobileNavLabels);
+
+  for (const label of snapshot.labels) {
+    expect(label.width, `${label.text} label width`).toBeGreaterThan(0);
+    expect(label.height, `${label.text} label height`).toBeGreaterThan(0);
+  }
+
+  for (const [name, rect] of Object.entries({
+    sidebar: snapshot.sidebar,
+    navList: snapshot.navList,
+    mainPanel: snapshot.mainPanel,
+  })) {
+    expect(rect.left, `${name} left`).toBeGreaterThanOrEqual(0);
+    expect(rect.right, `${name} right`).toBeLessThanOrEqual(viewportWidth + 1);
+    expect(rect.width, `${name} width`).toBeGreaterThan(0);
+  }
+
+  expect(snapshot.navList.bottom).toBeLessThanOrEqual(snapshot.sidebar.bottom + 1);
+  expect(snapshot.mainPanel.top).toBeGreaterThanOrEqual(snapshot.sidebar.bottom - 1);
+}
+
+async function expectMobileNavFocusTraversal(page: Page) {
+  const navItems = page.locator(".nav-item");
+  const navItemCount = await navItems.count();
+  expect(navItemCount).toBe(mobileNavLabels.length);
+
+  await page.locator(".brand").focus();
+  await page.locator(".nav-list").evaluate((element) => {
+    element.scrollLeft = 0;
+  });
+
+  const focusSteps = [];
+  for (let index = 0; index < navItemCount; index += 1) {
+    await page.keyboard.press("Tab");
+    await expect(navItems.nth(index)).toBeFocused();
+    const step = await navItems.nth(index).evaluate((element) => {
+      const navList = element.closest(".nav-list");
+      if (!(navList instanceof HTMLElement)) {
+        throw new Error("Missing mobile nav list");
+      }
+      const itemRect = element.getBoundingClientRect();
+      const navRect = navList.getBoundingClientRect();
+      const styles = getComputedStyle(element);
+      const outlineClearance = Math.max(
+        0,
+        (Number.parseFloat(styles.outlineWidth) || 0) +
+          (Number.parseFloat(styles.outlineOffset) || 0),
+      );
+      return {
+        label: element.textContent?.trim() ?? "",
+        left: itemRect.left,
+        right: itemRect.right,
+        width: itemRect.width,
+        height: itemRect.height,
+        outlineClearance,
+        navLeft: navRect.left,
+        navRight: navRect.right,
+        scrollLeft: navList.scrollLeft,
+        scrollWidth: navList.scrollWidth,
+        clientWidth: navList.clientWidth,
+        viewportWidth: window.innerWidth,
+      };
+    });
+
+    focusSteps.push(step);
+    expect(step.label).toBe(mobileNavLabels[index]);
+    expect(step.width, `${step.label} focused width`).toBeGreaterThan(0);
+    expect(step.height, `${step.label} focused height`).toBeGreaterThan(0);
+    expect(
+      step.left - step.outlineClearance,
+      `${step.label} focus outline left`,
+    ).toBeGreaterThanOrEqual(step.navLeft - 1);
+    expect(
+      step.right + step.outlineClearance,
+      `${step.label} focus outline right`,
+    ).toBeLessThanOrEqual(step.navRight + 1);
+    expect(
+      step.left - step.outlineClearance,
+      `${step.label} viewport focus outline left`,
+    ).toBeGreaterThanOrEqual(0);
+    expect(
+      step.right + step.outlineClearance,
+      `${step.label} viewport focus outline right`,
+    ).toBeLessThanOrEqual(
+      step.viewportWidth + 1,
+    );
+  }
+
+  const firstStep = focusSteps[0];
+  if (!firstStep) {
+    throw new Error("Mobile nav focus traversal did not run");
+  }
+  expect(firstStep.scrollLeft).toBe(0);
+  expect(firstStep.scrollWidth).toBeGreaterThan(firstStep.clientWidth);
+  expect(Math.max(...focusSteps.map((step) => step.scrollLeft))).toBeGreaterThan(0);
+}
+
 test.beforeEach(async ({ context }) => {
   await context.clearCookies();
 });
@@ -649,24 +799,23 @@ test("mobile shell keeps page width stable and preserves link targets", async ({
   page,
 }) => {
   const state = createState({ authenticated: true, mutationsEnabled: false });
-  await page.setViewportSize({ width: 390, height: 844 });
   await installApiFixtures(page, state);
 
-  await page.goto("/#/");
-  await expect(page.getByRole("heading", { name: "Dashboard" })).toBeVisible();
+  for (const viewportWidth of [320, 390]) {
+    await page.setViewportSize({ width: viewportWidth, height: 844 });
+    await page.goto("/#/");
+    await expect(page.getByRole("heading", { name: "Dashboard" })).toBeVisible();
 
-  await expect(page.locator(".brand")).toHaveAttribute(
-    "aria-label",
-    "WUD-Updater dashboard",
-  );
-  await expect
-    .poll(() =>
-      page.evaluate(() => ({
-        innerWidth: window.innerWidth,
-        scrollWidth: document.documentElement.scrollWidth,
-      })),
-    )
-    .toEqual({ innerWidth: 390, scrollWidth: 390 });
+    await expect(page.locator(".brand")).toHaveAttribute(
+      "aria-label",
+      "WUD-Updater dashboard",
+    );
+    await expectMobileShellLayout(page, viewportWidth);
+
+    if (viewportWidth === 320) {
+      await expectMobileNavFocusTraversal(page);
+    }
+  }
 
   const pendingLinkBox = await page
     .locator('a.text-link[href="#/pending"]')

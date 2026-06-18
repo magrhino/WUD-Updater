@@ -122,6 +122,17 @@ function isNavItemActive(item: NavItem): boolean {
   );
 }
 
+function scrollNavItemIntoView(event: FocusEvent): void {
+  if (!(event.currentTarget instanceof HTMLElement)) {
+    return;
+  }
+
+  event.currentTarget.scrollIntoView({
+    block: "nearest",
+    inline: "nearest",
+  });
+}
+
 onMounted(() => {
   if (connection.status === null) {
     runInBackground(connection.loadStatus());
@@ -146,6 +157,7 @@ onMounted(() => {
         :title="item.label"
         :aria-label="item.label"
         :aria-current="isNavItemActive(item) ? 'page' : undefined"
+        @focus="scrollNavItemIntoView"
       >
         <component :is="item.icon" :size="18" />
         <span>{{ item.label }}</span>
@@ -277,10 +289,13 @@ onMounted(() => {
     flex: 1 1 auto;
     grid-auto-flow: column;
     grid-auto-columns: max-content;
+    margin: -4px;
     min-width: 0;
     max-width: 100%;
+    padding: 4px;
     overflow-x: auto;
     overflow-y: hidden;
+    scroll-padding-inline: 4px;
   }
 
   .nav-item {
@@ -288,6 +303,7 @@ onMounted(() => {
     gap: 8px;
     min-height: 44px;
     padding: 0 12px;
+    scroll-margin-inline: 4px;
     white-space: nowrap;
   }
 }
