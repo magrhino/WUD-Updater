@@ -31,7 +31,43 @@ import type {
   TagExclusionRuleRecord,
   UpdateTargetItem,
   UpdateTargetsResponse,
+  WudApiStatus,
+  WudContainerMetadata,
 } from "../../src/api/client";
+
+export function wudApiStatus(
+  overrides: Partial<WudApiStatus> = {},
+): WudApiStatus {
+  return {
+    state: "ready",
+    available: true,
+    metadata_available: true,
+    last_checked_at: "2026-01-02T00:00:00+00:00",
+    detail: "1 WUD update metadata item(s) available",
+    ...overrides,
+  };
+}
+
+export function wudContainerMetadata(
+  overrides: Partial<WudContainerMetadata> = {},
+): WudContainerMetadata {
+  return {
+    id: "docker.local.app",
+    name: "app",
+    display_name: "App",
+    status: "running",
+    watcher: "local",
+    local_tag: "1.0",
+    local_digest: "sha256:old",
+    remote_tag: "1.1",
+    remote_digest: "sha256:new",
+    update_kind: "tag",
+    semver_diff: "minor",
+    link: "https://github.com/acme/app/releases/tag/v1.1",
+    error: "",
+    ...overrides,
+  };
+}
 
 export function authSession(
   overrides: Partial<AuthSessionResponse> = {},
@@ -65,6 +101,7 @@ export function statusResponse(
     timezone: "UTC",
     auto_update_scheduler_enabled: false,
     static_spa_available: true,
+    wud_api: wudApiStatus(),
     warnings: [],
     ...overrides,
   };
@@ -469,6 +506,7 @@ export function pendingItem(overrides: Partial<PendingItem> = {}): PendingItem {
     allow_repo: false,
     digest: "sha256:abc",
     desired_tag: "1.1",
+    wud_metadata: null,
     ...overrides,
   };
 }
@@ -522,6 +560,7 @@ export function pendingResponse(items = [pendingItem()]): PendingResponse {
     count: items.length,
     items,
     grouping: pendingGrouping(groupedItems),
+    wud_api: wudApiStatus(),
     warnings: [],
   };
 }
@@ -697,6 +736,7 @@ export function releaseNotesResponse(
     source_file: "/out/images.todo",
     count: items.length,
     items,
+    wud_api: wudApiStatus(),
     warnings: [],
   };
 }

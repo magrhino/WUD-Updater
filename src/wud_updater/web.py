@@ -42,6 +42,7 @@ from . import (
     web_startup,
     web_state,
     web_static,
+    web_wud_api,
 )
 from .config import (
     ConfigError,
@@ -82,6 +83,7 @@ def create_app(
     app.state.web_login_throttle = {}
     app.state.web_login_client_throttle = {}
     web_scheduler.initialize_auto_update_scheduler_state(app.state)
+    web_wud_api.startup_probe(active_settings)
     if not active_settings.dev_no_auth:
         app.state.web_setup_claim = web_auth._prepare_web_auth_state(
             active_settings
@@ -496,6 +498,7 @@ def load_web_settings(
         static_dir=web_static.resolve_static_dir(configured_static),
         host_docker_base=host_docker_base,
         restart_container=_resolve_restart_container(env),
+        wud_api_base_url=web_wud_api.configured_base_url(env),
         command_env=dict(env),
     )
 
@@ -580,8 +583,13 @@ def run_web_reset_admin_from_namespace(args: object) -> int:
 
 def api_status(request: Request) -> web_models.StatusResponse:
     settings = web_auth._settings(request)
-    pending = web_pending.pending_response(settings, include_grouping=False)
+    pending = web_pending.pending_response(
+        settings,
+        include_grouping=False,
+        include_wud_metadata=False,
+    )
     db_ready, db_warning = web_database.database_ready(settings)
+    wud_api = web_wud_api.get_snapshot(settings, include_containers=True)
     warnings = list(pending.warnings)
     if db_warning:
         warnings.append(db_warning)
@@ -600,6 +608,7 @@ def api_status(request: Request) -> web_models.StatusResponse:
         timezone=settings.config.timezone_name,
         auto_update_scheduler_enabled=settings.mutations_enabled,
         static_spa_available=web_static.static_spa_available(settings),
+        wud_api=wud_api.status,
         warnings=warnings,
     )
 

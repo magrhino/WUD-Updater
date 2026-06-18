@@ -12,6 +12,32 @@ export interface DigestTagProvenance {
   provenance_confidence: string;
 }
 
+export type WudApiState = "ready" | "unavailable" | "auth_required" | "error";
+
+export interface WudApiStatus {
+  state: WudApiState;
+  available: boolean;
+  metadata_available: boolean;
+  last_checked_at: string;
+  detail: string;
+}
+
+export interface WudContainerMetadata {
+  id: string;
+  name: string;
+  display_name: string;
+  status: string;
+  watcher: string;
+  local_tag: string;
+  local_digest: string;
+  remote_tag: string;
+  remote_digest: string;
+  update_kind: string;
+  semver_diff: string;
+  link: string;
+  error: string;
+}
+
 export interface PendingItem {
   line_no: number;
   raw: string;
@@ -24,6 +50,7 @@ export interface PendingItem {
   digest: string;
   desired_tag: string;
   digest_provenance?: DigestTagProvenance | null;
+  wud_metadata?: WudContainerMetadata | null;
 }
 
 export interface PendingDiagnostic {
@@ -72,6 +99,7 @@ export interface PendingResponse {
   count: number;
   items: PendingItem[];
   grouping: PendingGrouping;
+  wud_api: WudApiStatus;
   warnings: string[];
 }
 
@@ -265,6 +293,7 @@ export interface ReleaseNotesResponse {
   source_file: string;
   count: number;
   items: ReleaseNoteInfo[];
+  wud_api: WudApiStatus;
   warnings: string[];
 }
 
@@ -523,6 +552,7 @@ export interface StatusResponse {
   timezone: string;
   auto_update_scheduler_enabled: boolean;
   static_spa_available: boolean;
+  wud_api: WudApiStatus;
   warnings: string[];
 }
 

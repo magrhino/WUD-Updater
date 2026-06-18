@@ -73,6 +73,7 @@ def _doctor_client(
             "WUD_UPDATER": str(tmp_path / "app" / "bin" / "docker-update-from-wud"),
             "WUD_UPDATER_USE_SUDO": "false",
             "TRUENAS_STATUS_CHECK": "false",
+            "WUD_API_BASE_URL": "http://127.0.0.1:1",
             **(env or {}),
         },
     )

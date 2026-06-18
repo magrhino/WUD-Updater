@@ -163,6 +163,9 @@ __all__ = (
     "WebApplyJobProgressEvent",
     "WebSelfUpdatePlan",
     "WebSettings",
+    "WudApiState",
+    "WudApiStatus",
+    "WudContainerMetadata",
 )
 
 SELF_UPDATE_RELEASE_NOTES_CAP = 10
@@ -178,6 +181,8 @@ PlanStatus = Literal["ready", "empty", "blocked"]
 PendingGroupingStatus = Literal["ready", "unavailable"]
 
 DoctorCheckStatus = Literal["PASS", "WARN", "FAIL"]
+
+WudApiState = Literal["ready", "unavailable", "auth_required", "error"]
 
 ApplyJobStatus = Literal["queued", "running", "success", "failure"]
 
@@ -242,6 +247,7 @@ class WebSettings:
     static_dir: Path | None = None
     host_docker_base: Path | None = None
     restart_container: str = ""
+    wud_api_base_url: str = ""
     command_env: Mapping[str, str] | None = None
 
     @property
@@ -331,6 +337,30 @@ class DigestTagProvenance(BaseModel):
     provenance_confidence: str
 
 
+class WudApiStatus(BaseModel):
+    state: WudApiState
+    available: bool
+    metadata_available: bool
+    last_checked_at: str
+    detail: str = ""
+
+
+class WudContainerMetadata(BaseModel):
+    id: str
+    name: str
+    display_name: str
+    status: str
+    watcher: str
+    local_tag: str
+    local_digest: str
+    remote_tag: str
+    remote_digest: str
+    update_kind: str
+    semver_diff: str
+    link: str
+    error: str
+
+
 class PendingItem(BaseModel):
     line_no: int
     raw: str
@@ -343,6 +373,7 @@ class PendingItem(BaseModel):
     digest: str
     desired_tag: str
     digest_provenance: DigestTagProvenance | None = None
+    wud_metadata: WudContainerMetadata | None = None
 
 
 class PendingDiagnostic(BaseModel):
@@ -386,6 +417,14 @@ class PendingResponse(BaseModel):
     items: list[PendingItem] = Field(default_factory=list)
     grouping: PendingGrouping = Field(
         default_factory=lambda: PendingGrouping(status="unavailable")
+    )
+    wud_api: WudApiStatus = Field(
+        default_factory=lambda: WudApiStatus(
+            state="unavailable",
+            available=False,
+            metadata_available=False,
+            last_checked_at="",
+        )
     )
     warnings: list[str] = Field(default_factory=list)
 
@@ -529,6 +568,14 @@ class ReleaseNotesResponse(BaseModel):
     source_file: str
     count: int
     items: list[ReleaseNoteInfo] = Field(default_factory=list)
+    wud_api: WudApiStatus = Field(
+        default_factory=lambda: WudApiStatus(
+            state="unavailable",
+            available=False,
+            metadata_available=False,
+            last_checked_at="",
+        )
+    )
     warnings: list[str] = Field(default_factory=list)
 
 class HealthResponse(BaseModel):
@@ -550,6 +597,14 @@ class StatusResponse(BaseModel):
     timezone: str
     auto_update_scheduler_enabled: bool
     static_spa_available: bool
+    wud_api: WudApiStatus = Field(
+        default_factory=lambda: WudApiStatus(
+            state="unavailable",
+            available=False,
+            metadata_available=False,
+            last_checked_at="",
+        )
+    )
     warnings: list[str] = Field(default_factory=list)
 
 class SettingsEntry(BaseModel):

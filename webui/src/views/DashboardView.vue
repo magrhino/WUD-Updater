@@ -32,6 +32,22 @@ const warnings = computed(() => [
   ...(connection.status?.warnings ?? []),
   ...(updates.pending?.warnings ?? []),
 ]);
+const wudApiLabel = computed(() => {
+  const api = connection.status?.wud_api;
+  if (!api) {
+    return "Unknown";
+  }
+  if (api.metadata_available) {
+    return "Metadata ready";
+  }
+  if (api.available && api.state === "auth_required") {
+    return "Auth required";
+  }
+  if (api.available) {
+    return "Degraded";
+  }
+  return "Unavailable";
+});
 
 async function loadDashboard(): Promise<void> {
   await Promise.all([
@@ -80,10 +96,11 @@ onMounted(() => {
         <span>Pending: {{ connection.status?.pending_count ?? updates.pending?.count ?? 0 }}</span>
         <span>Database: {{ connection.status?.db_ready ? "ready" : "missing" }}</span>
         <span>Mutations: {{ connection.status?.mutations_enabled ? "enabled" : "read-only" }}</span>
+        <span>WUD API: {{ wudApiLabel }}</span>
       </div>
     </CoreUpdateTourPanel>
 
-    <n-grid responsive="self" cols="1 560:2 920:4" :x-gap="12" :y-gap="12">
+    <n-grid responsive="self" cols="1 560:2 920:5" :x-gap="12" :y-gap="12">
       <n-gi>
         <article class="metric-card">
           <ListChecks :size="22" />
@@ -111,6 +128,14 @@ onMounted(() => {
           <AlertTriangle v-else :size="22" />
           <span>Status</span>
           <strong>{{ connection.status?.ok ? "OK" : "Needs attention" }}</strong>
+        </article>
+      </n-gi>
+      <n-gi>
+        <article class="metric-card">
+          <CheckCircle2 v-if="connection.status?.wud_api?.metadata_available" :size="22" />
+          <AlertTriangle v-else :size="22" />
+          <span>WUD API</span>
+          <strong>{{ wudApiLabel }}</strong>
         </article>
       </n-gi>
     </n-grid>

@@ -82,6 +82,7 @@ class ReleaseNoteContext:
 
 
 ReleaseNoteSourceResolver = Callable[[WudTarget], str]
+ReleaseNoteTargetTagResolver = Callable[[WudTarget], str]
 
 
 class GitHubClient:
@@ -124,10 +125,16 @@ def cached_release_notes(
     environ: Mapping[str, str],
     *,
     source_resolver: ReleaseNoteSourceResolver | None = None,
+    target_tag_resolver: ReleaseNoteTargetTagResolver | None = None,
 ) -> list[ReleaseNoteInfo]:
     """Return cached release-note metadata without touching the network."""
 
-    contexts = release_note_contexts(targets, environ, source_resolver=source_resolver)
+    contexts = release_note_contexts(
+        targets,
+        environ,
+        source_resolver=source_resolver,
+        target_tag_resolver=target_tag_resolver,
+    )
     return [_cached_info(conn, context) for context in contexts]
 
 
@@ -136,6 +143,7 @@ def release_note_placeholders(
     environ: Mapping[str, str],
     *,
     source_resolver: ReleaseNoteSourceResolver | None = None,
+    target_tag_resolver: ReleaseNoteTargetTagResolver | None = None,
 ) -> list[ReleaseNoteInfo]:
     """Return missing/unsupported metadata without requiring a database."""
 
@@ -145,6 +153,7 @@ def release_note_placeholders(
             targets,
             environ,
             source_resolver=source_resolver,
+            target_tag_resolver=target_tag_resolver,
         )
     ]
 
@@ -157,6 +166,7 @@ def refresh_release_notes(
     client: GitHubClient | None = None,
     now: str | None = None,
     source_resolver: ReleaseNoteSourceResolver | None = None,
+    target_tag_resolver: ReleaseNoteTargetTagResolver | None = None,
     redact_error: Callable[[str], str] | None = None,
 ) -> list[ReleaseNoteInfo]:
     """Refresh missing or stale release-note metadata and return current rows."""
@@ -168,6 +178,7 @@ def refresh_release_notes(
         targets,
         environ,
         source_resolver=source_resolver,
+        target_tag_resolver=target_tag_resolver,
     ):
         cached = _cached_info(conn, context)
         if context.provider == "unsupported":
@@ -201,12 +212,15 @@ def release_note_contexts(
     environ: Mapping[str, str],
     *,
     source_resolver: ReleaseNoteSourceResolver | None = None,
+    target_tag_resolver: ReleaseNoteTargetTagResolver | None = None,
 ) -> list[ReleaseNoteContext]:
     upstreams = _load_upstream_map(environ)
     contexts: list[ReleaseNoteContext] = []
     for target in targets:
         current_tag = image_tag(target.first)
-        target_tag = target.desired_tag
+        target_tag = target.desired_tag or (
+            target_tag_resolver(target) if target_tag_resolver is not None else ""
+        )
         lsio_repo = _lsio_repo(target.repo)
         if lsio_repo:
             upstream_repo = upstreams.get(lsio_repo, "")

@@ -12,7 +12,7 @@ from typing import Any, Protocol
 
 from fastapi import HTTPException, Request
 
-from . import web_database, web_jobs
+from . import web_database, web_jobs, web_wud_api
 from .command import CommandRunner
 from .compose import ComposeCli, ComposeDiscoveryError
 from .config import ConfigError, UpdaterConfig
@@ -52,6 +52,7 @@ from .web_models import (
     UpdateTargetItem,
     UpdateTargetsResponse,
     WebSettings,
+    WudApiStatus,
 )
 from .wud_file import ParsedWudFile, parse_wud_file, remove_lines_before_run
 
@@ -287,10 +288,26 @@ def pending_response(
     settings: WebSettings,
     *,
     include_grouping: bool = True,
+    include_wud_metadata: bool = True,
 ) -> PendingResponse:
     exists, parsed = parse_pending_file(settings)
+    wud_snapshot = (
+        web_wud_api.get_snapshot(settings, include_containers=True)
+        if include_wud_metadata
+        else None
+    )
+    wud_metadata = (
+        web_wud_api.metadata_by_target(settings, parsed.targets, snapshot=wud_snapshot)
+        if wud_snapshot is not None
+        else {}
+    )
+    wud_metadata_by_line = web_wud_api.metadata_response_by_line(wud_metadata)
     grouping = (
-        _pending_grouping_response(settings, parsed)
+        _pending_grouping_response(
+            settings,
+            parsed,
+            wud_metadata_by_line=wud_metadata_by_line,
+        )
         if include_grouping
         else PendingGrouping(status="unavailable")
     )
@@ -308,6 +325,7 @@ def pending_response(
             digest=target.digest,
             desired_tag=target.desired_tag,
             digest_provenance=provenance_by_line.get(target.line_no),
+            wud_metadata=wud_metadata_by_line.get(target.line_no),
         )
         for target in parsed.targets
     ]
@@ -317,6 +335,7 @@ def pending_response(
         count=len(items),
         items=items,
         grouping=grouping,
+        wud_api=_wud_api_status(wud_snapshot),
         warnings=list(parsed.warnings),
     )
 
@@ -436,6 +455,8 @@ def _effective_config(settings: WebSettings) -> UpdaterConfig:
 def _pending_grouping_response(
     settings: WebSettings,
     parsed: ParsedWudFile,
+    *,
+    wud_metadata_by_line: dict[int, Any],
 ) -> PendingGrouping:
     grouping = resolve_pending_groups(
         _effective_config(settings),
@@ -457,16 +478,25 @@ def _pending_grouping_response(
                 services_label=group.services_label,
                 services=list(group.services),
                 line_numbers=list(group.line_numbers),
-                items=[_pending_grouped_item(item) for item in group.items],
+                items=[
+                    _pending_grouped_item(item, wud_metadata_by_line)
+                    for item in group.items
+                ],
             )
             for group in grouping.groups
         ],
-        unmatched=[_pending_grouped_item(item) for item in grouping.unmatched],
+        unmatched=[
+            _pending_grouped_item(item, wud_metadata_by_line)
+            for item in grouping.unmatched
+        ],
         warnings=list(grouping.warnings),
     )
 
 
-def _pending_grouped_item(item: Any) -> PendingGroupedItem:
+def _pending_grouped_item(
+    item: Any,
+    wud_metadata_by_line: dict[int, Any],
+) -> PendingGroupedItem:
     return PendingGroupedItem(
         line_no=item.line_no,
         raw=item.raw,
@@ -493,6 +523,7 @@ def _pending_grouped_item(item: Any) -> PendingGroupedItem:
             if item.digest_provenance is None
             else asdict(item.digest_provenance)
         ),
+        wud_metadata=wud_metadata_by_line.get(item.line_no),
     )
 
 
@@ -508,6 +539,19 @@ def _pending_grouping_provenance_by_line(
         if item.digest_provenance is not None:
             by_line[item.line_no] = item.digest_provenance
     return by_line
+
+
+def _wud_api_status(
+    snapshot: web_wud_api.WudApiSnapshot | None,
+) -> WudApiStatus:
+    if snapshot is not None:
+        return snapshot.status
+    return WudApiStatus(
+        state="unavailable",
+        available=False,
+        metadata_available=False,
+        last_checked_at="",
+    )
 
 
 def _cleanup_payload_lines(

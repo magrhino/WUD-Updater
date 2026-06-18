@@ -84,6 +84,7 @@ def test_settings_reports_effective_non_secret_configuration(
             "WUD_WEB_SECURE_COOKIES": "false",
             "WUD_WEB_MUTATIONS_ENABLED": "true",
             "WUD_WEB_RESTART_CONTAINER": "wud-updater",
+            "WUD_API_BASE_URL": "http://wud.internal:3000",
             **secret_values,
         },
     )
@@ -119,6 +120,13 @@ def test_settings_reports_effective_non_secret_configuration(
     assert webui["WUD_WEB_MUTATIONS_ENABLED"]["value"] == "true"
     assert webui["WUD_WEB_RESTART_CONTAINER"]["value"] == "wud-updater"
     assert webui["WUD_WEB_RESTART_CONTAINER"]["source"] == "configured"
+    assert webui["WUD_API_BASE_URL"] == {
+        "name": "WUD_API_BASE_URL",
+        "value": "http://wud.internal:3000",
+        "default_value": "http://wud:3000",
+        "configured": True,
+        "source": "configured",
+    }
     assert webui["WUD_WEB_SECURE_COOKIES"]["value"] == "false"
     assert webui["WUD_WEB_SECURE_COOKIES_EFFECTIVE"]["value"] == "false"
     assert webui["WUD_WEB_SECURE_COOKIES_EFFECTIVE"]["source"] == "request"

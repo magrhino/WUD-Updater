@@ -40,6 +40,7 @@ import type {
   TagExclusionStatusFilter,
   TagOverrideRequest,
   UpdateTargetsResponse,
+  WudApiStatus,
 } from "../types";
 import {
   DEMO_DB_PATH,
@@ -83,7 +84,22 @@ import {
   unmatchedIssue,
   upsertBy,
 } from "./helpers";
-import type { DemoJobRecord, DemoPendingItem, DemoRunFixture, DemoStackName } from "./types";
+import type {
+  DemoJobRecord,
+  DemoPendingItem,
+  DemoRunFixture,
+  DemoStackName,
+} from "./types";
+
+function demoWudApiStatus(): WudApiStatus {
+  return {
+    state: "ready",
+    available: true,
+    metadata_available: true,
+    last_checked_at: "2026-01-02T00:00:00+00:00",
+    detail: "Static demo WUD metadata is fixture-backed.",
+  };
+}
 
 function planStatus(selectedCount: number, issueCount: number): PlanStatus {
   if (selectedCount === 0) {
@@ -159,6 +175,7 @@ export class DemoApiState {
       timezone: "UTC",
       auto_update_scheduler_enabled: true,
       static_spa_available: true,
+      wud_api: demoWudApiStatus(),
       warnings: ["Static demo mode uses in-browser fixture data only."],
     };
   }
@@ -205,6 +222,12 @@ export class DemoApiState {
           "true",
           false,
           "derived",
+        ),
+        settingEntry(
+          "WUD_API_BASE_URL",
+          "http://wud:3000",
+          "http://wud:3000",
+          false,
         ),
         settingEntry("WUD_WEB_MUTATIONS_ENABLED", "true", "false", true),
         settingEntry(
@@ -509,6 +532,7 @@ export class DemoApiState {
           .map(stripDemoFields),
         warnings: [],
       },
+      wud_api: demoWudApiStatus(),
       warnings: [],
     };
   }
@@ -686,6 +710,7 @@ export class DemoApiState {
       source_file: DEMO_SOURCE_FILE,
       count: items.length,
       items: clone(items),
+      wud_api: demoWudApiStatus(),
       warnings: [],
     };
   }

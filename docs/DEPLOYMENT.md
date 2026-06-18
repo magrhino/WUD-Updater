@@ -216,8 +216,11 @@ docker compose --env-file "$WEBUI_ENV" -f docs/examples/docker-compose.webui.yml
 The env file keeps first-run defaults in one place. `HOST_DOCKER_BASE` must
 match the daemon-visible root that contains your Compose stack directories,
 `WEBUI_HTTP_BIND` controls the host-side published address and defaults to
-loopback, and `WEBUI_LOG_DIR` persists logs plus SQLite state. For LAN or
-reverse-proxy exposure, set `WUD_WEB_PUBLIC_ORIGIN`; use
+loopback, and `WEBUI_LOG_DIR` persists logs plus SQLite state. The Compose
+examples place WUD and WUD-Updater on a private app network and set
+`WUD_API_BASE_URL=http://wud:3000` so the WebUI can show best-effort WUD
+metadata without publishing WUD's port to the host. For LAN or reverse-proxy
+exposure, set `WUD_WEB_PUBLIC_ORIGIN`; use
 `WUD_WEB_ALLOWED_HOSTS` only for extra host aliases, and review
 `WUD_WEB_TRUSTED_PROXIES` plus `WUD_WEB_SECURE_COOKIES` for reverse proxies.
 
@@ -536,6 +539,7 @@ Boolean examples use `true` and `false`; legacy aliases `1`, `0`, `yes`, `no`,
 | `WUD_WEB_SECURE_COOKIES` | `auto` | Cookie `Secure` mode: `auto` enables it for effective HTTPS origins, `true` always enables it, and `false` disables it for local HTTP testing. |
 | `WUD_WEB_MUTATIONS_ENABLED` | `false` | Enables browser plan/apply update mutations and Settings container restart when set to `true`. Leave unset or `false` for read-only WebUI deployments. |
 | `WUD_WEB_RESTART_CONTAINER` | Docker `HOSTNAME` inside a container, otherwise unset | Optional Docker container name or ID restarted from Settings. Set this explicitly only when the auto-detected current container target is unavailable or wrong. |
+| `WUD_API_BASE_URL` | `http://wud:3000` | Internal WUD API base URL used for best-effort WebUI metadata discovery. Auth-required or unavailable WUD is reported as degraded and does not change pending/apply behavior, which still uses `WUD_OUT_FILE`. |
 | `WUD_WEB_HOST` | `127.0.0.1` | Host passed to Uvicorn when running `wud-updater web`. |
 | `WUD_WEB_PORT` | `7417` | Port passed to Uvicorn when running `wud-updater web`. |
 | `WUD_WEB_STATIC_DIR` | packaged SPA, auto-detected if present | Optional built SPA directory override. Backend tests and API startup do not require a frontend build. |

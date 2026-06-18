@@ -11,7 +11,10 @@ _Check out the demo: https://magrhino.github.io/WUD-Updater/_
 
 The WebUI container serves the FastAPI backend and packaged Vue SPA from the
 same image. WUD records pending image updates into a shared todo file, and the
-WebUI reads that file to show pending updates and prepare apply plans.
+WebUI reads that file to show pending updates and prepare apply plans. When WUD
+shares the Compose app network, the WebUI also probes WUD's internal API for
+display metadata; if that API is unavailable, the todo file remains the source
+of truth.
 
 ```text
 WUD detects an image update

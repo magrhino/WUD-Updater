@@ -10,6 +10,7 @@ from pathlib import Path
 
 from fastapi import HTTPException, Request
 
+from . import web_wud_api
 from .config import (
     COMPOSE_IGNORE_PATHS_ENV,
     DEFAULT_COMPOSE_IGNORE_PATHS,
@@ -557,6 +558,12 @@ def _webui_settings_entries(
             _format_bool(_static_spa_available(default_static_settings)),
             _env_configured(settings, "WUD_WEB_STATIC_DIR"),
             source="derived",
+        ),
+        _settings_entry(
+            web_wud_api.WUD_API_BASE_URL_ENV,
+            settings.wud_api_base_url,
+            web_wud_api.DEFAULT_WUD_API_BASE_URL,
+            _env_configured(settings, web_wud_api.WUD_API_BASE_URL_ENV),
         ),
         _settings_entry(
             "WUD_WEB_MUTATIONS_ENABLED",

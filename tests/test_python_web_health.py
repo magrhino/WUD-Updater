@@ -48,7 +48,8 @@ def test_readyz_is_unauthenticated_and_reports_local_readiness(
 
     response = client.get("/readyz")
     body = response.json()
-    codes = {check["code"] for check in body["checks"]}
+    checks = {check["code"]: check for check in body["checks"]}
+    codes = set(checks)
 
     assert response.status_code == 200
     assert body["ok"] is True
@@ -61,7 +62,9 @@ def test_readyz_is_unauthenticated_and_reports_local_readiness(
         "wud-out-file-directory",
         "wud-out-file",
         "webui-database",
+        "wud-api",
     }.issubset(codes)
+    assert checks["wud-api"]["status"] == "WARN"
     sensitive_keys = {
         "wud_file",
         "db_path",
@@ -116,6 +119,7 @@ def test_ready_api_requires_auth_and_returns_local_readiness(
     assert body["ok"] is True
     assert "docker-daemon-info" in codes
     assert "webui-database" in codes
+    assert "wud-api" in codes
 
 def test_readyz_fails_when_required_local_check_fails(
     tmp_path: Path,
@@ -205,5 +209,6 @@ def test_doctor_endpoint_returns_structured_redacted_results(
     assert checks["docker-daemon-info"]["suggestions"]
     assert checks["webui-database"]["status"] == "PASS"
     assert checks["webui-authentication"]["status"] == "WARN"
+    assert checks["wud-api"]["status"] == "WARN"
     assert secret not in serialized
     assert "<redacted>" in serialized
