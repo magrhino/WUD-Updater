@@ -104,6 +104,7 @@ SWITCH_TO_CONCRETE_CHOICE = "switch-to-concrete"
 _REGEX_SPECIAL_CHARS = "\\^$.*+?()[]{}|"
 RETAG_PREVIEW_EXECUTOR_MAX_WORKERS = 1
 RETAG_PREVIEW_JOB_LIMIT = 20
+RETAG_PREVIEW_ACTIVE_STATUSES = frozenset({"queued", "running"})
 
 
 @dataclass(frozen=True)
@@ -376,6 +377,11 @@ def _store_retag_preview_job(state: Any, job: _RetagPreviewJob) -> None:
     lock: Lock = state.web_retag_preview_lock
     jobs: dict[str, _RetagPreviewJob] = state.web_retag_preview_jobs
     with lock:
+        if any(
+            existing.status in RETAG_PREVIEW_ACTIVE_STATUSES
+            for existing in jobs.values()
+        ):
+            raise HTTPException(status_code=409, detail="retag preview is already running")
         terminal_ids = [
             job_id
             for job_id, existing in jobs.items()

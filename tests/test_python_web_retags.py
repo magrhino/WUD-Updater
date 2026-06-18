@@ -4,6 +4,7 @@ import sqlite3
 import time
 from dataclasses import dataclass, fields
 from pathlib import Path
+from threading import Event
 
 from fastapi.testclient import TestClient
 from httpx import Response
@@ -334,6 +335,62 @@ def test_retag_preview_refreshes_github_latest_before_building_plan(
     assert update["planned_digest"] == digest
     assert update["final_image"] == f"ghcr.io/acme/app@{digest}"
     _assert_pending_grouping_did_not_mutate(_fake_docker_calls(fake_root))
+
+
+def test_retag_preview_rejects_second_active_job(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = _client(tmp_path, {"WUD_WEB_DEV_NO_AUTH": "true"})
+    headers = _csrf_headers(client)
+    started = Event()
+    release = Event()
+
+    def slow_preview_job(
+        state: object,
+        _settings: object,
+        _payload: object,
+        job_id: str,
+    ) -> None:
+        web_retags_module._update_retag_preview_job(
+            state,
+            job_id,
+            status="running",
+        )
+        started.set()
+        release.wait(timeout=2)
+        web_retags_module._update_retag_preview_job(
+            state,
+            job_id,
+            status="failure",
+            error="test preview released",
+        )
+
+    monkeypatch.setattr(
+        web_retags_module,
+        "_run_retag_plan_preview_job",
+        slow_preview_job,
+    )
+
+    first = client.post(
+        "/api/v1/retag-plans/preview",
+        json={"choices": [_switch_choice()]},
+        headers=headers,
+    )
+    assert first.status_code == 202
+    assert started.wait(timeout=1)
+
+    second = client.post(
+        "/api/v1/retag-plans/preview",
+        json={"choices": [_switch_choice()]},
+        headers=headers,
+    )
+
+    assert second.status_code == 409
+    assert second.json()["detail"] == "retag preview is already running"
+    release.set()
+    job = _wait_retag_preview_job(client, first.json()["preview_job_id"])
+    assert job["status"] == "failure"
 
 
 def test_retag_preview_warns_when_github_latest_candidate_changes_after_refresh(
