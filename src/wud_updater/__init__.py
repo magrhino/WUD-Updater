@@ -1,3 +1,3 @@
 """Python package for WUD updater commands."""
 
-__version__ = "0.42.4"
+__version__ = "0.42.5"
