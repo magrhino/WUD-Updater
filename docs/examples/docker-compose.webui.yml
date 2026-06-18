@@ -7,6 +7,9 @@
 services:
   wud:
     image: getwud/wud:latest
+    networks:
+      - wud-updater-app
+      - wud-updater-egress
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - wud-scripts:/wud:ro
@@ -29,9 +32,13 @@ services:
       WUD_WEB_ALLOWED_HOSTS: "${WUD_WEB_ALLOWED_HOSTS:-}"
       WUD_WEB_TRUSTED_PROXIES: "${WUD_WEB_TRUSTED_PROXIES:-}"
       WUD_WEB_SECURE_COOKIES: "${WUD_WEB_SECURE_COOKIES:-auto}"
+      WUD_API_BASE_URL: "${WUD_API_BASE_URL:-http://wud:3000}"
       OUT_UID: "${OUT_UID:-1000}"
       OUT_GID: "${OUT_GID:-1000}"
       GITHUB_TOKEN: "${GITHUB_TOKEN:-}"
+    networks:
+      - wud-updater-app
+      - wud-updater-egress
     ports:
       - "${WEBUI_HTTP_BIND:-127.0.0.1}:${WUD_WEB_PORT:-7417}:${WUD_WEB_PORT:-7417}"
     healthcheck:
@@ -47,6 +54,11 @@ services:
       - wud-scripts:/managed-wud
       - wud-out:/out
     command: [ "web" ]
+
+networks:
+  wud-updater-app:
+    internal: true
+  wud-updater-egress:
 
 volumes:
   wud-scripts:

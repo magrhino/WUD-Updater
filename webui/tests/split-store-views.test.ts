@@ -140,6 +140,7 @@ describe("DashboardView split-store coverage", () => {
     expect(wrapper.text()).toContain("Missing");
     expect(wrapper.text()).toContain("#42");
     expect(wrapper.text()).toContain("Needs attention");
+    expect(wrapper.text()).toContain("Metadata ready");
     expect(wrapper.text()).toContain("Policies");
     expect(wrapper.text()).toContain("Active snoozes");
     expect(wrapper.text()).toContain("Active exclusions");

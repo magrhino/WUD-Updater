@@ -2,6 +2,9 @@ import { createDemoWebApi } from "./demo";
 
 export type {
   DigestTagProvenance,
+  WudApiState,
+  WudApiStatus,
+  WudContainerMetadata,
   // Pending updates
   PendingItem,
   PendingDiagnostic,

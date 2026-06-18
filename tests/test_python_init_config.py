@@ -76,6 +76,7 @@ class InitConfigTests(unittest.TestCase):
         self.assertIn("WUD_WEB_MUTATIONS_ENABLED=false", content)
         self.assertIn("WUD_WEB_PUBLIC_ORIGIN=", content)
         self.assertIn("WUD_WEB_ALLOWED_HOSTS=", content)
+        self.assertIn("WUD_API_BASE_URL=http://wud:3000", content)
 
     def test_webui_lan_requires_public_origin_in_non_interactive_mode(self) -> None:
         with self.assertRaisesRegex(InitConfigError, "--public-origin"):
@@ -361,6 +362,10 @@ class InitConfigTests(unittest.TestCase):
         self.assertNotIn("WUD_LOG_DIR", environment)
         self.assertNotIn("WUD_DB_PATH", environment)
         self.assertNotIn("WUD_UPDATER_USE_SUDO", environment)
+        self.assertEqual(
+            environment["WUD_API_BASE_URL"],
+            "${WUD_API_BASE_URL:-http://wud:3000}",
+        )
         self.assertIn(
             "${WEBUI_LOG_DIR:-./logs}:/logs",
             parsed["services"]["wud-updater"]["volumes"],
@@ -382,6 +387,10 @@ class InitConfigTests(unittest.TestCase):
 
         parsed = YAML(typ="safe").load(override_file.read_text(encoding="utf-8"))
         service = parsed["services"]["wud-updater"]
+        self.assertEqual(
+            service["environment"]["WUD_API_BASE_URL"],
+            "${WUD_API_BASE_URL:-http://wud:3000}",
+        )
         self.assertEqual(
             service["ports"],
             [

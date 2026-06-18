@@ -10,6 +10,7 @@ from types import SimpleNamespace
 from fastapi import Request, Response
 
 from . import __version__
+from . import web_wud_api
 from .config import (
     COMPOSE_IGNORE_PATHS_ENV,
     DIGEST_PIN_UPDATES_ENV,
@@ -59,7 +60,9 @@ READINESS_REQUIRED_CODES = frozenset(
     }
 )
 READINESS_INCLUDED_CODES = (
-    READINESS_DOCKER_ENDPOINT_CODES | READINESS_REQUIRED_CODES | {"configuration"}
+    READINESS_DOCKER_ENDPOINT_CODES
+    | READINESS_REQUIRED_CODES
+    | {"configuration", "wud-api"}
 )
 
 _EffectiveConfigLoader = Callable[[WebSettings], UpdaterConfig]
@@ -155,7 +158,11 @@ def web_readiness_result(
     except DoctorConfigError as exc:
         result = _doctor_configuration_result(exc)
     return DoctorDataResult(
-        checks=(*result.checks, _web_database_doctor_check(settings))
+        checks=(
+            *result.checks,
+            _web_database_doctor_check(settings),
+            _web_wud_api_doctor_check(settings),
+        )
     )
 
 
@@ -318,6 +325,7 @@ def _web_doctor_checks(
             ),
         )
     )
+    checks.append(_web_wud_api_doctor_check(settings))
     effective_origin = _effective_origin(request, settings)
     checks.append(
         _web_doctor_check(
@@ -395,6 +403,45 @@ def _web_database_doctor_check(settings: WebSettings) -> DoctorDataCheck:
                 snippet="WUD_DB_PATH=/logs/wud-updater.sqlite",
             ),
         ),
+    )
+
+
+def _web_wud_api_doctor_check(settings: WebSettings) -> DoctorDataCheck:
+    snapshot = web_wud_api.get_snapshot(settings, include_containers=True)
+    status = "PASS" if snapshot.status.metadata_available else "WARN"
+    if snapshot.status.state == "auth_required":
+        detail = snapshot.status.detail or "WUD API metadata requires authentication"
+        suggestions = (
+            DoctorDataSuggestion(
+                label="Keep todo-file fallback",
+                description=(
+                    "WUD-Updater will continue using images.todo until WUD API "
+                    "authentication support is added."
+                ),
+            ),
+        )
+    elif snapshot.status.available:
+        detail = snapshot.status.detail or "WUD API is reachable"
+        suggestions = ()
+    else:
+        detail = snapshot.status.detail or "WUD API is unavailable"
+        suggestions = (
+            DoctorDataSuggestion(
+                label="Connect WUD internally",
+                description=(
+                    "Place the wud and wud-updater services on an internal "
+                    "Docker network, or set WUD_API_BASE_URL to the internal "
+                    "WUD HTTP endpoint."
+                ),
+                snippet=f"{web_wud_api.WUD_API_BASE_URL_ENV}={web_wud_api.DEFAULT_WUD_API_BASE_URL}",
+            ),
+        )
+    return _web_doctor_check(
+        status,  # type: ignore[arg-type]
+        "WUD API discovery",
+        detail,
+        code="wud-api",
+        suggestions=suggestions,
     )
 
 

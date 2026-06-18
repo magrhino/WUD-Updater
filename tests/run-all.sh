@@ -134,6 +134,7 @@ EOF
     src/wud_updater/web_startup.py \
     src/wud_updater/web_state.py \
     src/wud_updater/web_static.py \
+    src/wud_updater/web_wud_api.py \
     src/wud_updater/web.py \
     src/wud_updater/wud_file.py \
     tests/test_python_banner.py \
@@ -214,6 +215,7 @@ EOF
     tests/test_python_web_state_operations.py \
     tests/test_python_web_state_settings.py \
     tests/test_python_web_state_status.py \
+    tests/test_python_web_wud_api.py \
     tests/update_from_wud_helpers.py \
     tests/updates_wrapper_helpers.py \
     tests/web_plan_test_helpers.py \

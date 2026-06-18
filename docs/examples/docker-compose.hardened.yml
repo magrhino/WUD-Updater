@@ -56,6 +56,7 @@ services:
     image: getwud/wud:latest
     restart: unless-stopped
     networks:
+      - wud-updater-app
       - wud-updater-egress
       - wud-updater-socket
     depends_on:
@@ -82,6 +83,7 @@ services:
     image: ghcr.io/magrhino/wud-updater:latest
     restart: unless-stopped
     networks:
+      - wud-updater-app
       - wud-updater-egress
       - wud-updater-socket
     depends_on:
@@ -99,6 +101,7 @@ services:
       WUD_WEB_ALLOWED_HOSTS: "${WUD_WEB_ALLOWED_HOSTS:-}"
       WUD_WEB_TRUSTED_PROXIES: "${WUD_WEB_TRUSTED_PROXIES:-}"
       WUD_WEB_SECURE_COOKIES: "${WUD_WEB_SECURE_COOKIES:-auto}"
+      WUD_API_BASE_URL: "${WUD_API_BASE_URL:-http://wud:3000}"
       HOME: /tmp
       OUT_UID: "${OUT_UID:-1000}"
       OUT_GID: "${OUT_GID:-1000}"
@@ -136,6 +139,8 @@ services:
       - no-new-privileges:true
 
 networks:
+  wud-updater-app:
+    internal: true
   wud-updater-egress:
   wud-updater-socket:
     internal: true

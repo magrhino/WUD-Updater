@@ -38,6 +38,16 @@ function authSession(state: FixtureState) {
   };
 }
 
+function wudApiStatus() {
+  return {
+    state: "ready",
+    available: true,
+    metadata_available: true,
+    last_checked_at: "2026-01-02T00:00:00+00:00",
+    detail: "1 WUD update metadata item(s) available",
+  };
+}
+
 function pendingResponse() {
   const item = {
     line_no: 1,
@@ -82,6 +92,7 @@ function pendingResponse() {
       unmatched: [],
       warnings: [],
     },
+    wud_api: wudApiStatus(),
   };
 }
 
@@ -111,6 +122,7 @@ function releaseNotesResponse() {
     source_file: "/out/images.todo",
     count: 1,
     warnings: [],
+    wud_api: wudApiStatus(),
     items: [
       {
         line_no: 1,
@@ -388,6 +400,7 @@ async function fulfillApi(
       timezone: "UTC",
       auto_update_scheduler_enabled: state.mutationsEnabled,
       static_spa_available: true,
+      wud_api: wudApiStatus(),
       warnings: [],
     });
     return;

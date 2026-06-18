@@ -306,6 +306,8 @@ def _container_env_values(answers: InitAnswers) -> list[tuple[str, str]]:
         ("OUT_UID", answers.uid or DEFAULT_UID_GID),
         ("OUT_GID", answers.gid or DEFAULT_UID_GID),
     ]
+    if answers.profile in {"webui", "hardened"}:
+        values.append(("WUD_API_BASE_URL", "http://wud:3000"))
     if answers.profile == "webui":
         values.extend(
             (
@@ -382,6 +384,8 @@ def _compose_environment(answers: InitAnswers) -> dict[str, str]:
                 "WUD_WEB_SECURE_COOKIES": "${WUD_WEB_SECURE_COOKIES:-auto}",
             }
         )
+    if answers.profile in {"webui", "hardened"}:
+        environment["WUD_API_BASE_URL"] = "${WUD_API_BASE_URL:-http://wud:3000}"
     return environment
 
 
