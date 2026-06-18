@@ -7,7 +7,7 @@ import type {
   PendingStackGroup,
   ReleaseNoteInfo,
 } from "../../api/client";
-import type { DependencySnoozedPendingItem } from "../../views/pending/usePendingQueueState";
+import type { SnoozedPendingItem } from "../../views/pending/snoozeSelection";
 import {
   groupedItemServices,
   type PendingTagInputProps,
@@ -19,7 +19,6 @@ import PendingStackCard from "./PendingStackCard.vue";
 import PendingUpdateRow from "./PendingUpdateRow.vue";
 
 defineProps<{
-  dependencySnoozedItems: DependencySnoozedPendingItem[];
   latestRunId: number | null;
   loading: boolean;
   pendingSourceLabel: string;
@@ -29,6 +28,7 @@ defineProps<{
   riskCues: (item: PendingGroupedItem) => SafetyCue[];
   selectedLineSet: Set<number>;
   showSetupLink: boolean;
+  snoozedItems: SnoozedPendingItem[];
   stackGroups: PendingStackGroup[];
   stackHasSelection: (group: PendingStackGroup) => boolean;
   stackIndeterminate: (group: PendingStackGroup) => boolean;
@@ -75,18 +75,18 @@ const emit = defineEmits<{
       @update-tag="(item, value) => emit('updateTag', item, value)"
     />
 
-    <article v-if="dependencySnoozedItems.length" class="stack-card needs-review">
+    <article v-if="snoozedItems.length" class="stack-card needs-review">
       <div class="stack-card-header">
         <div class="stack-title-block">
           <strong class="wrap-anywhere">Snoozed pending entries</strong>
           <span class="stack-path wrap-anywhere">
-            Excluded from bulk selection until the dependency service updates successfully.
+            Excluded from bulk selection while snoozed.
           </span>
         </div>
         <div class="stack-card-side">
           <div class="stack-card-tags">
             <n-tag size="small" type="default">
-              {{ pluralize(dependencySnoozedItems.length, "item") }}
+              {{ pluralize(snoozedItems.length, "item") }}
             </n-tag>
           </div>
         </div>
@@ -100,8 +100,8 @@ const emit = defineEmits<{
         </summary>
         <div class="stack-items">
           <PendingUpdateRow
-            v-for="{ group, item } in dependencySnoozedItems"
-            :key="`dependency-snoozed-${item.line_no}`"
+            v-for="{ group, item } in snoozedItems"
+            :key="`snoozed-${item.line_no}`"
             :item="item"
             :selected="selectedLineSet.has(item.line_no)"
             :group-name="group.name"
@@ -171,7 +171,7 @@ const emit = defineEmits<{
     <PendingEmptyQueueState
       v-if="
         !stackGroups.length &&
-        !dependencySnoozedItems.length &&
+        !snoozedItems.length &&
         !unmatchedItems.length
       "
       :latest-run-id="latestRunId"

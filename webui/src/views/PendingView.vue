@@ -53,7 +53,6 @@ const applyJobPanelRef = ref<PendingApplyJobPanelRef | null>(null);
 
 const pendingItems = computed(() => updates.pending?.items ?? []);
 const {
-  dependencySnoozedItems,
   groupingReady,
   latestRun,
   pendingHeadingText,
@@ -67,13 +66,14 @@ const {
   riskCues,
   selectableLineNumbers,
   selectAllLabel,
+  snoozedItems,
   stackGroups,
   unmatchedItems,
 } = usePendingQueueState();
 const {
   clearPendingSearch,
-  filteredDependencySnoozedItems,
   filteredPendingItems,
+  filteredSnoozedItems,
   filteredStackGroups,
   filteredUnmatchedItems,
   pendingSearchActive,
@@ -86,7 +86,7 @@ const {
 } = usePendingSearchState({
   pendingItems,
   groupingReady,
-  dependencySnoozedItems,
+  snoozedItems,
   selectableLineNumbers,
   selectAllLabel,
   stackGroups,
@@ -467,7 +467,6 @@ onMounted(() => {
 
     <PendingSelectionToolbar
       :batch-summary-label="batchSummaryLabel"
-      :dependency-snoozed-count="filteredDependencySnoozedItems.length"
       :grouping-ready="groupingReady"
       :has-selected-tag-updates="selectedHasTagUpdates"
       :is-mobile="isMobile"
@@ -480,6 +479,7 @@ onMounted(() => {
       :select-all-label="visibleSelectAllLabel"
       :selected-count="selectedLineNumbers.length"
       :selected-hidden-count="selectedHiddenCount"
+      :snoozed-count="filteredSnoozedItems.length"
       :stack-count="filteredStackGroups.length"
       :unmatched-review-count-label="visibleUnmatchedReviewCountLabel"
       :update-selected-disabled="updateSelectedDisabled"
@@ -505,7 +505,6 @@ onMounted(() => {
     <template v-if="groupingReady">
       <PendingStackSelection
         v-if="!pendingSearchEmpty"
-        :dependency-snoozed-items="filteredDependencySnoozedItems"
         :latest-run-id="latestRunId"
         :loading="updates.loading"
         :pending-source-label="pendingSourceLabel"
@@ -515,6 +514,7 @@ onMounted(() => {
         :risk-cues="riskCues"
         :selected-line-set="selectedLineSet"
         :show-setup-link="showSetupLink"
+        :snoozed-items="filteredSnoozedItems"
         :stack-groups="filteredStackGroups"
         :stack-has-selection="stackHasSelection"
         :stack-indeterminate="stackIndeterminate"

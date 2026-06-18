@@ -1,91 +1,27 @@
 import { computed } from "vue";
 
 import type {
-  PendingGroupedItem,
   PendingItem,
   PendingResponse,
-  PendingStackGroup,
   ReleaseNoteInfo,
 } from "../../api/client";
 import { useRunsStore } from "../../stores/runs";
 import { useSettingsStore } from "../../stores/settings";
 import { useUpdatesStore } from "../../stores/updates";
-import {
-  groupedItemServiceKeys,
-  pendingSourceFileName,
-  uniqueSorted,
-  uniqueStrings,
-} from "./pendingDisplay";
+import { pendingSourceFileName, uniqueSorted } from "./pendingDisplay";
 import {
   safetyCues as buildSafetyCues,
   type SafetyCue,
 } from "./safetyCues";
+import {
+  activeSnoozedServiceKeys as buildActiveSnoozedServiceKeys,
+  matchingSnoozedServiceKeys,
+  pendingServiceKeysForGroups,
+  selectableLineNumbersForGroups,
+  snoozedItemsForGroups,
+  stackGroupsWithoutSnoozedItems,
+} from "./snoozeSelection";
 import { pluralize } from "./utils";
-
-export type DependencySnoozedPendingItem = {
-  group: PendingStackGroup;
-  item: PendingGroupedItem;
-};
-
-function itemHasBlockedDependency(
-  group: PendingStackGroup,
-  item: PendingGroupedItem,
-  blocked: Set<string>,
-): boolean {
-  for (const key of groupedItemServiceKeys(group, item)) {
-    if (blocked.has(key)) {
-      return true;
-    }
-  }
-  return false;
-}
-
-function dependencySnoozedItemsForGroup(
-  group: PendingStackGroup,
-  blocked: Set<string>,
-): DependencySnoozedPendingItem[] {
-  const items: DependencySnoozedPendingItem[] = [];
-  for (const item of group.items) {
-    if (itemHasBlockedDependency(group, item, blocked)) {
-      items.push({ group, item });
-    }
-  }
-  return items;
-}
-
-function activeItemsForGroup(
-  group: PendingStackGroup,
-  blocked: Set<string>,
-): PendingGroupedItem[] {
-  const items: PendingGroupedItem[] = [];
-  for (const item of group.items) {
-    if (!itemHasBlockedDependency(group, item, blocked)) {
-      items.push(item);
-    }
-  }
-  return items;
-}
-
-function servicesLabel(services: string[], fallback: string): string {
-  if (services.length > 0) {
-    return services.join(", ");
-  }
-  return fallback;
-}
-
-function stackGroupWithItems(
-  group: PendingStackGroup,
-  items: PendingGroupedItem[],
-): PendingStackGroup {
-  const services = uniqueStrings(items.flatMap((item) => item.services));
-  return {
-    ...group,
-    items,
-    services,
-    services_label: servicesLabel(services, group.services_label),
-    line_numbers: items.map((item) => item.line_no),
-  };
-}
 
 function pendingHeadingTextFor(
   pending: PendingResponse | null,
@@ -121,49 +57,32 @@ export function usePendingQueueState() {
   const rawStackGroups = computed(() =>
     groupingReady.value ? (updates.pending?.grouping.groups ?? []) : [],
   );
-  const pendingServiceKeys = computed(() => {
-    const keys: string[] = [];
-    for (const group of rawStackGroups.value) {
-      for (const item of group.items) {
-        keys.push(...groupedItemServiceKeys(group, item));
-      }
-    }
-    return new Set(keys);
-  });
-  const activeDependencySnoozes = computed(() =>
-    settings.snoozes.filter(
-      (snooze) => snooze.kind === "dependency" && snooze.active,
+  const pendingServiceKeys = computed(() =>
+    pendingServiceKeysForGroups(rawStackGroups.value),
+  );
+  const activeSnoozedServiceKeys = computed(() =>
+    buildActiveSnoozedServiceKeys(settings.snoozes),
+  );
+  const bulkSnoozedServiceKeys = computed(() =>
+    matchingSnoozedServiceKeys(
+      activeSnoozedServiceKeys.value,
+      pendingServiceKeys.value,
     ),
   );
-  const dependencyBlockedServiceKeys = computed(() => {
-    const pending = pendingServiceKeys.value;
-    return new Set(
-      activeDependencySnoozes.value
-        .filter((snooze) => pending.has(snooze.service_key))
-        .map((snooze) => snooze.service_key),
-    );
-  });
-  const dependencySnoozedItems = computed<DependencySnoozedPendingItem[]>(() => {
-    const blocked = dependencyBlockedServiceKeys.value;
-    return rawStackGroups.value.flatMap((group) =>
-      dependencySnoozedItemsForGroup(group, blocked),
-    );
-  });
+  const snoozedItems = computed(() =>
+    snoozedItemsForGroups(rawStackGroups.value, bulkSnoozedServiceKeys.value),
+  );
   const stackGroups = computed(() =>
-    rawStackGroups.value
-      .map((group) =>
-        stackGroupWithItems(
-          group,
-          activeItemsForGroup(group, dependencyBlockedServiceKeys.value),
-        ),
-      )
-      .filter((group) => group.items.length > 0),
+    stackGroupsWithoutSnoozedItems(
+      rawStackGroups.value,
+      bulkSnoozedServiceKeys.value,
+    ),
   );
   const unmatchedItems = computed(() =>
     groupingReady.value ? (updates.pending?.grouping.unmatched ?? []) : [],
   );
   const stackLineNumbers = computed(() =>
-    uniqueSorted(stackGroups.value.flatMap((group) => group.line_numbers)),
+    selectableLineNumbersForGroups(stackGroups.value),
   );
   const pendingLoaded = computed(() => updates.pending !== null);
   const pendingLoadFailed = computed(
@@ -182,7 +101,7 @@ export function usePendingQueueState() {
     if (groupingReady.value) {
       return stackLineNumbers.value;
     }
-    if (activeDependencySnoozes.value.length) {
+    if (activeSnoozedServiceKeys.value.size) {
       return [];
     }
     return allLineNumbers.value;
@@ -224,10 +143,9 @@ export function usePendingQueueState() {
   }
 
   return {
-    activeDependencySnoozes,
     allLineNumbers,
-    dependencyBlockedServiceKeys,
-    dependencySnoozedItems,
+    activeSnoozedServiceKeys,
+    bulkSnoozedServiceKeys,
     groupingReady,
     latestRun,
     pendingHeadingText,
@@ -244,6 +162,7 @@ export function usePendingQueueState() {
     riskCues,
     selectableLineNumbers,
     selectAllLabel,
+    snoozedItems,
     stackGroups,
     stackLineNumbers,
     unmatchedItems,
