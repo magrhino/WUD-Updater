@@ -37,12 +37,78 @@ function sourceContents(): Array<{ path: string; content: string }> {
     }));
 }
 
+function isCustomMediaName(value: string): boolean {
+  if (!value.startsWith("--") || value.length === 2) {
+    return false;
+  }
+
+  for (const char of value.slice(2)) {
+    if (
+      (char >= "a" && char <= "z") ||
+      (char >= "A" && char <= "Z") ||
+      (char >= "0" && char <= "9") ||
+      char === "_" ||
+      char === "-"
+    ) {
+      continue;
+    }
+
+    return false;
+  }
+
+  return true;
+}
+
+function isCssWhitespace(char: string): boolean {
+  return (
+    char === " " ||
+    char === "\t" ||
+    char === "\n" ||
+    char === "\r" ||
+    char === "\f"
+  );
+}
+
+function firstWhitespaceIndex(value: string): number {
+  for (let index = 0; index < value.length; index += 1) {
+    if (isCssWhitespace(value[index])) {
+      return index;
+    }
+  }
+
+  return -1;
+}
+
 function cssCustomMediaDefinitions(): Map<string, string> {
   const css = readFileSync(responsiveCssPath, "utf8");
   const definitions = new Map<string, string>();
-  const pattern = /@custom-media\s+(--[\w-]+)\s+([^;]+);/g;
-  for (const match of css.matchAll(pattern)) {
-    definitions.set(match[1], match[2].trim());
+  const customMediaPrefix = "@custom-media";
+  for (const line of css.split("\n")) {
+    const statement = line.trim();
+    if (
+      !statement.startsWith(customMediaPrefix) ||
+      !statement.endsWith(";")
+    ) {
+      continue;
+    }
+
+    const declaration = statement.slice(customMediaPrefix.length, -1);
+    if (!isCssWhitespace(declaration[0])) {
+      continue;
+    }
+
+    const body = declaration.trim();
+    const nameEnd = firstWhitespaceIndex(body);
+    if (nameEnd === -1) {
+      continue;
+    }
+
+    const name = body.slice(0, nameEnd);
+    if (!isCustomMediaName(name)) {
+      continue;
+    }
+
+    definitions.set(name, body.slice(nameEnd).trim());
   }
   return definitions;
 }
