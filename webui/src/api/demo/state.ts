@@ -56,8 +56,6 @@ import type {
   DemoGeneratedFixtures,
   DemoGeneratedJobFixture,
   DemoJobRecord,
-  DemoMaterializedPlanCase,
-  DemoMaterializedRetagCase,
   DemoPlanCase,
   DemoRemovalCase,
   DemoRetagCase,
@@ -293,7 +291,7 @@ function tagOverridePlanSuffix(tagOverrides: TagOverrideRequest[]): string {
 function materializePlanCase(
   planCase: DemoPlanCase,
   tagOverrides: TagOverrideRequest[],
-): DemoMaterializedPlanCase {
+): DemoPlanCase {
   const response = materializePlanResponse(
     planCase.response,
     planCase.tagTokens,
@@ -309,7 +307,7 @@ function materializePlanCase(
   };
 }
 
-function materializeRetagCase(retagCase: DemoRetagCase): DemoMaterializedRetagCase {
+function materializeRetagCase(retagCase: DemoRetagCase): DemoRetagCase {
   return clone(retagCase);
 }
 
@@ -1388,7 +1386,7 @@ export class DemoApiState {
     lineNumbers: number[],
     allowTagUpdates: boolean,
     tagOverrides: TagOverrideRequest[],
-  ): DemoMaterializedPlanCase {
+  ): DemoPlanCase {
     const selected = uniqueSortedNumbers(lineNumbers);
     const overrideLines = uniqueSortedNumbers(
       tagOverrides.map((override) => override.line_no),
@@ -1427,7 +1425,7 @@ export class DemoApiState {
     throw new Error(STATIC_FIXTURE_ERROR);
   }
 
-  private retagCase(choices: RetagChoiceRequest[]): DemoMaterializedRetagCase {
+  private retagCase(choices: RetagChoiceRequest[]): DemoRetagCase {
     const normalized = this.normalizedRetagChoices(choices);
     const retagCase = fixtures.retagCases.find((candidate) =>
       sameRetagChoices(candidate.request.choices, normalized),

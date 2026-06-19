@@ -134,10 +134,6 @@ export type DemoGeneratedFixtures = {
   };
 };
 
-export type DemoMaterializedPlanCase = DemoPlanCase;
-
-export type DemoMaterializedRetagCase = DemoRetagCase;
-
 export type DemoJobRecord = {
   job: ApplyJobResponse;
   log: ApplyJobLogResponse;
