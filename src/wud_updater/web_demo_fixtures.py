@@ -22,6 +22,7 @@ GENERATED_FIXTURE_PATH = REPO_ROOT / "webui" / "src" / "api" / "demo" / "generat
 DEMO_FIXTURE_STARTED_AT = "2026-05-30T20:12:26+00:00"
 DEMO_FIXTURE_FINISHED_AT = "2026-05-30T20:12:28+00:00"
 DEMO_TAG_OVERRIDE_PREFIX = "demooverride"
+DEMO_PYTHON_RUNTIME_DETAIL = "Python 3.x"
 DEMO_FIXTURE_TIMESTAMP_RE = re.compile(
     r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:\+00:00|Z)"
 )
@@ -1539,7 +1540,24 @@ def _sanitize_payload(value: Any, paths: dict[str, Path]) -> Any:
         str(paths["root"]): "demo",
         str(REPO_ROOT): "demo/repo",
     }
-    return _replace_many(value, replacements)
+    return _normalize_demo_runtime_details(_replace_many(value, replacements))
+
+
+def _normalize_demo_runtime_details(value: Any) -> Any:
+    if isinstance(value, list):
+        return [_normalize_demo_runtime_details(item) for item in value]
+    if isinstance(value, dict):
+        normalized = {
+            key: _normalize_demo_runtime_details(item)
+            for key, item in value.items()
+        }
+        if (
+            normalized.get("code") == "python-runtime"
+            and normalized.get("name") == "python runtime"
+        ):
+            normalized["detail"] = DEMO_PYTHON_RUNTIME_DETAIL
+        return normalized
+    return value
 
 
 def _replace_many(value: Any, replacements: dict[str, str]) -> Any:

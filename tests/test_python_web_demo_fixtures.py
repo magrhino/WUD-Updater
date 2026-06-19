@@ -128,6 +128,27 @@ class WebDemoFixtureGenerationTests(unittest.TestCase):
         self.assertIn("demo/out/images.todo", rendered)
         self.assertIn("demo/docker", rendered)
 
+    def test_python_runtime_fixture_detail_is_stable(self) -> None:
+        details: list[str] = []
+
+        def collect_python_runtime_details(value: object) -> None:
+            if isinstance(value, dict):
+                if value.get("code") == "python-runtime":
+                    details.append(str(value.get("detail")))
+                for item in value.values():
+                    collect_python_runtime_details(item)
+            elif isinstance(value, list):
+                for item in value:
+                    collect_python_runtime_details(item)
+
+        collect_python_runtime_details(self.fixtures)
+
+        self.assertTrue(details)
+        self.assertEqual(
+            set(details),
+            {web_demo_fixtures.DEMO_PYTHON_RUNTIME_DETAIL},
+        )
+
     def test_typescript_fixture_render_is_sanitized(self) -> None:
         rendered = web_demo_fixtures.render_static_demo_fixtures_ts(self.fixtures)
         types_path = web_demo_fixtures.REPO_ROOT / "webui/src/api/demo/types.ts"

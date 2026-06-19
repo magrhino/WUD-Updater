@@ -28,7 +28,7 @@ export const generatedFixtures = {
         {
           "category": "runtime",
           "code": "python-runtime",
-          "detail": "3.14.5",
+          "detail": "Python 3.x",
           "name": "python runtime",
           "status": "PASS",
           "suggestions": [],
@@ -1157,7 +1157,7 @@ export const generatedFixtures = {
       {
         "category": "runtime",
         "code": "python-runtime",
-        "detail": "3.14.5",
+        "detail": "Python 3.x",
         "name": "python runtime",
         "status": "PASS",
         "suggestions": [],
