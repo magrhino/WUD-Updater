@@ -4,6 +4,18 @@ All notable changes to WUD-Updater are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com) and versions follow
 [Semantic Versioning](https://semver.org).
 
+## [0.44.0](https://github.com/magrhino/WUD-Updater/compare/v0.43.0...v0.44.0) (2026-06-19)
+
+
+### Features
+
+* **retags:** add refreshed GitHub latest fallback previews ([#354](https://github.com/magrhino/WUD-Updater/issues/354)) ([9509fb9](https://github.com/magrhino/WUD-Updater/commit/9509fb9b8471d09c17d18b03e2a338dec57e47ae))
+
+
+### Bug Fixes
+
+* **ci:** [StepSecurity] Apply security best practices ([#352](https://github.com/magrhino/WUD-Updater/issues/352)) ([ee70781](https://github.com/magrhino/WUD-Updater/commit/ee7078186a74fd9b14e659c30756ded63e80e886))
+
 ## [0.43.0](https://github.com/magrhino/WUD-Updater/compare/v0.42.5...v0.43.0) (2026-06-18)
 
 
