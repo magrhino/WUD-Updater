@@ -102,6 +102,7 @@ EOF
     src/wud_updater/web_auth.py \
     src/wud_updater/web_compat.py \
     src/wud_updater/web_database.py \
+    src/wud_updater/web_demo_fixtures.py \
     src/wud_updater/web_diagnostics.py \
     src/wud_updater/web_health.py \
     src/wud_updater/web_jobs.py \
@@ -150,6 +151,7 @@ EOF
     tests/test_python_updater_logging.py \
     tests/test_python_web.py \
     tests/test_python_web_diagnostics.py \
+    tests/test_python_web_demo_fixtures.py \
     tests/test_python_web_health.py \
     tests/test_python_web_jobs.py \
     tests/test_python_web_metadata.py \
