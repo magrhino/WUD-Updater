@@ -162,14 +162,24 @@ def _ensure_web_fixture_imports() -> None:
 
 
 DEMO_WUD_UPDATER_LATEST_IMAGE = "ghcr.io/magrhino/wud-updater:latest"
+DEMO_WUD_UPDATER_TARGET_TAG = "v0.16.1"
+DEMO_WUD_UPDATER_REPO_URL = "https://github.com/magrhino/WUD-Updater"
+DEMO_HOME_ASSISTANT_CORE_URL = "https://github.com/home-assistant/core"
+DEMO_OCI_SOURCE_LABEL = "org.opencontainers.image.source"
+DEMO_POSTGRES_IMAGE = "postgres:16"
+DEMO_POSTGRES_DIGEST = (
+    "sha256:1111111111111111111111111111111111111111111111111111111111111111"
+)
+DEMO_RADARR_SERVICE_KEY = "media/radarr"
+DEMO_SOURCE_METADATA_JSON = '{"source":"demo"}'
 DEMO_CREATED_AT = "2026-05-28T12:00:00+00:00"
 
 PENDING_LINES = (
     "# Demo WUD pending update file for local WebUI development.",
     "ghcr.io/home-assistant/home-assistant:2026.5.1 tag=2026.5.3",
     "lscr.io/linuxserver/radarr:5.21.1 tag=5.22.4",
-    "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
-    f"{DEMO_WUD_UPDATER_LATEST_IMAGE} tag=v0.16.1",
+    f"{DEMO_POSTGRES_IMAGE}@{DEMO_POSTGRES_DIGEST}",
+    f"{DEMO_WUD_UPDATER_LATEST_IMAGE} tag={DEMO_WUD_UPDATER_TARGET_TAG}",
     "ghcr.io/gethomepage/homepage:v0.9.12 tag=v0.10.9",
     "vaultwarden/server:1.31.0 tag=1.32.0",
     "containrrr/watchtower:1.7.1 tag=1.7.2",
@@ -196,7 +206,7 @@ DEMO_STACKS = (
     {
         "name": "data",
         "services": (
-            ("postgres", "postgres:16"),
+            ("postgres", DEMO_POSTGRES_IMAGE),
         ),
     },
 )
@@ -227,7 +237,7 @@ DEMO_KNOWN_IMAGES = (
         "digest": DEMO_WUD_UPDATER_DIGEST,
         "digest_provenance": DigestTagProvenance(
             source_image=DEMO_WUD_UPDATER_LATEST_IMAGE,
-            resolved_tag="v0.16.1",
+            resolved_tag=DEMO_WUD_UPDATER_TARGET_TAG,
             watch_tag="latest",
             target_digest=DEMO_WUD_UPDATER_DIGEST,
             final_image=f"ghcr.io/magrhino/wud-updater@{DEMO_WUD_UPDATER_DIGEST}",
@@ -249,12 +259,12 @@ DEMO_PULL_TARGETS = (
         "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
     ),
     (
-        "postgres:16",
+        DEMO_POSTGRES_IMAGE,
         "sha256:demo-postgres-new",
-        "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+        DEMO_POSTGRES_DIGEST,
     ),
     (
-        "ghcr.io/magrhino/wud-updater:v0.16.1",
+        f"ghcr.io/magrhino/wud-updater:{DEMO_WUD_UPDATER_TARGET_TAG}",
         "sha256:demo-wud-updater-new",
         DEMO_WUD_UPDATER_DIGEST,
     ),
@@ -270,7 +280,7 @@ DEMO_SERVICE_POLICIES = (
         "auto_update_days_json": '["mon","wed","fri"]',
     },
     {
-        "service_key": "media/radarr",
+        "service_key": DEMO_RADARR_SERVICE_KEY,
         "update_mode": "stop",
         "auto_update": False,
         "snooze_default_seconds": 86400,
@@ -281,7 +291,7 @@ DEMO_SERVICE_POLICIES = (
 
 DEMO_SNOOZES = (
     {
-        "service_key": "media/radarr",
+        "service_key": DEMO_RADARR_SERVICE_KEY,
         "snoozed_until": "2099-01-01T00:00:00+00:00",
         "reason": "demo maintenance window",
         "created_at": DEMO_CREATED_AT,
@@ -314,7 +324,7 @@ DEMO_TAG_EXCLUSIONS = (
     {
         "scope": "service",
         "image_repo": "lscr.io/linuxserver/radarr",
-        "service_key": "media/radarr",
+        "service_key": DEMO_RADARR_SERVICE_KEY,
         "tag": "5.22.4",
         "status": "disabled",
     },
@@ -487,9 +497,9 @@ RUNS = (
             "operation": "upsert_service_policy",
             "actor_type": "browser",
             "resource_type": "service_policy",
-            "resource_id": "media/radarr",
-            "service_key": "media/radarr",
-            "target": {"service_key": "media/radarr"},
+            "resource_id": DEMO_RADARR_SERVICE_KEY,
+            "service_key": DEMO_RADARR_SERVICE_KEY,
+            "target": {"service_key": DEMO_RADARR_SERVICE_KEY},
         },
         "pending": (),
         "events": (
@@ -497,7 +507,7 @@ RUNS = (
                 "service_name": "radarr",
                 "stack_name": "media",
                 "image": "service-policy",
-                "target_image": "media/radarr",
+                "target_image": DEMO_RADARR_SERVICE_KEY,
                 "status": "success",
                 "old_digest": "",
                 "new_digest": "",
@@ -561,11 +571,23 @@ def render_static_demo_fixtures_ts(data: dict[str, Any]) -> str:
 
 
 def write_static_demo_fixtures(path: Path = GENERATED_FIXTURE_PATH) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(
+    fixture_path = _resolve_repo_output_path(path)
+    fixture_path.parent.mkdir(parents=True, exist_ok=True)
+    fixture_path.write_text(
         render_static_demo_fixtures_ts(generate_static_demo_fixtures()),
         encoding="utf-8",
     )
+
+
+def _resolve_repo_output_path(path: Path) -> Path:
+    resolved = path.expanduser().resolve()
+    try:
+        resolved.relative_to(REPO_ROOT)
+    except ValueError as exc:
+        raise ValueError(
+            f"--fixtures-out must stay inside the repository: {path}"
+        ) from exc
+    return resolved
 
 
 def _non_empty_subsets(values: list[int]) -> list[list[int]]:
@@ -1287,12 +1309,10 @@ def _seed_wud_api_snapshot(settings: WebSettings) -> None:
             ),
             update_kind="tag",
             semver_diff="patch",
-            link="https://github.com/home-assistant/core",
+            link=DEMO_HOME_ASSISTANT_CORE_URL,
             error="",
             labels={
-                "org.opencontainers.image.source": (
-                    "https://github.com/home-assistant/core"
-                )
+                DEMO_OCI_SOURCE_LABEL: DEMO_HOME_ASSISTANT_CORE_URL
             },
         ),
         web_wud_api.WudApiContainer(
@@ -1324,15 +1344,11 @@ def _seed_wud_api_snapshot(settings: WebSettings) -> None:
             display_name="postgres",
             status="running",
             watcher="docker",
-            image="postgres:16",
+            image=DEMO_POSTGRES_IMAGE,
             local_tag="16",
-            local_digest=(
-                "sha256:1111111111111111111111111111111111111111111111111111111111111111"
-            ),
+            local_digest=DEMO_POSTGRES_DIGEST,
             remote_tag="",
-            remote_digest=(
-                "sha256:1111111111111111111111111111111111111111111111111111111111111111"
-            ),
+            remote_digest=DEMO_POSTGRES_DIGEST,
             update_kind="digest",
             semver_diff="",
             link="",
@@ -1348,16 +1364,14 @@ def _seed_wud_api_snapshot(settings: WebSettings) -> None:
             image=DEMO_WUD_UPDATER_LATEST_IMAGE,
             local_tag="latest",
             local_digest="",
-            remote_tag="v0.16.1",
+            remote_tag=DEMO_WUD_UPDATER_TARGET_TAG,
             remote_digest=DEMO_WUD_UPDATER_DIGEST,
             update_kind="tag",
             semver_diff="minor",
-            link="https://github.com/magrhino/WUD-Updater",
+            link=DEMO_WUD_UPDATER_REPO_URL,
             error="",
             labels={
-                "org.opencontainers.image.source": (
-                    "https://github.com/magrhino/WUD-Updater"
-                )
+                DEMO_OCI_SOURCE_LABEL: DEMO_WUD_UPDATER_REPO_URL
             },
         ),
     )
@@ -1415,9 +1429,9 @@ def _demo_release_source_resolver(
 
     def resolve(target: Any) -> str:
         if target.repo == "home-assistant/home-assistant":
-            return "https://github.com/home-assistant/core"
+            return DEMO_HOME_ASSISTANT_CORE_URL
         if target.repo == "magrhino/wud-updater":
-            return "https://github.com/magrhino/WUD-Updater"
+            return DEMO_WUD_UPDATER_REPO_URL
         return base_resolver(target)
 
     return resolve
@@ -1449,8 +1463,8 @@ def _demo_release_payload(repo: str, tag: str) -> dict[str, object]:
             "Radarr v5.22.4",
             "Demo upstream Radarr release notes.",
         ),
-        ("magrhino/wud-updater", "v0.16.1"): (
-            "WUD-Updater v0.16.1",
+        ("magrhino/wud-updater", DEMO_WUD_UPDATER_TARGET_TAG): (
+            f"WUD-Updater {DEMO_WUD_UPDATER_TARGET_TAG}",
             "Demo WUD-Updater release notes.",
         ),
         ("linuxserver/docker-radarr", "latest"): (
@@ -1564,16 +1578,15 @@ def main() -> int:
         write_static_demo_fixtures(args.fixtures_out)
         if not args.quiet:
             print(f"Wrote static WebUI demo fixtures: {args.fixtures_out}")
-        return 0
-
-    paths = seed_demo_state(args.root)
-    if not args.quiet:
-        print("Created WebUI demo state:")
-        print(f"  DOCKER_BASE={paths['docker_base']}")
-        print(f"  FAKE_DOCKER_ROOT={paths['fake_docker_root']}")
-        print(f"  WUD_OUT_FILE={paths['wud_file']}")
-        print(f"  WUD_LOG_DIR={paths['log_dir']}")
-        print(f"  WUD_DB_PATH={paths['db_path']}")
+    else:
+        paths = seed_demo_state(args.root)
+        if not args.quiet:
+            print("Created WebUI demo state:")
+            print(f"  DOCKER_BASE={paths['docker_base']}")
+            print(f"  FAKE_DOCKER_ROOT={paths['fake_docker_root']}")
+            print(f"  WUD_OUT_FILE={paths['wud_file']}")
+            print(f"  WUD_LOG_DIR={paths['log_dir']}")
+            print(f"  WUD_DB_PATH={paths['db_path']}")
     return 0
 
 
@@ -1636,14 +1649,14 @@ def seed_demo_state(root: Path) -> dict[str, Path]:
                     service_name=str(pending["service_name"]),
                     status=str(pending["status"]),
                     status_reason=str(pending["status_reason"]),
-                    metadata_json='{"source":"demo"}',
+                    metadata_json=DEMO_SOURCE_METADATA_JSON,
                 )
                 upsert_known_image(
                     conn,
                     service_key=str(pending["service_key"]),
                     image=str(pending["image"]),
                     digest="sha256:demo",
-                    metadata_json='{"source":"demo"}',
+                    metadata_json=DEMO_SOURCE_METADATA_JSON,
                 )
             for event in entry["events"]:
                 insert_update_event(
@@ -1701,7 +1714,7 @@ def _write_demo_management_state(conn) -> None:
                     policy["auto_update_days_json"],
                     created_at,
                     created_at,
-                    '{"source":"demo"}',
+                    DEMO_SOURCE_METADATA_JSON,
                 ),
             )
 
@@ -1712,7 +1725,7 @@ def _write_demo_management_state(conn) -> None:
             snoozed_until=str(snooze["snoozed_until"]),
             reason=str(snooze["reason"]),
             created_at=str(snooze["created_at"]),
-            metadata_json='{"source":"demo"}',
+            metadata_json=DEMO_SOURCE_METADATA_JSON,
         )
 
     for snooze in DEMO_DEPENDENCY_SNOOZES:
@@ -1722,7 +1735,7 @@ def _write_demo_management_state(conn) -> None:
             wait_for_service_key=str(snooze["wait_for_service_key"]),
             reason=str(snooze["reason"]),
             created_at=str(snooze["created_at"]),
-            metadata_json='{"source":"demo"}',
+            metadata_json=DEMO_SOURCE_METADATA_JSON,
         )
 
     for rule in DEMO_TAG_EXCLUSIONS:
@@ -1737,7 +1750,7 @@ def _write_demo_management_state(conn) -> None:
             status=str(rule["status"]),
             created_at=created_at,
             updated_at=created_at,
-            metadata_json='{"source":"demo"}',
+            metadata_json=DEMO_SOURCE_METADATA_JSON,
         )
 
     for known in DEMO_KNOWN_IMAGES:
@@ -1747,7 +1760,7 @@ def _write_demo_management_state(conn) -> None:
             image=str(known["image"]),
             image_id=str(known["image_id"]),
             digest=str(known["digest"]),
-            metadata_json='{"source":"demo"}',
+            metadata_json=DEMO_SOURCE_METADATA_JSON,
             digest_provenance=known["digest_provenance"],
         )
 

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import itertools
+import tempfile
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -48,6 +49,12 @@ class WebDemoFixtureGenerationTests(unittest.TestCase):
     def test_generated_responses_validate_against_web_models(self) -> None:
         data = self.fixtures
 
+        self._validate_core_responses(data)
+        self._validate_plan_fixtures(data)
+        self._validate_state_records(data)
+        self._validate_run_records(data)
+
+    def _validate_core_responses(self, data: dict[str, object]) -> None:
         AuthSessionResponse.model_validate(data["auth"]["session"])
         SetupStatusResponse.model_validate(data["auth"]["setupStatus"])
         StatusResponse.model_validate(data["status"])
@@ -62,6 +69,7 @@ class WebDemoFixtureGenerationTests(unittest.TestCase):
         SelfUpdatePlanResponse.model_validate(data["selfUpdatePlan"])
         DiagnosticsSupportBundleResponse.model_validate(data["diagnostics"])
 
+    def _validate_plan_fixtures(self, data: dict[str, object]) -> None:
         for case in data["planCases"]:
             PlanResponse.model_validate(case["response"])
             for fixture in [case.get("jobTemplate")]:
@@ -75,6 +83,8 @@ class WebDemoFixtureGenerationTests(unittest.TestCase):
             RetagPreviewJobResponse.model_validate(case["preview"]["complete"])
             if case.get("jobTemplate") is not None:
                 self._validate_job_fixture(case["jobTemplate"])
+
+    def _validate_state_records(self, data: dict[str, object]) -> None:
         for record in data["servicePolicies"]:
             ServicePolicyRecord.model_validate(record)
         for records in data["snoozes"].values():
@@ -83,12 +93,15 @@ class WebDemoFixtureGenerationTests(unittest.TestCase):
         for records in data["tagExclusions"].values():
             for record in records:
                 TagExclusionRuleRecord.model_validate(record)
+
+    def _validate_run_records(self, data: dict[str, object]) -> None:
         for summary in data["runs"]["summaries"]:
             RunSummary.model_validate(summary)
         for detail in data["runs"]["details"].values():
             RunDetail.model_validate(detail)
         for log in data["runs"]["logs"].values():
             RunLogResponse.model_validate(log)
+
     def _validate_job_fixture(self, fixture: dict[str, object]) -> None:
         ApplyJobResponse.model_validate(fixture["queued"])
         ApplyJobResponse.model_validate(fixture["terminal"])
@@ -118,6 +131,12 @@ class WebDemoFixtureGenerationTests(unittest.TestCase):
         rendered = web_demo_fixtures.render_static_demo_fixtures_ts(self.fixtures)
         self.assertIn("export const generatedFixtures", rendered)
         self.assertNotIn(str(Path.home()), rendered)
+
+    def test_fixture_writer_rejects_paths_outside_repo(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            out_path = Path(tmpdir) / "generatedFixtures.ts"
+            with self.assertRaisesRegex(ValueError, "inside the repository"):
+                web_demo_fixtures.write_static_demo_fixtures(out_path)
 
     def test_release_notes_are_generated_from_backend_cache(self) -> None:
         release_notes = ReleaseNotesResponse.model_validate(
