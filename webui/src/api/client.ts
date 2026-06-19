@@ -29,11 +29,13 @@ export type {
   RetagTargetsResponse,
   RetagPlanStatus,
   RetagChoiceRequest,
+  RetagPlanOptions,
   RetagPlanIssue,
   RetagPlanLabelRewrite,
   RetagPlanDigestPinUpdate,
   RetagPlanStack,
   RetagPlanResponse,
+  RetagPreviewJobResponse,
   // Release notes
   ReleaseNoteLink,
   ReleaseNoteInfo,
@@ -151,7 +153,9 @@ import type {
   UpdateTargetsResponse,
   RetagTargetsResponse,
   RetagChoiceRequest,
+  RetagPlanOptions,
   RetagPlanResponse,
+  RetagPreviewJobResponse,
   DiagnosticsSupportBundleResponse,
   PendingCleanupLine,
   PendingCleanupResponse,
@@ -435,17 +439,52 @@ const pendingApi = {
 
 const updatesApi = {
   updateTargets: () => apiRequest<UpdateTargetsResponse>("/update-targets"),
-  retagTargets: () => apiRequest<RetagTargetsResponse>("/retag-targets"),
-  createRetagPlan: (choices: RetagChoiceRequest[], csrfToken: string) =>
+  retagTargets: (options: RetagPlanOptions = {}) =>
+    apiRequest<RetagTargetsResponse>(
+      options.github_latest_fallback
+        ? "/retag-targets?github_latest_fallback=true"
+        : "/retag-targets",
+    ),
+  refreshRetagGithubLatest: (csrfToken: string) =>
+    apiRequest<RetagTargetsResponse>("/retag-targets/github-latest/refresh", {
+      method: "POST",
+      headers: { "x-wud-csrf-token": csrfToken },
+    }),
+  createRetagPlan: (
+    choices: RetagChoiceRequest[],
+    csrfToken: string,
+    options: RetagPlanOptions = {},
+  ) =>
     apiRequest<RetagPlanResponse>("/retag-plans", {
       method: "POST",
       headers: { "x-wud-csrf-token": csrfToken },
-      body: JSON.stringify({ choices }),
+      body: JSON.stringify({
+        choices,
+        github_latest_fallback: options.github_latest_fallback ?? false,
+      }),
     }),
+  startRetagPreview: (
+    choices: RetagChoiceRequest[],
+    csrfToken: string,
+    options: RetagPlanOptions = {},
+  ) =>
+    apiRequest<RetagPreviewJobResponse>("/retag-plans/preview", {
+      method: "POST",
+      headers: { "x-wud-csrf-token": csrfToken },
+      body: JSON.stringify({
+        choices,
+        github_latest_fallback: options.github_latest_fallback ?? false,
+      }),
+    }),
+  retagPreviewJob: (previewJobId: string) =>
+    apiRequest<RetagPreviewJobResponse>(
+      `/retag-plans/preview/${encodeURIComponent(previewJobId)}`,
+    ),
   applyRetagPlan: (
     planId: string,
     choices: RetagChoiceRequest[],
     csrfToken: string,
+    options: RetagPlanOptions = {},
   ) =>
     apiRequest<ApplyJobResponse>("/retag-plans/apply", {
       method: "POST",
@@ -453,6 +492,7 @@ const updatesApi = {
       body: JSON.stringify({
         plan_id: planId,
         choices,
+        github_latest_fallback: options.github_latest_fallback ?? false,
         confirmation: "apply-retags",
       }),
     }),

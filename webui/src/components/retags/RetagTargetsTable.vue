@@ -80,14 +80,28 @@ const columns = computed<DataTableColumns<RetagTargetItem>>(() => [
     title: "Candidate",
     key: "proposed_tag",
     minWidth: 220,
-    render: (row) =>
-      h("div", { class: "retag-table-cell" }, [
+    render: (row) => {
+      const candidateText = candidateLabel(row);
+      return h("div", { class: "retag-table-cell" }, [
         h(
           NTag,
           { size: "small", type: reasonTagType(row), bordered: false },
           { default: () => reasonLabel(row.retag_reason) },
         ),
-        h("span", candidateLabel(row)),
+        row.candidate_link_url
+          ? h(
+              "a",
+              {
+                href: row.candidate_link_url,
+                target: "_blank",
+                rel: "noreferrer",
+              },
+              candidateText,
+            )
+          : h("span", candidateText),
+        row.candidate_warning
+          ? h("span", { class: "release-notes-reason" }, row.candidate_warning)
+          : null,
         row.final_image
           ? h(
               "code",
@@ -95,7 +109,8 @@ const columns = computed<DataTableColumns<RetagTargetItem>>(() => [
               displayDigest(row.final_image),
             )
           : null,
-      ]),
+      ]);
+    },
   },
   {
     title: "Evidence",

@@ -27,8 +27,9 @@ describe("retag display helpers", () => {
       current_tag: "",
       tracking_tag: "",
       tracking_tag_source: "",
-      proposed_tag: "",
+      proposed_tag: "1.2.0",
       final_image: "",
+      candidate_warning: "GitHub latest fallback could not resolve the digest.",
       retag_available: false,
       retag_reason: "stale-provenance",
       choices: ["keep-current"],
@@ -49,11 +50,10 @@ describe("retag display helpers", () => {
     expect(trackingSourceLabel(stale)).toBe("Source unavailable");
     expect(currentTagLabel(stale)).toBe("Current tag unavailable");
     expect(candidateLabel(available)).toBe("latest -> 1.1");
-    expect(candidateLabel(stale)).toBe(
-      "Stored provenance does not match the current service image.",
-    );
+    expect(candidateLabel(stale)).toBe("latest -> 1.2.0");
     expect(composeLocation(stale)).toBe("/docker/media");
     expect(searchableText(stale)).toContain("stale provenance");
+    expect(searchableText(stale)).toContain("could not resolve");
   });
 
   it("summarizes retag plans and digest-pin changes", () => {

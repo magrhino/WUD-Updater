@@ -20,6 +20,7 @@ import type {
   ReleaseNotesResponse,
   RetagChoiceRequest,
   RetagPlanIssue,
+  RetagPreviewJobResponse,
   RetagPlanResponse,
   RetagTargetItem,
   RetagTargetsResponse,
@@ -118,6 +119,7 @@ export class DemoApiState {
   tagExclusions = clone(INITIAL_TAG_EXCLUSIONS);
   runs = clone(INITIAL_RUNS);
   jobs = new Map<string, DemoJobRecord>();
+  retagPreviewJobs = new Map<string, RetagPreviewJobResponse>();
   themePreference = "system";
   themePreferenceConfigured = false;
   onboardingDismissedAt = "";
@@ -131,6 +133,7 @@ export class DemoApiState {
     updated_at: "",
   };
   nextJob = 1;
+  nextRetagPreview = 1;
   nextRun = 7;
   nextAudit = 100;
   nextSnooze = 4;
@@ -661,6 +664,59 @@ export class DemoApiState {
         "Demo retag preview is fixture-backed and does not inspect local Compose files.",
       ],
     };
+  }
+
+  createRetagPreviewJob(choices: RetagChoiceRequest[]): RetagPreviewJobResponse {
+    const previewJobId = `demo-retag-preview-${this.nextRetagPreview++}`;
+    const startedAt = nowIso();
+    const queued: RetagPreviewJobResponse = {
+      preview_job_id: previewJobId,
+      status: "queued",
+      plan: null,
+      warnings: [],
+      error: "",
+      progress: [
+        {
+          job_id: previewJobId,
+          phase: "refresh",
+          status: "running",
+          message: "Refreshing demo retag candidates.",
+          created_at: startedAt,
+          stack: "",
+          services: [],
+          line_numbers: [],
+        },
+      ],
+    };
+    const plan = this.createRetagPlan(choices);
+    this.retagPreviewJobs.set(previewJobId, {
+      ...queued,
+      status: "success",
+      plan,
+      warnings: plan.warnings,
+      progress: [
+        ...queued.progress,
+        {
+          job_id: previewJobId,
+          phase: "preview",
+          status: "success",
+          message: "Demo retag preview is ready.",
+          created_at: nowIso(),
+          stack: "",
+          services: [],
+          line_numbers: [],
+        },
+      ],
+    });
+    return queued;
+  }
+
+  retagPreviewJob(previewJobId: string): RetagPreviewJobResponse {
+    const job = this.retagPreviewJobs.get(previewJobId);
+    if (!job) {
+      throw new Error("Demo retag preview job was not found.");
+    }
+    return clone(job);
   }
 
   createRetagJob(

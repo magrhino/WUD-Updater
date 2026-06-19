@@ -5,13 +5,14 @@ import {
   NAlert,
   NInput,
   NSelect,
+  NSwitch,
 } from "naive-ui";
 
 import type { RetagTargetChoice, RetagTargetItem } from "../api/client";
 import { useRouteRefresh } from "../components/app/routeRefresh";
 import PendingApplyJobPanel from "../components/pending/PendingApplyJobPanel.vue";
 import RetagConfirmModal from "../components/retags/RetagConfirmModal.vue";
-import RetagPlanPreview from "../components/retags/RetagPlanPreview.vue";
+import RetagPlanReviewModal from "../components/retags/RetagPlanReviewModal.vue";
 import RetagSummaryPanel from "../components/retags/RetagSummaryPanel.vue";
 import RetagTargetsMobileList from "../components/retags/RetagTargetsMobileList.vue";
 import RetagTargetsTable from "../components/retags/RetagTargetsTable.vue";
@@ -44,6 +45,7 @@ const statusFilter = ref<RetagFilter>("all");
 const applyJobPanelRef = ref<PendingApplyJobPanelRef | null>(null);
 const showRetagApplyJobPanel = ref(false);
 const showRetagConfirmModal = ref(false);
+const showRetagPreviewModal = ref(false);
 const isDemoMode =
   import.meta.env.MODE === "demo" ||
   import.meta.env.VITE_WUD_DEMO_MODE === "true";
@@ -214,13 +216,26 @@ function onRetagChoiceUpdate(
 }
 
 async function previewRetagChanges(): Promise<void> {
+  showRetagPreviewModal.value = true;
   await updates.createRetagPlan().catch(() => undefined);
+}
+
+async function onGithubLatestFallbackUpdate(enabled: boolean): Promise<void> {
+  await updates.setRetagGithubLatestFallback(enabled).catch(() => undefined);
 }
 
 function openRetagApplyConfirm(): void {
   if (applyDisabled.value) {
     return;
   }
+  showRetagConfirmModal.value = true;
+}
+
+function openRetagApplyConfirmFromPreview(): void {
+  if (applyDisabled.value) {
+    return;
+  }
+  showRetagPreviewModal.value = false;
   showRetagConfirmModal.value = true;
 }
 
@@ -338,6 +353,20 @@ onMounted(() => {
       @confirm="confirmRetagApply"
     />
 
+    <RetagPlanReviewModal
+      :show="showRetagPreviewModal"
+      :plan="updates.retagPlan"
+      :preview-job="updates.retagPreviewJob"
+      :preview-error="updates.retagPreviewError || updates.error"
+      :impact-label="retagConfirmImpactLabel"
+      :mutation-notice="retagMutationNotice"
+      :apply-disabled="applyDisabled"
+      :loading="updates.loading"
+      :apply-job-active="applyJobActive"
+      @close="showRetagPreviewModal = false"
+      @apply="openRetagApplyConfirmFromPreview"
+    />
+
     <RetagSummaryPanel
       :total-count="totalCount"
       :available-count="availableCount"
@@ -351,11 +380,6 @@ onMounted(() => {
       :mutation-notice="retagMutationNotice"
       @preview="previewRetagChanges"
       @apply="openRetagApplyConfirm"
-    />
-
-    <RetagPlanPreview
-      v-if="updates.retagPlan"
-      :plan="updates.retagPlan"
     />
 
     <section class="section-panel retag-controls-panel">
@@ -376,6 +400,16 @@ onMounted(() => {
           :options="filterOptions"
           aria-label="Retag status filter"
         />
+        <label class="retag-fallback-toggle" for="github-latest-fallback-switch">
+          <n-switch
+            id="github-latest-fallback-switch"
+            :value="updates.retagGithubLatestFallback"
+            :disabled="updates.loading"
+            aria-label="Use GitHub latest fallback"
+            @update:value="onGithubLatestFallbackUpdate"
+          />
+          <span>Use GitHub latest fallback</span>
+        </label>
       </div>
     </section>
 
@@ -461,6 +495,15 @@ onMounted(() => {
 
 .retag-controls :deep(.n-input) {
   max-width: 520px;
+}
+
+.retag-fallback-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--color-muted-text);
+  font-size: 0.9rem;
+  white-space: nowrap;
 }
 
 .retag-state svg {

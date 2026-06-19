@@ -29,7 +29,13 @@ describe("RetagsView", () => {
     const updates = useUpdatesStore();
     updates.retagTargets = retagTargetsResponse(
       [
-        retagTarget(),
+        retagTarget({
+          candidate_source: "github-latest",
+          candidate_warning:
+            "GitHub latest fallback will update latest tracking to 1.1.",
+          candidate_link_label: "GitHub release",
+          candidate_link_url: "https://github.com/acme/app/releases/tag/1.1",
+        }),
         retagTarget({
           service_key: "media/radarr",
           service: "radarr",
@@ -55,6 +61,9 @@ describe("RetagsView", () => {
         return plan;
       },
     );
+    const setRetagGithubLatestFallback = vi
+      .spyOn(updates, "setRetagGithubLatestFallback")
+      .mockResolvedValue();
 
     const wrapper = mountWithApp(RetagsView, { pinia });
     await flushPromises();
@@ -69,8 +78,15 @@ describe("RetagsView", () => {
     expect(text).toContain("media/app");
     expect(text).toContain("Retag available");
     expect(text).toContain("Candidate ready");
+    expect(text).toContain("Use GitHub latest fallback");
+    expect(text).toContain("GitHub latest fallback will update latest tracking to 1.1.");
     expect(text).toContain("media/radarr");
     expect(text).toContain("Missing provenance");
+
+    await wrapper
+      .find('input[aria-label="Use GitHub latest fallback"]')
+      .setValue(true);
+    expect(setRetagGithubLatestFallback).toHaveBeenCalledWith(true);
 
     const switchControls = wrapper.findAll('input[value="switch-to-concrete"]');
     expect(switchControls).toHaveLength(2);
@@ -86,13 +102,46 @@ describe("RetagsView", () => {
     await flushPromises();
 
     expect(createRetagPlan).toHaveBeenCalledTimes(1);
-    expect(wrapper.text()).toContain("Selected retag changes");
+    expect(wrapper.text()).toContain("Review retag preview");
     expect(wrapper.text()).toContain("repo/app:latest -> repo/app@sha256:abc123");
     const applyButton = wrapper
       .findAll("button")
       .find((button) => button.text().includes("Apply selected retags"));
     expect(applyButton).toBeDefined();
     expect(applyButton?.attributes("disabled")).toBeUndefined();
+  });
+
+  it("shows preview start failures in the review modal", async () => {
+    const pinia = createPinia();
+    setActivePinia(pinia);
+    const auth = useAuthStore();
+    auth.session = authSession({ mutations_enabled: true });
+    const updates = useUpdatesStore();
+    updates.retagTargets = retagTargetsResponse();
+    vi.spyOn(updates, "loadRetagTargets").mockResolvedValue();
+    vi.spyOn(updates, "createRetagPlan").mockImplementation(async () => {
+      updates.error = "retag preview is already running";
+      throw new Error("retag preview is already running");
+    });
+
+    const wrapper = mountWithApp(RetagsView, { pinia });
+    await flushPromises();
+
+    await wrapper
+      .findAll("button")
+      .find((button) => button.text().includes("Preview retag changes"))
+      ?.trigger("click");
+    await flushPromises();
+
+    expect(wrapper.text()).toContain("Review retag preview");
+    expect(wrapper.text()).toContain("retag preview is already running");
+    expect(wrapper.text()).not.toContain(
+      "Refreshing retag candidates and building a preview.",
+    );
+    const applyButton = wrapper
+      .findAll("button")
+      .find((button) => button.text().includes("Apply selected retags"));
+    expect(applyButton?.attributes("disabled")).toBeDefined();
   });
 
   it("disables switch and apply controls in read-only mode", async () => {

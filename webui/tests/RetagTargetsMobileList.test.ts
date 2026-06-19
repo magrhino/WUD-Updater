@@ -32,7 +32,12 @@ function mountMobileList({
 
 describe("RetagTargetsMobileList", () => {
   it("renders mobile review details and emits switch choices", async () => {
-    const item = retagTarget();
+    const item = retagTarget({
+      candidate_source: "github-latest",
+      candidate_warning: "GitHub latest fallback will update latest tracking to 1.1.",
+      candidate_link_label: "GitHub release",
+      candidate_link_url: "https://github.com/acme/app/releases/tag/1.1",
+    });
     const wrapper = mountMobileList({ rows: [item] });
 
     expect(wrapper.text()).toContain("media/app");
@@ -40,6 +45,12 @@ describe("RetagTargetsMobileList", () => {
     expect(wrapper.text()).toContain("repo/app:latest");
     expect(wrapper.text()).toContain("latest (label)");
     expect(wrapper.text()).toContain("latest -> 1.1");
+    expect(wrapper.text()).toContain(
+      "GitHub latest fallback will update latest tracking to 1.1.",
+    );
+    expect(wrapper.find("a").attributes("href")).toBe(
+      "https://github.com/acme/app/releases/tag/1.1",
+    );
     expect(wrapper.text()).toContain("repo/app@sha256:abc123");
     expect(wrapper.text()).toContain("/docker/media/docker-compose.yml");
     expect(

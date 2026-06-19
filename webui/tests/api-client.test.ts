@@ -167,6 +167,11 @@ describe("webApi", () => {
       webApi.pending(),
       webApi.updateTargets(),
       webApi.retagTargets(),
+      webApi.startRetagPreview(
+        [{ service_key: "media/app", choice: "switch-to-concrete" }],
+        "csrf",
+      ),
+      webApi.retagPreviewJob("retag-preview"),
       webApi.createRetagPlan(
         [{ service_key: "media/app", choice: "switch-to-concrete" }],
         "csrf",
@@ -198,7 +203,7 @@ describe("webApi", () => {
       webApi.runLog(1),
     ]);
 
-    expect(fetchMock).toHaveBeenCalledTimes(39);
+    expect(fetchMock).toHaveBeenCalledTimes(41);
     for (const call of fetchMock.mock.calls) {
       expect(requestInit(call).credentials).toBe("include");
     }
@@ -230,10 +235,12 @@ describe("webApi", () => {
       { service_key: "media/radarr", choice: "keep-current" as const },
     ];
 
+    await webApi.startRetagPreview(choices, "csrf-retag");
+    await webApi.retagPreviewJob("preview job");
     await webApi.createRetagPlan(choices, "csrf-retag");
     await webApi.applyRetagPlan("retag-plan-id", choices, "csrf-retag");
 
-    expect(fetchMock.mock.calls[0][0]).toBe("/api/v1/retag-plans");
+    expect(fetchMock.mock.calls[0][0]).toBe("/api/v1/retag-plans/preview");
     expect(requestInit(fetchMock.mock.calls[0]).method).toBe("POST");
     expect(
       (requestInit(fetchMock.mock.calls[0]).headers as Headers).get(
@@ -242,11 +249,55 @@ describe("webApi", () => {
     ).toBe("csrf-retag");
     expect(jsonRequestBody(fetchMock.mock.calls[0])).toEqual({
       choices,
+      github_latest_fallback: false,
     });
-    expect(fetchMock.mock.calls[1][0]).toBe("/api/v1/retag-plans/apply");
-    expect(jsonRequestBody(fetchMock.mock.calls[1])).toEqual({
+    expect(fetchMock.mock.calls[1][0]).toBe(
+      "/api/v1/retag-plans/preview/preview%20job",
+    );
+    expect(requestInit(fetchMock.mock.calls[1]).method).toBeUndefined();
+    expect(fetchMock.mock.calls[2][0]).toBe("/api/v1/retag-plans");
+    expect(jsonRequestBody(fetchMock.mock.calls[2])).toEqual({
+      choices,
+      github_latest_fallback: false,
+    });
+    expect(fetchMock.mock.calls[3][0]).toBe("/api/v1/retag-plans/apply");
+    expect(jsonRequestBody(fetchMock.mock.calls[3])).toEqual({
       plan_id: "retag-plan-id",
       choices,
+      github_latest_fallback: false,
+      confirmation: "apply-retags",
+    });
+
+    await webApi.retagTargets({ github_latest_fallback: true });
+    await webApi.refreshRetagGithubLatest("csrf-retag");
+    await webApi.startRetagPreview(choices, "csrf-retag", {
+      github_latest_fallback: true,
+    });
+    await webApi.createRetagPlan(choices, "csrf-retag", {
+      github_latest_fallback: true,
+    });
+    await webApi.applyRetagPlan("retag-plan-id", choices, "csrf-retag", {
+      github_latest_fallback: true,
+    });
+
+    expect(fetchMock.mock.calls[4][0]).toBe(
+      "/api/v1/retag-targets?github_latest_fallback=true",
+    );
+    expect(fetchMock.mock.calls[5][0]).toBe(
+      "/api/v1/retag-targets/github-latest/refresh",
+    );
+    expect(jsonRequestBody(fetchMock.mock.calls[6])).toEqual({
+      choices,
+      github_latest_fallback: true,
+    });
+    expect(jsonRequestBody(fetchMock.mock.calls[7])).toEqual({
+      choices,
+      github_latest_fallback: true,
+    });
+    expect(jsonRequestBody(fetchMock.mock.calls[8])).toEqual({
+      plan_id: "retag-plan-id",
+      choices,
+      github_latest_fallback: true,
       confirmation: "apply-retags",
     });
   });
@@ -290,6 +341,11 @@ describe("webApi", () => {
       selfUpdatePlanStatus(),
     );
     await webApi.restartContainer("csrf-token");
+    await webApi.refreshRetagGithubLatest("csrf-token");
+    await webApi.startRetagPreview(
+      [{ service_key: "media/app", choice: "switch-to-concrete" }],
+      "csrf-token",
+    );
     await webApi.createRetagPlan(
       [{ service_key: "media/app", choice: "switch-to-concrete" }],
       "csrf-token",

@@ -15,6 +15,7 @@ import type {
   ReleaseNoteInfo,
   ReleaseNotesResponse,
   RetagPlanResponse,
+  RetagPreviewJobResponse,
   RetagTargetItem,
   RetagTargetsResponse,
   RunVerificationSummary,
@@ -607,6 +608,10 @@ export function retagTarget(
     tracking_tag_source: "label",
     proposed_tag: "1.1",
     final_image: "repo/app@sha256:abc123",
+    candidate_source: "provenance",
+    candidate_warning: "",
+    candidate_link_label: "",
+    candidate_link_url: "",
     retag_available: true,
     retag_reason: "eligible",
     choices: ["keep-current", "switch-to-concrete"],
@@ -698,6 +703,32 @@ export function retagPlanResponse(
     ],
     issues: [],
     warnings: [],
+    ...overrides,
+  };
+}
+
+export function retagPreviewJobResponse(
+  overrides: Partial<RetagPreviewJobResponse> = {},
+): RetagPreviewJobResponse {
+  const plan = retagPlanResponse();
+  return {
+    preview_job_id: "retag-preview-test",
+    status: "success",
+    plan,
+    warnings: plan.warnings,
+    error: "",
+    progress: [
+      {
+        job_id: "retag-preview-test",
+        phase: "preview",
+        status: "success",
+        message: "Retag preview is ready.",
+        created_at: "2026-01-02T00:00:00Z",
+        stack: "",
+        services: [],
+        line_numbers: [],
+      },
+    ],
     ...overrides,
   };
 }
