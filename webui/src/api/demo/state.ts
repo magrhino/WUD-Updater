@@ -1,11 +1,11 @@
 import type {
-  ApplyJobLogResponse,
   ApplyJobProgressEvent,
   ApplyJobResponse,
   AuthSessionResponse,
   CoreUpdateTourResponse,
   CoreUpdateTourStatus,
   CoreUpdateTourStep,
+  DiagnosticsSupportBundleResponse,
   DigestPinLabelRewriteApprovalRequest,
   DoctorResponse,
   ManagedSettingsUpdateResponse,
@@ -13,18 +13,18 @@ import type {
   OnboardingDismissResponse,
   PendingCleanupLine,
   PendingCleanupResponse,
+  PendingGroupedItem,
+  PendingItem,
   PendingRemovalPlanResponse,
   PendingResponse,
   PlanResponse,
-  PlanStatus,
   ReleaseNotesResponse,
   RetagChoiceRequest,
-  RetagPlanIssue,
   RetagPreviewJobResponse,
   RetagPlanResponse,
-  RetagTargetItem,
   RetagTargetsResponse,
   RunDetail,
+  RunEventRecord,
   RunLogResponse,
   RunSummary,
   ServicePolicyRecord,
@@ -34,408 +34,547 @@ import type {
   SetupStatusResponse,
   SnoozeRecord,
   SnoozeState,
-  StatusResponse,
   StateOperation,
   StateOperationResponse,
+  StatusResponse,
   TagExclusionRuleRecord,
   TagExclusionStatusFilter,
   TagOverrideRequest,
   UpdateTargetsResponse,
-  WudApiStatus,
 } from "../types";
+import { generatedFixtures } from "./generatedFixtures";
 import {
-  DEMO_DB_PATH,
-  DEMO_DOCKER_BASE,
-  DEMO_LATEST_VERSION,
-  DEMO_LOG_DIR,
-  DEMO_SOURCE_FILE,
-  DEMO_VERSION,
-} from "./constants";
-import {
-  DEMO_RETAG_TARGETS,
-  DEMO_STACKS,
-  DEMO_UPDATE_TARGETS,
-  INITIAL_PENDING,
-  INITIAL_POLICIES,
-  INITIAL_RELEASE_NOTES,
-  INITIAL_RUNS,
-  INITIAL_SNOOZES,
-  INITIAL_TAG_EXCLUSIONS,
-} from "./fixtures";
-import {
-  applyTagOverride,
   cleanupLineKey,
   clone,
-  demoApplyPreflight,
-  doctorCheck,
   escapeRegex,
-  isMatchedDemoItem,
-  isUnmatchedDemoItem,
   normalizeDemoComposeIgnorePaths,
   nowIso,
-  planCleanupItem,
-  planStack,
   repoKey,
-  runFromApply,
-  runFromRetagApply,
-  runFromCleanup,
-  runFromRemoval,
-  settingEntry,
-  stripDemoFields,
-  unmatchedIssue,
   upsertBy,
 } from "./helpers";
 import type {
+  DemoGeneratedFixtures,
+  DemoGeneratedJobFixture,
   DemoJobRecord,
-  DemoPendingItem,
+  DemoPlanCase,
+  DemoRemovalCase,
+  DemoRetagCase,
   DemoRunFixture,
-  DemoStackName,
+  DemoTagToken,
 } from "./types";
 
-function demoWudApiStatus(): WudApiStatus {
+const STATIC_FIXTURE_ERROR =
+  "This selection is not part of the static demo fixture set.";
+const DEMO_NOW = "2026-05-31T00:00:00.000Z";
+const fixtures: DemoGeneratedFixtures = generatedFixtures;
+
+type PendingLineFixture = {
+  line_no: number;
+  raw: string;
+  image: string;
+  desired_tag: string;
+  digest: string;
+  repo: string;
+  target_image: string;
+  stack_name: string;
+  service_name: string;
+  digest_provenance?: PendingItem["digest_provenance"];
+};
+
+function activeLineNumbers(activeKeys: Set<string>): Set<number> {
+  return new Set(
+    fixtures.pending.items
+      .filter((item) => activeKeys.has(cleanupLineKey(item)))
+      .map((item) => item.line_no),
+  );
+}
+
+function uniqueSortedNumbers(values: number[]): number[] {
+  return [...new Set(values)].sort((left, right) => left - right);
+}
+
+function sameNumbers(left: number[], right: number[]): boolean {
+  const normalizedLeft = uniqueSortedNumbers(left);
+  const normalizedRight = uniqueSortedNumbers(right);
+  return (
+    normalizedLeft.length === normalizedRight.length &&
+    normalizedLeft.every((value, index) => value === normalizedRight[index])
+  );
+}
+
+function sameRetagChoices(
+  left: RetagChoiceRequest[],
+  right: RetagChoiceRequest[],
+): boolean {
+  if (left.length !== right.length) {
+    return false;
+  }
+  return left.every(
+    (choice, index) =>
+      choice.service_key === right[index]?.service_key &&
+      choice.choice === right[index]?.choice,
+  );
+}
+
+function replaceString(value: unknown, oldValue: string, newValue: string): unknown {
+  if (typeof value === "string") {
+    return value.replaceAll(oldValue, newValue);
+  }
+  if (Array.isArray(value)) {
+    return value.map((item) => replaceString(item, oldValue, newValue));
+  }
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, item]) => [
+        key,
+        replaceString(item, oldValue, newValue),
+      ]),
+    );
+  }
+  return value;
+}
+
+function replaceMany<T>(
+  value: T,
+  replacements: Array<[oldValue: string, newValue: string]>,
+): T {
+  let result: unknown = clone(value);
+  const placeholders = replacements
+    .filter(([oldValue]) => oldValue.length > 0)
+    .map(([oldValue, newValue], index) => ({
+      oldValue,
+      newValue,
+      placeholder: `\0demo-replacement-${index}\0`,
+    }))
+    .sort((left, right) => right.oldValue.length - left.oldValue.length);
+  for (const { oldValue, placeholder } of placeholders) {
+    result = replaceString(result, oldValue, placeholder);
+  }
+  for (const { newValue, placeholder } of placeholders) {
+    result = replaceString(result, placeholder, newValue);
+  }
+  return result as T;
+}
+
+function overrideByLine(tagOverrides: TagOverrideRequest[]): Map<number, string> {
+  const values = new Map<number, string>();
+  for (const override of tagOverrides) {
+    if (!values.has(override.line_no)) {
+      values.set(override.line_no, override.tag);
+    }
+  }
+  return values;
+}
+
+function tokenReplacements(
+  tagTokens: DemoTagToken[],
+  tagOverrides: TagOverrideRequest[],
+): Array<[oldValue: string, newValue: string]> {
+  const overrides = overrideByLine(tagOverrides);
+  return tagTokens.map((token) => {
+    const value = overrides.get(token.line_no) ?? token.default_tag;
+    return [token.token, value] satisfies [string, string];
+  });
+}
+
+function replaceTagReference(value: string, defaultTag: string, tag: string): string {
+  return value
+    .replaceAll(`tag=${defaultTag}`, `tag=${tag}`)
+    .replaceAll(`:${defaultTag}`, `:${tag}`);
+}
+
+function updateDesiredTagFields(
+  item: {
+    desired_tag: string;
+    raw: string;
+    target_image?: string;
+  },
+  defaultTag: string,
+  tag: string,
+): void {
+  item.desired_tag = tag;
+  item.raw = replaceTagReference(item.raw, defaultTag, tag);
+  item.target_image = item.target_image
+    ? replaceTagReference(item.target_image, defaultTag, tag)
+    : item.target_image;
+}
+
+function updatePlanLineTagFields(
+  item: {
+    desired_tag: string;
+    raw: string;
+    resolved_image: string;
+    target_image: string;
+  },
+  defaultTag: string,
+  tag: string,
+): void {
+  updateDesiredTagFields(item, defaultTag, tag);
+  item.resolved_image = item.resolved_image
+    ? replaceTagReference(item.resolved_image, defaultTag, tag)
+    : item.resolved_image;
+}
+
+function applyPlanTagOverride(
+  response: PlanResponse,
+  token: DemoTagToken,
+  tag: string,
+): void {
+  response.targets
+    .filter((target) => target.line_no === token.line_no)
+    .forEach((target) => updateDesiredTagFields(target, token.default_tag, tag));
+  response.skipped
+    .filter((skipped) => skipped.line_no === token.line_no)
+    .forEach((skipped) => updateDesiredTagFields(skipped, token.default_tag, tag));
+  response.cleanup.items
+    .filter((item) => item.line_no === token.line_no)
+    .forEach((item) => updateDesiredTagFields(item, token.default_tag, tag));
+  for (const stack of response.stacks) {
+    const line = stack.lines.find((item) => item.line_no === token.line_no);
+    if (!line) {
+      continue;
+    }
+    const service = line.service;
+    updatePlanLineTagFields(line, token.default_tag, tag);
+    for (const update of stack.tag_updates) {
+      if (!update.services.includes(service)) {
+        continue;
+      }
+      update.desired_tag = tag;
+      update.new_image = replaceTagReference(update.new_image, token.default_tag, tag);
+    }
+    for (const action of stack.actions) {
+      if (action.kind === "compose-tag-update" && action.description.includes(service)) {
+        action.description = replaceTagReference(
+          action.description,
+          token.default_tag,
+          tag,
+        );
+      }
+    }
+  }
+}
+
+function materializePlanResponse(
+  response: PlanResponse,
+  tagTokens: DemoTagToken[],
+  tagOverrides: TagOverrideRequest[],
+): PlanResponse {
+  const materialized = replaceMany(
+    response,
+    tokenReplacements(tagTokens, tagOverrides),
+  );
+  const overrides = overrideByLine(tagOverrides);
+  if (overrides.size === 0) {
+    return materialized;
+  }
+  const tokensByLine = new Map(tagTokens.map((token) => [token.line_no, token]));
+  for (const [lineNo, tag] of overrides) {
+    const token = tokensByLine.get(lineNo);
+    if (token) {
+      applyPlanTagOverride(materialized, token, tag);
+    }
+  }
+  return materialized;
+}
+
+function tagOverridePlanSuffix(tagOverrides: TagOverrideRequest[]): string {
+  if (!tagOverrides.length) {
+    return "";
+  }
+  const parts = [...overrideByLine(tagOverrides).entries()]
+    .sort(([left], [right]) => left - right)
+    .map(([lineNo, tag]) => `${lineNo}-${tag}`);
+  return `__overrides-${parts.join("-")}`;
+}
+
+function materializePlanCase(
+  planCase: DemoPlanCase,
+  tagOverrides: TagOverrideRequest[],
+): DemoPlanCase {
+  const response = materializePlanResponse(
+    planCase.response,
+    planCase.tagTokens,
+    tagOverrides,
+  );
+  response.plan_id = `${response.plan_id}${tagOverridePlanSuffix(tagOverrides)}`;
   return {
-    state: "ready",
-    available: true,
-    metadata_available: true,
-    last_checked_at: "2026-01-02T00:00:00+00:00",
-    detail: "Static demo WUD metadata is fixture-backed.",
+    ...planCase,
+    response,
+    jobTemplate: planCase.jobTemplate
+      ? materializeJobTemplate(planCase.jobTemplate, planCase.tagTokens, tagOverrides)
+      : undefined,
   };
 }
 
-function planStatus(selectedCount: number, issueCount: number): PlanStatus {
-  if (selectedCount === 0) {
-    return "empty";
+function materializeRetagCase(retagCase: DemoRetagCase): DemoRetagCase {
+  return clone(retagCase);
+}
+
+function materializeJobTemplate(
+  fixture: DemoGeneratedJobFixture,
+  tagTokens: DemoTagToken[],
+  tagOverrides: TagOverrideRequest[],
+): DemoGeneratedJobFixture {
+  const materialized = replaceMany(
+    fixture,
+    tokenReplacements(tagTokens, tagOverrides),
+  );
+  const overrides = overrideByLine(tagOverrides);
+  const noopTokens = tagTokens.filter((token) => !overrides.has(token.line_no));
+  if (noopTokens.length === 0) {
+    return materialized;
   }
-  if (issueCount > 0) {
-    return "blocked";
+  materialized.log.content = removeNoopTagOverrideLogLines(
+    materialized.log.content,
+    noopTokens,
+  );
+  if (materialized.run) {
+    materialized.run.log.content = removeNoopTagOverrideLogLines(
+      materialized.run.log.content,
+      noopTokens,
+    );
   }
-  return "ready";
+  return materialized;
+}
+
+function removeNoopTagOverrideLogLines(
+  content: string,
+  noopTokens: DemoTagToken[],
+): string {
+  if (!content) {
+    return content;
+  }
+  return content
+    .split("\n")
+    .filter((line) =>
+      noopTokens.every(
+        (token) =>
+          !line.includes(`Tag override: line ${token.line_no} uses tag ${token.default_tag} instead of ${token.default_tag}`),
+      ),
+    )
+    .join("\n");
+}
+
+function remapJobId<T>(value: T, sourceJobId: string, jobId: string): T {
+  return replaceString(clone(value), sourceJobId, jobId) as T;
+}
+
+function materializeRunFixture(fixture: DemoRunFixture, runId: number): DemoRunFixture {
+  const run = clone(fixture);
+  const remapEvents = (events: RunEventRecord[]) =>
+    events.map((event, index) => ({
+      ...event,
+      id: runId * 1000 + index,
+      run_id: runId,
+    }));
+
+  run.summary.id = runId;
+  run.summary.events = remapEvents(run.summary.events);
+  run.detail.id = runId;
+  run.detail.events = remapEvents(run.detail.events);
+  run.detail.pending_updates = run.detail.pending_updates.map((pending, index) => ({
+    ...pending,
+    id: runId * 100 + index,
+    run_id: runId,
+  }));
+  run.log.run_id = runId;
+  return run;
+}
+
+function filterPendingResponse(activeKeys: Set<string>): PendingResponse {
+  const response = clone(fixtures.pending);
+  response.items = response.items.filter((item) => activeKeys.has(cleanupLineKey(item)));
+  response.count = response.items.length;
+  response.grouping.groups = response.grouping.groups
+    .map((group) => {
+      const items = group.items.filter((item) =>
+        activeKeys.has(cleanupLineKey(item)),
+      );
+      return {
+        ...group,
+        line_numbers: items.map((item) => item.line_no),
+        items,
+      };
+    })
+    .filter((group) => group.items.length > 0);
+  response.grouping.unmatched = response.grouping.unmatched.filter((item) =>
+    activeKeys.has(cleanupLineKey(item)),
+  );
+  return response;
+}
+
+function findGroupedLine(line: PendingCleanupLine): PendingLineFixture | null {
+  for (const group of fixtures.pending.grouping.groups) {
+    const item = group.items.find((candidate) => cleanupLineKey(candidate) === cleanupLineKey(line));
+    if (item) {
+      return pendingLineFixture(item, group.name, item.services[0] ?? "");
+    }
+  }
+  const unmatched = fixtures.pending.grouping.unmatched.find(
+    (candidate) => cleanupLineKey(candidate) === cleanupLineKey(line),
+  );
+  if (unmatched) {
+    return pendingLineFixture(unmatched, "", unmatched.repo);
+  }
+  const item = fixtures.pending.items.find(
+    (candidate) => cleanupLineKey(candidate) === cleanupLineKey(line),
+  );
+  return item ? pendingLineFixture(item, "", item.repo) : null;
+}
+
+function pendingLineFixture(
+  item: PendingItem | PendingGroupedItem,
+  stackName: string,
+  serviceName: string,
+): PendingLineFixture {
+  return {
+    line_no: item.line_no,
+    raw: item.raw,
+    image: item.image,
+    desired_tag: item.desired_tag,
+    digest: item.digest,
+    repo: item.repo,
+    target_image: "target_image" in item ? item.target_image : "",
+    stack_name: stackName,
+    service_name: serviceName,
+    digest_provenance: item.digest_provenance,
+  };
 }
 
 export class DemoApiState {
-  pending = clone(INITIAL_PENDING);
-  policies = clone(INITIAL_POLICIES);
-  snoozes = clone(INITIAL_SNOOZES);
-  tagExclusions = clone(INITIAL_TAG_EXCLUSIONS);
-  runs = clone(INITIAL_RUNS);
+  private readonly activePendingLineKeys = new Set(
+    fixtures.pending.items.map((item) => cleanupLineKey(item)),
+  );
+  policies = clone(fixtures.servicePolicies);
+  snoozes = clone(fixtures.snoozes.all);
+  tagExclusions = clone(fixtures.tagExclusions.all);
+  runs = clone(fixtures.runs.summaries);
+  private readonly runDetails = new Map(
+    Object.entries(fixtures.runs.details).map(([id, detail]) => [
+      Number(id),
+      clone(detail),
+    ]),
+  );
+  private readonly runLogs = new Map(
+    Object.entries(fixtures.runs.logs).map(([id, log]) => [
+      Number(id),
+      clone(log),
+    ]),
+  );
   jobs = new Map<string, DemoJobRecord>();
-  retagPreviewJobs = new Map<string, RetagPreviewJobResponse>();
+  private readonly retagPreviewJobs = new Map<string, RetagPreviewJobResponse>();
   themePreference = "system";
   themePreferenceConfigured = false;
   onboardingDismissedAt = "";
-  composeIgnorePaths = "old";
+  composeIgnorePaths =
+    fixtures.settings.managed.find(
+      (entry) => entry.key === "compose_ignore_paths",
+    )?.value ?? "old";
   composeIgnorePathsConfigured = false;
-  digestPinUpdates = "false";
+  digestPinUpdates =
+    fixtures.settings.managed.find(
+      (entry) => entry.key === "digest_pin_updates",
+    )?.value ?? "false";
   digestPinUpdatesConfigured = false;
   coreUpdateTour: CoreUpdateTourResponse = {
     status: "not_started",
     step: "dashboard",
     updated_at: "",
   };
-  nextJob = 1;
-  nextRetagPreview = 1;
-  nextRun = 7;
-  nextAudit = 100;
-  nextSnooze = 4;
-  nextTagExclusion = 3;
+  private nextJob = 1;
+  private nextRetagPreview = 1;
+  private nextRun =
+    Math.max(0, ...fixtures.runs.summaries.map((run) => run.id)) + 1;
+  private nextAudit = 100;
+  private nextSnooze =
+    Math.max(0, ...fixtures.snoozes.all.map((snooze) => snooze.id)) + 1;
+  private nextTagExclusion =
+    Math.max(0, ...fixtures.tagExclusions.all.map((rule) => rule.id)) +
+    1;
 
   session(): AuthSessionResponse {
-    return {
-      authenticated: true,
-      setup_required: false,
-      auth_required: false,
-      dev_auth_bypass: true,
-      mutations_enabled: true,
-      username: null,
-    };
+    return clone(fixtures.auth.session);
   }
 
   setupStatus(): SetupStatusResponse {
-    return {
-      setup_required: false,
-      claim_required: false,
-      authenticated: true,
-      auth_required: false,
-      dev_auth_bypass: true,
-      mutations_enabled: true,
-      password_min_length: 12,
-    };
+    return clone(fixtures.auth.setupStatus);
   }
 
   status(): StatusResponse {
     return {
-      ok: true,
-      version: DEMO_VERSION,
-      wud_file: DEMO_SOURCE_FILE,
-      wud_file_exists: true,
-      pending_count: this.pending.length,
-      db_path: DEMO_DB_PATH,
-      db_ready: true,
-      auth_required: false,
-      dev_auth_bypass: true,
-      setup_required: false,
-      mutations_enabled: true,
-      timezone: "UTC",
-      auto_update_scheduler_enabled: true,
-      static_spa_available: true,
-      wud_api: demoWudApiStatus(),
-      warnings: ["Static demo mode uses in-browser fixture data only."],
+      ...clone(fixtures.status),
+      pending_count: this.activePendingLineKeys.size,
     };
   }
 
   settings(): SettingsResponse {
-    return {
-      updater: [
-        settingEntry("DOCKER_BASE", DEMO_DOCKER_BASE, DEMO_DOCKER_BASE, false),
-        settingEntry("HOST_DOCKER_BASE", DEMO_DOCKER_BASE, "", true),
-        settingEntry("WUD_OUT_FILE", DEMO_SOURCE_FILE, DEMO_SOURCE_FILE, false),
-        settingEntry("WUD_LOG_DIR", DEMO_LOG_DIR, DEMO_LOG_DIR, false),
-        settingEntry("WUD_DB_PATH", DEMO_DB_PATH, DEMO_DB_PATH, false),
-        settingEntry("WUD_UPDATE_MODE", "stop", "stop", false),
-        settingEntry("WUD_MAX_WAIT", "180", "180", false),
-        settingEntry("WUD_LOCK_TIMEOUT", "30", "30", false),
-        settingEntry("WUD_TIMEZONE", "UTC", "UTC", false),
-        settingEntry("WUD_COMPOSE_IGNORE_PATHS", "old", "old", false),
-        settingEntry("WUD_DIGEST_PIN_UPDATES", "false", "false", false),
-      ],
-      webui: [
-        settingEntry("WUD_WEB_AUTH_REQUIRED", "false", "true", false, "derived"),
-        settingEntry("WUD_WEB_DEV_NO_AUTH", "true", "false", true),
-        settingEntry("WUD_WEB_PUBLIC_ORIGIN", "", "", false),
-        settingEntry("WUD_WEB_ALLOWED_ORIGINS", "", "", false),
-        settingEntry(
-          "WUD_WEB_ALLOWED_HOSTS",
-          "127.0.0.1, localhost",
-          "127.0.0.1, localhost",
-          false,
-          "derived",
-        ),
-        settingEntry("WUD_WEB_TRUSTED_PROXIES", "", "", false),
-        settingEntry("WUD_WEB_SECURE_COOKIES", "auto", "auto", false),
-        settingEntry(
-          "WUD_WEB_SECURE_COOKIES_EFFECTIVE",
-          "false",
-          "false",
-          false,
-          "request",
-        ),
-        settingEntry(
-          "WUD_WEB_STATIC_SPA_AVAILABLE",
-          "true",
-          "true",
-          false,
-          "derived",
-        ),
-        settingEntry(
-          "WUD_API_BASE_URL",
-          "http://wud:3000",
-          "http://wud:3000",
-          false,
-        ),
-        settingEntry("WUD_WEB_MUTATIONS_ENABLED", "true", "false", true),
-        settingEntry(
-          "WUD_WEB_RESTART_CONTAINER",
-          "demo-wud-updater",
-          "",
-          false,
-          "derived",
-        ),
-        settingEntry(
-          "WUD_WEB_AUTO_UPDATE_SCHEDULER_ENABLED",
-          "true",
-          "false",
-          false,
-          "derived",
-        ),
-      ],
-      secrets: [
-        { name: "WUD_WEB_TOKEN", configured: false },
-        { name: "GITHUB_TOKEN", configured: false },
-        { name: "DISCORD_RELEASES_WEBHOOK", configured: false },
-        { name: "DISCORD_WEBHOOK", configured: false },
-        { name: "ADMIN_WEBHOOK", configured: false },
-      ],
-      managed: [
-        {
-          key: "theme_preference",
-          value: this.themePreference,
-          default_value: "system",
-          source: this.themePreferenceConfigured ? "configured" : "default",
-          editable: true,
-          allowed_values: ["system", "light", "dark"],
-          restart_required: false,
-          disabled_reason: "",
-        },
-        {
-          key: "onboarding_checklist",
-          value: this.onboardingDismissedAt ? "dismissed" : "visible",
-          default_value: "visible",
-          source: this.onboardingDismissedAt ? "configured" : "default",
-          editable: true,
-          allowed_values: ["visible", "dismissed"],
-          restart_required: false,
-          disabled_reason: "",
-        },
-        {
-          key: "compose_ignore_paths",
-          value: this.composeIgnorePaths,
-          default_value: "old",
-          source: this.composeIgnorePathsConfigured ? "configured" : "default",
-          editable: true,
-          allowed_values: [],
-          restart_required: false,
-          disabled_reason: "",
-        },
-        {
-          key: "digest_pin_updates",
-          value: this.digestPinUpdates,
-          default_value: "false",
-          source: this.digestPinUpdatesConfigured ? "configured" : "default",
-          editable: true,
-          allowed_values: ["false", "true"],
-          restart_required: false,
-          disabled_reason: "",
-        },
-      ],
-    };
+    const settings = clone(fixtures.settings);
+    this.updateManagedEntry(settings, "theme_preference", this.themePreference, this.themePreferenceConfigured);
+    this.updateManagedEntry(
+      settings,
+      "onboarding_checklist",
+      this.onboardingDismissedAt ? "dismissed" : "visible",
+      Boolean(this.onboardingDismissedAt),
+    );
+    this.updateManagedEntry(
+      settings,
+      "compose_ignore_paths",
+      this.composeIgnorePaths,
+      this.composeIgnorePathsConfigured,
+    );
+    this.updateManagedEntry(
+      settings,
+      "digest_pin_updates",
+      this.digestPinUpdates,
+      this.digestPinUpdatesConfigured,
+    );
+    return settings;
+  }
+
+  private updateManagedEntry(
+    settings: SettingsResponse,
+    key: string,
+    value: string,
+    configured: boolean,
+  ): void {
+    const entry = settings.managed.find((item) => item.key === key);
+    if (!entry) {
+      return;
+    }
+    entry.value = value;
+    entry.source = configured ? "configured" : "default";
   }
 
   doctor(): DoctorResponse {
+    return clone(fixtures.doctor);
+  }
+
+  diagnosticsSupportBundle(): DiagnosticsSupportBundleResponse {
     return {
-      ok: true,
-      failures: 0,
-      warnings: 4,
-      checks: [
-        doctorCheck("PASS", "docker-cli", "docker", "Docker CLI", "Docker version 28.0.0"),
-        doctorCheck(
-          "PASS",
-          "docker-daemon-info",
-          "docker",
-          "Docker daemon info",
-          "Docker Root Dir: /var/lib/docker",
-        ),
-        doctorCheck(
-          "PASS",
-          "compose-discovery",
-          "compose",
-          "Compose discovery",
-          "3 stack(s) rendered",
-        ),
-        doctorCheck(
-          "WARN",
-          "webui-authentication",
-          "webui",
-          "WebUI authentication",
-          "static demo mode bypasses authentication",
-        ),
-        doctorCheck(
-          "WARN",
-          "webui-public-origin",
-          "webui",
-          "WebUI public origin",
-          "not configured in demo mode",
-          {
-            label: "Set reverse proxy origin",
-            description: "Set this in real reverse-proxy deployments.",
-            snippet: "WUD_WEB_PUBLIC_ORIGIN=https://wud.example.test",
-          },
-        ),
-        doctorCheck(
-          "WARN",
-          "webui-mutation-gate",
-          "webui",
-          "WebUI mutation gate",
-          "demo mode enables in-browser apply fixtures",
-        ),
-        doctorCheck(
-          "WARN",
-          "truenas-status-helper",
-          "truenas",
-          "TrueNAS status helper",
-          "TRUENAS_STATUS_CHECK is disabled",
-        ),
-      ],
+      ...clone(fixtures.diagnostics),
+      settings: this.settings(),
+      doctor_result: this.doctor(),
+      pending_summary: this.pendingResponse(),
+      last_run_status: this.runs[0] ? clone(this.runs[0]) : null,
     };
   }
 
   onboardingChecklist(): OnboardingChecklistResponse {
-    if (this.onboardingDismissedAt) {
-      return {
-        dismissed: true,
-        dismissed_at: this.onboardingDismissedAt,
-        all_passed: false,
-        visible: false,
-        items: [],
-      };
+    if (!this.onboardingDismissedAt) {
+      return clone(fixtures.onboarding);
     }
     return {
-      dismissed: false,
-      dismissed_at: "",
+      dismissed: true,
+      dismissed_at: this.onboardingDismissedAt,
       all_passed: false,
-      visible: true,
-      items: [
-        {
-          key: "admin-setup",
-          title: "Admin setup",
-          status: "WARN",
-          detail:
-            "Static demo mode bypasses authentication; real deployments create an admin during first run.",
-          check_codes: ["webui-authentication"],
-          suggestions: [],
-          docs: [
-            {
-              label: "First login",
-              url: "https://github.com/magrhino/WUD-Updater/blob/main/docs/wiki/webui-container.md#first-login",
-            },
-          ],
-        },
-        {
-          key: "wud-output",
-          title: "Shared WUD output file",
-          status: "PASS",
-          detail:
-            "Demo fixture data includes a shared pending-update file path.",
-          check_codes: ["wud-out-file"],
-          suggestions: [],
-          docs: [],
-        },
-        {
-          key: "docker-access",
-          title: "Docker daemon access",
-          status: "PASS",
-          detail: "Demo mode uses sanitized fixture Docker state.",
-          check_codes: ["docker-daemon-info"],
-          suggestions: [],
-          docs: [],
-        },
-        {
-          key: "mutation-mode",
-          title: "Browser mutation mode",
-          status: "WARN",
-          detail:
-            "Demo mode enables in-browser apply fixtures; real deployments require server-side enablement.",
-          check_codes: ["webui-mutation-gate"],
-          suggestions: [
-            {
-              label: "Return to read-only mode",
-              description:
-                "Leave browser mutations disabled unless this deployment is intentionally allowed to apply updates.",
-              snippet: "WUD_WEB_MUTATIONS_ENABLED=false",
-            },
-          ],
-          docs: [
-            {
-              label: "Read-only and mutations",
-              url: "https://github.com/magrhino/WUD-Updater/blob/main/docs/wiki/webui-container.md#read-only-and-mutations",
-            },
-          ],
-        },
-      ],
+      visible: false,
+      items: [],
     };
   }
 
   dismissOnboarding(): OnboardingDismissResponse {
-    this.onboardingDismissedAt = new Date("2026-05-31T00:00:00.000Z").toISOString();
+    this.onboardingDismissedAt = DEMO_NOW;
     return {
       dismissed: true,
       dismissed_at: this.onboardingDismissedAt,
@@ -449,9 +588,9 @@ export class DemoApiState {
     this.coreUpdateTour = {
       status,
       step,
-      updated_at: new Date("2026-05-31T00:00:00.000Z").toISOString(),
+      updated_at: DEMO_NOW,
     };
-    return this.coreUpdateTour;
+    return clone(this.coreUpdateTour);
   }
 
   updateManagedSettings(
@@ -469,245 +608,56 @@ export class DemoApiState {
   private updateManagedSetting(key: string, value: string): void {
     switch (key) {
       case "theme_preference":
-        this.updateThemePreference(value);
+        if (!["system", "light", "dark"].includes(value)) {
+          throw new Error("theme_preference must be system, light, or dark");
+        }
+        this.themePreference = value;
+        this.themePreferenceConfigured = true;
         return;
       case "onboarding_checklist":
-        this.updateOnboardingChecklist(value);
+        if (!["visible", "dismissed"].includes(value)) {
+          throw new Error("onboarding_checklist must be visible or dismissed");
+        }
+        this.onboardingDismissedAt = value === "dismissed" ? this.onboardingDismissedAt || DEMO_NOW : "";
         return;
       case "compose_ignore_paths":
-        this.updateComposeIgnorePaths(value);
+        this.composeIgnorePaths = normalizeDemoComposeIgnorePaths(value);
+        this.composeIgnorePathsConfigured = true;
         return;
       case "digest_pin_updates":
-        this.updateDigestPinUpdates(value);
+        if (!["false", "true"].includes(value)) {
+          throw new Error("digest_pin_updates must be false or true");
+        }
+        this.digestPinUpdates = value;
+        this.digestPinUpdatesConfigured = true;
         return;
       default:
         throw new Error(`managed setting is not editable: ${key}`);
     }
   }
 
-  private updateThemePreference(value: string): void {
-    if (!["system", "light", "dark"].includes(value)) {
-      throw new Error("theme_preference must be system, light, or dark");
-    }
-    this.themePreference = value;
-    this.themePreferenceConfigured = true;
-  }
-
-  private updateOnboardingChecklist(value: string): void {
-    if (!["visible", "dismissed"].includes(value)) {
-      throw new Error("onboarding_checklist must be visible or dismissed");
-    }
-    if (value === "visible") {
-      this.onboardingDismissedAt = "";
-      return;
-    }
-    if (!this.onboardingDismissedAt) {
-      this.onboardingDismissedAt = new Date("2026-05-31T00:00:00.000Z").toISOString();
-    }
-  }
-
-  private updateComposeIgnorePaths(value: string): void {
-    this.composeIgnorePaths = normalizeDemoComposeIgnorePaths(value);
-    this.composeIgnorePathsConfigured = true;
-  }
-
-  private updateDigestPinUpdates(value: string): void {
-    if (!["false", "true"].includes(value)) {
-      throw new Error("digest_pin_updates must be false or true");
-    }
-    this.digestPinUpdates = value;
-    this.digestPinUpdatesConfigured = true;
-  }
-
   pendingResponse(): PendingResponse {
-    return {
-      source_file: DEMO_SOURCE_FILE,
-      exists: true,
-      count: this.pending.length,
-      items: this.pending.map(stripDemoFields),
-      grouping: {
-        status: "ready",
-        groups: (Object.keys(DEMO_STACKS) as DemoStackName[])
-          .map((name) => this.stackGroup(name))
-          .filter((group) => group.items.length > 0),
-        unmatched: this.pending
-          .filter(isUnmatchedDemoItem)
-          .map(stripDemoFields),
-        warnings: [],
-      },
-      wud_api: demoWudApiStatus(),
-      warnings: [],
-    };
+    return filterPendingResponse(this.activePendingLineKeys);
   }
 
   updateTargets(): UpdateTargetsResponse {
-    return {
-      status: "ready",
-      count: DEMO_UPDATE_TARGETS.length,
-      items: clone(DEMO_UPDATE_TARGETS),
-      warnings: [],
-    };
+    return clone(fixtures.updateTargets);
   }
 
   retagTargets(): RetagTargetsResponse {
-    return {
-      status: "ready",
-      count: DEMO_RETAG_TARGETS.length,
-      items: clone(DEMO_RETAG_TARGETS),
-      warnings: [
-        "Demo retag data is fixture-backed and does not inspect local Compose files.",
-      ],
-    };
+    return clone(fixtures.retagTargets);
   }
 
   createRetagPlan(choices: RetagChoiceRequest[]): RetagPlanResponse {
-    const targetsByKey = new Map(
-      DEMO_RETAG_TARGETS.map((item) => [item.service_key, item]),
-    );
-    const selected: RetagTargetItem[] = [];
-    const issues: RetagPlanIssue[] = [];
-    let keepCurrentCount = 0;
-    const choicesByServiceKey = new Map<string, RetagChoiceRequest>();
-    for (const choice of choices) {
-      if (!choicesByServiceKey.has(choice.service_key)) {
-        choicesByServiceKey.set(choice.service_key, choice);
-      }
-    }
-    for (const choice of choicesByServiceKey.values()) {
-      const target = targetsByKey.get(choice.service_key);
-      if (!target) {
-        issues.push({
-          severity: "error",
-          code: "retag-choice-unknown",
-          message: `${choice.service_key} is not present in demo retag fixtures.`,
-          service_key: choice.service_key,
-          stack: "",
-          service: "",
-          hint: "",
-          details: {},
-        });
-        continue;
-      }
-      if (choice.choice === "keep-current") {
-        keepCurrentCount += 1;
-        continue;
-      }
-      if (!target.retag_available) {
-        issues.push({
-          severity: "error",
-          code: "retag-target-not-eligible",
-          message: `${choice.service_key} cannot switch to concrete tracking: ${target.retag_reason}`,
-          service_key: target.service_key,
-          stack: target.stack,
-          service: target.service,
-          hint: "",
-          details: {},
-        });
-        continue;
-      }
-      selected.push(target);
-    }
-    let status: RetagPlanResponse["status"] = "empty";
-    if (issues.length) {
-      status = "blocked";
-    } else if (selected.length) {
-      status = "ready";
-    }
-    const stacks = Array.from(new Set(selected.map((item) => item.stack))).map(
-      (stackName) => {
-        const stackItems = selected.filter((item) => item.stack === stackName);
-        const first = stackItems[0];
-        return {
-          stack: stackName,
-          directory: first?.directory ?? "",
-          compose_file: first?.compose_file ?? "",
-          project_directory: first?.project_directory ?? "",
-          services: stackItems
-            .map((item) => item.service)
-            .sort((left, right) => left.localeCompare(right)),
-          digest_pin_updates: stackItems
-            .map((item) => ({
-              service_key: item.service_key,
-              stack: item.stack,
-              service: item.service,
-              source_image: item.image,
-              resolved_tag: item.proposed_tag,
-              planned_digest: item.final_image.split("@", 2)[1] ?? "",
-              final_image: item.final_image,
-              watch_tag: item.tracking_tag,
-              marker: `wud-updater.resolved-tag=${item.proposed_tag}`,
-              label_key: item.label_key,
-              label_value: item.label_value,
-              label_rewrites: [],
-              digest_provenance: item.digest_provenance ?? null,
-            }))
-            .sort((left, right) =>
-              left.service_key.localeCompare(right.service_key),
-            ),
-        };
-      },
-    );
-
-    return {
-      plan_id: `demo-retag-plan-${status}-${selected
-        .map((item) => item.service_key)
-        .sort((left, right) => left.localeCompare(right))
-        .join("-")}`,
-      status,
-      can_apply: status === "ready" && selected.length > 0,
-      external_recreate_required: false,
-      selected_count: selected.length,
-      keep_current_count: keepCurrentCount,
-      stacks,
-      issues,
-      warnings: [
-        "Demo retag preview is fixture-backed and does not inspect local Compose files.",
-      ],
-    };
+    return clone(this.retagCase(choices).response);
   }
 
   createRetagPreviewJob(choices: RetagChoiceRequest[]): RetagPreviewJobResponse {
+    const fixture = this.retagCase(choices).preview;
     const previewJobId = `demo-retag-preview-${this.nextRetagPreview++}`;
-    const startedAt = nowIso();
-    const queued: RetagPreviewJobResponse = {
-      preview_job_id: previewJobId,
-      status: "queued",
-      plan: null,
-      warnings: [],
-      error: "",
-      progress: [
-        {
-          job_id: previewJobId,
-          phase: "refresh",
-          status: "running",
-          message: "Refreshing demo retag candidates.",
-          created_at: startedAt,
-          stack: "",
-          services: [],
-          line_numbers: [],
-        },
-      ],
-    };
-    const plan = this.createRetagPlan(choices);
-    this.retagPreviewJobs.set(previewJobId, {
-      ...queued,
-      status: "success",
-      plan,
-      warnings: plan.warnings,
-      progress: [
-        ...queued.progress,
-        {
-          job_id: previewJobId,
-          phase: "preview",
-          status: "success",
-          message: "Demo retag preview is ready.",
-          created_at: nowIso(),
-          stack: "",
-          services: [],
-          line_numbers: [],
-        },
-      ],
-    });
+    const queued = this.materializeRetagPreviewJob(fixture.queued, previewJobId);
+    const complete = this.materializeRetagPreviewJob(fixture.complete, previewJobId);
+    this.retagPreviewJobs.set(previewJobId, complete);
     return queued;
   }
 
@@ -719,166 +669,34 @@ export class DemoApiState {
     return clone(job);
   }
 
-  createRetagJob(
-    planId: string,
-    choices: RetagChoiceRequest[],
-  ): ApplyJobResponse {
-    const plan = this.createRetagPlan(choices);
-    if (plan.plan_id !== planId) {
-      throw new Error("Demo retag plan is stale.");
-    }
-    const jobId = `demo-retag-job-${this.nextJob++}`;
-    const job: ApplyJobResponse = {
-      job_id: jobId,
-      status: plan.can_apply ? "queued" : "failure",
-      run_id: null,
-      log_file: "",
-      started_at: null,
-      finished_at: null,
-      error: plan.can_apply ? "" : "Demo retag plan is not applicable.",
-      selected_line_numbers: [],
-      progress: [],
-    };
-    const log: ApplyJobLogResponse = {
-      job_id: jobId,
-      log_file: "",
-      exists: true,
-      content: "",
-      truncated: false,
-      max_bytes: 65_536,
-      error: "",
-    };
-    this.jobs.set(jobId, {
-      job,
-      log,
-      lineNumbers: [],
-      plan: null,
-      retagPlan: plan,
-      completed: false,
-    });
-    return clone(job);
+  private materializeRetagPreviewJob(
+    response: RetagPreviewJobResponse,
+    previewJobId: string,
+  ): RetagPreviewJobResponse {
+    const result = clone(response);
+    const sourceId = response.preview_job_id;
+    result.preview_job_id = previewJobId;
+    result.progress = result.progress.map((event) => ({
+      ...event,
+      job_id: event.job_id === sourceId ? previewJobId : event.job_id,
+    }));
+    return result;
   }
 
   releaseNotes(): ReleaseNotesResponse {
-    const activeLines = new Set(this.pending.map((item) => item.line_no));
-    const items = INITIAL_RELEASE_NOTES.filter((item) => activeLines.has(item.line_no));
-    return {
-      source_file: DEMO_SOURCE_FILE,
-      count: items.length,
-      items: clone(items),
-      wud_api: demoWudApiStatus(),
-      warnings: [],
-    };
+    const activeLines = activeLineNumbers(this.activePendingLineKeys);
+    const response = clone(fixtures.releaseNotes);
+    response.items = response.items.filter((item) => activeLines.has(item.line_no));
+    response.count = response.items.length;
+    return response;
   }
 
   selfUpdate(): SelfUpdateResponse {
-    return {
-      status: "available",
-      strategy: "pull_image",
-      current_tag: `v${DEMO_VERSION}`,
-      latest_tag: DEMO_LATEST_VERSION,
-      current_image: "ghcr.io/magrhino/wud-updater:latest",
-      target_image: "ghcr.io/magrhino/wud-updater:latest",
-      restart_container: "demo-wud-updater",
-      release_notes: Array.from({ length: 10 }, (_, index) => {
-        const patch = 26 - index;
-        const tag = `v0.${patch}.0`;
-        return {
-          tag,
-          title: `${tag} demo release`,
-          published_at: `2026-05-${String(28 - index).padStart(2, "0")}T12:00:00Z`,
-          url: `https://github.com/magrhino/WUD-Updater/releases/tag/${tag}`,
-          body:
-            index === 0
-              ? "Adds the WebUI self-update banner, release-note review, and image pull flow."
-              : "Demo release note for the capped self-update history list.",
-          body_truncated: false,
-          breaking: index === 0,
-          breaking_reasons: index === 0 ? ["Review external container recreate steps."] : [],
-        };
-      }),
-      release_notes_truncated: true,
-      release_notes_cap: 10,
-      can_update: true,
-      disabled_reason: "",
-      external_recreate_required: false,
-      warnings: [],
-    };
+    return clone(fixtures.selfUpdate);
   }
 
   selfUpdatePlan(): SelfUpdatePlanResponse {
-    const item: DemoPendingItem = {
-      line_no: 1,
-      raw: "ghcr.io/magrhino/wud-updater:v0.25.0 tag=v0.26.0",
-      image: "ghcr.io/magrhino/wud-updater:v0.25.0",
-      key: "ghcr.io/magrhino/wud-updater",
-      repo: "ghcr.io/magrhino/wud-updater",
-      current_tag: "v0.25.0",
-      has_tag: true,
-      allow_repo: false,
-      digest: "",
-      desired_tag: "v0.26.0",
-      resolved_image: "ghcr.io/magrhino/wud-updater:v0.25.0",
-      target_image: "ghcr.io/magrhino/wud-updater:v0.26.0",
-      compose_images: ["ghcr.io/magrhino/wud-updater:v0.25.0"],
-      services: ["wud-updater"],
-      service: "wud-updater",
-      stack: "media",
-      action: "tag-update",
-      diagnostic: null,
-    };
-    const plan: PlanResponse = {
-      plan_id: "demo-self-update-plan",
-      dry_run: true,
-      can_apply: true,
-      status: "ready",
-      source_file: DEMO_SOURCE_FILE,
-      mode: "stop",
-      max_wait: 180,
-      digest_pin_updates: false,
-      selected_line_numbers: [1],
-      summary: {
-        target_count: 1,
-        matched_target_count: 1,
-        stack_count: 1,
-        service_count: 1,
-        skipped_count: 0,
-        issue_count: 0,
-      },
-      targets: [
-        {
-          line_no: item.line_no,
-          raw: item.raw,
-          image: item.image,
-          resolved_image: item.resolved_image,
-          digest: item.digest,
-          desired_tag: item.desired_tag,
-          matched: true,
-          action: item.action,
-        },
-      ],
-      stacks: [planStack("media", [item])],
-      skipped: [],
-      issues: [],
-      cleanup: {
-        cleanup_id: "",
-        can_remove_unmatched: false,
-        items: [],
-      },
-      apply_preflight: demoApplyPreflight(),
-    };
-    return {
-      strategy: "prepare_tag_update",
-      plan,
-      current_tag: "v0.25.0",
-      latest_tag: "v0.26.0",
-      current_image: "ghcr.io/magrhino/wud-updater:v0.25.0",
-      target_image: "ghcr.io/magrhino/wud-updater:v0.26.0",
-      restart_container: "demo-wud-updater",
-      external_recreate_required: true,
-      warning:
-        "This updates the Compose image tag and pulls the image. Recreate the WUD-Updater container from outside the WebUI to run it.",
-    };
+    return clone(fixtures.selfUpdatePlan);
   }
 
   createPlan(
@@ -887,179 +705,57 @@ export class DemoApiState {
     tagOverrides: TagOverrideRequest[],
     _digestPinLabelRewriteApprovals: DigestPinLabelRewriteApprovalRequest[] = [],
   ): PlanResponse {
-    const requested = new Set(lineNumbers);
-    const selected = this.pending
-      .filter((item) => requested.has(item.line_no))
-      .map((item) => applyTagOverride(item, tagOverrides));
-    const matchedSelected = selected.filter(isMatchedDemoItem);
-    const unmatchedSelected = selected.filter(isUnmatchedDemoItem);
-    const tagUpdateCount = matchedSelected.filter(
-      (item) => item.action === "tag-update",
-    ).length;
-    const blockedTagUpdates = tagUpdateCount > 0 && !allowTagUpdates;
-    const unmatchedIssues = unmatchedSelected.map((item) => unmatchedIssue(item));
-    const stacks = (Object.keys(DEMO_STACKS) as DemoStackName[])
-      .map((name) => planStack(name, matchedSelected))
-      .filter((stack) => stack.lines.length > 0);
-    const issues = [
-      ...unmatchedIssues,
-      ...(blockedTagUpdates
-        ? [
-            {
-              severity: "error",
-              code: "tag_updates_disabled",
-              message: "Tag rewrites must be confirmed before applying this demo plan.",
-              line_no: null,
-              stack: "",
-              service: "",
-              hint: "",
-              details: {},
-            },
-          ]
-        : []),
-    ];
-    const cleanupItems = unmatchedSelected.map(planCleanupItem);
-
-    const canApply = matchedSelected.length > 0 && issues.length === 0;
-    const status = planStatus(selected.length, issues.length);
-
-    return {
-      plan_id: `demo-plan-${Date.now()}`,
-      dry_run: true,
-      can_apply: canApply,
-      status,
-      source_file: DEMO_SOURCE_FILE,
-      mode: "stop",
-      max_wait: 180,
-      digest_pin_updates: false,
-      selected_line_numbers: selected.map((item) => item.line_no),
-      summary: {
-        target_count: selected.length,
-        matched_target_count: matchedSelected.length,
-        stack_count: stacks.length,
-        service_count: matchedSelected.length,
-        skipped_count: unmatchedSelected.length,
-        issue_count: issues.length,
-      },
-      targets: selected.map((item) => ({
-        line_no: item.line_no,
-        raw: item.raw,
-        image: item.image,
-        resolved_image: item.resolved_image,
-        digest: item.digest,
-        desired_tag: item.desired_tag,
-        matched: isMatchedDemoItem(item),
-        action: item.action,
-      })),
-      stacks,
-      skipped: unmatchedSelected.map((item) => ({
-        line_no: item.line_no,
-        raw: item.raw,
-        image: item.image,
-        desired_tag: item.desired_tag,
-        reason: "unmatched",
-      })),
-      issues,
-      cleanup: {
-        cleanup_id: cleanupItems.length > 0 ? "demo-cleanup" : "",
-        can_remove_unmatched: cleanupItems.length > 0,
-        items: cleanupItems,
-      },
-      apply_preflight: demoApplyPreflight({
-        selectedReady: canApply,
-        selectedDetail:
-          status === "empty"
-            ? "No selected services need changes."
-            : issues[0]?.message || "",
-      }),
-    };
+    const planCase = this.planCase(lineNumbers, allowTagUpdates, tagOverrides);
+    this.requireActiveLines(lineNumbers);
+    return clone(planCase.response);
   }
 
   cleanupPending(
     _cleanupId: string,
     lines: PendingCleanupLine[],
   ): PendingCleanupResponse {
-    const requested = new Set(lines.map((line) => cleanupLineKey(line)));
-    const removed = this.pending.filter(
-      (item) => isUnmatchedDemoItem(item) && requested.has(cleanupLineKey(item)),
+    const unmatchedKeys = new Set(
+      fixtures.pending.grouping.unmatched.map((line) => cleanupLineKey(line)),
     );
-    if (removed.length === 0 || removed.length !== requested.size) {
-      throw new Error("cleanup is stale");
-    }
-
-    this.pending = this.pending.filter(
-      (item) => !requested.has(cleanupLineKey(item)),
-    );
-    const runId = this.nextRun++;
-    this.runs.unshift(runFromCleanup(runId, removed));
-    return {
-      status: "success",
-      audit_run_id: runId,
-      removed_count: removed.length,
-      removed: removed.map((item) => ({
-        line_no: item.line_no,
-        raw: item.raw,
-        image: item.image,
-        reason: "unmatched",
-      })),
-    };
+    return this.removePendingLines(lines, {
+      requiredKeys: unmatchedKeys,
+      reason: "unmatched",
+      mode: "web-pending-cleanup",
+      operation: "remove_unmatched_pending",
+      statusReason: "removed-unmatched",
+      staleError: "cleanup is stale",
+    });
   }
 
   createRemovalPlan(lineNumbers: number[]): PendingRemovalPlanResponse {
-    const requested = new Set(lineNumbers);
-    const lines = this.pending
-      .filter((item) => requested.has(item.line_no))
-      .sort((left, right) => left.line_no - right.line_no)
-      .map((item) => ({
-        line_no: item.line_no,
-        raw: item.raw,
-        image: item.image,
-        desired_tag: item.desired_tag,
-        digest: item.digest,
-      }));
-    if (lines.length === 0 || lines.length !== requested.size) {
-      throw new Error("removal is stale");
-    }
-    return {
-      removal_id: "demo-removal",
-      source_file: DEMO_SOURCE_FILE,
-      can_remove: true,
-      selected_line_numbers: lines.map((item) => item.line_no),
-      lines,
-    };
+    const removalCase = this.removalCase(lineNumbers);
+    this.requireActiveLines(lineNumbers);
+    return clone(removalCase.response);
   }
 
   removeSelectedPending(
     removalId: string,
     lines: PendingCleanupLine[],
   ): PendingCleanupResponse {
-    if (removalId !== "demo-removal") {
+    const removal = fixtures.removalCases.find(
+      (item) => item.response.removal_id === removalId,
+    );
+    if (!removal) {
       throw new Error("removal is stale");
     }
-    const requested = new Set(lines.map((line) => cleanupLineKey(line)));
-    const removed = this.pending.filter((item) =>
-      requested.has(cleanupLineKey(item)),
+    const removalKeys = new Set(
+      removal.response.lines.map((line) =>
+        cleanupLineKey({ line_no: line.line_no, raw: line.raw }),
+      ),
     );
-    if (removed.length === 0 || removed.length !== requested.size) {
-      throw new Error("removal is stale");
-    }
-
-    this.pending = this.pending.filter(
-      (item) => !requested.has(cleanupLineKey(item)),
-    );
-    const runId = this.nextRun++;
-    this.runs.unshift(runFromRemoval(runId, removed));
-    return {
-      status: "success",
-      audit_run_id: runId,
-      removed_count: removed.length,
-      removed: removed.map((item) => ({
-        line_no: item.line_no,
-        raw: item.raw,
-        image: item.image,
-        reason: "selected",
-      })),
-    };
+    return this.removePendingLines(lines, {
+      requiredKeys: removalKeys,
+      reason: "selected",
+      mode: "web-pending-removal",
+      operation: "remove_selected_pending",
+      statusReason: "removed-selected",
+      staleError: "removal is stale",
+    });
   }
 
   createJob(
@@ -1075,36 +771,354 @@ export class DemoApiState {
       tagOverrides,
       digestPinLabelRewriteApprovals,
     );
+    if (plan.plan_id !== planId) {
+      throw new Error("Demo plan is stale.");
+    }
+    if (!plan.can_apply) {
+      return this.createFailureJob("Demo plan is not applyable.");
+    }
+    const planCase = this.planCase(lineNumbers, allowTagUpdates, tagOverrides);
+    const jobId = `demo-job-${this.nextJob++}`;
+    return this.createJobFromFixture(
+      jobId,
+      planCase.jobTemplate ?? this.jobTemplateFromPlan(plan, jobId),
+    );
+  }
+
+  createRetagJob(
+    planId: string,
+    choices: RetagChoiceRequest[],
+  ): ApplyJobResponse {
+    const retagCase = this.retagCase(choices);
+    const plan = clone(retagCase.response);
+    if (plan.plan_id !== planId) {
+      throw new Error("Demo retag plan is stale.");
+    }
+    if (!plan.can_apply) {
+      return this.createFailureJob("Demo retag plan is not applicable.");
+    }
+    if (!retagCase.jobTemplate) {
+      throw new Error(STATIC_FIXTURE_ERROR);
+    }
+    return this.createJobFromFixture(`demo-retag-job-${this.nextJob++}`, retagCase.jobTemplate);
+  }
+
+  private createJobFromFixture(
+    jobId: string,
+    fixture: DemoGeneratedJobFixture,
+  ): ApplyJobResponse {
+    const materialized = remapJobId(fixture, fixture.queued.job_id, jobId);
+    const record: DemoJobRecord = {
+      job: clone(materialized.queued),
+      log: {
+        job_id: jobId,
+        log_file: "",
+        exists: true,
+        content: "",
+        truncated: false,
+        max_bytes: materialized.log.max_bytes,
+        error: "",
+      },
+      fixture: materialized,
+      completed: false,
+    };
+    this.jobs.set(jobId, record);
+    return clone(record.job);
+  }
+
+  private createFailureJob(error: string): ApplyJobResponse {
     const jobId = `demo-job-${this.nextJob++}`;
     const job: ApplyJobResponse = {
       job_id: jobId,
-      status: planId && plan.can_apply ? "queued" : "failure",
+      status: "failure",
       run_id: null,
       log_file: "",
       started_at: null,
       finished_at: null,
-      error: plan.can_apply ? "" : "Demo plan is not applyable.",
-      selected_line_numbers: plan.selected_line_numbers,
+      error,
+      selected_line_numbers: [],
       progress: [],
     };
-    const log: ApplyJobLogResponse = {
-      job_id: jobId,
-      log_file: "",
-      exists: true,
-      content: "",
-      truncated: false,
-      max_bytes: 65_536,
-      error: "",
+    const fixture: DemoGeneratedJobFixture = {
+      queued: job,
+      terminal: job,
+      log: {
+        job_id: jobId,
+        log_file: "",
+        exists: true,
+        content: "",
+        truncated: false,
+        max_bytes: 65_536,
+        error: "",
+      },
+      run: null,
+      removeLineNumbers: [],
     };
     this.jobs.set(jobId, {
-      job,
-      log,
-      lineNumbers: plan.selected_line_numbers,
-      plan,
-      retagPlan: null,
-      completed: false,
+      job: clone(job),
+      log: clone(fixture.log),
+      fixture,
+      completed: true,
     });
     return clone(job);
+  }
+
+  private jobTemplateFromPlan(
+    plan: PlanResponse,
+    jobId: string,
+  ): DemoGeneratedJobFixture {
+    const startedAt = "2026-05-30T20:12:26+00:00";
+    const finishedAt = "2026-05-30T20:12:28+00:00";
+    const logFile = `demo/logs/demo-apply-${jobId}.log`;
+    const lineNumbers = plan.selected_line_numbers;
+    const logContent = this.applyLogFromPlan(plan, startedAt, finishedAt, logFile);
+    const run = this.runFixtureFromPlan(plan, startedAt, finishedAt, logFile, logContent);
+    const progress = this.progressFromPlan(plan, jobId, startedAt, finishedAt);
+    return {
+      queued: {
+        job_id: jobId,
+        status: "queued",
+        run_id: null,
+        log_file: "",
+        started_at: null,
+        finished_at: null,
+        error: "",
+        selected_line_numbers: lineNumbers,
+        progress: [],
+      },
+      terminal: {
+        job_id: jobId,
+        status: "success",
+        run_id: 0,
+        log_file: logFile,
+        started_at: startedAt,
+        finished_at: finishedAt,
+        error: "",
+        selected_line_numbers: lineNumbers,
+        progress,
+      },
+      log: {
+        job_id: jobId,
+        log_file: logFile,
+        exists: true,
+        content: logContent,
+        truncated: false,
+        max_bytes: 65_536,
+        error: "",
+      },
+      run,
+      removeLineNumbers: lineNumbers,
+    };
+  }
+
+  private progressFromPlan(
+    plan: PlanResponse,
+    jobId: string,
+    startedAt: string,
+    finishedAt: string,
+  ): ApplyJobProgressEvent[] {
+    const stack = plan.stacks[0];
+    const services = plan.stacks.flatMap((item) => item.services);
+    const lineNumbers = plan.selected_line_numbers;
+    const event = (
+      phase: string,
+      status: ApplyJobProgressEvent["status"],
+      message: string,
+      createdAt: string,
+    ): ApplyJobProgressEvent => ({
+      job_id: jobId,
+      phase,
+      status,
+      message,
+      created_at: createdAt,
+      stack: stack?.name ?? "",
+      services,
+      line_numbers: lineNumbers,
+    });
+    return [
+      event("preflight", "success", "Demo preflight checks passed.", startedAt),
+      event("pull", "running", "Pulling selected demo images.", finishedAt),
+      event("pull", "success", "Images pulled and verified.", finishedAt),
+      event("recreate", "running", "Recreating selected services.", finishedAt),
+      event("recreate", "success", "Services were recreated.", finishedAt),
+      event("health", "success", "Demo services reported healthy.", finishedAt),
+      event("cleanup", "success", "Pending entries were reconciled.", finishedAt),
+      event("completion", "success", "Updater completed successfully.", finishedAt),
+    ];
+  }
+
+  private applyLogFromPlan(
+    plan: PlanResponse,
+    startedAt: string,
+    finishedAt: string,
+    logFile: string,
+  ): string {
+    const lines = [
+      `[${startedAt}] [INFO] docker-update-from-wud-v2`,
+      `[${startedAt}] [INFO] WUD file: ${plan.source_file}`,
+      `[${startedAt}] [INFO] Log file: ${logFile}`,
+      `[${startedAt}] [INFO] Mode    : ${plan.mode}`,
+      `[${startedAt}] [INFO] Dry-run : false`,
+      `[${startedAt}] [INFO] Confirm : true`,
+      `[${startedAt}] [INFO] TagEdit : true`,
+      `[${startedAt}] [INFO] MaxWait : ${plan.max_wait}s`,
+      `[${startedAt}] [INFO] Removed in-flight WUD entries before update.`,
+    ];
+    for (const stack of plan.stacks) {
+      lines.push(
+        `[${startedAt}] [INFO] [${stack.name}] Checking for updates (mode=${plan.mode})`,
+        `[${startedAt}] [INFO] [${stack.name}] Matched compose service(s): ${stack.services.join(", ")}`,
+      );
+      for (const line of stack.lines) {
+        if (line.action === "tag-update") {
+          lines.push(
+            `[${startedAt}] [INFO] [${stack.name}] Compose tag updated: ${line.compose_image} -> ${line.target_image}`,
+          );
+        }
+        if (line.action !== "tag-update") {
+          lines.push(
+            `[${startedAt}] [INFO] [${stack.name}] ${line.service}: ${line.image} -> ${line.target_image || line.image}`,
+          );
+        }
+      }
+      lines.push(
+        `[${startedAt}] [INFO] [${stack.name}] Stopping affected service(s): ${stack.services.join(", ")}`,
+        `[${startedAt}] [INFO] [${stack.name}] Bringing affected service(s) up: ${stack.services.join(", ")}`,
+        `[${finishedAt}] [INFO] [${stack.name}] Healthy`,
+      );
+    }
+    lines.push(
+      `[${finishedAt}] [INFO] Successful WUD entries were removed before update.`,
+      `[${finishedAt}] [INFO] Done. See log: ${logFile}`,
+      "",
+    );
+    return lines.join("\n");
+  }
+
+  private runFixtureFromPlan(
+    plan: PlanResponse,
+    startedAt: string,
+    finishedAt: string,
+    logFile: string,
+    logContent: string,
+  ): DemoRunFixture {
+    const planLines = plan.stacks.flatMap((stack) =>
+      stack.lines.map((line) => ({ stack, line })),
+    );
+    const pending_updates = planLines.map(({ stack, line }, index) => ({
+      id: index,
+      run_id: 0,
+      line_no: line.line_no,
+      raw: line.raw,
+      image: line.image,
+      target_digest: line.digest_provenance?.target_digest ?? line.digest,
+      desired_tag: line.desired_tag,
+      service_key: `${stack.name}/${line.service}`,
+      stack_name: stack.name,
+      service_name: line.service,
+      status: "success",
+      status_reason: "demo fixture",
+      created_at: startedAt,
+      updated_at: finishedAt,
+      metadata: { source: "demo" },
+      digest_provenance: line.digest_provenance ?? null,
+    }));
+    const events = planLines.map(({ stack, line }, index): RunEventRecord => ({
+      id: index,
+      run_id: 0,
+      created_at: finishedAt,
+      service_name: line.service,
+      stack_name: stack.name,
+      image: line.image,
+      target_image: line.target_image,
+      old_image_id: "sha256:demo-old",
+      new_image_id: "sha256:demo-new",
+      old_digest: line.digest ? line.digest : "sha256:demo-old",
+      new_digest: line.digest_provenance?.target_digest ?? "sha256:demo-new",
+      status: "success",
+      metadata: { source: "demo" },
+      digest_provenance: line.digest_provenance ?? null,
+    }));
+    const verificationItems = pending_updates.map((item, index) => ({
+      line_no: item.line_no,
+      service_key: item.service_key,
+      stack_name: item.stack_name,
+      service_name: item.service_name,
+      image: item.image,
+      target_image: events[index]?.target_image ?? item.image,
+      image_status: "new_image_running" as const,
+      container_status: "recreated" as const,
+      health_status: "passed" as const,
+      wud_status: "removed" as const,
+      follow_up_needed: false,
+      summary: "Demo update verified.",
+    }));
+    const summary: RunSummary = {
+      id: 0,
+      started_at: startedAt,
+      finished_at: finishedAt,
+      status: "success",
+      dry_run: false,
+      mode: plan.mode,
+      wud_file: plan.source_file,
+      log_file: logFile,
+      metadata: {
+        source: "demo",
+        summary: `updated ${planLines.length} services`,
+      },
+      events,
+    };
+    const detail: RunDetail = {
+      ...summary,
+      pending_updates,
+      events,
+      verification: {
+        status: "verified",
+        total_count: verificationItems.length,
+        verified_count: verificationItems.length,
+        needs_review_count: 0,
+        items: verificationItems,
+      },
+    };
+    return {
+      summary,
+      detail,
+      log: {
+        run_id: 0,
+        log_file: logFile,
+        exists: true,
+        content: logContent,
+        truncated: false,
+        max_bytes: 262_144,
+      },
+    };
+  }
+
+  recordJobProgress(
+    jobId: string,
+    event: ApplyJobProgressEvent,
+  ): ApplyJobProgressEvent | null {
+    const record = this.jobs.get(jobId);
+    if (!record) {
+      return null;
+    }
+    if (record.job.status === "queued") {
+      record.job = {
+        ...record.job,
+        status: "running",
+        started_at: event.created_at,
+      };
+    }
+    record.job = {
+      ...record.job,
+      progress: [...record.job.progress, clone(event)],
+    };
+    return clone(event);
+  }
+
+  jobProgress(jobId: string): ApplyJobProgressEvent[] {
+    const record = this.jobs.get(jobId);
+    return clone(record?.fixture.terminal.progress ?? []);
   }
 
   completeJob(jobId: string): DemoJobRecord | null {
@@ -1112,118 +1126,25 @@ export class DemoApiState {
     if (!record || record.completed) {
       return record ?? null;
     }
-    if (record.retagPlan) {
-      return this.completeRetagJob(record);
-    }
-    if (!record.plan) {
-      return record;
-    }
-    if (!record.plan.can_apply) {
-      record.completed = true;
-      return record;
-    }
-
-    const startedAt = "2026-05-30T20:12:26+00:00";
-    const finishedAt = "2026-05-30T20:12:28+00:00";
-    const logFile = `${DEMO_LOG_DIR}/update-from-wud-v2-demo-${record.job.job_id}.log`;
-    const selectedItems = this.pending.filter(
-      (item) => isMatchedDemoItem(item) && record.lineNumbers.includes(item.line_no),
-    );
-    const runId = this.nextRun++;
-    const logContent = this.applyLog(record.plan, startedAt, finishedAt, logFile);
-    const selectedKeys = new Set(selectedItems.map((item) => cleanupLineKey(item)));
-
-    this.pending = this.pending.filter(
-      (item) => !selectedKeys.has(cleanupLineKey(item)),
-    );
+    const runId = record.fixture.run ? this.nextRun++ : record.fixture.terminal.run_id;
     record.completed = true;
     record.job = {
-      ...record.job,
-      status: "success",
+      ...clone(record.fixture.terminal),
       run_id: runId,
-      log_file: logFile,
-      started_at: startedAt,
-      finished_at: finishedAt,
-      error: "",
     };
-    record.log = {
-      ...record.log,
-      log_file: logFile,
-      content: logContent,
-    };
-    this.runs.unshift(
-      runFromApply(runId, selectedItems, record.plan, startedAt, finishedAt, logFile, logContent),
-    );
+    record.log = clone(record.fixture.log);
+    for (const lineNo of record.fixture.removeLineNumbers) {
+      const line = fixtures.pending.items.find(
+        (item) => item.line_no === lineNo,
+      );
+      if (line) {
+        this.activePendingLineKeys.delete(cleanupLineKey(line));
+      }
+    }
+    if (record.fixture.run && typeof runId === "number") {
+      this.prependRun(materializeRunFixture(record.fixture.run, runId));
+    }
     return record;
-  }
-
-  private completeRetagJob(record: DemoJobRecord): DemoJobRecord {
-    const plan = record.retagPlan;
-    if (!plan) {
-      return record;
-    }
-    if (!plan.can_apply) {
-      record.completed = true;
-      return record;
-    }
-
-    const startedAt = "2026-05-30T20:12:26+00:00";
-    const finishedAt = "2026-05-30T20:12:28+00:00";
-    const logFile = `${DEMO_LOG_DIR}/retag-demo-${record.job.job_id}.log`;
-    const runId = this.nextRun++;
-    const logContent = this.retagApplyLog(plan, startedAt, finishedAt, logFile);
-
-    record.completed = true;
-    record.job = {
-      ...record.job,
-      status: "success",
-      run_id: runId,
-      log_file: logFile,
-      started_at: startedAt,
-      finished_at: finishedAt,
-      error: "",
-    };
-    record.log = {
-      ...record.log,
-      log_file: logFile,
-      content: logContent,
-    };
-    this.runs.unshift(
-      runFromRetagApply(runId, plan, startedAt, finishedAt, logFile, logContent),
-    );
-    return record;
-  }
-
-  appendJobProgress(
-    jobId: string,
-    phase: string,
-    status: ApplyJobProgressEvent["status"],
-    message: string,
-    options: {
-      stack?: string;
-      services?: string[];
-      lineNumbers?: number[];
-    } = {},
-  ): ApplyJobProgressEvent | null {
-    const record = this.jobs.get(jobId);
-    if (!record) {
-      return null;
-    }
-    const event: ApplyJobProgressEvent = {
-      job_id: jobId,
-      phase,
-      status,
-      message,
-      created_at: nowIso(),
-      stack: options.stack ?? "",
-      services: options.services ?? [],
-      line_numbers: options.lineNumbers ?? record.lineNumbers,
-    };
-    record.job = {
-      ...record.job,
-      progress: [...record.job.progress, event],
-    };
-    return clone(event);
   }
 
   servicePolicies(): ServicePolicyRecord[] {
@@ -1261,7 +1182,7 @@ export class DemoApiState {
       return snooze.active;
     }
     const satisfied = this.runs.some((run) =>
-      run.summary.events.some((event) => {
+      run.events.some((event) => {
         const eventCreatedAt = Date.parse(event.created_at);
         return (
           event.status === "success" &&
@@ -1314,14 +1235,18 @@ export class DemoApiState {
       policy,
       (item) => item.service_key === policy.service_key,
     );
-    return this.operationResponse(operation.kind, "service_policy", policy.service_key, policy);
+    return this.operationResponse(
+      operation.kind,
+      "service_policy",
+      policy.service_key,
+      policy,
+    );
   }
 
   stateOperation(operation: StateOperation): StateOperationResponse {
     if (operation.kind === "upsert_service_policy") {
       return this.upsertServicePolicy(operation);
     }
-
     if (operation.kind === "delete_service_policy") {
       this.policies = this.policies.filter(
         (policy) => policy.service_key !== operation.service_key,
@@ -1333,7 +1258,6 @@ export class DemoApiState {
         null,
       );
     }
-
     if (operation.kind === "create_snooze") {
       const snooze: SnoozeRecord = {
         id: this.nextSnooze++,
@@ -1349,7 +1273,6 @@ export class DemoApiState {
       this.snoozes.unshift(snooze);
       return this.operationResponse(operation.kind, "snooze", String(snooze.id), snooze);
     }
-
     if (operation.kind === "create_dependency_snooze") {
       if (operation.service_key === operation.wait_for_service_key) {
         throw new Error("wait_for_service_key must be different from service_key");
@@ -1373,7 +1296,6 @@ export class DemoApiState {
         snooze,
       );
     }
-
     if (operation.kind === "delete_snooze") {
       this.snoozes = this.snoozes.filter(
         (snooze) =>
@@ -1386,7 +1308,6 @@ export class DemoApiState {
         null,
       );
     }
-
     if (operation.kind === "delete_dependency_snooze") {
       this.snoozes = this.snoozes.filter(
         (snooze) =>
@@ -1399,7 +1320,6 @@ export class DemoApiState {
         null,
       );
     }
-
     if (operation.kind === "upsert_tag_exclusion") {
       const imageRepo = repoKey(operation.image_repo);
       const key = (rule: TagExclusionRuleRecord) =>
@@ -1422,9 +1342,13 @@ export class DemoApiState {
         metadata: { source: "demo" },
       };
       this.tagExclusions = upsertBy(this.tagExclusions, rule, key);
-      return this.operationResponse(operation.kind, "tag_exclusion", String(rule.id), rule);
+      return this.operationResponse(
+        operation.kind,
+        "tag_exclusion",
+        String(rule.id),
+        rule,
+      );
     }
-
     const rule = this.tagExclusions.find((item) => item.id === operation.rule_id);
     if (rule) {
       rule.status = operation.status;
@@ -1439,107 +1363,263 @@ export class DemoApiState {
   }
 
   runSummaries(): RunSummary[] {
-    return clone(this.runs.map((run) => run.summary));
+    return clone(this.runs);
   }
 
   runDetail(runId: number): RunDetail {
-    return clone(this.findRun(runId).detail);
+    const detail = this.runDetails.get(runId);
+    if (!detail) {
+      throw new Error(`Demo run ${runId} was not found`);
+    }
+    return clone(detail);
   }
 
   runLog(runId: number): RunLogResponse {
-    return clone(this.findRun(runId).log);
+    const log = this.runLogs.get(runId);
+    if (!log) {
+      throw new Error(`Demo run ${runId} was not found`);
+    }
+    return clone(log);
   }
 
-  private stackGroup(name: DemoStackName) {
-    const stack = DEMO_STACKS[name];
-    const items = this.pending.filter((item) => item.stack === name);
+  private planCase(
+    lineNumbers: number[],
+    allowTagUpdates: boolean,
+    tagOverrides: TagOverrideRequest[],
+  ): DemoPlanCase {
+    const selected = uniqueSortedNumbers(lineNumbers);
+    const overrideLines = uniqueSortedNumbers(
+      tagOverrides.map((override) => override.line_no),
+    );
+    const planCase = fixtures.planCases.find((candidate) => {
+      if (
+        candidate.request.allow_tag_updates !== allowTagUpdates ||
+        !sameNumbers(candidate.request.line_numbers, selected)
+      ) {
+        return false;
+      }
+      if (overrideLines.length === 0) {
+        return candidate.request.tag_override_lines.length === 0;
+      }
+      return (
+        allowTagUpdates &&
+        overrideLines.every((lineNo) =>
+          candidate.tagTokens.some((token) => token.line_no === lineNo),
+        )
+      );
+    });
+    if (planCase) {
+      return materializePlanCase(planCase, tagOverrides);
+    }
+    throw new Error(STATIC_FIXTURE_ERROR);
+  }
+
+  private removalCase(lineNumbers: number[]): DemoRemovalCase {
+    const selected = uniqueSortedNumbers(lineNumbers);
+    const removalCase = fixtures.removalCases.find((candidate) =>
+      sameNumbers(candidate.request.line_numbers, selected),
+    );
+    if (removalCase) {
+      return removalCase;
+    }
+    throw new Error(STATIC_FIXTURE_ERROR);
+  }
+
+  private retagCase(choices: RetagChoiceRequest[]): DemoRetagCase {
+    const normalized = this.normalizedRetagChoices(choices);
+    const retagCase = fixtures.retagCases.find((candidate) =>
+      sameRetagChoices(candidate.request.choices, normalized),
+    );
+    if (retagCase) {
+      return materializeRetagCase(retagCase);
+    }
+    throw new Error(STATIC_FIXTURE_ERROR);
+  }
+
+  private normalizedRetagChoices(
+    choices: RetagChoiceRequest[],
+  ): RetagChoiceRequest[] {
+    const firstByService = new Map<string, RetagChoiceRequest>();
+    for (const choice of choices) {
+      if (!firstByService.has(choice.service_key)) {
+        firstByService.set(choice.service_key, choice);
+      }
+    }
+    const knownServices = new Set(
+      fixtures.retagTargets.items.map((item) => item.service_key),
+    );
+    for (const serviceKey of firstByService.keys()) {
+      if (!knownServices.has(serviceKey)) {
+        throw new Error(STATIC_FIXTURE_ERROR);
+      }
+    }
+    return fixtures.retagTargets.items.map((item) => ({
+      service_key: item.service_key,
+      choice: firstByService.get(item.service_key)?.choice ?? "keep-current",
+    }));
+  }
+
+  private requireActiveLines(lineNumbers: number[]): void {
+    const active = activeLineNumbers(this.activePendingLineKeys);
+    if (!lineNumbers.every((lineNo) => active.has(lineNo))) {
+      throw new Error("Demo fixture line is no longer active.");
+    }
+  }
+
+  private removePendingLines(
+    lines: PendingCleanupLine[],
+    options: {
+      requiredKeys: Set<string>;
+      reason: string;
+      mode: string;
+      operation: string;
+      statusReason: string;
+      staleError: string;
+    },
+  ): PendingCleanupResponse {
+    const requested = new Set(lines.map((line) => cleanupLineKey(line)));
+    const removed = lines.map((line) => findGroupedLine(line));
+    if (
+      requested.size === 0 ||
+      requested.size !== lines.length ||
+      removed.includes(null) ||
+      [...requested].some(
+        (key) => !this.activePendingLineKeys.has(key) || !options.requiredKeys.has(key),
+      )
+    ) {
+      throw new Error(options.staleError);
+    }
+    for (const key of requested) {
+      this.activePendingLineKeys.delete(key);
+    }
+    const removedLines = removed.filter((line): line is PendingLineFixture =>
+      Boolean(line),
+    );
+    const runId = this.nextRun++;
+    this.prependRun(
+      this.pendingRemovalRun(
+        runId,
+        removedLines,
+        options.mode,
+        options.operation,
+        options.statusReason,
+      ),
+    );
     return {
-      name,
-      directory: `${DEMO_DOCKER_BASE}/${name}`,
-      compose_file: "docker-compose.yml",
-      project_directory: "",
-      services_label: stack.servicesLabel,
-      services: stack.services,
-      line_numbers: items.map((item) => item.line_no),
-      items: clone(items.map(stripDemoFields)),
+      status: "success",
+      audit_run_id: runId,
+      removed_count: removedLines.length,
+      removed: removedLines.map((line) => ({
+        line_no: line.line_no,
+        raw: line.raw,
+        image: line.image,
+        reason: options.reason,
+      })),
     };
   }
 
-  private applyLog(
-    plan: PlanResponse,
-    startedAt: string,
-    finishedAt: string,
-    logFile: string,
-  ): string {
-    const lines = [
-      `[${startedAt}] [INFO] docker-update-from-wud-v2`,
-      `[${startedAt}] [INFO] Base    : ${DEMO_DOCKER_BASE}`,
-      `[${startedAt}] [INFO] WUD file: ${DEMO_SOURCE_FILE}`,
-      `[${startedAt}] [INFO] Log file: ${logFile}`,
-      `[${startedAt}] [INFO] Mode    : ${plan.mode}`,
-      `[${startedAt}] [INFO] Dry-run : false`,
-      `[${startedAt}] [INFO] Confirm : true`,
-      `[${startedAt}] [INFO] TagEdit : true`,
-      `[${startedAt}] [INFO] MaxWait : ${plan.max_wait}s`,
-      `[${startedAt}] [INFO] Removed in-flight WUD entries before update.`,
-    ];
-    for (const stack of plan.stacks) {
-      lines.push(
-        `[${startedAt}] [INFO] [${stack.name}] Checking for updates (mode=${plan.mode})`,
-        `[${startedAt}] [INFO] [${stack.name}] Matched compose service(s): ${stack.services.join(", ")}`,
-      );
-      for (const line of stack.lines) {
-        if (line.action === "tag-update") {
-          lines.push(
-            `[${startedAt}] [INFO] [${stack.name}] Compose tag updated: ${line.compose_image} -> ${line.target_image}`,
-          );
-        }
-      }
-      lines.push(
-        `[${startedAt}] [INFO] [${stack.name}] Stopping affected service(s): ${stack.services.join(", ")}`,
-        `[${startedAt}] [INFO] [${stack.name}] Bringing affected service(s) up: ${stack.services.join(", ")}`,
-        `[${finishedAt}] [INFO] [${stack.name}] Healthy`,
-      );
-    }
-    lines.push(
-      `[${finishedAt}] [INFO] Successful WUD entries were removed before update.`,
-      `[${finishedAt}] [INFO] Done. See log: ${logFile}`,
-      "",
-    );
-    return lines.join("\n");
+  private pendingRemovalRun(
+    runId: number,
+    removedLines: PendingLineFixture[],
+    mode: string,
+    operation: string,
+    statusReason: string,
+  ): DemoRunFixture {
+    const startedAt = "2026-05-30T20:12:26+00:00";
+    const events = removedLines.map((line, index): RunEventRecord => ({
+      id: runId * 1000 + index,
+      run_id: runId,
+      created_at: startedAt,
+      service_name: line.service_name,
+      stack_name: line.stack_name,
+      image: line.image,
+      target_image: line.target_image,
+      old_image_id: "",
+      new_image_id: "",
+      old_digest: "",
+      new_digest: "",
+      status: "success",
+      metadata: { source: "demo" },
+      digest_provenance: line.digest_provenance ?? null,
+    }));
+    const pending_updates = removedLines.map((line, index) => ({
+      id: runId * 100 + index,
+      run_id: runId,
+      line_no: line.line_no,
+      raw: line.raw,
+      image: line.image,
+      target_digest: line.digest,
+      desired_tag: line.desired_tag,
+      service_key: line.stack_name
+        ? `${line.stack_name}/${line.service_name}`
+        : line.repo,
+      stack_name: line.stack_name,
+      service_name: line.service_name,
+      status: "resolved",
+      status_reason: statusReason,
+      created_at: startedAt,
+      updated_at: startedAt,
+      metadata: { source: "demo" },
+      digest_provenance: line.digest_provenance ?? null,
+    }));
+    const summary: RunSummary = {
+      id: runId,
+      started_at: startedAt,
+      finished_at: startedAt,
+      status: "success",
+      dry_run: false,
+      mode,
+      wud_file: fixtures.pending.source_file,
+      log_file: "",
+      metadata: {
+        source: "demo",
+        operation,
+        line_numbers: removedLines.map((line) => line.line_no),
+      },
+      events,
+    };
+    const detail: RunDetail = {
+      ...summary,
+      pending_updates,
+      verification: {
+        status: "verified",
+        total_count: pending_updates.length,
+        verified_count: pending_updates.length,
+        needs_review_count: 0,
+        items: pending_updates.map((line) => ({
+          line_no: line.line_no,
+          service_key: line.service_key,
+          stack_name: line.stack_name,
+          service_name: line.service_name,
+          image: line.image,
+          target_image: "",
+          image_status: "already_current",
+          container_status: "skipped",
+          health_status: "skipped",
+          wud_status: "removed",
+          follow_up_needed: false,
+          summary: "Pending fixture line removed from the browser session.",
+        })),
+      },
+    };
+    return {
+      summary,
+      detail,
+      log: {
+        run_id: runId,
+        log_file: "",
+        exists: true,
+        content: "Removed pending demo fixture entries.\n",
+        truncated: false,
+        max_bytes: 262_144,
+      },
+    };
   }
 
-  private retagApplyLog(
-    plan: RetagPlanResponse,
-    startedAt: string,
-    finishedAt: string,
-    logFile: string,
-  ): string {
-    const lines = [
-      `[${startedAt}] [INFO] demo retag apply`,
-      `[${startedAt}] [INFO] Log file: ${logFile}`,
-      `[${startedAt}] [INFO] Selected retags: ${plan.selected_count}`,
-    ];
-    for (const stack of plan.stacks) {
-      lines.push(
-        `[${startedAt}] [INFO] [${stack.stack}] Writing retag Compose metadata.`,
-        `[${startedAt}] [INFO] [${stack.stack}] Pulling retagged service image(s): ${stack.services.join(", ")}`,
-      );
-      for (const update of stack.digest_pin_updates) {
-        lines.push(
-          `[${startedAt}] [INFO] [${stack.stack}] ${update.service}: ${update.source_image} -> ${update.final_image}`,
-        );
-      }
-      lines.push(
-        `[${finishedAt}] [INFO] [${stack.stack}] Retagged service container(s) recreated.`,
-      );
-    }
-    lines.push(
-      `[${finishedAt}] [INFO] Retag changes applied.`,
-      `[${finishedAt}] [INFO] Done. See log: ${logFile}`,
-      "",
-    );
-    return lines.join("\n");
+  private prependRun(run: DemoRunFixture): void {
+    this.runs = [clone(run.summary), ...this.runs];
+    this.runDetails.set(run.summary.id, clone(run.detail));
+    this.runLogs.set(run.summary.id, clone(run.log));
   }
 
   private operationResponse(
@@ -1556,13 +1636,5 @@ export class DemoApiState {
       resource_id: resourceId,
       resource: clone(resource),
     };
-  }
-
-  private findRun(runId: number): DemoRunFixture {
-    const run = this.runs.find((item) => item.summary.id === runId);
-    if (!run) {
-      throw new Error(`Demo run ${runId} was not found`);
-    }
-    return run;
   }
 }

@@ -107,7 +107,6 @@ test("static demo renders retag review fixtures", async ({ page }) => {
   await expect(page.getByText("media/wud-updater")).toBeVisible();
   await expect(page.getByText("Retag available").first()).toBeVisible();
   await expect(page.getByText("home/home-assistant")).toBeVisible();
-  await expect(page.getByText("Missing provenance")).toBeVisible();
   await expect(
     page.getByText("Demo mode previews retag apply without changing local Compose files."),
   ).toBeVisible();
@@ -117,6 +116,7 @@ test("static demo renders retag review fixtures", async ({ page }) => {
   const blockedServiceRow = page
     .getByRole("row")
     .filter({ hasText: "home/home-assistant" });
+  await expect(blockedServiceRow.getByText("Concrete tracking")).toBeVisible();
   await expect(
     blockedServiceRow.getByRole("radio", { name: "Switch" }),
   ).toBeDisabled();
