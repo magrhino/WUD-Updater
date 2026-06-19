@@ -65,6 +65,114 @@ def test_release_notes_get_uses_docker_source_label_without_creating_database(
     assert f"image inspect {image}" in _fake_docker_calls(fake_root)
     assert not db_path.exists()
 
+
+def test_release_notes_get_uses_tagged_label_for_digest_pinned_ref(
+    tmp_path: Path,
+    caplog,
+) -> None:
+    wud_file = tmp_path / "state" / "images.todo"
+    docker_env, fake_root = _fake_docker_env(tmp_path)
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            **docker_env,
+        },
+    )
+    image = "example.invalid/acme/app:latest"
+    digest_image = f"{image}@sha256:{'a' * 64}"
+    wud_file.write_text(f"{digest_image}\n", encoding="utf-8")
+    _fake_image_state_file(fake_root, image, "labels").write_text(
+        "org.opencontainers.image.source=https://github.com/acme/app\n",
+        encoding="utf-8",
+    )
+
+    with caplog.at_level(logging.ERROR, logger="wud_updater.web_release_notes"):
+        response = client.get("/api/v1/release-notes")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["items"][0]["provider"] == "github"
+    assert body["items"][0]["upstream_repo"] == "acme/app"
+    calls = _fake_docker_calls(fake_root)
+    assert f"image inspect {image}" in calls
+    assert f"image inspect {digest_image}" not in calls
+    assert "Docker inspect failed" not in caplog.text
+
+
+def test_release_notes_get_uses_tag_token_label_for_bare_digest_ref(
+    tmp_path: Path,
+    caplog,
+) -> None:
+    wud_file = tmp_path / "state" / "images.todo"
+    docker_env, fake_root = _fake_docker_env(tmp_path)
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            **docker_env,
+        },
+    )
+    image = "example.invalid/acme/app:latest"
+    digest_image = f"example.invalid/acme/app@sha256:{'b' * 64}"
+    wud_file.write_text(f"{digest_image} tag=latest\n", encoding="utf-8")
+    _fake_image_state_file(fake_root, image, "labels").write_text(
+        "org.opencontainers.image.source=https://github.com/acme/app\n",
+        encoding="utf-8",
+    )
+
+    with caplog.at_level(logging.ERROR, logger="wud_updater.web_release_notes"):
+        response = client.get("/api/v1/release-notes")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["items"][0]["provider"] == "github"
+    assert body["items"][0]["upstream_repo"] == "acme/app"
+    calls = _fake_docker_calls(fake_root)
+    assert f"image inspect {image}" in calls
+    assert f"image inspect {digest_image}" not in calls
+    assert "Docker inspect failed" not in caplog.text
+
+
+def test_release_notes_get_uses_running_container_label_for_bare_digest_ref(
+    tmp_path: Path,
+    caplog,
+) -> None:
+    wud_file = tmp_path / "state" / "images.todo"
+    docker_env, fake_root = _fake_docker_env(tmp_path)
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            **docker_env,
+        },
+    )
+    digest_image = f"example.invalid/acme/app@sha256:{'c' * 64}"
+    running_image = "example.invalid/acme/app:latest"
+    wud_file.write_text(f"{digest_image}\n", encoding="utf-8")
+    (fake_root / "containers.tsv").write_text(
+        f"app\t{running_image}\n",
+        encoding="utf-8",
+    )
+    _fake_image_state_file(fake_root, running_image, "labels").write_text(
+        "org.opencontainers.image.source=https://github.com/acme/app\n",
+        encoding="utf-8",
+    )
+
+    with caplog.at_level(logging.ERROR, logger="wud_updater.web_release_notes"):
+        response = client.get("/api/v1/release-notes")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["items"][0]["provider"] == "github"
+    assert body["items"][0]["upstream_repo"] == "acme/app"
+    calls = _fake_docker_calls(fake_root)
+    assert f"image inspect {digest_image}" in calls
+    assert "ps --format" in calls
+    assert f"image inspect {running_image}" in calls
+    assert "Docker inspect failed" not in caplog.text
+
+
 def test_release_notes_get_recovers_ghcr_repo_from_running_image(
     tmp_path: Path,
 ) -> None:

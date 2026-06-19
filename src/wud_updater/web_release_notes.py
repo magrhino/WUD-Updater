@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import sqlite3
+from collections.abc import Callable
 from contextlib import closing
 from dataclasses import asdict
 from typing import Any
@@ -14,7 +15,12 @@ from .command import CommandError, CommandRunner
 from .db import DatabaseError, init_db, open_db
 from . import web_wud_api
 from .docker_cli import ContainerImage, DockerCli
-from .images import image_matches_resolved_target
+from .images import (
+    image_has_tag,
+    image_matches_resolved_target,
+    image_with_tag,
+    strip_digest,
+)
 from .release_notes import (
     OCI_SOURCE_LABEL,
     ReleaseNoteSourceResolver,
@@ -41,6 +47,7 @@ from .wud_file import WudTarget
 
 LOGGER = logging.getLogger(__name__)
 DOCKER_STDERR_LOG_LIMIT = 500
+SourceLabelReader = Callable[[str], tuple[str, CommandError | None]]
 
 
 def api_release_notes(request: Request) -> ReleaseNotesResponse:
@@ -182,7 +189,7 @@ def release_note_source_resolver(
         if github_repo_from_source(wud_source):
             return wud_source
 
-        value, error = source_label(target.first)
+        value, error = source_label_for_target(target, source_label)
         if github_repo_from_source(value):
             return value
 
@@ -190,21 +197,68 @@ def release_note_source_resolver(
         if image_source:
             return image_source
 
-        running_source = running_container_release_source(target, running_images())
+        running_source, running_error = running_container_release_source(
+            target,
+            running_images(),
+            source_label,
+        )
         if running_source:
             return running_source
 
         if error is not None:
             log_source_label_error(settings, target, error)
+        elif running_error is not None:
+            log_source_label_error(settings, target, running_error)
         return value
 
     return resolve
 
 
+def source_label_for_target(
+    target: WudTarget,
+    source_label: SourceLabelReader,
+) -> tuple[str, CommandError | None]:
+    return source_label_from_candidates(
+        source_label_candidates(target.first, tag_token=target.tag_token),
+        source_label,
+    )
+
+
+def source_label_from_candidates(
+    candidates: tuple[str, ...],
+    source_label: SourceLabelReader,
+) -> tuple[str, CommandError | None]:
+    fallback = ""
+    first_error: CommandError | None = None
+    for image in candidates:
+        value, error = source_label(image)
+        if github_repo_from_source(value):
+            return value, None
+        if value and not fallback:
+            fallback = value
+        if error is not None and first_error is None:
+            first_error = error
+    return fallback, first_error
+
+
+def source_label_candidates(image: str, *, tag_token: str = "") -> tuple[str, ...]:
+    candidates: list[str] = []
+    if "@sha256:" in image:
+        if image_has_tag(image):
+            candidates.append(strip_digest(image))
+        elif tag_token:
+            candidates.append(image_with_tag(image, tag_token))
+    candidates.append(image)
+    return tuple(dict.fromkeys(candidate for candidate in candidates if candidate))
+
+
 def running_container_release_source(
     target: WudTarget,
     containers: list[ContainerImage],
-) -> str:
+    source_label: SourceLabelReader,
+) -> tuple[str, CommandError | None]:
+    fallback = ""
+    first_error: CommandError | None = None
     for container in containers:
         if container.name != target.first and not image_matches_resolved_target(
             container.image,
@@ -212,10 +266,20 @@ def running_container_release_source(
             target.allow_repo,
         ):
             continue
+        value, error = source_label_from_candidates(
+            source_label_candidates(container.image),
+            source_label,
+        )
+        if github_repo_from_source(value):
+            return value, None
+        if value and not fallback:
+            fallback = value
+        if error is not None and first_error is None:
+            first_error = error
         source = ghcr_release_source(container.image)
         if source:
-            return source
-    return ""
+            return source, None
+    return fallback, first_error
 
 
 def ghcr_release_source(image: str) -> str:

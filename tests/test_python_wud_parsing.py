@@ -200,19 +200,36 @@ class WudFileParsingTests(unittest.TestCase):
         target = parsed.targets[0]
 
         self.assertEqual(target.desired_tag, "2.0")
+        self.assertEqual(target.tag_token, "2.0")
         self.assertEqual(image_with_tag(target.first, target.desired_tag), "repo/app:2.0")
         self.assertEqual(parsed.warnings, ())
+
+    def test_bare_digest_tag_token_does_not_become_desired_tag(self) -> None:
+        parsed = parse_wud_text("repo/app@sha256:good tag=2.0\n")
+        target = parsed.targets[0]
+
+        self.assertEqual(target.tag_token, "2.0")
+        self.assertEqual(target.desired_tag, "")
+        self.assertEqual(
+            parsed.warnings,
+            (
+                "Ignoring tag update without a tagged source image on WUD line 1: "
+                "repo/app@sha256:good",
+            ),
+        )
 
     def test_last_desired_tag_token_wins(self) -> None:
         parsed = parse_wud_text("repo/app:1.0 tag=2.0 note=ignored tag=3.0\n")
 
         self.assertEqual(parsed.targets[0].desired_tag, "3.0")
+        self.assertEqual(parsed.targets[0].tag_token, "3.0")
         self.assertEqual(parsed.warnings, ())
 
     def test_later_invalid_desired_tag_overrides_earlier_valid_tag(self) -> None:
         parsed = parse_wud_text("repo/app:1.0 tag=2.0 tag=bad:value\n")
 
         self.assertEqual(parsed.targets[0].desired_tag, "")
+        self.assertEqual(parsed.targets[0].tag_token, "2.0")
         self.assertEqual(
             parsed.warnings,
             ("Ignoring invalid tag value on WUD line 1: bad:value",),

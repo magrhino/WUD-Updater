@@ -40,6 +40,7 @@ class WudTarget:
     allow_repo: bool
     digest: str
     desired_tag: str
+    tag_token: str = ""
 
 
 @dataclass(frozen=True)
@@ -304,9 +305,12 @@ def _parse_target(
     digest = normalize_digest(digest)
 
     desired_tag = ""
+    tag_token = ""
     for token in _rest_tokens(rest):
         if token.startswith("tag="):
             desired_tag = token.removeprefix("tag=")
+            if tag_value_valid(desired_tag):
+                tag_token = desired_tag
 
     warnings: list[str] = []
     if desired_tag != "":
@@ -336,6 +340,7 @@ def _parse_target(
             allow_repo=allow_repo,
             digest=digest,
             desired_tag=desired_tag,
+            tag_token=tag_token,
         ),
         warnings,
     )

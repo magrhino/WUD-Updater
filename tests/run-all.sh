@@ -157,6 +157,7 @@ EOF
     tests/test_python_web_metadata.py \
     tests/test_python_web_onboarding.py \
     tests/test_python_web_release_notes.py \
+    tests/test_python_web_release_notes_live.py \
     tests/test_python_web_retag_plans.py \
     tests/test_python_web_retags.py \
     tests/test_python_web_runs.py \
