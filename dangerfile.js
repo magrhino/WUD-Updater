@@ -40,7 +40,7 @@ if (releasePleaseBranch || releasePleaseTitle || dependencyBot) {
 function runCompanionTestRules() {
   warnWhenNoCompanionTests({
     marker: "frontend-api-tests-not-needed",
-    title: "Frontend API or store contract changed without companion tests.",
+    title: "Frontend API or store contract changed; confirm test evidence.",
     changed: [
       "webui/src/api/**",
       "webui/src/stores/**",
@@ -51,7 +51,7 @@ function runCompanionTestRules() {
       "tests/test_python_web*.py",
     ],
     detail:
-      "Update the matching Vitest/API/store coverage, backend contract tests, or add `Danger: frontend-api-tests-not-needed` with the reason.",
+      "Add companion Vitest/API/store or backend contract tests, rely on a passing `codecov/patch/webui-contract` patch coverage check, or add `Danger: frontend-api-tests-not-needed` with the rationale.",
   });
 
   warnWhenNoCompanionTests({
