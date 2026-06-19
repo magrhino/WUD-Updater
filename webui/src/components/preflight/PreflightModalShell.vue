@@ -31,10 +31,9 @@ function handleShowUpdate(value: boolean): void {
     :mask-closable="false"
     @update:show="handleShowUpdate"
   >
-    <section
+    <dialog
+      open
       class="preflight-modal"
-      role="dialog"
-      aria-modal="true"
       :aria-labelledby="titleId ?? `${eyebrow}-preflight-title`"
     >
       <div class="section-heading">
@@ -52,6 +51,6 @@ function handleShowUpdate(value: boolean): void {
       </div>
 
       <slot />
-    </section>
+    </dialog>
   </n-modal>
 </template>

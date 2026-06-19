@@ -101,6 +101,11 @@ from .wud_file import WudTarget
 
 KEEP_CURRENT_CHOICE = "keep-current"
 SWITCH_TO_CONCRETE_CHOICE = "switch-to-concrete"
+MUTATIONS_DISABLED_DETAIL = "mutations are disabled"
+GITHUB_LATEST_MISSING_CACHE_WARNING = (
+    "GitHub latest fallback is enabled, but no cached GitHub release "
+    "metadata is available. Refresh candidates and try again."
+)
 _REGEX_SPECIAL_CHARS = "\\^$.*+?()[]{}|"
 RETAG_PREVIEW_EXECUTOR_MAX_WORKERS = 1
 RETAG_PREVIEW_JOB_LIMIT = 20
@@ -183,7 +188,7 @@ def api_retag_targets(
 def api_refresh_retag_github_latest(request: Request) -> RetagTargetsResponse:
     settings = _settings(request)
     if not settings.mutations_enabled:
-        raise HTTPException(status_code=403, detail="mutations are disabled")
+        raise HTTPException(status_code=403, detail=MUTATIONS_DISABLED_DETAIL)
     response = _refresh_retag_github_latest_candidates(settings)
     if response is not None:
         return response
@@ -203,7 +208,7 @@ def api_start_retag_plan_preview(
 ) -> RetagPreviewJobResponse:
     settings = _settings(request)
     if not settings.mutations_enabled:
-        raise HTTPException(status_code=403, detail="mutations are disabled")
+        raise HTTPException(status_code=403, detail=MUTATIONS_DISABLED_DETAIL)
     state = request.app.state
     job = _RetagPreviewJob(id=secrets.token_urlsafe(18), status="queued")
     _store_retag_preview_job(state, job)
@@ -237,7 +242,7 @@ def api_apply_retag_plan(
 ) -> ApplyJobResponse:
     settings = _settings(request)
     if not settings.mutations_enabled:
-        raise HTTPException(status_code=403, detail="mutations are disabled")
+        raise HTTPException(status_code=403, detail=MUTATIONS_DISABLED_DETAIL)
     active_error = web_jobs._active_mutation_error(request)
     if active_error:
         raise HTTPException(status_code=409, detail=active_error)
@@ -570,57 +575,7 @@ def build_retag_plan(
     keep_current_count = sum(
         1 for choice in choices.values() if choice == KEEP_CURRENT_CHOICE
     )
-    selected: list[_RetagPlanUpdate] = []
-    issues: list[RetagPlanIssue] = []
-    for service_key, choice in sorted(choices.items()):
-        if choice == KEEP_CURRENT_CHOICE:
-            continue
-        record = records_by_key[service_key]
-        item = record.item
-        if not item.retag_available or record.provenance is None:
-            issues.append(
-                RetagPlanIssue(
-                    severity="error",
-                    code="retag-target-not-eligible",
-                    message=(
-                        f"{service_key} cannot switch to concrete tracking: "
-                        f"{item.retag_reason}"
-                    ),
-                    service_key=service_key,
-                    stack=item.stack,
-                    service=item.service,
-                )
-            )
-            continue
-        update = digest_pin_update_from_values(
-            old_image=item.image,
-            resolved_tag=record.provenance.resolved_tag,
-            planned_digest=record.provenance.target_digest,
-            services=(item.service,),
-        )
-        if update.final_image != record.provenance.final_image:
-            issues.append(
-                RetagPlanIssue(
-                    severity="error",
-                    code="retag-provenance-mismatch",
-                    message=(
-                        f"{service_key} stored provenance does not match the "
-                        "planned digest-pinned image."
-                    ),
-                    service_key=service_key,
-                    stack=item.stack,
-                    service=item.service,
-                )
-            )
-            continue
-        selected.append(
-            _RetagPlanUpdate(
-                service_key=service_key,
-                stack=record.stack,
-                update=update,
-                provenance=record.provenance,
-            )
-        )
+    selected, issues = _selected_retag_plan_updates(choices, records_by_key)
 
     selected, preview_issues = _preview_retag_updates(settings, selected)
     issues.extend(preview_issues)
@@ -639,6 +594,74 @@ def build_retag_plan(
     )
     plan.plan_id = _retag_plan_id(plan, updates=selected, compose_hashes=compose_hashes)
     return _RetagPlanBuild(response=plan, updates=tuple(selected))
+
+
+def _selected_retag_plan_updates(
+    choices: Mapping[str, str],
+    records_by_key: Mapping[str, _RetagTargetRecord],
+) -> tuple[list[_RetagPlanUpdate], list[RetagPlanIssue]]:
+    selected: list[_RetagPlanUpdate] = []
+    issues: list[RetagPlanIssue] = []
+    for service_key, choice in sorted(choices.items()):
+        if choice == KEEP_CURRENT_CHOICE:
+            continue
+        update, issue = _retag_plan_update_for_choice(
+            service_key,
+            records_by_key[service_key],
+        )
+        if issue is not None:
+            issues.append(issue)
+            continue
+        if update is not None:
+            selected.append(update)
+    return selected, issues
+
+
+def _retag_plan_update_for_choice(
+    service_key: str,
+    record: _RetagTargetRecord,
+) -> tuple[_RetagPlanUpdate | None, RetagPlanIssue | None]:
+    item = record.item
+    provenance = record.provenance
+    if not item.retag_available or provenance is None:
+        return None, RetagPlanIssue(
+            severity="error",
+            code="retag-target-not-eligible",
+            message=(
+                f"{service_key} cannot switch to concrete tracking: "
+                f"{item.retag_reason}"
+            ),
+            service_key=service_key,
+            stack=item.stack,
+            service=item.service,
+        )
+    update = digest_pin_update_from_values(
+        old_image=item.image,
+        resolved_tag=provenance.resolved_tag,
+        planned_digest=provenance.target_digest,
+        services=(item.service,),
+    )
+    if update.final_image != provenance.final_image:
+        return None, RetagPlanIssue(
+            severity="error",
+            code="retag-provenance-mismatch",
+            message=(
+                f"{service_key} stored provenance does not match the "
+                "planned digest-pinned image."
+            ),
+            service_key=service_key,
+            stack=item.stack,
+            service=item.service,
+        )
+    return (
+        _RetagPlanUpdate(
+            service_key=service_key,
+            stack=record.stack,
+            update=update,
+            provenance=provenance,
+        ),
+        None,
+    )
 
 
 def _retag_target_records(
@@ -758,10 +781,7 @@ def _cached_github_latest_fallback_by_service(
     if not target_rows:
         return {}
     missing_cache = _RetagGitHubLatestFallback(
-        warning=(
-            "GitHub latest fallback is enabled, but no cached GitHub release "
-            "metadata is available. Refresh candidates and try again."
-        )
+        warning=GITHUB_LATEST_MISSING_CACHE_WARNING
     )
     try:
         with closing(web_database.connect_readonly_db(settings)) as conn:
@@ -772,7 +792,10 @@ def _cached_github_latest_fallback_by_service(
                 source_resolver=release_note_source_resolver(settings),
             )
     except ReadOnlyDatabaseMissing:
-        return {service_key: missing_cache for service_key, _image, _target in target_rows}
+        return dict.fromkeys(
+            (service_key for service_key, _image, _target in target_rows),
+            missing_cache,
+        )
     except (OSError, sqlite3.Error, DatabaseError) as exc:
         warning = _safe_exception_detail(
             settings,
@@ -885,10 +908,7 @@ def _github_latest_info_warning(info: ReleaseNoteInfo) -> str:
     if provider == "lsio":
         return "GitHub latest fallback does not support LSIO upstream retag candidates."
     if status == "missing":
-        return (
-            "GitHub latest fallback is enabled, but no cached GitHub release "
-            "metadata is available. Refresh candidates and try again."
-        )
+        return GITHUB_LATEST_MISSING_CACHE_WARNING
     if status == "unsupported":
         return error or "No supported GitHub release source was found."
     if status == "not_found":
@@ -1827,10 +1847,7 @@ def _retag_target_item(
         and retag_reason == "missing-provenance"
     ):
         candidate_source = "github-latest"
-        candidate_warning = (
-            "GitHub latest fallback is enabled, but no cached GitHub release "
-            "metadata is available. Refresh candidates and try again."
-        )
+        candidate_warning = GITHUB_LATEST_MISSING_CACHE_WARNING
     return RetagTargetItem(
         service_key=service_key,
         stack=stack,

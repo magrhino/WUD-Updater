@@ -68,6 +68,6 @@ function delay(ms: number): Promise<void> {
     return Promise.resolve();
   }
   return new Promise((resolve) => {
-    window.setTimeout(resolve, ms);
+    globalThis.setTimeout(resolve, ms);
   });
 }

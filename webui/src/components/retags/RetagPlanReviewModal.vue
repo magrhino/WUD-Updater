@@ -46,9 +46,12 @@ const statusLabel = computed(
   () => props.plan?.status ?? props.previewJob?.status ?? "preview",
 );
 
-const statusType = computed(() =>
-  props.plan ? planStatusType(props.plan) : previewActive.value ? "info" : "default",
-);
+const statusType = computed(() => {
+  if (props.plan) {
+    return planStatusType(props.plan);
+  }
+  return previewActive.value ? "info" : "default";
+});
 
 const summary = computed(() => {
   if (props.previewError) {

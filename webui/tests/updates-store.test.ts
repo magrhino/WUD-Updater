@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { webApi } from "../src/api/client";
 import { useAuthStore } from "../src/stores/auth";
-import { useConnectionStore, errorMessage } from "../src/stores/connection";
+import { useConnectionStore } from "../src/stores/connection";
 import { useSettingsStore } from "../src/stores/settings";
 import { useUpdatesStore, APPLY_JOB_RECOVERY_MESSAGE } from "../src/stores/updates";
 import { useRunsStore } from "../src/stores/runs";
@@ -16,10 +16,6 @@ import {
 import {
   applyJobLogResponse,
   applyJobResponse,
-  coreUpdateTourResponse,
-  doctorResponse,
-  onboardingChecklistResponse,
-  onboardingDismissResponse,
   pendingResponse,
   releaseNotesResponse,
   retagPlanResponse,
@@ -27,18 +23,10 @@ import {
   retagTarget,
   retagTargetsResponse,
   planResponse,
-  runVerification,
-  runSummary,
   selfUpdateApplyResponse,
   selfUpdatePlanResponse,
   selfUpdatePrepareResponse,
   selfUpdateResponse,
-  settingsResponse,
-  servicePolicy,
-  statusResponse,
-  stateOperationResponse,
-  snooze,
-  tagExclusion,
   updateTargetsResponse,
 } from "./helpers/fixtures";
 
@@ -51,10 +39,10 @@ describe("updates store", () => {
     const fetchMock = mockFetch(planResponse());
     const auth = useAuthStore();
     const ensureCsrf = vi.spyOn(auth, "ensureCsrf").mockResolvedValue("csrf-plan");
-        const connection = useConnectionStore();
-    const settings = useSettingsStore();
+    useConnectionStore();
+    useSettingsStore();
     const updates = useUpdatesStore();
-    const runs = useRunsStore();
+    useRunsStore();
 
     await updates.createPlan([1], true, [{ line_no: 1, tag: "1.1" }]);
 
@@ -85,10 +73,10 @@ describe("updates store", () => {
     const ensureCsrf = vi
       .spyOn(auth, "ensureCsrf")
       .mockResolvedValue("csrf-cleanup");
-        const connection = useConnectionStore();
-    const settings = useSettingsStore();
+    useConnectionStore();
+    useSettingsStore();
     const updates = useUpdatesStore();
-    const runs = useRunsStore();
+    useRunsStore();
 
     await updates.cleanupPending("cleanup-test", [
       { line_no: 3, raw: "repo/old:latest" },
@@ -96,7 +84,7 @@ describe("updates store", () => {
 
     expect(ensureCsrf).toHaveBeenCalledTimes(1);
     expect(updates.pendingCleanup?.audit_run_id).toBe(12);
-    expect(JSON.parse(String((fetchMock.mock.calls[0][1] as RequestInit).body))).toEqual({
+    expect(jsonRequestBody(fetchMock.mock.calls[0])).toEqual({
       cleanup_id: "cleanup-test",
       lines: [{ line_no: 3, raw: "repo/old:latest" }],
       confirmation: "remove_unmatched",
@@ -110,10 +98,10 @@ describe("updates store", () => {
 
   it("preserves cleanup success while refreshing pending state when requested", async () => {
     mockFetch(pendingResponse());
-        const connection = useConnectionStore();
-    const settings = useSettingsStore();
+    useConnectionStore();
+    useSettingsStore();
     const updates = useUpdatesStore();
-    const runs = useRunsStore();
+    useRunsStore();
     updates.pendingCleanup = {
       status: "success",
       audit_run_id: 12,
@@ -325,10 +313,10 @@ describe("updates store", () => {
     const fetchMock = mockFetch(releaseNotesResponse());
     const auth = useAuthStore();
     const ensureCsrf = vi.spyOn(auth, "ensureCsrf").mockResolvedValue("csrf-notes");
-        const connection = useConnectionStore();
-    const settings = useSettingsStore();
+    useConnectionStore();
+    useSettingsStore();
     const updates = useUpdatesStore();
-    const runs = useRunsStore();
+    useRunsStore();
 
     await updates.refreshReleaseNotes();
 
@@ -344,10 +332,10 @@ describe("updates store", () => {
 
   it("loads self-update status for the shell banner", async () => {
     const fetchMock = mockFetch(selfUpdateResponse());
-        const connection = useConnectionStore();
-    const settings = useSettingsStore();
+    useConnectionStore();
+    useSettingsStore();
     const updates = useUpdatesStore();
-    const runs = useRunsStore();
+    useRunsStore();
 
     await updates.loadSelfUpdate();
 
@@ -359,10 +347,10 @@ describe("updates store", () => {
     const fetchMock = mockFetch(selfUpdatePlanResponse());
     const auth = useAuthStore();
     const ensureCsrf = vi.spyOn(auth, "ensureCsrf").mockResolvedValue("csrf-plan");
-        const connection = useConnectionStore();
-    const settings = useSettingsStore();
+    useConnectionStore();
+    useSettingsStore();
     const updates = useUpdatesStore();
-    const runs = useRunsStore();
+    useRunsStore();
 
     const response = await updates.planSelfUpdate();
 
@@ -387,10 +375,10 @@ describe("updates store", () => {
     const ensureCsrf = vi
       .spyOn(auth, "ensureCsrf")
       .mockResolvedValue("csrf-self-update");
-        const connection = useConnectionStore();
-    const settings = useSettingsStore();
+    useConnectionStore();
+    useSettingsStore();
     const updates = useUpdatesStore();
-    const runs = useRunsStore();
+    useRunsStore();
     updates.selfUpdate = selfUpdateResponse();
 
     const response = await updates.applySelfUpdate();
@@ -401,7 +389,7 @@ describe("updates store", () => {
       "Image pulled. Recreate the WUD-Updater container to run the new version. Tagged deployments are recommended for predictable updates.",
     );
     expect(fetchMock.mock.calls[0][0]).toBe("/api/v1/self-update");
-    expect(JSON.parse(String((fetchMock.mock.calls[0][1] as RequestInit).body))).toEqual({
+    expect(jsonRequestBody(fetchMock.mock.calls[0])).toEqual({
       confirmation: "pull_image",
       current_tag: "v0.24.2",
       latest_tag: "v0.25.0",
@@ -425,10 +413,10 @@ describe("updates store", () => {
     const ensureCsrf = vi
       .spyOn(auth, "ensureCsrf")
       .mockResolvedValue("csrf-self-update");
-        const connection = useConnectionStore();
-    const settings = useSettingsStore();
+    useConnectionStore();
+    useSettingsStore();
     const updates = useUpdatesStore();
-    const runs = useRunsStore();
+    useRunsStore();
     updates.selfUpdate = selfUpdateResponse({
       strategy: "prepare_tag_update",
       current_image: "ghcr.io/magrhino/wud-updater:v0.24.2",
@@ -445,7 +433,7 @@ describe("updates store", () => {
       "Tag updated and image pulled. Recreate the WUD-Updater container from outside the WebUI to run the new version. Tagged deployments are recommended for predictable updates.",
     );
     expect(fetchMock.mock.calls[0][0]).toBe("/api/v1/self-update/prepare");
-    expect(JSON.parse(String((fetchMock.mock.calls[0][1] as RequestInit).body))).toEqual({
+    expect(jsonRequestBody(fetchMock.mock.calls[0])).toEqual({
       confirmation: "prepare_tag_update",
       plan_id: "self-update-plan-test",
       current_tag: "v0.24.2",
@@ -462,10 +450,10 @@ describe("updates store", () => {
     const ensureCsrf = vi
       .spyOn(auth, "ensureCsrf")
       .mockResolvedValue("csrf-self-update");
-        const connection = useConnectionStore();
-    const settings = useSettingsStore();
+    useConnectionStore();
+    useSettingsStore();
     const updates = useUpdatesStore();
-    const runs = useRunsStore();
+    useRunsStore();
     updates.selfUpdate = selfUpdateResponse({
       strategy: "prepare_tag_update",
       current_image: "ghcr.io/magrhino/wud-updater:v0.24.2",
@@ -488,15 +476,15 @@ describe("updates store", () => {
     mockFetch(applyJobResponse({ job_id: "job-active", status: "running" }));
     const auth = useAuthStore();
     vi.spyOn(auth, "ensureCsrf").mockResolvedValue("csrf-job");
-        const connection = useConnectionStore();
-    const settings = useSettingsStore();
+    useConnectionStore();
+    useSettingsStore();
     const updates = useUpdatesStore();
-    const runs = useRunsStore();
+    useRunsStore();
 
     await updates.createJob("plan-test", [1], false, []);
 
     expect(updates.rememberedApplyJobId).toBe("job-active");
-    expect(window.sessionStorage.getItem("applyJobId")).toBe("job-active");
+    expect(globalThis.sessionStorage.getItem("applyJobId")).toBe("job-active");
 
     updates.setApplyJobLog(applyJobLogResponse({ job_id: "job-active" }));
     expect(updates.applyJobLog?.content).toContain("docker-update-from-wud-v2");
@@ -504,7 +492,7 @@ describe("updates store", () => {
     updates.setApplyJob(applyJobResponse({ job_id: "job-active", status: "success" }));
 
     expect(updates.rememberedApplyJobId).toBe("");
-    expect(window.sessionStorage.getItem("applyJobId")).toBeNull();
+    expect(globalThis.sessionStorage.getItem("applyJobId")).toBeNull();
   });
 
   it("applies plans through the plan apply endpoint", async () => {
@@ -543,10 +531,10 @@ describe("updates store", () => {
       truncated: false,
       max_bytes: 65_536,
     });
-        const connection = useConnectionStore();
-    const settings = useSettingsStore();
+    useConnectionStore();
+    useSettingsStore();
     const updates = useUpdatesStore();
-    const runs = useRunsStore();
+    useRunsStore();
 
     const log = await updates.loadApplyJobLogFromRun(
       applyJobResponse({
@@ -573,13 +561,13 @@ describe("updates store", () => {
   });
 
   it("marks recovery when a remembered apply job is missing", async () => {
-    window.sessionStorage.setItem("applyJobId", "job-lost");
+    globalThis.sessionStorage.setItem("applyJobId", "job-lost");
     const fetchMock = vi
       .fn()
       .mockResolvedValue(jsonResponse({ detail: "apply job not found" }, 404));
     vi.stubGlobal("fetch", fetchMock);
-        const connection = useConnectionStore();
-    const settings = useSettingsStore();
+    useConnectionStore();
+    useSettingsStore();
     const updates = useUpdatesStore();
     const runs = useRunsStore();
 
@@ -591,7 +579,7 @@ describe("updates store", () => {
     expect(updates.applyJobRecovery).toBe(APPLY_JOB_RECOVERY_MESSAGE);
     expect(updates.rememberedApplyJobId).toBe("");
     expect(runs.error).toBe("");
-    expect(window.sessionStorage.getItem("applyJobId")).toBeNull();
+    expect(globalThis.sessionStorage.getItem("applyJobId")).toBeNull();
   });
 });
 
