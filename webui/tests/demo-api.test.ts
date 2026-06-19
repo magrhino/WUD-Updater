@@ -808,9 +808,8 @@ describe("demo web API", () => {
       "media",
       "media",
     ]);
-    expect((await api.releaseNotes()).items.map((item) => item.line_no)).not.toEqual(
-      expect.arrayContaining(selected),
-    );
+    const remainingReleaseNoteLines = (await api.releaseNotes()).items.map((item) => item.line_no);
+    expect(remainingReleaseNoteLines.filter((lineNo) => selected.includes(lineNo))).toEqual([]);
   });
 
   it("materializes arbitrary tag overrides into plan, job log, and run detail", async () => {
