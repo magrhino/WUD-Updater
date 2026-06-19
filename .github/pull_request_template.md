@@ -24,7 +24,7 @@ Mark only checks that actually ran. For skipped or not-applicable checks, leave 
 
 - [ ] `tests/run-all.sh`
 - [ ] Focused test(s):
-    - `Test 1` 
+    - `Test 1`
     - `Test 2`
 
 - [ ] Docker or Compose validation, if container behavior changed:

@@ -16,6 +16,9 @@ concurrency:
   group: webui-demo-pages
   cancel-in-progress: false
 
+permissions:
+  contents: read
+
 jobs:
   build:
     name: build

@@ -1,0 +1,27 @@
+repos:
+- repo: https://github.com/gitleaks/gitleaks
+  rev: v8.30.1
+  hooks:
+  - id: gitleaks
+- repo: https://github.com/shellcheck-py/shellcheck-py
+  rev: v0.11.0.1
+  hooks:
+  - id: shellcheck
+- repo: https://github.com/pre-commit/mirrors-eslint
+  rev: v10.5.0
+  hooks:
+  - id: eslint
+    files: ^(eslint\.config\.js|webui/.*\.(js|mjs|cjs|ts|vue))$
+    types:
+    - file
+    additional_dependencies:
+    - eslint@10.5.0
+    - '@typescript-eslint/eslint-plugin@8.61.1'
+    - '@typescript-eslint/parser@8.61.1'
+    - eslint-plugin-vue@10.9.2
+    - vue-eslint-parser@10.4.1
+- repo: https://github.com/pre-commit/pre-commit-hooks
+  rev: v6.0.0
+  hooks:
+  - id: end-of-file-fixer
+  - id: trailing-whitespace
