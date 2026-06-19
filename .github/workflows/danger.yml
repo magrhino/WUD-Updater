@@ -1,0 +1,51 @@
+name: danger
+
+on:
+  pull_request:
+    branches:
+      - main
+    types:
+      - opened
+      - synchronize
+      - reopened
+      - ready_for_review
+      - edited
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  maintainability-review:
+    name: maintainability review
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    if: ${{ github.event.pull_request.head.repo.full_name == github.repository }}
+
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
+        with:
+          egress-policy: audit
+
+      - name: Check out repository
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up Node.js environment
+        uses: ./.github/actions/setup-node-env
+        with:
+          install-dependencies: "false"
+
+      - name: Run Danger maintainability rules
+        run: npm exec --yes --package=danger@13.0.8 -- danger ci
+        env:
+          DANGER_GITHUB_API_TOKEN: ${{ github.token }}
+          GITHUB_TOKEN: ${{ github.token }}

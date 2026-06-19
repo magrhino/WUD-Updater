@@ -1,6 +1,7 @@
 /.github/CODEOWNERS @magrhino
 /.github/zizmor.yml @magrhino
 /.github/workflows/ @magrhino
+/dangerfile.js @magrhino
 
 /.dockerignore @magrhino
 /Dockerfile @magrhino
