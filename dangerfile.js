@@ -23,6 +23,133 @@ const dependencyBot =
   prAuthor === "dependabot[bot]" ||
   prAuthor === "app/dependabot" ||
   prAuthor === "renovate[bot]";
+const COMPANION_TEST_RULES = [
+  [
+    "frontend-api-tests-not-needed",
+    "Frontend API or store contract changed; confirm test evidence.",
+    `
+      webui/src/api/**
+      webui/src/stores/**
+      webui/src/composables/**
+    `,
+    `
+      webui/tests/**
+      tests/test_python_web*.py
+    `,
+    "Add companion Vitest/API/store or backend contract tests, rely on a passing `codecov/patch/webui-contract` patch coverage check, or add `Danger: frontend-api-tests-not-needed` with the rationale.",
+  ],
+  [
+    "webui-mutation-tests-not-needed",
+    "Auth, CSRF, read-only, scheduler, or mutation UX files changed without guard tests.",
+    `
+      src/wud_updater/web.py
+      src/wud_updater/web_auth.py
+      src/wud_updater/web_diagnostics.py
+      src/wud_updater/web_jobs.py
+      src/wud_updater/web_pending.py
+      src/wud_updater/web_plans.py
+      src/wud_updater/web_retags.py
+      src/wud_updater/web_scheduler.py
+      src/wud_updater/web_self_update.py
+      src/wud_updater/web_settings.py
+      src/wud_updater/web_state.py
+      webui/src/stores/auth.ts
+      webui/src/stores/connection.ts
+      webui/src/stores/settings.ts
+      webui/src/stores/updates.ts
+      webui/src/views/PendingView.vue
+      webui/src/views/PoliciesView.vue
+      webui/src/views/RetagsView.vue
+      webui/src/views/SettingsView.vue
+      webui/src/views/SnoozesView.vue
+      webui/src/views/TagExclusionsView.vue
+      webui/src/views/pending/**
+      webui/src/views/settings/**
+      webui/src/components/app/AppSelfUpdate*.vue
+      webui/src/components/pending/**
+      webui/src/components/retags/**
+    `,
+    `
+      tests/test_python_web_apply_endpoint_guards.py
+      tests/test_python_web_auth_*.py
+      tests/test_python_web_jobs.py
+      tests/test_python_web_pending_*.py
+      tests/test_python_web_retags.py
+      tests/test_python_web_scheduler_*.py
+      tests/test_python_web_self_update_*.py
+      tests/test_python_web_state_operations.py
+      webui/tests/auth-store.test.ts
+      webui/tests/connection-store.test.ts
+      webui/tests/pending-view-*.test.ts
+      webui/tests/RetagsView.test.ts
+      webui/tests/settings-mutation-views.test.ts
+      webui/tests/settings-store.test.ts
+      webui/tests/updates-store.test.ts
+    `,
+    "Recent reviews caught missing read-only/mutation guards. Add focused auth/CSRF/read-only tests or add `Danger: webui-mutation-tests-not-needed` with the reason.",
+  ],
+  [
+    "compose-rewrite-tests-not-needed",
+    "Compose rewrite, digest, or tag logic changed without focused tests.",
+    `
+      src/wud_updater/compose_rewrite.py
+      src/wud_updater/compose.py
+      src/wud_updater/digest_provenance.py
+      src/wud_updater/digest_verifier.py
+      src/wud_updater/images.py
+      src/wud_updater/plan_actions.py
+      src/wud_updater/plan_*.py
+      src/wud_updater/plan_digest_unpin.py
+      src/wud_updater/plan_matching.py
+      src/wud_updater/plans.py
+      src/wud_updater/updater_digest*.py
+      src/wud_updater/updater_lifecycle_digest.py
+      src/wud_updater/updater_lifecycle_rewrite.py
+      src/wud_updater/updater_models.py
+      src/wud_updater/updater_runner_*.py
+      src/wud_updater/updater_tag_exclusions.py
+      src/wud_updater/wud_file.py
+      webui/src/utils/digestProvenance.ts
+    `,
+    `
+      tests/test_python_compose_*.py
+      tests/test_python_digest_verifier.py
+      tests/test_python_update_from_wud_*digest*.py
+      tests/test_python_update_from_wud_*tag*.py
+      tests/test_python_wud_parsing.py
+    `,
+    "Digest/tag rewrites are rollback-sensitive. Add focused compose/updater coverage or add `Danger: compose-rewrite-tests-not-needed` with the reason.",
+  ],
+  [
+    "demo-fixture-tests-not-needed",
+    "Static demo API or fixture state changed without demo tests.",
+    `
+      webui/src/api/demo/**
+      webui/scripts/seed_demo_state.py
+      tests/test_python_webui_demo_state.py
+    `,
+    `
+      webui/tests/demo-api.test.ts
+      webui/tests/static-security.test.ts
+      tests/test_python_webui_demo_state.py
+    `,
+    "Recent review feedback caught broad fixture replacements and duplicate cleanup handling. Add demo coverage or add `Danger: demo-fixture-tests-not-needed` with the reason.",
+  ],
+  [
+    "responsive-tests-not-needed",
+    "Responsive breakpoint code changed without responsive or smoke tests.",
+    `
+      webui/src/responsive.ts
+      webui/src/assets/styles/responsive.css
+      webui/src/assets/styles/foundation.css
+    `,
+    `
+      webui/tests/responsive.test.ts
+      webui/tests/smoke/**
+    `,
+    "Recent reviews caught JS/CSS breakpoint parity issues. Add responsive coverage, a smoke check, or add `Danger: responsive-tests-not-needed` with the reason.",
+  ],
+].map(companionTestRule);
 
 if (releasePleaseBranch || releasePleaseTitle || dependencyBot) {
   markdown(
@@ -38,141 +165,9 @@ if (releasePleaseBranch || releasePleaseTitle || dependencyBot) {
 }
 
 function runCompanionTestRules() {
-  warnWhenNoCompanionTests({
-    marker: "frontend-api-tests-not-needed",
-    title: "Frontend API or store contract changed; confirm test evidence.",
-    changed: [
-      "webui/src/api/**",
-      "webui/src/stores/**",
-      "webui/src/composables/**",
-    ],
-    tests: [
-      "webui/tests/**",
-      "tests/test_python_web*.py",
-    ],
-    detail:
-      "Add companion Vitest/API/store or backend contract tests, rely on a passing `codecov/patch/webui-contract` patch coverage check, or add `Danger: frontend-api-tests-not-needed` with the rationale.",
-  });
-
-  warnWhenNoCompanionTests({
-    marker: "webui-mutation-tests-not-needed",
-    title:
-      "Auth, CSRF, read-only, scheduler, or mutation UX files changed without guard tests.",
-    changed: [
-      "src/wud_updater/web.py",
-      "src/wud_updater/web_auth.py",
-      "src/wud_updater/web_diagnostics.py",
-      "src/wud_updater/web_jobs.py",
-      "src/wud_updater/web_pending.py",
-      "src/wud_updater/web_plans.py",
-      "src/wud_updater/web_retags.py",
-      "src/wud_updater/web_scheduler.py",
-      "src/wud_updater/web_self_update.py",
-      "src/wud_updater/web_settings.py",
-      "src/wud_updater/web_state.py",
-      "webui/src/stores/auth.ts",
-      "webui/src/stores/connection.ts",
-      "webui/src/stores/settings.ts",
-      "webui/src/stores/updates.ts",
-      "webui/src/views/PendingView.vue",
-      "webui/src/views/PoliciesView.vue",
-      "webui/src/views/RetagsView.vue",
-      "webui/src/views/SettingsView.vue",
-      "webui/src/views/SnoozesView.vue",
-      "webui/src/views/TagExclusionsView.vue",
-      "webui/src/views/pending/**",
-      "webui/src/views/settings/**",
-      "webui/src/components/app/AppSelfUpdate*.vue",
-      "webui/src/components/pending/**",
-      "webui/src/components/retags/**",
-    ],
-    tests: [
-      "tests/test_python_web_apply_endpoint_guards.py",
-      "tests/test_python_web_auth_*.py",
-      "tests/test_python_web_jobs.py",
-      "tests/test_python_web_pending_*.py",
-      "tests/test_python_web_retags.py",
-      "tests/test_python_web_scheduler_*.py",
-      "tests/test_python_web_self_update_*.py",
-      "tests/test_python_web_state_operations.py",
-      "webui/tests/auth-store.test.ts",
-      "webui/tests/connection-store.test.ts",
-      "webui/tests/pending-view-*.test.ts",
-      "webui/tests/RetagsView.test.ts",
-      "webui/tests/settings-mutation-views.test.ts",
-      "webui/tests/settings-store.test.ts",
-      "webui/tests/updates-store.test.ts",
-    ],
-    detail:
-      "Recent reviews caught missing read-only/mutation guards. Add focused auth/CSRF/read-only tests or add `Danger: webui-mutation-tests-not-needed` with the reason.",
-  });
-
-  warnWhenNoCompanionTests({
-    marker: "compose-rewrite-tests-not-needed",
-    title: "Compose rewrite, digest, or tag logic changed without focused tests.",
-    changed: [
-      "src/wud_updater/compose_rewrite.py",
-      "src/wud_updater/compose.py",
-      "src/wud_updater/digest_provenance.py",
-      "src/wud_updater/digest_verifier.py",
-      "src/wud_updater/images.py",
-      "src/wud_updater/plan_actions.py",
-      "src/wud_updater/plan_*.py",
-      "src/wud_updater/plan_digest_unpin.py",
-      "src/wud_updater/plan_matching.py",
-      "src/wud_updater/plans.py",
-      "src/wud_updater/updater_digest*.py",
-      "src/wud_updater/updater_lifecycle_digest.py",
-      "src/wud_updater/updater_lifecycle_rewrite.py",
-      "src/wud_updater/updater_models.py",
-      "src/wud_updater/updater_runner_*.py",
-      "src/wud_updater/updater_tag_exclusions.py",
-      "src/wud_updater/wud_file.py",
-      "webui/src/utils/digestProvenance.ts",
-    ],
-    tests: [
-      "tests/test_python_compose_*.py",
-      "tests/test_python_digest_verifier.py",
-      "tests/test_python_update_from_wud_*digest*.py",
-      "tests/test_python_update_from_wud_*tag*.py",
-      "tests/test_python_wud_parsing.py",
-    ],
-    detail:
-      "Digest/tag rewrites are rollback-sensitive. Add focused compose/updater coverage or add `Danger: compose-rewrite-tests-not-needed` with the reason.",
-  });
-
-  warnWhenNoCompanionTests({
-    marker: "demo-fixture-tests-not-needed",
-    title: "Static demo API or fixture state changed without demo tests.",
-    changed: [
-      "webui/src/api/demo/**",
-      "webui/scripts/seed_demo_state.py",
-      "tests/test_python_webui_demo_state.py",
-    ],
-    tests: [
-      "webui/tests/demo-api.test.ts",
-      "webui/tests/static-security.test.ts",
-      "tests/test_python_webui_demo_state.py",
-    ],
-    detail:
-      "Recent review feedback caught broad fixture replacements and duplicate cleanup handling. Add demo coverage or add `Danger: demo-fixture-tests-not-needed` with the reason.",
-  });
-
-  warnWhenNoCompanionTests({
-    marker: "responsive-tests-not-needed",
-    title: "Responsive breakpoint code changed without responsive or smoke tests.",
-    changed: [
-      "webui/src/responsive.ts",
-      "webui/src/assets/styles/responsive.css",
-      "webui/src/assets/styles/foundation.css",
-    ],
-    tests: [
-      "webui/tests/responsive.test.ts",
-      "webui/tests/smoke/**",
-    ],
-    detail:
-      "Recent reviews caught JS/CSS breakpoint parity issues. Add responsive coverage, a smoke check, or add `Danger: responsive-tests-not-needed` with the reason.",
-  });
+  for (const rule of COMPANION_TEST_RULES) {
+    warnWhenNoCompanionTests(rule);
+  }
 }
 
 function runReviewPromptRules() {
@@ -384,17 +379,32 @@ function warnWhenNoCompanionTests({ marker, title, changed, tests, detail }) {
   if (acknowledged(marker)) {
     return;
   }
+  const expectedTests = tests.map((test) => `\`${test}\``).join(", ");
 
   warn(
     [
       title,
       "",
       `Changed: ${formatFiles(files)}`,
-      `Expected companion tests: ${tests.map((test) => `\`${test}\``).join(", ")}`,
+      `Expected companion tests: ${expectedTests}`,
       "",
       detail,
     ].join("\n"),
   );
+}
+
+function companionTestRule([marker, title, changed, tests, detail]) {
+  return {
+    marker,
+    title,
+    changed: pathPatterns(changed),
+    tests: pathPatterns(tests),
+    detail,
+  };
+}
+
+function pathPatterns(patterns) {
+  return patterns.trim().split(/\s+/);
 }
 
 async function addedLinesForFile(file) {
@@ -449,7 +459,7 @@ function globToRegex(glob) {
 }
 
 function escapeRegex(value) {
-  return value.replace(/[|\\{}()[\]^$+?.]/g, "\\$&");
+  return value.replace(/[|\\{}()[\]^$+?.]/g, String.raw`\$&`);
 }
 
 function isIgnoredLargeFile(file) {
