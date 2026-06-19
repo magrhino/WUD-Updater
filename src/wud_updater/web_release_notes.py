@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import logging
 import sqlite3
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from contextlib import closing
-from dataclasses import asdict
+from dataclasses import asdict, dataclass
 from typing import Any
 
 from fastapi import HTTPException, Request
@@ -24,6 +24,7 @@ from .images import (
 from .release_notes import (
     OCI_SOURCE_LABEL,
     ReleaseNoteSourceResolver,
+    ReleaseNoteTargetTagResolver,
     cached_release_notes,
     github_repo_from_ghcr_image,
     github_repo_from_source,
@@ -50,41 +51,35 @@ DOCKER_STDERR_LOG_LIMIT = 500
 SourceLabelReader = Callable[[str], tuple[str, CommandError | None]]
 
 
+@dataclass(frozen=True)
+class _ReleaseNotesRequestContext:
+    targets: tuple[WudTarget, ...]
+    warnings: tuple[str, ...]
+    wud_api: Any
+    source_resolver: ReleaseNoteSourceResolver
+    target_tag_resolver: ReleaseNoteTargetTagResolver
+
+
 def api_release_notes(request: Request) -> ReleaseNotesResponse:
     settings = _settings(request)
-    wud_snapshot = web_wud_api.get_snapshot(settings, include_containers=True)
-    exists, parsed = parse_pending_file(settings)
-    warnings = list(parsed.warnings)
-    wud_metadata = web_wud_api.metadata_by_target(
-        settings,
-        parsed.targets,
-        snapshot=wud_snapshot,
-    )
-    if not exists:
-        return ReleaseNotesResponse(
-            source_file=str(settings.config.wud_out_file),
-            count=0,
-            items=[],
-            wud_api=wud_snapshot.status,
-            warnings=warnings,
-        )
-    source_resolver = release_note_source_resolver(settings, wud_metadata=wud_metadata)
-    target_tag_resolver = web_wud_api.target_tag_resolver_from_metadata(wud_metadata)
+    context = _release_notes_request_context(settings)
+    if isinstance(context, ReleaseNotesResponse):
+        return context
     try:
         with closing(_connect_readonly_db(settings)) as conn:
             items = cached_release_notes(
                 conn,
-                parsed.targets,
+                context.targets,
                 settings.command_env or {},
-                source_resolver=source_resolver,
-                target_tag_resolver=target_tag_resolver,
+                source_resolver=context.source_resolver,
+                target_tag_resolver=context.target_tag_resolver,
             )
     except ReadOnlyDatabaseMissing:
         items = release_note_placeholders(
-            parsed.targets,
+            context.targets,
             settings.command_env or {},
-            source_resolver=source_resolver,
-            target_tag_resolver=target_tag_resolver,
+            source_resolver=context.source_resolver,
+            target_tag_resolver=context.target_tag_resolver,
         )
     except (OSError, sqlite3.Error, DatabaseError) as exc:
         raise HTTPException(
@@ -95,38 +90,28 @@ def api_release_notes(request: Request) -> ReleaseNotesResponse:
                 exc,
             ),
         ) from exc
-    return release_notes_response(settings, items, warnings, wud_api=wud_snapshot.status)
+    return release_notes_response(
+        settings,
+        items,
+        context.warnings,
+        wud_api=context.wud_api,
+    )
 
 
 def api_refresh_release_notes(request: Request) -> ReleaseNotesResponse:
     settings = _settings(request)
-    wud_snapshot = web_wud_api.get_snapshot(settings, include_containers=True)
-    exists, parsed = parse_pending_file(settings)
-    warnings = list(parsed.warnings)
-    wud_metadata = web_wud_api.metadata_by_target(
-        settings,
-        parsed.targets,
-        snapshot=wud_snapshot,
-    )
-    if not exists:
-        return ReleaseNotesResponse(
-            source_file=str(settings.config.wud_out_file),
-            count=0,
-            items=[],
-            wud_api=wud_snapshot.status,
-            warnings=warnings,
-        )
-    source_resolver = release_note_source_resolver(settings, wud_metadata=wud_metadata)
-    target_tag_resolver = web_wud_api.target_tag_resolver_from_metadata(wud_metadata)
+    context = _release_notes_request_context(settings)
+    if isinstance(context, ReleaseNotesResponse):
+        return context
     try:
         with open_db(settings.config.db_path) as conn:
             init_db(conn)
             items = refresh_release_notes(
                 conn,
-                parsed.targets,
+                context.targets,
                 settings.command_env or {},
-                source_resolver=source_resolver,
-                target_tag_resolver=target_tag_resolver,
+                source_resolver=context.source_resolver,
+                target_tag_resolver=context.target_tag_resolver,
                 redact_error=lambda value: _redact_sensitive_text(settings, value),
             )
     except (OSError, sqlite3.Error, DatabaseError) as exc:
@@ -138,13 +123,50 @@ def api_refresh_release_notes(request: Request) -> ReleaseNotesResponse:
                 exc,
             ),
         ) from exc
-    return release_notes_response(settings, items, warnings, wud_api=wud_snapshot.status)
+    return release_notes_response(
+        settings,
+        items,
+        context.warnings,
+        wud_api=context.wud_api,
+    )
+
+
+def _release_notes_request_context(
+    settings: WebSettings,
+) -> _ReleaseNotesRequestContext | ReleaseNotesResponse:
+    wud_snapshot = web_wud_api.get_snapshot(settings, include_containers=True)
+    exists, parsed = parse_pending_file(settings)
+    wud_metadata = web_wud_api.metadata_by_target(
+        settings,
+        parsed.targets,
+        snapshot=wud_snapshot,
+    )
+    if not exists:
+        return ReleaseNotesResponse(
+            source_file=str(settings.config.wud_out_file),
+            count=0,
+            items=[],
+            wud_api=wud_snapshot.status,
+            warnings=list(parsed.warnings),
+        )
+    return _ReleaseNotesRequestContext(
+        targets=parsed.targets,
+        warnings=parsed.warnings,
+        wud_api=wud_snapshot.status,
+        source_resolver=release_note_source_resolver(
+            settings,
+            wud_metadata=wud_metadata,
+        ),
+        target_tag_resolver=web_wud_api.target_tag_resolver_from_metadata(
+            wud_metadata,
+        ),
+    )
 
 
 def release_notes_response(
     settings: WebSettings,
     items: list[Any],
-    warnings: list[str],
+    warnings: Iterable[str],
     *,
     wud_api: Any,
 ) -> ReleaseNotesResponse:
