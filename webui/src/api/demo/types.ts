@@ -134,16 +134,9 @@ export type DemoGeneratedFixtures = {
   };
 };
 
-export type DemoMaterializedPlanCase = Omit<DemoPlanCase, "response" | "jobTemplate"> & {
-  response: PlanResponse;
-  jobTemplate?: DemoGeneratedJobFixture;
-};
+export type DemoMaterializedPlanCase = DemoPlanCase;
 
-export type DemoMaterializedRetagCase = Omit<DemoRetagCase, "response" | "preview" | "jobTemplate"> & {
-  response: RetagPlanResponse;
-  preview: DemoRetagPreviewFixture;
-  jobTemplate?: DemoGeneratedJobFixture;
-};
+export type DemoMaterializedRetagCase = DemoRetagCase;
 
 export type DemoJobRecord = {
   job: ApplyJobResponse;
