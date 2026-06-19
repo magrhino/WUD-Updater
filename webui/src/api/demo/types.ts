@@ -36,3 +36,5 @@ export type DemoRunFixture = {
   detail: RunDetail;
   log: RunLogResponse;
 };
+
+export type DemoGeneratedFixtures = Record<string, unknown>;

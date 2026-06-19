@@ -2,12 +2,13 @@ from __future__ import annotations
 
 import json
 import itertools
+import os
 import tempfile
 import unittest
 from pathlib import Path
 from unittest import mock
 
-from wud_updater import web_demo_fixtures
+from wud_updater import web_demo_fixtures, web_wud_api
 from wud_updater.web_models import (
     ApplyJobLogResponse,
     ApplyJobResponse,
@@ -129,8 +130,102 @@ class WebDemoFixtureGenerationTests(unittest.TestCase):
 
     def test_typescript_fixture_render_is_sanitized(self) -> None:
         rendered = web_demo_fixtures.render_static_demo_fixtures_ts(self.fixtures)
+        types_path = web_demo_fixtures.REPO_ROOT / "webui/src/api/demo/types.ts"
         self.assertIn("export const generatedFixtures", rendered)
+        self.assertIn(
+            'import type { DemoGeneratedFixtures } from "./types"',
+            rendered,
+        )
+        self.assertIn(
+            "export type DemoGeneratedFixtures",
+            types_path.read_text(encoding="utf-8"),
+        )
         self.assertNotIn(str(Path.home()), rendered)
+
+    def test_demo_environment_is_allowlisted(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            paths = web_demo_fixtures.seed_demo_state(Path(tmpdir) / "state")
+            static_dir = paths["root"] / "static"
+            static_dir.mkdir(parents=True, exist_ok=True)
+
+            with mock.patch.dict(
+                os.environ,
+                {
+                    "GITHUB_TOKEN": "host-secret",
+                    "PATH": "/private/host/bin",
+                    "WUD_WEB_TOKEN": "host-web-token",
+                },
+            ):
+                env = web_demo_fixtures._demo_environ(paths, static_dir)
+
+        self.assertEqual(
+            set(env),
+            {
+                "HOME",
+                "DOCKER_BASE",
+                "HOST_DOCKER_BASE",
+                "WUD_OUT_FILE",
+                "WUD_LOG_DIR",
+                "WUD_DB_PATH",
+                "WUD_WEB_STATIC_DIR",
+                "WUD_WEB_DEV_NO_AUTH",
+                "WUD_WEB_MUTATIONS_ENABLED",
+                "WUD_WEB_RESTART_CONTAINER",
+                "WUD_WEB_DEMO_SELF_UPDATE",
+                "WUD_WEB_ALLOWED_HOSTS",
+                "WUD_WEB_ALLOWED_ORIGINS",
+                "WUD_WEB_UPSTREAM_MAP",
+                "WUD_SCRIPTS_DIR",
+                "DOCKER_HOST",
+                "PATH",
+                "FAKE_DOCKER_ROOT",
+            },
+        )
+        self.assertNotIn("GITHUB_TOKEN", env)
+        self.assertNotIn("WUD_WEB_TOKEN", env)
+        self.assertNotIn("/private/host/bin", env["PATH"])
+        self.assertEqual(env["WUD_WEB_DEV_NO_AUTH"], "true")
+
+    def test_fixture_generation_restores_wud_api_snapshot_cache(self) -> None:
+        sentinel = web_wud_api.WudApiSnapshot(
+            status=web_wud_api.WudApiStatus(
+                state="unavailable",
+                available=False,
+                metadata_available=False,
+                last_checked_at="2026-05-30T00:00:00+00:00",
+                detail="sentinel",
+            ),
+            checked_monotonic=123.0,
+        )
+        with web_wud_api._cache_lock:
+            original_cache = dict(web_wud_api._snapshot_cache)
+            web_wud_api._snapshot_cache.clear()
+            web_wud_api._snapshot_cache["http://sentinel.example"] = sentinel
+        try:
+            with mock.patch(
+                "urllib.request.urlopen",
+                side_effect=AssertionError("fixture generation must not use network"),
+            ):
+                web_demo_fixtures.generate_static_demo_fixtures()
+            with web_wud_api._cache_lock:
+                self.assertEqual(
+                    web_wud_api._snapshot_cache,
+                    {"http://sentinel.example": sentinel},
+                )
+        finally:
+            with web_wud_api._cache_lock:
+                web_wud_api._snapshot_cache.clear()
+                web_wud_api._snapshot_cache.update(original_cache)
+
+    def test_static_spa_available_default_is_fixture_controlled(self) -> None:
+        entry = next(
+            item
+            for item in self.fixtures["settings"]["webui"]
+            if item["name"] == "WUD_WEB_STATIC_SPA_AVAILABLE"
+        )
+
+        self.assertEqual(entry["value"], "true")
+        self.assertEqual(entry["default_value"], "true")
 
     def test_fixture_writer_rejects_paths_outside_repo(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

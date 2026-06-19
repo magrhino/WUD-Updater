@@ -553,13 +553,27 @@ def generate_static_demo_fixtures() -> dict[str, Any]:
     """Generate static demo fixtures from backend WebUI response builders."""
 
     _ensure_web_fixture_imports()
-    with tempfile.TemporaryDirectory(prefix="wud-static-demo.") as tmpdir:
-        context = _demo_context(Path(tmpdir) / "state")
-        try:
-            data = _fixture_payload(context)
-            return _sanitize_payload(data, context.paths)
-        finally:
-            web_jobs.shutdown_apply_job_state(context.state)
+    with _preserved_wud_api_snapshot_cache():
+        with tempfile.TemporaryDirectory(prefix="wud-static-demo.") as tmpdir:
+            context = _demo_context(Path(tmpdir) / "state")
+            try:
+                with _static_demo_default_static_dir(context.paths["static_dir"]):
+                    data = _fixture_payload(context)
+                return _sanitize_payload(data, context.paths)
+            finally:
+                web_jobs.shutdown_apply_job_state(context.state)
+
+
+@contextlib.contextmanager
+def _preserved_wud_api_snapshot_cache():
+    with web_wud_api._cache_lock:
+        original_cache = dict(web_wud_api._snapshot_cache)
+    try:
+        yield
+    finally:
+        with web_wud_api._cache_lock:
+            web_wud_api._snapshot_cache.clear()
+            web_wud_api._snapshot_cache.update(original_cache)
 
 
 def render_static_demo_fixtures_ts(data: dict[str, Any]) -> str:
@@ -1238,8 +1252,10 @@ def _demo_context(root: Path) -> SimpleNamespace:
 
 def _demo_environ(paths: dict[str, Path], static_dir: Path) -> dict[str, str]:
     fake_bin = REPO_ROOT / "tests" / "fakes"
+    command_path = os.pathsep.join(
+        (str(fake_bin), "/usr/bin", "/bin", "/usr/sbin", "/sbin")
+    )
     return {
-        **os.environ,
         "HOME": str(paths["root"]),
         "DOCKER_BASE": str(paths["docker_base"]),
         "HOST_DOCKER_BASE": str(paths["docker_base"]),
@@ -1256,7 +1272,7 @@ def _demo_environ(paths: dict[str, Path], static_dir: Path) -> dict[str, str]:
         "WUD_WEB_UPSTREAM_MAP": str(REPO_ROOT / "wud" / "upstreams.txt"),
         "WUD_SCRIPTS_DIR": str(REPO_ROOT / "wud"),
         "DOCKER_HOST": "tcp://demo-docker:2375",
-        "PATH": f"{fake_bin}{os.pathsep}{os.environ.get('PATH', '')}",
+        "PATH": command_path,
         "FAKE_DOCKER_ROOT": str(paths["fake_docker_root"]),
     }
 
@@ -1276,6 +1292,22 @@ def _demo_request(settings: WebSettings, state: Any) -> Request:
             "app": app,
         }
     )
+
+
+@contextlib.contextmanager
+def _static_demo_default_static_dir(static_dir: Path):
+    original_resolve_static_dir = web_settings._resolve_static_dir
+
+    def resolve_static_dir(configured: str | Path | None) -> Path | None:
+        if configured is None:
+            return static_dir
+        return original_resolve_static_dir(configured)
+
+    web_settings._resolve_static_dir = resolve_static_dir
+    try:
+        yield
+    finally:
+        web_settings._resolve_static_dir = original_resolve_static_dir
 
 
 def _configure_backend_callbacks() -> None:
