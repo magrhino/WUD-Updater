@@ -346,27 +346,27 @@ function pendingLineFixture(
 }
 
 export class DemoApiState {
-  private activePendingLineKeys = new Set(
+  private readonly activePendingLineKeys = new Set(
     fixtures.pending.items.map((item) => cleanupLineKey(item)),
   );
   policies = clone(fixtures.servicePolicies);
   snoozes = clone(fixtures.snoozes.all);
   tagExclusions = clone(fixtures.tagExclusions.all);
   runs = clone(fixtures.runs.summaries);
-  private runDetails = new Map(
+  private readonly runDetails = new Map(
     Object.entries(fixtures.runs.details).map(([id, detail]) => [
       Number(id),
       clone(detail),
     ]),
   );
-  private runLogs = new Map(
+  private readonly runLogs = new Map(
     Object.entries(fixtures.runs.logs).map(([id, log]) => [
       Number(id),
       clone(log),
     ]),
   );
   jobs = new Map<string, DemoJobRecord>();
-  private retagPreviewJobs = new Map<string, RetagPreviewJobResponse>();
+  private readonly retagPreviewJobs = new Map<string, RetagPreviewJobResponse>();
   themePreference = "system";
   themePreferenceConfigured = false;
   onboardingDismissedAt = "";
@@ -1384,7 +1384,7 @@ export class DemoApiState {
     const removed = lines.map((line) => findGroupedLine(line));
     if (
       requested.size === 0 ||
-      removed.some((line) => line === null) ||
+      removed.includes(null) ||
       [...requested].some(
         (key) => !this.activePendingLineKeys.has(key) || !options.requiredKeys.has(key),
       )
