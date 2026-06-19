@@ -187,7 +187,7 @@ class WebDemoFixtureGenerationTests(unittest.TestCase):
         self.assertNotIn("WUD_WEB_TOKEN", env)
         self.assertNotIn("/private/host/bin", env["PATH"])
         self.assertEqual(env["WUD_WEB_DEV_NO_AUTH"], "true")
-        self.assertEqual(env["WUD_SYNC_SCRIPTS"], "disabled")
+        self.assertEqual(env["WUD_SYNC_SCRIPTS"], "false")
         self.assertEqual(env["WUD_UPDATER_USE_SUDO"], "false")
 
     def test_fixture_generation_restores_wud_api_snapshot_cache(self) -> None:
