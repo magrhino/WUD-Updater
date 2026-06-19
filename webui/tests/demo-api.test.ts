@@ -364,7 +364,9 @@ describe("demo web API", () => {
       matched_target_count: 4,
       skipped_count: 3,
     });
-    expect(plan.stacks.map((stack) => stack.name).sort()).toEqual([
+    expect(
+      plan.stacks.map((stack) => stack.name).sort((left, right) => left.localeCompare(right)),
+    ).toEqual([
       "data",
       "home",
       "media",
@@ -796,7 +798,11 @@ describe("demo web API", () => {
     expect((await api.pending()).items.map((item) => item.line_no)).toEqual([6, 7, 8]);
     const runId = completedRunId(jobs);
     const detail = await api.runDetail(runId);
-    expect(detail.events.map((event) => event.stack_name).sort()).toEqual([
+    expect(
+      detail.events
+        .map((event) => event.stack_name)
+        .sort((left, right) => left.localeCompare(right)),
+    ).toEqual([
       "data",
       "home",
       "media",
