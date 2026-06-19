@@ -72,12 +72,14 @@ const COMPANION_TEST_RULES = [
     `
       tests/test_python_web_apply_endpoint_guards.py
       tests/test_python_web_auth_*.py
+      tests/test_python_web_diagnostics.py
       tests/test_python_web_jobs.py
       tests/test_python_web_pending_*.py
+      tests/test_python_web_plan_*.py
       tests/test_python_web_retags.py
       tests/test_python_web_scheduler_*.py
       tests/test_python_web_self_update_*.py
-      tests/test_python_web_state_operations.py
+      tests/test_python_web_state_*.py
       webui/tests/auth-store.test.ts
       webui/tests/connection-store.test.ts
       webui/tests/pending-view-*.test.ts
@@ -116,6 +118,7 @@ const COMPANION_TEST_RULES = [
       tests/test_python_digest_verifier.py
       tests/test_python_update_from_wud_*digest*.py
       tests/test_python_update_from_wud_*tag*.py
+      tests/test_python_updater_digest*.py
       tests/test_python_wud_parsing.py
     `,
     "Digest/tag rewrites are rollback-sensitive. Add focused compose/updater coverage or add `Danger: compose-rewrite-tests-not-needed` with the reason.",
