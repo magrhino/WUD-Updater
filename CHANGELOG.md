@@ -4,6 +4,13 @@ All notable changes to WUD-Updater are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com) and versions follow
 [Semantic Versioning](https://semver.org).
 
+## [0.45.0](https://github.com/magrhino/WUD-Updater/compare/v0.44.0...v0.45.0) (2026-06-19)
+
+
+### Features
+
+* **web:** add static demo fixture catalog generator ([#356](https://github.com/magrhino/WUD-Updater/issues/356)) ([1fc2270](https://github.com/magrhino/WUD-Updater/commit/1fc2270fa1eae2799e350805b3c66f8e7f4726ac))
+
 ## [0.44.0](https://github.com/magrhino/WUD-Updater/compare/v0.43.0...v0.44.0) (2026-06-19)
 
 
