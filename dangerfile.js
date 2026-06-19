@@ -431,7 +431,10 @@ function globToRegex(glob) {
     for (let index = 0; index < glob.length; index += 1) {
       const char = glob[index];
       const next = glob[index + 1];
-      if (char === "*" && next === "*") {
+      if (char === "*" && next === "*" && glob[index + 2] === "/") {
+        pattern += "(?:.*/)?";
+        index += 2;
+      } else if (char === "*" && next === "*") {
         pattern += ".*";
         index += 1;
       } else if (char === "*") {
