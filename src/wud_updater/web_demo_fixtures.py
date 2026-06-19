@@ -1271,6 +1271,8 @@ def _demo_environ(paths: dict[str, Path], static_dir: Path) -> dict[str, str]:
         "WUD_WEB_ALLOWED_ORIGINS": "http://testserver",
         "WUD_WEB_UPSTREAM_MAP": str(REPO_ROOT / "wud" / "upstreams.txt"),
         "WUD_SCRIPTS_DIR": str(REPO_ROOT / "wud"),
+        "WUD_SYNC_SCRIPTS": "disabled",
+        "WUD_UPDATER_USE_SUDO": "false",
         "DOCKER_HOST": "tcp://demo-docker:2375",
         "PATH": command_path,
         "FAKE_DOCKER_ROOT": str(paths["fake_docker_root"]),
