@@ -407,6 +407,16 @@ describe("demo web API", () => {
         "csrf",
       ),
     ).rejects.toThrow("cleanup is stale");
+    await expect(
+      api.cleanupPending(
+        cleanupId,
+        [
+          { line_no: line.line_no, raw: line.raw },
+          { line_no: line.line_no, raw: line.raw },
+        ],
+        "csrf",
+      ),
+    ).rejects.toThrow("cleanup is stale");
 
     const cleanup = await api.cleanupPending(
       cleanupId,
@@ -612,6 +622,14 @@ describe("demo web API", () => {
     expect(planLines.get(3)).toMatchObject({
       desired_tag: "5.23.0",
       target_image: "lscr.io/linuxserver/radarr:5.23.0",
+    });
+    expect(plan.stacks[0]?.actions[0]).toMatchObject({
+      kind: "compose-tag-update",
+      description: "Rewrite ghcr.io/home-assistant/home-assistant:2026.5.1 to ghcr.io/home-assistant/home-assistant:5.22.4 for home-assistant",
+    });
+    expect(plan.stacks[0]?.tag_updates[0]).toMatchObject({
+      desired_tag: "5.22.4",
+      new_image: "ghcr.io/home-assistant/home-assistant:5.22.4",
     });
 
     const job = await api.createJob(

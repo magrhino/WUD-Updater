@@ -173,13 +173,111 @@ function tokenReplacements(
   tagOverrides: TagOverrideRequest[],
 ): Array<[oldValue: string, newValue: string]> {
   const overrides = overrideByLine(tagOverrides);
-  return tagTokens.flatMap((token) => {
+  return tagTokens.map((token) => {
     const value = overrides.get(token.line_no) ?? token.default_tag;
-    return [
-      [token.token, value],
-      [token.default_tag, value],
-    ] satisfies Array<[string, string]>;
+    return [token.token, value] satisfies [string, string];
   });
+}
+
+function replaceTagReference(value: string, defaultTag: string, tag: string): string {
+  return value
+    .replaceAll(`tag=${defaultTag}`, `tag=${tag}`)
+    .replaceAll(`:${defaultTag}`, `:${tag}`);
+}
+
+function updateDesiredTagFields(
+  item: {
+    desired_tag: string;
+    raw: string;
+    target_image?: string;
+  },
+  defaultTag: string,
+  tag: string,
+): void {
+  item.desired_tag = tag;
+  item.raw = replaceTagReference(item.raw, defaultTag, tag);
+  item.target_image = item.target_image
+    ? replaceTagReference(item.target_image, defaultTag, tag)
+    : item.target_image;
+}
+
+function updatePlanLineTagFields(
+  item: {
+    desired_tag: string;
+    raw: string;
+    resolved_image: string;
+    target_image: string;
+  },
+  defaultTag: string,
+  tag: string,
+): void {
+  updateDesiredTagFields(item, defaultTag, tag);
+  item.resolved_image = item.resolved_image
+    ? replaceTagReference(item.resolved_image, defaultTag, tag)
+    : item.resolved_image;
+}
+
+function applyPlanTagOverride(
+  response: PlanResponse,
+  token: DemoTagToken,
+  tag: string,
+): void {
+  response.targets
+    .filter((target) => target.line_no === token.line_no)
+    .forEach((target) => updateDesiredTagFields(target, token.default_tag, tag));
+  response.skipped
+    .filter((skipped) => skipped.line_no === token.line_no)
+    .forEach((skipped) => updateDesiredTagFields(skipped, token.default_tag, tag));
+  response.cleanup.items
+    .filter((item) => item.line_no === token.line_no)
+    .forEach((item) => updateDesiredTagFields(item, token.default_tag, tag));
+  for (const stack of response.stacks) {
+    const line = stack.lines.find((item) => item.line_no === token.line_no);
+    if (!line) {
+      continue;
+    }
+    const service = line.service;
+    updatePlanLineTagFields(line, token.default_tag, tag);
+    for (const update of stack.tag_updates) {
+      if (!update.services.includes(service)) {
+        continue;
+      }
+      update.desired_tag = tag;
+      update.new_image = replaceTagReference(update.new_image, token.default_tag, tag);
+    }
+    for (const action of stack.actions) {
+      if (action.kind === "compose-tag-update" && action.description.includes(service)) {
+        action.description = replaceTagReference(
+          action.description,
+          token.default_tag,
+          tag,
+        );
+      }
+    }
+  }
+}
+
+function materializePlanResponse(
+  response: PlanResponse,
+  tagTokens: DemoTagToken[],
+  tagOverrides: TagOverrideRequest[],
+): PlanResponse {
+  const materialized = replaceMany(
+    response,
+    tokenReplacements(tagTokens, tagOverrides),
+  );
+  const overrides = overrideByLine(tagOverrides);
+  if (overrides.size === 0) {
+    return materialized;
+  }
+  const tokensByLine = new Map(tagTokens.map((token) => [token.line_no, token]));
+  for (const [lineNo, tag] of overrides) {
+    const token = tokensByLine.get(lineNo);
+    if (token) {
+      applyPlanTagOverride(materialized, token, tag);
+    }
+  }
+  return materialized;
 }
 
 function tagOverridePlanSuffix(tagOverrides: TagOverrideRequest[]): string {
@@ -196,9 +294,10 @@ function materializePlanCase(
   planCase: DemoPlanCase,
   tagOverrides: TagOverrideRequest[],
 ): DemoMaterializedPlanCase {
-  const response = replaceMany(
+  const response = materializePlanResponse(
     planCase.response,
-    tokenReplacements(planCase.tagTokens, tagOverrides),
+    planCase.tagTokens,
+    tagOverrides,
   );
   response.plan_id = `${response.plan_id}${tagOverridePlanSuffix(tagOverrides)}`;
   return {
@@ -1384,6 +1483,7 @@ export class DemoApiState {
     const removed = lines.map((line) => findGroupedLine(line));
     if (
       requested.size === 0 ||
+      requested.size !== lines.length ||
       removed.includes(null) ||
       [...requested].some(
         (key) => !this.activePendingLineKeys.has(key) || !options.requiredKeys.has(key),
