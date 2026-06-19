@@ -19,7 +19,10 @@ const releasePleaseBranch =
 const releasePleaseTitle = /^chore: release \d+\.\d+\.\d+ \[skip ci\]/i.test(
   prTitle,
 );
-const dependencyBot = prAuthor === "dependabot[bot]" || prAuthor === "app/dependabot";
+const dependencyBot =
+  prAuthor === "dependabot[bot]" ||
+  prAuthor === "app/dependabot" ||
+  prAuthor === "renovate[bot]";
 
 if (releasePleaseBranch || releasePleaseTitle || dependencyBot) {
   markdown(
