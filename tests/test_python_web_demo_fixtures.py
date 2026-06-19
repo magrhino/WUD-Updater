@@ -237,6 +237,11 @@ class WebDemoFixtureGenerationTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "inside the repository"):
                 web_demo_fixtures.write_static_demo_fixtures(out_path)
 
+    def test_checked_in_typescript_fixture_is_current(self) -> None:
+        expected = web_demo_fixtures.render_static_demo_fixtures_ts(self.fixtures)
+        actual = web_demo_fixtures.GENERATED_FIXTURE_PATH.read_text(encoding="utf-8")
+        self.assertEqual(actual, expected)
+
     def test_release_notes_are_generated_from_backend_cache(self) -> None:
         release_notes = ReleaseNotesResponse.model_validate(
             self.fixtures["releaseNotes"]

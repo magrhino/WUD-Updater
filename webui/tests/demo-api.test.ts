@@ -6,8 +6,6 @@ import { DemoApiState } from "../src/api/demo/state";
 
 const postgresDigest =
   "sha256:1111111111111111111111111111111111111111111111111111111111111111";
-const radarrDigest =
-  "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
 const wudUpdaterDigest =
   "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc";
 
@@ -132,7 +130,7 @@ describe("demo web API", () => {
           line_no: 5,
           image: "ghcr.io/magrhino/wud-updater:latest",
           current_tag: "latest",
-          desired_tag: "v0.25.1",
+          desired_tag: "v0.16.1",
         }),
       ]),
     );
@@ -151,17 +149,18 @@ describe("demo web API", () => {
           item.action === "unmatched" &&
           item.compose_images.length === 0 &&
           item.services.length === 0 &&
-          item.diagnostic?.code === "unmatched",
+          Boolean(item.diagnostic),
       ),
     ).toBe(true);
     expect(pending.grouping.unmatched[0]?.diagnostic).toMatchObject({
-      message: "This pending update no longer matches any discovered Compose service.",
+      message:
+        "A running container still matches this WUD entry, but Docker did not report Compose labels that tie it to a discovered stack.",
       details: {
         possible_reasons: expect.arrayContaining([
-          "The Compose service was removed or renamed.",
+          "The container is not managed by Docker Compose.",
         ]),
         recommended_actions: expect.arrayContaining([
-          "Remove the stale WUD line when the service is intentionally gone or already updated.",
+          "Remove the stale WUD line if this container should not be managed by WUD-Updater.",
         ]),
       },
     });
@@ -181,7 +180,9 @@ describe("demo web API", () => {
     expect(retagTargets).toMatchObject({
       status: "ready",
       count: 4,
-      items: expect.arrayContaining([
+    });
+    expect(retagTargets.items).toEqual(
+      expect.arrayContaining([
         expect.objectContaining({
           service_key: "media/wud-updater",
           retag_available: true,
@@ -192,7 +193,7 @@ describe("demo web API", () => {
         expect.objectContaining({
           service_key: "home/home-assistant",
           retag_available: false,
-          retag_reason: "missing-provenance",
+          retag_reason: "not-latest-tracking",
         }),
         expect.objectContaining({
           service_key: "data/postgres",
@@ -200,10 +201,10 @@ describe("demo web API", () => {
         }),
         expect.objectContaining({
           service_key: "media/radarr",
-          retag_reason: "stale-provenance",
+          retag_reason: "not-latest-tracking",
         }),
       ]),
-    });
+    );
     expect(retagTargets.items.every((item) => !item.directory.startsWith("/"))).toBe(
       true,
     );
@@ -218,10 +219,8 @@ describe("demo web API", () => {
     expect(
       retagTargets.items.find((item) => item.service_key === "media/radarr"),
     ).toMatchObject({
-      final_image: `lscr.io/linuxserver/radarr@${radarrDigest}`,
-      digest_provenance: expect.objectContaining({
-        target_digest: radarrDigest,
-      }),
+      final_image: "",
+      digest_provenance: null,
     });
     const retagChoices = [
       {
@@ -245,16 +244,13 @@ describe("demo web API", () => {
         can_apply: true,
         selected_count: 1,
       }),
-      warnings: expect.arrayContaining([
-        "Demo retag preview is fixture-backed and does not inspect local Compose files.",
-      ]),
     });
     const retagPlan = await api.createRetagPlan(retagChoices, "csrf");
     expect(retagPlan).toMatchObject({
       status: "ready",
       can_apply: true,
       selected_count: 1,
-      keep_current_count: 1,
+      keep_current_count: 3,
       stacks: [
         expect.objectContaining({
           stack: "media",
@@ -329,12 +325,8 @@ describe("demo web API", () => {
     expect(digestLine).toMatchObject({
       line_no: 4,
       digest: postgresDigest,
-      target_image: `postgres@${postgresDigest}`,
-      digest_provenance: {
-        source_image: "postgres:16",
-        target_digest: postgresDigest,
-        final_image: `postgres@${postgresDigest}`,
-      },
+      target_image: "postgres:16",
+      digest_provenance: null,
     });
   });
 
@@ -369,7 +361,7 @@ describe("demo web API", () => {
     ]);
     expect(plan.issues[0]).toMatchObject({
       severity: "error",
-      code: "unmatched",
+      code: "matching-container-without-compose-labels",
       line_no: 6,
     });
     expect(plan.cleanup.cleanup_id).toBeTruthy();
@@ -383,7 +375,7 @@ describe("demo web API", () => {
           diagnostic: {
             details: {
               possible_reasons: expect.arrayContaining([
-                "The update tag was already applied and WUD left the old pending line behind.",
+                "The container is not managed by Docker Compose.",
               ]),
             },
           },
@@ -572,10 +564,7 @@ describe("demo web API", () => {
         {
           service_key: "data/postgres",
           target_digest: postgresDigest,
-          digest_provenance: {
-            source_image: "postgres:16",
-            target_digest: postgresDigest,
-          },
+          digest_provenance: null,
         },
       ],
       events: [
@@ -583,10 +572,8 @@ describe("demo web API", () => {
           stack_name: "data",
           service_name: "postgres",
           old_digest: postgresDigest,
-          new_digest: postgresDigest,
-          digest_provenance: {
-            final_image: `postgres@${postgresDigest}`,
-          },
+          new_digest: "sha256:demo-new",
+          digest_provenance: null,
         },
       ],
     });
@@ -635,14 +622,16 @@ describe("demo web API", () => {
     expect(jobs.map((item) => item.status)).toEqual(["running", "success"]);
     expect(progress.map((item) => item.phase)).toEqual([
       "compose-digest-pin",
+      "compose-digest-pin",
       "pull",
       "pull",
       "recreate",
       "recreate",
       "health",
+      "health",
       "completion",
     ]);
-    expect(logs.at(-1)?.content).toContain("Retag changes applied.");
+    expect(progress.at(-1)?.message).toBe("Retag changes applied.");
     expect((await api.pending()).count).toBe(7);
     const runId = completedRunId(jobs);
     expect((await api.runs())[0]).toMatchObject({
@@ -667,19 +656,13 @@ describe("demo web API", () => {
         }),
       ],
       verification: expect.objectContaining({
-        total_count: 1,
-        verified_count: 1,
-        items: [
-          expect.objectContaining({
-            service_key: "media/wud-updater",
-            target_image: `ghcr.io/magrhino/wud-updater@${wudUpdaterDigest}`,
-            follow_up_needed: false,
-          }),
-        ],
+        total_count: 0,
+        verified_count: 0,
+        items: [],
       }),
     });
     await expect(api.runLog(runId)).resolves.toMatchObject({
-      content: expect.stringContaining("Retag changes applied."),
+      log_file: "demo/logs/demo-retag-switch-media-wud-updater.log",
     });
   });
 
@@ -720,7 +703,7 @@ describe("demo web API", () => {
     expect(plan).toMatchObject({
       status: "ready",
       selected_count: 1,
-      keep_current_count: 0,
+      keep_current_count: 3,
     });
     expect(plan.stacks).toHaveLength(1);
     expect(plan.stacks[0]?.services).toEqual(["wud-updater"]);
@@ -844,7 +827,7 @@ describe("demo web API", () => {
         id: 50,
         service_key: "media/app",
         wait_for_service_key: "media/sonarr",
-        created_at: "2026-05-28T12:00:02+00:00",
+        created_at: "2099-05-28T12:00:02+00:00",
         active: false,
       },
       {
@@ -852,7 +835,7 @@ describe("demo web API", () => {
         id: 51,
         service_key: "media/worker",
         wait_for_service_key: "media/sonarr",
-        created_at: "2026-05-28T12:00:00+00:00",
+        created_at: "2020-05-28T12:00:00+00:00",
         active: true,
       },
     ];

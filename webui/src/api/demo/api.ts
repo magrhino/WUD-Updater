@@ -1,6 +1,5 @@
 import type { WebApi } from "../client";
 import type {
-  ApplyJobProgressEvent,
   ContainerRestartResponse,
   CoreUpdateTourStatus,
   CoreUpdateTourStep,
@@ -81,16 +80,7 @@ export function createDemoWebApi(): WebApi {
       _csrfToken: string,
       _options = {},
     ) => state.createRetagJob(planId, choices),
-    diagnosticsSupportBundle: async () => ({
-      wud_updater_version: "demo-v0.0.0",
-      settings: state.settings(),
-      doctor_result: state.doctor(),
-      pending_summary: state.pendingResponse(),
-      last_run_status: null,
-      diagnostics_warnings: [],
-      discovery_warnings: [],
-      log_tail: null,
-    }),
+    diagnosticsSupportBundle: async () => state.diagnosticsSupportBundle(),
     cleanupPending: async (
       cleanupId: string,
       lines: PendingCleanupLine[],
@@ -221,59 +211,33 @@ class DemoJobStream extends EventTarget {
       this.queue(() => this.onerror?.(new Event("error")), 0);
       return;
     }
-    if (
-      record.job.status === "failure" ||
-      record.plan?.can_apply === false ||
-      record.retagPlan?.can_apply === false
-    ) {
+    if (record.job.status === "failure") {
       this.queue(() => {
         this.emit("job", record.job);
         this.close();
       }, 0);
       return;
     }
-    const isRetagJob = Boolean(record.retagPlan);
     this.queue(() => {
-      this.emitProgress(
-        isRetagJob ? "compose-digest-pin" : "preflight",
-        "success",
-        isRetagJob
-          ? "Demo retag Compose metadata was prepared."
-          : "Demo preflight checks passed.",
-      );
-      record.job = {
-        ...record.job,
-        status: "running",
-        started_at: "2026-05-30T20:12:26+00:00",
-      };
-      record.log = {
-        ...record.log,
-        content:
-          "[2026-05-30T20:12:26+00:00] [INFO] docker-update-from-wud-v2\n",
-      };
-      this.emit("job", record.job);
-      this.emitProgress(
-        "pull",
-        "running",
-        isRetagJob ? "Pulling retagged demo images." : "Pulling selected demo images.",
-      );
-      this.emit("log", record.log);
+      const [first] = this.state.jobProgress(this.jobId);
+      if (first) {
+        const progress = this.state.recordJobProgress(this.jobId, first);
+        if (progress) {
+          this.emit("progress", progress);
+        }
+      }
+      const running = this.state.jobs.get(this.jobId);
+      if (running) {
+        this.emit("job", running.job);
+      }
     }, 40);
     this.queue(() => {
-      this.emitProgress("pull", "success", "Images pulled and verified.");
-      this.emitProgress("recreate", "running", "Recreating selected services.");
-      this.emitProgress("recreate", "success", "Services were recreated.");
-      this.emitProgress("health", "success", "Demo services reported healthy.");
-      if (!isRetagJob) {
-        this.emitProgress("cleanup", "success", "Pending entries were reconciled.");
+      for (const progress of this.state.jobProgress(this.jobId).slice(1)) {
+        const event = this.state.recordJobProgress(this.jobId, progress);
+        if (event) {
+          this.emit("progress", event);
+        }
       }
-      this.emitProgress(
-        "completion",
-        "success",
-        isRetagJob
-          ? "Retag changes applied."
-          : "Updater completed successfully.",
-      );
       const completed = this.state.completeJob(this.jobId);
       if (!completed) {
         this.onerror?.(new Event("error"));
@@ -295,24 +259,6 @@ class DemoJobStream extends EventTarget {
         data: JSON.stringify(data),
       }),
     );
-  }
-
-  private emitProgress(
-    phase: string,
-    status: ApplyJobProgressEvent["status"],
-    message: string,
-  ): void {
-    const record = this.state.jobs.get(this.jobId);
-    const stack = record?.plan?.stacks[0];
-    const retagStack = record?.retagPlan?.stacks[0];
-    const event = this.state.appendJobProgress(this.jobId, phase, status, message, {
-      stack: stack?.name ?? retagStack?.stack,
-      services: stack?.services ?? retagStack?.services,
-      lineNumbers: record?.lineNumbers,
-    });
-    if (event) {
-      this.emit("progress", event);
-    }
   }
 }
 
