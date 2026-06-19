@@ -18,6 +18,27 @@ function completedRunId(jobs: ApplyJobResponse[]): number {
   return runId;
 }
 
+async function streamDemoJob(
+  api: ReturnType<typeof createDemoWebApi>,
+  jobId: string,
+): Promise<{ jobs: ApplyJobResponse[]; logs: ApplyJobLogResponse[] }> {
+  const jobs: ApplyJobResponse[] = [];
+  const logs: ApplyJobLogResponse[] = [];
+  const source = api.openJobStream(jobId);
+  source.addEventListener("job", (event) => {
+    jobs.push(JSON.parse((event as MessageEvent<string>).data) as ApplyJobResponse);
+  });
+  source.addEventListener("log", (event) => {
+    logs.push(
+      JSON.parse((event as MessageEvent<string>).data) as ApplyJobLogResponse,
+    );
+  });
+
+  await vi.advanceTimersByTimeAsync(200);
+  source.close();
+  return { jobs, logs };
+}
+
 describe("demo web API", () => {
   afterEach(() => {
     vi.useRealTimers();
@@ -330,6 +351,36 @@ describe("demo web API", () => {
     });
   });
 
+  it("serves a select-all blocked plan with cleanup items", async () => {
+    const api = createDemoWebApi();
+
+    const plan = await api.createPlan([8, 7, 6, 5, 4, 3, 2], true, [], [], "csrf");
+
+    expect(plan.status).toBe("blocked");
+    expect(plan.can_apply).toBe(false);
+    expect(plan.selected_line_numbers).toEqual([2, 3, 4, 5, 6, 7, 8]);
+    expect(plan.summary).toMatchObject({
+      target_count: 7,
+      matched_target_count: 4,
+      skipped_count: 3,
+    });
+    expect(
+      plan.stacks.map((stack) => stack.name).sort((left, right) => left.localeCompare(right)),
+    ).toEqual([
+      "data",
+      "home",
+      "media",
+    ]);
+    expect(plan.cleanup).toMatchObject({
+      can_remove_unmatched: true,
+      items: [
+        expect.objectContaining({ line_no: 6 }),
+        expect.objectContaining({ line_no: 7 }),
+        expect.objectContaining({ line_no: 8 }),
+      ],
+    });
+  });
+
   it("blocks unmatched fixture lines and previews cleanup", async () => {
     const api = createDemoWebApi();
 
@@ -465,6 +516,30 @@ describe("demo web API", () => {
     ).rejects.toThrow("cleanup is stale");
   });
 
+  it("removes multiple stale pending lines through demo cleanup", async () => {
+    const api = createDemoWebApi();
+    const plan = await api.createPlan([6, 7], true, [], [], "csrf");
+    const cleanupLines = plan.cleanup.items.map((item) => ({
+      line_no: item.line_no,
+      raw: item.raw,
+    }));
+
+    const cleanup = await api.cleanupPending(
+      plan.cleanup.cleanup_id,
+      cleanupLines,
+      "csrf",
+    );
+
+    expect(cleanup).toMatchObject({
+      status: "success",
+      removed_count: 2,
+    });
+    expect(cleanup.removed.map((line) => line.line_no)).toEqual([6, 7]);
+    const refreshed = await api.pending();
+    expect(refreshed.count).toBe(5);
+    expect(refreshed.grouping.unmatched.map((item) => item.line_no)).toEqual([8]);
+  });
+
   it("removes selected matched pending lines through demo removal", async () => {
     const api = createDemoWebApi();
     const pending = await api.pending();
@@ -527,6 +602,34 @@ describe("demo web API", () => {
         [{ line_no: matchedLine?.line_no ?? 0, raw: matchedLine?.raw ?? "" }],
         "csrf",
       ),
+    ).rejects.toThrow("removal is stale");
+  });
+
+  it("removes arbitrary selected pending subsets through demo removal", async () => {
+    const api = createDemoWebApi();
+    const pending = await api.pending();
+    const selected = pending.items
+      .filter((item) => [3, 4, 8].includes(item.line_no))
+      .map((item) => ({ line_no: item.line_no, raw: item.raw }));
+
+    const plan = await api.createRemovalPlan(
+      selected.map((item) => item.line_no),
+      "csrf",
+    );
+    const removal = await api.removeSelectedPending(plan.removal_id, selected, "csrf");
+
+    expect(removal).toMatchObject({
+      status: "success",
+      removed_count: 3,
+    });
+    expect(removal.removed.map((line) => line.line_no)).toEqual([3, 4, 8]);
+    const refreshed = await api.pending();
+    expect(refreshed.count).toBe(4);
+    expect(refreshed.items.some((item) => [3, 4, 8].includes(item.line_no))).toBe(
+      false,
+    );
+    await expect(
+      api.removeSelectedPending(plan.removal_id, selected, "csrf"),
     ).rejects.toThrow("removal is stale");
   });
 
@@ -682,6 +785,83 @@ describe("demo web API", () => {
     });
   });
 
+  it("applies multi-stack matched plans and filters released pending notes", async () => {
+    vi.useFakeTimers();
+    const api = createDemoWebApi();
+    const selected = [2, 3, 4, 5];
+
+    const plan = await api.createPlan(selected, true, [], [], "csrf");
+    const job = await api.createJob(plan.plan_id, selected, true, [], [], "csrf");
+    const { jobs } = await streamDemoJob(api, job.job_id);
+
+    expect(jobs.at(-1)?.status).toBe("success");
+    expect((await api.pending()).items.map((item) => item.line_no)).toEqual([6, 7, 8]);
+    const runId = completedRunId(jobs);
+    const detail = await api.runDetail(runId);
+    expect(
+      detail.events
+        .map((event) => event.stack_name)
+        .sort((left, right) => left.localeCompare(right)),
+    ).toEqual([
+      "data",
+      "home",
+      "media",
+      "media",
+    ]);
+    const remainingReleaseNoteLines = (await api.releaseNotes()).items.map((item) => item.line_no);
+    expect(remainingReleaseNoteLines.filter((lineNo) => selected.includes(lineNo))).toEqual([]);
+  });
+
+  it("materializes arbitrary tag overrides into plan, job log, and run detail", async () => {
+    vi.useFakeTimers();
+    const api = createDemoWebApi();
+    const selected = [2];
+    const tagOverrides = [{ line_no: 2, tag: "2026.6.0" }];
+
+    const plan = await api.createPlan(selected, true, tagOverrides, [], "csrf");
+    expect(plan.stacks[0]?.lines[0]).toMatchObject({
+      desired_tag: "2026.6.0",
+      target_image: "ghcr.io/home-assistant/home-assistant:2026.6.0",
+    });
+
+    const job = await api.createJob(
+      plan.plan_id,
+      selected,
+      true,
+      tagOverrides,
+      [],
+      "csrf",
+    );
+    const { jobs, logs } = await streamDemoJob(api, job.job_id);
+
+    expect(jobs.at(-1)?.status).toBe("success");
+    expect(logs.at(-1)?.content).toContain("2026.6.0");
+    expect((await api.pending()).items.some((item) => item.line_no === 2)).toBe(false);
+    const detail = await api.runDetail(completedRunId(jobs));
+    expect(detail.events[0]).toMatchObject({
+      target_image: "ghcr.io/home-assistant/home-assistant:2026.6.0",
+    });
+    expect(detail.pending_updates[0]).toMatchObject({
+      desired_tag: "2026.6.0",
+    });
+  });
+
+  it("blocks tag update selections when tag updates are disabled", async () => {
+    const api = createDemoWebApi();
+
+    const plan = await api.createPlan([2], false, [], [], "csrf");
+
+    expect(plan).toMatchObject({
+      status: "empty",
+      can_apply: false,
+    });
+    expect(plan.issues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ code: "tag-updates-disabled" }),
+      ]),
+    );
+  });
+
   it("streams retag apply jobs and records demo run history", async () => {
     vi.useFakeTimers();
     const api = createDemoWebApi();
@@ -727,6 +907,11 @@ describe("demo web API", () => {
       "completion",
     ]);
     expect(progress.at(-1)?.message).toBe("Retag changes applied.");
+    expect(logs.at(-1)).toMatchObject({
+      exists: true,
+      log_file: "demo/logs/demo-retag-switch-media-wud-updater.log",
+      content: expect.stringContaining("Retag changes applied."),
+    });
     expect((await api.pending()).count).toBe(7);
     const runId = completedRunId(jobs);
     expect((await api.runs())[0]).toMatchObject({
@@ -757,7 +942,9 @@ describe("demo web API", () => {
       }),
     });
     await expect(api.runLog(runId)).resolves.toMatchObject({
+      exists: true,
       log_file: "demo/logs/demo-retag-switch-media-wud-updater.log",
+      content: expect.stringContaining("Retag changes applied."),
     });
   });
 
@@ -803,6 +990,39 @@ describe("demo web API", () => {
     expect(plan.stacks).toHaveLength(1);
     expect(plan.stacks[0]?.services).toEqual(["wud-updater"]);
     expect(plan.stacks[0]?.digest_pin_updates).toHaveLength(1);
+  });
+
+  it("normalizes missing retag choices to keep-current and blocks non-eligible switches", async () => {
+    const api = createDemoWebApi();
+
+    const empty = await api.createRetagPlan([], "csrf");
+    expect(empty).toMatchObject({
+      status: "empty",
+      can_apply: false,
+      selected_count: 0,
+      keep_current_count: 4,
+    });
+
+    const blocked = await api.createRetagPlan(
+      [
+        {
+          service_key: "home/home-assistant",
+          choice: "switch-to-concrete" as const,
+        },
+      ],
+      "csrf",
+    );
+    expect(blocked).toMatchObject({
+      status: "blocked",
+      can_apply: false,
+      selected_count: 0,
+      keep_current_count: 3,
+    });
+    expect(blocked.issues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ code: "retag-target-not-eligible" }),
+      ]),
+    );
   });
 
   it("keeps policy, snooze, and tag exclusion mutations in memory", async () => {

@@ -1138,12 +1138,52 @@ def _job_fixture_from_terminal(
         "run": run,
         "removeLineNumbers": remove_line_numbers,
     }
-    return _normalize_job_fixture(
+    normalized = _normalize_job_fixture(
         fixture,
         original_job_id=terminal_response.job_id,
         stable_job_id=stable_job_id,
         stable_log_file=stable_log_file,
     )
+    _populate_missing_job_log(normalized)
+    return normalized
+
+
+def _populate_missing_job_log(fixture: dict[str, Any]) -> None:
+    terminal = fixture["terminal"]
+    progress = terminal.get("progress", [])
+    log_file = terminal.get("log_file", "")
+    if not progress or not log_file:
+        return
+
+    content = _job_progress_log_content(progress, str(log_file))
+    log = fixture["log"]
+    if not log.get("exists") or not log.get("content"):
+        log["exists"] = True
+        log["log_file"] = log_file
+        log["content"] = content
+        log["truncated"] = False
+        log["error"] = ""
+
+    run = fixture.get("run")
+    if run and (not run["log"].get("exists") or not run["log"].get("content")):
+        run["log"]["exists"] = True
+        run["log"]["log_file"] = log_file
+        run["log"]["content"] = content
+        run["log"]["truncated"] = False
+
+
+def _job_progress_log_content(
+    progress: list[dict[str, Any]],
+    log_file: str,
+) -> str:
+    lines = []
+    for event in progress:
+        created_at = event.get("created_at") or DEMO_FIXTURE_FINISHED_AT
+        phase = event.get("phase") or "progress"
+        message = event.get("message") or ""
+        lines.append(f"[{created_at}] [INFO] [{phase}] {message}".rstrip())
+    lines.append(f"[{DEMO_FIXTURE_FINISHED_AT}] [INFO] Done. See log: {log_file}")
+    return "\n".join(lines) + "\n"
 
 
 def _wait_for_job(state: Any, job_id: str) -> Any:

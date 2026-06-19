@@ -110572,9 +110572,9 @@ export const generatedFixtures = {
     {
       "jobTemplate": {
         "log": {
-          "content": "",
+          "content": "[2026-05-30T20:12:26+00:00] [INFO] [compose-digest-pin] [media] Writing retag Compose metadata.\n[2026-05-30T20:12:28+00:00] [INFO] [compose-digest-pin] [media] Compose retag metadata was written.\n[2026-05-30T20:12:28+00:00] [INFO] [pull] [media] Pulling retagged service image(s).\n[2026-05-30T20:12:28+00:00] [INFO] [pull] [media] Retagged service image(s) pulled.\n[2026-05-30T20:12:28+00:00] [INFO] [recreate] [media] Recreating retagged service container(s).\n[2026-05-30T20:12:28+00:00] [INFO] [recreate] [media] Retagged service container(s) recreated.\n[2026-05-30T20:12:28+00:00] [INFO] [health] [media] Waiting up to 180s for retagged service health.\n[2026-05-30T20:12:28+00:00] [INFO] [health] [media] Retagged service health wait succeeded in 2s.\n[2026-05-30T20:12:28+00:00] [INFO] [completion] Retag changes applied.\n[2026-05-30T20:12:28+00:00] [INFO] Done. See log: demo/logs/demo-retag-switch-media-wud-updater.log\n",
           "error": "",
-          "exists": false,
+          "exists": true,
           "job_id": "demo-retag-job-switch-media-wud-updater",
           "log_file": "demo/logs/demo-retag-switch-media-wud-updater.log",
           "max_bytes": 65536,
@@ -110690,8 +110690,8 @@ export const generatedFixtures = {
             "wud_file": "demo/out/images.todo"
           },
           "log": {
-            "content": "",
-            "exists": false,
+            "content": "[2026-05-30T20:12:26+00:00] [INFO] [compose-digest-pin] [media] Writing retag Compose metadata.\n[2026-05-30T20:12:28+00:00] [INFO] [compose-digest-pin] [media] Compose retag metadata was written.\n[2026-05-30T20:12:28+00:00] [INFO] [pull] [media] Pulling retagged service image(s).\n[2026-05-30T20:12:28+00:00] [INFO] [pull] [media] Retagged service image(s) pulled.\n[2026-05-30T20:12:28+00:00] [INFO] [recreate] [media] Recreating retagged service container(s).\n[2026-05-30T20:12:28+00:00] [INFO] [recreate] [media] Retagged service container(s) recreated.\n[2026-05-30T20:12:28+00:00] [INFO] [health] [media] Waiting up to 180s for retagged service health.\n[2026-05-30T20:12:28+00:00] [INFO] [health] [media] Retagged service health wait succeeded in 2s.\n[2026-05-30T20:12:28+00:00] [INFO] [completion] Retag changes applied.\n[2026-05-30T20:12:28+00:00] [INFO] Done. See log: demo/logs/demo-retag-switch-media-wud-updater.log\n",
+            "exists": true,
             "log_file": "demo/logs/demo-retag-switch-media-wud-updater.log",
             "max_bytes": 262144,
             "run_id": 7,

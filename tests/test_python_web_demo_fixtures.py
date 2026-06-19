@@ -329,6 +329,17 @@ class WebDemoFixtureGenerationTests(unittest.TestCase):
             if case["response"]["can_apply"]:
                 self.assertIn("jobTemplate", case)
 
+    def test_applyable_retag_fixtures_have_readable_logs(self) -> None:
+        for case in self.fixtures["retagCases"]:
+            if not case["response"]["can_apply"]:
+                continue
+            fixture = case["jobTemplate"]
+            self.assertTrue(fixture["log"]["exists"])
+            self.assertIn("Retag changes applied.", fixture["log"]["content"])
+            self.assertIsNotNone(fixture["run"])
+            self.assertTrue(fixture["run"]["log"]["exists"])
+            self.assertIn("Retag changes applied.", fixture["run"]["log"]["content"])
+
 
 if __name__ == "__main__":
     unittest.main()
