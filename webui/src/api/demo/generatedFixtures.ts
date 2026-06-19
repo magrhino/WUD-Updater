@@ -82,16 +82,10 @@ export const generatedFixtures = {
         {
           "category": "runtime",
           "code": "sudo",
-          "detail": "exit 126: [Errno 1] Operation not permitted: 'sudo'",
+          "detail": "disabled by WUD_UPDATER_USE_SUDO=false",
           "name": "sudo",
-          "status": "FAIL",
-          "suggestions": [
-            {
-              "description": "Set WUD_UPDATER_USE_SUDO=false when the updater can run directly.",
-              "label": "Disable sudo if not needed",
-              "snippet": "WUD_UPDATER_USE_SUDO=false"
-            }
-          ],
+          "status": "PASS",
+          "suggestions": [],
           "target": ""
         },
         {
@@ -187,9 +181,9 @@ export const generatedFixtures = {
         {
           "category": "general",
           "code": "wud-script-sync",
-          "detail": "unsafe WUD_SCRIPTS_DIR [REDACTED_PATH]",
+          "detail": "WUD_SYNC_SCRIPTS is disabled",
           "name": "WUD script sync",
-          "status": "FAIL",
+          "status": "WARN",
           "suggestions": [
             {
               "description": "Verify the packaged WUD scripts are executable and the managed script volume is mounted at [REDACTED_PATH]",
@@ -356,9 +350,9 @@ export const generatedFixtures = {
           "target": ""
         }
       ],
-      "failures": 2,
-      "ok": false,
-      "warnings": 5
+      "failures": 0,
+      "ok": true,
+      "warnings": 6
     },
     "last_run_status": {
       "dry_run": false,
@@ -1217,16 +1211,10 @@ export const generatedFixtures = {
       {
         "category": "runtime",
         "code": "sudo",
-        "detail": "exit 126: [Errno 1] Operation not permitted: 'sudo'",
+        "detail": "disabled by WUD_UPDATER_USE_SUDO=false",
         "name": "sudo",
-        "status": "FAIL",
-        "suggestions": [
-          {
-            "description": "Set WUD_UPDATER_USE_SUDO=false when the updater can run directly.",
-            "label": "Disable sudo if not needed",
-            "snippet": "WUD_UPDATER_USE_SUDO=false"
-          }
-        ],
+        "status": "PASS",
+        "suggestions": [],
         "target": ""
       },
       {
@@ -1322,9 +1310,9 @@ export const generatedFixtures = {
       {
         "category": "general",
         "code": "wud-script-sync",
-        "detail": "unsafe WUD_SCRIPTS_DIR demo/repo/wud",
+        "detail": "WUD_SYNC_SCRIPTS is disabled",
         "name": "WUD script sync",
-        "status": "FAIL",
+        "status": "WARN",
         "suggestions": [
           {
             "description": "Verify the packaged WUD scripts are executable and the managed script volume is mounted at /managed-wud.",
@@ -1491,9 +1479,9 @@ export const generatedFixtures = {
         "target": ""
       }
     ],
-    "failures": 2,
-    "ok": false,
-    "warnings": 5
+    "failures": 0,
+    "ok": true,
+    "warnings": 6
   },
   "onboarding": {
     "all_passed": false,
@@ -1544,7 +1532,7 @@ export const generatedFixtures = {
           "packaged-wud-scripts",
           "wud-script-sync"
         ],
-        "detail": "WUD script sync: unsafe WUD_SCRIPTS_DIR demo/repo/wud",
+        "detail": "WUD script sync: WUD_SYNC_SCRIPTS is disabled",
         "docs": [
           {
             "label": "Script sync notes",
@@ -1552,7 +1540,7 @@ export const generatedFixtures = {
           }
         ],
         "key": "wud-scripts",
-        "status": "FAIL",
+        "status": "WARN",
         "suggestions": [
           {
             "description": "Verify the packaged WUD scripts are executable and the managed script volume is mounted at /managed-wud.",

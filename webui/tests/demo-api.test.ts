@@ -587,6 +587,83 @@ describe("demo web API", () => {
     });
   });
 
+  it("keeps multi-line tag overrides scoped when an override matches another default tag", async () => {
+    vi.useFakeTimers();
+    const api = createDemoWebApi();
+    const jobs: ApplyJobResponse[] = [];
+    const logs: ApplyJobLogResponse[] = [];
+    const selected = [2, 3];
+    const tagOverrides = [
+      { line_no: 2, tag: "5.22.4" },
+      { line_no: 3, tag: "5.23.0" },
+    ];
+
+    const plan = await api.createPlan(selected, true, tagOverrides, [], "csrf");
+    const planLines = new Map(
+      plan.stacks.flatMap((stack) =>
+        stack.lines.map((line) => [line.line_no, line] as const),
+      ),
+    );
+
+    expect(planLines.get(2)).toMatchObject({
+      desired_tag: "5.22.4",
+      target_image: "ghcr.io/home-assistant/home-assistant:5.22.4",
+    });
+    expect(planLines.get(3)).toMatchObject({
+      desired_tag: "5.23.0",
+      target_image: "lscr.io/linuxserver/radarr:5.23.0",
+    });
+
+    const job = await api.createJob(
+      plan.plan_id,
+      selected,
+      true,
+      tagOverrides,
+      [],
+      "csrf",
+    );
+    const source = api.openJobStream(job.job_id);
+    source.addEventListener("job", (event) => {
+      jobs.push(JSON.parse((event as MessageEvent<string>).data) as ApplyJobResponse);
+    });
+    source.addEventListener("log", (event) => {
+      logs.push(
+        JSON.parse((event as MessageEvent<string>).data) as ApplyJobLogResponse,
+      );
+    });
+
+    await vi.advanceTimersByTimeAsync(200);
+    source.close();
+
+    expect(jobs.at(-1)?.status).toBe("success");
+    const logContent = logs.at(-1)?.content ?? "";
+    expect(logContent).toContain(
+      "ghcr.io/home-assistant/home-assistant:2026.5.1 -> ghcr.io/home-assistant/home-assistant:5.22.4",
+    );
+    expect(logContent).toContain(
+      "lscr.io/linuxserver/radarr:5.21.1 -> lscr.io/linuxserver/radarr:5.23.0",
+    );
+    expect(logContent).not.toContain(
+      "ghcr.io/home-assistant/home-assistant:2026.5.1 -> ghcr.io/home-assistant/home-assistant:5.23.0",
+    );
+
+    const detail = await api.runDetail(completedRunId(jobs));
+    const pendingByLine = new Map(
+      detail.pending_updates.map((item) => [item.line_no, item] as const),
+    );
+    const eventByService = new Map(
+      detail.events.map((event) => [event.service_name, event] as const),
+    );
+    expect(pendingByLine.get(2)).toMatchObject({ desired_tag: "5.22.4" });
+    expect(pendingByLine.get(3)).toMatchObject({ desired_tag: "5.23.0" });
+    expect(eventByService.get("home-assistant")).toMatchObject({
+      target_image: "ghcr.io/home-assistant/home-assistant:5.22.4",
+    });
+    expect(eventByService.get("radarr")).toMatchObject({
+      target_image: "lscr.io/linuxserver/radarr:5.23.0",
+    });
+  });
+
   it("streams retag apply jobs and records demo run history", async () => {
     vi.useFakeTimers();
     const api = createDemoWebApi();

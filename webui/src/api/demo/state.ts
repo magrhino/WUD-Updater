@@ -141,8 +141,19 @@ function replaceMany<T>(
   replacements: Array<[oldValue: string, newValue: string]>,
 ): T {
   let result: unknown = clone(value);
-  for (const [oldValue, newValue] of replacements) {
-    result = replaceString(result, oldValue, newValue);
+  const placeholders = replacements
+    .filter(([oldValue]) => oldValue.length > 0)
+    .map(([oldValue, newValue], index) => ({
+      oldValue,
+      newValue,
+      placeholder: `\0demo-replacement-${index}\0`,
+    }))
+    .sort((left, right) => right.oldValue.length - left.oldValue.length);
+  for (const { oldValue, placeholder } of placeholders) {
+    result = replaceString(result, oldValue, placeholder);
+  }
+  for (const { newValue, placeholder } of placeholders) {
+    result = replaceString(result, placeholder, newValue);
   }
   return result as T;
 }
