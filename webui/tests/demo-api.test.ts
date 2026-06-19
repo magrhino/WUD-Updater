@@ -907,6 +907,11 @@ describe("demo web API", () => {
       "completion",
     ]);
     expect(progress.at(-1)?.message).toBe("Retag changes applied.");
+    expect(logs.at(-1)).toMatchObject({
+      exists: true,
+      log_file: "demo/logs/demo-retag-switch-media-wud-updater.log",
+      content: expect.stringContaining("Retag changes applied."),
+    });
     expect((await api.pending()).count).toBe(7);
     const runId = completedRunId(jobs);
     expect((await api.runs())[0]).toMatchObject({
@@ -937,7 +942,9 @@ describe("demo web API", () => {
       }),
     });
     await expect(api.runLog(runId)).resolves.toMatchObject({
+      exists: true,
       log_file: "demo/logs/demo-retag-switch-media-wud-updater.log",
+      content: expect.stringContaining("Retag changes applied."),
     });
   });
 
