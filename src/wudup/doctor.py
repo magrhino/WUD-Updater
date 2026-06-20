@@ -63,6 +63,7 @@ class DoctorOptions:
     sync_scripts: str = "auto"
     updater_use_sudo: bool = False
     updater_use_sudo_source: str = ""
+    updater_use_sudo_value: str = ""
     truenas_status_check: bool = False
     truenas_status_timeout: str = DEFAULT_TRUENAS_STATUS_TIMEOUT
     compose_ignore_paths: tuple[Path, ...] = ()
@@ -366,7 +367,8 @@ class Doctor:
     def _check_sudo(self) -> None:
         if not self.options.updater_use_sudo:
             detail = (
-                f"disabled by {self.options.updater_use_sudo_source}=false"
+                f"disabled by {self.options.updater_use_sudo_source}="
+                f"{self.options.updater_use_sudo_value}"
                 if self.options.updater_use_sudo_source
                 else "disabled by default"
             )
@@ -966,6 +968,7 @@ def options_from_namespace(
             default=False,
         ),
         updater_use_sudo_source=updater_sudo_source,
+        updater_use_sudo_value=updater_sudo_value.strip() if updater_sudo_value else "",
         truenas_status_check=_resolve_bool_env(
             environ.get("TRUENAS_STATUS_CHECK"),
             "TRUENAS_STATUS_CHECK",

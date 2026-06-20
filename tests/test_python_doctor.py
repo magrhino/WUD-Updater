@@ -345,6 +345,14 @@ class DoctorTests(unittest.TestCase):
         self.assertEqual(status, 0, stdout)
         self.assertIn("[PASS] sudo: disabled by WUDUP_USE_SUDO=false", stdout)
 
+    def test_check_sudo_reports_configured_falsey_value(self) -> None:
+        for value in ("0", "no", "off"):
+            with self.subTest(value=value):
+                status, stdout = self._run_doctor({"WUDUP_USE_SUDO": value})
+
+                self.assertEqual(status, 0, stdout)
+                self.assertIn(f"[PASS] sudo: disabled by WUDUP_USE_SUDO={value}", stdout)
+
     def test_check_sudo_passes_when_legacy_env_disabled(self) -> None:
         env = self._doctor_env({"WUD_UPDATER_USE_SUDO": "false"})
         env.pop("WUDUP_USE_SUDO")
