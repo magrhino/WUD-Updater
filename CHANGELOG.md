@@ -4,6 +4,13 @@ All notable changes to WUD-Updater are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com) and versions follow
 [Semantic Versioning](https://semver.org).
 
+## [0.45.5](https://github.com/magrhino/wudup/compare/v0.45.4...v0.45.5) (2026-06-20)
+
+
+### Bug Fixes
+
+* **webui:** Wait for WUD API readiness during WebUI startup ([#370](https://github.com/magrhino/wudup/issues/370)) ([539879f](https://github.com/magrhino/wudup/commit/539879f16e3742c82d8133eb43057e85af471f96))
+
 ## [0.45.4](https://github.com/magrhino/wudup/compare/v0.45.3...v0.45.4) (2026-06-20)
 
 
