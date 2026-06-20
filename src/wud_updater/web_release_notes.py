@@ -136,11 +136,6 @@ def _release_notes_request_context(
 ) -> _ReleaseNotesRequestContext | ReleaseNotesResponse:
     wud_snapshot = web_wud_api.get_snapshot(settings, include_containers=True)
     exists, parsed = parse_pending_file(settings)
-    wud_metadata = web_wud_api.metadata_by_target(
-        settings,
-        parsed.targets,
-        snapshot=wud_snapshot,
-    )
     if not exists:
         return ReleaseNotesResponse(
             source_file=str(settings.config.wud_out_file),
@@ -149,6 +144,11 @@ def _release_notes_request_context(
             wud_api=wud_snapshot.status,
             warnings=list(parsed.warnings),
         )
+    wud_metadata = web_wud_api.metadata_by_target(
+        settings,
+        parsed.targets,
+        snapshot=wud_snapshot,
+    )
     return _ReleaseNotesRequestContext(
         targets=parsed.targets,
         warnings=parsed.warnings,

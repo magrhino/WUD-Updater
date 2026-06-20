@@ -2,12 +2,14 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
 from wud_updater.command import CommandError, CommandResult
 from wud_updater import web_release_notes as release_notes_module
 from wud_updater.release_notes import ReleaseNoteInfo as ReleaseNoteData
+from wud_updater.web_models import WudApiStatus
 
 from tests.web_test_helpers import (
     _client,
@@ -35,6 +37,43 @@ def test_release_notes_get_returns_placeholders_without_creating_database(
     assert body["items"][0]["status"] == "missing"
     assert body["items"][0]["provider"] == "github"
     assert not db_path.exists()
+
+
+def test_release_notes_get_skips_wud_metadata_when_file_is_missing(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    def fail_metadata_by_target(*_args, **_kwargs):
+        raise AssertionError("metadata_by_target should not be called")
+
+    monkeypatch.setattr(
+        release_notes_module.web_wud_api,
+        "get_snapshot",
+        lambda *_args, **_kwargs: SimpleNamespace(
+            status=WudApiStatus(
+                state="ready",
+                available=True,
+                metadata_available=True,
+                last_checked_at="2026-06-19T00:00:00+00:00",
+                detail="test WUD API snapshot",
+            ),
+        ),
+    )
+    monkeypatch.setattr(
+        release_notes_module.web_wud_api,
+        "metadata_by_target",
+        fail_metadata_by_target,
+    )
+    client = _client(tmp_path, {"WUD_WEB_DEV_NO_AUTH": "true"})
+
+    response = client.get("/api/v1/release-notes")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["count"] == 0
+    assert body["items"] == []
+    assert body["wud_api"]["state"] == "ready"
+
 
 def test_release_notes_get_uses_docker_source_label_without_creating_database(
     tmp_path: Path,
