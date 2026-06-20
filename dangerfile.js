@@ -12,6 +12,27 @@ const prBodyLower = prBody.toLowerCase();
 const prTitle = pr.title ?? "";
 const prAuthor = pr.user?.login ?? "";
 const globCache = new Map();
+const LARGE_FILE_IGNORE_PATTERNS = [
+  "**/package-lock.json",
+  "**/npm-shrinkwrap.json",
+  "**/yarn.lock",
+  "**/pnpm-lock.yaml",
+  "**/Cargo.lock",
+  "**/Pipfile.lock",
+  "**/poetry.lock",
+  "**/composer.lock",
+  "**/Gemfile.lock",
+  "dangerfile.js",
+  ".github/**",
+  "webui/dist/**",
+  "webui/coverage/**",
+  "**/node_modules/**",
+  "**/vendor/**",
+  "**/.cargo/**",
+  "**/__pycache__/**",
+  "**/*.pyc",
+  "CHANGELOG.md",
+];
 
 const releasePleaseBranch =
   typeof pr.head?.ref === "string" &&
@@ -466,16 +487,7 @@ function escapeRegex(value) {
 }
 
 function isIgnoredLargeFile(file) {
-  return (
-    file.endsWith("package-lock.json") ||
-    file === "dangerfile.js" ||
-    file.startsWith(".github/") ||
-    file.startsWith("webui/dist/") ||
-    file.startsWith("webui/coverage/") ||
-    file.includes("/__pycache__/") ||
-    file.endsWith(".pyc") ||
-    file === "CHANGELOG.md"
-  );
+  return matchesAny(file, LARGE_FILE_IGNORE_PATTERNS);
 }
 
 function formatFiles(files) {
