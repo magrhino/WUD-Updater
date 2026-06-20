@@ -4,6 +4,20 @@ All notable changes to WUD-Updater are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com) and versions follow
 [Semantic Versioning](https://semver.org).
 
+## [0.45.3](https://github.com/magrhino/wudup/compare/v0.45.2...v0.45.3) (2026-06-20)
+
+
+### Bug Fixes
+
+* **ui:** centralize touch target and semantic color tokens ([ce9c25d](https://github.com/magrhino/wudup/commit/ce9c25db8783397051fdad62b7581d824f7faec0))
+* **ui:** improve mobile action touch targets ([96f4abc](https://github.com/magrhino/wudup/commit/96f4abcace2ec11c4c8507fca3388f71ed5a6d47))
+* **ui:** polish disclosure marker and focus radius ([2bdbaf0](https://github.com/magrhino/wudup/commit/2bdbaf05fe20544044af5517da5951b0413bf417))
+
+
+### Documentation
+
+* **webui:** document dark border token ([7e0016d](https://github.com/magrhino/wudup/commit/7e0016d485fcc4870a63200687a4665f1fb60163))
+
 ## [0.45.2](https://github.com/magrhino/WUD-Updater/compare/v0.45.1...v0.45.2) (2026-06-20)
 
 
