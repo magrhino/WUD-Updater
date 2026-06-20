@@ -10,14 +10,19 @@
 .disclosure-summary-triangle::before {
   content: "";
   flex: 0 0 auto;
-  width: 0;
-  height: 0;
-  border-top: 4px solid transparent;
-  border-bottom: 4px solid transparent;
-  border-left: 5px solid var(--color-action-blue);
-  transition: transform 180ms ease-out;
+  width: 8px;
+  height: 8px;
+  background: var(--color-action-blue);
+  clip-path: polygon(24% 10%, 76% 50%, 24% 90%);
+  transition: transform var(--motion-base) var(--ease-out-quart);
 }
 
 details[open] > .disclosure-summary-triangle::before {
   transform: rotate(90deg);
+}
+
+@media (--wud-reduced-motion) {
+  .disclosure-summary-triangle::before {
+    transition: none;
+  }
 }

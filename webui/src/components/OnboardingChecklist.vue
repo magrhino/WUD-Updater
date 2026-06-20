@@ -601,7 +601,7 @@ function sourceCheckSummaryLabel(item: OnboardingChecklistItem): string {
 .onboarding-check-diagnostics summary:focus-visible {
   outline: 2px solid var(--color-action-blue);
   outline-offset: 2px;
-  border-radius: 4px;
+  border-radius: 7px;
 }
 
 .onboarding-check-diagnostics[open] .onboarding-check-codes {
