@@ -4,6 +4,13 @@ All notable changes to WUD-Updater are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com) and versions follow
 [Semantic Versioning](https://semver.org).
 
+## [0.45.4](https://github.com/magrhino/wudup/compare/v0.45.3...v0.45.4) (2026-06-20)
+
+
+### Bug Fixes
+
+* **updates:** Default WUDup updates to run without sudo ([#368](https://github.com/magrhino/wudup/issues/368)) ([7e028ab](https://github.com/magrhino/wudup/commit/7e028abd026cdff5103262d9ec6b94a8795e1536))
+
 ## [0.45.3](https://github.com/magrhino/wudup/compare/v0.45.2...v0.45.3) (2026-06-20)
 
 
