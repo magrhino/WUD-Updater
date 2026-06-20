@@ -38,6 +38,7 @@ HELPER_ONLY_MOUNT_PREFIXES = (Path("/host"), Path("/docker-host"), Path("/contai
 MANAGED_SCRIPTS_MARKER = ".wudup-managed"
 LEGACY_MANAGED_SCRIPTS_MARKER = ".wud-updater-managed"
 DOCTOR_PROBE_NAME = ".wudup-doctor-probe"
+UPDATER_EXECUTABLE_CHECK = "updater executable"
 REQUIRED_WUD_SCRIPTS = (
     "on-update.sh",
     "append-updates.sh",
@@ -332,30 +333,32 @@ class Doctor:
     def _check_updater(self) -> None:
         updater = self.options.updater
         if not updater:
-            self._record("FAIL", "updater executable", "WUDUP_UPDATER is empty")
+            self._record("FAIL", UPDATER_EXECUTABLE_CHECK, "WUDUP_UPDATER is empty")
             return
 
         path = Path(updater)
         if path.is_absolute() or "/" in updater:
             if path.is_file() and os.access(path, os.X_OK):
-                self._record("PASS", "updater executable", str(path))
+                self._record("PASS", UPDATER_EXECUTABLE_CHECK, str(path))
             elif path.exists():
                 self._record(
                     "FAIL",
-                    "updater executable",
+                    UPDATER_EXECUTABLE_CHECK,
                     f"{path} is not executable",
                 )
             else:
-                self._record("FAIL", "updater executable", f"{path} does not exist")
+                self._record(
+                    "FAIL", UPDATER_EXECUTABLE_CHECK, f"{path} does not exist"
+                )
             return
 
         resolved = shutil.which(updater, path=self.environ.get("PATH"))
         if resolved:
-            self._record("PASS", "updater executable", resolved)
+            self._record("PASS", UPDATER_EXECUTABLE_CHECK, resolved)
         else:
             self._record(
                 "FAIL",
-                "updater executable",
+                UPDATER_EXECUTABLE_CHECK,
                 f"{updater} not found on PATH",
             )
 
@@ -743,7 +746,7 @@ def _check_code(name: str) -> str:
 
 
 def _check_category(name: str) -> str:
-    if name.startswith("python ") or name in {"sudo", "updater executable"}:
+    if name.startswith("python ") or name in {"sudo", UPDATER_EXECUTABLE_CHECK}:
         return "runtime"
     if name.startswith("docker "):
         return "docker"

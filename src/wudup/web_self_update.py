@@ -41,7 +41,11 @@ from .images import (
 )
 from .plans import DryRunPlan, PlanFileMissing, PlanInputError, build_dry_run_plan
 from .release_notes import detect_breaking
-from .self_update import current_container_image, release_self_update_target
+from .self_update import (
+    DEFAULT_SELF_UPDATE_IMAGE,
+    current_container_image,
+    release_self_update_target,
+)
 from .compose_rewrite import (
     _backup_compose,
     apply_compose_digest_pins,
@@ -887,11 +891,11 @@ def _demo_self_update_response(
 ) -> SelfUpdateResponse:
     demo_current_tag = "v0.25.0"
     latest_tag = "v0.26.0"
-    current_image = current_image or "ghcr.io/magrhino/wudup:latest"
-    target_image = "ghcr.io/magrhino/wudup:latest"
+    current_image = current_image or DEFAULT_SELF_UPDATE_IMAGE
+    target_image = DEFAULT_SELF_UPDATE_IMAGE
     disabled_reason = _self_update_disabled_reason(
         settings,
-        target_spec="ghcr.io/magrhino/wudup:latest",
+        target_spec=DEFAULT_SELF_UPDATE_IMAGE,
         target_image=target_image,
         restart_container=restart_container,
     )

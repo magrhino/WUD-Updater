@@ -42,6 +42,7 @@ from .truenas import (
 DEFAULT_UPDATE_MODE = "stop"
 DEFAULT_MAX_WAIT = "180"
 DEFAULT_LOCK_TIMEOUT = "30"
+SELF_UPDATE_SKIPPED_MESSAGE = "⏸️  Skipped WUDup self-update."
 _SECONDS_RE = re.compile(r"^[0-9]+$")
 _SHELL_SPACE_RE = re.compile(r"[ \t\n\r\v\f]")
 _LEGACY_SHA_SUFFIX_RE = re.compile(r"^(.*\S)\s+sha256=\S+$")
@@ -410,7 +411,7 @@ class UpdatesRunner:
                     "Update WUDup before other Docker updates? (Y/n) "
                 )
             if reply is None:
-                print("⏸️  Skipped WUDup self-update.")
+                print(SELF_UPDATE_SKIPPED_MESSAGE)
                 return False
             choice = reply.strip().casefold()
             if choice in {"y", "yes"}:
@@ -418,10 +419,10 @@ class UpdatesRunner:
             if choice == "":
                 if sys.stdin.isatty():
                     return True
-                print("⏸️  Skipped WUDup self-update.")
+                print(SELF_UPDATE_SKIPPED_MESSAGE)
                 return False
             if choice in {"n", "no"}:
-                print("⏸️  Skipped WUDup self-update.")
+                print(SELF_UPDATE_SKIPPED_MESSAGE)
                 return False
             print("Invalid choice. Enter y or n.")
 
@@ -1037,21 +1038,9 @@ def load_configured_environ(
     if config_file:
         env["WUDUP_CONFIG"] = config_file
         env["WUD_UPDATER_CONFIG"] = config_file
-    if (
-        env.get("WUDUP_CONFIG_SOURCED") == "1"
-        or env.get("WUD_UPDATER_CONFIG_SOURCED") == "1"
-    ) and not explicit_config_file:
+    if _config_already_sourced(env, explicit_config_file=explicit_config_file):
         return env
-    home = env.get("HOME") or str(Path.home())
-    configured = env_value(env, "WUDUP_CONFIG", "WUD_UPDATER_CONFIG")
-    default_config_file = Path(home) / ".config" / CONFIG_DIR_NAME / "env"
-    legacy_config_file = Path(home) / ".config" / LEGACY_CONFIG_DIR_NAME / "env"
-    if configured:
-        config_file = Path(configured)
-    elif legacy_config_file.is_file() and not default_config_file.is_file():
-        config_file = legacy_config_file
-    else:
-        config_file = default_config_file
+    config_file = _configured_env_file(env)
     if not config_file.is_file() or not os.access(config_file, os.R_OK):
         return env
 
@@ -1080,6 +1069,29 @@ def load_configured_environ(
         key, value = line.split("=", 1)
         env[key] = value
     return env
+
+
+def _config_already_sourced(
+    env: Mapping[str, str],
+    *,
+    explicit_config_file: bool,
+) -> bool:
+    return (
+        env.get("WUDUP_CONFIG_SOURCED") == "1"
+        or env.get("WUD_UPDATER_CONFIG_SOURCED") == "1"
+    ) and not explicit_config_file
+
+
+def _configured_env_file(env: Mapping[str, str]) -> Path:
+    home = env.get("HOME") or str(Path.home())
+    configured = env_value(env, "WUDUP_CONFIG", "WUD_UPDATER_CONFIG")
+    default_config_file = Path(home) / ".config" / CONFIG_DIR_NAME / "env"
+    legacy_config_file = Path(home) / ".config" / LEGACY_CONFIG_DIR_NAME / "env"
+    if configured:
+        return Path(configured)
+    if legacy_config_file.is_file() and not default_config_file.is_file():
+        return legacy_config_file
+    return default_config_file
 
 
 def _parse_todo_entries(text: str) -> list[TodoEntry]:
