@@ -62,6 +62,7 @@ class DoctorOptions:
     docker_host: str = ""
     sync_scripts: str = "auto"
     updater_use_sudo: bool = False
+    updater_use_sudo_source: str = ""
     truenas_status_check: bool = False
     truenas_status_timeout: str = DEFAULT_TRUENAS_STATUS_TIMEOUT
     compose_ignore_paths: tuple[Path, ...] = ()
@@ -364,14 +365,9 @@ class Doctor:
 
     def _check_sudo(self) -> None:
         if not self.options.updater_use_sudo:
-            configured = env_value(
-                self.environ,
-                "WUDUP_USE_SUDO",
-                "WUD_UPDATER_USE_SUDO",
-            )
             detail = (
-                "disabled by WUDUP_USE_SUDO=false"
-                if configured
+                f"disabled by {self.options.updater_use_sudo_source}=false"
+                if self.options.updater_use_sudo_source
                 else "disabled by default"
             )
             self._record("PASS", "sudo", detail)
@@ -939,6 +935,11 @@ def options_from_namespace(
     updater = env_value(environ, "WUDUP_UPDATER", "WUD_UPDATER") or _default_updater(
         repo_path
     )
+    updater_sudo_source, updater_sudo_value = _env_value_with_source(
+        environ,
+        "WUDUP_USE_SUDO",
+        "WUD_UPDATER_USE_SUDO",
+    )
     try:
         compose_ignore_paths = parse_compose_ignore_paths(
             environ.get(COMPOSE_IGNORE_PATHS_ENV)
@@ -960,10 +961,11 @@ def options_from_namespace(
             environ.get("WUD_SYNC_SCRIPTS"),
         ),
         updater_use_sudo=_resolve_bool_env(
-            env_value(environ, "WUDUP_USE_SUDO", "WUD_UPDATER_USE_SUDO"),
-            "WUDUP_USE_SUDO",
+            updater_sudo_value,
+            updater_sudo_source or "WUDUP_USE_SUDO",
             default=False,
         ),
+        updater_use_sudo_source=updater_sudo_source,
         truenas_status_check=_resolve_bool_env(
             environ.get("TRUENAS_STATUS_CHECK"),
             "TRUENAS_STATUS_CHECK",
@@ -975,6 +977,20 @@ def options_from_namespace(
         compose_ignore_paths=compose_ignore_paths,
         no_color=bool(getattr(args, "no_color", False)),
     )
+
+
+def _env_value_with_source(
+    env: Mapping[str, str],
+    canonical: str,
+    legacy: str,
+) -> tuple[str, str | None]:
+    value = env.get(canonical)
+    if value:
+        return canonical, value
+    value = env.get(legacy)
+    if value:
+        return legacy, value
+    return "", None
 
 
 def _default_app_dir(repo_root: Path) -> str:

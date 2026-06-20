@@ -32,6 +32,7 @@ class UpdatesWrapperInteractiveTests(UpdatesWrapperTestCase):
 
         self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
         updater_log = self.updater_log.read_text(encoding="utf-8")
+        self.assertFalse(self.sudo_log.exists())
         self.assertIn(
             "--only-lines 1 --allow-tag-updates --tag-override 1=3.0 --yes",
             updater_log,
@@ -82,6 +83,7 @@ class UpdatesWrapperInteractiveTests(UpdatesWrapperTestCase):
 
         self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
         updater_log = self.updater_log.read_text(encoding="utf-8")
+        self.assertFalse(self.sudo_log.exists())
         self.assertIn(
             "--only-lines 1 --exclude-tag-lines 1 --recreate-excluded-services --yes",
             updater_log,
