@@ -102,7 +102,7 @@ export type DemoGeneratedFixtures = {
     session: AuthSessionResponse;
     setupStatus: SetupStatusResponse;
   };
-  status: StatusResponse;
+  status: Omit<StatusResponse, "version">;
   settings: SettingsResponse;
   doctor: DoctorResponse;
   onboarding: OnboardingChecklistResponse;
@@ -115,7 +115,7 @@ export type DemoGeneratedFixtures = {
   releaseNotes: ReleaseNotesResponse;
   selfUpdate: SelfUpdateResponse;
   selfUpdatePlan: SelfUpdatePlanResponse;
-  diagnostics: DiagnosticsSupportBundleResponse;
+  diagnostics: Omit<DiagnosticsSupportBundleResponse, "wud_updater_version">;
   servicePolicies: ServicePolicyRecord[];
   snoozes: {
     active: SnoozeRecord[];

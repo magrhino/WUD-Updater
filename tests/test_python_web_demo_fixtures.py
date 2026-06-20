@@ -163,6 +163,14 @@ class WebDemoFixtureGenerationTests(unittest.TestCase):
         )
         self.assertNotIn(str(Path.home()), rendered)
 
+    def test_typescript_fixture_render_omits_release_versions(self) -> None:
+        payload = web_demo_fixtures._static_demo_fixture_render_payload(self.fixtures)
+
+        self.assertIn("version", self.fixtures["status"])
+        self.assertIn("wud_updater_version", self.fixtures["diagnostics"])
+        self.assertNotIn("version", payload["status"])
+        self.assertNotIn("wud_updater_version", payload["diagnostics"])
+
     def test_demo_environment_is_allowlisted(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             paths = web_demo_fixtures.seed_demo_state(Path(tmpdir) / "state")

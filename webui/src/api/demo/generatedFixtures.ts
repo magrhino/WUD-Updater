@@ -1149,8 +1149,7 @@ export const generatedFixtures = {
           "value": "true"
         }
       ]
-    },
-    "wud_updater_version": "0.45.0"
+    }
   },
   "doctor": {
     "checks": [
@@ -115062,7 +115061,6 @@ export const generatedFixtures = {
     "setup_required": false,
     "static_spa_available": true,
     "timezone": "UTC",
-    "version": "0.45.0",
     "warnings": [],
     "wud_api": {
       "available": true,

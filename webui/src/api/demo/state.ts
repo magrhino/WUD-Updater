@@ -42,6 +42,7 @@ import type {
   TagOverrideRequest,
   UpdateTargetsResponse,
 } from "../types";
+import { DEMO_VERSION } from "./constants";
 import { generatedFixtures } from "./generatedFixtures";
 import {
   cleanupLineKey,
@@ -504,6 +505,7 @@ export class DemoApiState {
   status(): StatusResponse {
     return {
       ...clone(fixtures.status),
+      version: DEMO_VERSION,
       pending_count: this.activePendingLineKeys.size,
     };
   }
@@ -553,6 +555,7 @@ export class DemoApiState {
   diagnosticsSupportBundle(): DiagnosticsSupportBundleResponse {
     return {
       ...clone(fixtures.diagnostics),
+      wud_updater_version: DEMO_VERSION,
       settings: this.settings(),
       doctor_result: this.doctor(),
       pending_summary: this.pendingResponse(),

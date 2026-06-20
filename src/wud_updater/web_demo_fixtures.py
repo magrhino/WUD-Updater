@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import contextlib
+import copy
 import io
 import itertools
 import json
@@ -578,11 +579,26 @@ def _preserved_wud_api_snapshot_cache():
 
 
 def render_static_demo_fixtures_ts(data: dict[str, Any]) -> str:
-    payload = json.dumps(data, indent=2, sort_keys=True)
+    payload = json.dumps(
+        _static_demo_fixture_render_payload(data),
+        indent=2,
+        sort_keys=True,
+    )
     return (
         'import type { DemoGeneratedFixtures } from "./types";\n\n'
         f"export const generatedFixtures = {payload} satisfies DemoGeneratedFixtures;\n"
     )
+
+
+def _static_demo_fixture_render_payload(data: dict[str, Any]) -> dict[str, Any]:
+    payload = copy.deepcopy(data)
+    status = payload.get("status")
+    if isinstance(status, dict):
+        status.pop("version", None)
+    diagnostics = payload.get("diagnostics")
+    if isinstance(diagnostics, dict):
+        diagnostics.pop("wud_updater_version", None)
+    return payload
 
 
 def write_static_demo_fixtures(path: Path = GENERATED_FIXTURE_PATH) -> None:
