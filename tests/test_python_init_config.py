@@ -13,6 +13,7 @@ from ruamel.yaml import YAML
 from wudup.init_config import (
     InitConfigError,
     InitPrompter,
+    _add_wud_health_dependency,
     answers_from_namespace,
     generate_files,
     run_init,
@@ -378,6 +379,23 @@ class InitConfigTests(unittest.TestCase):
         self.assertIn(
             "${WEBUI_LOG_DIR:-./logs}:/logs",
             parsed["services"]["wudup"]["volumes"],
+        )
+
+    def test_wud_health_dependency_preserves_existing_depends_on(self) -> None:
+        service: dict[str, object] = {
+            "depends_on": {
+                "socket-proxy-wudup": {"condition": "service_started"},
+            }
+        }
+
+        _add_wud_health_dependency(service)
+
+        self.assertEqual(
+            service["depends_on"],
+            {
+                "socket-proxy-wudup": {"condition": "service_started"},
+                "wud": {"condition": "service_healthy"},
+            },
         )
 
     def test_webui_compose_override_yaml_contains_readyz_healthcheck(self) -> None:
