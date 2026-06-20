@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import logging
 import sqlite3
+from collections.abc import Callable, Iterable
 from contextlib import closing
-from dataclasses import asdict
+from dataclasses import asdict, dataclass
 from typing import Any
 
 from fastapi import HTTPException, Request
@@ -14,10 +15,16 @@ from .command import CommandError, CommandRunner
 from .db import DatabaseError, init_db, open_db
 from . import web_wud_api
 from .docker_cli import ContainerImage, DockerCli
-from .images import image_matches_resolved_target
+from .images import (
+    image_has_tag,
+    image_matches_resolved_target,
+    image_with_tag,
+    strip_digest,
+)
 from .release_notes import (
     OCI_SOURCE_LABEL,
     ReleaseNoteSourceResolver,
+    ReleaseNoteTargetTagResolver,
     cached_release_notes,
     github_repo_from_ghcr_image,
     github_repo_from_source,
@@ -41,43 +48,38 @@ from .wud_file import WudTarget
 
 LOGGER = logging.getLogger(__name__)
 DOCKER_STDERR_LOG_LIMIT = 500
+SourceLabelReader = Callable[[str], tuple[str, CommandError | None]]
+
+
+@dataclass(frozen=True)
+class _ReleaseNotesRequestContext:
+    targets: tuple[WudTarget, ...]
+    warnings: tuple[str, ...]
+    wud_api: Any
+    source_resolver: ReleaseNoteSourceResolver
+    target_tag_resolver: ReleaseNoteTargetTagResolver
 
 
 def api_release_notes(request: Request) -> ReleaseNotesResponse:
     settings = _settings(request)
-    wud_snapshot = web_wud_api.get_snapshot(settings, include_containers=True)
-    exists, parsed = parse_pending_file(settings)
-    warnings = list(parsed.warnings)
-    wud_metadata = web_wud_api.metadata_by_target(
-        settings,
-        parsed.targets,
-        snapshot=wud_snapshot,
-    )
-    if not exists:
-        return ReleaseNotesResponse(
-            source_file=str(settings.config.wud_out_file),
-            count=0,
-            items=[],
-            wud_api=wud_snapshot.status,
-            warnings=warnings,
-        )
-    source_resolver = release_note_source_resolver(settings, wud_metadata=wud_metadata)
-    target_tag_resolver = web_wud_api.target_tag_resolver_from_metadata(wud_metadata)
+    context = _release_notes_request_context(settings)
+    if isinstance(context, ReleaseNotesResponse):
+        return context
     try:
         with closing(_connect_readonly_db(settings)) as conn:
             items = cached_release_notes(
                 conn,
-                parsed.targets,
+                context.targets,
                 settings.command_env or {},
-                source_resolver=source_resolver,
-                target_tag_resolver=target_tag_resolver,
+                source_resolver=context.source_resolver,
+                target_tag_resolver=context.target_tag_resolver,
             )
     except ReadOnlyDatabaseMissing:
         items = release_note_placeholders(
-            parsed.targets,
+            context.targets,
             settings.command_env or {},
-            source_resolver=source_resolver,
-            target_tag_resolver=target_tag_resolver,
+            source_resolver=context.source_resolver,
+            target_tag_resolver=context.target_tag_resolver,
         )
     except (OSError, sqlite3.Error, DatabaseError) as exc:
         raise HTTPException(
@@ -88,38 +90,28 @@ def api_release_notes(request: Request) -> ReleaseNotesResponse:
                 exc,
             ),
         ) from exc
-    return release_notes_response(settings, items, warnings, wud_api=wud_snapshot.status)
+    return release_notes_response(
+        settings,
+        items,
+        context.warnings,
+        wud_api=context.wud_api,
+    )
 
 
 def api_refresh_release_notes(request: Request) -> ReleaseNotesResponse:
     settings = _settings(request)
-    wud_snapshot = web_wud_api.get_snapshot(settings, include_containers=True)
-    exists, parsed = parse_pending_file(settings)
-    warnings = list(parsed.warnings)
-    wud_metadata = web_wud_api.metadata_by_target(
-        settings,
-        parsed.targets,
-        snapshot=wud_snapshot,
-    )
-    if not exists:
-        return ReleaseNotesResponse(
-            source_file=str(settings.config.wud_out_file),
-            count=0,
-            items=[],
-            wud_api=wud_snapshot.status,
-            warnings=warnings,
-        )
-    source_resolver = release_note_source_resolver(settings, wud_metadata=wud_metadata)
-    target_tag_resolver = web_wud_api.target_tag_resolver_from_metadata(wud_metadata)
+    context = _release_notes_request_context(settings)
+    if isinstance(context, ReleaseNotesResponse):
+        return context
     try:
         with open_db(settings.config.db_path) as conn:
             init_db(conn)
             items = refresh_release_notes(
                 conn,
-                parsed.targets,
+                context.targets,
                 settings.command_env or {},
-                source_resolver=source_resolver,
-                target_tag_resolver=target_tag_resolver,
+                source_resolver=context.source_resolver,
+                target_tag_resolver=context.target_tag_resolver,
                 redact_error=lambda value: _redact_sensitive_text(settings, value),
             )
     except (OSError, sqlite3.Error, DatabaseError) as exc:
@@ -131,13 +123,50 @@ def api_refresh_release_notes(request: Request) -> ReleaseNotesResponse:
                 exc,
             ),
         ) from exc
-    return release_notes_response(settings, items, warnings, wud_api=wud_snapshot.status)
+    return release_notes_response(
+        settings,
+        items,
+        context.warnings,
+        wud_api=context.wud_api,
+    )
+
+
+def _release_notes_request_context(
+    settings: WebSettings,
+) -> _ReleaseNotesRequestContext | ReleaseNotesResponse:
+    wud_snapshot = web_wud_api.get_snapshot(settings, include_containers=True)
+    exists, parsed = parse_pending_file(settings)
+    if not exists:
+        return ReleaseNotesResponse(
+            source_file=str(settings.config.wud_out_file),
+            count=0,
+            items=[],
+            wud_api=wud_snapshot.status,
+            warnings=list(parsed.warnings),
+        )
+    wud_metadata = web_wud_api.metadata_by_target(
+        settings,
+        parsed.targets,
+        snapshot=wud_snapshot,
+    )
+    return _ReleaseNotesRequestContext(
+        targets=parsed.targets,
+        warnings=parsed.warnings,
+        wud_api=wud_snapshot.status,
+        source_resolver=release_note_source_resolver(
+            settings,
+            wud_metadata=wud_metadata,
+        ),
+        target_tag_resolver=web_wud_api.target_tag_resolver_from_metadata(
+            wud_metadata,
+        ),
+    )
 
 
 def release_notes_response(
     settings: WebSettings,
     items: list[Any],
-    warnings: list[str],
+    warnings: Iterable[str],
     *,
     wud_api: Any,
 ) -> ReleaseNotesResponse:
@@ -182,7 +211,7 @@ def release_note_source_resolver(
         if github_repo_from_source(wud_source):
             return wud_source
 
-        value, error = source_label(target.first)
+        value, error = source_label_for_target(target, source_label)
         if github_repo_from_source(value):
             return value
 
@@ -190,21 +219,68 @@ def release_note_source_resolver(
         if image_source:
             return image_source
 
-        running_source = running_container_release_source(target, running_images())
+        running_source, running_error = running_container_release_source(
+            target,
+            running_images(),
+            source_label,
+        )
         if running_source:
             return running_source
 
         if error is not None:
             log_source_label_error(settings, target, error)
+        elif running_error is not None:
+            log_source_label_error(settings, target, running_error)
         return value
 
     return resolve
 
 
+def source_label_for_target(
+    target: WudTarget,
+    source_label: SourceLabelReader,
+) -> tuple[str, CommandError | None]:
+    return source_label_from_candidates(
+        source_label_candidates(target.first, tag_token=target.tag_token),
+        source_label,
+    )
+
+
+def source_label_from_candidates(
+    candidates: tuple[str, ...],
+    source_label: SourceLabelReader,
+) -> tuple[str, CommandError | None]:
+    fallback = ""
+    first_error: CommandError | None = None
+    for image in candidates:
+        value, error = source_label(image)
+        if github_repo_from_source(value):
+            return value, None
+        if value and not fallback:
+            fallback = value
+        if error is not None and first_error is None:
+            first_error = error
+    return fallback, first_error
+
+
+def source_label_candidates(image: str, *, tag_token: str = "") -> tuple[str, ...]:
+    candidates: list[str] = []
+    if "@sha256:" in image:
+        if image_has_tag(image):
+            candidates.append(strip_digest(image))
+        elif tag_token:
+            candidates.append(image_with_tag(image, tag_token))
+    candidates.append(image)
+    return tuple(dict.fromkeys(candidate for candidate in candidates if candidate))
+
+
 def running_container_release_source(
     target: WudTarget,
     containers: list[ContainerImage],
-) -> str:
+    source_label: SourceLabelReader,
+) -> tuple[str, CommandError | None]:
+    fallback = ""
+    first_error: CommandError | None = None
     for container in containers:
         if container.name != target.first and not image_matches_resolved_target(
             container.image,
@@ -212,10 +288,20 @@ def running_container_release_source(
             target.allow_repo,
         ):
             continue
+        value, error = source_label_from_candidates(
+            source_label_candidates(container.image),
+            source_label,
+        )
+        if github_repo_from_source(value):
+            return value, None
+        if value and not fallback:
+            fallback = value
+        if error is not None and first_error is None:
+            first_error = error
         source = ghcr_release_source(container.image)
         if source:
-            return source
-    return ""
+            return source, None
+    return fallback, first_error
 
 
 def ghcr_release_source(image: str) -> str:
