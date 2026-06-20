@@ -54,7 +54,7 @@ const {
 }
 
 .settings-safety-strip.is-mutable {
-  border-color: color-mix(in srgb, var(--color-border) 68%, var(--color-warning) 32%);
+  border-color: color-mix(in srgb, var(--color-border) 68%, var(--color-warning-fg) 32%);
   background: color-mix(in srgb, var(--color-surface) 86%, var(--color-warning-bg) 14%);
 }
 
@@ -72,7 +72,7 @@ const {
 }
 
 .settings-safety-strip.is-mutable .settings-safety-main>svg {
-  color: var(--color-warning);
+  color: var(--color-warning-fg);
 }
 
 .settings-safety-main>span {

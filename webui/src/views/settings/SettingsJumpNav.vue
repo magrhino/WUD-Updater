@@ -64,7 +64,7 @@ import { SETTINGS_SECTION_LINKS } from "./settingsDisplay";
 
   .settings-jump-button {
     flex: 0 0 auto;
-    min-height: 44px;
+    min-height: var(--size-touch-target);
   }
 }
 </style>

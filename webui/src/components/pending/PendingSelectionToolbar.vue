@@ -186,12 +186,12 @@ const emit = defineEmits<{
   }
 
   .pending-actions :deep(.n-button) {
-    min-width: 44px;
-    min-height: 44px;
+    min-width: var(--size-touch-target);
+    min-height: var(--size-touch-target);
   }
 
   .pending-actions :deep(.n-checkbox) {
-    min-height: 44px;
+    min-height: var(--size-touch-target);
     display: inline-flex;
     align-items: center;
   }

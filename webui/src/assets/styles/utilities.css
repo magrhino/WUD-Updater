@@ -102,7 +102,7 @@ body .n-switch:focus-within {
   a.icon-link {
     display: inline-flex;
     align-items: center;
-    min-height: 44px;
+    min-height: var(--size-touch-target);
   }
 }
 

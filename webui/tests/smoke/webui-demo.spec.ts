@@ -1,5 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 
+import { touchTargetSizePx } from "../../src/touchTargets";
+
 const demoBasePath = process.env.PLAYWRIGHT_WEBUI_DEMO_BASE_PATH ?? "";
 const browserFailures = new WeakMap<Page, string[]>();
 
@@ -40,6 +42,20 @@ test.afterEach(({ page }) => {
 
 function demoRoute(path: string) {
   return `${demoBasePath}${path}`;
+}
+
+async function expectTouchTargetHeight(page: Page, buttonName: string) {
+  const button = page
+    .getByRole("button", { name: buttonName, exact: true })
+    .first();
+  await expect(button).toBeVisible();
+  await button.scrollIntoViewIfNeeded();
+  const box = await button.boundingBox();
+  if (box === null) {
+    throw new Error(`Expected "${buttonName}" button to have a bounding box`);
+  }
+  expect(box.height).toBeGreaterThanOrEqual(touchTargetSizePx);
+  expect(box.width).toBeGreaterThanOrEqual(touchTargetSizePx);
 }
 
 test("static demo renders current pending state and completes apply flow", async ({
@@ -130,6 +146,7 @@ test("static demo mobile layout stays within the viewport", async ({ page }) => 
     page.getByRole("heading", { name: "Pending updates", exact: true }),
   ).toBeVisible();
   await expect(page.getByRole("checkbox", { name: /Select stack media/ })).toBeVisible();
+  await expectTouchTargetHeight(page, "Pull image");
   await expect
     .poll(() =>
       page.evaluate(() => ({
@@ -138,4 +155,13 @@ test("static demo mobile layout stays within the viewport", async ({ page }) => 
       })),
     )
     .toEqual({ innerWidth: 390, scrollWidth: 390 });
+
+  await page.goto(demoRoute("/#/doctor"));
+  await expect(page.getByRole("heading", { name: "Doctor", level: 1 })).toBeVisible();
+  await expectTouchTargetHeight(page, "Refresh");
+
+  await page.goto(demoRoute("/#/settings"));
+  await expect(page.getByRole("heading", { name: "Settings", level: 1 })).toBeVisible();
+  await expectTouchTargetHeight(page, "Download support bundle");
+  await expectTouchTargetHeight(page, "Copy");
 });

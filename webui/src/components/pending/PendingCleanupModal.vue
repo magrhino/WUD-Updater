@@ -147,7 +147,7 @@ function handleModalShowUpdate(value: boolean): void {
   padding: 10px 12px;
   border: 1px solid color-mix(in srgb,
       var(--color-border) 68%,
-      var(--color-warning) 32%);
+      var(--color-warning-fg) 32%);
   border-radius: 7px;
   background: color-mix(in srgb,
       var(--color-surface) 86%,

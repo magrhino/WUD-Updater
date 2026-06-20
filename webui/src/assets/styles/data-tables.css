@@ -141,7 +141,7 @@ code.pending-table-value {
 
 .release-breaking-cue {
   padding: 0 8px;
-  color: var(--color-warning);
+  color: var(--color-warning-fg);
   background: var(--color-warning-bg);
 }
 
@@ -222,13 +222,13 @@ code.pending-table-value {
 
   .form-actions .n-button,
   .table-actions .n-button {
-    min-width: 44px;
-    min-height: 44px;
+    min-width: var(--size-touch-target);
+    min-height: var(--size-touch-target);
   }
 
   .filter-control .n-base-selection,
   .mobile-card .tag-override-input {
-    min-height: 44px;
+    min-height: var(--size-touch-target);
   }
 
   .tag-override-input {

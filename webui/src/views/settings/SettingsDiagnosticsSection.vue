@@ -98,6 +98,8 @@ const {
 
   .settings-action-row :deep(.n-button) {
     justify-self: start;
+    min-width: var(--size-touch-target);
+    min-height: var(--size-touch-target);
   }
 }
 </style>

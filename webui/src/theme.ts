@@ -10,6 +10,7 @@ import { darkTheme, type GlobalTheme, type GlobalThemeOverrides } from "naive-ui
 
 import { useAuthStore } from "./stores/auth";
 import { useSettingsStore } from "./stores/settings";
+import { touchTargetSizePx } from "./touchTargets";
 import { runInBackground } from "./utils/promises";
 
 export type EffectiveTheme = "light" | "dark";
@@ -53,11 +54,12 @@ type ThemeTokens = {
     operationalTeal: string;
     operationalTealHover: string;
     operationalTealPressed: string;
-    warning: string;
+    warningFg: string;
     warningBg: string;
     warningHover: string;
     warningPressed: string;
-    error: string;
+    errorFg: string;
+    errorBg: string;
     errorHover: string;
     errorPressed: string;
     loginBg: string;
@@ -96,11 +98,12 @@ const lightDesignTokens: ThemeTokens = {
     operationalTeal: "#137a63",
     operationalTealHover: "#106a58",
     operationalTealPressed: "#0c5748",
-    warning: "#663c00",
+    warningFg: "#663c00",
     warningBg: "#fff1d6",
     warningHover: "#824d00",
     warningPressed: "#4d2d00",
-    error: "#b42318",
+    errorFg: "#b42318",
+    errorBg: "#fde8e6",
     errorHover: "#961b12",
     errorPressed: "#7a160f",
     loginBg: "#eef3f5",
@@ -139,11 +142,12 @@ const darkDesignTokens: ThemeTokens = {
     operationalTeal: "#58c5a6",
     operationalTealHover: "#73d7bb",
     operationalTealPressed: "#39ab8d",
-    warning: "#ffe0a3",
+    warningFg: "#ffe0a3",
     warningBg: "#38280e",
     warningHover: "#fff0c7",
     warningPressed: "#ffc766",
-    error: "#ff9286",
+    errorFg: "#ff9286",
+    errorBg: "#3a1d1b",
     errorHover: "#ffafa8",
     errorPressed: "#e77569",
     loginBg: "#0d1518",
@@ -188,11 +192,12 @@ function cssVariablesFor(tokens: ThemeTokens): Record<string, string> {
     "--color-operational-teal": tokens.color.operationalTeal,
     "--color-operational-teal-hover": tokens.color.operationalTealHover,
     "--color-operational-teal-pressed": tokens.color.operationalTealPressed,
-    "--color-warning": tokens.color.warning,
+    "--color-warning-fg": tokens.color.warningFg,
     "--color-warning-bg": tokens.color.warningBg,
     "--color-warning-hover": tokens.color.warningHover,
     "--color-warning-pressed": tokens.color.warningPressed,
-    "--color-error": tokens.color.error,
+    "--color-error-fg": tokens.color.errorFg,
+    "--color-error-bg": tokens.color.errorBg,
     "--color-error-hover": tokens.color.errorHover,
     "--color-error-pressed": tokens.color.errorPressed,
     "--color-login-bg": tokens.color.loginBg,
@@ -200,6 +205,7 @@ function cssVariablesFor(tokens: ThemeTokens): Record<string, string> {
     "--color-log-text": tokens.color.logText,
     "--color-code-text": tokens.color.codeText,
     "--shadow-panel-lift": tokens.shadow.panelLift,
+    "--size-touch-target": `${touchTargetSizePx}px`,
   };
 }
 
@@ -229,14 +235,14 @@ function themeOverridesFor(tokens: ThemeTokens): GlobalThemeOverrides {
       successColorHover: tokens.color.operationalTealHover,
       successColorPressed: tokens.color.operationalTealPressed,
       successColorSuppl: tokens.color.operationalTeal,
-      warningColor: tokens.color.warning,
+      warningColor: tokens.color.warningFg,
       warningColorHover: tokens.color.warningHover,
       warningColorPressed: tokens.color.warningPressed,
-      warningColorSuppl: tokens.color.warning,
-      errorColor: tokens.color.error,
+      warningColorSuppl: tokens.color.warningFg,
+      errorColor: tokens.color.errorFg,
       errorColorHover: tokens.color.errorHover,
       errorColorPressed: tokens.color.errorPressed,
-      errorColorSuppl: tokens.color.error,
+      errorColorSuppl: tokens.color.errorFg,
       textColorBase: tokens.color.ink,
       textColor1: tokens.color.ink,
       textColor2: tokens.color.textSecondary,
@@ -252,13 +258,21 @@ function themeOverridesFor(tokens: ThemeTokens): GlobalThemeOverrides {
       borderRadiusSmall: "7px",
     },
     Tag: {
-      borderWarning: `1px solid ${tokens.color.warning}`,
+      // Naive Tag color* slots are backgrounds; text/border slots use foreground tokens.
+      borderWarning: `1px solid ${tokens.color.warningFg}`,
       colorBorderedWarning: tokens.color.warningBg,
       colorWarning: tokens.color.warningBg,
-      closeIconColorWarning: tokens.color.warning,
+      closeIconColorWarning: tokens.color.warningFg,
       closeIconColorHoverWarning: tokens.color.warningHover,
       closeIconColorPressedWarning: tokens.color.warningPressed,
-      textColorWarning: tokens.color.warning,
+      textColorWarning: tokens.color.warningFg,
+      borderError: `1px solid ${tokens.color.errorFg}`,
+      colorBorderedError: tokens.color.errorBg,
+      colorError: tokens.color.errorBg,
+      closeIconColorError: tokens.color.errorFg,
+      closeIconColorHoverError: tokens.color.errorHover,
+      closeIconColorPressedError: tokens.color.errorPressed,
+      textColorError: tokens.color.errorFg,
     },
   };
 }

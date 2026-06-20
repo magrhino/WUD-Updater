@@ -112,5 +112,10 @@ defineEmits<{
     display: grid;
     grid-template-columns: 1fr;
   }
+
+  .self-update-banner-actions :deep(.n-button) {
+    min-width: var(--size-touch-target);
+    min-height: var(--size-touch-target);
+  }
 }
 </style>

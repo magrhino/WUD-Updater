@@ -378,8 +378,11 @@ const {
     align-items: start;
   }
 
-  .settings-action-row :deep(.n-button) {
+  .settings-action-row :deep(.n-button),
+  .settings-button-group :deep(.n-button) {
     justify-self: start;
+    min-width: var(--size-touch-target);
+    min-height: var(--size-touch-target);
   }
 
   .settings-preference-row>.settings-preference-controls {

@@ -14,6 +14,7 @@ import {
   themeStorageKey,
   useWebuiTheme,
 } from "../src/theme";
+import { touchTargetSizePx } from "../src/touchTargets";
 import { authSession, settingsResponse } from "./helpers/fixtures";
 
 function mockMatchMedia(prefersDark: boolean): void {
@@ -41,11 +42,21 @@ describe("webui theme tokens", () => {
     expect(root.style.getPropertyValue("--color-table-head")).toBe(
       designTokens.color.tableHead,
     );
+    expect(root.style.getPropertyValue("--color-warning-bg")).toBe(
+      designTokens.color.warningBg,
+    );
+    expect(root.style.getPropertyValue("--size-touch-target")).toBe(
+      `${touchTargetSizePx}px`,
+    );
     expect(themeOverrides.common?.primaryColor).toBe(
       designTokens.color.operationalTeal,
     );
     expect(themeOverrides.common?.tableHeaderColor).toBe(
       designTokens.color.tableHead,
+    );
+    expect(themeOverrides.Tag?.colorError).toBe(designTokens.color.errorBg);
+    expect(themeOverrides.Tag?.textColorError).toBe(
+      designTokens.color.errorFg,
     );
   });
 

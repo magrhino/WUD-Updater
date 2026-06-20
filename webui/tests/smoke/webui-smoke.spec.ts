@@ -1,5 +1,7 @@
 import { expect, test, type Page, type Route } from "@playwright/test";
 
+import { touchTargetSizePx } from "../../src/touchTargets";
+
 type ApiCall = {
   method: string;
   path: string;
@@ -861,8 +863,11 @@ test("mobile shell keeps page width stable and preserves link targets", async ({
   const historyLinkBox = await page
     .locator('a.text-link[href="#/runs"]')
     .boundingBox();
-  expect(pendingLinkBox?.height).toBeGreaterThanOrEqual(44);
-  expect(historyLinkBox?.height).toBeGreaterThanOrEqual(44);
+  if (pendingLinkBox === null || historyLinkBox === null) {
+    throw new Error("Expected mobile navigation text links to have bounding boxes");
+  }
+  expect(pendingLinkBox.height).toBeGreaterThanOrEqual(touchTargetSizePx);
+  expect(historyLinkBox.height).toBeGreaterThanOrEqual(touchTargetSizePx);
 
   await page.goto("/#/pending");
   await expect(page.getByRole("checkbox", { name: /Select stack media/ })).toBeVisible();

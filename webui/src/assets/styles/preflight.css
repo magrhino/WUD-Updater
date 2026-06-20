@@ -182,12 +182,12 @@
 
 @media (--wud-compact) {
   .preflight-footer .n-button {
-    min-width: 44px;
-    min-height: 44px;
+    min-width: var(--size-touch-target);
+    min-height: var(--size-touch-target);
   }
 
   .preflight-details .disclosure-summary {
-    min-height: 44px;
+    min-height: var(--size-touch-target);
   }
 
   .plan-line-row {

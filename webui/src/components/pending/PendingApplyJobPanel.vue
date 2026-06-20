@@ -447,10 +447,10 @@ function snapshotLineScope(
 .apply-job-now-failure {
   border-color: color-mix(in srgb,
       var(--color-border) 54%,
-      var(--color-error) 46%);
+      var(--color-error-fg) 46%);
   background: color-mix(in srgb,
       var(--color-surface) 90%,
-      var(--color-error) 10%);
+      var(--color-error-fg) 10%);
 }
 
 .apply-job-now-copy {
@@ -596,10 +596,10 @@ function snapshotLineScope(
 .apply-progress-step-failure {
   border-color: color-mix(in srgb,
       var(--color-border) 52%,
-      var(--color-error) 48%);
+      var(--color-error-fg) 48%);
   background: color-mix(in srgb,
       var(--color-surface) 90%,
-      var(--color-error) 10%);
+      var(--color-error-fg) 10%);
 }
 
 .apply-progress-icon {
@@ -626,8 +626,8 @@ function snapshotLineScope(
 }
 
 .apply-progress-step-failure .apply-progress-icon {
-  border-color: var(--color-error);
-  color: var(--color-error);
+  border-color: var(--color-error-fg);
+  color: var(--color-error-fg);
 }
 
 .apply-progress-copy {
@@ -728,7 +728,7 @@ function snapshotLineScope(
   }
 
   .apply-job-details .disclosure-summary {
-    min-height: 44px;
+    min-height: var(--size-touch-target);
   }
 }
 

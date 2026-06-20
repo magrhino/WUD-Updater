@@ -11,12 +11,17 @@ colors:
   sidebar-muted: "#c9d6d9"
   muted-text: "#65747a"
   border: "#dbe3e6"
+  dark-border: "#31444b"
   border-subtle: "#e6ecef"
   border-hover: "#86b7dd"
   panel-tint: "#f9fbfc"
   table-head: "#f0f5f6"
   action-blue: "#0f6fbd"
   operational-teal: "#137a63"
+  warning: "#663c00"
+  warning-bg: "#fff1d6"
+  error: "#b42318"
+  error-bg: "#fde8e6"
   login-bg: "#eef3f5"
   log-bg: "#0f171a"
   log-text: "#d8e8df"
@@ -149,6 +154,10 @@ The palette is a restrained product palette: cool neutrals carry the surface, da
 ### Primary
 - **Operational Teal**: Icon and state accent for update-related affordances. Use it sparingly for positive operational cues and never as page decoration.
 - **Action Blue**: Link and command color. Use for navigational text links, hover borders, and explicit user actions that need to stand apart from passive data.
+
+### Semantic
+- **Warning**: Amber/brown foreground and pale amber background for cautionary diagnostic, readiness, and policy states.
+- **Error**: Red foreground and pale red background for failed checks, blocked readiness, destructive risk, and error states.
 
 ### Neutral
 - **Console Ink**: Primary text for headings, labels with emphasis, and dense data.
