@@ -9,6 +9,18 @@ coverage:
       default:
         target: auto
         informational: true
+      webui-contract:
+        target: 70%
+        threshold: 30%
+        informational: true
+        only_pulls: true
+        flags:
+          - webui
+        paths:
+          - webui/src/api/
+          - webui/src/stores/
+          - webui/src/composables/
+        flag_coverage_not_uploaded_behavior: exclude
 
 comment:
   layout: "reach, diff, flags, files"
