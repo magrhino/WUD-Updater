@@ -1,6 +1,6 @@
 # Release-Note Notifications
 
-WUD-Updater includes optional helpers that post release information to Discord
+WUDup includes optional helpers that post release information to Discord
 when WUD reports an available image update. Webhook and token values must come
 from the WUD container environment or another host-local secret store.
 

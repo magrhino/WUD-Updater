@@ -9,8 +9,8 @@ services:
     # Configure your WUD trigger to call:
     #   /wud/on-update.sh
 
-  wud-updater:
-    image: ghcr.io/magrhino/wud-updater:latest
+  wudup:
+    image: ghcr.io/magrhino/wudup:latest
     environment:
       DOCKER_BASE: ${HOST_DOCKER_BASE:-/srv/docker}
       WUD_OUT_FILE: /out/images.todo

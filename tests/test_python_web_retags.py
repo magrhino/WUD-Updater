@@ -19,12 +19,12 @@ from tests.web_test_helpers import (
     _make_fake_stack,
     _wait_apply_job,
 )
-from wud_updater.db import init_db, open_db, upsert_known_image
-from wud_updater.digest_verifier import DigestResolveResult
-from wud_updater.digest_provenance import DigestTagProvenance
-from wud_updater import web_database
-from wud_updater import web_retags as web_retags_module
-from wud_updater.web_models import WebApplyJob
+from wudup.db import init_db, open_db, upsert_known_image
+from wudup.digest_verifier import DigestResolveResult
+from wudup.digest_provenance import DigestTagProvenance
+from wudup import web_database
+from wudup import web_retags as web_retags_module
+from wudup.web_models import WebApplyJob
 
 
 @dataclass(frozen=True)
@@ -708,7 +708,7 @@ def test_retag_plan_and_apply_rewrites_pulls_recreates_and_audits(
     job = _wait_apply_job(client, apply_response.json()["job_id"])
     assert job["status"] == "success"
     content = (compose_dir / "docker-compose.yml").read_text(encoding="utf-8")
-    assert "# wud-updater.resolved-tag=2.0" in content
+    assert "# wudup.resolved-tag=2.0" in content
     assert "image: repo/app@sha256:old" in content
     assert "wud.tag.include=^2\\.0$$" in content
     calls = _fake_docker_calls(fixture.fake_root)

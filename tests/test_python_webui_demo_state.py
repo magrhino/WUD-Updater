@@ -26,7 +26,7 @@ class WebuiDemoStateTests(unittest.TestCase):
                 )
 
             wud_file = root / "out" / "images.todo"
-            db_path = root / "logs" / "wud-updater.sqlite"
+            db_path = root / "logs" / "wudup.sqlite"
             docker_base = root / "docker"
             fake_docker_root = root / "fake-docker"
             logs = sorted(path.name for path in (root / "logs").glob("demo-*.log"))
@@ -67,7 +67,7 @@ class WebuiDemoStateTests(unittest.TestCase):
             media_compose = (docker_base / "media" / "docker-compose.yml").read_text(
                 encoding="utf-8"
             )
-            self.assertIn("ghcr.io/magrhino/wud-updater:latest", media_compose)
+            self.assertIn("ghcr.io/magrhino/wudup:latest", media_compose)
             self.assertIn("wud.tag.include=^latest$$", media_compose)
             self.assertTrue((fake_docker_root / "calls.log").exists())
             self.assertTrue((fake_docker_root / "containers.tsv").exists())
@@ -78,7 +78,7 @@ class WebuiDemoStateTests(unittest.TestCase):
                 (
                     fake_docker_root
                     / "containers"
-                    / "demo-wud-updater.summary"
+                    / "demo-wudup.summary"
                 ).exists()
             )
             self.assertIn(
@@ -115,7 +115,7 @@ class WebuiDemoStateTests(unittest.TestCase):
                 text=True,
                 capture_output=True,
             )
-            self.assertIn("ghcr.io/magrhino/wud-updater:latest", result.stdout)
+            self.assertIn("ghcr.io/magrhino/wudup:latest", result.stdout)
             with sqlite3.connect(db_path) as conn:
                 run_count = conn.execute("SELECT COUNT(*) FROM update_runs").fetchone()
                 pending_count = conn.execute(
@@ -158,7 +158,7 @@ class WebuiDemoStateTests(unittest.TestCase):
                     """
                     SELECT image, digest_resolved_tag, digest_watch_tag, digest_final_image
                     FROM known_images
-                    WHERE service_key = 'media/wud-updater'
+                    WHERE service_key = 'media/wudup'
                     """
                 ).fetchall()
 
@@ -184,10 +184,10 @@ class WebuiDemoStateTests(unittest.TestCase):
         self.assertEqual(
             retag_candidates[0],
             (
-                "ghcr.io/magrhino/wud-updater:latest",
+                "ghcr.io/magrhino/wudup:latest",
                 "v0.16.1",
                 "latest",
-                "ghcr.io/magrhino/wud-updater@sha256:"
+                "ghcr.io/magrhino/wudup@sha256:"
                 "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
             ),
         )

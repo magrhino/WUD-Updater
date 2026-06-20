@@ -7,8 +7,8 @@ from threading import Event, Lock
 
 from fastapi import HTTPException
 
-from wud_updater import web_auth as web_auth_module
-from wud_updater.db import (
+from wudup import web_auth as web_auth_module
+from wudup.db import (
     open_db,
 )
 

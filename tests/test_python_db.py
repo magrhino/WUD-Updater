@@ -7,7 +7,7 @@ from collections.abc import Iterator, Mapping
 from pathlib import Path
 from unittest.mock import patch
 
-from wud_updater.db import (
+from wudup.db import (
     DatabaseError,
     SCHEMA_VERSION,
     _EXPECTED_SCHEMAS_BY_VERSION,
@@ -28,7 +28,7 @@ from wud_updater.db import (
     update_pending_update,
     upsert_known_image,
 )
-from wud_updater.digest_provenance import (
+from wudup.digest_provenance import (
     DIGEST_PROVENANCE_SQL_COLUMNS,
     DigestTagProvenance,
     digest_provenance_from_row,
@@ -49,7 +49,7 @@ class DatabaseTests(unittest.TestCase):
     def test_connect_db_sets_driver_timeout_and_connection_pragmas(self) -> None:
         conn = FakeConnection()
 
-        with patch("wud_updater.db.sqlite3.connect", return_value=conn) as connect:
+        with patch("wudup.db.sqlite3.connect", return_value=conn) as connect:
             result = connect_db(":memory:")
 
         self.assertIs(result, conn)
@@ -95,7 +95,7 @@ class DatabaseTests(unittest.TestCase):
 
     def test_initial_db_creation_creates_expected_tables(self) -> None:
         with tempfile.TemporaryDirectory(prefix="wud-python-db.") as tmpdir:
-            db_path = Path(tmpdir) / "state" / "wud-updater.sqlite"
+            db_path = Path(tmpdir) / "state" / "wudup.sqlite"
 
             with open_db(db_path) as conn:
                 init_db(conn)

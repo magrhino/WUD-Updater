@@ -5,9 +5,9 @@ from pathlib import Path
 
 from fastapi import HTTPException
 
-from wud_updater import web_settings as settings_module
-from wud_updater import web_state as state_module
-from wud_updater.db import (
+from wudup import web_settings as settings_module
+from wudup import web_state as state_module
+from wudup.db import (
     open_db,
 )
 
@@ -83,7 +83,7 @@ def test_settings_reports_effective_non_secret_configuration(
             "WUD_WEB_TRUSTED_PROXIES": "127.0.0.1/32",
             "WUD_WEB_SECURE_COOKIES": "false",
             "WUD_WEB_MUTATIONS_ENABLED": "true",
-            "WUD_WEB_RESTART_CONTAINER": "wud-updater",
+            "WUD_WEB_RESTART_CONTAINER": "wudup",
             "WUD_API_BASE_URL": "http://wud.internal:3000",
             **secret_values,
         },
@@ -118,7 +118,7 @@ def test_settings_reports_effective_non_secret_configuration(
     }
     assert webui["WUD_WEB_PUBLIC_ORIGIN"]["value"] == "https://wud.example.test"
     assert webui["WUD_WEB_MUTATIONS_ENABLED"]["value"] == "true"
-    assert webui["WUD_WEB_RESTART_CONTAINER"]["value"] == "wud-updater"
+    assert webui["WUD_WEB_RESTART_CONTAINER"]["value"] == "wudup"
     assert webui["WUD_WEB_RESTART_CONTAINER"]["source"] == "configured"
     assert webui["WUD_API_BASE_URL"] == {
         "name": "WUD_API_BASE_URL",

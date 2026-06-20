@@ -17,7 +17,7 @@ concurrency:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: magrhino/wud-updater
+  IMAGE_NAME: magrhino/wudup
 
 permissions:
   contents: read
@@ -214,7 +214,7 @@ jobs:
           trap cleanup EXIT
 
           docker run --rm "$image:$RELEASE_TAG"
-          docker run --rm -e WUD_UPDATER_PYTHON=true "$image:$RELEASE_TAG"
+          docker run --rm -e WUDUP_PYTHON=true "$image:$RELEASE_TAG"
           docker run --rm -v "$sync_tmp:/managed-wud" "$image:$RELEASE_TAG" sync-wud-scripts
           [[ -x "$sync_tmp/on-update.sh" ]]
           [[ -x "$sync_tmp/append-updates.sh" ]]

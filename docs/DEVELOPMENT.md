@@ -33,7 +33,7 @@ ruff check .
 shellcheck install.sh bin/updates bin/docker-update-from-wud wud/*.sh
 bash -n install.sh bin/updates bin/docker-update-from-wud wud/http.sh wud/release-notes-to-discord.sh wud/github-release-embed.sh wud/tag-manager.sh
 sh -n wud/on-update.sh wud/append-updates.sh
-python3 -m py_compile src/wud_updater/*.py tests/test_python_*.py
+python3 -m py_compile src/wudup/*.py tests/test_python_*.py
 python -m pytest tests/test_python_*.py
 tests/run-all.sh --python
 tests/run-all.sh --shell
@@ -122,7 +122,7 @@ Useful WebUI development variables:
 | Variable | Purpose |
 |---|---|
 | `VITE_WUD_DEMO_MODE` | Build-time switch for the static GitHub Pages WebUI demo. |
-| `VITE_WUD_PAGES_BASE` | Static demo asset base path; default demo mode value is `/WUD-Updater/`. |
+| `VITE_WUD_PAGES_BASE` | Static demo asset base path; default demo mode value is `/wudup/`. |
 | `WUD_DB_PATH` | SQLite database path for WebUI setup state, sessions, run history, audit records, and managed tag exclusions. |
 | `WUD_TIMEZONE` | IANA timezone name used for WebUI auto-update policy schedules. Defaults to `UTC`. |
 | `WUD_WEB_MUTATIONS_ENABLED` | Set to `true` only when testing browser-initiated plan/apply flows; default is read-only. |
@@ -130,7 +130,7 @@ Useful WebUI development variables:
 | `WUD_WEB_DEV_FRONTEND_PORT` | Vite frontend port used by the dev-server wrapper; default `5173`. |
 | `VITE_WUD_API_PREFIX` | Optional live API prefix or URL for custom reverse proxies; defaults to `<app base>/api/v1`. A preloaded `window.WUD_API_PREFIX` value overrides it at runtime. |
 | `VITE_WUD_BACKEND_URL` | Backend URL exported by the dev-server wrapper for frontend experiments; the Vite proxy forwards the same-origin API prefix. |
-| `WUD_WEB_HOST` / `WUD_WEB_PORT` | Host and port used when running `wud-updater web` manually. |
+| `WUD_WEB_HOST` / `WUD_WEB_PORT` | Host and port used when running `wudup web` manually. |
 | `WUD_WEB_STATIC_DIR` | Optional built SPA directory override for manual backend testing. |
 | `WUD_WEB_DEV_NO_AUTH` | Development-only auth bypass used by tests and the local demo wrapper. |
 | `WUD_WEB_ALLOWED_ORIGINS` | Extra allowed origins for login, logout, setup, and mutation CSRF/Origin checks. |
@@ -144,7 +144,7 @@ For manual backend-only testing with a built SPA:
 
 ```bash
 npm --prefix webui run build
-wud-updater web --host 127.0.0.1 --port 7417 --static-dir webui/dist
+wudup web --host 127.0.0.1 --port 7417 --static-dir webui/dist
 ```
 
 ## CI
@@ -187,7 +187,7 @@ gh workflow run release.yml --ref main -f release_tag=v1.2.3
 ```
 
 The release publisher runs the release validation gate, builds and publishes
-Docker images for Linux amd64 and arm64 to `ghcr.io/magrhino/wud-updater`,
+Docker images for Linux amd64 and arm64 to `ghcr.io/magrhino/wudup`,
 validates the published multi-arch manifests, and then creates or publishes the
 GitHub Release. The public GitHub Release is published only after the GHCR image
 tags are available. The release gate includes Linux validation, container build

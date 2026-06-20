@@ -4,15 +4,15 @@ from contextlib import redirect_stderr, redirect_stdout
 from io import StringIO
 from unittest import mock
 
-from wud_updater.command import CommandRunner
-from wud_updater.compose import (
+from wudup.command import CommandRunner
+from wudup.compose import (
     ComposeStack,
     ServiceImage,
 )
-from wud_updater.updater import (
+from wudup.updater import (
     UpdateFromWudRunner,
 )
-from wud_updater.updater_models import (
+from wudup.updater_models import (
     UpdaterOptions,
 )
 
@@ -441,7 +441,7 @@ class UpdateFromWudTagUpdateTests(UpdateFromWudRunnerTestCase):
 
         with (
             mock.patch(
-                "wud_updater.compose_rewrite._backup_compose",
+                "wudup.compose_rewrite._backup_compose",
                 side_effect=OSError("backup denied"),
             ),
             redirect_stdout(stdout),

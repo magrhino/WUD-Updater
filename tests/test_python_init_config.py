@@ -10,7 +10,7 @@ from unittest import mock
 
 from ruamel.yaml import YAML
 
-from wud_updater.init_config import (
+from wudup.init_config import (
     InitConfigError,
     InitPrompter,
     answers_from_namespace,
@@ -330,11 +330,11 @@ class InitConfigTests(unittest.TestCase):
         run_init(answers, repo_root=self.root, environ=self._env())
 
         parsed = YAML(typ="safe").load(override_file.read_text(encoding="utf-8"))
-        service = parsed["services"]["wud-updater"]
+        service = parsed["services"]["wudup"]
         self.assertEqual(service["environment"]["WUD_OUT_FILE"], "/out/images.todo")
         self.assertEqual(
             service["environment"]["WUD_DB_PATH"],
-            "/logs/wud-updater.sqlite",
+            "/logs/wudup.sqlite",
         )
         self.assertIn("${WEBUI_LOG_DIR:-./logs}:/logs", service["volumes"])
         self.assertIn("wud-scripts:/managed-wud", service["volumes"])
@@ -354,21 +354,21 @@ class InitConfigTests(unittest.TestCase):
         run_init(answers, repo_root=self.root, environ=self._env())
 
         parsed = YAML(typ="safe").load(override_file.read_text(encoding="utf-8"))
-        environment = parsed["services"]["wud-updater"]["environment"]
+        environment = parsed["services"]["wudup"]["environment"]
         self.assertEqual(
             environment["WUD_OUT_FILE"],
             "${WUD_OUT_FILE:-/out/images.todo}",
         )
         self.assertNotIn("WUD_LOG_DIR", environment)
         self.assertNotIn("WUD_DB_PATH", environment)
-        self.assertNotIn("WUD_UPDATER_USE_SUDO", environment)
+        self.assertNotIn("WUDUP_USE_SUDO", environment)
         self.assertEqual(
             environment["WUD_API_BASE_URL"],
             "${WUD_API_BASE_URL:-http://wud:3000}",
         )
         self.assertIn(
             "${WEBUI_LOG_DIR:-./logs}:/logs",
-            parsed["services"]["wud-updater"]["volumes"],
+            parsed["services"]["wudup"]["volumes"],
         )
 
     def test_webui_compose_override_yaml_contains_readyz_healthcheck(self) -> None:
@@ -386,7 +386,7 @@ class InitConfigTests(unittest.TestCase):
         run_init(answers, repo_root=self.root, environ=self._env())
 
         parsed = YAML(typ="safe").load(override_file.read_text(encoding="utf-8"))
-        service = parsed["services"]["wud-updater"]
+        service = parsed["services"]["wudup"]
         self.assertEqual(
             service["environment"]["WUD_API_BASE_URL"],
             "${WUD_API_BASE_URL:-http://wud:3000}",
@@ -413,7 +413,7 @@ class InitConfigTests(unittest.TestCase):
 
     def test_host_doctor_status_becomes_command_status(self) -> None:
         with mock.patch(
-            "wud_updater.init_config.run_doctor_from_namespace",
+            "wudup.init_config.run_doctor_from_namespace",
             return_value=5,
         ):
             stdout = StringIO()
@@ -449,7 +449,7 @@ class InitConfigTests(unittest.TestCase):
 
         with (
             mock.patch("builtins.input", return_value="yes"),
-            mock.patch("wud_updater.init_config.subprocess.run", return_value=completed)
+            mock.patch("wudup.init_config.subprocess.run", return_value=completed)
             as run,
             redirect_stdout(StringIO()),
         ):
@@ -467,7 +467,7 @@ class InitConfigTests(unittest.TestCase):
                 "docs/examples/docker-compose.example.yml",
                 "run",
                 "--rm",
-                "wud-updater",
+                "wudup",
                 "doctor",
             ],
         )

@@ -9,7 +9,7 @@ import AppSelfUpdateDialog from "./AppSelfUpdateDialog.vue";
 
 const updates = useUpdatesStore();
 
-const RELEASES_URL = "https://github.com/magrhino/WUD-Updater/releases";
+const RELEASES_URL = "https://github.com/magrhino/wudup/releases";
 const selfUpdateDialogVisible = ref(false);
 
 const selfUpdateVisible = computed(

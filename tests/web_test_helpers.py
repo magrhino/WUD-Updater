@@ -10,12 +10,12 @@ from typing import Optional
 
 from fastapi.testclient import TestClient
 
-from wud_updater.db import (
+from wudup.db import (
     open_db,
     init_db,
     insert_update_run,
 )
-from wud_updater.web import create_app
+from wudup.web import create_app
 
 DEFAULT_CLAIM_PHRASE = " ".join(("correct", "horse", "battery", "staple"))
 SSE_EVENT_PREFIX = "event: "
@@ -70,8 +70,8 @@ def _doctor_client(
             "WUD_SYNC_SCRIPTS": "true",
             "WUD_SCRIPTS_DIR": str(tmp_path / "managed-wud"),
             "WUD_APP_DIR": str(tmp_path / "app"),
-            "WUD_UPDATER": str(tmp_path / "app" / "bin" / "docker-update-from-wud"),
-            "WUD_UPDATER_USE_SUDO": "false",
+            "WUDUP_UPDATER": str(tmp_path / "app" / "bin" / "docker-update-from-wud"),
+            "WUDUP_USE_SUDO": "false",
             "TRUENAS_STATUS_CHECK": "false",
             "WUD_API_BASE_URL": "http://127.0.0.1:1",
             **(env or {}),
@@ -103,8 +103,8 @@ def _self_update_payload(
     *,
     current_tag: str = "v0.24.2",
     latest_tag: str = "v0.25.0",
-    target_image: str = "ghcr.io/magrhino/wud-updater:latest",
-    restart_container: str = "wud-updater",
+    target_image: str = "ghcr.io/magrhino/wudup:latest",
+    restart_container: str = "wudup",
 ) -> dict[str, str]:
     return {
         "confirmation": "pull_image",
@@ -205,7 +205,7 @@ def _write_doctor_files(env: Mapping[str, str]) -> None:
         script = packaged_scripts / name
         script.write_text("#!/usr/bin/env sh\nexit 0\n", encoding="utf-8")
         script.chmod(0o755)
-    updater = Path(env["WUD_UPDATER"])
+    updater = Path(env["WUDUP_UPDATER"])
     updater.parent.mkdir(parents=True, exist_ok=True)
     updater.write_text("#!/usr/bin/env bash\nexit 0\n", encoding="utf-8")
     updater.chmod(0o755)

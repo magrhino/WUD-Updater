@@ -12,18 +12,18 @@ from contextlib import closing, redirect_stderr, redirect_stdout
 from io import StringIO
 from pathlib import Path
 
-from wud_updater.command import CommandRunner
-from wud_updater.digest_verifier import (
+from wudup.command import CommandRunner
+from wudup.digest_verifier import (
     DigestVerifier,
     DockerManifestResolver,
     ManifestDocument,
     ManifestLookupError,
 )
-from wud_updater.docker_cli import DockerCli
-from wud_updater.updater import (
+from wudup.docker_cli import DockerCli
+from wudup.updater import (
     UpdateFromWudRunner,
 )
-from wud_updater.updater_models import (
+from wudup.updater_models import (
     DigestPinUpdate,
     UpdaterOptions,
 )
@@ -83,7 +83,7 @@ class FakeDockerTestCase(unittest.TestCase):
         self.base = self.root / "base"
         self.wud_file = self.root / "images.todo"
         self.log_dir = self.root / "logs"
-        self.db_path = self.root / "state" / "wud-updater.sqlite"
+        self.db_path = self.root / "state" / "wudup.sqlite"
         self.fake_root = self.root / "fake"
         for path in (
             self.base,
@@ -101,7 +101,7 @@ class FakeDockerTestCase(unittest.TestCase):
         self.env["FAKE_DOCKER_ROOT"] = str(self.fake_root)
         self.env["PATH"] = f"{self.repo_root / 'tests' / 'fakes'}:{self.env['PATH']}"
         self.env["PYTHONPATH"] = str(self.repo_root / "src")
-        self.env["WUD_UPDATER_BANNER"] = "false"
+        self.env["WUDUP_BANNER"] = "false"
         self.env["WUD_DB_PATH"] = str(self.db_path)
 
     def tearDown(self) -> None:
@@ -207,7 +207,7 @@ class UpdateFromWudRunnerTestCase(FakeDockerTestCase):
             command = [
                 sys.executable,
                 "-m",
-                "wud_updater.cli",
+                "wudup.cli",
                 "update-from-wud",
                 *common,
             ]

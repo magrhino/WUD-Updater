@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from wud_updater import web as web_module
+from wudup import web as web_module
 
 from tests.web_test_helpers import (
     _client,
@@ -149,7 +149,7 @@ def test_readyz_fails_when_required_checks_are_missing(
 ) -> None:
     client = _doctor_client(
         tmp_path,
-        {"WUD_UPDATER_USE_SUDO": "treu"},
+        {"WUDUP_USE_SUDO": "treu"},
         client=("127.0.0.1", 50000),
     )
 

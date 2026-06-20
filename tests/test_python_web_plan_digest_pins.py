@@ -1,7 +1,7 @@
 from __future__ import annotations
 from pathlib import Path
-from wud_updater import web_plans as plans_module
-from wud_updater.db import DatabaseError
+from wudup import web_plans as plans_module
+from wudup.db import DatabaseError
 from tests.web_test_helpers import (
     _client,
     _csrf_headers,
@@ -93,7 +93,7 @@ def test_plan_endpoint_treats_digest_provenance_lookup_failure_as_best_effort(
         "connect_readonly_db",
         fail_connect,
     )
-    caplog.set_level("WARNING", logger="wud_updater.web_database")
+    caplog.set_level("WARNING", logger="wudup.web_database")
 
     response = client.post(
         "/api/v1/plans",
@@ -139,7 +139,7 @@ def test_known_digest_provenance_closes_connection_after_query_failure(
         "connect_readonly_db",
         lambda _settings: conn,
     )
-    caplog.set_level("WARNING", logger="wud_updater.web_database")
+    caplog.set_level("WARNING", logger="wudup.web_database")
 
     result = plans_module.web_database.known_digest_provenance_by_service(
         client.app.state.web_settings,

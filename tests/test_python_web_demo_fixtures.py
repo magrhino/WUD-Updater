@@ -8,8 +8,8 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from wud_updater import web_demo_fixtures, web_wud_api
-from wud_updater.web_models import (
+from wudup import web_demo_fixtures, web_wud_api
+from wudup.web_models import (
     ApplyJobLogResponse,
     ApplyJobResponse,
     AuthSessionResponse,
@@ -167,9 +167,9 @@ class WebDemoFixtureGenerationTests(unittest.TestCase):
         payload = web_demo_fixtures._static_demo_fixture_render_payload(self.fixtures)
 
         self.assertIn("version", self.fixtures["status"])
-        self.assertIn("wud_updater_version", self.fixtures["diagnostics"])
+        self.assertIn("wudup_version", self.fixtures["diagnostics"])
         self.assertNotIn("version", payload["status"])
-        self.assertNotIn("wud_updater_version", payload["diagnostics"])
+        self.assertNotIn("wudup_version", payload["diagnostics"])
 
     def test_demo_environment_is_allowlisted(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -206,7 +206,7 @@ class WebDemoFixtureGenerationTests(unittest.TestCase):
                 "WUD_WEB_UPSTREAM_MAP",
                 "WUD_SCRIPTS_DIR",
                 "WUD_SYNC_SCRIPTS",
-                "WUD_UPDATER_USE_SUDO",
+                "WUDUP_USE_SUDO",
                 "DOCKER_HOST",
                 "PATH",
                 "FAKE_DOCKER_ROOT",
@@ -217,7 +217,7 @@ class WebDemoFixtureGenerationTests(unittest.TestCase):
         self.assertNotIn("/private/host/bin", env["PATH"])
         self.assertEqual(env["WUD_WEB_DEV_NO_AUTH"], "true")
         self.assertEqual(env["WUD_SYNC_SCRIPTS"], "false")
-        self.assertEqual(env["WUD_UPDATER_USE_SUDO"], "false")
+        self.assertEqual(env["WUDUP_USE_SUDO"], "false")
 
     def test_fixture_generation_restores_wud_api_snapshot_cache(self) -> None:
         sentinel = web_wud_api.WudApiSnapshot(
@@ -285,7 +285,7 @@ class WebDemoFixtureGenerationTests(unittest.TestCase):
             "Home Assistant Core 2026.5.3",
         )
         self.assertEqual(ready_titles[3], "Radarr v5.22.4")
-        self.assertEqual(ready_titles[5], "WUD-Updater v0.16.1")
+        self.assertEqual(ready_titles[5], "WUDup v0.16.1")
 
     def test_plan_and_removal_catalogs_cover_pending_line_subsets(self) -> None:
         line_numbers = sorted(

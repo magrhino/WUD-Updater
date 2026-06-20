@@ -1,8 +1,8 @@
 from __future__ import annotations
 import json
 from pathlib import Path
-from wud_updater import web_plans as plans_module
-from wud_updater.config import ConfigError
+from wudup import web_plans as plans_module
+from wudup.config import ConfigError
 from tests.web_test_helpers import (
     _client,
     _csrf_headers,

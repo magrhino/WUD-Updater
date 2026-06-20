@@ -5,8 +5,8 @@ from types import SimpleNamespace
 
 from fastapi.testclient import TestClient
 
-from wud_updater import web_auth as web_auth_module
-from wud_updater.web import create_app
+from wudup import web_auth as web_auth_module
+from wudup.web import create_app
 
 
 from tests.web_test_helpers import (

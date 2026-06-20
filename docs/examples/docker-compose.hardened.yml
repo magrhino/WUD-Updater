@@ -1,20 +1,20 @@
 # This example is a more secure version of the docker-compose.webui.yml
-# example that uses a socket proxy to give the WUD-Updater container access
+# example that uses a socket proxy to give the WUDup container access
 # to a limited subset of the Docker API instead of mounting the raw Docker
 # socket. This minimizes the attack surface and potential damage if the
-# WUD-Updater container is compromised, while still allowing it to manage
+# WUDup container is compromised, while still allowing it to manage
 # WUD helper containers and perform updates. Please see the documentation
 # and comments in this file for more details on the security features and
-# best practices when running WUD-Updater.
+# best practices when running WUDup.
 services:
-  socket-proxy-wud-updater:
+  socket-proxy-wudup:
     image: lscr.io/linuxserver/socket-proxy:latest
     restart: unless-stopped
     networks:
-      - wud-updater-socket
+      - wudup-socket
     environment:
       # This is the only service with the raw host socket. WUD and
-      # WUD-Updater talk to this internal proxy instead of mounting
+      # WUDup talk to this internal proxy instead of mounting
       # /var/run/docker.sock directly.
       CONTAINERS: "1"
       IMAGES: "1"
@@ -56,15 +56,15 @@ services:
     image: getwud/wud:latest
     restart: unless-stopped
     networks:
-      - wud-updater-app
-      - wud-updater-egress
-      - wud-updater-socket
+      - wudup-app
+      - wudup-egress
+      - wudup-socket
     depends_on:
-      - socket-proxy-wud-updater
+      - socket-proxy-wudup
     environment:
       # WUD watches Docker through the proxy and writes pending updates to
       # /out/images.todo through the mounted callback scripts.
-      WUD_WATCHER_LOCAL_HOST: socket-proxy-wud-updater
+      WUD_WATCHER_LOCAL_HOST: socket-proxy-wudup
       WUD_WATCHER_LOCAL_PORT: "2375"
       WUD_WATCHER_LOCAL_WATCHEVENTS: "true"
     volumes:
@@ -79,18 +79,18 @@ services:
     security_opt:
       - no-new-privileges:true
 
-  wud-updater:
-    image: ghcr.io/magrhino/wud-updater:latest
+  wudup:
+    image: ghcr.io/magrhino/wudup:latest
     restart: unless-stopped
     networks:
-      - wud-updater-app
-      - wud-updater-egress
-      - wud-updater-socket
+      - wudup-app
+      - wudup-egress
+      - wudup-socket
     depends_on:
-      - socket-proxy-wud-updater
+      - socket-proxy-wudup
     environment:
       # The Docker CLI and Compose plugin use the same constrained proxy.
-      DOCKER_HOST: tcp://socket-proxy-wud-updater:2375
+      DOCKER_HOST: tcp://socket-proxy-wudup:2375
       DOCKER_BASE: ${HOST_DOCKER_BASE:-/srv/docker}
       WUD_OUT_FILE: "${WUD_OUT_FILE:-/out/images.todo}"
       WUD_TIMEZONE: "${WUD_TIMEZONE:-UTC}"
@@ -139,10 +139,10 @@ services:
       - no-new-privileges:true
 
 networks:
-  wud-updater-app:
+  wudup-app:
     internal: true
-  wud-updater-egress:
-  wud-updater-socket:
+  wudup-egress:
+  wudup-socket:
     internal: true
 
 volumes:

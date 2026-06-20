@@ -88,7 +88,7 @@ describe("onboarding and tour views", () => {
           docs: [
             {
               label: "Deployment Docker access",
-              url: "https://github.com/magrhino/WUD-Updater/blob/main/docs/DEPLOYMENT.md#requirements",
+              url: "https://github.com/magrhino/wudup/blob/main/docs/DEPLOYMENT.md#requirements",
             },
           ],
         },
@@ -117,7 +117,7 @@ describe("onboarding and tour views", () => {
     expect(text).not.toContain("github-token-secret");
     expect(
       wrapper.find(
-        'a[href="https://github.com/magrhino/WUD-Updater/blob/main/docs/DEPLOYMENT.md#requirements"]',
+        'a[href="https://github.com/magrhino/wudup/blob/main/docs/DEPLOYMENT.md#requirements"]',
       ).exists(),
     ).toBe(true);
   });

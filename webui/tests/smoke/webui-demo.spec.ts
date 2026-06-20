@@ -104,7 +104,7 @@ test("static demo renders retag review fixtures", async ({ page }) => {
 
   await expect(page.getByRole("heading", { name: "Retags", level: 1 })).toBeVisible();
   await expect(page.getByText("Compose service tracking")).toBeVisible();
-  await expect(page.getByText("media/wud-updater")).toBeVisible();
+  await expect(page.getByText("media/wudup")).toBeVisible();
   await expect(page.getByText("Retag available").first()).toBeVisible();
   await expect(page.getByText("home/home-assistant")).toBeVisible();
   await expect(

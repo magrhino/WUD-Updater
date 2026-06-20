@@ -24,7 +24,7 @@ body:
     id: solution
     attributes:
       label: Proposed solution
-      description: How should WUD-Updater solve this?
+      description: How should WUDup solve this?
     validations:
       required: true
 

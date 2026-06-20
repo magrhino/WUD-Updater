@@ -12,6 +12,7 @@
 /wud/ @magrhino
 
 /pyproject.toml @magrhino
+/src/wudup/ @magrhino
 /src/wud_updater/ @magrhino
 
 /release-please-config.json @magrhino

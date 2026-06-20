@@ -3,9 +3,9 @@ requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "wud-updater"
+name = "wudup"
 version = "0.45.2"
-description = "Python package for WUD updater commands."
+description = "Python package for WUDup commands."
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
@@ -30,7 +30,8 @@ dev = [
 ]
 
 [project.scripts]
-wud-updater = "wud_updater.cli:main"
+wudup = "wudup.cli:main"
+wud-updater = "wudup.cli:main"
 
 [tool.ruff]
 line-length = 88
@@ -50,4 +51,4 @@ package-dir = {"" = "src"}
 where = ["src"]
 
 [tool.setuptools.package-data]
-wud_updater = ["ascii-text-art.txt", "web_static/index.html", "web_static/assets/*"]
+wudup = ["ascii-text-art.txt", "web_static/index.html", "web_static/assets/*"]

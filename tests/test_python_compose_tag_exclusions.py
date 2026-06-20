@@ -5,12 +5,12 @@ import stat
 from unittest import mock
 
 from compose_rewrite_helpers import ComposeRewriteTestCase
-from wud_updater.compose_rewrite import (
+from wudup.compose_rewrite import (
     apply_compose_tag_exclusions,
     merge_wud_exclude_regex,
     render_compose_tag_exclusions,
 )
-from wud_updater.updater_models import ComposeTagRewriteError
+from wudup.updater_models import ComposeTagRewriteError
 
 
 class ComposeTagExclusionRegexTests(ComposeRewriteTestCase):
@@ -248,7 +248,7 @@ class ComposeTagExclusionTests(ComposeRewriteTestCase):
         compose_file = self.write_compose(original)
 
         with mock.patch(
-            "wud_updater.compose_rewrite._atomic_replace_compose"
+            "wudup.compose_rewrite._atomic_replace_compose"
         ) as replace:
             applied = apply_compose_tag_exclusions(
                 compose_file,

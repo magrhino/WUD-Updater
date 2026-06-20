@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from wud_updater import web as web_module
-from wud_updater import web_compat
-from wud_updater import web_models
-from wud_updater.web import PASSWORD_HASHER
+from wudup import web as web_module
+from wudup import web_compat
+from wudup import web_models
+from wudup.web import PASSWORD_HASHER
 
 
 def test_web_module_reexports_web_models_for_compatibility() -> None:

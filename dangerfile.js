@@ -63,17 +63,17 @@ const COMPANION_TEST_RULES = [
     "webui-mutation-tests-not-needed",
     "Auth, CSRF, read-only, scheduler, or mutation UX files changed without guard tests.",
     `
-      src/wud_updater/web.py
-      src/wud_updater/web_auth.py
-      src/wud_updater/web_diagnostics.py
-      src/wud_updater/web_jobs.py
-      src/wud_updater/web_pending.py
-      src/wud_updater/web_plans.py
-      src/wud_updater/web_retags.py
-      src/wud_updater/web_scheduler.py
-      src/wud_updater/web_self_update.py
-      src/wud_updater/web_settings.py
-      src/wud_updater/web_state.py
+      src/wudup/web.py
+      src/wudup/web_auth.py
+      src/wudup/web_diagnostics.py
+      src/wudup/web_jobs.py
+      src/wudup/web_pending.py
+      src/wudup/web_plans.py
+      src/wudup/web_retags.py
+      src/wudup/web_scheduler.py
+      src/wudup/web_self_update.py
+      src/wudup/web_settings.py
+      src/wudup/web_state.py
       webui/src/stores/auth.ts
       webui/src/stores/connection.ts
       webui/src/stores/settings.ts
@@ -115,23 +115,23 @@ const COMPANION_TEST_RULES = [
     "compose-rewrite-tests-not-needed",
     "Compose rewrite, digest, or tag logic changed without focused tests.",
     `
-      src/wud_updater/compose_rewrite.py
-      src/wud_updater/compose.py
-      src/wud_updater/digest_provenance.py
-      src/wud_updater/digest_verifier.py
-      src/wud_updater/images.py
-      src/wud_updater/plan_actions.py
-      src/wud_updater/plan_*.py
-      src/wud_updater/plan_digest_unpin.py
-      src/wud_updater/plan_matching.py
-      src/wud_updater/plans.py
-      src/wud_updater/updater_digest*.py
-      src/wud_updater/updater_lifecycle_digest.py
-      src/wud_updater/updater_lifecycle_rewrite.py
-      src/wud_updater/updater_models.py
-      src/wud_updater/updater_runner_*.py
-      src/wud_updater/updater_tag_exclusions.py
-      src/wud_updater/wud_file.py
+      src/wudup/compose_rewrite.py
+      src/wudup/compose.py
+      src/wudup/digest_provenance.py
+      src/wudup/digest_verifier.py
+      src/wudup/images.py
+      src/wudup/plan_actions.py
+      src/wudup/plan_*.py
+      src/wudup/plan_digest_unpin.py
+      src/wudup/plan_matching.py
+      src/wudup/plans.py
+      src/wudup/updater_digest*.py
+      src/wudup/updater_lifecycle_digest.py
+      src/wudup/updater_lifecycle_rewrite.py
+      src/wudup/updater_models.py
+      src/wudup/updater_runner_*.py
+      src/wudup/updater_tag_exclusions.py
+      src/wudup/wud_file.py
       webui/src/utils/digestProvenance.ts
     `,
     `
@@ -200,20 +200,20 @@ function runReviewPromptRules() {
     "Dockerfile",
     "entrypoint.sh",
     "docs/examples/docker-compose*.yml",
-    "src/wud_updater/compose.py",
-    "src/wud_updater/digest_verifier.py",
-    "src/wud_updater/docker_cli.py",
-    "src/wud_updater/doctor.py",
-    "src/wud_updater/plan_actions.py",
-    "src/wud_updater/self_update.py",
-    "src/wud_updater/updates.py",
-    "src/wud_updater/updater_cli.py",
-    "src/wud_updater/updater_lifecycle*.py",
-    "src/wud_updater/updater_runner_*.py",
-    "src/wud_updater/web_health.py",
-    "src/wud_updater/web_jobs.py",
-    "src/wud_updater/web_scheduler.py",
-    "src/wud_updater/web_self_update.py",
+    "src/wudup/compose.py",
+    "src/wudup/digest_verifier.py",
+    "src/wudup/docker_cli.py",
+    "src/wudup/doctor.py",
+    "src/wudup/plan_actions.py",
+    "src/wudup/self_update.py",
+    "src/wudup/updates.py",
+    "src/wudup/updater_cli.py",
+    "src/wudup/updater_lifecycle*.py",
+    "src/wudup/updater_runner_*.py",
+    "src/wudup/web_health.py",
+    "src/wudup/web_jobs.py",
+    "src/wudup/web_scheduler.py",
+    "src/wudup/web_self_update.py",
     "bin/docker-update-from-wud",
     "bin/updates",
     "tests/container-build.sh",
@@ -267,11 +267,11 @@ async function runDiffContentRules() {
 }
 
 async function warnOnNewRoutes() {
-  if (!editedFiles.includes("src/wud_updater/web.py")) {
+  if (!editedFiles.includes("src/wudup/web.py")) {
     return;
   }
 
-  const added = await addedLinesForFile("src/wud_updater/web.py");
+  const added = await addedLinesForFile("src/wudup/web.py");
   const routeAdded = added.some((line) => {
     return (
       /\b(add_api_route|include_router|APIRouter)\b/.test(line) ||

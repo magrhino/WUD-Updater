@@ -20,7 +20,7 @@ defineEmits<{
 <template>
   <section
     class="self-update-banner"
-    aria-label="WUD-Updater self-update"
+    aria-label="WUDup self-update"
   >
     <div class="self-update-banner-main">
       <ArrowUpCircle :size="20" aria-hidden="true" />

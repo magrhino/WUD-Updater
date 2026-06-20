@@ -1,4 +1,4 @@
-# This is only if you want to build the WUD-Updater image yourself. You can also just use the pre-built image from GHCR, which is what the docker-compose.hardened.yml example does.
+# This is only if you want to build the WUDup image yourself. You can also just use the pre-built image from GHCR, which is what the docker-compose.hardened.yml example does.
 services:
   wud:
     image: getwud/wud:latest
@@ -9,9 +9,9 @@ services:
     # Configure your WUD trigger to call:
     #   /wud/on-update.sh
 
-  wud-updater:
+  wudup:
     build: ../..
-    image: magrhino/wud-updater:local
+    image: magrhino/wudup:local
     environment:
       DOCKER_BASE: ${HOST_DOCKER_BASE:-/srv/docker}
       WUD_OUT_FILE: /out/images.todo

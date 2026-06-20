@@ -15,7 +15,7 @@ export default defineConfig(({ command, mode, isPreview }) => {
   return {
     base:
       (command === "build" || isPreview) && demoMode
-        ? (viteEnv.VITE_WUD_PAGES_BASE ?? "/WUD-Updater/")
+        ? (viteEnv.VITE_WUD_PAGES_BASE ?? "/wudup/")
         : "/",
     plugins,
     server: {

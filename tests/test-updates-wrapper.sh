@@ -62,12 +62,12 @@ test_dispatches_python_cli(){
 
   run_script env \
     PYTHON_BIN="$fake_python" \
-    WUD_UPDATER_CONFIG="$TEST_TMP/missing-env" \
+    WUDUP_CONFIG="$TEST_TMP/missing-env" \
     FAKE_PYTHON_LOG="$TEST_TMP/python.log" \
     "$SCRIPT" --dry-run
 
   assert_status 0
-  grep -q '^argv=-m wud_updater.cli updates --dry-run$' "$TEST_TMP/python.log" || fail "launcher did not dispatch updates subcommand"
+  grep -q '^argv=-m wudup.cli updates --dry-run$' "$TEST_TMP/python.log" || fail "launcher did not dispatch updates subcommand"
   grep -q "^PYTHONPATH=$REPO_ROOT/src$" "$TEST_TMP/python.log" || fail "launcher did not add repo src to PYTHONPATH"
   teardown_case
 }
@@ -82,7 +82,7 @@ test_sources_config_before_dispatch(){
   } > "$TEST_TMP/env"
 
   run_script env \
-    WUD_UPDATER_CONFIG="$TEST_TMP/env" \
+    WUDUP_CONFIG="$TEST_TMP/env" \
     FAKE_PYTHON_LOG="$TEST_TMP/python.log" \
     "$SCRIPT" --dry-run
 
@@ -108,14 +108,14 @@ test_config_file_argument_sources_explicit_config_before_dispatch(){
   } > "$TEST_TMP/explicit-env"
 
   run_script env \
-    WUD_UPDATER_CONFIG="$TEST_TMP/default-env" \
+    WUDUP_CONFIG="$TEST_TMP/default-env" \
     FAKE_PYTHON_LOG="$TEST_TMP/python.log" \
     "$SCRIPT" --config-file "$TEST_TMP/explicit-env" --dry-run
 
   assert_status 0
   grep -q "^python=$explicit_python$" "$TEST_TMP/python.log" || fail "--config-file did not choose explicit config before dispatch"
   grep -q '^CONFIG_SENTINEL=from-explicit$' "$TEST_TMP/python.log" || fail "explicit config variables were not exported to Python"
-  grep -q "^argv=-m wud_updater.cli updates --config-file $TEST_TMP/explicit-env --dry-run$" "$TEST_TMP/python.log" || fail "launcher did not preserve --config-file arguments"
+  grep -q "^argv=-m wudup.cli updates --config-file $TEST_TMP/explicit-env --dry-run$" "$TEST_TMP/python.log" || fail "launcher did not preserve --config-file arguments"
   teardown_case
 }
 
@@ -130,7 +130,7 @@ test_installed_symlink_resolves_repo_src(){
   run_script env \
     PYTHON_BIN="$fake_python" \
     PYTHONPATH="$TEST_TMP/existing-pythonpath" \
-    WUD_UPDATER_CONFIG="$TEST_TMP/missing-env" \
+    WUDUP_CONFIG="$TEST_TMP/missing-env" \
     FAKE_PYTHON_LOG="$TEST_TMP/python.log" \
     "$installed_bin/updates" --dry-run
 
@@ -146,13 +146,13 @@ test_legacy_python_false_does_not_disable_python_dispatch(){
 
   run_script env \
     PYTHON_BIN="$fake_python" \
-    WUD_UPDATER_CONFIG="$TEST_TMP/missing-env" \
-    WUD_UPDATER_PYTHON=false \
+    WUDUP_CONFIG="$TEST_TMP/missing-env" \
+    WUDUP_PYTHON=false \
     FAKE_PYTHON_LOG="$TEST_TMP/python.log" \
     "$SCRIPT" --dry-run --no-updater-sudo
 
   assert_status 0
-  grep -q '^argv=-m wud_updater.cli updates --dry-run --no-updater-sudo$' "$TEST_TMP/python.log" || fail "legacy env var disabled or altered Python dispatch"
+  grep -q '^argv=-m wudup.cli updates --dry-run --no-updater-sudo$' "$TEST_TMP/python.log" || fail "legacy env var disabled or altered Python dispatch"
   teardown_case
 }
 
@@ -166,8 +166,8 @@ test_uses_configured_venv_when_python3_lacks_runtime_deps(){
   run_script env \
     PATH="$TEST_TMP/bin:$PATH" \
     PYTHON_BIN= \
-    WUD_UPDATER_CONFIG="$TEST_TMP/missing-env" \
-    WUD_UPDATER_VENV="$TEST_TMP/venv" \
+    WUDUP_CONFIG="$TEST_TMP/missing-env" \
+    WUDUP_VENV="$TEST_TMP/venv" \
     FAKE_PYTHON_LOG="$TEST_TMP/python.log" \
     FAKE_PYTHON_PROBE_STATUS=1 \
     "$SCRIPT" --dry-run

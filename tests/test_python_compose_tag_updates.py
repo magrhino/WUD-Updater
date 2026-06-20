@@ -3,8 +3,8 @@ from __future__ import annotations
 from pathlib import Path
 
 from compose_rewrite_helpers import ComposeRewriteTestCase
-from wud_updater.compose_rewrite import apply_compose_tag_updates
-from wud_updater.updater_models import ComposeTagRewriteError, TagUpdate
+from wudup.compose_rewrite import apply_compose_tag_updates
+from wudup.updater_models import ComposeTagRewriteError, TagUpdate
 
 
 class ComposeTagUpdateTests(ComposeRewriteTestCase):

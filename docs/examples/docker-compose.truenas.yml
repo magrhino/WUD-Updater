@@ -1,10 +1,10 @@
-# This example is for if you want to run WUD-Updater on TrueNAS SCALE
+# This example is for if you want to run WUDup on TrueNAS SCALE
 # using the built-in Docker support. It is not hardened by default, but you
 # can use the docker-compose.hardened.yml example as a starting point to add
 # more secure defaults if you want.
 # Please open an issue if you experience any problems running this on TrueNAS
 # SCALE, or if you have suggestions for improving the TrueNAS experience.
-# Note that the WUD-Updater container needs access to the Docker socket and a
+# Note that the WUDup container needs access to the Docker socket and a
 # compatible API client to manage containers on TrueNAS SCALE, which is why it
 # is not hardened by default.
 # I don't use TrueNAS SCALE myself, so I would appreciate any help from the
@@ -19,20 +19,20 @@ services:
     # Configure your WUD trigger to call:
     #   /wud/on-update.sh
 
-  wud-updater:
+  wudup:
     build:
       context: ../..
       args:
         # Pick a client tag compatible with your TrueNAS release. See:
         #   https://github.com/truenas/api_client#version-compatibility--features
         TRUENAS_API_CLIENT_REF: ${TRUENAS_API_CLIENT_REF:-TS-26.0.0-BETA.1}
-    image: magrhino/wud-updater:truenas-status
+    image: magrhino/wudup:truenas-status
     environment:
       DOCKER_BASE: ${HOST_DOCKER_BASE:-/srv/docker}
       WUD_OUT_FILE: /out/images.todo
       WUD_LOG_DIR: /logs
       # TrueNAS helper support is implemented in the Python/container wrapper.
-      WUD_UPDATER_USE_SUDO: "false"
+      WUDUP_USE_SUDO: "false"
       OUT_UID: "1000"
       OUT_GID: "1000"
       # Uses Docker to start a short-lived helper container that mounts the

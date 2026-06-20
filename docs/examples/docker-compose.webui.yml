@@ -1,15 +1,15 @@
 ####### IMPORTANT NOTE #######
 # Unless you have a specific reason to use the less secure raw Docker socket,
 # you should use the hardened socket-proxy example instead of this one. The
-# socket-proxy example gives the WUD-Updater container access to a minimized
+# socket-proxy example gives the WUDup container access to a minimized
 # subset of the Docker API that is sufficient for managing WUD helper
 # containers, but does not give it full control over the host Docker daemon.
 services:
   wud:
     image: getwud/wud:latest
     networks:
-      - wud-updater-app
-      - wud-updater-egress
+      - wudup-app
+      - wudup-egress
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - wud-scripts:/wud:ro
@@ -17,13 +17,13 @@ services:
     # Configure your WUD trigger to call:
     #   /wud/on-update.sh
 
-  wud-updater:
-    image: ghcr.io/magrhino/wud-updater:latest
+  wudup:
+    image: ghcr.io/magrhino/wudup:latest
     environment:
       DOCKER_BASE: ${HOST_DOCKER_BASE:-/srv/docker}
       WUD_OUT_FILE: /out/images.todo
       WUD_LOG_DIR: /logs
-      WUD_DB_PATH: /logs/wud-updater.sqlite
+      WUD_DB_PATH: /logs/wudup.sqlite
       WUD_TIMEZONE: "${WUD_TIMEZONE:-UTC}"
       WUD_WEB_HOST: 0.0.0.0
       WUD_WEB_PORT: "${WUD_WEB_PORT:-7417}"
@@ -37,8 +37,8 @@ services:
       OUT_GID: "${OUT_GID:-1000}"
       GITHUB_TOKEN: "${GITHUB_TOKEN:-}"
     networks:
-      - wud-updater-app
-      - wud-updater-egress
+      - wudup-app
+      - wudup-egress
     ports:
       - "${WEBUI_HTTP_BIND:-127.0.0.1}:${WUD_WEB_PORT:-7417}:${WUD_WEB_PORT:-7417}"
     healthcheck:
@@ -56,9 +56,9 @@ services:
     command: [ "web" ]
 
 networks:
-  wud-updater-app:
+  wudup-app:
     internal: true
-  wud-updater-egress:
+  wudup-egress:
 
 volumes:
   wud-scripts:

@@ -19,7 +19,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
     DOCKER_BASE=/host/docker \
     WUD_OUT_FILE=/out/images.todo \
     WUD_LOG_DIR=/logs \
-    WUD_UPDATER=/app/bin/docker-update-from-wud \
+    WUDUP_UPDATER=/app/bin/docker-update-from-wud \
     PATH=/app/bin:$PATH
 
 RUN set -eux; \
@@ -58,7 +58,7 @@ RUN python -m pip install --no-cache-dir -r requirements.txt
 
 COPY pyproject.toml README.md /app/
 COPY src/ /app/src/
-COPY --from=webui-build /webui/dist/ /app/src/wud_updater/web_static/
+COPY --from=webui-build /webui/dist/ /app/src/wudup/web_static/
 
 RUN python -m pip install --no-deps --no-cache-dir .
 

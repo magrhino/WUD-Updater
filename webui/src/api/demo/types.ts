@@ -115,7 +115,10 @@ export type DemoGeneratedFixtures = {
   releaseNotes: ReleaseNotesResponse;
   selfUpdate: SelfUpdateResponse;
   selfUpdatePlan: SelfUpdatePlanResponse;
-  diagnostics: Omit<DiagnosticsSupportBundleResponse, "wud_updater_version">;
+  diagnostics: Omit<
+    DiagnosticsSupportBundleResponse,
+    "wudup_version" | "wud_updater_version"
+  >;
   servicePolicies: ServicePolicyRecord[];
   snoozes: {
     active: SnoozeRecord[];

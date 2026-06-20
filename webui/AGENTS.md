@@ -2,13 +2,13 @@
 
 ## Scope
 
-Rules for files under `webui/`. Root `AGENTS.md` controls repo-wide safety, releases, and files outside this directory; this file owns frontend architecture and scoped validation. `src/wud_updater/AGENTS.md` controls backend contract work.
+Rules for files under `webui/`. Root `AGENTS.md` controls repo-wide safety, releases, and files outside this directory; this file owns frontend architecture and scoped validation. `src/wudup/AGENTS.md` controls backend contract work.
 
 ## Context Budget
 
 - Read `package.json`, the owning store/API/component, and focused tests for the task.
 - Avoid broad frontend tree reads; use `rg` and nearby examples.
-- For backend contract changes, read `src/wud_updater/AGENTS.md`, then inspect the matching `web_*` backend module and focused Python tests.
+- For backend contract changes, read `src/wudup/AGENTS.md`, then inspect the matching `web_*` backend module and focused Python tests.
 
 ## Ownership Map
 
@@ -34,7 +34,7 @@ Rules for files under `webui/`. Root `AGENTS.md` controls repo-wide safety, rele
 
 ## Backend Contract Rules
 
-- Backend route implementations live outside `webui/`; follow `src/wud_updater/AGENTS.md` before editing them.
+- Backend route implementations live outside `webui/`; follow `src/wudup/AGENTS.md` before editing them.
 - Preserve API paths, methods, response shapes, auth/session assumptions, and error surfaces unless the task explicitly changes the contract.
 - When frontend API types change, update matching backend tests or explain why the change is frontend-only.
 
@@ -51,7 +51,7 @@ Choose the smallest useful set:
 - Browser validation: prefer the Playwright plugin. Start the relevant dev/demo server, navigate directly to the route, use targeted waits/clicks/evaluations, check console messages, and cover desktop/mobile widths when layout changes.
 - Keep Playwright output low-token: avoid full snapshots unless debugging, prefer `browser_evaluate` for compact state, write screenshots/snapshots to files, and remove generated `.playwright-mcp` or screenshot artifacts.
 - Local/demo tooling change: `node --check webui/scripts/dev-server.mjs` plus focused script tests; use `make webui-demo-state` or `make webui-dev` when validating those flows.
-- Backend API contract change: run the focused Python WebUI backend tests selected by `src/wud_updater/AGENTS.md`
+- Backend API contract change: run the focused Python WebUI backend tests selected by `src/wudup/AGENTS.md`
 
 ## Edit Discipline
 

@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from wud_updater import web_scheduler, web_settings
+from wudup import web_scheduler, web_settings
 
 
 def _auto_update_tick(client, now: datetime):

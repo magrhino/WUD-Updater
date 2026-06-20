@@ -12,7 +12,7 @@ import { ExternalLink } from "@lucide/vue";
     </div>
     <div class="settings-doc-links">
       <a
-        href="https://github.com/magrhino/WUD-Updater/blob/main/docs/DEPLOYMENT.md#environment-variables"
+        href="https://github.com/magrhino/wudup/blob/main/docs/DEPLOYMENT.md#environment-variables"
         target="_blank"
         rel="noopener noreferrer"
         class="text-link"
@@ -21,7 +21,7 @@ import { ExternalLink } from "@lucide/vue";
         <ExternalLink :size="15" />
       </a>
       <a
-        href="https://github.com/magrhino/WUD-Updater/blob/main/docs/examples/settings.env.example"
+        href="https://github.com/magrhino/wudup/blob/main/docs/examples/settings.env.example"
         target="_blank"
         rel="noopener noreferrer"
         class="text-link"

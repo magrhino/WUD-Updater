@@ -10,8 +10,8 @@ Copy the env example, review the Compose stack path and browser exposure
 settings, then start the service:
 
 ```bash
-WEBUI_ENV="$HOME/.config/wud-updater/webui.env"
-mkdir -p "$HOME/.config/wud-updater"
+WEBUI_ENV="$HOME/.config/wudup/webui.env"
+mkdir -p "$HOME/.config/wudup"
 test -f "$WEBUI_ENV" || cp docs/examples/webui.env.example "$WEBUI_ENV"
 docker compose --env-file "$WEBUI_ENV" -f docs/examples/docker-compose.webui.yml up -d
 ```
@@ -35,7 +35,7 @@ On first start, the WebUI creates a one-time setup claim and prints a setup URL
 to the server logs. Read it with:
 
 ```bash
-docker compose --env-file "$WEBUI_ENV" -f docs/examples/docker-compose.webui.yml logs wud-updater
+docker compose --env-file "$WEBUI_ENV" -f docs/examples/docker-compose.webui.yml logs wudup
 ```
 
 Open the `/#/setup?claim=...` URL, create the first admin username, and choose a
@@ -48,7 +48,7 @@ deployment you intended, or dismiss it once those checks are understood.
 
 The setup claim, password hash, sessions, update runs, managed tag exclusions,
 and audit records are stored in SQLite at `WUD_DB_PATH`. The example sets that
-path to `/logs/wud-updater.sqlite`, backed by `WEBUI_LOG_DIR` on the Compose
+path to `/logs/wudup.sqlite`, backed by `WEBUI_LOG_DIR` on the Compose
 host. Keep that directory when recreating the container, or the WebUI will
 require setup again and previous run history will be lost.
 
@@ -58,14 +58,14 @@ If the admin password is lost or you need to rotate the admin credentials, run
 the local recovery command against the same `WUD_DB_PATH`:
 
 ```bash
-wud-updater web reset-admin --user admin
+wudup web reset-admin --user admin
 ```
 
 For the Compose example, run the command through the WebUI container so it uses
 the mounted SQLite database:
 
 ```bash
-docker compose --env-file "$WEBUI_ENV" -f docs/examples/docker-compose.webui.yml run --rm wud-updater web reset-admin --user admin
+docker compose --env-file "$WEBUI_ENV" -f docs/examples/docker-compose.webui.yml run --rm wudup web reset-admin --user admin
 ```
 
 The command prints a single `/#/reset-admin?claim=...` link. Opening that link

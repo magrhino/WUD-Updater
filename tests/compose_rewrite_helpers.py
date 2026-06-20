@@ -4,9 +4,9 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from wud_updater.compose import ComposeStack, ServiceImage
-from wud_updater.compose_rewrite import compose_escape_dollars, exact_tags_regex
-from wud_updater.updater_models import (
+from wudup.compose import ComposeStack, ServiceImage
+from wudup.compose_rewrite import compose_escape_dollars, exact_tags_regex
+from wudup.updater_models import (
     DigestPinUpdate,
     DigestUnpinUpdate,
     TagExclusionUpdate,
@@ -76,7 +76,7 @@ class ComposeRewriteTestCase(unittest.TestCase):
             planned_digest=planned_digest,
             final_image=f"{image_repo}@{planned_digest}",
             watch_tag=resolved_tag,
-            marker=f"wud-updater.resolved-tag={resolved_tag}",
+            marker=f"wudup.resolved-tag={resolved_tag}",
             label_key="wud.tag.include",
             label_value=compose_escape_dollars(exact_tags_regex((resolved_tag,))),
             services=services,
@@ -98,7 +98,7 @@ class ComposeRewriteTestCase(unittest.TestCase):
             current_digest="sha256:old",
             target_digest=target_digest,
             watch_tag=resolved_tag,
-            marker=f"wud-updater.resolved-tag={resolved_tag}",
+            marker=f"wudup.resolved-tag={resolved_tag}",
             label_key="wud.tag.include",
             label_value=compose_escape_dollars(exact_tags_regex((resolved_tag,))),
             services=services,

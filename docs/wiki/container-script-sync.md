@@ -19,7 +19,7 @@ services:
     volumes:
       - wud-scripts:/wud:ro
 
-  wud-updater:
+  wudup:
     volumes:
       - wud-scripts:/managed-wud
 ```
@@ -44,23 +44,23 @@ The sync target must resolve to a directory that is separate from:
 - the parent directory for `WUD_OUT_FILE`
 
 If the target directory is non-empty and does not contain
-`.wud-updater-managed`, sync refuses to continue. This prevents accidentally
+`.wudup-managed`, sync refuses to continue. This prevents accidentally
 cleaning an operator-managed directory.
 
 When sync is allowed, the entrypoint removes the previous managed contents,
 copies `/app/wud`, marks `*.sh` files executable, and writes
-`.wud-updater-managed`.
+`.wudup-managed`.
 
 ## Manual Sync
 
 Run a one-shot sync with:
 
 ```bash
-docker compose -f docs/examples/docker-compose.example.yml run --rm wud-updater sync-wud-scripts
+docker compose -f docs/examples/docker-compose.example.yml run --rm wudup sync-wud-scripts
 ```
 
 Run this once before relying on `/wud/on-update.sh` when you intentionally
-disabled startup sync. During upgrades, recreating `wud-updater` refreshes the
+disabled startup sync. During upgrades, recreating `wudup` refreshes the
 scripts automatically when the managed script volume is mounted.
 
 For local image development, use

@@ -6,10 +6,10 @@ from types import SimpleNamespace
 
 import pytest
 
-from wud_updater.command import CommandError, CommandResult
-from wud_updater import web_release_notes as release_notes_module
-from wud_updater.release_notes import ReleaseNoteInfo as ReleaseNoteData
-from wud_updater.web_models import WudApiStatus
+from wudup.command import CommandError, CommandResult
+from wudup import web_release_notes as release_notes_module
+from wudup.release_notes import ReleaseNoteInfo as ReleaseNoteData
+from wudup.web_models import WudApiStatus
 
 from tests.web_test_helpers import (
     _client,
@@ -144,7 +144,7 @@ def test_release_notes_get_uses_tagged_label_for_digest_ref(
         encoding="utf-8",
     )
 
-    with caplog.at_level(logging.ERROR, logger="wud_updater.web_release_notes"):
+    with caplog.at_level(logging.ERROR, logger="wudup.web_release_notes"):
         response = client.get("/api/v1/release-notes")
 
     assert response.status_code == 200
@@ -182,7 +182,7 @@ def test_release_notes_get_uses_running_container_label_for_bare_digest_ref(
         encoding="utf-8",
     )
 
-    with caplog.at_level(logging.ERROR, logger="wud_updater.web_release_notes"):
+    with caplog.at_level(logging.ERROR, logger="wudup.web_release_notes"):
         response = client.get("/api/v1/release-notes")
 
     assert response.status_code == 200
@@ -255,7 +255,7 @@ def test_release_notes_get_logs_when_docker_source_label_inspect_fails(
     image = "advplyr/audiobookshelf:latest"
     wud_file.write_text(f"{image}\n", encoding="utf-8")
 
-    with caplog.at_level(logging.ERROR, logger="wud_updater.web_release_notes"):
+    with caplog.at_level(logging.ERROR, logger="wudup.web_release_notes"):
         response = client.get("/api/v1/release-notes")
 
     assert response.status_code == 200
@@ -309,7 +309,7 @@ def test_release_notes_get_sanitizes_docker_inspect_stderr_in_log(
     )
     wud_file.write_text(f"{image}\n", encoding="utf-8")
 
-    with caplog.at_level(logging.ERROR, logger="wud_updater.web_release_notes"):
+    with caplog.at_level(logging.ERROR, logger="wudup.web_release_notes"):
         response = client.get("/api/v1/release-notes")
 
     assert response.status_code == 200

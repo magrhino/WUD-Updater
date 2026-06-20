@@ -6,9 +6,9 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from wud_updater.command import CommandResult
-from wud_updater.file_ops import OwnerConfig
-from wud_updater.updater_logging import (
+from wudup.command import CommandResult
+from wudup.file_ops import OwnerConfig
+from wudup.updater_logging import (
     Logger,
     _create_unique_text_file_exclusive,
     _render_command_result,
@@ -20,7 +20,7 @@ from wud_updater.updater_logging import (
 
 class UpdaterLoggingTests(unittest.TestCase):
     def setUp(self) -> None:
-        self.tmp = tempfile.TemporaryDirectory(prefix="wud-updater-logging.")
+        self.tmp = tempfile.TemporaryDirectory(prefix="wudup-logging.")
         self.root = Path(self.tmp.name)
         self.log_dir = self.root / "logs"
         self.log_dir.mkdir()
@@ -35,7 +35,7 @@ class UpdaterLoggingTests(unittest.TestCase):
         owner = OwnerConfig.from_values(str(os.getuid()), str(os.getgid()))
 
         with mock.patch(
-            "wud_updater.updater_logging.file_timestamp",
+            "wudup.updater_logging.file_timestamp",
             return_value="fixed",
         ):
             log_file = prepare_log_file(self.log_dir, owner)
@@ -65,7 +65,7 @@ class UpdaterLoggingTests(unittest.TestCase):
         path.write_text("existing\n", encoding="utf-8")
         (self.log_dir / "report-1.log").write_text("existing\n", encoding="utf-8")
 
-        with mock.patch("wud_updater.updater_logging._EXCLUSIVE_CREATE_ATTEMPTS", 2):
+        with mock.patch("wudup.updater_logging._EXCLUSIVE_CREATE_ATTEMPTS", 2):
             with self.assertRaises(FileExistsError) as raised:
                 _create_unique_text_file_exclusive(path, "new\n")
 
@@ -92,7 +92,7 @@ class UpdaterLoggingTests(unittest.TestCase):
         log_file = self.log_dir / "update.log"
         logger = Logger(log_file, no_color=True)
 
-        with mock.patch("wud_updater.updater_logging.timestamp", return_value="fixed-time"):
+        with mock.patch("wudup.updater_logging.timestamp", return_value="fixed-time"):
             logger.plain("INFO", "message")
 
         self.assertEqual(

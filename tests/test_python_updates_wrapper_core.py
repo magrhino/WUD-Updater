@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 
-from wud_updater.updates import (
+from wudup.updates import (
     _parse_display_spec,
     _parse_todo_entries,
 )

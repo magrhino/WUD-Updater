@@ -2,7 +2,6 @@
 import { computed, onMounted, type Component } from "vue";
 import { RouterLink, useRoute } from "vue-router";
 import {
-  Activity,
   BellOff,
   Clock3,
   LayoutDashboard,
@@ -17,11 +16,12 @@ import { NTag } from "naive-ui";
 
 import { useConnectionStore } from "../../stores/connection";
 import { runInBackground } from "../../utils/promises";
+import AppBrandMark from "./AppBrandMark.vue";
 
 const route = useRoute();
 const connection = useConnectionStore();
 
-const RELEASES_URL = "https://github.com/magrhino/WUD-Updater/releases";
+const RELEASES_URL = "https://github.com/magrhino/wudup/releases";
 const VERSION_RELEASE_RE = /^v?\d+\.\d+/;
 
 const appVersion = computed(() => connection.status?.version ?? "");
@@ -48,7 +48,7 @@ const appVersionHref = computed(() => {
 const appVersionTitle = computed(() =>
   appVersionIsRelease.value
     ? `Open ${appVersionLabel.value} release notes`
-    : "Open WUD-Updater releases",
+    : "Open WUDup releases",
 );
 
 type NavItem = {
@@ -142,9 +142,9 @@ onMounted(() => {
 
 <template>
   <aside class="sidebar">
-    <RouterLink class="brand" to="/" aria-label="WUD-Updater dashboard">
-      <Activity :size="22" />
-      <span>WUD-Updater</span>
+    <RouterLink class="brand" to="/" aria-label="WUDup dashboard">
+      <AppBrandMark :size="28" />
+      <span>WUDup</span>
     </RouterLink>
 
     <nav class="nav-list">

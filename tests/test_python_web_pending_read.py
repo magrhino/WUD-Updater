@@ -1,7 +1,7 @@
 from __future__ import annotations
 from pathlib import Path
-from wud_updater import web_pending as pending_module
-from wud_updater.config import ConfigError
+from wudup import web_pending as pending_module
+from wudup.config import ConfigError
 from tests.web_test_helpers import (
     _client,
     _csrf_headers,
@@ -189,7 +189,7 @@ def test_pending_endpoint_recovers_digest_pin_provenance_from_compose(
             [
                 "services:",
                 "  app:",
-                "    # wud-updater.resolved-tag=latest",
+                "    # wudup.resolved-tag=latest",
                 "    image: repo/app@sha256:old",
                 "    labels:",
                 "      - wud.tag.include=^latest$$",

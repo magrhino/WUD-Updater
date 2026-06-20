@@ -4,8 +4,8 @@ from types import SimpleNamespace
 
 import uvicorn
 
-from wud_updater import web as web_module
-from wud_updater import web_startup
+from wudup import web as web_module
+from wudup import web_startup
 from tests.web_test_helpers import (
     _client,
     _web_env,
@@ -77,12 +77,12 @@ def test_web_startup_prints_first_run_summary(
 
     assert status == 0
     assert uvicorn_calls
-    assert "WUD-Updater WebUI startup summary" in stderr
+    assert "WUDup WebUI startup summary" in stderr
     assert "Setup link: http://127.0.0.1:12735/#/setup?claim=" in stderr
     assert f"Docker base: {tmp_path / 'docker'}" in stderr
     assert f"WUD output: {tmp_path / 'state' / 'images.todo'}" in stderr
     assert "Script sync: auto-detected writable /managed-wud" in stderr
-    assert "Doctor: docker compose exec wud-updater doctor" in stderr
+    assert "Doctor: docker compose exec wudup doctor" in stderr
     assert secret not in stderr
 
 

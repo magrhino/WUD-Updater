@@ -5,7 +5,7 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
 cd "$REPO_ROOT"
 
 TEST_TMP=""
-IMAGE="${WUD_UPDATER_TEST_IMAGE:-}"
+IMAGE="${WUDUP_TEST_IMAGE:-}"
 cleanup_image=0
 REGISTRY_NAME=""
 REGISTRY_REF=""
@@ -187,7 +187,7 @@ wait_for_container_version(){
 }
 
 start_registry(){
-  REGISTRY_NAME="wud-updater-e2e-registry-${GITHUB_RUN_ID:-local}-$$"
+  REGISTRY_NAME="wudup-e2e-registry-${GITHUB_RUN_ID:-local}-$$"
   local registry_port
 
   run docker run -d --name "$REGISTRY_NAME" -p 127.0.0.1::5000 registry:2
@@ -217,7 +217,7 @@ ARG BASE_IMAGE=python:3.14-slim-bookworm
 FROM ${BASE_IMAGE}
 ARG FIXTURE_VERSION
 RUN printf '%s\n' "${FIXTURE_VERSION}" > /wud-e2e-version
-LABEL org.opencontainers.image.source="https://github.com/magrhino/wud-updater-e2e-fixture"
+LABEL org.opencontainers.image.source="https://github.com/magrhino/wudup-e2e-fixture"
 HEALTHCHECK --interval=1s --timeout=1s --retries=30 CMD test -f /wud-e2e-version
 ENTRYPOINT []
 CMD ["bash", "-lc", "trap 'exit 0' TERM INT; while :; do sleep 1; done"]
@@ -236,8 +236,8 @@ build_fixture_image(){
 }
 
 prepare_images(){
-  OLD_LOCAL_IMAGE="wud-updater-e2e-app-old:${GITHUB_RUN_ID:-local}-$$"
-  NEW_LOCAL_IMAGE="wud-updater-e2e-app-new:${GITHUB_RUN_ID:-local}-$$"
+  OLD_LOCAL_IMAGE="wudup-e2e-app-old:${GITHUB_RUN_ID:-local}-$$"
+  NEW_LOCAL_IMAGE="wudup-e2e-app-new:${GITHUB_RUN_ID:-local}-$$"
 
   write_fixture_dockerfile
   build_fixture_image "$OLD_LOCAL_IMAGE" old
@@ -286,7 +286,7 @@ run_updater_e2e(){
     -v "$STACK_DIR:$STACK_DIR" \
     -v "$OUT_VOLUME:/out" \
     -v "$LOG_VOLUME:/logs" \
-    -e WUD_UPDATER_BANNER=false \
+    -e WUDUP_BANNER=false \
     -e WUD_DB_PATH=/logs/e2e.sqlite \
     -e OUT_UID="$(id -u)" \
     -e OUT_GID="$(id -g)" \
@@ -325,7 +325,7 @@ run_preflight_failure_e2e(){
       -v "$STACK_DIR:/host/docker" \
       -v "$OUT_VOLUME:/out" \
       -v "$LOG_VOLUME:/logs" \
-      -e WUD_UPDATER_BANNER=false \
+      -e WUDUP_BANNER=false \
       -e WUD_DB_PATH=/logs/e2e-preflight.sqlite \
       -e OUT_UID="$(id -u)" \
       -e OUT_GID="$(id -g)" \
@@ -399,16 +399,16 @@ main(){
   run docker version
   run docker compose version
 
-  TEST_TMP="$(mktemp -d "${TMPDIR:-/tmp}/wud-updater-e2e.XXXXXX")"
+  TEST_TMP="$(mktemp -d "${TMPDIR:-/tmp}/wudup-e2e.XXXXXX")"
   STACK_DIR="$TEST_TMP/docker/wud-e2e-stack"
   COMPOSE_FILE="$STACK_DIR/docker-compose.yml"
-  OUT_VOLUME="wud-updater-e2e-out-${GITHUB_RUN_ID:-local}-$$"
-  LOG_VOLUME="wud-updater-e2e-logs-${GITHUB_RUN_ID:-local}-$$"
+  OUT_VOLUME="wudup-e2e-out-${GITHUB_RUN_ID:-local}-$$"
+  LOG_VOLUME="wudup-e2e-logs-${GITHUB_RUN_ID:-local}-$$"
   SCRIPTS_DIR="$TEST_TMP/managed-wud"
   mkdir -p "$SCRIPTS_DIR"
 
   if [[ -z "$IMAGE" ]]; then
-    IMAGE="wud-updater:e2e-${GITHUB_RUN_ID:-local}-$$"
+    IMAGE="wudup:e2e-${GITHUB_RUN_ID:-local}-$$"
     cleanup_image=1
     run docker build -t "$IMAGE" .
   fi

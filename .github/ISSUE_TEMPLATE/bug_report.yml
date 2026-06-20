@@ -34,7 +34,7 @@ body:
       label: Steps to reproduce
       description: Minimal steps to trigger the bug.
       placeholder: |
-        1. Configure WUD-Updater with ...
+        1. Configure WUDup with ...
         2. Run ...
         3. See ...
     validations:
@@ -78,7 +78,7 @@ body:
   - type: input
     id: version
     attributes:
-      label: WUD-Updater version
+      label: WUDup version
       placeholder: "v0.1.0, ghcr.io image tag, or git commit"
     validations:
       required: true

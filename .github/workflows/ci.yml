@@ -112,6 +112,7 @@ jobs:
               - 'pyproject.toml'
               - 'bin/*'
               - 'wud/*'
+              - 'src/wudup/*'
               - 'src/wud_updater/*'
               - 'tests/e2e-docker-compose.sh'
             webui_smoke:

@@ -105,8 +105,8 @@ export function createDemoWebApi(): WebApi {
       audit_run_id: 9002,
       current_tag: `v${DEMO_VERSION}`,
       latest_tag: DEMO_LATEST_VERSION,
-      target_image: "ghcr.io/magrhino/wud-updater:latest",
-      container: "demo-wud-updater",
+      target_image: "ghcr.io/magrhino/wudup:latest",
+      container: "demo-wudup",
     }),
     prepareSelfUpdate: async (
       _csrfToken: string,
@@ -117,8 +117,8 @@ export function createDemoWebApi(): WebApi {
       audit_run_id: 9003,
       current_tag: "v0.25.0",
       latest_tag: "v0.26.0",
-      target_image: "ghcr.io/magrhino/wud-updater:v0.26.0",
-      container: "demo-wud-updater",
+      target_image: "ghcr.io/magrhino/wudup:v0.26.0",
+      container: "demo-wudup",
       external_recreate_required: true,
     }),
     servicePolicies: async () => state.servicePolicies(),
@@ -131,7 +131,7 @@ export function createDemoWebApi(): WebApi {
     restartContainer: async (_csrfToken: string): Promise<ContainerRestartResponse> => ({
       status: "scheduled",
       audit_run_id: 9001,
-      container: "demo-wud-updater",
+      container: "demo-wudup",
     }),
     createPlan: async (
       lineNumbers: number[],

@@ -4,7 +4,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from wud_updater.images import (
+from wudup.images import (
     drop_registry,
     image_matches_resolved_target,
     image_tag,
@@ -15,8 +15,8 @@ from wud_updater.images import (
     strip_digest,
     tag_value_valid,
 )
-from wud_updater.line_specs import LineSpecError, parse_line_spec
-from wud_updater.wud_file import parse_wud_file, parse_wud_text
+from wudup.line_specs import LineSpecError, parse_line_spec
+from wudup.wud_file import parse_wud_file, parse_wud_text
 
 
 class ImageHelperTests(unittest.TestCase):

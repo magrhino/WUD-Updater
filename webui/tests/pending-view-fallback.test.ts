@@ -91,12 +91,12 @@ describe("pending view fallback and release notes", () => {
     });
     const updater = pendingGroupedItem({
       line_no: 2,
-      image: "ghcr.io/example/wud-updater:1.0",
-      repo: "ghcr.io/example/wud-updater",
+      image: "ghcr.io/example/wudup:1.0",
+      repo: "ghcr.io/example/wudup",
       current_tag: "1.0",
       desired_tag: "2.0",
-      target_image: "ghcr.io/example/wud-updater:2.0",
-      services: ["wud-updater"],
+      target_image: "ghcr.io/example/wudup:2.0",
+      services: ["wudup"],
     });
     const stackItem = pendingGroupedItem({
       line_no: 3,
@@ -125,7 +125,7 @@ describe("pending view fallback and release notes", () => {
       }),
     ]);
     settings.servicePolicies = [
-      servicePolicy({ service_key: "media/wud-updater", auto_update: true }),
+      servicePolicy({ service_key: "media/wudup", auto_update: true }),
     ];
     updates.pending = {
       source_file: "/out/images.todo",
@@ -137,8 +137,8 @@ describe("pending view fallback and release notes", () => {
         groups: [
           {
             ...pendingGrouping([radarr, updater, stackItem]).groups[0],
-            services_label: "radarr, wud-updater",
-            services: ["radarr", "wud-updater"],
+            services_label: "radarr, wudup",
+            services: ["radarr", "wudup"],
             line_numbers: [1, 2, 3],
             items: [radarr, updater, stackItem],
           },
@@ -151,7 +151,7 @@ describe("pending view fallback and release notes", () => {
     const card = wrapper.find(".stack-card");
 
     expect(card.find(".stack-identity").text()).toContain(
-      "Services radarr, wud-updater",
+      "Services radarr, wudup",
     );
     const previewText = card.find(".stack-change-preview").text();
     expect(previewText).toContain("radarr");
@@ -159,19 +159,19 @@ describe("pending view fallback and release notes", () => {
     expect(previewText).toContain("No release notes");
     expect(previewText).toContain("lscr.io/linuxserver/radarr:5.0");
     expect(previewText).toContain("lscr.io/linuxserver/radarr:5.1");
-    expect(previewText).toContain("wud-updater");
+    expect(previewText).toContain("wudup");
     expect(previewText).toContain("Tag update");
     expect(previewText).toContain("Major bump");
     expect(previewText).toContain("Possible breaking");
     expect(previewText).toContain("Auto-update");
-    expect(previewText).toContain("ghcr.io/example/wud-updater:1.0");
-    expect(previewText).toContain("ghcr.io/example/wud-updater:2.0");
+    expect(previewText).toContain("ghcr.io/example/wudup:1.0");
+    expect(previewText).toContain("ghcr.io/example/wudup:2.0");
     expect(card.text()).toContain("Recreate stack");
     expect(card.text()).toContain("Mutable latest");
     expect(card.text()).toContain("Digest-only");
     expect(card.text()).toContain("Stack restart");
     expect(card.find(".stack-card-tags").text()).not.toContain(
-      "radarr, wud-updater",
+      "radarr, wudup",
     );
   });
 
@@ -188,12 +188,12 @@ describe("pending view fallback and release notes", () => {
     });
     const updater = pendingGroupedItem({
       line_no: 2,
-      image: "ghcr.io/example/wud-updater:1.0",
-      repo: "ghcr.io/example/wud-updater",
+      image: "ghcr.io/example/wudup:1.0",
+      repo: "ghcr.io/example/wudup",
       current_tag: "1.0",
       desired_tag: "2.0",
-      target_image: "ghcr.io/example/wud-updater:2.0",
-      services: ["wud-updater"],
+      target_image: "ghcr.io/example/wudup:2.0",
+      services: ["wudup"],
     });
     const { pinia, auth, connection, settings, updates, runs } = setupStores(true);
     settings.snoozes = [snooze({ service_key: "media/radarr" })];
@@ -207,8 +207,8 @@ describe("pending view fallback and release notes", () => {
         groups: [
           {
             ...pendingGrouping([radarr, updater]).groups[0],
-            services_label: "radarr, wud-updater",
-            services: ["radarr", "wud-updater"],
+            services_label: "radarr, wudup",
+            services: ["radarr", "wudup"],
             line_numbers: [1, 2],
             items: [radarr, updater],
           },
@@ -226,7 +226,7 @@ describe("pending view fallback and release notes", () => {
       .find((card) => card.text().includes("Snoozed pending entries"));
 
     expect(stackCard?.find(".stack-identity").text()).toContain(
-      "Services wud-updater",
+      "Services wudup",
     );
     expect(stackCard?.find(".stack-identity").text()).not.toContain("radarr");
     expect(stackCard?.find(".stack-change-preview").text()).not.toContain(
@@ -261,10 +261,10 @@ describe("pending view fallback and release notes", () => {
         stacks: [
           {
             ...planResponse().stacks[0],
-            services_label: "radarr, wud-updater",
-            services: ["radarr", "wud-updater"],
-            pull_services: ["radarr", "wud-updater"],
-            stop_services: ["radarr", "wud-updater"],
+            services_label: "radarr, wudup",
+            services: ["radarr", "wudup"],
+            pull_services: ["radarr", "wudup"],
+            stop_services: ["radarr", "wudup"],
             tag_updates: [
               {
                 old_image: "lscr.io/linuxserver/radarr:5.0",
@@ -288,12 +288,12 @@ describe("pending view fallback and release notes", () => {
               },
               {
                 line_no: 2,
-                raw: "ghcr.io/example/wud-updater:1.0",
-                image: "ghcr.io/example/wud-updater:1.0",
-                resolved_image: "ghcr.io/example/wud-updater:1.0",
-                compose_image: "ghcr.io/example/wud-updater:1.0",
-                target_image: "ghcr.io/example/wud-updater:1.1",
-                service: "wud-updater",
+                raw: "ghcr.io/example/wudup:1.0",
+                image: "ghcr.io/example/wudup:1.0",
+                resolved_image: "ghcr.io/example/wudup:1.0",
+                compose_image: "ghcr.io/example/wudup:1.0",
+                target_image: "ghcr.io/example/wudup:1.1",
+                service: "wudup",
                 digest: "",
                 desired_tag: "",
                 action: "recreate_service",
@@ -316,7 +316,7 @@ describe("pending view fallback and release notes", () => {
     const impact = dialog.find(".preflight-impact");
     expect(dialog.find("#preflight-modal-title").text()).toBe("Review media plan");
     expect(dialog.find(".preflight-impact-text").text()).toBe(
-      "radarr, wud-updater",
+      "radarr, wudup",
     );
     expect(readiness.exists()).toBe(true);
     expect(readiness.text()).toContain("Apply readiness");
@@ -330,7 +330,7 @@ describe("pending view fallback and release notes", () => {
     expect(impact.exists()).toBe(true);
     expect(impact.text()).toContain("Services and images");
     expect(impact.text()).toContain("radarr");
-    expect(impact.text()).toContain("wud-updater");
+    expect(impact.text()).toContain("wudup");
     expect(impact.find(".tag-rewrite-detail").text()).toContain(
       "lscr.io/linuxserver/radarr:5.0 -> lscr.io/linuxserver/radarr:5.1",
     );

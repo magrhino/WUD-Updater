@@ -4,9 +4,9 @@ import json
 from pathlib import Path
 
 
-from wud_updater import web as web_module
-from wud_updater import web_auth as web_auth_module
-from wud_updater.db import (
+from wudup import web as web_module
+from wudup import web_auth as web_auth_module
+from wudup.db import (
     open_db,
     init_db,
 )

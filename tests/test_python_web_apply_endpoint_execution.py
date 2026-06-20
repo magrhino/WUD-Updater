@@ -1,8 +1,8 @@
 from __future__ import annotations
 from pathlib import Path
-from wud_updater import web_jobs
-from wud_updater.db import open_db
-from wud_updater.locks import DirectoryLock, WudLockError, lock_dir_for
+from wudup import web_jobs
+from wudup.db import open_db
+from wudup.locks import DirectoryLock, WudLockError, lock_dir_for
 from tests.web_test_helpers import (
     _client,
     _csrf_headers,
@@ -42,7 +42,7 @@ def test_apply_endpoint_applies_digest_unpin_plan_and_records_provenance(
     compose_file.write_text(
         "services:\n"
         "  app:\n"
-        "    # wud-updater.resolved-tag=latest\n"
+        "    # wudup.resolved-tag=latest\n"
         "    image: repo/app@sha256:old\n"
         "    labels:\n"
         "      - wud.tag.include=^latest$\n",
@@ -78,7 +78,7 @@ def test_apply_endpoint_applies_digest_unpin_plan_and_records_provenance(
     assert job["status"] == "success"
     rendered = compose_file.read_text(encoding="utf-8")
     assert "image: repo/app:latest" in rendered
-    assert "wud-updater.resolved-tag" not in rendered
+    assert "wudup.resolved-tag" not in rendered
     assert "wud.tag.include=^latest$" in rendered
     assert wud_file.read_text(encoding="utf-8") == ""
     calls = _fake_docker_calls(fake_root)
@@ -205,7 +205,7 @@ def test_apply_endpoint_requires_and_uses_digest_pin_label_rewrite_approval(
     assert apply_response.status_code == 202
     assert job["status"] == "success"
     content = compose_file.read_text(encoding="utf-8")
-    assert "# wud-updater.resolved-tag=2.0" in content
+    assert "# wudup.resolved-tag=2.0" in content
     assert "image: repo/app@sha256:index" in content
     assert "wud.tag.include=^2\\.0$$" in content
 

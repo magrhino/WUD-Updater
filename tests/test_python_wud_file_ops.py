@@ -6,13 +6,13 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from wud_updater.file_ops import (
+from wudup.file_ops import (
     OwnerConfig,
     OwnerConfigError,
     atomic_rewrite,
 )
-from wud_updater.locks import DirectoryLock, WudLockTimeout, lock_dir_for
-from wud_updater.wud_file import (
+from wudup.locks import DirectoryLock, WudLockTimeout, lock_dir_for
+from wudup.wud_file import (
     cleanup_successful_lines,
     parse_wud_file,
     remove_lines_before_run,

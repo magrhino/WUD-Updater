@@ -6,8 +6,8 @@ from contextlib import redirect_stderr
 from io import StringIO
 from unittest import mock
 
-from wud_updater.container_identity import container_identity_candidates
-from wud_updater.self_update import (
+from wudup.container_identity import container_identity_candidates
+from wudup.self_update import (
     _image_reference_tag,
     _inspected_container_image,
     _is_release_image_tag,
@@ -31,7 +31,7 @@ class ContainerIdentityTests(unittest.TestCase):
         ):
             candidates = container_identity_candidates(
                 {
-                    "WUD_WEB_RESTART_CONTAINER": "wud-updater",
+                    "WUD_WEB_RESTART_CONTAINER": "wudup",
                     "HOSTNAME": "custom-hostname",
                 }
             )
@@ -39,7 +39,7 @@ class ContainerIdentityTests(unittest.TestCase):
         self.assertEqual(
             candidates,
             [
-                "wud-updater",
+                "wudup",
                 "custom-hostname",
                 "1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
             ],
@@ -55,14 +55,14 @@ class SelfUpdateTests(unittest.TestCase):
                 0,
                 stdout=(
                     '[{"Image":"sha256:aaaaaaaa",'
-                    '"Config":{"Image":"ghcr.io/magrhino/wud-updater:latest"}}]'
+                    '"Config":{"Image":"ghcr.io/magrhino/wudup:latest"}}]'
                 ),
                 stderr="",
             ),
         ):
-            image = current_container_image({"HOSTNAME": "wud-updater-1"})
+            image = current_container_image({"HOSTNAME": "wudup-1"})
 
-        self.assertEqual(image, "ghcr.io/magrhino/wud-updater:latest")
+        self.assertEqual(image, "ghcr.io/magrhino/wudup:latest")
 
     def test_current_container_image_tries_next_candidate_after_missing_name(self) -> None:
         run_mock = mock.Mock(
@@ -71,7 +71,7 @@ class SelfUpdateTests(unittest.TestCase):
                 subprocess.CompletedProcess(
                     ["docker"],
                     0,
-                    stdout='[{"Config":{"Image":"ghcr.io/magrhino/wud-updater:latest"}}]',
+                    stdout='[{"Config":{"Image":"ghcr.io/magrhino/wudup:latest"}}]',
                     stderr="",
                 ),
             ]
@@ -79,20 +79,34 @@ class SelfUpdateTests(unittest.TestCase):
 
         with (
             mock.patch(
-                "wud_updater.self_update.container_identity_candidates",
+                "wudup.self_update.container_identity_candidates",
                 return_value=["custom-hostname", "actual-container-id"],
             ),
             mock.patch("subprocess.run", run_mock),
         ):
             image = current_container_image({"HOSTNAME": "custom-hostname"})
 
-        self.assertEqual(image, "ghcr.io/magrhino/wud-updater:latest")
+        self.assertEqual(image, "ghcr.io/magrhino/wudup:latest")
         self.assertEqual(
             run_mock.call_args_list[1].args[0],
             ["docker", "container", "inspect", "actual-container-id"],
         )
 
     def test_release_self_update_target_rewrites_pinned_release_tag(self) -> None:
+        target = release_self_update_target(
+            "ghcr.io/magrhino/wudup:v0.12.2",
+            "v0.12.2",
+            "v0.12.3",
+        )
+
+        self.assertEqual(
+            target,
+            "ghcr.io/magrhino/wudup:v0.12.2 tag=v0.12.3",
+        )
+
+    def test_release_self_update_target_rewrites_legacy_pinned_image_repo(
+        self,
+    ) -> None:
         target = release_self_update_target(
             "ghcr.io/magrhino/wud-updater:v0.12.2",
             "v0.12.2",
@@ -101,17 +115,28 @@ class SelfUpdateTests(unittest.TestCase):
 
         self.assertEqual(
             target,
-            "ghcr.io/magrhino/wud-updater:v0.12.2 tag=v0.12.3",
+            "ghcr.io/magrhino/wudup:v0.12.2 tag=v0.12.3",
         )
 
     def test_release_self_update_target_keeps_floating_tag(self) -> None:
+        target = release_self_update_target(
+            "ghcr.io/magrhino/wudup:latest",
+            "v0.12.2",
+            "v0.12.3",
+        )
+
+        self.assertEqual(target, "ghcr.io/magrhino/wudup:latest")
+
+    def test_release_self_update_target_rewrites_legacy_floating_image_repo(
+        self,
+    ) -> None:
         target = release_self_update_target(
             "ghcr.io/magrhino/wud-updater:latest",
             "v0.12.2",
             "v0.12.3",
         )
 
-        self.assertEqual(target, "ghcr.io/magrhino/wud-updater:latest")
+        self.assertEqual(target, "ghcr.io/magrhino/wudup:latest")
 
     def test_release_self_update_target_uses_local_tag_when_image_unknown(self) -> None:
         target = release_self_update_target(
@@ -122,7 +147,7 @@ class SelfUpdateTests(unittest.TestCase):
 
         self.assertEqual(
             target,
-            "ghcr.io/magrhino/wud-updater:v0.12.2 tag=v0.12.3",
+            "ghcr.io/magrhino/wudup:v0.12.2 tag=v0.12.3",
         )
 
     def test_release_self_update_target_falls_back_when_local_tag_is_not_image_tag(
@@ -134,23 +159,23 @@ class SelfUpdateTests(unittest.TestCase):
             "v0.12.3",
         )
 
-        self.assertEqual(target, "ghcr.io/magrhino/wud-updater:latest")
+        self.assertEqual(target, "ghcr.io/magrhino/wudup:latest")
 
     def test_release_self_update_target_keeps_current_image_when_tag_matches_latest(
         self,
     ) -> None:
         # When the pinned tag already matches the latest, return the image as-is.
         target = release_self_update_target(
-            "ghcr.io/magrhino/wud-updater:v0.12.3",
+            "ghcr.io/magrhino/wudup:v0.12.3",
             "v0.12.3",
             "v0.12.3",
         )
 
-        self.assertEqual(target, "ghcr.io/magrhino/wud-updater:v0.12.3")
+        self.assertEqual(target, "ghcr.io/magrhino/wudup:v0.12.3")
 
     def test_current_container_image_returns_empty_without_candidates(self) -> None:
         with mock.patch(
-            "wud_updater.self_update.container_identity_candidates",
+            "wudup.self_update.container_identity_candidates",
             return_value=[],
         ):
             image = current_container_image({})
@@ -160,38 +185,38 @@ class SelfUpdateTests(unittest.TestCase):
     def test_current_container_image_returns_empty_on_os_error(self) -> None:
         with (
             mock.patch(
-                "wud_updater.self_update.container_identity_candidates",
-                return_value=["wud-updater-1"],
+                "wudup.self_update.container_identity_candidates",
+                return_value=["wudup-1"],
             ),
             mock.patch(
                 "subprocess.run",
                 side_effect=OSError("docker not found"),
             ),
         ):
-            image = current_container_image({"HOSTNAME": "wud-updater-1"})
+            image = current_container_image({"HOSTNAME": "wudup-1"})
 
         self.assertEqual(image, "")
 
     def test_current_container_image_returns_empty_on_timeout(self) -> None:
         with (
             mock.patch(
-                "wud_updater.self_update.container_identity_candidates",
-                return_value=["wud-updater-1"],
+                "wudup.self_update.container_identity_candidates",
+                return_value=["wudup-1"],
             ),
             mock.patch(
                 "subprocess.run",
                 side_effect=subprocess.TimeoutExpired(["docker"], 5),
             ),
         ):
-            image = current_container_image({"HOSTNAME": "wud-updater-1"})
+            image = current_container_image({"HOSTNAME": "wudup-1"})
 
         self.assertEqual(image, "")
 
     def test_current_container_image_returns_empty_on_invalid_json(self) -> None:
         with (
             mock.patch(
-                "wud_updater.self_update.container_identity_candidates",
-                return_value=["wud-updater-1"],
+                "wudup.self_update.container_identity_candidates",
+                return_value=["wudup-1"],
             ),
             mock.patch(
                 "subprocess.run",
@@ -200,15 +225,15 @@ class SelfUpdateTests(unittest.TestCase):
                 ),
             ),
         ):
-            image = current_container_image({"HOSTNAME": "wud-updater-1"})
+            image = current_container_image({"HOSTNAME": "wudup-1"})
 
         self.assertEqual(image, "")
 
     def test_current_container_image_returns_empty_for_non_list_payload(self) -> None:
         with (
             mock.patch(
-                "wud_updater.self_update.container_identity_candidates",
-                return_value=["wud-updater-1"],
+                "wudup.self_update.container_identity_candidates",
+                return_value=["wudup-1"],
             ),
             mock.patch(
                 "subprocess.run",
@@ -217,7 +242,7 @@ class SelfUpdateTests(unittest.TestCase):
                 ),
             ),
         ):
-            image = current_container_image({"HOSTNAME": "wud-updater-1"})
+            image = current_container_image({"HOSTNAME": "wudup-1"})
 
         self.assertEqual(image, "")
 
@@ -226,8 +251,8 @@ class SelfUpdateTests(unittest.TestCase):
     ) -> None:
         with (
             mock.patch(
-                "wud_updater.self_update.container_identity_candidates",
-                return_value=["wud-updater-1"],
+                "wudup.self_update.container_identity_candidates",
+                return_value=["wudup-1"],
             ),
             mock.patch(
                 "subprocess.run",
@@ -236,7 +261,7 @@ class SelfUpdateTests(unittest.TestCase):
                 ),
             ),
         ):
-            image = current_container_image({"HOSTNAME": "wud-updater-1"})
+            image = current_container_image({"HOSTNAME": "wudup-1"})
 
         self.assertEqual(image, "")
 
@@ -245,8 +270,8 @@ class SelfUpdateTests(unittest.TestCase):
     ) -> None:
         with (
             mock.patch(
-                "wud_updater.self_update.container_identity_candidates",
-                return_value=["wud-updater-1"],
+                "wudup.self_update.container_identity_candidates",
+                return_value=["wudup-1"],
             ),
             mock.patch(
                 "subprocess.run",
@@ -255,7 +280,7 @@ class SelfUpdateTests(unittest.TestCase):
                 ),
             ),
         ):
-            image = current_container_image({"HOSTNAME": "wud-updater-1"})
+            image = current_container_image({"HOSTNAME": "wudup-1"})
 
         self.assertEqual(image, "")
 
@@ -263,19 +288,19 @@ class SelfUpdateTests(unittest.TestCase):
 class InspectedContainerImageTests(unittest.TestCase):
     def test_prefers_config_image_over_top_level_image(self) -> None:
         container = {
-            "Config": {"Image": "ghcr.io/magrhino/wud-updater:latest"},
+            "Config": {"Image": "ghcr.io/magrhino/wudup:latest"},
             "Image": "sha256:aaaa",
         }
         self.assertEqual(
             _inspected_container_image(container),
-            "ghcr.io/magrhino/wud-updater:latest",
+            "ghcr.io/magrhino/wudup:latest",
         )
 
     def test_falls_back_to_top_level_image_when_no_config(self) -> None:
-        container = {"Image": "ghcr.io/magrhino/wud-updater:latest"}
+        container = {"Image": "ghcr.io/magrhino/wudup:latest"}
         self.assertEqual(
             _inspected_container_image(container),
-            "ghcr.io/magrhino/wud-updater:latest",
+            "ghcr.io/magrhino/wudup:latest",
         )
 
     def test_returns_empty_when_no_image_fields(self) -> None:
@@ -339,42 +364,50 @@ class SelfUpdateEnabledTests(unittest.TestCase):
 
     def test_cli_true_overrides_env_false(self) -> None:
         self.assertTrue(
-            self_update_enabled({"WUD_UPDATER_SELF_UPDATE": "false"}, cli_value=True)
+            self_update_enabled({"WUDUP_SELF_UPDATE": "false"}, cli_value=True)
         )
 
     def test_env_false_disables(self) -> None:
+        self.assertFalse(
+            self_update_enabled({"WUDUP_SELF_UPDATE": "false"})
+        )
+
+    def test_legacy_env_false_disables(self) -> None:
         self.assertFalse(
             self_update_enabled({"WUD_UPDATER_SELF_UPDATE": "false"})
         )
 
     def test_env_zero_disables(self) -> None:
-        self.assertFalse(self_update_enabled({"WUD_UPDATER_SELF_UPDATE": "0"}))
+        self.assertFalse(self_update_enabled({"WUDUP_SELF_UPDATE": "0"}))
 
     def test_env_no_disables(self) -> None:
-        self.assertFalse(self_update_enabled({"WUD_UPDATER_SELF_UPDATE": "no"}))
+        self.assertFalse(self_update_enabled({"WUDUP_SELF_UPDATE": "no"}))
 
     def test_env_off_disables(self) -> None:
-        self.assertFalse(self_update_enabled({"WUD_UPDATER_SELF_UPDATE": "off"}))
+        self.assertFalse(self_update_enabled({"WUDUP_SELF_UPDATE": "off"}))
 
     def test_env_true_enables(self) -> None:
-        self.assertTrue(self_update_enabled({"WUD_UPDATER_SELF_UPDATE": "true"}))
+        self.assertTrue(self_update_enabled({"WUDUP_SELF_UPDATE": "true"}))
 
 
 class IsAndDisplaySelfUpdateTests(unittest.TestCase):
     def test_is_self_update_target_matches_known_repos(self) -> None:
-        self.assertTrue(is_self_update_target("ghcr.io/magrhino/wud-updater:latest"))
-        self.assertTrue(is_self_update_target("ghcr.io/Magrhino/WUD-Updater:v1.0.0"))
+        self.assertTrue(is_self_update_target("ghcr.io/magrhino/wudup:latest"))
+        self.assertTrue(is_self_update_target("ghcr.io/Magrhino/WUDup:v1.0.0"))
+        self.assertTrue(
+            is_self_update_target("ghcr.io/magrhino/wud-updater:latest")
+        )
 
     def test_is_self_update_target_rejects_other_repos(self) -> None:
         self.assertFalse(is_self_update_target("ghcr.io/someone/other-app:latest"))
 
     def test_self_update_display_numbers_finds_positions(self) -> None:
         entry_a = mock.Mock()
-        entry_a.first = "ghcr.io/magrhino/wud-updater:latest"
+        entry_a.first = "ghcr.io/magrhino/wudup:latest"
         entry_b = mock.Mock()
         entry_b.first = "other/app:latest"
         entry_c = mock.Mock()
-        entry_c.first = "ghcr.io/magrhino/wud-updater:v1.0.0"
+        entry_c.first = "ghcr.io/magrhino/wudup:v1.0.0"
 
         result = self_update_display_numbers([entry_a, entry_b, entry_c])
 
@@ -400,26 +433,26 @@ class MainTests(unittest.TestCase):
     def test_main_returns_0_when_no_update_available(self) -> None:
         with (
             mock.patch(
-                "wud_updater.self_update.github_release_self_update",
+                "wudup.self_update.github_release_self_update",
                 return_value=None,
             ),
         ):
             self.assertEqual(main(["github-target"]), 0)
 
     def test_main_prints_target_when_update_available(self) -> None:
-        from wud_updater.self_update import ReleaseSelfUpdate
+        from wudup.self_update import ReleaseSelfUpdate
         from io import StringIO
         from contextlib import redirect_stdout
 
         update = ReleaseSelfUpdate(
             local_tag="v0.12.2",
             latest_tag="v0.12.3",
-            target="ghcr.io/magrhino/wud-updater:v0.12.2 tag=v0.12.3",
+            target="ghcr.io/magrhino/wudup:v0.12.2 tag=v0.12.3",
         )
         buf = StringIO()
         with (
             mock.patch(
-                "wud_updater.self_update.github_release_self_update",
+                "wudup.self_update.github_release_self_update",
                 return_value=update,
             ),
             redirect_stdout(buf),

@@ -1,8 +1,8 @@
 blank_issues_enabled: false
 contact_links:
   - name: Support & Questions
-    url: https://github.com/magrhino/WUD-Updater/discussions
-    about: Ask questions, get help, and discuss WUD-Updater in GitHub Discussions. The issue tracker is for confirmed bugs and feature requests only.
+    url: https://github.com/magrhino/wudup/discussions
+    about: Ask questions, get help, and discuss WUDup in GitHub Discussions. The issue tracker is for confirmed bugs and feature requests only.
   - name: Security vulnerability
-    url: https://github.com/magrhino/WUD-Updater/security/advisories/new
+    url: https://github.com/magrhino/wudup/security/advisories/new
     about: Report security vulnerabilities privately via GitHub Security Advisory.

@@ -555,7 +555,7 @@ export class DemoApiState {
   diagnosticsSupportBundle(): DiagnosticsSupportBundleResponse {
     return {
       ...clone(fixtures.diagnostics),
-      wud_updater_version: DEMO_VERSION,
+      wudup_version: DEMO_VERSION,
       settings: this.settings(),
       doctor_result: this.doctor(),
       pending_summary: this.pendingResponse(),

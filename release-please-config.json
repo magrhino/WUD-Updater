@@ -3,7 +3,7 @@
   "packages": {
     ".": {
       "release-type": "python",
-      "package-name": "wud-updater",
+      "package-name": "wudup",
       "include-component-in-tag": false,
       "include-v-in-tag": true,
       "initial-version": "1.0.0",

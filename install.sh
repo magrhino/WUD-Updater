@@ -7,7 +7,7 @@ docker_base="${DOCKER_BASE:-$HOME/docker}"
 wud_scripts_link="${WUD_SCRIPTS_LINK:-$docker_base/wud/scripts}"
 wud_out_dir="${WUD_OUT_DIR:-$docker_base/wud/out}"
 python_bin="${PYTHON_BIN:-python3}"
-venv_dir="${WUD_UPDATER_VENV:-$repo_dir/.venv}"
+venv_dir="${WUDUP_VENV:-${WUD_UPDATER_VENV:-$repo_dir/.venv}}"
 venv_python="$venv_dir/bin/python"
 
 python_has_runtime_deps() {
@@ -86,7 +86,7 @@ link_one "$repo_dir/wud" "$wud_scripts_link"
 
 cat <<EOF
 
-Installed WUD-Updater.
+Installed WUDup.
 
 Add this to your shell startup if needed:
   export PATH="\$HOME/bin:\$PATH"

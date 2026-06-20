@@ -6,8 +6,8 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 
-from wud_updater import web_state as state_module
-from wud_updater.db import (
+from wudup import web_state as state_module
+from wudup.db import (
     open_db,
     init_db,
 )

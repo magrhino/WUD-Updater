@@ -33,7 +33,7 @@ class UpdatesWrapperInvocationTests(UpdatesWrapperTestCase):
         self.assertIn("--allow-tag-updates --yes", updater_log)
     def test_yes_preserves_db_path_through_sudo_env(self) -> None:
         self.wud_file.write_text("repo/app:latest\n", encoding="utf-8")
-        db_path = self.root / "state" / "wud-updater.sqlite"
+        db_path = self.root / "state" / "wudup.sqlite"
 
         result = self.run_updates(
             "--yes",
@@ -116,7 +116,7 @@ class UpdatesWrapperInvocationTests(UpdatesWrapperTestCase):
             str(cli_log_dir),
             env_overrides={
                 "WUD_LOG_DIR": str(self.root / "env-logs"),
-                "WUD_UPDATER_USE_SUDO": "false",
+                "WUDUP_USE_SUDO": "false",
             },
         )
 
@@ -130,7 +130,7 @@ class UpdatesWrapperInvocationTests(UpdatesWrapperTestCase):
 
         result = self.run_updates(
             "--yes",
-            env_overrides={"WUD_UPDATER_USE_SUDO": "false"},
+            env_overrides={"WUDUP_USE_SUDO": "false"},
         )
 
         self.assertEqual(result.returncode, 0, result.stderr + result.stdout)

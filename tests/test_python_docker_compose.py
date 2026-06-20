@@ -10,8 +10,8 @@ from io import StringIO
 from pathlib import Path
 from unittest import mock
 
-from wud_updater.command import CommandError, CommandRunner, display_command
-from wud_updater.compose import (
+from wudup.command import CommandError, CommandRunner, display_command
+from wudup.compose import (
     ComposeBindMount,
     ComposeCli,
     ComposeDiscoveryError,
@@ -21,7 +21,7 @@ from wud_updater.compose import (
     _service_bind_mounts_from_config_json,
     _service_runtime_port_issues_from_config_json,
 )
-from wud_updater.docker_cli import ContainerImage, DockerCli
+from wudup.docker_cli import ContainerImage, DockerCli
 
 
 class CommandHelperTests(unittest.TestCase):
@@ -72,7 +72,7 @@ class CommandHelperTests(unittest.TestCase):
         runner = CommandRunner()
 
         with (
-            mock.patch("wud_updater.command.pty.openpty", side_effect=OSError("no pty")),
+            mock.patch("wudup.command.pty.openpty", side_effect=OSError("no pty")),
             mock.patch("sys.stdout", stdout),
             mock.patch("sys.stderr", stderr),
         ):

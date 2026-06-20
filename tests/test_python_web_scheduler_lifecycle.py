@@ -6,8 +6,8 @@ from pathlib import Path
 from threading import Event, Thread
 from types import SimpleNamespace
 
-from wud_updater import web_scheduler
-from wud_updater.db import open_db
+from wudup import web_scheduler
+from wudup.db import open_db
 
 from tests.web_test_helpers import (
     _client,

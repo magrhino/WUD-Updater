@@ -2,7 +2,7 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
-const pagesBase = "/WUD-Updater/";
+const pagesBase = "/wudup/";
 const htmlPath = resolve("dist", "index.html");
 const html = readFileSync(htmlPath, "utf8");
 const failures = [];

@@ -3,8 +3,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from wud_updater import web_settings
-from wud_updater.db import open_db
+from wudup import web_settings
+from wudup.db import open_db
 
 from tests.web_test_helpers import (
     _client,

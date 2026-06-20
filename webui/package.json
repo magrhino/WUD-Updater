@@ -1,5 +1,5 @@
 {
-  "name": "wud-updater-webui",
+  "name": "wudup-webui",
   "version": "0.16.0",
   "private": true,
   "type": "module",
@@ -15,7 +15,7 @@
     "test": "NODE_OPTIONS=--no-experimental-webstorage vitest run --coverage",
     "test:watch": "NODE_OPTIONS=--no-experimental-webstorage vitest",
     "test:smoke": "playwright test",
-    "test:smoke:demo": "npm run build:demo && npm run assert:demo-dist && PLAYWRIGHT_WEBUI_DEMO=true PLAYWRIGHT_WEBUI_DEMO_BASE_PATH=/WUD-Updater PLAYWRIGHT_BASE_URL=http://127.0.0.1:4173 PLAYWRIGHT_WEB_SERVER_COMMAND=\"npm run preview:demo\" playwright test tests/smoke/webui-demo.spec.ts"
+    "test:smoke:demo": "npm run build:demo && npm run assert:demo-dist && PLAYWRIGHT_WEBUI_DEMO=true PLAYWRIGHT_WEBUI_DEMO_BASE_PATH=/wudup PLAYWRIGHT_BASE_URL=http://127.0.0.1:4173 PLAYWRIGHT_WEB_SERVER_COMMAND=\"npm run preview:demo\" playwright test tests/smoke/webui-demo.spec.ts"
   },
   "dependencies": {
     "@lucide/vue": "^1.17.0",

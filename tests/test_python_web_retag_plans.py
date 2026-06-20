@@ -2,11 +2,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from wud_updater.compose import ComposeStack
-from wud_updater.digest_provenance import DigestTagProvenance
-from wud_updater.updater_models import DigestPinUpdate
-from wud_updater.web_models import RetagPlanIssue, RetagPlanResponse
-from wud_updater.web_retag_plans import (
+from wudup.compose import ComposeStack
+from wudup.digest_provenance import DigestTagProvenance
+from wudup.updater_models import DigestPinUpdate
+from wudup.web_models import RetagPlanIssue, RetagPlanResponse
+from wudup.web_retag_plans import (
     RetagPlanUpdate,
     ordered_retag_stacks,
     retag_plan_id,

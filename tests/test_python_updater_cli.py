@@ -4,13 +4,13 @@ import unittest
 from pathlib import Path
 from types import SimpleNamespace
 
-from wud_updater.config import DEFAULT_MAX_WAIT
-from wud_updater.updater_cli import (
+from wudup.config import DEFAULT_MAX_WAIT
+from wudup.updater_cli import (
     options_from_namespace,
     parse_seconds,
     parse_tag_overrides,
 )
-from wud_updater.updater_models import UpdaterError
+from wudup.updater_models import UpdaterError
 
 
 def namespace(**overrides: object) -> SimpleNamespace:

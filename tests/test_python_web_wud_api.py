@@ -6,13 +6,13 @@ import urllib.parse
 from pathlib import Path
 from typing import Any
 
-from wud_updater import web_release_notes as release_notes_module
-from wud_updater import web_wud_api
-from wud_updater.release_notes import (
+from wudup import web_release_notes as release_notes_module
+from wudup import web_wud_api
+from wudup.release_notes import (
     ReleaseNoteInfo as ReleaseNoteData,
     release_note_contexts,
 )
-from wud_updater.web import load_web_settings
+from wudup.web import load_web_settings
 
 from tests.web_test_helpers import _client, _csrf_headers, _web_env
 

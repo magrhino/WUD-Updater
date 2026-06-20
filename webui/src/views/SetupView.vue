@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { ShieldCheck, UserPlus } from "@lucide/vue";
+import { UserPlus } from "@lucide/vue";
 import { NAlert, NButton, NForm, NFormItem, NInput } from "naive-ui";
 
+import AppBrandMark from "../components/app/AppBrandMark.vue";
 import { useAdminClaimForm } from "./useAdminClaimForm";
 
 const {
@@ -30,10 +31,10 @@ const {
     <div class="auth-panel">
       <div class="auth-heading">
         <div class="auth-mark">
-          <ShieldCheck :size="24" />
+          <AppBrandMark :size="36" />
         </div>
         <div>
-          <p class="eyebrow">WUD-Updater</p>
+          <p class="eyebrow">WUDup</p>
           <h1>Create admin</h1>
         </div>
       </div>

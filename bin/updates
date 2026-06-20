@@ -53,12 +53,20 @@ config_file_from_args() {
 if cli_config_file="$(config_file_from_args "$@")"; then
   config_file="$cli_config_file"
 else
-  config_file="${WUD_UPDATER_CONFIG:-$HOME/.config/wud-updater/env}"
+  default_config="$HOME/.config/wudup/env"
+  legacy_default_config="$HOME/.config/wud-updater/env"
+  config_file="${WUDUP_CONFIG:-${WUD_UPDATER_CONFIG:-$default_config}}"
+  if [[ -z "${WUDUP_CONFIG:-}" && -z "${WUD_UPDATER_CONFIG:-}" && ! -r "$config_file" && -r "$legacy_default_config" ]]; then
+    config_file="$legacy_default_config"
+  fi
 fi
 
 if [ -r "$config_file" ]; then
+  set -a
   # shellcheck source=/dev/null
   . "$config_file"
+  set +a
+  export WUDUP_CONFIG_SOURCED=1
   export WUD_UPDATER_CONFIG_SOURCED=1
 fi
 
@@ -74,7 +82,7 @@ PY
 
 run_python_updates() {
   local python_bin="${PYTHON_BIN:-python3}"
-  local venv_dir="${WUD_UPDATER_VENV:-$repo_dir/.venv}"
+  local venv_dir="${WUDUP_VENV:-${WUD_UPDATER_VENV:-$repo_dir/.venv}}"
 
   if [[ -z "${PYTHON_BIN:-}" && -x "$venv_dir/bin/python" ]]; then
     if ! python_has_runtime_deps "$python_bin"; then
@@ -88,7 +96,7 @@ run_python_updates() {
     export PYTHONPATH="${repo_dir}/src"
   fi
 
-  exec "$python_bin" -m wud_updater.cli updates "$@"
+  exec "$python_bin" -m wudup.cli updates "$@"
 }
 
 run_python_updates "$@"

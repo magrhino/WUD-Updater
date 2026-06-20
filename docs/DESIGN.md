@@ -1,5 +1,5 @@
 ---
-name: WUD-Updater
+name: WUDup
 description: A compact operator dashboard for reviewing and safely applying Docker updates.
 colors:
   ink: "#172026"
@@ -124,13 +124,13 @@ components:
     padding: "{spacing.lg}"
 ---
 
-# Design System: WUD-Updater
+# Design System: WUDup
 
 ## 1. Overview
 
 **Creative North Star: "The Operator Console"**
 
-WUD-Updater should feel like a small self-hosted admin appliance that has one job: help an operator understand update state and act safely. The visual system is calm, reliable, and compact. It uses cool neutral surfaces, a dark teal sidebar, modest borders, and restrained accent color so the content stays ahead of the chrome.
+WUDup should feel like a small self-hosted admin appliance that has one job: help an operator understand update state and act safely. The visual system is calm, reliable, and compact. It uses cool neutral surfaces, a dark teal sidebar, modest borders, and restrained accent color so the content stays ahead of the chrome.
 
 The interface rejects marketing-page performance. It should not use hero sections, decorative gradients, glowing cards, fake metrics, or card-within-card clutter. Density is part of the brand when it helps operators compare images, stacks, plans, and history without losing orientation.
 
@@ -196,7 +196,7 @@ The palette is a restrained product palette: cool neutrals carry the surface, da
 
 ## 4. Elevation
 
-WUD-Updater is flat by default. Depth is carried by borders, tonal layers, and layout position. The only ambient shadow currently used is a tiny panel lift, subtle enough to read as separation rather than decoration.
+WUDup is flat by default. Depth is carried by borders, tonal layers, and layout position. The only ambient shadow currently used is a tiny panel lift, subtle enough to read as separation rather than decoration.
 
 ### Shadow Vocabulary
 - **Panel Lift** (`box-shadow: 0 1px 2px rgb(23 32 38 / 0.04)`): Use only on major panels, metric cards, login panels, and mobile cards. Do not combine it with large blur values.

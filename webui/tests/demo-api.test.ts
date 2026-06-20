@@ -6,7 +6,7 @@ import { DemoApiState } from "../src/api/demo/state";
 
 const postgresDigest =
   "sha256:1111111111111111111111111111111111111111111111111111111111111111";
-const wudUpdaterDigest =
+const wudupDigest =
   "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc";
 
 function completedRunId(jobs: ApplyJobResponse[]): number {
@@ -55,7 +55,7 @@ describe("demo web API", () => {
     });
     await expect(api.status()).resolves.toMatchObject({
       wud_file: "demo/out/images.todo",
-      db_path: "demo/logs/wud-updater.sqlite",
+      db_path: "demo/logs/wudup.sqlite",
       pending_count: 7,
       mutations_enabled: true,
     });
@@ -149,7 +149,7 @@ describe("demo web API", () => {
       expect.arrayContaining([
         expect.objectContaining({
           line_no: 5,
-          image: "ghcr.io/magrhino/wud-updater:latest",
+          image: "ghcr.io/magrhino/wudup:latest",
           current_tag: "latest",
           desired_tag: "v0.16.1",
         }),
@@ -181,7 +181,7 @@ describe("demo web API", () => {
           "The container is not managed by Docker Compose.",
         ]),
         recommended_actions: expect.arrayContaining([
-          "Remove the stale WUD line if this container should not be managed by WUD-Updater.",
+          "Remove the stale WUD line if this container should not be managed by WUDup.",
         ]),
       },
     });
@@ -205,7 +205,7 @@ describe("demo web API", () => {
     expect(retagTargets.items).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          service_key: "media/wud-updater",
+          service_key: "media/wudup",
           retag_available: true,
           retag_reason: "eligible",
           label_value: "^latest$$",
@@ -230,11 +230,11 @@ describe("demo web API", () => {
       true,
     );
     expect(
-      retagTargets.items.find((item) => item.service_key === "media/wud-updater"),
+      retagTargets.items.find((item) => item.service_key === "media/wudup"),
     ).toMatchObject({
-      final_image: `ghcr.io/magrhino/wud-updater@${wudUpdaterDigest}`,
+      final_image: `ghcr.io/magrhino/wudup@${wudupDigest}`,
       digest_provenance: expect.objectContaining({
-        target_digest: wudUpdaterDigest,
+        target_digest: wudupDigest,
       }),
     });
     expect(
@@ -245,7 +245,7 @@ describe("demo web API", () => {
     });
     const retagChoices = [
       {
-        service_key: "media/wud-updater",
+        service_key: "media/wudup",
         choice: "switch-to-concrete" as const,
       },
       { service_key: "media/radarr", choice: "keep-current" as const },
@@ -275,10 +275,10 @@ describe("demo web API", () => {
       stacks: [
         expect.objectContaining({
           stack: "media",
-          services: ["wud-updater"],
+          services: ["wudup"],
           digest_pin_updates: [
             expect.objectContaining({
-              service_key: "media/wud-updater",
+              service_key: "media/wudup",
               final_image: expect.stringContaining("@sha256:"),
             }),
           ],
@@ -332,7 +332,7 @@ describe("demo web API", () => {
       issue_count: 0,
     });
     expect(plan.stacks[0]?.name).toBe("media");
-    expect(plan.stacks[0]?.services).toEqual(["radarr", "wud-updater"]);
+    expect(plan.stacks[0]?.services).toEqual(["radarr", "wudup"]);
     expect(plan.cleanup).toEqual({
       cleanup_id: "",
       can_remove_unmatched: false,
@@ -870,7 +870,7 @@ describe("demo web API", () => {
     const progress: ApplyJobResponse["progress"] = [];
     const choices = [
       {
-        service_key: "media/wud-updater",
+        service_key: "media/wudup",
         choice: "switch-to-concrete" as const,
       },
     ];
@@ -909,7 +909,7 @@ describe("demo web API", () => {
     expect(progress.at(-1)?.message).toBe("Retag changes applied.");
     expect(logs.at(-1)).toMatchObject({
       exists: true,
-      log_file: "demo/logs/demo-retag-switch-media-wud-updater.log",
+      log_file: "demo/logs/demo-retag-switch-media-wudup.log",
       content: expect.stringContaining("Retag changes applied."),
     });
     expect((await api.pending()).count).toBe(7);
@@ -920,8 +920,8 @@ describe("demo web API", () => {
       mode: "web-retag",
       events: [
         expect.objectContaining({
-          service_name: "wud-updater",
-          target_image: `ghcr.io/magrhino/wud-updater@${wudUpdaterDigest}`,
+          service_name: "wudup",
+          target_image: `ghcr.io/magrhino/wudup@${wudupDigest}`,
         }),
       ],
     });
@@ -931,8 +931,8 @@ describe("demo web API", () => {
       pending_updates: [],
       events: [
         expect.objectContaining({
-          service_name: "wud-updater",
-          target_image: `ghcr.io/magrhino/wud-updater@${wudUpdaterDigest}`,
+          service_name: "wudup",
+          target_image: `ghcr.io/magrhino/wudup@${wudupDigest}`,
         }),
       ],
       verification: expect.objectContaining({
@@ -943,7 +943,7 @@ describe("demo web API", () => {
     });
     await expect(api.runLog(runId)).resolves.toMatchObject({
       exists: true,
-      log_file: "demo/logs/demo-retag-switch-media-wud-updater.log",
+      log_file: "demo/logs/demo-retag-switch-media-wudup.log",
       content: expect.stringContaining("Retag changes applied."),
     });
   });
@@ -952,7 +952,7 @@ describe("demo web API", () => {
     const api = createDemoWebApi();
     const choices = [
       {
-        service_key: "media/wud-updater",
+        service_key: "media/wudup",
         choice: "keep-current" as const,
       },
     ];
@@ -970,14 +970,14 @@ describe("demo web API", () => {
     const plan = await api.createRetagPlan(
       [
         {
-          service_key: "media/wud-updater",
+          service_key: "media/wudup",
           choice: "switch-to-concrete" as const,
         },
         {
-          service_key: "media/wud-updater",
+          service_key: "media/wudup",
           choice: "switch-to-concrete" as const,
         },
-        { service_key: "media/wud-updater", choice: "keep-current" as const },
+        { service_key: "media/wudup", choice: "keep-current" as const },
       ],
       "csrf",
     );
@@ -988,7 +988,7 @@ describe("demo web API", () => {
       keep_current_count: 3,
     });
     expect(plan.stacks).toHaveLength(1);
-    expect(plan.stacks[0]?.services).toEqual(["wud-updater"]);
+    expect(plan.stacks[0]?.services).toEqual(["wudup"]);
     expect(plan.stacks[0]?.digest_pin_updates).toHaveLength(1);
   });
 
@@ -1031,7 +1031,7 @@ describe("demo web API", () => {
     await api.stateOperation(
       {
         kind: "upsert_service_policy",
-        service_key: "media/wud-updater",
+        service_key: "media/wudup",
         update_mode: "stop",
         auto_update: true,
         snooze_default_seconds: null,
@@ -1070,8 +1070,8 @@ describe("demo web API", () => {
       {
         kind: "upsert_tag_exclusion",
         scope: "service",
-        image_repo: "ghcr.io/magrhino/wud-updater",
-        service_key: "media/wud-updater",
+        image_repo: "ghcr.io/magrhino/wudup",
+        service_key: "media/wudup",
         tag: "v0.25.1",
         status: "active",
       },
@@ -1080,7 +1080,7 @@ describe("demo web API", () => {
 
     expect(await api.servicePolicies()).toContainEqual(
       expect.objectContaining({
-        service_key: "media/wud-updater",
+        service_key: "media/wudup",
         auto_update: true,
         auto_update_time: "02:15",
         auto_update_days: ["tue", "thu"],
@@ -1120,8 +1120,8 @@ describe("demo web API", () => {
     );
     expect(await api.tagExclusions("active")).toContainEqual(
       expect.objectContaining({
-        image_repo: "magrhino/wud-updater",
-        service_key: "media/wud-updater",
+        image_repo: "magrhino/wudup",
+        service_key: "media/wudup",
       }),
     );
   });

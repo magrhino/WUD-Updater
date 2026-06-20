@@ -7,14 +7,14 @@ from io import StringIO
 from pathlib import Path
 from unittest import mock
 
-from wud_updater.command import CommandRunner
-from wud_updater.compose import (
+from wudup.command import CommandRunner
+from wudup.compose import (
     ComposeBindMount,
 )
-from wud_updater.updater import (
+from wudup.updater import (
     UpdateFromWudRunner,
 )
-from wud_updater.updater_models import (
+from wudup.updater_models import (
     UpdaterOptions,
 )
 

@@ -44,9 +44,9 @@ function selfUpdateStatus(): SelfUpdateResponse {
     strategy: "pull_image",
     current_tag: "v0.24.2",
     latest_tag: "v0.25.0",
-    current_image: "ghcr.io/magrhino/wud-updater:latest",
-    target_image: "ghcr.io/magrhino/wud-updater:latest",
-    restart_container: "wud-updater",
+    current_image: "ghcr.io/magrhino/wudup:latest",
+    target_image: "ghcr.io/magrhino/wudup:latest",
+    restart_container: "wudup",
     release_notes: [],
     release_notes_truncated: false,
     release_notes_cap: 10,
@@ -95,12 +95,12 @@ function selfUpdatePlanStatus(): SelfUpdatePlanResponse {
     },
     current_tag: "v0.24.2",
     latest_tag: "v0.25.0",
-    current_image: "ghcr.io/magrhino/wud-updater:v0.24.2",
-    target_image: "ghcr.io/magrhino/wud-updater:v0.25.0",
-    restart_container: "wud-updater",
+    current_image: "ghcr.io/magrhino/wudup:v0.24.2",
+    target_image: "ghcr.io/magrhino/wudup:v0.25.0",
+    restart_container: "wudup",
     external_recreate_required: true,
     warning:
-      "This updates the Compose image tag and pulls the image. Recreate the WUD-Updater container from outside the WebUI to run it.",
+      "This updates the Compose image tag and pulls the image. Recreate the WUDup container from outside the WebUI to run it.",
   };
 }
 
@@ -421,16 +421,16 @@ describe("webApi", () => {
       confirmation: "pull_image",
       current_tag: "v0.24.2",
       latest_tag: "v0.25.0",
-      target_image: "ghcr.io/magrhino/wud-updater:latest",
-      restart_container: "wud-updater",
+      target_image: "ghcr.io/magrhino/wudup:latest",
+      restart_container: "wudup",
     });
     expect(jsonRequestBody(fetchMock.mock.calls[7])).toEqual({
       confirmation: "prepare_tag_update",
       plan_id: "self-plan",
       current_tag: "v0.24.2",
       latest_tag: "v0.25.0",
-      target_image: "ghcr.io/magrhino/wud-updater:latest",
-      restart_container: "wud-updater",
+      target_image: "ghcr.io/magrhino/wudup:latest",
+      restart_container: "wudup",
     });
     expect(jsonRequestBody(fetchMock.mock.calls[8])).toEqual({
       confirmation: "restart_container",

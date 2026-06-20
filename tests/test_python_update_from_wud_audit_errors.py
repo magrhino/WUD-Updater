@@ -7,16 +7,16 @@ from io import StringIO
 from pathlib import Path
 from unittest import mock
 
-from wud_updater.command import CommandRunner
-from wud_updater.compose import (
+from wudup.command import CommandRunner
+from wudup.compose import (
     ComposeStack,
 )
-from wud_updater.file_ops import OwnerConfig
-from wud_updater.updater import (
+from wudup.file_ops import OwnerConfig
+from wudup.updater import (
     UpdateFromWudRunner,
     _apply_sqlite_owner,
 )
-from wud_updater.updater_models import (
+from wudup.updater_models import (
     AppliedDigestPinUpdate,
     AppliedTagUpdate,
     UpdaterError,
@@ -40,7 +40,7 @@ class UpdateFromWudAuditErrorTests(UpdateFromWudRunnerTestCase):
 
         with (
             mock.patch(
-                "wud_updater.updater._apply_sqlite_owner",
+                "wudup.updater._apply_sqlite_owner",
                 side_effect=OSError("chown failed"),
             ),
             redirect_stdout(stdout),
@@ -70,7 +70,7 @@ class UpdateFromWudAuditErrorTests(UpdateFromWudRunnerTestCase):
 
         with (
             mock.patch(
-                "wud_updater.updater.insert_update_event",
+                "wudup.updater.insert_update_event",
                 side_effect=sqlite3.OperationalError("database is locked"),
             ),
             redirect_stdout(stdout),
@@ -98,7 +98,7 @@ class UpdateFromWudAuditErrorTests(UpdateFromWudRunnerTestCase):
 
         with (
             mock.patch(
-                "wud_updater.updater.remove_lines_before_run",
+                "wudup.updater.remove_lines_before_run",
                 side_effect=OSError("metadata verification failed"),
             ),
             redirect_stdout(stdout),
@@ -126,7 +126,7 @@ class UpdateFromWudAuditErrorTests(UpdateFromWudRunnerTestCase):
         stderr = StringIO()
 
         with (
-            mock.patch("wud_updater.updater._apply_sqlite_owner") as apply_owner,
+            mock.patch("wudup.updater._apply_sqlite_owner") as apply_owner,
             redirect_stdout(stdout),
             redirect_stderr(stderr),
         ):
@@ -135,7 +135,7 @@ class UpdateFromWudAuditErrorTests(UpdateFromWudRunnerTestCase):
         self.assertEqual(status, 0, stderr.getvalue() + stdout.getvalue())
         apply_owner.assert_any_call(self.db_path, runner.owner, chown_parent=True)
     def test_apply_sqlite_owner_leaves_existing_db_directory_alone(self) -> None:
-        db_path = self.root / "state" / "wud-updater.sqlite"
+        db_path = self.root / "state" / "wudup.sqlite"
         sidecars = [
             db_path,
             Path(f"{db_path}-wal"),
@@ -147,13 +147,13 @@ class UpdateFromWudAuditErrorTests(UpdateFromWudRunnerTestCase):
             path.write_text("", encoding="utf-8")
         owner = OwnerConfig.from_values(str(os.getuid()), str(os.getgid()))
 
-        with mock.patch("wud_updater.updater.apply_configured_owner") as apply_owner:
+        with mock.patch("wudup.updater.apply_configured_owner") as apply_owner:
             _apply_sqlite_owner(db_path, owner)
 
         called_paths = [Path(call.args[0]) for call in apply_owner.call_args_list]
         self.assertEqual(called_paths, sidecars)
     def test_apply_sqlite_owner_updates_created_db_directory_and_sidecars(self) -> None:
-        db_path = self.root / "created-state" / "wud-updater.sqlite"
+        db_path = self.root / "created-state" / "wudup.sqlite"
         sidecars = [
             db_path,
             Path(f"{db_path}-wal"),
@@ -165,7 +165,7 @@ class UpdateFromWudAuditErrorTests(UpdateFromWudRunnerTestCase):
             path.write_text("", encoding="utf-8")
         owner = OwnerConfig.from_values(str(os.getuid()), str(os.getgid()))
 
-        with mock.patch("wud_updater.updater.apply_configured_owner") as apply_owner:
+        with mock.patch("wudup.updater.apply_configured_owner") as apply_owner:
             _apply_sqlite_owner(db_path, owner, chown_parent=True)
 
         called_paths = [Path(call.args[0]) for call in apply_owner.call_args_list]
@@ -204,7 +204,7 @@ class UpdateFromWudAuditErrorTests(UpdateFromWudRunnerTestCase):
             planned_digest="sha256:index",
             final_image="repo/app@sha256:index",
             watch_tag="2.0",
-            marker="wud-updater.resolved-tag=2.0",
+            marker="wudup.resolved-tag=2.0",
             label_key="wud.tag.include",
             label_value="^2\\.0$$",
             services=(),
@@ -239,7 +239,7 @@ class UpdateFromWudAuditErrorTests(UpdateFromWudRunnerTestCase):
             return path
 
         with mock.patch(
-            "wud_updater.updater_logging._create_unique_text_file_exclusive",
+            "wudup.updater_logging._create_unique_text_file_exclusive",
             side_effect=fake_create,
         ) as create_file:
             runner._write_tag_incident_log(
@@ -272,7 +272,7 @@ class UpdateFromWudAuditErrorTests(UpdateFromWudRunnerTestCase):
         )
         with (
             mock.patch(
-                "wud_updater.updater_logging._create_unique_text_file_exclusive",
+                "wudup.updater_logging._create_unique_text_file_exclusive",
                 side_effect=OSError("permission denied"),
             ),
             mock.patch.object(runner.log, "warn") as warn,
@@ -320,7 +320,7 @@ class UpdateFromWudAuditErrorTests(UpdateFromWudRunnerTestCase):
         stderr = StringIO()
 
         with (
-            mock.patch("wud_updater.updater_logging.file_timestamp", return_value="fixed"),
+            mock.patch("wudup.updater_logging.file_timestamp", return_value="fixed"),
             redirect_stdout(stdout),
             redirect_stderr(stderr),
         ):

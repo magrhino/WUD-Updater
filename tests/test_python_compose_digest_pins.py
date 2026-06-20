@@ -3,11 +3,11 @@ from __future__ import annotations
 from unittest import mock
 
 from compose_rewrite_helpers import ComposeRewriteTestCase
-from wud_updater.compose_rewrite import (
+from wudup.compose_rewrite import (
     apply_compose_digest_pins,
     render_compose_digest_pins,
 )
-from wud_updater.updater_models import (
+from wudup.updater_models import (
     ComposeTagRewriteError,
     DigestPinLabelRewriteApproval,
     DigestPinLabelRewriteApprovalRequired,
@@ -40,7 +40,7 @@ class ComposeDigestPinTests(ComposeRewriteTestCase):
         )
 
         self.assertEqual(applied[0].replacements, 1)
-        self.assertIn("# wud-updater.resolved-tag=2.0", rendered)
+        self.assertIn("# wudup.resolved-tag=2.0", rendered)
         self.assertIn("image: repo/app@sha256:pin", rendered)
         self.assertIn("wud.tag.include=^2\\.0$$", rendered)
         self.assertEqual(
@@ -58,7 +58,7 @@ class ComposeDigestPinTests(ComposeRewriteTestCase):
 
         content = compose_file.read_text(encoding="utf-8")
         self.assertEqual(applied[0].final_image, "repo/app@sha256:pin")
-        self.assertIn("# wud-updater.resolved-tag=2.0", content)
+        self.assertIn("# wudup.resolved-tag=2.0", content)
         self.assertIn("image: repo/app@sha256:pin", content)
 
     def test_apply_retags_only_selected_service_when_image_is_shared(self) -> None:
@@ -82,7 +82,7 @@ class ComposeDigestPinTests(ComposeRewriteTestCase):
         content = compose_file.read_text(encoding="utf-8")
         self.assertEqual(len(applied), 1)
         self.assertEqual(applied[0].services, ("app",))
-        self.assertIn("# wud-updater.resolved-tag=2.0", content)
+        self.assertIn("# wudup.resolved-tag=2.0", content)
         self.assertEqual(content.count("image: repo/app@sha256:pin"), 1)
         self.assertIn("  sibling:\n    image: repo/app:1.0", content)
         self.assertEqual(content.count("wud.tag.include=^2\\.0$$"), 1)
@@ -119,11 +119,11 @@ class ComposeDigestPinTests(ComposeRewriteTestCase):
 
         with (
             mock.patch(
-                "wud_updater.compose_rewrite.render_compose_digest_pins",
+                "wudup.compose_rewrite.render_compose_digest_pins",
                 return_value=("", ()),
             ),
             mock.patch(
-                "wud_updater.compose_rewrite._atomic_replace_compose"
+                "wudup.compose_rewrite._atomic_replace_compose"
             ) as replace,
         ):
             with self.assertRaisesRegex(ComposeTagRewriteError, "produced no output"):

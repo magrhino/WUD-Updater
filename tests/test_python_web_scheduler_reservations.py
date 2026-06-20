@@ -4,9 +4,9 @@ import json
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from wud_updater import web_jobs, web_scheduler
-from wud_updater.db import init_db, open_db
-from wud_updater.locks import DirectoryLock
+from wudup import web_jobs, web_scheduler
+from wudup.db import init_db, open_db
+from wudup.locks import DirectoryLock
 
 from tests.web_test_helpers import (
     _client,

@@ -5,7 +5,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from wud_updater.updates import (
+from wudup.updates import (
     UpdateSelectionState,
     UpdatesError,
     UpdatesFileLock,

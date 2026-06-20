@@ -1,6 +1,6 @@
 # Documentation
 
-This is the full documentation index for WUD-Updater. The root README stays
+This is the full documentation index for WUDup. The root README stays
 short; detailed setup and behavior notes live here.
 
 ## Start Here
@@ -8,7 +8,7 @@ short; detailed setup and behavior notes live here.
 | Topic | Where |
 |---|---|
 | Project overview and quick commands | [../README.md](../README.md) |
-| Public static WebUI demo | [magrhino.github.io/WUD-Updater](https://magrhino.github.io/WUD-Updater/) |
+| Public static WebUI demo | [magrhino.github.io/wudup](https://magrhino.github.io/wudup/) |
 | Security policy and private vulnerability reporting | [../SECURITY.md](../SECURITY.md) |
 | Deployment reference | [DEPLOYMENT.md](DEPLOYMENT.md) |
 | Generated first-run configuration | [DEPLOYMENT.md#init-wizard](DEPLOYMENT.md#init-wizard) |
@@ -37,7 +37,7 @@ short; detailed setup and behavior notes live here.
 | Area | Purpose |
 |---|---|
 | `bin/` | Host-facing wrapper commands. |
-| `src/wud_updater/` | Python updater package and CLI entrypoints. |
+| `src/wudup/` | Python updater package and CLI entrypoints. |
 | `wud/` | Scripts mounted into the WUD container. |
 | `docs/examples/` | Copyable deployment examples. |
 | `tests/` | Shell and Python validation using fakes and temp directories. |

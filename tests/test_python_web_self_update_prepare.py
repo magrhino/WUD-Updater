@@ -1,8 +1,8 @@
 from __future__ import annotations
 import json
 from pathlib import Path
-from wud_updater import web_self_update as self_update_module
-from wud_updater.db import (
+from wudup import web_self_update as self_update_module
+from wudup.db import (
     open_db,
 )
 from tests.web_test_helpers import (
@@ -26,7 +26,7 @@ def test_self_update_get_reports_prepare_strategy_for_pinned_tag_rewrite_targets
     monkeypatch.setattr(
         self_update_module,
         "current_container_image",
-        lambda _env: "ghcr.io/magrhino/wud-updater:v0.24.2",
+        lambda _env: "ghcr.io/magrhino/wudup:v0.24.2",
     )
     monkeypatch.setattr(
         self_update_module,
@@ -38,7 +38,7 @@ def test_self_update_get_reports_prepare_strategy_for_pinned_tag_rewrite_targets
         {
             "WUD_WEB_DEV_NO_AUTH": "true",
             "WUD_WEB_MUTATIONS_ENABLED": "true",
-            "WUD_WEB_RESTART_CONTAINER": "wud-updater",
+            "WUD_WEB_RESTART_CONTAINER": "wudup",
         },
     ).get("/api/v1/self-update")
 
@@ -46,7 +46,7 @@ def test_self_update_get_reports_prepare_strategy_for_pinned_tag_rewrite_targets
     body = response.json()
     assert body["status"] == "available"
     assert body["strategy"] == "prepare_tag_update"
-    assert body["target_image"] == "ghcr.io/magrhino/wud-updater:v0.25.0"
+    assert body["target_image"] == "ghcr.io/magrhino/wudup:v0.25.0"
     assert body["can_update"] is True
     assert body["disabled_reason"] == ""
     assert body["external_recreate_required"] is True
@@ -62,7 +62,7 @@ def test_self_update_pull_endpoint_rejects_pinned_tag_prepare_targets(
     monkeypatch.setattr(
         self_update_module,
         "current_container_image",
-        lambda _env: "ghcr.io/magrhino/wud-updater:v0.24.2",
+        lambda _env: "ghcr.io/magrhino/wudup:v0.24.2",
     )
     monkeypatch.setattr(
         self_update_module,
@@ -74,7 +74,7 @@ def test_self_update_pull_endpoint_rejects_pinned_tag_prepare_targets(
         {
             "WUD_WEB_DEV_NO_AUTH": "true",
             "WUD_WEB_MUTATIONS_ENABLED": "true",
-            "WUD_WEB_RESTART_CONTAINER": "wud-updater",
+            "WUD_WEB_RESTART_CONTAINER": "wudup",
             **fake_env,
         },
     )
@@ -82,7 +82,7 @@ def test_self_update_pull_endpoint_rejects_pinned_tag_prepare_targets(
     response = client.post(
         "/api/v1/self-update",
         json=_self_update_payload(
-            target_image="ghcr.io/magrhino/wud-updater:v0.25.0",
+            target_image="ghcr.io/magrhino/wudup:v0.25.0",
         ),
         headers=_csrf_headers(client),
     )
@@ -102,7 +102,7 @@ def test_self_update_prepare_endpoint_rewrites_tag_pulls_and_audits(
     monkeypatch.setattr(
         self_update_module,
         "current_container_image",
-        lambda _env: "ghcr.io/magrhino/wud-updater:v0.24.2",
+        lambda _env: "ghcr.io/magrhino/wudup:v0.24.2",
     )
     monkeypatch.setattr(
         self_update_module,
@@ -114,7 +114,7 @@ def test_self_update_prepare_endpoint_rewrites_tag_pulls_and_audits(
         {
             "WUD_WEB_DEV_NO_AUTH": "true",
             "WUD_WEB_MUTATIONS_ENABLED": "true",
-            "WUD_WEB_RESTART_CONTAINER": "wud-updater",
+            "WUD_WEB_RESTART_CONTAINER": "wudup",
             **fake_env,
         },
     )
@@ -124,9 +124,9 @@ def test_self_update_prepare_endpoint_rewrites_tag_pulls_and_audits(
         "wud",
         [
             (
-                "wud-updater",
-                "ghcr.io/magrhino/wud-updater:v0.24.2",
-                "wud-updater",
+                "wudup",
+                "ghcr.io/magrhino/wudup:v0.24.2",
+                "wudup",
             ),
         ],
     )
@@ -142,8 +142,8 @@ def test_self_update_prepare_endpoint_rewrites_tag_pulls_and_audits(
             "plan_id": plan["plan"]["plan_id"],
             "current_tag": "v0.24.2",
             "latest_tag": "v0.25.0",
-            "target_image": "ghcr.io/magrhino/wud-updater:v0.25.0",
-            "restart_container": "wud-updater",
+            "target_image": "ghcr.io/magrhino/wudup:v0.25.0",
+            "restart_container": "wudup",
         },
         headers=_csrf_headers(client),
     )
@@ -152,12 +152,12 @@ def test_self_update_prepare_endpoint_rewrites_tag_pulls_and_audits(
     body = response.json()
     assert body["status"] == "tag_prepared"
     assert body["external_recreate_required"] is True
-    assert "image: ghcr.io/magrhino/wud-updater:v0.25.0" in (
+    assert "image: ghcr.io/magrhino/wudup:v0.25.0" in (
         compose_dir / "docker-compose.yml"
     ).read_text(encoding="utf-8")
     calls = _fake_docker_calls(fake_root)
-    assert "inspect wud-updater" in calls
-    assert "compose -f docker-compose.yml pull wud-updater" in calls
+    assert "inspect wudup" in calls
+    assert "compose -f docker-compose.yml pull wudup" in calls
     assert " up -d " not in calls
     assert "restart " not in calls
     assert client.app.state.web_self_update_running is False
@@ -180,9 +180,9 @@ def test_self_update_prepare_endpoint_rewrites_tag_pulls_and_audits(
     assert metadata["strategy"] == "prepare_tag_update"
     assert metadata["status"] == "tag_prepared"
     assert metadata["external_recreate_required"] is True
-    assert metadata["services"] == ["wud-updater"]
+    assert metadata["services"] == ["wudup"]
     assert metadata["tag_updates"][0]["new_image"] == (
-        "ghcr.io/magrhino/wud-updater:v0.25.0"
+        "ghcr.io/magrhino/wudup:v0.25.0"
     )
 
 
@@ -191,7 +191,7 @@ def test_self_update_prepare_endpoint_digest_pins_after_verification(
     monkeypatch,
 ) -> None:
     fake_env, fake_root = _fake_docker_env(tmp_path)
-    target_image = "ghcr.io/magrhino/wud-updater:v0.25.0"
+    target_image = "ghcr.io/magrhino/wudup:v0.25.0"
     _write_fake_manifest(
         fake_root,
         target_image,
@@ -208,7 +208,7 @@ def test_self_update_prepare_endpoint_digest_pins_after_verification(
     monkeypatch.setattr(
         self_update_module,
         "current_container_image",
-        lambda _env: "ghcr.io/magrhino/wud-updater:v0.24.2",
+        lambda _env: "ghcr.io/magrhino/wudup:v0.24.2",
     )
     monkeypatch.setattr(
         self_update_module,
@@ -220,7 +220,7 @@ def test_self_update_prepare_endpoint_digest_pins_after_verification(
         {
             "WUD_WEB_DEV_NO_AUTH": "true",
             "WUD_WEB_MUTATIONS_ENABLED": "true",
-            "WUD_WEB_RESTART_CONTAINER": "wud-updater",
+            "WUD_WEB_RESTART_CONTAINER": "wudup",
             "WUD_DIGEST_PIN_UPDATES": "true",
             **fake_env,
         },
@@ -231,9 +231,9 @@ def test_self_update_prepare_endpoint_digest_pins_after_verification(
         "wud",
         [
             (
-                "wud-updater",
-                "ghcr.io/magrhino/wud-updater:v0.24.2",
-                "wud-updater",
+                "wudup",
+                "ghcr.io/magrhino/wudup:v0.24.2",
+                "wudup",
             ),
         ],
     )
@@ -250,15 +250,15 @@ def test_self_update_prepare_endpoint_digest_pins_after_verification(
             "current_tag": "v0.24.2",
             "latest_tag": "v0.25.0",
             "target_image": target_image,
-            "restart_container": "wud-updater",
+            "restart_container": "wudup",
         },
         headers=_csrf_headers(client),
     )
 
     assert response.status_code == 200
     content = (compose_dir / "docker-compose.yml").read_text(encoding="utf-8")
-    assert "# wud-updater.resolved-tag=v0.25.0" in content
-    assert "image: ghcr.io/magrhino/wud-updater@sha256:index" in content
+    assert "# wudup.resolved-tag=v0.25.0" in content
+    assert "image: ghcr.io/magrhino/wudup@sha256:index" in content
     assert "wud.tag.include=^v0\\.25\\.0$$" in content
 
     body = response.json()
@@ -269,7 +269,7 @@ def test_self_update_prepare_endpoint_digest_pins_after_verification(
         ).fetchone()
     metadata = json.loads(row["metadata_json"])
     assert metadata["digest_pin_updates"][0]["final_image"] == (
-        "ghcr.io/magrhino/wud-updater@sha256:index"
+        "ghcr.io/magrhino/wudup@sha256:index"
     )
 
 
@@ -278,7 +278,7 @@ def test_self_update_prepare_endpoint_rejects_moved_digest_pin_after_pull(
     monkeypatch,
 ) -> None:
     fake_env, fake_root = _fake_docker_env(tmp_path)
-    target_image = "ghcr.io/magrhino/wud-updater:v0.25.0"
+    target_image = "ghcr.io/magrhino/wudup:v0.25.0"
     _write_fake_manifest(
         fake_root,
         target_image,
@@ -295,7 +295,7 @@ def test_self_update_prepare_endpoint_rejects_moved_digest_pin_after_pull(
     monkeypatch.setattr(
         self_update_module,
         "current_container_image",
-        lambda _env: "ghcr.io/magrhino/wud-updater:v0.24.2",
+        lambda _env: "ghcr.io/magrhino/wudup:v0.24.2",
     )
     monkeypatch.setattr(
         self_update_module,
@@ -319,7 +319,7 @@ def test_self_update_prepare_endpoint_rejects_moved_digest_pin_after_pull(
         {
             "WUD_WEB_DEV_NO_AUTH": "true",
             "WUD_WEB_MUTATIONS_ENABLED": "true",
-            "WUD_WEB_RESTART_CONTAINER": "wud-updater",
+            "WUD_WEB_RESTART_CONTAINER": "wudup",
             "WUD_DIGEST_PIN_UPDATES": "true",
             **fake_env,
         },
@@ -330,9 +330,9 @@ def test_self_update_prepare_endpoint_rejects_moved_digest_pin_after_pull(
         "wud",
         [
             (
-                "wud-updater",
-                "ghcr.io/magrhino/wud-updater:v0.24.2",
-                "wud-updater",
+                "wudup",
+                "ghcr.io/magrhino/wudup:v0.24.2",
+                "wudup",
             ),
         ],
     )
@@ -350,7 +350,7 @@ def test_self_update_prepare_endpoint_rejects_moved_digest_pin_after_pull(
             "current_tag": "v0.24.2",
             "latest_tag": "v0.25.0",
             "target_image": target_image,
-            "restart_container": "wud-updater",
+            "restart_container": "wudup",
         },
         headers=_csrf_headers(client),
     )
@@ -370,7 +370,7 @@ def test_self_update_prepare_endpoint_restores_compose_when_pull_fails(
     monkeypatch.setattr(
         self_update_module,
         "current_container_image",
-        lambda _env: "ghcr.io/magrhino/wud-updater:v0.24.2",
+        lambda _env: "ghcr.io/magrhino/wudup:v0.24.2",
     )
     monkeypatch.setattr(
         self_update_module,
@@ -382,7 +382,7 @@ def test_self_update_prepare_endpoint_restores_compose_when_pull_fails(
         {
             "WUD_WEB_DEV_NO_AUTH": "true",
             "WUD_WEB_MUTATIONS_ENABLED": "true",
-            "WUD_WEB_RESTART_CONTAINER": "wud-updater",
+            "WUD_WEB_RESTART_CONTAINER": "wudup",
             **fake_env,
         },
     )
@@ -392,9 +392,9 @@ def test_self_update_prepare_endpoint_restores_compose_when_pull_fails(
         "wud",
         [
             (
-                "wud-updater",
-                "ghcr.io/magrhino/wud-updater:v0.24.2",
-                "wud-updater",
+                "wudup",
+                "ghcr.io/magrhino/wudup:v0.24.2",
+                "wudup",
             ),
         ],
     )
@@ -415,8 +415,8 @@ def test_self_update_prepare_endpoint_restores_compose_when_pull_fails(
             "plan_id": plan["plan"]["plan_id"],
             "current_tag": "v0.24.2",
             "latest_tag": "v0.25.0",
-            "target_image": "ghcr.io/magrhino/wud-updater:v0.25.0",
-            "restart_container": "wud-updater",
+            "target_image": "ghcr.io/magrhino/wudup:v0.25.0",
+            "restart_container": "wudup",
         },
         headers=_csrf_headers(client),
     )
@@ -427,7 +427,7 @@ def test_self_update_prepare_endpoint_restores_compose_when_pull_fails(
     )
     assert (compose_dir / "docker-compose.yml").read_text(encoding="utf-8") == compose_before
     calls = _fake_docker_calls(fake_root)
-    assert "compose -f docker-compose.yml pull wud-updater" in calls
+    assert "compose -f docker-compose.yml pull wudup" in calls
     assert " up -d " not in calls
     assert "restart " not in calls
     assert client.app.state.web_self_update_running is False
@@ -453,7 +453,7 @@ def test_self_update_prepare_endpoint_keeps_backup_when_restore_fails(
     monkeypatch.setattr(
         self_update_module,
         "current_container_image",
-        lambda _env: "ghcr.io/magrhino/wud-updater:v0.24.2",
+        lambda _env: "ghcr.io/magrhino/wudup:v0.24.2",
     )
     monkeypatch.setattr(
         self_update_module,
@@ -465,7 +465,7 @@ def test_self_update_prepare_endpoint_keeps_backup_when_restore_fails(
         {
             "WUD_WEB_DEV_NO_AUTH": "true",
             "WUD_WEB_MUTATIONS_ENABLED": "true",
-            "WUD_WEB_RESTART_CONTAINER": "wud-updater",
+            "WUD_WEB_RESTART_CONTAINER": "wudup",
             **fake_env,
         },
     )
@@ -475,9 +475,9 @@ def test_self_update_prepare_endpoint_keeps_backup_when_restore_fails(
         "wud",
         [
             (
-                "wud-updater",
-                "ghcr.io/magrhino/wud-updater:v0.24.2",
-                "wud-updater",
+                "wudup",
+                "ghcr.io/magrhino/wudup:v0.24.2",
+                "wudup",
             ),
         ],
     )
@@ -511,8 +511,8 @@ def test_self_update_prepare_endpoint_keeps_backup_when_restore_fails(
             "plan_id": plan["plan"]["plan_id"],
             "current_tag": "v0.24.2",
             "latest_tag": "v0.25.0",
-            "target_image": "ghcr.io/magrhino/wud-updater:v0.25.0",
-            "restart_container": "wud-updater",
+            "target_image": "ghcr.io/magrhino/wudup:v0.25.0",
+            "restart_container": "wudup",
         },
         headers=_csrf_headers(client),
     )
@@ -520,7 +520,7 @@ def test_self_update_prepare_endpoint_keeps_backup_when_restore_fails(
     assert response.status_code == 500
     assert "compose rollback failed: restore blocked" in response.json()["detail"]
     assert backup.read_text(encoding="utf-8") == compose_before
-    assert "image: ghcr.io/magrhino/wud-updater:v0.25.0" in compose_path.read_text(
+    assert "image: ghcr.io/magrhino/wudup:v0.25.0" in compose_path.read_text(
         encoding="utf-8",
     )
     assert client.app.state.web_self_update_running is False

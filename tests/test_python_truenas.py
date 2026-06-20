@@ -8,7 +8,7 @@ from contextlib import redirect_stdout
 from io import StringIO
 from unittest import mock
 
-from wud_updater.truenas import (
+from wudup.truenas import (
     DEFAULT_TRUENAS_STATUS_TIMEOUT,
     TrueNasCallResult,
     _first_inspected_container,
@@ -335,14 +335,14 @@ class TrueNasMidcltJsonTests(unittest.TestCase):
         )
 
     def test_returns_failure_when_midclt_is_missing(self) -> None:
-        with mock.patch("wud_updater.truenas._has_command", return_value=False):
+        with mock.patch("wudup.truenas._has_command", return_value=False):
             result = _midclt_json("update.status", "5", {"PATH": ""})
 
         self.assertFalse(result.ok)
         self.assertEqual(result.reason, "midclt not available")
 
     def test_returns_failure_on_invalid_timeout(self) -> None:
-        with mock.patch("wud_updater.truenas._has_command", return_value=True):
+        with mock.patch("wudup.truenas._has_command", return_value=True):
             result = _midclt_json("update.status", "invalid", {"PATH": "/usr/bin"})
 
         self.assertFalse(result.ok)
@@ -358,7 +358,7 @@ class TrueNasMidcltJsonTests(unittest.TestCase):
         ]
 
         with (
-            mock.patch("wud_updater.truenas._has_command", return_value=True),
+            mock.patch("wudup.truenas._has_command", return_value=True),
             mock.patch("subprocess.run", side_effect=calls),
         ):
             update = _midclt_json("update.status", "5", {"PATH": "/usr/bin"})
@@ -376,7 +376,7 @@ class TrueNasMidcltJsonTests(unittest.TestCase):
         ]
 
         with (
-            mock.patch("wud_updater.truenas._has_command", return_value=True),
+            mock.patch("wudup.truenas._has_command", return_value=True),
             mock.patch("subprocess.run", side_effect=calls),
         ):
             update = _midclt_json("update.status", "5", {"PATH": "/usr/bin"})
@@ -395,7 +395,7 @@ class TrueNasMidcltJsonTests(unittest.TestCase):
 
     def test_handles_midclt_subprocess_failures(self) -> None:
         with (
-            mock.patch("wud_updater.truenas._has_command", return_value=True),
+            mock.patch("wudup.truenas._has_command", return_value=True),
             mock.patch(
                 "subprocess.run",
                 return_value=self._completed(returncode=2, stderr="failed"),
@@ -413,7 +413,7 @@ class TrueNasMidcltJsonTests(unittest.TestCase):
         ]
 
         with (
-            mock.patch("wud_updater.truenas._has_command", return_value=True),
+            mock.patch("wudup.truenas._has_command", return_value=True),
             mock.patch("subprocess.run", side_effect=calls),
         ):
             empty = _midclt_json("update.status", "5", {"PATH": "/usr/bin"})
@@ -424,7 +424,7 @@ class TrueNasMidcltJsonTests(unittest.TestCase):
 
     def test_handles_timeout_and_os_error(self) -> None:
         with (
-            mock.patch("wud_updater.truenas._has_command", return_value=True),
+            mock.patch("wudup.truenas._has_command", return_value=True),
             mock.patch(
                 "subprocess.run",
                 side_effect=subprocess.TimeoutExpired(cmd=["midclt"], timeout=5),
@@ -433,7 +433,7 @@ class TrueNasMidcltJsonTests(unittest.TestCase):
             timed_out = _midclt_json("update.status", "5", {"PATH": "/usr/bin"})
 
         with (
-            mock.patch("wud_updater.truenas._has_command", return_value=True),
+            mock.patch("wudup.truenas._has_command", return_value=True),
             mock.patch("subprocess.run", side_effect=OSError("permission denied")),
         ):
             failed = _midclt_json("update.status", "5", {"PATH": "/usr/bin"})
@@ -451,7 +451,7 @@ class TrueNasStatusExportTests(unittest.TestCase):
         stdout = StringIO()
 
         with (
-            mock.patch("wud_updater.truenas._midclt_json", side_effect=calls),
+            mock.patch("wudup.truenas._midclt_json", side_effect=calls),
             redirect_stdout(stdout),
         ):
             status = run_truenas_status_export_from_namespace(
@@ -467,7 +467,7 @@ class TrueNasStatusExportTests(unittest.TestCase):
     def test_status_export_passes_timeout_to_both_midclt_calls(self) -> None:
         with (
             mock.patch(
-                "wud_updater.truenas._midclt_json",
+                "wudup.truenas._midclt_json",
                 return_value=TrueNasCallResult(ok=False, reason="test"),
             ) as midclt_json,
             redirect_stdout(StringIO()),
@@ -485,7 +485,7 @@ class TrueNasStatusExportTests(unittest.TestCase):
     def test_status_export_uses_default_timeout(self) -> None:
         with (
             mock.patch(
-                "wud_updater.truenas._midclt_json",
+                "wudup.truenas._midclt_json",
                 return_value=TrueNasCallResult(ok=False, reason="test"),
             ) as midclt_json,
             redirect_stdout(StringIO()),
@@ -525,9 +525,9 @@ class TrueNasStatusHelperTests(unittest.TestCase):
         )
 
         with (
-            mock.patch("wud_updater.truenas._has_command", return_value=True),
+            mock.patch("wudup.truenas._has_command", return_value=True),
             mock.patch(
-                "wud_updater.truenas.container_identity_candidates",
+                "wudup.truenas.container_identity_candidates",
                 return_value=[],
             ),
         ):
@@ -553,22 +553,22 @@ class TrueNasStatusHelperTests(unittest.TestCase):
         for run_result, reason in cases:
             with self.subTest(reason=reason):
                 with (
-                    mock.patch("wud_updater.truenas._has_command", return_value=True),
+                    mock.patch("wudup.truenas._has_command", return_value=True),
                     mock.patch("subprocess.run", side_effect=[run_result]),
                 ):
                     result = _run_truenas_status_helper(
                         self._options(),
-                        {"PATH": "/usr/bin", "HOSTNAME": "wud-updater-1"},
+                        {"PATH": "/usr/bin", "HOSTNAME": "wudup-1"},
                     )
 
                 self.assertFalse(result.ok)
                 self.assertEqual(result.reason, reason)
 
     def test_run_helper_reports_docker_run_failures(self) -> None:
-        inspect_result = self._completed(stdout='[{"Image":"wud-updater:test"}]')
+        inspect_result = self._completed(stdout='[{"Image":"wudup:test"}]')
 
         with (
-            mock.patch("wud_updater.truenas._has_command", return_value=True),
+            mock.patch("wudup.truenas._has_command", return_value=True),
             mock.patch(
                 "subprocess.run",
                 side_effect=[
@@ -579,7 +579,7 @@ class TrueNasStatusHelperTests(unittest.TestCase):
         ):
             result = _run_truenas_status_helper(
                 self._options(),
-                {"PATH": "/usr/bin", "HOSTNAME": "wud-updater-1"},
+                {"PATH": "/usr/bin", "HOSTNAME": "wudup-1"},
             )
 
         self.assertFalse(result.ok)
@@ -587,7 +587,7 @@ class TrueNasStatusHelperTests(unittest.TestCase):
 
     def test_run_helper_tries_next_container_identity_after_missing_name(self) -> None:
         inspect_failure = self._completed(returncode=1, stderr="container not found")
-        inspect_success = self._completed(stdout='[{"Image":"wud-updater:test"}]')
+        inspect_success = self._completed(stdout='[{"Image":"wudup:test"}]')
         helper_payload = {
             "update": {"ok": True, "data": {"status": "AVAILABLE"}, "reason": ""},
             "alerts": {"ok": True, "data": [], "reason": ""},
@@ -601,9 +601,9 @@ class TrueNasStatusHelperTests(unittest.TestCase):
         )
 
         with (
-            mock.patch("wud_updater.truenas._has_command", return_value=True),
+            mock.patch("wudup.truenas._has_command", return_value=True),
             mock.patch(
-                "wud_updater.truenas.container_identity_candidates",
+                "wudup.truenas.container_identity_candidates",
                 return_value=["custom-hostname", "actual-container-id"],
             ),
             mock.patch("subprocess.run", run_mock),
@@ -621,7 +621,7 @@ class TrueNasStatusHelperTests(unittest.TestCase):
         )
 
     def test_run_helper_parses_successful_helper_stdout(self) -> None:
-        inspect_result = self._completed(stdout='[{"Config":{"Image":"wud-updater:test"}}]')
+        inspect_result = self._completed(stdout='[{"Config":{"Image":"wudup:test"}}]')
         helper_payload = {
             "update": {"ok": True, "data": {"status": "AVAILABLE"}, "reason": ""},
             "alerts": {"ok": True, "data": [], "reason": ""},
@@ -634,12 +634,12 @@ class TrueNasStatusHelperTests(unittest.TestCase):
         )
 
         with (
-            mock.patch("wud_updater.truenas._has_command", return_value=True),
+            mock.patch("wudup.truenas._has_command", return_value=True),
             mock.patch("subprocess.run", run_mock),
         ):
             result = _run_truenas_status_helper(
                 self._options("7"),
-                {"PATH": "/usr/bin", "HOSTNAME": "wud-updater-1"},
+                {"PATH": "/usr/bin", "HOSTNAME": "wudup-1"},
             )
 
         self.assertTrue(result.ok)
@@ -652,7 +652,7 @@ class TrueNasStatusHelperTests(unittest.TestCase):
 
     def test_refresh_status_returns_unavailable_snapshot_on_helper_failure(self) -> None:
         with mock.patch(
-            "wud_updater.truenas._run_truenas_status_helper",
+            "wudup.truenas._run_truenas_status_helper",
             return_value=TrueNasCallResult(ok=False, reason="docker not available"),
         ):
             snapshot = _refresh_truenas_status(self._options(), {"PATH": ""})
@@ -668,7 +668,7 @@ class TrueNasStatusHelperTests(unittest.TestCase):
         }
 
         with mock.patch(
-            "wud_updater.truenas._run_truenas_status_helper",
+            "wudup.truenas._run_truenas_status_helper",
             return_value=TrueNasCallResult(ok=True, data=payload),
         ):
             snapshot = _refresh_truenas_status(self._options(), {"PATH": ""})

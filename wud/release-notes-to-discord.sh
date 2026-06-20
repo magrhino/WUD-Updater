@@ -182,7 +182,7 @@ DISCORD_COLOR="$(norm_color "$COLOR_HEX")"
 api_get() {
   local url="$1" tmp
   local -a headers
-  headers=(-H "Accept: application/vnd.github+json" -H "User-Agent: wud-updater-release-notes/1.0")
+  headers=(-H "Accept: application/vnd.github+json" -H "User-Agent: wudup-release-notes/1.0")
   [[ -n "${GITHUB_TOKEN:-}" ]] && headers+=(-H "Authorization: Bearer ${GITHUB_TOKEN}")
   tmp="$(mktemp)"
   if http_get_to_file "$tmp" "$url" "${headers[@]}"; then
@@ -262,7 +262,7 @@ fetch_github_release() {
   if [[ -n "$tag" ]]; then
     case "$(printf '%s' "$tag" | tr '[:upper:]' '[:lower:]')" in
       latest|current)
-        real="$(http_effective_url "https://github.com/${owner}/${repo}/releases/latest" -H "User-Agent: wud-updater-release-notes/1.0" 2>/dev/null || true)"
+        real="$(http_effective_url "https://github.com/${owner}/${repo}/releases/latest" -H "User-Agent: wudup-release-notes/1.0" 2>/dev/null || true)"
         real="$(sed -nE 's#.*/releases/tag/([^/?#]+).*#\1#p' <<<"$real")"
         if [[ -n "$real" ]]; then
           dbg "Resolved latest -> tag '$real' via redirect"

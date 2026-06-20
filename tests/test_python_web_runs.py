@@ -4,17 +4,17 @@ from pathlib import Path
 
 from fastapi import HTTPException
 
-from wud_updater import web_runs as runs_module
-from wud_updater.db import (
+from wudup import web_runs as runs_module
+from wudup.db import (
     open_db,
     init_db,
     insert_pending_update,
     insert_update_event,
     insert_update_run,
 )
-from wud_updater.digest_provenance import DigestTagProvenance
-from wud_updater.updater_models import STALE_PENDING_DIGEST_REASON
-from wud_updater.web_models import LogTail
+from wudup.digest_provenance import DigestTagProvenance
+from wudup.updater_models import STALE_PENDING_DIGEST_REASON
+from wudup.web_models import LogTail
 from tests.web_test_helpers import (
     _client,
     _insert_run,
