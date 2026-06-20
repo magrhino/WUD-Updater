@@ -4,9 +4,9 @@ import unittest
 from collections.abc import Mapping
 from unittest import mock
 
-from wud_updater.command import CommandRunner
+from wudup.command import CommandRunner
 
-from wud_updater.digest_verifier import (
+from wudup.digest_verifier import (
     DigestVerifier,
     DockerManifestResolver,
     ManifestDocument,
@@ -16,7 +16,7 @@ from wud_updater.digest_verifier import (
     parse_ghcr_image,
     parse_registry_image,
 )
-from wud_updater.docker_cli import DockerCli
+from wudup.docker_cli import DockerCli
 from tests.update_from_wud_helpers import (
     FakeDockerTestCase,
     MANIFEST_INDEX_TYPE,
@@ -326,7 +326,7 @@ class DigestVerifierTests(unittest.TestCase):
         )
 
         with mock.patch(
-            "wud_updater.digest_verifier.RegistryHttpManifestResolver.fetch",
+            "wudup.digest_verifier.RegistryHttpManifestResolver.fetch",
             side_effect=AssertionError("fresh HTTP resolver used"),
         ):
             result = verifier.resolve_tag_digest("ghcr.io/acme/app:latest")
@@ -586,7 +586,7 @@ class DockerManifestResolverVerboseTests(FakeDockerTestCase):
         docker = DockerCli(runner=command_runner)
         resolver = DockerManifestResolver(docker, verbose=False)
 
-        from wud_updater.digest_verifier import parse_registry_image
+        from wudup.digest_verifier import parse_registry_image
         reg_image = parse_registry_image("docker.io/repo/app:1.0")
         assert reg_image is not None
         doc = resolver.fetch(reg_image, reg_image.tag)
@@ -605,7 +605,7 @@ class DockerManifestResolverVerboseTests(FakeDockerTestCase):
         docker = DockerCli(runner=command_runner)
         resolver = DockerManifestResolver(docker, verbose=True)
 
-        from wud_updater.digest_verifier import parse_registry_image
+        from wudup.digest_verifier import parse_registry_image
         reg_image = parse_registry_image("docker.io/repo/app:1.0")
         assert reg_image is not None
         doc = resolver.fetch(reg_image, reg_image.tag)
@@ -623,7 +623,7 @@ class DockerManifestResolverVerboseTests(FakeDockerTestCase):
         docker = DockerCli(runner=command_runner)
         resolver = DockerManifestResolver(docker, verbose=True)
 
-        from wud_updater.digest_verifier import parse_registry_image
+        from wudup.digest_verifier import parse_registry_image
         reg_image = parse_registry_image("docker.io/repo/app:2.0")
         assert reg_image is not None
         doc = resolver.fetch(reg_image, reg_image.tag)
@@ -643,7 +643,7 @@ class DockerManifestResolverVerboseTests(FakeDockerTestCase):
         docker = DockerCli(runner=command_runner)
         resolver = DockerManifestResolver(docker, verbose=True)
 
-        from wud_updater.digest_verifier import parse_registry_image
+        from wudup.digest_verifier import parse_registry_image
         reg_image = parse_registry_image("docker.io/repo/app:3.0")
         assert reg_image is not None
         doc = resolver.fetch(reg_image, reg_image.tag)
@@ -719,7 +719,7 @@ class DigestVerifierResolveTagDigestTests(FakeDockerTestCase):
         verifier = self._make_verifier()
 
         with mock.patch(
-            "wud_updater.digest_verifier.RegistryHttpManifestResolver.fetch",
+            "wudup.digest_verifier.RegistryHttpManifestResolver.fetch",
             return_value=ManifestDocument(
                 source="registry-http:registry-1.docker.io",
                 digest="sha256:index",

@@ -5,12 +5,12 @@ from unittest import mock
 from ruamel.yaml import YAML
 
 from compose_rewrite_helpers import ComposeRewriteTestCase
-from wud_updater import compose_rewrite
-from wud_updater.compose_rewrite import (
+from wudup import compose_rewrite
+from wudup.compose_rewrite import (
     apply_compose_digest_unpins,
     render_compose_digest_unpins,
 )
-from wud_updater.updater_models import ComposeTagRewriteError
+from wudup.updater_models import ComposeTagRewriteError
 
 
 class ComposeDigestUnpinTests(ComposeRewriteTestCase):
@@ -27,7 +27,7 @@ class ComposeDigestUnpinTests(ComposeRewriteTestCase):
         compose_file = self.write_compose(
             "services:\n"
             "  app:\n"
-            "    # wud-updater.resolved-tag=latest\n"
+            "    # wudup.resolved-tag=latest\n"
             "    image: repo/app@sha256:old\n"
             "    labels:\n"
             "    - wud.tag.include=^latest$$\n"
@@ -42,19 +42,18 @@ class ComposeDigestUnpinTests(ComposeRewriteTestCase):
         self.assertEqual(applied[0].replacements, 1)
         self.assertIn("image: repo/app:latest", rendered)
         self.assertIn("wud.tag.include=^latest$$", rendered)
-        self.assertNotIn("wud-updater.resolved-tag", rendered)
+        self.assertNotIn("wudup.resolved-tag", rendered)
         self.assertNotIn(
             "repo/app:latest",
             compose_file.read_text(encoding="utf-8"),
         )
 
-    def test_render_removes_resolved_tag_marker_from_image_comment_slot(self) -> None:
+    def test_render_removes_legacy_resolved_tag_marker(self) -> None:
         compose_file = self.write_compose(
             "services:\n"
             "  app:\n"
             "    # wud-updater.resolved-tag=latest\n"
             "    image: repo/app@sha256:old\n"
-            "    # wud-updater.resolved-tag=latest\n"
             "    labels:\n"
             "    - wud.tag.include=^latest$$\n"
         )
@@ -69,12 +68,33 @@ class ComposeDigestUnpinTests(ComposeRewriteTestCase):
         self.assertIn("image: repo/app:latest", rendered)
         self.assertNotIn("wud-updater.resolved-tag", rendered)
 
+    def test_render_removes_resolved_tag_marker_from_image_comment_slot(self) -> None:
+        compose_file = self.write_compose(
+            "services:\n"
+            "  app:\n"
+            "    # wudup.resolved-tag=latest\n"
+            "    image: repo/app@sha256:old\n"
+            "    # wudup.resolved-tag=latest\n"
+            "    labels:\n"
+            "    - wud.tag.include=^latest$$\n"
+        )
+
+        rendered, applied = render_compose_digest_unpins(
+            compose_file,
+            (self.digest_unpin_update(),),
+            stack_name="stack",
+        )
+
+        self.assertEqual(applied[0].replacements, 1)
+        self.assertIn("image: repo/app:latest", rendered)
+        self.assertNotIn("wudup.resolved-tag", rendered)
+
     def test_remove_resolved_tag_marker_rejects_partial_cleanup(self) -> None:
         parsed = YAML(typ="rt").load(
             "services:\n"
             "  app:\n"
-            "    # wud-updater.resolved-tag=latest\n"
-            "    # wud-updater.resolved-tag=other\n"
+            "    # wudup.resolved-tag=latest\n"
+            "    # wudup.resolved-tag=other\n"
             "    image: repo/app@sha256:old\n"
         )
         services = parsed["services"]
@@ -88,7 +108,7 @@ class ComposeDigestUnpinTests(ComposeRewriteTestCase):
                 services,
                 "app",
                 service_config,
-                "wud-updater.resolved-tag=latest",
+                "wudup.resolved-tag=latest",
             )
 
     def test_apply_rejects_empty_digest_unpin_render_without_write(self) -> None:
@@ -97,11 +117,11 @@ class ComposeDigestUnpinTests(ComposeRewriteTestCase):
 
         with (
             mock.patch(
-                "wud_updater.compose_rewrite.render_compose_digest_unpins",
+                "wudup.compose_rewrite.render_compose_digest_unpins",
                 return_value=("", ()),
             ),
             mock.patch(
-                "wud_updater.compose_rewrite._atomic_replace_compose"
+                "wudup.compose_rewrite._atomic_replace_compose"
             ) as replace,
         ):
             with self.assertRaisesRegex(ComposeTagRewriteError, "produced no output"):

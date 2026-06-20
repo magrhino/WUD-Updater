@@ -822,7 +822,7 @@ test("mobile shell keeps page width stable and preserves link targets", async ({
 
     await expect(page.locator(".brand")).toHaveAttribute(
       "aria-label",
-      "WUD-Updater dashboard",
+      "WUDup dashboard",
     );
     await expectMobileShellLayout(page, viewportWidth);
 

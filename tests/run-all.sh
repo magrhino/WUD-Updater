@@ -48,83 +48,87 @@ EOF
   run "$python_bin" -m ruff check .
 
   run "$python_bin" -m py_compile \
+    src/wudup/__init__.py \
+    src/wudup/banner.py \
+    src/wudup/cli.py \
+    src/wudup/command.py \
+    src/wudup/compose.py \
+    src/wudup/compose_rewrite.py \
+    src/wudup/config.py \
+    src/wudup/container_identity.py \
+    src/wudup/db.py \
+    src/wudup/digest_provenance.py \
+    src/wudup/digest_verifier.py \
+    src/wudup/doctor.py \
+    src/wudup/docker_cli.py \
+    src/wudup/file_ops.py \
+    src/wudup/images.py \
+    src/wudup/init_config.py \
+    src/wudup/line_specs.py \
+    src/wudup/locks.py \
+    src/wudup/naming.py \
+    src/wudup/plan_actions.py \
+    src/wudup/plan_digest_unpin.py \
+    src/wudup/plan_identity.py \
+    src/wudup/plan_issues.py \
+    src/wudup/plan_matching.py \
+    src/wudup/plan_models.py \
+    src/wudup/plans.py \
+    src/wudup/release_notes.py \
+    src/wudup/self_update.py \
+    src/wudup/terminal.py \
+    src/wudup/truenas.py \
+    src/wudup/updates.py \
+    src/wudup/updater_audit.py \
+    src/wudup/updater_digest_pin.py \
+    src/wudup/updater_digest_unpin.py \
+    src/wudup/updater_lifecycle.py \
+    src/wudup/updater_lifecycle_digest.py \
+    src/wudup/updater_lifecycle_health.py \
+    src/wudup/updater_lifecycle_recreate.py \
+    src/wudup/updater_lifecycle_rewrite.py \
+    src/wudup/updater_lifecycle_scope.py \
+    src/wudup/updater_lifecycle_state.py \
+    src/wudup/updater_matching.py \
+    src/wudup/updater_models.py \
+    src/wudup/updater.py \
+    src/wudup/updater_cli.py \
+    src/wudup/updater_logging.py \
+    src/wudup/updater_planning.py \
+    src/wudup/updater_preflight.py \
+    src/wudup/updater_runner_matching.py \
+    src/wudup/updater_runner_operations.py \
+    src/wudup/updater_runner_output.py \
+    src/wudup/updater_tag_exclusions.py \
+    src/wudup/web_auth.py \
+    src/wudup/web_compat.py \
+    src/wudup/web_database.py \
+    src/wudup/web_demo_fixtures.py \
+    src/wudup/web_diagnostics.py \
+    src/wudup/web_health.py \
+    src/wudup/web_jobs.py \
+    src/wudup/web_metadata.py \
+    src/wudup/web_models.py \
+    src/wudup/web_onboarding.py \
+    src/wudup/web_pending.py \
+    src/wudup/web_plans.py \
+    src/wudup/web_release_notes.py \
+    src/wudup/web_retag_plans.py \
+    src/wudup/web_retags.py \
+    src/wudup/web_run_verification.py \
+    src/wudup/web_runs.py \
+    src/wudup/web_scheduler.py \
+    src/wudup/web_self_update.py \
+    src/wudup/web_settings.py \
+    src/wudup/web_startup.py \
+    src/wudup/web_state.py \
+    src/wudup/web_static.py \
+    src/wudup/web_wud_api.py \
+    src/wudup/web.py \
+    src/wudup/wud_file.py \
     src/wud_updater/__init__.py \
-    src/wud_updater/banner.py \
     src/wud_updater/cli.py \
-    src/wud_updater/command.py \
-    src/wud_updater/compose.py \
-    src/wud_updater/compose_rewrite.py \
-    src/wud_updater/config.py \
-    src/wud_updater/container_identity.py \
-    src/wud_updater/db.py \
-    src/wud_updater/digest_provenance.py \
-    src/wud_updater/digest_verifier.py \
-    src/wud_updater/doctor.py \
-    src/wud_updater/docker_cli.py \
-    src/wud_updater/file_ops.py \
-    src/wud_updater/images.py \
-    src/wud_updater/init_config.py \
-    src/wud_updater/line_specs.py \
-    src/wud_updater/locks.py \
-    src/wud_updater/plan_actions.py \
-    src/wud_updater/plan_digest_unpin.py \
-    src/wud_updater/plan_identity.py \
-    src/wud_updater/plan_issues.py \
-    src/wud_updater/plan_matching.py \
-    src/wud_updater/plan_models.py \
-    src/wud_updater/plans.py \
-    src/wud_updater/release_notes.py \
     src/wud_updater/self_update.py \
-    src/wud_updater/terminal.py \
-    src/wud_updater/truenas.py \
-    src/wud_updater/updates.py \
-    src/wud_updater/updater_audit.py \
-    src/wud_updater/updater_digest_pin.py \
-    src/wud_updater/updater_digest_unpin.py \
-    src/wud_updater/updater_lifecycle.py \
-    src/wud_updater/updater_lifecycle_digest.py \
-    src/wud_updater/updater_lifecycle_health.py \
-    src/wud_updater/updater_lifecycle_recreate.py \
-    src/wud_updater/updater_lifecycle_rewrite.py \
-    src/wud_updater/updater_lifecycle_scope.py \
-    src/wud_updater/updater_lifecycle_state.py \
-    src/wud_updater/updater_matching.py \
-    src/wud_updater/updater_models.py \
-    src/wud_updater/updater.py \
-    src/wud_updater/updater_cli.py \
-    src/wud_updater/updater_logging.py \
-    src/wud_updater/updater_planning.py \
-    src/wud_updater/updater_preflight.py \
-    src/wud_updater/updater_runner_matching.py \
-    src/wud_updater/updater_runner_operations.py \
-    src/wud_updater/updater_runner_output.py \
-    src/wud_updater/updater_tag_exclusions.py \
-    src/wud_updater/web_auth.py \
-    src/wud_updater/web_compat.py \
-    src/wud_updater/web_database.py \
-    src/wud_updater/web_demo_fixtures.py \
-    src/wud_updater/web_diagnostics.py \
-    src/wud_updater/web_health.py \
-    src/wud_updater/web_jobs.py \
-    src/wud_updater/web_metadata.py \
-    src/wud_updater/web_models.py \
-    src/wud_updater/web_onboarding.py \
-    src/wud_updater/web_pending.py \
-    src/wud_updater/web_plans.py \
-    src/wud_updater/web_release_notes.py \
-    src/wud_updater/web_retag_plans.py \
-    src/wud_updater/web_retags.py \
-    src/wud_updater/web_run_verification.py \
-    src/wud_updater/web_runs.py \
-    src/wud_updater/web_scheduler.py \
-    src/wud_updater/web_self_update.py \
-    src/wud_updater/web_settings.py \
-    src/wud_updater/web_startup.py \
-    src/wud_updater/web_state.py \
-    src/wud_updater/web_static.py \
-    src/wud_updater/web_wud_api.py \
-    src/wud_updater/web.py \
-    src/wud_updater/wud_file.py \
     tests/check_python_deps.py \
     tests/test_python_banner.py \
     tests/test_python_cli.py \
@@ -214,7 +218,7 @@ EOF
     tests/web_scheduler_test_helpers.py \
     webui/scripts/seed_demo_state.py
 
-  run "$python_bin" -m pytest --cov=wud_updater --cov-branch --cov-report=xml
+  run "$python_bin" -m pytest --cov=wudup --cov-branch --cov-report=xml
 }
 
 run_shell_checks() {

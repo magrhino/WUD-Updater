@@ -10,8 +10,8 @@ from io import StringIO
 from pathlib import Path
 from unittest import mock
 
-from wud_updater.command import CommandResult
-from wud_updater.doctor import (
+from wudup.command import CommandResult
+from wudup.doctor import (
     Doctor,
     DoctorOptions,
     REQUIRED_WUD_SCRIPTS,
@@ -19,7 +19,7 @@ from wud_updater.doctor import (
     doctor_result_from_namespace,
     run_doctor_from_namespace,
 )
-from wud_updater.truenas import DEFAULT_TRUENAS_STATUS_TIMEOUT
+from wudup.truenas import DEFAULT_TRUENAS_STATUS_TIMEOUT
 
 
 class DoctorTests(unittest.TestCase):
@@ -165,7 +165,7 @@ class DoctorTests(unittest.TestCase):
     def test_doctor_fails_for_invalid_boolean_environment_values(self) -> None:
         labels = (
             "WUD_SYNC_SCRIPTS",
-            "WUD_UPDATER_USE_SUDO",
+            "WUDUP_USE_SUDO",
             "TRUENAS_STATUS_CHECK",
         )
         for label in labels:
@@ -184,7 +184,7 @@ class DoctorTests(unittest.TestCase):
             {
                 "TRUENAS_STATUS_CHECK": "true",
                 "HOSTNAME": "custom-hostname",
-                "WUD_WEB_RESTART_CONTAINER": "wud-updater-1",
+                "WUD_WEB_RESTART_CONTAINER": "wudup-1",
             },
         )
 
@@ -196,7 +196,7 @@ class DoctorTests(unittest.TestCase):
             {
                 "TRUENAS_STATUS_CHECK": "true",
                 "TRUENAS_STATUS_TIMEOUT": "not-a-number",
-                "HOSTNAME": "wud-updater-1",
+                "HOSTNAME": "wudup-1",
             },
         )
 
@@ -206,7 +206,7 @@ class DoctorTests(unittest.TestCase):
 
     def test_truenas_fails_when_no_identity_candidates(self) -> None:
         with mock.patch(
-            "wud_updater.doctor.container_identity_candidates",
+            "wudup.doctor.container_identity_candidates",
             return_value=[],
         ):
             status, stdout = self._run_doctor(
@@ -229,7 +229,7 @@ class DoctorTests(unittest.TestCase):
         runner_mock.capture.return_value = fail_result
 
         with mock.patch(
-            "wud_updater.doctor.container_identity_candidates",
+            "wudup.doctor.container_identity_candidates",
             return_value=["c1", "c2"],
         ):
             doctor = Doctor(
@@ -257,13 +257,13 @@ class DoctorTests(unittest.TestCase):
             args=("docker", "container", "inspect", "c2"),
             cwd=None,
             returncode=0,
-            stdout='[{"Config":{"Image":"wud-updater:test"}}]',
+            stdout='[{"Config":{"Image":"wudup:test"}}]',
         )
         runner_mock = mock.Mock()
         runner_mock.capture.side_effect = [fail_result, ok_result]
 
         with mock.patch(
-            "wud_updater.doctor.container_identity_candidates",
+            "wudup.doctor.container_identity_candidates",
             return_value=["c1", "c2"],
         ):
             doctor = Doctor(
@@ -279,7 +279,7 @@ class DoctorTests(unittest.TestCase):
         self.assertEqual(inspect_check.status, "PASS")
 
     def test_check_updater_fails_when_empty(self) -> None:
-        # options_from_namespace treats WUD_UPDATER="" as unset and uses the default
+        # options_from_namespace treats WUDUP_UPDATER="" as unset and uses the default
         # path, so we create DoctorOptions with updater="" directly to test this path.
         options = self._make_doctor_options(updater="")
         doctor = Doctor(options, environ={})
@@ -287,14 +287,14 @@ class DoctorTests(unittest.TestCase):
 
         updater_check = next(c for c in doctor.checks if c.name == "updater executable")
         self.assertEqual(updater_check.status, "FAIL")
-        self.assertIn("WUD_UPDATER is empty", updater_check.detail)
+        self.assertIn("WUDUP_UPDATER is empty", updater_check.detail)
 
     def test_check_updater_fails_when_not_executable(self) -> None:
         non_exec = self.root / "non-executable"
         non_exec.write_text("#!/usr/bin/env bash\n", encoding="utf-8")
         non_exec.chmod(0o644)
 
-        status, stdout = self._run_doctor({"WUD_UPDATER": str(non_exec)})
+        status, stdout = self._run_doctor({"WUDUP_UPDATER": str(non_exec)})
 
         self.assertEqual(status, 1, stdout)
         self.assertIn("[FAIL] updater executable", stdout)
@@ -302,7 +302,7 @@ class DoctorTests(unittest.TestCase):
 
     def test_check_updater_fails_when_absolute_path_missing(self) -> None:
         status, stdout = self._run_doctor(
-            {"WUD_UPDATER": str(self.root / "nonexistent-updater")}
+            {"WUDUP_UPDATER": str(self.root / "nonexistent-updater")}
         )
 
         self.assertEqual(status, 1, stdout)
@@ -311,7 +311,7 @@ class DoctorTests(unittest.TestCase):
 
     def test_check_updater_fails_when_not_found_on_path(self) -> None:
         status, stdout = self._run_doctor(
-            {"WUD_UPDATER": "no-such-updater-on-path"},
+            {"WUDUP_UPDATER": "no-such-updater-on-path"},
         )
 
         self.assertEqual(status, 1, stdout)
@@ -323,7 +323,7 @@ class DoctorTests(unittest.TestCase):
         bare_bin.write_text("#!/usr/bin/env bash\nexit 0\n", encoding="utf-8")
         bare_bin.chmod(0o755)
 
-        status, stdout = self._run_doctor({"WUD_UPDATER": "my-updater"})
+        status, stdout = self._run_doctor({"WUDUP_UPDATER": "my-updater"})
 
         self.assertEqual(status, 0, stdout)
         self.assertIn("[PASS] updater executable", stdout)
@@ -331,7 +331,7 @@ class DoctorTests(unittest.TestCase):
     def test_check_sudo_fails_when_required_but_missing(self) -> None:
         status, stdout = self._run_doctor(
             {
-                "WUD_UPDATER_USE_SUDO": "true",
+                "WUDUP_USE_SUDO": "true",
                 "PATH": str(self.root / "empty-bin"),
             },
         )
@@ -340,10 +340,10 @@ class DoctorTests(unittest.TestCase):
         self.assertIn("[FAIL] sudo: required but not found on PATH", stdout)
 
     def test_check_sudo_passes_when_disabled(self) -> None:
-        status, stdout = self._run_doctor({"WUD_UPDATER_USE_SUDO": "false"})
+        status, stdout = self._run_doctor({"WUDUP_USE_SUDO": "false"})
 
         self.assertEqual(status, 0, stdout)
-        self.assertIn("[PASS] sudo: disabled by WUD_UPDATER_USE_SUDO=false", stdout)
+        self.assertIn("[PASS] sudo: disabled by WUDUP_USE_SUDO=false", stdout)
 
     def test_readiness_result_passes_with_accessible_docker_and_wud_file(self) -> None:
         # Use a tcp DOCKER_HOST so no Unix socket check is needed.
@@ -427,9 +427,9 @@ class DoctorTests(unittest.TestCase):
             "WUD_SCRIPTS_DIR": str(self.scripts_dir),
             "WUD_APP_DIR": str(self.app_dir),
             "WUD_SYNC_SCRIPTS": "true",
-            "WUD_UPDATER": str(self.updater),
-            "WUD_UPDATER_CONFIG": str(self.root / "missing-env"),
-            "WUD_UPDATER_USE_SUDO": "false",
+            "WUDUP_UPDATER": str(self.updater),
+            "WUDUP_CONFIG": str(self.root / "missing-env"),
+            "WUDUP_USE_SUDO": "false",
             "TRUENAS_STATUS_CHECK": "false",
         }
         if env_overrides is not None:
@@ -483,7 +483,7 @@ case "${1:-}" in
     ;;
   container)
     if [[ "${2:-}" == "inspect" ]]; then
-      printf '[{"Config":{"Image":"wud-updater:test"}}]\\n'
+      printf '[{"Config":{"Image":"wudup:test"}}]\\n'
       exit 0
     fi
     ;;

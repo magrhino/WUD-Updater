@@ -312,12 +312,12 @@ export const useUpdatesStore = defineStore("updates", () => {
             planLocal,
           );
           selfUpdateMessage.value =
-            "Tag updated and image pulled. Recreate the WUD-Updater container from outside the WebUI to run the new version. Tagged deployments are recommended for predictable updates.";
+            "Tag updated and image pulled. Recreate the WUDup container from outside the WebUI to run the new version. Tagged deployments are recommended for predictable updates.";
         } else {
           const csrfToken = await auth.ensureCsrf();
           response = await webApi.applySelfUpdate(csrfToken, selfUpdate.value);
           selfUpdateMessage.value =
-            "Image pulled. Recreate the WUD-Updater container to run the new version. Tagged deployments are recommended for predictable updates.";
+            "Image pulled. Recreate the WUDup container to run the new version. Tagged deployments are recommended for predictable updates.";
         }
         try {
           selfUpdate.value = await webApi.selfUpdate();

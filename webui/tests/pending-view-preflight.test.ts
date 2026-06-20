@@ -191,7 +191,7 @@ describe("pending view preflight safety", () => {
         compose_file: "docker-compose.yml",
         proposed_label_regex: "^latest$",
         explanation:
-          "WUD-Updater can only overwrite this include rule after explicit approval.",
+          "WUDup can only overwrite this include rule after explicit approval.",
       },
     };
     const createPlan = vi
@@ -304,7 +304,7 @@ describe("pending view preflight safety", () => {
         compose_file: "docker-compose.yml",
         proposed_label_regex: "^latest$",
         explanation:
-          "WUD-Updater can only overwrite this include rule after explicit approval.",
+          "WUDup can only overwrite this include rule after explicit approval.",
       },
     };
     const createPlan = vi

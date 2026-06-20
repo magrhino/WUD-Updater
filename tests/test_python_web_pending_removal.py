@@ -2,9 +2,9 @@ from __future__ import annotations
 import sqlite3
 import stat
 from pathlib import Path
-from wud_updater import web as web_module
-from wud_updater import web_pending as pending_module
-from wud_updater.locks import lock_dir_for
+from wudup import web as web_module
+from wudup import web_pending as pending_module
+from wudup.locks import lock_dir_for
 from tests.web_test_helpers import (
     _client,
     _csrf_headers,

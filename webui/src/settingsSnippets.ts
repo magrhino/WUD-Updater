@@ -35,7 +35,7 @@ export function buildSettingsEnvSnippet(settings: SettingsResponse): string {
 }
 
 export function buildSettingsComposeSnippet(settings: SettingsResponse): string {
-  const lines = ["services:", "  wud-updater:", "    environment:"];
+  const lines = ["services:", "  wudup:", "    environment:"];
   lines.push(
     ...sanitizedSettingsEntries(settings).map(
       (entry) => `      ${entry.name}: ${quoteYamlValue(entry.value)}`,

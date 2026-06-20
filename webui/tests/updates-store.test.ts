@@ -384,17 +384,17 @@ describe("updates store", () => {
     const response = await updates.applySelfUpdate();
 
     expect(ensureCsrf).toHaveBeenCalledTimes(1);
-    expect(response.container).toBe("wud-updater");
+    expect(response.container).toBe("wudup");
     expect(updates.selfUpdateMessage).toBe(
-      "Image pulled. Recreate the WUD-Updater container to run the new version. Tagged deployments are recommended for predictable updates.",
+      "Image pulled. Recreate the WUDup container to run the new version. Tagged deployments are recommended for predictable updates.",
     );
     expect(fetchMock.mock.calls[0][0]).toBe("/api/v1/self-update");
     expect(jsonRequestBody(fetchMock.mock.calls[0])).toEqual({
       confirmation: "pull_image",
       current_tag: "v0.24.2",
       latest_tag: "v0.25.0",
-      target_image: "ghcr.io/magrhino/wud-updater:latest",
-      restart_container: "wud-updater",
+      target_image: "ghcr.io/magrhino/wudup:latest",
+      restart_container: "wudup",
     });
     expect(
       ((fetchMock.mock.calls[0][1] as RequestInit).headers as Headers).get(
@@ -419,8 +419,8 @@ describe("updates store", () => {
     useRunsStore();
     updates.selfUpdate = selfUpdateResponse({
       strategy: "prepare_tag_update",
-      current_image: "ghcr.io/magrhino/wud-updater:v0.24.2",
-      target_image: "ghcr.io/magrhino/wud-updater:v0.25.0",
+      current_image: "ghcr.io/magrhino/wudup:v0.24.2",
+      target_image: "ghcr.io/magrhino/wudup:v0.25.0",
       external_recreate_required: true,
     });
     updates.selfUpdatePlan = selfUpdatePlanResponse();
@@ -430,7 +430,7 @@ describe("updates store", () => {
     expect(ensureCsrf).toHaveBeenCalledTimes(1);
     expect(response.status).toBe("tag_prepared");
     expect(updates.selfUpdateMessage).toBe(
-      "Tag updated and image pulled. Recreate the WUD-Updater container from outside the WebUI to run the new version. Tagged deployments are recommended for predictable updates.",
+      "Tag updated and image pulled. Recreate the WUDup container from outside the WebUI to run the new version. Tagged deployments are recommended for predictable updates.",
     );
     expect(fetchMock.mock.calls[0][0]).toBe("/api/v1/self-update/prepare");
     expect(jsonRequestBody(fetchMock.mock.calls[0])).toEqual({
@@ -438,8 +438,8 @@ describe("updates store", () => {
       plan_id: "self-update-plan-test",
       current_tag: "v0.24.2",
       latest_tag: "v0.25.0",
-      target_image: "ghcr.io/magrhino/wud-updater:v0.25.0",
-      restart_container: "wud-updater",
+      target_image: "ghcr.io/magrhino/wudup:v0.25.0",
+      restart_container: "wudup",
     });
   });
 
@@ -456,8 +456,8 @@ describe("updates store", () => {
     useRunsStore();
     updates.selfUpdate = selfUpdateResponse({
       strategy: "prepare_tag_update",
-      current_image: "ghcr.io/magrhino/wud-updater:v0.24.2",
-      target_image: "ghcr.io/magrhino/wud-updater:v0.25.0",
+      current_image: "ghcr.io/magrhino/wudup:v0.24.2",
+      target_image: "ghcr.io/magrhino/wudup:v0.25.0",
       external_recreate_required: true,
     });
 

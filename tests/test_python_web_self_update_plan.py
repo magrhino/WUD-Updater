@@ -1,7 +1,7 @@
 from __future__ import annotations
 from pathlib import Path
-from wud_updater import web as web_module
-from wud_updater import web_self_update as self_update_module
+from wudup import web as web_module
+from wudup import web_self_update as self_update_module
 from tests.web_test_helpers import (
     _client,
     _csrf_headers,
@@ -21,7 +21,7 @@ def test_self_update_plan_endpoint_returns_pinned_tag_preview(
     monkeypatch.setattr(
         self_update_module,
         "current_container_image",
-        lambda _env: "ghcr.io/magrhino/wud-updater:v0.24.2",
+        lambda _env: "ghcr.io/magrhino/wudup:v0.24.2",
     )
     monkeypatch.setattr(
         self_update_module,
@@ -33,7 +33,7 @@ def test_self_update_plan_endpoint_returns_pinned_tag_preview(
         {
             "WUD_WEB_DEV_NO_AUTH": "true",
             "WUD_WEB_MUTATIONS_ENABLED": "true",
-            "WUD_WEB_RESTART_CONTAINER": "wud-updater",
+            "WUD_WEB_RESTART_CONTAINER": "wudup",
             **fake_env,
         },
     )
@@ -43,9 +43,9 @@ def test_self_update_plan_endpoint_returns_pinned_tag_preview(
         "wud",
         [
             (
-                "wud-updater",
-                "ghcr.io/magrhino/wud-updater:v0.24.2",
-                "wud-updater",
+                "wudup",
+                "ghcr.io/magrhino/wudup:v0.24.2",
+                "wudup",
             ),
         ],
     )
@@ -60,22 +60,22 @@ def test_self_update_plan_endpoint_returns_pinned_tag_preview(
     body = response.json()
     assert body["strategy"] == "prepare_tag_update"
     assert body["external_recreate_required"] is True
-    assert body["target_image"] == "ghcr.io/magrhino/wud-updater:v0.25.0"
+    assert body["target_image"] == "ghcr.io/magrhino/wudup:v0.25.0"
     assert body["plan"]["status"] == "ready"
     assert body["plan"]["can_apply"] is True
     stack = body["plan"]["stacks"][0]
-    assert stack["services"] == ["wud-updater"]
+    assert stack["services"] == ["wudup"]
     assert stack["tag_updates"] == [
         {
-            "old_image": "ghcr.io/magrhino/wud-updater:v0.24.2",
+            "old_image": "ghcr.io/magrhino/wudup:v0.24.2",
             "desired_tag": "v0.25.0",
-            "new_image": "ghcr.io/magrhino/wud-updater:v0.25.0",
-            "services": ["wud-updater"],
+            "new_image": "ghcr.io/magrhino/wudup:v0.25.0",
+            "services": ["wudup"],
         }
     ]
     assert (compose_dir / "docker-compose.yml").read_text(encoding="utf-8") == compose_before
     calls = _fake_docker_calls(fake_root)
-    assert "manifest inspect ghcr.io/magrhino/wud-updater:v0.25.0" in calls
+    assert "manifest inspect ghcr.io/magrhino/wudup:v0.25.0" in calls
     assert " pull " not in calls
     assert " up -d " not in calls
     assert "restart " not in calls
@@ -91,7 +91,7 @@ def test_self_update_prepare_endpoint_rejects_stale_plan(
     monkeypatch.setattr(
         self_update_module,
         "current_container_image",
-        lambda _env: "ghcr.io/magrhino/wud-updater:v0.24.2",
+        lambda _env: "ghcr.io/magrhino/wudup:v0.24.2",
     )
     monkeypatch.setattr(
         self_update_module,
@@ -103,7 +103,7 @@ def test_self_update_prepare_endpoint_rejects_stale_plan(
         {
             "WUD_WEB_DEV_NO_AUTH": "true",
             "WUD_WEB_MUTATIONS_ENABLED": "true",
-            "WUD_WEB_RESTART_CONTAINER": "wud-updater",
+            "WUD_WEB_RESTART_CONTAINER": "wudup",
             **fake_env,
         },
     )
@@ -115,8 +115,8 @@ def test_self_update_prepare_endpoint_rejects_stale_plan(
             "plan_id": "missing-plan",
             "current_tag": "v0.24.2",
             "latest_tag": "v0.25.0",
-            "target_image": "ghcr.io/magrhino/wud-updater:v0.25.0",
-            "restart_container": "wud-updater",
+            "target_image": "ghcr.io/magrhino/wudup:v0.25.0",
+            "restart_container": "wudup",
         },
         headers=_csrf_headers(client),
     )
@@ -135,15 +135,15 @@ def test_self_update_plan_and_prepare_enforce_auth_csrf_read_only_and_active_job
         "plan_id": "plan",
         "current_tag": "v0.24.2",
         "latest_tag": "v0.25.0",
-        "target_image": "ghcr.io/magrhino/wud-updater:v0.25.0",
-        "restart_container": "wud-updater",
+        "target_image": "ghcr.io/magrhino/wudup:v0.25.0",
+        "restart_container": "wudup",
     }
     unauthenticated = _client(tmp_path, {"WUD_WEB_MUTATIONS_ENABLED": "true"})
     read_only = _client(
         tmp_path,
         {
             "WUD_WEB_DEV_NO_AUTH": "true",
-            "WUD_WEB_RESTART_CONTAINER": "wud-updater",
+            "WUD_WEB_RESTART_CONTAINER": "wudup",
         },
     )
     mutating = _client(
@@ -151,7 +151,7 @@ def test_self_update_plan_and_prepare_enforce_auth_csrf_read_only_and_active_job
         {
             "WUD_WEB_DEV_NO_AUTH": "true",
             "WUD_WEB_MUTATIONS_ENABLED": "true",
-            "WUD_WEB_RESTART_CONTAINER": "wud-updater",
+            "WUD_WEB_RESTART_CONTAINER": "wudup",
         },
     )
     mutating.app.state.web_apply_jobs["job-active"] = web_module.WebApplyJob(

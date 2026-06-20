@@ -3,8 +3,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from wud_updater.db import init_db, open_db, upsert_known_image
-from wud_updater.digest_provenance import DigestTagProvenance
+from wudup.db import init_db, open_db, upsert_known_image
+from wudup.digest_provenance import DigestTagProvenance
 
 def _seed_known_digest_provenance(
     tmp_path: Path,

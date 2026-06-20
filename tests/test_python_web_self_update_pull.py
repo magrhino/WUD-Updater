@@ -2,8 +2,8 @@ from __future__ import annotations
 import json
 import sqlite3
 from pathlib import Path
-from wud_updater import web_self_update as self_update_module
-from wud_updater.db import (
+from wudup import web_self_update as self_update_module
+from wudup.db import (
     open_db,
 )
 from tests.web_test_helpers import (
@@ -24,7 +24,7 @@ def test_self_update_endpoint_rejects_stale_confirmation(
     monkeypatch.setattr(
         self_update_module,
         "current_container_image",
-        lambda _env: "ghcr.io/magrhino/wud-updater:latest",
+        lambda _env: "ghcr.io/magrhino/wudup:latest",
     )
     monkeypatch.setattr(
         self_update_module,
@@ -36,7 +36,7 @@ def test_self_update_endpoint_rejects_stale_confirmation(
         {
             "WUD_WEB_DEV_NO_AUTH": "true",
             "WUD_WEB_MUTATIONS_ENABLED": "true",
-            "WUD_WEB_RESTART_CONTAINER": "wud-updater",
+            "WUD_WEB_RESTART_CONTAINER": "wudup",
             **fake_env,
         },
     )
@@ -62,7 +62,7 @@ def test_self_update_endpoint_pulls_image_and_audits(
     monkeypatch.setattr(
         self_update_module,
         "current_container_image",
-        lambda _env: "ghcr.io/magrhino/wud-updater:latest",
+        lambda _env: "ghcr.io/magrhino/wudup:latest",
     )
     monkeypatch.setattr(
         self_update_module,
@@ -74,12 +74,12 @@ def test_self_update_endpoint_pulls_image_and_audits(
         {
             "WUD_WEB_DEV_NO_AUTH": "true",
             "WUD_WEB_MUTATIONS_ENABLED": "true",
-            "WUD_WEB_RESTART_CONTAINER": "wud-updater",
+            "WUD_WEB_RESTART_CONTAINER": "wudup",
             **fake_env,
         },
     )
-    (fake_root / "containers" / "wud-updater.summary").write_text(
-        "/wud-updater|running|healthy|0|0\n",
+    (fake_root / "containers" / "wudup.summary").write_text(
+        "/wudup|running|healthy|0|0\n",
         encoding="utf-8",
     )
 
@@ -92,11 +92,11 @@ def test_self_update_endpoint_pulls_image_and_audits(
     assert response.status_code == 200
     body = response.json()
     assert body["status"] == "image_pulled"
-    assert body["target_image"] == "ghcr.io/magrhino/wud-updater:latest"
-    assert body["container"] == "wud-updater"
+    assert body["target_image"] == "ghcr.io/magrhino/wudup:latest"
+    assert body["container"] == "wudup"
     calls = _fake_docker_calls(fake_root)
-    assert "pull ghcr.io/magrhino/wud-updater:latest" in calls
-    assert "restart --time 10 wud-updater" not in calls
+    assert "pull ghcr.io/magrhino/wudup:latest" in calls
+    assert "restart --time 10 wudup" not in calls
     assert client.app.state.web_self_update_running is False
 
     with open_db(tmp_path / "state" / "wud.sqlite") as conn:
@@ -118,8 +118,8 @@ def test_self_update_endpoint_pulls_image_and_audits(
     assert metadata["latest_tag"] == "v0.25.0"
     assert metadata["status"] == "image_pulled"
     assert metadata["target"] == {
-        "container": "wud-updater",
-        "image": "ghcr.io/magrhino/wud-updater:latest",
+        "container": "wudup",
+        "image": "ghcr.io/magrhino/wudup:latest",
     }
 
 
@@ -133,7 +133,7 @@ def test_self_update_endpoint_inspects_restart_container_before_pull(
     monkeypatch.setattr(
         self_update_module,
         "current_container_image",
-        lambda _env: "ghcr.io/magrhino/wud-updater:latest",
+        lambda _env: "ghcr.io/magrhino/wudup:latest",
     )
     monkeypatch.setattr(
         self_update_module,
@@ -145,22 +145,22 @@ def test_self_update_endpoint_inspects_restart_container_before_pull(
         {
             "WUD_WEB_DEV_NO_AUTH": "true",
             "WUD_WEB_MUTATIONS_ENABLED": "true",
-            "WUD_WEB_RESTART_CONTAINER": "missing-wud-updater",
+            "WUD_WEB_RESTART_CONTAINER": "missing-wudup",
             **fake_env,
         },
     )
 
     response = client.post(
         "/api/v1/self-update",
-        json=_self_update_payload(restart_container="missing-wud-updater"),
+        json=_self_update_payload(restart_container="missing-wudup"),
         headers=_csrf_headers(client),
     )
 
     assert response.status_code == 500
     assert response.json()["detail"].startswith("could not inspect restart container")
     calls = _fake_docker_calls(fake_root)
-    assert "inspect missing-wud-updater" in calls
-    assert "pull ghcr.io/magrhino/wud-updater:latest" not in calls
+    assert "inspect missing-wudup" in calls
+    assert "pull ghcr.io/magrhino/wudup:latest" not in calls
     assert client.app.state.web_self_update_running is False
     try:
         with open_db(tmp_path / "state" / "wud.sqlite") as conn:
@@ -185,7 +185,7 @@ def test_self_update_endpoint_marks_audit_failed_when_pull_fails(
     monkeypatch.setattr(
         self_update_module,
         "current_container_image",
-        lambda _env: "ghcr.io/magrhino/wud-updater:latest",
+        lambda _env: "ghcr.io/magrhino/wudup:latest",
     )
     monkeypatch.setattr(
         self_update_module,
@@ -197,12 +197,12 @@ def test_self_update_endpoint_marks_audit_failed_when_pull_fails(
         {
             "WUD_WEB_DEV_NO_AUTH": "true",
             "WUD_WEB_MUTATIONS_ENABLED": "true",
-            "WUD_WEB_RESTART_CONTAINER": "wud-updater",
+            "WUD_WEB_RESTART_CONTAINER": "wudup",
             **fake_env,
         },
     )
-    (fake_root / "containers" / "wud-updater.summary").write_text(
-        "/wud-updater|running|healthy|0|0\n",
+    (fake_root / "containers" / "wudup.summary").write_text(
+        "/wudup|running|healthy|0|0\n",
         encoding="utf-8",
     )
 
@@ -215,8 +215,8 @@ def test_self_update_endpoint_marks_audit_failed_when_pull_fails(
     assert response.status_code == 500
     assert response.json()["detail"].startswith("could not pull self-update image")
     calls = _fake_docker_calls(fake_root)
-    assert "pull ghcr.io/magrhino/wud-updater:latest" in calls
-    assert "restart --time 10 wud-updater" not in calls
+    assert "pull ghcr.io/magrhino/wudup:latest" in calls
+    assert "restart --time 10 wudup" not in calls
     assert client.app.state.web_self_update_running is False
 
     with open_db(tmp_path / "state" / "wud.sqlite") as conn:
@@ -227,7 +227,7 @@ def test_self_update_endpoint_marks_audit_failed_when_pull_fails(
     assert row["finished_at"]
     metadata = json.loads(row["metadata_json"])
     assert metadata["status"] == "failure"
-    assert "docker pull ghcr.io/magrhino/wud-updater:latest" in metadata["error"]
+    assert "docker pull ghcr.io/magrhino/wudup:latest" in metadata["error"]
 
 
 def test_self_update_endpoint_rejects_active_self_update(
@@ -242,7 +242,7 @@ def test_self_update_endpoint_rejects_active_self_update(
         {
             "WUD_WEB_DEV_NO_AUTH": "true",
             "WUD_WEB_MUTATIONS_ENABLED": "true",
-            "WUD_WEB_RESTART_CONTAINER": "wud-updater",
+            "WUD_WEB_RESTART_CONTAINER": "wudup",
             **fake_env,
         },
     )

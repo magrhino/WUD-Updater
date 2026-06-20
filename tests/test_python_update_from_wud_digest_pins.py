@@ -5,23 +5,23 @@ from contextlib import redirect_stderr, redirect_stdout
 from io import StringIO
 from unittest import mock
 
-from wud_updater.command import CommandRunner
-from wud_updater.compose import (
+from wudup.command import CommandRunner
+from wudup.compose import (
     ComposeStack,
     ServiceImage,
 )
-from wud_updater.config import load_config
-from wud_updater.digest_verifier import (
+from wudup.config import load_config
+from wudup.digest_verifier import (
     DigestVerifier,
     DockerManifestResolver,
 )
-from wud_updater.docker_cli import DockerCli
-from wud_updater.plans import build_dry_run_plan
-from wud_updater.updater import (
+from wudup.docker_cli import DockerCli
+from wudup.plans import build_dry_run_plan
+from wudup.updater import (
     UpdateFromWudRunner,
 )
-from wud_updater.updater_digest_pin import digest_pin_update_from_values
-from wud_updater.updater_models import (
+from wudup.updater_digest_pin import digest_pin_update_from_values
+from wudup.updater_models import (
     UpdaterOptions,
 )
 
@@ -61,7 +61,7 @@ class UpdateFromWudDigestPinTests(UpdateFromWudRunnerTestCase):
         self.assertEqual(status, 0, stderr + stdout)
         self.assertEqual(self.wud_file.read_text(encoding="utf-8"), "")
         content = compose_file.read_text(encoding="utf-8")
-        self.assertIn("# wud-updater.resolved-tag=2.0", content)
+        self.assertIn("# wudup.resolved-tag=2.0", content)
         self.assertIn("image: repo/app@sha256:index", content)
         self.assertIn("wud.tag.include=^2\\.0$$", content)
         calls = self.calls()
@@ -100,7 +100,7 @@ class UpdateFromWudDigestPinTests(UpdateFromWudRunnerTestCase):
         self.prepare_digest_pin_latest_update()
 
         with mock.patch(
-            "wud_updater.compose_rewrite.apply_compose_digest_pins",
+            "wudup.compose_rewrite.apply_compose_digest_pins",
             side_effect=OSError("write denied"),
         ):
             status, stdout, stderr = self.run_direct(digest_pin_updates=True)
@@ -117,7 +117,7 @@ class UpdateFromWudDigestPinTests(UpdateFromWudRunnerTestCase):
         self.prepare_digest_pin_latest_update()
 
         with mock.patch(
-            "wud_updater.compose_rewrite.apply_compose_digest_pins",
+            "wudup.compose_rewrite.apply_compose_digest_pins",
             return_value=(),
         ):
             status, stdout, stderr = self.run_direct(digest_pin_updates=True)
@@ -425,7 +425,7 @@ class UpdateFromWudDigestPinTests(UpdateFromWudRunnerTestCase):
         )
         content = compose_file.read_text(encoding="utf-8")
         self.assertIn("image: repo/app:1.0", content)
-        self.assertNotIn("wud-updater.resolved-tag", content)
+        self.assertNotIn("wudup.resolved-tag", content)
         pending = self.db_rows("SELECT * FROM pending_updates")
         self.assertEqual(pending[0]["status"], "failed")
         self.assertEqual(
@@ -475,7 +475,7 @@ class UpdateFromWudDigestPinTests(UpdateFromWudRunnerTestCase):
         )
         content = compose_file.read_text(encoding="utf-8")
         self.assertIn("image: repo/app:latest", content)
-        self.assertNotIn("wud-updater.resolved-tag", content)
+        self.assertNotIn("wudup.resolved-tag", content)
         pending = self.db_rows("SELECT * FROM pending_updates")
         self.assertEqual(pending[0]["status"], "failed")
         self.assertEqual(
@@ -514,7 +514,7 @@ class UpdateFromWudDigestPinTests(UpdateFromWudRunnerTestCase):
         self.assertEqual(status, 0, stderr + stdout)
         self.assertEqual(self.wud_file.read_text(encoding="utf-8"), "")
         content = compose_file.read_text(encoding="utf-8")
-        self.assertIn("# wud-updater.resolved-tag=latest", content)
+        self.assertIn("# wudup.resolved-tag=latest", content)
         self.assertIn("image: repo/app@sha256:child", content)
         events = self.db_rows("SELECT * FROM update_events")
         pending = self.db_rows("SELECT * FROM pending_updates")
@@ -591,7 +591,7 @@ class UpdateFromWudDigestPinTests(UpdateFromWudRunnerTestCase):
         content = compose_file.read_text(encoding="utf-8")
         self.assertIn("image: repo/app:latest", content)
         self.assertNotIn("image: repo/app@sha256:child", content)
-        self.assertNotIn("wud-updater.resolved-tag", content)
+        self.assertNotIn("wudup.resolved-tag", content)
         incidents = sorted(stack_dir.glob("error-*.logs"))
         self.assertTrue(incidents)
         incident = incidents[-1].read_text(encoding="utf-8")
@@ -664,7 +664,7 @@ class UpdateFromWudDigestPinTests(UpdateFromWudRunnerTestCase):
                 [
                     "services:",
                     "  app:",
-                    "    # wud-updater.resolved-tag=latest",
+                    "    # wudup.resolved-tag=latest",
                     "    image: repo/app@sha256:old",
                     "    labels:",
                     "      - wud.tag.include=^latest$$",
@@ -702,7 +702,7 @@ class UpdateFromWudDigestPinTests(UpdateFromWudRunnerTestCase):
         self.assertEqual(status, 0, stderr + stdout)
         self.assertEqual(self.wud_file.read_text(encoding="utf-8"), "")
         content = compose_file.read_text(encoding="utf-8")
-        self.assertIn("# wud-updater.resolved-tag=latest", content)
+        self.assertIn("# wudup.resolved-tag=latest", content)
         self.assertIn("image: repo/app@sha256:child", content)
         self.assertIn("wud.tag.include=^latest$$", content)
         self.assertRegex(self.calls(), r"compose -f docker-compose.yml pull app")
@@ -723,7 +723,7 @@ class UpdateFromWudDigestPinTests(UpdateFromWudRunnerTestCase):
                 [
                     "services:",
                     "  app:",
-                    "    # wud-updater.resolved-tag=latest",
+                    "    # wudup.resolved-tag=latest",
                     "    image: repo/app:latest@sha256:old",
                     "    labels:",
                     "      - wud.tag.include=^latest$$",
@@ -757,7 +757,7 @@ class UpdateFromWudDigestPinTests(UpdateFromWudRunnerTestCase):
         self.assertEqual(status, 0, stderr + stdout)
         self.assertEqual(self.wud_file.read_text(encoding="utf-8"), "")
         content = compose_file.read_text(encoding="utf-8")
-        self.assertIn("# wud-updater.resolved-tag=latest", content)
+        self.assertIn("# wudup.resolved-tag=latest", content)
         self.assertIn("image: repo/app@sha256:child", content)
         self.assertNotIn("image: repo/app:latest@sha256:old", content)
         self.assertRegex(self.calls(), r"compose -f docker-compose.yml pull app")
@@ -775,7 +775,7 @@ class UpdateFromWudDigestPinTests(UpdateFromWudRunnerTestCase):
                 [
                     "services:",
                     "  app:",
-                    "    # wud-updater.resolved-tag=latest",
+                    "    # wudup.resolved-tag=latest",
                     "    image: repo/app@sha256:old",
                     "    labels:",
                     "      - wud.tag.include=^latest$$",
@@ -816,7 +816,7 @@ class UpdateFromWudDigestPinTests(UpdateFromWudRunnerTestCase):
                 [
                     "services:",
                     "  app:",
-                    "    # wud-updater.resolved-tag=latest",
+                    "    # wudup.resolved-tag=latest",
                     "    image: repo/app@sha256:old",
                     "    labels:",
                     "      - wud.tag.include=^latest$$",

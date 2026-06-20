@@ -34,7 +34,7 @@ safe_name(){
 }
 
 setup_case(){
-  TEST_TMP="$(mktemp -d "${TMPDIR:-/tmp}/wud-updater-test.XXXXXX")"
+  TEST_TMP="$(mktemp -d "${TMPDIR:-/tmp}/wudup-test.XXXXXX")"
   BASE="$TEST_TMP/base"
   WUD_FILE="$TEST_TMP/images.todo"
   LOG_DIR="$TEST_TMP/logs"
@@ -159,12 +159,12 @@ run_script(){
   LAST_STATUS=0
   if ((${#env_args[@]})); then
     PATH="$FAKE_BIN:$PATH" FAKE_DOCKER_ROOT="$FAKE_ROOT" \
-      WUD_UPDATER_BANNER=false \
+      WUDUP_BANNER=false \
       env "${env_args[@]}" "$SCRIPT" --base "$BASE" --file "$WUD_FILE" --log-dir "$LOG_DIR" --max-wait 0 --no-color "$@" \
       > "$TEST_TMP/output.log" 2>&1 || LAST_STATUS=$?
   else
     PATH="$FAKE_BIN:$PATH" FAKE_DOCKER_ROOT="$FAKE_ROOT" \
-      WUD_UPDATER_BANNER=false \
+      WUDUP_BANNER=false \
       "$SCRIPT" --base "$BASE" --file "$WUD_FILE" --log-dir "$LOG_DIR" --max-wait 0 --no-color "$@" \
       > "$TEST_TMP/output.log" 2>&1 || LAST_STATUS=$?
   fi
@@ -176,7 +176,7 @@ run_script_with_home_defaults(){
 
   LAST_STATUS=0
   PATH="$FAKE_BIN:$PATH" HOME="$home_dir" FAKE_DOCKER_ROOT="$FAKE_ROOT" \
-    WUD_UPDATER_BANNER=false \
+    WUDUP_BANNER=false \
     "$SCRIPT" --log-dir "$LOG_DIR" --max-wait 0 --no-color "$@" \
     > "$TEST_TMP/output.log" 2>&1 || LAST_STATUS=$?
 }

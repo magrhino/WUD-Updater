@@ -35,13 +35,13 @@ class UpdatesWrapperTestCase(unittest.TestCase):
         env = os.environ.copy()
         env_defaults = {
             "PATH": f"{self.fake_bin}:{env.get('PATH', '')}",
-            "WUD_UPDATER": str(self.updater),
-            "WUD_UPDATER_CONFIG": str(self.root / "missing-env"),
+            "WUDUP_UPDATER": str(self.updater),
+            "WUDUP_CONFIG": str(self.root / "missing-env"),
             "FAKE_SUDO_LOG": str(self.sudo_log),
             "FAKE_UPDATER_LOG": str(self.updater_log),
             "FAKE_WUD_FILE": str(self.wud_file),
-            "WUD_UPDATER_BANNER": "false",
-            "WUD_UPDATER_RELEASE_CHECK": "false",
+            "WUDUP_BANNER": "false",
+            "WUDUP_RELEASE_CHECK": "false",
         }
         if include_pythonpath:
             env_defaults["PYTHONPATH"] = str(self.repo_root / "src")
@@ -52,7 +52,7 @@ class UpdatesWrapperTestCase(unittest.TestCase):
             env.update(env_overrides)
 
         if command is None:
-            command = [sys.executable, "-m", "wud_updater.cli", "updates"]
+            command = [sys.executable, "-m", "wudup.cli", "updates"]
         if include_file:
             command = [*command, "--file", str(self.wud_file)]
         command = [*command, *args]
@@ -104,7 +104,7 @@ if [[ "$1 $2" == "container inspect" ]]; then
     exit "$FAKE_DOCKER_INSPECT_RETURN"
   fi
   out_dir="$(dirname "${FAKE_WUD_FILE:?FAKE_WUD_FILE is required}")"
-  printf '[{"Config":{"Image":"wud-updater:test"},"Mounts":[{"Type":"volume","Name":"wud-out","Destination":"%s"}]}]\\n' "$out_dir"
+  printf '[{"Config":{"Image":"wudup:test"},"Mounts":[{"Type":"volume","Name":"wud-out","Destination":"%s"}]}]\\n' "$out_dir"
   exit 0
 fi
 if [[ "$1" == "run" ]]; then

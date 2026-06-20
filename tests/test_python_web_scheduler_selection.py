@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from types import SimpleNamespace
 
-from wud_updater import web_scheduler
+from wudup import web_scheduler
 
 
 

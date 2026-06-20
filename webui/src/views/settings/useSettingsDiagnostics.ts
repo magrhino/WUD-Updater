@@ -62,7 +62,7 @@ export function useSettingsDiagnostics() {
       url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = "wud-updater-diagnostics.json";
+      a.download = "wudup-diagnostics.json";
       a.click();
       URL.revokeObjectURL(url);
       url = null;

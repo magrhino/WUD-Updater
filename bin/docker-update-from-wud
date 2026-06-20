@@ -26,7 +26,7 @@ PY
 }
 
 python_bin="${PYTHON_BIN:-python3}"
-venv_dir="${WUD_UPDATER_VENV:-$repo_dir/.venv}"
+venv_dir="${WUDUP_VENV:-${WUD_UPDATER_VENV:-$repo_dir/.venv}}"
 if [[ -z "${PYTHON_BIN:-}" && -x "$venv_dir/bin/python" ]]; then
   if ! python_has_runtime_deps "$python_bin"; then
     python_bin="$venv_dir/bin/python"
@@ -39,4 +39,4 @@ else
   export PYTHONPATH="${repo_dir}/src"
 fi
 
-exec "$python_bin" -m wud_updater.cli update-from-wud "$@"
+exec "$python_bin" -m wudup.cli update-from-wud "$@"

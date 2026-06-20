@@ -1,10 +1,10 @@
 from __future__ import annotations
 import json
 from pathlib import Path
-from wud_updater.db import (
+from wudup.db import (
     open_db,
 )
-from wud_updater.web_models import WebApplyJob
+from wudup.web_models import WebApplyJob
 from tests.web_test_helpers import (
     _client,
     _csrf_headers,
@@ -21,7 +21,7 @@ def test_container_restart_endpoint_enforces_auth_csrf_read_only_and_post(
         tmp_path,
         {
             "WUD_WEB_DEV_NO_AUTH": "true",
-            "WUD_WEB_RESTART_CONTAINER": "wud-updater",
+            "WUD_WEB_RESTART_CONTAINER": "wudup",
         },
     )
     mutating = _client(
@@ -29,7 +29,7 @@ def test_container_restart_endpoint_enforces_auth_csrf_read_only_and_post(
         {
             "WUD_WEB_DEV_NO_AUTH": "true",
             "WUD_WEB_MUTATIONS_ENABLED": "true",
-            "WUD_WEB_RESTART_CONTAINER": "wud-updater",
+            "WUD_WEB_RESTART_CONTAINER": "wudup",
         },
     )
 
@@ -81,7 +81,7 @@ def test_container_restart_endpoint_rejects_active_apply_job(tmp_path: Path) -> 
         {
             "WUD_WEB_DEV_NO_AUTH": "true",
             "WUD_WEB_MUTATIONS_ENABLED": "true",
-            "WUD_WEB_RESTART_CONTAINER": "wud-updater",
+            "WUD_WEB_RESTART_CONTAINER": "wudup",
             **fake_env,
         },
     )
@@ -111,12 +111,12 @@ def test_container_restart_endpoint_schedules_docker_restart_and_audit(
         {
             "WUD_WEB_DEV_NO_AUTH": "true",
             "WUD_WEB_MUTATIONS_ENABLED": "true",
-            "WUD_WEB_RESTART_CONTAINER": "wud-updater",
+            "WUD_WEB_RESTART_CONTAINER": "wudup",
             **fake_env,
         },
     )
-    (fake_root / "containers" / "wud-updater.summary").write_text(
-        "/wud-updater|running|healthy|0|0\n",
+    (fake_root / "containers" / "wudup.summary").write_text(
+        "/wudup|running|healthy|0|0\n",
         encoding="utf-8",
     )
 
@@ -129,10 +129,10 @@ def test_container_restart_endpoint_schedules_docker_restart_and_audit(
     assert response.status_code == 202
     body = response.json()
     assert body["status"] == "scheduled"
-    assert body["container"] == "wud-updater"
+    assert body["container"] == "wudup"
     calls = _fake_docker_calls(fake_root)
-    assert "inspect wud-updater" in calls
-    assert "restart --time 10 wud-updater" in calls
+    assert "inspect wudup" in calls
+    assert "restart --time 10 wudup" in calls
 
     with open_db(tmp_path / "state" / "wud.sqlite") as conn:
         row = conn.execute(
@@ -149,7 +149,7 @@ def test_container_restart_endpoint_schedules_docker_restart_and_audit(
     assert event["status"] == "success"
     metadata = json.loads(row["metadata_json"])
     assert metadata["operation"] == "restart_container"
-    assert metadata["target"] == {"container": "wud-updater"}
+    assert metadata["target"] == {"container": "wudup"}
     assert metadata["status"] == "success"
     assert json.loads(event["metadata_json"]) == metadata
 
@@ -163,12 +163,12 @@ def test_container_restart_endpoint_marks_audit_failed_when_restart_fails(
         {
             "WUD_WEB_DEV_NO_AUTH": "true",
             "WUD_WEB_MUTATIONS_ENABLED": "true",
-            "WUD_WEB_RESTART_CONTAINER": "wud-updater",
+            "WUD_WEB_RESTART_CONTAINER": "wudup",
             **fake_env,
         },
     )
-    (fake_root / "containers" / "wud-updater.summary").write_text(
-        "/wud-updater|running|healthy|0|0\n",
+    (fake_root / "containers" / "wudup.summary").write_text(
+        "/wudup|running|healthy|0|0\n",
         encoding="utf-8",
     )
     (fake_root / "restart_fail").write_text("restart failed\n", encoding="utf-8")
@@ -181,7 +181,7 @@ def test_container_restart_endpoint_marks_audit_failed_when_restart_fails(
 
     assert response.status_code == 202
     audit_run_id = response.json()["audit_run_id"]
-    assert "restart --time 10 wud-updater" in _fake_docker_calls(fake_root)
+    assert "restart --time 10 wudup" in _fake_docker_calls(fake_root)
 
     with open_db(tmp_path / "state" / "wud.sqlite") as conn:
         row = conn.execute(

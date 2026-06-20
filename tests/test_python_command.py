@@ -5,7 +5,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from wud_updater.command import (
+from wudup.command import (
     CommandError,
     CommandResult,
     CommandRunner,
@@ -36,7 +36,7 @@ class CommandRunnerTests(unittest.TestCase):
         self.assertEqual(str(error), "Command failed with exit code 1: false")
         self.assertIs(error.result, result)
 
-    @mock.patch("wud_updater.command.subprocess.run")
+    @mock.patch("wudup.command.subprocess.run")
     def test_capture_success(self, run_mock: mock.Mock) -> None:
         run_mock.return_value = mock.Mock(
             returncode=0,
@@ -53,7 +53,7 @@ class CommandRunnerTests(unittest.TestCase):
         run_mock.assert_called_once()
         self.assertEqual(run_mock.call_args.args[0], ("ls", "-l"))
 
-    @mock.patch("wud_updater.command.subprocess.run")
+    @mock.patch("wudup.command.subprocess.run")
     def test_capture_failure_raises(self, run_mock: mock.Mock) -> None:
         run_mock.return_value = mock.Mock(
             returncode=2,
@@ -68,7 +68,7 @@ class CommandRunnerTests(unittest.TestCase):
         self.assertEqual(cm.exception.result.returncode, 2)
         self.assertEqual(cm.exception.result.stderr, "bad usage")
 
-    @mock.patch("wud_updater.command.subprocess.run")
+    @mock.patch("wudup.command.subprocess.run")
     def test_capture_failure_no_check(self, run_mock: mock.Mock) -> None:
         run_mock.return_value = mock.Mock(
             returncode=2,
@@ -82,7 +82,7 @@ class CommandRunnerTests(unittest.TestCase):
         self.assertFalse(result.ok)
         self.assertEqual(result.returncode, 2)
 
-    @mock.patch("wud_updater.command.subprocess.run")
+    @mock.patch("wudup.command.subprocess.run")
     def test_capture_os_error_handling(self, run_mock: mock.Mock) -> None:
         run_mock.side_effect = FileNotFoundError("No such file or directory")
         runner = CommandRunner()
@@ -93,7 +93,7 @@ class CommandRunnerTests(unittest.TestCase):
         self.assertEqual(result.returncode, 127)
         self.assertEqual(result.stderr, "No such file or directory")
 
-    @mock.patch("wud_updater.command.subprocess.run")
+    @mock.patch("wudup.command.subprocess.run")
     def test_capture_permission_error_handling(self, run_mock: mock.Mock) -> None:
         run_mock.side_effect = PermissionError("Permission denied")
         runner = CommandRunner()
@@ -102,7 +102,7 @@ class CommandRunnerTests(unittest.TestCase):
 
         self.assertEqual(result.returncode, 126)
 
-    @mock.patch("wud_updater.command.subprocess.run")
+    @mock.patch("wudup.command.subprocess.run")
     def test_capture_lines(self, run_mock: mock.Mock) -> None:
         run_mock.return_value = mock.Mock(
             returncode=0,
@@ -115,7 +115,7 @@ class CommandRunnerTests(unittest.TestCase):
 
         self.assertEqual(lines, ["line1", "line2"])
 
-    @mock.patch("wud_updater.command.subprocess.run")
+    @mock.patch("wudup.command.subprocess.run")
     def test_run_success(self, run_mock: mock.Mock) -> None:
         run_mock.return_value = mock.Mock(returncode=0)
         runner = CommandRunner()
@@ -126,7 +126,7 @@ class CommandRunnerTests(unittest.TestCase):
         self.assertEqual(result.stdout, "")
         self.assertEqual(result.stderr, "")
 
-    @mock.patch("wud_updater.command.subprocess.run")
+    @mock.patch("wudup.command.subprocess.run")
     def test_run_os_error_handling(self, run_mock: mock.Mock) -> None:
         run_mock.side_effect = FileNotFoundError("Missing")
         runner = CommandRunner()
@@ -136,28 +136,28 @@ class CommandRunnerTests(unittest.TestCase):
 
         self.assertEqual(cm.exception.result.returncode, 127)
 
-    @mock.patch("wud_updater.command.os.read")
-    @mock.patch("wud_updater.command.os.close")
-    @mock.patch("wud_updater.command.subprocess.Popen")
+    @mock.patch("wudup.command.os.read")
+    @mock.patch("wudup.command.os.close")
+    @mock.patch("wudup.command.subprocess.Popen")
     def test_run_in_pty_success(
         self,
         popen_mock: mock.Mock,
         close_mock: mock.Mock,
         read_mock: mock.Mock,
     ) -> None:
-        import wud_updater.command
+        import wudup.command
 
-        if getattr(wud_updater.command, "pty", None) is None:
+        if getattr(wudup.command, "pty", None) is None:
             self.skipTest("pty not available on this platform")
 
-        with mock.patch("wud_updater.command.pty.openpty") as openpty_mock:
+        with mock.patch("wudup.command.pty.openpty") as openpty_mock:
             openpty_mock.return_value = (10, 11)
             read_mock.side_effect = [b"pty output", b""]
             process_mock = mock.Mock()
             process_mock.wait.return_value = 0
             popen_mock.return_value = process_mock
 
-            with mock.patch("wud_updater.command._copy_terminal_size"), mock.patch("sys.stdout"):
+            with mock.patch("wudup.command._copy_terminal_size"), mock.patch("sys.stdout"):
                 runner = CommandRunner()
                 result = runner.run_in_pty(["some-command"])
 
@@ -168,12 +168,12 @@ class CommandRunnerTests(unittest.TestCase):
         self.assertEqual(popen_mock.call_args.kwargs["stdout"], 11)
 
     def test_run_in_pty_fallback_on_oserror(self) -> None:
-        import wud_updater.command
+        import wudup.command
 
-        if getattr(wud_updater.command, "pty", None) is None:
+        if getattr(wudup.command, "pty", None) is None:
             self.skipTest("pty not available on this platform")
 
-        with mock.patch("wud_updater.command.pty.openpty") as openpty_mock:
+        with mock.patch("wudup.command.pty.openpty") as openpty_mock:
             openpty_mock.side_effect = OSError("no pty")
             runner = CommandRunner()
 
@@ -184,7 +184,7 @@ class CommandRunnerTests(unittest.TestCase):
         self.assertTrue(result.ok)
         streaming_mock.assert_called_once()
 
-    @mock.patch("wud_updater.command.subprocess.Popen")
+    @mock.patch("wudup.command.subprocess.Popen")
     def test_run_streaming_success(self, popen_mock: mock.Mock) -> None:
         process_mock = mock.Mock()
         process_mock.stdout = ["out1\n", "out2\n"]
@@ -201,7 +201,7 @@ class CommandRunnerTests(unittest.TestCase):
         self.assertEqual(result.stdout, "out1\nout2\n")
         self.assertEqual(result.stderr, "err1\n")
 
-    @mock.patch("wud_updater.command.subprocess.Popen")
+    @mock.patch("wudup.command.subprocess.Popen")
     def test_run_streaming_oserror(self, popen_mock: mock.Mock) -> None:
         popen_mock.side_effect = FileNotFoundError("Missing streaming")
         runner = CommandRunner()
@@ -211,7 +211,7 @@ class CommandRunnerTests(unittest.TestCase):
         self.assertFalse(result.ok)
         self.assertEqual(result.returncode, 127)
 
-    @mock.patch("wud_updater.command.subprocess.run")
+    @mock.patch("wudup.command.subprocess.run")
     def test_cwd_and_env_passing(self, run_mock: mock.Mock) -> None:
         run_mock.return_value = mock.Mock(returncode=0)
         runner = CommandRunner(env={"BASE": "1"})

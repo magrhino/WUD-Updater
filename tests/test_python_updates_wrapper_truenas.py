@@ -20,7 +20,7 @@ class UpdatesWrapperTruenasTests(UpdatesWrapperTestCase):
             "--dry-run",
             env_overrides={
                 "TRUENAS_STATUS_CHECK": "true",
-                "HOSTNAME": "wud-updater-1",
+                "HOSTNAME": "wudup-1",
                 "FAKE_DOCKER_LOG": str(docker_log),
             },
         )
@@ -30,7 +30,7 @@ class UpdatesWrapperTruenasTests(UpdatesWrapperTestCase):
         self.assertIn("25.10.1", result.stdout)
         self.assertIn("Pool needs attention", result.stdout)
         docker_calls = docker_log.read_text(encoding="utf-8")
-        self.assertIn("container inspect wud-updater-1", docker_calls)
+        self.assertIn("container inspect wudup-1", docker_calls)
         self.assertIn(
             "run --rm --pull never --network none --read-only --cap-drop ALL "
             "--security-opt no-new-privileges",
@@ -44,7 +44,7 @@ class UpdatesWrapperTruenasTests(UpdatesWrapperTestCase):
             docker_calls,
         )
         self.assertNotIn("-v /var/run/middleware:/var/run/middleware:ro", docker_calls)
-        self.assertIn("wud-updater:test truenas-status-export", docker_calls)
+        self.assertIn("wudup:test truenas-status-export", docker_calls)
         self.assertNotIn("--volumes-from", docker_calls)
         self.assertNotIn("--uri", docker_calls)
         self.assertNotIn("-K", docker_calls)
@@ -53,7 +53,7 @@ class UpdatesWrapperTruenasTests(UpdatesWrapperTestCase):
             "--dry-run",
             env_overrides={
                 "TRUENAS_STATUS_CHECK": "true",
-                "HOSTNAME": "wud-updater-1",
+                "HOSTNAME": "wudup-1",
                 "FAKE_DOCKER_RUN_RETURN": "2",
             },
         )
@@ -70,7 +70,7 @@ class UpdatesWrapperTruenasTests(UpdatesWrapperTestCase):
             "--dry-run",
             env_overrides={
                 "TRUENAS_STATUS_CHECK": "true",
-                "HOSTNAME": "wud-updater-1",
+                "HOSTNAME": "wudup-1",
                 "FAKE_DOCKER_INSPECT_RETURN": "2",
             },
         )
@@ -87,7 +87,7 @@ class UpdatesWrapperTruenasTests(UpdatesWrapperTestCase):
             "--dry-run",
             env_overrides={
                 "TRUENAS_STATUS_CHECK": "true",
-                "HOSTNAME": "wud-updater-1",
+                "HOSTNAME": "wudup-1",
                 "FAKE_DOCKER_STATUS_RESPONSE": "invalid",
             },
         )
@@ -104,7 +104,7 @@ class UpdatesWrapperTruenasTests(UpdatesWrapperTestCase):
         midclt_log = self.root / "midclt.log"
 
         result = self.run_updates(
-            command=[sys.executable, "-m", "wud_updater.cli", "truenas-status-export"],
+            command=[sys.executable, "-m", "wudup.cli", "truenas-status-export"],
             include_file=False,
             env_overrides={
                 "WUD_OUT_FILE": str(self.wud_file),
@@ -142,7 +142,7 @@ class UpdatesWrapperTruenasTests(UpdatesWrapperTestCase):
             "--dry-run",
             env_overrides={
                 "TRUENAS_STATUS_CHECK": "true",
-                "HOSTNAME": "wud-updater-1",
+                "HOSTNAME": "wudup-1",
                 "FAKE_TRUENAS_UPDATE_STATUS": "unavailable",
             },
         )
@@ -154,7 +154,7 @@ class UpdatesWrapperTruenasTests(UpdatesWrapperTestCase):
             "--dry-run",
             env_overrides={
                 "TRUENAS_STATUS_CHECK": "true",
-                "HOSTNAME": "wud-updater-1",
+                "HOSTNAME": "wudup-1",
                 "FAKE_TRUENAS_UPDATE_STATUS": "error",
             },
         )
@@ -166,7 +166,7 @@ class UpdatesWrapperTruenasTests(UpdatesWrapperTestCase):
             "--dry-run",
             env_overrides={
                 "TRUENAS_STATUS_CHECK": "true",
-                "HOSTNAME": "wud-updater-1",
+                "HOSTNAME": "wudup-1",
                 "FAKE_TRUENAS_ALERT_STATUS": "none",
             },
         )
@@ -175,7 +175,7 @@ class UpdatesWrapperTruenasTests(UpdatesWrapperTestCase):
         self.assertIn("✅ No active alerts", result.stdout)
     def test_truenas_status_export_records_midclt_failure(self) -> None:
         result = self.run_updates(
-            command=[sys.executable, "-m", "wud_updater.cli", "truenas-status-export"],
+            command=[sys.executable, "-m", "wudup.cli", "truenas-status-export"],
             include_file=False,
             env_overrides={
                 "WUD_OUT_FILE": str(self.wud_file),

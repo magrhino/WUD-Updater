@@ -1,10 +1,10 @@
 from __future__ import annotations
 from pathlib import Path
-from wud_updater import web as web_module
-from wud_updater import web_jobs
-from wud_updater import web_self_update as self_update_module
-from wud_updater.config import UpdaterConfig
-from wud_updater.web_models import WebSettings
+from wudup import web as web_module
+from wudup import web_jobs
+from wudup import web_self_update as self_update_module
+from wudup.config import UpdaterConfig
+from wudup.web_models import WebSettings
 from tests.web_test_helpers import (
     _client,
     _csrf_headers,
@@ -95,7 +95,7 @@ def test_self_update_endpoint_enforces_auth_csrf_read_only_and_active_job(
         tmp_path,
         {
             "WUD_WEB_DEV_NO_AUTH": "true",
-            "WUD_WEB_RESTART_CONTAINER": "wud-updater",
+            "WUD_WEB_RESTART_CONTAINER": "wudup",
         },
     )
     mutating = _client(
@@ -103,7 +103,7 @@ def test_self_update_endpoint_enforces_auth_csrf_read_only_and_active_job(
         {
             "WUD_WEB_DEV_NO_AUTH": "true",
             "WUD_WEB_MUTATIONS_ENABLED": "true",
-            "WUD_WEB_RESTART_CONTAINER": "wud-updater",
+            "WUD_WEB_RESTART_CONTAINER": "wudup",
         },
     )
     mutating.app.state.web_apply_jobs["job-active"] = web_module.WebApplyJob(

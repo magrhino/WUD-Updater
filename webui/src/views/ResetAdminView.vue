@@ -36,7 +36,7 @@ const {
           <ShieldCheck :size="24" />
         </div>
         <div>
-          <p class="eyebrow">WUD-Updater</p>
+          <p class="eyebrow">WUDup</p>
           <h1>Reset admin</h1>
         </div>
       </div>

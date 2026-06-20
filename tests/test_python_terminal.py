@@ -4,8 +4,8 @@ import unittest
 from io import StringIO
 from unittest import mock
 
-import wud_updater.terminal as terminal
-from wud_updater.terminal import RICH_AVAILABLE, TerminalRenderer
+import wudup.terminal as terminal
+from wudup.terminal import RICH_AVAILABLE, TerminalRenderer
 
 
 class FakeConsole:

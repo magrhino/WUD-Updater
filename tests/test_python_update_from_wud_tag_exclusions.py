@@ -3,17 +3,17 @@ from __future__ import annotations
 from pathlib import Path
 from unittest import mock
 
-from wud_updater import updater_tag_exclusions
-from wud_updater.command import CommandRunner
-from wud_updater.compose import (
+from wudup import updater_tag_exclusions
+from wudup.command import CommandRunner
+from wudup.compose import (
     ComposeStack,
     ServiceImage,
 )
-from wud_updater.compose_rewrite import apply_compose_tag_exclusions
-from wud_updater.updater import (
+from wudup.compose_rewrite import apply_compose_tag_exclusions
+from wudup.updater import (
     UpdateFromWudRunner,
 )
-from wud_updater.updater_models import (
+from wudup.updater_models import (
     ComposeTagRewriteError,
     TagExclusionUpdate,
     UpdaterOptions,
@@ -141,7 +141,7 @@ class UpdateFromWudTagExclusionTests(UpdateFromWudRunnerTestCase):
             return "", ()
 
         with mock.patch(
-            "wud_updater.compose_rewrite.render_compose_tag_exclusions",
+            "wudup.compose_rewrite.render_compose_tag_exclusions",
             side_effect=fake_render_compose_tag_exclusions,
         ):
             result = updater_tag_exclusions.can_apply_tag_exclusions(
@@ -218,7 +218,7 @@ class UpdateFromWudTagExclusionTests(UpdateFromWudRunnerTestCase):
             )
 
         with mock.patch(
-            "wud_updater.compose_rewrite.apply_compose_tag_exclusions",
+            "wudup.compose_rewrite.apply_compose_tag_exclusions",
             side_effect=flaky_apply_compose_tag_exclusions,
         ):
             result = runner.run()

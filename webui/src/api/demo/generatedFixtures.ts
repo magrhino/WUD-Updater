@@ -82,7 +82,7 @@ export const generatedFixtures = {
         {
           "category": "runtime",
           "code": "sudo",
-          "detail": "disabled by WUD_UPDATER_USE_SUDO=false",
+          "detail": "disabled by WUDUP_USE_SUDO=false",
           "name": "sudo",
           "status": "PASS",
           "suggestions": [],
@@ -543,7 +543,7 @@ export const generatedFixtures = {
                 "action": "tag-update",
                 "allow_repo": false,
                 "compose_images": [
-                  "ghcr.io/magrhino/wud-updater:latest"
+                  "ghcr.io/magrhino/wudup:latest"
                 ],
                 "current_tag": "latest",
                 "desired_tag": "v0.16.1",
@@ -551,24 +551,24 @@ export const generatedFixtures = {
                 "digest": "",
                 "digest_provenance": null,
                 "has_tag": true,
-                "image": "ghcr.io/magrhino/wud-updater:latest",
-                "key": "magrhino/wud-updater:latest",
+                "image": "ghcr.io/magrhino/wudup:latest",
+                "key": "magrhino/wudup:latest",
                 "line_no": 5,
                 "raw": "",
-                "repo": "magrhino/wud-updater",
-                "resolved_image": "ghcr.io/magrhino/wud-updater:latest",
+                "repo": "magrhino/wudup",
+                "resolved_image": "ghcr.io/magrhino/wudup:latest",
                 "services": [
-                  "wud-updater"
+                  "wudup"
                 ],
-                "target_image": "ghcr.io/magrhino/wud-updater:v0.16.1",
+                "target_image": "ghcr.io/magrhino/wudup:v0.16.1",
                 "wud_metadata": {
-                  "display_name": "wud-updater",
+                  "display_name": "wudup",
                   "error": "",
-                  "id": "cid-media-wud-updater",
-                  "link": "https://github.com/magrhino/WUD-Updater",
+                  "id": "cid-media-wudup",
+                  "link": "https://github.com/magrhino/wudup",
                   "local_digest": "",
                   "local_tag": "latest",
-                  "name": "demo-wud-updater",
+                  "name": "demo-wudup",
                   "remote_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
                   "remote_tag": "v0.16.1",
                   "semver_diff": "minor",
@@ -586,9 +586,9 @@ export const generatedFixtures = {
             "project_directory": "<DOCKER_BASE>/media",
             "services": [
               "radarr",
-              "wud-updater"
+              "wudup"
             ],
-            "services_label": "radarr, wud-updater"
+            "services_label": "radarr, wudup"
           }
         ],
         "status": "ready",
@@ -613,7 +613,7 @@ export const generatedFixtures = {
                 ],
                 "recommended_actions": [
                   "Inspect the container source before removing the line.",
-                  "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                  "Remove the stale WUD line if this container should not be managed by WUDup."
                 ],
                 "running_container": "homepage",
                 "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -657,7 +657,7 @@ export const generatedFixtures = {
                 ],
                 "recommended_actions": [
                   "Inspect the container source before removing the line.",
-                  "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                  "Remove the stale WUD line if this container should not be managed by WUDup."
                 ],
                 "running_container": "vaultwarden",
                 "running_image": "vaultwarden/server:1.31.0"
@@ -701,7 +701,7 @@ export const generatedFixtures = {
                 ],
                 "recommended_actions": [
                   "Inspect the container source before removing the line.",
-                  "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                  "Remove the stale WUD line if this container should not be managed by WUDup."
                 ],
                 "running_container": "watchtower",
                 "running_image": "containrrr/watchtower:1.7.1"
@@ -828,19 +828,19 @@ export const generatedFixtures = {
           "digest": "",
           "digest_provenance": null,
           "has_tag": true,
-          "image": "ghcr.io/magrhino/wud-updater:latest",
-          "key": "magrhino/wud-updater:latest",
+          "image": "ghcr.io/magrhino/wudup:latest",
+          "key": "magrhino/wudup:latest",
           "line_no": 5,
           "raw": "",
-          "repo": "magrhino/wud-updater",
+          "repo": "magrhino/wudup",
           "wud_metadata": {
-            "display_name": "wud-updater",
+            "display_name": "wudup",
             "error": "",
-            "id": "cid-media-wud-updater",
-            "link": "https://github.com/magrhino/WUD-Updater",
+            "id": "cid-media-wudup",
+            "link": "https://github.com/magrhino/wudup",
             "local_digest": "",
             "local_tag": "latest",
-            "name": "demo-wud-updater",
+            "name": "demo-wudup",
             "remote_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
             "remote_tag": "v0.16.1",
             "semver_diff": "minor",
@@ -1139,7 +1139,7 @@ export const generatedFixtures = {
           "default_value": "",
           "name": "WUD_WEB_RESTART_CONTAINER",
           "source": "configured",
-          "value": "demo-wud-updater"
+          "value": "demo-wudup"
         },
         {
           "configured": false,
@@ -1210,7 +1210,7 @@ export const generatedFixtures = {
       {
         "category": "runtime",
         "code": "sudo",
-        "detail": "disabled by WUD_UPDATER_USE_SUDO=false",
+        "detail": "disabled by WUDUP_USE_SUDO=false",
         "name": "sudo",
         "status": "PASS",
         "suggestions": [],
@@ -1375,7 +1375,7 @@ export const generatedFixtures = {
       {
         "category": "webui",
         "code": "webui-database",
-        "detail": "demo/logs/wud-updater.sqlite",
+        "detail": "demo/logs/wudup.sqlite",
         "name": "WebUI database",
         "status": "PASS",
         "suggestions": [],
@@ -1495,7 +1495,7 @@ export const generatedFixtures = {
         "docs": [
           {
             "label": "First login",
-            "url": "https://github.com/magrhino/WUD-Updater/blob/main/docs/wiki/webui-container.md#first-login"
+            "url": "https://github.com/magrhino/wudup/blob/main/docs/wiki/webui-container.md#first-login"
           }
         ],
         "key": "admin-setup",
@@ -1518,7 +1518,7 @@ export const generatedFixtures = {
         "docs": [
           {
             "label": "WebUI container setup",
-            "url": "https://github.com/magrhino/WUD-Updater/blob/main/docs/wiki/webui-container.md#start-the-webui"
+            "url": "https://github.com/magrhino/wudup/blob/main/docs/wiki/webui-container.md#start-the-webui"
           }
         ],
         "key": "wud-output",
@@ -1535,7 +1535,7 @@ export const generatedFixtures = {
         "docs": [
           {
             "label": "Script sync notes",
-            "url": "https://github.com/magrhino/WUD-Updater/blob/main/docs/wiki/container-script-sync.md"
+            "url": "https://github.com/magrhino/wudup/blob/main/docs/wiki/container-script-sync.md"
           }
         ],
         "key": "wud-scripts",
@@ -1560,7 +1560,7 @@ export const generatedFixtures = {
         "docs": [
           {
             "label": "Deployment Docker access",
-            "url": "https://github.com/magrhino/WUD-Updater/blob/main/docs/DEPLOYMENT.md#requirements"
+            "url": "https://github.com/magrhino/wudup/blob/main/docs/DEPLOYMENT.md#requirements"
           }
         ],
         "key": "docker-access",
@@ -1579,7 +1579,7 @@ export const generatedFixtures = {
         "docs": [
           {
             "label": "Path mapping",
-            "url": "https://github.com/magrhino/WUD-Updater/blob/main/docs/DEPLOYMENT.md#docker-compose"
+            "url": "https://github.com/magrhino/wudup/blob/main/docs/DEPLOYMENT.md#docker-compose"
           }
         ],
         "key": "compose-discovery",
@@ -1596,7 +1596,7 @@ export const generatedFixtures = {
         "docs": [
           {
             "label": "First login",
-            "url": "https://github.com/magrhino/WUD-Updater/blob/main/docs/wiki/webui-container.md#first-login"
+            "url": "https://github.com/magrhino/wudup/blob/main/docs/wiki/webui-container.md#first-login"
           }
         ],
         "key": "persistence",
@@ -1616,7 +1616,7 @@ export const generatedFixtures = {
         "docs": [
           {
             "label": "Network exposure",
-            "url": "https://github.com/magrhino/WUD-Updater/blob/main/docs/wiki/webui-container.md#network-exposure"
+            "url": "https://github.com/magrhino/wudup/blob/main/docs/wiki/webui-container.md#network-exposure"
           }
         ],
         "key": "browser-access",
@@ -1648,7 +1648,7 @@ export const generatedFixtures = {
         "docs": [
           {
             "label": "Read-only and mutations",
-            "url": "https://github.com/magrhino/WUD-Updater/blob/main/docs/wiki/webui-container.md#read-only-and-mutations"
+            "url": "https://github.com/magrhino/wudup/blob/main/docs/wiki/webui-container.md#read-only-and-mutations"
           }
         ],
         "key": "mutation-mode",
@@ -1830,7 +1830,7 @@ export const generatedFixtures = {
               "action": "tag-update",
               "allow_repo": false,
               "compose_images": [
-                "ghcr.io/magrhino/wud-updater:latest"
+                "ghcr.io/magrhino/wudup:latest"
               ],
               "current_tag": "latest",
               "desired_tag": "v0.16.1",
@@ -1838,24 +1838,24 @@ export const generatedFixtures = {
               "digest": "",
               "digest_provenance": null,
               "has_tag": true,
-              "image": "ghcr.io/magrhino/wud-updater:latest",
-              "key": "magrhino/wud-updater:latest",
+              "image": "ghcr.io/magrhino/wudup:latest",
+              "key": "magrhino/wudup:latest",
               "line_no": 5,
-              "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-              "repo": "magrhino/wud-updater",
-              "resolved_image": "ghcr.io/magrhino/wud-updater:latest",
+              "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+              "repo": "magrhino/wudup",
+              "resolved_image": "ghcr.io/magrhino/wudup:latest",
               "services": [
-                "wud-updater"
+                "wudup"
               ],
-              "target_image": "ghcr.io/magrhino/wud-updater:v0.16.1",
+              "target_image": "ghcr.io/magrhino/wudup:v0.16.1",
               "wud_metadata": {
-                "display_name": "wud-updater",
+                "display_name": "wudup",
                 "error": "",
-                "id": "cid-media-wud-updater",
-                "link": "https://github.com/magrhino/WUD-Updater",
+                "id": "cid-media-wudup",
+                "link": "https://github.com/magrhino/wudup",
                 "local_digest": "",
                 "local_tag": "latest",
-                "name": "demo-wud-updater",
+                "name": "demo-wudup",
                 "remote_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
                 "remote_tag": "v0.16.1",
                 "semver_diff": "minor",
@@ -1873,9 +1873,9 @@ export const generatedFixtures = {
           "project_directory": "demo/docker/media",
           "services": [
             "radarr",
-            "wud-updater"
+            "wudup"
           ],
-          "services_label": "radarr, wud-updater"
+          "services_label": "radarr, wudup"
         }
       ],
       "status": "ready",
@@ -1900,7 +1900,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "homepage",
               "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -1944,7 +1944,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "vaultwarden",
               "running_image": "vaultwarden/server:1.31.0"
@@ -1988,7 +1988,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "watchtower",
               "running_image": "containrrr/watchtower:1.7.1"
@@ -2115,19 +2115,19 @@ export const generatedFixtures = {
         "digest": "",
         "digest_provenance": null,
         "has_tag": true,
-        "image": "ghcr.io/magrhino/wud-updater:latest",
-        "key": "magrhino/wud-updater:latest",
+        "image": "ghcr.io/magrhino/wudup:latest",
+        "key": "magrhino/wudup:latest",
         "line_no": 5,
-        "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-        "repo": "magrhino/wud-updater",
+        "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+        "repo": "magrhino/wudup",
         "wud_metadata": {
-          "display_name": "wud-updater",
+          "display_name": "wudup",
           "error": "",
-          "id": "cid-media-wud-updater",
-          "link": "https://github.com/magrhino/WUD-Updater",
+          "id": "cid-media-wudup",
+          "link": "https://github.com/magrhino/wudup",
           "local_digest": "",
           "local_tag": "latest",
-          "name": "demo-wud-updater",
+          "name": "demo-wudup",
           "remote_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
           "remote_tag": "v0.16.1",
           "semver_diff": "minor",
@@ -3587,9 +3587,9 @@ export const generatedFixtures = {
         "skipped": [
           {
             "desired_tag": "v0.16.1",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
             "reason": "tag-updates-disabled"
           }
         ],
@@ -3609,11 +3609,11 @@ export const generatedFixtures = {
             "action": "tag-updates-disabled",
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
             "matched": false,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-            "resolved_image": "ghcr.io/magrhino/wud-updater:latest"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+            "resolved_image": "ghcr.io/magrhino/wudup:latest"
           }
         ]
       },
@@ -3741,7 +3741,7 @@ export const generatedFixtures = {
               {
                 "args": [],
                 "cwd": "demo/docker/media",
-                "description": "Rewrite ghcr.io/magrhino/wud-updater:latest to ghcr.io/magrhino/wud-updater:v0.16.1 for wud-updater",
+                "description": "Rewrite ghcr.io/magrhino/wudup:latest to ghcr.io/magrhino/wudup:v0.16.1 for wudup",
                 "kind": "compose-tag-update"
               },
               {
@@ -3753,7 +3753,7 @@ export const generatedFixtures = {
                   "-f",
                   "docker-compose.yml",
                   "pull",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Pull matched image updates",
@@ -3768,7 +3768,7 @@ export const generatedFixtures = {
                   "-f",
                   "docker-compose.yml",
                   "stop",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Stop affected services before recreate",
@@ -3786,7 +3786,7 @@ export const generatedFixtures = {
                   "-d",
                   "--remove-orphans",
                   "--no-deps",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Recreate services with updated images",
@@ -3807,37 +3807,37 @@ export const generatedFixtures = {
             "lines": [
               {
                 "action": "tag-update",
-                "compose_image": "ghcr.io/magrhino/wud-updater:latest",
+                "compose_image": "ghcr.io/magrhino/wudup:latest",
                 "desired_tag": "v0.16.1",
                 "digest": "",
                 "digest_provenance": null,
-                "image": "ghcr.io/magrhino/wud-updater:latest",
+                "image": "ghcr.io/magrhino/wudup:latest",
                 "line_no": 5,
-                "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-                "resolved_image": "ghcr.io/magrhino/wud-updater:v0.16.1",
-                "service": "wud-updater",
-                "target_image": "ghcr.io/magrhino/wud-updater:v0.16.1"
+                "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+                "resolved_image": "ghcr.io/magrhino/wudup:v0.16.1",
+                "service": "wudup",
+                "target_image": "ghcr.io/magrhino/wudup:v0.16.1"
               }
             ],
             "name": "media",
             "project_directory": "demo/docker/media",
             "pull_services": [
-              "wud-updater"
+              "wudup"
             ],
             "services": [
-              "wud-updater"
+              "wudup"
             ],
-            "services_label": "wud-updater",
+            "services_label": "wudup",
             "stop_services": [
-              "wud-updater"
+              "wudup"
             ],
             "tag_updates": [
               {
                 "desired_tag": "v0.16.1",
-                "new_image": "ghcr.io/magrhino/wud-updater:v0.16.1",
-                "old_image": "ghcr.io/magrhino/wud-updater:latest",
+                "new_image": "ghcr.io/magrhino/wudup:v0.16.1",
+                "old_image": "ghcr.io/magrhino/wudup:latest",
                 "services": [
-                  "wud-updater"
+                  "wudup"
                 ]
               }
             ],
@@ -3858,11 +3858,11 @@ export const generatedFixtures = {
             "action": "tag-update",
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
             "matched": true,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-            "resolved_image": "ghcr.io/magrhino/wud-updater:latest"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+            "resolved_image": "ghcr.io/magrhino/wudup:latest"
           }
         ]
       },
@@ -3991,7 +3991,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "homepage",
                   "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -4188,7 +4188,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "homepage",
                   "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -4223,7 +4223,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "homepage",
               "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -4400,7 +4400,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "vaultwarden",
                   "running_image": "vaultwarden/server:1.31.0"
@@ -4597,7 +4597,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "vaultwarden",
                   "running_image": "vaultwarden/server:1.31.0"
@@ -4632,7 +4632,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "vaultwarden",
               "running_image": "vaultwarden/server:1.31.0"
@@ -4809,7 +4809,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "watchtower",
                   "running_image": "containrrr/watchtower:1.7.1"
@@ -5006,7 +5006,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "watchtower",
                   "running_image": "containrrr/watchtower:1.7.1"
@@ -5041,7 +5041,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "watchtower",
               "running_image": "containrrr/watchtower:1.7.1"
@@ -6427,9 +6427,9 @@ export const generatedFixtures = {
           },
           {
             "desired_tag": "v0.16.1",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
             "reason": "tag-updates-disabled"
           }
         ],
@@ -6459,11 +6459,11 @@ export const generatedFixtures = {
             "action": "tag-updates-disabled",
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
             "matched": false,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-            "resolved_image": "ghcr.io/magrhino/wud-updater:latest"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+            "resolved_image": "ghcr.io/magrhino/wudup:latest"
           }
         ]
       },
@@ -6706,7 +6706,7 @@ export const generatedFixtures = {
               {
                 "args": [],
                 "cwd": "demo/docker/media",
-                "description": "Rewrite ghcr.io/magrhino/wud-updater:latest to ghcr.io/magrhino/wud-updater:v0.16.1 for wud-updater",
+                "description": "Rewrite ghcr.io/magrhino/wudup:latest to ghcr.io/magrhino/wudup:v0.16.1 for wudup",
                 "kind": "compose-tag-update"
               },
               {
@@ -6718,7 +6718,7 @@ export const generatedFixtures = {
                   "-f",
                   "docker-compose.yml",
                   "pull",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Pull matched image updates",
@@ -6733,7 +6733,7 @@ export const generatedFixtures = {
                   "-f",
                   "docker-compose.yml",
                   "stop",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Stop affected services before recreate",
@@ -6751,7 +6751,7 @@ export const generatedFixtures = {
                   "-d",
                   "--remove-orphans",
                   "--no-deps",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Recreate services with updated images",
@@ -6772,37 +6772,37 @@ export const generatedFixtures = {
             "lines": [
               {
                 "action": "tag-update",
-                "compose_image": "ghcr.io/magrhino/wud-updater:latest",
+                "compose_image": "ghcr.io/magrhino/wudup:latest",
                 "desired_tag": "v0.16.1",
                 "digest": "",
                 "digest_provenance": null,
-                "image": "ghcr.io/magrhino/wud-updater:latest",
+                "image": "ghcr.io/magrhino/wudup:latest",
                 "line_no": 5,
-                "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-                "resolved_image": "ghcr.io/magrhino/wud-updater:v0.16.1",
-                "service": "wud-updater",
-                "target_image": "ghcr.io/magrhino/wud-updater:v0.16.1"
+                "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+                "resolved_image": "ghcr.io/magrhino/wudup:v0.16.1",
+                "service": "wudup",
+                "target_image": "ghcr.io/magrhino/wudup:v0.16.1"
               }
             ],
             "name": "media",
             "project_directory": "demo/docker/media",
             "pull_services": [
-              "wud-updater"
+              "wudup"
             ],
             "services": [
-              "wud-updater"
+              "wudup"
             ],
-            "services_label": "wud-updater",
+            "services_label": "wudup",
             "stop_services": [
-              "wud-updater"
+              "wudup"
             ],
             "tag_updates": [
               {
                 "desired_tag": "v0.16.1",
-                "new_image": "ghcr.io/magrhino/wud-updater:v0.16.1",
-                "old_image": "ghcr.io/magrhino/wud-updater:latest",
+                "new_image": "ghcr.io/magrhino/wudup:v0.16.1",
+                "old_image": "ghcr.io/magrhino/wudup:latest",
                 "services": [
-                  "wud-updater"
+                  "wudup"
                 ]
               }
             ],
@@ -6833,11 +6833,11 @@ export const generatedFixtures = {
             "action": "tag-update",
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
             "matched": true,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-            "resolved_image": "ghcr.io/magrhino/wud-updater:latest"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+            "resolved_image": "ghcr.io/magrhino/wudup:latest"
           }
         ]
       },
@@ -6972,7 +6972,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "homepage",
                   "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -7200,7 +7200,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "homepage",
                   "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -7235,7 +7235,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "homepage",
               "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -7537,7 +7537,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "vaultwarden",
                   "running_image": "vaultwarden/server:1.31.0"
@@ -7765,7 +7765,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "vaultwarden",
                   "running_image": "vaultwarden/server:1.31.0"
@@ -7800,7 +7800,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "vaultwarden",
               "running_image": "vaultwarden/server:1.31.0"
@@ -8102,7 +8102,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "watchtower",
                   "running_image": "containrrr/watchtower:1.7.1"
@@ -8330,7 +8330,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "watchtower",
                   "running_image": "containrrr/watchtower:1.7.1"
@@ -8365,7 +8365,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "watchtower",
               "running_image": "containrrr/watchtower:1.7.1"
@@ -9304,9 +9304,9 @@ export const generatedFixtures = {
           },
           {
             "desired_tag": "v0.16.1",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
             "reason": "tag-updates-disabled"
           }
         ],
@@ -9336,11 +9336,11 @@ export const generatedFixtures = {
             "action": "tag-updates-disabled",
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
             "matched": false,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-            "resolved_image": "ghcr.io/magrhino/wud-updater:latest"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+            "resolved_image": "ghcr.io/magrhino/wudup:latest"
           }
         ]
       },
@@ -9475,7 +9475,7 @@ export const generatedFixtures = {
               {
                 "args": [],
                 "cwd": "demo/docker/media",
-                "description": "Rewrite ghcr.io/magrhino/wud-updater:latest to ghcr.io/magrhino/wud-updater:v0.16.1 for wud-updater",
+                "description": "Rewrite ghcr.io/magrhino/wudup:latest to ghcr.io/magrhino/wudup:v0.16.1 for wudup",
                 "kind": "compose-tag-update"
               },
               {
@@ -9494,7 +9494,7 @@ export const generatedFixtures = {
                   "docker-compose.yml",
                   "pull",
                   "radarr",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Pull matched image updates",
@@ -9510,7 +9510,7 @@ export const generatedFixtures = {
                   "docker-compose.yml",
                   "stop",
                   "radarr",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Stop affected services before recreate",
@@ -9529,7 +9529,7 @@ export const generatedFixtures = {
                   "--remove-orphans",
                   "--no-deps",
                   "radarr",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Recreate services with updated images",
@@ -9563,40 +9563,40 @@ export const generatedFixtures = {
               },
               {
                 "action": "tag-update",
-                "compose_image": "ghcr.io/magrhino/wud-updater:latest",
+                "compose_image": "ghcr.io/magrhino/wudup:latest",
                 "desired_tag": "v0.16.1",
                 "digest": "",
                 "digest_provenance": null,
-                "image": "ghcr.io/magrhino/wud-updater:latest",
+                "image": "ghcr.io/magrhino/wudup:latest",
                 "line_no": 5,
-                "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-                "resolved_image": "ghcr.io/magrhino/wud-updater:v0.16.1",
-                "service": "wud-updater",
-                "target_image": "ghcr.io/magrhino/wud-updater:v0.16.1"
+                "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+                "resolved_image": "ghcr.io/magrhino/wudup:v0.16.1",
+                "service": "wudup",
+                "target_image": "ghcr.io/magrhino/wudup:v0.16.1"
               }
             ],
             "name": "media",
             "project_directory": "demo/docker/media",
             "pull_services": [
               "radarr",
-              "wud-updater"
+              "wudup"
             ],
             "services": [
               "radarr",
-              "wud-updater"
+              "wudup"
             ],
-            "services_label": "radarr wud-updater",
+            "services_label": "radarr wudup",
             "stop_services": [
               "radarr",
-              "wud-updater"
+              "wudup"
             ],
             "tag_updates": [
               {
                 "desired_tag": "v0.16.1",
-                "new_image": "ghcr.io/magrhino/wud-updater:v0.16.1",
-                "old_image": "ghcr.io/magrhino/wud-updater:latest",
+                "new_image": "ghcr.io/magrhino/wudup:v0.16.1",
+                "old_image": "ghcr.io/magrhino/wudup:latest",
                 "services": [
-                  "wud-updater"
+                  "wudup"
                 ]
               },
               {
@@ -9635,11 +9635,11 @@ export const generatedFixtures = {
             "action": "tag-update",
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
             "matched": true,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-            "resolved_image": "ghcr.io/magrhino/wud-updater:latest"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+            "resolved_image": "ghcr.io/magrhino/wudup:latest"
           }
         ]
       },
@@ -9774,7 +9774,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "homepage",
                   "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -10002,7 +10002,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "homepage",
                   "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -10037,7 +10037,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "homepage",
               "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -10339,7 +10339,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "vaultwarden",
                   "running_image": "vaultwarden/server:1.31.0"
@@ -10567,7 +10567,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "vaultwarden",
                   "running_image": "vaultwarden/server:1.31.0"
@@ -10602,7 +10602,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "vaultwarden",
               "running_image": "vaultwarden/server:1.31.0"
@@ -10904,7 +10904,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "watchtower",
                   "running_image": "containrrr/watchtower:1.7.1"
@@ -11132,7 +11132,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "watchtower",
                   "running_image": "containrrr/watchtower:1.7.1"
@@ -11167,7 +11167,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "watchtower",
               "running_image": "containrrr/watchtower:1.7.1"
@@ -11475,9 +11475,9 @@ export const generatedFixtures = {
         "skipped": [
           {
             "desired_tag": "v0.16.1",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
             "reason": "tag-updates-disabled"
           }
         ],
@@ -11596,11 +11596,11 @@ export const generatedFixtures = {
             "action": "tag-updates-disabled",
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
             "matched": false,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-            "resolved_image": "ghcr.io/magrhino/wud-updater:latest"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+            "resolved_image": "ghcr.io/magrhino/wudup:latest"
           }
         ]
       },
@@ -11819,7 +11819,7 @@ export const generatedFixtures = {
               {
                 "args": [],
                 "cwd": "demo/docker/media",
-                "description": "Rewrite ghcr.io/magrhino/wud-updater:latest to ghcr.io/magrhino/wud-updater:v0.16.1 for wud-updater",
+                "description": "Rewrite ghcr.io/magrhino/wudup:latest to ghcr.io/magrhino/wudup:v0.16.1 for wudup",
                 "kind": "compose-tag-update"
               },
               {
@@ -11831,7 +11831,7 @@ export const generatedFixtures = {
                   "-f",
                   "docker-compose.yml",
                   "pull",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Pull matched image updates",
@@ -11846,7 +11846,7 @@ export const generatedFixtures = {
                   "-f",
                   "docker-compose.yml",
                   "stop",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Stop affected services before recreate",
@@ -11864,7 +11864,7 @@ export const generatedFixtures = {
                   "-d",
                   "--remove-orphans",
                   "--no-deps",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Recreate services with updated images",
@@ -11885,37 +11885,37 @@ export const generatedFixtures = {
             "lines": [
               {
                 "action": "tag-update",
-                "compose_image": "ghcr.io/magrhino/wud-updater:latest",
+                "compose_image": "ghcr.io/magrhino/wudup:latest",
                 "desired_tag": "v0.16.1",
                 "digest": "",
                 "digest_provenance": null,
-                "image": "ghcr.io/magrhino/wud-updater:latest",
+                "image": "ghcr.io/magrhino/wudup:latest",
                 "line_no": 5,
-                "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-                "resolved_image": "ghcr.io/magrhino/wud-updater:v0.16.1",
-                "service": "wud-updater",
-                "target_image": "ghcr.io/magrhino/wud-updater:v0.16.1"
+                "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+                "resolved_image": "ghcr.io/magrhino/wudup:v0.16.1",
+                "service": "wudup",
+                "target_image": "ghcr.io/magrhino/wudup:v0.16.1"
               }
             ],
             "name": "media",
             "project_directory": "demo/docker/media",
             "pull_services": [
-              "wud-updater"
+              "wudup"
             ],
             "services": [
-              "wud-updater"
+              "wudup"
             ],
-            "services_label": "wud-updater",
+            "services_label": "wudup",
             "stop_services": [
-              "wud-updater"
+              "wudup"
             ],
             "tag_updates": [
               {
                 "desired_tag": "v0.16.1",
-                "new_image": "ghcr.io/magrhino/wud-updater:v0.16.1",
-                "old_image": "ghcr.io/magrhino/wud-updater:latest",
+                "new_image": "ghcr.io/magrhino/wudup:v0.16.1",
+                "old_image": "ghcr.io/magrhino/wudup:latest",
                 "services": [
-                  "wud-updater"
+                  "wudup"
                 ]
               }
             ],
@@ -11946,11 +11946,11 @@ export const generatedFixtures = {
             "action": "tag-update",
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
             "matched": true,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-            "resolved_image": "ghcr.io/magrhino/wud-updater:latest"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+            "resolved_image": "ghcr.io/magrhino/wudup:latest"
           }
         ]
       },
@@ -12077,7 +12077,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "homepage",
                   "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -12372,7 +12372,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "homepage",
                   "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -12407,7 +12407,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "homepage",
               "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -12682,7 +12682,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "vaultwarden",
                   "running_image": "vaultwarden/server:1.31.0"
@@ -12977,7 +12977,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "vaultwarden",
                   "running_image": "vaultwarden/server:1.31.0"
@@ -13012,7 +13012,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "vaultwarden",
               "running_image": "vaultwarden/server:1.31.0"
@@ -13287,7 +13287,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "watchtower",
                   "running_image": "containrrr/watchtower:1.7.1"
@@ -13582,7 +13582,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "watchtower",
                   "running_image": "containrrr/watchtower:1.7.1"
@@ -13617,7 +13617,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "watchtower",
               "running_image": "containrrr/watchtower:1.7.1"
@@ -13895,7 +13895,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "homepage",
                   "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -13948,9 +13948,9 @@ export const generatedFixtures = {
         "skipped": [
           {
             "desired_tag": "v0.16.1",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
             "reason": "tag-updates-disabled"
           },
           {
@@ -13977,11 +13977,11 @@ export const generatedFixtures = {
             "action": "tag-updates-disabled",
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
             "matched": false,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-            "resolved_image": "ghcr.io/magrhino/wud-updater:latest"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+            "resolved_image": "ghcr.io/magrhino/wudup:latest"
           },
           {
             "action": "tag-updates-disabled",
@@ -14123,7 +14123,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "homepage",
                   "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -14158,7 +14158,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "homepage",
               "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -14194,7 +14194,7 @@ export const generatedFixtures = {
               {
                 "args": [],
                 "cwd": "demo/docker/media",
-                "description": "Rewrite ghcr.io/magrhino/wud-updater:latest to ghcr.io/magrhino/wud-updater:v0.16.1 for wud-updater",
+                "description": "Rewrite ghcr.io/magrhino/wudup:latest to ghcr.io/magrhino/wudup:v0.16.1 for wudup",
                 "kind": "compose-tag-update"
               },
               {
@@ -14206,7 +14206,7 @@ export const generatedFixtures = {
                   "-f",
                   "docker-compose.yml",
                   "pull",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Pull matched image updates",
@@ -14221,7 +14221,7 @@ export const generatedFixtures = {
                   "-f",
                   "docker-compose.yml",
                   "stop",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Stop affected services before recreate",
@@ -14239,7 +14239,7 @@ export const generatedFixtures = {
                   "-d",
                   "--remove-orphans",
                   "--no-deps",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Recreate services with updated images",
@@ -14260,37 +14260,37 @@ export const generatedFixtures = {
             "lines": [
               {
                 "action": "tag-update",
-                "compose_image": "ghcr.io/magrhino/wud-updater:latest",
+                "compose_image": "ghcr.io/magrhino/wudup:latest",
                 "desired_tag": "v0.16.1",
                 "digest": "",
                 "digest_provenance": null,
-                "image": "ghcr.io/magrhino/wud-updater:latest",
+                "image": "ghcr.io/magrhino/wudup:latest",
                 "line_no": 5,
-                "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-                "resolved_image": "ghcr.io/magrhino/wud-updater:v0.16.1",
-                "service": "wud-updater",
-                "target_image": "ghcr.io/magrhino/wud-updater:v0.16.1"
+                "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+                "resolved_image": "ghcr.io/magrhino/wudup:v0.16.1",
+                "service": "wudup",
+                "target_image": "ghcr.io/magrhino/wudup:v0.16.1"
               }
             ],
             "name": "media",
             "project_directory": "demo/docker/media",
             "pull_services": [
-              "wud-updater"
+              "wudup"
             ],
             "services": [
-              "wud-updater"
+              "wudup"
             ],
-            "services_label": "wud-updater",
+            "services_label": "wudup",
             "stop_services": [
-              "wud-updater"
+              "wudup"
             ],
             "tag_updates": [
               {
                 "desired_tag": "v0.16.1",
-                "new_image": "ghcr.io/magrhino/wud-updater:v0.16.1",
-                "old_image": "ghcr.io/magrhino/wud-updater:latest",
+                "new_image": "ghcr.io/magrhino/wudup:v0.16.1",
+                "old_image": "ghcr.io/magrhino/wudup:latest",
                 "services": [
-                  "wud-updater"
+                  "wudup"
                 ]
               }
             ],
@@ -14311,11 +14311,11 @@ export const generatedFixtures = {
             "action": "tag-update",
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
             "matched": true,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-            "resolved_image": "ghcr.io/magrhino/wud-updater:latest"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+            "resolved_image": "ghcr.io/magrhino/wudup:latest"
           },
           {
             "action": "unmatched",
@@ -14460,7 +14460,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "vaultwarden",
                   "running_image": "vaultwarden/server:1.31.0"
@@ -14513,9 +14513,9 @@ export const generatedFixtures = {
         "skipped": [
           {
             "desired_tag": "v0.16.1",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
             "reason": "tag-updates-disabled"
           },
           {
@@ -14542,11 +14542,11 @@ export const generatedFixtures = {
             "action": "tag-updates-disabled",
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
             "matched": false,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-            "resolved_image": "ghcr.io/magrhino/wud-updater:latest"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+            "resolved_image": "ghcr.io/magrhino/wudup:latest"
           },
           {
             "action": "tag-updates-disabled",
@@ -14688,7 +14688,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "vaultwarden",
                   "running_image": "vaultwarden/server:1.31.0"
@@ -14723,7 +14723,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "vaultwarden",
               "running_image": "vaultwarden/server:1.31.0"
@@ -14759,7 +14759,7 @@ export const generatedFixtures = {
               {
                 "args": [],
                 "cwd": "demo/docker/media",
-                "description": "Rewrite ghcr.io/magrhino/wud-updater:latest to ghcr.io/magrhino/wud-updater:v0.16.1 for wud-updater",
+                "description": "Rewrite ghcr.io/magrhino/wudup:latest to ghcr.io/magrhino/wudup:v0.16.1 for wudup",
                 "kind": "compose-tag-update"
               },
               {
@@ -14771,7 +14771,7 @@ export const generatedFixtures = {
                   "-f",
                   "docker-compose.yml",
                   "pull",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Pull matched image updates",
@@ -14786,7 +14786,7 @@ export const generatedFixtures = {
                   "-f",
                   "docker-compose.yml",
                   "stop",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Stop affected services before recreate",
@@ -14804,7 +14804,7 @@ export const generatedFixtures = {
                   "-d",
                   "--remove-orphans",
                   "--no-deps",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Recreate services with updated images",
@@ -14825,37 +14825,37 @@ export const generatedFixtures = {
             "lines": [
               {
                 "action": "tag-update",
-                "compose_image": "ghcr.io/magrhino/wud-updater:latest",
+                "compose_image": "ghcr.io/magrhino/wudup:latest",
                 "desired_tag": "v0.16.1",
                 "digest": "",
                 "digest_provenance": null,
-                "image": "ghcr.io/magrhino/wud-updater:latest",
+                "image": "ghcr.io/magrhino/wudup:latest",
                 "line_no": 5,
-                "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-                "resolved_image": "ghcr.io/magrhino/wud-updater:v0.16.1",
-                "service": "wud-updater",
-                "target_image": "ghcr.io/magrhino/wud-updater:v0.16.1"
+                "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+                "resolved_image": "ghcr.io/magrhino/wudup:v0.16.1",
+                "service": "wudup",
+                "target_image": "ghcr.io/magrhino/wudup:v0.16.1"
               }
             ],
             "name": "media",
             "project_directory": "demo/docker/media",
             "pull_services": [
-              "wud-updater"
+              "wudup"
             ],
             "services": [
-              "wud-updater"
+              "wudup"
             ],
-            "services_label": "wud-updater",
+            "services_label": "wudup",
             "stop_services": [
-              "wud-updater"
+              "wudup"
             ],
             "tag_updates": [
               {
                 "desired_tag": "v0.16.1",
-                "new_image": "ghcr.io/magrhino/wud-updater:v0.16.1",
-                "old_image": "ghcr.io/magrhino/wud-updater:latest",
+                "new_image": "ghcr.io/magrhino/wudup:v0.16.1",
+                "old_image": "ghcr.io/magrhino/wudup:latest",
                 "services": [
-                  "wud-updater"
+                  "wudup"
                 ]
               }
             ],
@@ -14876,11 +14876,11 @@ export const generatedFixtures = {
             "action": "tag-update",
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
             "matched": true,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-            "resolved_image": "ghcr.io/magrhino/wud-updater:latest"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+            "resolved_image": "ghcr.io/magrhino/wudup:latest"
           },
           {
             "action": "unmatched",
@@ -15025,7 +15025,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "watchtower",
                   "running_image": "containrrr/watchtower:1.7.1"
@@ -15078,9 +15078,9 @@ export const generatedFixtures = {
         "skipped": [
           {
             "desired_tag": "v0.16.1",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
             "reason": "tag-updates-disabled"
           },
           {
@@ -15107,11 +15107,11 @@ export const generatedFixtures = {
             "action": "tag-updates-disabled",
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
             "matched": false,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-            "resolved_image": "ghcr.io/magrhino/wud-updater:latest"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+            "resolved_image": "ghcr.io/magrhino/wudup:latest"
           },
           {
             "action": "tag-updates-disabled",
@@ -15253,7 +15253,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "watchtower",
                   "running_image": "containrrr/watchtower:1.7.1"
@@ -15288,7 +15288,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "watchtower",
               "running_image": "containrrr/watchtower:1.7.1"
@@ -15324,7 +15324,7 @@ export const generatedFixtures = {
               {
                 "args": [],
                 "cwd": "demo/docker/media",
-                "description": "Rewrite ghcr.io/magrhino/wud-updater:latest to ghcr.io/magrhino/wud-updater:v0.16.1 for wud-updater",
+                "description": "Rewrite ghcr.io/magrhino/wudup:latest to ghcr.io/magrhino/wudup:v0.16.1 for wudup",
                 "kind": "compose-tag-update"
               },
               {
@@ -15336,7 +15336,7 @@ export const generatedFixtures = {
                   "-f",
                   "docker-compose.yml",
                   "pull",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Pull matched image updates",
@@ -15351,7 +15351,7 @@ export const generatedFixtures = {
                   "-f",
                   "docker-compose.yml",
                   "stop",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Stop affected services before recreate",
@@ -15369,7 +15369,7 @@ export const generatedFixtures = {
                   "-d",
                   "--remove-orphans",
                   "--no-deps",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Recreate services with updated images",
@@ -15390,37 +15390,37 @@ export const generatedFixtures = {
             "lines": [
               {
                 "action": "tag-update",
-                "compose_image": "ghcr.io/magrhino/wud-updater:latest",
+                "compose_image": "ghcr.io/magrhino/wudup:latest",
                 "desired_tag": "v0.16.1",
                 "digest": "",
                 "digest_provenance": null,
-                "image": "ghcr.io/magrhino/wud-updater:latest",
+                "image": "ghcr.io/magrhino/wudup:latest",
                 "line_no": 5,
-                "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-                "resolved_image": "ghcr.io/magrhino/wud-updater:v0.16.1",
-                "service": "wud-updater",
-                "target_image": "ghcr.io/magrhino/wud-updater:v0.16.1"
+                "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+                "resolved_image": "ghcr.io/magrhino/wudup:v0.16.1",
+                "service": "wudup",
+                "target_image": "ghcr.io/magrhino/wudup:v0.16.1"
               }
             ],
             "name": "media",
             "project_directory": "demo/docker/media",
             "pull_services": [
-              "wud-updater"
+              "wudup"
             ],
             "services": [
-              "wud-updater"
+              "wudup"
             ],
-            "services_label": "wud-updater",
+            "services_label": "wudup",
             "stop_services": [
-              "wud-updater"
+              "wudup"
             ],
             "tag_updates": [
               {
                 "desired_tag": "v0.16.1",
-                "new_image": "ghcr.io/magrhino/wud-updater:v0.16.1",
-                "old_image": "ghcr.io/magrhino/wud-updater:latest",
+                "new_image": "ghcr.io/magrhino/wudup:v0.16.1",
+                "old_image": "ghcr.io/magrhino/wudup:latest",
                 "services": [
-                  "wud-updater"
+                  "wudup"
                 ]
               }
             ],
@@ -15441,11 +15441,11 @@ export const generatedFixtures = {
             "action": "tag-update",
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
             "matched": true,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-            "resolved_image": "ghcr.io/magrhino/wud-updater:latest"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+            "resolved_image": "ghcr.io/magrhino/wudup:latest"
           },
           {
             "action": "unmatched",
@@ -15590,7 +15590,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "homepage",
                   "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -15623,7 +15623,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "vaultwarden",
                   "running_image": "vaultwarden/server:1.31.0"
@@ -15854,7 +15854,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "homepage",
                   "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -15887,7 +15887,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "vaultwarden",
                   "running_image": "vaultwarden/server:1.31.0"
@@ -15922,7 +15922,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "homepage",
               "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -15947,7 +15947,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "vaultwarden",
               "running_image": "vaultwarden/server:1.31.0"
@@ -16148,7 +16148,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "homepage",
                   "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -16181,7 +16181,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "watchtower",
                   "running_image": "containrrr/watchtower:1.7.1"
@@ -16412,7 +16412,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "homepage",
                   "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -16445,7 +16445,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "watchtower",
                   "running_image": "containrrr/watchtower:1.7.1"
@@ -16480,7 +16480,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "homepage",
               "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -16505,7 +16505,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "watchtower",
               "running_image": "containrrr/watchtower:1.7.1"
@@ -16706,7 +16706,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "vaultwarden",
                   "running_image": "vaultwarden/server:1.31.0"
@@ -16739,7 +16739,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "watchtower",
                   "running_image": "containrrr/watchtower:1.7.1"
@@ -16970,7 +16970,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "vaultwarden",
                   "running_image": "vaultwarden/server:1.31.0"
@@ -17003,7 +17003,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "watchtower",
                   "running_image": "containrrr/watchtower:1.7.1"
@@ -17038,7 +17038,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "vaultwarden",
               "running_image": "vaultwarden/server:1.31.0"
@@ -17063,7 +17063,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "watchtower",
               "running_image": "containrrr/watchtower:1.7.1"
@@ -18079,9 +18079,9 @@ export const generatedFixtures = {
           },
           {
             "desired_tag": "v0.16.1",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
             "reason": "tag-updates-disabled"
           }
         ],
@@ -18121,11 +18121,11 @@ export const generatedFixtures = {
             "action": "tag-updates-disabled",
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
             "matched": false,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-            "resolved_image": "ghcr.io/magrhino/wud-updater:latest"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+            "resolved_image": "ghcr.io/magrhino/wudup:latest"
           }
         ]
       },
@@ -18375,7 +18375,7 @@ export const generatedFixtures = {
               {
                 "args": [],
                 "cwd": "demo/docker/media",
-                "description": "Rewrite ghcr.io/magrhino/wud-updater:latest to ghcr.io/magrhino/wud-updater:v0.16.1 for wud-updater",
+                "description": "Rewrite ghcr.io/magrhino/wudup:latest to ghcr.io/magrhino/wudup:v0.16.1 for wudup",
                 "kind": "compose-tag-update"
               },
               {
@@ -18394,7 +18394,7 @@ export const generatedFixtures = {
                   "docker-compose.yml",
                   "pull",
                   "radarr",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Pull matched image updates",
@@ -18410,7 +18410,7 @@ export const generatedFixtures = {
                   "docker-compose.yml",
                   "stop",
                   "radarr",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Stop affected services before recreate",
@@ -18429,7 +18429,7 @@ export const generatedFixtures = {
                   "--remove-orphans",
                   "--no-deps",
                   "radarr",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Recreate services with updated images",
@@ -18463,40 +18463,40 @@ export const generatedFixtures = {
               },
               {
                 "action": "tag-update",
-                "compose_image": "ghcr.io/magrhino/wud-updater:latest",
+                "compose_image": "ghcr.io/magrhino/wudup:latest",
                 "desired_tag": "v0.16.1",
                 "digest": "",
                 "digest_provenance": null,
-                "image": "ghcr.io/magrhino/wud-updater:latest",
+                "image": "ghcr.io/magrhino/wudup:latest",
                 "line_no": 5,
-                "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-                "resolved_image": "ghcr.io/magrhino/wud-updater:v0.16.1",
-                "service": "wud-updater",
-                "target_image": "ghcr.io/magrhino/wud-updater:v0.16.1"
+                "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+                "resolved_image": "ghcr.io/magrhino/wudup:v0.16.1",
+                "service": "wudup",
+                "target_image": "ghcr.io/magrhino/wudup:v0.16.1"
               }
             ],
             "name": "media",
             "project_directory": "demo/docker/media",
             "pull_services": [
               "radarr",
-              "wud-updater"
+              "wudup"
             ],
             "services": [
               "radarr",
-              "wud-updater"
+              "wudup"
             ],
-            "services_label": "radarr wud-updater",
+            "services_label": "radarr wudup",
             "stop_services": [
               "radarr",
-              "wud-updater"
+              "wudup"
             ],
             "tag_updates": [
               {
                 "desired_tag": "v0.16.1",
-                "new_image": "ghcr.io/magrhino/wud-updater:v0.16.1",
-                "old_image": "ghcr.io/magrhino/wud-updater:latest",
+                "new_image": "ghcr.io/magrhino/wudup:v0.16.1",
+                "old_image": "ghcr.io/magrhino/wudup:latest",
                 "services": [
-                  "wud-updater"
+                  "wudup"
                 ]
               },
               {
@@ -18545,11 +18545,11 @@ export const generatedFixtures = {
             "action": "tag-update",
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
             "matched": true,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-            "resolved_image": "ghcr.io/magrhino/wud-updater:latest"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+            "resolved_image": "ghcr.io/magrhino/wudup:latest"
           }
         ]
       },
@@ -18690,7 +18690,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "homepage",
                   "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -18953,7 +18953,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "homepage",
                   "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -18988,7 +18988,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "homepage",
               "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -19414,7 +19414,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "vaultwarden",
                   "running_image": "vaultwarden/server:1.31.0"
@@ -19677,7 +19677,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "vaultwarden",
                   "running_image": "vaultwarden/server:1.31.0"
@@ -19712,7 +19712,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "vaultwarden",
               "running_image": "vaultwarden/server:1.31.0"
@@ -20138,7 +20138,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "watchtower",
                   "running_image": "containrrr/watchtower:1.7.1"
@@ -20401,7 +20401,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "watchtower",
                   "running_image": "containrrr/watchtower:1.7.1"
@@ -20436,7 +20436,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "watchtower",
               "running_image": "containrrr/watchtower:1.7.1"
@@ -20886,9 +20886,9 @@ export const generatedFixtures = {
           },
           {
             "desired_tag": "v0.16.1",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
             "reason": "tag-updates-disabled"
           }
         ],
@@ -21017,11 +21017,11 @@ export const generatedFixtures = {
             "action": "tag-updates-disabled",
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
             "matched": false,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-            "resolved_image": "ghcr.io/magrhino/wud-updater:latest"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+            "resolved_image": "ghcr.io/magrhino/wudup:latest"
           }
         ]
       },
@@ -21355,7 +21355,7 @@ export const generatedFixtures = {
               {
                 "args": [],
                 "cwd": "demo/docker/media",
-                "description": "Rewrite ghcr.io/magrhino/wud-updater:latest to ghcr.io/magrhino/wud-updater:v0.16.1 for wud-updater",
+                "description": "Rewrite ghcr.io/magrhino/wudup:latest to ghcr.io/magrhino/wudup:v0.16.1 for wudup",
                 "kind": "compose-tag-update"
               },
               {
@@ -21367,7 +21367,7 @@ export const generatedFixtures = {
                   "-f",
                   "docker-compose.yml",
                   "pull",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Pull matched image updates",
@@ -21382,7 +21382,7 @@ export const generatedFixtures = {
                   "-f",
                   "docker-compose.yml",
                   "stop",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Stop affected services before recreate",
@@ -21400,7 +21400,7 @@ export const generatedFixtures = {
                   "-d",
                   "--remove-orphans",
                   "--no-deps",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Recreate services with updated images",
@@ -21421,37 +21421,37 @@ export const generatedFixtures = {
             "lines": [
               {
                 "action": "tag-update",
-                "compose_image": "ghcr.io/magrhino/wud-updater:latest",
+                "compose_image": "ghcr.io/magrhino/wudup:latest",
                 "desired_tag": "v0.16.1",
                 "digest": "",
                 "digest_provenance": null,
-                "image": "ghcr.io/magrhino/wud-updater:latest",
+                "image": "ghcr.io/magrhino/wudup:latest",
                 "line_no": 5,
-                "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-                "resolved_image": "ghcr.io/magrhino/wud-updater:v0.16.1",
-                "service": "wud-updater",
-                "target_image": "ghcr.io/magrhino/wud-updater:v0.16.1"
+                "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+                "resolved_image": "ghcr.io/magrhino/wudup:v0.16.1",
+                "service": "wudup",
+                "target_image": "ghcr.io/magrhino/wudup:v0.16.1"
               }
             ],
             "name": "media",
             "project_directory": "demo/docker/media",
             "pull_services": [
-              "wud-updater"
+              "wudup"
             ],
             "services": [
-              "wud-updater"
+              "wudup"
             ],
-            "services_label": "wud-updater",
+            "services_label": "wudup",
             "stop_services": [
-              "wud-updater"
+              "wudup"
             ],
             "tag_updates": [
               {
                 "desired_tag": "v0.16.1",
-                "new_image": "ghcr.io/magrhino/wud-updater:v0.16.1",
-                "old_image": "ghcr.io/magrhino/wud-updater:latest",
+                "new_image": "ghcr.io/magrhino/wudup:v0.16.1",
+                "old_image": "ghcr.io/magrhino/wudup:latest",
                 "services": [
-                  "wud-updater"
+                  "wudup"
                 ]
               }
             ],
@@ -21492,11 +21492,11 @@ export const generatedFixtures = {
             "action": "tag-update",
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
             "matched": true,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-            "resolved_image": "ghcr.io/magrhino/wud-updater:latest"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+            "resolved_image": "ghcr.io/magrhino/wudup:latest"
           }
         ]
       },
@@ -21629,7 +21629,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "homepage",
                   "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -21959,7 +21959,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "homepage",
                   "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -21994,7 +21994,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "homepage",
               "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -22393,7 +22393,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "vaultwarden",
                   "running_image": "vaultwarden/server:1.31.0"
@@ -22723,7 +22723,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "vaultwarden",
                   "running_image": "vaultwarden/server:1.31.0"
@@ -22758,7 +22758,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "vaultwarden",
               "running_image": "vaultwarden/server:1.31.0"
@@ -23157,7 +23157,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "watchtower",
                   "running_image": "containrrr/watchtower:1.7.1"
@@ -23487,7 +23487,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "watchtower",
                   "running_image": "containrrr/watchtower:1.7.1"
@@ -23522,7 +23522,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "watchtower",
               "running_image": "containrrr/watchtower:1.7.1"
@@ -23924,7 +23924,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "homepage",
                   "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -23995,9 +23995,9 @@ export const generatedFixtures = {
           },
           {
             "desired_tag": "v0.16.1",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
             "reason": "tag-updates-disabled"
           },
           {
@@ -24034,11 +24034,11 @@ export const generatedFixtures = {
             "action": "tag-updates-disabled",
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
             "matched": false,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-            "resolved_image": "ghcr.io/magrhino/wud-updater:latest"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+            "resolved_image": "ghcr.io/magrhino/wudup:latest"
           },
           {
             "action": "tag-updates-disabled",
@@ -24187,7 +24187,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "homepage",
                   "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -24222,7 +24222,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "homepage",
               "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -24366,7 +24366,7 @@ export const generatedFixtures = {
               {
                 "args": [],
                 "cwd": "demo/docker/media",
-                "description": "Rewrite ghcr.io/magrhino/wud-updater:latest to ghcr.io/magrhino/wud-updater:v0.16.1 for wud-updater",
+                "description": "Rewrite ghcr.io/magrhino/wudup:latest to ghcr.io/magrhino/wudup:v0.16.1 for wudup",
                 "kind": "compose-tag-update"
               },
               {
@@ -24378,7 +24378,7 @@ export const generatedFixtures = {
                   "-f",
                   "docker-compose.yml",
                   "pull",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Pull matched image updates",
@@ -24393,7 +24393,7 @@ export const generatedFixtures = {
                   "-f",
                   "docker-compose.yml",
                   "stop",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Stop affected services before recreate",
@@ -24411,7 +24411,7 @@ export const generatedFixtures = {
                   "-d",
                   "--remove-orphans",
                   "--no-deps",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Recreate services with updated images",
@@ -24432,37 +24432,37 @@ export const generatedFixtures = {
             "lines": [
               {
                 "action": "tag-update",
-                "compose_image": "ghcr.io/magrhino/wud-updater:latest",
+                "compose_image": "ghcr.io/magrhino/wudup:latest",
                 "desired_tag": "v0.16.1",
                 "digest": "",
                 "digest_provenance": null,
-                "image": "ghcr.io/magrhino/wud-updater:latest",
+                "image": "ghcr.io/magrhino/wudup:latest",
                 "line_no": 5,
-                "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-                "resolved_image": "ghcr.io/magrhino/wud-updater:v0.16.1",
-                "service": "wud-updater",
-                "target_image": "ghcr.io/magrhino/wud-updater:v0.16.1"
+                "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+                "resolved_image": "ghcr.io/magrhino/wudup:v0.16.1",
+                "service": "wudup",
+                "target_image": "ghcr.io/magrhino/wudup:v0.16.1"
               }
             ],
             "name": "media",
             "project_directory": "demo/docker/media",
             "pull_services": [
-              "wud-updater"
+              "wudup"
             ],
             "services": [
-              "wud-updater"
+              "wudup"
             ],
-            "services_label": "wud-updater",
+            "services_label": "wudup",
             "stop_services": [
-              "wud-updater"
+              "wudup"
             ],
             "tag_updates": [
               {
                 "desired_tag": "v0.16.1",
-                "new_image": "ghcr.io/magrhino/wud-updater:v0.16.1",
-                "old_image": "ghcr.io/magrhino/wud-updater:latest",
+                "new_image": "ghcr.io/magrhino/wudup:v0.16.1",
+                "old_image": "ghcr.io/magrhino/wudup:latest",
                 "services": [
-                  "wud-updater"
+                  "wudup"
                 ]
               }
             ],
@@ -24493,11 +24493,11 @@ export const generatedFixtures = {
             "action": "tag-update",
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
             "matched": true,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-            "resolved_image": "ghcr.io/magrhino/wud-updater:latest"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+            "resolved_image": "ghcr.io/magrhino/wudup:latest"
           },
           {
             "action": "unmatched",
@@ -24648,7 +24648,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "vaultwarden",
                   "running_image": "vaultwarden/server:1.31.0"
@@ -24719,9 +24719,9 @@ export const generatedFixtures = {
           },
           {
             "desired_tag": "v0.16.1",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
             "reason": "tag-updates-disabled"
           },
           {
@@ -24758,11 +24758,11 @@ export const generatedFixtures = {
             "action": "tag-updates-disabled",
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
             "matched": false,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-            "resolved_image": "ghcr.io/magrhino/wud-updater:latest"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+            "resolved_image": "ghcr.io/magrhino/wudup:latest"
           },
           {
             "action": "tag-updates-disabled",
@@ -24911,7 +24911,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "vaultwarden",
                   "running_image": "vaultwarden/server:1.31.0"
@@ -24946,7 +24946,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "vaultwarden",
               "running_image": "vaultwarden/server:1.31.0"
@@ -25090,7 +25090,7 @@ export const generatedFixtures = {
               {
                 "args": [],
                 "cwd": "demo/docker/media",
-                "description": "Rewrite ghcr.io/magrhino/wud-updater:latest to ghcr.io/magrhino/wud-updater:v0.16.1 for wud-updater",
+                "description": "Rewrite ghcr.io/magrhino/wudup:latest to ghcr.io/magrhino/wudup:v0.16.1 for wudup",
                 "kind": "compose-tag-update"
               },
               {
@@ -25102,7 +25102,7 @@ export const generatedFixtures = {
                   "-f",
                   "docker-compose.yml",
                   "pull",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Pull matched image updates",
@@ -25117,7 +25117,7 @@ export const generatedFixtures = {
                   "-f",
                   "docker-compose.yml",
                   "stop",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Stop affected services before recreate",
@@ -25135,7 +25135,7 @@ export const generatedFixtures = {
                   "-d",
                   "--remove-orphans",
                   "--no-deps",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Recreate services with updated images",
@@ -25156,37 +25156,37 @@ export const generatedFixtures = {
             "lines": [
               {
                 "action": "tag-update",
-                "compose_image": "ghcr.io/magrhino/wud-updater:latest",
+                "compose_image": "ghcr.io/magrhino/wudup:latest",
                 "desired_tag": "v0.16.1",
                 "digest": "",
                 "digest_provenance": null,
-                "image": "ghcr.io/magrhino/wud-updater:latest",
+                "image": "ghcr.io/magrhino/wudup:latest",
                 "line_no": 5,
-                "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-                "resolved_image": "ghcr.io/magrhino/wud-updater:v0.16.1",
-                "service": "wud-updater",
-                "target_image": "ghcr.io/magrhino/wud-updater:v0.16.1"
+                "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+                "resolved_image": "ghcr.io/magrhino/wudup:v0.16.1",
+                "service": "wudup",
+                "target_image": "ghcr.io/magrhino/wudup:v0.16.1"
               }
             ],
             "name": "media",
             "project_directory": "demo/docker/media",
             "pull_services": [
-              "wud-updater"
+              "wudup"
             ],
             "services": [
-              "wud-updater"
+              "wudup"
             ],
-            "services_label": "wud-updater",
+            "services_label": "wudup",
             "stop_services": [
-              "wud-updater"
+              "wudup"
             ],
             "tag_updates": [
               {
                 "desired_tag": "v0.16.1",
-                "new_image": "ghcr.io/magrhino/wud-updater:v0.16.1",
-                "old_image": "ghcr.io/magrhino/wud-updater:latest",
+                "new_image": "ghcr.io/magrhino/wudup:v0.16.1",
+                "old_image": "ghcr.io/magrhino/wudup:latest",
                 "services": [
-                  "wud-updater"
+                  "wudup"
                 ]
               }
             ],
@@ -25217,11 +25217,11 @@ export const generatedFixtures = {
             "action": "tag-update",
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
             "matched": true,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-            "resolved_image": "ghcr.io/magrhino/wud-updater:latest"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+            "resolved_image": "ghcr.io/magrhino/wudup:latest"
           },
           {
             "action": "unmatched",
@@ -25372,7 +25372,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "watchtower",
                   "running_image": "containrrr/watchtower:1.7.1"
@@ -25443,9 +25443,9 @@ export const generatedFixtures = {
           },
           {
             "desired_tag": "v0.16.1",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
             "reason": "tag-updates-disabled"
           },
           {
@@ -25482,11 +25482,11 @@ export const generatedFixtures = {
             "action": "tag-updates-disabled",
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
             "matched": false,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-            "resolved_image": "ghcr.io/magrhino/wud-updater:latest"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+            "resolved_image": "ghcr.io/magrhino/wudup:latest"
           },
           {
             "action": "tag-updates-disabled",
@@ -25635,7 +25635,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "watchtower",
                   "running_image": "containrrr/watchtower:1.7.1"
@@ -25670,7 +25670,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "watchtower",
               "running_image": "containrrr/watchtower:1.7.1"
@@ -25814,7 +25814,7 @@ export const generatedFixtures = {
               {
                 "args": [],
                 "cwd": "demo/docker/media",
-                "description": "Rewrite ghcr.io/magrhino/wud-updater:latest to ghcr.io/magrhino/wud-updater:v0.16.1 for wud-updater",
+                "description": "Rewrite ghcr.io/magrhino/wudup:latest to ghcr.io/magrhino/wudup:v0.16.1 for wudup",
                 "kind": "compose-tag-update"
               },
               {
@@ -25826,7 +25826,7 @@ export const generatedFixtures = {
                   "-f",
                   "docker-compose.yml",
                   "pull",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Pull matched image updates",
@@ -25841,7 +25841,7 @@ export const generatedFixtures = {
                   "-f",
                   "docker-compose.yml",
                   "stop",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Stop affected services before recreate",
@@ -25859,7 +25859,7 @@ export const generatedFixtures = {
                   "-d",
                   "--remove-orphans",
                   "--no-deps",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Recreate services with updated images",
@@ -25880,37 +25880,37 @@ export const generatedFixtures = {
             "lines": [
               {
                 "action": "tag-update",
-                "compose_image": "ghcr.io/magrhino/wud-updater:latest",
+                "compose_image": "ghcr.io/magrhino/wudup:latest",
                 "desired_tag": "v0.16.1",
                 "digest": "",
                 "digest_provenance": null,
-                "image": "ghcr.io/magrhino/wud-updater:latest",
+                "image": "ghcr.io/magrhino/wudup:latest",
                 "line_no": 5,
-                "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-                "resolved_image": "ghcr.io/magrhino/wud-updater:v0.16.1",
-                "service": "wud-updater",
-                "target_image": "ghcr.io/magrhino/wud-updater:v0.16.1"
+                "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+                "resolved_image": "ghcr.io/magrhino/wudup:v0.16.1",
+                "service": "wudup",
+                "target_image": "ghcr.io/magrhino/wudup:v0.16.1"
               }
             ],
             "name": "media",
             "project_directory": "demo/docker/media",
             "pull_services": [
-              "wud-updater"
+              "wudup"
             ],
             "services": [
-              "wud-updater"
+              "wudup"
             ],
-            "services_label": "wud-updater",
+            "services_label": "wudup",
             "stop_services": [
-              "wud-updater"
+              "wudup"
             ],
             "tag_updates": [
               {
                 "desired_tag": "v0.16.1",
-                "new_image": "ghcr.io/magrhino/wud-updater:v0.16.1",
-                "old_image": "ghcr.io/magrhino/wud-updater:latest",
+                "new_image": "ghcr.io/magrhino/wudup:v0.16.1",
+                "old_image": "ghcr.io/magrhino/wudup:latest",
                 "services": [
-                  "wud-updater"
+                  "wudup"
                 ]
               }
             ],
@@ -25941,11 +25941,11 @@ export const generatedFixtures = {
             "action": "tag-update",
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
             "matched": true,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-            "resolved_image": "ghcr.io/magrhino/wud-updater:latest"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+            "resolved_image": "ghcr.io/magrhino/wudup:latest"
           },
           {
             "action": "unmatched",
@@ -26096,7 +26096,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "homepage",
                   "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -26129,7 +26129,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "vaultwarden",
                   "running_image": "vaultwarden/server:1.31.0"
@@ -26391,7 +26391,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "homepage",
                   "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -26424,7 +26424,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "vaultwarden",
                   "running_image": "vaultwarden/server:1.31.0"
@@ -26459,7 +26459,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "homepage",
               "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -26484,7 +26484,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "vaultwarden",
               "running_image": "vaultwarden/server:1.31.0"
@@ -26810,7 +26810,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "homepage",
                   "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -26843,7 +26843,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "watchtower",
                   "running_image": "containrrr/watchtower:1.7.1"
@@ -27105,7 +27105,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "homepage",
                   "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -27138,7 +27138,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "watchtower",
                   "running_image": "containrrr/watchtower:1.7.1"
@@ -27173,7 +27173,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "homepage",
               "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -27198,7 +27198,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "watchtower",
               "running_image": "containrrr/watchtower:1.7.1"
@@ -27524,7 +27524,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "vaultwarden",
                   "running_image": "vaultwarden/server:1.31.0"
@@ -27557,7 +27557,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "watchtower",
                   "running_image": "containrrr/watchtower:1.7.1"
@@ -27819,7 +27819,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "vaultwarden",
                   "running_image": "vaultwarden/server:1.31.0"
@@ -27852,7 +27852,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "watchtower",
                   "running_image": "containrrr/watchtower:1.7.1"
@@ -27887,7 +27887,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "vaultwarden",
               "running_image": "vaultwarden/server:1.31.0"
@@ -27912,7 +27912,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "watchtower",
               "running_image": "containrrr/watchtower:1.7.1"
@@ -28262,9 +28262,9 @@ export const generatedFixtures = {
           },
           {
             "desired_tag": "v0.16.1",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
             "reason": "tag-updates-disabled"
           }
         ],
@@ -28393,11 +28393,11 @@ export const generatedFixtures = {
             "action": "tag-updates-disabled",
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
             "matched": false,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-            "resolved_image": "ghcr.io/magrhino/wud-updater:latest"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+            "resolved_image": "ghcr.io/magrhino/wudup:latest"
           }
         ]
       },
@@ -28623,7 +28623,7 @@ export const generatedFixtures = {
               {
                 "args": [],
                 "cwd": "demo/docker/media",
-                "description": "Rewrite ghcr.io/magrhino/wud-updater:latest to ghcr.io/magrhino/wud-updater:v0.16.1 for wud-updater",
+                "description": "Rewrite ghcr.io/magrhino/wudup:latest to ghcr.io/magrhino/wudup:v0.16.1 for wudup",
                 "kind": "compose-tag-update"
               },
               {
@@ -28642,7 +28642,7 @@ export const generatedFixtures = {
                   "docker-compose.yml",
                   "pull",
                   "radarr",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Pull matched image updates",
@@ -28658,7 +28658,7 @@ export const generatedFixtures = {
                   "docker-compose.yml",
                   "stop",
                   "radarr",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Stop affected services before recreate",
@@ -28677,7 +28677,7 @@ export const generatedFixtures = {
                   "--remove-orphans",
                   "--no-deps",
                   "radarr",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Recreate services with updated images",
@@ -28711,40 +28711,40 @@ export const generatedFixtures = {
               },
               {
                 "action": "tag-update",
-                "compose_image": "ghcr.io/magrhino/wud-updater:latest",
+                "compose_image": "ghcr.io/magrhino/wudup:latest",
                 "desired_tag": "v0.16.1",
                 "digest": "",
                 "digest_provenance": null,
-                "image": "ghcr.io/magrhino/wud-updater:latest",
+                "image": "ghcr.io/magrhino/wudup:latest",
                 "line_no": 5,
-                "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-                "resolved_image": "ghcr.io/magrhino/wud-updater:v0.16.1",
-                "service": "wud-updater",
-                "target_image": "ghcr.io/magrhino/wud-updater:v0.16.1"
+                "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+                "resolved_image": "ghcr.io/magrhino/wudup:v0.16.1",
+                "service": "wudup",
+                "target_image": "ghcr.io/magrhino/wudup:v0.16.1"
               }
             ],
             "name": "media",
             "project_directory": "demo/docker/media",
             "pull_services": [
               "radarr",
-              "wud-updater"
+              "wudup"
             ],
             "services": [
               "radarr",
-              "wud-updater"
+              "wudup"
             ],
-            "services_label": "radarr wud-updater",
+            "services_label": "radarr wudup",
             "stop_services": [
               "radarr",
-              "wud-updater"
+              "wudup"
             ],
             "tag_updates": [
               {
                 "desired_tag": "v0.16.1",
-                "new_image": "ghcr.io/magrhino/wud-updater:v0.16.1",
-                "old_image": "ghcr.io/magrhino/wud-updater:latest",
+                "new_image": "ghcr.io/magrhino/wudup:v0.16.1",
+                "old_image": "ghcr.io/magrhino/wudup:latest",
                 "services": [
-                  "wud-updater"
+                  "wudup"
                 ]
               },
               {
@@ -28793,11 +28793,11 @@ export const generatedFixtures = {
             "action": "tag-update",
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
             "matched": true,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-            "resolved_image": "ghcr.io/magrhino/wud-updater:latest"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+            "resolved_image": "ghcr.io/magrhino/wudup:latest"
           }
         ]
       },
@@ -28930,7 +28930,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "homepage",
                   "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -29260,7 +29260,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "homepage",
                   "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -29295,7 +29295,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "homepage",
               "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -29694,7 +29694,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "vaultwarden",
                   "running_image": "vaultwarden/server:1.31.0"
@@ -30024,7 +30024,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "vaultwarden",
                   "running_image": "vaultwarden/server:1.31.0"
@@ -30059,7 +30059,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "vaultwarden",
               "running_image": "vaultwarden/server:1.31.0"
@@ -30458,7 +30458,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "watchtower",
                   "running_image": "containrrr/watchtower:1.7.1"
@@ -30788,7 +30788,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "watchtower",
                   "running_image": "containrrr/watchtower:1.7.1"
@@ -30823,7 +30823,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "watchtower",
               "running_image": "containrrr/watchtower:1.7.1"
@@ -31225,7 +31225,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "homepage",
                   "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -31296,9 +31296,9 @@ export const generatedFixtures = {
           },
           {
             "desired_tag": "v0.16.1",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
             "reason": "tag-updates-disabled"
           },
           {
@@ -31335,11 +31335,11 @@ export const generatedFixtures = {
             "action": "tag-updates-disabled",
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
             "matched": false,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-            "resolved_image": "ghcr.io/magrhino/wud-updater:latest"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+            "resolved_image": "ghcr.io/magrhino/wudup:latest"
           },
           {
             "action": "tag-updates-disabled",
@@ -31487,7 +31487,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "homepage",
                   "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -31522,7 +31522,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "homepage",
               "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -31559,7 +31559,7 @@ export const generatedFixtures = {
               {
                 "args": [],
                 "cwd": "demo/docker/media",
-                "description": "Rewrite ghcr.io/magrhino/wud-updater:latest to ghcr.io/magrhino/wud-updater:v0.16.1 for wud-updater",
+                "description": "Rewrite ghcr.io/magrhino/wudup:latest to ghcr.io/magrhino/wudup:v0.16.1 for wudup",
                 "kind": "compose-tag-update"
               },
               {
@@ -31578,7 +31578,7 @@ export const generatedFixtures = {
                   "docker-compose.yml",
                   "pull",
                   "radarr",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Pull matched image updates",
@@ -31594,7 +31594,7 @@ export const generatedFixtures = {
                   "docker-compose.yml",
                   "stop",
                   "radarr",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Stop affected services before recreate",
@@ -31613,7 +31613,7 @@ export const generatedFixtures = {
                   "--remove-orphans",
                   "--no-deps",
                   "radarr",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Recreate services with updated images",
@@ -31647,40 +31647,40 @@ export const generatedFixtures = {
               },
               {
                 "action": "tag-update",
-                "compose_image": "ghcr.io/magrhino/wud-updater:latest",
+                "compose_image": "ghcr.io/magrhino/wudup:latest",
                 "desired_tag": "v0.16.1",
                 "digest": "",
                 "digest_provenance": null,
-                "image": "ghcr.io/magrhino/wud-updater:latest",
+                "image": "ghcr.io/magrhino/wudup:latest",
                 "line_no": 5,
-                "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-                "resolved_image": "ghcr.io/magrhino/wud-updater:v0.16.1",
-                "service": "wud-updater",
-                "target_image": "ghcr.io/magrhino/wud-updater:v0.16.1"
+                "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+                "resolved_image": "ghcr.io/magrhino/wudup:v0.16.1",
+                "service": "wudup",
+                "target_image": "ghcr.io/magrhino/wudup:v0.16.1"
               }
             ],
             "name": "media",
             "project_directory": "demo/docker/media",
             "pull_services": [
               "radarr",
-              "wud-updater"
+              "wudup"
             ],
             "services": [
               "radarr",
-              "wud-updater"
+              "wudup"
             ],
-            "services_label": "radarr wud-updater",
+            "services_label": "radarr wudup",
             "stop_services": [
               "radarr",
-              "wud-updater"
+              "wudup"
             ],
             "tag_updates": [
               {
                 "desired_tag": "v0.16.1",
-                "new_image": "ghcr.io/magrhino/wud-updater:v0.16.1",
-                "old_image": "ghcr.io/magrhino/wud-updater:latest",
+                "new_image": "ghcr.io/magrhino/wudup:v0.16.1",
+                "old_image": "ghcr.io/magrhino/wudup:latest",
                 "services": [
-                  "wud-updater"
+                  "wudup"
                 ]
               },
               {
@@ -31719,11 +31719,11 @@ export const generatedFixtures = {
             "action": "tag-update",
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
             "matched": true,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-            "resolved_image": "ghcr.io/magrhino/wud-updater:latest"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+            "resolved_image": "ghcr.io/magrhino/wudup:latest"
           },
           {
             "action": "unmatched",
@@ -31874,7 +31874,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "vaultwarden",
                   "running_image": "vaultwarden/server:1.31.0"
@@ -31945,9 +31945,9 @@ export const generatedFixtures = {
           },
           {
             "desired_tag": "v0.16.1",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
             "reason": "tag-updates-disabled"
           },
           {
@@ -31984,11 +31984,11 @@ export const generatedFixtures = {
             "action": "tag-updates-disabled",
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
             "matched": false,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-            "resolved_image": "ghcr.io/magrhino/wud-updater:latest"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+            "resolved_image": "ghcr.io/magrhino/wudup:latest"
           },
           {
             "action": "tag-updates-disabled",
@@ -32136,7 +32136,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "vaultwarden",
                   "running_image": "vaultwarden/server:1.31.0"
@@ -32171,7 +32171,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "vaultwarden",
               "running_image": "vaultwarden/server:1.31.0"
@@ -32208,7 +32208,7 @@ export const generatedFixtures = {
               {
                 "args": [],
                 "cwd": "demo/docker/media",
-                "description": "Rewrite ghcr.io/magrhino/wud-updater:latest to ghcr.io/magrhino/wud-updater:v0.16.1 for wud-updater",
+                "description": "Rewrite ghcr.io/magrhino/wudup:latest to ghcr.io/magrhino/wudup:v0.16.1 for wudup",
                 "kind": "compose-tag-update"
               },
               {
@@ -32227,7 +32227,7 @@ export const generatedFixtures = {
                   "docker-compose.yml",
                   "pull",
                   "radarr",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Pull matched image updates",
@@ -32243,7 +32243,7 @@ export const generatedFixtures = {
                   "docker-compose.yml",
                   "stop",
                   "radarr",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Stop affected services before recreate",
@@ -32262,7 +32262,7 @@ export const generatedFixtures = {
                   "--remove-orphans",
                   "--no-deps",
                   "radarr",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Recreate services with updated images",
@@ -32296,40 +32296,40 @@ export const generatedFixtures = {
               },
               {
                 "action": "tag-update",
-                "compose_image": "ghcr.io/magrhino/wud-updater:latest",
+                "compose_image": "ghcr.io/magrhino/wudup:latest",
                 "desired_tag": "v0.16.1",
                 "digest": "",
                 "digest_provenance": null,
-                "image": "ghcr.io/magrhino/wud-updater:latest",
+                "image": "ghcr.io/magrhino/wudup:latest",
                 "line_no": 5,
-                "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-                "resolved_image": "ghcr.io/magrhino/wud-updater:v0.16.1",
-                "service": "wud-updater",
-                "target_image": "ghcr.io/magrhino/wud-updater:v0.16.1"
+                "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+                "resolved_image": "ghcr.io/magrhino/wudup:v0.16.1",
+                "service": "wudup",
+                "target_image": "ghcr.io/magrhino/wudup:v0.16.1"
               }
             ],
             "name": "media",
             "project_directory": "demo/docker/media",
             "pull_services": [
               "radarr",
-              "wud-updater"
+              "wudup"
             ],
             "services": [
               "radarr",
-              "wud-updater"
+              "wudup"
             ],
-            "services_label": "radarr wud-updater",
+            "services_label": "radarr wudup",
             "stop_services": [
               "radarr",
-              "wud-updater"
+              "wudup"
             ],
             "tag_updates": [
               {
                 "desired_tag": "v0.16.1",
-                "new_image": "ghcr.io/magrhino/wud-updater:v0.16.1",
-                "old_image": "ghcr.io/magrhino/wud-updater:latest",
+                "new_image": "ghcr.io/magrhino/wudup:v0.16.1",
+                "old_image": "ghcr.io/magrhino/wudup:latest",
                 "services": [
-                  "wud-updater"
+                  "wudup"
                 ]
               },
               {
@@ -32368,11 +32368,11 @@ export const generatedFixtures = {
             "action": "tag-update",
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
             "matched": true,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-            "resolved_image": "ghcr.io/magrhino/wud-updater:latest"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+            "resolved_image": "ghcr.io/magrhino/wudup:latest"
           },
           {
             "action": "unmatched",
@@ -32523,7 +32523,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "watchtower",
                   "running_image": "containrrr/watchtower:1.7.1"
@@ -32594,9 +32594,9 @@ export const generatedFixtures = {
           },
           {
             "desired_tag": "v0.16.1",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
             "reason": "tag-updates-disabled"
           },
           {
@@ -32633,11 +32633,11 @@ export const generatedFixtures = {
             "action": "tag-updates-disabled",
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
             "matched": false,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-            "resolved_image": "ghcr.io/magrhino/wud-updater:latest"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+            "resolved_image": "ghcr.io/magrhino/wudup:latest"
           },
           {
             "action": "tag-updates-disabled",
@@ -32785,7 +32785,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "watchtower",
                   "running_image": "containrrr/watchtower:1.7.1"
@@ -32820,7 +32820,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "watchtower",
               "running_image": "containrrr/watchtower:1.7.1"
@@ -32857,7 +32857,7 @@ export const generatedFixtures = {
               {
                 "args": [],
                 "cwd": "demo/docker/media",
-                "description": "Rewrite ghcr.io/magrhino/wud-updater:latest to ghcr.io/magrhino/wud-updater:v0.16.1 for wud-updater",
+                "description": "Rewrite ghcr.io/magrhino/wudup:latest to ghcr.io/magrhino/wudup:v0.16.1 for wudup",
                 "kind": "compose-tag-update"
               },
               {
@@ -32876,7 +32876,7 @@ export const generatedFixtures = {
                   "docker-compose.yml",
                   "pull",
                   "radarr",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Pull matched image updates",
@@ -32892,7 +32892,7 @@ export const generatedFixtures = {
                   "docker-compose.yml",
                   "stop",
                   "radarr",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Stop affected services before recreate",
@@ -32911,7 +32911,7 @@ export const generatedFixtures = {
                   "--remove-orphans",
                   "--no-deps",
                   "radarr",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Recreate services with updated images",
@@ -32945,40 +32945,40 @@ export const generatedFixtures = {
               },
               {
                 "action": "tag-update",
-                "compose_image": "ghcr.io/magrhino/wud-updater:latest",
+                "compose_image": "ghcr.io/magrhino/wudup:latest",
                 "desired_tag": "v0.16.1",
                 "digest": "",
                 "digest_provenance": null,
-                "image": "ghcr.io/magrhino/wud-updater:latest",
+                "image": "ghcr.io/magrhino/wudup:latest",
                 "line_no": 5,
-                "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-                "resolved_image": "ghcr.io/magrhino/wud-updater:v0.16.1",
-                "service": "wud-updater",
-                "target_image": "ghcr.io/magrhino/wud-updater:v0.16.1"
+                "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+                "resolved_image": "ghcr.io/magrhino/wudup:v0.16.1",
+                "service": "wudup",
+                "target_image": "ghcr.io/magrhino/wudup:v0.16.1"
               }
             ],
             "name": "media",
             "project_directory": "demo/docker/media",
             "pull_services": [
               "radarr",
-              "wud-updater"
+              "wudup"
             ],
             "services": [
               "radarr",
-              "wud-updater"
+              "wudup"
             ],
-            "services_label": "radarr wud-updater",
+            "services_label": "radarr wudup",
             "stop_services": [
               "radarr",
-              "wud-updater"
+              "wudup"
             ],
             "tag_updates": [
               {
                 "desired_tag": "v0.16.1",
-                "new_image": "ghcr.io/magrhino/wud-updater:v0.16.1",
-                "old_image": "ghcr.io/magrhino/wud-updater:latest",
+                "new_image": "ghcr.io/magrhino/wudup:v0.16.1",
+                "old_image": "ghcr.io/magrhino/wudup:latest",
                 "services": [
-                  "wud-updater"
+                  "wudup"
                 ]
               },
               {
@@ -33017,11 +33017,11 @@ export const generatedFixtures = {
             "action": "tag-update",
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
             "matched": true,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-            "resolved_image": "ghcr.io/magrhino/wud-updater:latest"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+            "resolved_image": "ghcr.io/magrhino/wudup:latest"
           },
           {
             "action": "unmatched",
@@ -33172,7 +33172,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "homepage",
                   "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -33205,7 +33205,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "vaultwarden",
                   "running_image": "vaultwarden/server:1.31.0"
@@ -33467,7 +33467,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "homepage",
                   "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -33500,7 +33500,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "vaultwarden",
                   "running_image": "vaultwarden/server:1.31.0"
@@ -33535,7 +33535,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "homepage",
               "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -33560,7 +33560,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "vaultwarden",
               "running_image": "vaultwarden/server:1.31.0"
@@ -33886,7 +33886,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "homepage",
                   "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -33919,7 +33919,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "watchtower",
                   "running_image": "containrrr/watchtower:1.7.1"
@@ -34181,7 +34181,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "homepage",
                   "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -34214,7 +34214,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "watchtower",
                   "running_image": "containrrr/watchtower:1.7.1"
@@ -34249,7 +34249,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "homepage",
               "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -34274,7 +34274,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "watchtower",
               "running_image": "containrrr/watchtower:1.7.1"
@@ -34600,7 +34600,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "vaultwarden",
                   "running_image": "vaultwarden/server:1.31.0"
@@ -34633,7 +34633,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "watchtower",
                   "running_image": "containrrr/watchtower:1.7.1"
@@ -34895,7 +34895,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "vaultwarden",
                   "running_image": "vaultwarden/server:1.31.0"
@@ -34928,7 +34928,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "watchtower",
                   "running_image": "containrrr/watchtower:1.7.1"
@@ -34963,7 +34963,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "vaultwarden",
               "running_image": "vaultwarden/server:1.31.0"
@@ -34988,7 +34988,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "watchtower",
               "running_image": "containrrr/watchtower:1.7.1"
@@ -35311,7 +35311,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "homepage",
                   "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -35365,9 +35365,9 @@ export const generatedFixtures = {
         "skipped": [
           {
             "desired_tag": "v0.16.1",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
             "reason": "tag-updates-disabled"
           },
           {
@@ -35493,11 +35493,11 @@ export const generatedFixtures = {
             "action": "tag-updates-disabled",
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
             "matched": false,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-            "resolved_image": "ghcr.io/magrhino/wud-updater:latest"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+            "resolved_image": "ghcr.io/magrhino/wudup:latest"
           },
           {
             "action": "tag-updates-disabled",
@@ -35641,7 +35641,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "homepage",
                   "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -35676,7 +35676,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "homepage",
               "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -35801,7 +35801,7 @@ export const generatedFixtures = {
               {
                 "args": [],
                 "cwd": "demo/docker/media",
-                "description": "Rewrite ghcr.io/magrhino/wud-updater:latest to ghcr.io/magrhino/wud-updater:v0.16.1 for wud-updater",
+                "description": "Rewrite ghcr.io/magrhino/wudup:latest to ghcr.io/magrhino/wudup:v0.16.1 for wudup",
                 "kind": "compose-tag-update"
               },
               {
@@ -35813,7 +35813,7 @@ export const generatedFixtures = {
                   "-f",
                   "docker-compose.yml",
                   "pull",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Pull matched image updates",
@@ -35828,7 +35828,7 @@ export const generatedFixtures = {
                   "-f",
                   "docker-compose.yml",
                   "stop",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Stop affected services before recreate",
@@ -35846,7 +35846,7 @@ export const generatedFixtures = {
                   "-d",
                   "--remove-orphans",
                   "--no-deps",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Recreate services with updated images",
@@ -35867,37 +35867,37 @@ export const generatedFixtures = {
             "lines": [
               {
                 "action": "tag-update",
-                "compose_image": "ghcr.io/magrhino/wud-updater:latest",
+                "compose_image": "ghcr.io/magrhino/wudup:latest",
                 "desired_tag": "v0.16.1",
                 "digest": "",
                 "digest_provenance": null,
-                "image": "ghcr.io/magrhino/wud-updater:latest",
+                "image": "ghcr.io/magrhino/wudup:latest",
                 "line_no": 5,
-                "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-                "resolved_image": "ghcr.io/magrhino/wud-updater:v0.16.1",
-                "service": "wud-updater",
-                "target_image": "ghcr.io/magrhino/wud-updater:v0.16.1"
+                "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+                "resolved_image": "ghcr.io/magrhino/wudup:v0.16.1",
+                "service": "wudup",
+                "target_image": "ghcr.io/magrhino/wudup:v0.16.1"
               }
             ],
             "name": "media",
             "project_directory": "demo/docker/media",
             "pull_services": [
-              "wud-updater"
+              "wudup"
             ],
             "services": [
-              "wud-updater"
+              "wudup"
             ],
-            "services_label": "wud-updater",
+            "services_label": "wudup",
             "stop_services": [
-              "wud-updater"
+              "wudup"
             ],
             "tag_updates": [
               {
                 "desired_tag": "v0.16.1",
-                "new_image": "ghcr.io/magrhino/wud-updater:v0.16.1",
-                "old_image": "ghcr.io/magrhino/wud-updater:latest",
+                "new_image": "ghcr.io/magrhino/wudup:v0.16.1",
+                "old_image": "ghcr.io/magrhino/wudup:latest",
                 "services": [
-                  "wud-updater"
+                  "wudup"
                 ]
               }
             ],
@@ -35928,11 +35928,11 @@ export const generatedFixtures = {
             "action": "tag-update",
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
             "matched": true,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-            "resolved_image": "ghcr.io/magrhino/wud-updater:latest"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+            "resolved_image": "ghcr.io/magrhino/wudup:latest"
           },
           {
             "action": "unmatched",
@@ -36075,7 +36075,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "vaultwarden",
                   "running_image": "vaultwarden/server:1.31.0"
@@ -36129,9 +36129,9 @@ export const generatedFixtures = {
         "skipped": [
           {
             "desired_tag": "v0.16.1",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
             "reason": "tag-updates-disabled"
           },
           {
@@ -36257,11 +36257,11 @@ export const generatedFixtures = {
             "action": "tag-updates-disabled",
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
             "matched": false,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-            "resolved_image": "ghcr.io/magrhino/wud-updater:latest"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+            "resolved_image": "ghcr.io/magrhino/wudup:latest"
           },
           {
             "action": "tag-updates-disabled",
@@ -36405,7 +36405,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "vaultwarden",
                   "running_image": "vaultwarden/server:1.31.0"
@@ -36440,7 +36440,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "vaultwarden",
               "running_image": "vaultwarden/server:1.31.0"
@@ -36565,7 +36565,7 @@ export const generatedFixtures = {
               {
                 "args": [],
                 "cwd": "demo/docker/media",
-                "description": "Rewrite ghcr.io/magrhino/wud-updater:latest to ghcr.io/magrhino/wud-updater:v0.16.1 for wud-updater",
+                "description": "Rewrite ghcr.io/magrhino/wudup:latest to ghcr.io/magrhino/wudup:v0.16.1 for wudup",
                 "kind": "compose-tag-update"
               },
               {
@@ -36577,7 +36577,7 @@ export const generatedFixtures = {
                   "-f",
                   "docker-compose.yml",
                   "pull",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Pull matched image updates",
@@ -36592,7 +36592,7 @@ export const generatedFixtures = {
                   "-f",
                   "docker-compose.yml",
                   "stop",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Stop affected services before recreate",
@@ -36610,7 +36610,7 @@ export const generatedFixtures = {
                   "-d",
                   "--remove-orphans",
                   "--no-deps",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Recreate services with updated images",
@@ -36631,37 +36631,37 @@ export const generatedFixtures = {
             "lines": [
               {
                 "action": "tag-update",
-                "compose_image": "ghcr.io/magrhino/wud-updater:latest",
+                "compose_image": "ghcr.io/magrhino/wudup:latest",
                 "desired_tag": "v0.16.1",
                 "digest": "",
                 "digest_provenance": null,
-                "image": "ghcr.io/magrhino/wud-updater:latest",
+                "image": "ghcr.io/magrhino/wudup:latest",
                 "line_no": 5,
-                "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-                "resolved_image": "ghcr.io/magrhino/wud-updater:v0.16.1",
-                "service": "wud-updater",
-                "target_image": "ghcr.io/magrhino/wud-updater:v0.16.1"
+                "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+                "resolved_image": "ghcr.io/magrhino/wudup:v0.16.1",
+                "service": "wudup",
+                "target_image": "ghcr.io/magrhino/wudup:v0.16.1"
               }
             ],
             "name": "media",
             "project_directory": "demo/docker/media",
             "pull_services": [
-              "wud-updater"
+              "wudup"
             ],
             "services": [
-              "wud-updater"
+              "wudup"
             ],
-            "services_label": "wud-updater",
+            "services_label": "wudup",
             "stop_services": [
-              "wud-updater"
+              "wudup"
             ],
             "tag_updates": [
               {
                 "desired_tag": "v0.16.1",
-                "new_image": "ghcr.io/magrhino/wud-updater:v0.16.1",
-                "old_image": "ghcr.io/magrhino/wud-updater:latest",
+                "new_image": "ghcr.io/magrhino/wudup:v0.16.1",
+                "old_image": "ghcr.io/magrhino/wudup:latest",
                 "services": [
-                  "wud-updater"
+                  "wudup"
                 ]
               }
             ],
@@ -36692,11 +36692,11 @@ export const generatedFixtures = {
             "action": "tag-update",
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
             "matched": true,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-            "resolved_image": "ghcr.io/magrhino/wud-updater:latest"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+            "resolved_image": "ghcr.io/magrhino/wudup:latest"
           },
           {
             "action": "unmatched",
@@ -36839,7 +36839,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "watchtower",
                   "running_image": "containrrr/watchtower:1.7.1"
@@ -36893,9 +36893,9 @@ export const generatedFixtures = {
         "skipped": [
           {
             "desired_tag": "v0.16.1",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
             "reason": "tag-updates-disabled"
           },
           {
@@ -37021,11 +37021,11 @@ export const generatedFixtures = {
             "action": "tag-updates-disabled",
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
             "matched": false,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-            "resolved_image": "ghcr.io/magrhino/wud-updater:latest"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+            "resolved_image": "ghcr.io/magrhino/wudup:latest"
           },
           {
             "action": "tag-updates-disabled",
@@ -37169,7 +37169,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "watchtower",
                   "running_image": "containrrr/watchtower:1.7.1"
@@ -37204,7 +37204,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "watchtower",
               "running_image": "containrrr/watchtower:1.7.1"
@@ -37329,7 +37329,7 @@ export const generatedFixtures = {
               {
                 "args": [],
                 "cwd": "demo/docker/media",
-                "description": "Rewrite ghcr.io/magrhino/wud-updater:latest to ghcr.io/magrhino/wud-updater:v0.16.1 for wud-updater",
+                "description": "Rewrite ghcr.io/magrhino/wudup:latest to ghcr.io/magrhino/wudup:v0.16.1 for wudup",
                 "kind": "compose-tag-update"
               },
               {
@@ -37341,7 +37341,7 @@ export const generatedFixtures = {
                   "-f",
                   "docker-compose.yml",
                   "pull",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Pull matched image updates",
@@ -37356,7 +37356,7 @@ export const generatedFixtures = {
                   "-f",
                   "docker-compose.yml",
                   "stop",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Stop affected services before recreate",
@@ -37374,7 +37374,7 @@ export const generatedFixtures = {
                   "-d",
                   "--remove-orphans",
                   "--no-deps",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Recreate services with updated images",
@@ -37395,37 +37395,37 @@ export const generatedFixtures = {
             "lines": [
               {
                 "action": "tag-update",
-                "compose_image": "ghcr.io/magrhino/wud-updater:latest",
+                "compose_image": "ghcr.io/magrhino/wudup:latest",
                 "desired_tag": "v0.16.1",
                 "digest": "",
                 "digest_provenance": null,
-                "image": "ghcr.io/magrhino/wud-updater:latest",
+                "image": "ghcr.io/magrhino/wudup:latest",
                 "line_no": 5,
-                "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-                "resolved_image": "ghcr.io/magrhino/wud-updater:v0.16.1",
-                "service": "wud-updater",
-                "target_image": "ghcr.io/magrhino/wud-updater:v0.16.1"
+                "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+                "resolved_image": "ghcr.io/magrhino/wudup:v0.16.1",
+                "service": "wudup",
+                "target_image": "ghcr.io/magrhino/wudup:v0.16.1"
               }
             ],
             "name": "media",
             "project_directory": "demo/docker/media",
             "pull_services": [
-              "wud-updater"
+              "wudup"
             ],
             "services": [
-              "wud-updater"
+              "wudup"
             ],
-            "services_label": "wud-updater",
+            "services_label": "wudup",
             "stop_services": [
-              "wud-updater"
+              "wudup"
             ],
             "tag_updates": [
               {
                 "desired_tag": "v0.16.1",
-                "new_image": "ghcr.io/magrhino/wud-updater:v0.16.1",
-                "old_image": "ghcr.io/magrhino/wud-updater:latest",
+                "new_image": "ghcr.io/magrhino/wudup:v0.16.1",
+                "old_image": "ghcr.io/magrhino/wudup:latest",
                 "services": [
-                  "wud-updater"
+                  "wudup"
                 ]
               }
             ],
@@ -37456,11 +37456,11 @@ export const generatedFixtures = {
             "action": "tag-update",
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
             "matched": true,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-            "resolved_image": "ghcr.io/magrhino/wud-updater:latest"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+            "resolved_image": "ghcr.io/magrhino/wudup:latest"
           },
           {
             "action": "unmatched",
@@ -37603,7 +37603,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "homepage",
                   "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -37636,7 +37636,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "vaultwarden",
                   "running_image": "vaultwarden/server:1.31.0"
@@ -37965,7 +37965,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "homepage",
                   "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -37998,7 +37998,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "vaultwarden",
                   "running_image": "vaultwarden/server:1.31.0"
@@ -38033,7 +38033,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "homepage",
               "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -38058,7 +38058,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "vaultwarden",
               "running_image": "vaultwarden/server:1.31.0"
@@ -38357,7 +38357,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "homepage",
                   "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -38390,7 +38390,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "watchtower",
                   "running_image": "containrrr/watchtower:1.7.1"
@@ -38719,7 +38719,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "homepage",
                   "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -38752,7 +38752,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "watchtower",
                   "running_image": "containrrr/watchtower:1.7.1"
@@ -38787,7 +38787,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "homepage",
               "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -38812,7 +38812,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "watchtower",
               "running_image": "containrrr/watchtower:1.7.1"
@@ -39111,7 +39111,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "vaultwarden",
                   "running_image": "vaultwarden/server:1.31.0"
@@ -39144,7 +39144,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "watchtower",
                   "running_image": "containrrr/watchtower:1.7.1"
@@ -39473,7 +39473,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "vaultwarden",
                   "running_image": "vaultwarden/server:1.31.0"
@@ -39506,7 +39506,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "watchtower",
                   "running_image": "containrrr/watchtower:1.7.1"
@@ -39541,7 +39541,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "vaultwarden",
               "running_image": "vaultwarden/server:1.31.0"
@@ -39566,7 +39566,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "watchtower",
               "running_image": "containrrr/watchtower:1.7.1"
@@ -39868,7 +39868,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "homepage",
                   "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -39901,7 +39901,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "vaultwarden",
                   "running_image": "vaultwarden/server:1.31.0"
@@ -39965,9 +39965,9 @@ export const generatedFixtures = {
         "skipped": [
           {
             "desired_tag": "v0.16.1",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
             "reason": "tag-updates-disabled"
           },
           {
@@ -40001,11 +40001,11 @@ export const generatedFixtures = {
             "action": "tag-updates-disabled",
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
             "matched": false,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-            "resolved_image": "ghcr.io/magrhino/wud-updater:latest"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+            "resolved_image": "ghcr.io/magrhino/wudup:latest"
           },
           {
             "action": "tag-updates-disabled",
@@ -40163,7 +40163,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "homepage",
                   "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -40196,7 +40196,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "vaultwarden",
                   "running_image": "vaultwarden/server:1.31.0"
@@ -40231,7 +40231,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "homepage",
               "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -40256,7 +40256,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "vaultwarden",
               "running_image": "vaultwarden/server:1.31.0"
@@ -40300,7 +40300,7 @@ export const generatedFixtures = {
               {
                 "args": [],
                 "cwd": "demo/docker/media",
-                "description": "Rewrite ghcr.io/magrhino/wud-updater:latest to ghcr.io/magrhino/wud-updater:v0.16.1 for wud-updater",
+                "description": "Rewrite ghcr.io/magrhino/wudup:latest to ghcr.io/magrhino/wudup:v0.16.1 for wudup",
                 "kind": "compose-tag-update"
               },
               {
@@ -40312,7 +40312,7 @@ export const generatedFixtures = {
                   "-f",
                   "docker-compose.yml",
                   "pull",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Pull matched image updates",
@@ -40327,7 +40327,7 @@ export const generatedFixtures = {
                   "-f",
                   "docker-compose.yml",
                   "stop",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Stop affected services before recreate",
@@ -40345,7 +40345,7 @@ export const generatedFixtures = {
                   "-d",
                   "--remove-orphans",
                   "--no-deps",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Recreate services with updated images",
@@ -40366,37 +40366,37 @@ export const generatedFixtures = {
             "lines": [
               {
                 "action": "tag-update",
-                "compose_image": "ghcr.io/magrhino/wud-updater:latest",
+                "compose_image": "ghcr.io/magrhino/wudup:latest",
                 "desired_tag": "v0.16.1",
                 "digest": "",
                 "digest_provenance": null,
-                "image": "ghcr.io/magrhino/wud-updater:latest",
+                "image": "ghcr.io/magrhino/wudup:latest",
                 "line_no": 5,
-                "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-                "resolved_image": "ghcr.io/magrhino/wud-updater:v0.16.1",
-                "service": "wud-updater",
-                "target_image": "ghcr.io/magrhino/wud-updater:v0.16.1"
+                "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+                "resolved_image": "ghcr.io/magrhino/wudup:v0.16.1",
+                "service": "wudup",
+                "target_image": "ghcr.io/magrhino/wudup:v0.16.1"
               }
             ],
             "name": "media",
             "project_directory": "demo/docker/media",
             "pull_services": [
-              "wud-updater"
+              "wudup"
             ],
             "services": [
-              "wud-updater"
+              "wudup"
             ],
-            "services_label": "wud-updater",
+            "services_label": "wudup",
             "stop_services": [
-              "wud-updater"
+              "wudup"
             ],
             "tag_updates": [
               {
                 "desired_tag": "v0.16.1",
-                "new_image": "ghcr.io/magrhino/wud-updater:v0.16.1",
-                "old_image": "ghcr.io/magrhino/wud-updater:latest",
+                "new_image": "ghcr.io/magrhino/wudup:v0.16.1",
+                "old_image": "ghcr.io/magrhino/wudup:latest",
                 "services": [
-                  "wud-updater"
+                  "wudup"
                 ]
               }
             ],
@@ -40417,11 +40417,11 @@ export const generatedFixtures = {
             "action": "tag-update",
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
             "matched": true,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-            "resolved_image": "ghcr.io/magrhino/wud-updater:latest"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+            "resolved_image": "ghcr.io/magrhino/wudup:latest"
           },
           {
             "action": "unmatched",
@@ -40582,7 +40582,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "homepage",
                   "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -40615,7 +40615,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "watchtower",
                   "running_image": "containrrr/watchtower:1.7.1"
@@ -40679,9 +40679,9 @@ export const generatedFixtures = {
         "skipped": [
           {
             "desired_tag": "v0.16.1",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
             "reason": "tag-updates-disabled"
           },
           {
@@ -40715,11 +40715,11 @@ export const generatedFixtures = {
             "action": "tag-updates-disabled",
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
             "matched": false,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-            "resolved_image": "ghcr.io/magrhino/wud-updater:latest"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+            "resolved_image": "ghcr.io/magrhino/wudup:latest"
           },
           {
             "action": "tag-updates-disabled",
@@ -40877,7 +40877,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "homepage",
                   "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -40910,7 +40910,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "watchtower",
                   "running_image": "containrrr/watchtower:1.7.1"
@@ -40945,7 +40945,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "homepage",
               "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -40970,7 +40970,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "watchtower",
               "running_image": "containrrr/watchtower:1.7.1"
@@ -41014,7 +41014,7 @@ export const generatedFixtures = {
               {
                 "args": [],
                 "cwd": "demo/docker/media",
-                "description": "Rewrite ghcr.io/magrhino/wud-updater:latest to ghcr.io/magrhino/wud-updater:v0.16.1 for wud-updater",
+                "description": "Rewrite ghcr.io/magrhino/wudup:latest to ghcr.io/magrhino/wudup:v0.16.1 for wudup",
                 "kind": "compose-tag-update"
               },
               {
@@ -41026,7 +41026,7 @@ export const generatedFixtures = {
                   "-f",
                   "docker-compose.yml",
                   "pull",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Pull matched image updates",
@@ -41041,7 +41041,7 @@ export const generatedFixtures = {
                   "-f",
                   "docker-compose.yml",
                   "stop",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Stop affected services before recreate",
@@ -41059,7 +41059,7 @@ export const generatedFixtures = {
                   "-d",
                   "--remove-orphans",
                   "--no-deps",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Recreate services with updated images",
@@ -41080,37 +41080,37 @@ export const generatedFixtures = {
             "lines": [
               {
                 "action": "tag-update",
-                "compose_image": "ghcr.io/magrhino/wud-updater:latest",
+                "compose_image": "ghcr.io/magrhino/wudup:latest",
                 "desired_tag": "v0.16.1",
                 "digest": "",
                 "digest_provenance": null,
-                "image": "ghcr.io/magrhino/wud-updater:latest",
+                "image": "ghcr.io/magrhino/wudup:latest",
                 "line_no": 5,
-                "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-                "resolved_image": "ghcr.io/magrhino/wud-updater:v0.16.1",
-                "service": "wud-updater",
-                "target_image": "ghcr.io/magrhino/wud-updater:v0.16.1"
+                "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+                "resolved_image": "ghcr.io/magrhino/wudup:v0.16.1",
+                "service": "wudup",
+                "target_image": "ghcr.io/magrhino/wudup:v0.16.1"
               }
             ],
             "name": "media",
             "project_directory": "demo/docker/media",
             "pull_services": [
-              "wud-updater"
+              "wudup"
             ],
             "services": [
-              "wud-updater"
+              "wudup"
             ],
-            "services_label": "wud-updater",
+            "services_label": "wudup",
             "stop_services": [
-              "wud-updater"
+              "wudup"
             ],
             "tag_updates": [
               {
                 "desired_tag": "v0.16.1",
-                "new_image": "ghcr.io/magrhino/wud-updater:v0.16.1",
-                "old_image": "ghcr.io/magrhino/wud-updater:latest",
+                "new_image": "ghcr.io/magrhino/wudup:v0.16.1",
+                "old_image": "ghcr.io/magrhino/wudup:latest",
                 "services": [
-                  "wud-updater"
+                  "wudup"
                 ]
               }
             ],
@@ -41131,11 +41131,11 @@ export const generatedFixtures = {
             "action": "tag-update",
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
             "matched": true,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-            "resolved_image": "ghcr.io/magrhino/wud-updater:latest"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+            "resolved_image": "ghcr.io/magrhino/wudup:latest"
           },
           {
             "action": "unmatched",
@@ -41296,7 +41296,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "vaultwarden",
                   "running_image": "vaultwarden/server:1.31.0"
@@ -41329,7 +41329,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "watchtower",
                   "running_image": "containrrr/watchtower:1.7.1"
@@ -41393,9 +41393,9 @@ export const generatedFixtures = {
         "skipped": [
           {
             "desired_tag": "v0.16.1",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
             "reason": "tag-updates-disabled"
           },
           {
@@ -41429,11 +41429,11 @@ export const generatedFixtures = {
             "action": "tag-updates-disabled",
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
             "matched": false,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-            "resolved_image": "ghcr.io/magrhino/wud-updater:latest"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+            "resolved_image": "ghcr.io/magrhino/wudup:latest"
           },
           {
             "action": "tag-updates-disabled",
@@ -41591,7 +41591,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "vaultwarden",
                   "running_image": "vaultwarden/server:1.31.0"
@@ -41624,7 +41624,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "watchtower",
                   "running_image": "containrrr/watchtower:1.7.1"
@@ -41659,7 +41659,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "vaultwarden",
               "running_image": "vaultwarden/server:1.31.0"
@@ -41684,7 +41684,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "watchtower",
               "running_image": "containrrr/watchtower:1.7.1"
@@ -41728,7 +41728,7 @@ export const generatedFixtures = {
               {
                 "args": [],
                 "cwd": "demo/docker/media",
-                "description": "Rewrite ghcr.io/magrhino/wud-updater:latest to ghcr.io/magrhino/wud-updater:v0.16.1 for wud-updater",
+                "description": "Rewrite ghcr.io/magrhino/wudup:latest to ghcr.io/magrhino/wudup:v0.16.1 for wudup",
                 "kind": "compose-tag-update"
               },
               {
@@ -41740,7 +41740,7 @@ export const generatedFixtures = {
                   "-f",
                   "docker-compose.yml",
                   "pull",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Pull matched image updates",
@@ -41755,7 +41755,7 @@ export const generatedFixtures = {
                   "-f",
                   "docker-compose.yml",
                   "stop",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Stop affected services before recreate",
@@ -41773,7 +41773,7 @@ export const generatedFixtures = {
                   "-d",
                   "--remove-orphans",
                   "--no-deps",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Recreate services with updated images",
@@ -41794,37 +41794,37 @@ export const generatedFixtures = {
             "lines": [
               {
                 "action": "tag-update",
-                "compose_image": "ghcr.io/magrhino/wud-updater:latest",
+                "compose_image": "ghcr.io/magrhino/wudup:latest",
                 "desired_tag": "v0.16.1",
                 "digest": "",
                 "digest_provenance": null,
-                "image": "ghcr.io/magrhino/wud-updater:latest",
+                "image": "ghcr.io/magrhino/wudup:latest",
                 "line_no": 5,
-                "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-                "resolved_image": "ghcr.io/magrhino/wud-updater:v0.16.1",
-                "service": "wud-updater",
-                "target_image": "ghcr.io/magrhino/wud-updater:v0.16.1"
+                "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+                "resolved_image": "ghcr.io/magrhino/wudup:v0.16.1",
+                "service": "wudup",
+                "target_image": "ghcr.io/magrhino/wudup:v0.16.1"
               }
             ],
             "name": "media",
             "project_directory": "demo/docker/media",
             "pull_services": [
-              "wud-updater"
+              "wudup"
             ],
             "services": [
-              "wud-updater"
+              "wudup"
             ],
-            "services_label": "wud-updater",
+            "services_label": "wudup",
             "stop_services": [
-              "wud-updater"
+              "wudup"
             ],
             "tag_updates": [
               {
                 "desired_tag": "v0.16.1",
-                "new_image": "ghcr.io/magrhino/wud-updater:v0.16.1",
-                "old_image": "ghcr.io/magrhino/wud-updater:latest",
+                "new_image": "ghcr.io/magrhino/wudup:v0.16.1",
+                "old_image": "ghcr.io/magrhino/wudup:latest",
                 "services": [
-                  "wud-updater"
+                  "wudup"
                 ]
               }
             ],
@@ -41845,11 +41845,11 @@ export const generatedFixtures = {
             "action": "tag-update",
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
             "matched": true,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-            "resolved_image": "ghcr.io/magrhino/wud-updater:latest"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+            "resolved_image": "ghcr.io/magrhino/wudup:latest"
           },
           {
             "action": "unmatched",
@@ -42010,7 +42010,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "homepage",
                   "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -42043,7 +42043,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "vaultwarden",
                   "running_image": "vaultwarden/server:1.31.0"
@@ -42076,7 +42076,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "watchtower",
                   "running_image": "containrrr/watchtower:1.7.1"
@@ -42341,7 +42341,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "homepage",
                   "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -42374,7 +42374,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "vaultwarden",
                   "running_image": "vaultwarden/server:1.31.0"
@@ -42407,7 +42407,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "watchtower",
                   "running_image": "containrrr/watchtower:1.7.1"
@@ -42442,7 +42442,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "homepage",
               "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -42467,7 +42467,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "vaultwarden",
               "running_image": "vaultwarden/server:1.31.0"
@@ -42492,7 +42492,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "watchtower",
               "running_image": "containrrr/watchtower:1.7.1"
@@ -42760,9 +42760,9 @@ export const generatedFixtures = {
           },
           {
             "desired_tag": "v0.16.1",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
             "reason": "tag-updates-disabled"
           }
         ],
@@ -42901,11 +42901,11 @@ export const generatedFixtures = {
             "action": "tag-updates-disabled",
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
             "matched": false,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-            "resolved_image": "ghcr.io/magrhino/wud-updater:latest"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+            "resolved_image": "ghcr.io/magrhino/wudup:latest"
           }
         ]
       },
@@ -43246,7 +43246,7 @@ export const generatedFixtures = {
               {
                 "args": [],
                 "cwd": "demo/docker/media",
-                "description": "Rewrite ghcr.io/magrhino/wud-updater:latest to ghcr.io/magrhino/wud-updater:v0.16.1 for wud-updater",
+                "description": "Rewrite ghcr.io/magrhino/wudup:latest to ghcr.io/magrhino/wudup:v0.16.1 for wudup",
                 "kind": "compose-tag-update"
               },
               {
@@ -43265,7 +43265,7 @@ export const generatedFixtures = {
                   "docker-compose.yml",
                   "pull",
                   "radarr",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Pull matched image updates",
@@ -43281,7 +43281,7 @@ export const generatedFixtures = {
                   "docker-compose.yml",
                   "stop",
                   "radarr",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Stop affected services before recreate",
@@ -43300,7 +43300,7 @@ export const generatedFixtures = {
                   "--remove-orphans",
                   "--no-deps",
                   "radarr",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Recreate services with updated images",
@@ -43334,40 +43334,40 @@ export const generatedFixtures = {
               },
               {
                 "action": "tag-update",
-                "compose_image": "ghcr.io/magrhino/wud-updater:latest",
+                "compose_image": "ghcr.io/magrhino/wudup:latest",
                 "desired_tag": "v0.16.1",
                 "digest": "",
                 "digest_provenance": null,
-                "image": "ghcr.io/magrhino/wud-updater:latest",
+                "image": "ghcr.io/magrhino/wudup:latest",
                 "line_no": 5,
-                "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-                "resolved_image": "ghcr.io/magrhino/wud-updater:v0.16.1",
-                "service": "wud-updater",
-                "target_image": "ghcr.io/magrhino/wud-updater:v0.16.1"
+                "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+                "resolved_image": "ghcr.io/magrhino/wudup:v0.16.1",
+                "service": "wudup",
+                "target_image": "ghcr.io/magrhino/wudup:v0.16.1"
               }
             ],
             "name": "media",
             "project_directory": "demo/docker/media",
             "pull_services": [
               "radarr",
-              "wud-updater"
+              "wudup"
             ],
             "services": [
               "radarr",
-              "wud-updater"
+              "wudup"
             ],
-            "services_label": "radarr wud-updater",
+            "services_label": "radarr wudup",
             "stop_services": [
               "radarr",
-              "wud-updater"
+              "wudup"
             ],
             "tag_updates": [
               {
                 "desired_tag": "v0.16.1",
-                "new_image": "ghcr.io/magrhino/wud-updater:v0.16.1",
-                "old_image": "ghcr.io/magrhino/wud-updater:latest",
+                "new_image": "ghcr.io/magrhino/wudup:v0.16.1",
+                "old_image": "ghcr.io/magrhino/wudup:latest",
                 "services": [
-                  "wud-updater"
+                  "wudup"
                 ]
               },
               {
@@ -43426,11 +43426,11 @@ export const generatedFixtures = {
             "action": "tag-update",
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
             "matched": true,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-            "resolved_image": "ghcr.io/magrhino/wud-updater:latest"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+            "resolved_image": "ghcr.io/magrhino/wudup:latest"
           }
         ]
       },
@@ -43569,7 +43569,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "homepage",
                   "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -43934,7 +43934,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "homepage",
                   "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -43969,7 +43969,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "homepage",
               "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -44492,7 +44492,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "vaultwarden",
                   "running_image": "vaultwarden/server:1.31.0"
@@ -44857,7 +44857,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "vaultwarden",
                   "running_image": "vaultwarden/server:1.31.0"
@@ -44892,7 +44892,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "vaultwarden",
               "running_image": "vaultwarden/server:1.31.0"
@@ -45415,7 +45415,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "watchtower",
                   "running_image": "containrrr/watchtower:1.7.1"
@@ -45780,7 +45780,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "watchtower",
                   "running_image": "containrrr/watchtower:1.7.1"
@@ -45815,7 +45815,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "watchtower",
               "running_image": "containrrr/watchtower:1.7.1"
@@ -46341,7 +46341,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "homepage",
                   "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -46430,9 +46430,9 @@ export const generatedFixtures = {
           },
           {
             "desired_tag": "v0.16.1",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
             "reason": "tag-updates-disabled"
           },
           {
@@ -46479,11 +46479,11 @@ export const generatedFixtures = {
             "action": "tag-updates-disabled",
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
             "matched": false,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-            "resolved_image": "ghcr.io/magrhino/wud-updater:latest"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+            "resolved_image": "ghcr.io/magrhino/wudup:latest"
           },
           {
             "action": "tag-updates-disabled",
@@ -46638,7 +46638,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "homepage",
                   "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -46673,7 +46673,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "homepage",
               "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -46818,7 +46818,7 @@ export const generatedFixtures = {
               {
                 "args": [],
                 "cwd": "demo/docker/media",
-                "description": "Rewrite ghcr.io/magrhino/wud-updater:latest to ghcr.io/magrhino/wud-updater:v0.16.1 for wud-updater",
+                "description": "Rewrite ghcr.io/magrhino/wudup:latest to ghcr.io/magrhino/wudup:v0.16.1 for wudup",
                 "kind": "compose-tag-update"
               },
               {
@@ -46837,7 +46837,7 @@ export const generatedFixtures = {
                   "docker-compose.yml",
                   "pull",
                   "radarr",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Pull matched image updates",
@@ -46853,7 +46853,7 @@ export const generatedFixtures = {
                   "docker-compose.yml",
                   "stop",
                   "radarr",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Stop affected services before recreate",
@@ -46872,7 +46872,7 @@ export const generatedFixtures = {
                   "--remove-orphans",
                   "--no-deps",
                   "radarr",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Recreate services with updated images",
@@ -46906,40 +46906,40 @@ export const generatedFixtures = {
               },
               {
                 "action": "tag-update",
-                "compose_image": "ghcr.io/magrhino/wud-updater:latest",
+                "compose_image": "ghcr.io/magrhino/wudup:latest",
                 "desired_tag": "v0.16.1",
                 "digest": "",
                 "digest_provenance": null,
-                "image": "ghcr.io/magrhino/wud-updater:latest",
+                "image": "ghcr.io/magrhino/wudup:latest",
                 "line_no": 5,
-                "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-                "resolved_image": "ghcr.io/magrhino/wud-updater:v0.16.1",
-                "service": "wud-updater",
-                "target_image": "ghcr.io/magrhino/wud-updater:v0.16.1"
+                "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+                "resolved_image": "ghcr.io/magrhino/wudup:v0.16.1",
+                "service": "wudup",
+                "target_image": "ghcr.io/magrhino/wudup:v0.16.1"
               }
             ],
             "name": "media",
             "project_directory": "demo/docker/media",
             "pull_services": [
               "radarr",
-              "wud-updater"
+              "wudup"
             ],
             "services": [
               "radarr",
-              "wud-updater"
+              "wudup"
             ],
-            "services_label": "radarr wud-updater",
+            "services_label": "radarr wudup",
             "stop_services": [
               "radarr",
-              "wud-updater"
+              "wudup"
             ],
             "tag_updates": [
               {
                 "desired_tag": "v0.16.1",
-                "new_image": "ghcr.io/magrhino/wud-updater:v0.16.1",
-                "old_image": "ghcr.io/magrhino/wud-updater:latest",
+                "new_image": "ghcr.io/magrhino/wudup:v0.16.1",
+                "old_image": "ghcr.io/magrhino/wudup:latest",
                 "services": [
-                  "wud-updater"
+                  "wudup"
                 ]
               },
               {
@@ -46988,11 +46988,11 @@ export const generatedFixtures = {
             "action": "tag-update",
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
             "matched": true,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-            "resolved_image": "ghcr.io/magrhino/wud-updater:latest"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+            "resolved_image": "ghcr.io/magrhino/wudup:latest"
           },
           {
             "action": "unmatched",
@@ -47149,7 +47149,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "vaultwarden",
                   "running_image": "vaultwarden/server:1.31.0"
@@ -47238,9 +47238,9 @@ export const generatedFixtures = {
           },
           {
             "desired_tag": "v0.16.1",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
             "reason": "tag-updates-disabled"
           },
           {
@@ -47287,11 +47287,11 @@ export const generatedFixtures = {
             "action": "tag-updates-disabled",
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
             "matched": false,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-            "resolved_image": "ghcr.io/magrhino/wud-updater:latest"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+            "resolved_image": "ghcr.io/magrhino/wudup:latest"
           },
           {
             "action": "tag-updates-disabled",
@@ -47446,7 +47446,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "vaultwarden",
                   "running_image": "vaultwarden/server:1.31.0"
@@ -47481,7 +47481,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "vaultwarden",
               "running_image": "vaultwarden/server:1.31.0"
@@ -47626,7 +47626,7 @@ export const generatedFixtures = {
               {
                 "args": [],
                 "cwd": "demo/docker/media",
-                "description": "Rewrite ghcr.io/magrhino/wud-updater:latest to ghcr.io/magrhino/wud-updater:v0.16.1 for wud-updater",
+                "description": "Rewrite ghcr.io/magrhino/wudup:latest to ghcr.io/magrhino/wudup:v0.16.1 for wudup",
                 "kind": "compose-tag-update"
               },
               {
@@ -47645,7 +47645,7 @@ export const generatedFixtures = {
                   "docker-compose.yml",
                   "pull",
                   "radarr",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Pull matched image updates",
@@ -47661,7 +47661,7 @@ export const generatedFixtures = {
                   "docker-compose.yml",
                   "stop",
                   "radarr",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Stop affected services before recreate",
@@ -47680,7 +47680,7 @@ export const generatedFixtures = {
                   "--remove-orphans",
                   "--no-deps",
                   "radarr",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Recreate services with updated images",
@@ -47714,40 +47714,40 @@ export const generatedFixtures = {
               },
               {
                 "action": "tag-update",
-                "compose_image": "ghcr.io/magrhino/wud-updater:latest",
+                "compose_image": "ghcr.io/magrhino/wudup:latest",
                 "desired_tag": "v0.16.1",
                 "digest": "",
                 "digest_provenance": null,
-                "image": "ghcr.io/magrhino/wud-updater:latest",
+                "image": "ghcr.io/magrhino/wudup:latest",
                 "line_no": 5,
-                "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-                "resolved_image": "ghcr.io/magrhino/wud-updater:v0.16.1",
-                "service": "wud-updater",
-                "target_image": "ghcr.io/magrhino/wud-updater:v0.16.1"
+                "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+                "resolved_image": "ghcr.io/magrhino/wudup:v0.16.1",
+                "service": "wudup",
+                "target_image": "ghcr.io/magrhino/wudup:v0.16.1"
               }
             ],
             "name": "media",
             "project_directory": "demo/docker/media",
             "pull_services": [
               "radarr",
-              "wud-updater"
+              "wudup"
             ],
             "services": [
               "radarr",
-              "wud-updater"
+              "wudup"
             ],
-            "services_label": "radarr wud-updater",
+            "services_label": "radarr wudup",
             "stop_services": [
               "radarr",
-              "wud-updater"
+              "wudup"
             ],
             "tag_updates": [
               {
                 "desired_tag": "v0.16.1",
-                "new_image": "ghcr.io/magrhino/wud-updater:v0.16.1",
-                "old_image": "ghcr.io/magrhino/wud-updater:latest",
+                "new_image": "ghcr.io/magrhino/wudup:v0.16.1",
+                "old_image": "ghcr.io/magrhino/wudup:latest",
                 "services": [
-                  "wud-updater"
+                  "wudup"
                 ]
               },
               {
@@ -47796,11 +47796,11 @@ export const generatedFixtures = {
             "action": "tag-update",
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
             "matched": true,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-            "resolved_image": "ghcr.io/magrhino/wud-updater:latest"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+            "resolved_image": "ghcr.io/magrhino/wudup:latest"
           },
           {
             "action": "unmatched",
@@ -47957,7 +47957,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "watchtower",
                   "running_image": "containrrr/watchtower:1.7.1"
@@ -48046,9 +48046,9 @@ export const generatedFixtures = {
           },
           {
             "desired_tag": "v0.16.1",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
             "reason": "tag-updates-disabled"
           },
           {
@@ -48095,11 +48095,11 @@ export const generatedFixtures = {
             "action": "tag-updates-disabled",
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
             "matched": false,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-            "resolved_image": "ghcr.io/magrhino/wud-updater:latest"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+            "resolved_image": "ghcr.io/magrhino/wudup:latest"
           },
           {
             "action": "tag-updates-disabled",
@@ -48254,7 +48254,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "watchtower",
                   "running_image": "containrrr/watchtower:1.7.1"
@@ -48289,7 +48289,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "watchtower",
               "running_image": "containrrr/watchtower:1.7.1"
@@ -48434,7 +48434,7 @@ export const generatedFixtures = {
               {
                 "args": [],
                 "cwd": "demo/docker/media",
-                "description": "Rewrite ghcr.io/magrhino/wud-updater:latest to ghcr.io/magrhino/wud-updater:v0.16.1 for wud-updater",
+                "description": "Rewrite ghcr.io/magrhino/wudup:latest to ghcr.io/magrhino/wudup:v0.16.1 for wudup",
                 "kind": "compose-tag-update"
               },
               {
@@ -48453,7 +48453,7 @@ export const generatedFixtures = {
                   "docker-compose.yml",
                   "pull",
                   "radarr",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Pull matched image updates",
@@ -48469,7 +48469,7 @@ export const generatedFixtures = {
                   "docker-compose.yml",
                   "stop",
                   "radarr",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Stop affected services before recreate",
@@ -48488,7 +48488,7 @@ export const generatedFixtures = {
                   "--remove-orphans",
                   "--no-deps",
                   "radarr",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Recreate services with updated images",
@@ -48522,40 +48522,40 @@ export const generatedFixtures = {
               },
               {
                 "action": "tag-update",
-                "compose_image": "ghcr.io/magrhino/wud-updater:latest",
+                "compose_image": "ghcr.io/magrhino/wudup:latest",
                 "desired_tag": "v0.16.1",
                 "digest": "",
                 "digest_provenance": null,
-                "image": "ghcr.io/magrhino/wud-updater:latest",
+                "image": "ghcr.io/magrhino/wudup:latest",
                 "line_no": 5,
-                "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-                "resolved_image": "ghcr.io/magrhino/wud-updater:v0.16.1",
-                "service": "wud-updater",
-                "target_image": "ghcr.io/magrhino/wud-updater:v0.16.1"
+                "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+                "resolved_image": "ghcr.io/magrhino/wudup:v0.16.1",
+                "service": "wudup",
+                "target_image": "ghcr.io/magrhino/wudup:v0.16.1"
               }
             ],
             "name": "media",
             "project_directory": "demo/docker/media",
             "pull_services": [
               "radarr",
-              "wud-updater"
+              "wudup"
             ],
             "services": [
               "radarr",
-              "wud-updater"
+              "wudup"
             ],
-            "services_label": "radarr wud-updater",
+            "services_label": "radarr wudup",
             "stop_services": [
               "radarr",
-              "wud-updater"
+              "wudup"
             ],
             "tag_updates": [
               {
                 "desired_tag": "v0.16.1",
-                "new_image": "ghcr.io/magrhino/wud-updater:v0.16.1",
-                "old_image": "ghcr.io/magrhino/wud-updater:latest",
+                "new_image": "ghcr.io/magrhino/wudup:v0.16.1",
+                "old_image": "ghcr.io/magrhino/wudup:latest",
                 "services": [
-                  "wud-updater"
+                  "wudup"
                 ]
               },
               {
@@ -48604,11 +48604,11 @@ export const generatedFixtures = {
             "action": "tag-update",
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
             "matched": true,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-            "resolved_image": "ghcr.io/magrhino/wud-updater:latest"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+            "resolved_image": "ghcr.io/magrhino/wudup:latest"
           },
           {
             "action": "unmatched",
@@ -48765,7 +48765,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "homepage",
                   "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -48798,7 +48798,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "vaultwarden",
                   "running_image": "vaultwarden/server:1.31.0"
@@ -49095,7 +49095,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "homepage",
                   "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -49128,7 +49128,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "vaultwarden",
                   "running_image": "vaultwarden/server:1.31.0"
@@ -49163,7 +49163,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "homepage",
               "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -49188,7 +49188,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "vaultwarden",
               "running_image": "vaultwarden/server:1.31.0"
@@ -49638,7 +49638,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "homepage",
                   "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -49671,7 +49671,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "watchtower",
                   "running_image": "containrrr/watchtower:1.7.1"
@@ -49968,7 +49968,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "homepage",
                   "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -50001,7 +50001,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "watchtower",
                   "running_image": "containrrr/watchtower:1.7.1"
@@ -50036,7 +50036,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "homepage",
               "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -50061,7 +50061,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "watchtower",
               "running_image": "containrrr/watchtower:1.7.1"
@@ -50511,7 +50511,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "vaultwarden",
                   "running_image": "vaultwarden/server:1.31.0"
@@ -50544,7 +50544,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "watchtower",
                   "running_image": "containrrr/watchtower:1.7.1"
@@ -50841,7 +50841,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "vaultwarden",
                   "running_image": "vaultwarden/server:1.31.0"
@@ -50874,7 +50874,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "watchtower",
                   "running_image": "containrrr/watchtower:1.7.1"
@@ -50909,7 +50909,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "vaultwarden",
               "running_image": "vaultwarden/server:1.31.0"
@@ -50934,7 +50934,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "watchtower",
               "running_image": "containrrr/watchtower:1.7.1"
@@ -51381,7 +51381,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "homepage",
                   "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -51453,9 +51453,9 @@ export const generatedFixtures = {
           },
           {
             "desired_tag": "v0.16.1",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
             "reason": "tag-updates-disabled"
           },
           {
@@ -51591,11 +51591,11 @@ export const generatedFixtures = {
             "action": "tag-updates-disabled",
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
             "matched": false,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-            "resolved_image": "ghcr.io/magrhino/wud-updater:latest"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+            "resolved_image": "ghcr.io/magrhino/wudup:latest"
           },
           {
             "action": "tag-updates-disabled",
@@ -51746,7 +51746,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "homepage",
                   "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -51781,7 +51781,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "homepage",
               "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -52014,7 +52014,7 @@ export const generatedFixtures = {
               {
                 "args": [],
                 "cwd": "demo/docker/media",
-                "description": "Rewrite ghcr.io/magrhino/wud-updater:latest to ghcr.io/magrhino/wud-updater:v0.16.1 for wud-updater",
+                "description": "Rewrite ghcr.io/magrhino/wudup:latest to ghcr.io/magrhino/wudup:v0.16.1 for wudup",
                 "kind": "compose-tag-update"
               },
               {
@@ -52026,7 +52026,7 @@ export const generatedFixtures = {
                   "-f",
                   "docker-compose.yml",
                   "pull",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Pull matched image updates",
@@ -52041,7 +52041,7 @@ export const generatedFixtures = {
                   "-f",
                   "docker-compose.yml",
                   "stop",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Stop affected services before recreate",
@@ -52059,7 +52059,7 @@ export const generatedFixtures = {
                   "-d",
                   "--remove-orphans",
                   "--no-deps",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Recreate services with updated images",
@@ -52080,37 +52080,37 @@ export const generatedFixtures = {
             "lines": [
               {
                 "action": "tag-update",
-                "compose_image": "ghcr.io/magrhino/wud-updater:latest",
+                "compose_image": "ghcr.io/magrhino/wudup:latest",
                 "desired_tag": "v0.16.1",
                 "digest": "",
                 "digest_provenance": null,
-                "image": "ghcr.io/magrhino/wud-updater:latest",
+                "image": "ghcr.io/magrhino/wudup:latest",
                 "line_no": 5,
-                "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-                "resolved_image": "ghcr.io/magrhino/wud-updater:v0.16.1",
-                "service": "wud-updater",
-                "target_image": "ghcr.io/magrhino/wud-updater:v0.16.1"
+                "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+                "resolved_image": "ghcr.io/magrhino/wudup:v0.16.1",
+                "service": "wudup",
+                "target_image": "ghcr.io/magrhino/wudup:v0.16.1"
               }
             ],
             "name": "media",
             "project_directory": "demo/docker/media",
             "pull_services": [
-              "wud-updater"
+              "wudup"
             ],
             "services": [
-              "wud-updater"
+              "wudup"
             ],
-            "services_label": "wud-updater",
+            "services_label": "wudup",
             "stop_services": [
-              "wud-updater"
+              "wudup"
             ],
             "tag_updates": [
               {
                 "desired_tag": "v0.16.1",
-                "new_image": "ghcr.io/magrhino/wud-updater:v0.16.1",
-                "old_image": "ghcr.io/magrhino/wud-updater:latest",
+                "new_image": "ghcr.io/magrhino/wudup:v0.16.1",
+                "old_image": "ghcr.io/magrhino/wudup:latest",
                 "services": [
-                  "wud-updater"
+                  "wudup"
                 ]
               }
             ],
@@ -52151,11 +52151,11 @@ export const generatedFixtures = {
             "action": "tag-update",
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
             "matched": true,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-            "resolved_image": "ghcr.io/magrhino/wud-updater:latest"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+            "resolved_image": "ghcr.io/magrhino/wudup:latest"
           },
           {
             "action": "unmatched",
@@ -52304,7 +52304,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "vaultwarden",
                   "running_image": "vaultwarden/server:1.31.0"
@@ -52376,9 +52376,9 @@ export const generatedFixtures = {
           },
           {
             "desired_tag": "v0.16.1",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
             "reason": "tag-updates-disabled"
           },
           {
@@ -52514,11 +52514,11 @@ export const generatedFixtures = {
             "action": "tag-updates-disabled",
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
             "matched": false,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-            "resolved_image": "ghcr.io/magrhino/wud-updater:latest"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+            "resolved_image": "ghcr.io/magrhino/wudup:latest"
           },
           {
             "action": "tag-updates-disabled",
@@ -52669,7 +52669,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "vaultwarden",
                   "running_image": "vaultwarden/server:1.31.0"
@@ -52704,7 +52704,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "vaultwarden",
               "running_image": "vaultwarden/server:1.31.0"
@@ -52937,7 +52937,7 @@ export const generatedFixtures = {
               {
                 "args": [],
                 "cwd": "demo/docker/media",
-                "description": "Rewrite ghcr.io/magrhino/wud-updater:latest to ghcr.io/magrhino/wud-updater:v0.16.1 for wud-updater",
+                "description": "Rewrite ghcr.io/magrhino/wudup:latest to ghcr.io/magrhino/wudup:v0.16.1 for wudup",
                 "kind": "compose-tag-update"
               },
               {
@@ -52949,7 +52949,7 @@ export const generatedFixtures = {
                   "-f",
                   "docker-compose.yml",
                   "pull",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Pull matched image updates",
@@ -52964,7 +52964,7 @@ export const generatedFixtures = {
                   "-f",
                   "docker-compose.yml",
                   "stop",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Stop affected services before recreate",
@@ -52982,7 +52982,7 @@ export const generatedFixtures = {
                   "-d",
                   "--remove-orphans",
                   "--no-deps",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Recreate services with updated images",
@@ -53003,37 +53003,37 @@ export const generatedFixtures = {
             "lines": [
               {
                 "action": "tag-update",
-                "compose_image": "ghcr.io/magrhino/wud-updater:latest",
+                "compose_image": "ghcr.io/magrhino/wudup:latest",
                 "desired_tag": "v0.16.1",
                 "digest": "",
                 "digest_provenance": null,
-                "image": "ghcr.io/magrhino/wud-updater:latest",
+                "image": "ghcr.io/magrhino/wudup:latest",
                 "line_no": 5,
-                "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-                "resolved_image": "ghcr.io/magrhino/wud-updater:v0.16.1",
-                "service": "wud-updater",
-                "target_image": "ghcr.io/magrhino/wud-updater:v0.16.1"
+                "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+                "resolved_image": "ghcr.io/magrhino/wudup:v0.16.1",
+                "service": "wudup",
+                "target_image": "ghcr.io/magrhino/wudup:v0.16.1"
               }
             ],
             "name": "media",
             "project_directory": "demo/docker/media",
             "pull_services": [
-              "wud-updater"
+              "wudup"
             ],
             "services": [
-              "wud-updater"
+              "wudup"
             ],
-            "services_label": "wud-updater",
+            "services_label": "wudup",
             "stop_services": [
-              "wud-updater"
+              "wudup"
             ],
             "tag_updates": [
               {
                 "desired_tag": "v0.16.1",
-                "new_image": "ghcr.io/magrhino/wud-updater:v0.16.1",
-                "old_image": "ghcr.io/magrhino/wud-updater:latest",
+                "new_image": "ghcr.io/magrhino/wudup:v0.16.1",
+                "old_image": "ghcr.io/magrhino/wudup:latest",
                 "services": [
-                  "wud-updater"
+                  "wudup"
                 ]
               }
             ],
@@ -53074,11 +53074,11 @@ export const generatedFixtures = {
             "action": "tag-update",
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
             "matched": true,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-            "resolved_image": "ghcr.io/magrhino/wud-updater:latest"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+            "resolved_image": "ghcr.io/magrhino/wudup:latest"
           },
           {
             "action": "unmatched",
@@ -53227,7 +53227,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "watchtower",
                   "running_image": "containrrr/watchtower:1.7.1"
@@ -53299,9 +53299,9 @@ export const generatedFixtures = {
           },
           {
             "desired_tag": "v0.16.1",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
             "reason": "tag-updates-disabled"
           },
           {
@@ -53437,11 +53437,11 @@ export const generatedFixtures = {
             "action": "tag-updates-disabled",
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
             "matched": false,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-            "resolved_image": "ghcr.io/magrhino/wud-updater:latest"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+            "resolved_image": "ghcr.io/magrhino/wudup:latest"
           },
           {
             "action": "tag-updates-disabled",
@@ -53592,7 +53592,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "watchtower",
                   "running_image": "containrrr/watchtower:1.7.1"
@@ -53627,7 +53627,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "watchtower",
               "running_image": "containrrr/watchtower:1.7.1"
@@ -53860,7 +53860,7 @@ export const generatedFixtures = {
               {
                 "args": [],
                 "cwd": "demo/docker/media",
-                "description": "Rewrite ghcr.io/magrhino/wud-updater:latest to ghcr.io/magrhino/wud-updater:v0.16.1 for wud-updater",
+                "description": "Rewrite ghcr.io/magrhino/wudup:latest to ghcr.io/magrhino/wudup:v0.16.1 for wudup",
                 "kind": "compose-tag-update"
               },
               {
@@ -53872,7 +53872,7 @@ export const generatedFixtures = {
                   "-f",
                   "docker-compose.yml",
                   "pull",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Pull matched image updates",
@@ -53887,7 +53887,7 @@ export const generatedFixtures = {
                   "-f",
                   "docker-compose.yml",
                   "stop",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Stop affected services before recreate",
@@ -53905,7 +53905,7 @@ export const generatedFixtures = {
                   "-d",
                   "--remove-orphans",
                   "--no-deps",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Recreate services with updated images",
@@ -53926,37 +53926,37 @@ export const generatedFixtures = {
             "lines": [
               {
                 "action": "tag-update",
-                "compose_image": "ghcr.io/magrhino/wud-updater:latest",
+                "compose_image": "ghcr.io/magrhino/wudup:latest",
                 "desired_tag": "v0.16.1",
                 "digest": "",
                 "digest_provenance": null,
-                "image": "ghcr.io/magrhino/wud-updater:latest",
+                "image": "ghcr.io/magrhino/wudup:latest",
                 "line_no": 5,
-                "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-                "resolved_image": "ghcr.io/magrhino/wud-updater:v0.16.1",
-                "service": "wud-updater",
-                "target_image": "ghcr.io/magrhino/wud-updater:v0.16.1"
+                "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+                "resolved_image": "ghcr.io/magrhino/wudup:v0.16.1",
+                "service": "wudup",
+                "target_image": "ghcr.io/magrhino/wudup:v0.16.1"
               }
             ],
             "name": "media",
             "project_directory": "demo/docker/media",
             "pull_services": [
-              "wud-updater"
+              "wudup"
             ],
             "services": [
-              "wud-updater"
+              "wudup"
             ],
-            "services_label": "wud-updater",
+            "services_label": "wudup",
             "stop_services": [
-              "wud-updater"
+              "wudup"
             ],
             "tag_updates": [
               {
                 "desired_tag": "v0.16.1",
-                "new_image": "ghcr.io/magrhino/wud-updater:v0.16.1",
-                "old_image": "ghcr.io/magrhino/wud-updater:latest",
+                "new_image": "ghcr.io/magrhino/wudup:v0.16.1",
+                "old_image": "ghcr.io/magrhino/wudup:latest",
                 "services": [
-                  "wud-updater"
+                  "wudup"
                 ]
               }
             ],
@@ -53997,11 +53997,11 @@ export const generatedFixtures = {
             "action": "tag-update",
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
             "matched": true,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-            "resolved_image": "ghcr.io/magrhino/wud-updater:latest"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+            "resolved_image": "ghcr.io/magrhino/wudup:latest"
           },
           {
             "action": "unmatched",
@@ -54150,7 +54150,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "homepage",
                   "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -54183,7 +54183,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "vaultwarden",
                   "running_image": "vaultwarden/server:1.31.0"
@@ -54547,7 +54547,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "homepage",
                   "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -54580,7 +54580,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "vaultwarden",
                   "running_image": "vaultwarden/server:1.31.0"
@@ -54615,7 +54615,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "homepage",
               "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -54640,7 +54640,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "vaultwarden",
               "running_image": "vaultwarden/server:1.31.0"
@@ -55063,7 +55063,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "homepage",
                   "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -55096,7 +55096,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "watchtower",
                   "running_image": "containrrr/watchtower:1.7.1"
@@ -55460,7 +55460,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "homepage",
                   "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -55493,7 +55493,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "watchtower",
                   "running_image": "containrrr/watchtower:1.7.1"
@@ -55528,7 +55528,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "homepage",
               "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -55553,7 +55553,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "watchtower",
               "running_image": "containrrr/watchtower:1.7.1"
@@ -55976,7 +55976,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "vaultwarden",
                   "running_image": "vaultwarden/server:1.31.0"
@@ -56009,7 +56009,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "watchtower",
                   "running_image": "containrrr/watchtower:1.7.1"
@@ -56373,7 +56373,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "vaultwarden",
                   "running_image": "vaultwarden/server:1.31.0"
@@ -56406,7 +56406,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "watchtower",
                   "running_image": "containrrr/watchtower:1.7.1"
@@ -56441,7 +56441,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "vaultwarden",
               "running_image": "vaultwarden/server:1.31.0"
@@ -56466,7 +56466,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "watchtower",
               "running_image": "containrrr/watchtower:1.7.1"
@@ -56892,7 +56892,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "homepage",
                   "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -56925,7 +56925,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "vaultwarden",
                   "running_image": "vaultwarden/server:1.31.0"
@@ -57007,9 +57007,9 @@ export const generatedFixtures = {
           },
           {
             "desired_tag": "v0.16.1",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
             "reason": "tag-updates-disabled"
           },
           {
@@ -57053,11 +57053,11 @@ export const generatedFixtures = {
             "action": "tag-updates-disabled",
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
             "matched": false,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-            "resolved_image": "ghcr.io/magrhino/wud-updater:latest"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+            "resolved_image": "ghcr.io/magrhino/wudup:latest"
           },
           {
             "action": "tag-updates-disabled",
@@ -57222,7 +57222,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "homepage",
                   "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -57255,7 +57255,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "vaultwarden",
                   "running_image": "vaultwarden/server:1.31.0"
@@ -57290,7 +57290,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "homepage",
               "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -57315,7 +57315,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "vaultwarden",
               "running_image": "vaultwarden/server:1.31.0"
@@ -57467,7 +57467,7 @@ export const generatedFixtures = {
               {
                 "args": [],
                 "cwd": "demo/docker/media",
-                "description": "Rewrite ghcr.io/magrhino/wud-updater:latest to ghcr.io/magrhino/wud-updater:v0.16.1 for wud-updater",
+                "description": "Rewrite ghcr.io/magrhino/wudup:latest to ghcr.io/magrhino/wudup:v0.16.1 for wudup",
                 "kind": "compose-tag-update"
               },
               {
@@ -57479,7 +57479,7 @@ export const generatedFixtures = {
                   "-f",
                   "docker-compose.yml",
                   "pull",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Pull matched image updates",
@@ -57494,7 +57494,7 @@ export const generatedFixtures = {
                   "-f",
                   "docker-compose.yml",
                   "stop",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Stop affected services before recreate",
@@ -57512,7 +57512,7 @@ export const generatedFixtures = {
                   "-d",
                   "--remove-orphans",
                   "--no-deps",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Recreate services with updated images",
@@ -57533,37 +57533,37 @@ export const generatedFixtures = {
             "lines": [
               {
                 "action": "tag-update",
-                "compose_image": "ghcr.io/magrhino/wud-updater:latest",
+                "compose_image": "ghcr.io/magrhino/wudup:latest",
                 "desired_tag": "v0.16.1",
                 "digest": "",
                 "digest_provenance": null,
-                "image": "ghcr.io/magrhino/wud-updater:latest",
+                "image": "ghcr.io/magrhino/wudup:latest",
                 "line_no": 5,
-                "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-                "resolved_image": "ghcr.io/magrhino/wud-updater:v0.16.1",
-                "service": "wud-updater",
-                "target_image": "ghcr.io/magrhino/wud-updater:v0.16.1"
+                "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+                "resolved_image": "ghcr.io/magrhino/wudup:v0.16.1",
+                "service": "wudup",
+                "target_image": "ghcr.io/magrhino/wudup:v0.16.1"
               }
             ],
             "name": "media",
             "project_directory": "demo/docker/media",
             "pull_services": [
-              "wud-updater"
+              "wudup"
             ],
             "services": [
-              "wud-updater"
+              "wudup"
             ],
-            "services_label": "wud-updater",
+            "services_label": "wudup",
             "stop_services": [
-              "wud-updater"
+              "wudup"
             ],
             "tag_updates": [
               {
                 "desired_tag": "v0.16.1",
-                "new_image": "ghcr.io/magrhino/wud-updater:v0.16.1",
-                "old_image": "ghcr.io/magrhino/wud-updater:latest",
+                "new_image": "ghcr.io/magrhino/wudup:v0.16.1",
+                "old_image": "ghcr.io/magrhino/wudup:latest",
                 "services": [
-                  "wud-updater"
+                  "wudup"
                 ]
               }
             ],
@@ -57594,11 +57594,11 @@ export const generatedFixtures = {
             "action": "tag-update",
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
             "matched": true,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-            "resolved_image": "ghcr.io/magrhino/wud-updater:latest"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+            "resolved_image": "ghcr.io/magrhino/wudup:latest"
           },
           {
             "action": "unmatched",
@@ -57765,7 +57765,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "homepage",
                   "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -57798,7 +57798,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "watchtower",
                   "running_image": "containrrr/watchtower:1.7.1"
@@ -57880,9 +57880,9 @@ export const generatedFixtures = {
           },
           {
             "desired_tag": "v0.16.1",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
             "reason": "tag-updates-disabled"
           },
           {
@@ -57926,11 +57926,11 @@ export const generatedFixtures = {
             "action": "tag-updates-disabled",
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
             "matched": false,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-            "resolved_image": "ghcr.io/magrhino/wud-updater:latest"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+            "resolved_image": "ghcr.io/magrhino/wudup:latest"
           },
           {
             "action": "tag-updates-disabled",
@@ -58095,7 +58095,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "homepage",
                   "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -58128,7 +58128,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "watchtower",
                   "running_image": "containrrr/watchtower:1.7.1"
@@ -58163,7 +58163,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "homepage",
               "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -58188,7 +58188,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "watchtower",
               "running_image": "containrrr/watchtower:1.7.1"
@@ -58340,7 +58340,7 @@ export const generatedFixtures = {
               {
                 "args": [],
                 "cwd": "demo/docker/media",
-                "description": "Rewrite ghcr.io/magrhino/wud-updater:latest to ghcr.io/magrhino/wud-updater:v0.16.1 for wud-updater",
+                "description": "Rewrite ghcr.io/magrhino/wudup:latest to ghcr.io/magrhino/wudup:v0.16.1 for wudup",
                 "kind": "compose-tag-update"
               },
               {
@@ -58352,7 +58352,7 @@ export const generatedFixtures = {
                   "-f",
                   "docker-compose.yml",
                   "pull",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Pull matched image updates",
@@ -58367,7 +58367,7 @@ export const generatedFixtures = {
                   "-f",
                   "docker-compose.yml",
                   "stop",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Stop affected services before recreate",
@@ -58385,7 +58385,7 @@ export const generatedFixtures = {
                   "-d",
                   "--remove-orphans",
                   "--no-deps",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Recreate services with updated images",
@@ -58406,37 +58406,37 @@ export const generatedFixtures = {
             "lines": [
               {
                 "action": "tag-update",
-                "compose_image": "ghcr.io/magrhino/wud-updater:latest",
+                "compose_image": "ghcr.io/magrhino/wudup:latest",
                 "desired_tag": "v0.16.1",
                 "digest": "",
                 "digest_provenance": null,
-                "image": "ghcr.io/magrhino/wud-updater:latest",
+                "image": "ghcr.io/magrhino/wudup:latest",
                 "line_no": 5,
-                "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-                "resolved_image": "ghcr.io/magrhino/wud-updater:v0.16.1",
-                "service": "wud-updater",
-                "target_image": "ghcr.io/magrhino/wud-updater:v0.16.1"
+                "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+                "resolved_image": "ghcr.io/magrhino/wudup:v0.16.1",
+                "service": "wudup",
+                "target_image": "ghcr.io/magrhino/wudup:v0.16.1"
               }
             ],
             "name": "media",
             "project_directory": "demo/docker/media",
             "pull_services": [
-              "wud-updater"
+              "wudup"
             ],
             "services": [
-              "wud-updater"
+              "wudup"
             ],
-            "services_label": "wud-updater",
+            "services_label": "wudup",
             "stop_services": [
-              "wud-updater"
+              "wudup"
             ],
             "tag_updates": [
               {
                 "desired_tag": "v0.16.1",
-                "new_image": "ghcr.io/magrhino/wud-updater:v0.16.1",
-                "old_image": "ghcr.io/magrhino/wud-updater:latest",
+                "new_image": "ghcr.io/magrhino/wudup:v0.16.1",
+                "old_image": "ghcr.io/magrhino/wudup:latest",
                 "services": [
-                  "wud-updater"
+                  "wudup"
                 ]
               }
             ],
@@ -58467,11 +58467,11 @@ export const generatedFixtures = {
             "action": "tag-update",
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
             "matched": true,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-            "resolved_image": "ghcr.io/magrhino/wud-updater:latest"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+            "resolved_image": "ghcr.io/magrhino/wudup:latest"
           },
           {
             "action": "unmatched",
@@ -58638,7 +58638,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "vaultwarden",
                   "running_image": "vaultwarden/server:1.31.0"
@@ -58671,7 +58671,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "watchtower",
                   "running_image": "containrrr/watchtower:1.7.1"
@@ -58753,9 +58753,9 @@ export const generatedFixtures = {
           },
           {
             "desired_tag": "v0.16.1",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
             "reason": "tag-updates-disabled"
           },
           {
@@ -58799,11 +58799,11 @@ export const generatedFixtures = {
             "action": "tag-updates-disabled",
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
             "matched": false,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-            "resolved_image": "ghcr.io/magrhino/wud-updater:latest"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+            "resolved_image": "ghcr.io/magrhino/wudup:latest"
           },
           {
             "action": "tag-updates-disabled",
@@ -58968,7 +58968,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "vaultwarden",
                   "running_image": "vaultwarden/server:1.31.0"
@@ -59001,7 +59001,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "watchtower",
                   "running_image": "containrrr/watchtower:1.7.1"
@@ -59036,7 +59036,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "vaultwarden",
               "running_image": "vaultwarden/server:1.31.0"
@@ -59061,7 +59061,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "watchtower",
               "running_image": "containrrr/watchtower:1.7.1"
@@ -59213,7 +59213,7 @@ export const generatedFixtures = {
               {
                 "args": [],
                 "cwd": "demo/docker/media",
-                "description": "Rewrite ghcr.io/magrhino/wud-updater:latest to ghcr.io/magrhino/wud-updater:v0.16.1 for wud-updater",
+                "description": "Rewrite ghcr.io/magrhino/wudup:latest to ghcr.io/magrhino/wudup:v0.16.1 for wudup",
                 "kind": "compose-tag-update"
               },
               {
@@ -59225,7 +59225,7 @@ export const generatedFixtures = {
                   "-f",
                   "docker-compose.yml",
                   "pull",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Pull matched image updates",
@@ -59240,7 +59240,7 @@ export const generatedFixtures = {
                   "-f",
                   "docker-compose.yml",
                   "stop",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Stop affected services before recreate",
@@ -59258,7 +59258,7 @@ export const generatedFixtures = {
                   "-d",
                   "--remove-orphans",
                   "--no-deps",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Recreate services with updated images",
@@ -59279,37 +59279,37 @@ export const generatedFixtures = {
             "lines": [
               {
                 "action": "tag-update",
-                "compose_image": "ghcr.io/magrhino/wud-updater:latest",
+                "compose_image": "ghcr.io/magrhino/wudup:latest",
                 "desired_tag": "v0.16.1",
                 "digest": "",
                 "digest_provenance": null,
-                "image": "ghcr.io/magrhino/wud-updater:latest",
+                "image": "ghcr.io/magrhino/wudup:latest",
                 "line_no": 5,
-                "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-                "resolved_image": "ghcr.io/magrhino/wud-updater:v0.16.1",
-                "service": "wud-updater",
-                "target_image": "ghcr.io/magrhino/wud-updater:v0.16.1"
+                "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+                "resolved_image": "ghcr.io/magrhino/wudup:v0.16.1",
+                "service": "wudup",
+                "target_image": "ghcr.io/magrhino/wudup:v0.16.1"
               }
             ],
             "name": "media",
             "project_directory": "demo/docker/media",
             "pull_services": [
-              "wud-updater"
+              "wudup"
             ],
             "services": [
-              "wud-updater"
+              "wudup"
             ],
-            "services_label": "wud-updater",
+            "services_label": "wudup",
             "stop_services": [
-              "wud-updater"
+              "wudup"
             ],
             "tag_updates": [
               {
                 "desired_tag": "v0.16.1",
-                "new_image": "ghcr.io/magrhino/wud-updater:v0.16.1",
-                "old_image": "ghcr.io/magrhino/wud-updater:latest",
+                "new_image": "ghcr.io/magrhino/wudup:v0.16.1",
+                "old_image": "ghcr.io/magrhino/wudup:latest",
                 "services": [
-                  "wud-updater"
+                  "wudup"
                 ]
               }
             ],
@@ -59340,11 +59340,11 @@ export const generatedFixtures = {
             "action": "tag-update",
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
             "matched": true,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-            "resolved_image": "ghcr.io/magrhino/wud-updater:latest"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+            "resolved_image": "ghcr.io/magrhino/wudup:latest"
           },
           {
             "action": "unmatched",
@@ -59511,7 +59511,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "homepage",
                   "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -59544,7 +59544,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "vaultwarden",
                   "running_image": "vaultwarden/server:1.31.0"
@@ -59577,7 +59577,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "watchtower",
                   "running_image": "containrrr/watchtower:1.7.1"
@@ -59873,7 +59873,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "homepage",
                   "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -59906,7 +59906,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "vaultwarden",
                   "running_image": "vaultwarden/server:1.31.0"
@@ -59939,7 +59939,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "watchtower",
                   "running_image": "containrrr/watchtower:1.7.1"
@@ -59974,7 +59974,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "homepage",
               "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -59999,7 +59999,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "vaultwarden",
               "running_image": "vaultwarden/server:1.31.0"
@@ -60024,7 +60024,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "watchtower",
               "running_image": "containrrr/watchtower:1.7.1"
@@ -60371,7 +60371,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "homepage",
                   "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -60443,9 +60443,9 @@ export const generatedFixtures = {
           },
           {
             "desired_tag": "v0.16.1",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
             "reason": "tag-updates-disabled"
           },
           {
@@ -60581,11 +60581,11 @@ export const generatedFixtures = {
             "action": "tag-updates-disabled",
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
             "matched": false,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-            "resolved_image": "ghcr.io/magrhino/wud-updater:latest"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+            "resolved_image": "ghcr.io/magrhino/wudup:latest"
           },
           {
             "action": "tag-updates-disabled",
@@ -60735,7 +60735,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "homepage",
                   "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -60770,7 +60770,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "homepage",
               "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -60896,7 +60896,7 @@ export const generatedFixtures = {
               {
                 "args": [],
                 "cwd": "demo/docker/media",
-                "description": "Rewrite ghcr.io/magrhino/wud-updater:latest to ghcr.io/magrhino/wud-updater:v0.16.1 for wud-updater",
+                "description": "Rewrite ghcr.io/magrhino/wudup:latest to ghcr.io/magrhino/wudup:v0.16.1 for wudup",
                 "kind": "compose-tag-update"
               },
               {
@@ -60915,7 +60915,7 @@ export const generatedFixtures = {
                   "docker-compose.yml",
                   "pull",
                   "radarr",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Pull matched image updates",
@@ -60931,7 +60931,7 @@ export const generatedFixtures = {
                   "docker-compose.yml",
                   "stop",
                   "radarr",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Stop affected services before recreate",
@@ -60950,7 +60950,7 @@ export const generatedFixtures = {
                   "--remove-orphans",
                   "--no-deps",
                   "radarr",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Recreate services with updated images",
@@ -60984,40 +60984,40 @@ export const generatedFixtures = {
               },
               {
                 "action": "tag-update",
-                "compose_image": "ghcr.io/magrhino/wud-updater:latest",
+                "compose_image": "ghcr.io/magrhino/wudup:latest",
                 "desired_tag": "v0.16.1",
                 "digest": "",
                 "digest_provenance": null,
-                "image": "ghcr.io/magrhino/wud-updater:latest",
+                "image": "ghcr.io/magrhino/wudup:latest",
                 "line_no": 5,
-                "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-                "resolved_image": "ghcr.io/magrhino/wud-updater:v0.16.1",
-                "service": "wud-updater",
-                "target_image": "ghcr.io/magrhino/wud-updater:v0.16.1"
+                "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+                "resolved_image": "ghcr.io/magrhino/wudup:v0.16.1",
+                "service": "wudup",
+                "target_image": "ghcr.io/magrhino/wudup:v0.16.1"
               }
             ],
             "name": "media",
             "project_directory": "demo/docker/media",
             "pull_services": [
               "radarr",
-              "wud-updater"
+              "wudup"
             ],
             "services": [
               "radarr",
-              "wud-updater"
+              "wudup"
             ],
-            "services_label": "radarr wud-updater",
+            "services_label": "radarr wudup",
             "stop_services": [
               "radarr",
-              "wud-updater"
+              "wudup"
             ],
             "tag_updates": [
               {
                 "desired_tag": "v0.16.1",
-                "new_image": "ghcr.io/magrhino/wud-updater:v0.16.1",
-                "old_image": "ghcr.io/magrhino/wud-updater:latest",
+                "new_image": "ghcr.io/magrhino/wudup:v0.16.1",
+                "old_image": "ghcr.io/magrhino/wudup:latest",
                 "services": [
-                  "wud-updater"
+                  "wudup"
                 ]
               },
               {
@@ -61066,11 +61066,11 @@ export const generatedFixtures = {
             "action": "tag-update",
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
             "matched": true,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-            "resolved_image": "ghcr.io/magrhino/wud-updater:latest"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+            "resolved_image": "ghcr.io/magrhino/wudup:latest"
           },
           {
             "action": "unmatched",
@@ -61219,7 +61219,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "vaultwarden",
                   "running_image": "vaultwarden/server:1.31.0"
@@ -61291,9 +61291,9 @@ export const generatedFixtures = {
           },
           {
             "desired_tag": "v0.16.1",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
             "reason": "tag-updates-disabled"
           },
           {
@@ -61429,11 +61429,11 @@ export const generatedFixtures = {
             "action": "tag-updates-disabled",
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
             "matched": false,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-            "resolved_image": "ghcr.io/magrhino/wud-updater:latest"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+            "resolved_image": "ghcr.io/magrhino/wudup:latest"
           },
           {
             "action": "tag-updates-disabled",
@@ -61583,7 +61583,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "vaultwarden",
                   "running_image": "vaultwarden/server:1.31.0"
@@ -61618,7 +61618,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "vaultwarden",
               "running_image": "vaultwarden/server:1.31.0"
@@ -61744,7 +61744,7 @@ export const generatedFixtures = {
               {
                 "args": [],
                 "cwd": "demo/docker/media",
-                "description": "Rewrite ghcr.io/magrhino/wud-updater:latest to ghcr.io/magrhino/wud-updater:v0.16.1 for wud-updater",
+                "description": "Rewrite ghcr.io/magrhino/wudup:latest to ghcr.io/magrhino/wudup:v0.16.1 for wudup",
                 "kind": "compose-tag-update"
               },
               {
@@ -61763,7 +61763,7 @@ export const generatedFixtures = {
                   "docker-compose.yml",
                   "pull",
                   "radarr",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Pull matched image updates",
@@ -61779,7 +61779,7 @@ export const generatedFixtures = {
                   "docker-compose.yml",
                   "stop",
                   "radarr",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Stop affected services before recreate",
@@ -61798,7 +61798,7 @@ export const generatedFixtures = {
                   "--remove-orphans",
                   "--no-deps",
                   "radarr",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Recreate services with updated images",
@@ -61832,40 +61832,40 @@ export const generatedFixtures = {
               },
               {
                 "action": "tag-update",
-                "compose_image": "ghcr.io/magrhino/wud-updater:latest",
+                "compose_image": "ghcr.io/magrhino/wudup:latest",
                 "desired_tag": "v0.16.1",
                 "digest": "",
                 "digest_provenance": null,
-                "image": "ghcr.io/magrhino/wud-updater:latest",
+                "image": "ghcr.io/magrhino/wudup:latest",
                 "line_no": 5,
-                "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-                "resolved_image": "ghcr.io/magrhino/wud-updater:v0.16.1",
-                "service": "wud-updater",
-                "target_image": "ghcr.io/magrhino/wud-updater:v0.16.1"
+                "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+                "resolved_image": "ghcr.io/magrhino/wudup:v0.16.1",
+                "service": "wudup",
+                "target_image": "ghcr.io/magrhino/wudup:v0.16.1"
               }
             ],
             "name": "media",
             "project_directory": "demo/docker/media",
             "pull_services": [
               "radarr",
-              "wud-updater"
+              "wudup"
             ],
             "services": [
               "radarr",
-              "wud-updater"
+              "wudup"
             ],
-            "services_label": "radarr wud-updater",
+            "services_label": "radarr wudup",
             "stop_services": [
               "radarr",
-              "wud-updater"
+              "wudup"
             ],
             "tag_updates": [
               {
                 "desired_tag": "v0.16.1",
-                "new_image": "ghcr.io/magrhino/wud-updater:v0.16.1",
-                "old_image": "ghcr.io/magrhino/wud-updater:latest",
+                "new_image": "ghcr.io/magrhino/wudup:v0.16.1",
+                "old_image": "ghcr.io/magrhino/wudup:latest",
                 "services": [
-                  "wud-updater"
+                  "wudup"
                 ]
               },
               {
@@ -61914,11 +61914,11 @@ export const generatedFixtures = {
             "action": "tag-update",
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
             "matched": true,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-            "resolved_image": "ghcr.io/magrhino/wud-updater:latest"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+            "resolved_image": "ghcr.io/magrhino/wudup:latest"
           },
           {
             "action": "unmatched",
@@ -62067,7 +62067,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "watchtower",
                   "running_image": "containrrr/watchtower:1.7.1"
@@ -62139,9 +62139,9 @@ export const generatedFixtures = {
           },
           {
             "desired_tag": "v0.16.1",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
             "reason": "tag-updates-disabled"
           },
           {
@@ -62277,11 +62277,11 @@ export const generatedFixtures = {
             "action": "tag-updates-disabled",
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
             "matched": false,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-            "resolved_image": "ghcr.io/magrhino/wud-updater:latest"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+            "resolved_image": "ghcr.io/magrhino/wudup:latest"
           },
           {
             "action": "tag-updates-disabled",
@@ -62431,7 +62431,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "watchtower",
                   "running_image": "containrrr/watchtower:1.7.1"
@@ -62466,7 +62466,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "watchtower",
               "running_image": "containrrr/watchtower:1.7.1"
@@ -62592,7 +62592,7 @@ export const generatedFixtures = {
               {
                 "args": [],
                 "cwd": "demo/docker/media",
-                "description": "Rewrite ghcr.io/magrhino/wud-updater:latest to ghcr.io/magrhino/wud-updater:v0.16.1 for wud-updater",
+                "description": "Rewrite ghcr.io/magrhino/wudup:latest to ghcr.io/magrhino/wudup:v0.16.1 for wudup",
                 "kind": "compose-tag-update"
               },
               {
@@ -62611,7 +62611,7 @@ export const generatedFixtures = {
                   "docker-compose.yml",
                   "pull",
                   "radarr",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Pull matched image updates",
@@ -62627,7 +62627,7 @@ export const generatedFixtures = {
                   "docker-compose.yml",
                   "stop",
                   "radarr",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Stop affected services before recreate",
@@ -62646,7 +62646,7 @@ export const generatedFixtures = {
                   "--remove-orphans",
                   "--no-deps",
                   "radarr",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Recreate services with updated images",
@@ -62680,40 +62680,40 @@ export const generatedFixtures = {
               },
               {
                 "action": "tag-update",
-                "compose_image": "ghcr.io/magrhino/wud-updater:latest",
+                "compose_image": "ghcr.io/magrhino/wudup:latest",
                 "desired_tag": "v0.16.1",
                 "digest": "",
                 "digest_provenance": null,
-                "image": "ghcr.io/magrhino/wud-updater:latest",
+                "image": "ghcr.io/magrhino/wudup:latest",
                 "line_no": 5,
-                "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-                "resolved_image": "ghcr.io/magrhino/wud-updater:v0.16.1",
-                "service": "wud-updater",
-                "target_image": "ghcr.io/magrhino/wud-updater:v0.16.1"
+                "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+                "resolved_image": "ghcr.io/magrhino/wudup:v0.16.1",
+                "service": "wudup",
+                "target_image": "ghcr.io/magrhino/wudup:v0.16.1"
               }
             ],
             "name": "media",
             "project_directory": "demo/docker/media",
             "pull_services": [
               "radarr",
-              "wud-updater"
+              "wudup"
             ],
             "services": [
               "radarr",
-              "wud-updater"
+              "wudup"
             ],
-            "services_label": "radarr wud-updater",
+            "services_label": "radarr wudup",
             "stop_services": [
               "radarr",
-              "wud-updater"
+              "wudup"
             ],
             "tag_updates": [
               {
                 "desired_tag": "v0.16.1",
-                "new_image": "ghcr.io/magrhino/wud-updater:v0.16.1",
-                "old_image": "ghcr.io/magrhino/wud-updater:latest",
+                "new_image": "ghcr.io/magrhino/wudup:v0.16.1",
+                "old_image": "ghcr.io/magrhino/wudup:latest",
                 "services": [
-                  "wud-updater"
+                  "wudup"
                 ]
               },
               {
@@ -62762,11 +62762,11 @@ export const generatedFixtures = {
             "action": "tag-update",
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
             "matched": true,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-            "resolved_image": "ghcr.io/magrhino/wud-updater:latest"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+            "resolved_image": "ghcr.io/magrhino/wudup:latest"
           },
           {
             "action": "unmatched",
@@ -62915,7 +62915,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "homepage",
                   "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -62948,7 +62948,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "vaultwarden",
                   "running_image": "vaultwarden/server:1.31.0"
@@ -63312,7 +63312,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "homepage",
                   "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -63345,7 +63345,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "vaultwarden",
                   "running_image": "vaultwarden/server:1.31.0"
@@ -63380,7 +63380,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "homepage",
               "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -63405,7 +63405,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "vaultwarden",
               "running_image": "vaultwarden/server:1.31.0"
@@ -63828,7 +63828,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "homepage",
                   "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -63861,7 +63861,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "watchtower",
                   "running_image": "containrrr/watchtower:1.7.1"
@@ -64225,7 +64225,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "homepage",
                   "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -64258,7 +64258,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "watchtower",
                   "running_image": "containrrr/watchtower:1.7.1"
@@ -64293,7 +64293,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "homepage",
               "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -64318,7 +64318,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "watchtower",
               "running_image": "containrrr/watchtower:1.7.1"
@@ -64741,7 +64741,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "vaultwarden",
                   "running_image": "vaultwarden/server:1.31.0"
@@ -64774,7 +64774,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "watchtower",
                   "running_image": "containrrr/watchtower:1.7.1"
@@ -65138,7 +65138,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "vaultwarden",
                   "running_image": "vaultwarden/server:1.31.0"
@@ -65171,7 +65171,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "watchtower",
                   "running_image": "containrrr/watchtower:1.7.1"
@@ -65206,7 +65206,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "vaultwarden",
               "running_image": "vaultwarden/server:1.31.0"
@@ -65231,7 +65231,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "watchtower",
               "running_image": "containrrr/watchtower:1.7.1"
@@ -65657,7 +65657,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "homepage",
                   "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -65690,7 +65690,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "vaultwarden",
                   "running_image": "vaultwarden/server:1.31.0"
@@ -65772,9 +65772,9 @@ export const generatedFixtures = {
           },
           {
             "desired_tag": "v0.16.1",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
             "reason": "tag-updates-disabled"
           },
           {
@@ -65818,11 +65818,11 @@ export const generatedFixtures = {
             "action": "tag-updates-disabled",
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
             "matched": false,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-            "resolved_image": "ghcr.io/magrhino/wud-updater:latest"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+            "resolved_image": "ghcr.io/magrhino/wudup:latest"
           },
           {
             "action": "tag-updates-disabled",
@@ -65986,7 +65986,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "homepage",
                   "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -66019,7 +66019,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "vaultwarden",
                   "running_image": "vaultwarden/server:1.31.0"
@@ -66054,7 +66054,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "homepage",
               "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -66079,7 +66079,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "vaultwarden",
               "running_image": "vaultwarden/server:1.31.0"
@@ -66124,7 +66124,7 @@ export const generatedFixtures = {
               {
                 "args": [],
                 "cwd": "demo/docker/media",
-                "description": "Rewrite ghcr.io/magrhino/wud-updater:latest to ghcr.io/magrhino/wud-updater:v0.16.1 for wud-updater",
+                "description": "Rewrite ghcr.io/magrhino/wudup:latest to ghcr.io/magrhino/wudup:v0.16.1 for wudup",
                 "kind": "compose-tag-update"
               },
               {
@@ -66143,7 +66143,7 @@ export const generatedFixtures = {
                   "docker-compose.yml",
                   "pull",
                   "radarr",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Pull matched image updates",
@@ -66159,7 +66159,7 @@ export const generatedFixtures = {
                   "docker-compose.yml",
                   "stop",
                   "radarr",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Stop affected services before recreate",
@@ -66178,7 +66178,7 @@ export const generatedFixtures = {
                   "--remove-orphans",
                   "--no-deps",
                   "radarr",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Recreate services with updated images",
@@ -66212,40 +66212,40 @@ export const generatedFixtures = {
               },
               {
                 "action": "tag-update",
-                "compose_image": "ghcr.io/magrhino/wud-updater:latest",
+                "compose_image": "ghcr.io/magrhino/wudup:latest",
                 "desired_tag": "v0.16.1",
                 "digest": "",
                 "digest_provenance": null,
-                "image": "ghcr.io/magrhino/wud-updater:latest",
+                "image": "ghcr.io/magrhino/wudup:latest",
                 "line_no": 5,
-                "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-                "resolved_image": "ghcr.io/magrhino/wud-updater:v0.16.1",
-                "service": "wud-updater",
-                "target_image": "ghcr.io/magrhino/wud-updater:v0.16.1"
+                "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+                "resolved_image": "ghcr.io/magrhino/wudup:v0.16.1",
+                "service": "wudup",
+                "target_image": "ghcr.io/magrhino/wudup:v0.16.1"
               }
             ],
             "name": "media",
             "project_directory": "demo/docker/media",
             "pull_services": [
               "radarr",
-              "wud-updater"
+              "wudup"
             ],
             "services": [
               "radarr",
-              "wud-updater"
+              "wudup"
             ],
-            "services_label": "radarr wud-updater",
+            "services_label": "radarr wudup",
             "stop_services": [
               "radarr",
-              "wud-updater"
+              "wudup"
             ],
             "tag_updates": [
               {
                 "desired_tag": "v0.16.1",
-                "new_image": "ghcr.io/magrhino/wud-updater:v0.16.1",
-                "old_image": "ghcr.io/magrhino/wud-updater:latest",
+                "new_image": "ghcr.io/magrhino/wudup:v0.16.1",
+                "old_image": "ghcr.io/magrhino/wudup:latest",
                 "services": [
-                  "wud-updater"
+                  "wudup"
                 ]
               },
               {
@@ -66284,11 +66284,11 @@ export const generatedFixtures = {
             "action": "tag-update",
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
             "matched": true,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-            "resolved_image": "ghcr.io/magrhino/wud-updater:latest"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+            "resolved_image": "ghcr.io/magrhino/wudup:latest"
           },
           {
             "action": "unmatched",
@@ -66455,7 +66455,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "homepage",
                   "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -66488,7 +66488,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "watchtower",
                   "running_image": "containrrr/watchtower:1.7.1"
@@ -66570,9 +66570,9 @@ export const generatedFixtures = {
           },
           {
             "desired_tag": "v0.16.1",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
             "reason": "tag-updates-disabled"
           },
           {
@@ -66616,11 +66616,11 @@ export const generatedFixtures = {
             "action": "tag-updates-disabled",
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
             "matched": false,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-            "resolved_image": "ghcr.io/magrhino/wud-updater:latest"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+            "resolved_image": "ghcr.io/magrhino/wudup:latest"
           },
           {
             "action": "tag-updates-disabled",
@@ -66784,7 +66784,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "homepage",
                   "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -66817,7 +66817,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "watchtower",
                   "running_image": "containrrr/watchtower:1.7.1"
@@ -66852,7 +66852,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "homepage",
               "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -66877,7 +66877,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "watchtower",
               "running_image": "containrrr/watchtower:1.7.1"
@@ -66922,7 +66922,7 @@ export const generatedFixtures = {
               {
                 "args": [],
                 "cwd": "demo/docker/media",
-                "description": "Rewrite ghcr.io/magrhino/wud-updater:latest to ghcr.io/magrhino/wud-updater:v0.16.1 for wud-updater",
+                "description": "Rewrite ghcr.io/magrhino/wudup:latest to ghcr.io/magrhino/wudup:v0.16.1 for wudup",
                 "kind": "compose-tag-update"
               },
               {
@@ -66941,7 +66941,7 @@ export const generatedFixtures = {
                   "docker-compose.yml",
                   "pull",
                   "radarr",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Pull matched image updates",
@@ -66957,7 +66957,7 @@ export const generatedFixtures = {
                   "docker-compose.yml",
                   "stop",
                   "radarr",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Stop affected services before recreate",
@@ -66976,7 +66976,7 @@ export const generatedFixtures = {
                   "--remove-orphans",
                   "--no-deps",
                   "radarr",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Recreate services with updated images",
@@ -67010,40 +67010,40 @@ export const generatedFixtures = {
               },
               {
                 "action": "tag-update",
-                "compose_image": "ghcr.io/magrhino/wud-updater:latest",
+                "compose_image": "ghcr.io/magrhino/wudup:latest",
                 "desired_tag": "v0.16.1",
                 "digest": "",
                 "digest_provenance": null,
-                "image": "ghcr.io/magrhino/wud-updater:latest",
+                "image": "ghcr.io/magrhino/wudup:latest",
                 "line_no": 5,
-                "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-                "resolved_image": "ghcr.io/magrhino/wud-updater:v0.16.1",
-                "service": "wud-updater",
-                "target_image": "ghcr.io/magrhino/wud-updater:v0.16.1"
+                "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+                "resolved_image": "ghcr.io/magrhino/wudup:v0.16.1",
+                "service": "wudup",
+                "target_image": "ghcr.io/magrhino/wudup:v0.16.1"
               }
             ],
             "name": "media",
             "project_directory": "demo/docker/media",
             "pull_services": [
               "radarr",
-              "wud-updater"
+              "wudup"
             ],
             "services": [
               "radarr",
-              "wud-updater"
+              "wudup"
             ],
-            "services_label": "radarr wud-updater",
+            "services_label": "radarr wudup",
             "stop_services": [
               "radarr",
-              "wud-updater"
+              "wudup"
             ],
             "tag_updates": [
               {
                 "desired_tag": "v0.16.1",
-                "new_image": "ghcr.io/magrhino/wud-updater:v0.16.1",
-                "old_image": "ghcr.io/magrhino/wud-updater:latest",
+                "new_image": "ghcr.io/magrhino/wudup:v0.16.1",
+                "old_image": "ghcr.io/magrhino/wudup:latest",
                 "services": [
-                  "wud-updater"
+                  "wudup"
                 ]
               },
               {
@@ -67082,11 +67082,11 @@ export const generatedFixtures = {
             "action": "tag-update",
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
             "matched": true,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-            "resolved_image": "ghcr.io/magrhino/wud-updater:latest"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+            "resolved_image": "ghcr.io/magrhino/wudup:latest"
           },
           {
             "action": "unmatched",
@@ -67253,7 +67253,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "vaultwarden",
                   "running_image": "vaultwarden/server:1.31.0"
@@ -67286,7 +67286,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "watchtower",
                   "running_image": "containrrr/watchtower:1.7.1"
@@ -67368,9 +67368,9 @@ export const generatedFixtures = {
           },
           {
             "desired_tag": "v0.16.1",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
             "reason": "tag-updates-disabled"
           },
           {
@@ -67414,11 +67414,11 @@ export const generatedFixtures = {
             "action": "tag-updates-disabled",
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
             "matched": false,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-            "resolved_image": "ghcr.io/magrhino/wud-updater:latest"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+            "resolved_image": "ghcr.io/magrhino/wudup:latest"
           },
           {
             "action": "tag-updates-disabled",
@@ -67582,7 +67582,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "vaultwarden",
                   "running_image": "vaultwarden/server:1.31.0"
@@ -67615,7 +67615,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "watchtower",
                   "running_image": "containrrr/watchtower:1.7.1"
@@ -67650,7 +67650,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "vaultwarden",
               "running_image": "vaultwarden/server:1.31.0"
@@ -67675,7 +67675,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "watchtower",
               "running_image": "containrrr/watchtower:1.7.1"
@@ -67720,7 +67720,7 @@ export const generatedFixtures = {
               {
                 "args": [],
                 "cwd": "demo/docker/media",
-                "description": "Rewrite ghcr.io/magrhino/wud-updater:latest to ghcr.io/magrhino/wud-updater:v0.16.1 for wud-updater",
+                "description": "Rewrite ghcr.io/magrhino/wudup:latest to ghcr.io/magrhino/wudup:v0.16.1 for wudup",
                 "kind": "compose-tag-update"
               },
               {
@@ -67739,7 +67739,7 @@ export const generatedFixtures = {
                   "docker-compose.yml",
                   "pull",
                   "radarr",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Pull matched image updates",
@@ -67755,7 +67755,7 @@ export const generatedFixtures = {
                   "docker-compose.yml",
                   "stop",
                   "radarr",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Stop affected services before recreate",
@@ -67774,7 +67774,7 @@ export const generatedFixtures = {
                   "--remove-orphans",
                   "--no-deps",
                   "radarr",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Recreate services with updated images",
@@ -67808,40 +67808,40 @@ export const generatedFixtures = {
               },
               {
                 "action": "tag-update",
-                "compose_image": "ghcr.io/magrhino/wud-updater:latest",
+                "compose_image": "ghcr.io/magrhino/wudup:latest",
                 "desired_tag": "v0.16.1",
                 "digest": "",
                 "digest_provenance": null,
-                "image": "ghcr.io/magrhino/wud-updater:latest",
+                "image": "ghcr.io/magrhino/wudup:latest",
                 "line_no": 5,
-                "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-                "resolved_image": "ghcr.io/magrhino/wud-updater:v0.16.1",
-                "service": "wud-updater",
-                "target_image": "ghcr.io/magrhino/wud-updater:v0.16.1"
+                "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+                "resolved_image": "ghcr.io/magrhino/wudup:v0.16.1",
+                "service": "wudup",
+                "target_image": "ghcr.io/magrhino/wudup:v0.16.1"
               }
             ],
             "name": "media",
             "project_directory": "demo/docker/media",
             "pull_services": [
               "radarr",
-              "wud-updater"
+              "wudup"
             ],
             "services": [
               "radarr",
-              "wud-updater"
+              "wudup"
             ],
-            "services_label": "radarr wud-updater",
+            "services_label": "radarr wudup",
             "stop_services": [
               "radarr",
-              "wud-updater"
+              "wudup"
             ],
             "tag_updates": [
               {
                 "desired_tag": "v0.16.1",
-                "new_image": "ghcr.io/magrhino/wud-updater:v0.16.1",
-                "old_image": "ghcr.io/magrhino/wud-updater:latest",
+                "new_image": "ghcr.io/magrhino/wudup:v0.16.1",
+                "old_image": "ghcr.io/magrhino/wudup:latest",
                 "services": [
-                  "wud-updater"
+                  "wudup"
                 ]
               },
               {
@@ -67880,11 +67880,11 @@ export const generatedFixtures = {
             "action": "tag-update",
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
             "matched": true,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-            "resolved_image": "ghcr.io/magrhino/wud-updater:latest"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+            "resolved_image": "ghcr.io/magrhino/wudup:latest"
           },
           {
             "action": "unmatched",
@@ -68051,7 +68051,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "homepage",
                   "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -68084,7 +68084,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "vaultwarden",
                   "running_image": "vaultwarden/server:1.31.0"
@@ -68117,7 +68117,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "watchtower",
                   "running_image": "containrrr/watchtower:1.7.1"
@@ -68413,7 +68413,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "homepage",
                   "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -68446,7 +68446,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "vaultwarden",
                   "running_image": "vaultwarden/server:1.31.0"
@@ -68479,7 +68479,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "watchtower",
                   "running_image": "containrrr/watchtower:1.7.1"
@@ -68514,7 +68514,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "homepage",
               "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -68539,7 +68539,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "vaultwarden",
               "running_image": "vaultwarden/server:1.31.0"
@@ -68564,7 +68564,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "watchtower",
               "running_image": "containrrr/watchtower:1.7.1"
@@ -68911,7 +68911,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "homepage",
                   "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -68944,7 +68944,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "vaultwarden",
                   "running_image": "vaultwarden/server:1.31.0"
@@ -69009,9 +69009,9 @@ export const generatedFixtures = {
         "skipped": [
           {
             "desired_tag": "v0.16.1",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
             "reason": "tag-updates-disabled"
           },
           {
@@ -69144,11 +69144,11 @@ export const generatedFixtures = {
             "action": "tag-updates-disabled",
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
             "matched": false,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-            "resolved_image": "ghcr.io/magrhino/wud-updater:latest"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+            "resolved_image": "ghcr.io/magrhino/wudup:latest"
           },
           {
             "action": "tag-updates-disabled",
@@ -69308,7 +69308,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "homepage",
                   "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -69341,7 +69341,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "vaultwarden",
                   "running_image": "vaultwarden/server:1.31.0"
@@ -69376,7 +69376,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "homepage",
               "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -69401,7 +69401,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "vaultwarden",
               "running_image": "vaultwarden/server:1.31.0"
@@ -69534,7 +69534,7 @@ export const generatedFixtures = {
               {
                 "args": [],
                 "cwd": "demo/docker/media",
-                "description": "Rewrite ghcr.io/magrhino/wud-updater:latest to ghcr.io/magrhino/wud-updater:v0.16.1 for wud-updater",
+                "description": "Rewrite ghcr.io/magrhino/wudup:latest to ghcr.io/magrhino/wudup:v0.16.1 for wudup",
                 "kind": "compose-tag-update"
               },
               {
@@ -69546,7 +69546,7 @@ export const generatedFixtures = {
                   "-f",
                   "docker-compose.yml",
                   "pull",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Pull matched image updates",
@@ -69561,7 +69561,7 @@ export const generatedFixtures = {
                   "-f",
                   "docker-compose.yml",
                   "stop",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Stop affected services before recreate",
@@ -69579,7 +69579,7 @@ export const generatedFixtures = {
                   "-d",
                   "--remove-orphans",
                   "--no-deps",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Recreate services with updated images",
@@ -69600,37 +69600,37 @@ export const generatedFixtures = {
             "lines": [
               {
                 "action": "tag-update",
-                "compose_image": "ghcr.io/magrhino/wud-updater:latest",
+                "compose_image": "ghcr.io/magrhino/wudup:latest",
                 "desired_tag": "v0.16.1",
                 "digest": "",
                 "digest_provenance": null,
-                "image": "ghcr.io/magrhino/wud-updater:latest",
+                "image": "ghcr.io/magrhino/wudup:latest",
                 "line_no": 5,
-                "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-                "resolved_image": "ghcr.io/magrhino/wud-updater:v0.16.1",
-                "service": "wud-updater",
-                "target_image": "ghcr.io/magrhino/wud-updater:v0.16.1"
+                "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+                "resolved_image": "ghcr.io/magrhino/wudup:v0.16.1",
+                "service": "wudup",
+                "target_image": "ghcr.io/magrhino/wudup:v0.16.1"
               }
             ],
             "name": "media",
             "project_directory": "demo/docker/media",
             "pull_services": [
-              "wud-updater"
+              "wudup"
             ],
             "services": [
-              "wud-updater"
+              "wudup"
             ],
-            "services_label": "wud-updater",
+            "services_label": "wudup",
             "stop_services": [
-              "wud-updater"
+              "wudup"
             ],
             "tag_updates": [
               {
                 "desired_tag": "v0.16.1",
-                "new_image": "ghcr.io/magrhino/wud-updater:v0.16.1",
-                "old_image": "ghcr.io/magrhino/wud-updater:latest",
+                "new_image": "ghcr.io/magrhino/wudup:v0.16.1",
+                "old_image": "ghcr.io/magrhino/wudup:latest",
                 "services": [
-                  "wud-updater"
+                  "wudup"
                 ]
               }
             ],
@@ -69661,11 +69661,11 @@ export const generatedFixtures = {
             "action": "tag-update",
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
             "matched": true,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-            "resolved_image": "ghcr.io/magrhino/wud-updater:latest"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+            "resolved_image": "ghcr.io/magrhino/wudup:latest"
           },
           {
             "action": "unmatched",
@@ -69824,7 +69824,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "homepage",
                   "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -69857,7 +69857,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "watchtower",
                   "running_image": "containrrr/watchtower:1.7.1"
@@ -69922,9 +69922,9 @@ export const generatedFixtures = {
         "skipped": [
           {
             "desired_tag": "v0.16.1",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
             "reason": "tag-updates-disabled"
           },
           {
@@ -70057,11 +70057,11 @@ export const generatedFixtures = {
             "action": "tag-updates-disabled",
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
             "matched": false,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-            "resolved_image": "ghcr.io/magrhino/wud-updater:latest"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+            "resolved_image": "ghcr.io/magrhino/wudup:latest"
           },
           {
             "action": "tag-updates-disabled",
@@ -70221,7 +70221,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "homepage",
                   "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -70254,7 +70254,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "watchtower",
                   "running_image": "containrrr/watchtower:1.7.1"
@@ -70289,7 +70289,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "homepage",
               "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -70314,7 +70314,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "watchtower",
               "running_image": "containrrr/watchtower:1.7.1"
@@ -70447,7 +70447,7 @@ export const generatedFixtures = {
               {
                 "args": [],
                 "cwd": "demo/docker/media",
-                "description": "Rewrite ghcr.io/magrhino/wud-updater:latest to ghcr.io/magrhino/wud-updater:v0.16.1 for wud-updater",
+                "description": "Rewrite ghcr.io/magrhino/wudup:latest to ghcr.io/magrhino/wudup:v0.16.1 for wudup",
                 "kind": "compose-tag-update"
               },
               {
@@ -70459,7 +70459,7 @@ export const generatedFixtures = {
                   "-f",
                   "docker-compose.yml",
                   "pull",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Pull matched image updates",
@@ -70474,7 +70474,7 @@ export const generatedFixtures = {
                   "-f",
                   "docker-compose.yml",
                   "stop",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Stop affected services before recreate",
@@ -70492,7 +70492,7 @@ export const generatedFixtures = {
                   "-d",
                   "--remove-orphans",
                   "--no-deps",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Recreate services with updated images",
@@ -70513,37 +70513,37 @@ export const generatedFixtures = {
             "lines": [
               {
                 "action": "tag-update",
-                "compose_image": "ghcr.io/magrhino/wud-updater:latest",
+                "compose_image": "ghcr.io/magrhino/wudup:latest",
                 "desired_tag": "v0.16.1",
                 "digest": "",
                 "digest_provenance": null,
-                "image": "ghcr.io/magrhino/wud-updater:latest",
+                "image": "ghcr.io/magrhino/wudup:latest",
                 "line_no": 5,
-                "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-                "resolved_image": "ghcr.io/magrhino/wud-updater:v0.16.1",
-                "service": "wud-updater",
-                "target_image": "ghcr.io/magrhino/wud-updater:v0.16.1"
+                "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+                "resolved_image": "ghcr.io/magrhino/wudup:v0.16.1",
+                "service": "wudup",
+                "target_image": "ghcr.io/magrhino/wudup:v0.16.1"
               }
             ],
             "name": "media",
             "project_directory": "demo/docker/media",
             "pull_services": [
-              "wud-updater"
+              "wudup"
             ],
             "services": [
-              "wud-updater"
+              "wudup"
             ],
-            "services_label": "wud-updater",
+            "services_label": "wudup",
             "stop_services": [
-              "wud-updater"
+              "wudup"
             ],
             "tag_updates": [
               {
                 "desired_tag": "v0.16.1",
-                "new_image": "ghcr.io/magrhino/wud-updater:v0.16.1",
-                "old_image": "ghcr.io/magrhino/wud-updater:latest",
+                "new_image": "ghcr.io/magrhino/wudup:v0.16.1",
+                "old_image": "ghcr.io/magrhino/wudup:latest",
                 "services": [
-                  "wud-updater"
+                  "wudup"
                 ]
               }
             ],
@@ -70574,11 +70574,11 @@ export const generatedFixtures = {
             "action": "tag-update",
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
             "matched": true,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-            "resolved_image": "ghcr.io/magrhino/wud-updater:latest"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+            "resolved_image": "ghcr.io/magrhino/wudup:latest"
           },
           {
             "action": "unmatched",
@@ -70737,7 +70737,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "vaultwarden",
                   "running_image": "vaultwarden/server:1.31.0"
@@ -70770,7 +70770,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "watchtower",
                   "running_image": "containrrr/watchtower:1.7.1"
@@ -70835,9 +70835,9 @@ export const generatedFixtures = {
         "skipped": [
           {
             "desired_tag": "v0.16.1",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
             "reason": "tag-updates-disabled"
           },
           {
@@ -70970,11 +70970,11 @@ export const generatedFixtures = {
             "action": "tag-updates-disabled",
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
             "matched": false,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-            "resolved_image": "ghcr.io/magrhino/wud-updater:latest"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+            "resolved_image": "ghcr.io/magrhino/wudup:latest"
           },
           {
             "action": "tag-updates-disabled",
@@ -71134,7 +71134,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "vaultwarden",
                   "running_image": "vaultwarden/server:1.31.0"
@@ -71167,7 +71167,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "watchtower",
                   "running_image": "containrrr/watchtower:1.7.1"
@@ -71202,7 +71202,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "vaultwarden",
               "running_image": "vaultwarden/server:1.31.0"
@@ -71227,7 +71227,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "watchtower",
               "running_image": "containrrr/watchtower:1.7.1"
@@ -71360,7 +71360,7 @@ export const generatedFixtures = {
               {
                 "args": [],
                 "cwd": "demo/docker/media",
-                "description": "Rewrite ghcr.io/magrhino/wud-updater:latest to ghcr.io/magrhino/wud-updater:v0.16.1 for wud-updater",
+                "description": "Rewrite ghcr.io/magrhino/wudup:latest to ghcr.io/magrhino/wudup:v0.16.1 for wudup",
                 "kind": "compose-tag-update"
               },
               {
@@ -71372,7 +71372,7 @@ export const generatedFixtures = {
                   "-f",
                   "docker-compose.yml",
                   "pull",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Pull matched image updates",
@@ -71387,7 +71387,7 @@ export const generatedFixtures = {
                   "-f",
                   "docker-compose.yml",
                   "stop",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Stop affected services before recreate",
@@ -71405,7 +71405,7 @@ export const generatedFixtures = {
                   "-d",
                   "--remove-orphans",
                   "--no-deps",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Recreate services with updated images",
@@ -71426,37 +71426,37 @@ export const generatedFixtures = {
             "lines": [
               {
                 "action": "tag-update",
-                "compose_image": "ghcr.io/magrhino/wud-updater:latest",
+                "compose_image": "ghcr.io/magrhino/wudup:latest",
                 "desired_tag": "v0.16.1",
                 "digest": "",
                 "digest_provenance": null,
-                "image": "ghcr.io/magrhino/wud-updater:latest",
+                "image": "ghcr.io/magrhino/wudup:latest",
                 "line_no": 5,
-                "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-                "resolved_image": "ghcr.io/magrhino/wud-updater:v0.16.1",
-                "service": "wud-updater",
-                "target_image": "ghcr.io/magrhino/wud-updater:v0.16.1"
+                "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+                "resolved_image": "ghcr.io/magrhino/wudup:v0.16.1",
+                "service": "wudup",
+                "target_image": "ghcr.io/magrhino/wudup:v0.16.1"
               }
             ],
             "name": "media",
             "project_directory": "demo/docker/media",
             "pull_services": [
-              "wud-updater"
+              "wudup"
             ],
             "services": [
-              "wud-updater"
+              "wudup"
             ],
-            "services_label": "wud-updater",
+            "services_label": "wudup",
             "stop_services": [
-              "wud-updater"
+              "wudup"
             ],
             "tag_updates": [
               {
                 "desired_tag": "v0.16.1",
-                "new_image": "ghcr.io/magrhino/wud-updater:v0.16.1",
-                "old_image": "ghcr.io/magrhino/wud-updater:latest",
+                "new_image": "ghcr.io/magrhino/wudup:v0.16.1",
+                "old_image": "ghcr.io/magrhino/wudup:latest",
                 "services": [
-                  "wud-updater"
+                  "wudup"
                 ]
               }
             ],
@@ -71487,11 +71487,11 @@ export const generatedFixtures = {
             "action": "tag-update",
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
             "matched": true,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-            "resolved_image": "ghcr.io/magrhino/wud-updater:latest"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+            "resolved_image": "ghcr.io/magrhino/wudup:latest"
           },
           {
             "action": "unmatched",
@@ -71650,7 +71650,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "homepage",
                   "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -71683,7 +71683,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "vaultwarden",
                   "running_image": "vaultwarden/server:1.31.0"
@@ -71716,7 +71716,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "watchtower",
                   "running_image": "containrrr/watchtower:1.7.1"
@@ -72079,7 +72079,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "homepage",
                   "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -72112,7 +72112,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "vaultwarden",
                   "running_image": "vaultwarden/server:1.31.0"
@@ -72145,7 +72145,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "watchtower",
                   "running_image": "containrrr/watchtower:1.7.1"
@@ -72180,7 +72180,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "homepage",
               "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -72205,7 +72205,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "vaultwarden",
               "running_image": "vaultwarden/server:1.31.0"
@@ -72230,7 +72230,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "watchtower",
               "running_image": "containrrr/watchtower:1.7.1"
@@ -72556,7 +72556,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "homepage",
                   "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -72589,7 +72589,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "vaultwarden",
                   "running_image": "vaultwarden/server:1.31.0"
@@ -72622,7 +72622,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "watchtower",
                   "running_image": "containrrr/watchtower:1.7.1"
@@ -72697,9 +72697,9 @@ export const generatedFixtures = {
         "skipped": [
           {
             "desired_tag": "v0.16.1",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
             "reason": "tag-updates-disabled"
           },
           {
@@ -72740,11 +72740,11 @@ export const generatedFixtures = {
             "action": "tag-updates-disabled",
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
             "matched": false,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-            "resolved_image": "ghcr.io/magrhino/wud-updater:latest"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+            "resolved_image": "ghcr.io/magrhino/wudup:latest"
           },
           {
             "action": "tag-updates-disabled",
@@ -72918,7 +72918,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "homepage",
                   "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -72951,7 +72951,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "vaultwarden",
                   "running_image": "vaultwarden/server:1.31.0"
@@ -72984,7 +72984,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "watchtower",
                   "running_image": "containrrr/watchtower:1.7.1"
@@ -73019,7 +73019,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "homepage",
               "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -73044,7 +73044,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "vaultwarden",
               "running_image": "vaultwarden/server:1.31.0"
@@ -73069,7 +73069,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "watchtower",
               "running_image": "containrrr/watchtower:1.7.1"
@@ -73121,7 +73121,7 @@ export const generatedFixtures = {
               {
                 "args": [],
                 "cwd": "demo/docker/media",
-                "description": "Rewrite ghcr.io/magrhino/wud-updater:latest to ghcr.io/magrhino/wud-updater:v0.16.1 for wud-updater",
+                "description": "Rewrite ghcr.io/magrhino/wudup:latest to ghcr.io/magrhino/wudup:v0.16.1 for wudup",
                 "kind": "compose-tag-update"
               },
               {
@@ -73133,7 +73133,7 @@ export const generatedFixtures = {
                   "-f",
                   "docker-compose.yml",
                   "pull",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Pull matched image updates",
@@ -73148,7 +73148,7 @@ export const generatedFixtures = {
                   "-f",
                   "docker-compose.yml",
                   "stop",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Stop affected services before recreate",
@@ -73166,7 +73166,7 @@ export const generatedFixtures = {
                   "-d",
                   "--remove-orphans",
                   "--no-deps",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Recreate services with updated images",
@@ -73187,37 +73187,37 @@ export const generatedFixtures = {
             "lines": [
               {
                 "action": "tag-update",
-                "compose_image": "ghcr.io/magrhino/wud-updater:latest",
+                "compose_image": "ghcr.io/magrhino/wudup:latest",
                 "desired_tag": "v0.16.1",
                 "digest": "",
                 "digest_provenance": null,
-                "image": "ghcr.io/magrhino/wud-updater:latest",
+                "image": "ghcr.io/magrhino/wudup:latest",
                 "line_no": 5,
-                "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-                "resolved_image": "ghcr.io/magrhino/wud-updater:v0.16.1",
-                "service": "wud-updater",
-                "target_image": "ghcr.io/magrhino/wud-updater:v0.16.1"
+                "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+                "resolved_image": "ghcr.io/magrhino/wudup:v0.16.1",
+                "service": "wudup",
+                "target_image": "ghcr.io/magrhino/wudup:v0.16.1"
               }
             ],
             "name": "media",
             "project_directory": "demo/docker/media",
             "pull_services": [
-              "wud-updater"
+              "wudup"
             ],
             "services": [
-              "wud-updater"
+              "wudup"
             ],
-            "services_label": "wud-updater",
+            "services_label": "wudup",
             "stop_services": [
-              "wud-updater"
+              "wudup"
             ],
             "tag_updates": [
               {
                 "desired_tag": "v0.16.1",
-                "new_image": "ghcr.io/magrhino/wud-updater:v0.16.1",
-                "old_image": "ghcr.io/magrhino/wud-updater:latest",
+                "new_image": "ghcr.io/magrhino/wudup:v0.16.1",
+                "old_image": "ghcr.io/magrhino/wudup:latest",
                 "services": [
-                  "wud-updater"
+                  "wudup"
                 ]
               }
             ],
@@ -73238,11 +73238,11 @@ export const generatedFixtures = {
             "action": "tag-update",
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
             "matched": true,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-            "resolved_image": "ghcr.io/magrhino/wud-updater:latest"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+            "resolved_image": "ghcr.io/magrhino/wudup:latest"
           },
           {
             "action": "unmatched",
@@ -73417,7 +73417,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "homepage",
                   "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -73507,9 +73507,9 @@ export const generatedFixtures = {
           },
           {
             "desired_tag": "v0.16.1",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
             "reason": "tag-updates-disabled"
           },
           {
@@ -73655,11 +73655,11 @@ export const generatedFixtures = {
             "action": "tag-updates-disabled",
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
             "matched": false,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-            "resolved_image": "ghcr.io/magrhino/wud-updater:latest"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+            "resolved_image": "ghcr.io/magrhino/wudup:latest"
           },
           {
             "action": "tag-updates-disabled",
@@ -73816,7 +73816,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "homepage",
                   "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -73851,7 +73851,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "homepage",
               "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -74085,7 +74085,7 @@ export const generatedFixtures = {
               {
                 "args": [],
                 "cwd": "demo/docker/media",
-                "description": "Rewrite ghcr.io/magrhino/wud-updater:latest to ghcr.io/magrhino/wud-updater:v0.16.1 for wud-updater",
+                "description": "Rewrite ghcr.io/magrhino/wudup:latest to ghcr.io/magrhino/wudup:v0.16.1 for wudup",
                 "kind": "compose-tag-update"
               },
               {
@@ -74104,7 +74104,7 @@ export const generatedFixtures = {
                   "docker-compose.yml",
                   "pull",
                   "radarr",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Pull matched image updates",
@@ -74120,7 +74120,7 @@ export const generatedFixtures = {
                   "docker-compose.yml",
                   "stop",
                   "radarr",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Stop affected services before recreate",
@@ -74139,7 +74139,7 @@ export const generatedFixtures = {
                   "--remove-orphans",
                   "--no-deps",
                   "radarr",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Recreate services with updated images",
@@ -74173,40 +74173,40 @@ export const generatedFixtures = {
               },
               {
                 "action": "tag-update",
-                "compose_image": "ghcr.io/magrhino/wud-updater:latest",
+                "compose_image": "ghcr.io/magrhino/wudup:latest",
                 "desired_tag": "v0.16.1",
                 "digest": "",
                 "digest_provenance": null,
-                "image": "ghcr.io/magrhino/wud-updater:latest",
+                "image": "ghcr.io/magrhino/wudup:latest",
                 "line_no": 5,
-                "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-                "resolved_image": "ghcr.io/magrhino/wud-updater:v0.16.1",
-                "service": "wud-updater",
-                "target_image": "ghcr.io/magrhino/wud-updater:v0.16.1"
+                "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+                "resolved_image": "ghcr.io/magrhino/wudup:v0.16.1",
+                "service": "wudup",
+                "target_image": "ghcr.io/magrhino/wudup:v0.16.1"
               }
             ],
             "name": "media",
             "project_directory": "demo/docker/media",
             "pull_services": [
               "radarr",
-              "wud-updater"
+              "wudup"
             ],
             "services": [
               "radarr",
-              "wud-updater"
+              "wudup"
             ],
-            "services_label": "radarr wud-updater",
+            "services_label": "radarr wudup",
             "stop_services": [
               "radarr",
-              "wud-updater"
+              "wudup"
             ],
             "tag_updates": [
               {
                 "desired_tag": "v0.16.1",
-                "new_image": "ghcr.io/magrhino/wud-updater:v0.16.1",
-                "old_image": "ghcr.io/magrhino/wud-updater:latest",
+                "new_image": "ghcr.io/magrhino/wudup:v0.16.1",
+                "old_image": "ghcr.io/magrhino/wudup:latest",
                 "services": [
-                  "wud-updater"
+                  "wudup"
                 ]
               },
               {
@@ -74265,11 +74265,11 @@ export const generatedFixtures = {
             "action": "tag-update",
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
             "matched": true,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-            "resolved_image": "ghcr.io/magrhino/wud-updater:latest"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+            "resolved_image": "ghcr.io/magrhino/wudup:latest"
           },
           {
             "action": "unmatched",
@@ -74424,7 +74424,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "vaultwarden",
                   "running_image": "vaultwarden/server:1.31.0"
@@ -74514,9 +74514,9 @@ export const generatedFixtures = {
           },
           {
             "desired_tag": "v0.16.1",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
             "reason": "tag-updates-disabled"
           },
           {
@@ -74662,11 +74662,11 @@ export const generatedFixtures = {
             "action": "tag-updates-disabled",
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
             "matched": false,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-            "resolved_image": "ghcr.io/magrhino/wud-updater:latest"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+            "resolved_image": "ghcr.io/magrhino/wudup:latest"
           },
           {
             "action": "tag-updates-disabled",
@@ -74823,7 +74823,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "vaultwarden",
                   "running_image": "vaultwarden/server:1.31.0"
@@ -74858,7 +74858,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "vaultwarden",
               "running_image": "vaultwarden/server:1.31.0"
@@ -75092,7 +75092,7 @@ export const generatedFixtures = {
               {
                 "args": [],
                 "cwd": "demo/docker/media",
-                "description": "Rewrite ghcr.io/magrhino/wud-updater:latest to ghcr.io/magrhino/wud-updater:v0.16.1 for wud-updater",
+                "description": "Rewrite ghcr.io/magrhino/wudup:latest to ghcr.io/magrhino/wudup:v0.16.1 for wudup",
                 "kind": "compose-tag-update"
               },
               {
@@ -75111,7 +75111,7 @@ export const generatedFixtures = {
                   "docker-compose.yml",
                   "pull",
                   "radarr",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Pull matched image updates",
@@ -75127,7 +75127,7 @@ export const generatedFixtures = {
                   "docker-compose.yml",
                   "stop",
                   "radarr",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Stop affected services before recreate",
@@ -75146,7 +75146,7 @@ export const generatedFixtures = {
                   "--remove-orphans",
                   "--no-deps",
                   "radarr",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Recreate services with updated images",
@@ -75180,40 +75180,40 @@ export const generatedFixtures = {
               },
               {
                 "action": "tag-update",
-                "compose_image": "ghcr.io/magrhino/wud-updater:latest",
+                "compose_image": "ghcr.io/magrhino/wudup:latest",
                 "desired_tag": "v0.16.1",
                 "digest": "",
                 "digest_provenance": null,
-                "image": "ghcr.io/magrhino/wud-updater:latest",
+                "image": "ghcr.io/magrhino/wudup:latest",
                 "line_no": 5,
-                "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-                "resolved_image": "ghcr.io/magrhino/wud-updater:v0.16.1",
-                "service": "wud-updater",
-                "target_image": "ghcr.io/magrhino/wud-updater:v0.16.1"
+                "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+                "resolved_image": "ghcr.io/magrhino/wudup:v0.16.1",
+                "service": "wudup",
+                "target_image": "ghcr.io/magrhino/wudup:v0.16.1"
               }
             ],
             "name": "media",
             "project_directory": "demo/docker/media",
             "pull_services": [
               "radarr",
-              "wud-updater"
+              "wudup"
             ],
             "services": [
               "radarr",
-              "wud-updater"
+              "wudup"
             ],
-            "services_label": "radarr wud-updater",
+            "services_label": "radarr wudup",
             "stop_services": [
               "radarr",
-              "wud-updater"
+              "wudup"
             ],
             "tag_updates": [
               {
                 "desired_tag": "v0.16.1",
-                "new_image": "ghcr.io/magrhino/wud-updater:v0.16.1",
-                "old_image": "ghcr.io/magrhino/wud-updater:latest",
+                "new_image": "ghcr.io/magrhino/wudup:v0.16.1",
+                "old_image": "ghcr.io/magrhino/wudup:latest",
                 "services": [
-                  "wud-updater"
+                  "wudup"
                 ]
               },
               {
@@ -75272,11 +75272,11 @@ export const generatedFixtures = {
             "action": "tag-update",
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
             "matched": true,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-            "resolved_image": "ghcr.io/magrhino/wud-updater:latest"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+            "resolved_image": "ghcr.io/magrhino/wudup:latest"
           },
           {
             "action": "unmatched",
@@ -75431,7 +75431,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "watchtower",
                   "running_image": "containrrr/watchtower:1.7.1"
@@ -75521,9 +75521,9 @@ export const generatedFixtures = {
           },
           {
             "desired_tag": "v0.16.1",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
             "reason": "tag-updates-disabled"
           },
           {
@@ -75669,11 +75669,11 @@ export const generatedFixtures = {
             "action": "tag-updates-disabled",
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
             "matched": false,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-            "resolved_image": "ghcr.io/magrhino/wud-updater:latest"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+            "resolved_image": "ghcr.io/magrhino/wudup:latest"
           },
           {
             "action": "tag-updates-disabled",
@@ -75830,7 +75830,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "watchtower",
                   "running_image": "containrrr/watchtower:1.7.1"
@@ -75865,7 +75865,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "watchtower",
               "running_image": "containrrr/watchtower:1.7.1"
@@ -76099,7 +76099,7 @@ export const generatedFixtures = {
               {
                 "args": [],
                 "cwd": "demo/docker/media",
-                "description": "Rewrite ghcr.io/magrhino/wud-updater:latest to ghcr.io/magrhino/wud-updater:v0.16.1 for wud-updater",
+                "description": "Rewrite ghcr.io/magrhino/wudup:latest to ghcr.io/magrhino/wudup:v0.16.1 for wudup",
                 "kind": "compose-tag-update"
               },
               {
@@ -76118,7 +76118,7 @@ export const generatedFixtures = {
                   "docker-compose.yml",
                   "pull",
                   "radarr",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Pull matched image updates",
@@ -76134,7 +76134,7 @@ export const generatedFixtures = {
                   "docker-compose.yml",
                   "stop",
                   "radarr",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Stop affected services before recreate",
@@ -76153,7 +76153,7 @@ export const generatedFixtures = {
                   "--remove-orphans",
                   "--no-deps",
                   "radarr",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Recreate services with updated images",
@@ -76187,40 +76187,40 @@ export const generatedFixtures = {
               },
               {
                 "action": "tag-update",
-                "compose_image": "ghcr.io/magrhino/wud-updater:latest",
+                "compose_image": "ghcr.io/magrhino/wudup:latest",
                 "desired_tag": "v0.16.1",
                 "digest": "",
                 "digest_provenance": null,
-                "image": "ghcr.io/magrhino/wud-updater:latest",
+                "image": "ghcr.io/magrhino/wudup:latest",
                 "line_no": 5,
-                "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-                "resolved_image": "ghcr.io/magrhino/wud-updater:v0.16.1",
-                "service": "wud-updater",
-                "target_image": "ghcr.io/magrhino/wud-updater:v0.16.1"
+                "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+                "resolved_image": "ghcr.io/magrhino/wudup:v0.16.1",
+                "service": "wudup",
+                "target_image": "ghcr.io/magrhino/wudup:v0.16.1"
               }
             ],
             "name": "media",
             "project_directory": "demo/docker/media",
             "pull_services": [
               "radarr",
-              "wud-updater"
+              "wudup"
             ],
             "services": [
               "radarr",
-              "wud-updater"
+              "wudup"
             ],
-            "services_label": "radarr wud-updater",
+            "services_label": "radarr wudup",
             "stop_services": [
               "radarr",
-              "wud-updater"
+              "wudup"
             ],
             "tag_updates": [
               {
                 "desired_tag": "v0.16.1",
-                "new_image": "ghcr.io/magrhino/wud-updater:v0.16.1",
-                "old_image": "ghcr.io/magrhino/wud-updater:latest",
+                "new_image": "ghcr.io/magrhino/wudup:v0.16.1",
+                "old_image": "ghcr.io/magrhino/wudup:latest",
                 "services": [
-                  "wud-updater"
+                  "wudup"
                 ]
               },
               {
@@ -76279,11 +76279,11 @@ export const generatedFixtures = {
             "action": "tag-update",
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
             "matched": true,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-            "resolved_image": "ghcr.io/magrhino/wud-updater:latest"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+            "resolved_image": "ghcr.io/magrhino/wudup:latest"
           },
           {
             "action": "unmatched",
@@ -76438,7 +76438,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "homepage",
                   "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -76471,7 +76471,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "vaultwarden",
                   "running_image": "vaultwarden/server:1.31.0"
@@ -76870,7 +76870,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "homepage",
                   "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -76903,7 +76903,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "vaultwarden",
                   "running_image": "vaultwarden/server:1.31.0"
@@ -76938,7 +76938,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "homepage",
               "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -76963,7 +76963,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "vaultwarden",
               "running_image": "vaultwarden/server:1.31.0"
@@ -77510,7 +77510,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "homepage",
                   "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -77543,7 +77543,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "watchtower",
                   "running_image": "containrrr/watchtower:1.7.1"
@@ -77942,7 +77942,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "homepage",
                   "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -77975,7 +77975,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "watchtower",
                   "running_image": "containrrr/watchtower:1.7.1"
@@ -78010,7 +78010,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "homepage",
               "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -78035,7 +78035,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "watchtower",
               "running_image": "containrrr/watchtower:1.7.1"
@@ -78582,7 +78582,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "vaultwarden",
                   "running_image": "vaultwarden/server:1.31.0"
@@ -78615,7 +78615,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "watchtower",
                   "running_image": "containrrr/watchtower:1.7.1"
@@ -79014,7 +79014,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "vaultwarden",
                   "running_image": "vaultwarden/server:1.31.0"
@@ -79047,7 +79047,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "watchtower",
                   "running_image": "containrrr/watchtower:1.7.1"
@@ -79082,7 +79082,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "vaultwarden",
               "running_image": "vaultwarden/server:1.31.0"
@@ -79107,7 +79107,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "watchtower",
               "running_image": "containrrr/watchtower:1.7.1"
@@ -79657,7 +79657,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "homepage",
                   "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -79690,7 +79690,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "vaultwarden",
                   "running_image": "vaultwarden/server:1.31.0"
@@ -79790,9 +79790,9 @@ export const generatedFixtures = {
           },
           {
             "desired_tag": "v0.16.1",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
             "reason": "tag-updates-disabled"
           },
           {
@@ -79846,11 +79846,11 @@ export const generatedFixtures = {
             "action": "tag-updates-disabled",
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
             "matched": false,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-            "resolved_image": "ghcr.io/magrhino/wud-updater:latest"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+            "resolved_image": "ghcr.io/magrhino/wudup:latest"
           },
           {
             "action": "tag-updates-disabled",
@@ -80021,7 +80021,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "homepage",
                   "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -80054,7 +80054,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "vaultwarden",
                   "running_image": "vaultwarden/server:1.31.0"
@@ -80089,7 +80089,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "homepage",
               "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -80114,7 +80114,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "vaultwarden",
               "running_image": "vaultwarden/server:1.31.0"
@@ -80267,7 +80267,7 @@ export const generatedFixtures = {
               {
                 "args": [],
                 "cwd": "demo/docker/media",
-                "description": "Rewrite ghcr.io/magrhino/wud-updater:latest to ghcr.io/magrhino/wud-updater:v0.16.1 for wud-updater",
+                "description": "Rewrite ghcr.io/magrhino/wudup:latest to ghcr.io/magrhino/wudup:v0.16.1 for wudup",
                 "kind": "compose-tag-update"
               },
               {
@@ -80286,7 +80286,7 @@ export const generatedFixtures = {
                   "docker-compose.yml",
                   "pull",
                   "radarr",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Pull matched image updates",
@@ -80302,7 +80302,7 @@ export const generatedFixtures = {
                   "docker-compose.yml",
                   "stop",
                   "radarr",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Stop affected services before recreate",
@@ -80321,7 +80321,7 @@ export const generatedFixtures = {
                   "--remove-orphans",
                   "--no-deps",
                   "radarr",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Recreate services with updated images",
@@ -80355,40 +80355,40 @@ export const generatedFixtures = {
               },
               {
                 "action": "tag-update",
-                "compose_image": "ghcr.io/magrhino/wud-updater:latest",
+                "compose_image": "ghcr.io/magrhino/wudup:latest",
                 "desired_tag": "v0.16.1",
                 "digest": "",
                 "digest_provenance": null,
-                "image": "ghcr.io/magrhino/wud-updater:latest",
+                "image": "ghcr.io/magrhino/wudup:latest",
                 "line_no": 5,
-                "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-                "resolved_image": "ghcr.io/magrhino/wud-updater:v0.16.1",
-                "service": "wud-updater",
-                "target_image": "ghcr.io/magrhino/wud-updater:v0.16.1"
+                "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+                "resolved_image": "ghcr.io/magrhino/wudup:v0.16.1",
+                "service": "wudup",
+                "target_image": "ghcr.io/magrhino/wudup:v0.16.1"
               }
             ],
             "name": "media",
             "project_directory": "demo/docker/media",
             "pull_services": [
               "radarr",
-              "wud-updater"
+              "wudup"
             ],
             "services": [
               "radarr",
-              "wud-updater"
+              "wudup"
             ],
-            "services_label": "radarr wud-updater",
+            "services_label": "radarr wudup",
             "stop_services": [
               "radarr",
-              "wud-updater"
+              "wudup"
             ],
             "tag_updates": [
               {
                 "desired_tag": "v0.16.1",
-                "new_image": "ghcr.io/magrhino/wud-updater:v0.16.1",
-                "old_image": "ghcr.io/magrhino/wud-updater:latest",
+                "new_image": "ghcr.io/magrhino/wudup:v0.16.1",
+                "old_image": "ghcr.io/magrhino/wudup:latest",
                 "services": [
-                  "wud-updater"
+                  "wudup"
                 ]
               },
               {
@@ -80437,11 +80437,11 @@ export const generatedFixtures = {
             "action": "tag-update",
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
             "matched": true,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-            "resolved_image": "ghcr.io/magrhino/wud-updater:latest"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+            "resolved_image": "ghcr.io/magrhino/wudup:latest"
           },
           {
             "action": "unmatched",
@@ -80614,7 +80614,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "homepage",
                   "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -80647,7 +80647,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "watchtower",
                   "running_image": "containrrr/watchtower:1.7.1"
@@ -80747,9 +80747,9 @@ export const generatedFixtures = {
           },
           {
             "desired_tag": "v0.16.1",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
             "reason": "tag-updates-disabled"
           },
           {
@@ -80803,11 +80803,11 @@ export const generatedFixtures = {
             "action": "tag-updates-disabled",
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
             "matched": false,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-            "resolved_image": "ghcr.io/magrhino/wud-updater:latest"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+            "resolved_image": "ghcr.io/magrhino/wudup:latest"
           },
           {
             "action": "tag-updates-disabled",
@@ -80978,7 +80978,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "homepage",
                   "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -81011,7 +81011,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "watchtower",
                   "running_image": "containrrr/watchtower:1.7.1"
@@ -81046,7 +81046,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "homepage",
               "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -81071,7 +81071,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "watchtower",
               "running_image": "containrrr/watchtower:1.7.1"
@@ -81224,7 +81224,7 @@ export const generatedFixtures = {
               {
                 "args": [],
                 "cwd": "demo/docker/media",
-                "description": "Rewrite ghcr.io/magrhino/wud-updater:latest to ghcr.io/magrhino/wud-updater:v0.16.1 for wud-updater",
+                "description": "Rewrite ghcr.io/magrhino/wudup:latest to ghcr.io/magrhino/wudup:v0.16.1 for wudup",
                 "kind": "compose-tag-update"
               },
               {
@@ -81243,7 +81243,7 @@ export const generatedFixtures = {
                   "docker-compose.yml",
                   "pull",
                   "radarr",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Pull matched image updates",
@@ -81259,7 +81259,7 @@ export const generatedFixtures = {
                   "docker-compose.yml",
                   "stop",
                   "radarr",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Stop affected services before recreate",
@@ -81278,7 +81278,7 @@ export const generatedFixtures = {
                   "--remove-orphans",
                   "--no-deps",
                   "radarr",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Recreate services with updated images",
@@ -81312,40 +81312,40 @@ export const generatedFixtures = {
               },
               {
                 "action": "tag-update",
-                "compose_image": "ghcr.io/magrhino/wud-updater:latest",
+                "compose_image": "ghcr.io/magrhino/wudup:latest",
                 "desired_tag": "v0.16.1",
                 "digest": "",
                 "digest_provenance": null,
-                "image": "ghcr.io/magrhino/wud-updater:latest",
+                "image": "ghcr.io/magrhino/wudup:latest",
                 "line_no": 5,
-                "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-                "resolved_image": "ghcr.io/magrhino/wud-updater:v0.16.1",
-                "service": "wud-updater",
-                "target_image": "ghcr.io/magrhino/wud-updater:v0.16.1"
+                "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+                "resolved_image": "ghcr.io/magrhino/wudup:v0.16.1",
+                "service": "wudup",
+                "target_image": "ghcr.io/magrhino/wudup:v0.16.1"
               }
             ],
             "name": "media",
             "project_directory": "demo/docker/media",
             "pull_services": [
               "radarr",
-              "wud-updater"
+              "wudup"
             ],
             "services": [
               "radarr",
-              "wud-updater"
+              "wudup"
             ],
-            "services_label": "radarr wud-updater",
+            "services_label": "radarr wudup",
             "stop_services": [
               "radarr",
-              "wud-updater"
+              "wudup"
             ],
             "tag_updates": [
               {
                 "desired_tag": "v0.16.1",
-                "new_image": "ghcr.io/magrhino/wud-updater:v0.16.1",
-                "old_image": "ghcr.io/magrhino/wud-updater:latest",
+                "new_image": "ghcr.io/magrhino/wudup:v0.16.1",
+                "old_image": "ghcr.io/magrhino/wudup:latest",
                 "services": [
-                  "wud-updater"
+                  "wudup"
                 ]
               },
               {
@@ -81394,11 +81394,11 @@ export const generatedFixtures = {
             "action": "tag-update",
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
             "matched": true,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-            "resolved_image": "ghcr.io/magrhino/wud-updater:latest"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+            "resolved_image": "ghcr.io/magrhino/wudup:latest"
           },
           {
             "action": "unmatched",
@@ -81571,7 +81571,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "vaultwarden",
                   "running_image": "vaultwarden/server:1.31.0"
@@ -81604,7 +81604,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "watchtower",
                   "running_image": "containrrr/watchtower:1.7.1"
@@ -81704,9 +81704,9 @@ export const generatedFixtures = {
           },
           {
             "desired_tag": "v0.16.1",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
             "reason": "tag-updates-disabled"
           },
           {
@@ -81760,11 +81760,11 @@ export const generatedFixtures = {
             "action": "tag-updates-disabled",
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
             "matched": false,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-            "resolved_image": "ghcr.io/magrhino/wud-updater:latest"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+            "resolved_image": "ghcr.io/magrhino/wudup:latest"
           },
           {
             "action": "tag-updates-disabled",
@@ -81935,7 +81935,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "vaultwarden",
                   "running_image": "vaultwarden/server:1.31.0"
@@ -81968,7 +81968,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "watchtower",
                   "running_image": "containrrr/watchtower:1.7.1"
@@ -82003,7 +82003,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "vaultwarden",
               "running_image": "vaultwarden/server:1.31.0"
@@ -82028,7 +82028,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "watchtower",
               "running_image": "containrrr/watchtower:1.7.1"
@@ -82181,7 +82181,7 @@ export const generatedFixtures = {
               {
                 "args": [],
                 "cwd": "demo/docker/media",
-                "description": "Rewrite ghcr.io/magrhino/wud-updater:latest to ghcr.io/magrhino/wud-updater:v0.16.1 for wud-updater",
+                "description": "Rewrite ghcr.io/magrhino/wudup:latest to ghcr.io/magrhino/wudup:v0.16.1 for wudup",
                 "kind": "compose-tag-update"
               },
               {
@@ -82200,7 +82200,7 @@ export const generatedFixtures = {
                   "docker-compose.yml",
                   "pull",
                   "radarr",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Pull matched image updates",
@@ -82216,7 +82216,7 @@ export const generatedFixtures = {
                   "docker-compose.yml",
                   "stop",
                   "radarr",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Stop affected services before recreate",
@@ -82235,7 +82235,7 @@ export const generatedFixtures = {
                   "--remove-orphans",
                   "--no-deps",
                   "radarr",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Recreate services with updated images",
@@ -82269,40 +82269,40 @@ export const generatedFixtures = {
               },
               {
                 "action": "tag-update",
-                "compose_image": "ghcr.io/magrhino/wud-updater:latest",
+                "compose_image": "ghcr.io/magrhino/wudup:latest",
                 "desired_tag": "v0.16.1",
                 "digest": "",
                 "digest_provenance": null,
-                "image": "ghcr.io/magrhino/wud-updater:latest",
+                "image": "ghcr.io/magrhino/wudup:latest",
                 "line_no": 5,
-                "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-                "resolved_image": "ghcr.io/magrhino/wud-updater:v0.16.1",
-                "service": "wud-updater",
-                "target_image": "ghcr.io/magrhino/wud-updater:v0.16.1"
+                "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+                "resolved_image": "ghcr.io/magrhino/wudup:v0.16.1",
+                "service": "wudup",
+                "target_image": "ghcr.io/magrhino/wudup:v0.16.1"
               }
             ],
             "name": "media",
             "project_directory": "demo/docker/media",
             "pull_services": [
               "radarr",
-              "wud-updater"
+              "wudup"
             ],
             "services": [
               "radarr",
-              "wud-updater"
+              "wudup"
             ],
-            "services_label": "radarr wud-updater",
+            "services_label": "radarr wudup",
             "stop_services": [
               "radarr",
-              "wud-updater"
+              "wudup"
             ],
             "tag_updates": [
               {
                 "desired_tag": "v0.16.1",
-                "new_image": "ghcr.io/magrhino/wud-updater:v0.16.1",
-                "old_image": "ghcr.io/magrhino/wud-updater:latest",
+                "new_image": "ghcr.io/magrhino/wudup:v0.16.1",
+                "old_image": "ghcr.io/magrhino/wudup:latest",
                 "services": [
-                  "wud-updater"
+                  "wudup"
                 ]
               },
               {
@@ -82351,11 +82351,11 @@ export const generatedFixtures = {
             "action": "tag-update",
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
             "matched": true,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-            "resolved_image": "ghcr.io/magrhino/wud-updater:latest"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+            "resolved_image": "ghcr.io/magrhino/wudup:latest"
           },
           {
             "action": "unmatched",
@@ -82528,7 +82528,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "homepage",
                   "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -82561,7 +82561,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "vaultwarden",
                   "running_image": "vaultwarden/server:1.31.0"
@@ -82594,7 +82594,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "watchtower",
                   "running_image": "containrrr/watchtower:1.7.1"
@@ -82925,7 +82925,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "homepage",
                   "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -82958,7 +82958,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "vaultwarden",
                   "running_image": "vaultwarden/server:1.31.0"
@@ -82991,7 +82991,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "watchtower",
                   "running_image": "containrrr/watchtower:1.7.1"
@@ -83026,7 +83026,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "homepage",
               "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -83051,7 +83051,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "vaultwarden",
               "running_image": "vaultwarden/server:1.31.0"
@@ -83076,7 +83076,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "watchtower",
               "running_image": "containrrr/watchtower:1.7.1"
@@ -83547,7 +83547,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "homepage",
                   "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -83580,7 +83580,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "vaultwarden",
                   "running_image": "vaultwarden/server:1.31.0"
@@ -83663,9 +83663,9 @@ export const generatedFixtures = {
           },
           {
             "desired_tag": "v0.16.1",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
             "reason": "tag-updates-disabled"
           },
           {
@@ -83808,11 +83808,11 @@ export const generatedFixtures = {
             "action": "tag-updates-disabled",
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
             "matched": false,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-            "resolved_image": "ghcr.io/magrhino/wud-updater:latest"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+            "resolved_image": "ghcr.io/magrhino/wudup:latest"
           },
           {
             "action": "tag-updates-disabled",
@@ -83979,7 +83979,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "homepage",
                   "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -84012,7 +84012,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "vaultwarden",
                   "running_image": "vaultwarden/server:1.31.0"
@@ -84047,7 +84047,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "homepage",
               "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -84072,7 +84072,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "vaultwarden",
               "running_image": "vaultwarden/server:1.31.0"
@@ -84313,7 +84313,7 @@ export const generatedFixtures = {
               {
                 "args": [],
                 "cwd": "demo/docker/media",
-                "description": "Rewrite ghcr.io/magrhino/wud-updater:latest to ghcr.io/magrhino/wud-updater:v0.16.1 for wud-updater",
+                "description": "Rewrite ghcr.io/magrhino/wudup:latest to ghcr.io/magrhino/wudup:v0.16.1 for wudup",
                 "kind": "compose-tag-update"
               },
               {
@@ -84325,7 +84325,7 @@ export const generatedFixtures = {
                   "-f",
                   "docker-compose.yml",
                   "pull",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Pull matched image updates",
@@ -84340,7 +84340,7 @@ export const generatedFixtures = {
                   "-f",
                   "docker-compose.yml",
                   "stop",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Stop affected services before recreate",
@@ -84358,7 +84358,7 @@ export const generatedFixtures = {
                   "-d",
                   "--remove-orphans",
                   "--no-deps",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Recreate services with updated images",
@@ -84379,37 +84379,37 @@ export const generatedFixtures = {
             "lines": [
               {
                 "action": "tag-update",
-                "compose_image": "ghcr.io/magrhino/wud-updater:latest",
+                "compose_image": "ghcr.io/magrhino/wudup:latest",
                 "desired_tag": "v0.16.1",
                 "digest": "",
                 "digest_provenance": null,
-                "image": "ghcr.io/magrhino/wud-updater:latest",
+                "image": "ghcr.io/magrhino/wudup:latest",
                 "line_no": 5,
-                "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-                "resolved_image": "ghcr.io/magrhino/wud-updater:v0.16.1",
-                "service": "wud-updater",
-                "target_image": "ghcr.io/magrhino/wud-updater:v0.16.1"
+                "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+                "resolved_image": "ghcr.io/magrhino/wudup:v0.16.1",
+                "service": "wudup",
+                "target_image": "ghcr.io/magrhino/wudup:v0.16.1"
               }
             ],
             "name": "media",
             "project_directory": "demo/docker/media",
             "pull_services": [
-              "wud-updater"
+              "wudup"
             ],
             "services": [
-              "wud-updater"
+              "wudup"
             ],
-            "services_label": "wud-updater",
+            "services_label": "wudup",
             "stop_services": [
-              "wud-updater"
+              "wudup"
             ],
             "tag_updates": [
               {
                 "desired_tag": "v0.16.1",
-                "new_image": "ghcr.io/magrhino/wud-updater:v0.16.1",
-                "old_image": "ghcr.io/magrhino/wud-updater:latest",
+                "new_image": "ghcr.io/magrhino/wudup:v0.16.1",
+                "old_image": "ghcr.io/magrhino/wudup:latest",
                 "services": [
-                  "wud-updater"
+                  "wudup"
                 ]
               }
             ],
@@ -84450,11 +84450,11 @@ export const generatedFixtures = {
             "action": "tag-update",
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
             "matched": true,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-            "resolved_image": "ghcr.io/magrhino/wud-updater:latest"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+            "resolved_image": "ghcr.io/magrhino/wudup:latest"
           },
           {
             "action": "unmatched",
@@ -84619,7 +84619,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "homepage",
                   "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -84652,7 +84652,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "watchtower",
                   "running_image": "containrrr/watchtower:1.7.1"
@@ -84735,9 +84735,9 @@ export const generatedFixtures = {
           },
           {
             "desired_tag": "v0.16.1",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
             "reason": "tag-updates-disabled"
           },
           {
@@ -84880,11 +84880,11 @@ export const generatedFixtures = {
             "action": "tag-updates-disabled",
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
             "matched": false,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-            "resolved_image": "ghcr.io/magrhino/wud-updater:latest"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+            "resolved_image": "ghcr.io/magrhino/wudup:latest"
           },
           {
             "action": "tag-updates-disabled",
@@ -85051,7 +85051,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "homepage",
                   "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -85084,7 +85084,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "watchtower",
                   "running_image": "containrrr/watchtower:1.7.1"
@@ -85119,7 +85119,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "homepage",
               "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -85144,7 +85144,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "watchtower",
               "running_image": "containrrr/watchtower:1.7.1"
@@ -85385,7 +85385,7 @@ export const generatedFixtures = {
               {
                 "args": [],
                 "cwd": "demo/docker/media",
-                "description": "Rewrite ghcr.io/magrhino/wud-updater:latest to ghcr.io/magrhino/wud-updater:v0.16.1 for wud-updater",
+                "description": "Rewrite ghcr.io/magrhino/wudup:latest to ghcr.io/magrhino/wudup:v0.16.1 for wudup",
                 "kind": "compose-tag-update"
               },
               {
@@ -85397,7 +85397,7 @@ export const generatedFixtures = {
                   "-f",
                   "docker-compose.yml",
                   "pull",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Pull matched image updates",
@@ -85412,7 +85412,7 @@ export const generatedFixtures = {
                   "-f",
                   "docker-compose.yml",
                   "stop",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Stop affected services before recreate",
@@ -85430,7 +85430,7 @@ export const generatedFixtures = {
                   "-d",
                   "--remove-orphans",
                   "--no-deps",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Recreate services with updated images",
@@ -85451,37 +85451,37 @@ export const generatedFixtures = {
             "lines": [
               {
                 "action": "tag-update",
-                "compose_image": "ghcr.io/magrhino/wud-updater:latest",
+                "compose_image": "ghcr.io/magrhino/wudup:latest",
                 "desired_tag": "v0.16.1",
                 "digest": "",
                 "digest_provenance": null,
-                "image": "ghcr.io/magrhino/wud-updater:latest",
+                "image": "ghcr.io/magrhino/wudup:latest",
                 "line_no": 5,
-                "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-                "resolved_image": "ghcr.io/magrhino/wud-updater:v0.16.1",
-                "service": "wud-updater",
-                "target_image": "ghcr.io/magrhino/wud-updater:v0.16.1"
+                "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+                "resolved_image": "ghcr.io/magrhino/wudup:v0.16.1",
+                "service": "wudup",
+                "target_image": "ghcr.io/magrhino/wudup:v0.16.1"
               }
             ],
             "name": "media",
             "project_directory": "demo/docker/media",
             "pull_services": [
-              "wud-updater"
+              "wudup"
             ],
             "services": [
-              "wud-updater"
+              "wudup"
             ],
-            "services_label": "wud-updater",
+            "services_label": "wudup",
             "stop_services": [
-              "wud-updater"
+              "wudup"
             ],
             "tag_updates": [
               {
                 "desired_tag": "v0.16.1",
-                "new_image": "ghcr.io/magrhino/wud-updater:v0.16.1",
-                "old_image": "ghcr.io/magrhino/wud-updater:latest",
+                "new_image": "ghcr.io/magrhino/wudup:v0.16.1",
+                "old_image": "ghcr.io/magrhino/wudup:latest",
                 "services": [
-                  "wud-updater"
+                  "wudup"
                 ]
               }
             ],
@@ -85522,11 +85522,11 @@ export const generatedFixtures = {
             "action": "tag-update",
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
             "matched": true,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-            "resolved_image": "ghcr.io/magrhino/wud-updater:latest"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+            "resolved_image": "ghcr.io/magrhino/wudup:latest"
           },
           {
             "action": "unmatched",
@@ -85691,7 +85691,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "vaultwarden",
                   "running_image": "vaultwarden/server:1.31.0"
@@ -85724,7 +85724,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "watchtower",
                   "running_image": "containrrr/watchtower:1.7.1"
@@ -85807,9 +85807,9 @@ export const generatedFixtures = {
           },
           {
             "desired_tag": "v0.16.1",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
             "reason": "tag-updates-disabled"
           },
           {
@@ -85952,11 +85952,11 @@ export const generatedFixtures = {
             "action": "tag-updates-disabled",
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
             "matched": false,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-            "resolved_image": "ghcr.io/magrhino/wud-updater:latest"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+            "resolved_image": "ghcr.io/magrhino/wudup:latest"
           },
           {
             "action": "tag-updates-disabled",
@@ -86123,7 +86123,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "vaultwarden",
                   "running_image": "vaultwarden/server:1.31.0"
@@ -86156,7 +86156,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "watchtower",
                   "running_image": "containrrr/watchtower:1.7.1"
@@ -86191,7 +86191,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "vaultwarden",
               "running_image": "vaultwarden/server:1.31.0"
@@ -86216,7 +86216,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "watchtower",
               "running_image": "containrrr/watchtower:1.7.1"
@@ -86457,7 +86457,7 @@ export const generatedFixtures = {
               {
                 "args": [],
                 "cwd": "demo/docker/media",
-                "description": "Rewrite ghcr.io/magrhino/wud-updater:latest to ghcr.io/magrhino/wud-updater:v0.16.1 for wud-updater",
+                "description": "Rewrite ghcr.io/magrhino/wudup:latest to ghcr.io/magrhino/wudup:v0.16.1 for wudup",
                 "kind": "compose-tag-update"
               },
               {
@@ -86469,7 +86469,7 @@ export const generatedFixtures = {
                   "-f",
                   "docker-compose.yml",
                   "pull",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Pull matched image updates",
@@ -86484,7 +86484,7 @@ export const generatedFixtures = {
                   "-f",
                   "docker-compose.yml",
                   "stop",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Stop affected services before recreate",
@@ -86502,7 +86502,7 @@ export const generatedFixtures = {
                   "-d",
                   "--remove-orphans",
                   "--no-deps",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Recreate services with updated images",
@@ -86523,37 +86523,37 @@ export const generatedFixtures = {
             "lines": [
               {
                 "action": "tag-update",
-                "compose_image": "ghcr.io/magrhino/wud-updater:latest",
+                "compose_image": "ghcr.io/magrhino/wudup:latest",
                 "desired_tag": "v0.16.1",
                 "digest": "",
                 "digest_provenance": null,
-                "image": "ghcr.io/magrhino/wud-updater:latest",
+                "image": "ghcr.io/magrhino/wudup:latest",
                 "line_no": 5,
-                "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-                "resolved_image": "ghcr.io/magrhino/wud-updater:v0.16.1",
-                "service": "wud-updater",
-                "target_image": "ghcr.io/magrhino/wud-updater:v0.16.1"
+                "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+                "resolved_image": "ghcr.io/magrhino/wudup:v0.16.1",
+                "service": "wudup",
+                "target_image": "ghcr.io/magrhino/wudup:v0.16.1"
               }
             ],
             "name": "media",
             "project_directory": "demo/docker/media",
             "pull_services": [
-              "wud-updater"
+              "wudup"
             ],
             "services": [
-              "wud-updater"
+              "wudup"
             ],
-            "services_label": "wud-updater",
+            "services_label": "wudup",
             "stop_services": [
-              "wud-updater"
+              "wudup"
             ],
             "tag_updates": [
               {
                 "desired_tag": "v0.16.1",
-                "new_image": "ghcr.io/magrhino/wud-updater:v0.16.1",
-                "old_image": "ghcr.io/magrhino/wud-updater:latest",
+                "new_image": "ghcr.io/magrhino/wudup:v0.16.1",
+                "old_image": "ghcr.io/magrhino/wudup:latest",
                 "services": [
-                  "wud-updater"
+                  "wudup"
                 ]
               }
             ],
@@ -86594,11 +86594,11 @@ export const generatedFixtures = {
             "action": "tag-update",
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
             "matched": true,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-            "resolved_image": "ghcr.io/magrhino/wud-updater:latest"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+            "resolved_image": "ghcr.io/magrhino/wudup:latest"
           },
           {
             "action": "unmatched",
@@ -86763,7 +86763,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "homepage",
                   "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -86796,7 +86796,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "vaultwarden",
                   "running_image": "vaultwarden/server:1.31.0"
@@ -86829,7 +86829,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "watchtower",
                   "running_image": "containrrr/watchtower:1.7.1"
@@ -87227,7 +87227,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "homepage",
                   "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -87260,7 +87260,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "vaultwarden",
                   "running_image": "vaultwarden/server:1.31.0"
@@ -87293,7 +87293,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "watchtower",
                   "running_image": "containrrr/watchtower:1.7.1"
@@ -87328,7 +87328,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "homepage",
               "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -87353,7 +87353,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "vaultwarden",
               "running_image": "vaultwarden/server:1.31.0"
@@ -87378,7 +87378,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "watchtower",
               "running_image": "containrrr/watchtower:1.7.1"
@@ -87828,7 +87828,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "homepage",
                   "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -87861,7 +87861,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "vaultwarden",
                   "running_image": "vaultwarden/server:1.31.0"
@@ -87894,7 +87894,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "watchtower",
                   "running_image": "containrrr/watchtower:1.7.1"
@@ -87987,9 +87987,9 @@ export const generatedFixtures = {
           },
           {
             "desired_tag": "v0.16.1",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
             "reason": "tag-updates-disabled"
           },
           {
@@ -88040,11 +88040,11 @@ export const generatedFixtures = {
             "action": "tag-updates-disabled",
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
             "matched": false,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-            "resolved_image": "ghcr.io/magrhino/wud-updater:latest"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+            "resolved_image": "ghcr.io/magrhino/wudup:latest"
           },
           {
             "action": "tag-updates-disabled",
@@ -88225,7 +88225,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "homepage",
                   "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -88258,7 +88258,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "vaultwarden",
                   "running_image": "vaultwarden/server:1.31.0"
@@ -88291,7 +88291,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "watchtower",
                   "running_image": "containrrr/watchtower:1.7.1"
@@ -88326,7 +88326,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "homepage",
               "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -88351,7 +88351,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "vaultwarden",
               "running_image": "vaultwarden/server:1.31.0"
@@ -88376,7 +88376,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "watchtower",
               "running_image": "containrrr/watchtower:1.7.1"
@@ -88536,7 +88536,7 @@ export const generatedFixtures = {
               {
                 "args": [],
                 "cwd": "demo/docker/media",
-                "description": "Rewrite ghcr.io/magrhino/wud-updater:latest to ghcr.io/magrhino/wud-updater:v0.16.1 for wud-updater",
+                "description": "Rewrite ghcr.io/magrhino/wudup:latest to ghcr.io/magrhino/wudup:v0.16.1 for wudup",
                 "kind": "compose-tag-update"
               },
               {
@@ -88548,7 +88548,7 @@ export const generatedFixtures = {
                   "-f",
                   "docker-compose.yml",
                   "pull",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Pull matched image updates",
@@ -88563,7 +88563,7 @@ export const generatedFixtures = {
                   "-f",
                   "docker-compose.yml",
                   "stop",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Stop affected services before recreate",
@@ -88581,7 +88581,7 @@ export const generatedFixtures = {
                   "-d",
                   "--remove-orphans",
                   "--no-deps",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Recreate services with updated images",
@@ -88602,37 +88602,37 @@ export const generatedFixtures = {
             "lines": [
               {
                 "action": "tag-update",
-                "compose_image": "ghcr.io/magrhino/wud-updater:latest",
+                "compose_image": "ghcr.io/magrhino/wudup:latest",
                 "desired_tag": "v0.16.1",
                 "digest": "",
                 "digest_provenance": null,
-                "image": "ghcr.io/magrhino/wud-updater:latest",
+                "image": "ghcr.io/magrhino/wudup:latest",
                 "line_no": 5,
-                "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-                "resolved_image": "ghcr.io/magrhino/wud-updater:v0.16.1",
-                "service": "wud-updater",
-                "target_image": "ghcr.io/magrhino/wud-updater:v0.16.1"
+                "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+                "resolved_image": "ghcr.io/magrhino/wudup:v0.16.1",
+                "service": "wudup",
+                "target_image": "ghcr.io/magrhino/wudup:v0.16.1"
               }
             ],
             "name": "media",
             "project_directory": "demo/docker/media",
             "pull_services": [
-              "wud-updater"
+              "wudup"
             ],
             "services": [
-              "wud-updater"
+              "wudup"
             ],
-            "services_label": "wud-updater",
+            "services_label": "wudup",
             "stop_services": [
-              "wud-updater"
+              "wudup"
             ],
             "tag_updates": [
               {
                 "desired_tag": "v0.16.1",
-                "new_image": "ghcr.io/magrhino/wud-updater:v0.16.1",
-                "old_image": "ghcr.io/magrhino/wud-updater:latest",
+                "new_image": "ghcr.io/magrhino/wudup:v0.16.1",
+                "old_image": "ghcr.io/magrhino/wudup:latest",
                 "services": [
-                  "wud-updater"
+                  "wudup"
                 ]
               }
             ],
@@ -88663,11 +88663,11 @@ export const generatedFixtures = {
             "action": "tag-update",
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
             "matched": true,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-            "resolved_image": "ghcr.io/magrhino/wud-updater:latest"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+            "resolved_image": "ghcr.io/magrhino/wudup:latest"
           },
           {
             "action": "unmatched",
@@ -88847,7 +88847,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "homepage",
                   "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -88880,7 +88880,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "vaultwarden",
                   "running_image": "vaultwarden/server:1.31.0"
@@ -88963,9 +88963,9 @@ export const generatedFixtures = {
           },
           {
             "desired_tag": "v0.16.1",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
             "reason": "tag-updates-disabled"
           },
           {
@@ -89108,11 +89108,11 @@ export const generatedFixtures = {
             "action": "tag-updates-disabled",
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
             "matched": false,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-            "resolved_image": "ghcr.io/magrhino/wud-updater:latest"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+            "resolved_image": "ghcr.io/magrhino/wudup:latest"
           },
           {
             "action": "tag-updates-disabled",
@@ -89278,7 +89278,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "homepage",
                   "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -89311,7 +89311,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "vaultwarden",
                   "running_image": "vaultwarden/server:1.31.0"
@@ -89346,7 +89346,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "homepage",
               "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -89371,7 +89371,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "vaultwarden",
               "running_image": "vaultwarden/server:1.31.0"
@@ -89505,7 +89505,7 @@ export const generatedFixtures = {
               {
                 "args": [],
                 "cwd": "demo/docker/media",
-                "description": "Rewrite ghcr.io/magrhino/wud-updater:latest to ghcr.io/magrhino/wud-updater:v0.16.1 for wud-updater",
+                "description": "Rewrite ghcr.io/magrhino/wudup:latest to ghcr.io/magrhino/wudup:v0.16.1 for wudup",
                 "kind": "compose-tag-update"
               },
               {
@@ -89524,7 +89524,7 @@ export const generatedFixtures = {
                   "docker-compose.yml",
                   "pull",
                   "radarr",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Pull matched image updates",
@@ -89540,7 +89540,7 @@ export const generatedFixtures = {
                   "docker-compose.yml",
                   "stop",
                   "radarr",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Stop affected services before recreate",
@@ -89559,7 +89559,7 @@ export const generatedFixtures = {
                   "--remove-orphans",
                   "--no-deps",
                   "radarr",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Recreate services with updated images",
@@ -89593,40 +89593,40 @@ export const generatedFixtures = {
               },
               {
                 "action": "tag-update",
-                "compose_image": "ghcr.io/magrhino/wud-updater:latest",
+                "compose_image": "ghcr.io/magrhino/wudup:latest",
                 "desired_tag": "v0.16.1",
                 "digest": "",
                 "digest_provenance": null,
-                "image": "ghcr.io/magrhino/wud-updater:latest",
+                "image": "ghcr.io/magrhino/wudup:latest",
                 "line_no": 5,
-                "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-                "resolved_image": "ghcr.io/magrhino/wud-updater:v0.16.1",
-                "service": "wud-updater",
-                "target_image": "ghcr.io/magrhino/wud-updater:v0.16.1"
+                "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+                "resolved_image": "ghcr.io/magrhino/wudup:v0.16.1",
+                "service": "wudup",
+                "target_image": "ghcr.io/magrhino/wudup:v0.16.1"
               }
             ],
             "name": "media",
             "project_directory": "demo/docker/media",
             "pull_services": [
               "radarr",
-              "wud-updater"
+              "wudup"
             ],
             "services": [
               "radarr",
-              "wud-updater"
+              "wudup"
             ],
-            "services_label": "radarr wud-updater",
+            "services_label": "radarr wudup",
             "stop_services": [
               "radarr",
-              "wud-updater"
+              "wudup"
             ],
             "tag_updates": [
               {
                 "desired_tag": "v0.16.1",
-                "new_image": "ghcr.io/magrhino/wud-updater:v0.16.1",
-                "old_image": "ghcr.io/magrhino/wud-updater:latest",
+                "new_image": "ghcr.io/magrhino/wudup:v0.16.1",
+                "old_image": "ghcr.io/magrhino/wudup:latest",
                 "services": [
-                  "wud-updater"
+                  "wudup"
                 ]
               },
               {
@@ -89675,11 +89675,11 @@ export const generatedFixtures = {
             "action": "tag-update",
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
             "matched": true,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-            "resolved_image": "ghcr.io/magrhino/wud-updater:latest"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+            "resolved_image": "ghcr.io/magrhino/wudup:latest"
           },
           {
             "action": "unmatched",
@@ -89844,7 +89844,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "homepage",
                   "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -89877,7 +89877,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "watchtower",
                   "running_image": "containrrr/watchtower:1.7.1"
@@ -89960,9 +89960,9 @@ export const generatedFixtures = {
           },
           {
             "desired_tag": "v0.16.1",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
             "reason": "tag-updates-disabled"
           },
           {
@@ -90105,11 +90105,11 @@ export const generatedFixtures = {
             "action": "tag-updates-disabled",
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
             "matched": false,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-            "resolved_image": "ghcr.io/magrhino/wud-updater:latest"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+            "resolved_image": "ghcr.io/magrhino/wudup:latest"
           },
           {
             "action": "tag-updates-disabled",
@@ -90275,7 +90275,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "homepage",
                   "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -90308,7 +90308,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "watchtower",
                   "running_image": "containrrr/watchtower:1.7.1"
@@ -90343,7 +90343,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "homepage",
               "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -90368,7 +90368,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "watchtower",
               "running_image": "containrrr/watchtower:1.7.1"
@@ -90502,7 +90502,7 @@ export const generatedFixtures = {
               {
                 "args": [],
                 "cwd": "demo/docker/media",
-                "description": "Rewrite ghcr.io/magrhino/wud-updater:latest to ghcr.io/magrhino/wud-updater:v0.16.1 for wud-updater",
+                "description": "Rewrite ghcr.io/magrhino/wudup:latest to ghcr.io/magrhino/wudup:v0.16.1 for wudup",
                 "kind": "compose-tag-update"
               },
               {
@@ -90521,7 +90521,7 @@ export const generatedFixtures = {
                   "docker-compose.yml",
                   "pull",
                   "radarr",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Pull matched image updates",
@@ -90537,7 +90537,7 @@ export const generatedFixtures = {
                   "docker-compose.yml",
                   "stop",
                   "radarr",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Stop affected services before recreate",
@@ -90556,7 +90556,7 @@ export const generatedFixtures = {
                   "--remove-orphans",
                   "--no-deps",
                   "radarr",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Recreate services with updated images",
@@ -90590,40 +90590,40 @@ export const generatedFixtures = {
               },
               {
                 "action": "tag-update",
-                "compose_image": "ghcr.io/magrhino/wud-updater:latest",
+                "compose_image": "ghcr.io/magrhino/wudup:latest",
                 "desired_tag": "v0.16.1",
                 "digest": "",
                 "digest_provenance": null,
-                "image": "ghcr.io/magrhino/wud-updater:latest",
+                "image": "ghcr.io/magrhino/wudup:latest",
                 "line_no": 5,
-                "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-                "resolved_image": "ghcr.io/magrhino/wud-updater:v0.16.1",
-                "service": "wud-updater",
-                "target_image": "ghcr.io/magrhino/wud-updater:v0.16.1"
+                "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+                "resolved_image": "ghcr.io/magrhino/wudup:v0.16.1",
+                "service": "wudup",
+                "target_image": "ghcr.io/magrhino/wudup:v0.16.1"
               }
             ],
             "name": "media",
             "project_directory": "demo/docker/media",
             "pull_services": [
               "radarr",
-              "wud-updater"
+              "wudup"
             ],
             "services": [
               "radarr",
-              "wud-updater"
+              "wudup"
             ],
-            "services_label": "radarr wud-updater",
+            "services_label": "radarr wudup",
             "stop_services": [
               "radarr",
-              "wud-updater"
+              "wudup"
             ],
             "tag_updates": [
               {
                 "desired_tag": "v0.16.1",
-                "new_image": "ghcr.io/magrhino/wud-updater:v0.16.1",
-                "old_image": "ghcr.io/magrhino/wud-updater:latest",
+                "new_image": "ghcr.io/magrhino/wudup:v0.16.1",
+                "old_image": "ghcr.io/magrhino/wudup:latest",
                 "services": [
-                  "wud-updater"
+                  "wudup"
                 ]
               },
               {
@@ -90672,11 +90672,11 @@ export const generatedFixtures = {
             "action": "tag-update",
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
             "matched": true,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-            "resolved_image": "ghcr.io/magrhino/wud-updater:latest"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+            "resolved_image": "ghcr.io/magrhino/wudup:latest"
           },
           {
             "action": "unmatched",
@@ -90841,7 +90841,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "vaultwarden",
                   "running_image": "vaultwarden/server:1.31.0"
@@ -90874,7 +90874,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "watchtower",
                   "running_image": "containrrr/watchtower:1.7.1"
@@ -90957,9 +90957,9 @@ export const generatedFixtures = {
           },
           {
             "desired_tag": "v0.16.1",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
             "reason": "tag-updates-disabled"
           },
           {
@@ -91102,11 +91102,11 @@ export const generatedFixtures = {
             "action": "tag-updates-disabled",
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
             "matched": false,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-            "resolved_image": "ghcr.io/magrhino/wud-updater:latest"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+            "resolved_image": "ghcr.io/magrhino/wudup:latest"
           },
           {
             "action": "tag-updates-disabled",
@@ -91272,7 +91272,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "vaultwarden",
                   "running_image": "vaultwarden/server:1.31.0"
@@ -91305,7 +91305,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "watchtower",
                   "running_image": "containrrr/watchtower:1.7.1"
@@ -91340,7 +91340,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "vaultwarden",
               "running_image": "vaultwarden/server:1.31.0"
@@ -91365,7 +91365,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "watchtower",
               "running_image": "containrrr/watchtower:1.7.1"
@@ -91499,7 +91499,7 @@ export const generatedFixtures = {
               {
                 "args": [],
                 "cwd": "demo/docker/media",
-                "description": "Rewrite ghcr.io/magrhino/wud-updater:latest to ghcr.io/magrhino/wud-updater:v0.16.1 for wud-updater",
+                "description": "Rewrite ghcr.io/magrhino/wudup:latest to ghcr.io/magrhino/wudup:v0.16.1 for wudup",
                 "kind": "compose-tag-update"
               },
               {
@@ -91518,7 +91518,7 @@ export const generatedFixtures = {
                   "docker-compose.yml",
                   "pull",
                   "radarr",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Pull matched image updates",
@@ -91534,7 +91534,7 @@ export const generatedFixtures = {
                   "docker-compose.yml",
                   "stop",
                   "radarr",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Stop affected services before recreate",
@@ -91553,7 +91553,7 @@ export const generatedFixtures = {
                   "--remove-orphans",
                   "--no-deps",
                   "radarr",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Recreate services with updated images",
@@ -91587,40 +91587,40 @@ export const generatedFixtures = {
               },
               {
                 "action": "tag-update",
-                "compose_image": "ghcr.io/magrhino/wud-updater:latest",
+                "compose_image": "ghcr.io/magrhino/wudup:latest",
                 "desired_tag": "v0.16.1",
                 "digest": "",
                 "digest_provenance": null,
-                "image": "ghcr.io/magrhino/wud-updater:latest",
+                "image": "ghcr.io/magrhino/wudup:latest",
                 "line_no": 5,
-                "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-                "resolved_image": "ghcr.io/magrhino/wud-updater:v0.16.1",
-                "service": "wud-updater",
-                "target_image": "ghcr.io/magrhino/wud-updater:v0.16.1"
+                "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+                "resolved_image": "ghcr.io/magrhino/wudup:v0.16.1",
+                "service": "wudup",
+                "target_image": "ghcr.io/magrhino/wudup:v0.16.1"
               }
             ],
             "name": "media",
             "project_directory": "demo/docker/media",
             "pull_services": [
               "radarr",
-              "wud-updater"
+              "wudup"
             ],
             "services": [
               "radarr",
-              "wud-updater"
+              "wudup"
             ],
-            "services_label": "radarr wud-updater",
+            "services_label": "radarr wudup",
             "stop_services": [
               "radarr",
-              "wud-updater"
+              "wudup"
             ],
             "tag_updates": [
               {
                 "desired_tag": "v0.16.1",
-                "new_image": "ghcr.io/magrhino/wud-updater:v0.16.1",
-                "old_image": "ghcr.io/magrhino/wud-updater:latest",
+                "new_image": "ghcr.io/magrhino/wudup:v0.16.1",
+                "old_image": "ghcr.io/magrhino/wudup:latest",
                 "services": [
-                  "wud-updater"
+                  "wudup"
                 ]
               },
               {
@@ -91669,11 +91669,11 @@ export const generatedFixtures = {
             "action": "tag-update",
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
             "matched": true,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-            "resolved_image": "ghcr.io/magrhino/wud-updater:latest"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+            "resolved_image": "ghcr.io/magrhino/wudup:latest"
           },
           {
             "action": "unmatched",
@@ -91838,7 +91838,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "homepage",
                   "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -91871,7 +91871,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "vaultwarden",
                   "running_image": "vaultwarden/server:1.31.0"
@@ -91904,7 +91904,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "watchtower",
                   "running_image": "containrrr/watchtower:1.7.1"
@@ -92302,7 +92302,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "homepage",
                   "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -92335,7 +92335,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "vaultwarden",
                   "running_image": "vaultwarden/server:1.31.0"
@@ -92368,7 +92368,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "watchtower",
                   "running_image": "containrrr/watchtower:1.7.1"
@@ -92403,7 +92403,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "homepage",
               "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -92428,7 +92428,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "vaultwarden",
               "running_image": "vaultwarden/server:1.31.0"
@@ -92453,7 +92453,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "watchtower",
               "running_image": "containrrr/watchtower:1.7.1"
@@ -92903,7 +92903,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "homepage",
                   "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -92936,7 +92936,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "vaultwarden",
                   "running_image": "vaultwarden/server:1.31.0"
@@ -92969,7 +92969,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "watchtower",
                   "running_image": "containrrr/watchtower:1.7.1"
@@ -93062,9 +93062,9 @@ export const generatedFixtures = {
           },
           {
             "desired_tag": "v0.16.1",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
             "reason": "tag-updates-disabled"
           },
           {
@@ -93115,11 +93115,11 @@ export const generatedFixtures = {
             "action": "tag-updates-disabled",
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
             "matched": false,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-            "resolved_image": "ghcr.io/magrhino/wud-updater:latest"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+            "resolved_image": "ghcr.io/magrhino/wudup:latest"
           },
           {
             "action": "tag-updates-disabled",
@@ -93299,7 +93299,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "homepage",
                   "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -93332,7 +93332,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "vaultwarden",
                   "running_image": "vaultwarden/server:1.31.0"
@@ -93365,7 +93365,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "watchtower",
                   "running_image": "containrrr/watchtower:1.7.1"
@@ -93400,7 +93400,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "homepage",
               "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -93425,7 +93425,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "vaultwarden",
               "running_image": "vaultwarden/server:1.31.0"
@@ -93450,7 +93450,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "watchtower",
               "running_image": "containrrr/watchtower:1.7.1"
@@ -93503,7 +93503,7 @@ export const generatedFixtures = {
               {
                 "args": [],
                 "cwd": "demo/docker/media",
-                "description": "Rewrite ghcr.io/magrhino/wud-updater:latest to ghcr.io/magrhino/wud-updater:v0.16.1 for wud-updater",
+                "description": "Rewrite ghcr.io/magrhino/wudup:latest to ghcr.io/magrhino/wudup:v0.16.1 for wudup",
                 "kind": "compose-tag-update"
               },
               {
@@ -93522,7 +93522,7 @@ export const generatedFixtures = {
                   "docker-compose.yml",
                   "pull",
                   "radarr",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Pull matched image updates",
@@ -93538,7 +93538,7 @@ export const generatedFixtures = {
                   "docker-compose.yml",
                   "stop",
                   "radarr",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Stop affected services before recreate",
@@ -93557,7 +93557,7 @@ export const generatedFixtures = {
                   "--remove-orphans",
                   "--no-deps",
                   "radarr",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Recreate services with updated images",
@@ -93591,40 +93591,40 @@ export const generatedFixtures = {
               },
               {
                 "action": "tag-update",
-                "compose_image": "ghcr.io/magrhino/wud-updater:latest",
+                "compose_image": "ghcr.io/magrhino/wudup:latest",
                 "desired_tag": "v0.16.1",
                 "digest": "",
                 "digest_provenance": null,
-                "image": "ghcr.io/magrhino/wud-updater:latest",
+                "image": "ghcr.io/magrhino/wudup:latest",
                 "line_no": 5,
-                "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-                "resolved_image": "ghcr.io/magrhino/wud-updater:v0.16.1",
-                "service": "wud-updater",
-                "target_image": "ghcr.io/magrhino/wud-updater:v0.16.1"
+                "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+                "resolved_image": "ghcr.io/magrhino/wudup:v0.16.1",
+                "service": "wudup",
+                "target_image": "ghcr.io/magrhino/wudup:v0.16.1"
               }
             ],
             "name": "media",
             "project_directory": "demo/docker/media",
             "pull_services": [
               "radarr",
-              "wud-updater"
+              "wudup"
             ],
             "services": [
               "radarr",
-              "wud-updater"
+              "wudup"
             ],
-            "services_label": "radarr wud-updater",
+            "services_label": "radarr wudup",
             "stop_services": [
               "radarr",
-              "wud-updater"
+              "wudup"
             ],
             "tag_updates": [
               {
                 "desired_tag": "v0.16.1",
-                "new_image": "ghcr.io/magrhino/wud-updater:v0.16.1",
-                "old_image": "ghcr.io/magrhino/wud-updater:latest",
+                "new_image": "ghcr.io/magrhino/wudup:v0.16.1",
+                "old_image": "ghcr.io/magrhino/wudup:latest",
                 "services": [
-                  "wud-updater"
+                  "wudup"
                 ]
               },
               {
@@ -93663,11 +93663,11 @@ export const generatedFixtures = {
             "action": "tag-update",
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
             "matched": true,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-            "resolved_image": "ghcr.io/magrhino/wud-updater:latest"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+            "resolved_image": "ghcr.io/magrhino/wudup:latest"
           },
           {
             "action": "unmatched",
@@ -93847,7 +93847,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "homepage",
                   "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -93880,7 +93880,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "vaultwarden",
                   "running_image": "vaultwarden/server:1.31.0"
@@ -93913,7 +93913,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "watchtower",
                   "running_image": "containrrr/watchtower:1.7.1"
@@ -93989,9 +93989,9 @@ export const generatedFixtures = {
         "skipped": [
           {
             "desired_tag": "v0.16.1",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
             "reason": "tag-updates-disabled"
           },
           {
@@ -94131,11 +94131,11 @@ export const generatedFixtures = {
             "action": "tag-updates-disabled",
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
             "matched": false,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-            "resolved_image": "ghcr.io/magrhino/wud-updater:latest"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+            "resolved_image": "ghcr.io/magrhino/wudup:latest"
           },
           {
             "action": "tag-updates-disabled",
@@ -94311,7 +94311,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "homepage",
                   "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -94344,7 +94344,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "vaultwarden",
                   "running_image": "vaultwarden/server:1.31.0"
@@ -94377,7 +94377,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "watchtower",
                   "running_image": "containrrr/watchtower:1.7.1"
@@ -94412,7 +94412,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "homepage",
               "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -94437,7 +94437,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "vaultwarden",
               "running_image": "vaultwarden/server:1.31.0"
@@ -94462,7 +94462,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "watchtower",
               "running_image": "containrrr/watchtower:1.7.1"
@@ -94603,7 +94603,7 @@ export const generatedFixtures = {
               {
                 "args": [],
                 "cwd": "demo/docker/media",
-                "description": "Rewrite ghcr.io/magrhino/wud-updater:latest to ghcr.io/magrhino/wud-updater:v0.16.1 for wud-updater",
+                "description": "Rewrite ghcr.io/magrhino/wudup:latest to ghcr.io/magrhino/wudup:v0.16.1 for wudup",
                 "kind": "compose-tag-update"
               },
               {
@@ -94615,7 +94615,7 @@ export const generatedFixtures = {
                   "-f",
                   "docker-compose.yml",
                   "pull",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Pull matched image updates",
@@ -94630,7 +94630,7 @@ export const generatedFixtures = {
                   "-f",
                   "docker-compose.yml",
                   "stop",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Stop affected services before recreate",
@@ -94648,7 +94648,7 @@ export const generatedFixtures = {
                   "-d",
                   "--remove-orphans",
                   "--no-deps",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Recreate services with updated images",
@@ -94669,37 +94669,37 @@ export const generatedFixtures = {
             "lines": [
               {
                 "action": "tag-update",
-                "compose_image": "ghcr.io/magrhino/wud-updater:latest",
+                "compose_image": "ghcr.io/magrhino/wudup:latest",
                 "desired_tag": "v0.16.1",
                 "digest": "",
                 "digest_provenance": null,
-                "image": "ghcr.io/magrhino/wud-updater:latest",
+                "image": "ghcr.io/magrhino/wudup:latest",
                 "line_no": 5,
-                "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-                "resolved_image": "ghcr.io/magrhino/wud-updater:v0.16.1",
-                "service": "wud-updater",
-                "target_image": "ghcr.io/magrhino/wud-updater:v0.16.1"
+                "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+                "resolved_image": "ghcr.io/magrhino/wudup:v0.16.1",
+                "service": "wudup",
+                "target_image": "ghcr.io/magrhino/wudup:v0.16.1"
               }
             ],
             "name": "media",
             "project_directory": "demo/docker/media",
             "pull_services": [
-              "wud-updater"
+              "wudup"
             ],
             "services": [
-              "wud-updater"
+              "wudup"
             ],
-            "services_label": "wud-updater",
+            "services_label": "wudup",
             "stop_services": [
-              "wud-updater"
+              "wudup"
             ],
             "tag_updates": [
               {
                 "desired_tag": "v0.16.1",
-                "new_image": "ghcr.io/magrhino/wud-updater:v0.16.1",
-                "old_image": "ghcr.io/magrhino/wud-updater:latest",
+                "new_image": "ghcr.io/magrhino/wudup:v0.16.1",
+                "old_image": "ghcr.io/magrhino/wudup:latest",
                 "services": [
-                  "wud-updater"
+                  "wudup"
                 ]
               }
             ],
@@ -94730,11 +94730,11 @@ export const generatedFixtures = {
             "action": "tag-update",
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
             "matched": true,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-            "resolved_image": "ghcr.io/magrhino/wud-updater:latest"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+            "resolved_image": "ghcr.io/magrhino/wudup:latest"
           },
           {
             "action": "unmatched",
@@ -94910,7 +94910,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "homepage",
                   "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -94943,7 +94943,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "vaultwarden",
                   "running_image": "vaultwarden/server:1.31.0"
@@ -95044,9 +95044,9 @@ export const generatedFixtures = {
           },
           {
             "desired_tag": "v0.16.1",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
             "reason": "tag-updates-disabled"
           },
           {
@@ -95199,11 +95199,11 @@ export const generatedFixtures = {
             "action": "tag-updates-disabled",
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
             "matched": false,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-            "resolved_image": "ghcr.io/magrhino/wud-updater:latest"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+            "resolved_image": "ghcr.io/magrhino/wudup:latest"
           },
           {
             "action": "tag-updates-disabled",
@@ -95376,7 +95376,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "homepage",
                   "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -95409,7 +95409,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "vaultwarden",
                   "running_image": "vaultwarden/server:1.31.0"
@@ -95444,7 +95444,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "homepage",
               "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -95469,7 +95469,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "vaultwarden",
               "running_image": "vaultwarden/server:1.31.0"
@@ -95711,7 +95711,7 @@ export const generatedFixtures = {
               {
                 "args": [],
                 "cwd": "demo/docker/media",
-                "description": "Rewrite ghcr.io/magrhino/wud-updater:latest to ghcr.io/magrhino/wud-updater:v0.16.1 for wud-updater",
+                "description": "Rewrite ghcr.io/magrhino/wudup:latest to ghcr.io/magrhino/wudup:v0.16.1 for wudup",
                 "kind": "compose-tag-update"
               },
               {
@@ -95730,7 +95730,7 @@ export const generatedFixtures = {
                   "docker-compose.yml",
                   "pull",
                   "radarr",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Pull matched image updates",
@@ -95746,7 +95746,7 @@ export const generatedFixtures = {
                   "docker-compose.yml",
                   "stop",
                   "radarr",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Stop affected services before recreate",
@@ -95765,7 +95765,7 @@ export const generatedFixtures = {
                   "--remove-orphans",
                   "--no-deps",
                   "radarr",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Recreate services with updated images",
@@ -95799,40 +95799,40 @@ export const generatedFixtures = {
               },
               {
                 "action": "tag-update",
-                "compose_image": "ghcr.io/magrhino/wud-updater:latest",
+                "compose_image": "ghcr.io/magrhino/wudup:latest",
                 "desired_tag": "v0.16.1",
                 "digest": "",
                 "digest_provenance": null,
-                "image": "ghcr.io/magrhino/wud-updater:latest",
+                "image": "ghcr.io/magrhino/wudup:latest",
                 "line_no": 5,
-                "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-                "resolved_image": "ghcr.io/magrhino/wud-updater:v0.16.1",
-                "service": "wud-updater",
-                "target_image": "ghcr.io/magrhino/wud-updater:v0.16.1"
+                "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+                "resolved_image": "ghcr.io/magrhino/wudup:v0.16.1",
+                "service": "wudup",
+                "target_image": "ghcr.io/magrhino/wudup:v0.16.1"
               }
             ],
             "name": "media",
             "project_directory": "demo/docker/media",
             "pull_services": [
               "radarr",
-              "wud-updater"
+              "wudup"
             ],
             "services": [
               "radarr",
-              "wud-updater"
+              "wudup"
             ],
-            "services_label": "radarr wud-updater",
+            "services_label": "radarr wudup",
             "stop_services": [
               "radarr",
-              "wud-updater"
+              "wudup"
             ],
             "tag_updates": [
               {
                 "desired_tag": "v0.16.1",
-                "new_image": "ghcr.io/magrhino/wud-updater:v0.16.1",
-                "old_image": "ghcr.io/magrhino/wud-updater:latest",
+                "new_image": "ghcr.io/magrhino/wudup:v0.16.1",
+                "old_image": "ghcr.io/magrhino/wudup:latest",
                 "services": [
-                  "wud-updater"
+                  "wudup"
                 ]
               },
               {
@@ -95891,11 +95891,11 @@ export const generatedFixtures = {
             "action": "tag-update",
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
             "matched": true,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-            "resolved_image": "ghcr.io/magrhino/wud-updater:latest"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+            "resolved_image": "ghcr.io/magrhino/wudup:latest"
           },
           {
             "action": "unmatched",
@@ -96066,7 +96066,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "homepage",
                   "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -96099,7 +96099,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "watchtower",
                   "running_image": "containrrr/watchtower:1.7.1"
@@ -96200,9 +96200,9 @@ export const generatedFixtures = {
           },
           {
             "desired_tag": "v0.16.1",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
             "reason": "tag-updates-disabled"
           },
           {
@@ -96355,11 +96355,11 @@ export const generatedFixtures = {
             "action": "tag-updates-disabled",
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
             "matched": false,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-            "resolved_image": "ghcr.io/magrhino/wud-updater:latest"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+            "resolved_image": "ghcr.io/magrhino/wudup:latest"
           },
           {
             "action": "tag-updates-disabled",
@@ -96532,7 +96532,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "homepage",
                   "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -96565,7 +96565,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "watchtower",
                   "running_image": "containrrr/watchtower:1.7.1"
@@ -96600,7 +96600,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "homepage",
               "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -96625,7 +96625,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "watchtower",
               "running_image": "containrrr/watchtower:1.7.1"
@@ -96867,7 +96867,7 @@ export const generatedFixtures = {
               {
                 "args": [],
                 "cwd": "demo/docker/media",
-                "description": "Rewrite ghcr.io/magrhino/wud-updater:latest to ghcr.io/magrhino/wud-updater:v0.16.1 for wud-updater",
+                "description": "Rewrite ghcr.io/magrhino/wudup:latest to ghcr.io/magrhino/wudup:v0.16.1 for wudup",
                 "kind": "compose-tag-update"
               },
               {
@@ -96886,7 +96886,7 @@ export const generatedFixtures = {
                   "docker-compose.yml",
                   "pull",
                   "radarr",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Pull matched image updates",
@@ -96902,7 +96902,7 @@ export const generatedFixtures = {
                   "docker-compose.yml",
                   "stop",
                   "radarr",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Stop affected services before recreate",
@@ -96921,7 +96921,7 @@ export const generatedFixtures = {
                   "--remove-orphans",
                   "--no-deps",
                   "radarr",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Recreate services with updated images",
@@ -96955,40 +96955,40 @@ export const generatedFixtures = {
               },
               {
                 "action": "tag-update",
-                "compose_image": "ghcr.io/magrhino/wud-updater:latest",
+                "compose_image": "ghcr.io/magrhino/wudup:latest",
                 "desired_tag": "v0.16.1",
                 "digest": "",
                 "digest_provenance": null,
-                "image": "ghcr.io/magrhino/wud-updater:latest",
+                "image": "ghcr.io/magrhino/wudup:latest",
                 "line_no": 5,
-                "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-                "resolved_image": "ghcr.io/magrhino/wud-updater:v0.16.1",
-                "service": "wud-updater",
-                "target_image": "ghcr.io/magrhino/wud-updater:v0.16.1"
+                "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+                "resolved_image": "ghcr.io/magrhino/wudup:v0.16.1",
+                "service": "wudup",
+                "target_image": "ghcr.io/magrhino/wudup:v0.16.1"
               }
             ],
             "name": "media",
             "project_directory": "demo/docker/media",
             "pull_services": [
               "radarr",
-              "wud-updater"
+              "wudup"
             ],
             "services": [
               "radarr",
-              "wud-updater"
+              "wudup"
             ],
-            "services_label": "radarr wud-updater",
+            "services_label": "radarr wudup",
             "stop_services": [
               "radarr",
-              "wud-updater"
+              "wudup"
             ],
             "tag_updates": [
               {
                 "desired_tag": "v0.16.1",
-                "new_image": "ghcr.io/magrhino/wud-updater:v0.16.1",
-                "old_image": "ghcr.io/magrhino/wud-updater:latest",
+                "new_image": "ghcr.io/magrhino/wudup:v0.16.1",
+                "old_image": "ghcr.io/magrhino/wudup:latest",
                 "services": [
-                  "wud-updater"
+                  "wudup"
                 ]
               },
               {
@@ -97047,11 +97047,11 @@ export const generatedFixtures = {
             "action": "tag-update",
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
             "matched": true,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-            "resolved_image": "ghcr.io/magrhino/wud-updater:latest"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+            "resolved_image": "ghcr.io/magrhino/wudup:latest"
           },
           {
             "action": "unmatched",
@@ -97222,7 +97222,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "vaultwarden",
                   "running_image": "vaultwarden/server:1.31.0"
@@ -97255,7 +97255,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "watchtower",
                   "running_image": "containrrr/watchtower:1.7.1"
@@ -97356,9 +97356,9 @@ export const generatedFixtures = {
           },
           {
             "desired_tag": "v0.16.1",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
             "reason": "tag-updates-disabled"
           },
           {
@@ -97511,11 +97511,11 @@ export const generatedFixtures = {
             "action": "tag-updates-disabled",
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
             "matched": false,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-            "resolved_image": "ghcr.io/magrhino/wud-updater:latest"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+            "resolved_image": "ghcr.io/magrhino/wudup:latest"
           },
           {
             "action": "tag-updates-disabled",
@@ -97688,7 +97688,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "vaultwarden",
                   "running_image": "vaultwarden/server:1.31.0"
@@ -97721,7 +97721,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "watchtower",
                   "running_image": "containrrr/watchtower:1.7.1"
@@ -97756,7 +97756,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "vaultwarden",
               "running_image": "vaultwarden/server:1.31.0"
@@ -97781,7 +97781,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "watchtower",
               "running_image": "containrrr/watchtower:1.7.1"
@@ -98023,7 +98023,7 @@ export const generatedFixtures = {
               {
                 "args": [],
                 "cwd": "demo/docker/media",
-                "description": "Rewrite ghcr.io/magrhino/wud-updater:latest to ghcr.io/magrhino/wud-updater:v0.16.1 for wud-updater",
+                "description": "Rewrite ghcr.io/magrhino/wudup:latest to ghcr.io/magrhino/wudup:v0.16.1 for wudup",
                 "kind": "compose-tag-update"
               },
               {
@@ -98042,7 +98042,7 @@ export const generatedFixtures = {
                   "docker-compose.yml",
                   "pull",
                   "radarr",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Pull matched image updates",
@@ -98058,7 +98058,7 @@ export const generatedFixtures = {
                   "docker-compose.yml",
                   "stop",
                   "radarr",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Stop affected services before recreate",
@@ -98077,7 +98077,7 @@ export const generatedFixtures = {
                   "--remove-orphans",
                   "--no-deps",
                   "radarr",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Recreate services with updated images",
@@ -98111,40 +98111,40 @@ export const generatedFixtures = {
               },
               {
                 "action": "tag-update",
-                "compose_image": "ghcr.io/magrhino/wud-updater:latest",
+                "compose_image": "ghcr.io/magrhino/wudup:latest",
                 "desired_tag": "v0.16.1",
                 "digest": "",
                 "digest_provenance": null,
-                "image": "ghcr.io/magrhino/wud-updater:latest",
+                "image": "ghcr.io/magrhino/wudup:latest",
                 "line_no": 5,
-                "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-                "resolved_image": "ghcr.io/magrhino/wud-updater:v0.16.1",
-                "service": "wud-updater",
-                "target_image": "ghcr.io/magrhino/wud-updater:v0.16.1"
+                "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+                "resolved_image": "ghcr.io/magrhino/wudup:v0.16.1",
+                "service": "wudup",
+                "target_image": "ghcr.io/magrhino/wudup:v0.16.1"
               }
             ],
             "name": "media",
             "project_directory": "demo/docker/media",
             "pull_services": [
               "radarr",
-              "wud-updater"
+              "wudup"
             ],
             "services": [
               "radarr",
-              "wud-updater"
+              "wudup"
             ],
-            "services_label": "radarr wud-updater",
+            "services_label": "radarr wudup",
             "stop_services": [
               "radarr",
-              "wud-updater"
+              "wudup"
             ],
             "tag_updates": [
               {
                 "desired_tag": "v0.16.1",
-                "new_image": "ghcr.io/magrhino/wud-updater:v0.16.1",
-                "old_image": "ghcr.io/magrhino/wud-updater:latest",
+                "new_image": "ghcr.io/magrhino/wudup:v0.16.1",
+                "old_image": "ghcr.io/magrhino/wudup:latest",
                 "services": [
-                  "wud-updater"
+                  "wudup"
                 ]
               },
               {
@@ -98203,11 +98203,11 @@ export const generatedFixtures = {
             "action": "tag-update",
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
             "matched": true,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-            "resolved_image": "ghcr.io/magrhino/wud-updater:latest"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+            "resolved_image": "ghcr.io/magrhino/wudup:latest"
           },
           {
             "action": "unmatched",
@@ -98378,7 +98378,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "homepage",
                   "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -98411,7 +98411,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "vaultwarden",
                   "running_image": "vaultwarden/server:1.31.0"
@@ -98444,7 +98444,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "watchtower",
                   "running_image": "containrrr/watchtower:1.7.1"
@@ -98877,7 +98877,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "homepage",
                   "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -98910,7 +98910,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "vaultwarden",
                   "running_image": "vaultwarden/server:1.31.0"
@@ -98943,7 +98943,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "watchtower",
                   "running_image": "containrrr/watchtower:1.7.1"
@@ -98978,7 +98978,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "homepage",
               "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -99003,7 +99003,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "vaultwarden",
               "running_image": "vaultwarden/server:1.31.0"
@@ -99028,7 +99028,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "watchtower",
               "running_image": "containrrr/watchtower:1.7.1"
@@ -99602,7 +99602,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "homepage",
                   "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -99635,7 +99635,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "vaultwarden",
                   "running_image": "vaultwarden/server:1.31.0"
@@ -99668,7 +99668,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "watchtower",
                   "running_image": "containrrr/watchtower:1.7.1"
@@ -99779,9 +99779,9 @@ export const generatedFixtures = {
           },
           {
             "desired_tag": "v0.16.1",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
             "reason": "tag-updates-disabled"
           },
           {
@@ -99842,11 +99842,11 @@ export const generatedFixtures = {
             "action": "tag-updates-disabled",
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
             "matched": false,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-            "resolved_image": "ghcr.io/magrhino/wud-updater:latest"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+            "resolved_image": "ghcr.io/magrhino/wudup:latest"
           },
           {
             "action": "tag-updates-disabled",
@@ -100033,7 +100033,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "homepage",
                   "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -100066,7 +100066,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "vaultwarden",
                   "running_image": "vaultwarden/server:1.31.0"
@@ -100099,7 +100099,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "watchtower",
                   "running_image": "containrrr/watchtower:1.7.1"
@@ -100134,7 +100134,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "homepage",
               "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -100159,7 +100159,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "vaultwarden",
               "running_image": "vaultwarden/server:1.31.0"
@@ -100184,7 +100184,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "watchtower",
               "running_image": "containrrr/watchtower:1.7.1"
@@ -100345,7 +100345,7 @@ export const generatedFixtures = {
               {
                 "args": [],
                 "cwd": "demo/docker/media",
-                "description": "Rewrite ghcr.io/magrhino/wud-updater:latest to ghcr.io/magrhino/wud-updater:v0.16.1 for wud-updater",
+                "description": "Rewrite ghcr.io/magrhino/wudup:latest to ghcr.io/magrhino/wudup:v0.16.1 for wudup",
                 "kind": "compose-tag-update"
               },
               {
@@ -100364,7 +100364,7 @@ export const generatedFixtures = {
                   "docker-compose.yml",
                   "pull",
                   "radarr",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Pull matched image updates",
@@ -100380,7 +100380,7 @@ export const generatedFixtures = {
                   "docker-compose.yml",
                   "stop",
                   "radarr",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Stop affected services before recreate",
@@ -100399,7 +100399,7 @@ export const generatedFixtures = {
                   "--remove-orphans",
                   "--no-deps",
                   "radarr",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Recreate services with updated images",
@@ -100433,40 +100433,40 @@ export const generatedFixtures = {
               },
               {
                 "action": "tag-update",
-                "compose_image": "ghcr.io/magrhino/wud-updater:latest",
+                "compose_image": "ghcr.io/magrhino/wudup:latest",
                 "desired_tag": "v0.16.1",
                 "digest": "",
                 "digest_provenance": null,
-                "image": "ghcr.io/magrhino/wud-updater:latest",
+                "image": "ghcr.io/magrhino/wudup:latest",
                 "line_no": 5,
-                "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-                "resolved_image": "ghcr.io/magrhino/wud-updater:v0.16.1",
-                "service": "wud-updater",
-                "target_image": "ghcr.io/magrhino/wud-updater:v0.16.1"
+                "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+                "resolved_image": "ghcr.io/magrhino/wudup:v0.16.1",
+                "service": "wudup",
+                "target_image": "ghcr.io/magrhino/wudup:v0.16.1"
               }
             ],
             "name": "media",
             "project_directory": "demo/docker/media",
             "pull_services": [
               "radarr",
-              "wud-updater"
+              "wudup"
             ],
             "services": [
               "radarr",
-              "wud-updater"
+              "wudup"
             ],
-            "services_label": "radarr wud-updater",
+            "services_label": "radarr wudup",
             "stop_services": [
               "radarr",
-              "wud-updater"
+              "wudup"
             ],
             "tag_updates": [
               {
                 "desired_tag": "v0.16.1",
-                "new_image": "ghcr.io/magrhino/wud-updater:v0.16.1",
-                "old_image": "ghcr.io/magrhino/wud-updater:latest",
+                "new_image": "ghcr.io/magrhino/wudup:v0.16.1",
+                "old_image": "ghcr.io/magrhino/wudup:latest",
                 "services": [
-                  "wud-updater"
+                  "wudup"
                 ]
               },
               {
@@ -100515,11 +100515,11 @@ export const generatedFixtures = {
             "action": "tag-update",
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
             "matched": true,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-            "resolved_image": "ghcr.io/magrhino/wud-updater:latest"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+            "resolved_image": "ghcr.io/magrhino/wudup:latest"
           },
           {
             "action": "unmatched",
@@ -100705,7 +100705,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "homepage",
                   "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -100738,7 +100738,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "vaultwarden",
                   "running_image": "vaultwarden/server:1.31.0"
@@ -100771,7 +100771,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "watchtower",
                   "running_image": "containrrr/watchtower:1.7.1"
@@ -100865,9 +100865,9 @@ export const generatedFixtures = {
           },
           {
             "desired_tag": "v0.16.1",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
             "reason": "tag-updates-disabled"
           },
           {
@@ -101017,11 +101017,11 @@ export const generatedFixtures = {
             "action": "tag-updates-disabled",
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
             "matched": false,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-            "resolved_image": "ghcr.io/magrhino/wud-updater:latest"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+            "resolved_image": "ghcr.io/magrhino/wudup:latest"
           },
           {
             "action": "tag-updates-disabled",
@@ -101204,7 +101204,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "homepage",
                   "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -101237,7 +101237,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "vaultwarden",
                   "running_image": "vaultwarden/server:1.31.0"
@@ -101270,7 +101270,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "watchtower",
                   "running_image": "containrrr/watchtower:1.7.1"
@@ -101305,7 +101305,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "homepage",
               "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -101330,7 +101330,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "vaultwarden",
               "running_image": "vaultwarden/server:1.31.0"
@@ -101355,7 +101355,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "watchtower",
               "running_image": "containrrr/watchtower:1.7.1"
@@ -101604,7 +101604,7 @@ export const generatedFixtures = {
               {
                 "args": [],
                 "cwd": "demo/docker/media",
-                "description": "Rewrite ghcr.io/magrhino/wud-updater:latest to ghcr.io/magrhino/wud-updater:v0.16.1 for wud-updater",
+                "description": "Rewrite ghcr.io/magrhino/wudup:latest to ghcr.io/magrhino/wudup:v0.16.1 for wudup",
                 "kind": "compose-tag-update"
               },
               {
@@ -101616,7 +101616,7 @@ export const generatedFixtures = {
                   "-f",
                   "docker-compose.yml",
                   "pull",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Pull matched image updates",
@@ -101631,7 +101631,7 @@ export const generatedFixtures = {
                   "-f",
                   "docker-compose.yml",
                   "stop",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Stop affected services before recreate",
@@ -101649,7 +101649,7 @@ export const generatedFixtures = {
                   "-d",
                   "--remove-orphans",
                   "--no-deps",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Recreate services with updated images",
@@ -101670,37 +101670,37 @@ export const generatedFixtures = {
             "lines": [
               {
                 "action": "tag-update",
-                "compose_image": "ghcr.io/magrhino/wud-updater:latest",
+                "compose_image": "ghcr.io/magrhino/wudup:latest",
                 "desired_tag": "v0.16.1",
                 "digest": "",
                 "digest_provenance": null,
-                "image": "ghcr.io/magrhino/wud-updater:latest",
+                "image": "ghcr.io/magrhino/wudup:latest",
                 "line_no": 5,
-                "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-                "resolved_image": "ghcr.io/magrhino/wud-updater:v0.16.1",
-                "service": "wud-updater",
-                "target_image": "ghcr.io/magrhino/wud-updater:v0.16.1"
+                "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+                "resolved_image": "ghcr.io/magrhino/wudup:v0.16.1",
+                "service": "wudup",
+                "target_image": "ghcr.io/magrhino/wudup:v0.16.1"
               }
             ],
             "name": "media",
             "project_directory": "demo/docker/media",
             "pull_services": [
-              "wud-updater"
+              "wudup"
             ],
             "services": [
-              "wud-updater"
+              "wudup"
             ],
-            "services_label": "wud-updater",
+            "services_label": "wudup",
             "stop_services": [
-              "wud-updater"
+              "wudup"
             ],
             "tag_updates": [
               {
                 "desired_tag": "v0.16.1",
-                "new_image": "ghcr.io/magrhino/wud-updater:v0.16.1",
-                "old_image": "ghcr.io/magrhino/wud-updater:latest",
+                "new_image": "ghcr.io/magrhino/wudup:v0.16.1",
+                "old_image": "ghcr.io/magrhino/wudup:latest",
                 "services": [
-                  "wud-updater"
+                  "wudup"
                 ]
               }
             ],
@@ -101741,11 +101741,11 @@ export const generatedFixtures = {
             "action": "tag-update",
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
             "matched": true,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-            "resolved_image": "ghcr.io/magrhino/wud-updater:latest"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+            "resolved_image": "ghcr.io/magrhino/wudup:latest"
           },
           {
             "action": "unmatched",
@@ -101926,7 +101926,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "homepage",
                   "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -101959,7 +101959,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "vaultwarden",
                   "running_image": "vaultwarden/server:1.31.0"
@@ -101992,7 +101992,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "watchtower",
                   "running_image": "containrrr/watchtower:1.7.1"
@@ -102086,9 +102086,9 @@ export const generatedFixtures = {
           },
           {
             "desired_tag": "v0.16.1",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
             "reason": "tag-updates-disabled"
           },
           {
@@ -102238,11 +102238,11 @@ export const generatedFixtures = {
             "action": "tag-updates-disabled",
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
             "matched": false,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-            "resolved_image": "ghcr.io/magrhino/wud-updater:latest"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+            "resolved_image": "ghcr.io/magrhino/wudup:latest"
           },
           {
             "action": "tag-updates-disabled",
@@ -102424,7 +102424,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "homepage",
                   "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -102457,7 +102457,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "vaultwarden",
                   "running_image": "vaultwarden/server:1.31.0"
@@ -102490,7 +102490,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "watchtower",
                   "running_image": "containrrr/watchtower:1.7.1"
@@ -102525,7 +102525,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "homepage",
               "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -102550,7 +102550,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "vaultwarden",
               "running_image": "vaultwarden/server:1.31.0"
@@ -102575,7 +102575,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "watchtower",
               "running_image": "containrrr/watchtower:1.7.1"
@@ -102717,7 +102717,7 @@ export const generatedFixtures = {
               {
                 "args": [],
                 "cwd": "demo/docker/media",
-                "description": "Rewrite ghcr.io/magrhino/wud-updater:latest to ghcr.io/magrhino/wud-updater:v0.16.1 for wud-updater",
+                "description": "Rewrite ghcr.io/magrhino/wudup:latest to ghcr.io/magrhino/wudup:v0.16.1 for wudup",
                 "kind": "compose-tag-update"
               },
               {
@@ -102736,7 +102736,7 @@ export const generatedFixtures = {
                   "docker-compose.yml",
                   "pull",
                   "radarr",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Pull matched image updates",
@@ -102752,7 +102752,7 @@ export const generatedFixtures = {
                   "docker-compose.yml",
                   "stop",
                   "radarr",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Stop affected services before recreate",
@@ -102771,7 +102771,7 @@ export const generatedFixtures = {
                   "--remove-orphans",
                   "--no-deps",
                   "radarr",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Recreate services with updated images",
@@ -102805,40 +102805,40 @@ export const generatedFixtures = {
               },
               {
                 "action": "tag-update",
-                "compose_image": "ghcr.io/magrhino/wud-updater:latest",
+                "compose_image": "ghcr.io/magrhino/wudup:latest",
                 "desired_tag": "v0.16.1",
                 "digest": "",
                 "digest_provenance": null,
-                "image": "ghcr.io/magrhino/wud-updater:latest",
+                "image": "ghcr.io/magrhino/wudup:latest",
                 "line_no": 5,
-                "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-                "resolved_image": "ghcr.io/magrhino/wud-updater:v0.16.1",
-                "service": "wud-updater",
-                "target_image": "ghcr.io/magrhino/wud-updater:v0.16.1"
+                "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+                "resolved_image": "ghcr.io/magrhino/wudup:v0.16.1",
+                "service": "wudup",
+                "target_image": "ghcr.io/magrhino/wudup:v0.16.1"
               }
             ],
             "name": "media",
             "project_directory": "demo/docker/media",
             "pull_services": [
               "radarr",
-              "wud-updater"
+              "wudup"
             ],
             "services": [
               "radarr",
-              "wud-updater"
+              "wudup"
             ],
-            "services_label": "radarr wud-updater",
+            "services_label": "radarr wudup",
             "stop_services": [
               "radarr",
-              "wud-updater"
+              "wudup"
             ],
             "tag_updates": [
               {
                 "desired_tag": "v0.16.1",
-                "new_image": "ghcr.io/magrhino/wud-updater:v0.16.1",
-                "old_image": "ghcr.io/magrhino/wud-updater:latest",
+                "new_image": "ghcr.io/magrhino/wudup:v0.16.1",
+                "old_image": "ghcr.io/magrhino/wudup:latest",
                 "services": [
-                  "wud-updater"
+                  "wudup"
                 ]
               },
               {
@@ -102887,11 +102887,11 @@ export const generatedFixtures = {
             "action": "tag-update",
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
             "matched": true,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-            "resolved_image": "ghcr.io/magrhino/wud-updater:latest"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+            "resolved_image": "ghcr.io/magrhino/wudup:latest"
           },
           {
             "action": "unmatched",
@@ -103073,7 +103073,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "homepage",
                   "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -103106,7 +103106,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "vaultwarden",
                   "running_image": "vaultwarden/server:1.31.0"
@@ -103139,7 +103139,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "watchtower",
                   "running_image": "containrrr/watchtower:1.7.1"
@@ -103251,9 +103251,9 @@ export const generatedFixtures = {
           },
           {
             "desired_tag": "v0.16.1",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
             "reason": "tag-updates-disabled"
           },
           {
@@ -103413,11 +103413,11 @@ export const generatedFixtures = {
             "action": "tag-updates-disabled",
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
             "matched": false,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-            "resolved_image": "ghcr.io/magrhino/wud-updater:latest"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+            "resolved_image": "ghcr.io/magrhino/wudup:latest"
           },
           {
             "action": "tag-updates-disabled",
@@ -103606,7 +103606,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "homepage",
                   "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -103639,7 +103639,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "vaultwarden",
                   "running_image": "vaultwarden/server:1.31.0"
@@ -103672,7 +103672,7 @@ export const generatedFixtures = {
                   ],
                   "recommended_actions": [
                     "Inspect the container source before removing the line.",
-                    "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                    "Remove the stale WUD line if this container should not be managed by WUDup."
                   ],
                   "running_container": "watchtower",
                   "running_image": "containrrr/watchtower:1.7.1"
@@ -103707,7 +103707,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "homepage",
               "running_image": "ghcr.io/gethomepage/homepage:v0.9.12"
@@ -103732,7 +103732,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "vaultwarden",
               "running_image": "vaultwarden/server:1.31.0"
@@ -103757,7 +103757,7 @@ export const generatedFixtures = {
               ],
               "recommended_actions": [
                 "Inspect the container source before removing the line.",
-                "Remove the stale WUD line if this container should not be managed by WUD-Updater."
+                "Remove the stale WUD line if this container should not be managed by WUDup."
               ],
               "running_container": "watchtower",
               "running_image": "containrrr/watchtower:1.7.1"
@@ -104007,7 +104007,7 @@ export const generatedFixtures = {
               {
                 "args": [],
                 "cwd": "demo/docker/media",
-                "description": "Rewrite ghcr.io/magrhino/wud-updater:latest to ghcr.io/magrhino/wud-updater:v0.16.1 for wud-updater",
+                "description": "Rewrite ghcr.io/magrhino/wudup:latest to ghcr.io/magrhino/wudup:v0.16.1 for wudup",
                 "kind": "compose-tag-update"
               },
               {
@@ -104026,7 +104026,7 @@ export const generatedFixtures = {
                   "docker-compose.yml",
                   "pull",
                   "radarr",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Pull matched image updates",
@@ -104042,7 +104042,7 @@ export const generatedFixtures = {
                   "docker-compose.yml",
                   "stop",
                   "radarr",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Stop affected services before recreate",
@@ -104061,7 +104061,7 @@ export const generatedFixtures = {
                   "--remove-orphans",
                   "--no-deps",
                   "radarr",
-                  "wud-updater"
+                  "wudup"
                 ],
                 "cwd": "demo/docker/media",
                 "description": "Recreate services with updated images",
@@ -104095,40 +104095,40 @@ export const generatedFixtures = {
               },
               {
                 "action": "tag-update",
-                "compose_image": "ghcr.io/magrhino/wud-updater:latest",
+                "compose_image": "ghcr.io/magrhino/wudup:latest",
                 "desired_tag": "v0.16.1",
                 "digest": "",
                 "digest_provenance": null,
-                "image": "ghcr.io/magrhino/wud-updater:latest",
+                "image": "ghcr.io/magrhino/wudup:latest",
                 "line_no": 5,
-                "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-                "resolved_image": "ghcr.io/magrhino/wud-updater:v0.16.1",
-                "service": "wud-updater",
-                "target_image": "ghcr.io/magrhino/wud-updater:v0.16.1"
+                "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+                "resolved_image": "ghcr.io/magrhino/wudup:v0.16.1",
+                "service": "wudup",
+                "target_image": "ghcr.io/magrhino/wudup:v0.16.1"
               }
             ],
             "name": "media",
             "project_directory": "demo/docker/media",
             "pull_services": [
               "radarr",
-              "wud-updater"
+              "wudup"
             ],
             "services": [
               "radarr",
-              "wud-updater"
+              "wudup"
             ],
-            "services_label": "radarr wud-updater",
+            "services_label": "radarr wudup",
             "stop_services": [
               "radarr",
-              "wud-updater"
+              "wudup"
             ],
             "tag_updates": [
               {
                 "desired_tag": "v0.16.1",
-                "new_image": "ghcr.io/magrhino/wud-updater:v0.16.1",
-                "old_image": "ghcr.io/magrhino/wud-updater:latest",
+                "new_image": "ghcr.io/magrhino/wudup:v0.16.1",
+                "old_image": "ghcr.io/magrhino/wudup:latest",
                 "services": [
-                  "wud-updater"
+                  "wudup"
                 ]
               },
               {
@@ -104187,11 +104187,11 @@ export const generatedFixtures = {
             "action": "tag-update",
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
             "matched": true,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1",
-            "resolved_image": "ghcr.io/magrhino/wud-updater:latest"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
+            "resolved_image": "ghcr.io/magrhino/wudup:latest"
           },
           {
             "action": "unmatched",
@@ -104328,13 +104328,13 @@ export const generatedFixtures = {
         "breaking": false,
         "breaking_reasons": [],
         "error": "",
-        "image_repo": "magrhino/WUD-Updater",
+        "image_repo": "magrhino/wudup",
         "line_no": 5,
         "links": [
           {
             "kind": "github_release",
             "label": "GitHub release",
-            "url": "https://github.com/magrhino/WUD-Updater/releases/tag/v0.16.1"
+            "url": "https://github.com/magrhino/wudup/releases/tag/v0.16.1"
           }
         ],
         "provider": "github",
@@ -104342,8 +104342,8 @@ export const generatedFixtures = {
         "refreshed_at": "2026-05-28T12:00:00+00:00",
         "release_tag": "v0.16.1",
         "status": "ready",
-        "title": "WUD-Updater v0.16.1",
-        "upstream_repo": "magrhino/WUD-Updater"
+        "title": "WUDup v0.16.1",
+        "upstream_repo": "magrhino/wudup"
       },
       {
         "breaking": false,
@@ -104496,9 +104496,9 @@ export const generatedFixtures = {
           {
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1"
           }
         ],
         "removal_id": "demo-removal-lines-5",
@@ -104672,9 +104672,9 @@ export const generatedFixtures = {
           {
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1"
           }
         ],
         "removal_id": "demo-removal-lines-2-5",
@@ -104842,9 +104842,9 @@ export const generatedFixtures = {
           {
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1"
           }
         ],
         "removal_id": "demo-removal-lines-3-5",
@@ -104978,9 +104978,9 @@ export const generatedFixtures = {
           {
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1"
           }
         ],
         "removal_id": "demo-removal-lines-4-5",
@@ -105107,9 +105107,9 @@ export const generatedFixtures = {
           {
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1"
           },
           {
             "desired_tag": "v0.10.9",
@@ -105141,9 +105141,9 @@ export const generatedFixtures = {
           {
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1"
           },
           {
             "desired_tag": "1.32.0",
@@ -105175,9 +105175,9 @@ export const generatedFixtures = {
           {
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1"
           },
           {
             "desired_tag": "1.7.2",
@@ -105369,9 +105369,9 @@ export const generatedFixtures = {
           {
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1"
           }
         ],
         "removal_id": "demo-removal-lines-2-3-5",
@@ -105541,9 +105541,9 @@ export const generatedFixtures = {
           {
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1"
           }
         ],
         "removal_id": "demo-removal-lines-2-4-5",
@@ -105706,9 +105706,9 @@ export const generatedFixtures = {
           {
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1"
           },
           {
             "desired_tag": "v0.10.9",
@@ -105749,9 +105749,9 @@ export const generatedFixtures = {
           {
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1"
           },
           {
             "desired_tag": "1.32.0",
@@ -105792,9 +105792,9 @@ export const generatedFixtures = {
           {
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1"
           },
           {
             "desired_tag": "1.7.2",
@@ -105971,9 +105971,9 @@ export const generatedFixtures = {
           {
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1"
           }
         ],
         "removal_id": "demo-removal-lines-3-4-5",
@@ -106136,9 +106136,9 @@ export const generatedFixtures = {
           {
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1"
           },
           {
             "desired_tag": "v0.10.9",
@@ -106179,9 +106179,9 @@ export const generatedFixtures = {
           {
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1"
           },
           {
             "desired_tag": "1.32.0",
@@ -106222,9 +106222,9 @@ export const generatedFixtures = {
           {
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1"
           },
           {
             "desired_tag": "1.7.2",
@@ -106394,9 +106394,9 @@ export const generatedFixtures = {
           {
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1"
           },
           {
             "desired_tag": "v0.10.9",
@@ -106437,9 +106437,9 @@ export const generatedFixtures = {
           {
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1"
           },
           {
             "desired_tag": "1.32.0",
@@ -106480,9 +106480,9 @@ export const generatedFixtures = {
           {
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1"
           },
           {
             "desired_tag": "1.7.2",
@@ -106645,9 +106645,9 @@ export const generatedFixtures = {
           {
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1"
           },
           {
             "desired_tag": "v0.10.9",
@@ -106688,9 +106688,9 @@ export const generatedFixtures = {
           {
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1"
           },
           {
             "desired_tag": "v0.10.9",
@@ -106731,9 +106731,9 @@ export const generatedFixtures = {
           {
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1"
           },
           {
             "desired_tag": "1.32.0",
@@ -106839,9 +106839,9 @@ export const generatedFixtures = {
           {
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1"
           }
         ],
         "removal_id": "demo-removal-lines-2-3-4-5",
@@ -107040,9 +107040,9 @@ export const generatedFixtures = {
           {
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1"
           },
           {
             "desired_tag": "v0.10.9",
@@ -107092,9 +107092,9 @@ export const generatedFixtures = {
           {
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1"
           },
           {
             "desired_tag": "1.32.0",
@@ -107144,9 +107144,9 @@ export const generatedFixtures = {
           {
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1"
           },
           {
             "desired_tag": "1.7.2",
@@ -107352,9 +107352,9 @@ export const generatedFixtures = {
           {
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1"
           },
           {
             "desired_tag": "v0.10.9",
@@ -107404,9 +107404,9 @@ export const generatedFixtures = {
           {
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1"
           },
           {
             "desired_tag": "1.32.0",
@@ -107456,9 +107456,9 @@ export const generatedFixtures = {
           {
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1"
           },
           {
             "desired_tag": "1.7.2",
@@ -107657,9 +107657,9 @@ export const generatedFixtures = {
           {
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1"
           },
           {
             "desired_tag": "v0.10.9",
@@ -107709,9 +107709,9 @@ export const generatedFixtures = {
           {
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1"
           },
           {
             "desired_tag": "v0.10.9",
@@ -107761,9 +107761,9 @@ export const generatedFixtures = {
           {
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1"
           },
           {
             "desired_tag": "1.32.0",
@@ -107872,9 +107872,9 @@ export const generatedFixtures = {
           {
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1"
           },
           {
             "desired_tag": "v0.10.9",
@@ -107924,9 +107924,9 @@ export const generatedFixtures = {
           {
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1"
           },
           {
             "desired_tag": "1.32.0",
@@ -107976,9 +107976,9 @@ export const generatedFixtures = {
           {
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1"
           },
           {
             "desired_tag": "1.7.2",
@@ -108177,9 +108177,9 @@ export const generatedFixtures = {
           {
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1"
           },
           {
             "desired_tag": "v0.10.9",
@@ -108229,9 +108229,9 @@ export const generatedFixtures = {
           {
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1"
           },
           {
             "desired_tag": "v0.10.9",
@@ -108281,9 +108281,9 @@ export const generatedFixtures = {
           {
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1"
           },
           {
             "desired_tag": "1.32.0",
@@ -108385,9 +108385,9 @@ export const generatedFixtures = {
           {
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1"
           },
           {
             "desired_tag": "v0.10.9",
@@ -108437,9 +108437,9 @@ export const generatedFixtures = {
           {
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1"
           },
           {
             "desired_tag": "v0.10.9",
@@ -108489,9 +108489,9 @@ export const generatedFixtures = {
           {
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1"
           },
           {
             "desired_tag": "1.32.0",
@@ -108586,9 +108586,9 @@ export const generatedFixtures = {
           {
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1"
           },
           {
             "desired_tag": "v0.10.9",
@@ -108660,9 +108660,9 @@ export const generatedFixtures = {
           {
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1"
           },
           {
             "desired_tag": "v0.10.9",
@@ -108721,9 +108721,9 @@ export const generatedFixtures = {
           {
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1"
           },
           {
             "desired_tag": "1.32.0",
@@ -108782,9 +108782,9 @@ export const generatedFixtures = {
           {
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1"
           },
           {
             "desired_tag": "1.7.2",
@@ -109019,9 +109019,9 @@ export const generatedFixtures = {
           {
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1"
           },
           {
             "desired_tag": "v0.10.9",
@@ -109080,9 +109080,9 @@ export const generatedFixtures = {
           {
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1"
           },
           {
             "desired_tag": "v0.10.9",
@@ -109141,9 +109141,9 @@ export const generatedFixtures = {
           {
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1"
           },
           {
             "desired_tag": "1.32.0",
@@ -109263,9 +109263,9 @@ export const generatedFixtures = {
           {
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1"
           },
           {
             "desired_tag": "v0.10.9",
@@ -109324,9 +109324,9 @@ export const generatedFixtures = {
           {
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1"
           },
           {
             "desired_tag": "v0.10.9",
@@ -109385,9 +109385,9 @@ export const generatedFixtures = {
           {
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1"
           },
           {
             "desired_tag": "1.32.0",
@@ -109500,9 +109500,9 @@ export const generatedFixtures = {
           {
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1"
           },
           {
             "desired_tag": "v0.10.9",
@@ -109568,9 +109568,9 @@ export const generatedFixtures = {
           {
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1"
           },
           {
             "desired_tag": "v0.10.9",
@@ -109629,9 +109629,9 @@ export const generatedFixtures = {
           {
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1"
           },
           {
             "desired_tag": "v0.10.9",
@@ -109690,9 +109690,9 @@ export const generatedFixtures = {
           {
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1"
           },
           {
             "desired_tag": "1.32.0",
@@ -109805,9 +109805,9 @@ export const generatedFixtures = {
           {
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1"
           },
           {
             "desired_tag": "v0.10.9",
@@ -109866,9 +109866,9 @@ export const generatedFixtures = {
           {
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1"
           },
           {
             "desired_tag": "v0.10.9",
@@ -109942,9 +109942,9 @@ export const generatedFixtures = {
           {
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1"
           },
           {
             "desired_tag": "v0.10.9",
@@ -110012,9 +110012,9 @@ export const generatedFixtures = {
           {
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1"
           },
           {
             "desired_tag": "v0.10.9",
@@ -110082,9 +110082,9 @@ export const generatedFixtures = {
           {
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1"
           },
           {
             "desired_tag": "1.32.0",
@@ -110215,9 +110215,9 @@ export const generatedFixtures = {
           {
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1"
           },
           {
             "desired_tag": "v0.10.9",
@@ -110285,9 +110285,9 @@ export const generatedFixtures = {
           {
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1"
           },
           {
             "desired_tag": "v0.10.9",
@@ -110355,9 +110355,9 @@ export const generatedFixtures = {
           {
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1"
           },
           {
             "desired_tag": "v0.10.9",
@@ -110433,9 +110433,9 @@ export const generatedFixtures = {
           {
             "desired_tag": "v0.16.1",
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:latest",
+            "image": "ghcr.io/magrhino/wudup:latest",
             "line_no": 5,
-            "raw": "ghcr.io/magrhino/wud-updater:latest tag=v0.16.1"
+            "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1"
           },
           {
             "desired_tag": "v0.10.9",
@@ -110552,7 +110552,7 @@ export const generatedFixtures = {
           },
           {
             "choice": "keep-current",
-            "service_key": "media/wud-updater"
+            "service_key": "media/wudup"
           }
         ]
       },
@@ -110571,18 +110571,18 @@ export const generatedFixtures = {
     {
       "jobTemplate": {
         "log": {
-          "content": "[2026-05-30T20:12:26+00:00] [INFO] [compose-digest-pin] [media] Writing retag Compose metadata.\n[2026-05-30T20:12:28+00:00] [INFO] [compose-digest-pin] [media] Compose retag metadata was written.\n[2026-05-30T20:12:28+00:00] [INFO] [pull] [media] Pulling retagged service image(s).\n[2026-05-30T20:12:28+00:00] [INFO] [pull] [media] Retagged service image(s) pulled.\n[2026-05-30T20:12:28+00:00] [INFO] [recreate] [media] Recreating retagged service container(s).\n[2026-05-30T20:12:28+00:00] [INFO] [recreate] [media] Retagged service container(s) recreated.\n[2026-05-30T20:12:28+00:00] [INFO] [health] [media] Waiting up to 180s for retagged service health.\n[2026-05-30T20:12:28+00:00] [INFO] [health] [media] Retagged service health wait succeeded in 2s.\n[2026-05-30T20:12:28+00:00] [INFO] [completion] Retag changes applied.\n[2026-05-30T20:12:28+00:00] [INFO] Done. See log: demo/logs/demo-retag-switch-media-wud-updater.log\n",
+          "content": "[2026-05-30T20:12:26+00:00] [INFO] [compose-digest-pin] [media] Writing retag Compose metadata.\n[2026-05-30T20:12:28+00:00] [INFO] [compose-digest-pin] [media] Compose retag metadata was written.\n[2026-05-30T20:12:28+00:00] [INFO] [pull] [media] Pulling retagged service image(s).\n[2026-05-30T20:12:28+00:00] [INFO] [pull] [media] Retagged service image(s) pulled.\n[2026-05-30T20:12:28+00:00] [INFO] [recreate] [media] Recreating retagged service container(s).\n[2026-05-30T20:12:28+00:00] [INFO] [recreate] [media] Retagged service container(s) recreated.\n[2026-05-30T20:12:28+00:00] [INFO] [health] [media] Waiting up to 180s for retagged service health.\n[2026-05-30T20:12:28+00:00] [INFO] [health] [media] Retagged service health wait succeeded in 2s.\n[2026-05-30T20:12:28+00:00] [INFO] [completion] Retag changes applied.\n[2026-05-30T20:12:28+00:00] [INFO] Done. See log: demo/logs/demo-retag-switch-media-wudup.log\n",
           "error": "",
           "exists": true,
-          "job_id": "demo-retag-job-switch-media-wud-updater",
-          "log_file": "demo/logs/demo-retag-switch-media-wud-updater.log",
+          "job_id": "demo-retag-job-switch-media-wudup",
+          "log_file": "demo/logs/demo-retag-switch-media-wudup.log",
           "max_bytes": 65536,
           "truncated": false
         },
         "queued": {
           "error": "",
           "finished_at": null,
-          "job_id": "demo-retag-job-switch-media-wud-updater",
+          "job_id": "demo-retag-job-switch-media-wudup",
           "log_file": "",
           "progress": [],
           "run_id": null,
@@ -110598,20 +110598,20 @@ export const generatedFixtures = {
               {
                 "created_at": "2026-05-30T20:12:26+00:00",
                 "digest_provenance": {
-                  "final_image": "ghcr.io/magrhino/wud-updater@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                  "final_image": "ghcr.io/magrhino/wudup@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
                   "provenance_confidence": "verified",
                   "provenance_source": "retag",
                   "resolved_tag": "v0.16.1",
-                  "source_image": "ghcr.io/magrhino/wud-updater:latest",
+                  "source_image": "ghcr.io/magrhino/wudup:latest",
                   "target_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
                   "watch_tag": "v0.16.1"
                 },
                 "id": 7,
-                "image": "ghcr.io/magrhino/wud-updater:latest",
+                "image": "ghcr.io/magrhino/wudup:latest",
                 "metadata": {
                   "operation": "retag",
                   "resolved_tag": "v0.16.1",
-                  "service_key": "media/wud-updater",
+                  "service_key": "media/wudup",
                   "source": "webui",
                   "watch_tag": "v0.16.1"
                 },
@@ -110620,28 +110620,28 @@ export const generatedFixtures = {
                 "old_digest": "",
                 "old_image_id": "",
                 "run_id": 7,
-                "service_name": "wud-updater",
+                "service_name": "wudup",
                 "stack_name": "media",
                 "status": "success",
-                "target_image": "ghcr.io/magrhino/wud-updater@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+                "target_image": "ghcr.io/magrhino/wudup@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
               }
             ],
             "finished_at": "2026-05-30T20:12:28+00:00",
             "id": 7,
-            "log_file": "demo/logs/demo-retag-switch-media-wud-updater.log",
+            "log_file": "demo/logs/demo-retag-switch-media-wudup.log",
             "metadata": {
               "digest_pin_updates": [
                 {
                   "digest_provenance": {
-                    "final_image": "ghcr.io/magrhino/wud-updater@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                    "final_image": "ghcr.io/magrhino/wudup@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
                     "provenance_confidence": "verified",
                     "provenance_source": "demo",
                     "resolved_tag": "v0.16.1",
-                    "source_image": "ghcr.io/magrhino/wud-updater:latest",
+                    "source_image": "ghcr.io/magrhino/wudup:latest",
                     "target_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
                     "watch_tag": "latest"
                   },
-                  "final_image": "ghcr.io/magrhino/wud-updater@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                  "final_image": "ghcr.io/magrhino/wudup@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
                   "label_key": "wud.tag.include",
                   "label_rewrites": [
                     {
@@ -110652,25 +110652,25 @@ export const generatedFixtures = {
                       "proposed_label_regex": "^v0\\.16\\.1$",
                       "proposed_label_value": "^v0\\.16\\.1$$",
                       "reason": "exact-regex-normalized",
-                      "service": "wud-updater"
+                      "service": "wudup"
                     }
                   ],
                   "label_value": "^v0\\.16\\.1$$",
-                  "marker": "wud-updater.resolved-tag=v0.16.1",
+                  "marker": "wudup.resolved-tag=v0.16.1",
                   "planned_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
                   "resolved_tag": "v0.16.1",
-                  "service": "wud-updater",
-                  "service_key": "media/wud-updater",
-                  "source_image": "ghcr.io/magrhino/wud-updater:latest",
+                  "service": "wudup",
+                  "service_key": "media/wudup",
+                  "source_image": "ghcr.io/magrhino/wudup:latest",
                   "stack": "media",
                   "watch_tag": "v0.16.1"
                 }
               ],
               "external_recreate_required": false,
               "operation": "retag",
-              "plan_id": "demo-retag-job-switch-media-wud-updater-plan",
+              "plan_id": "demo-retag-job-switch-media-wudup-plan",
               "services": [
-                "media/wud-updater"
+                "media/wudup"
               ],
               "source": "webui",
               "status": "success"
@@ -110689,9 +110689,9 @@ export const generatedFixtures = {
             "wud_file": "demo/out/images.todo"
           },
           "log": {
-            "content": "[2026-05-30T20:12:26+00:00] [INFO] [compose-digest-pin] [media] Writing retag Compose metadata.\n[2026-05-30T20:12:28+00:00] [INFO] [compose-digest-pin] [media] Compose retag metadata was written.\n[2026-05-30T20:12:28+00:00] [INFO] [pull] [media] Pulling retagged service image(s).\n[2026-05-30T20:12:28+00:00] [INFO] [pull] [media] Retagged service image(s) pulled.\n[2026-05-30T20:12:28+00:00] [INFO] [recreate] [media] Recreating retagged service container(s).\n[2026-05-30T20:12:28+00:00] [INFO] [recreate] [media] Retagged service container(s) recreated.\n[2026-05-30T20:12:28+00:00] [INFO] [health] [media] Waiting up to 180s for retagged service health.\n[2026-05-30T20:12:28+00:00] [INFO] [health] [media] Retagged service health wait succeeded in 2s.\n[2026-05-30T20:12:28+00:00] [INFO] [completion] Retag changes applied.\n[2026-05-30T20:12:28+00:00] [INFO] Done. See log: demo/logs/demo-retag-switch-media-wud-updater.log\n",
+            "content": "[2026-05-30T20:12:26+00:00] [INFO] [compose-digest-pin] [media] Writing retag Compose metadata.\n[2026-05-30T20:12:28+00:00] [INFO] [compose-digest-pin] [media] Compose retag metadata was written.\n[2026-05-30T20:12:28+00:00] [INFO] [pull] [media] Pulling retagged service image(s).\n[2026-05-30T20:12:28+00:00] [INFO] [pull] [media] Retagged service image(s) pulled.\n[2026-05-30T20:12:28+00:00] [INFO] [recreate] [media] Recreating retagged service container(s).\n[2026-05-30T20:12:28+00:00] [INFO] [recreate] [media] Retagged service container(s) recreated.\n[2026-05-30T20:12:28+00:00] [INFO] [health] [media] Waiting up to 180s for retagged service health.\n[2026-05-30T20:12:28+00:00] [INFO] [health] [media] Retagged service health wait succeeded in 2s.\n[2026-05-30T20:12:28+00:00] [INFO] [completion] Retag changes applied.\n[2026-05-30T20:12:28+00:00] [INFO] Done. See log: demo/logs/demo-retag-switch-media-wudup.log\n",
             "exists": true,
-            "log_file": "demo/logs/demo-retag-switch-media-wud-updater.log",
+            "log_file": "demo/logs/demo-retag-switch-media-wudup.log",
             "max_bytes": 262144,
             "run_id": 7,
             "truncated": false
@@ -110702,20 +110702,20 @@ export const generatedFixtures = {
               {
                 "created_at": "2026-05-30T20:12:26+00:00",
                 "digest_provenance": {
-                  "final_image": "ghcr.io/magrhino/wud-updater@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                  "final_image": "ghcr.io/magrhino/wudup@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
                   "provenance_confidence": "verified",
                   "provenance_source": "retag",
                   "resolved_tag": "v0.16.1",
-                  "source_image": "ghcr.io/magrhino/wud-updater:latest",
+                  "source_image": "ghcr.io/magrhino/wudup:latest",
                   "target_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
                   "watch_tag": "v0.16.1"
                 },
                 "id": 7,
-                "image": "ghcr.io/magrhino/wud-updater:latest",
+                "image": "ghcr.io/magrhino/wudup:latest",
                 "metadata": {
                   "operation": "retag",
                   "resolved_tag": "v0.16.1",
-                  "service_key": "media/wud-updater",
+                  "service_key": "media/wudup",
                   "source": "webui",
                   "watch_tag": "v0.16.1"
                 },
@@ -110724,28 +110724,28 @@ export const generatedFixtures = {
                 "old_digest": "",
                 "old_image_id": "",
                 "run_id": 7,
-                "service_name": "wud-updater",
+                "service_name": "wudup",
                 "stack_name": "media",
                 "status": "success",
-                "target_image": "ghcr.io/magrhino/wud-updater@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+                "target_image": "ghcr.io/magrhino/wudup@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
               }
             ],
             "finished_at": "2026-05-30T20:12:28+00:00",
             "id": 7,
-            "log_file": "demo/logs/demo-retag-switch-media-wud-updater.log",
+            "log_file": "demo/logs/demo-retag-switch-media-wudup.log",
             "metadata": {
               "digest_pin_updates": [
                 {
                   "digest_provenance": {
-                    "final_image": "ghcr.io/magrhino/wud-updater@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                    "final_image": "ghcr.io/magrhino/wudup@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
                     "provenance_confidence": "verified",
                     "provenance_source": "demo",
                     "resolved_tag": "v0.16.1",
-                    "source_image": "ghcr.io/magrhino/wud-updater:latest",
+                    "source_image": "ghcr.io/magrhino/wudup:latest",
                     "target_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
                     "watch_tag": "latest"
                   },
-                  "final_image": "ghcr.io/magrhino/wud-updater@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                  "final_image": "ghcr.io/magrhino/wudup@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
                   "label_key": "wud.tag.include",
                   "label_rewrites": [
                     {
@@ -110756,25 +110756,25 @@ export const generatedFixtures = {
                       "proposed_label_regex": "^v0\\.16\\.1$",
                       "proposed_label_value": "^v0\\.16\\.1$$",
                       "reason": "exact-regex-normalized",
-                      "service": "wud-updater"
+                      "service": "wudup"
                     }
                   ],
                   "label_value": "^v0\\.16\\.1$$",
-                  "marker": "wud-updater.resolved-tag=v0.16.1",
+                  "marker": "wudup.resolved-tag=v0.16.1",
                   "planned_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
                   "resolved_tag": "v0.16.1",
-                  "service": "wud-updater",
-                  "service_key": "media/wud-updater",
-                  "source_image": "ghcr.io/magrhino/wud-updater:latest",
+                  "service": "wudup",
+                  "service_key": "media/wudup",
+                  "source_image": "ghcr.io/magrhino/wudup:latest",
                   "stack": "media",
                   "watch_tag": "v0.16.1"
                 }
               ],
               "external_recreate_required": false,
               "operation": "retag",
-              "plan_id": "demo-retag-job-switch-media-wud-updater-plan",
+              "plan_id": "demo-retag-job-switch-media-wudup-plan",
               "services": [
-                "media/wud-updater"
+                "media/wudup"
               ],
               "source": "webui",
               "status": "success"
@@ -110788,108 +110788,108 @@ export const generatedFixtures = {
         "terminal": {
           "error": "",
           "finished_at": "2026-05-30T20:12:28+00:00",
-          "job_id": "demo-retag-job-switch-media-wud-updater",
-          "log_file": "demo/logs/demo-retag-switch-media-wud-updater.log",
+          "job_id": "demo-retag-job-switch-media-wudup",
+          "log_file": "demo/logs/demo-retag-switch-media-wudup.log",
           "progress": [
             {
               "created_at": "2026-05-30T20:12:26+00:00",
-              "job_id": "demo-retag-job-switch-media-wud-updater",
+              "job_id": "demo-retag-job-switch-media-wudup",
               "line_numbers": [],
               "message": "[media] Writing retag Compose metadata.",
               "phase": "compose-digest-pin",
               "services": [
-                "wud-updater"
+                "wudup"
               ],
               "stack": "media",
               "status": "running"
             },
             {
               "created_at": "2026-05-30T20:12:28+00:00",
-              "job_id": "demo-retag-job-switch-media-wud-updater",
+              "job_id": "demo-retag-job-switch-media-wudup",
               "line_numbers": [],
               "message": "[media] Compose retag metadata was written.",
               "phase": "compose-digest-pin",
               "services": [
-                "wud-updater"
+                "wudup"
               ],
               "stack": "media",
               "status": "success"
             },
             {
               "created_at": "2026-05-30T20:12:28+00:00",
-              "job_id": "demo-retag-job-switch-media-wud-updater",
+              "job_id": "demo-retag-job-switch-media-wudup",
               "line_numbers": [],
               "message": "[media] Pulling retagged service image(s).",
               "phase": "pull",
               "services": [
-                "wud-updater"
+                "wudup"
               ],
               "stack": "media",
               "status": "running"
             },
             {
               "created_at": "2026-05-30T20:12:28+00:00",
-              "job_id": "demo-retag-job-switch-media-wud-updater",
+              "job_id": "demo-retag-job-switch-media-wudup",
               "line_numbers": [],
               "message": "[media] Retagged service image(s) pulled.",
               "phase": "pull",
               "services": [
-                "wud-updater"
+                "wudup"
               ],
               "stack": "media",
               "status": "success"
             },
             {
               "created_at": "2026-05-30T20:12:28+00:00",
-              "job_id": "demo-retag-job-switch-media-wud-updater",
+              "job_id": "demo-retag-job-switch-media-wudup",
               "line_numbers": [],
               "message": "[media] Recreating retagged service container(s).",
               "phase": "recreate",
               "services": [
-                "wud-updater"
+                "wudup"
               ],
               "stack": "media",
               "status": "running"
             },
             {
               "created_at": "2026-05-30T20:12:28+00:00",
-              "job_id": "demo-retag-job-switch-media-wud-updater",
+              "job_id": "demo-retag-job-switch-media-wudup",
               "line_numbers": [],
               "message": "[media] Retagged service container(s) recreated.",
               "phase": "recreate",
               "services": [
-                "wud-updater"
+                "wudup"
               ],
               "stack": "media",
               "status": "success"
             },
             {
               "created_at": "2026-05-30T20:12:28+00:00",
-              "job_id": "demo-retag-job-switch-media-wud-updater",
+              "job_id": "demo-retag-job-switch-media-wudup",
               "line_numbers": [],
               "message": "[media] Waiting up to 180s for retagged service health.",
               "phase": "health",
               "services": [
-                "wud-updater"
+                "wudup"
               ],
               "stack": "media",
               "status": "running"
             },
             {
               "created_at": "2026-05-30T20:12:28+00:00",
-              "job_id": "demo-retag-job-switch-media-wud-updater",
+              "job_id": "demo-retag-job-switch-media-wudup",
               "line_numbers": [],
               "message": "[media] Retagged service health wait succeeded in 2s.",
               "phase": "health",
               "services": [
-                "wud-updater"
+                "wudup"
               ],
               "stack": "media",
               "status": "success"
             },
             {
               "created_at": "2026-05-30T20:12:28+00:00",
-              "job_id": "demo-retag-job-switch-media-wud-updater",
+              "job_id": "demo-retag-job-switch-media-wudup",
               "line_numbers": [],
               "message": "Retag changes applied.",
               "phase": "completion",
@@ -110904,7 +110904,7 @@ export const generatedFixtures = {
           "status": "success"
         }
       },
-      "key": "switch-media-wud-updater",
+      "key": "switch-media-wudup",
       "preview": {
         "complete": {
           "error": "",
@@ -110913,7 +110913,7 @@ export const generatedFixtures = {
             "external_recreate_required": false,
             "issues": [],
             "keep_current_count": 3,
-            "plan_id": "demo-retag-plan-switch-media-wud-updater",
+            "plan_id": "demo-retag-plan-switch-media-wudup",
             "selected_count": 1,
             "stacks": [
               {
@@ -110921,15 +110921,15 @@ export const generatedFixtures = {
                 "digest_pin_updates": [
                   {
                     "digest_provenance": {
-                      "final_image": "ghcr.io/magrhino/wud-updater@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                      "final_image": "ghcr.io/magrhino/wudup@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
                       "provenance_confidence": "verified",
                       "provenance_source": "demo",
                       "resolved_tag": "v0.16.1",
-                      "source_image": "ghcr.io/magrhino/wud-updater:latest",
+                      "source_image": "ghcr.io/magrhino/wudup:latest",
                       "target_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
                       "watch_tag": "latest"
                     },
-                    "final_image": "ghcr.io/magrhino/wud-updater@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                    "final_image": "ghcr.io/magrhino/wudup@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
                     "label_key": "wud.tag.include",
                     "label_rewrites": [
                       {
@@ -110940,16 +110940,16 @@ export const generatedFixtures = {
                         "proposed_label_regex": "^v0\\.16\\.1$",
                         "proposed_label_value": "^v0\\.16\\.1$$",
                         "reason": "exact-regex-normalized",
-                        "service": "wud-updater"
+                        "service": "wudup"
                       }
                     ],
                     "label_value": "^v0\\.16\\.1$$",
-                    "marker": "wud-updater.resolved-tag=v0.16.1",
+                    "marker": "wudup.resolved-tag=v0.16.1",
                     "planned_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
                     "resolved_tag": "v0.16.1",
-                    "service": "wud-updater",
-                    "service_key": "media/wud-updater",
-                    "source_image": "ghcr.io/magrhino/wud-updater:latest",
+                    "service": "wudup",
+                    "service_key": "media/wudup",
+                    "source_image": "ghcr.io/magrhino/wudup:latest",
                     "stack": "media",
                     "watch_tag": "v0.16.1"
                   }
@@ -110957,7 +110957,7 @@ export const generatedFixtures = {
                 "directory": "demo/docker/media",
                 "project_directory": "demo/docker/media",
                 "services": [
-                  "wud-updater"
+                  "wudup"
                 ],
                 "stack": "media"
               }
@@ -110965,11 +110965,11 @@ export const generatedFixtures = {
             "status": "ready",
             "warnings": []
           },
-          "preview_job_id": "demo-retag-preview-switch-media-wud-updater",
+          "preview_job_id": "demo-retag-preview-switch-media-wudup",
           "progress": [
             {
               "created_at": "2026-05-30T20:12:26+00:00",
-              "job_id": "demo-retag-preview-switch-media-wud-updater",
+              "job_id": "demo-retag-preview-switch-media-wudup",
               "line_numbers": [],
               "message": "Refreshing demo retag candidates.",
               "phase": "refresh",
@@ -110979,7 +110979,7 @@ export const generatedFixtures = {
             },
             {
               "created_at": "2026-05-30T20:12:28+00:00",
-              "job_id": "demo-retag-preview-switch-media-wud-updater",
+              "job_id": "demo-retag-preview-switch-media-wudup",
               "line_numbers": [],
               "message": "Demo retag preview is ready.",
               "phase": "preview",
@@ -110994,11 +110994,11 @@ export const generatedFixtures = {
         "queued": {
           "error": "",
           "plan": null,
-          "preview_job_id": "demo-retag-preview-switch-media-wud-updater",
+          "preview_job_id": "demo-retag-preview-switch-media-wudup",
           "progress": [
             {
               "created_at": "2026-05-30T20:12:26+00:00",
-              "job_id": "demo-retag-preview-switch-media-wud-updater",
+              "job_id": "demo-retag-preview-switch-media-wudup",
               "line_numbers": [],
               "message": "Refreshing demo retag candidates.",
               "phase": "refresh",
@@ -111027,7 +111027,7 @@ export const generatedFixtures = {
           },
           {
             "choice": "switch-to-concrete",
-            "service_key": "media/wud-updater"
+            "service_key": "media/wudup"
           }
         ]
       },
@@ -111036,7 +111036,7 @@ export const generatedFixtures = {
         "external_recreate_required": false,
         "issues": [],
         "keep_current_count": 3,
-        "plan_id": "demo-retag-plan-switch-media-wud-updater",
+        "plan_id": "demo-retag-plan-switch-media-wudup",
         "selected_count": 1,
         "stacks": [
           {
@@ -111044,15 +111044,15 @@ export const generatedFixtures = {
             "digest_pin_updates": [
               {
                 "digest_provenance": {
-                  "final_image": "ghcr.io/magrhino/wud-updater@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                  "final_image": "ghcr.io/magrhino/wudup@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
                   "provenance_confidence": "verified",
                   "provenance_source": "demo",
                   "resolved_tag": "v0.16.1",
-                  "source_image": "ghcr.io/magrhino/wud-updater:latest",
+                  "source_image": "ghcr.io/magrhino/wudup:latest",
                   "target_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
                   "watch_tag": "latest"
                 },
-                "final_image": "ghcr.io/magrhino/wud-updater@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                "final_image": "ghcr.io/magrhino/wudup@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
                 "label_key": "wud.tag.include",
                 "label_rewrites": [
                   {
@@ -111063,16 +111063,16 @@ export const generatedFixtures = {
                     "proposed_label_regex": "^v0\\.16\\.1$",
                     "proposed_label_value": "^v0\\.16\\.1$$",
                     "reason": "exact-regex-normalized",
-                    "service": "wud-updater"
+                    "service": "wudup"
                   }
                 ],
                 "label_value": "^v0\\.16\\.1$$",
-                "marker": "wud-updater.resolved-tag=v0.16.1",
+                "marker": "wudup.resolved-tag=v0.16.1",
                 "planned_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
                 "resolved_tag": "v0.16.1",
-                "service": "wud-updater",
-                "service_key": "media/wud-updater",
-                "source_image": "ghcr.io/magrhino/wud-updater:latest",
+                "service": "wudup",
+                "service_key": "media/wudup",
+                "source_image": "ghcr.io/magrhino/wudup:latest",
                 "stack": "media",
                 "watch_tag": "v0.16.1"
               }
@@ -111080,7 +111080,7 @@ export const generatedFixtures = {
             "directory": "demo/docker/media",
             "project_directory": "demo/docker/media",
             "services": [
-              "wud-updater"
+              "wudup"
             ],
             "stack": "media"
           }
@@ -111178,7 +111178,7 @@ export const generatedFixtures = {
           },
           {
             "choice": "keep-current",
-            "service_key": "media/wud-updater"
+            "service_key": "media/wudup"
           }
         ]
       },
@@ -111206,7 +111206,7 @@ export const generatedFixtures = {
       }
     },
     {
-      "key": "switch-media-radarr-media-wud-updater",
+      "key": "switch-media-radarr-media-wudup",
       "preview": {
         "complete": {
           "error": "",
@@ -111226,7 +111226,7 @@ export const generatedFixtures = {
               }
             ],
             "keep_current_count": 2,
-            "plan_id": "demo-retag-plan-switch-media-radarr-media-wud-updater",
+            "plan_id": "demo-retag-plan-switch-media-radarr-media-wudup",
             "selected_count": 1,
             "stacks": [
               {
@@ -111234,15 +111234,15 @@ export const generatedFixtures = {
                 "digest_pin_updates": [
                   {
                     "digest_provenance": {
-                      "final_image": "ghcr.io/magrhino/wud-updater@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                      "final_image": "ghcr.io/magrhino/wudup@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
                       "provenance_confidence": "verified",
                       "provenance_source": "demo",
                       "resolved_tag": "v0.16.1",
-                      "source_image": "ghcr.io/magrhino/wud-updater:latest",
+                      "source_image": "ghcr.io/magrhino/wudup:latest",
                       "target_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
                       "watch_tag": "latest"
                     },
-                    "final_image": "ghcr.io/magrhino/wud-updater@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                    "final_image": "ghcr.io/magrhino/wudup@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
                     "label_key": "wud.tag.include",
                     "label_rewrites": [
                       {
@@ -111253,16 +111253,16 @@ export const generatedFixtures = {
                         "proposed_label_regex": "^v0\\.16\\.1$",
                         "proposed_label_value": "^v0\\.16\\.1$$",
                         "reason": "exact-regex-normalized",
-                        "service": "wud-updater"
+                        "service": "wudup"
                       }
                     ],
                     "label_value": "^v0\\.16\\.1$$",
-                    "marker": "wud-updater.resolved-tag=v0.16.1",
+                    "marker": "wudup.resolved-tag=v0.16.1",
                     "planned_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
                     "resolved_tag": "v0.16.1",
-                    "service": "wud-updater",
-                    "service_key": "media/wud-updater",
-                    "source_image": "ghcr.io/magrhino/wud-updater:latest",
+                    "service": "wudup",
+                    "service_key": "media/wudup",
+                    "source_image": "ghcr.io/magrhino/wudup:latest",
                     "stack": "media",
                     "watch_tag": "v0.16.1"
                   }
@@ -111270,7 +111270,7 @@ export const generatedFixtures = {
                 "directory": "demo/docker/media",
                 "project_directory": "demo/docker/media",
                 "services": [
-                  "wud-updater"
+                  "wudup"
                 ],
                 "stack": "media"
               }
@@ -111278,11 +111278,11 @@ export const generatedFixtures = {
             "status": "blocked",
             "warnings": []
           },
-          "preview_job_id": "demo-retag-preview-switch-media-radarr-media-wud-updater",
+          "preview_job_id": "demo-retag-preview-switch-media-radarr-media-wudup",
           "progress": [
             {
               "created_at": "2026-05-30T20:12:26+00:00",
-              "job_id": "demo-retag-preview-switch-media-radarr-media-wud-updater",
+              "job_id": "demo-retag-preview-switch-media-radarr-media-wudup",
               "line_numbers": [],
               "message": "Refreshing demo retag candidates.",
               "phase": "refresh",
@@ -111292,7 +111292,7 @@ export const generatedFixtures = {
             },
             {
               "created_at": "2026-05-30T20:12:28+00:00",
-              "job_id": "demo-retag-preview-switch-media-radarr-media-wud-updater",
+              "job_id": "demo-retag-preview-switch-media-radarr-media-wudup",
               "line_numbers": [],
               "message": "Demo retag preview is ready.",
               "phase": "preview",
@@ -111307,11 +111307,11 @@ export const generatedFixtures = {
         "queued": {
           "error": "",
           "plan": null,
-          "preview_job_id": "demo-retag-preview-switch-media-radarr-media-wud-updater",
+          "preview_job_id": "demo-retag-preview-switch-media-radarr-media-wudup",
           "progress": [
             {
               "created_at": "2026-05-30T20:12:26+00:00",
-              "job_id": "demo-retag-preview-switch-media-radarr-media-wud-updater",
+              "job_id": "demo-retag-preview-switch-media-radarr-media-wudup",
               "line_numbers": [],
               "message": "Refreshing demo retag candidates.",
               "phase": "refresh",
@@ -111340,7 +111340,7 @@ export const generatedFixtures = {
           },
           {
             "choice": "switch-to-concrete",
-            "service_key": "media/wud-updater"
+            "service_key": "media/wudup"
           }
         ]
       },
@@ -111360,7 +111360,7 @@ export const generatedFixtures = {
           }
         ],
         "keep_current_count": 2,
-        "plan_id": "demo-retag-plan-switch-media-radarr-media-wud-updater",
+        "plan_id": "demo-retag-plan-switch-media-radarr-media-wudup",
         "selected_count": 1,
         "stacks": [
           {
@@ -111368,15 +111368,15 @@ export const generatedFixtures = {
             "digest_pin_updates": [
               {
                 "digest_provenance": {
-                  "final_image": "ghcr.io/magrhino/wud-updater@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                  "final_image": "ghcr.io/magrhino/wudup@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
                   "provenance_confidence": "verified",
                   "provenance_source": "demo",
                   "resolved_tag": "v0.16.1",
-                  "source_image": "ghcr.io/magrhino/wud-updater:latest",
+                  "source_image": "ghcr.io/magrhino/wudup:latest",
                   "target_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
                   "watch_tag": "latest"
                 },
-                "final_image": "ghcr.io/magrhino/wud-updater@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                "final_image": "ghcr.io/magrhino/wudup@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
                 "label_key": "wud.tag.include",
                 "label_rewrites": [
                   {
@@ -111387,16 +111387,16 @@ export const generatedFixtures = {
                     "proposed_label_regex": "^v0\\.16\\.1$",
                     "proposed_label_value": "^v0\\.16\\.1$$",
                     "reason": "exact-regex-normalized",
-                    "service": "wud-updater"
+                    "service": "wudup"
                   }
                 ],
                 "label_value": "^v0\\.16\\.1$$",
-                "marker": "wud-updater.resolved-tag=v0.16.1",
+                "marker": "wudup.resolved-tag=v0.16.1",
                 "planned_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
                 "resolved_tag": "v0.16.1",
-                "service": "wud-updater",
-                "service_key": "media/wud-updater",
-                "source_image": "ghcr.io/magrhino/wud-updater:latest",
+                "service": "wudup",
+                "service_key": "media/wudup",
+                "source_image": "ghcr.io/magrhino/wudup:latest",
                 "stack": "media",
                 "watch_tag": "v0.16.1"
               }
@@ -111404,7 +111404,7 @@ export const generatedFixtures = {
             "directory": "demo/docker/media",
             "project_directory": "demo/docker/media",
             "services": [
-              "wud-updater"
+              "wudup"
             ],
             "stack": "media"
           }
@@ -111502,7 +111502,7 @@ export const generatedFixtures = {
           },
           {
             "choice": "keep-current",
-            "service_key": "media/wud-updater"
+            "service_key": "media/wudup"
           }
         ]
       },
@@ -111530,7 +111530,7 @@ export const generatedFixtures = {
       }
     },
     {
-      "key": "switch-home-home-assistant-media-wud-updater",
+      "key": "switch-home-home-assistant-media-wudup",
       "preview": {
         "complete": {
           "error": "",
@@ -111550,7 +111550,7 @@ export const generatedFixtures = {
               }
             ],
             "keep_current_count": 2,
-            "plan_id": "demo-retag-plan-switch-home-home-assistant-media-wud-updater",
+            "plan_id": "demo-retag-plan-switch-home-home-assistant-media-wudup",
             "selected_count": 1,
             "stacks": [
               {
@@ -111558,15 +111558,15 @@ export const generatedFixtures = {
                 "digest_pin_updates": [
                   {
                     "digest_provenance": {
-                      "final_image": "ghcr.io/magrhino/wud-updater@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                      "final_image": "ghcr.io/magrhino/wudup@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
                       "provenance_confidence": "verified",
                       "provenance_source": "demo",
                       "resolved_tag": "v0.16.1",
-                      "source_image": "ghcr.io/magrhino/wud-updater:latest",
+                      "source_image": "ghcr.io/magrhino/wudup:latest",
                       "target_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
                       "watch_tag": "latest"
                     },
-                    "final_image": "ghcr.io/magrhino/wud-updater@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                    "final_image": "ghcr.io/magrhino/wudup@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
                     "label_key": "wud.tag.include",
                     "label_rewrites": [
                       {
@@ -111577,16 +111577,16 @@ export const generatedFixtures = {
                         "proposed_label_regex": "^v0\\.16\\.1$",
                         "proposed_label_value": "^v0\\.16\\.1$$",
                         "reason": "exact-regex-normalized",
-                        "service": "wud-updater"
+                        "service": "wudup"
                       }
                     ],
                     "label_value": "^v0\\.16\\.1$$",
-                    "marker": "wud-updater.resolved-tag=v0.16.1",
+                    "marker": "wudup.resolved-tag=v0.16.1",
                     "planned_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
                     "resolved_tag": "v0.16.1",
-                    "service": "wud-updater",
-                    "service_key": "media/wud-updater",
-                    "source_image": "ghcr.io/magrhino/wud-updater:latest",
+                    "service": "wudup",
+                    "service_key": "media/wudup",
+                    "source_image": "ghcr.io/magrhino/wudup:latest",
                     "stack": "media",
                     "watch_tag": "v0.16.1"
                   }
@@ -111594,7 +111594,7 @@ export const generatedFixtures = {
                 "directory": "demo/docker/media",
                 "project_directory": "demo/docker/media",
                 "services": [
-                  "wud-updater"
+                  "wudup"
                 ],
                 "stack": "media"
               }
@@ -111602,11 +111602,11 @@ export const generatedFixtures = {
             "status": "blocked",
             "warnings": []
           },
-          "preview_job_id": "demo-retag-preview-switch-home-home-assistant-media-wud-updater",
+          "preview_job_id": "demo-retag-preview-switch-home-home-assistant-media-wudup",
           "progress": [
             {
               "created_at": "2026-05-30T20:12:26+00:00",
-              "job_id": "demo-retag-preview-switch-home-home-assistant-media-wud-updater",
+              "job_id": "demo-retag-preview-switch-home-home-assistant-media-wudup",
               "line_numbers": [],
               "message": "Refreshing demo retag candidates.",
               "phase": "refresh",
@@ -111616,7 +111616,7 @@ export const generatedFixtures = {
             },
             {
               "created_at": "2026-05-30T20:12:28+00:00",
-              "job_id": "demo-retag-preview-switch-home-home-assistant-media-wud-updater",
+              "job_id": "demo-retag-preview-switch-home-home-assistant-media-wudup",
               "line_numbers": [],
               "message": "Demo retag preview is ready.",
               "phase": "preview",
@@ -111631,11 +111631,11 @@ export const generatedFixtures = {
         "queued": {
           "error": "",
           "plan": null,
-          "preview_job_id": "demo-retag-preview-switch-home-home-assistant-media-wud-updater",
+          "preview_job_id": "demo-retag-preview-switch-home-home-assistant-media-wudup",
           "progress": [
             {
               "created_at": "2026-05-30T20:12:26+00:00",
-              "job_id": "demo-retag-preview-switch-home-home-assistant-media-wud-updater",
+              "job_id": "demo-retag-preview-switch-home-home-assistant-media-wudup",
               "line_numbers": [],
               "message": "Refreshing demo retag candidates.",
               "phase": "refresh",
@@ -111664,7 +111664,7 @@ export const generatedFixtures = {
           },
           {
             "choice": "switch-to-concrete",
-            "service_key": "media/wud-updater"
+            "service_key": "media/wudup"
           }
         ]
       },
@@ -111684,7 +111684,7 @@ export const generatedFixtures = {
           }
         ],
         "keep_current_count": 2,
-        "plan_id": "demo-retag-plan-switch-home-home-assistant-media-wud-updater",
+        "plan_id": "demo-retag-plan-switch-home-home-assistant-media-wudup",
         "selected_count": 1,
         "stacks": [
           {
@@ -111692,15 +111692,15 @@ export const generatedFixtures = {
             "digest_pin_updates": [
               {
                 "digest_provenance": {
-                  "final_image": "ghcr.io/magrhino/wud-updater@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                  "final_image": "ghcr.io/magrhino/wudup@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
                   "provenance_confidence": "verified",
                   "provenance_source": "demo",
                   "resolved_tag": "v0.16.1",
-                  "source_image": "ghcr.io/magrhino/wud-updater:latest",
+                  "source_image": "ghcr.io/magrhino/wudup:latest",
                   "target_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
                   "watch_tag": "latest"
                 },
-                "final_image": "ghcr.io/magrhino/wud-updater@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                "final_image": "ghcr.io/magrhino/wudup@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
                 "label_key": "wud.tag.include",
                 "label_rewrites": [
                   {
@@ -111711,16 +111711,16 @@ export const generatedFixtures = {
                     "proposed_label_regex": "^v0\\.16\\.1$",
                     "proposed_label_value": "^v0\\.16\\.1$$",
                     "reason": "exact-regex-normalized",
-                    "service": "wud-updater"
+                    "service": "wudup"
                   }
                 ],
                 "label_value": "^v0\\.16\\.1$$",
-                "marker": "wud-updater.resolved-tag=v0.16.1",
+                "marker": "wudup.resolved-tag=v0.16.1",
                 "planned_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
                 "resolved_tag": "v0.16.1",
-                "service": "wud-updater",
-                "service_key": "media/wud-updater",
-                "source_image": "ghcr.io/magrhino/wud-updater:latest",
+                "service": "wudup",
+                "service_key": "media/wudup",
+                "source_image": "ghcr.io/magrhino/wudup:latest",
                 "stack": "media",
                 "watch_tag": "v0.16.1"
               }
@@ -111728,7 +111728,7 @@ export const generatedFixtures = {
             "directory": "demo/docker/media",
             "project_directory": "demo/docker/media",
             "services": [
-              "wud-updater"
+              "wudup"
             ],
             "stack": "media"
           }
@@ -111836,7 +111836,7 @@ export const generatedFixtures = {
           },
           {
             "choice": "keep-current",
-            "service_key": "media/wud-updater"
+            "service_key": "media/wudup"
           }
         ]
       },
@@ -111874,7 +111874,7 @@ export const generatedFixtures = {
       }
     },
     {
-      "key": "switch-home-home-assistant-media-radarr-media-wud-updater",
+      "key": "switch-home-home-assistant-media-radarr-media-wudup",
       "preview": {
         "complete": {
           "error": "",
@@ -111904,7 +111904,7 @@ export const generatedFixtures = {
               }
             ],
             "keep_current_count": 1,
-            "plan_id": "demo-retag-plan-switch-home-home-assistant-media-radarr-media-wud-updater",
+            "plan_id": "demo-retag-plan-switch-home-home-assistant-media-radarr-media-wudup",
             "selected_count": 1,
             "stacks": [
               {
@@ -111912,15 +111912,15 @@ export const generatedFixtures = {
                 "digest_pin_updates": [
                   {
                     "digest_provenance": {
-                      "final_image": "ghcr.io/magrhino/wud-updater@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                      "final_image": "ghcr.io/magrhino/wudup@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
                       "provenance_confidence": "verified",
                       "provenance_source": "demo",
                       "resolved_tag": "v0.16.1",
-                      "source_image": "ghcr.io/magrhino/wud-updater:latest",
+                      "source_image": "ghcr.io/magrhino/wudup:latest",
                       "target_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
                       "watch_tag": "latest"
                     },
-                    "final_image": "ghcr.io/magrhino/wud-updater@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                    "final_image": "ghcr.io/magrhino/wudup@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
                     "label_key": "wud.tag.include",
                     "label_rewrites": [
                       {
@@ -111931,16 +111931,16 @@ export const generatedFixtures = {
                         "proposed_label_regex": "^v0\\.16\\.1$",
                         "proposed_label_value": "^v0\\.16\\.1$$",
                         "reason": "exact-regex-normalized",
-                        "service": "wud-updater"
+                        "service": "wudup"
                       }
                     ],
                     "label_value": "^v0\\.16\\.1$$",
-                    "marker": "wud-updater.resolved-tag=v0.16.1",
+                    "marker": "wudup.resolved-tag=v0.16.1",
                     "planned_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
                     "resolved_tag": "v0.16.1",
-                    "service": "wud-updater",
-                    "service_key": "media/wud-updater",
-                    "source_image": "ghcr.io/magrhino/wud-updater:latest",
+                    "service": "wudup",
+                    "service_key": "media/wudup",
+                    "source_image": "ghcr.io/magrhino/wudup:latest",
                     "stack": "media",
                     "watch_tag": "v0.16.1"
                   }
@@ -111948,7 +111948,7 @@ export const generatedFixtures = {
                 "directory": "demo/docker/media",
                 "project_directory": "demo/docker/media",
                 "services": [
-                  "wud-updater"
+                  "wudup"
                 ],
                 "stack": "media"
               }
@@ -111956,11 +111956,11 @@ export const generatedFixtures = {
             "status": "blocked",
             "warnings": []
           },
-          "preview_job_id": "demo-retag-preview-switch-home-home-assistant-media-radarr-media-wud-updater",
+          "preview_job_id": "demo-retag-preview-switch-home-home-assistant-media-radarr-media-wudup",
           "progress": [
             {
               "created_at": "2026-05-30T20:12:26+00:00",
-              "job_id": "demo-retag-preview-switch-home-home-assistant-media-radarr-media-wud-updater",
+              "job_id": "demo-retag-preview-switch-home-home-assistant-media-radarr-media-wudup",
               "line_numbers": [],
               "message": "Refreshing demo retag candidates.",
               "phase": "refresh",
@@ -111970,7 +111970,7 @@ export const generatedFixtures = {
             },
             {
               "created_at": "2026-05-30T20:12:28+00:00",
-              "job_id": "demo-retag-preview-switch-home-home-assistant-media-radarr-media-wud-updater",
+              "job_id": "demo-retag-preview-switch-home-home-assistant-media-radarr-media-wudup",
               "line_numbers": [],
               "message": "Demo retag preview is ready.",
               "phase": "preview",
@@ -111985,11 +111985,11 @@ export const generatedFixtures = {
         "queued": {
           "error": "",
           "plan": null,
-          "preview_job_id": "demo-retag-preview-switch-home-home-assistant-media-radarr-media-wud-updater",
+          "preview_job_id": "demo-retag-preview-switch-home-home-assistant-media-radarr-media-wudup",
           "progress": [
             {
               "created_at": "2026-05-30T20:12:26+00:00",
-              "job_id": "demo-retag-preview-switch-home-home-assistant-media-radarr-media-wud-updater",
+              "job_id": "demo-retag-preview-switch-home-home-assistant-media-radarr-media-wudup",
               "line_numbers": [],
               "message": "Refreshing demo retag candidates.",
               "phase": "refresh",
@@ -112018,7 +112018,7 @@ export const generatedFixtures = {
           },
           {
             "choice": "switch-to-concrete",
-            "service_key": "media/wud-updater"
+            "service_key": "media/wudup"
           }
         ]
       },
@@ -112048,7 +112048,7 @@ export const generatedFixtures = {
           }
         ],
         "keep_current_count": 1,
-        "plan_id": "demo-retag-plan-switch-home-home-assistant-media-radarr-media-wud-updater",
+        "plan_id": "demo-retag-plan-switch-home-home-assistant-media-radarr-media-wudup",
         "selected_count": 1,
         "stacks": [
           {
@@ -112056,15 +112056,15 @@ export const generatedFixtures = {
             "digest_pin_updates": [
               {
                 "digest_provenance": {
-                  "final_image": "ghcr.io/magrhino/wud-updater@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                  "final_image": "ghcr.io/magrhino/wudup@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
                   "provenance_confidence": "verified",
                   "provenance_source": "demo",
                   "resolved_tag": "v0.16.1",
-                  "source_image": "ghcr.io/magrhino/wud-updater:latest",
+                  "source_image": "ghcr.io/magrhino/wudup:latest",
                   "target_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
                   "watch_tag": "latest"
                 },
-                "final_image": "ghcr.io/magrhino/wud-updater@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                "final_image": "ghcr.io/magrhino/wudup@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
                 "label_key": "wud.tag.include",
                 "label_rewrites": [
                   {
@@ -112075,16 +112075,16 @@ export const generatedFixtures = {
                     "proposed_label_regex": "^v0\\.16\\.1$",
                     "proposed_label_value": "^v0\\.16\\.1$$",
                     "reason": "exact-regex-normalized",
-                    "service": "wud-updater"
+                    "service": "wudup"
                   }
                 ],
                 "label_value": "^v0\\.16\\.1$$",
-                "marker": "wud-updater.resolved-tag=v0.16.1",
+                "marker": "wudup.resolved-tag=v0.16.1",
                 "planned_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
                 "resolved_tag": "v0.16.1",
-                "service": "wud-updater",
-                "service_key": "media/wud-updater",
-                "source_image": "ghcr.io/magrhino/wud-updater:latest",
+                "service": "wudup",
+                "service_key": "media/wudup",
+                "source_image": "ghcr.io/magrhino/wudup:latest",
                 "stack": "media",
                 "watch_tag": "v0.16.1"
               }
@@ -112092,7 +112092,7 @@ export const generatedFixtures = {
             "directory": "demo/docker/media",
             "project_directory": "demo/docker/media",
             "services": [
-              "wud-updater"
+              "wudup"
             ],
             "stack": "media"
           }
@@ -112190,7 +112190,7 @@ export const generatedFixtures = {
           },
           {
             "choice": "keep-current",
-            "service_key": "media/wud-updater"
+            "service_key": "media/wudup"
           }
         ]
       },
@@ -112218,7 +112218,7 @@ export const generatedFixtures = {
       }
     },
     {
-      "key": "switch-data-postgres-media-wud-updater",
+      "key": "switch-data-postgres-media-wudup",
       "preview": {
         "complete": {
           "error": "",
@@ -112238,7 +112238,7 @@ export const generatedFixtures = {
               }
             ],
             "keep_current_count": 2,
-            "plan_id": "demo-retag-plan-switch-data-postgres-media-wud-updater",
+            "plan_id": "demo-retag-plan-switch-data-postgres-media-wudup",
             "selected_count": 1,
             "stacks": [
               {
@@ -112246,15 +112246,15 @@ export const generatedFixtures = {
                 "digest_pin_updates": [
                   {
                     "digest_provenance": {
-                      "final_image": "ghcr.io/magrhino/wud-updater@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                      "final_image": "ghcr.io/magrhino/wudup@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
                       "provenance_confidence": "verified",
                       "provenance_source": "demo",
                       "resolved_tag": "v0.16.1",
-                      "source_image": "ghcr.io/magrhino/wud-updater:latest",
+                      "source_image": "ghcr.io/magrhino/wudup:latest",
                       "target_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
                       "watch_tag": "latest"
                     },
-                    "final_image": "ghcr.io/magrhino/wud-updater@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                    "final_image": "ghcr.io/magrhino/wudup@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
                     "label_key": "wud.tag.include",
                     "label_rewrites": [
                       {
@@ -112265,16 +112265,16 @@ export const generatedFixtures = {
                         "proposed_label_regex": "^v0\\.16\\.1$",
                         "proposed_label_value": "^v0\\.16\\.1$$",
                         "reason": "exact-regex-normalized",
-                        "service": "wud-updater"
+                        "service": "wudup"
                       }
                     ],
                     "label_value": "^v0\\.16\\.1$$",
-                    "marker": "wud-updater.resolved-tag=v0.16.1",
+                    "marker": "wudup.resolved-tag=v0.16.1",
                     "planned_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
                     "resolved_tag": "v0.16.1",
-                    "service": "wud-updater",
-                    "service_key": "media/wud-updater",
-                    "source_image": "ghcr.io/magrhino/wud-updater:latest",
+                    "service": "wudup",
+                    "service_key": "media/wudup",
+                    "source_image": "ghcr.io/magrhino/wudup:latest",
                     "stack": "media",
                     "watch_tag": "v0.16.1"
                   }
@@ -112282,7 +112282,7 @@ export const generatedFixtures = {
                 "directory": "demo/docker/media",
                 "project_directory": "demo/docker/media",
                 "services": [
-                  "wud-updater"
+                  "wudup"
                 ],
                 "stack": "media"
               }
@@ -112290,11 +112290,11 @@ export const generatedFixtures = {
             "status": "blocked",
             "warnings": []
           },
-          "preview_job_id": "demo-retag-preview-switch-data-postgres-media-wud-updater",
+          "preview_job_id": "demo-retag-preview-switch-data-postgres-media-wudup",
           "progress": [
             {
               "created_at": "2026-05-30T20:12:26+00:00",
-              "job_id": "demo-retag-preview-switch-data-postgres-media-wud-updater",
+              "job_id": "demo-retag-preview-switch-data-postgres-media-wudup",
               "line_numbers": [],
               "message": "Refreshing demo retag candidates.",
               "phase": "refresh",
@@ -112304,7 +112304,7 @@ export const generatedFixtures = {
             },
             {
               "created_at": "2026-05-30T20:12:28+00:00",
-              "job_id": "demo-retag-preview-switch-data-postgres-media-wud-updater",
+              "job_id": "demo-retag-preview-switch-data-postgres-media-wudup",
               "line_numbers": [],
               "message": "Demo retag preview is ready.",
               "phase": "preview",
@@ -112319,11 +112319,11 @@ export const generatedFixtures = {
         "queued": {
           "error": "",
           "plan": null,
-          "preview_job_id": "demo-retag-preview-switch-data-postgres-media-wud-updater",
+          "preview_job_id": "demo-retag-preview-switch-data-postgres-media-wudup",
           "progress": [
             {
               "created_at": "2026-05-30T20:12:26+00:00",
-              "job_id": "demo-retag-preview-switch-data-postgres-media-wud-updater",
+              "job_id": "demo-retag-preview-switch-data-postgres-media-wudup",
               "line_numbers": [],
               "message": "Refreshing demo retag candidates.",
               "phase": "refresh",
@@ -112352,7 +112352,7 @@ export const generatedFixtures = {
           },
           {
             "choice": "switch-to-concrete",
-            "service_key": "media/wud-updater"
+            "service_key": "media/wudup"
           }
         ]
       },
@@ -112372,7 +112372,7 @@ export const generatedFixtures = {
           }
         ],
         "keep_current_count": 2,
-        "plan_id": "demo-retag-plan-switch-data-postgres-media-wud-updater",
+        "plan_id": "demo-retag-plan-switch-data-postgres-media-wudup",
         "selected_count": 1,
         "stacks": [
           {
@@ -112380,15 +112380,15 @@ export const generatedFixtures = {
             "digest_pin_updates": [
               {
                 "digest_provenance": {
-                  "final_image": "ghcr.io/magrhino/wud-updater@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                  "final_image": "ghcr.io/magrhino/wudup@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
                   "provenance_confidence": "verified",
                   "provenance_source": "demo",
                   "resolved_tag": "v0.16.1",
-                  "source_image": "ghcr.io/magrhino/wud-updater:latest",
+                  "source_image": "ghcr.io/magrhino/wudup:latest",
                   "target_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
                   "watch_tag": "latest"
                 },
-                "final_image": "ghcr.io/magrhino/wud-updater@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                "final_image": "ghcr.io/magrhino/wudup@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
                 "label_key": "wud.tag.include",
                 "label_rewrites": [
                   {
@@ -112399,16 +112399,16 @@ export const generatedFixtures = {
                     "proposed_label_regex": "^v0\\.16\\.1$",
                     "proposed_label_value": "^v0\\.16\\.1$$",
                     "reason": "exact-regex-normalized",
-                    "service": "wud-updater"
+                    "service": "wudup"
                   }
                 ],
                 "label_value": "^v0\\.16\\.1$$",
-                "marker": "wud-updater.resolved-tag=v0.16.1",
+                "marker": "wudup.resolved-tag=v0.16.1",
                 "planned_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
                 "resolved_tag": "v0.16.1",
-                "service": "wud-updater",
-                "service_key": "media/wud-updater",
-                "source_image": "ghcr.io/magrhino/wud-updater:latest",
+                "service": "wudup",
+                "service_key": "media/wudup",
+                "source_image": "ghcr.io/magrhino/wudup:latest",
                 "stack": "media",
                 "watch_tag": "v0.16.1"
               }
@@ -112416,7 +112416,7 @@ export const generatedFixtures = {
             "directory": "demo/docker/media",
             "project_directory": "demo/docker/media",
             "services": [
-              "wud-updater"
+              "wudup"
             ],
             "stack": "media"
           }
@@ -112524,7 +112524,7 @@ export const generatedFixtures = {
           },
           {
             "choice": "keep-current",
-            "service_key": "media/wud-updater"
+            "service_key": "media/wudup"
           }
         ]
       },
@@ -112562,7 +112562,7 @@ export const generatedFixtures = {
       }
     },
     {
-      "key": "switch-data-postgres-media-radarr-media-wud-updater",
+      "key": "switch-data-postgres-media-radarr-media-wudup",
       "preview": {
         "complete": {
           "error": "",
@@ -112592,7 +112592,7 @@ export const generatedFixtures = {
               }
             ],
             "keep_current_count": 1,
-            "plan_id": "demo-retag-plan-switch-data-postgres-media-radarr-media-wud-updater",
+            "plan_id": "demo-retag-plan-switch-data-postgres-media-radarr-media-wudup",
             "selected_count": 1,
             "stacks": [
               {
@@ -112600,15 +112600,15 @@ export const generatedFixtures = {
                 "digest_pin_updates": [
                   {
                     "digest_provenance": {
-                      "final_image": "ghcr.io/magrhino/wud-updater@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                      "final_image": "ghcr.io/magrhino/wudup@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
                       "provenance_confidence": "verified",
                       "provenance_source": "demo",
                       "resolved_tag": "v0.16.1",
-                      "source_image": "ghcr.io/magrhino/wud-updater:latest",
+                      "source_image": "ghcr.io/magrhino/wudup:latest",
                       "target_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
                       "watch_tag": "latest"
                     },
-                    "final_image": "ghcr.io/magrhino/wud-updater@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                    "final_image": "ghcr.io/magrhino/wudup@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
                     "label_key": "wud.tag.include",
                     "label_rewrites": [
                       {
@@ -112619,16 +112619,16 @@ export const generatedFixtures = {
                         "proposed_label_regex": "^v0\\.16\\.1$",
                         "proposed_label_value": "^v0\\.16\\.1$$",
                         "reason": "exact-regex-normalized",
-                        "service": "wud-updater"
+                        "service": "wudup"
                       }
                     ],
                     "label_value": "^v0\\.16\\.1$$",
-                    "marker": "wud-updater.resolved-tag=v0.16.1",
+                    "marker": "wudup.resolved-tag=v0.16.1",
                     "planned_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
                     "resolved_tag": "v0.16.1",
-                    "service": "wud-updater",
-                    "service_key": "media/wud-updater",
-                    "source_image": "ghcr.io/magrhino/wud-updater:latest",
+                    "service": "wudup",
+                    "service_key": "media/wudup",
+                    "source_image": "ghcr.io/magrhino/wudup:latest",
                     "stack": "media",
                     "watch_tag": "v0.16.1"
                   }
@@ -112636,7 +112636,7 @@ export const generatedFixtures = {
                 "directory": "demo/docker/media",
                 "project_directory": "demo/docker/media",
                 "services": [
-                  "wud-updater"
+                  "wudup"
                 ],
                 "stack": "media"
               }
@@ -112644,11 +112644,11 @@ export const generatedFixtures = {
             "status": "blocked",
             "warnings": []
           },
-          "preview_job_id": "demo-retag-preview-switch-data-postgres-media-radarr-media-wud-updater",
+          "preview_job_id": "demo-retag-preview-switch-data-postgres-media-radarr-media-wudup",
           "progress": [
             {
               "created_at": "2026-05-30T20:12:26+00:00",
-              "job_id": "demo-retag-preview-switch-data-postgres-media-radarr-media-wud-updater",
+              "job_id": "demo-retag-preview-switch-data-postgres-media-radarr-media-wudup",
               "line_numbers": [],
               "message": "Refreshing demo retag candidates.",
               "phase": "refresh",
@@ -112658,7 +112658,7 @@ export const generatedFixtures = {
             },
             {
               "created_at": "2026-05-30T20:12:28+00:00",
-              "job_id": "demo-retag-preview-switch-data-postgres-media-radarr-media-wud-updater",
+              "job_id": "demo-retag-preview-switch-data-postgres-media-radarr-media-wudup",
               "line_numbers": [],
               "message": "Demo retag preview is ready.",
               "phase": "preview",
@@ -112673,11 +112673,11 @@ export const generatedFixtures = {
         "queued": {
           "error": "",
           "plan": null,
-          "preview_job_id": "demo-retag-preview-switch-data-postgres-media-radarr-media-wud-updater",
+          "preview_job_id": "demo-retag-preview-switch-data-postgres-media-radarr-media-wudup",
           "progress": [
             {
               "created_at": "2026-05-30T20:12:26+00:00",
-              "job_id": "demo-retag-preview-switch-data-postgres-media-radarr-media-wud-updater",
+              "job_id": "demo-retag-preview-switch-data-postgres-media-radarr-media-wudup",
               "line_numbers": [],
               "message": "Refreshing demo retag candidates.",
               "phase": "refresh",
@@ -112706,7 +112706,7 @@ export const generatedFixtures = {
           },
           {
             "choice": "switch-to-concrete",
-            "service_key": "media/wud-updater"
+            "service_key": "media/wudup"
           }
         ]
       },
@@ -112736,7 +112736,7 @@ export const generatedFixtures = {
           }
         ],
         "keep_current_count": 1,
-        "plan_id": "demo-retag-plan-switch-data-postgres-media-radarr-media-wud-updater",
+        "plan_id": "demo-retag-plan-switch-data-postgres-media-radarr-media-wudup",
         "selected_count": 1,
         "stacks": [
           {
@@ -112744,15 +112744,15 @@ export const generatedFixtures = {
             "digest_pin_updates": [
               {
                 "digest_provenance": {
-                  "final_image": "ghcr.io/magrhino/wud-updater@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                  "final_image": "ghcr.io/magrhino/wudup@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
                   "provenance_confidence": "verified",
                   "provenance_source": "demo",
                   "resolved_tag": "v0.16.1",
-                  "source_image": "ghcr.io/magrhino/wud-updater:latest",
+                  "source_image": "ghcr.io/magrhino/wudup:latest",
                   "target_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
                   "watch_tag": "latest"
                 },
-                "final_image": "ghcr.io/magrhino/wud-updater@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                "final_image": "ghcr.io/magrhino/wudup@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
                 "label_key": "wud.tag.include",
                 "label_rewrites": [
                   {
@@ -112763,16 +112763,16 @@ export const generatedFixtures = {
                     "proposed_label_regex": "^v0\\.16\\.1$",
                     "proposed_label_value": "^v0\\.16\\.1$$",
                     "reason": "exact-regex-normalized",
-                    "service": "wud-updater"
+                    "service": "wudup"
                   }
                 ],
                 "label_value": "^v0\\.16\\.1$$",
-                "marker": "wud-updater.resolved-tag=v0.16.1",
+                "marker": "wudup.resolved-tag=v0.16.1",
                 "planned_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
                 "resolved_tag": "v0.16.1",
-                "service": "wud-updater",
-                "service_key": "media/wud-updater",
-                "source_image": "ghcr.io/magrhino/wud-updater:latest",
+                "service": "wudup",
+                "service_key": "media/wudup",
+                "source_image": "ghcr.io/magrhino/wudup:latest",
                 "stack": "media",
                 "watch_tag": "v0.16.1"
               }
@@ -112780,7 +112780,7 @@ export const generatedFixtures = {
             "directory": "demo/docker/media",
             "project_directory": "demo/docker/media",
             "services": [
-              "wud-updater"
+              "wudup"
             ],
             "stack": "media"
           }
@@ -112888,7 +112888,7 @@ export const generatedFixtures = {
           },
           {
             "choice": "keep-current",
-            "service_key": "media/wud-updater"
+            "service_key": "media/wudup"
           }
         ]
       },
@@ -112926,7 +112926,7 @@ export const generatedFixtures = {
       }
     },
     {
-      "key": "switch-data-postgres-home-home-assistant-media-wud-updater",
+      "key": "switch-data-postgres-home-home-assistant-media-wudup",
       "preview": {
         "complete": {
           "error": "",
@@ -112956,7 +112956,7 @@ export const generatedFixtures = {
               }
             ],
             "keep_current_count": 1,
-            "plan_id": "demo-retag-plan-switch-data-postgres-home-home-assistant-media-wud-updater",
+            "plan_id": "demo-retag-plan-switch-data-postgres-home-home-assistant-media-wudup",
             "selected_count": 1,
             "stacks": [
               {
@@ -112964,15 +112964,15 @@ export const generatedFixtures = {
                 "digest_pin_updates": [
                   {
                     "digest_provenance": {
-                      "final_image": "ghcr.io/magrhino/wud-updater@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                      "final_image": "ghcr.io/magrhino/wudup@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
                       "provenance_confidence": "verified",
                       "provenance_source": "demo",
                       "resolved_tag": "v0.16.1",
-                      "source_image": "ghcr.io/magrhino/wud-updater:latest",
+                      "source_image": "ghcr.io/magrhino/wudup:latest",
                       "target_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
                       "watch_tag": "latest"
                     },
-                    "final_image": "ghcr.io/magrhino/wud-updater@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                    "final_image": "ghcr.io/magrhino/wudup@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
                     "label_key": "wud.tag.include",
                     "label_rewrites": [
                       {
@@ -112983,16 +112983,16 @@ export const generatedFixtures = {
                         "proposed_label_regex": "^v0\\.16\\.1$",
                         "proposed_label_value": "^v0\\.16\\.1$$",
                         "reason": "exact-regex-normalized",
-                        "service": "wud-updater"
+                        "service": "wudup"
                       }
                     ],
                     "label_value": "^v0\\.16\\.1$$",
-                    "marker": "wud-updater.resolved-tag=v0.16.1",
+                    "marker": "wudup.resolved-tag=v0.16.1",
                     "planned_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
                     "resolved_tag": "v0.16.1",
-                    "service": "wud-updater",
-                    "service_key": "media/wud-updater",
-                    "source_image": "ghcr.io/magrhino/wud-updater:latest",
+                    "service": "wudup",
+                    "service_key": "media/wudup",
+                    "source_image": "ghcr.io/magrhino/wudup:latest",
                     "stack": "media",
                     "watch_tag": "v0.16.1"
                   }
@@ -113000,7 +113000,7 @@ export const generatedFixtures = {
                 "directory": "demo/docker/media",
                 "project_directory": "demo/docker/media",
                 "services": [
-                  "wud-updater"
+                  "wudup"
                 ],
                 "stack": "media"
               }
@@ -113008,11 +113008,11 @@ export const generatedFixtures = {
             "status": "blocked",
             "warnings": []
           },
-          "preview_job_id": "demo-retag-preview-switch-data-postgres-home-home-assistant-media-wud-updater",
+          "preview_job_id": "demo-retag-preview-switch-data-postgres-home-home-assistant-media-wudup",
           "progress": [
             {
               "created_at": "2026-05-30T20:12:26+00:00",
-              "job_id": "demo-retag-preview-switch-data-postgres-home-home-assistant-media-wud-updater",
+              "job_id": "demo-retag-preview-switch-data-postgres-home-home-assistant-media-wudup",
               "line_numbers": [],
               "message": "Refreshing demo retag candidates.",
               "phase": "refresh",
@@ -113022,7 +113022,7 @@ export const generatedFixtures = {
             },
             {
               "created_at": "2026-05-30T20:12:28+00:00",
-              "job_id": "demo-retag-preview-switch-data-postgres-home-home-assistant-media-wud-updater",
+              "job_id": "demo-retag-preview-switch-data-postgres-home-home-assistant-media-wudup",
               "line_numbers": [],
               "message": "Demo retag preview is ready.",
               "phase": "preview",
@@ -113037,11 +113037,11 @@ export const generatedFixtures = {
         "queued": {
           "error": "",
           "plan": null,
-          "preview_job_id": "demo-retag-preview-switch-data-postgres-home-home-assistant-media-wud-updater",
+          "preview_job_id": "demo-retag-preview-switch-data-postgres-home-home-assistant-media-wudup",
           "progress": [
             {
               "created_at": "2026-05-30T20:12:26+00:00",
-              "job_id": "demo-retag-preview-switch-data-postgres-home-home-assistant-media-wud-updater",
+              "job_id": "demo-retag-preview-switch-data-postgres-home-home-assistant-media-wudup",
               "line_numbers": [],
               "message": "Refreshing demo retag candidates.",
               "phase": "refresh",
@@ -113070,7 +113070,7 @@ export const generatedFixtures = {
           },
           {
             "choice": "switch-to-concrete",
-            "service_key": "media/wud-updater"
+            "service_key": "media/wudup"
           }
         ]
       },
@@ -113100,7 +113100,7 @@ export const generatedFixtures = {
           }
         ],
         "keep_current_count": 1,
-        "plan_id": "demo-retag-plan-switch-data-postgres-home-home-assistant-media-wud-updater",
+        "plan_id": "demo-retag-plan-switch-data-postgres-home-home-assistant-media-wudup",
         "selected_count": 1,
         "stacks": [
           {
@@ -113108,15 +113108,15 @@ export const generatedFixtures = {
             "digest_pin_updates": [
               {
                 "digest_provenance": {
-                  "final_image": "ghcr.io/magrhino/wud-updater@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                  "final_image": "ghcr.io/magrhino/wudup@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
                   "provenance_confidence": "verified",
                   "provenance_source": "demo",
                   "resolved_tag": "v0.16.1",
-                  "source_image": "ghcr.io/magrhino/wud-updater:latest",
+                  "source_image": "ghcr.io/magrhino/wudup:latest",
                   "target_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
                   "watch_tag": "latest"
                 },
-                "final_image": "ghcr.io/magrhino/wud-updater@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                "final_image": "ghcr.io/magrhino/wudup@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
                 "label_key": "wud.tag.include",
                 "label_rewrites": [
                   {
@@ -113127,16 +113127,16 @@ export const generatedFixtures = {
                     "proposed_label_regex": "^v0\\.16\\.1$",
                     "proposed_label_value": "^v0\\.16\\.1$$",
                     "reason": "exact-regex-normalized",
-                    "service": "wud-updater"
+                    "service": "wudup"
                   }
                 ],
                 "label_value": "^v0\\.16\\.1$$",
-                "marker": "wud-updater.resolved-tag=v0.16.1",
+                "marker": "wudup.resolved-tag=v0.16.1",
                 "planned_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
                 "resolved_tag": "v0.16.1",
-                "service": "wud-updater",
-                "service_key": "media/wud-updater",
-                "source_image": "ghcr.io/magrhino/wud-updater:latest",
+                "service": "wudup",
+                "service_key": "media/wudup",
+                "source_image": "ghcr.io/magrhino/wudup:latest",
                 "stack": "media",
                 "watch_tag": "v0.16.1"
               }
@@ -113144,7 +113144,7 @@ export const generatedFixtures = {
             "directory": "demo/docker/media",
             "project_directory": "demo/docker/media",
             "services": [
-              "wud-updater"
+              "wudup"
             ],
             "stack": "media"
           }
@@ -113262,7 +113262,7 @@ export const generatedFixtures = {
           },
           {
             "choice": "keep-current",
-            "service_key": "media/wud-updater"
+            "service_key": "media/wudup"
           }
         ]
       },
@@ -113310,7 +113310,7 @@ export const generatedFixtures = {
       }
     },
     {
-      "key": "switch-data-postgres-home-home-assistant-media-radarr-media-wud-updater",
+      "key": "switch-data-postgres-home-home-assistant-media-radarr-media-wudup",
       "preview": {
         "complete": {
           "error": "",
@@ -113350,7 +113350,7 @@ export const generatedFixtures = {
               }
             ],
             "keep_current_count": 0,
-            "plan_id": "demo-retag-plan-switch-data-postgres-home-home-assistant-media-radarr-media-wud-updater",
+            "plan_id": "demo-retag-plan-switch-data-postgres-home-home-assistant-media-radarr-media-wudup",
             "selected_count": 1,
             "stacks": [
               {
@@ -113358,15 +113358,15 @@ export const generatedFixtures = {
                 "digest_pin_updates": [
                   {
                     "digest_provenance": {
-                      "final_image": "ghcr.io/magrhino/wud-updater@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                      "final_image": "ghcr.io/magrhino/wudup@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
                       "provenance_confidence": "verified",
                       "provenance_source": "demo",
                       "resolved_tag": "v0.16.1",
-                      "source_image": "ghcr.io/magrhino/wud-updater:latest",
+                      "source_image": "ghcr.io/magrhino/wudup:latest",
                       "target_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
                       "watch_tag": "latest"
                     },
-                    "final_image": "ghcr.io/magrhino/wud-updater@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                    "final_image": "ghcr.io/magrhino/wudup@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
                     "label_key": "wud.tag.include",
                     "label_rewrites": [
                       {
@@ -113377,16 +113377,16 @@ export const generatedFixtures = {
                         "proposed_label_regex": "^v0\\.16\\.1$",
                         "proposed_label_value": "^v0\\.16\\.1$$",
                         "reason": "exact-regex-normalized",
-                        "service": "wud-updater"
+                        "service": "wudup"
                       }
                     ],
                     "label_value": "^v0\\.16\\.1$$",
-                    "marker": "wud-updater.resolved-tag=v0.16.1",
+                    "marker": "wudup.resolved-tag=v0.16.1",
                     "planned_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
                     "resolved_tag": "v0.16.1",
-                    "service": "wud-updater",
-                    "service_key": "media/wud-updater",
-                    "source_image": "ghcr.io/magrhino/wud-updater:latest",
+                    "service": "wudup",
+                    "service_key": "media/wudup",
+                    "source_image": "ghcr.io/magrhino/wudup:latest",
                     "stack": "media",
                     "watch_tag": "v0.16.1"
                   }
@@ -113394,7 +113394,7 @@ export const generatedFixtures = {
                 "directory": "demo/docker/media",
                 "project_directory": "demo/docker/media",
                 "services": [
-                  "wud-updater"
+                  "wudup"
                 ],
                 "stack": "media"
               }
@@ -113402,11 +113402,11 @@ export const generatedFixtures = {
             "status": "blocked",
             "warnings": []
           },
-          "preview_job_id": "demo-retag-preview-switch-data-postgres-home-home-assistant-media-radarr-media-wud-updater",
+          "preview_job_id": "demo-retag-preview-switch-data-postgres-home-home-assistant-media-radarr-media-wudup",
           "progress": [
             {
               "created_at": "2026-05-30T20:12:26+00:00",
-              "job_id": "demo-retag-preview-switch-data-postgres-home-home-assistant-media-radarr-media-wud-updater",
+              "job_id": "demo-retag-preview-switch-data-postgres-home-home-assistant-media-radarr-media-wudup",
               "line_numbers": [],
               "message": "Refreshing demo retag candidates.",
               "phase": "refresh",
@@ -113416,7 +113416,7 @@ export const generatedFixtures = {
             },
             {
               "created_at": "2026-05-30T20:12:28+00:00",
-              "job_id": "demo-retag-preview-switch-data-postgres-home-home-assistant-media-radarr-media-wud-updater",
+              "job_id": "demo-retag-preview-switch-data-postgres-home-home-assistant-media-radarr-media-wudup",
               "line_numbers": [],
               "message": "Demo retag preview is ready.",
               "phase": "preview",
@@ -113431,11 +113431,11 @@ export const generatedFixtures = {
         "queued": {
           "error": "",
           "plan": null,
-          "preview_job_id": "demo-retag-preview-switch-data-postgres-home-home-assistant-media-radarr-media-wud-updater",
+          "preview_job_id": "demo-retag-preview-switch-data-postgres-home-home-assistant-media-radarr-media-wudup",
           "progress": [
             {
               "created_at": "2026-05-30T20:12:26+00:00",
-              "job_id": "demo-retag-preview-switch-data-postgres-home-home-assistant-media-radarr-media-wud-updater",
+              "job_id": "demo-retag-preview-switch-data-postgres-home-home-assistant-media-radarr-media-wudup",
               "line_numbers": [],
               "message": "Refreshing demo retag candidates.",
               "phase": "refresh",
@@ -113464,7 +113464,7 @@ export const generatedFixtures = {
           },
           {
             "choice": "switch-to-concrete",
-            "service_key": "media/wud-updater"
+            "service_key": "media/wudup"
           }
         ]
       },
@@ -113504,7 +113504,7 @@ export const generatedFixtures = {
           }
         ],
         "keep_current_count": 0,
-        "plan_id": "demo-retag-plan-switch-data-postgres-home-home-assistant-media-radarr-media-wud-updater",
+        "plan_id": "demo-retag-plan-switch-data-postgres-home-home-assistant-media-radarr-media-wudup",
         "selected_count": 1,
         "stacks": [
           {
@@ -113512,15 +113512,15 @@ export const generatedFixtures = {
             "digest_pin_updates": [
               {
                 "digest_provenance": {
-                  "final_image": "ghcr.io/magrhino/wud-updater@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                  "final_image": "ghcr.io/magrhino/wudup@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
                   "provenance_confidence": "verified",
                   "provenance_source": "demo",
                   "resolved_tag": "v0.16.1",
-                  "source_image": "ghcr.io/magrhino/wud-updater:latest",
+                  "source_image": "ghcr.io/magrhino/wudup:latest",
                   "target_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
                   "watch_tag": "latest"
                 },
-                "final_image": "ghcr.io/magrhino/wud-updater@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                "final_image": "ghcr.io/magrhino/wudup@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
                 "label_key": "wud.tag.include",
                 "label_rewrites": [
                   {
@@ -113531,16 +113531,16 @@ export const generatedFixtures = {
                     "proposed_label_regex": "^v0\\.16\\.1$",
                     "proposed_label_value": "^v0\\.16\\.1$$",
                     "reason": "exact-regex-normalized",
-                    "service": "wud-updater"
+                    "service": "wudup"
                   }
                 ],
                 "label_value": "^v0\\.16\\.1$$",
-                "marker": "wud-updater.resolved-tag=v0.16.1",
+                "marker": "wudup.resolved-tag=v0.16.1",
                 "planned_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
                 "resolved_tag": "v0.16.1",
-                "service": "wud-updater",
-                "service_key": "media/wud-updater",
-                "source_image": "ghcr.io/magrhino/wud-updater:latest",
+                "service": "wudup",
+                "service_key": "media/wudup",
+                "source_image": "ghcr.io/magrhino/wudup:latest",
                 "stack": "media",
                 "watch_tag": "v0.16.1"
               }
@@ -113548,7 +113548,7 @@ export const generatedFixtures = {
             "directory": "demo/docker/media",
             "project_directory": "demo/docker/media",
             "services": [
-              "wud-updater"
+              "wudup"
             ],
             "stack": "media"
           }
@@ -113654,26 +113654,26 @@ export const generatedFixtures = {
         "compose_file": "docker-compose.yml",
         "current_tag": "latest",
         "digest_provenance": {
-          "final_image": "ghcr.io/magrhino/wud-updater@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+          "final_image": "ghcr.io/magrhino/wudup@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
           "provenance_confidence": "verified",
           "provenance_source": "demo",
           "resolved_tag": "v0.16.1",
-          "source_image": "ghcr.io/magrhino/wud-updater:latest",
+          "source_image": "ghcr.io/magrhino/wudup:latest",
           "target_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
           "watch_tag": "latest"
         },
         "directory": "demo/docker/media",
-        "final_image": "ghcr.io/magrhino/wud-updater@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
-        "image": "ghcr.io/magrhino/wud-updater:latest",
-        "image_repo": "magrhino/wud-updater",
+        "final_image": "ghcr.io/magrhino/wudup@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "image": "ghcr.io/magrhino/wudup:latest",
+        "image_repo": "magrhino/wudup",
         "label_key": "wud.tag.include",
         "label_value": "^latest$$",
         "project_directory": "demo/docker/media",
         "proposed_tag": "v0.16.1",
         "retag_available": true,
         "retag_reason": "eligible",
-        "service": "wud-updater",
-        "service_key": "media/wud-updater",
+        "service": "wudup",
+        "service_key": "media/wudup",
         "stack": "media",
         "tracking_tag": "latest",
         "tracking_tag_source": "label"
@@ -114363,7 +114363,7 @@ export const generatedFixtures = {
   },
   "selfUpdate": {
     "can_update": true,
-    "current_image": "ghcr.io/magrhino/wud-updater:latest",
+    "current_image": "ghcr.io/magrhino/wudup:latest",
     "current_tag": "v0.25.0",
     "disabled_reason": "",
     "external_recreate_required": false,
@@ -114379,7 +114379,7 @@ export const generatedFixtures = {
         "published_at": "2026-05-28T12:00:00Z",
         "tag": "v0.26.0",
         "title": "v0.26.0 demo release",
-        "url": "https://github.com/magrhino/WUD-Updater/releases/tag/v0.26.0"
+        "url": "https://github.com/magrhino/wudup/releases/tag/v0.26.0"
       },
       {
         "body": "Demo release note for the capped self-update history list.",
@@ -114389,7 +114389,7 @@ export const generatedFixtures = {
         "published_at": "2026-05-27T12:00:00Z",
         "tag": "v0.25.0",
         "title": "v0.25.0 demo release",
-        "url": "https://github.com/magrhino/WUD-Updater/releases/tag/v0.25.0"
+        "url": "https://github.com/magrhino/wudup/releases/tag/v0.25.0"
       },
       {
         "body": "Demo release note for the capped self-update history list.",
@@ -114399,7 +114399,7 @@ export const generatedFixtures = {
         "published_at": "2026-05-26T12:00:00Z",
         "tag": "v0.24.0",
         "title": "v0.24.0 demo release",
-        "url": "https://github.com/magrhino/WUD-Updater/releases/tag/v0.24.0"
+        "url": "https://github.com/magrhino/wudup/releases/tag/v0.24.0"
       },
       {
         "body": "Demo release note for the capped self-update history list.",
@@ -114409,7 +114409,7 @@ export const generatedFixtures = {
         "published_at": "2026-05-25T12:00:00Z",
         "tag": "v0.23.0",
         "title": "v0.23.0 demo release",
-        "url": "https://github.com/magrhino/WUD-Updater/releases/tag/v0.23.0"
+        "url": "https://github.com/magrhino/wudup/releases/tag/v0.23.0"
       },
       {
         "body": "Demo release note for the capped self-update history list.",
@@ -114419,7 +114419,7 @@ export const generatedFixtures = {
         "published_at": "2026-05-24T12:00:00Z",
         "tag": "v0.22.0",
         "title": "v0.22.0 demo release",
-        "url": "https://github.com/magrhino/WUD-Updater/releases/tag/v0.22.0"
+        "url": "https://github.com/magrhino/wudup/releases/tag/v0.22.0"
       },
       {
         "body": "Demo release note for the capped self-update history list.",
@@ -114429,7 +114429,7 @@ export const generatedFixtures = {
         "published_at": "2026-05-23T12:00:00Z",
         "tag": "v0.21.0",
         "title": "v0.21.0 demo release",
-        "url": "https://github.com/magrhino/WUD-Updater/releases/tag/v0.21.0"
+        "url": "https://github.com/magrhino/wudup/releases/tag/v0.21.0"
       },
       {
         "body": "Demo release note for the capped self-update history list.",
@@ -114439,7 +114439,7 @@ export const generatedFixtures = {
         "published_at": "2026-05-22T12:00:00Z",
         "tag": "v0.20.0",
         "title": "v0.20.0 demo release",
-        "url": "https://github.com/magrhino/WUD-Updater/releases/tag/v0.20.0"
+        "url": "https://github.com/magrhino/wudup/releases/tag/v0.20.0"
       },
       {
         "body": "Demo release note for the capped self-update history list.",
@@ -114449,7 +114449,7 @@ export const generatedFixtures = {
         "published_at": "2026-05-21T12:00:00Z",
         "tag": "v0.19.0",
         "title": "v0.19.0 demo release",
-        "url": "https://github.com/magrhino/WUD-Updater/releases/tag/v0.19.0"
+        "url": "https://github.com/magrhino/wudup/releases/tag/v0.19.0"
       },
       {
         "body": "Demo release note for the capped self-update history list.",
@@ -114459,7 +114459,7 @@ export const generatedFixtures = {
         "published_at": "2026-05-20T12:00:00Z",
         "tag": "v0.18.0",
         "title": "v0.18.0 demo release",
-        "url": "https://github.com/magrhino/WUD-Updater/releases/tag/v0.18.0"
+        "url": "https://github.com/magrhino/wudup/releases/tag/v0.18.0"
       },
       {
         "body": "Demo release note for the capped self-update history list.",
@@ -114469,19 +114469,19 @@ export const generatedFixtures = {
         "published_at": "2026-05-19T12:00:00Z",
         "tag": "v0.17.0",
         "title": "v0.17.0 demo release",
-        "url": "https://github.com/magrhino/WUD-Updater/releases/tag/v0.17.0"
+        "url": "https://github.com/magrhino/wudup/releases/tag/v0.17.0"
       }
     ],
     "release_notes_cap": 10,
     "release_notes_truncated": true,
-    "restart_container": "demo-wud-updater",
+    "restart_container": "demo-wudup",
     "status": "available",
     "strategy": "pull_image",
-    "target_image": "ghcr.io/magrhino/wud-updater:latest",
+    "target_image": "ghcr.io/magrhino/wudup:latest",
     "warnings": []
   },
   "selfUpdatePlan": {
-    "current_image": "ghcr.io/magrhino/wud-updater:v0.25.0",
+    "current_image": "ghcr.io/magrhino/wudup:v0.25.0",
     "current_tag": "v0.25.0",
     "external_recreate_required": true,
     "latest_tag": "v0.26.0",
@@ -114604,9 +114604,9 @@ export const generatedFixtures = {
               "stack": ""
             },
             "digest": "",
-            "image": "ghcr.io/magrhino/wud-updater:v0.25.0",
+            "image": "ghcr.io/magrhino/wudup:v0.25.0",
             "line_no": 1,
-            "raw": "ghcr.io/magrhino/wud-updater:v0.25.0 tag=v0.26.0",
+            "raw": "ghcr.io/magrhino/wudup:v0.25.0 tag=v0.26.0",
             "reason": "unmatched"
           }
         ]
@@ -114648,9 +114648,9 @@ export const generatedFixtures = {
       "skipped": [
         {
           "desired_tag": "v0.26.0",
-          "image": "ghcr.io/magrhino/wud-updater:v0.25.0",
+          "image": "ghcr.io/magrhino/wudup:v0.25.0",
           "line_no": 1,
-          "raw": "ghcr.io/magrhino/wud-updater:v0.25.0 tag=v0.26.0",
+          "raw": "ghcr.io/magrhino/wudup:v0.25.0 tag=v0.26.0",
           "reason": "unmatched"
         }
       ],
@@ -114670,18 +114670,18 @@ export const generatedFixtures = {
           "action": "unmatched",
           "desired_tag": "v0.26.0",
           "digest": "",
-          "image": "ghcr.io/magrhino/wud-updater:v0.25.0",
+          "image": "ghcr.io/magrhino/wudup:v0.25.0",
           "line_no": 1,
           "matched": false,
-          "raw": "ghcr.io/magrhino/wud-updater:v0.25.0 tag=v0.26.0",
-          "resolved_image": "ghcr.io/magrhino/wud-updater:v0.25.0"
+          "raw": "ghcr.io/magrhino/wudup:v0.25.0 tag=v0.26.0",
+          "resolved_image": "ghcr.io/magrhino/wudup:v0.25.0"
         }
       ]
     },
-    "restart_container": "demo-wud-updater",
+    "restart_container": "demo-wudup",
     "strategy": "prepare_tag_update",
-    "target_image": "ghcr.io/magrhino/wud-updater:v0.26.0",
-    "warning": "This updates the Compose image tag and pulls the image. Recreate the WUD-Updater container from outside the WebUI to run it."
+    "target_image": "ghcr.io/magrhino/wudup:v0.26.0",
+    "warning": "This updates the Compose image tag and pulls the image. Recreate the WUDup container from outside the WebUI to run it."
   },
   "servicePolicies": [
     {
@@ -114821,10 +114821,10 @@ export const generatedFixtures = {
       },
       {
         "configured": true,
-        "default_value": "demo/logs/wud-updater.sqlite",
+        "default_value": "demo/logs/wudup.sqlite",
         "name": "WUD_DB_PATH",
         "source": "configured",
-        "value": "demo/logs/wud-updater.sqlite"
+        "value": "demo/logs/wudup.sqlite"
       },
       {
         "configured": false,
@@ -114952,7 +114952,7 @@ export const generatedFixtures = {
         "default_value": "",
         "name": "WUD_WEB_RESTART_CONTAINER",
         "source": "configured",
-        "value": "demo-wud-updater"
+        "value": "demo-wudup"
       },
       {
         "configured": false,
@@ -115052,7 +115052,7 @@ export const generatedFixtures = {
   "status": {
     "auth_required": false,
     "auto_update_scheduler_enabled": true,
-    "db_path": "demo/logs/wud-updater.sqlite",
+    "db_path": "demo/logs/wudup.sqlite",
     "db_ready": true,
     "dev_auth_bypass": true,
     "mutations_enabled": true,
@@ -115180,11 +115180,11 @@ export const generatedFixtures = {
         "compose_file": "docker-compose.yml",
         "current_tag": "latest",
         "directory": "demo/docker/media",
-        "image": "ghcr.io/magrhino/wud-updater:latest",
-        "image_repo": "magrhino/wud-updater",
+        "image": "ghcr.io/magrhino/wudup:latest",
+        "image_repo": "magrhino/wudup",
         "project_directory": "demo/docker/media",
-        "service": "wud-updater",
-        "service_key": "media/wud-updater",
+        "service": "wudup",
+        "service_key": "media/wudup",
         "stack": "media"
       }
     ],

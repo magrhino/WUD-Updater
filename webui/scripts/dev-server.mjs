@@ -28,7 +28,7 @@ const backend = spawn(
   pythonBin,
   [
     "-m",
-    "wud_updater.cli",
+    "wudup.cli",
     "web",
     "--host",
     backendHost,
@@ -41,7 +41,7 @@ const backend = spawn(
     "--log-dir",
     join(localDevRoot, "logs"),
     "--db-path",
-    join(localDevRoot, "logs", "wud-updater.sqlite"),
+    join(localDevRoot, "logs", "wudup.sqlite"),
   ],
   {
     cwd: repoRoot,
@@ -53,7 +53,7 @@ const backend = spawn(
       FAKE_DOCKER_ROOT: fakeDockerRoot,
       WUD_WEB_DEV_NO_AUTH: "true",
       WUD_WEB_MUTATIONS_ENABLED: "true",
-      WUD_WEB_RESTART_CONTAINER: "demo-wud-updater",
+      WUD_WEB_RESTART_CONTAINER: "demo-wudup",
       WUD_WEB_DEMO_SELF_UPDATE: "true",
       WUD_WEB_ALLOWED_ORIGINS: `http://${frontendHost}:${frontendPort},http://localhost:${frontendPort}`,
     },

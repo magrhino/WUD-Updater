@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import unittest
 
-from wud_updater.updater_digest_pin import digest_pin_update_from_values
+from wudup.updater_digest_pin import digest_pin_update_from_values
 
 class DigestPinUpdateFromValuesTests(unittest.TestCase):
     def test_produces_correct_fields(self) -> None:
@@ -19,7 +19,7 @@ class DigestPinUpdateFromValuesTests(unittest.TestCase):
         self.assertEqual(update.planned_digest, "sha256:abcdef")
         self.assertEqual(update.final_image, "repo/app@sha256:abcdef")
         self.assertEqual(update.watch_tag, "2.0")
-        self.assertEqual(update.marker, "wud-updater.resolved-tag=2.0")
+        self.assertEqual(update.marker, "wudup.resolved-tag=2.0")
         self.assertEqual(update.label_key, "wud.tag.include")
         self.assertIn("2", update.label_value)
         self.assertEqual(update.services, ("app", "worker"))

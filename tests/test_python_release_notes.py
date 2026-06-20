@@ -10,14 +10,14 @@ try:
 except ModuleNotFoundError:
     from test_python_db import V4_SCHEMA_SQL
 
-from wud_updater.db import SCHEMA_VERSION, init_db, open_db
-from wud_updater.release_notes import (
+from wudup.db import SCHEMA_VERSION, init_db, open_db
+from wudup.release_notes import (
     GitHubClient,
     detect_breaking,
     release_note_contexts,
     refresh_release_notes,
 )
-from wud_updater.wud_file import parse_wud_text
+from wudup.wud_file import parse_wud_text
 
 PARITY_SPEC = Path(__file__).with_name("fixtures") / "release-note-parity.json"
 

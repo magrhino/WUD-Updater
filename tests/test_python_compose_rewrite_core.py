@@ -4,8 +4,8 @@ import unittest
 from unittest import mock
 
 from compose_rewrite_helpers import ComposeRewriteTestCase
-from wud_updater import compose_rewrite
-from wud_updater.compose_rewrite import (
+from wudup import compose_rewrite
+from wudup.compose_rewrite import (
     _backup_compose,
     _exact_tag_include_matches,
     _is_simple_exact_tag_include,
@@ -15,7 +15,7 @@ from wud_updater.compose_rewrite import (
 
 class ComposeRewriteCompatibilityTests(unittest.TestCase):
     def test_updater_reexports_compose_rewrite_helpers(self) -> None:
-        from wud_updater import updater
+        from wudup import updater
 
         names = (
             "apply_compose_tag_updates",
@@ -83,7 +83,7 @@ class ComposeBackupTests(ComposeRewriteTestCase):
         compose_file = self.write_compose("services: {}\n")
 
         with mock.patch(
-            "wud_updater.compose_rewrite.shutil.copy2",
+            "wudup.compose_rewrite.shutil.copy2",
             side_effect=OSError("copy failed"),
         ):
             with self.assertRaisesRegex(OSError, "copy failed"):
@@ -96,7 +96,7 @@ class ComposeBackupTests(ComposeRewriteTestCase):
             "services:\n  app:\n    image: repo/app:1.0\n"
         )
 
-        with mock.patch("wud_updater.compose_rewrite.shutil.copy2") as mock_copy2:
+        with mock.patch("wudup.compose_rewrite.shutil.copy2") as mock_copy2:
             mock_copy2.side_effect = RuntimeError("copy failed")
 
             with mock.patch("pathlib.Path.unlink") as mock_unlink:

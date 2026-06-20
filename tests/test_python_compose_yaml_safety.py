@@ -5,7 +5,7 @@ import unittest
 from ruamel.yaml import YAML
 
 from compose_rewrite_helpers import ComposeRewriteTestCase
-from wud_updater.compose_rewrite import (
+from wudup.compose_rewrite import (
     _reject_yaml_anchor_or_alias_image_value,
     _reject_yaml_anchor_or_alias_labels,
     _reject_yaml_anchor_or_alias_service_config,
@@ -15,7 +15,7 @@ from wud_updater.compose_rewrite import (
     render_compose_digest_pins,
     render_compose_tag_exclusions,
 )
-from wud_updater.updater_models import ComposeTagRewriteError, TagUpdate
+from wudup.updater_models import ComposeTagRewriteError, TagUpdate
 
 
 class ComposeTagUpdateYamlSafetyTests(ComposeRewriteTestCase):

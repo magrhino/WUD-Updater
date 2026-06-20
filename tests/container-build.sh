@@ -11,10 +11,10 @@ COMPOSE_BUILD="docs/examples/docker-compose.build.yml"
 COMPOSE_TRUENAS="docs/examples/docker-compose.truenas.yml"
 cleanup_image=0
 SYNC_TMP=""
-if [[ -n "${WUD_UPDATER_TEST_IMAGE:-}" ]]; then
-  IMAGE="$WUD_UPDATER_TEST_IMAGE"
+if [[ -n "${WUDUP_TEST_IMAGE:-}" ]]; then
+  IMAGE="$WUDUP_TEST_IMAGE"
 else
-  IMAGE="wud-updater:test-${GITHUB_RUN_ID:-local}-$$"
+  IMAGE="wudup:test-${GITHUB_RUN_ID:-local}-$$"
   cleanup_image=1
 fi
 
@@ -67,7 +67,7 @@ run_quiet docker compose -f "$COMPOSE_HARDENED" config
 run_quiet docker compose -f "$COMPOSE_BUILD" config
 run_quiet docker compose -f "$COMPOSE_TRUENAS" config
 run docker build -t "$IMAGE" .
-run docker run --rm "$IMAGE" test -f /app/src/wud_updater/web_static/index.html
+run docker run --rm "$IMAGE" test -f /app/src/wudup/web_static/index.html
 run docker run --rm "$IMAGE"
 SYNC_TMP="$(mktemp -d "${TMPDIR:-/tmp}/wud-script-sync-test.XXXXXX")"
 run docker run --rm -v "$SYNC_TMP:/managed-wud" "$IMAGE" sync-wud-scripts

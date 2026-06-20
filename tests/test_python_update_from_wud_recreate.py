@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 
-from wud_updater.updater import (
+from wudup.updater import (
     UpdateFromWudRunner,
 )
-from wud_updater.updater_models import (
+from wudup.updater_models import (
     UpdaterError,
     UpdaterOptions,
 )
@@ -142,7 +142,7 @@ class UpdateFromWudRecreateTests(UpdateFromWudRunnerTestCase):
             runner.run()
     def test_run_rejects_tag_overrides_without_allow_tag_updates(self) -> None:
         self.wud_file.write_text("repo/app:latest\n", encoding="utf-8")
-        from wud_updater.updater_models import TagOverride
+        from wudup.updater_models import TagOverride
         options = UpdaterOptions(tag_overrides=(TagOverride(1, "tag"),), allow_tag_updates=False, docker_base=self.base, wud_file=self.wud_file, log_dir=self.log_dir)
         runner = UpdateFromWudRunner(options)
         with self.assertRaisesRegex(UpdaterError, "--tag-override requires --allow-tag-updates"):
@@ -158,7 +158,7 @@ class UpdateFromWudRecreateTests(UpdateFromWudRunnerTestCase):
         self.set_image_state("repo/app:latest", "old", "sha256:old")
         self.set_image_after_pull("repo/app:latest", "new", "sha256:new")
         self.env["WUD_LOCK_HELD_BY_PARENT"] = "1"
-        from wud_updater.locks import lock_dir_for
+        from wudup.locks import lock_dir_for
         lock_dir_for(self.wud_file).mkdir(parents=True)
         result = self.run_python("--yes")
         self.assertEqual(result.returncode, 0, result.stderr + result.stdout)

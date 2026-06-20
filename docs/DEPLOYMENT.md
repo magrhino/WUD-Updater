@@ -1,6 +1,6 @@
 # Deployment
 
-This is the canonical reference for running WUD-Updater through Docker Compose,
+This is the canonical reference for running WUDup through Docker Compose,
 as a WebUI container, as a Docker script runner, or through host-installed
 commands. The WebUI container is the recommended deployment for new installs.
 The WebUI/API is the primary supported workflow; the `updates` CLI is retained
@@ -8,7 +8,7 @@ as an admin convenience, and CLI/WebUI feature parity is not a project goal. New
 review and interactive features should generally go to the WebUI/API first.
 For a short entrypoint, see the [README](../README.md).
 
-WUD-Updater controls the Docker daemon it is pointed at. Review the socket and
+WUDup controls the Docker daemon it is pointed at. Review the socket and
 stack-directory mounts before using any command without `--dry-run`.
 
 ## Docker Image
@@ -16,14 +16,18 @@ stack-directory mounts before using any command without `--dry-run`.
 Build a local helper image from this repository:
 
 ```bash
-docker build -t wud-updater:local .
+docker build -t wudup:local .
 ```
 
 Release images are published to GitHub Container Registry:
 
 ```bash
-docker pull ghcr.io/magrhino/wud-updater:latest
+docker pull ghcr.io/magrhino/wudup:latest
 ```
+
+Deployments that previously used `ghcr.io/magrhino/wud-updater` must update
+their Compose image reference to `ghcr.io/magrhino/wudup`; new releases are
+published only under the `wudup` image name.
 
 Use the exact `vX.Y.Z` release tag for reproducible deployments. Release images
 are also published as `X.Y.Z`, `X.Y`, and `latest`. The same tags support
@@ -33,7 +37,7 @@ host platform automatically.
 The image uses a multi-stage Dockerfile that first compiles the frontend with a
 Node.js `webui-build` stage. The final stage uses `python:3.14.5-slim-bookworm`,
 installs the Docker CLI with the Compose plugin, copies `bin/`, `src/`, and `wud/`
-into `/app`, and packages the built SPA into `/app/src/wud_updater/web_static/`
+into `/app`, and packages the built SPA into `/app/src/wudup/web_static/`
 so the container natively serves the compiled WebUI without requiring static
 directory mounts. It starts through `tini`. Run doctor first to validate Docker
 access, mounted paths, script permissions, and Compose rendering:
@@ -60,7 +64,7 @@ docker run --rm \
   -e DOCKER_BASE=/srv/docker \
   -e WUD_OUT_FILE=/out/images.todo \
   -e WUD_LOG_DIR=/logs \
-  ghcr.io/magrhino/wud-updater:latest
+  ghcr.io/magrhino/wudup:latest
 ```
 
 ## Requirements
@@ -84,26 +88,26 @@ The repository example is at
 It uses the published GHCR image by default. Run it from the repository root:
 
 ```bash
-docker compose -f docs/examples/docker-compose.example.yml run --rm wud-updater doctor
-docker compose -f docs/examples/docker-compose.example.yml run --rm wud-updater
+docker compose -f docs/examples/docker-compose.example.yml run --rm wudup doctor
+docker compose -f docs/examples/docker-compose.example.yml run --rm wudup
 ```
 
 To apply every pending entry through the wrapper:
 
 ```bash
-docker compose -f docs/examples/docker-compose.example.yml run --rm wud-updater updates --yes
+docker compose -f docs/examples/docker-compose.example.yml run --rm wudup updates --yes
 ```
 
 To call the updater directly:
 
 ```bash
-docker compose -f docs/examples/docker-compose.example.yml run --rm wud-updater docker-update-from-wud --yes
+docker compose -f docs/examples/docker-compose.example.yml run --rm wudup docker-update-from-wud --yes
 ```
 
 For tag updates, keep the explicit opt-in:
 
 ```bash
-docker compose -f docs/examples/docker-compose.example.yml run --rm wud-updater docker-update-from-wud --yes --allow-tag-updates
+docker compose -f docs/examples/docker-compose.example.yml run --rm wudup docker-update-from-wud --yes --allow-tag-updates
 ```
 
 To write approved tag updates as digest-pinned Compose references, set
@@ -115,7 +119,7 @@ To correct a bad WUD-proposed tag for one run, use the original WUD file line
 number:
 
 ```bash
-docker compose -f docs/examples/docker-compose.example.yml run --rm wud-updater docker-update-from-wud --yes --allow-tag-updates --tag-override 1=5.2.0
+docker compose -f docs/examples/docker-compose.example.yml run --rm wudup docker-update-from-wud --yes --allow-tag-updates --tag-override 1=5.2.0
 ```
 
 To reject a WUD-proposed tag durably, exclude the original WUD file line. The
@@ -124,7 +128,7 @@ service, stores the managed exact-tag rule in SQLite, and removes the WUD line
 after the label is written:
 
 ```bash
-docker compose -f docs/examples/docker-compose.example.yml run --rm wud-updater docker-update-from-wud --yes --exclude-tag-lines 1
+docker compose -f docs/examples/docker-compose.example.yml run --rm wudup docker-update-from-wud --yes --exclude-tag-lines 1
 ```
 
 Add `--recreate-excluded-services` when you want Compose to recreate affected
@@ -191,7 +195,7 @@ For a socket-proxy WebUI deployment, use
 [`docs/examples/docker-compose.hardened.yml`](examples/docker-compose.hardened.yml).
 That variant mounts `/var/run/docker.sock` only into a LinuxServer.io socket
 proxy sidecar, points WUD and the WebUI container at
-`tcp://socket-proxy-wud-updater:2375`, keeps the proxy on an internal Docker
+`tcp://socket-proxy-wudup:2375`, keeps the proxy on an internal Docker
 network, and keeps browser mutations disabled unless
 `WUD_WEB_MUTATIONS_ENABLED=true` is set.
 
@@ -199,25 +203,25 @@ network, and keeps browser mutations disabled unless
 
 For a long-running WebUI container, use
 [`docs/examples/docker-compose.webui.yml`](examples/docker-compose.webui.yml).
-That variant runs `wud-updater web`, serves the packaged SPA on
-`127.0.0.1:7417`, persists SQLite state in `/logs/wud-updater.sqlite`, and keeps
+That variant runs `wudup web`, serves the packaged SPA on
+`127.0.0.1:7417`, persists SQLite state in `/logs/wudup.sqlite`, and keeps
 browser mutations disabled unless `WUD_WEB_MUTATIONS_ENABLED=true` is set. Copy
 the WebUI env example, review the stack path and browser exposure settings, then
 start it and read the one-time setup link from the service logs:
 
 ```bash
-WEBUI_ENV="$HOME/.config/wud-updater/webui.env"
-mkdir -p "$HOME/.config/wud-updater"
+WEBUI_ENV="$HOME/.config/wudup/webui.env"
+mkdir -p "$HOME/.config/wudup"
 test -f "$WEBUI_ENV" || cp docs/examples/webui.env.example "$WEBUI_ENV"
 docker compose --env-file "$WEBUI_ENV" -f docs/examples/docker-compose.webui.yml up -d
-docker compose --env-file "$WEBUI_ENV" -f docs/examples/docker-compose.webui.yml logs wud-updater
+docker compose --env-file "$WEBUI_ENV" -f docs/examples/docker-compose.webui.yml logs wudup
 ```
 
 The env file keeps first-run defaults in one place. `HOST_DOCKER_BASE` must
 match the daemon-visible root that contains your Compose stack directories,
 `WEBUI_HTTP_BIND` controls the host-side published address and defaults to
 loopback, and `WEBUI_LOG_DIR` persists logs plus SQLite state. The Compose
-examples place WUD and WUD-Updater on a private app network and set
+examples place WUD and WUDup on a private app network and set
 `WUD_API_BASE_URL=http://wud:3000` so the WebUI can show best-effort WUD
 metadata without publishing WUD's port to the host. For LAN or reverse-proxy
 exposure, set `WUD_WEB_PUBLIC_ORIGIN`; use
@@ -253,7 +257,7 @@ That variant builds the helper image with the official TrueNAS API client so a
 short-lived sibling container can run local `midclt` calls. Set
 `TRUENAS_API_CLIENT_REF` to an API client tag that is compatible with your
 TrueNAS release. The example uses the Python/container `updates` wrapper by
-default and sets `WUD_UPDATER_USE_SUDO=false` and `TRUENAS_STATUS_CHECK=true`;
+default and sets `WUDUP_USE_SUDO=false` and `TRUENAS_STATUS_CHECK=true`;
 the TrueNAS helper is only wired into that wrapper.
 
 When enabled, the Python `updates` wrapper uses Docker to inspect its own
@@ -282,8 +286,8 @@ services:
     # Configure your WUD trigger to call:
     #   /wud/on-update.sh
 
-  wud-updater:
-    image: ghcr.io/magrhino/wud-updater:latest
+  wudup:
+    image: ghcr.io/magrhino/wudup:latest
     environment:
       DOCKER_BASE: ${HOST_DOCKER_BASE:-/srv/docker}
       WUD_OUT_FILE: /out/images.todo
@@ -315,15 +319,15 @@ The sync refuses unsafe destinations:
 - the WUD output directory
 - any non-empty directory that is not already marked as managed
 
-Managed directories are marked with `.wud-updater-managed`. Sync removes the
+Managed directories are marked with `.wudup-managed`. Sync removes the
 previous managed contents, copies the packaged scripts, marks `*.sh` executable,
 and writes the marker again.
 
-Start or recreate `wud-updater` once before relying on `/wud/on-update.sh` in a
+Start or recreate `wudup` once before relying on `/wud/on-update.sh` in a
 fresh empty script volume. You can also run the sync directly:
 
 ```bash
-docker compose -f docs/examples/docker-compose.example.yml run --rm wud-updater sync-wud-scripts
+docker compose -f docs/examples/docker-compose.example.yml run --rm wudup sync-wud-scripts
 ```
 
 Use the same `sync-wud-scripts` command with
@@ -336,7 +340,7 @@ Use `doctor` after changing container mounts, Docker socket access, or helper
 environment variables:
 
 ```bash
-docker compose -f docs/examples/docker-compose.example.yml run --rm wud-updater doctor
+docker compose -f docs/examples/docker-compose.example.yml run --rm wudup doctor
 ```
 
 The authenticated WebUI Doctor page runs the same checks from the browser and
@@ -413,11 +417,11 @@ values; image values provided through interpolation or inherited YAML snippets
 are left pending for manual review.
 With `WUD_DIGEST_PIN_UPDATES=true`, approved tag updates temporarily pull the
 resolved tag, then write the final digest-pinned image plus
-`# wud-updater.resolved-tag=<tag>` and an exact `wud.tag.include` label.
+`# wudup.resolved-tag=<tag>` and an exact `wud.tag.include` label.
 
 ## Init Wizard
 
-`wud-updater init` generates local first-run configuration without creating a
+`wudup init` generates local first-run configuration without creating a
 separate runtime config model. It writes env files and optional Compose
 overrides that use the same variables documented below, refuses to overwrite
 existing files unless `--backup-existing` is set, and keeps
@@ -426,39 +430,39 @@ existing files unless `--backup-existing` is set, and keeps
 Host command setup:
 
 ```bash
-wud-updater init --profile host --stack-root "$HOME/docker" --non-interactive
+wudup init --profile host --stack-root "$HOME/docker" --non-interactive
 updates --dry-run
 ```
 
 WebUI container setup:
 
 ```bash
-wud-updater init --profile webui --stack-root /srv/docker --non-interactive
-docker compose --env-file "$HOME/.config/wud-updater/webui.env" \
+wudup init --profile webui --stack-root /srv/docker --non-interactive
+docker compose --env-file "$HOME/.config/wudup/webui.env" \
   -f docs/examples/docker-compose.webui.yml up -d
 ```
 
 Helper-only container setup also generates a Compose override by default:
 
 ```bash
-wud-updater init --profile helper --stack-root /srv/docker --non-interactive
-docker compose --env-file "$HOME/.config/wud-updater/helper.env" \
+wudup init --profile helper --stack-root /srv/docker --non-interactive
+docker compose --env-file "$HOME/.config/wudup/helper.env" \
   -f docs/examples/docker-compose.example.yml \
-  -f "$HOME/.config/wud-updater/docker-compose.helper.override.yml" \
-  run --rm wud-updater doctor
+  -f "$HOME/.config/wudup/docker-compose.helper.override.yml" \
+  run --rm wudup doctor
 ```
 
 Hardened WebUI setup can be checked with `doctor` before starting the WebUI:
 
 ```bash
-wud-updater init --profile hardened --stack-root /srv/docker --non-interactive
-docker compose --env-file "$HOME/.config/wud-updater/hardened.env" \
+wudup init --profile hardened --stack-root /srv/docker --non-interactive
+docker compose --env-file "$HOME/.config/wudup/hardened.env" \
   -f docs/examples/docker-compose.hardened.yml \
-  -f "$HOME/.config/wud-updater/docker-compose.hardened.override.yml" \
-  run --rm wud-updater doctor
-docker compose --env-file "$HOME/.config/wud-updater/hardened.env" \
+  -f "$HOME/.config/wudup/docker-compose.hardened.override.yml" \
+  run --rm wudup doctor
+docker compose --env-file "$HOME/.config/wudup/hardened.env" \
   -f docs/examples/docker-compose.hardened.yml \
-  -f "$HOME/.config/wud-updater/docker-compose.hardened.override.yml" \
+  -f "$HOME/.config/wudup/docker-compose.hardened.override.yml" \
   up -d
 ```
 
@@ -466,7 +470,7 @@ For LAN or reverse-proxy WebUI exposure, pass the browser-visible origin
 explicitly:
 
 ```bash
-wud-updater init --profile webui --stack-root /srv/docker --non-interactive \
+wudup init --profile webui --stack-root /srv/docker --non-interactive \
   --web-exposure reverse-proxy \
   --public-origin https://wud.example.test \
   --trusted-proxies 127.0.0.1/32
@@ -479,11 +483,11 @@ Compose may create transient containers or volumes.
 ## Environment Variables
 
 `updates` reads optional host overrides from the environment or from
-`$HOME/.config/wud-updater/env`. Start from the tracked template:
+`$HOME/.config/wudup/env`. Start from the tracked template:
 
 ```bash
-mkdir -p "$HOME/.config/wud-updater"
-cp docs/examples/template.env "$HOME/.config/wud-updater/env"
+mkdir -p "$HOME/.config/wudup"
+cp docs/examples/template.env "$HOME/.config/wudup/env"
 ```
 
 Common host values:
@@ -514,22 +518,22 @@ Boolean examples use `true` and `false`; legacy aliases `1`, `0`, `yes`, `no`,
 | `DOCKER_HOST` | Docker CLI default | Optional Docker daemon endpoint, such as the hardened example's socket proxy. |
 | `WUD_OUT_FILE` | Host: `$DOCKER_BASE/wud/out/images.todo`; container: `/out/images.todo` | Shared pending-update file. |
 | `WUD_LOG_DIR` | Host: `./logs`; container: `/logs` | Updater log directory. Set to `$DOCKER_BASE/logs` to keep the previous layout. |
-| `WUD_DB_PATH` | `$WUD_LOG_DIR/wud-updater.sqlite` | SQLite database path for setup state, sessions, run history, audit records, and managed tag exclusions. Preserve this file for WebUI login continuity and history. |
+| `WUD_DB_PATH` | `$WUD_LOG_DIR/wudup.sqlite` | SQLite database path for setup state, sessions, run history, audit records, and managed tag exclusions. Preserve this file for WebUI login continuity and history. |
 | `WUD_UPDATE_MODE` | `stop` | Update mode for matched Compose services or stacks: `pause`, `stop`, or `live`. |
 | `WUD_MAX_WAIT` | `180` | Seconds to wait for health after recreation. |
 | `WUD_LOCK_TIMEOUT` | `30` | Seconds to wait for the shared todo-file lock. |
 | `WUD_TIMEZONE` | `UTC` | IANA timezone name, such as `America/Chicago`, used for WebUI auto-update policy schedules. |
 | `WUD_COMPOSE_IGNORE_PATHS` | `old` | Comma-separated relative directory names or paths excluded from Compose discovery. Set an empty value to disable archive ignores; when unset in the WebUI, the managed Settings value can control this. |
-| `WUD_DIGEST_PIN_UPDATES` | `false` | Opt-in digest-pin mode for approved tag updates. When `true`, supported tag updates resolve the planned tag/index digest and write Compose as `repo/app@sha256:<digest>` with `wud-updater.resolved-tag` and `wud.tag.include` metadata. Environment configuration overrides the managed WebUI setting. |
+| `WUD_DIGEST_PIN_UPDATES` | `false` | Opt-in digest-pin mode for approved tag updates. When `true`, supported tag updates resolve the planned tag/index digest and write Compose as `repo/app@sha256:<digest>` with `wudup.resolved-tag` and `wud.tag.include` metadata. Environment configuration overrides the managed WebUI setting. |
 | `OUT_UID` / `OUT_GID` | unset | Optional owner for rewritten todo files and updater logs. `OUT_GUID` is accepted as an alias for `OUT_GID`. |
-| `WUD_UPDATER` | Host: repo-local `bin/docker-update-from-wud`; image: `/app/bin/docker-update-from-wud` | Updater command invoked by `updates`. |
-| `WUD_UPDATER_CONFIG` | `$HOME/.config/wud-updater/env` | Host config file read by `updates`. |
-| `WUD_UPDATER_USE_SUDO` | `true` | For the Python `updates` wrapper, set to `false` to disable sudo file fallbacks and run `WUD_UPDATER` directly. |
-| `WUD_UPDATER_BANNER` | `auto` | Startup banner mode: `auto` prints on TTY startup, `true` forces it, and `false` disables it. |
-| `WUD_UPDATER_RELEASE_CHECK` | `auto` | Latest-release check mode: `auto` or `true` lets startup banner, WebUI self-update banner, and self-update release checks try GitHub briefly, and `false` disables the network check. |
-| `WUD_UPDATER_SELF_UPDATE` | enabled | Set to `false`, `0`, `no`, or `off` to disable the default `updates` self-update preflight. |
+| `WUDUP_UPDATER` | Host: repo-local `bin/docker-update-from-wud`; image: `/app/bin/docker-update-from-wud` | Updater command invoked by `updates`. |
+| `WUDUP_CONFIG` | `$HOME/.config/wudup/env` | Host config file read by `updates`. |
+| `WUDUP_USE_SUDO` | `true` | For the Python `updates` wrapper, set to `false` to disable sudo file fallbacks and run `WUDUP_UPDATER` directly. |
+| `WUDUP_BANNER` | `auto` | Startup banner mode: `auto` prints on TTY startup, `true` forces it, and `false` disables it. |
+| `WUDUP_RELEASE_CHECK` | `auto` | Latest-release check mode: `auto` or `true` lets startup banner, WebUI self-update banner, and self-update release checks try GitHub briefly, and `false` disables the network check. |
+| `WUDUP_SELF_UPDATE` | enabled | Set to `false`, `0`, `no`, or `off` to disable the default `updates` self-update preflight. |
 | `PYTHON_BIN` | `python3`, with repo `.venv` fallback when unset | Python interpreter used by Python entrypoint wrappers. Set this to bypass automatic `.venv` fallback. |
-| `WUD_UPDATER_VENV` | Repo-local `.venv` | Optional installer and wrapper venv path for host runtime dependencies. |
+| `WUDUP_VENV` | Repo-local `.venv` | Optional installer and wrapper venv path for host runtime dependencies. |
 | `WUD_WEB_TOKEN` | unset | Optional bearer token for API clients after first-run setup. This token is not accepted by the browser login form and does not bypass setup. |
 | `WUD_WEB_DEV_NO_AUTH` | `false` | Explicitly disables WebUI API auth for tests or local development only. |
 | `WUD_WEB_ALLOWED_ORIGINS` | same origin only | Comma-separated extra origins accepted by the CSRF/Origin checks for login, logout, and future mutating WebUI routes. |
@@ -540,10 +544,15 @@ Boolean examples use `true` and `false`; legacy aliases `1`, `0`, `yes`, `no`,
 | `WUD_WEB_MUTATIONS_ENABLED` | `false` | Enables browser plan/apply update mutations and Settings container restart when set to `true`. Leave unset or `false` for read-only WebUI deployments. |
 | `WUD_WEB_RESTART_CONTAINER` | Docker `HOSTNAME` inside a container, otherwise unset | Optional Docker container name or ID restarted from Settings. Set this explicitly only when the auto-detected current container target is unavailable or wrong. |
 | `WUD_API_BASE_URL` | `http://wud:3000` | Internal WUD API base URL used for best-effort WebUI metadata discovery. Auth-required or unavailable WUD is reported as degraded and does not change pending/apply behavior, which still uses `WUD_OUT_FILE`. |
-| `WUD_WEB_HOST` | `127.0.0.1` | Host passed to Uvicorn when running `wud-updater web`. |
-| `WUD_WEB_PORT` | `7417` | Port passed to Uvicorn when running `wud-updater web`. |
+| `WUD_WEB_HOST` | `127.0.0.1` | Host passed to Uvicorn when running `wudup web`. |
+| `WUD_WEB_PORT` | `7417` | Port passed to Uvicorn when running `wudup web`. |
 | `WUD_WEB_STATIC_DIR` | packaged SPA, auto-detected if present | Optional built SPA directory override. Backend tests and API startup do not require a frontend build. |
 | `WUD_WEB_UPSTREAM_MAP` | auto-detected | Optional LinuxServer.io image to upstream GitHub repository map used by WebUI release-note link metadata. |
+
+Legacy `WUD_UPDATER`, `WUD_UPDATER_CONFIG`, `WUD_UPDATER_USE_SUDO`,
+`WUD_UPDATER_BANNER`, `WUD_UPDATER_RELEASE_CHECK`, `WUD_UPDATER_SELF_UPDATE`,
+and `WUD_UPDATER_VENV` variables remain accepted as fallbacks. Prefer the
+`WUDUP_*` names for new configuration.
 
 On first WebUI start, if no admin user exists in `WUD_DB_PATH`, the server logs
 a one-time setup link. Open that link, create the first admin username and a
@@ -621,32 +630,32 @@ authorization is still controlled by TrueNAS middleware, not by the mount flag.
 otherwise mutate host state. Mutating Docker operations require interactive
 confirmation or `--yes`.
 
-By default, `updates` checks for a WUD-Updater update before applying other
+By default, `updates` checks for a WUDup update before applying other
 pending Docker updates. It first honors a matching WUD todo entry, and if none
 exists it can use the GitHub latest-release check. Floating tags such as
 `latest` are pulled directly and then ask you to restart the container; pinned
 release tags use the normal updater path so the Compose image tag can be
 rewritten before restart. Use `updates --no-self-update` or
-`WUD_UPDATER_SELF_UPDATE=0` to skip this preflight. `WUD_UPDATER_RELEASE_CHECK=0`
+`WUDUP_SELF_UPDATE=0` to skip this preflight. `WUDUP_RELEASE_CHECK=0`
 disables only the GitHub release-check source; WUD todo-file detection still
 runs unless self-update is disabled.
 
 ## Maintenance And Upgrades
 
-For container-first deployments, pull the new image and recreate `wud-updater`
+For container-first deployments, pull the new image and recreate `wudup`
 so startup sync refreshes the managed WUD script volume:
 
 ```bash
-docker compose pull wud-updater
-docker compose up -d --force-recreate wud-updater
+docker compose pull wudup
+docker compose up -d --force-recreate wudup
 ```
 
 For local image development, rebuild with the development compose artifact and
 recreate the helper:
 
 ```bash
-docker compose -f docs/examples/docker-compose.build.yml build wud-updater
-docker compose -f docs/examples/docker-compose.build.yml up -d --force-recreate wud-updater
+docker compose -f docs/examples/docker-compose.build.yml build wudup
+docker compose -f docs/examples/docker-compose.build.yml up -d --force-recreate wudup
 ```
 
 For host installs, update the checkout, rerun the installer, and restart the WUD

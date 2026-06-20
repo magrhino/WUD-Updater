@@ -7,7 +7,8 @@ wud_out_file="${WUD_OUT_FILE:-/out/images.todo}"
 wud_log_dir="${WUD_LOG_DIR:-/logs}"
 wud_scripts_default_dir="/managed-wud"
 wud_scripts_dir="${WUD_SCRIPTS_DIR-$wud_scripts_default_dir}"
-wud_scripts_marker=".wud-updater-managed"
+wud_scripts_marker=".wudup-managed"
+legacy_wud_scripts_marker=".wud-updater-managed"
 
 env_bool_enabled(){
   local value="${1:-}"
@@ -176,7 +177,7 @@ refuse_unsafe_wud_scripts_dir(){
 sync_wud_scripts(){
   local src="$app_dir/wud"
   local dst="$wud_scripts_dir"
-  local dst_canon app_canon docker_base_canon out_dir_canon out_dir marker
+  local dst_canon app_canon docker_base_canon out_dir_canon out_dir marker legacy_marker
 
   if [[ -z "$dst" ]]; then
     refuse_unsafe_wud_scripts_dir
@@ -215,7 +216,8 @@ sync_wud_scripts(){
 
   mkdir -p "$dst_canon"
   marker="$dst_canon/$wud_scripts_marker"
-  if [[ ! -e "$marker" ]] &&
+  legacy_marker="$dst_canon/$legacy_wud_scripts_marker"
+  if [[ ! -e "$marker" && ! -e "$legacy_marker" ]] &&
     [[ -n "$(find "$dst_canon" -mindepth 1 -maxdepth 1 -print -quit)" ]]; then
     printf 'Refusing to sync into non-empty unmanaged WUD_SCRIPTS_DIR: %s\n' "$wud_scripts_dir" >&2
     printf 'Use an empty managed directory or remove/relocate existing contents first.\n' >&2
@@ -258,7 +260,7 @@ case "$1" in
     else
       export PYTHONPATH="$app_dir/src"
     fi
-    exec "${PYTHON_BIN:-python3}" -m wud_updater.cli truenas-status-export "$@"
+    exec "${PYTHON_BIN:-python3}" -m wudup.cli truenas-status-export "$@"
     ;;
   doctor)
     shift
@@ -273,7 +275,7 @@ case "$1" in
       export PYTHONPATH="$app_dir/src"
     fi
     export WUD_APP_DIR="$app_dir"
-    exec "${PYTHON_BIN:-python3}" -m wud_updater.cli doctor "${doctor_args[@]}" "$@"
+    exec "${PYTHON_BIN:-python3}" -m wudup.cli doctor "${doctor_args[@]}" "$@"
     ;;
   docker-update-from-wud)
     shift
@@ -294,7 +296,7 @@ case "$1" in
     else
       export PYTHONPATH="$app_dir/src"
     fi
-    exec "${PYTHON_BIN:-python3}" -m wud_updater.cli web "${web_args[@]}" "$@"
+    exec "${PYTHON_BIN:-python3}" -m wudup.cli web "${web_args[@]}" "$@"
     ;;
   *)
     exec "$@"

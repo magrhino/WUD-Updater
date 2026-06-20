@@ -584,7 +584,7 @@ describe("pending helper modules", () => {
       current_digest: "sha256:old",
       target_digest: "sha256:new",
       watch_tag: "latest",
-      marker: "wud-updater.resolved-tag=latest",
+      marker: "wudup.resolved-tag=latest",
       label_key: "wud.tag.include",
       label_value: "^latest$$",
       services: ["app"],

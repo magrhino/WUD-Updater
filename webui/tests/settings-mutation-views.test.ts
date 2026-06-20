@@ -400,7 +400,7 @@ describe("settings mutation views", () => {
     expect(text).not.toContain("Delete settings");
     expect(
       wrapper.find(
-        'a[href="https://github.com/magrhino/WUD-Updater/blob/main/docs/DEPLOYMENT.md#environment-variables"]',
+        'a[href="https://github.com/magrhino/wudup/blob/main/docs/DEPLOYMENT.md#environment-variables"]',
       ).exists(),
     ).toBe(true);
   });
@@ -559,7 +559,7 @@ describe("settings mutation views", () => {
     const restartContainer = vi.spyOn(connection, "restartContainer").mockResolvedValue({
       status: "scheduled",
       audit_run_id: 42,
-      container: "wud-updater",
+      container: "wudup",
     });
 
     const wrapper = mountWithApp(SettingsView, { pinia });
@@ -573,7 +573,7 @@ describe("settings mutation views", () => {
 
     const dialog = wrapper.find('[role="dialog"]');
     expect(dialog.text()).toContain("Restart WebUI container");
-    expect(dialog.text()).toContain("wud-updater");
+    expect(dialog.text()).toContain("wudup");
     expect(restartContainer).not.toHaveBeenCalled();
 
     const confirmButton = dialog
@@ -583,7 +583,7 @@ describe("settings mutation views", () => {
     await flushPromises();
 
     expect(restartContainer).toHaveBeenCalledTimes(1);
-    expect(wrapper.text()).toContain("Restart requested for wud-updater");
+    expect(wrapper.text()).toContain("Restart requested for wudup");
   });
 
   it("blocks container restart controls while restart is pending", async () => {
@@ -600,7 +600,7 @@ describe("settings mutation views", () => {
     const restartContainer = vi.spyOn(connection, "restartContainer").mockResolvedValue({
       status: "scheduled",
       audit_run_id: 42,
-      container: "wud-updater",
+      container: "wudup",
     });
 
     const wrapper = mountWithApp(SettingsView, { pinia });
@@ -643,7 +643,7 @@ describe("settings mutation views", () => {
     const restartContainer = vi.spyOn(connection, "restartContainer").mockResolvedValue({
       status: "scheduled",
       audit_run_id: 42,
-      container: "wud-updater",
+      container: "wudup",
     });
 
     const wrapper = mountWithApp(SettingsView, { pinia });

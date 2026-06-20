@@ -6,10 +6,10 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from types import SimpleNamespace
 
-from wud_updater import web as web_module
-from wud_updater import web_scheduler
-from wud_updater.db import init_db, open_db, upsert_known_image
-from wud_updater.digest_provenance import DigestTagProvenance
+from wudup import web as web_module
+from wudup import web_scheduler
+from wudup.db import init_db, open_db, upsert_known_image
+from wudup.digest_provenance import DigestTagProvenance
 
 from tests.web_test_helpers import (
     _client,

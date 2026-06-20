@@ -6,7 +6,7 @@ product
 
 ## Users
 
-WUD-Updater is used by self-hosted operators who maintain Docker Compose stacks, review update signals from What's Up Docker, and decide when to snooze, preview, or apply container updates. They are usually working in an admin context where speed matters, but where a mistaken update can affect running services.
+WUDup is used by self-hosted operators who maintain Docker Compose stacks, review update signals from What's Up Docker, and decide when to snooze, preview, or apply container updates. They are usually working in an admin context where speed matters, but where a mistaken update can affect running services.
 
 ## Product Purpose
 

@@ -41,7 +41,7 @@ defineEmits<{
   <n-modal
     :show="show"
     preset="dialog"
-    title="Update WUD-Updater"
+    title="Update WUDup"
     :positive-text="actionLabel"
     negative-text="Cancel"
     :positive-button-props="{
@@ -58,10 +58,10 @@ defineEmits<{
         type="warning"
       >
         This updates the Compose image tag and pulls the image. Recreate
-        the WUD-Updater container from outside the WebUI to run it.
+        the WUDup container from outside the WebUI to run it.
       </n-alert>
       <n-alert v-else type="warning">
-        This pulls the WUD-Updater image only. Recreate the container
+        This pulls the WUDup image only. Recreate the container
         outside the WebUI to run the new version.
       </n-alert>
 

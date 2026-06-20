@@ -106,7 +106,7 @@ describe("connection store", () => {
     const fetchMock = mockFetch({
       status: "scheduled",
       audit_run_id: 42,
-      container: "wud-updater",
+      container: "wudup",
     });
     const auth = useAuthStore();
     const ensureCsrf = vi.spyOn(auth, "ensureCsrf").mockResolvedValue("csrf-restart");
@@ -118,7 +118,7 @@ describe("connection store", () => {
     const response = await connection.restartContainer();
 
     expect(ensureCsrf).toHaveBeenCalledTimes(1);
-    expect(response.container).toBe("wud-updater");
+    expect(response.container).toBe("wudup");
     expect(fetchMock.mock.calls[0][0]).toBe("/api/v1/container/restart");
     expect(JSON.parse(String((fetchMock.mock.calls[0][1] as RequestInit).body))).toEqual({
       confirmation: "restart_container",
@@ -151,7 +151,7 @@ describe("connection store", () => {
 
   it("loads diagnostics support bundle without csrf", async () => {
     const bundlePayload = {
-      wud_updater_version: "0.24.2",
+      wudup_version: "0.24.2",
       settings: settingsResponse(),
       doctor_result: doctorResponse(),
       pending_summary: pendingResponse(),
@@ -167,7 +167,7 @@ describe("connection store", () => {
 
     expect(fetchMock.mock.calls[0][0]).toBe("/api/v1/diagnostics/support-bundle");
     expect((fetchMock.mock.calls[0][1] as RequestInit).method).toBeUndefined();
-    expect(response.wud_updater_version).toBe("0.24.2");
+    expect(response.wudup_version).toBe("0.24.2");
     expect(connection.loading).toBe(false);
     expect(connection.error).toBe("");
   });

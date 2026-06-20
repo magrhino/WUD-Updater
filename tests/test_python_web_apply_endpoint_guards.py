@@ -1,9 +1,9 @@
 from __future__ import annotations
 import json
 from pathlib import Path
-from wud_updater import web_plans as plans_module
-from wud_updater.config import ConfigError
-from wud_updater.locks import DirectoryLock, lock_dir_for
+from wudup import web_plans as plans_module
+from wudup.config import ConfigError
+from wudup.locks import DirectoryLock, lock_dir_for
 from tests.web_test_helpers import (
     _client,
     _csrf_headers,

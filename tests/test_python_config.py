@@ -7,7 +7,7 @@ from unittest.mock import patch
 from zoneinfo import ZoneInfo, reset_tzpath
 import zoneinfo
 
-from wud_updater.config import ConfigError, load_config, parse_bool_env
+from wudup.config import ConfigError, load_config, parse_bool_env
 
 
 class LoadConfigTests(unittest.TestCase):
@@ -20,7 +20,7 @@ class LoadConfigTests(unittest.TestCase):
             Path("/home/wud/docker/wud/out/images.todo"),
         )
         self.assertEqual(config.log_dir, Path("logs"))
-        self.assertEqual(config.db_path, Path("logs/wud-updater.sqlite"))
+        self.assertEqual(config.db_path, Path("logs/wudup.sqlite"))
         self.assertEqual(config.update_mode, "stop")
         self.assertEqual(config.max_wait, 180)
         self.assertEqual(config.lock_timeout, 30)
@@ -89,7 +89,7 @@ class LoadConfigTests(unittest.TestCase):
             Path("/home/wud/docker/wud/out/images.todo"),
         )
         self.assertEqual(config.log_dir, Path("logs"))
-        self.assertEqual(config.db_path, Path("logs/wud-updater.sqlite"))
+        self.assertEqual(config.db_path, Path("logs/wudup.sqlite"))
         self.assertEqual(config.update_mode, "stop")
         self.assertEqual(config.max_wait, 180)
         self.assertEqual(config.lock_timeout, 30)
@@ -100,7 +100,7 @@ class LoadConfigTests(unittest.TestCase):
     def test_db_path_defaults_under_configured_log_dir(self) -> None:
         config = load_config({"WUD_LOG_DIR": "/srv/logs"}, home="/home/wud")
 
-        self.assertEqual(config.db_path, Path("/srv/logs/wud-updater.sqlite"))
+        self.assertEqual(config.db_path, Path("/srv/logs/wudup.sqlite"))
 
     def test_out_guid_alias_is_used_when_out_gid_is_absent(self) -> None:
         config = load_config(

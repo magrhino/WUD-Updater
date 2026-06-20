@@ -1,6 +1,6 @@
 # WUD Update Flow
 
-WUD-Updater is built around a shared, line-oriented todo file. WUD writes update
+WUDup is built around a shared, line-oriented todo file. WUD writes update
 events into that file, and the host or helper container later applies selected
 entries.
 
@@ -56,7 +56,7 @@ During the apply/execution phase, the updater temporarily rewrites Compose to
 the resolved tag for `docker compose pull`, verifies the pulled local image
 against the planned digest, then writes the final image as
 `repo/app@sha256:<digest>`. The Compose edit adds
-`# wud-updater.resolved-tag=<tag>` above `image:` and sets `wud.tag.include` to
+`# wudup.resolved-tag=<tag>` above `image:` and sets `wud.tag.include` to
 an exact regex for the resolved tag. Dry-run remains non-mutating; Compose edits
 and final digest writes happen only during apply. Lines without a safe resolved
 tag, custom compound `wud.tag.include` regexes, YAML anchors/aliases,

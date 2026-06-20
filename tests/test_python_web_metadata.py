@@ -1,4 +1,4 @@
-from wud_updater.web_metadata import json_list, json_object, json_object_or_empty
+from wudup.web_metadata import json_list, json_object, json_object_or_empty
 
 
 def test_json_object_uses_compact_sorted_encoding():

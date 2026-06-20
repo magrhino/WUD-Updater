@@ -6,7 +6,7 @@ from contextlib import redirect_stderr, redirect_stdout
 from io import StringIO
 from unittest import mock
 
-from wud_updater.updates import (
+from wudup.updates import (
     _self_update_desired_tag,
     run_updates_from_namespace,
 )
@@ -22,7 +22,7 @@ class UpdatesWrapperSelfUpdateTests(UpdatesWrapperTestCase):
         self.assertEqual(_self_update_desired_tag("repo/app tag=2.0"), "")
     def test_self_update_yes_runs_wud_entry_before_remaining_updates(self) -> None:
         self.wud_file.write_text(
-            "ghcr.io/magrhino/wud-updater:latest\nrepo/app:latest\n",
+            "ghcr.io/magrhino/wudup:latest\nrepo/app:latest\n",
             encoding="utf-8",
         )
 
@@ -42,7 +42,7 @@ class UpdatesWrapperSelfUpdateTests(UpdatesWrapperTestCase):
         )
     def test_self_update_tag_entry_enables_tag_updates(self) -> None:
         self.wud_file.write_text(
-            "ghcr.io/magrhino/wud-updater:1.0 tag=2.0\nrepo/app:latest\n",
+            "ghcr.io/magrhino/wudup:1.0 tag=2.0\nrepo/app:latest\n",
             encoding="utf-8",
         )
 
@@ -58,7 +58,7 @@ class UpdatesWrapperSelfUpdateTests(UpdatesWrapperTestCase):
         self.assertNotIn("--allow-tag-updates", arg_lines[1])
     def test_self_update_prompt_decline_continues_to_normal_selection(self) -> None:
         self.wud_file.write_text(
-            "ghcr.io/magrhino/wud-updater:latest\nrepo/app:latest\n",
+            "ghcr.io/magrhino/wudup:latest\nrepo/app:latest\n",
             encoding="utf-8",
         )
 
@@ -69,57 +69,57 @@ class UpdatesWrapperSelfUpdateTests(UpdatesWrapperTestCase):
         )
 
         self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
-        self.assertIn("Skipped WUD-Updater self-update", result.stdout)
+        self.assertIn("Skipped WUDup self-update", result.stdout)
         sudo_log = self.sudo_log.read_text(encoding="utf-8")
         self.assertIn("--only-lines 2 --yes", sudo_log)
         self.assertNotIn("--only-lines 1", sudo_log)
     def test_self_update_eof_declines_without_invoking_updater(self) -> None:
         self.wud_file.write_text(
-            "ghcr.io/magrhino/wud-updater:latest\nrepo/app:latest\n",
+            "ghcr.io/magrhino/wudup:latest\nrepo/app:latest\n",
             encoding="utf-8",
         )
 
         result = self.run_updates(input_text="")
 
         self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
-        self.assertIn("Skipped WUD-Updater self-update", result.stdout)
+        self.assertIn("Skipped WUDup self-update", result.stdout)
         self.assertFalse(self.sudo_log.exists())
         self.assertFalse(self.updater_log.exists())
     def test_self_update_dry_run_reports_without_invoking_updater(self) -> None:
         self.wud_file.write_text(
-            "ghcr.io/magrhino/wud-updater:latest\n",
+            "ghcr.io/magrhino/wudup:latest\n",
             encoding="utf-8",
         )
 
         result = self.run_updates("--dry-run")
 
         self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
-        self.assertIn("WUD-Updater self-update detected", result.stdout)
-        self.assertIn("not running WUD-Updater self-update", result.stdout)
+        self.assertIn("WUDup self-update detected", result.stdout)
+        self.assertIn("not running WUDup self-update", result.stdout)
         self.assertFalse(self.sudo_log.exists())
         self.assertFalse(self.updater_log.exists())
     def test_no_self_update_flag_leaves_default_update_order(self) -> None:
         self.wud_file.write_text(
-            "ghcr.io/magrhino/wud-updater:latest\n",
+            "ghcr.io/magrhino/wudup:latest\n",
             encoding="utf-8",
         )
 
         result = self.run_updates("--yes", "--no-self-update")
 
         self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
-        self.assertNotIn("WUD-Updater self-update detected", result.stdout)
+        self.assertNotIn("WUDup self-update detected", result.stdout)
         sudo_log = self.sudo_log.read_text(encoding="utf-8")
         self.assertNotIn("--only-lines", sudo_log)
     def test_self_update_env_can_disable_preflight(self) -> None:
-        self.wud_file.write_text("wud-updater\n", encoding="utf-8")
+        self.wud_file.write_text("wudup\n", encoding="utf-8")
 
         result = self.run_updates(
             "--yes",
-            env_overrides={"WUD_UPDATER_SELF_UPDATE": "0"},
+            env_overrides={"WUDUP_SELF_UPDATE": "0"},
         )
 
         self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
-        self.assertNotIn("WUD-Updater self-update detected", result.stdout)
+        self.assertNotIn("WUDup self-update detected", result.stdout)
         self.assertNotIn(
             "--only-lines",
             self.updater_log.read_text(encoding="utf-8"),
@@ -130,15 +130,15 @@ class UpdatesWrapperSelfUpdateTests(UpdatesWrapperTestCase):
         env.update(
             {
                 "PATH": f"{self.fake_bin}:{env.get('PATH', '')}",
-                "WUD_UPDATER": str(self.updater),
-                "WUD_UPDATER_CONFIG": str(self.root / "missing-env"),
+                "WUDUP_UPDATER": str(self.updater),
+                "WUDUP_CONFIG": str(self.root / "missing-env"),
                 "FAKE_SUDO_LOG": str(self.sudo_log),
                 "FAKE_UPDATER_LOG": str(self.updater_log),
                 "FAKE_DOCKER_LOG": str(self.docker_log),
-                "WUD_UPDATER_BANNER": "0",
-                "WUD_UPDATER_RELEASE_CHECK": "1",
+                "WUDUP_BANNER": "0",
+                "WUDUP_RELEASE_CHECK": "1",
                 "DOCKER_HOST": "tcp://docker:2375",
-                "HOSTNAME": "wud-updater-1",
+                "HOSTNAME": "wudup-1",
             }
         )
         args = Namespace(
@@ -159,12 +159,12 @@ class UpdatesWrapperSelfUpdateTests(UpdatesWrapperTestCase):
 
         with (
             mock.patch(
-                "wud_updater.self_update.fetch_latest_release_tag",
+                "wudup.self_update.fetch_latest_release_tag",
                 return_value="v999.0.0",
             ),
             mock.patch(
-                "wud_updater.self_update.current_container_image",
-                return_value="ghcr.io/magrhino/wud-updater:latest",
+                "wudup.self_update.current_container_image",
+                return_value="ghcr.io/magrhino/wudup:latest",
             ),
             redirect_stdout(stdout),
             redirect_stderr(stderr),
@@ -178,16 +178,16 @@ class UpdatesWrapperSelfUpdateTests(UpdatesWrapperTestCase):
         self.assertEqual(status, 0, stderr.getvalue() + stdout.getvalue())
         self.assertFalse(self.updater_log.exists())
         self.assertIn(
-            "pull ghcr.io/magrhino/wud-updater:latest",
+            "pull ghcr.io/magrhino/wudup:latest",
             self.docker_log.read_text(encoding="utf-8"),
         )
         self.assertIn(
             "env DOCKER_HOST=tcp://docker:2375 docker pull "
-            "ghcr.io/magrhino/wud-updater:latest",
+            "ghcr.io/magrhino/wudup:latest",
             self.sudo_log.read_text(encoding="utf-8"),
         )
         self.assertIn(
-            "Please restart the wud-updater container before running updates again.",
+            "Please restart the wudup container before running updates again.",
             stdout.getvalue(),
         )
     def test_github_release_self_update_rewrites_pinned_release_tag(self) -> None:
@@ -196,15 +196,15 @@ class UpdatesWrapperSelfUpdateTests(UpdatesWrapperTestCase):
         env.update(
             {
                 "PATH": f"{self.fake_bin}:{env.get('PATH', '')}",
-                "WUD_UPDATER": str(self.updater),
-                "WUD_UPDATER_CONFIG": str(self.root / "missing-env"),
+                "WUDUP_UPDATER": str(self.updater),
+                "WUDUP_CONFIG": str(self.root / "missing-env"),
                 "FAKE_SUDO_LOG": str(self.sudo_log),
                 "FAKE_UPDATER_LOG": str(self.updater_log),
                 "FAKE_DOCKER_LOG": str(self.docker_log),
                 "FAKE_UPDATER_LOG_WUD_CONTENT": "1",
-                "WUD_UPDATER_BANNER": "0",
-                "WUD_UPDATER_RELEASE_CHECK": "1",
-                "HOSTNAME": "wud-updater-1",
+                "WUDUP_BANNER": "0",
+                "WUDUP_RELEASE_CHECK": "1",
+                "HOSTNAME": "wudup-1",
             }
         )
         args = Namespace(
@@ -225,12 +225,12 @@ class UpdatesWrapperSelfUpdateTests(UpdatesWrapperTestCase):
 
         with (
             mock.patch(
-                "wud_updater.self_update.fetch_latest_release_tag",
+                "wudup.self_update.fetch_latest_release_tag",
                 return_value="v999.0.0",
             ),
             mock.patch(
-                "wud_updater.self_update.current_container_image",
-                return_value="ghcr.io/magrhino/wud-updater:v0.12.2",
+                "wudup.self_update.current_container_image",
+                return_value="ghcr.io/magrhino/wudup:v0.12.2",
             ),
             redirect_stdout(stdout),
             redirect_stderr(stderr),
@@ -244,7 +244,7 @@ class UpdatesWrapperSelfUpdateTests(UpdatesWrapperTestCase):
         self.assertEqual(status, 0, stderr.getvalue() + stdout.getvalue())
         log = self.updater_log.read_text(encoding="utf-8")
         self.assertIn(
-            "WUD_CONTENT=ghcr.io/magrhino/wud-updater:v0.12.2 tag=v999.0.0|",
+            "WUD_CONTENT=ghcr.io/magrhino/wudup:v0.12.2 tag=v999.0.0|",
             log,
         )
         arg_lines = _updater_arg_lines(log)
@@ -254,7 +254,7 @@ class UpdatesWrapperSelfUpdateTests(UpdatesWrapperTestCase):
         self.assertNotIn(f"--file {self.wud_file}", arg_lines[0])
         self.assertFalse(self.docker_log.exists())
         self.assertNotIn(
-            "Please restart the wud-updater container before running updates again.",
+            "Please restart the wudup container before running updates again.",
             stdout.getvalue(),
         )
     def test_github_release_self_update_failed_pull_exits_without_restart_message(
@@ -265,15 +265,15 @@ class UpdatesWrapperSelfUpdateTests(UpdatesWrapperTestCase):
         env.update(
             {
                 "PATH": f"{self.fake_bin}:{env.get('PATH', '')}",
-                "WUD_UPDATER": str(self.updater),
-                "WUD_UPDATER_CONFIG": str(self.root / "missing-env"),
+                "WUDUP_UPDATER": str(self.updater),
+                "WUDUP_CONFIG": str(self.root / "missing-env"),
                 "FAKE_SUDO_LOG": str(self.sudo_log),
                 "FAKE_UPDATER_LOG": str(self.updater_log),
                 "FAKE_DOCKER_LOG": str(self.docker_log),
                 "FAKE_DOCKER_PULL_RETURN": "17",
-                "WUD_UPDATER_BANNER": "0",
-                "WUD_UPDATER_RELEASE_CHECK": "1",
-                "HOSTNAME": "wud-updater-1",
+                "WUDUP_BANNER": "0",
+                "WUDUP_RELEASE_CHECK": "1",
+                "HOSTNAME": "wudup-1",
             }
         )
         args = Namespace(
@@ -294,12 +294,12 @@ class UpdatesWrapperSelfUpdateTests(UpdatesWrapperTestCase):
 
         with (
             mock.patch(
-                "wud_updater.self_update.fetch_latest_release_tag",
+                "wudup.self_update.fetch_latest_release_tag",
                 return_value="v999.0.0",
             ),
             mock.patch(
-                "wud_updater.self_update.current_container_image",
-                return_value="ghcr.io/magrhino/wud-updater:latest",
+                "wudup.self_update.current_container_image",
+                return_value="ghcr.io/magrhino/wudup:latest",
             ),
             redirect_stdout(stdout),
             redirect_stderr(stderr),
@@ -313,10 +313,10 @@ class UpdatesWrapperSelfUpdateTests(UpdatesWrapperTestCase):
         self.assertEqual(status, 17, stderr.getvalue() + stdout.getvalue())
         self.assertFalse(self.updater_log.exists())
         self.assertIn(
-            "pull ghcr.io/magrhino/wud-updater:latest",
+            "pull ghcr.io/magrhino/wudup:latest",
             self.docker_log.read_text(encoding="utf-8"),
         )
         self.assertNotIn(
-            "Please restart the wud-updater container before running updates again.",
+            "Please restart the wudup container before running updates again.",
             stdout.getvalue(),
         )

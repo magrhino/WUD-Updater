@@ -1,13 +1,13 @@
-# WUD-Updater
+# WUDup
 
-WUD-Updater turns image update notices from What's Up Docker (WUD) into a
+WUDup turns image update notices from What's Up Docker (WUD) into a
 reviewable Docker Compose update workflow. The recommended deployment is the
 long-running WebUI container, which provides a local browser dashboard,
 read-only safety defaults, Doctor checks, run history, logs, diagnostics, and an
 optional plan-first apply flow.
 
 ## Web Deployment
-_Check out the demo: https://magrhino.github.io/WUD-Updater/_
+_Check out the demo: https://magrhino.github.io/wudup/_
 
 The WebUI container serves the FastAPI backend and packaged Vue SPA from the
 same image. WUD records pending image updates into a shared todo file, and the
@@ -28,15 +28,15 @@ disabled unless `WUD_WEB_MUTATIONS_ENABLED=true` is set intentionally.
 
 ### Start The WebUI
 
-If the `wud-updater` CLI is available, generate first-run hardened WebUI config
+If the `wudup` CLI is available, generate first-run hardened WebUI config
 instead of downloading the env template:
 
 ```bash
-wud-updater init --profile hardened --stack-root /srv/docker --non-interactive
+wudup init --profile hardened --stack-root /srv/docker --non-interactive
 ```
 
 That writes a hardened env file and Compose override under
-`$HOME/.config/wud-updater/`. Use them with the hardened Compose example before
+`$HOME/.config/wudup/`. Use them with the hardened Compose example before
 starting the service.
 
 To start without the CLI, download the published hardened WebUI Compose example
@@ -44,8 +44,8 @@ plus an env template in your deployment directory:
 
 ```bash
 curl -fsSL \
-  -o docker-compose.yml https://raw.githubusercontent.com/magrhino/WUD-Updater/main/docs/examples/docker-compose.hardened.yml \
-  -o .env https://raw.githubusercontent.com/magrhino/WUD-Updater/main/docs/examples/webui.env.example
+  -o docker-compose.yml https://raw.githubusercontent.com/magrhino/wudup/main/docs/examples/docker-compose.hardened.yml \
+  -o .env https://raw.githubusercontent.com/magrhino/wudup/main/docs/examples/webui.env.example
 ```
 
 Review `.env` before starting: set `HOST_DOCKER_BASE` to your Compose stack
@@ -55,7 +55,7 @@ link from the logs:
 
 ```bash
 docker compose up -d
-docker compose logs wud-updater
+docker compose logs wudup
 ```
 
 Open the printed `/#/setup?claim=...` link, create the first admin username and
@@ -88,7 +88,7 @@ should generally go to the WebUI/API first.
 
 | Topic | Where |
 |---|---|
-| Public WebUI demo | [magrhino.github.io/WUD-Updater](https://magrhino.github.io/WUD-Updater/) |
+| Public WebUI demo | [magrhino.github.io/wudup](https://magrhino.github.io/wudup/) |
 | Full deployment reference | [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) |
 | WebUI container deployment | [docs/DEPLOYMENT.md#webui-container](docs/DEPLOYMENT.md#webui-container) |
 | WebUI operations guide | [docs/wiki/webui-container.md](docs/wiki/webui-container.md) |

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import importlib
 import os
 import unittest
 import tempfile
@@ -8,13 +9,23 @@ from io import StringIO
 from pathlib import Path
 from unittest import mock
 
-from wud_updater.banner import current_tag
-from wud_updater.cli import main
-from wud_updater.db import init_db, open_db, utc_timestamp
-from wud_updater.web import PASSWORD_HASHER
+from wudup.banner import current_tag
+from wudup.cli import main
+from wudup.db import init_db, open_db, utc_timestamp
+from wudup.web import PASSWORD_HASHER
 
 
 class CliTests(unittest.TestCase):
+    def test_legacy_import_package_aliases_wudup(self) -> None:
+        legacy_cli = importlib.import_module("wud_updater.cli")
+        legacy_self_update = importlib.import_module("wud_updater.self_update")
+
+        self.assertIs(legacy_cli.main, main)
+        self.assertEqual(
+            legacy_self_update.DEFAULT_SELF_UPDATE_REPOSITORY,
+            "ghcr.io/magrhino/wudup",
+        )
+
     def _run_main(self, argv: list[str]) -> tuple[int, str, str]:
         stdout = StringIO()
         stderr = StringIO()
@@ -83,8 +94,8 @@ class CliTests(unittest.TestCase):
                 "WUD_LOG_DIR": str(log_dir),
                 "WUD_UPDATE_MODE": "live",
                 "WUD_MAX_WAIT": "0",
-                "WUD_UPDATER_BANNER": "false",
-                "WUD_UPDATER_RELEASE_CHECK": "false",
+                "WUDUP_BANNER": "false",
+                "WUDUP_RELEASE_CHECK": "false",
                 "PATH": os.environ.get("PATH", ""),
             }
             with mock.patch.dict(os.environ, env, clear=True):
@@ -108,8 +119,8 @@ class CliTests(unittest.TestCase):
     def test_update_from_wud_rejects_invalid_environment_max_wait(self) -> None:
         env = {
             "WUD_MAX_WAIT": "not-a-number",
-            "WUD_UPDATER_BANNER": "false",
-            "WUD_UPDATER_RELEASE_CHECK": "false",
+            "WUDUP_BANNER": "false",
+            "WUDUP_RELEASE_CHECK": "false",
             "PATH": os.environ.get("PATH", ""),
         }
         with mock.patch.dict(os.environ, env, clear=True):
@@ -157,8 +168,8 @@ class CliTests(unittest.TestCase):
             wud_file.write_text("", encoding="utf-8")
 
             env = {
-                "WUD_UPDATER_BANNER": "true",
-                "WUD_UPDATER_RELEASE_CHECK": "false",
+                "WUDUP_BANNER": "true",
+                "WUDUP_RELEASE_CHECK": "false",
                 "PATH": os.environ.get("PATH", ""),
             }
             with mock.patch.dict(os.environ, env, clear=True):
@@ -179,7 +190,7 @@ class CliTests(unittest.TestCase):
                 )
 
         self.assertEqual(status, 0)
-        self.assertIn(f"WUD-Updater {current_tag()}", stdout)
+        self.assertIn(f"WUDup {current_tag()}", stdout)
         self.assertIn("Nothing to do; list is empty.", stdout)
         self.assertEqual(stderr, "")
 
@@ -187,8 +198,8 @@ class CliTests(unittest.TestCase):
         with tempfile.TemporaryDirectory(prefix="wud-python-cli.") as tmpdir:
             env = {
                 "HOME": tmpdir,
-                "WUD_UPDATER_CONFIG": str(Path(tmpdir) / "missing-env"),
-                "WUD_UPDATER_RELEASE_CHECK": "0",
+                "WUDUP_CONFIG": str(Path(tmpdir) / "missing-env"),
+                "WUDUP_RELEASE_CHECK": "0",
                 "PATH": os.environ.get("PATH", ""),
             }
             with mock.patch.dict(os.environ, env, clear=True):
@@ -212,8 +223,8 @@ class CliTests(unittest.TestCase):
         with tempfile.TemporaryDirectory(prefix="wud-python-cli.") as tmpdir:
             env = {
                 "HOME": tmpdir,
-                "WUD_UPDATER_CONFIG": str(Path(tmpdir) / "missing-env"),
-                "WUD_UPDATER_RELEASE_CHECK": "0",
+                "WUDUP_CONFIG": str(Path(tmpdir) / "missing-env"),
+                "WUDUP_RELEASE_CHECK": "0",
                 "PATH": os.environ.get("PATH", ""),
             }
             with mock.patch.dict(os.environ, env, clear=True):
@@ -235,9 +246,9 @@ class CliTests(unittest.TestCase):
         with tempfile.TemporaryDirectory(prefix="wud-python-cli.") as tmpdir:
             env = {
                 "HOME": tmpdir,
-                "WUD_UPDATER_CONFIG": str(Path(tmpdir) / "missing-env"),
-                "WUD_UPDATER_BANNER": "true",
-                "WUD_UPDATER_RELEASE_CHECK": "false",
+                "WUDUP_CONFIG": str(Path(tmpdir) / "missing-env"),
+                "WUDUP_BANNER": "true",
+                "WUDUP_RELEASE_CHECK": "false",
                 "PATH": os.environ.get("PATH", ""),
             }
             with mock.patch.dict(os.environ, env, clear=True):
@@ -251,27 +262,27 @@ class CliTests(unittest.TestCase):
                 )
 
         self.assertEqual(status, 0)
-        self.assertIn(f"WUD-Updater {current_tag()}", stdout)
+        self.assertIn(f"WUDup {current_tag()}", stdout)
         self.assertIn("✅ No pending Docker updates!", stdout)
         self.assertEqual(stderr, "")
 
     def test_truenas_status_export_skips_forced_startup_banner(self) -> None:
         env = {
-            "WUD_UPDATER_BANNER": "true",
-            "WUD_UPDATER_RELEASE_CHECK": "false",
+            "WUDUP_BANNER": "true",
+            "WUDUP_RELEASE_CHECK": "false",
             "PATH": os.environ.get("PATH", ""),
         }
         with mock.patch.dict(os.environ, env, clear=True):
             status, stdout, stderr = self._run_main(["truenas-status-export"])
 
         self.assertEqual(status, 0)
-        self.assertNotIn("WUD-Updater", stdout)
+        self.assertNotIn("WUDup", stdout)
         self.assertTrue(stdout.strip().startswith("{"))
         self.assertEqual(stderr, "")
 
     def test_doctor_subcommand_accepts_container_path_options(self) -> None:
         with mock.patch(
-            "wud_updater.cli.run_doctor_from_namespace",
+            "wudup.cli.run_doctor_from_namespace",
             return_value=17,
         ) as run_doctor:
             status, stdout, stderr = self._run_main(
@@ -300,7 +311,7 @@ class CliTests(unittest.TestCase):
         self.assertTrue(args.no_color)
 
     def test_web_subcommand_accepts_server_and_state_options(self) -> None:
-        with mock.patch("wud_updater.cli._run_web", return_value=19) as run_web:
+        with mock.patch("wudup.cli._run_web", return_value=19) as run_web:
             status, stdout, stderr = self._run_main(
                 [
                     "web",
@@ -334,7 +345,7 @@ class CliTests(unittest.TestCase):
         self.assertEqual(args.static_dir, "/app/webui")
 
     def test_web_reset_admin_accepts_user_and_db_path(self) -> None:
-        with mock.patch("wud_updater.cli._run_web", return_value=21) as run_web:
+        with mock.patch("wudup.cli._run_web", return_value=21) as run_web:
             status, stdout, stderr = self._run_main(
                 [
                     "web",
@@ -355,7 +366,7 @@ class CliTests(unittest.TestCase):
         self.assertEqual(args.db_path, "/state/wud.sqlite")
 
     def test_init_subcommand_accepts_configuration_options(self) -> None:
-        with mock.patch("wud_updater.cli._run_init", return_value=23) as run_init:
+        with mock.patch("wudup.cli._run_init", return_value=23) as run_init:
             status, stdout, stderr = self._run_main(
                 [
                     "init",
@@ -491,8 +502,8 @@ class CliTests(unittest.TestCase):
         with tempfile.TemporaryDirectory(prefix="wud-python-cli.") as tmpdir:
             env = {
                 "HOME": tmpdir,
-                "WUD_UPDATER_CONFIG": str(Path(tmpdir) / "missing-env"),
-                "WUD_UPDATER_RELEASE_CHECK": "0",
+                "WUDUP_CONFIG": str(Path(tmpdir) / "missing-env"),
+                "WUDUP_RELEASE_CHECK": "0",
                 "PATH": os.environ.get("PATH", ""),
             }
             with mock.patch.dict(os.environ, env, clear=True):
@@ -506,7 +517,7 @@ class CliTests(unittest.TestCase):
 
     def test_keyboard_interrupt_returns_130_without_traceback(self) -> None:
         with mock.patch(
-            "wud_updater.cli._run_updates",
+            "wudup.cli._run_updates",
             side_effect=KeyboardInterrupt,
         ):
             status, stdout, stderr = self._run_main(["updates", "--dry-run"])

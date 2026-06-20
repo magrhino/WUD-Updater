@@ -1,7 +1,7 @@
 from __future__ import annotations
 import json
 from pathlib import Path
-from wud_updater import web_self_update as self_update_module
+from wudup import web_self_update as self_update_module
 from tests.web_test_helpers import (
     _client,
 )
@@ -21,7 +21,7 @@ def test_self_update_get_reports_available_up_to_date_disabled_and_unavailable(
         tmp_path,
         {
             "WUD_WEB_DEV_NO_AUTH": "true",
-            "WUD_WEB_RESTART_CONTAINER": "wud-updater",
+            "WUD_WEB_RESTART_CONTAINER": "wudup",
         },
     ).get("/api/v1/self-update")
 
@@ -30,7 +30,7 @@ def test_self_update_get_reports_available_up_to_date_disabled_and_unavailable(
     assert body["status"] == "available"
     assert body["current_tag"] == "v0.24.2"
     assert body["latest_tag"] == "v0.25.0"
-    assert body["target_image"] == "ghcr.io/magrhino/wud-updater:v0.25.0"
+    assert body["target_image"] == "ghcr.io/magrhino/wudup:v0.25.0"
     assert body["can_update"] is False
     assert "Read-only mode" in body["disabled_reason"]
 
@@ -45,7 +45,7 @@ def test_self_update_get_reports_available_up_to_date_disabled_and_unavailable(
         tmp_path,
         {
             "WUD_WEB_DEV_NO_AUTH": "true",
-            "WUD_UPDATER_RELEASE_CHECK": "false",
+            "WUDUP_RELEASE_CHECK": "false",
         },
     ).get("/api/v1/self-update")
     assert disabled.json()["status"] == "disabled"
@@ -65,7 +65,7 @@ def test_self_update_get_can_use_local_demo_fixture(tmp_path: Path) -> None:
         {
             "WUD_WEB_DEV_NO_AUTH": "true",
             "WUD_WEB_MUTATIONS_ENABLED": "true",
-            "WUD_WEB_RESTART_CONTAINER": "demo-wud-updater",
+            "WUD_WEB_RESTART_CONTAINER": "demo-wudup",
             "WUD_WEB_DEMO_SELF_UPDATE": "true",
         },
     )
@@ -77,8 +77,8 @@ def test_self_update_get_can_use_local_demo_fixture(tmp_path: Path) -> None:
     assert body["status"] == "available"
     assert body["current_tag"] == "v0.25.0"
     assert body["latest_tag"] == "v0.26.0"
-    assert body["target_image"] == "ghcr.io/magrhino/wud-updater:latest"
-    assert body["restart_container"] == "demo-wud-updater"
+    assert body["target_image"] == "ghcr.io/magrhino/wudup:latest"
+    assert body["restart_container"] == "demo-wudup"
     assert body["can_update"] is True
     assert body["release_notes_truncated"] is True
     assert len(body["release_notes"]) == 10

@@ -35,7 +35,7 @@ run_install(){
     DOCKER_BASE="$docker_base" \
     WUD_SCRIPTS_LINK="$docker_base/wud/scripts" \
     WUD_OUT_DIR="$docker_base/wud/out" \
-    WUD_UPDATER_VENV="$TEST_TMP/.venv" \
+    WUDUP_VENV="$TEST_TMP/.venv" \
     PYTHON_BIN="$python_bin" \
     FAKE_PYTHON_LOG="$TEST_TMP/python.log" \
     "$SCRIPT" > "$TEST_TMP/output.log" 2>&1 || LAST_STATUS=$?
@@ -159,27 +159,27 @@ test_dispatchers_use_local_venv_when_host_python_lacks_deps(){
   (
     unset PYTHON_BIN
     PATH="$fake_bin:$PATH" \
-      WUD_UPDATER_VENV="$venv_dir" \
+      WUDUP_VENV="$venv_dir" \
       FAKE_PYTHON_LOG="$TEST_TMP/python.log" \
       "$REPO_ROOT/bin/docker-update-from-wud" --dry-run
   ) > "$TEST_TMP/output.log" 2>&1 || LAST_STATUS=$?
   [[ "$LAST_STATUS" == "42" ]] || fail "expected docker-update-from-wud to use fake venv python"
   grep -q -- "host:" "$TEST_TMP/python.log" || fail "host python dependency probe was not run"
-  grep -q -- "venv:-m wud_updater.cli update-from-wud --dry-run" "$TEST_TMP/python.log" || fail "updater wrapper did not use venv python"
+  grep -q -- "venv:-m wudup.cli update-from-wud --dry-run" "$TEST_TMP/python.log" || fail "updater wrapper did not use venv python"
 
   : > "$TEST_TMP/python.log"
   LAST_STATUS=0
   (
     unset PYTHON_BIN
     PATH="$fake_bin:$PATH" \
-      WUD_UPDATER_VENV="$venv_dir" \
-      WUD_UPDATER_CONFIG="$TEST_TMP/missing-config" \
+      WUDUP_VENV="$venv_dir" \
+      WUDUP_CONFIG="$TEST_TMP/missing-config" \
       FAKE_PYTHON_LOG="$TEST_TMP/python.log" \
       "$REPO_ROOT/bin/updates" --dry-run
   ) > "$TEST_TMP/output.log" 2>&1 || LAST_STATUS=$?
   [[ "$LAST_STATUS" == "42" ]] || fail "expected updates to use fake venv python"
   grep -q -- "host:" "$TEST_TMP/python.log" || fail "updates host python dependency probe was not run"
-  grep -q -- "venv:-m wud_updater.cli updates --dry-run" "$TEST_TMP/python.log" || fail "updates wrapper did not use venv python"
+  grep -q -- "venv:-m wudup.cli updates --dry-run" "$TEST_TMP/python.log" || fail "updates wrapper did not use venv python"
   teardown_case
 }
 

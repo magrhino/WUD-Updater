@@ -3,17 +3,17 @@ from __future__ import annotations
 import json
 import unittest
 
-from wud_updater.compose import (
+from wudup.compose import (
     ComposeStack,
     ServiceImage,
 )
-from wud_updater.updater_lifecycle_health import _updated_images
-from wud_updater.updater_models import (
+from wudup.updater_lifecycle_health import _updated_images
+from wudup.updater_models import (
     ImageState,
     Match,
     STALE_PENDING_DIGEST_REASON,
 )
-from wud_updater.wud_file import parse_wud_text
+from wudup.wud_file import parse_wud_text
 
 
 from tests.update_from_wud_helpers import (

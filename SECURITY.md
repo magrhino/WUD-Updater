@@ -14,14 +14,14 @@ or regression history.
 
 Report security vulnerabilities privately through GitHub Security Advisories:
 
-<https://github.com/magrhino/WUD-Updater/security/advisories/new>
+<https://github.com/magrhino/wudup/security/advisories/new>
 
 Do not open public issues, discussions, or pull requests for suspected
 vulnerabilities until a fix or disclosure plan is agreed.
 
 Include enough detail to reproduce and triage the issue:
 
-- The WUD-Updater version, image tag, or commit.
+- The WUDup version, image tag, or commit.
 - The deployment method: host install, Docker Compose image, local build, or
   source checkout.
 - Relevant configuration, Compose snippets, command output, logs, and minimal
@@ -36,7 +36,7 @@ other credentials. Use placeholders when a value shape matters.
 
 ## Security Scope
 
-Reports are in scope when they show that WUD-Updater does something outside
+Reports are in scope when they show that WUDup does something outside
 the documented trust boundaries, including:
 
 - WebUI authentication, session, CSRF, Origin, Host, trusted proxy, or secure
@@ -62,7 +62,7 @@ the documented trust boundaries, including:
 The following behaviors are documented operational risks, not vulnerabilities
 by themselves:
 
-- Mounting `/var/run/docker.sock` gives WUD-Updater root-equivalent control of
+- Mounting `/var/run/docker.sock` gives WUDup root-equivalent control of
   the host Docker daemon. Only run trusted images with that socket.
 - The hardened socket-proxy example reduces direct socket exposure, but Docker
   Compose pull, stop, and recreate operations still require proxy `POST=1`.
@@ -77,7 +77,7 @@ by themselves:
 
 ## Security Defaults And Expectations
 
-WUD-Updater defaults to non-mutating operation where practical:
+WUDup defaults to non-mutating operation where practical:
 
 - The container image runs `updates --dry-run` by default.
 - `--dry-run` must not pull images, recreate containers, remove WUD lines, or
@@ -91,7 +91,7 @@ WUD-Updater defaults to non-mutating operation where practical:
 - `WUD_WEB_DEV_NO_AUTH=true` is for local development and tests only.
 
 Deployments should keep Docker socket, stack, script, output, log, and database
-mounts scoped to the directories WUD-Updater needs. When exposing the WebUI
+mounts scoped to the directories WUDup needs. When exposing the WebUI
 outside loopback, set the browser-visible public origin, allowed hosts, trusted
 proxy addresses, and secure-cookie behavior intentionally.
 

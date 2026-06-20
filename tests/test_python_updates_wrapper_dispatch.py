@@ -12,7 +12,7 @@ class UpdatesWrapperDispatchTests(UpdatesWrapperTestCase):
         docker_base.mkdir(parents=True)
         config_wud_file = docker_base / "images.todo"
         config_wud_file.write_text("repo/app:latest\n", encoding="utf-8")
-        config_file = home / ".config" / "wud-updater" / "env"
+        config_file = home / ".config" / "wudup" / "env"
         config_file.parent.mkdir(parents=True)
         config_file.write_text(
             "\n".join(
@@ -21,7 +21,7 @@ class UpdatesWrapperDispatchTests(UpdatesWrapperTestCase):
                     'WUD_OUT_FILE="$DOCKER_BASE/images.todo"',
                     'WUD_UPDATE_MODE="live"',
                     'WUD_MAX_WAIT="7"',
-                    f'WUD_UPDATER="{self.updater}"',
+                    f'WUDUP_UPDATER="{self.updater}"',
                     "",
                 ]
             ),
@@ -33,7 +33,7 @@ class UpdatesWrapperDispatchTests(UpdatesWrapperTestCase):
             include_file=False,
             env_overrides={
                 "HOME": str(home),
-                "WUD_UPDATER_CONFIG": str(config_file),
+                "WUDUP_CONFIG": str(config_file),
                 "FAKE_WUD_FILE": str(config_wud_file),
             },
         )
@@ -44,6 +44,48 @@ class UpdatesWrapperDispatchTests(UpdatesWrapperTestCase):
             "--log-dir ./logs --mode live --max-wait 7 --yes",
             self.sudo_log.read_text(encoding="utf-8"),
         )
+
+    def test_legacy_default_config_path_is_sourced(self) -> None:
+        home = self.root / "home"
+        docker_base = home / "legacy-config"
+        docker_base.mkdir(parents=True)
+        config_wud_file = docker_base / "images.todo"
+        config_wud_file.write_text("repo/app:latest\n", encoding="utf-8")
+        config_file = home / ".config" / "wud-updater" / "env"
+        config_file.parent.mkdir(parents=True)
+        config_file.write_text(
+            "\n".join(
+                [
+                    'DOCKER_BASE="$HOME/legacy-config"',
+                    'WUD_OUT_FILE="$DOCKER_BASE/images.todo"',
+                    'WUD_UPDATE_MODE="pause"',
+                    'WUD_MAX_WAIT="9"',
+                    f'WUD_UPDATER="{self.updater}"',
+                    "",
+                ]
+            ),
+            encoding="utf-8",
+        )
+
+        result = self.run_updates(
+            "--yes",
+            command=[str(self.repo_root / "bin" / "updates")],
+            include_file=False,
+            env_overrides={
+                "HOME": str(home),
+                "PYTHON_BIN": sys.executable,
+                "WUDUP_CONFIG": "",
+                "FAKE_WUD_FILE": str(config_wud_file),
+            },
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+        self.assertIn(
+            f"{self.updater} --base {docker_base} --file {config_wud_file} "
+            "--log-dir ./logs --mode pause --max-wait 9 --yes",
+            self.sudo_log.read_text(encoding="utf-8"),
+        )
+
     def test_bin_updates_dispatches_python_wrapper_by_default(self) -> None:
         self.wud_file.write_text("repo/app:latest\n", encoding="utf-8")
 
@@ -80,7 +122,7 @@ class UpdatesWrapperDispatchTests(UpdatesWrapperTestCase):
             "\n".join(
                 [
                     f'PYTHON_BIN="{sys.executable}"',
-                    "WUD_UPDATER_USE_SUDO=false",
+                    "WUDUP_USE_SUDO=false",
                     "",
                 ]
             ),
@@ -91,7 +133,7 @@ class UpdatesWrapperDispatchTests(UpdatesWrapperTestCase):
             "--dry-run",
             "--no-updater-sudo",
             command=[str(self.repo_root / "bin" / "updates")],
-            env_overrides={"WUD_UPDATER_CONFIG": str(config_file)},
+            env_overrides={"WUDUP_CONFIG": str(config_file)},
             include_pythonpath=False,
         )
 
@@ -104,7 +146,7 @@ class UpdatesWrapperDispatchTests(UpdatesWrapperTestCase):
         default_config_file.write_text(
             "\n".join(
                 [
-                    "export WUD_UPDATER_USE_SUDO=true",
+                    "export WUDUP_USE_SUDO=true",
                     "",
                 ]
             ),
@@ -114,7 +156,7 @@ class UpdatesWrapperDispatchTests(UpdatesWrapperTestCase):
         config_file.write_text(
             "\n".join(
                 [
-                    "WUD_UPDATER_USE_SUDO=false",
+                    "WUDUP_USE_SUDO=false",
                     "",
                 ]
             ),
@@ -128,7 +170,7 @@ class UpdatesWrapperDispatchTests(UpdatesWrapperTestCase):
             command=[str(self.repo_root / "bin" / "updates")],
             env_overrides={
                 "PYTHON_BIN": sys.executable,
-                "WUD_UPDATER_CONFIG": str(default_config_file),
+                "WUDUP_CONFIG": str(default_config_file),
             },
         )
 
@@ -170,7 +212,7 @@ class UpdatesWrapperDispatchTests(UpdatesWrapperTestCase):
             "--no-updater-sudo",
             command=[str(self.repo_root / "bin" / "updates")],
             env_overrides={
-                "WUD_UPDATER_PYTHON": "false",
+                "WUDUP_PYTHON": "false",
                 "PYTHON_BIN": sys.executable,
             },
         )

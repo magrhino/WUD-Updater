@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from wud_updater.release_notes import OCI_SOURCE_LABEL
+from wudup.release_notes import OCI_SOURCE_LABEL
 
 from tests.web_test_helpers import _client
 
@@ -17,10 +17,10 @@ pytestmark = pytest.mark.skipif(
 )
 
 
-SOURCE_IMAGE = "ghcr.io/magrhino/wud-updater:latest"
-LOCAL_IMAGE = "wud-updater-issue259:live"
-LOCAL_REPO = "wud-updater-issue259"
-SOURCE_LABEL = "https://github.com/magrhino/WUD-Updater"
+SOURCE_IMAGE = "ghcr.io/magrhino/wudup:latest"
+LOCAL_IMAGE = "wudup-issue259:live"
+LOCAL_REPO = "wudup-issue259"
+SOURCE_LABEL = "https://github.com/magrhino/wudup"
 
 
 def test_live_release_notes_resolve_digest_pinned_image_labels(tmp_path: Path) -> None:
@@ -30,7 +30,7 @@ def test_live_release_notes_resolve_digest_pinned_image_labels(tmp_path: Path) -
     digest = _image_digest(SOURCE_IMAGE)
     local_digest_image = f"{LOCAL_IMAGE}@{digest}"
     bare_digest_image = f"{LOCAL_REPO}@{digest}"
-    container_name = f"wud-updater-issue259-{os.getpid()}"
+    container_name = f"wudup-issue259-{os.getpid()}"
 
     _docker("tag", SOURCE_IMAGE, LOCAL_IMAGE)
     try:
@@ -54,7 +54,7 @@ def test_live_release_notes_resolve_digest_pinned_image_labels(tmp_path: Path) -
         assert response.status_code == 200
         item = response.json()["items"][0]
         assert item["provider"] == "github"
-        assert item["upstream_repo"] == "magrhino/WUD-Updater"
+        assert item["upstream_repo"] == "magrhino/wudup"
 
         _docker("run", "-d", "--name", container_name, LOCAL_IMAGE, "sleep", "60")
         try:
@@ -64,7 +64,7 @@ def test_live_release_notes_resolve_digest_pinned_image_labels(tmp_path: Path) -
             assert response.status_code == 200
             item = response.json()["items"][0]
             assert item["provider"] == "github"
-            assert item["upstream_repo"] == "magrhino/WUD-Updater"
+            assert item["upstream_repo"] == "magrhino/wudup"
         finally:
             _docker("rm", "-f", container_name, check=False)
     finally:

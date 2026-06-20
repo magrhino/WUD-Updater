@@ -30,7 +30,7 @@ vi.mock("@vueuse/core", () => ({
 
 function supportBundle(): DiagnosticsSupportBundleResponse {
   return {
-    wud_updater_version: "0.24.2",
+    wudup_version: "0.24.2",
     settings: settingsResponse(),
     doctor_result: doctorResponse(),
     pending_summary: pendingResponse(),

@@ -67,7 +67,7 @@ the resolved tag, pulls with Compose, re-resolves the tag digest, verifies the
 pulled local image against the planned digest, and only then writes the final
 digest-pinned Compose reference.
 
-The final Compose edit also writes `# wud-updater.resolved-tag=<tag>`
+The final Compose edit also writes `# wudup.resolved-tag=<tag>`
 immediately above `image:` and sets `wud.tag.include` to an exact regex for that
 tag so WUD keeps watching the resolved tag. If the tag digest moves, cannot be
 resolved, cannot be verified locally, or the Compose metadata cannot be written

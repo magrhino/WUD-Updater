@@ -842,7 +842,8 @@ export interface LogTail {
 // ---------------------------------------------------------------------------
 
 export interface DiagnosticsSupportBundleResponse {
-  wud_updater_version: string;
+  wudup_version: string;
+  wud_updater_version?: string;
   settings: SettingsResponse;
   doctor_result: DoctorResponse;
   pending_summary: PendingResponse;

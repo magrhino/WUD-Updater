@@ -181,8 +181,8 @@ function primePinnedSelfUpdate(stores: AppStores): void {
   stores.settings.coreUpdateTour = coreUpdateTourResponse();
   stores.updates.selfUpdate = selfUpdateResponse({
     strategy: "prepare_tag_update",
-    current_image: "ghcr.io/magrhino/wud-updater:v0.24.2",
-    target_image: "ghcr.io/magrhino/wud-updater:v0.25.0",
+    current_image: "ghcr.io/magrhino/wudup:v0.24.2",
+    target_image: "ghcr.io/magrhino/wudup:v0.25.0",
     external_recreate_required: true,
   });
 }
@@ -304,7 +304,7 @@ describe("app shell", () => {
 
     const { wrapper } = await mountAppAt(stores);
     const versionLink = wrapper.find(
-      'a[href="https://github.com/magrhino/WUD-Updater/releases/tag/v0.24.2"]',
+      'a[href="https://github.com/magrhino/wudup/releases/tag/v0.24.2"]',
     );
 
     expect(versionLink.exists()).toBe(true);
@@ -315,7 +315,7 @@ describe("app shell", () => {
     await nextTick();
 
     const buildLink = wrapper.find(
-      'a[href="https://github.com/magrhino/WUD-Updater/releases"]',
+      'a[href="https://github.com/magrhino/wudup/releases"]',
     );
     expect(buildLink.exists()).toBe(true);
     expect(buildLink.text()).toBe("dev-build");
@@ -382,14 +382,14 @@ describe("app shell", () => {
     expectTextToContain(
       wrapper,
       "Update available: v0.24.2 → v0.25.0",
-      "ghcr.io/magrhino/wud-updater:latest",
+      "ghcr.io/magrhino/wudup:latest",
     );
     await clickButtonByText(wrapper, "Pull image");
 
     const dialog = wrapper.find('[role="dialog"]');
     expectTextToContain(
       dialog,
-      "Update WUD-Updater",
+      "Update WUDup",
       "Update Plan",
       "Release Notes",
     );
@@ -436,8 +436,8 @@ describe("app shell", () => {
       dialog,
       "This updates the Compose image tag",
       "Compose tag update",
-      "wud-updater",
-      "ghcr.io/magrhino/wud-updater:v0.25.0",
+      "wudup",
+      "ghcr.io/magrhino/wudup:v0.25.0",
     );
 
     await clickButtonByText(dialog, "Prepare tag update");
