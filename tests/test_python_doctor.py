@@ -345,6 +345,68 @@ class DoctorTests(unittest.TestCase):
         self.assertEqual(status, 0, stdout)
         self.assertIn("[PASS] sudo: disabled by WUDUP_USE_SUDO=false", stdout)
 
+    def test_check_sudo_reports_configured_falsey_value(self) -> None:
+        for value in ("0", "no", "off"):
+            with self.subTest(value=value):
+                status, stdout = self._run_doctor({"WUDUP_USE_SUDO": value})
+
+                self.assertEqual(status, 0, stdout)
+                self.assertIn(f"[PASS] sudo: disabled by WUDUP_USE_SUDO={value}", stdout)
+
+    def test_check_sudo_passes_when_legacy_env_disabled(self) -> None:
+        env = self._doctor_env({"WUD_UPDATER_USE_SUDO": "false"})
+        env.pop("WUDUP_USE_SUDO")
+        stdout = StringIO()
+
+        with redirect_stdout(stdout):
+            status = run_doctor_from_namespace(
+                self._doctor_args(),
+                repo_root=self.root,
+                environ=env,
+            )
+
+        output = stdout.getvalue()
+        self.assertEqual(status, 0, output)
+        self.assertIn("[PASS] sudo: disabled by WUD_UPDATER_USE_SUDO=false", output)
+
+    def test_check_sudo_requires_sudo_when_legacy_env_enabled(self) -> None:
+        env = self._doctor_env(
+            {
+                "PATH": str(self.root / "empty-bin"),
+                "WUD_UPDATER_USE_SUDO": "true",
+            }
+        )
+        env.pop("WUDUP_USE_SUDO")
+        stdout = StringIO()
+
+        with redirect_stdout(stdout):
+            status = run_doctor_from_namespace(
+                self._doctor_args(),
+                repo_root=self.root,
+                environ=env,
+            )
+
+        output = stdout.getvalue()
+        self.assertEqual(status, 1, output)
+        self.assertIn("[FAIL] sudo: required but not found on PATH", output)
+        self.assertNotIn("[PASS] sudo: disabled by default", output)
+
+    def test_check_sudo_passes_when_unset(self) -> None:
+        env = self._doctor_env()
+        env.pop("WUDUP_USE_SUDO")
+        stdout = StringIO()
+
+        with redirect_stdout(stdout):
+            status = run_doctor_from_namespace(
+                self._doctor_args(),
+                repo_root=self.root,
+                environ=env,
+            )
+
+        output = stdout.getvalue()
+        self.assertEqual(status, 0, output)
+        self.assertIn("[PASS] sudo: disabled by default", output)
+
     def test_readiness_result_passes_with_accessible_docker_and_wud_file(self) -> None:
         # Use a tcp DOCKER_HOST so no Unix socket check is needed.
         options = self._make_doctor_options(docker_host="tcp://docker:2375")

@@ -63,6 +63,24 @@ class CliTests(unittest.TestCase):
             status = main(argv)
         return status, stdout.getvalue(), stderr.getvalue()
 
+    def test_updates_help_describes_no_sudo_default(self) -> None:
+        stdout = StringIO()
+        stderr = StringIO()
+
+        with (
+            redirect_stdout(stdout),
+            redirect_stderr(stderr),
+            self.assertRaises(SystemExit) as raised,
+        ):
+            main(["updates", "--help"])
+
+        help_text = stdout.getvalue()
+        self.assertEqual(raised.exception.code, 0)
+        self.assertIn("--no-updater-sudo", help_text)
+        self.assertIn("direct updater execution is the default", help_text)
+        self.assertIn("WUDUP_USE_SUDO=true", help_text)
+        self.assertEqual(stderr.getvalue(), "")
+
     def test_update_from_wud_dry_run_accepts_shell_flags(self) -> None:
         with tempfile.TemporaryDirectory(prefix="wud-python-cli.") as tmpdir:
             root = Path(tmpdir)

@@ -61,7 +61,9 @@ class DoctorOptions:
     host_docker_base: Path | None = None
     docker_host: str = ""
     sync_scripts: str = "auto"
-    updater_use_sudo: bool = True
+    updater_use_sudo: bool = False
+    updater_use_sudo_source: str = ""
+    updater_use_sudo_value: str = ""
     truenas_status_check: bool = False
     truenas_status_timeout: str = DEFAULT_TRUENAS_STATUS_TIMEOUT
     compose_ignore_paths: tuple[Path, ...] = ()
@@ -364,7 +366,13 @@ class Doctor:
 
     def _check_sudo(self) -> None:
         if not self.options.updater_use_sudo:
-            self._record("PASS", "sudo", "disabled by WUDUP_USE_SUDO=false")
+            detail = (
+                f"disabled by {self.options.updater_use_sudo_source}="
+                f"{self.options.updater_use_sudo_value}"
+                if self.options.updater_use_sudo_source
+                else "disabled by default"
+            )
+            self._record("PASS", "sudo", detail)
             return
 
         if shutil.which("sudo", path=self.environ.get("PATH")) is None:
@@ -886,8 +894,8 @@ def _suggestions_for(status: str, name: str) -> tuple[DoctorSuggestion, ...]:
             DoctorSuggestion(
                 label="Disable sudo if not needed",
                 description=(
-                    "Set WUDUP_USE_SUDO=false when the updater can run "
-                    "directly."
+                    "Unset WUDUP_USE_SUDO or set it to false when the updater "
+                    "can run directly."
                 ),
                 snippet="WUDUP_USE_SUDO=false",
             ),
@@ -929,6 +937,11 @@ def options_from_namespace(
     updater = env_value(environ, "WUDUP_UPDATER", "WUD_UPDATER") or _default_updater(
         repo_path
     )
+    updater_sudo_source, updater_sudo_value = _env_value_with_source(
+        environ,
+        "WUDUP_USE_SUDO",
+        "WUD_UPDATER_USE_SUDO",
+    )
     try:
         compose_ignore_paths = parse_compose_ignore_paths(
             environ.get(COMPOSE_IGNORE_PATHS_ENV)
@@ -950,10 +963,12 @@ def options_from_namespace(
             environ.get("WUD_SYNC_SCRIPTS"),
         ),
         updater_use_sudo=_resolve_bool_env(
-            env_value(environ, "WUDUP_USE_SUDO", "WUD_UPDATER_USE_SUDO"),
-            "WUDUP_USE_SUDO",
-            default=True,
+            updater_sudo_value,
+            updater_sudo_source or "WUDUP_USE_SUDO",
+            default=False,
         ),
+        updater_use_sudo_source=updater_sudo_source,
+        updater_use_sudo_value=updater_sudo_value.strip() if updater_sudo_value else "",
         truenas_status_check=_resolve_bool_env(
             environ.get("TRUENAS_STATUS_CHECK"),
             "TRUENAS_STATUS_CHECK",
@@ -965,6 +980,20 @@ def options_from_namespace(
         compose_ignore_paths=compose_ignore_paths,
         no_color=bool(getattr(args, "no_color", False)),
     )
+
+
+def _env_value_with_source(
+    env: Mapping[str, str],
+    canonical: str,
+    legacy: str,
+) -> tuple[str, str | None]:
+    value = env.get(canonical)
+    if value:
+        return canonical, value
+    value = env.get(legacy)
+    if value:
+        return legacy, value
+    return "", None
 
 
 def _default_app_dir(repo_root: Path) -> str:

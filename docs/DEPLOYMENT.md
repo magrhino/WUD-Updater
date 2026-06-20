@@ -257,8 +257,8 @@ That variant builds the helper image with the official TrueNAS API client so a
 short-lived sibling container can run local `midclt` calls. Set
 `TRUENAS_API_CLIENT_REF` to an API client tag that is compatible with your
 TrueNAS release. The example uses the Python/container `updates` wrapper by
-default and sets `WUDUP_USE_SUDO=false` and `TRUENAS_STATUS_CHECK=true`;
-the TrueNAS helper is only wired into that wrapper.
+default, keeps sudo disabled, and sets `TRUENAS_STATUS_CHECK=true`; the
+TrueNAS helper is only wired into that wrapper.
 
 When enabled, the Python `updates` wrapper uses Docker to inspect its own
 container, starts the same image with `--network none`, mounts only
@@ -528,7 +528,7 @@ Boolean examples use `true` and `false`; legacy aliases `1`, `0`, `yes`, `no`,
 | `OUT_UID` / `OUT_GID` | unset | Optional owner for rewritten todo files and updater logs. `OUT_GUID` is accepted as an alias for `OUT_GID`. |
 | `WUDUP_UPDATER` | Host: repo-local `bin/docker-update-from-wud`; image: `/app/bin/docker-update-from-wud` | Updater command invoked by `updates`. |
 | `WUDUP_CONFIG` | `$HOME/.config/wudup/env` | Host config file read by `updates`. |
-| `WUDUP_USE_SUDO` | `true` | For the Python `updates` wrapper, set to `false` to disable sudo file fallbacks and run `WUDUP_UPDATER` directly. |
+| `WUDUP_USE_SUDO` | `false` | For the Python `updates` wrapper, set to `true` only when a host install needs sudo file fallbacks and should run `WUDUP_UPDATER` through sudo. |
 | `WUDUP_BANNER` | `auto` | Startup banner mode: `auto` prints on TTY startup, `true` forces it, and `false` disables it. |
 | `WUDUP_RELEASE_CHECK` | `auto` | Latest-release check mode: `auto` or `true` lets startup banner, WebUI self-update banner, and self-update release checks try GitHub briefly, and `false` disables the network check. |
 | `WUDUP_SELF_UPDATE` | enabled | Set to `false`, `0`, `no`, or `off` to disable the default `updates` self-update preflight. |

@@ -40,10 +40,11 @@ class UpdatesWrapperDispatchTests(UpdatesWrapperTestCase):
 
         self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
         self.assertIn(
-            f"{self.updater} --base {docker_base} --file {config_wud_file} "
-            "--log-dir ./logs --mode live --max-wait 7 --yes",
-            self.sudo_log.read_text(encoding="utf-8"),
+            f"--base {docker_base} --file {config_wud_file} --log-dir ./logs "
+            "--mode live --max-wait 7 --yes",
+            self.updater_log.read_text(encoding="utf-8"),
         )
+        self.assertFalse(self.sudo_log.exists())
 
     def test_legacy_default_config_path_is_sourced(self) -> None:
         home = self.root / "home"
@@ -81,10 +82,11 @@ class UpdatesWrapperDispatchTests(UpdatesWrapperTestCase):
 
         self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
         self.assertIn(
-            f"{self.updater} --base {docker_base} --file {config_wud_file} "
-            "--log-dir ./logs --mode pause --max-wait 9 --yes",
-            self.sudo_log.read_text(encoding="utf-8"),
+            f"--base {docker_base} --file {config_wud_file} --log-dir ./logs "
+            "--mode pause --max-wait 9 --yes",
+            self.updater_log.read_text(encoding="utf-8"),
         )
+        self.assertFalse(self.sudo_log.exists())
 
     def test_bin_updates_dispatches_python_wrapper_by_default(self) -> None:
         self.wud_file.write_text("repo/app:latest\n", encoding="utf-8")
