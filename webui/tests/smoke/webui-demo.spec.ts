@@ -1,5 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 
+import { touchTargetSizePx } from "../../src/touchTargets";
+
 const demoBasePath = process.env.PLAYWRIGHT_WEBUI_DEMO_BASE_PATH ?? "";
 const browserFailures = new WeakMap<Page, string[]>();
 
@@ -46,10 +48,14 @@ async function expectTouchTargetHeight(page: Page, buttonName: string) {
   const button = page
     .getByRole("button", { name: buttonName, exact: true })
     .first();
+  await expect(button).toBeVisible();
   await button.scrollIntoViewIfNeeded();
   const box = await button.boundingBox();
-  expect(box?.height ?? 0).toBeGreaterThanOrEqual(44);
-  expect(box?.width ?? 0).toBeGreaterThanOrEqual(44);
+  if (box === null) {
+    throw new Error(`Expected "${buttonName}" button to have a bounding box`);
+  }
+  expect(box.height).toBeGreaterThanOrEqual(touchTargetSizePx);
+  expect(box.width).toBeGreaterThanOrEqual(touchTargetSizePx);
 }
 
 test("static demo renders current pending state and completes apply flow", async ({

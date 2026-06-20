@@ -641,11 +641,11 @@ const emit = defineEmits<{
 }
 
 .apply-readiness-row.status-warn > svg {
-  color: var(--color-warning);
+  color: var(--color-warning-fg);
 }
 
 .apply-readiness-row.status-fail > svg {
-  color: var(--color-error);
+  color: var(--color-error-fg);
 }
 
 .apply-readiness-detail {

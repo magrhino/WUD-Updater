@@ -79,7 +79,7 @@ function updateQuery(value: string): void {
   }
 
   .pending-search-input {
-    min-height: 44px;
+    min-height: var(--size-touch-target);
   }
 }
 </style>

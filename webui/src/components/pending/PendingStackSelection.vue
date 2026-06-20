@@ -273,7 +273,7 @@ const emit = defineEmits<{
   }
 
   .stack-details .disclosure-summary {
-    min-height: 44px;
+    min-height: var(--size-touch-target);
   }
 
   .stack-card-tags {

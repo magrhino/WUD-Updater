@@ -120,12 +120,12 @@ async function handleLogout(): Promise<void> {
 
 @media (--wud-compact) {
   :deep(.inline-actions .n-button) {
-    min-width: 44px;
-    min-height: 44px;
+    min-width: var(--size-touch-target);
+    min-height: var(--size-touch-target);
   }
 
   :deep(.inline-actions .n-button--circle) {
-    min-width: 44px;
+    min-width: var(--size-touch-target);
   }
 }
 </style>

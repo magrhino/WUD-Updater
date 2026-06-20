@@ -430,7 +430,7 @@ function sourceCheckSummaryLabel(item: OnboardingChecklistItem): string {
 .onboarding-next-main>svg {
   flex: 0 0 auto;
   margin-top: 2px;
-  color: var(--color-warning);
+  color: var(--color-warning-fg);
 }
 
 .onboarding-next-action.is-ready .onboarding-next-main>svg {
@@ -494,11 +494,11 @@ function sourceCheckSummaryLabel(item: OnboardingChecklistItem): string {
 }
 
 .onboarding-check-row.status-warn .onboarding-check-main>svg {
-  color: var(--color-warning);
+  color: var(--color-warning-fg);
 }
 
 .onboarding-check-row.status-fail .onboarding-check-main>svg {
-  color: var(--color-error);
+  color: var(--color-error-fg);
 }
 
 .onboarding-check-main>div {
@@ -567,7 +567,7 @@ function sourceCheckSummaryLabel(item: OnboardingChecklistItem): string {
 .onboarding-check-row.status-fail .onboarding-check-codes.is-primary code {
   border-color: color-mix(in srgb,
       var(--color-border) 58%,
-      var(--color-error) 42%);
+      var(--color-error-fg) 42%);
   background: color-mix(in srgb,
       var(--color-surface) 68%,
       var(--color-error-bg) 32%);
@@ -576,7 +576,7 @@ function sourceCheckSummaryLabel(item: OnboardingChecklistItem): string {
 .onboarding-check-row.status-warn .onboarding-check-codes.is-primary code {
   border-color: color-mix(in srgb,
       var(--color-border) 58%,
-      var(--color-warning) 42%);
+      var(--color-warning-fg) 42%);
   background: color-mix(in srgb,
       var(--color-surface) 68%,
       var(--color-warning-bg) 32%);
@@ -661,8 +661,8 @@ function sourceCheckSummaryLabel(item: OnboardingChecklistItem): string {
   .onboarding-actions :deep(.n-button),
   .onboarding-suggestion :deep(.n-button),
   .onboarding-next-action :deep(.n-button) {
-    min-width: 44px;
-    min-height: 44px;
+    min-width: var(--size-touch-target);
+    min-height: var(--size-touch-target);
   }
 }
 </style>

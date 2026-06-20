@@ -213,11 +213,11 @@ function groupedItemTarget(item: PendingGroupedItem): string {
   }
 
   .pending-update-tag .tag-override-input {
-    min-height: 44px;
+    min-height: var(--size-touch-target);
   }
 
   .pending-update-main :deep(.n-checkbox) {
-    min-height: 44px;
+    min-height: var(--size-touch-target);
     display: inline-flex;
     align-items: center;
   }

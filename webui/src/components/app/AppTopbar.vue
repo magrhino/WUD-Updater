@@ -83,12 +83,12 @@ defineEmits<{
   }
 
   .topbar-actions :deep(.n-button) {
-    min-width: 44px;
-    min-height: 44px;
+    min-width: var(--size-touch-target);
+    min-height: var(--size-touch-target);
   }
 
   .topbar-actions :deep(.n-button--circle) {
-    min-width: 44px;
+    min-width: var(--size-touch-target);
   }
 }
 </style>

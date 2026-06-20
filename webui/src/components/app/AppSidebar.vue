@@ -281,8 +281,8 @@ onMounted(() => {
   }
 
   .brand {
-    min-width: 44px;
-    min-height: 44px;
+    min-width: var(--size-touch-target);
+    min-height: var(--size-touch-target);
   }
 
   .nav-list {
@@ -301,7 +301,7 @@ onMounted(() => {
   .nav-item {
     flex: 0 0 auto;
     gap: 8px;
-    min-height: 44px;
+    min-height: var(--size-touch-target);
     padding: 0 12px;
     scroll-margin-inline: 4px;
     white-space: nowrap;

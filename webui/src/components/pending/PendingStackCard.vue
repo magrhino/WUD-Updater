@@ -383,16 +383,16 @@ const emit = defineEmits<{
   }
 
   .stack-card-actions :deep(.n-button) {
-    min-width: 44px;
-    min-height: 44px;
+    min-width: var(--size-touch-target);
+    min-height: var(--size-touch-target);
   }
 
   .stack-details .disclosure-summary {
-    min-height: 44px;
+    min-height: var(--size-touch-target);
   }
 
   .stack-title-block :deep(.n-checkbox) {
-    min-height: 44px;
+    min-height: var(--size-touch-target);
     display: inline-flex;
     align-items: center;
   }

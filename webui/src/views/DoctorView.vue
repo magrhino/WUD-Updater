@@ -331,11 +331,11 @@ function statusIcon(status: DoctorCheckStatus): Component {
 }
 
 .doctor-check-row.status-warn .doctor-check-title svg {
-  color: var(--color-warning);
+  color: var(--color-warning-fg);
 }
 
 .doctor-check-row.status-fail .doctor-check-title svg {
-  color: var(--color-error);
+  color: var(--color-error-fg);
 }
 
 .doctor-check-title>div,
@@ -384,8 +384,8 @@ function statusIcon(status: DoctorCheckStatus): Component {
 
   .section-heading-meta :deep(.n-button),
   .doctor-suggestion :deep(.n-button) {
-    min-width: 44px;
-    min-height: 44px;
+    min-width: var(--size-touch-target);
+    min-height: var(--size-touch-target);
   }
 }
 </style>
