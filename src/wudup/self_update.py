@@ -17,7 +17,7 @@ from .banner import (
     release_update_available,
 )
 from .container_identity import container_identity_candidates
-from .images import repo_key, tag_value_valid
+from .images import image_repo_ref, repo_key, tag_value_valid
 from .naming import IMAGE_REPOSITORY, LEGACY_IMAGE_REPOSITORY, env_value
 
 
@@ -27,6 +27,13 @@ SELF_UPDATE_REPOS = frozenset(
     {
         "magrhino/wudup",
         "wudup",
+        "magrhino/wud-updater",
+        "wud-updater",
+        LEGACY_IMAGE_REPOSITORY.removeprefix("ghcr.io/"),
+    }
+)
+LEGACY_SELF_UPDATE_REPOS = frozenset(
+    {
         "magrhino/wud-updater",
         "wud-updater",
         LEGACY_IMAGE_REPOSITORY.removeprefix("ghcr.io/"),
@@ -108,6 +115,7 @@ def release_self_update_target(
             return f"{DEFAULT_SELF_UPDATE_REPOSITORY}:{local_tag} tag={latest_tag}"
         return DEFAULT_SELF_UPDATE_IMAGE
 
+    current_image = _canonical_self_update_image(current_image)
     current_tag = _image_reference_tag(current_image)
     if _is_release_image_tag(current_tag) and _normalize_tag(current_tag) != latest_tag:
         return f"{current_image} tag={latest_tag}"
@@ -190,6 +198,14 @@ def _image_reference_tag(image: str) -> str:
     if ":" not in last:
         return ""
     return last.rsplit(":", 1)[1]
+
+
+def _canonical_self_update_image(image: str) -> str:
+    if repo_key(image).casefold() not in LEGACY_SELF_UPDATE_REPOS:
+        return image
+    repo = image_repo_ref(image)
+    suffix = image[len(repo) :]
+    return f"{IMAGE_REPOSITORY}{suffix}"
 
 
 def _is_release_image_tag(tag: str) -> bool:

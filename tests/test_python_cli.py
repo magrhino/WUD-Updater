@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import importlib
 import os
+import subprocess
+import sys
 import unittest
 import tempfile
 from contextlib import redirect_stderr, redirect_stdout
@@ -25,6 +27,34 @@ class CliTests(unittest.TestCase):
             legacy_self_update.DEFAULT_SELF_UPDATE_REPOSITORY,
             "ghcr.io/magrhino/wudup",
         )
+
+    def test_legacy_submodule_import_works_in_fresh_process(self) -> None:
+        repo_root = Path(__file__).resolve().parents[1]
+        env = dict(os.environ)
+        src_path = str(repo_root / "src")
+        existing_pythonpath = env.get("PYTHONPATH", "")
+        env["PYTHONPATH"] = (
+            src_path
+            if not existing_pythonpath
+            else f"{src_path}{os.pathsep}{existing_pythonpath}"
+        )
+
+        result = subprocess.run(
+            [
+                sys.executable,
+                "-c",
+                "import wud_updater.banner; print(wud_updater.banner.__name__)",
+            ],
+            env=env,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            check=False,
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout.strip(), "wudup.banner")
 
     def _run_main(self, argv: list[str]) -> tuple[int, str, str]:
         stdout = StringIO()

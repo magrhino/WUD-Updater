@@ -104,9 +104,34 @@ class SelfUpdateTests(unittest.TestCase):
             "ghcr.io/magrhino/wudup:v0.12.2 tag=v0.12.3",
         )
 
+    def test_release_self_update_target_rewrites_legacy_pinned_image_repo(
+        self,
+    ) -> None:
+        target = release_self_update_target(
+            "ghcr.io/magrhino/wud-updater:v0.12.2",
+            "v0.12.2",
+            "v0.12.3",
+        )
+
+        self.assertEqual(
+            target,
+            "ghcr.io/magrhino/wudup:v0.12.2 tag=v0.12.3",
+        )
+
     def test_release_self_update_target_keeps_floating_tag(self) -> None:
         target = release_self_update_target(
             "ghcr.io/magrhino/wudup:latest",
+            "v0.12.2",
+            "v0.12.3",
+        )
+
+        self.assertEqual(target, "ghcr.io/magrhino/wudup:latest")
+
+    def test_release_self_update_target_rewrites_legacy_floating_image_repo(
+        self,
+    ) -> None:
+        target = release_self_update_target(
+            "ghcr.io/magrhino/wud-updater:latest",
             "v0.12.2",
             "v0.12.3",
         )

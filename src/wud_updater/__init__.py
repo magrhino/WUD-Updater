@@ -5,6 +5,7 @@ from __future__ import annotations
 import importlib
 import importlib.abc
 import importlib.machinery
+import importlib.util
 import sys
 from types import ModuleType
 from typing import Any
