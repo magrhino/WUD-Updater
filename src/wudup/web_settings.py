@@ -566,6 +566,19 @@ def _webui_settings_entries(
             _env_configured(settings, web_wud_api.WUD_API_BASE_URL_ENV),
         ),
         _settings_entry(
+            web_wud_api.WUD_API_STARTUP_WAIT_SECONDS_ENV,
+            web_wud_api.format_startup_wait_seconds(
+                settings.wud_api_startup_wait_seconds
+            ),
+            web_wud_api.format_startup_wait_seconds(
+                web_wud_api.DEFAULT_WUD_API_STARTUP_WAIT_SECONDS
+            ),
+            _env_configured(
+                settings,
+                web_wud_api.WUD_API_STARTUP_WAIT_SECONDS_ENV,
+            ),
+        ),
+        _settings_entry(
             "WUD_WEB_MUTATIONS_ENABLED",
             _format_bool(settings.mutations_enabled),
             "false",

@@ -139,6 +139,7 @@ Useful WebUI development variables:
 | `WUD_WEB_TRUSTED_PROXIES` | Proxy IP/CIDR entries whose forwarded headers are trusted. |
 | `WUD_WEB_SECURE_COOKIES` | Cookie Secure mode: `auto`, `true`, or `false`; keep `auto` outside local HTTP tests. |
 | `WUD_API_BASE_URL` | Internal WUD API URL for best-effort WebUI metadata discovery; defaults to `http://wud:3000`. |
+| `WUD_API_STARTUP_WAIT_SECONDS` | Seconds to retry the initial WUD API health probe during WebUI startup; defaults to `0`. |
 
 For manual backend-only testing with a built SPA:
 

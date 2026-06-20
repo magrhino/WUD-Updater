@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 import time
 import urllib.error
 import urllib.parse
@@ -20,13 +21,20 @@ from .images import (
     tag_value_valid,
 )
 from .release_notes import OCI_SOURCE_LABEL, github_repo_from_source
-from .web_auth import _redact_sensitive_text, _redact_unknown_absolute_paths
+from .web_auth import (
+    WebConfigError,
+    _redact_sensitive_text,
+    _redact_unknown_absolute_paths,
+)
 from .web_models import WebSettings, WudApiStatus, WudContainerMetadata
 from .wud_file import WudTarget
 
 DEFAULT_WUD_API_BASE_URL = "http://wud:3000"
 WUD_API_BASE_URL_ENV = "WUD_API_BASE_URL"
+WUD_API_STARTUP_WAIT_SECONDS_ENV = "WUD_API_STARTUP_WAIT_SECONDS"
+DEFAULT_WUD_API_STARTUP_WAIT_SECONDS = 0.0
 WUD_API_TIMEOUT_SECONDS = 1.0
+WUD_API_STARTUP_RETRY_INTERVAL_SECONDS = 0.5
 WUD_API_CACHE_TTL_SECONDS = 30.0
 WUD_API_USER_AGENT = "wudup-webui-wud-api/1.0"
 
@@ -85,8 +93,49 @@ def configured_base_url(environ: Mapping[str, str]) -> str:
     )
 
 
+def configured_startup_wait_seconds(environ: Mapping[str, str]) -> float:
+    raw_value = environ.get(WUD_API_STARTUP_WAIT_SECONDS_ENV, "").strip()
+    if not raw_value:
+        return DEFAULT_WUD_API_STARTUP_WAIT_SECONDS
+    try:
+        value = float(raw_value)
+    except ValueError as exc:
+        raise WebConfigError(
+            f"{WUD_API_STARTUP_WAIT_SECONDS_ENV} must be a number of seconds"
+        ) from exc
+    if not math.isfinite(value):
+        raise WebConfigError(
+            f"{WUD_API_STARTUP_WAIT_SECONDS_ENV} must be a finite number of seconds"
+        )
+    if value < 0:
+        raise WebConfigError(
+            f"{WUD_API_STARTUP_WAIT_SECONDS_ENV} must be zero or greater"
+        )
+    return value
+
+
+def format_startup_wait_seconds(value: float) -> str:
+    numeric_value = float(value)
+    if numeric_value.is_integer():
+        return str(int(numeric_value))
+    return str(numeric_value)
+
+
 def startup_probe(settings: WebSettings) -> WudApiSnapshot:
-    return _refresh_snapshot(settings, include_containers=False)
+    snapshot = _refresh_snapshot(settings, include_containers=False)
+    wait_seconds = max(settings.wud_api_startup_wait_seconds, 0.0)
+    if snapshot.status.state != "unavailable" or wait_seconds <= 0:
+        return snapshot
+
+    deadline = time.monotonic() + wait_seconds
+    while True:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            return snapshot
+        time.sleep(min(WUD_API_STARTUP_RETRY_INTERVAL_SECONDS, remaining))
+        snapshot = _refresh_snapshot(settings, include_containers=False)
+        if snapshot.status.state != "unavailable":
+            return snapshot
 
 
 def get_snapshot(

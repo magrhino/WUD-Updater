@@ -520,6 +520,7 @@ def load_web_settings(
         host_docker_base=host_docker_base,
         restart_container=_resolve_restart_container(env),
         wud_api_base_url=web_wud_api.configured_base_url(env),
+        wud_api_startup_wait_seconds=web_wud_api.configured_startup_wait_seconds(env),
         command_env=dict(env),
     )
 

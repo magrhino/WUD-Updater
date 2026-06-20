@@ -6,6 +6,8 @@ import urllib.parse
 from pathlib import Path
 from typing import Any
 
+import pytest
+
 from wudup import web_release_notes as release_notes_module
 from wudup import web_wud_api
 from wudup.release_notes import (
@@ -13,6 +15,7 @@ from wudup.release_notes import (
     release_note_contexts,
 )
 from wudup.web import load_web_settings
+from wudup.web_auth import WebConfigError
 
 from tests.web_test_helpers import _client, _csrf_headers, _web_env
 
@@ -140,6 +143,55 @@ def test_wud_api_snapshot_reports_unreachable_state(
     assert snapshot.status.available is False
     assert snapshot.status.metadata_available is False
     assert snapshot.containers == ()
+
+
+def test_startup_probe_waits_for_wud_api_readiness(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    calls: list[str] = []
+
+    def fake_request_json(url: str) -> object:
+        calls.append(url)
+        if len(calls) == 1:
+            raise OSError("connection refused")
+        return {"status": "ok"}
+
+    monkeypatch.setattr(web_wud_api, "_request_json", fake_request_json)
+    monkeypatch.setattr(
+        web_wud_api,
+        "WUD_API_STARTUP_RETRY_INTERVAL_SECONDS",
+        0.0,
+    )
+    settings = load_web_settings(
+        environ=_web_env(
+            tmp_path,
+            {
+                "WUD_API_BASE_URL": "https://wud.startup-wait.test:3000",
+                "WUD_API_STARTUP_WAIT_SECONDS": "1",
+            },
+        ),
+    )
+
+    snapshot = web_wud_api.startup_probe(settings)
+
+    assert snapshot.status.state == "ready"
+    assert snapshot.status.available is True
+    assert len(calls) == 2
+
+
+@pytest.mark.parametrize("value", ["soon", "-1", "nan", "inf"])
+def test_wud_api_startup_wait_rejects_invalid_values(
+    tmp_path: Path,
+    value: str,
+) -> None:
+    with pytest.raises(WebConfigError):
+        load_web_settings(
+            environ=_web_env(
+                tmp_path,
+                {"WUD_API_STARTUP_WAIT_SECONDS": value},
+            ),
+        )
 
 
 def test_wud_api_snapshot_reports_auth_required_metadata(

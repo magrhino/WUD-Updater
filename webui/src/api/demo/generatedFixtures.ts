@@ -1128,6 +1128,13 @@ export const generatedFixtures = {
           "value": "http://wud:3000"
         },
         {
+          "configured": false,
+          "default_value": "0",
+          "name": "WUD_API_STARTUP_WAIT_SECONDS",
+          "source": "default",
+          "value": "0"
+        },
+        {
           "configured": true,
           "default_value": "false",
           "name": "WUD_WEB_MUTATIONS_ENABLED",
@@ -114939,6 +114946,13 @@ export const generatedFixtures = {
         "name": "WUD_API_BASE_URL",
         "source": "default",
         "value": "http://wud:3000"
+      },
+      {
+        "configured": false,
+        "default_value": "0",
+        "name": "WUD_API_STARTUP_WAIT_SECONDS",
+        "source": "default",
+        "value": "0"
       },
       {
         "configured": true,

@@ -13,6 +13,7 @@ from ruamel.yaml import YAML
 from wudup.init_config import (
     InitConfigError,
     InitPrompter,
+    _add_wud_health_dependency,
     answers_from_namespace,
     generate_files,
     run_init,
@@ -77,6 +78,7 @@ class InitConfigTests(unittest.TestCase):
         self.assertIn("WUD_WEB_PUBLIC_ORIGIN=", content)
         self.assertIn("WUD_WEB_ALLOWED_HOSTS=", content)
         self.assertIn("WUD_API_BASE_URL=http://wud:3000", content)
+        self.assertIn("WUD_API_STARTUP_WAIT_SECONDS=5", content)
 
     def test_webui_lan_requires_public_origin_in_non_interactive_mode(self) -> None:
         with self.assertRaisesRegex(InitConfigError, "--public-origin"):
@@ -366,10 +368,59 @@ class InitConfigTests(unittest.TestCase):
             environment["WUD_API_BASE_URL"],
             "${WUD_API_BASE_URL:-http://wud:3000}",
         )
+        self.assertEqual(
+            environment["WUD_API_STARTUP_WAIT_SECONDS"],
+            "${WUD_API_STARTUP_WAIT_SECONDS:-5}",
+        )
+        self.assertEqual(
+            parsed["services"]["wudup"]["depends_on"],
+            {"wud": {"condition": "service_healthy"}},
+        )
         self.assertIn(
             "${WEBUI_LOG_DIR:-./logs}:/logs",
             parsed["services"]["wudup"]["volumes"],
         )
+
+    def test_wud_health_dependency_preserves_existing_depends_on(self) -> None:
+        service: dict[str, object] = {
+            "depends_on": {
+                "socket-proxy-wudup": {"condition": "service_started"},
+            }
+        }
+
+        _add_wud_health_dependency(service)
+
+        self.assertEqual(
+            service["depends_on"],
+            {
+                "socket-proxy-wudup": {"condition": "service_started"},
+                "wud": {"condition": "service_healthy"},
+            },
+        )
+
+    def test_wud_health_dependency_converts_list_depends_on(self) -> None:
+        service: dict[str, object] = {
+            "depends_on": ["socket-proxy", "database"],
+        }
+
+        _add_wud_health_dependency(service)
+
+        self.assertEqual(
+            service["depends_on"],
+            {
+                "socket-proxy": {"condition": "service_started"},
+                "database": {"condition": "service_started"},
+                "wud": {"condition": "service_healthy"},
+            },
+        )
+
+    def test_wud_health_dependency_rejects_invalid_depends_on(self) -> None:
+        service: dict[str, object] = {
+            "depends_on": "database",
+        }
+
+        with self.assertRaisesRegex(InitConfigError, "mapping or a list"):
+            _add_wud_health_dependency(service)
 
     def test_webui_compose_override_yaml_contains_readyz_healthcheck(self) -> None:
         override_file = self.root / "override.yml"
@@ -390,6 +441,14 @@ class InitConfigTests(unittest.TestCase):
         self.assertEqual(
             service["environment"]["WUD_API_BASE_URL"],
             "${WUD_API_BASE_URL:-http://wud:3000}",
+        )
+        self.assertEqual(
+            service["environment"]["WUD_API_STARTUP_WAIT_SECONDS"],
+            "${WUD_API_STARTUP_WAIT_SECONDS:-5}",
+        )
+        self.assertEqual(
+            service["depends_on"],
+            {"wud": {"condition": "service_healthy"}},
         )
         self.assertEqual(
             service["ports"],
