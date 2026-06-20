@@ -4,6 +4,13 @@ All notable changes to WUD-Updater are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com) and versions follow
 [Semantic Versioning](https://semver.org).
 
+## [0.45.1](https://github.com/magrhino/WUD-Updater/compare/v0.45.0...v0.45.1) (2026-06-20)
+
+
+### Bug Fixes
+
+* **notes:** fix release notes for digest-pinned refs ([#361](https://github.com/magrhino/WUD-Updater/issues/361)) ([be13e13](https://github.com/magrhino/WUD-Updater/commit/be13e13258ae7c0117e1cdb790efe5cf95a3cae2))
+
 ## [0.45.0](https://github.com/magrhino/WUD-Updater/compare/v0.44.0...v0.45.0) (2026-06-19)
 
 
