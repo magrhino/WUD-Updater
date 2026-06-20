@@ -167,7 +167,7 @@ def test_startup_probe_waits_for_wud_api_readiness(
         environ=_web_env(
             tmp_path,
             {
-                "WUD_API_BASE_URL": "http://wud.startup-wait.test:3000",
+                "WUD_API_BASE_URL": "https://wud.startup-wait.test:3000",
                 "WUD_API_STARTUP_WAIT_SECONDS": "1",
             },
         ),
