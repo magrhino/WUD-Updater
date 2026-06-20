@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { useRoute } from "vue-router";
-import { KeyRound, ShieldCheck } from "@lucide/vue";
+import { KeyRound } from "@lucide/vue";
 import { NAlert, NButton, NForm, NFormItem, NInput } from "naive-ui";
 
+import AppBrandMark from "../components/app/AppBrandMark.vue";
 import { useAdminClaimForm } from "./useAdminClaimForm";
 
 const route = useRoute();
@@ -33,7 +34,7 @@ const {
     <div class="auth-panel">
       <div class="auth-heading">
         <div class="auth-mark">
-          <ShieldCheck :size="24" />
+          <AppBrandMark :size="36" />
         </div>
         <div>
           <p class="eyebrow">WUDup</p>

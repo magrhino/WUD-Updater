@@ -1,5 +1,7 @@
 # WUDup
 
+<img src="docs/assets/wudup-mark.png" alt="WUDup logo" width="128">
+
 WUDup turns image update notices from What's Up Docker (WUD) into a
 reviewable Docker Compose update workflow. The recommended deployment is the
 long-running WebUI container, which provides a local browser dashboard,

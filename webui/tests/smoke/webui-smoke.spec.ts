@@ -547,6 +547,29 @@ async function expectSidebarForegroundToken(page: Page, selector: string) {
     .toBe(true);
 }
 
+async function expectBrandMarkVisible(
+  page: Page,
+  selector: string,
+  expectedSize: number,
+) {
+  const mark = page.locator(`${selector} img.app-brand-mark`);
+  await expect(mark).toBeVisible();
+  await expect(mark).toHaveAttribute("alt", "");
+  await expect(mark).toHaveAttribute("aria-hidden", "true");
+  await expect
+    .poll(() =>
+      mark.evaluate((element) => {
+        const rect = element.getBoundingClientRect();
+        return {
+          complete: element instanceof HTMLImageElement && element.complete,
+          width: Math.round(rect.width),
+          height: Math.round(rect.height),
+        };
+      }),
+    )
+    .toEqual({ complete: true, width: expectedSize, height: expectedSize });
+}
+
 async function mobileShellLayout(page: Page) {
   return page.evaluate(() => {
     const bounds = (selector: string) => {
@@ -824,6 +847,7 @@ test("mobile shell keeps page width stable and preserves link targets", async ({
       "aria-label",
       "WUDup dashboard",
     );
+    await expectBrandMarkVisible(page, ".brand", 28);
     await expectMobileShellLayout(page, viewportWidth);
 
     if (viewportWidth === 320) {
@@ -900,7 +924,7 @@ test("theme toggle follows system dark mode and cycles preferences", async ({
   });
 });
 
-test("login mark uses sidebar foreground token in light and dark themes", async ({
+test("login mark renders brand image in light and dark themes", async ({
   page,
 }) => {
   const state = createState();
@@ -910,13 +934,13 @@ test("login mark uses sidebar foreground token in light and dark themes", async 
   await page.goto("/#/login");
   await expect(page.getByRole("heading", { name: "Sign in" })).toBeVisible();
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
-  await expectSidebarForegroundToken(page, ".auth-mark");
+  await expectBrandMarkVisible(page, ".auth-mark", 36);
 
   await page.evaluate(() => localStorage.setItem("theme-preference", "light"));
   await page.reload();
   await expect(page.getByRole("heading", { name: "Sign in" })).toBeVisible();
   await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
-  await expectSidebarForegroundToken(page, ".auth-mark");
+  await expectBrandMarkVisible(page, ".auth-mark", 36);
 });
 
 test("mutation-enabled pending flow creates jobs only after confirmation", async ({

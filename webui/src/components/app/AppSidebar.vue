@@ -2,7 +2,6 @@
 import { computed, onMounted, type Component } from "vue";
 import { RouterLink, useRoute } from "vue-router";
 import {
-  Activity,
   BellOff,
   Clock3,
   LayoutDashboard,
@@ -17,6 +16,7 @@ import { NTag } from "naive-ui";
 
 import { useConnectionStore } from "../../stores/connection";
 import { runInBackground } from "../../utils/promises";
+import AppBrandMark from "./AppBrandMark.vue";
 
 const route = useRoute();
 const connection = useConnectionStore();
@@ -143,7 +143,7 @@ onMounted(() => {
 <template>
   <aside class="sidebar">
     <RouterLink class="brand" to="/" aria-label="WUDup dashboard">
-      <Activity :size="22" />
+      <AppBrandMark :size="28" />
       <span>WUDup</span>
     </RouterLink>
 

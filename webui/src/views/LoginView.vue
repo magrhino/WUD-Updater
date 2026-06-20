@@ -4,6 +4,7 @@ import { useRoute, useRouter } from "vue-router";
 import { LogIn } from "@lucide/vue";
 import { NAlert, NButton, NForm, NFormItem, NInput } from "naive-ui";
 
+import AppBrandMark from "../components/app/AppBrandMark.vue";
 import { useAuthStore } from "../stores/auth";
 
 const auth = useAuthStore();
@@ -47,7 +48,7 @@ async function submit(event: Event): Promise<void> {
     <div class="auth-panel">
       <div class="auth-heading">
         <div class="auth-mark">
-          <LogIn :size="24" />
+          <AppBrandMark :size="36" />
         </div>
         <div>
           <p class="eyebrow">WUDup</p>
