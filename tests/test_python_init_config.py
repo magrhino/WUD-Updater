@@ -398,6 +398,30 @@ class InitConfigTests(unittest.TestCase):
             },
         )
 
+    def test_wud_health_dependency_converts_list_depends_on(self) -> None:
+        service: dict[str, object] = {
+            "depends_on": ["socket-proxy", "database"],
+        }
+
+        _add_wud_health_dependency(service)
+
+        self.assertEqual(
+            service["depends_on"],
+            {
+                "socket-proxy": {"condition": "service_started"},
+                "database": {"condition": "service_started"},
+                "wud": {"condition": "service_healthy"},
+            },
+        )
+
+    def test_wud_health_dependency_rejects_invalid_depends_on(self) -> None:
+        service: dict[str, object] = {
+            "depends_on": "database",
+        }
+
+        with self.assertRaisesRegex(InitConfigError, "mapping or a list"):
+            _add_wud_health_dependency(service)
+
     def test_webui_compose_override_yaml_contains_readyz_healthcheck(self) -> None:
         override_file = self.root / "override.yml"
         answers = answers_from_namespace(

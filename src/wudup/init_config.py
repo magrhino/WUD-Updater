@@ -364,7 +364,26 @@ def _compose_override_content(answers: InitAnswers) -> str:
 
 
 def _add_wud_health_dependency(service: dict[str, object]) -> None:
-    depends_on = dict(service.get("depends_on", {}))
+    current_depends_on = service.get("depends_on")
+    if current_depends_on is None:
+        depends_on = {}
+    elif isinstance(current_depends_on, Mapping):
+        depends_on = dict(current_depends_on)
+    elif isinstance(current_depends_on, Sequence) and not isinstance(
+        current_depends_on, (str, bytes, bytearray)
+    ):
+        depends_on = {}
+        for dependency in current_depends_on:
+            if not isinstance(dependency, str):
+                raise InitConfigError(
+                    "compose service depends_on must be a mapping or a list of "
+                    "service names"
+                )
+            depends_on[dependency] = {"condition": "service_started"}
+    else:
+        raise InitConfigError(
+            "compose service depends_on must be a mapping or a list of service names"
+        )
     depends_on["wud"] = {"condition": "service_healthy"}
     service["depends_on"] = depends_on
 
