@@ -302,11 +302,11 @@ function statusIcon(status: DoctorCheckStatus): Component {
 }
 
 .doctor-check-row.status-warn {
-  background: color-mix(in srgb, var(--color-panel-tint) 78%, #f6d57a 22%);
+  background: var(--color-warning-bg);
 }
 
 .doctor-check-row.status-fail {
-  background: color-mix(in srgb, var(--color-surface) 88%, #c65454 12%);
+  background: var(--color-error-bg);
 }
 
 .doctor-check-head,
@@ -331,11 +331,11 @@ function statusIcon(status: DoctorCheckStatus): Component {
 }
 
 .doctor-check-row.status-warn .doctor-check-title svg {
-  color: #9a640c;
+  color: var(--color-warning);
 }
 
 .doctor-check-row.status-fail .doctor-check-title svg {
-  color: #a73535;
+  color: var(--color-error);
 }
 
 .doctor-check-title>div,

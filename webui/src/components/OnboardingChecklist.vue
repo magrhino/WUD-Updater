@@ -473,11 +473,11 @@ function sourceCheckSummaryLabel(item: OnboardingChecklistItem): string {
 }
 
 .onboarding-check-row.status-warn {
-  background: color-mix(in srgb, var(--color-panel-tint) 78%, #f6d57a 22%);
+  background: var(--color-warning-bg);
 }
 
 .onboarding-check-row.status-fail {
-  background: color-mix(in srgb, var(--color-surface) 88%, #c65454 12%);
+  background: var(--color-error-bg);
 }
 
 .onboarding-check-main {
@@ -494,11 +494,11 @@ function sourceCheckSummaryLabel(item: OnboardingChecklistItem): string {
 }
 
 .onboarding-check-row.status-warn .onboarding-check-main>svg {
-  color: #9a640c;
+  color: var(--color-warning);
 }
 
 .onboarding-check-row.status-fail .onboarding-check-main>svg {
-  color: #a73535;
+  color: var(--color-error);
 }
 
 .onboarding-check-main>div {
@@ -565,13 +565,21 @@ function sourceCheckSummaryLabel(item: OnboardingChecklistItem): string {
 }
 
 .onboarding-check-row.status-fail .onboarding-check-codes.is-primary code {
-  border-color: color-mix(in srgb, var(--color-border) 58%, #a73535 42%);
-  background: color-mix(in srgb, var(--color-surface) 80%, #c65454 20%);
+  border-color: color-mix(in srgb,
+      var(--color-border) 58%,
+      var(--color-error) 42%);
+  background: color-mix(in srgb,
+      var(--color-surface) 68%,
+      var(--color-error-bg) 32%);
 }
 
 .onboarding-check-row.status-warn .onboarding-check-codes.is-primary code {
-  border-color: color-mix(in srgb, var(--color-border) 58%, #9a640c 42%);
-  background: color-mix(in srgb, var(--color-surface) 78%, #f6d57a 22%);
+  border-color: color-mix(in srgb,
+      var(--color-border) 58%,
+      var(--color-warning) 42%);
+  background: color-mix(in srgb,
+      var(--color-surface) 68%,
+      var(--color-warning-bg) 32%);
 }
 
 .onboarding-check-diagnostics {

@@ -58,6 +58,7 @@ type ThemeTokens = {
     warningHover: string;
     warningPressed: string;
     error: string;
+    errorBg: string;
     errorHover: string;
     errorPressed: string;
     loginBg: string;
@@ -101,6 +102,7 @@ const lightDesignTokens: ThemeTokens = {
     warningHover: "#824d00",
     warningPressed: "#4d2d00",
     error: "#b42318",
+    errorBg: "#fde8e6",
     errorHover: "#961b12",
     errorPressed: "#7a160f",
     loginBg: "#eef3f5",
@@ -144,6 +146,7 @@ const darkDesignTokens: ThemeTokens = {
     warningHover: "#fff0c7",
     warningPressed: "#ffc766",
     error: "#ff9286",
+    errorBg: "#3a1d1b",
     errorHover: "#ffafa8",
     errorPressed: "#e77569",
     loginBg: "#0d1518",
@@ -193,6 +196,7 @@ function cssVariablesFor(tokens: ThemeTokens): Record<string, string> {
     "--color-warning-hover": tokens.color.warningHover,
     "--color-warning-pressed": tokens.color.warningPressed,
     "--color-error": tokens.color.error,
+    "--color-error-bg": tokens.color.errorBg,
     "--color-error-hover": tokens.color.errorHover,
     "--color-error-pressed": tokens.color.errorPressed,
     "--color-login-bg": tokens.color.loginBg,
@@ -259,6 +263,13 @@ function themeOverridesFor(tokens: ThemeTokens): GlobalThemeOverrides {
       closeIconColorHoverWarning: tokens.color.warningHover,
       closeIconColorPressedWarning: tokens.color.warningPressed,
       textColorWarning: tokens.color.warning,
+      borderError: `1px solid ${tokens.color.error}`,
+      colorBorderedError: tokens.color.errorBg,
+      colorError: tokens.color.errorBg,
+      closeIconColorError: tokens.color.error,
+      closeIconColorHoverError: tokens.color.errorHover,
+      closeIconColorPressedError: tokens.color.errorPressed,
+      textColorError: tokens.color.error,
     },
   };
 }
