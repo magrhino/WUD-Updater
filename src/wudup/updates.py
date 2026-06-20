@@ -89,7 +89,7 @@ class UpdatesOptions:
     out_uid: str = ""
     out_gid: str = ""
     lock_timeout: str = ""
-    use_sudo: bool = True
+    use_sudo: bool = False
     no_color: bool = False
     self_update: bool = True
     truenas_status_check: bool = False
@@ -107,7 +107,7 @@ class UpdatesFileLock:
     path: str
     timeout_seconds: str
     environ: Mapping[str, str]
-    use_sudo: bool = True
+    use_sudo: bool = False
     sleep: Callable[[float], None] = time.sleep
     lock_dir: Path = field(init=False)
     held: bool = field(default=False, init=False)
@@ -1266,7 +1266,7 @@ def _resolve_use_sudo(
     if no_updater_sudo:
         return False
     if value is None or value == "":
-        return True
+        return False
 
     normalized = value.strip().lower()
     if normalized in {"1", "true", "yes", "on"}:

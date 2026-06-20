@@ -70,9 +70,9 @@ class UpdatesWrapperSelfUpdateTests(UpdatesWrapperTestCase):
 
         self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
         self.assertIn("Skipped WUDup self-update", result.stdout)
-        sudo_log = self.sudo_log.read_text(encoding="utf-8")
-        self.assertIn("--only-lines 2 --yes", sudo_log)
-        self.assertNotIn("--only-lines 1", sudo_log)
+        updater_log = self.updater_log.read_text(encoding="utf-8")
+        self.assertIn("--only-lines 2 --yes", updater_log)
+        self.assertNotIn("--only-lines 1", updater_log)
     def test_self_update_eof_declines_without_invoking_updater(self) -> None:
         self.wud_file.write_text(
             "ghcr.io/magrhino/wudup:latest\nrepo/app:latest\n",
@@ -108,8 +108,8 @@ class UpdatesWrapperSelfUpdateTests(UpdatesWrapperTestCase):
 
         self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
         self.assertNotIn("WUDup self-update detected", result.stdout)
-        sudo_log = self.sudo_log.read_text(encoding="utf-8")
-        self.assertNotIn("--only-lines", sudo_log)
+        updater_log = self.updater_log.read_text(encoding="utf-8")
+        self.assertNotIn("--only-lines", updater_log)
     def test_self_update_env_can_disable_preflight(self) -> None:
         self.wud_file.write_text("wudup\n", encoding="utf-8")
 
@@ -181,11 +181,7 @@ class UpdatesWrapperSelfUpdateTests(UpdatesWrapperTestCase):
             "pull ghcr.io/magrhino/wudup:latest",
             self.docker_log.read_text(encoding="utf-8"),
         )
-        self.assertIn(
-            "env DOCKER_HOST=tcp://docker:2375 docker pull "
-            "ghcr.io/magrhino/wudup:latest",
-            self.sudo_log.read_text(encoding="utf-8"),
-        )
+        self.assertFalse(self.sudo_log.exists())
         self.assertIn(
             "Please restart the wudup container before running updates again.",
             stdout.getvalue(),

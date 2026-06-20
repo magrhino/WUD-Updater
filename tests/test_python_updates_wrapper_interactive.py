@@ -19,8 +19,8 @@ class UpdatesWrapperInteractiveTests(UpdatesWrapperTestCase):
         )
 
         self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
-        sudo_log = self.sudo_log.read_text(encoding="utf-8")
-        self.assertIn("--only-lines 2,5 --remove-lines-before-run 4 --yes", sudo_log)
+        updater_log = self.updater_log.read_text(encoding="utf-8")
+        self.assertIn("--only-lines 2,5 --remove-lines-before-run 4 --yes", updater_log)
     def test_interactive_tag_change_passes_original_line_number(self) -> None:
         self.wud_file.write_text("repo/app:1.0 tag=wrong\n", encoding="utf-8")
 
@@ -31,10 +31,10 @@ class UpdatesWrapperInteractiveTests(UpdatesWrapperTestCase):
         )
 
         self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
-        sudo_log = self.sudo_log.read_text(encoding="utf-8")
+        updater_log = self.updater_log.read_text(encoding="utf-8")
         self.assertIn(
             "--only-lines 1 --allow-tag-updates --tag-override 1=3.0 --yes",
-            sudo_log,
+            updater_log,
         )
         self.assertIn("Selected tag update(s):", result.stdout)
     def test_interactive_tag_yes_keeps_wud_tag_without_override_prompt(self) -> None:
@@ -47,9 +47,9 @@ class UpdatesWrapperInteractiveTests(UpdatesWrapperTestCase):
         )
 
         self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
-        sudo_log = self.sudo_log.read_text(encoding="utf-8")
-        self.assertIn("--only-lines 1 --allow-tag-updates --yes", sudo_log)
-        self.assertNotIn("--tag-override", sudo_log)
+        updater_log = self.updater_log.read_text(encoding="utf-8")
+        self.assertIn("--only-lines 1 --allow-tag-updates --yes", updater_log)
+        self.assertNotIn("--tag-override", updater_log)
         self.assertIn("[y]es/[n]o/[c]hange", result.stdout)
         self.assertNotIn("Override tag for update", result.stdout)
     def test_interactive_selected_tag_prompt_precedes_remove_prompt(self) -> None:
@@ -65,9 +65,9 @@ class UpdatesWrapperInteractiveTests(UpdatesWrapperTestCase):
         )
 
         self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
-        sudo_log = self.sudo_log.read_text(encoding="utf-8")
-        self.assertIn("--only-lines 1 --allow-tag-updates --yes", sudo_log)
-        self.assertNotIn("--remove-lines-before-run", sudo_log)
+        updater_log = self.updater_log.read_text(encoding="utf-8")
+        self.assertIn("--only-lines 1 --allow-tag-updates --yes", updater_log)
+        self.assertNotIn("--remove-lines-before-run", updater_log)
         tag_prompt = result.stdout.index("Apply selected tag update entries?")
         remove_prompt = result.stdout.index("Remove unselected entries")
         self.assertLess(tag_prompt, remove_prompt)
@@ -81,13 +81,13 @@ class UpdatesWrapperInteractiveTests(UpdatesWrapperTestCase):
         )
 
         self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
-        sudo_log = self.sudo_log.read_text(encoding="utf-8")
+        updater_log = self.updater_log.read_text(encoding="utf-8")
         self.assertIn(
             "--only-lines 1 --exclude-tag-lines 1 --recreate-excluded-services --yes",
-            sudo_log,
+            updater_log,
         )
-        self.assertNotIn("--allow-tag-updates", sudo_log)
-        self.assertNotIn("--tag-override", sudo_log)
+        self.assertNotIn("--allow-tag-updates", updater_log)
+        self.assertNotIn("--tag-override", updater_log)
     def test_interactive_tag_exclude_can_skip_recreate(self) -> None:
         self.wud_file.write_text("repo/app:1.0 tag=2.0\n", encoding="utf-8")
 
@@ -98,9 +98,9 @@ class UpdatesWrapperInteractiveTests(UpdatesWrapperTestCase):
         )
 
         self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
-        sudo_log = self.sudo_log.read_text(encoding="utf-8")
-        self.assertIn("--only-lines 1 --exclude-tag-lines 1 --yes", sudo_log)
-        self.assertNotIn("--recreate-excluded-services", sudo_log)
+        updater_log = self.updater_log.read_text(encoding="utf-8")
+        self.assertIn("--only-lines 1 --exclude-tag-lines 1 --yes", updater_log)
+        self.assertNotIn("--recreate-excluded-services", updater_log)
     def test_interactive_tag_exclude_selects_subset_of_tag_lines(self) -> None:
         self.wud_file.write_text(
             "\n".join(
@@ -122,13 +122,13 @@ class UpdatesWrapperInteractiveTests(UpdatesWrapperTestCase):
         )
 
         self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
-        sudo_log = self.sudo_log.read_text(encoding="utf-8")
+        updater_log = self.updater_log.read_text(encoding="utf-8")
         self.assertIn(
             "--only-lines 1,2,3,4 --exclude-tag-lines 1,4 --yes",
-            sudo_log,
+            updater_log,
         )
-        self.assertNotIn("--allow-tag-updates", sudo_log)
-        self.assertNotIn("--tag-override", sudo_log)
+        self.assertNotIn("--allow-tag-updates", updater_log)
+        self.assertNotIn("--tag-override", updater_log)
     def test_interactive_tag_exclude_rejects_non_tag_selection(self) -> None:
         self.wud_file.write_text(
             "\n".join(
@@ -153,13 +153,13 @@ class UpdatesWrapperInteractiveTests(UpdatesWrapperTestCase):
             "Invalid tag selection. Use listed tag update numbers/ranges like 1,3-5.",
             result.stdout,
         )
-        sudo_log = self.sudo_log.read_text(encoding="utf-8")
+        updater_log = self.updater_log.read_text(encoding="utf-8")
         self.assertIn(
             "--only-lines 1,2,3 --exclude-tag-lines 1,3 --yes",
-            sudo_log,
+            updater_log,
         )
-        self.assertNotIn("--allow-tag-updates", sudo_log)
-        self.assertNotIn("--tag-override", sudo_log)
+        self.assertNotIn("--allow-tag-updates", updater_log)
+        self.assertNotIn("--tag-override", updater_log)
     def test_interactive_declined_tag_updates_do_not_enable_allow_flag(self) -> None:
         self.wud_file.write_text("repo/app:1.0 tag=2.0\n", encoding="utf-8")
 
@@ -170,10 +170,10 @@ class UpdatesWrapperInteractiveTests(UpdatesWrapperTestCase):
         )
 
         self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
-        sudo_log = self.sudo_log.read_text(encoding="utf-8")
-        self.assertIn("--only-lines 1 --yes", sudo_log)
-        self.assertNotIn("--allow-tag-updates", sudo_log)
-        self.assertNotIn("--tag-override", sudo_log)
+        updater_log = self.updater_log.read_text(encoding="utf-8")
+        self.assertIn("--only-lines 1 --yes", updater_log)
+        self.assertNotIn("--allow-tag-updates", updater_log)
+        self.assertNotIn("--tag-override", updater_log)
     def test_interactive_untagged_tag_token_does_not_prompt(self) -> None:
         self.wud_file.write_text("repo/app tag=2.0\n", encoding="utf-8")
 
@@ -185,9 +185,9 @@ class UpdatesWrapperInteractiveTests(UpdatesWrapperTestCase):
 
         self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
         self.assertNotIn("Selected tag update(s):", result.stdout)
-        sudo_log = self.sudo_log.read_text(encoding="utf-8")
-        self.assertNotIn("--allow-tag-updates", sudo_log)
-        self.assertNotIn("--tag-override", sudo_log)
+        updater_log = self.updater_log.read_text(encoding="utf-8")
+        self.assertNotIn("--allow-tag-updates", updater_log)
+        self.assertNotIn("--tag-override", updater_log)
     def test_interactive_all_tag_override_aborts_when_snapshot_lines_change(self) -> None:
         self.wud_file.write_text("repo/app:1.0 tag=wrong\n", encoding="utf-8")
         hook = self.root / "change-wud-file"

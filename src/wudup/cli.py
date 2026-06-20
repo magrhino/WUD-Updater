@@ -78,7 +78,7 @@ def _add_updates_options(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--no-updater-sudo",
         action="store_true",
-        help="run the configured updater directly and disable sudo file fallbacks",
+        help="override WUDUP_USE_SUDO=true and run the configured updater directly",
     )
 
 

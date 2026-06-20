@@ -61,7 +61,7 @@ class DoctorOptions:
     host_docker_base: Path | None = None
     docker_host: str = ""
     sync_scripts: str = "auto"
-    updater_use_sudo: bool = True
+    updater_use_sudo: bool = False
     truenas_status_check: bool = False
     truenas_status_timeout: str = DEFAULT_TRUENAS_STATUS_TIMEOUT
     compose_ignore_paths: tuple[Path, ...] = ()
@@ -364,7 +364,17 @@ class Doctor:
 
     def _check_sudo(self) -> None:
         if not self.options.updater_use_sudo:
-            self._record("PASS", "sudo", "disabled by WUDUP_USE_SUDO=false")
+            configured = env_value(
+                self.environ,
+                "WUDUP_USE_SUDO",
+                "WUD_UPDATER_USE_SUDO",
+            )
+            detail = (
+                "disabled by WUDUP_USE_SUDO=false"
+                if configured
+                else "disabled by default"
+            )
+            self._record("PASS", "sudo", detail)
             return
 
         if shutil.which("sudo", path=self.environ.get("PATH")) is None:
@@ -886,8 +896,8 @@ def _suggestions_for(status: str, name: str) -> tuple[DoctorSuggestion, ...]:
             DoctorSuggestion(
                 label="Disable sudo if not needed",
                 description=(
-                    "Set WUDUP_USE_SUDO=false when the updater can run "
-                    "directly."
+                    "Unset WUDUP_USE_SUDO or set it to false when the updater "
+                    "can run directly."
                 ),
                 snippet="WUDUP_USE_SUDO=false",
             ),
@@ -952,7 +962,7 @@ def options_from_namespace(
         updater_use_sudo=_resolve_bool_env(
             env_value(environ, "WUDUP_USE_SUDO", "WUD_UPDATER_USE_SUDO"),
             "WUDUP_USE_SUDO",
-            default=True,
+            default=False,
         ),
         truenas_status_check=_resolve_bool_env(
             environ.get("TRUENAS_STATUS_CHECK"),

@@ -17,6 +17,7 @@ class UpdatesWrapperInvocationTests(UpdatesWrapperTestCase):
                 "OUT_UID": "1000",
                 "OUT_GID": "1001",
                 "WUD_LOCK_TIMEOUT": "0",
+                "WUDUP_USE_SUDO": "true",
             },
         )
 
@@ -31,13 +32,38 @@ class UpdatesWrapperInvocationTests(UpdatesWrapperTestCase):
         )
         self.assertIn("OUT_UID=1000 OUT_GID=1001", updater_log)
         self.assertIn("--allow-tag-updates --yes", updater_log)
+    def test_yes_invokes_configured_updater_directly_by_default(self) -> None:
+        self.wud_file.write_text("repo/app:latest\n", encoding="utf-8")
+
+        result = self.run_updates(
+            "--yes",
+            "--base",
+            str(self.root / "docker"),
+            env_overrides={
+                "OUT_UID": "1000",
+                "OUT_GID": "1001",
+                "WUD_LOCK_TIMEOUT": "0",
+            },
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+        self.assertFalse(self.sudo_log.exists())
+        updater_log = self.updater_log.read_text(encoding="utf-8")
+        self.assertIn("OUT_UID=1000 OUT_GID=1001 WUD_LOCK_TIMEOUT=0", updater_log)
+        self.assertIn(
+            f"--base {self.root / 'docker'} --file {self.wud_file} --log-dir ./logs",
+            updater_log,
+        )
     def test_yes_preserves_db_path_through_sudo_env(self) -> None:
         self.wud_file.write_text("repo/app:latest\n", encoding="utf-8")
         db_path = self.root / "state" / "wudup.sqlite"
 
         result = self.run_updates(
             "--yes",
-            env_overrides={"WUD_DB_PATH": str(db_path)},
+            env_overrides={
+                "WUD_DB_PATH": str(db_path),
+                "WUDUP_USE_SUDO": "true",
+            },
         )
 
         self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
@@ -51,7 +77,10 @@ class UpdatesWrapperInvocationTests(UpdatesWrapperTestCase):
 
         result = self.run_updates(
             "--yes",
-            env_overrides={"HOST_DOCKER_BASE": str(host_base)},
+            env_overrides={
+                "HOST_DOCKER_BASE": str(host_base),
+                "WUDUP_USE_SUDO": "true",
+            },
         )
 
         self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
@@ -67,7 +96,10 @@ class UpdatesWrapperInvocationTests(UpdatesWrapperTestCase):
 
         result = self.run_updates(
             "--yes",
-            env_overrides={"WUD_COMPOSE_IGNORE_PATHS": "old,archive/disabled"},
+            env_overrides={
+                "WUD_COMPOSE_IGNORE_PATHS": "old,archive/disabled",
+                "WUDUP_USE_SUDO": "true",
+            },
         )
 
         self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
