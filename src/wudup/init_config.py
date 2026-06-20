@@ -312,6 +312,7 @@ def _container_env_values(answers: InitAnswers) -> list[tuple[str, str]]:
     ]
     if answers.profile in {"webui", "hardened"}:
         values.append(("WUD_API_BASE_URL", "http://wud:3000"))
+        values.append(("WUD_API_STARTUP_WAIT_SECONDS", "5"))
     if answers.profile == "webui":
         values.extend(
             (
@@ -336,6 +337,8 @@ def _compose_override_content(answers: InitAnswers) -> str:
         raise InitConfigError("internal compose override error")
 
     service["environment"] = _compose_environment(answers)
+    if answers.profile in {"webui", "hardened"}:
+        service["depends_on"] = {"wud": {"condition": "service_healthy"}}
     service["volumes"] = _compose_volumes(answers)
     if answers.profile == "webui":
         service["ports"] = [
@@ -390,6 +393,9 @@ def _compose_environment(answers: InitAnswers) -> dict[str, str]:
         )
     if answers.profile in {"webui", "hardened"}:
         environment["WUD_API_BASE_URL"] = "${WUD_API_BASE_URL:-http://wud:3000}"
+        environment["WUD_API_STARTUP_WAIT_SECONDS"] = (
+            "${WUD_API_STARTUP_WAIT_SECONDS:-5}"
+        )
     return environment
 
 

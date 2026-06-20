@@ -19,6 +19,9 @@ services:
 
   wudup:
     image: ghcr.io/magrhino/wudup:latest
+    depends_on:
+      wud:
+        condition: service_healthy
     environment:
       DOCKER_BASE: ${HOST_DOCKER_BASE:-/srv/docker}
       WUD_OUT_FILE: /out/images.todo
@@ -33,6 +36,7 @@ services:
       WUD_WEB_TRUSTED_PROXIES: "${WUD_WEB_TRUSTED_PROXIES:-}"
       WUD_WEB_SECURE_COOKIES: "${WUD_WEB_SECURE_COOKIES:-auto}"
       WUD_API_BASE_URL: "${WUD_API_BASE_URL:-http://wud:3000}"
+      WUD_API_STARTUP_WAIT_SECONDS: "${WUD_API_STARTUP_WAIT_SECONDS:-5}"
       OUT_UID: "${OUT_UID:-1000}"
       OUT_GID: "${OUT_GID:-1000}"
       GITHUB_TOKEN: "${GITHUB_TOKEN:-}"

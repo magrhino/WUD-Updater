@@ -249,6 +249,7 @@ class WebSettings:
     host_docker_base: Path | None = None
     restart_container: str = ""
     wud_api_base_url: str = ""
+    wud_api_startup_wait_seconds: float = 0.0
     command_env: Mapping[str, str] | None = None
 
     @property

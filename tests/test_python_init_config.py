@@ -77,6 +77,7 @@ class InitConfigTests(unittest.TestCase):
         self.assertIn("WUD_WEB_PUBLIC_ORIGIN=", content)
         self.assertIn("WUD_WEB_ALLOWED_HOSTS=", content)
         self.assertIn("WUD_API_BASE_URL=http://wud:3000", content)
+        self.assertIn("WUD_API_STARTUP_WAIT_SECONDS=5", content)
 
     def test_webui_lan_requires_public_origin_in_non_interactive_mode(self) -> None:
         with self.assertRaisesRegex(InitConfigError, "--public-origin"):
@@ -366,6 +367,14 @@ class InitConfigTests(unittest.TestCase):
             environment["WUD_API_BASE_URL"],
             "${WUD_API_BASE_URL:-http://wud:3000}",
         )
+        self.assertEqual(
+            environment["WUD_API_STARTUP_WAIT_SECONDS"],
+            "${WUD_API_STARTUP_WAIT_SECONDS:-5}",
+        )
+        self.assertEqual(
+            parsed["services"]["wudup"]["depends_on"],
+            {"wud": {"condition": "service_healthy"}},
+        )
         self.assertIn(
             "${WEBUI_LOG_DIR:-./logs}:/logs",
             parsed["services"]["wudup"]["volumes"],
@@ -390,6 +399,14 @@ class InitConfigTests(unittest.TestCase):
         self.assertEqual(
             service["environment"]["WUD_API_BASE_URL"],
             "${WUD_API_BASE_URL:-http://wud:3000}",
+        )
+        self.assertEqual(
+            service["environment"]["WUD_API_STARTUP_WAIT_SECONDS"],
+            "${WUD_API_STARTUP_WAIT_SECONDS:-5}",
+        )
+        self.assertEqual(
+            service["depends_on"],
+            {"wud": {"condition": "service_healthy"}},
         )
         self.assertEqual(
             service["ports"],
