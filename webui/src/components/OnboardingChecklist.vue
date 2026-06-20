@@ -649,5 +649,12 @@ function sourceCheckSummaryLabel(item: OnboardingChecklistItem): string {
   .onboarding-next-action {
     display: grid;
   }
+
+  .onboarding-actions :deep(.n-button),
+  .onboarding-suggestion :deep(.n-button),
+  .onboarding-next-action :deep(.n-button) {
+    min-width: 44px;
+    min-height: 44px;
+  }
 }
 </style>

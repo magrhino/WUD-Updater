@@ -381,5 +381,11 @@ function statusIcon(status: DoctorCheckStatus): Component {
   .doctor-suggestion {
     display: grid;
   }
+
+  .section-heading-meta :deep(.n-button),
+  .doctor-suggestion :deep(.n-button) {
+    min-width: 44px;
+    min-height: 44px;
+  }
 }
 </style>

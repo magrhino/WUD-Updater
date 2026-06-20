@@ -42,6 +42,16 @@ function demoRoute(path: string) {
   return `${demoBasePath}${path}`;
 }
 
+async function expectTouchTargetHeight(page: Page, buttonName: string) {
+  const button = page
+    .getByRole("button", { name: buttonName, exact: true })
+    .first();
+  await button.scrollIntoViewIfNeeded();
+  const box = await button.boundingBox();
+  expect(box?.height ?? 0).toBeGreaterThanOrEqual(44);
+  expect(box?.width ?? 0).toBeGreaterThanOrEqual(44);
+}
+
 test("static demo renders current pending state and completes apply flow", async ({
   page,
 }) => {
@@ -130,6 +140,7 @@ test("static demo mobile layout stays within the viewport", async ({ page }) => 
     page.getByRole("heading", { name: "Pending updates", exact: true }),
   ).toBeVisible();
   await expect(page.getByRole("checkbox", { name: /Select stack media/ })).toBeVisible();
+  await expectTouchTargetHeight(page, "Pull image");
   await expect
     .poll(() =>
       page.evaluate(() => ({
@@ -138,4 +149,13 @@ test("static demo mobile layout stays within the viewport", async ({ page }) => 
       })),
     )
     .toEqual({ innerWidth: 390, scrollWidth: 390 });
+
+  await page.goto(demoRoute("/#/doctor"));
+  await expect(page.getByRole("heading", { name: "Doctor", level: 1 })).toBeVisible();
+  await expectTouchTargetHeight(page, "Refresh");
+
+  await page.goto(demoRoute("/#/settings"));
+  await expect(page.getByRole("heading", { name: "Settings", level: 1 })).toBeVisible();
+  await expectTouchTargetHeight(page, "Download support bundle");
+  await expectTouchTargetHeight(page, "Copy");
 });

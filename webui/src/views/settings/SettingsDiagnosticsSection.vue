@@ -98,6 +98,8 @@ const {
 
   .settings-action-row :deep(.n-button) {
     justify-self: start;
+    min-width: 44px;
+    min-height: 44px;
   }
 }
 </style>
