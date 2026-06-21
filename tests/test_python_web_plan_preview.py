@@ -129,10 +129,16 @@ def test_plan_endpoint_uses_api_pending_source_without_wud_file(
     monkeypatch,
 ) -> None:
     fake_env, fake_root = _fake_docker_env(tmp_path)
+    remote_digest = f"sha256:{'b' * 64}"
     _install_wud_api(
         monkeypatch,
         containers=[
-            _wud_api_container(tag="latest", remote_tag="", update_kind="digest")
+            _wud_api_container(
+                tag="latest",
+                remote_tag="",
+                remote_digest=remote_digest,
+                update_kind="digest",
+            )
         ],
     )
     client = _client(
@@ -148,7 +154,10 @@ def test_plan_endpoint_uses_api_pending_source_without_wud_file(
         tmp_path,
         fake_root,
         "stack",
-        [("app", "repo/app:latest", "cid-app")],
+        [
+            ("app", "repo/app:latest", "cid-app"),
+            ("worker", "repo/app:stable", "cid-worker"),
+        ],
     )
 
     response = client.post(
@@ -163,7 +172,11 @@ def test_plan_endpoint_uses_api_pending_source_without_wud_file(
     assert body["source_file"] == "WUD API"
     assert body["status"] == "ready"
     assert body["selected_line_numbers"] == [1]
-    assert body["targets"][0]["raw"] == "repo/app:latest"
+    assert body["targets"][0]["raw"] == f"repo/app:latest@{remote_digest}"
+    assert body["stacks"][0]["lines"][0]["service"] == "app"
+    assert "worker" not in {
+        line["service"] for stack in body["stacks"] for line in stack["lines"]
+    }
     assert not (tmp_path / "state" / "images.todo").exists()
     calls = _fake_docker_calls(fake_root)
     assert " pull " not in calls

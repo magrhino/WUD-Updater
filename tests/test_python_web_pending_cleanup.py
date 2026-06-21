@@ -374,3 +374,49 @@ def test_pending_cleanup_rejects_api_pending_source_without_mutation(
         "pending cleanup only supports WUD_OUT_FILE source"
     )
     assert wud_file.read_text(encoding="utf-8") == "repo/file:latest\n"
+
+
+def test_pending_cleanup_wraps_source_read_errors_without_mutation(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    secret = "cleanup-source-secret"
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+            "GITHUB_TOKEN": secret,
+        },
+    )
+    wud_file = tmp_path / "state" / "images.todo"
+    wud_file.write_text("repo/app:latest\n", encoding="utf-8")
+
+    def fail_source_read(*_args, **_kwargs):
+        raise OSError(f"open failed for {wud_file} with {secret}")
+
+    monkeypatch.setattr(
+        pending_module.web_pending_sources,
+        "resolve_pending_source",
+        fail_source_read,
+    )
+
+    response = client.post(
+        "/api/v1/pending/cleanup",
+        json={
+            "cleanup_id": "cleanup",
+            "lines": [{"line_no": 1, "raw": "repo/app:latest"}],
+            "confirmation": "remove_unmatched",
+        },
+        headers=_csrf_headers(client),
+    )
+
+    assert response.status_code == 500
+    detail = response.json()["detail"]
+    assert detail.startswith("could not verify pending cleanup source: ")
+    assert secret not in detail
+    assert str(tmp_path) not in detail
+    assert "<redacted>" in detail
+    assert "[REDACTED_PATH]" in detail
+    assert wud_file.read_text(encoding="utf-8") == "repo/app:latest\n"
+    assert not lock_dir_for(wud_file).exists()

@@ -289,7 +289,12 @@ def test_apply_endpoint_uses_api_pending_source_without_editing_wud_file(
     _install_wud_api(
         monkeypatch,
         containers=[
-            _wud_api_container(tag="latest", remote_tag="", update_kind="digest")
+            _wud_api_container(
+                tag="latest",
+                remote_tag="",
+                remote_digest="sha256:new",
+                update_kind="digest",
+            )
         ],
     )
     client = _client(
@@ -308,7 +313,10 @@ def test_apply_endpoint_uses_api_pending_source_without_editing_wud_file(
         tmp_path,
         fake_root,
         "stack",
-        [("app", "repo/app:latest", "cid-app")],
+        [
+            ("app", "repo/app:latest", "cid-app"),
+            ("worker", "repo/app:stable", "cid-worker"),
+        ],
     )
     _write_fake_image_after_pull(
         fake_root,
@@ -335,12 +343,14 @@ def test_apply_endpoint_uses_api_pending_source_without_editing_wud_file(
     job = _wait_apply_job(client, apply_response.json()["job_id"])
 
     assert plan["source"]["active"] == "api"
+    assert plan["targets"][0]["raw"] == "repo/app:latest@sha256:new"
     assert apply_response.status_code == 202
     assert job["status"] == "success"
     assert wud_file.read_text(encoding="utf-8") == "repo/file:latest\n"
     calls = _fake_docker_calls(fake_root)
     assert "compose -f docker-compose.yml pull app" in calls
     assert "compose -f docker-compose.yml up -d --remove-orphans --no-deps app" in calls
+    assert "worker" not in calls
     detail = client.get(f"/api/v1/runs/{job['run_id']}").json()
     assert detail["metadata"]["pending_source"] == "api"
     assert detail["metadata"]["pending_source_configured"] == "api"
@@ -629,21 +639,20 @@ def test_apply_endpoint_releases_wud_lock_when_pending_source_reread_fails(
         fail_second_source_read,
     )
 
-    try:
-        client.post(
-            "/api/v1/jobs",
-            json={
-                "plan_id": plan["plan_id"],
-                "line_numbers": [1],
-                "confirmation": "apply",
-            },
-            headers=headers,
-        )
-    except OSError as exc:
-        assert "pending source re-read failed" in str(exc)
-    else:
-        raise AssertionError("expected pending source re-read failure")
+    response = client.post(
+        "/api/v1/jobs",
+        json={
+            "plan_id": plan["plan_id"],
+            "line_numbers": [1],
+            "confirmation": "apply",
+        },
+        headers=headers,
+    )
 
+    assert response.status_code == 500
+    assert response.json()["detail"] == (
+        "could not revalidate plan: pending source re-read failed"
+    )
     assert calls == 2
     assert not lock_dir_for(wud_file).exists()
     assert wud_file.read_text(encoding="utf-8") == "repo/app:latest\n"

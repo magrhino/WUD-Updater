@@ -406,3 +406,56 @@ def test_pending_removal_rejects_api_pending_source_without_mutation(
         "pending removal only supports WUD_OUT_FILE source"
     )
     assert wud_file.read_text(encoding="utf-8") == "repo/file:latest\n"
+
+
+def test_pending_removal_wraps_source_read_errors_without_mutation(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    secret = "removal-source-secret"
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+            "GITHUB_TOKEN": secret,
+        },
+    )
+    wud_file = tmp_path / "state" / "images.todo"
+    wud_file.write_text("repo/app:latest\n", encoding="utf-8")
+    headers = _csrf_headers(client)
+
+    def fail_source_read(*_args, **_kwargs):
+        raise OSError(f"open failed for {wud_file} with {secret}")
+
+    monkeypatch.setattr(
+        pending_module.web_pending_sources,
+        "resolve_pending_source",
+        fail_source_read,
+    )
+
+    plan_response = client.post(
+        "/api/v1/pending/removal-plan",
+        json={"line_numbers": [1]},
+        headers=headers,
+    )
+    removal_response = client.post(
+        "/api/v1/pending/removal",
+        json={
+            "removal_id": "removal",
+            "lines": [{"line_no": 1, "raw": "repo/app:latest"}],
+            "confirmation": "remove_selected",
+        },
+        headers=headers,
+    )
+
+    for response in (plan_response, removal_response):
+        assert response.status_code == 500
+        detail = response.json()["detail"]
+        assert detail.startswith("could not verify pending removal source: ")
+        assert secret not in detail
+        assert str(tmp_path) not in detail
+        assert "<redacted>" in detail
+        assert "[REDACTED_PATH]" in detail
+    assert wud_file.read_text(encoding="utf-8") == "repo/app:latest\n"
+    assert not lock_dir_for(wud_file).exists()

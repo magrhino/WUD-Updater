@@ -447,7 +447,17 @@ def parse_pending_file(settings: WebSettings) -> tuple[bool, ParsedWudFile]:
 
 
 def _require_file_pending_source(settings: WebSettings, *, operation: str) -> None:
-    source = web_pending_sources.resolve_pending_source(settings)
+    try:
+        source = web_pending_sources.resolve_pending_source(settings)
+    except OSError as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=_safe_exception_detail(
+                settings,
+                f"could not verify pending {operation} source",
+                exc,
+            ),
+        ) from exc
     if source.active == "file":
         return
     raise HTTPException(

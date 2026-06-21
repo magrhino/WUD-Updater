@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from . import web_wud_api
-from .images import image_with_digest, tag_value_valid
+from .images import normalize_digest, strip_digest, tag_value_valid
 from .plan_models import DryRunPlanSource
 from .web_auth import WebConfigError
 from .web_models import PendingSourceInfo
@@ -266,10 +266,14 @@ def _container_pending_line(container: web_wud_api.WudApiContainer) -> str:
     if container.update_kind == "tag" and tag_value_valid(container.remote_tag):
         return f"{image} tag={container.remote_tag}"
     if container.remote_digest:
-        return image_with_digest(image, container.remote_digest)
+        return _pending_image_with_digest(image, container.remote_digest)
     if tag_value_valid(container.remote_tag):
         return f"{image} tag={container.remote_tag}"
     return image
+
+
+def _pending_image_with_digest(image: str, digest: str) -> str:
+    return f"{strip_digest(image)}@{normalize_digest(digest)}"
 
 
 def _container_source_id(container: web_wud_api.WudApiContainer) -> str:

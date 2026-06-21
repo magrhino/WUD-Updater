@@ -77,16 +77,10 @@ def api_create_job(payload: ApplyPlanRequest, request: Request) -> ApplyJobRespo
         raise HTTPException(status_code=409, detail=active_error)
     wud_lock: DirectoryLock | None = None
     try:
-        pending_source = web_pending_sources.resolve_pending_source(
-            settings,
-            force_api=True,
-        )
+        pending_source = _resolve_pending_source_for_apply(settings)
         if pending_source.active == "file":
             wud_lock = web_jobs._acquire_apply_wud_lock(settings)
-            pending_source = web_pending_sources.resolve_pending_source(
-                settings,
-                force_api=True,
-            )
+            pending_source = _resolve_pending_source_for_apply(settings)
             if pending_source.active != "file":
                 wud_lock.close()
                 wud_lock = None
@@ -147,6 +141,25 @@ def api_create_job(payload: ApplyPlanRequest, request: Request) -> ApplyJobRespo
 
 def api_apply_plan(payload: ApplyPlanRequest, request: Request) -> ApplyJobResponse:
     return api_create_job(payload, request)
+
+
+def _resolve_pending_source_for_apply(
+    settings: WebSettings,
+) -> web_pending_sources.PendingSourceResult:
+    try:
+        return web_pending_sources.resolve_pending_source(
+            settings,
+            force_api=True,
+        )
+    except OSError as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=_safe_exception_detail(
+                settings,
+                "could not revalidate plan",
+                exc,
+            ),
+        ) from exc
 
 
 def build_web_plan(

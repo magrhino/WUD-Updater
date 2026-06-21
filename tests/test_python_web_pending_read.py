@@ -99,6 +99,55 @@ def test_pending_endpoint_reads_wud_api_source_without_wud_file(
     _assert_pending_grouping_did_not_mutate(_fake_docker_calls(fake_root))
 
 
+def test_pending_endpoint_preserves_tag_for_wud_api_digest_source(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    fake_env, fake_root = _fake_docker_env(tmp_path)
+    remote_digest = f"sha256:{'a' * 64}"
+    _install_wud_api(
+        monkeypatch,
+        containers=[
+            _wud_api_container(
+                tag="latest",
+                remote_tag="",
+                remote_digest=remote_digest,
+                update_kind="digest",
+            )
+        ],
+    )
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_PENDING_SOURCE": "api",
+            "WUD_API_BASE_URL": "http://wud.api-digest-source.test:3000",
+            **fake_env,
+        },
+    )
+    _make_fake_stack(
+        tmp_path,
+        fake_root,
+        "stack",
+        [
+            ("app", "repo/app:latest", "cid-app"),
+            ("worker", "repo/app:stable", "cid-worker"),
+        ],
+    )
+
+    response = client.get("/api/v1/pending")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["items"][0]["raw"] == f"repo/app:latest@{remote_digest}"
+    assert body["items"][0]["digest"] == remote_digest
+    assert body["grouping"]["status"] == "ready"
+    assert body["grouping"]["groups"][0]["items"][0]["services"] == ["app"]
+    calls = _fake_docker_calls(fake_root)
+    assert "worker" not in calls
+    _assert_pending_grouping_did_not_mutate(calls)
+
+
 def test_pending_endpoint_auto_falls_back_to_wud_file_when_api_unavailable(
     tmp_path: Path,
     monkeypatch,
