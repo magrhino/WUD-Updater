@@ -148,11 +148,7 @@ export function findChangelogRawUrl(
   releaseBody: string,
   release: Pick<GitHubReleaseRef, "owner" | "repo">,
 ): string {
-  const linkPattern = /\[([^\]]+)]\(([^)\s]+)(?:\s+"[^"]*")?\)/g;
-  let match: RegExpExecArray | null;
-  while ((match = linkPattern.exec(releaseBody)) !== null) {
-    const label = match[1] ?? "";
-    const href = match[2] ?? "";
+  for (const { label, href } of markdownLinks(releaseBody)) {
     if (!changelogLabelMatches(label)) {
       continue;
     }
@@ -221,6 +217,87 @@ function changelogLabelMatches(label: string): boolean {
   );
 }
 
+function* markdownLinks(
+  markdown: string,
+): Generator<{ label: string; href: string }> {
+  let searchIndex = 0;
+  while (searchIndex < markdown.length) {
+    const labelStart = markdown.indexOf("[", searchIndex);
+    if (labelStart === -1) {
+      return;
+    }
+    const labelEnd = markdown.indexOf("]", labelStart + 1);
+    if (labelEnd === -1) {
+      return;
+    }
+    if (labelEnd === labelStart + 1 || markdown[labelEnd + 1] !== "(") {
+      searchIndex = labelStart + 1;
+      continue;
+    }
+
+    const link = readMarkdownLink(markdown, labelEnd + 2);
+    if (link === null) {
+      searchIndex = labelEnd + 1;
+      continue;
+    }
+    yield {
+      label: markdown.slice(labelStart + 1, labelEnd),
+      href: link.href,
+    };
+    searchIndex = link.endIndex;
+  }
+}
+
+function readMarkdownLink(
+  markdown: string,
+  hrefStart: number,
+): { href: string; endIndex: number } | null {
+  let cursor = hrefStart;
+  while (
+    cursor < markdown.length &&
+    markdown[cursor] !== ")" &&
+    !isMarkdownWhitespace(markdown[cursor])
+  ) {
+    cursor += 1;
+  }
+  if (cursor === hrefStart) {
+    return null;
+  }
+
+  const href = markdown.slice(hrefStart, cursor);
+  if (markdown[cursor] === ")") {
+    return { href, endIndex: cursor + 1 };
+  }
+  if (!isMarkdownWhitespace(markdown[cursor])) {
+    return null;
+  }
+
+  while (cursor < markdown.length && isMarkdownWhitespace(markdown[cursor])) {
+    cursor += 1;
+  }
+  if (markdown[cursor] !== '"') {
+    return null;
+  }
+  cursor += 1;
+  while (cursor < markdown.length) {
+    if (markdown[cursor] === '"') {
+      return markdown[cursor + 1] === ")"
+        ? { href, endIndex: cursor + 2 }
+        : null;
+    }
+    if (
+      markdown[cursor] === "[" ||
+      markdown[cursor] === ")" ||
+      markdown[cursor] === "\n" ||
+      markdown[cursor] === "\r"
+    ) {
+      return null;
+    }
+    cursor += 1;
+  }
+  return null;
+}
+
 function resolveGitHubMarkdownHref(
   href: string,
   release: Pick<GitHubReleaseRef, "owner" | "repo">,
@@ -271,13 +348,37 @@ function githubMarkdownUrlToRaw(value: string): string {
 function parseAtxHeading(
   line: string,
 ): { level: number; text: string } | null {
-  const match = /^(#{1,6})\s+(.+?)\s*#*\s*$/.exec(line.trim());
-  if (!match) {
+  const trimmed = line.trim();
+  let level = 0;
+  while (trimmed[level] === "#") {
+    level += 1;
+  }
+  if (
+    level === 0 ||
+    level > 6 ||
+    trimmed[level] === "#" ||
+    !isMarkdownWhitespace(trimmed[level])
+  ) {
     return null;
   }
+  let textStart = level + 1;
+  while (textStart < trimmed.length && isMarkdownWhitespace(trimmed[textStart])) {
+    textStart += 1;
+  }
+  if (textStart >= trimmed.length) {
+    return null;
+  }
+
+  let textEnd = trimmed.length;
+  while (textEnd > textStart + 1 && trimmed[textEnd - 1] === "#") {
+    textEnd -= 1;
+  }
+  while (textEnd > textStart + 1 && isMarkdownWhitespace(trimmed[textEnd - 1])) {
+    textEnd -= 1;
+  }
   return {
-    level: match[1].length,
-    text: match[2],
+    level,
+    text: trimmed.slice(textStart, textEnd),
   };
 }
 
@@ -292,11 +393,43 @@ function headingMatchesTag(heading: string, releaseTag: string): boolean {
 }
 
 function plainMarkdownText(value: string): string {
-  return value
-    .replace(/\[([^\]]+)]\([^)]+\)/g, "$1")
+  return replaceMarkdownLinksWithLabels(value)
     .replace(/[`*_~]+/g, "")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+function replaceMarkdownLinksWithLabels(value: string): string {
+  let result = "";
+  let searchIndex = 0;
+  while (searchIndex < value.length) {
+    const labelStart = value.indexOf("[", searchIndex);
+    if (labelStart === -1) {
+      return result + value.slice(searchIndex);
+    }
+    const labelEnd = value.indexOf("]", labelStart + 1);
+    if (labelEnd === -1) {
+      return result + value.slice(searchIndex);
+    }
+    const hrefStart = labelEnd + 2;
+    if (
+      labelEnd === labelStart + 1 ||
+      value[labelEnd + 1] !== "(" ||
+      value[hrefStart] === ")"
+    ) {
+      result += value.slice(searchIndex, labelStart + 1);
+      searchIndex = labelStart + 1;
+      continue;
+    }
+    const hrefEnd = value.indexOf(")", hrefStart);
+    if (hrefEnd === -1) {
+      return result + value.slice(searchIndex);
+    }
+    result += value.slice(searchIndex, labelStart);
+    result += value.slice(labelStart + 1, labelEnd);
+    searchIndex = hrefEnd + 1;
+  }
+  return result;
 }
 
 function tagVariants(releaseTag: string): string[] {
@@ -313,6 +446,17 @@ function tagVariants(releaseTag: string): string[] {
 
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function isMarkdownWhitespace(value: string | undefined): boolean {
+  return (
+    value === " " ||
+    value === "\t" ||
+    value === "\n" ||
+    value === "\r" ||
+    value === "\f" ||
+    value === "\v"
+  );
 }
 
 async function fetchTextWithLimit(

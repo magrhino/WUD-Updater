@@ -46,6 +46,19 @@ describe("release changelog extraction", () => {
     );
   });
 
+  it("finds titled changelog links after malformed markdown noise", () => {
+    const noisyBody = `${"[not a changelog](README.md \"".repeat(1500)} [release notes](docs/CHANGELOG.md "notes")`;
+
+    expect(
+      findChangelogRawUrl(noisyBody, {
+        owner: "t-mart",
+        repo: "mousehole",
+      }),
+    ).toBe(
+      "https://raw.githubusercontent.com/t-mart/mousehole/HEAD/docs/CHANGELOG.md",
+    );
+  });
+
   it("extracts a Mousehole-style tag section", () => {
     const markdown = [
       "# Changelog",
@@ -123,6 +136,26 @@ describe("release changelog extraction", () => {
     expect(section).toContain("## [v1.2]");
     expect(section).toContain("Minor release");
     expect(section).not.toContain("Patch release");
+  });
+
+  it("does not match a tag from a markdown link URL in a heading", () => {
+    const markdown = [
+      "# Changelog",
+      "",
+      "## [Release notes](https://github.com/t-mart/mousehole/releases/tag/v1.2)",
+      "",
+      "- Wrong section",
+      "",
+      "## [v1.2]",
+      "",
+      "- Exact release",
+    ].join("\n");
+
+    const section = extractChangelogSection(markdown, "v1.2");
+
+    expect(section).toContain("## [v1.2]");
+    expect(section).toContain("Exact release");
+    expect(section).not.toContain("Wrong section");
   });
 
   it("does not match version headings with delimiter suffixes", () => {
