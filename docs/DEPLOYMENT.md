@@ -242,9 +242,10 @@ After sign-in, open the WebUI Settings page to review the effective non-secret
 configuration, safety status, secret presence, and first-run checklist for the
 running process.
 
-The WebUI supports readiness endpoints for container healthchecks. The `/readyz`
-endpoint provides a no-auth, loopback-only healthcheck used by Docker Compose,
-while the `/api/v1/ready` endpoint requires authentication for API client checks.
+The packaged image defines a default Docker healthcheck against `/readyz`, a
+no-auth, loopback-only readiness endpoint. Override the service healthcheck only
+when you need custom timing or need to disable it for a non-WebUI command. The
+`/api/v1/ready` endpoint requires authentication for API client checks.
 
 The Settings page separates runtime configuration from managed UI preferences.
 Runtime values come from command-line overrides for the running command, then

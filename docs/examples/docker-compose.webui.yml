@@ -44,12 +44,6 @@ services:
       - wudup-egress
     ports:
       - "${WEBUI_HTTP_BIND:-127.0.0.1}:${WUD_WEB_PORT:-7417}:${WUD_WEB_PORT:-7417}"
-    healthcheck:
-      test: [ "CMD", "curl", "-fsS", "http://127.0.0.1:${WUD_WEB_PORT:-7417}/readyz" ]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 10s
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - ${HOST_DOCKER_BASE:-/srv/docker}:${HOST_DOCKER_BASE:-/srv/docker}
