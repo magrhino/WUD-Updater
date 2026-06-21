@@ -1,6 +1,6 @@
 from __future__ import annotations
 from pathlib import Path
-from wudup import web_jobs
+from wudup import web_jobs, web_plans
 from wudup.db import open_db
 from wudup.locks import DirectoryLock, WudLockError, lock_dir_for
 from tests.web_test_helpers import (
@@ -584,6 +584,72 @@ def test_apply_endpoint_releases_wud_lock_when_runner_raises(
     calls = _fake_docker_calls(fake_root)
     assert " pull " not in calls
     assert " up -d " not in calls
+
+
+def test_apply_endpoint_releases_wud_lock_when_pending_source_reread_fails(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    fake_env, fake_root = _fake_docker_env(tmp_path)
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+            **fake_env,
+        },
+    )
+    wud_file = tmp_path / "state" / "images.todo"
+    wud_file.write_text("repo/app:latest\n", encoding="utf-8")
+    _make_fake_stack(
+        tmp_path,
+        fake_root,
+        "stack",
+        [("app", "repo/app:latest", "cid-app")],
+    )
+    headers = _csrf_headers(client)
+    plan = client.post(
+        "/api/v1/plans",
+        json={"line_numbers": [1]},
+        headers=headers,
+    ).json()
+    original_resolve = web_plans.web_pending_sources.resolve_pending_source
+    calls = 0
+
+    def fail_second_source_read(*args, **kwargs):
+        nonlocal calls
+        calls += 1
+        if calls == 2:
+            raise OSError("pending source re-read failed")
+        return original_resolve(*args, **kwargs)
+
+    monkeypatch.setattr(
+        web_plans.web_pending_sources,
+        "resolve_pending_source",
+        fail_second_source_read,
+    )
+
+    try:
+        client.post(
+            "/api/v1/jobs",
+            json={
+                "plan_id": plan["plan_id"],
+                "line_numbers": [1],
+                "confirmation": "apply",
+            },
+            headers=headers,
+        )
+    except OSError as exc:
+        assert "pending source re-read failed" in str(exc)
+    else:
+        raise AssertionError("expected pending source re-read failure")
+
+    assert calls == 2
+    assert not lock_dir_for(wud_file).exists()
+    assert wud_file.read_text(encoding="utf-8") == "repo/app:latest\n"
+    calls_text = _fake_docker_calls(fake_root)
+    assert " pull " not in calls_text
+    assert " up -d " not in calls_text
 
 
 def test_apply_endpoint_reports_updater_failure_and_preserves_line(

@@ -75,21 +75,21 @@ def api_create_job(payload: ApplyPlanRequest, request: Request) -> ApplyJobRespo
     active_error = web_jobs._active_mutation_error(request)
     if active_error:
         raise HTTPException(status_code=409, detail=active_error)
-    pending_source = web_pending_sources.resolve_pending_source(
-        settings,
-        force_api=True,
-    )
     wud_lock: DirectoryLock | None = None
-    if pending_source.active == "file":
-        wud_lock = web_jobs._acquire_apply_wud_lock(settings)
+    try:
         pending_source = web_pending_sources.resolve_pending_source(
             settings,
             force_api=True,
         )
-        if pending_source.active != "file":
-            wud_lock.close()
-            wud_lock = None
-    try:
+        if pending_source.active == "file":
+            wud_lock = web_jobs._acquire_apply_wud_lock(settings)
+            pending_source = web_pending_sources.resolve_pending_source(
+                settings,
+                force_api=True,
+            )
+            if pending_source.active != "file":
+                wud_lock.close()
+                wud_lock = None
         try:
             plan = build_web_plan(
                 settings,
