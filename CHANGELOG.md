@@ -4,6 +4,15 @@ All notable changes to WUD-Updater are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com) and versions follow
 [Semantic Versioning](https://semver.org).
 
+## [0.45.6](https://github.com/magrhino/wudup/compare/v0.45.5...v0.45.6) (2026-06-21)
+
+
+### Bug Fixes
+
+* **ci:** Danger workflow permissions for PR comments and status updates ([#383](https://github.com/magrhino/wudup/issues/383)) ([cf577c6](https://github.com/magrhino/wudup/commit/cf577c6ae143978f45bcbed71126d405b1f47b88))
+* **container:** add default WebUI and readiness healthcheck ([#380](https://github.com/magrhino/wudup/issues/380)) ([9b5dacf](https://github.com/magrhino/wudup/commit/9b5dacf751acb065bce8d1c4f9d1df1e8091483a))
+* **release:** Harden WebUI changelog tag parsing ([#379](https://github.com/magrhino/wudup/issues/379)) ([f1f8d86](https://github.com/magrhino/wudup/commit/f1f8d869783c835c0400be03d1a2c58b731e6165))
+
 ## [0.45.5](https://github.com/magrhino/wudup/compare/v0.45.4...v0.45.5) (2026-06-20)
 
 
