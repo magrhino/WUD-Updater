@@ -229,6 +229,8 @@ examples place WUD and WUDup on a private app network and set
 metadata without publishing WUD's port to the host. The examples also gate
 WUDup startup on WUD's container healthcheck and set
 `WUD_API_STARTUP_WAIT_SECONDS=5` as a short in-app retry for startup races.
+After startup, WUD API metadata discovery retries automatically on later
+WebUI requests when the API is temporarily unavailable.
 For LAN or reverse-proxy exposure, set `WUD_WEB_PUBLIC_ORIGIN`; use
 `WUD_WEB_ALLOWED_HOSTS` only for extra host aliases, and review
 `WUD_WEB_TRUSTED_PROXIES` plus `WUD_WEB_SECURE_COOKIES` for reverse proxies.
@@ -549,8 +551,8 @@ Boolean examples use `true` and `false`; legacy aliases `1`, `0`, `yes`, `no`,
 | `WUD_WEB_SECURE_COOKIES` | `auto` | Cookie `Secure` mode: `auto` enables it for effective HTTPS origins, `true` always enables it, and `false` disables it for local HTTP testing. |
 | `WUD_WEB_MUTATIONS_ENABLED` | `false` | Enables browser plan/apply update mutations and Settings container restart when set to `true`. Leave unset or `false` for read-only WebUI deployments. |
 | `WUD_WEB_RESTART_CONTAINER` | Docker `HOSTNAME` inside a container, otherwise unset | Optional Docker container name or ID restarted from Settings. Set this explicitly only when the auto-detected current container target is unavailable or wrong. |
-| `WUD_API_BASE_URL` | `http://wud:3000` | Internal WUD API base URL used for best-effort WebUI metadata discovery. Auth-required or unavailable WUD is reported as degraded and does not change pending/apply behavior, which still uses `WUD_OUT_FILE`. |
-| `WUD_API_STARTUP_WAIT_SECONDS` | `0`, `5` in Compose examples | Seconds to retry the initial WUD API health probe during WebUI startup before reporting degraded WUD API discovery. |
+| `WUD_API_BASE_URL` | `http://wud:3000` | Internal WUD API base URL used for best-effort WebUI metadata discovery. Unavailable or error states are reported as degraded and retried faster on later WebUI requests; auth-required WUD still uses the normal cache TTL. WUD API discovery does not change pending/apply behavior, which still uses `WUD_OUT_FILE`. |
+| `WUD_API_STARTUP_WAIT_SECONDS` | `0`, `5` in Compose examples | Seconds to retry the initial WUD API health probe during WebUI startup before reporting degraded WUD API discovery. This startup wait is separate from automatic runtime retries. |
 | `WUD_WEB_HOST` | Host/direct app: `127.0.0.1`; container image: `0.0.0.0` | Host passed to Uvicorn when running `wudup web`. The image default makes published Docker ports reachable; Compose still controls host-side exposure with `WEBUI_HTTP_BIND`. |
 | `WUD_WEB_PORT` | `7417` | Port passed to Uvicorn when running `wudup web`. |
 | `WUD_WEB_STATIC_DIR` | packaged SPA, auto-detected if present | Optional built SPA directory override. Backend tests and API startup do not require a frontend build. |
