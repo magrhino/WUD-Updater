@@ -159,7 +159,21 @@ class WudFileCleanupTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             path = Path(tmpdir) / "images.todo"
             path.write_text("repo/app:latest\n", encoding="utf-8")
-            os.chmod(path, 0o600)
+            os.chmod(path, 0o660)
+            before = path.stat()
+            parsed = parse_wud_file(path)
+
+            cleanup_successful_lines(path, parsed, [1])
+
+            after = path.stat()
+            self.assertEqual(stat.S_IMODE(after.st_mode), stat.S_IMODE(before.st_mode))
+            self.assertEqual((after.st_uid, after.st_gid), (before.st_uid, before.st_gid))
+
+    def test_readonly_mode_and_owner_are_preserved_when_cleaning_file(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "images.todo"
+            path.write_text("repo/app:latest\n", encoding="utf-8")
+            os.chmod(path, 0o440)
             before = path.stat()
             parsed = parse_wud_file(path)
 
@@ -185,7 +199,7 @@ class FileOpsTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             path = Path(tmpdir) / "images.todo"
             path.write_text("old\n", encoding="utf-8")
-            os.chmod(path, 0o400)
+            os.chmod(path, 0o640)
             before = path.stat()
             owner = OwnerConfig.from_values(
                 str(os.getuid()),
