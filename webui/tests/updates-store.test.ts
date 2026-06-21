@@ -668,6 +668,99 @@ describe("connection store focused coverage", () => {
     expect(changelog.body).not.toContain("Older release");
   });
 
+  it("deduplicates concurrent release changelog loads", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        jsonResponse({
+          body: "[changelog](https://github.com/t-mart/mousehole/blob/master/CHANGELOG.md)",
+        }),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          [
+            "# Changelog",
+            "",
+            "## [v0.5.0](https://github.com/t-mart/mousehole/releases/tag/v0.5.0) - 2026-06-20",
+            "",
+            "- Concurrent entry",
+          ].join("\n"),
+        ),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+    const updates = useUpdatesStore();
+    const note = releaseNoteInfo({
+      release_tag: "v0.5.0",
+      links: [
+        {
+          label: "GitHub release",
+          url: "https://github.com/t-mart/mousehole/releases/tag/v0.5.0",
+          kind: "github_release",
+        },
+      ],
+    });
+
+    await Promise.all([
+      updates.loadReleaseChangelog(note),
+      updates.loadReleaseChangelog(note),
+    ]);
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock.mock.calls[0][0]).toBe(
+      "https://api.github.com/repos/t-mart/mousehole/releases/tags/v0.5.0",
+    );
+    expect(fetchMock.mock.calls[1][0]).toBe(
+      "https://raw.githubusercontent.com/t-mart/mousehole/master/CHANGELOG.md",
+    );
+    expect(updates.releaseChangelogStateFor(note)).toMatchObject({
+      status: "ready",
+      body: expect.stringContaining("Concurrent entry"),
+    });
+  });
+
+  it("short-circuits release changelog loads when ready", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        jsonResponse({
+          body: "[changelog](https://github.com/t-mart/mousehole/blob/master/CHANGELOG.md)",
+        }),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          [
+            "# Changelog",
+            "",
+            "## [v0.5.0](https://github.com/t-mart/mousehole/releases/tag/v0.5.0) - 2026-06-20",
+            "",
+            "- Cached entry",
+          ].join("\n"),
+        ),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+    const updates = useUpdatesStore();
+    const note = releaseNoteInfo({
+      release_tag: "v0.5.0",
+      links: [
+        {
+          label: "GitHub release",
+          url: "https://github.com/t-mart/mousehole/releases/tag/v0.5.0",
+          kind: "github_release",
+        },
+      ],
+    });
+
+    await updates.loadReleaseChangelog(note);
+    expect(updates.releaseChangelogStateFor(note)).toMatchObject({
+      status: "ready",
+      body: expect.stringContaining("Cached entry"),
+    });
+
+    await updates.loadReleaseChangelog(note);
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
   it("keeps changelog failures scoped to the release row", async () => {
     vi.stubGlobal(
       "fetch",

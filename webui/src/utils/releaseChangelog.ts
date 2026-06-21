@@ -515,7 +515,11 @@ async function fetchTextWithLimit(
     }
     const reader = response.body?.getReader();
     if (!reader) {
-      return "";
+      const text = await response.text();
+      if (new TextEncoder().encode(text).byteLength > options.maxBytes) {
+        throw new Error(`${options.resource} response is too large.`);
+      }
+      return text;
     }
     const chunks: Uint8Array[] = [];
     let bytesRead = 0;

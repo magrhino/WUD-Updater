@@ -11,6 +11,17 @@ function textResponse(body: string, init: ResponseInit = {}): Response {
   return new Response(body, init);
 }
 
+function streamlessTextResponse(body: string, init: ResponseInit = {}): Response {
+  const status = init.status ?? 200;
+  return {
+    ok: status >= 200 && status < 300,
+    status,
+    headers: new Headers(init.headers),
+    body: null,
+    text: vi.fn().mockResolvedValue(body),
+  } as unknown as Response;
+}
+
 describe("release changelog extraction", () => {
   it("parses GitHub release URLs", () => {
     expect(
@@ -221,6 +232,44 @@ describe("release changelog extraction", () => {
     });
   });
 
+  it("falls back to text responses when streams are unavailable", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        streamlessTextResponse(
+          JSON.stringify({
+            body: "[changelog](https://github.com/t-mart/mousehole/blob/master/CHANGELOG.md)",
+          }),
+        ),
+      )
+      .mockResolvedValueOnce(
+        streamlessTextResponse(
+          [
+            "# Changelog",
+            "",
+            "## [v0.5.0](https://github.com/t-mart/mousehole/releases/tag/v0.5.0)",
+            "",
+            "- Streamless response body",
+            "",
+            "## [v0.4.0]",
+            "",
+            "- Older release",
+          ].join("\n"),
+        ),
+      );
+
+    await expect(
+      fetchReleaseChangelog(
+        "https://github.com/t-mart/mousehole/releases/tag/v0.5.0",
+        "v0.5.0",
+        { fetch: fetchMock },
+      ),
+    ).resolves.toMatchObject({
+      status: "ready",
+      body: expect.stringContaining("Streamless response body"),
+    });
+  });
+
   it("rejects oversized and failed fetches", async () => {
     const oversizedFetch = vi.fn().mockResolvedValueOnce(
       textResponse("{}", { headers: { "content-length": "20" } }),
@@ -239,6 +288,17 @@ describe("release changelog extraction", () => {
         "https://github.com/t-mart/mousehole/releases/tag/v0.5.0",
         "v0.5.0",
         { fetch: oversizedBodyFetch, maxBytes: 1 },
+      ),
+    ).rejects.toThrow("GitHub release response is too large.");
+
+    const oversizedStreamlessFetch = vi
+      .fn()
+      .mockResolvedValueOnce(streamlessTextResponse("{}"));
+    await expect(
+      fetchReleaseChangelog(
+        "https://github.com/t-mart/mousehole/releases/tag/v0.5.0",
+        "v0.5.0",
+        { fetch: oversizedStreamlessFetch, maxBytes: 1 },
       ),
     ).rejects.toThrow("GitHub release response is too large.");
 
