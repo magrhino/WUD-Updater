@@ -282,9 +282,10 @@ function parseAtxHeading(
 function headingMatchesTag(heading: string, releaseTag: string): boolean {
   const text = plainMarkdownText(heading);
   return tagVariants(releaseTag).some((tag) =>
-    new RegExp(`(^|[^0-9A-Za-z])${escapeRegExp(tag)}([^0-9A-Za-z]|$)`, "i").test(
-      text,
-    ),
+    new RegExp(
+      `(^|[^0-9A-Za-z._+/-])${escapeRegExp(tag)}([^0-9A-Za-z._+/-]|$)`,
+      "i",
+    ).test(text),
   );
 }
 

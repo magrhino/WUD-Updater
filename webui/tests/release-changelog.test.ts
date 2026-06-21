@@ -79,6 +79,26 @@ describe("release changelog extraction", () => {
       .toContain("Prefixed tag");
   });
 
+  it("does not prefix-match longer version headings", () => {
+    const markdown = [
+      "# Changelog",
+      "",
+      "## [v1.2.1](https://github.com/t-mart/mousehole/releases/tag/v1.2.1)",
+      "",
+      "- Patch release",
+      "",
+      "## [v1.2](https://github.com/t-mart/mousehole/releases/tag/v1.2)",
+      "",
+      "- Minor release",
+    ].join("\n");
+
+    const section = extractChangelogSection(markdown, "v1.2");
+
+    expect(section).toContain("## [v1.2]");
+    expect(section).toContain("Minor release");
+    expect(section).not.toContain("Patch release");
+  });
+
   it("returns unavailable when the release body has no changelog link", async () => {
     const fetchMock = vi.fn().mockResolvedValueOnce(
       textResponse(JSON.stringify({ body: "No changelog here." })),
