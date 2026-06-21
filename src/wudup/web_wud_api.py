@@ -36,6 +36,7 @@ DEFAULT_WUD_API_STARTUP_WAIT_SECONDS = 0.0
 WUD_API_TIMEOUT_SECONDS = 1.0
 WUD_API_STARTUP_RETRY_INTERVAL_SECONDS = 0.5
 WUD_API_CACHE_TTL_SECONDS = 30.0
+WUD_API_DEGRADED_RETRY_INTERVAL_SECONDS = 5.0
 WUD_API_USER_AGENT = "wudup-webui-wud-api/1.0"
 
 
@@ -151,11 +152,17 @@ def get_snapshot(
         if (
             not force
             and cached is not None
-            and now - cached.checked_monotonic < WUD_API_CACHE_TTL_SECONDS
+            and now - cached.checked_monotonic < _snapshot_cache_ttl(cached)
             and (not include_containers or cached.metadata_checked)
         ):
             return cached
     return _refresh_snapshot(settings, include_containers=include_containers)
+
+
+def _snapshot_cache_ttl(snapshot: WudApiSnapshot) -> float:
+    if snapshot.status.state in {"unavailable", "error"}:
+        return WUD_API_DEGRADED_RETRY_INTERVAL_SECONDS
+    return WUD_API_CACHE_TTL_SECONDS
 
 
 def metadata_by_target(
@@ -228,6 +235,7 @@ def _refresh_snapshot(
             checked_at=checked_at,
             detail=_sanitize_detail(settings, f"invalid WUD API base URL: {exc}"),
             checked_monotonic=checked_monotonic,
+            metadata_checked=include_containers,
         )
         _store_snapshot(base_url, snapshot)
         return snapshot
@@ -243,6 +251,7 @@ def _refresh_snapshot(
                 checked_at=checked_at,
                 detail="WUD API requires authentication",
                 checked_monotonic=checked_monotonic,
+                metadata_checked=include_containers,
             )
         else:
             snapshot = _snapshot(
@@ -255,6 +264,7 @@ def _refresh_snapshot(
                     f"WUD API health check returned HTTP {exc.code}",
                 ),
                 checked_monotonic=checked_monotonic,
+                metadata_checked=include_containers,
             )
         _store_snapshot(base_url, snapshot)
         return snapshot
@@ -266,6 +276,7 @@ def _refresh_snapshot(
             checked_at=checked_at,
             detail=_sanitize_detail(settings, f"WUD API is unavailable: {exc}"),
             checked_monotonic=checked_monotonic,
+            metadata_checked=include_containers,
         )
         _store_snapshot(base_url, snapshot)
         return snapshot

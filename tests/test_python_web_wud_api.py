@@ -233,6 +233,95 @@ def test_wud_api_snapshot_rejects_invalid_container_payload(
     assert snapshot.status.detail == "WUD API container metadata payload was not a list"
 
 
+def test_wud_api_snapshot_reports_degraded_after_ready_cache_expires(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    clock = {"now": 0.0}
+    reachable = {"value": True}
+    calls: list[str] = []
+
+    def fake_request_json(url: str) -> object:
+        path = urllib.parse.urlsplit(url).path
+        calls.append(path)
+        if not reachable["value"]:
+            raise OSError("connection refused")
+        if path == "/health":
+            return {"status": "ok"}
+        if path == "/api/containers":
+            return [_container_payload(name="app")]
+        raise AssertionError(f"unexpected WUD API URL: {url}")
+
+    monkeypatch.setattr(web_wud_api.time, "monotonic", lambda: clock["now"])
+    monkeypatch.setattr(web_wud_api, "_request_json", fake_request_json)
+    settings = _settings(tmp_path, "http://wud.cache-expiry.test:3000")
+
+    ready = web_wud_api.get_snapshot(
+        settings,
+        include_containers=True,
+        force=True,
+    )
+    assert ready.status.state == "ready"
+    assert ready.status.metadata_available is True
+
+    reachable["value"] = False
+    clock["now"] = web_wud_api.WUD_API_CACHE_TTL_SECONDS / 2
+    cached = web_wud_api.get_snapshot(settings, include_containers=True)
+    assert cached.status.state == "ready"
+    assert calls == ["/health", "/api/containers"]
+
+    clock["now"] = web_wud_api.WUD_API_CACHE_TTL_SECONDS + 0.1
+    degraded = web_wud_api.get_snapshot(settings, include_containers=True)
+    assert degraded.status.state == "unavailable"
+    assert degraded.status.metadata_available is False
+    assert calls == ["/health", "/api/containers", "/health"]
+
+
+def test_wud_api_degraded_snapshot_retries_after_short_interval_and_recovers(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    clock = {"now": 0.0}
+    reachable = {"value": False}
+    calls: list[str] = []
+
+    def fake_request_json(url: str) -> object:
+        path = urllib.parse.urlsplit(url).path
+        calls.append(path)
+        if not reachable["value"]:
+            raise OSError("connection refused")
+        if path == "/health":
+            return {"status": "ok"}
+        if path == "/api/containers":
+            return [_container_payload(name="app")]
+        raise AssertionError(f"unexpected WUD API URL: {url}")
+
+    monkeypatch.setattr(web_wud_api.time, "monotonic", lambda: clock["now"])
+    monkeypatch.setattr(web_wud_api, "_request_json", fake_request_json)
+    settings = _settings(tmp_path, "http://wud.retry.test:3000")
+
+    unavailable = web_wud_api.get_snapshot(
+        settings,
+        include_containers=True,
+        force=True,
+    )
+    assert unavailable.status.state == "unavailable"
+    assert calls == ["/health"]
+
+    reachable["value"] = True
+    clock["now"] = web_wud_api.WUD_API_DEGRADED_RETRY_INTERVAL_SECONDS / 2
+    cached = web_wud_api.get_snapshot(settings, include_containers=True)
+    assert cached.status.state == "unavailable"
+    assert calls == ["/health"]
+
+    clock["now"] = web_wud_api.WUD_API_DEGRADED_RETRY_INTERVAL_SECONDS + 0.1
+    recovered = web_wud_api.get_snapshot(settings, include_containers=True)
+    assert recovered.status.state == "ready"
+    assert recovered.status.metadata_available is True
+    assert recovered.containers[0].name == "app"
+    assert calls == ["/health", "/health", "/api/containers"]
+
+
 def test_web_startup_continues_when_wud_api_is_unavailable(
     tmp_path: Path,
     monkeypatch,
@@ -307,6 +396,55 @@ def test_pending_endpoint_keeps_images_todo_fallback_when_wud_unavailable(
     assert body["items"][0]["image"] == "registry.example/acme/app:1.0.0"
     assert body["items"][0]["wud_metadata"] is None
     assert body["wud_api"]["metadata_available"] is False
+
+
+def test_pending_endpoint_falls_back_after_wud_api_connection_loss(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    clock = {"now": 0.0}
+    reachable = {"value": True}
+
+    def fake_request_json(url: str) -> object:
+        path = urllib.parse.urlsplit(url).path
+        if not reachable["value"]:
+            raise OSError("connection refused")
+        if path == "/health":
+            return {"status": "ok"}
+        if path == "/api/containers":
+            return [_container_payload(name="app")]
+        raise AssertionError(f"unexpected WUD API URL: {url}")
+
+    monkeypatch.setattr(web_wud_api.time, "monotonic", lambda: clock["now"])
+    monkeypatch.setattr(web_wud_api, "_request_json", fake_request_json)
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_API_BASE_URL": "http://wud.pending-loss.test:3000",
+        },
+    )
+    wud_file = tmp_path / "state" / "images.todo"
+    original = "app\n"
+    wud_file.write_text(original, encoding="utf-8")
+
+    ready_response = client.get("/api/v1/pending")
+    assert ready_response.status_code == 200
+    ready_body = ready_response.json()
+    assert ready_body["wud_api"]["metadata_available"] is True
+    assert ready_body["items"][0]["wud_metadata"]["name"] == "app"
+
+    reachable["value"] = False
+    clock["now"] = web_wud_api.WUD_API_CACHE_TTL_SECONDS + 0.1
+    degraded_response = client.get("/api/v1/pending")
+
+    assert degraded_response.status_code == 200
+    degraded_body = degraded_response.json()
+    assert degraded_body["count"] == 1
+    assert degraded_body["items"][0]["image"] == "app"
+    assert degraded_body["items"][0]["wud_metadata"] is None
+    assert degraded_body["wud_api"]["state"] == "unavailable"
+    assert wud_file.read_text(encoding="utf-8") == original
 
 
 def test_release_notes_refresh_uses_wud_source_and_safe_remote_tag(
