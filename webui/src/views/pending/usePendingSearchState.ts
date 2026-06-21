@@ -6,6 +6,7 @@ import type {
   PendingStackGroup,
   ReleaseNoteInfo,
 } from "../../api/client";
+import type { ReleaseChangelogState } from "../../utils/releaseChangelog";
 import type { SafetyCue } from "./safetyCues";
 import type { SnoozedPendingItem } from "./snoozeSelection";
 import {
@@ -24,6 +25,9 @@ type UsePendingSearchStateOptions = {
   selectAllLabel: ComputedRef<string>;
   stackGroups: ComputedRef<PendingStackGroup[]>;
   unmatchedItems: ComputedRef<PendingGroupedItem[]>;
+  releaseChangelogFor: (
+    note: ReleaseNoteInfo | null,
+  ) => ReleaseChangelogState | null;
   releaseNoteFor: (item: PendingItem) => ReleaseNoteInfo | null;
   releaseNoteReason: (note: ReleaseNoteInfo | null) => string;
   releaseNoteStatus: (note: ReleaseNoteInfo | null) => string;
@@ -37,6 +41,7 @@ export function usePendingSearchState(options: UsePendingSearchStateOptions) {
   );
   const pendingSearchActive = computed(() => Boolean(pendingSearchText.value));
   const pendingSearchContext = {
+    releaseChangelogFor: options.releaseChangelogFor,
     releaseNoteFor: options.releaseNoteFor,
     releaseNoteReason: options.releaseNoteReason,
     releaseNoteStatus: options.releaseNoteStatus,

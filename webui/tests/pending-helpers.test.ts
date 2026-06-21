@@ -353,6 +353,12 @@ describe("pending helper modules", () => {
       error: "no supported GitHub release source found",
     });
     const context = {
+      releaseChangelogFor: () => ({
+        status: "ready" as const,
+        body: "Server-Sent Events replace WebSocket live updates.",
+        sourceUrl: "https://raw.githubusercontent.com/t-mart/mousehole/master/CHANGELOG.md",
+        error: "",
+      }),
       releaseNoteFor: () => note,
       releaseNoteReason,
       releaseNoteStatus: (value: typeof note | null) =>
@@ -367,6 +373,7 @@ describe("pending helper modules", () => {
     expect(pendingItemMatchesSearch(app, "feedface", context)).toBe(true);
     expect(pendingItemMatchesSearch(app, "docker-compose.archive", context)).toBe(true);
     expect(pendingItemMatchesSearch(app, "Only GHCR", context)).toBe(true);
+    expect(pendingItemMatchesSearch(app, "server-sent events", context)).toBe(true);
     expect(pendingItemMatchesSearch(app, "mutable latest", context)).toBe(true);
 
     const itemMatchedGroups = filterPendingStackGroups([group], "worker", context);
@@ -405,6 +412,7 @@ describe("pending helper modules", () => {
       },
     });
     const context: PendingSearchContext = {
+      releaseChangelogFor: () => null,
       releaseNoteFor: () => null,
       releaseNoteReason,
       releaseNoteStatus: (value) => releaseNoteStatus(value, false),

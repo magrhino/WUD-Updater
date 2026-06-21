@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import type { InputHTMLAttributes } from "vue";
-import { AlertTriangle, ExternalLink } from "@lucide/vue";
 import { NAlert, NCheckbox, NInput, NTag } from "naive-ui";
 
 import type { PendingGroupedItem, ReleaseNoteInfo } from "../../api/client";
+import PendingReleaseNotes from "./PendingReleaseNotes.vue";
 
 type TagType = "default" | "error" | "info" | "success" | "warning";
 
@@ -98,40 +98,12 @@ function groupedItemTarget(item: PendingGroupedItem): string {
         {{ tagRewriteLabel }}
       </span>
       <span v-if="metaDetail" class="wrap-anywhere">{{ metaDetail }}</span>
-      <div v-if="showReleaseNotes && releaseNote?.links.length" class="release-notes-cell">
-        <a
-          v-for="link in releaseNote.links"
-          :key="`${item.line_no}-${link.kind}-${link.url}`"
-          class="release-note-link"
-          :href="link.url"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          {{ link.label }}
-          <ExternalLink :size="14" aria-hidden="true" />
-        </a>
-        <span
-          v-if="releaseNote.breaking"
-          class="release-breaking-cue wrap-anywhere"
-          :title="releaseNote.breaking_reasons.join(' ')"
-          aria-label="Possible breaking change"
-        >
-          <AlertTriangle :size="14" aria-hidden="true" />
-          Possible breaking change
-        </span>
-      </div>
-      <span
-        v-if="showReleaseNotes && !releaseNote?.links.length"
-        class="release-notes-muted wrap-anywhere"
-        :title="releaseNoteReason || undefined"
-      >
-        <span class="release-notes-status wrap-anywhere">
-          {{ releaseNoteStatus }}
-        </span>
-        <span v-if="releaseNoteReason" class="release-notes-reason">
-          {{ releaseNoteReason }}
-        </span>
-      </span>
+      <PendingReleaseNotes
+        v-if="showReleaseNotes"
+        :release-note="releaseNote"
+        :release-note-status="releaseNoteStatus"
+        :release-note-reason="releaseNoteReason"
+      />
     </div>
     <div v-if="showDiagnostic && item.diagnostic" class="pending-update-diagnostic">
       <n-alert type="warning" :title="item.diagnostic.message">

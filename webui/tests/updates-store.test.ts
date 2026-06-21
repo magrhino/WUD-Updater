@@ -17,6 +17,7 @@ import {
   applyJobLogResponse,
   applyJobResponse,
   pendingResponse,
+  releaseNoteInfo,
   releaseNotesResponse,
   retagPlanResponse,
   retagPreviewJobResponse,
@@ -615,6 +616,82 @@ describe("connection store focused coverage", () => {
     expect(updates.releaseNotesError).toBe("notes unavailable");
     expect(updates.releaseNotesLoading).toBe(false);
     expect(updates.loading).toBe(false);
+  });
+
+  it("loads release changelogs on demand", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        jsonResponse({
+          body: "[changelog](https://github.com/t-mart/mousehole/blob/master/CHANGELOG.md)",
+        }),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          [
+            "# Changelog",
+            "",
+            "## [v0.5.0](https://github.com/t-mart/mousehole/releases/tag/v0.5.0) - 2026-06-20",
+            "",
+            "- **Breaking**: Live updates use Server-Sent Events instead of WebSockets.",
+            "",
+            "## [v0.4.0](https://github.com/t-mart/mousehole/releases/tag/v0.4.0) - 2026-06-04",
+            "",
+            "- Older release",
+          ].join("\n"),
+        ),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+    const updates = useUpdatesStore();
+    const note = releaseNoteInfo({
+      release_tag: "v0.5.0",
+      links: [
+        {
+          label: "GitHub release",
+          url: "https://github.com/t-mart/mousehole/releases/tag/v0.5.0",
+          kind: "github_release",
+        },
+      ],
+    });
+
+    await updates.loadReleaseChangelog(note);
+
+    const changelog = updates.releaseChangelogStateFor(note);
+    expect(fetchMock.mock.calls[0][0]).toBe(
+      "https://api.github.com/repos/t-mart/mousehole/releases/tags/v0.5.0",
+    );
+    expect(fetchMock.mock.calls[1][0]).toBe(
+      "https://raw.githubusercontent.com/t-mart/mousehole/master/CHANGELOG.md",
+    );
+    expect(changelog.status).toBe("ready");
+    expect(changelog.body).toContain("Server-Sent Events");
+    expect(changelog.body).not.toContain("Older release");
+  });
+
+  it("keeps changelog failures scoped to the release row", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockRejectedValueOnce(new Error("network failed")),
+    );
+    const updates = useUpdatesStore();
+    const note = releaseNoteInfo({
+      release_tag: "v0.5.0",
+      links: [
+        {
+          label: "GitHub release",
+          url: "https://github.com/t-mart/mousehole/releases/tag/v0.5.0",
+          kind: "github_release",
+        },
+      ],
+    });
+
+    await updates.loadReleaseChangelog(note);
+
+    expect(updates.releaseChangelogStateFor(note)).toMatchObject({
+      status: "error",
+      error: "network failed",
+    });
+    expect(updates.releaseNotesError).toBe("");
   });
 
   it("sets stream errors through the updates store action", () => {

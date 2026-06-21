@@ -44,6 +44,7 @@ import {
   updateTargetsResponse,
 } from "./helpers/fixtures";
 import { mountWithApp, naiveStubs } from "./helpers/mount";
+import { jsonResponse } from "./helpers/storeActions";
 
 
 import {
@@ -601,16 +602,97 @@ describe("pending view fallback and release notes", () => {
     vi.spyOn(updates, "loadPending").mockResolvedValue();
     vi.spyOn(updates, "loadReleaseNotes").mockResolvedValue();
     vi.spyOn(updates, "refreshReleaseNotes").mockResolvedValue();
+    const loadChangelog = vi
+      .spyOn(updates, "loadReleaseChangelog")
+      .mockResolvedValue();
     const wrapper = mountPendingView(pinia);
 
     expect(wrapper.text()).toContain("GitHub release");
     expect(wrapper.text()).toContain("Possible breaking change");
+    expect(wrapper.text()).toContain("Read changelog");
+    expect(loadChangelog).not.toHaveBeenCalled();
     const link = wrapper.find(
       'a[href="https://github.com/acme/app/releases/tag/v2.0.0"]',
     );
     expect(link.exists()).toBe(true);
     expect(link.attributes("target")).toBe("_blank");
     expect(link.attributes("rel")).toBe("noopener noreferrer");
+  });
+
+  it("loads changelog notes on demand and includes them in pending search", async () => {
+    const { pinia, auth, connection, settings, updates, runs } = setupStores(false);
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        jsonResponse({
+          body: "[changelog](https://github.com/t-mart/mousehole/blob/master/CHANGELOG.md)",
+        }),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          [
+            "# Changelog",
+            "",
+            "## [v0.5.0](https://github.com/t-mart/mousehole/releases/tag/v0.5.0) - 2026-06-20",
+            "",
+            "- **Breaking**: Live updates use Server-Sent Events instead of WebSockets.",
+            "",
+            "## [v0.4.0](https://github.com/t-mart/mousehole/releases/tag/v0.4.0) - 2026-06-04",
+            "",
+            "- Older release",
+          ].join("\n"),
+        ),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+    updates.pending = pendingResponse([
+      pendingItem({
+        image: "ghcr.io/t-mart/mousehole:0.4.0",
+        repo: "ghcr.io/t-mart/mousehole",
+        current_tag: "0.4.0",
+        desired_tag: "0.5.0",
+      }),
+    ]);
+    updates.releaseNotes = releaseNotesResponse([
+      releaseNoteInfo({
+        release_tag: "v0.5.0",
+        title: "v0.5.0",
+        links: [
+          {
+            label: "GitHub release",
+            url: "https://github.com/t-mart/mousehole/releases/tag/v0.5.0",
+            kind: "github_release",
+          },
+        ],
+      }),
+    ]);
+    vi.spyOn(updates, "loadPending").mockResolvedValue();
+    vi.spyOn(updates, "loadReleaseNotes").mockResolvedValue();
+    vi.spyOn(updates, "refreshReleaseNotes").mockResolvedValue();
+    vi.spyOn(settings, "loadPendingSafetyCues").mockResolvedValue();
+    const wrapper = mountPendingView(pinia);
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    const readButton = wrapper
+      .findAll("button")
+      .find((button) => button.text().includes("Read changelog"));
+    expect(readButton?.exists()).toBe(true);
+
+    await readButton?.trigger("click");
+    await flushPromises();
+    await nextTick();
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(wrapper.text()).toContain("Changelog notes");
+    expect(wrapper.text()).toContain("Server-Sent Events");
+    expect(wrapper.text()).not.toContain("Older release");
+
+    await wrapper
+      .find('input[aria-label="Search pending updates"]')
+      .setValue("server-sent events");
+    await flushPromises();
+
+    expect(wrapper.text()).toContain("1 visible update matched");
+    expect(wrapper.text()).toContain("mousehole");
   });
 
   it("renders both LSIO and upstream release-note links", () => {
