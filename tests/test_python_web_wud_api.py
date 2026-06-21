@@ -96,6 +96,26 @@ def _wud_response(url: str, response: ResponseSpec | Exception) -> object:
     return payload
 
 
+class _ToggleableWudApi:
+    def __init__(self, monkeypatch, *, reachable: bool) -> None:
+        self.now = 0.0
+        self.reachable = reachable
+        self.calls: list[str] = []
+        monkeypatch.setattr(web_wud_api.time, "monotonic", lambda: self.now)
+        monkeypatch.setattr(web_wud_api, "_request_json", self.request_json)
+
+    def request_json(self, url: str) -> object:
+        path = urllib.parse.urlsplit(url).path
+        self.calls.append(path)
+        if not self.reachable:
+            raise OSError("connection refused")
+        if path == "/health":
+            return {"status": "ok"}
+        if path == "/api/containers":
+            return [_container_payload(name="app")]
+        raise AssertionError(f"unexpected WUD API URL: {url}")
+
+
 def test_wud_api_snapshot_reads_update_metadata(tmp_path: Path, monkeypatch) -> None:
     _install_wud_api(
         monkeypatch,
@@ -237,23 +257,7 @@ def test_wud_api_snapshot_reports_degraded_after_ready_cache_expires(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
-    clock = {"now": 0.0}
-    reachable = {"value": True}
-    calls: list[str] = []
-
-    def fake_request_json(url: str) -> object:
-        path = urllib.parse.urlsplit(url).path
-        calls.append(path)
-        if not reachable["value"]:
-            raise OSError("connection refused")
-        if path == "/health":
-            return {"status": "ok"}
-        if path == "/api/containers":
-            return [_container_payload(name="app")]
-        raise AssertionError(f"unexpected WUD API URL: {url}")
-
-    monkeypatch.setattr(web_wud_api.time, "monotonic", lambda: clock["now"])
-    monkeypatch.setattr(web_wud_api, "_request_json", fake_request_json)
+    api = _ToggleableWudApi(monkeypatch, reachable=True)
     settings = _settings(tmp_path, "http://wud.cache-expiry.test:3000")
 
     ready = web_wud_api.get_snapshot(
@@ -264,40 +268,25 @@ def test_wud_api_snapshot_reports_degraded_after_ready_cache_expires(
     assert ready.status.state == "ready"
     assert ready.status.metadata_available is True
 
-    reachable["value"] = False
-    clock["now"] = web_wud_api.WUD_API_CACHE_TTL_SECONDS / 2
+    api.reachable = False
+    api.now = web_wud_api.WUD_API_CACHE_TTL_SECONDS / 2
     cached = web_wud_api.get_snapshot(settings, include_containers=True)
     assert cached.status.state == "ready"
-    assert calls == ["/health", "/api/containers"]
+    assert api.calls == ["/health", "/api/containers"]
 
-    clock["now"] = web_wud_api.WUD_API_CACHE_TTL_SECONDS + 0.1
+    api.now = web_wud_api.WUD_API_CACHE_TTL_SECONDS + 0.1
     degraded = web_wud_api.get_snapshot(settings, include_containers=True)
     assert degraded.status.state == "unavailable"
     assert degraded.status.metadata_available is False
-    assert calls == ["/health", "/api/containers", "/health"]
+    assert degraded.containers == ()
+    assert api.calls == ["/health", "/api/containers", "/health"]
 
 
 def test_wud_api_degraded_snapshot_retries_after_short_interval_and_recovers(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
-    clock = {"now": 0.0}
-    reachable = {"value": False}
-    calls: list[str] = []
-
-    def fake_request_json(url: str) -> object:
-        path = urllib.parse.urlsplit(url).path
-        calls.append(path)
-        if not reachable["value"]:
-            raise OSError("connection refused")
-        if path == "/health":
-            return {"status": "ok"}
-        if path == "/api/containers":
-            return [_container_payload(name="app")]
-        raise AssertionError(f"unexpected WUD API URL: {url}")
-
-    monkeypatch.setattr(web_wud_api.time, "monotonic", lambda: clock["now"])
-    monkeypatch.setattr(web_wud_api, "_request_json", fake_request_json)
+    api = _ToggleableWudApi(monkeypatch, reachable=False)
     settings = _settings(tmp_path, "http://wud.retry.test:3000")
 
     unavailable = web_wud_api.get_snapshot(
@@ -306,20 +295,24 @@ def test_wud_api_degraded_snapshot_retries_after_short_interval_and_recovers(
         force=True,
     )
     assert unavailable.status.state == "unavailable"
-    assert calls == ["/health"]
+    assert unavailable.status.metadata_available is False
+    assert unavailable.containers == ()
+    assert api.calls == ["/health"]
 
-    reachable["value"] = True
-    clock["now"] = web_wud_api.WUD_API_DEGRADED_RETRY_INTERVAL_SECONDS / 2
+    api.reachable = True
+    api.now = web_wud_api.WUD_API_DEGRADED_RETRY_INTERVAL_SECONDS / 2
     cached = web_wud_api.get_snapshot(settings, include_containers=True)
     assert cached.status.state == "unavailable"
-    assert calls == ["/health"]
+    assert cached.status.metadata_available is False
+    assert cached.containers == ()
+    assert api.calls == ["/health"]
 
-    clock["now"] = web_wud_api.WUD_API_DEGRADED_RETRY_INTERVAL_SECONDS + 0.1
+    api.now = web_wud_api.WUD_API_DEGRADED_RETRY_INTERVAL_SECONDS + 0.1
     recovered = web_wud_api.get_snapshot(settings, include_containers=True)
     assert recovered.status.state == "ready"
     assert recovered.status.metadata_available is True
     assert recovered.containers[0].name == "app"
-    assert calls == ["/health", "/health", "/api/containers"]
+    assert api.calls == ["/health", "/health", "/api/containers"]
 
 
 def test_web_startup_continues_when_wud_api_is_unavailable(
@@ -402,21 +395,7 @@ def test_pending_endpoint_falls_back_after_wud_api_connection_loss(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
-    clock = {"now": 0.0}
-    reachable = {"value": True}
-
-    def fake_request_json(url: str) -> object:
-        path = urllib.parse.urlsplit(url).path
-        if not reachable["value"]:
-            raise OSError("connection refused")
-        if path == "/health":
-            return {"status": "ok"}
-        if path == "/api/containers":
-            return [_container_payload(name="app")]
-        raise AssertionError(f"unexpected WUD API URL: {url}")
-
-    monkeypatch.setattr(web_wud_api.time, "monotonic", lambda: clock["now"])
-    monkeypatch.setattr(web_wud_api, "_request_json", fake_request_json)
+    api = _ToggleableWudApi(monkeypatch, reachable=True)
     client = _client(
         tmp_path,
         {
@@ -434,8 +413,8 @@ def test_pending_endpoint_falls_back_after_wud_api_connection_loss(
     assert ready_body["wud_api"]["metadata_available"] is True
     assert ready_body["items"][0]["wud_metadata"]["name"] == "app"
 
-    reachable["value"] = False
-    clock["now"] = web_wud_api.WUD_API_CACHE_TTL_SECONDS + 0.1
+    api.reachable = False
+    api.now = web_wud_api.WUD_API_CACHE_TTL_SECONDS + 0.1
     degraded_response = client.get("/api/v1/pending")
 
     assert degraded_response.status_code == 200
