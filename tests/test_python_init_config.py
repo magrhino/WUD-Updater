@@ -422,7 +422,7 @@ class InitConfigTests(unittest.TestCase):
         with self.assertRaisesRegex(InitConfigError, "mapping or a list"):
             _add_wud_health_dependency(service)
 
-    def test_webui_compose_override_yaml_contains_readyz_healthcheck(self) -> None:
+    def test_webui_compose_override_yaml_inherits_image_healthcheck(self) -> None:
         override_file = self.root / "override.yml"
         answers = answers_from_namespace(
             self._args(
@@ -438,6 +438,8 @@ class InitConfigTests(unittest.TestCase):
 
         parsed = YAML(typ="safe").load(override_file.read_text(encoding="utf-8"))
         service = parsed["services"]["wudup"]
+        self.assertNotIn("command", service)
+        self.assertNotIn("WUD_WEB_HOST", service["environment"])
         self.assertEqual(
             service["environment"]["WUD_API_BASE_URL"],
             "${WUD_API_BASE_URL:-http://wud:3000}",
@@ -456,19 +458,7 @@ class InitConfigTests(unittest.TestCase):
                 "${WEBUI_HTTP_BIND:-127.0.0.1}:${WUD_WEB_PORT:-7417}:${WUD_WEB_PORT:-7417}"
             ],
         )
-        self.assertEqual(
-            service["healthcheck"]["test"],
-            [
-                "CMD",
-                "curl",
-                "-fsS",
-                "http://127.0.0.1:${WUD_WEB_PORT:-7417}/readyz",
-            ],
-        )
-        self.assertEqual(service["healthcheck"]["interval"], "30s")
-        self.assertEqual(service["healthcheck"]["timeout"], "5s")
-        self.assertEqual(service["healthcheck"]["retries"], 3)
-        self.assertEqual(service["healthcheck"]["start_period"], "10s")
+        self.assertNotIn("healthcheck", service)
 
     def test_host_doctor_status_becomes_command_status(self) -> None:
         with mock.patch(

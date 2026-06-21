@@ -233,7 +233,7 @@ sync_wud_scripts(){
 }
 
 if [[ "$#" -eq 0 ]]; then
-  set -- updates --dry-run
+  set -- web
 elif [[ "$1" == -* ]]; then
   set -- updates "$@"
 fi

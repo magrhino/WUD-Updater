@@ -39,24 +39,26 @@ Node.js `webui-build` stage. The final stage uses `python:3.14.5-slim-bookworm`,
 installs the Docker CLI with the Compose plugin, copies `bin/`, `src/`, and `wud/`
 into `/app`, and packages the built SPA into `/app/src/wudup/web_static/`
 so the container natively serves the compiled WebUI without requiring static
-directory mounts. It starts through `tini`. Run doctor first to validate Docker
+directory mounts. It starts through `tini`, and with no command it runs the
+WebUI on the container's `0.0.0.0:7417`. Run doctor first to validate Docker
 access, mounted paths, script permissions, and Compose rendering:
 
 ```bash
 doctor
 ```
 
-With no command, the image runs the non-mutating default:
+For the explicit non-mutating helper path, run:
 
 ```bash
 updates --dry-run
 ```
 
 For direct `docker run` usage, mount the Docker socket, the host stack directory,
-and the WUD output path:
+the WUD output path, logs, and publish the WebUI port:
 
 ```bash
 docker run --rm \
+  -p 127.0.0.1:7417:7417 \
   -v /var/run/docker.sock:/var/run/docker.sock \
   -v /srv/docker:/srv/docker \
   -v wud-out:/out \
@@ -64,6 +66,7 @@ docker run --rm \
   -e DOCKER_BASE=/srv/docker \
   -e WUD_OUT_FILE=/out/images.todo \
   -e WUD_LOG_DIR=/logs \
+  -e WUD_DB_PATH=/logs/wudup.sqlite \
   ghcr.io/magrhino/wudup:latest
 ```
 
@@ -89,7 +92,7 @@ It uses the published GHCR image by default. Run it from the repository root:
 
 ```bash
 docker compose -f docs/examples/docker-compose.example.yml run --rm wudup doctor
-docker compose -f docs/examples/docker-compose.example.yml run --rm wudup
+docker compose -f docs/examples/docker-compose.example.yml run --rm wudup updates --dry-run
 ```
 
 To apply every pending entry through the wrapper:
@@ -203,11 +206,11 @@ network, and keeps browser mutations disabled unless
 
 For a long-running WebUI container, use
 [`docs/examples/docker-compose.webui.yml`](examples/docker-compose.webui.yml).
-That variant runs `wudup web`, serves the packaged SPA on
-`127.0.0.1:7417`, persists SQLite state in `/logs/wudup.sqlite`, and keeps
-browser mutations disabled unless `WUD_WEB_MUTATIONS_ENABLED=true` is set. Copy
-the WebUI env example, review the stack path and browser exposure settings, then
-start it and read the one-time setup link from the service logs:
+That variant relies on the image's default WebUI command, serves the packaged
+SPA on `127.0.0.1:7417`, persists SQLite state in `/logs/wudup.sqlite`, and
+keeps browser mutations disabled unless `WUD_WEB_MUTATIONS_ENABLED=true` is set.
+Copy the WebUI env example, review the stack path and browser exposure settings,
+then start it and read the one-time setup link from the service logs:
 
 ```bash
 WEBUI_ENV="$HOME/.config/wudup/webui.env"
@@ -239,9 +242,10 @@ After sign-in, open the WebUI Settings page to review the effective non-secret
 configuration, safety status, secret presence, and first-run checklist for the
 running process.
 
-The WebUI supports readiness endpoints for container healthchecks. The `/readyz`
-endpoint provides a no-auth, loopback-only healthcheck used by Docker Compose,
-while the `/api/v1/ready` endpoint requires authentication for API client checks.
+The packaged image defines a default Docker healthcheck against `/readyz`, a
+no-auth, loopback-only readiness endpoint. Override the service healthcheck only
+when you need custom timing or need to disable it for a non-WebUI command. The
+`/api/v1/ready` endpoint requires authentication for API client checks.
 
 The Settings page separates runtime configuration from managed UI preferences.
 Runtime values come from command-line overrides for the running command, then
@@ -547,7 +551,7 @@ Boolean examples use `true` and `false`; legacy aliases `1`, `0`, `yes`, `no`,
 | `WUD_WEB_RESTART_CONTAINER` | Docker `HOSTNAME` inside a container, otherwise unset | Optional Docker container name or ID restarted from Settings. Set this explicitly only when the auto-detected current container target is unavailable or wrong. |
 | `WUD_API_BASE_URL` | `http://wud:3000` | Internal WUD API base URL used for best-effort WebUI metadata discovery. Auth-required or unavailable WUD is reported as degraded and does not change pending/apply behavior, which still uses `WUD_OUT_FILE`. |
 | `WUD_API_STARTUP_WAIT_SECONDS` | `0`, `5` in Compose examples | Seconds to retry the initial WUD API health probe during WebUI startup before reporting degraded WUD API discovery. |
-| `WUD_WEB_HOST` | `127.0.0.1` | Host passed to Uvicorn when running `wudup web`. |
+| `WUD_WEB_HOST` | Host/direct app: `127.0.0.1`; container image: `0.0.0.0` | Host passed to Uvicorn when running `wudup web`. The image default makes published Docker ports reachable; Compose still controls host-side exposure with `WEBUI_HTTP_BIND`. |
 | `WUD_WEB_PORT` | `7417` | Port passed to Uvicorn when running `wudup web`. |
 | `WUD_WEB_STATIC_DIR` | packaged SPA, auto-detected if present | Optional built SPA directory override. Backend tests and API startup do not require a frontend build. |
 | `WUD_WEB_UPSTREAM_MAP` | auto-detected | Optional LinuxServer.io image to upstream GitHub repository map used by WebUI release-note link metadata. |

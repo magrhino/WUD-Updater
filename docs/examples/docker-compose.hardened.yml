@@ -97,7 +97,6 @@ services:
       DOCKER_BASE: ${HOST_DOCKER_BASE:-/srv/docker}
       WUD_OUT_FILE: "${WUD_OUT_FILE:-/out/images.todo}"
       WUD_TIMEZONE: "${WUD_TIMEZONE:-UTC}"
-      WUD_WEB_HOST: 0.0.0.0
       WUD_WEB_PORT: "${WUD_WEB_PORT:-7417}"
       WUD_WEB_MUTATIONS_ENABLED: "${WUD_WEB_MUTATIONS_ENABLED:-false}"
       WUD_WEB_PUBLIC_ORIGIN: "${WUD_WEB_PUBLIC_ORIGIN:-}"
@@ -112,12 +111,6 @@ services:
       GITHUB_TOKEN: "${GITHUB_TOKEN:-}"
     ports:
       - "${WEBUI_HTTP_BIND:-127.0.0.1}:${WUD_WEB_PORT:-7417}:${WUD_WEB_PORT:-7417}"
-    healthcheck:
-      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:${WUD_WEB_PORT:-7417}/readyz"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 10s
     volumes:
       # Keep this path aligned with DOCKER_BASE. It is writable because the
       # updater may rewrite Compose image tags when --allow-tag-updates is used.
@@ -127,7 +120,6 @@ services:
       # Startup sync copies this repo's WUD callback scripts here for WUD.
       - wud-scripts:/managed-wud
       - wud-out:/out
-    command: ["web"]
     read_only: true
     tmpfs:
       - /tmp

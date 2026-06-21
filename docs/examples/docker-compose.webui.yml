@@ -28,7 +28,6 @@ services:
       WUD_LOG_DIR: /logs
       WUD_DB_PATH: /logs/wudup.sqlite
       WUD_TIMEZONE: "${WUD_TIMEZONE:-UTC}"
-      WUD_WEB_HOST: 0.0.0.0
       WUD_WEB_PORT: "${WUD_WEB_PORT:-7417}"
       WUD_WEB_MUTATIONS_ENABLED: "${WUD_WEB_MUTATIONS_ENABLED:-false}"
       WUD_WEB_PUBLIC_ORIGIN: "${WUD_WEB_PUBLIC_ORIGIN:-}"
@@ -45,19 +44,12 @@ services:
       - wudup-egress
     ports:
       - "${WEBUI_HTTP_BIND:-127.0.0.1}:${WUD_WEB_PORT:-7417}:${WUD_WEB_PORT:-7417}"
-    healthcheck:
-      test: [ "CMD", "curl", "-fsS", "http://127.0.0.1:${WUD_WEB_PORT:-7417}/readyz" ]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 10s
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - ${HOST_DOCKER_BASE:-/srv/docker}:${HOST_DOCKER_BASE:-/srv/docker}
       - ${WEBUI_LOG_DIR:-./logs}:/logs
       - wud-scripts:/managed-wud
       - wud-out:/out
-    command: [ "web" ]
 
 networks:
   wudup-app:
