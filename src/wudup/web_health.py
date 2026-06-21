@@ -46,6 +46,9 @@ from .web_models import (
     HealthResponse,
     ReadyResponse,
     WebSettings,
+    WudApiDiagnosticEndpointStatus,
+    WudApiRegistryDiagnostics,
+    WudApiWatcherDiagnostics,
 )
 
 READINESS_DOCKER_ENDPOINT_CODES = frozenset({"docker-endpoint", "docker-socket"})
@@ -326,6 +329,7 @@ def _web_doctor_checks(
         )
     )
     checks.append(_web_wud_api_doctor_check(settings))
+    checks.extend(_web_wud_api_diagnostic_checks(settings))
     effective_origin = _effective_origin(request, settings)
     checks.append(
         _web_doctor_check(
@@ -445,6 +449,120 @@ def _web_wud_api_doctor_check(settings: WebSettings) -> DoctorDataCheck:
     )
 
 
+def _web_wud_api_diagnostic_checks(settings: WebSettings) -> tuple[DoctorDataCheck, ...]:
+    diagnostics = web_wud_api.get_configuration_diagnostics(settings)
+    return (
+        _web_wud_api_diagnostic_check(
+            "wud-api-app",
+            "WUD API app configuration",
+            diagnostics.app.status,
+            _wud_api_app_detail(diagnostics.app.name, diagnostics.app.version),
+        ),
+        _web_wud_api_diagnostic_check(
+            "wud-api-log",
+            "WUD API log configuration",
+            diagnostics.log.status,
+            f"log level {diagnostics.log.level}" if diagnostics.log.level else "",
+        ),
+        _web_wud_api_diagnostic_check(
+            "wud-api-store",
+            "WUD API store configuration",
+            diagnostics.store.status,
+            _wud_api_store_detail(diagnostics.store.path, diagnostics.store.file),
+        ),
+        _web_wud_api_diagnostic_check(
+            "wud-api-watchers",
+            "WUD API watcher configuration",
+            diagnostics.watchers_status,
+            _wud_api_watchers_detail(diagnostics.watchers),
+        ),
+        _web_wud_api_diagnostic_check(
+            "wud-api-registries",
+            "WUD API registry configuration",
+            diagnostics.registries_status,
+            _wud_api_registries_detail(diagnostics.registries),
+        ),
+    )
+
+
+def _web_wud_api_diagnostic_check(
+    code: str,
+    name: str,
+    endpoint: WudApiDiagnosticEndpointStatus,
+    ready_detail: str,
+) -> DoctorDataCheck:
+    detail = ready_detail if endpoint.state == web_wud_api.WUD_API_STATE_READY else ""
+    return _web_doctor_check(
+        "PASS" if endpoint.state == web_wud_api.WUD_API_STATE_READY else "WARN",
+        name,
+        detail or endpoint.detail,
+        code=code,
+        category="wud-api",
+    )
+
+
+def _wud_api_app_detail(name: str, version: str) -> str:
+    if name and version:
+        return f"{name} {version}"
+    return name or version
+
+
+def _wud_api_store_detail(path: str, file: str) -> str:
+    if path and file:
+        return f"path {path}, file {file}"
+    if path:
+        return f"path {path}"
+    if file:
+        return f"file {file}"
+    return ""
+
+
+def _wud_api_watchers_detail(watchers: Sequence[WudApiWatcherDiagnostics]) -> str:
+    return _wud_api_named_items_detail(
+        "watcher",
+        [_wud_api_watcher_label(watcher) for watcher in watchers],
+    )
+
+
+def _wud_api_registries_detail(
+    registries: Sequence[WudApiRegistryDiagnostics],
+) -> str:
+    return _wud_api_named_items_detail(
+        "registry",
+        [_wud_api_typed_name(registry.id, registry.type, registry.name) for registry in registries],
+    )
+
+
+def _wud_api_named_items_detail(kind: str, labels: Sequence[str]) -> str:
+    count = len(labels)
+    noun = kind if count == 1 else f"{kind}s"
+    if not labels:
+        return f"0 {noun} configured"
+    preview = ", ".join(labels[:5])
+    if count > 5:
+        preview = f"{preview}, +{count - 5} more"
+    return f"{count} {noun}: {preview}"
+
+
+def _wud_api_watcher_label(watcher: WudApiWatcherDiagnostics) -> str:
+    label = _wud_api_typed_name(watcher.id, watcher.type, watcher.name)
+    details: list[str] = []
+    if watcher.cron:
+        details.append(f"cron {watcher.cron}")
+    if watcher.watch_by_default is not None:
+        details.append(f"watch-by-default {_format_bool(watcher.watch_by_default)}")
+    if details:
+        return f"{label} ({', '.join(details)})"
+    return label
+
+
+def _wud_api_typed_name(item_id: str, item_type: str, item_name: str) -> str:
+    type_name = "/".join(part for part in (item_type, item_name) if part)
+    if item_id and type_name:
+        return f"{item_id} ({type_name})"
+    return item_id or type_name or "unnamed"
+
+
 def _public_origin_suggestions(
     settings: WebSettings,
     request: Request,
@@ -508,6 +626,7 @@ def _web_doctor_check(
     detail: str,
     *,
     code: str,
+    category: str = "webui",
     suggestions: Sequence[DoctorDataSuggestion] = (),
 ) -> DoctorDataCheck:
     return DoctorDataCheck(
@@ -515,7 +634,7 @@ def _web_doctor_check(
         name=name,
         detail=detail,
         code=code,
-        category="webui",
+        category=category,
         suggestions=tuple(suggestions),
     )
 

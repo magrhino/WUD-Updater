@@ -38,6 +38,58 @@ export interface WudContainerMetadata {
   error: string;
 }
 
+export interface WudApiDiagnosticEndpointStatus {
+  state: WudApiState;
+  available: boolean;
+  last_checked_at: string;
+  detail: string;
+}
+
+export interface WudApiAppDiagnostics {
+  status: WudApiDiagnosticEndpointStatus;
+  name: string;
+  version: string;
+}
+
+export interface WudApiLogDiagnostics {
+  status: WudApiDiagnosticEndpointStatus;
+  level: string;
+}
+
+export interface WudApiStoreDiagnostics {
+  status: WudApiDiagnosticEndpointStatus;
+  path: string;
+  file: string;
+  configuration: Record<string, unknown>;
+}
+
+export interface WudApiWatcherDiagnostics {
+  id: string;
+  type: string;
+  name: string;
+  cron: string;
+  watch_by_default: boolean | null;
+  configuration: Record<string, unknown>;
+}
+
+export interface WudApiRegistryDiagnostics {
+  id: string;
+  type: string;
+  name: string;
+  configuration: Record<string, unknown>;
+}
+
+export interface WudApiConfigurationDiagnostics {
+  health: WudApiDiagnosticEndpointStatus;
+  app: WudApiAppDiagnostics;
+  log: WudApiLogDiagnostics;
+  store: WudApiStoreDiagnostics;
+  watchers_status: WudApiDiagnosticEndpointStatus;
+  watchers: WudApiWatcherDiagnostics[];
+  registries_status: WudApiDiagnosticEndpointStatus;
+  registries: WudApiRegistryDiagnostics[];
+}
+
 export interface PendingItem {
   line_no: number;
   raw: string;
@@ -846,6 +898,7 @@ export interface DiagnosticsSupportBundleResponse {
   wud_updater_version?: string;
   settings: SettingsResponse;
   doctor_result: DoctorResponse;
+  wud_api_diagnostics: WudApiConfigurationDiagnostics;
   pending_summary: PendingResponse;
   last_run_status: RunSummary | null;
   diagnostics_warnings: string[];

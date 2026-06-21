@@ -5,6 +5,13 @@ export type {
   WudApiState,
   WudApiStatus,
   WudContainerMetadata,
+  WudApiDiagnosticEndpointStatus,
+  WudApiAppDiagnostics,
+  WudApiLogDiagnostics,
+  WudApiStoreDiagnostics,
+  WudApiWatcherDiagnostics,
+  WudApiRegistryDiagnostics,
+  WudApiConfigurationDiagnostics,
   // Pending updates
   PendingItem,
   PendingDiagnostic,

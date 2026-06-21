@@ -12,6 +12,7 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from threading import Lock
+from typing import Any
 
 from .images import (
     image_has_tag,
@@ -26,7 +27,19 @@ from .web_auth import (
     _redact_sensitive_text,
     _redact_unknown_absolute_paths,
 )
-from .web_models import WebSettings, WudApiState, WudApiStatus, WudContainerMetadata
+from .web_models import (
+    WebSettings,
+    WudApiAppDiagnostics,
+    WudApiConfigurationDiagnostics,
+    WudApiDiagnosticEndpointStatus,
+    WudApiLogDiagnostics,
+    WudApiRegistryDiagnostics,
+    WudApiState,
+    WudApiStatus,
+    WudApiStoreDiagnostics,
+    WudApiWatcherDiagnostics,
+    WudContainerMetadata,
+)
 from .wud_file import WudTarget
 
 DEFAULT_WUD_API_BASE_URL = "http://wud:3000"
@@ -44,6 +57,27 @@ WUD_API_STATE_AUTH_REQUIRED: WudApiState = "auth_required"
 WUD_API_STATE_ERROR: WudApiState = "error"
 WUD_API_DEGRADED_STATES = frozenset(
     {WUD_API_STATE_UNAVAILABLE, WUD_API_STATE_ERROR}
+)
+WUD_API_CONFIG_ENDPOINTS = (
+    ("app", "/api/app", "app configuration"),
+    ("log", "/api/log", "log configuration"),
+    ("store", "/api/store", "store configuration"),
+    ("watchers", "/api/watchers", "watcher configuration"),
+    ("registries", "/api/registries", "registry configuration"),
+)
+WUD_API_SENSITIVE_CONFIG_KEY_PARTS = frozenset(
+    {
+        "auth",
+        "authorization",
+        "credential",
+        "header",
+        "key",
+        "pass",
+        "password",
+        "secret",
+        "token",
+        "webhook",
+    }
 )
 
 
@@ -91,8 +125,15 @@ class WudApiSnapshot:
     checked_monotonic: float = 0.0
 
 
+@dataclass(frozen=True)
+class WudApiConfigurationSnapshot:
+    diagnostics: WudApiConfigurationDiagnostics
+    checked_monotonic: float = 0.0
+
+
 _cache_lock = Lock()
 _snapshot_cache: dict[str, WudApiSnapshot] = {}
+_configuration_diagnostics_cache: dict[str, WudApiConfigurationSnapshot] = {}
 
 
 def configured_base_url(environ: Mapping[str, str]) -> str:
@@ -166,10 +207,53 @@ def get_snapshot(
     return _refresh_snapshot(settings, include_containers=include_containers)
 
 
+def get_configuration_diagnostics(
+    settings: WebSettings,
+    *,
+    force: bool = False,
+) -> WudApiConfigurationDiagnostics:
+    base_url = settings.wud_api_base_url or DEFAULT_WUD_API_BASE_URL
+    now = time.monotonic()
+    with _cache_lock:
+        cached = _configuration_diagnostics_cache.get(base_url)
+        if (
+            not force
+            and cached is not None
+            and now - cached.checked_monotonic
+            < _configuration_diagnostics_cache_ttl(cached)
+        ):
+            return cached.diagnostics
+    return _refresh_configuration_diagnostics(settings).diagnostics
+
+
 def _snapshot_cache_ttl(snapshot: WudApiSnapshot) -> float:
     if snapshot.status.state in WUD_API_DEGRADED_STATES:
         return WUD_API_DEGRADED_RETRY_INTERVAL_SECONDS
     return WUD_API_CACHE_TTL_SECONDS
+
+
+def _configuration_diagnostics_cache_ttl(
+    snapshot: WudApiConfigurationSnapshot,
+) -> float:
+    if any(
+        status.state in WUD_API_DEGRADED_STATES
+        for status in _configuration_diagnostic_statuses(snapshot.diagnostics)
+    ):
+        return WUD_API_DEGRADED_RETRY_INTERVAL_SECONDS
+    return WUD_API_CACHE_TTL_SECONDS
+
+
+def _configuration_diagnostic_statuses(
+    diagnostics: WudApiConfigurationDiagnostics,
+) -> tuple[WudApiDiagnosticEndpointStatus, ...]:
+    return (
+        diagnostics.health,
+        diagnostics.app.status,
+        diagnostics.log.status,
+        diagnostics.store.status,
+        diagnostics.watchers_status,
+        diagnostics.registries_status,
+    )
 
 
 def metadata_by_target(
@@ -376,6 +460,424 @@ def _refresh_snapshot(
     return snapshot
 
 
+def _refresh_configuration_diagnostics(
+    settings: WebSettings,
+) -> WudApiConfigurationSnapshot:
+    checked_at = _utc_timestamp()
+    checked_monotonic = time.monotonic()
+    base_url = settings.wud_api_base_url or DEFAULT_WUD_API_BASE_URL
+    try:
+        normalized_base_url = _normalize_base_url(base_url)
+    except ValueError as exc:
+        health = _diagnostic_endpoint_status(
+            WUD_API_STATE_ERROR,
+            available=False,
+            checked_at=checked_at,
+            detail=f"invalid WUD API base URL: {exc}",
+            settings=settings,
+        )
+        snapshot = WudApiConfigurationSnapshot(
+            diagnostics=_configuration_diagnostics_blocked_by_health(
+                health,
+                checked_at,
+            ),
+            checked_monotonic=checked_monotonic,
+        )
+        _store_configuration_diagnostics(base_url, snapshot)
+        return snapshot
+
+    health = _wud_api_health_diagnostic(settings, normalized_base_url, checked_at)
+    if health.state != WUD_API_STATE_READY:
+        snapshot = WudApiConfigurationSnapshot(
+            diagnostics=_configuration_diagnostics_blocked_by_health(
+                health,
+                checked_at,
+            ),
+            checked_monotonic=checked_monotonic,
+        )
+        _store_configuration_diagnostics(base_url, snapshot)
+        return snapshot
+
+    diagnostics = WudApiConfigurationDiagnostics(health=health)
+    diagnostics.app = _fetch_app_diagnostics(settings, normalized_base_url, checked_at)
+    diagnostics.log = _fetch_log_diagnostics(settings, normalized_base_url, checked_at)
+    diagnostics.store = _fetch_store_diagnostics(
+        settings,
+        normalized_base_url,
+        checked_at,
+    )
+    diagnostics.watchers_status, diagnostics.watchers = _fetch_watchers_diagnostics(
+        settings,
+        normalized_base_url,
+        checked_at,
+    )
+    (
+        diagnostics.registries_status,
+        diagnostics.registries,
+    ) = _fetch_registries_diagnostics(settings, normalized_base_url, checked_at)
+    snapshot = WudApiConfigurationSnapshot(
+        diagnostics=diagnostics,
+        checked_monotonic=checked_monotonic,
+    )
+    _store_configuration_diagnostics(base_url, snapshot)
+    return snapshot
+
+
+def _wud_api_health_diagnostic(
+    settings: WebSettings,
+    normalized_base_url: str,
+    checked_at: str,
+) -> WudApiDiagnosticEndpointStatus:
+    try:
+        _request_json(_join_url(normalized_base_url, "/health"))
+    except urllib.error.HTTPError as exc:
+        if exc.code in {401, 403}:
+            return _diagnostic_endpoint_status(
+                WUD_API_STATE_AUTH_REQUIRED,
+                available=True,
+                checked_at=checked_at,
+                detail="WUD API requires authentication",
+                settings=settings,
+            )
+        return _diagnostic_endpoint_status(
+            WUD_API_STATE_UNAVAILABLE,
+            available=False,
+            checked_at=checked_at,
+            detail=f"WUD API health check returned HTTP {exc.code}",
+            settings=settings,
+        )
+    except (OSError, ValueError) as exc:
+        return _diagnostic_endpoint_status(
+            WUD_API_STATE_UNAVAILABLE,
+            available=False,
+            checked_at=checked_at,
+            detail=f"WUD API is unavailable: {exc}",
+            settings=settings,
+        )
+    return _diagnostic_endpoint_status(
+        WUD_API_STATE_READY,
+        available=True,
+        checked_at=checked_at,
+        detail="WUD API is reachable",
+        settings=settings,
+    )
+
+
+def _configuration_diagnostics_blocked_by_health(
+    health: WudApiDiagnosticEndpointStatus,
+    checked_at: str,
+) -> WudApiConfigurationDiagnostics:
+    endpoint_statuses = {
+        name: WudApiDiagnosticEndpointStatus(
+            state=health.state,
+            available=health.available,
+            last_checked_at=checked_at,
+            detail=(
+                f"WUD API health check blocked {label}: {health.detail}"
+                if health.detail
+                else f"WUD API health check blocked {label}"
+            ),
+        )
+        for name, _path, label in WUD_API_CONFIG_ENDPOINTS
+    }
+    return WudApiConfigurationDiagnostics(
+        health=health,
+        app=WudApiAppDiagnostics(status=endpoint_statuses["app"]),
+        log=WudApiLogDiagnostics(status=endpoint_statuses["log"]),
+        store=WudApiStoreDiagnostics(status=endpoint_statuses["store"]),
+        watchers_status=endpoint_statuses["watchers"],
+        registries_status=endpoint_statuses["registries"],
+    )
+
+
+def _fetch_app_diagnostics(
+    settings: WebSettings,
+    normalized_base_url: str,
+    checked_at: str,
+) -> WudApiAppDiagnostics:
+    status, payload = _request_config_payload(
+        settings,
+        normalized_base_url,
+        "/api/app",
+        "app configuration",
+        checked_at,
+    )
+    if status.state != WUD_API_STATE_READY:
+        return WudApiAppDiagnostics(status=status)
+    if not isinstance(payload, dict):
+        return WudApiAppDiagnostics(
+            status=_malformed_config_status(
+                settings,
+                checked_at,
+                "app configuration",
+                "object",
+            )
+        )
+    return WudApiAppDiagnostics(
+        status=status,
+        name=_sanitized_wud_config_string(settings, payload.get("name"), key="name"),
+        version=_sanitized_wud_config_string(
+            settings,
+            payload.get("version"),
+            key="version",
+        ),
+    )
+
+
+def _fetch_log_diagnostics(
+    settings: WebSettings,
+    normalized_base_url: str,
+    checked_at: str,
+) -> WudApiLogDiagnostics:
+    status, payload = _request_config_payload(
+        settings,
+        normalized_base_url,
+        "/api/log",
+        "log configuration",
+        checked_at,
+    )
+    if status.state != WUD_API_STATE_READY:
+        return WudApiLogDiagnostics(status=status)
+    if not isinstance(payload, dict):
+        return WudApiLogDiagnostics(
+            status=_malformed_config_status(
+                settings,
+                checked_at,
+                "log configuration",
+                "object",
+            )
+        )
+    return WudApiLogDiagnostics(
+        status=status,
+        level=_sanitized_wud_config_string(settings, payload.get("level"), key="level"),
+    )
+
+
+def _fetch_store_diagnostics(
+    settings: WebSettings,
+    normalized_base_url: str,
+    checked_at: str,
+) -> WudApiStoreDiagnostics:
+    status, payload = _request_config_payload(
+        settings,
+        normalized_base_url,
+        "/api/store",
+        "store configuration",
+        checked_at,
+    )
+    if status.state != WUD_API_STATE_READY:
+        return WudApiStoreDiagnostics(status=status)
+    if not isinstance(payload, dict) or not isinstance(
+        payload.get("configuration"),
+        dict,
+    ):
+        return WudApiStoreDiagnostics(
+            status=_malformed_config_status(
+                settings,
+                checked_at,
+                "store configuration",
+                "configuration object",
+            )
+        )
+    configuration = _sanitized_wud_config_mapping(
+        settings,
+        payload["configuration"],
+    )
+    return WudApiStoreDiagnostics(
+        status=status,
+        path=_config_string(configuration, "path"),
+        file=_config_string(configuration, "file"),
+        configuration=configuration,
+    )
+
+
+def _fetch_watchers_diagnostics(
+    settings: WebSettings,
+    normalized_base_url: str,
+    checked_at: str,
+) -> tuple[WudApiDiagnosticEndpointStatus, list[WudApiWatcherDiagnostics]]:
+    status, payload = _request_config_payload(
+        settings,
+        normalized_base_url,
+        "/api/watchers",
+        "watcher configuration",
+        checked_at,
+    )
+    if status.state != WUD_API_STATE_READY:
+        return status, []
+    if not isinstance(payload, list) or not all(
+        isinstance(item, dict) for item in payload
+    ):
+        return (
+            _malformed_config_status(
+                settings,
+                checked_at,
+                "watcher configuration",
+                "list of objects",
+            ),
+            [],
+        )
+    return status, [_parse_watcher_diagnostics(settings, item) for item in payload]
+
+
+def _fetch_registries_diagnostics(
+    settings: WebSettings,
+    normalized_base_url: str,
+    checked_at: str,
+) -> tuple[WudApiDiagnosticEndpointStatus, list[WudApiRegistryDiagnostics]]:
+    status, payload = _request_config_payload(
+        settings,
+        normalized_base_url,
+        "/api/registries",
+        "registry configuration",
+        checked_at,
+    )
+    if status.state != WUD_API_STATE_READY:
+        return status, []
+    if not isinstance(payload, list) or not all(
+        isinstance(item, dict) for item in payload
+    ):
+        return (
+            _malformed_config_status(
+                settings,
+                checked_at,
+                "registry configuration",
+                "list of objects",
+            ),
+            [],
+        )
+    return status, [_parse_registry_diagnostics(settings, item) for item in payload]
+
+
+def _request_config_payload(
+    settings: WebSettings,
+    normalized_base_url: str,
+    path: str,
+    label: str,
+    checked_at: str,
+) -> tuple[WudApiDiagnosticEndpointStatus, object | None]:
+    try:
+        payload = _request_json(_join_url(normalized_base_url, path))
+    except urllib.error.HTTPError as exc:
+        if exc.code in {401, 403}:
+            return (
+                _diagnostic_endpoint_status(
+                    WUD_API_STATE_AUTH_REQUIRED,
+                    available=True,
+                    checked_at=checked_at,
+                    detail=f"WUD API {label} requires authentication",
+                    settings=settings,
+                ),
+                None,
+            )
+        return (
+            _diagnostic_endpoint_status(
+                WUD_API_STATE_ERROR,
+                available=True,
+                checked_at=checked_at,
+                detail=f"WUD API {label} returned HTTP {exc.code}",
+                settings=settings,
+            ),
+            None,
+        )
+    except (OSError, ValueError) as exc:
+        return (
+            _diagnostic_endpoint_status(
+                WUD_API_STATE_ERROR,
+                available=True,
+                checked_at=checked_at,
+                detail=f"WUD API {label} is unavailable: {exc}",
+                settings=settings,
+            ),
+            None,
+        )
+    return (
+        _diagnostic_endpoint_status(
+            WUD_API_STATE_READY,
+            available=True,
+            checked_at=checked_at,
+            detail=f"WUD API {label} available",
+            settings=settings,
+        ),
+        payload,
+    )
+
+
+def _parse_watcher_diagnostics(
+    settings: WebSettings,
+    raw: Mapping[str, object],
+) -> WudApiWatcherDiagnostics:
+    configuration = _sanitized_wud_config_mapping(
+        settings,
+        raw.get("configuration"),
+    )
+    watch_by_default = configuration.get("watchbydefault")
+    return WudApiWatcherDiagnostics(
+        id=_sanitized_wud_config_string(settings, raw.get("id"), key="id"),
+        type=_sanitized_wud_config_string(settings, raw.get("type"), key="type"),
+        name=_sanitized_wud_config_string(settings, raw.get("name"), key="name"),
+        cron=_config_string(configuration, "cron"),
+        watch_by_default=watch_by_default
+        if isinstance(watch_by_default, bool)
+        else None,
+        configuration=configuration,
+    )
+
+
+def _parse_registry_diagnostics(
+    settings: WebSettings,
+    raw: Mapping[str, object],
+) -> WudApiRegistryDiagnostics:
+    return WudApiRegistryDiagnostics(
+        id=_sanitized_wud_config_string(settings, raw.get("id"), key="id"),
+        type=_sanitized_wud_config_string(settings, raw.get("type"), key="type"),
+        name=_sanitized_wud_config_string(settings, raw.get("name"), key="name"),
+        configuration=_sanitized_wud_config_mapping(
+            settings,
+            raw.get("configuration"),
+        ),
+    )
+
+
+def _malformed_config_status(
+    settings: WebSettings,
+    checked_at: str,
+    label: str,
+    expected: str,
+) -> WudApiDiagnosticEndpointStatus:
+    return _diagnostic_endpoint_status(
+        WUD_API_STATE_ERROR,
+        available=True,
+        checked_at=checked_at,
+        detail=f"WUD API {label} payload was not a {expected}",
+        settings=settings,
+    )
+
+
+def _diagnostic_endpoint_status(
+    state: WudApiState,
+    *,
+    available: bool,
+    checked_at: str,
+    detail: str,
+    settings: WebSettings,
+) -> WudApiDiagnosticEndpointStatus:
+    return WudApiDiagnosticEndpointStatus(
+        state=state,
+        available=available,
+        last_checked_at=checked_at,
+        detail=_sanitize_detail(settings, detail),
+    )
+
+
+def _store_configuration_diagnostics(
+    base_url: str,
+    snapshot: WudApiConfigurationSnapshot,
+) -> None:
+    with _cache_lock:
+        _configuration_diagnostics_cache[base_url] = snapshot
+
+
 def _store_snapshot(base_url: str, snapshot: WudApiSnapshot) -> None:
     with _cache_lock:
         _snapshot_cache[base_url] = snapshot
@@ -575,6 +1077,61 @@ def _string_mapping(value: object) -> Mapping[str, str]:
         for key, item in value.items()
         if isinstance(key, str) and isinstance(item, str)
     }
+
+
+def _sanitized_wud_config_mapping(
+    settings: WebSettings,
+    value: object,
+) -> dict[str, Any]:
+    sanitized = _sanitize_wud_configuration_value(settings, value)
+    return sanitized if isinstance(sanitized, dict) else {}
+
+
+def _sanitized_wud_config_string(
+    settings: WebSettings,
+    value: object,
+    *,
+    key: str,
+) -> str:
+    sanitized = _sanitize_wud_configuration_value(settings, _string(value), key=key)
+    return sanitized if isinstance(sanitized, str) else ""
+
+
+def _sanitize_wud_configuration_value(
+    settings: WebSettings,
+    value: object,
+    *,
+    key: str = "",
+) -> Any:
+    if _wud_config_key_is_sensitive(key):
+        return "<redacted>"
+    if isinstance(value, dict):
+        return {
+            str(item_key): _sanitize_wud_configuration_value(
+                settings,
+                item_value,
+                key=str(item_key),
+            )
+            for item_key, item_value in value.items()
+        }
+    if isinstance(value, list):
+        return [
+            _sanitize_wud_configuration_value(settings, item, key=key)
+            for item in value
+        ]
+    if isinstance(value, str):
+        return _sanitize_detail(settings, value)
+    return value
+
+
+def _wud_config_key_is_sensitive(key: str) -> bool:
+    normalized = key.lower().replace("-", "").replace("_", "")
+    return any(part in normalized for part in WUD_API_SENSITIVE_CONFIG_KEY_PARTS)
+
+
+def _config_string(configuration: Mapping[str, object], key: str) -> str:
+    value = configuration.get(key)
+    return value if isinstance(value, str) else ""
 
 
 def _error_message(value: object) -> str:

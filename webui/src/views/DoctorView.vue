@@ -77,6 +77,9 @@ function categoryLabel(category: string): string {
   if (category === "webui") {
     return "WebUI";
   }
+  if (category === "wud-api") {
+    return "WUD API";
+  }
   if (category === "truenas") {
     return "TrueNAS";
   }

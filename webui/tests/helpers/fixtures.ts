@@ -32,6 +32,7 @@ import type {
   TagExclusionRuleRecord,
   UpdateTargetItem,
   UpdateTargetsResponse,
+  WudApiConfigurationDiagnostics,
   WudApiStatus,
   WudContainerMetadata,
 } from "../../src/api/client";
@@ -45,6 +46,67 @@ export function wudApiStatus(
     metadata_available: true,
     last_checked_at: "2026-01-02T00:00:00+00:00",
     detail: "1 WUD update metadata item(s) available",
+    ...overrides,
+  };
+}
+
+export function wudApiConfigurationDiagnostics(
+  overrides: Partial<WudApiConfigurationDiagnostics> = {},
+): WudApiConfigurationDiagnostics {
+  const readyStatus = {
+    state: "ready" as const,
+    available: true,
+    last_checked_at: "2026-01-02T00:00:00+00:00",
+    detail: "WUD API configuration available",
+  };
+  return {
+    health: {
+      ...readyStatus,
+      detail: "WUD API is reachable",
+    },
+    app: {
+      status: readyStatus,
+      name: "wud",
+      version: "5.0.0",
+    },
+    log: {
+      status: readyStatus,
+      level: "debug",
+    },
+    store: {
+      status: readyStatus,
+      path: ".store",
+      file: "wud.json",
+      configuration: {
+        path: ".store",
+        file: "wud.json",
+      },
+    },
+    watchers_status: readyStatus,
+    watchers: [
+      {
+        id: "docker.local",
+        type: "docker",
+        name: "local",
+        cron: "0 * * * *",
+        watch_by_default: true,
+        configuration: {
+          cron: "0 * * * *",
+          watchbydefault: true,
+        },
+      },
+    ],
+    registries_status: readyStatus,
+    registries: [
+      {
+        id: "hub.private",
+        type: "hub",
+        name: "private",
+        configuration: {
+          auth: "<redacted>",
+        },
+      },
+    ],
     ...overrides,
   };
 }

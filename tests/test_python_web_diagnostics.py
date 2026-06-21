@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import json
+import urllib.parse
 from pathlib import Path
 
 from wudup import web_settings
+from wudup import web_wud_api
 from wudup.db import open_db
 
 from tests.web_test_helpers import (
@@ -52,8 +54,75 @@ def test_diagnostics_support_bundle_returns_semantically_redacted_payload(
     assert "<WUD_LOG_DIR>/run.log" in serialized
     assert "wud-out-file" in doctor_codes
     assert "compose-discovery" in doctor_codes
+    assert "wud_api_diagnostics" in body
     assert body["pending_summary"]["source_file"] == "<WUD_OUT_FILE>"
     assert body["log_tail"]["exists"] is True
+
+
+def test_diagnostics_support_bundle_includes_sanitized_wud_api_diagnostics(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    secret = "registry-secret-token"
+
+    def fake_request_json(url: str) -> object:
+        path = urllib.parse.urlsplit(url).path
+        if path == "/health":
+            return {"status": "ok"}
+        if path == "/api/containers":
+            return []
+        if path == "/api/app":
+            return {"name": "wud", "version": "5.0.0"}
+        if path == "/api/log":
+            return {"level": "debug"}
+        if path == "/api/store":
+            return {"configuration": {"path": ".store", "file": "wud.json"}}
+        if path == "/api/watchers":
+            return [
+                {
+                    "id": "docker.local",
+                    "type": "docker",
+                    "name": "local",
+                    "configuration": {
+                        "socket": "/var/run/docker.sock",
+                        "headers": {"Authorization": f"Bearer {secret}"},
+                        "cron": "0 * * * *",
+                        "watchbydefault": True,
+                    },
+                }
+            ]
+        if path == "/api/registries":
+            return [
+                {
+                    "id": "hub.private",
+                    "type": "hub",
+                    "name": "private",
+                    "configuration": {
+                        "region": "eu-west-1",
+                        "auth": secret,
+                    },
+                }
+            ]
+        raise AssertionError(f"unexpected WUD API URL: {url}")
+
+    monkeypatch.setattr(web_wud_api, "_request_json", fake_request_json)
+    client = _doctor_client(
+        tmp_path,
+        {"WUD_API_BASE_URL": "http://wud.support-config.test:3000"},
+    )
+
+    response = client.get("/api/v1/diagnostics/support-bundle")
+    body = response.json()
+    serialized = json.dumps(body)
+    diagnostics = body["wud_api_diagnostics"]
+
+    assert response.status_code == 200
+    assert diagnostics["app"]["name"] == "wud"
+    assert diagnostics["watchers"][0]["configuration"]["socket"] == "[REDACTED_PATH]"
+    assert diagnostics["watchers"][0]["configuration"]["headers"] == "<redacted>"
+    assert diagnostics["registries"][0]["configuration"]["region"] == "eu-west-1"
+    assert diagnostics["registries"][0]["configuration"]["auth"] == "<redacted>"
+    assert secret not in serialized
 
 
 def test_diagnostics_support_bundle_reuses_resolved_settings(

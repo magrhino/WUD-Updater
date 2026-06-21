@@ -164,8 +164,15 @@ __all__ = (
     "WebApplyJobProgressEvent",
     "WebSelfUpdatePlan",
     "WebSettings",
+    "WudApiAppDiagnostics",
+    "WudApiConfigurationDiagnostics",
+    "WudApiDiagnosticEndpointStatus",
+    "WudApiLogDiagnostics",
+    "WudApiRegistryDiagnostics",
+    "WudApiStoreDiagnostics",
     "WudApiState",
     "WudApiStatus",
+    "WudApiWatcherDiagnostics",
     "WudContainerMetadata",
 )
 
@@ -361,6 +368,70 @@ class WudContainerMetadata(BaseModel):
     semver_diff: str
     link: str
     error: str
+
+
+class WudApiDiagnosticEndpointStatus(BaseModel):
+    state: WudApiState = "unavailable"
+    available: bool = False
+    last_checked_at: str = ""
+    detail: str = ""
+
+
+class WudApiAppDiagnostics(BaseModel):
+    status: WudApiDiagnosticEndpointStatus = Field(
+        default_factory=WudApiDiagnosticEndpointStatus
+    )
+    name: str = ""
+    version: str = ""
+
+
+class WudApiLogDiagnostics(BaseModel):
+    status: WudApiDiagnosticEndpointStatus = Field(
+        default_factory=WudApiDiagnosticEndpointStatus
+    )
+    level: str = ""
+
+
+class WudApiStoreDiagnostics(BaseModel):
+    status: WudApiDiagnosticEndpointStatus = Field(
+        default_factory=WudApiDiagnosticEndpointStatus
+    )
+    path: str = ""
+    file: str = ""
+    configuration: dict[str, Any] = Field(default_factory=dict)
+
+
+class WudApiWatcherDiagnostics(BaseModel):
+    id: str = ""
+    type: str = ""
+    name: str = ""
+    cron: str = ""
+    watch_by_default: bool | None = None
+    configuration: dict[str, Any] = Field(default_factory=dict)
+
+
+class WudApiRegistryDiagnostics(BaseModel):
+    id: str = ""
+    type: str = ""
+    name: str = ""
+    configuration: dict[str, Any] = Field(default_factory=dict)
+
+
+class WudApiConfigurationDiagnostics(BaseModel):
+    health: WudApiDiagnosticEndpointStatus = Field(
+        default_factory=WudApiDiagnosticEndpointStatus
+    )
+    app: WudApiAppDiagnostics = Field(default_factory=WudApiAppDiagnostics)
+    log: WudApiLogDiagnostics = Field(default_factory=WudApiLogDiagnostics)
+    store: WudApiStoreDiagnostics = Field(default_factory=WudApiStoreDiagnostics)
+    watchers_status: WudApiDiagnosticEndpointStatus = Field(
+        default_factory=WudApiDiagnosticEndpointStatus
+    )
+    watchers: list[WudApiWatcherDiagnostics] = Field(default_factory=list)
+    registries_status: WudApiDiagnosticEndpointStatus = Field(
+        default_factory=WudApiDiagnosticEndpointStatus
+    )
+    registries: list[WudApiRegistryDiagnostics] = Field(default_factory=list)
 
 
 class PendingItem(BaseModel):
@@ -873,6 +944,9 @@ class DiagnosticsSupportBundleResponse(BaseModel):
     wud_updater_version: str = ""
     settings: SettingsResponse
     doctor_result: DoctorResponse
+    wud_api_diagnostics: WudApiConfigurationDiagnostics = Field(
+        default_factory=WudApiConfigurationDiagnostics
+    )
     pending_summary: PendingResponse
     last_run_status: RunSummary | None
     diagnostics_warnings: list[str] = Field(default_factory=list)

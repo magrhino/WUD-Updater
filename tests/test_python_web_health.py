@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 import json
+import urllib.error
+import urllib.parse
 from pathlib import Path
 
 from wudup import web as web_module
+from wudup import web_wud_api
 
 from tests.web_test_helpers import (
     _client,
@@ -212,3 +215,104 @@ def test_doctor_endpoint_returns_structured_redacted_results(
     assert checks["wud-api"]["status"] == "WARN"
     assert secret not in serialized
     assert "<redacted>" in serialized
+
+
+def test_doctor_endpoint_reports_wud_api_configuration_checks(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    secret = "registry-secret-token"
+
+    def fake_request_json(url: str) -> object:
+        path = urllib.parse.urlsplit(url).path
+        if path == "/health":
+            return {"status": "ok"}
+        if path == "/api/containers":
+            return []
+        if path == "/api/app":
+            return {"name": "wud", "version": "5.0.0"}
+        if path == "/api/log":
+            return {"level": "debug"}
+        if path == "/api/store":
+            return {"configuration": {"path": ".store", "file": "wud.json"}}
+        if path == "/api/watchers":
+            return [
+                {
+                    "id": "docker.local",
+                    "type": "docker",
+                    "name": "local",
+                    "configuration": {
+                        "cron": "0 * * * *",
+                        "watchbydefault": True,
+                    },
+                }
+            ]
+        if path == "/api/registries":
+            return [
+                {
+                    "id": "hub.private",
+                    "type": "hub",
+                    "name": "private",
+                    "configuration": {"auth": secret},
+                }
+            ]
+        raise AssertionError(f"unexpected WUD API URL: {url}")
+
+    monkeypatch.setattr(web_wud_api, "_request_json", fake_request_json)
+    client = _doctor_client(
+        tmp_path,
+        {"WUD_API_BASE_URL": "http://wud.doctor-config.test:3000"},
+    )
+
+    response = client.post("/api/v1/doctor", headers=_csrf_headers(client))
+    body = response.json()
+    checks = {check["code"]: check for check in body["checks"]}
+    serialized = json.dumps(body)
+
+    assert response.status_code == 200
+    assert checks["wud-api-app"]["status"] == "PASS"
+    assert checks["wud-api-app"]["detail"] == "wud 5.0.0"
+    assert checks["wud-api-log"]["detail"] == "log level debug"
+    assert checks["wud-api-store"]["detail"] == "path .store, file wud.json"
+    assert checks["wud-api-watchers"]["category"] == "wud-api"
+    assert "docker.local" in checks["wud-api-watchers"]["detail"]
+    assert "watch-by-default true" in checks["wud-api-watchers"]["detail"]
+    assert "hub.private" in checks["wud-api-registries"]["detail"]
+    assert secret not in serialized
+
+
+def test_doctor_endpoint_warns_for_wud_api_configuration_failures(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    def fake_request_json(url: str) -> object:
+        path = urllib.parse.urlsplit(url).path
+        if path == "/health":
+            return {"status": "ok"}
+        if path == "/api/containers":
+            return []
+        if path == "/api/app":
+            return []
+        if path == "/api/log":
+            raise urllib.error.HTTPError(url, 500, "test WUD API error", {}, None)
+        if path == "/api/store":
+            return {"configuration": {"path": ".store", "file": "wud.json"}}
+        if path == "/api/watchers":
+            return []
+        if path == "/api/registries":
+            raise urllib.error.HTTPError(url, 401, "test WUD API error", {}, None)
+        raise AssertionError(f"unexpected WUD API URL: {url}")
+
+    monkeypatch.setattr(web_wud_api, "_request_json", fake_request_json)
+    client = _doctor_client(
+        tmp_path,
+        {"WUD_API_BASE_URL": "http://wud.doctor-config-warn.test:3000"},
+    )
+
+    response = client.post("/api/v1/doctor", headers=_csrf_headers(client))
+    checks = {check["code"]: check for check in response.json()["checks"]}
+
+    assert response.status_code == 200
+    assert checks["wud-api-app"]["status"] == "WARN"
+    assert checks["wud-api-log"]["status"] == "WARN"
+    assert checks["wud-api-registries"]["status"] == "WARN"
