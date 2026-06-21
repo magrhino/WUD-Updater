@@ -40,6 +40,8 @@ type FetchReleaseChangelogOptions = {
 
 const DEFAULT_TIMEOUT_MS = 6000;
 const DEFAULT_MAX_BYTES = 512 * 1024;
+const VERSION_TAG_PATTERN =
+  /^\d+(?:[._-]\d+)*(?:[-+][0-9A-Za-z][0-9A-Za-z._+-]*)?$/;
 
 export const IDLE_RELEASE_CHANGELOG: ReleaseChangelogState = {
   status: "idle",
@@ -303,9 +305,10 @@ function tagVariants(releaseTag: string): string[] {
     return [];
   }
   const withoutLeadingV = trimmed.replace(/^v/i, "");
-  return [...new Set([trimmed, withoutLeadingV, `v${withoutLeadingV}`])].filter(
-    Boolean,
-  );
+  if (!VERSION_TAG_PATTERN.test(withoutLeadingV)) {
+    return [trimmed];
+  }
+  return [...new Set([trimmed, withoutLeadingV, `v${withoutLeadingV}`])];
 }
 
 function escapeRegExp(value: string): string {

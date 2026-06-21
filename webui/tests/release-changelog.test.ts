@@ -79,6 +79,32 @@ describe("release changelog extraction", () => {
       .toContain("Prefixed tag");
   });
 
+  it("does not strip v from non-version tags", () => {
+    for (const [tag, nearMatch] of [
+      ["version-1.0", "ersion-1.0"],
+      ["vault-1.0", "ault-1.0"],
+      ["latest", "vlatest"],
+    ]) {
+      const markdown = [
+        "# Changelog",
+        "",
+        `## [${nearMatch}]`,
+        "",
+        "- Wrong section",
+        "",
+        `## [${tag}]`,
+        "",
+        "- Exact section",
+      ].join("\n");
+
+      const section = extractChangelogSection(markdown, tag);
+
+      expect(section).toContain(`## [${tag}]`);
+      expect(section).toContain("Exact section");
+      expect(section).not.toContain("Wrong section");
+    }
+  });
+
   it("does not prefix-match longer version headings", () => {
     const markdown = [
       "# Changelog",
@@ -97,6 +123,28 @@ describe("release changelog extraction", () => {
     expect(section).toContain("## [v1.2]");
     expect(section).toContain("Minor release");
     expect(section).not.toContain("Patch release");
+  });
+
+  it("does not match version headings with delimiter suffixes", () => {
+    for (const suffix of [".1", "-rc.1", "+build", "/alpine", "_hotfix"]) {
+      const markdown = [
+        "# Changelog",
+        "",
+        `## [v1.2${suffix}]`,
+        "",
+        "- Suffixed release",
+        "",
+        "## [v1.2]",
+        "",
+        "- Exact release",
+      ].join("\n");
+
+      const section = extractChangelogSection(markdown, "v1.2");
+
+      expect(section).toContain("## [v1.2]");
+      expect(section).toContain("Exact release");
+      expect(section).not.toContain("Suffixed release");
+    }
   });
 
   it("returns unavailable when the release body has no changelog link", async () => {
@@ -151,6 +199,26 @@ describe("release changelog extraction", () => {
         { fetch: oversizedFetch, maxBytes: 10 },
       ),
     ).rejects.toThrow("GitHub release response is too large.");
+
+    const oversizedBodyFetch = vi.fn().mockResolvedValueOnce(textResponse("{}"));
+    await expect(
+      fetchReleaseChangelog(
+        "https://github.com/t-mart/mousehole/releases/tag/v0.5.0",
+        "v0.5.0",
+        { fetch: oversizedBodyFetch, maxBytes: 1 },
+      ),
+    ).rejects.toThrow("GitHub release response is too large.");
+
+    const failedStatusFetch = vi
+      .fn()
+      .mockResolvedValueOnce(textResponse("Not found", { status: 404 }));
+    await expect(
+      fetchReleaseChangelog(
+        "https://github.com/t-mart/mousehole/releases/tag/v0.5.0",
+        "v0.5.0",
+        { fetch: failedStatusFetch },
+      ),
+    ).rejects.toThrow("Could not fetch GitHub release (404).");
 
     const failedFetch = vi.fn().mockRejectedValueOnce(new Error("network failed"));
     await expect(
