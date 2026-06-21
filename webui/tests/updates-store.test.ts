@@ -83,6 +83,7 @@ function mockReleaseChangelogFetch(entry: string, includeOlder = false) {
 }
 
 function expectReleaseChangelogFetches(fetchMock: ReturnType<typeof vi.fn>): void {
+  expect(fetchMock.mock.calls).toHaveLength(2);
   expect(fetchMock.mock.calls[0][0]).toBe(
     "https://api.github.com/repos/t-mart/mousehole/releases/tags/v0.5.0",
   );

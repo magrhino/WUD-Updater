@@ -19,6 +19,11 @@ describe("GitHub release changelog links", () => {
         "https://github.com/t-mart/mousehole/releases/tag/v0.5.0",
     });
     expect(parseGitHubReleaseUrl("https://example.com/acme/app")).toBeNull();
+    expect(
+      parseGitHubReleaseUrl(
+        "https://github.com/t-mart/mousehole/releases/tag/%E0%A4%A",
+      ),
+    ).toBeNull();
   });
 
   it("finds changelog links and converts GitHub markdown URLs to raw URLs", () => {
@@ -37,6 +42,22 @@ describe("GitHub release changelog links", () => {
       }),
     ).toBe(
       "https://raw.githubusercontent.com/t-mart/mousehole/HEAD/CHANGELOG.md",
+    );
+    expect(
+      findChangelogRawUrl("[release notes](/docs/CHANGELOG.md)", {
+        owner: "t-mart",
+        repo: "mousehole",
+      }),
+    ).toBe(
+      "https://raw.githubusercontent.com/t-mart/mousehole/HEAD/docs/CHANGELOG.md",
+    );
+    expect(
+      findChangelogRawUrl("[release notes](/other/project/blob/main/docs/CHANGELOG.md)", {
+        owner: "t-mart",
+        repo: "mousehole",
+      }),
+    ).toBe(
+      "https://raw.githubusercontent.com/other/project/main/docs/CHANGELOG.md",
     );
   });
 

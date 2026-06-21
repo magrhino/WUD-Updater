@@ -25,7 +25,12 @@ export function parseGitHubReleaseUrl(value: string): GitHubReleaseRef | null {
   ) {
     return null;
   }
-  const tag = decodeURIComponent(parts.slice(4).join("/"));
+  let tag: string;
+  try {
+    tag = decodeURIComponent(parts.slice(4).join("/"));
+  } catch {
+    return null;
+  }
   if (!tag) {
     return null;
   }
@@ -166,10 +171,13 @@ function resolveGitHubMarkdownHref(
   const base = `https://github.com/${release.owner}/${release.repo}/blob/HEAD/`;
   if (href.startsWith("/")) {
     const parts = href.split("/").filter(Boolean);
-    if (parts[0] !== release.owner || parts[1] !== release.repo) {
-      return new URL(href.replace(/^\/+/, ""), base).toString();
+    if (parts[0] === release.owner && parts[1] === release.repo) {
+      return new URL(href, "https://github.com").toString();
     }
-    return new URL(href, `https://github.com`).toString();
+    if (parts.length >= 5 && parts[2] === "blob") {
+      return new URL(href, "https://github.com").toString();
+    }
+    return new URL(href.replace(/^\/+/, ""), base).toString();
   }
   return new URL(href, base).toString();
 }
