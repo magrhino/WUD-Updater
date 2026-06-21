@@ -11,6 +11,7 @@ import type {
   PendingGrouping,
   PendingItem,
   PendingResponse,
+  PendingSourceInfo,
   PlanResponse,
   ReleaseNoteInfo,
   ReleaseNotesResponse,
@@ -70,6 +71,21 @@ export function wudContainerMetadata(
   };
 }
 
+export function pendingSourceInfo(
+  overrides: Partial<PendingSourceInfo> = {},
+): PendingSourceInfo {
+  return {
+    configured: "file",
+    active: "file",
+    label: "Pending file",
+    fresh: true,
+    degraded: false,
+    fallback_reason: "",
+    detail: "",
+    ...overrides,
+  };
+}
+
 export function authSession(
   overrides: Partial<AuthSessionResponse> = {},
 ): AuthSessionResponse {
@@ -93,6 +109,7 @@ export function statusResponse(
     wud_file: "/out/images.todo",
     wud_file_exists: true,
     pending_count: 1,
+    pending_source: pendingSourceInfo(),
     db_path: "/out/wud.sqlite",
     db_ready: true,
     auth_required: true,
@@ -508,6 +525,8 @@ export function pendingItem(overrides: Partial<PendingItem> = {}): PendingItem {
     digest: "sha256:abc",
     desired_tag: "1.1",
     wud_metadata: null,
+    source: "file",
+    source_id: "file:1",
     ...overrides,
   };
 }
@@ -557,6 +576,7 @@ export function pendingResponse(items = [pendingItem()]): PendingResponse {
   const groupedItems = items.map((item) => pendingGroupedItem(item));
   return {
     source_file: "/out/images.todo",
+    source: pendingSourceInfo(),
     exists: true,
     count: items.length,
     items,
@@ -765,6 +785,7 @@ export function releaseNotesResponse(
 ): ReleaseNotesResponse {
   return {
     source_file: "/out/images.todo",
+    source: pendingSourceInfo(),
     count: items.length,
     items,
     wud_api: wudApiStatus(),
@@ -853,6 +874,7 @@ export function planResponse(overrides: Partial<PlanResponse> = {}): PlanRespons
     can_apply: true,
     status: "ready",
     source_file: "/out/images.todo",
+    source: pendingSourceInfo(),
     mode: "stop",
     max_wait: 120,
     digest_pin_updates: false,

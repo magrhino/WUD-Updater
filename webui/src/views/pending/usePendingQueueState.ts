@@ -121,11 +121,24 @@ export function usePendingQueueState() {
   const pendingSourceFile = computed(
     () => updates.pending?.source_file ?? "Pending file",
   );
-  const pendingSourceLabel = computed(() =>
-    pendingSourceFileName(pendingSourceFile.value),
-  );
+  const pendingSourceLabel = computed(() => {
+    const source = updates.pending?.source;
+    if (source && source.active !== "file") {
+      return source.label || pendingSourceFileName(pendingSourceFile.value);
+    }
+    return pendingSourceFileName(pendingSourceFile.value);
+  });
   const pendingSourceDisplay = computed(() =>
     pendingSourceDisplayFor(pendingSourceLabel.value),
+  );
+  const pendingSourceDegraded = computed(
+    () => updates.pending?.source?.degraded ?? false,
+  );
+  const pendingSourceWarning = computed(
+    () =>
+      updates.pending?.source?.fallback_reason ||
+      updates.pending?.source?.detail ||
+      "",
   );
 
   function releaseNoteFor(item: PendingItem): ReleaseNoteInfo | null {
@@ -161,8 +174,10 @@ export function usePendingQueueState() {
     pendingLoading,
     pendingServiceKeys,
     pendingSourceDisplay,
+    pendingSourceDegraded,
     pendingSourceFile,
     pendingSourceLabel,
+    pendingSourceWarning,
     rawStackGroups,
     releaseChangelogFor,
     releaseNoteFor,

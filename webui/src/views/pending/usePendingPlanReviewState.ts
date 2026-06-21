@@ -81,6 +81,9 @@ export function usePendingPlanReviewState(
   const selectedTagOverrideError = computed(() =>
     options.tagOverrideErrorForLines(options.selectedLineNumbers.value),
   );
+  const pendingSourceAllowsFileEdits = computed(
+    () => (updates.pending?.source?.active ?? "file") === "file",
+  );
   const updateSelectedDisabled = computed(
     () =>
       options.selectedLineNumbers.value.length === 0 ||
@@ -91,13 +94,17 @@ export function usePendingPlanReviewState(
     () =>
       options.selectedLineNumbers.value.length === 0 ||
       updates.loading ||
-      !auth.session?.mutations_enabled,
+      !auth.session?.mutations_enabled ||
+      !pendingSourceAllowsFileEdits.value,
   );
   const removeSelectedDisabledMessage = computed(() => {
-    if (
-      !options.selectedLineNumbers.value.length ||
-      auth.session?.mutations_enabled
-    ) {
+    if (!options.selectedLineNumbers.value.length) {
+      return "";
+    }
+    if (!pendingSourceAllowsFileEdits.value) {
+      return `${options.pendingSourceLabel.value} entries cannot be removed from the WebUI because this source is read from WUD.`;
+    }
+    if (auth.session?.mutations_enabled) {
       return "";
     }
     return "Read-only mode is active. Set WUD_WEB_MUTATIONS_ENABLED=true on the server to remove selected entries.";
@@ -286,6 +293,9 @@ export function usePendingPlanReviewState(
     }
     if (!auth.session?.mutations_enabled) {
       return "Read-only mode is active. Set WUD_WEB_MUTATIONS_ENABLED=true on the server to remove stale pending entries.";
+    }
+    if (!pendingSourceAllowsFileEdits.value) {
+      return `${options.pendingSourceLabel.value} entries cannot be removed from the WebUI because this source is read from WUD.`;
     }
     return "These pending entries cannot be removed right now.";
   });

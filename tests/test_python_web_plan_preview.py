@@ -10,6 +10,8 @@ from tests.web_test_helpers import (
     _make_fake_stack,
     _write_fake_container_labels,
     _fake_docker_calls,
+    _install_wud_api,
+    _wud_api_container,
 )
 
 
@@ -117,6 +119,52 @@ def test_plan_endpoint_returns_selected_dry_run_without_mutation(
     assert (compose_dir / "docker-compose.yml").read_text(encoding="utf-8") == compose_before
     assert not db_path.exists()
     assert not log_dir.exists()
+    calls = _fake_docker_calls(fake_root)
+    assert " pull " not in calls
+    assert " up -d " not in calls
+
+
+def test_plan_endpoint_uses_api_pending_source_without_wud_file(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    fake_env, fake_root = _fake_docker_env(tmp_path)
+    _install_wud_api(
+        monkeypatch,
+        containers=[
+            _wud_api_container(tag="latest", remote_tag="", update_kind="digest")
+        ],
+    )
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_PENDING_SOURCE": "api",
+            "WUD_API_BASE_URL": "http://wud.plan-api-source.test:3000",
+            **fake_env,
+        },
+    )
+    _make_fake_stack(
+        tmp_path,
+        fake_root,
+        "stack",
+        [("app", "repo/app:latest", "cid-app")],
+    )
+
+    response = client.post(
+        "/api/v1/plans",
+        json={"line_numbers": [1]},
+        headers=_csrf_headers(client),
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["source"]["active"] == "api"
+    assert body["source_file"] == "WUD API"
+    assert body["status"] == "ready"
+    assert body["selected_line_numbers"] == [1]
+    assert body["targets"][0]["raw"] == "repo/app:latest"
+    assert not (tmp_path / "state" / "images.todo").exists()
     calls = _fake_docker_calls(fake_root)
     assert " pull " not in calls
     assert " up -d " not in calls

@@ -10,7 +10,10 @@ from tests.web_test_helpers import (
     _write_fake_container_labels,
     _fake_docker_calls,
     _assert_pending_grouping_did_not_mutate,
+    _install_wud_api,
+    _wud_api_container,
 )
+
 
 def test_pending_endpoint_reads_wud_file_without_mutation(tmp_path: Path) -> None:
     wud_file = tmp_path / "state" / "images.todo"
@@ -47,6 +50,121 @@ def test_pending_endpoint_reads_wud_file_without_mutation(tmp_path: Path) -> Non
     }
     assert body["grouping"]["warnings"]
     assert wud_file.read_text(encoding="utf-8") == original
+
+
+def test_pending_endpoint_reads_wud_api_source_without_wud_file(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    fake_env, fake_root = _fake_docker_env(tmp_path)
+    _install_wud_api(
+        monkeypatch,
+        containers=[_wud_api_container()],
+    )
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_PENDING_SOURCE": "api",
+            "WUD_API_BASE_URL": "http://wud.api-source.test:3000",
+            **fake_env,
+        },
+    )
+    _make_fake_stack(
+        tmp_path,
+        fake_root,
+        "stack",
+        [("app", "repo/app:1.0", "cid-app")],
+    )
+
+    response = client.get("/api/v1/pending")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["source"]["configured"] == "api"
+    assert body["source"]["active"] == "api"
+    assert body["source"]["label"] == "WUD API"
+    assert body["exists"] is True
+    assert body["source_file"] == "WUD API"
+    assert body["count"] == 1
+    assert body["items"][0]["line_no"] == 1
+    assert body["items"][0]["raw"] == "repo/app:1.0 tag=2.0"
+    assert body["items"][0]["source"] == "api"
+    assert body["items"][0]["source_id"] == "docker.local.app"
+    assert body["items"][0]["wud_metadata"]["remote_tag"] == "2.0"
+    assert body["grouping"]["status"] == "ready"
+    assert body["grouping"]["groups"][0]["items"][0]["source"] == "api"
+    assert body["grouping"]["groups"][0]["items"][0]["source_id"] == "docker.local.app"
+    assert not (tmp_path / "state" / "images.todo").exists()
+    _assert_pending_grouping_did_not_mutate(_fake_docker_calls(fake_root))
+
+
+def test_pending_endpoint_auto_falls_back_to_wud_file_when_api_unavailable(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    _install_wud_api(
+        monkeypatch,
+        containers=[],
+        health_error=OSError("connection refused"),
+    )
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_PENDING_SOURCE": "auto",
+            "WUD_API_BASE_URL": "http://wud.unavailable-source.test:3000",
+        },
+    )
+    wud_file = tmp_path / "state" / "images.todo"
+    wud_file.write_text("repo/file:latest\n", encoding="utf-8")
+
+    response = client.get("/api/v1/pending")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["source"]["configured"] == "auto"
+    assert body["source"]["active"] == "file"
+    assert body["source"]["degraded"] is True
+    assert body["source"]["fresh"] is False
+    assert "connection refused" in body["source"]["fallback_reason"]
+    assert body["count"] == 1
+    assert body["items"][0]["raw"] == "repo/file:latest"
+    assert body["items"][0]["source"] == "file"
+    assert body["warnings"][0].startswith("WUD API pending source degraded")
+
+
+def test_pending_endpoint_api_mode_does_not_fallback_to_wud_file(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    _install_wud_api(
+        monkeypatch,
+        containers=[],
+        health_error=OSError("connection refused"),
+    )
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_PENDING_SOURCE": "api",
+            "WUD_API_BASE_URL": "http://wud.api-unavailable.test:3000",
+        },
+    )
+    wud_file = tmp_path / "state" / "images.todo"
+    wud_file.write_text("repo/file:latest\n", encoding="utf-8")
+
+    response = client.get("/api/v1/pending")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["source"]["configured"] == "api"
+    assert body["source"]["active"] == "api"
+    assert body["source"]["degraded"] is True
+    assert body["count"] == 0
+    assert body["items"] == []
+    assert body["source_file"] == "WUD API"
+    assert wud_file.read_text(encoding="utf-8") == "repo/file:latest\n"
 
 
 def test_pending_endpoint_wraps_effective_config_error(
@@ -88,12 +206,12 @@ def test_pending_endpoint_sanitizes_wud_file_errors(
 ) -> None:
     secret = "pending-read-secret"
 
-    def failed_parse(_path):
+    def failed_read(_path):
         raise OSError(
             f"open failed for {tmp_path / 'state' / 'images.todo'} with {secret}"
         )
 
-    monkeypatch.setattr(pending_module, "parse_wud_file", failed_parse)
+    monkeypatch.setattr(pending_module.web_pending_sources, "_read_pending_file", failed_read)
     client = _client(
         tmp_path,
         {

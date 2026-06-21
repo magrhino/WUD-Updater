@@ -11,6 +11,8 @@ from tests.web_test_helpers import (
     _fake_docker_env,
     _make_fake_stack,
     _fake_docker_calls,
+    _install_wud_api,
+    _wud_api_container,
 )
 
 def test_pending_cleanup_endpoint_enforces_auth_csrf_and_read_only(
@@ -333,3 +335,42 @@ def test_pending_cleanup_rejects_noop_request(tmp_path: Path) -> None:
         for item in response.json()["detail"]
     )
     assert wud_file.read_text(encoding="utf-8") == "repo/old:latest\n"
+
+
+def test_pending_cleanup_rejects_api_pending_source_without_mutation(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    _install_wud_api(
+        monkeypatch,
+        containers=[
+            _wud_api_container(tag="latest", remote_tag="", update_kind="digest")
+        ],
+    )
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+            "WUD_PENDING_SOURCE": "api",
+            "WUD_API_BASE_URL": "http://wud.cleanup-api-source.test:3000",
+        },
+    )
+    wud_file = tmp_path / "state" / "images.todo"
+    wud_file.write_text("repo/file:latest\n", encoding="utf-8")
+
+    response = client.post(
+        "/api/v1/pending/cleanup",
+        json={
+            "cleanup_id": "cleanup",
+            "lines": [{"line_no": 1, "raw": "repo/app:latest"}],
+            "confirmation": "remove_unmatched",
+        },
+        headers=_csrf_headers(client),
+    )
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == (
+        "pending cleanup only supports WUD_OUT_FILE source"
+    )
+    assert wud_file.read_text(encoding="utf-8") == "repo/file:latest\n"

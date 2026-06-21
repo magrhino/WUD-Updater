@@ -8,6 +8,7 @@ import {
   pendingGrouping,
   pendingItem,
   pendingResponse,
+  pendingSourceInfo,
   planResponse,
   snooze,
 } from "./helpers/fixtures";
@@ -311,6 +312,42 @@ describe("pending view selection actions", () => {
     await flushPromises();
 
     expect(wrapper.text()).toContain("Read-only mode is active");
+    const removalButton = wrapper
+      .findAll("button")
+      .find((button) => button.text().includes("Remove 1 selected entry"));
+    expect(removalButton?.attributes("disabled")).toBeDefined();
+    await removalButton?.trigger("click");
+
+    expect(createRemovalPlan).not.toHaveBeenCalled();
+  });
+
+  it("disables selected pending removal for API pending source", async () => {
+    const item = pendingItem({
+      source: "api",
+      source_id: "docker.local.app",
+    });
+    const { pinia, settings, updates } = setupStores(true);
+    updates.pending = {
+      ...pendingResponse([item]),
+      source_file: "WUD API",
+      source: pendingSourceInfo({
+        configured: "api",
+        active: "api",
+        label: "WUD API",
+      }),
+    };
+    mockPendingLifecycle(settings, updates);
+    const createRemovalPlan = vi.spyOn(updates, "createRemovalPlan");
+    const wrapper = mountPendingView(pinia);
+
+    await wrapper
+      .find('input[aria-label="Select stack media"]')
+      .setValue(true);
+    await flushPromises();
+
+    expect(wrapper.text()).toContain(
+      "WUD API entries cannot be removed from the WebUI because this source is read from WUD.",
+    );
     const removalButton = wrapper
       .findAll("button")
       .find((button) => button.text().includes("Remove 1 selected entry"));

@@ -10,6 +10,8 @@ from tests.web_test_helpers import (
     _csrf_headers,
     _fake_docker_env,
     _fake_docker_calls,
+    _install_wud_api,
+    _wud_api_container,
 )
 
 def test_pending_removal_plan_endpoint_enforces_auth_csrf_and_previews_read_only(
@@ -355,3 +357,52 @@ def test_pending_removal_rejects_duplicate_and_noop_requests(
         "removal line 1 was provided more than once"
     )
     assert wud_file.read_text(encoding="utf-8") == "repo/app:latest\n"
+
+
+def test_pending_removal_rejects_api_pending_source_without_mutation(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    _install_wud_api(
+        monkeypatch,
+        containers=[
+            _wud_api_container(tag="latest", remote_tag="", update_kind="digest")
+        ],
+    )
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+            "WUD_PENDING_SOURCE": "api",
+            "WUD_API_BASE_URL": "http://wud.removal-api-source.test:3000",
+        },
+    )
+    wud_file = tmp_path / "state" / "images.todo"
+    wud_file.write_text("repo/file:latest\n", encoding="utf-8")
+    headers = _csrf_headers(client)
+
+    plan_response = client.post(
+        "/api/v1/pending/removal-plan",
+        json={"line_numbers": [1]},
+        headers=headers,
+    )
+    removal_response = client.post(
+        "/api/v1/pending/removal",
+        json={
+            "removal_id": "removal",
+            "lines": [{"line_no": 1, "raw": "repo/app:latest"}],
+            "confirmation": "remove_selected",
+        },
+        headers=headers,
+    )
+
+    assert plan_response.status_code == 409
+    assert plan_response.json()["detail"] == (
+        "pending removal only supports WUD_OUT_FILE source"
+    )
+    assert removal_response.status_code == 409
+    assert removal_response.json()["detail"] == (
+        "pending removal only supports WUD_OUT_FILE source"
+    )
+    assert wud_file.read_text(encoding="utf-8") == "repo/file:latest\n"

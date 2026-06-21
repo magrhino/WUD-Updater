@@ -50,6 +50,19 @@ function wudApiStatus() {
   };
 }
 
+function pendingSourceInfo(overrides: Record<string, unknown> = {}) {
+  return {
+    configured: "file",
+    active: "file",
+    label: "Pending file",
+    fresh: true,
+    degraded: false,
+    fallback_reason: "",
+    detail: "",
+    ...overrides,
+  };
+}
+
 function pendingResponse() {
   const item = {
     line_no: 1,
@@ -63,6 +76,8 @@ function pendingResponse() {
     digest: "",
     desired_tag: "1.1",
     wud_metadata: null,
+    source: "file",
+    source_id: "file:1",
   };
   const groupedItem = {
     ...item,
@@ -74,6 +89,7 @@ function pendingResponse() {
   };
   return {
     source_file: "/out/images.todo",
+    source: pendingSourceInfo(),
     exists: true,
     count: 1,
     warnings: [],
@@ -123,6 +139,7 @@ function updateTargetsResponse() {
 function releaseNotesResponse() {
   return {
     source_file: "/out/images.todo",
+    source: pendingSourceInfo(),
     count: 1,
     warnings: [],
     wud_api: wudApiStatus(),
@@ -159,6 +176,7 @@ function planResponse(overrides: Record<string, unknown> = {}) {
     can_apply: true,
     status: "ready",
     source_file: "/out/images.todo",
+    source: pendingSourceInfo(),
     mode: "stop",
     max_wait: 120,
     digest_pin_updates: false,
@@ -394,6 +412,7 @@ async function fulfillApi(
       wud_file: "/out/images.todo",
       wud_file_exists: true,
       pending_count: 1,
+      pending_source: pendingSourceInfo(),
       db_path: "/out/wud.sqlite",
       db_ready: true,
       auth_required: true,

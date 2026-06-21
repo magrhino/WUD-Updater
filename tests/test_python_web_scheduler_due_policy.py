@@ -424,7 +424,7 @@ def test_auto_update_candidate_reuses_effective_config_snapshot(
             ),
         )
 
-    def fake_build_dry_run_plan(config, **kwargs):
+    def fake_build_dry_run_plan(config, _parsed, **kwargs):
         observed["plan_config"] = config
         observed["plan_kwargs"] = kwargs
         return SimpleNamespace(status="ready", skipped=(), issues=())
@@ -434,7 +434,11 @@ def test_auto_update_candidate_reuses_effective_config_snapshot(
         "resolve_pending_groups",
         fake_resolve_pending_groups,
     )
-    monkeypatch.setattr(web_scheduler, "build_dry_run_plan", fake_build_dry_run_plan)
+    monkeypatch.setattr(
+        web_scheduler,
+        "build_dry_run_plan_from_pending_source",
+        fake_build_dry_run_plan,
+    )
     with open_db(settings.config.db_path) as conn:
         init_db(conn)
         upsert_known_image(
@@ -485,8 +489,9 @@ def test_auto_update_candidate_reuses_effective_config_snapshot(
         )
 
     assert candidate is not None
-    selection, plan = candidate
+    selection, plan, pending_source = candidate
     assert plan.status == "ready"
+    assert pending_source.active == "file"
     assert selection.line_numbers == (1,)
     assert len(loaded_settings) == 1
     assert observed["resolve_config"] is first_config

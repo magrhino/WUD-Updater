@@ -8,11 +8,22 @@ from typing import Protocol
 
 from fastapi import HTTPException, Request
 
-from . import web_database, web_diagnostics, web_jobs, web_scheduler
+from . import (
+    web_database,
+    web_diagnostics,
+    web_jobs,
+    web_pending_sources,
+    web_scheduler,
+)
 from .config import ConfigError, UpdaterConfig
 from .images import tag_value_valid
 from .locks import DirectoryLock
-from .plans import DryRunPlan, PlanFileMissing, PlanInputError, build_dry_run_plan
+from .plans import (
+    DryRunPlan,
+    PlanFileMissing,
+    PlanInputError,
+    build_dry_run_plan_from_pending_source,
+)
 from .updater_models import DigestPinLabelRewriteApproval, TagOverride
 from .web_auth import _safe_exception_detail, _settings
 from .web_models import (
@@ -64,7 +75,20 @@ def api_create_job(payload: ApplyPlanRequest, request: Request) -> ApplyJobRespo
     active_error = web_jobs._active_mutation_error(request)
     if active_error:
         raise HTTPException(status_code=409, detail=active_error)
-    wud_lock = web_jobs._acquire_apply_wud_lock(settings)
+    pending_source = web_pending_sources.resolve_pending_source(
+        settings,
+        force_api=True,
+    )
+    wud_lock: DirectoryLock | None = None
+    if pending_source.active == "file":
+        wud_lock = web_jobs._acquire_apply_wud_lock(settings)
+        pending_source = web_pending_sources.resolve_pending_source(
+            settings,
+            force_api=True,
+        )
+        if pending_source.active != "file":
+            wud_lock.close()
+            wud_lock = None
     try:
         try:
             plan = build_web_plan(
@@ -77,6 +101,7 @@ def api_create_job(payload: ApplyPlanRequest, request: Request) -> ApplyJobRespo
                         payload.digest_pin_label_rewrite_approvals
                     ),
                 ),
+                pending_source=pending_source,
             )
         except (PlanInputError, PlanFileMissing) as exc:
             raise HTTPException(status_code=409, detail="plan is stale") from exc
@@ -106,9 +131,17 @@ def api_create_job(payload: ApplyPlanRequest, request: Request) -> ApplyJobRespo
         )
         if not apply_preflight.ok:
             raise HTTPException(status_code=409, detail="apply preflight failed")
-        return submit_apply_job(request, settings, plan, payload, wud_lock)
+        return submit_apply_job(
+            request,
+            settings,
+            plan,
+            payload,
+            wud_lock,
+            pending_source=pending_source,
+        )
     except Exception:
-        wud_lock.close()
+        if wud_lock is not None:
+            wud_lock.close()
         raise
 
 
@@ -121,6 +154,8 @@ def build_web_plan(
     payload: PlanRequest,
     *,
     update_mode_override: str | None = None,
+    pending_source: web_pending_sources.PendingSourceResult | None = None,
+    force_api: bool = False,
 ) -> DryRunPlan:
     base_config = _effective_config(settings)
     config = (
@@ -128,8 +163,18 @@ def build_web_plan(
         if update_mode_override is None
         else replace(base_config, update_mode=update_mode_override)
     )
-    return build_dry_run_plan(
+    source = pending_source or web_pending_sources.resolve_pending_source(
+        settings,
+        force_api=force_api,
+    )
+    if source.active == "file" and not source.exists:
+        raise PlanFileMissing(f"WUD file not found: {settings.config.wud_out_file}")
+    return build_dry_run_plan_from_pending_source(
         config,
+        source.parsed,
+        source_file=source.source_file,
+        source_hash=source.source_hash,
+        source=source.plan_source(),
         line_numbers=payload.line_numbers,
         allow_tag_updates=payload.allow_tag_updates,
         tag_overrides=tag_overrides_from_payload(payload),
@@ -226,7 +271,9 @@ def plan_response(
     payload = asdict(plan)
     payload["can_apply"] = plan_can_apply(plan, settings) and apply_preflight.ok
     payload["cleanup"]["can_remove_unmatched"] = (
-        settings.mutations_enabled and bool(plan.cleanup.items)
+        settings.mutations_enabled
+        and plan.source.active == "file"
+        and bool(plan.cleanup.items)
     )
     payload["apply_preflight"] = apply_preflight.model_dump()
     return PlanResponse.model_validate(payload)
@@ -237,7 +284,9 @@ def submit_apply_job(
     settings: WebSettings,
     plan: DryRunPlan,
     payload: ApplyPlanRequest,
-    wud_lock: DirectoryLock,
+    wud_lock: DirectoryLock | None,
+    *,
+    pending_source: web_pending_sources.PendingSourceResult,
 ) -> ApplyJobResponse:
     return web_jobs._submit_apply_job_state(
         request.app.state,
@@ -253,6 +302,16 @@ def submit_apply_job(
         auto_update_schedule_run_updater=(
             web_scheduler._safe_update_auto_update_schedule_runs
         ),
+        metadata_extra={
+            "pending_source": plan.source.active,
+            "pending_source_configured": plan.source.configured,
+            "pending_source_degraded": plan.source.degraded,
+            "pending_source_label": plan.source.label,
+        },
+        pending_source_text=(
+            pending_source.text if pending_source.active == "api" else None
+        ),
+        pending_source_label=pending_source.label,
     )
 
 
