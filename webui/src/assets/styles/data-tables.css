@@ -134,6 +134,10 @@ code.pending-table-value {
   color: var(--color-action-blue);
 }
 
+.release-changelog-button {
+  min-height: 24px;
+}
+
 .release-note-link:hover {
   text-decoration: underline;
   text-underline-offset: 3px;
@@ -163,6 +167,51 @@ code.pending-table-value {
   font-size: 0.78rem;
   line-height: 1.35;
   overflow-wrap: anywhere;
+}
+
+.release-changelog-problem {
+  flex-basis: 100%;
+}
+
+.release-changelog-details {
+  flex-basis: 100%;
+  min-width: min(100%, 18rem);
+}
+
+.release-changelog-summary {
+  cursor: pointer;
+  color: var(--color-action-blue);
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.release-changelog-summary:focus-visible {
+  outline: 2px solid var(--color-action-blue);
+  outline-offset: 3px;
+}
+
+.release-changelog-body {
+  max-height: 18rem;
+  margin: 8px 0 0;
+  padding: 10px;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 7px;
+  background: var(--color-panel-subtle);
+  color: var(--color-text);
+  font: inherit;
+  font-size: 0.82rem;
+  line-height: 1.45;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.release-changelog-source {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 6px;
+  font-size: 0.82rem;
 }
 
 .risk-badges-container {

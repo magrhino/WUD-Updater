@@ -12,6 +12,7 @@ import {
   type PendingRemovalPlanResponse,
   type PlanResponse,
   type PendingResponse,
+  type ReleaseNoteInfo,
   type ReleaseNotesResponse,
   type RetagChoiceRequest,
   type RetagPlanResponse,
@@ -33,6 +34,12 @@ import {
   normalizeRetagChoice,
   retagChoice as selectedRetagChoice,
 } from "../utils/retagChoices";
+import {
+  fetchReleaseChangelog,
+  IDLE_RELEASE_CHANGELOG,
+  releaseChangelogKey,
+  type ReleaseChangelogState,
+} from "../utils/releaseChangelog";
 
 export const APPLY_JOB_RECOVERY_MESSAGE =
   "Last known apply job state is unavailable because the WebUI process restarted. Check Runs -> Latest run and the updater log before applying more updates.";
@@ -68,6 +75,8 @@ export const useUpdatesStore = defineStore("updates", () => {
     { intervalMs: 400 },
   );
   const releaseNotes = ref<ReleaseNotesResponse | null>(null);
+  const releaseChangelogs = ref<Record<string, ReleaseChangelogState>>({});
+  const releaseChangelogRequests = new Map<string, Promise<void>>();
   const selfUpdate = ref<SelfUpdateResponse | null>(null);
   const selfUpdatePlan = ref<SelfUpdatePlanResponse | null>(null);
   const selfUpdateMessage = ref("");
@@ -254,6 +263,82 @@ export const useUpdatesStore = defineStore("updates", () => {
     } finally {
       releaseNotesLoading.value = false;
     }
+  }
+
+  function releaseChangelogStateFor(
+    note: ReleaseNoteInfo | null,
+  ): ReleaseChangelogState {
+    const key = releaseChangelogKeyFor(note);
+    return key
+      ? releaseChangelogs.value[key] ?? IDLE_RELEASE_CHANGELOG
+      : IDLE_RELEASE_CHANGELOG;
+  }
+
+  async function loadReleaseChangelog(note: ReleaseNoteInfo | null): Promise<void> {
+    const link = releaseChangelogLinkFor(note);
+    if (link === "") {
+      return;
+    }
+    const key = releaseChangelogKey(link);
+    if (key === "") {
+      return;
+    }
+    const currentState = releaseChangelogs.value[key];
+    if (currentState?.status === "ready") {
+      return;
+    }
+    const pendingRequest = releaseChangelogRequests.get(key);
+    if (pendingRequest) {
+      await pendingRequest;
+      return;
+    }
+    setReleaseChangelogState(key, {
+      status: "loading",
+      body: "",
+      sourceUrl: "",
+      error: "",
+    });
+    const request = fetchReleaseChangelog(link, note?.release_tag ?? "")
+      .then((result) => {
+        if (result.status === "ready") {
+          setReleaseChangelogState(key, {
+            status: "ready",
+            body: result.body,
+            sourceUrl: result.sourceUrl,
+            error: "",
+          });
+          return;
+        }
+        setReleaseChangelogState(key, {
+          status: "unavailable",
+          body: "",
+          sourceUrl: "",
+          error: result.error,
+        });
+      })
+      .catch((caughtError: unknown) => {
+        setReleaseChangelogState(key, {
+          status: "error",
+          body: "",
+          sourceUrl: "",
+          error: errorMessage(caughtError),
+        });
+      })
+      .finally(() => {
+        releaseChangelogRequests.delete(key);
+      });
+    releaseChangelogRequests.set(key, request);
+    await request;
+  }
+
+  function setReleaseChangelogState(
+    key: string,
+    state: ReleaseChangelogState,
+  ): void {
+    releaseChangelogs.value = {
+      ...releaseChangelogs.value,
+      [key]: state,
+    };
   }
 
   async function loadSelfUpdate(): Promise<void> {
@@ -573,6 +658,7 @@ export const useUpdatesStore = defineStore("updates", () => {
     retagPreviewError: retagPreviewPoller.error,
     retagGithubLatestFallback,
     releaseNotes,
+    releaseChangelogs,
     selfUpdate,
     selfUpdatePlan,
     selfUpdateMessage,
@@ -600,6 +686,9 @@ export const useUpdatesStore = defineStore("updates", () => {
     applyRetagPlan,
     loadReleaseNotes,
     refreshReleaseNotes,
+    releaseChangelogStateFor,
+    releaseChangelogCanLoad,
+    loadReleaseChangelog,
     loadSelfUpdate,
     planSelfUpdate,
     applySelfUpdate,
@@ -620,6 +709,20 @@ export const useUpdatesStore = defineStore("updates", () => {
     clearRememberedApplyJobId,
   };
 });
+
+function releaseChangelogKeyFor(note: ReleaseNoteInfo | null): string {
+  const link = releaseChangelogLinkFor(note);
+  return link ? releaseChangelogKey(link) : "";
+}
+
+function releaseChangelogCanLoad(note: ReleaseNoteInfo | null): boolean {
+  const link = releaseChangelogLinkFor(note);
+  return Boolean(link && releaseChangelogKey(link));
+}
+
+function releaseChangelogLinkFor(note: ReleaseNoteInfo | null): string {
+  return note?.links.find((link) => link.kind === "github_release")?.url ?? "";
+}
 
 function readRememberedApplyJobId(): string {
   const storage = sessionStorageAvailable();

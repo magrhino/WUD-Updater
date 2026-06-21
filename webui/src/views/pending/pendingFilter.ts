@@ -4,6 +4,7 @@ import type {
   PendingStackGroup,
   ReleaseNoteInfo,
 } from "../../api/client";
+import type { ReleaseChangelogState } from "../../utils/releaseChangelog";
 import {
   groupedItemActionLabel,
   groupedItemServices,
@@ -13,6 +14,9 @@ import {
 import type { SafetyCue } from "./safetyCues";
 
 export type PendingSearchContext = {
+  releaseChangelogFor: (
+    note: ReleaseNoteInfo | null,
+  ) => ReleaseChangelogState | null;
   releaseNoteFor: (item: PendingItem) => ReleaseNoteInfo | null;
   releaseNoteReason: (note: ReleaseNoteInfo | null) => string;
   releaseNoteStatus: (note: ReleaseNoteInfo | null) => string;
@@ -207,9 +211,10 @@ function releaseNoteParts(
   note: ReleaseNoteInfo | null,
   context: Pick<
     PendingSearchContext,
-    "releaseNoteReason" | "releaseNoteStatus"
+    "releaseChangelogFor" | "releaseNoteReason" | "releaseNoteStatus"
   >,
 ): string[] {
+  const changelog = context.releaseChangelogFor(note);
   return [
     context.releaseNoteStatus(note),
     context.releaseNoteReason(note),
@@ -221,6 +226,7 @@ function releaseNoteParts(
     note?.breaking ? "possible breaking change" : "",
     ...(note?.breaking_reasons ?? []),
     ...(note?.links.flatMap((link) => [link.label, link.kind, link.url]) ?? []),
+    changelog?.status === "ready" ? changelog.body : "",
     note?.error ?? "",
   ];
 }

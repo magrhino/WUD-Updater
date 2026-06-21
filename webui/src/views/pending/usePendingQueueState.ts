@@ -5,6 +5,7 @@ import type {
   PendingResponse,
   ReleaseNoteInfo,
 } from "../../api/client";
+import type { ReleaseChangelogState } from "../../utils/releaseChangelog";
 import { useRunsStore } from "../../stores/runs";
 import { useSettingsStore } from "../../stores/settings";
 import { useUpdatesStore } from "../../stores/updates";
@@ -131,6 +132,12 @@ export function usePendingQueueState() {
     return releaseNotesByLine.value.get(item.line_no) ?? null;
   }
 
+  function releaseChangelogFor(
+    note: ReleaseNoteInfo | null,
+  ): ReleaseChangelogState | null {
+    return updates.releaseChangelogStateFor(note);
+  }
+
   function riskCues(row: PendingItem): SafetyCue[] {
     return buildSafetyCues(row, {
       pending: updates.pending,
@@ -157,6 +164,7 @@ export function usePendingQueueState() {
     pendingSourceFile,
     pendingSourceLabel,
     rawStackGroups,
+    releaseChangelogFor,
     releaseNoteFor,
     releaseNotesByLine,
     riskCues,

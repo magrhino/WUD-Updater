@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import { AlertTriangle, ExternalLink } from "@lucide/vue";
 import {
   NAlert,
   NCheckbox,
@@ -18,6 +17,7 @@ import {
 import { rowKey, type PendingTagInputProps } from "../../views/pending/pendingDisplay";
 import type { SafetyCue } from "../../views/pending/safetyCues";
 import PendingEmptyQueueState from "./PendingEmptyQueueState.vue";
+import PendingReleaseNotes from "./PendingReleaseNotes.vue";
 
 defineProps<{
   columns: DataTableColumns<PendingItem>;
@@ -149,40 +149,11 @@ const emit = defineEmits<{
         <div>
           <dt>Release notes</dt>
           <dd>
-            <div v-if="releaseNoteFor(item)?.links.length" class="release-notes-cell">
-              <a
-                v-for="link in releaseNoteFor(item)?.links ?? []"
-                :key="`${item.line_no}-${link.kind}-${link.url}`"
-                class="release-note-link"
-                :href="link.url"
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                {{ link.label }}
-                <ExternalLink :size="14" aria-hidden="true" />
-              </a>
-              <span
-                v-if="releaseNoteFor(item)?.breaking"
-                class="release-breaking-cue"
-                :title="releaseNoteFor(item)?.breaking_reasons.join(' ')"
-                aria-label="Possible breaking change"
-              >
-                <AlertTriangle :size="14" aria-hidden="true" />
-                Possible breaking change
-              </span>
-            </div>
-            <span
-              v-else
-              class="release-notes-muted"
-              :title="releaseNoteReason(releaseNoteFor(item)) || undefined"
-            >
-              <span class="release-notes-status">
-                {{ releaseNoteStatus(releaseNoteFor(item)) }}
-              </span>
-              <span v-if="releaseNoteReason(releaseNoteFor(item))" class="release-notes-reason">
-                {{ releaseNoteReason(releaseNoteFor(item)) }}
-              </span>
-            </span>
+            <PendingReleaseNotes
+              :release-note="releaseNoteFor(item)"
+              :release-note-status="releaseNoteStatus(releaseNoteFor(item))"
+              :release-note-reason="releaseNoteReason(releaseNoteFor(item))"
+            />
           </dd>
         </div>
       </dl>
