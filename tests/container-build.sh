@@ -48,6 +48,25 @@ run_quiet(){
   fi
 }
 
+assert_image_metadata(){
+  local cmd web_host
+
+  cmd="$(docker image inspect -f '{{json .Config.Cmd}}' "$IMAGE")"
+  [[ "$cmd" == '["web"]' ]] || {
+    printf 'Expected image Cmd ["web"], got %s\n' "$cmd" >&2
+    return 1
+  }
+
+  web_host="$(
+    docker image inspect -f '{{range .Config.Env}}{{println .}}{{end}}' "$IMAGE" |
+      awk -F= '$1 == "WUD_WEB_HOST" { print $2; exit }'
+  )"
+  [[ "$web_host" == "0.0.0.0" ]] || {
+    printf 'Expected WUD_WEB_HOST=0.0.0.0, got %s\n' "${web_host:-<unset>}" >&2
+    return 1
+  }
+}
+
 need_cmd(){
   local cmd="$1"
 
@@ -67,8 +86,9 @@ run_quiet docker compose -f "$COMPOSE_HARDENED" config
 run_quiet docker compose -f "$COMPOSE_BUILD" config
 run_quiet docker compose -f "$COMPOSE_TRUENAS" config
 run docker build -t "$IMAGE" .
+run assert_image_metadata
 run docker run --rm "$IMAGE" test -f /app/src/wudup/web_static/index.html
-run docker run --rm "$IMAGE"
+run docker run --rm "$IMAGE" updates --dry-run
 SYNC_TMP="$(mktemp -d "${TMPDIR:-/tmp}/wud-script-sync-test.XXXXXX")"
 run docker run --rm -v "$SYNC_TMP:/managed-wud" "$IMAGE" sync-wud-scripts
 [[ -x "$SYNC_TMP/on-update.sh" ]]

@@ -19,6 +19,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
     DOCKER_BASE=/host/docker \
     WUD_OUT_FILE=/out/images.todo \
     WUD_LOG_DIR=/logs \
+    WUD_WEB_HOST=0.0.0.0 \
     WUDUP_UPDATER=/app/bin/docker-update-from-wud \
     PATH=/app/bin:$PATH
 
@@ -70,4 +71,4 @@ RUN chmod +x /app/entrypoint.sh /app/bin/updates /app/bin/docker-update-from-wud
     && mkdir -p /host/docker /out /logs
 
 ENTRYPOINT ["/usr/bin/tini", "--", "/app/entrypoint.sh"]
-CMD ["updates", "--dry-run"]
+CMD ["web"]

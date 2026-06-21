@@ -438,6 +438,8 @@ class InitConfigTests(unittest.TestCase):
 
         parsed = YAML(typ="safe").load(override_file.read_text(encoding="utf-8"))
         service = parsed["services"]["wudup"]
+        self.assertNotIn("command", service)
+        self.assertNotIn("WUD_WEB_HOST", service["environment"])
         self.assertEqual(
             service["environment"]["WUD_API_BASE_URL"],
             "${WUD_API_BASE_URL:-http://wud:3000}",

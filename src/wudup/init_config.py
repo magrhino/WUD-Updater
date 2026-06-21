@@ -407,7 +407,6 @@ def _compose_environment(answers: InitAnswers) -> dict[str, str]:
     if answers.profile == "webui":
         environment.update(
             {
-                "WUD_WEB_HOST": "0.0.0.0",
                 "WUD_WEB_PORT": "${WUD_WEB_PORT:-7417}",
                 "WUD_WEB_MUTATIONS_ENABLED": "${WUD_WEB_MUTATIONS_ENABLED:-false}",
                 "WUD_WEB_PUBLIC_ORIGIN": "${WUD_WEB_PUBLIC_ORIGIN:-}",

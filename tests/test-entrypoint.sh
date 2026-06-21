@@ -135,11 +135,11 @@ assert_refuses_sync_dir(){
   grep -q 'Refusing unsafe WUD_SCRIPTS_DIR' "$TEST_TMP/output.log" || fail "missing unsafe destination message for $dir"
 }
 
-test_default_runs_updates_dry_run(){
+test_default_runs_web(){
   setup_case
-  run_entrypoint
+  PYTHON_BIN="$TEST_TMP/python" run_entrypoint
   assert_status 0
-  assert_output 'updates [--dry-run]'
+  assert_output "python [-m] [wudup.cli] [web] [--base] [$TEST_TMP/docker] [--file] [$TEST_TMP/out/images.todo] [--log-dir] [/logs]"
   teardown_case
 }
 
@@ -439,7 +439,7 @@ run_test(){
 }
 
 main(){
-  run_test test_default_runs_updates_dry_run
+  run_test test_default_runs_web
   run_test test_leading_flag_runs_updates
   run_test test_updates_dispatch_passes_arguments
   run_test test_truenas_status_export_dispatches_python_cli
