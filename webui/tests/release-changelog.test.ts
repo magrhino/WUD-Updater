@@ -262,4 +262,34 @@ describe("release changelog extraction", () => {
       ),
     ).rejects.toThrow("network failed");
   });
+
+  it("aborts streamed fetches when the cumulative body limit is exceeded", async () => {
+    let signal: AbortSignal | undefined;
+    const fetchMock = vi.fn(async (_input: string, init?: RequestInit) => {
+      signal = init?.signal ?? undefined;
+      const chunks = [Uint8Array.of(123), Uint8Array.of(125)];
+      return new Response(
+        new ReadableStream<Uint8Array>({
+          pull(controller) {
+            const chunk = chunks.shift();
+            if (chunk) {
+              controller.enqueue(chunk);
+              return;
+            }
+            controller.close();
+          },
+        }),
+      );
+    });
+
+    await expect(
+      fetchReleaseChangelog(
+        "https://github.com/t-mart/mousehole/releases/tag/v0.5.0",
+        "v0.5.0",
+        { fetch: fetchMock, maxBytes: 1 },
+      ),
+    ).rejects.toThrow("GitHub release response is too large.");
+
+    expect(signal?.aborted).toBe(true);
+  });
 });

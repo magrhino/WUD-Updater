@@ -385,12 +385,9 @@ function parseAtxHeading(
 }
 
 function headingMatchesTag(heading: string, releaseTag: string): boolean {
-  const text = plainMarkdownText(heading);
+  const text = plainMarkdownText(heading).toLowerCase();
   return tagVariants(releaseTag).some((tag) =>
-    new RegExp(
-      `(^|[^0-9A-Za-z._+/-])${escapeRegExp(tag)}([^0-9A-Za-z._+/-]|$)`,
-      "i",
-    ).test(text),
+    textContainsDelimitedTag(text, tag.toLowerCase()),
   );
 }
 
@@ -446,8 +443,39 @@ function tagVariants(releaseTag: string): string[] {
   return [...new Set([trimmed, withoutLeadingV, `v${withoutLeadingV}`])];
 }
 
-function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`);
+function textContainsDelimitedTag(text: string, tag: string): boolean {
+  let startIndex = 0;
+  while (startIndex < text.length) {
+    const tagIndex = text.indexOf(tag, startIndex);
+    if (tagIndex === -1) {
+      return false;
+    }
+    if (
+      isTagBoundary(text[tagIndex - 1]) &&
+      isTagBoundary(text[tagIndex + tag.length])
+    ) {
+      return true;
+    }
+    startIndex = tagIndex + 1;
+  }
+  return false;
+}
+
+function isTagBoundary(value: string | undefined): boolean {
+  if (value === undefined) {
+    return true;
+  }
+  const code = value.charCodeAt(0);
+  return !(
+    (code >= 48 && code <= 57) ||
+    (code >= 65 && code <= 90) ||
+    (code >= 97 && code <= 122) ||
+    value === "." ||
+    value === "_" ||
+    value === "+" ||
+    value === "/" ||
+    value === "-"
+  );
 }
 
 function isMarkdownWhitespace(value: string | undefined): boolean {
@@ -485,11 +513,31 @@ async function fetchTextWithLimit(
     if (contentLength > options.maxBytes) {
       throw new Error(`${options.resource} response is too large.`);
     }
-    const text = await response.text();
-    if (text.length > options.maxBytes) {
-      throw new Error(`${options.resource} response is too large.`);
+    const reader = response.body?.getReader();
+    if (!reader) {
+      return "";
     }
-    return text;
+    const chunks: Uint8Array[] = [];
+    let bytesRead = 0;
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) {
+        break;
+      }
+      bytesRead += value.byteLength;
+      if (bytesRead > options.maxBytes) {
+        controller.abort();
+        throw new Error(`${options.resource} response is too large.`);
+      }
+      chunks.push(value);
+    }
+    const body = new Uint8Array(bytesRead);
+    let offset = 0;
+    for (const chunk of chunks) {
+      body.set(chunk, offset);
+      offset += chunk.byteLength;
+    }
+    return new TextDecoder().decode(body);
   } finally {
     clearTimeout(timeout);
   }
