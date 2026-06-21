@@ -620,7 +620,7 @@ describe("pending view fallback and release notes", () => {
   });
 
   it("loads changelog notes on demand and includes them in pending search", async () => {
-    const { pinia, auth, connection, settings, updates, runs } = setupStores(false);
+    const { pinia, settings, updates } = setupStores(false);
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce(

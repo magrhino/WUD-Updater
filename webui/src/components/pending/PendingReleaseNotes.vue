@@ -34,8 +34,8 @@ const readChangelogLabel = computed(() =>
   changelogReady.value ? "Changelog loaded" : "Read changelog",
 );
 
-function readChangelog(): void {
-  void updates.loadReleaseChangelog(props.releaseNote);
+function readChangelog(): Promise<void> {
+  return updates.loadReleaseChangelog(props.releaseNote);
 }
 </script>
 

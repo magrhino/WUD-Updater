@@ -271,31 +271,33 @@ function readMarkdownLink(
   if (!isMarkdownWhitespace(markdown[cursor])) {
     return null;
   }
+  const endIndex = readMarkdownLinkTitleEnd(markdown, cursor);
+  return endIndex === -1 ? null : { href, endIndex };
+}
 
+function readMarkdownLinkTitleEnd(markdown: string, titleStart: number): number {
+  let cursor = titleStart;
   while (cursor < markdown.length && isMarkdownWhitespace(markdown[cursor])) {
     cursor += 1;
   }
   if (markdown[cursor] !== '"') {
-    return null;
+    return -1;
   }
   cursor += 1;
   while (cursor < markdown.length) {
     if (markdown[cursor] === '"') {
-      return markdown[cursor + 1] === ")"
-        ? { href, endIndex: cursor + 2 }
-        : null;
+      return markdown[cursor + 1] === ")" ? cursor + 2 : -1;
     }
-    if (
-      markdown[cursor] === "[" ||
-      markdown[cursor] === ")" ||
-      markdown[cursor] === "\n" ||
-      markdown[cursor] === "\r"
-    ) {
-      return null;
+    if (isMarkdownLinkTitleTerminator(markdown[cursor])) {
+      return -1;
     }
     cursor += 1;
   }
-  return null;
+  return -1;
+}
+
+function isMarkdownLinkTitleTerminator(value: string | undefined): boolean {
+  return value === "[" || value === ")" || value === "\n" || value === "\r";
 }
 
 function resolveGitHubMarkdownHref(
@@ -445,7 +447,7 @@ function tagVariants(releaseTag: string): string[] {
 }
 
 function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return value.replace(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`);
 }
 
 function isMarkdownWhitespace(value: string | undefined): boolean {

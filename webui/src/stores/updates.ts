@@ -274,11 +274,6 @@ export const useUpdatesStore = defineStore("updates", () => {
       : IDLE_RELEASE_CHANGELOG;
   }
 
-  function releaseChangelogCanLoad(note: ReleaseNoteInfo | null): boolean {
-    const link = releaseChangelogLinkFor(note);
-    return Boolean(link && releaseChangelogKey(link));
-  }
-
   async function loadReleaseChangelog(note: ReleaseNoteInfo | null): Promise<void> {
     const link = releaseChangelogLinkFor(note);
     if (link === "") {
@@ -718,6 +713,11 @@ export const useUpdatesStore = defineStore("updates", () => {
 function releaseChangelogKeyFor(note: ReleaseNoteInfo | null): string {
   const link = releaseChangelogLinkFor(note);
   return link ? releaseChangelogKey(link) : "";
+}
+
+function releaseChangelogCanLoad(note: ReleaseNoteInfo | null): boolean {
+  const link = releaseChangelogLinkFor(note);
+  return Boolean(link && releaseChangelogKey(link));
 }
 
 function releaseChangelogLinkFor(note: ReleaseNoteInfo | null): string {
