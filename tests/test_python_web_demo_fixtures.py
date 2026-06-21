@@ -248,9 +248,9 @@ class WebDemoFixtureGenerationTests(unittest.TestCase):
             )
             web_wud_api._snapshot_cache.clear()
             web_wud_api._configuration_diagnostics_cache.clear()
-            web_wud_api._snapshot_cache["http://sentinel.example"] = sentinel
+            web_wud_api._snapshot_cache["https://sentinel.example"] = sentinel
             web_wud_api._configuration_diagnostics_cache[
-                "http://sentinel.example"
+                "https://sentinel.example"
             ] = diagnostics_sentinel
         try:
             with mock.patch(
@@ -261,11 +261,11 @@ class WebDemoFixtureGenerationTests(unittest.TestCase):
             with web_wud_api._cache_lock:
                 self.assertEqual(
                     web_wud_api._snapshot_cache,
-                    {"http://sentinel.example": sentinel},
+                    {"https://sentinel.example": sentinel},
                 )
                 self.assertEqual(
                     web_wud_api._configuration_diagnostics_cache,
-                    {"http://sentinel.example": diagnostics_sentinel},
+                    {"https://sentinel.example": diagnostics_sentinel},
                 )
         finally:
             with web_wud_api._cache_lock:

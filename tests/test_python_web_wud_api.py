@@ -196,7 +196,7 @@ def test_wud_api_configuration_diagnostics_reads_endpoint_payloads(
     _install_wud_api(monkeypatch)
 
     diagnostics = web_wud_api.get_configuration_diagnostics(
-        _settings(tmp_path, "http://wud.config.test:3000"),
+        _settings(tmp_path, "https://wud.config.test:3000"),
         force=True,
     )
 
@@ -256,7 +256,7 @@ def test_wud_api_configuration_diagnostics_redacts_sensitive_config(
     )
 
     diagnostics = web_wud_api.get_configuration_diagnostics(
-        _settings(tmp_path, "http://wud.config-redaction.test:3000"),
+        _settings(tmp_path, "https://wud.config-redaction.test:3000"),
         force=True,
     )
     serialized = diagnostics.model_dump_json()
@@ -278,7 +278,7 @@ def test_wud_api_configuration_diagnostics_reports_unreachable_health(
     _install_wud_api(monkeypatch, health=OSError("connection refused"))
 
     diagnostics = web_wud_api.get_configuration_diagnostics(
-        _settings(tmp_path, "http://wud.config-unreachable.test:3000"),
+        _settings(tmp_path, "https://wud.config-unreachable.test:3000"),
         force=True,
     )
 
@@ -296,7 +296,7 @@ def test_wud_api_configuration_diagnostics_reports_health_auth_required(
     _install_wud_api(monkeypatch, health=(401, {"error": "authentication required"}))
 
     diagnostics = web_wud_api.get_configuration_diagnostics(
-        _settings(tmp_path, "http://wud.config-auth.test:3000"),
+        _settings(tmp_path, "https://wud.config-auth.test:3000"),
         force=True,
     )
 
@@ -316,7 +316,7 @@ def test_wud_api_configuration_diagnostics_reports_partial_endpoint_failure(
     )
 
     diagnostics = web_wud_api.get_configuration_diagnostics(
-        _settings(tmp_path, "http://wud.config-partial.test:3000"),
+        _settings(tmp_path, "https://wud.config-partial.test:3000"),
         force=True,
     )
 
@@ -340,7 +340,7 @@ def test_wud_api_configuration_diagnostics_rejects_malformed_payloads(
     )
 
     diagnostics = web_wud_api.get_configuration_diagnostics(
-        _settings(tmp_path, "http://wud.config-malformed.test:3000"),
+        _settings(tmp_path, "https://wud.config-malformed.test:3000"),
         force=True,
     )
 

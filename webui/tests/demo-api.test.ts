@@ -126,6 +126,28 @@ describe("demo web API", () => {
     await expect(api.onboardingChecklist("csrf")).resolves.toMatchObject({
       visible: true,
     });
+    await expect(api.diagnosticsSupportBundle()).resolves.toMatchObject({
+      wud_api_diagnostics: {
+        health: expect.objectContaining({ state: "ready" }),
+        app: expect.objectContaining({ name: "wud", version: "5.0.0" }),
+        watchers: [
+          expect.objectContaining({
+            id: "docker.local",
+            configuration: expect.objectContaining({
+              socket: "[REDACTED_PATH]",
+            }),
+          }),
+        ],
+        registries: [
+          expect.objectContaining({
+            id: "hub.private",
+            configuration: expect.objectContaining({
+              auth: "<redacted>",
+            }),
+          }),
+        ],
+      },
+    });
 
     const pending = await api.pending();
     expect(pending.count).toBe(7);

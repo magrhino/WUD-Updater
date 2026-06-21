@@ -1,16 +1,15 @@
 from __future__ import annotations
 
 import json
-import urllib.parse
 from pathlib import Path
 
 from wudup import web_settings
-from wudup import web_wud_api
 from wudup.db import open_db
 
 from tests.web_test_helpers import (
     _client,
     _doctor_client,
+    _install_wud_api_diagnostics,
     _insert_run,
 )
 
@@ -64,21 +63,11 @@ def test_diagnostics_support_bundle_includes_sanitized_wud_api_diagnostics(
     monkeypatch,
 ) -> None:
     secret = "registry-secret-token"
-
-    def fake_request_json(url: str) -> object:
-        path = urllib.parse.urlsplit(url).path
-        if path == "/health":
-            return {"status": "ok"}
-        if path == "/api/containers":
-            return []
-        if path == "/api/app":
-            return {"name": "wud", "version": "5.0.0"}
-        if path == "/api/log":
-            return {"level": "debug"}
-        if path == "/api/store":
-            return {"configuration": {"path": ".store", "file": "wud.json"}}
-        if path == "/api/watchers":
-            return [
+    _install_wud_api_diagnostics(
+        monkeypatch,
+        watchers=(
+            200,
+            [
                 {
                     "id": "docker.local",
                     "type": "docker",
@@ -90,9 +79,11 @@ def test_diagnostics_support_bundle_includes_sanitized_wud_api_diagnostics(
                         "watchbydefault": True,
                     },
                 }
-            ]
-        if path == "/api/registries":
-            return [
+            ],
+        ),
+        registries=(
+            200,
+            [
                 {
                     "id": "hub.private",
                     "type": "hub",
@@ -102,13 +93,12 @@ def test_diagnostics_support_bundle_includes_sanitized_wud_api_diagnostics(
                         "auth": secret,
                     },
                 }
-            ]
-        raise AssertionError(f"unexpected WUD API URL: {url}")
-
-    monkeypatch.setattr(web_wud_api, "_request_json", fake_request_json)
+            ],
+        ),
+    )
     client = _doctor_client(
         tmp_path,
-        {"WUD_API_BASE_URL": "http://wud.support-config.test:3000"},
+        {"WUD_API_BASE_URL": "https://wud.support-config.test:3000"},
     )
 
     response = client.get("/api/v1/diagnostics/support-bundle")
