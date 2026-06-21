@@ -4,6 +4,22 @@ set -Eeuo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
 cd "$REPO_ROOT"
 
+docker_name_component(){
+  local value="${1:-local}"
+  local digest sanitized
+
+  sanitized="$(printf '%s' "$value" | LC_ALL=C tr -c 'A-Za-z0-9_.-' '-')"
+  if [[ -z "$sanitized" ]]; then
+    sanitized="local"
+  fi
+  if (( ${#sanitized} > 48 )); then
+    digest="$(printf '%s' "$value" | cksum | awk '{ print $1 }')"
+    sanitized="${sanitized:0:40}-${digest}"
+  fi
+
+  printf '%s' "$sanitized"
+}
+
 COMPOSE_EXAMPLE="docs/examples/docker-compose.example.yml"
 COMPOSE_WEBUI="docs/examples/docker-compose.webui.yml"
 COMPOSE_HARDENED="docs/examples/docker-compose.hardened.yml"
@@ -13,10 +29,11 @@ cleanup_image=0
 SYNC_TMP=""
 HEALTH_TMP=""
 HEALTH_CONTAINER=""
+RUN_ID_COMPONENT="$(docker_name_component "${GITHUB_RUN_ID:-local}")"
 if [[ -n "${WUDUP_TEST_IMAGE:-}" ]]; then
   IMAGE="$WUDUP_TEST_IMAGE"
 else
-  IMAGE="wudup:test-${GITHUB_RUN_ID:-local}-$$"
+  IMAGE="wudup:test-${RUN_ID_COMPONENT}-$$"
   cleanup_image=1
 fi
 
@@ -66,8 +83,9 @@ assert_duration(){
 }
 
 assert_image_metadata(){
-  local cmd web_host expected_health_test
-  local health_test health_interval health_timeout health_retries health_start_period
+  local cmd web_host
+  local health_test_len health_test_type health_test_command
+  local health_interval health_timeout health_retries health_start_period
 
   cmd="$(docker image inspect -f '{{json .Config.Cmd}}' "$IMAGE")"
   [[ "$cmd" == '["web"]' ]] || {
@@ -84,10 +102,35 @@ assert_image_metadata(){
     return 1
   }
 
-  health_test="$(docker image inspect -f '{{json .Config.Healthcheck.Test}}' "$IMAGE")"
-  expected_health_test="[\"CMD-SHELL\",\"curl -fsS -o /dev/null \\\"http://127.0.0.1:\${WUD_WEB_PORT:-7417}/readyz\\\" || exit 1\"]"
-  [[ "$health_test" == "$expected_health_test" ]] || {
-    printf 'Expected readyz healthcheck command, got %s\n' "$health_test" >&2
+  health_test_len="$(docker image inspect -f '{{if .Config.Healthcheck}}{{len .Config.Healthcheck.Test}}{{else}}0{{end}}' "$IMAGE")"
+  [[ "$health_test_len" == "2" ]] || {
+    printf 'Expected healthcheck test with 2 entries, got %s\n' "$health_test_len" >&2
+    return 1
+  }
+  health_test_type="$(docker image inspect -f '{{index .Config.Healthcheck.Test 0}}' "$IMAGE")"
+  health_test_command="$(docker image inspect -f '{{index .Config.Healthcheck.Test 1}}' "$IMAGE")"
+  [[ "$health_test_type" == "CMD-SHELL" ]] || {
+    printf 'Expected healthcheck type CMD-SHELL, got %s\n' "$health_test_type" >&2
+    return 1
+  }
+  [[ " $health_test_command " == *" curl "* ]] || {
+    printf 'Expected healthcheck command to run curl, got %s\n' "$health_test_command" >&2
+    return 1
+  }
+  [[ " $health_test_command " == *" -fsS "* ]] || {
+    printf 'Expected healthcheck curl flags -fsS, got %s\n' "$health_test_command" >&2
+    return 1
+  }
+  [[ " $health_test_command " == *" -o /dev/null "* ]] || {
+    printf 'Expected healthcheck to discard response body, got %s\n' "$health_test_command" >&2
+    return 1
+  }
+  [[ "$health_test_command" == *"http://127.0.0.1:\${WUD_WEB_PORT:-7417}/readyz"* ]] || {
+    printf 'Expected healthcheck command to call the readyz endpoint, got %s\n' "$health_test_command" >&2
+    return 1
+  }
+  [[ "$health_test_command" == *'|| exit 1'* ]] || {
+    printf 'Expected healthcheck command to fail on unsuccessful readyz probe, got %s\n' "$health_test_command" >&2
     return 1
   }
 
@@ -138,7 +181,7 @@ wait_for_default_web_health(){
 
 smoke_default_web_health(){
   HEALTH_TMP="$(mktemp -d "${TMPDIR:-/tmp}/wud-health-test.XXXXXX")"
-  HEALTH_CONTAINER="wudup-health-${GITHUB_RUN_ID:-local}-$$"
+  HEALTH_CONTAINER="wudup-health-${RUN_ID_COMPONENT}-$$"
   mkdir -p "$HEALTH_TMP/host-docker" "$HEALTH_TMP/out" "$HEALTH_TMP/logs"
   touch "$HEALTH_TMP/out/images.todo"
 
