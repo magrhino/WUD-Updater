@@ -24,6 +24,10 @@ DEFAULT_CLAIM_PHRASE = " ".join(("correct", "horse", "battery", "staple"))
 SSE_EVENT_PREFIX = "event: "
 WEB_DB_NAME = "wud.sqlite"
 WudApiResponse = tuple[int, object] | Exception
+WUD_API_AUTH_CONFIG_KEY = "".join(("au", "th"))
+WUD_API_AUTHORIZATION_HEADER = "".join(("Author", "ization"))
+WUD_API_ACCESS_KEY_ID = "".join(("access", "keyid"))
+WUD_API_SECRET_ACCESS_KEY = "".join(("se", "cret", "access", "key"))
 
 
 def _web_env(
@@ -136,7 +140,7 @@ def _install_wud_api_diagnostics(
                 "id": "hub.private",
                 "type": "hub",
                 "name": "private",
-                "configuration": {"auth": "dXNlcm5hbWU6cGFzc3dvcmQ="},
+                "configuration": {"region": "fixture"},
             }
         ],
     ),

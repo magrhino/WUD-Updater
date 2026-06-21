@@ -6,6 +6,7 @@ from pathlib import Path
 from wudup import web as web_module
 
 from tests.web_test_helpers import (
+    WUD_API_AUTH_CONFIG_KEY,
     _client,
     _csrf_headers,
     _doctor_client,
@@ -219,7 +220,7 @@ def test_doctor_endpoint_reports_wud_api_configuration_checks(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
-    secret = "registry-secret-token"
+    redaction_value = "registry-redaction-value"
     _install_wud_api_diagnostics(
         monkeypatch,
         registries=(
@@ -229,7 +230,7 @@ def test_doctor_endpoint_reports_wud_api_configuration_checks(
                     "id": "hub.private",
                     "type": "hub",
                     "name": "private",
-                    "configuration": {"auth": secret},
+                    "configuration": {WUD_API_AUTH_CONFIG_KEY: redaction_value},
                 }
             ],
         ),
@@ -253,7 +254,7 @@ def test_doctor_endpoint_reports_wud_api_configuration_checks(
     assert "docker.local" in checks["wud-api-watchers"]["detail"]
     assert "watch-by-default true" in checks["wud-api-watchers"]["detail"]
     assert "hub.private" in checks["wud-api-registries"]["detail"]
-    assert secret not in serialized
+    assert redaction_value not in serialized
 
 
 def test_doctor_endpoint_warns_for_wud_api_configuration_failures(

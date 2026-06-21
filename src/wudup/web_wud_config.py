@@ -26,12 +26,17 @@ WUD_API_STATE_ERROR: WudApiState = "error"
 WUD_API_DEGRADED_STATES = frozenset(
     {WUD_API_STATE_UNAVAILABLE, WUD_API_STATE_ERROR}
 )
+APP_CONFIGURATION_LABEL = "app configuration"
+LOG_CONFIGURATION_LABEL = "log configuration"
+STORE_CONFIGURATION_LABEL = "store configuration"
+WATCHER_CONFIGURATION_LABEL = "watcher configuration"
+REGISTRY_CONFIGURATION_LABEL = "registry configuration"
 WUD_API_CONFIG_ENDPOINTS = (
-    ("app", "/api/app", "app configuration"),
-    ("log", "/api/log", "log configuration"),
-    ("store", "/api/store", "store configuration"),
-    ("watchers", "/api/watchers", "watcher configuration"),
-    ("registries", "/api/registries", "registry configuration"),
+    ("app", "/api/app", APP_CONFIGURATION_LABEL),
+    ("log", "/api/log", LOG_CONFIGURATION_LABEL),
+    ("store", "/api/store", STORE_CONFIGURATION_LABEL),
+    ("watchers", "/api/watchers", WATCHER_CONFIGURATION_LABEL),
+    ("registries", "/api/registries", REGISTRY_CONFIGURATION_LABEL),
 )
 WUD_API_SENSITIVE_CONFIG_KEY_PARTS = frozenset(
     {
@@ -241,7 +246,7 @@ def _fetch_app_diagnostics(
     status, payload = _request_config_payload(
         context,
         "/api/app",
-        "app configuration",
+        APP_CONFIGURATION_LABEL,
     )
     if status.state != WUD_API_STATE_READY:
         return WudApiAppDiagnostics(status=status)
@@ -249,7 +254,7 @@ def _fetch_app_diagnostics(
         return WudApiAppDiagnostics(
             status=_malformed_config_status(
                 context,
-                "app configuration",
+                APP_CONFIGURATION_LABEL,
                 "object",
             )
         )
@@ -270,7 +275,7 @@ def _fetch_log_diagnostics(
     status, payload = _request_config_payload(
         context,
         "/api/log",
-        "log configuration",
+        LOG_CONFIGURATION_LABEL,
     )
     if status.state != WUD_API_STATE_READY:
         return WudApiLogDiagnostics(status=status)
@@ -278,7 +283,7 @@ def _fetch_log_diagnostics(
         return WudApiLogDiagnostics(
             status=_malformed_config_status(
                 context,
-                "log configuration",
+                LOG_CONFIGURATION_LABEL,
                 "object",
             )
         )
@@ -294,7 +299,7 @@ def _fetch_store_diagnostics(
     status, payload = _request_config_payload(
         context,
         "/api/store",
-        "store configuration",
+        STORE_CONFIGURATION_LABEL,
     )
     if status.state != WUD_API_STATE_READY:
         return WudApiStoreDiagnostics(status=status)
@@ -305,7 +310,7 @@ def _fetch_store_diagnostics(
         return WudApiStoreDiagnostics(
             status=_malformed_config_status(
                 context,
-                "store configuration",
+                STORE_CONFIGURATION_LABEL,
                 "configuration object",
             )
         )
@@ -327,7 +332,7 @@ def _fetch_watchers_diagnostics(
     status, payload = _request_config_payload(
         context,
         "/api/watchers",
-        "watcher configuration",
+        WATCHER_CONFIGURATION_LABEL,
     )
     if status.state != WUD_API_STATE_READY:
         return status, []
@@ -337,7 +342,7 @@ def _fetch_watchers_diagnostics(
         return (
             _malformed_config_status(
                 context,
-                "watcher configuration",
+                WATCHER_CONFIGURATION_LABEL,
                 "list of objects",
             ),
             [],
@@ -351,7 +356,7 @@ def _fetch_registries_diagnostics(
     status, payload = _request_config_payload(
         context,
         "/api/registries",
-        "registry configuration",
+        REGISTRY_CONFIGURATION_LABEL,
     )
     if status.state != WUD_API_STATE_READY:
         return status, []
@@ -361,7 +366,7 @@ def _fetch_registries_diagnostics(
         return (
             _malformed_config_status(
                 context,
-                "registry configuration",
+                REGISTRY_CONFIGURATION_LABEL,
                 "list of objects",
             ),
             [],

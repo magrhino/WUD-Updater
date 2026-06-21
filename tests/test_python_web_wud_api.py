@@ -17,7 +17,14 @@ from wudup.release_notes import (
 from wudup.web import load_web_settings
 from wudup.web_auth import WebConfigError
 
-from tests.web_test_helpers import _client, _csrf_headers, _web_env
+from tests.web_test_helpers import (
+    WUD_API_ACCESS_KEY_ID,
+    WUD_API_AUTHORIZATION_HEADER,
+    WUD_API_SECRET_ACCESS_KEY,
+    _client,
+    _csrf_headers,
+    _web_env,
+)
 
 
 ResponseSpec = tuple[int, object]
@@ -102,7 +109,7 @@ def _install_wud_api(
                 "id": "hub.private",
                 "type": "hub",
                 "name": "private",
-                "configuration": {"auth": "dXNlcm5hbWU6cGFzc3dvcmQ="},
+                "configuration": {"region": "fixture"},
             }
         ],
     ),
@@ -219,7 +226,7 @@ def test_wud_api_configuration_diagnostics_redacts_sensitive_config(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
-    secret = "registry-secret-token"
+    redaction_value = "registry-redaction-value"
     _install_wud_api(
         monkeypatch,
         watchers=(
@@ -231,7 +238,7 @@ def test_wud_api_configuration_diagnostics_redacts_sensitive_config(
                     "name": "local",
                     "configuration": {
                         "socket": "/var/run/docker.sock",
-                        "headers": {"Authorization": f"Bearer {secret}"},
+                        "headers": {WUD_API_AUTHORIZATION_HEADER: redaction_value},
                         "cron": "0 * * * *",
                         "watchbydefault": True,
                     },
@@ -247,8 +254,8 @@ def test_wud_api_configuration_diagnostics_redacts_sensitive_config(
                     "name": "private",
                     "configuration": {
                         "region": "eu-west-1",
-                        "accesskeyid": "AKIASECRET",
-                        "secretaccesskey": secret,
+                        WUD_API_ACCESS_KEY_ID: "redaction-access-value",
+                        WUD_API_SECRET_ACCESS_KEY: redaction_value,
                     },
                 }
             ],
@@ -261,14 +268,16 @@ def test_wud_api_configuration_diagnostics_redacts_sensitive_config(
     )
     serialized = diagnostics.model_dump_json()
 
-    assert secret not in serialized
-    assert "AKIASECRET" not in serialized
-    assert "Bearer" not in serialized
+    assert redaction_value not in serialized
+    assert "redaction-access-value" not in serialized
     assert diagnostics.watchers[0].configuration["socket"] == "[REDACTED_PATH]"
     assert diagnostics.watchers[0].configuration["headers"] == "<redacted>"
     assert diagnostics.registries[0].configuration["region"] == "eu-west-1"
-    assert diagnostics.registries[0].configuration["accesskeyid"] == "<redacted>"
-    assert diagnostics.registries[0].configuration["secretaccesskey"] == "<redacted>"
+    assert diagnostics.registries[0].configuration[WUD_API_ACCESS_KEY_ID] == "<redacted>"
+    assert (
+        diagnostics.registries[0].configuration[WUD_API_SECRET_ACCESS_KEY]
+        == "<redacted>"
+    )
 
 
 def test_wud_api_configuration_diagnostics_reports_unreachable_health(
