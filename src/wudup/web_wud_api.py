@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 import base64
-import hashlib
+import hmac
 import json
 import math
 import re
+import secrets
 import time
 import urllib.error
 import urllib.parse
@@ -130,6 +131,7 @@ WudApiCacheKey = tuple[str, str]
 _cache_lock = Lock()
 _snapshot_cache: dict[WudApiCacheKey, WudApiSnapshot] = {}
 _configuration_diagnostics_cache: dict[WudApiCacheKey, WudApiConfigurationSnapshot] = {}
+_CLIENT_CONFIG_FINGERPRINT_KEY = secrets.token_bytes(32)
 
 
 def configured_base_url(environ: Mapping[str, str]) -> str:
@@ -319,8 +321,9 @@ def _client_config_fingerprint(header_items: Sequence[tuple[str, str]]) -> str:
         list(header_items),
         ensure_ascii=False,
         separators=(",", ":"),
-    )
-    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+    ).encode("utf-8")
+    # Keep cache partitioning stable without creating a reusable digest of secrets.
+    return hmac.digest(_CLIENT_CONFIG_FINGERPRINT_KEY, payload, "sha256").hex()
 
 
 def startup_probe(settings: WebSettings) -> WudApiSnapshot:

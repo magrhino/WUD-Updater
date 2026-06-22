@@ -314,6 +314,35 @@ def test_wud_api_static_json_headers_are_added_to_requests(tmp_path: Path) -> No
     assert "static-header-secret" in settings.wud_api_client.secret_values
 
 
+def test_wud_api_client_config_fingerprint_partitions_without_secret_text(
+    tmp_path: Path,
+) -> None:
+    base_url = "https://wud.fingerprint.test:3000"
+    first = _settings(
+        tmp_path,
+        base_url,
+        {web_wud_api.WUD_API_AUTH_BEARER_TOKEN_ENV: "same-token-secret"},
+    )
+    second = _settings(
+        tmp_path,
+        base_url,
+        {web_wud_api.WUD_API_AUTH_BEARER_TOKEN_ENV: "same-token-secret"},
+    )
+    third = _settings(
+        tmp_path,
+        base_url,
+        {web_wud_api.WUD_API_AUTH_BEARER_TOKEN_ENV: "other-token-secret"},
+    )
+
+    fingerprint = first.wud_api_client.fingerprint
+
+    assert fingerprint
+    assert fingerprint == second.wud_api_client.fingerprint
+    assert fingerprint != third.wud_api_client.fingerprint
+    assert "same-token-secret" not in fingerprint
+    assert "Bearer" not in fingerprint
+
+
 def test_wud_api_auth_rejected_state_mentions_configured_credentials(
     tmp_path: Path,
     monkeypatch,
