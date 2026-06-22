@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import ipaddress
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field as dataclass_field
 from datetime import datetime
 from pathlib import Path
 from typing import Annotated, Any, Literal
@@ -171,6 +171,7 @@ __all__ = (
     "UpsertTagExclusionOperation",
     "WebApplyJob",
     "WebApplyJobProgressEvent",
+    "WudApiClientConfig",
     "WebSelfUpdatePlan",
     "WebSettings",
     "WudApiAppDiagnostics",
@@ -255,6 +256,17 @@ TERMINAL_APPLY_JOB_STATUSES = frozenset({"success", "failure"})
 APPLY_JOB_PROGRESS_STATUSES = frozenset({"running", "success", "failure", "skipped"})
 
 @dataclass(frozen=True)
+class WudApiClientConfig:
+    header_items: tuple[tuple[str, str], ...] = ()
+    secret_values: tuple[str, ...] = ()
+    fingerprint: str = ""
+
+    @property
+    def configured(self) -> bool:
+        return bool(self.header_items)
+
+
+@dataclass(frozen=True)
 class WebSettings:
     config: UpdaterConfig
     auth_token: str
@@ -270,6 +282,9 @@ class WebSettings:
     restart_container: str = ""
     wud_api_base_url: str = ""
     wud_api_startup_wait_seconds: float = 0.0
+    wud_api_client: WudApiClientConfig = dataclass_field(
+        default_factory=WudApiClientConfig
+    )
     pending_source: PendingSourceMode = "file"
     command_env: Mapping[str, str] | None = None
 

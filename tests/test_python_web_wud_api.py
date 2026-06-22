@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import base64
+import json
 import urllib.parse
 from pathlib import Path
 from typing import Any
@@ -26,9 +28,16 @@ from tests.web_test_helpers import (
 )
 
 
-def _settings(tmp_path: Path, base_url: str):
+def _settings(
+    tmp_path: Path,
+    base_url: str,
+    env: dict[str, str] | None = None,
+):
+    values = {"WUD_API_BASE_URL": base_url}
+    if env:
+        values.update(env)
     return load_web_settings(
-        environ=_web_env(tmp_path, {"WUD_API_BASE_URL": base_url}),
+        environ=_web_env(tmp_path, values),
     )
 
 
@@ -80,7 +89,7 @@ class _ToggleableWudApi:
         monkeypatch.setattr(web_wud_api.time, "monotonic", lambda: self.now)
         monkeypatch.setattr(web_wud_api, "_request_json", self.request_json)
 
-    def request_json(self, url: str) -> object:
+    def request_json(self, url: str, _client_config=None) -> object:
         path = urllib.parse.urlsplit(url).path
         self.calls.append(path)
         if not self.reachable:
@@ -207,6 +216,370 @@ def test_wud_api_configuration_diagnostics_redacts_sensitive_config(
     )
 
 
+def test_wud_api_bearer_auth_applies_to_get_and_post_requests(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    bearer_value = "fixture-bearer-value"
+    calls: list[tuple[str, str, dict[str, str]]] = []
+
+    def request_json(url: str, client_config=None) -> object:
+        path = urllib.parse.urlsplit(url).path
+        calls.append(("GET", path, web_wud_api._request_headers(client_config)))
+        if path == "/health":
+            return {"status": "ok"}
+        if path == "/api/containers":
+            return [_container_payload(name="app")]
+        raise AssertionError(f"unexpected WUD API URL: {url}")
+
+    def post_json(url: str, client_config=None) -> object:
+        path = urllib.parse.urlsplit(url).path
+        calls.append(("POST", path, web_wud_api._request_headers(client_config)))
+        return {"status": "ok"}
+
+    monkeypatch.setattr(web_wud_api, "_request_json", request_json)
+    monkeypatch.setattr(web_wud_api, "_post_json", post_json)
+    settings = _settings(
+        tmp_path,
+        "https://wud.auth-header.test:3000",
+        {web_wud_api.WUD_API_AUTH_BEARER_TOKEN_ENV: bearer_value},
+    )
+
+    snapshot = web_wud_api.get_snapshot(settings, include_containers=True, force=True)
+    watch = web_wud_api.watch_all(settings)
+
+    assert snapshot.status.state == "ready"
+    assert watch.watched is True
+    assert calls
+    assert {
+        (method, path)
+        for method, path, _headers in calls
+    } >= {
+        ("GET", "/health"),
+        ("GET", "/api/containers"),
+        ("POST", "/api/containers/watch"),
+    }
+    for _method, _path, headers in calls:
+        assert headers["Authorization"] == f"Bearer {bearer_value}"
+        assert headers["Accept"] == "application/json"
+        assert headers["User-Agent"] == web_wud_api.WUD_API_USER_AGENT
+
+
+def test_wud_api_basic_auth_password_file_builds_authorization_header(
+    tmp_path: Path,
+) -> None:
+    password_file = tmp_path / "wud-api-basic-password"
+    password_file.write_text("basic-password-secret\n", encoding="utf-8")
+    settings = _settings(
+        tmp_path,
+        "https://wud.basic-auth.test:3000",
+        {
+            web_wud_api.WUD_API_AUTH_BASIC_USER_ENV: "wud-user",
+            web_wud_api.WUD_API_AUTH_BASIC_PASSWORD_FILE_ENV: str(password_file),
+        },
+    )
+    expected_token = base64.b64encode(
+        b"wud-user:basic-password-secret"
+    ).decode("ascii")
+
+    headers = web_wud_api._request_headers(settings.wud_api_client)
+
+    assert headers["Authorization"] == f"Basic {expected_token}"
+    assert "basic-password-secret" in settings.wud_api_client.secret_values
+    assert headers["Authorization"] in settings.wud_api_client.secret_values
+
+
+def test_wud_api_static_json_headers_are_added_to_requests(tmp_path: Path) -> None:
+    headers_file = tmp_path / "wud-api-headers.json"
+    headers_file.write_text(
+        json.dumps(
+            {
+                "X-Api-Key": "static-header-secret",
+                "X-WUD-Trace": "enabled",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    settings = _settings(
+        tmp_path,
+        "https://wud.static-headers.test:3000",
+        {web_wud_api.WUD_API_HEADERS_FILE_ENV: str(headers_file)},
+    )
+    headers = web_wud_api._request_headers(settings.wud_api_client)
+
+    assert headers["X-Api-Key"] == "static-header-secret"
+    assert headers["X-WUD-Trace"] == "enabled"
+    assert headers["Accept"] == "application/json"
+    assert "static-header-secret" in settings.wud_api_client.secret_values
+
+
+def test_wud_api_static_json_headers_file_read_error(tmp_path: Path) -> None:
+    env = {
+        web_wud_api.WUD_API_HEADERS_FILE_ENV: str(tmp_path / "missing-headers.json"),
+    }
+
+    with pytest.raises(WebConfigError) as excinfo:
+        _settings(tmp_path, "https://wud.static-headers.test:3000", env)
+
+    assert str(excinfo.value) == "WUD_API_HEADERS_FILE could not be read"
+
+
+def test_wud_api_client_config_fingerprint_is_opaque_without_secret_text(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    tokens = iter(("opaque-one", "opaque-two", "opaque-three"))
+    monkeypatch.setattr(web_wud_api.secrets, "token_hex", lambda _bytes: next(tokens))
+    base_url = "https://wud.fingerprint.test:3000"
+    first = _settings(
+        tmp_path,
+        base_url,
+        {web_wud_api.WUD_API_AUTH_BEARER_TOKEN_ENV: "same-token-secret"},
+    )
+    second = _settings(
+        tmp_path,
+        base_url,
+        {web_wud_api.WUD_API_AUTH_BEARER_TOKEN_ENV: "same-token-secret"},
+    )
+    third = _settings(
+        tmp_path,
+        base_url,
+        {web_wud_api.WUD_API_AUTH_BEARER_TOKEN_ENV: "other-token-secret"},
+    )
+
+    fingerprint = first.wud_api_client.fingerprint
+
+    assert fingerprint == "opaque-one"
+    assert second.wud_api_client.fingerprint == "opaque-two"
+    assert third.wud_api_client.fingerprint == "opaque-three"
+    assert "same-token-secret" not in fingerprint
+    assert "Bearer" not in fingerprint
+
+
+def test_wud_api_auth_rejected_state_mentions_configured_credentials(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    _install_wud_api(monkeypatch, health=(401, {"error": "authentication required"}))
+
+    snapshot = web_wud_api.get_snapshot(
+        _settings(
+            tmp_path,
+            "https://wud.rejected-auth.test:3000",
+            {
+                web_wud_api.WUD_API_AUTH_BEARER_TOKEN_ENV: (
+                    "wud-api-rejected-secret"
+                )
+            },
+        ),
+        include_containers=True,
+        force=True,
+    )
+
+    assert snapshot.status.state == "auth_required"
+    assert snapshot.status.detail == "configured WUD API credentials were rejected"
+
+
+def test_wud_api_snapshot_cache_is_separated_by_auth_headers(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    calls: list[str] = []
+
+    def request_json(url: str, client_config=None) -> object:
+        path = urllib.parse.urlsplit(url).path
+        authorization = web_wud_api._request_headers(client_config)["Authorization"]
+        calls.append(f"{authorization} {path}")
+        if path == "/health":
+            return {"status": "ok"}
+        if path == "/api/containers":
+            name = "one" if authorization.endswith("one-token") else "two"
+            return [_container_payload(name=name)]
+        raise AssertionError(f"unexpected WUD API URL: {url}")
+
+    monkeypatch.setattr(web_wud_api, "_request_json", request_json)
+    base_url = "https://wud.auth-cache.test:3000"
+    first_settings = _settings(
+        tmp_path,
+        base_url,
+        {web_wud_api.WUD_API_AUTH_BEARER_TOKEN_ENV: "one-token"},
+    )
+    second_settings = _settings(
+        tmp_path,
+        base_url,
+        {web_wud_api.WUD_API_AUTH_BEARER_TOKEN_ENV: "two-token"},
+    )
+
+    first = web_wud_api.get_snapshot(
+        first_settings,
+        include_containers=True,
+        force=True,
+    )
+    second = web_wud_api.get_snapshot(second_settings, include_containers=True)
+
+    assert first.containers[0].name == "one"
+    assert second.containers[0].name == "two"
+    assert calls == [
+        "Bearer one-token /health",
+        "Bearer one-token /api/containers",
+        "Bearer two-token /health",
+        "Bearer two-token /api/containers",
+    ]
+
+
+def test_wud_api_auth_config_values_are_redacted_from_details(tmp_path: Path) -> None:
+    token_file = tmp_path / "wud-api-token"
+    token_file.write_text("file-token-secret\n", encoding="utf-8")
+    headers_file = tmp_path / "wud-api-headers.json"
+    headers_file.write_text(
+        json.dumps({"X-Api-Key": "static-header-secret"}),
+        encoding="utf-8",
+    )
+    settings = _settings(
+        tmp_path,
+        "https://wud.redaction.test:3000",
+        {
+            web_wud_api.WUD_API_AUTH_BEARER_TOKEN_FILE_ENV: str(token_file),
+            web_wud_api.WUD_API_HEADERS_FILE_ENV: str(headers_file),
+        },
+    )
+
+    detail = web_wud_api._sanitize_detail(
+        settings,
+        "file-token-secret static-header-secret Bearer file-token-secret",
+    )
+
+    assert "file-token-secret" not in detail
+    assert "static-header-secret" not in detail
+    assert detail.count("<redacted>") == 3
+
+
+def test_wud_api_auth_config_rejects_malformed_inputs(tmp_path: Path) -> None:
+    token_file = tmp_path / "token"
+    token_file.write_text("file-token-secret\n", encoding="utf-8")
+    empty_file = tmp_path / "empty"
+    empty_file.write_text("\n", encoding="utf-8")
+    bad_json_file = tmp_path / "headers-bad-json"
+    bad_json_file.write_text("{not json", encoding="utf-8")
+    unreadable_headers = tmp_path / "headers-unreadable"
+    unreadable_headers.mkdir()
+    empty_headers = tmp_path / "headers-empty"
+    empty_headers.write_text("", encoding="utf-8")
+    non_object_headers = tmp_path / "headers-list"
+    non_object_headers.write_text("[]", encoding="utf-8")
+    non_string_headers = tmp_path / "headers-non-string"
+    non_string_headers.write_text(json.dumps({"X-Api-Key": 7}), encoding="utf-8")
+    invalid_name_headers = tmp_path / "headers-invalid-name"
+    invalid_name_headers.write_text(
+        json.dumps({"X Invalid Header": "value"}),
+        encoding="utf-8",
+    )
+    duplicate_headers = tmp_path / "headers-duplicate"
+    duplicate_headers.write_text(
+        json.dumps({"X-Api-Key": "one", "x-api-key": "two"}),
+        encoding="utf-8",
+    )
+    newline_headers = tmp_path / "headers-newline"
+    newline_headers.write_text(
+        json.dumps({"X-Api-Key": "bad\nvalue"}),
+        encoding="utf-8",
+    )
+    cr_newline_headers = tmp_path / "headers-cr-newline"
+    cr_newline_headers.write_text(
+        json.dumps({"X-Api-Key": "bad\r\nvalue"}),
+        encoding="utf-8",
+    )
+    auth_headers = tmp_path / "headers-auth"
+    auth_headers.write_text(
+        json.dumps({"Authorization": "Bearer static-secret"}),
+        encoding="utf-8",
+    )
+
+    cases = [
+        (
+            {
+                web_wud_api.WUD_API_AUTH_BEARER_TOKEN_ENV: "direct-token",
+                web_wud_api.WUD_API_AUTH_BEARER_TOKEN_FILE_ENV: str(token_file),
+            },
+            "cannot both be set",
+        ),
+        (
+            {
+                web_wud_api.WUD_API_AUTH_BEARER_TOKEN_FILE_ENV: str(empty_file),
+            },
+            "must not be empty",
+        ),
+        (
+            {
+                web_wud_api.WUD_API_AUTH_BEARER_TOKEN_FILE_ENV: str(
+                    tmp_path / "missing-token"
+                ),
+            },
+            "could not be read",
+        ),
+        (
+            {
+                web_wud_api.WUD_API_AUTH_BEARER_TOKEN_ENV: "direct-token",
+                web_wud_api.WUD_API_AUTH_BASIC_USER_ENV: "wud-user",
+                web_wud_api.WUD_API_AUTH_BASIC_PASSWORD_ENV: "basic-password",
+            },
+            "bearer and basic auth cannot both be configured",
+        ),
+        (
+            {web_wud_api.WUD_API_AUTH_BASIC_USER_ENV: "wud-user"},
+            "must be set together",
+        ),
+        (
+            {web_wud_api.WUD_API_HEADERS_FILE_ENV: str(bad_json_file)},
+            "must contain a JSON object",
+        ),
+        (
+            {web_wud_api.WUD_API_HEADERS_FILE_ENV: str(unreadable_headers)},
+            "could not be read",
+        ),
+        (
+            {web_wud_api.WUD_API_HEADERS_FILE_ENV: str(empty_headers)},
+            "must contain a JSON object",
+        ),
+        (
+            {web_wud_api.WUD_API_HEADERS_FILE_ENV: str(non_object_headers)},
+            "must contain a JSON object",
+        ),
+        (
+            {web_wud_api.WUD_API_HEADERS_FILE_ENV: str(invalid_name_headers)},
+            "contains an invalid header",
+        ),
+        (
+            {web_wud_api.WUD_API_HEADERS_FILE_ENV: str(duplicate_headers)},
+            "must not define duplicate headers",
+        ),
+        (
+            {web_wud_api.WUD_API_HEADERS_FILE_ENV: str(non_string_headers)},
+            "values must be strings",
+        ),
+        (
+            {web_wud_api.WUD_API_HEADERS_FILE_ENV: str(newline_headers)},
+            "must not contain newlines",
+        ),
+        (
+            {web_wud_api.WUD_API_HEADERS_FILE_ENV: str(cr_newline_headers)},
+            "must not contain newlines",
+        ),
+        (
+            {
+                web_wud_api.WUD_API_AUTH_BEARER_TOKEN_ENV: "direct-token",
+                web_wud_api.WUD_API_HEADERS_FILE_ENV: str(auth_headers),
+            },
+            "must not define Authorization",
+        ),
+    ]
+
+    for env, expected in cases:
+        with pytest.raises(WebConfigError, match=expected):
+            _settings(tmp_path, f"https://wud.invalid-{len(expected)}.test:3000", env)
+
+
 def test_wud_api_configuration_diagnostics_reports_unreachable_health(
     tmp_path: Path,
     monkeypatch,
@@ -311,7 +684,7 @@ def test_startup_probe_waits_for_wud_api_readiness(
 ) -> None:
     calls: list[str] = []
 
-    def fake_request_json(url: str) -> object:
+    def fake_request_json(url: str, _client_config=None) -> object:
         calls.append(url)
         if len(calls) == 1:
             raise OSError("connection refused")

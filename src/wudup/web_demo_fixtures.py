@@ -1487,7 +1487,9 @@ def _seed_wud_api_snapshot(settings: WebSettings) -> None:
         checked_monotonic=time.monotonic(),
     )
     with web_wud_api._cache_lock:
-        web_wud_api._snapshot_cache[base_url] = snapshot
+        web_wud_api._snapshot_cache[
+            web_wud_api._cache_key(settings, base_url)
+        ] = snapshot
 
 
 def _seed_wud_api_configuration_diagnostics(settings: WebSettings) -> None:
@@ -1569,7 +1571,9 @@ def _seed_wud_api_configuration_diagnostics(settings: WebSettings) -> None:
         checked_monotonic=time.monotonic(),
     )
     with web_wud_api._cache_lock:
-        web_wud_api._configuration_diagnostics_cache[base_url] = snapshot
+        web_wud_api._configuration_diagnostics_cache[
+            web_wud_api._cache_key(settings, base_url)
+        ] = snapshot
 
 
 def _seed_release_note_cache(settings: WebSettings) -> None:

@@ -145,7 +145,7 @@ def test_pending_selected_rescan_reports_partial_watch_failure(
         ],
     )
 
-    def post_json(url: str) -> object:
+    def post_json(url: str, _client_config=None) -> object:
         path = urllib.parse.urlsplit(url).path
         calls.append(("POST", path))
         if path == "/api/containers/docker.local.radarr/watch":
@@ -232,11 +232,15 @@ def test_pending_rescan_rejects_active_apply_job_without_watch(
     monkeypatch,
 ) -> None:
     posts: list[str] = []
-    monkeypatch.setattr(web_wud_api, "_request_json", lambda url: {"status": "ok"})
+    monkeypatch.setattr(
+        web_wud_api,
+        "_request_json",
+        lambda url, _client_config=None: {"status": "ok"},
+    )
     monkeypatch.setattr(
         web_wud_api,
         "_post_json",
-        lambda url: posts.append(urllib.parse.urlsplit(url).path),
+        lambda url, _client_config=None: posts.append(urllib.parse.urlsplit(url).path),
     )
     client = _client(
         tmp_path,

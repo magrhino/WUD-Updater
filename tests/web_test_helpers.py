@@ -197,7 +197,7 @@ def _install_wud_api(
         "/api/registries": registries,
     }
 
-    def fake_request_json(url: str) -> object:
+    def fake_request_json(url: str, _client_config=None) -> object:
         path = urllib.parse.urlsplit(url).path
         try:
             return _wud_api_response(url, responses[path])

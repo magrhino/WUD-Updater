@@ -534,6 +534,7 @@ def load_web_settings(
         restart_container=_resolve_restart_container(env),
         wud_api_base_url=web_wud_api.configured_base_url(env),
         wud_api_startup_wait_seconds=web_wud_api.configured_startup_wait_seconds(env),
+        wud_api_client=web_wud_api.configured_client_config(env),
         pending_source=web_pending_sources.configured_pending_source(env),
         command_env=dict(env),
     )

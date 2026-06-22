@@ -231,6 +231,11 @@ WUDup startup on WUD's container healthcheck and set
 `WUD_API_STARTUP_WAIT_SECONDS=5` as a short in-app retry for startup races.
 After startup, WUD API metadata discovery retries automatically on later
 WebUI requests when the API is temporarily unavailable.
+If WUD's internal API is protected by a reverse proxy or another static
+authentication layer, configure WUDup's outbound WUD API client with bearer,
+basic, or JSON header-file credentials. Prefer the `_FILE` variables for
+container deployments so secrets stay out of Compose YAML, logs, and support
+bundles.
 By default, pending updates still come from the WUD callback todo file. The
 experimental `WUD_PENDING_SOURCE=api` mode reads WebUI pending entries from
 WUD's `/api/containers` metadata, and `WUD_PENDING_SOURCE=auto` uses that API
@@ -558,6 +563,9 @@ Boolean examples use `true` and `false`; legacy aliases `1`, `0`, `yes`, `no`,
 | `WUD_WEB_RESTART_CONTAINER` | Docker `HOSTNAME` inside a container, otherwise unset | Optional Docker container name or ID restarted from Settings. Set this explicitly only when the auto-detected current container target is unavailable or wrong. |
 | `WUD_API_BASE_URL` | `http://wud:3000` | Internal WUD API base URL used for best-effort WebUI metadata discovery and experimental API-backed pending source modes. Unavailable or error states are reported as degraded and retried faster on later WebUI requests; auth-required WUD still uses the normal cache TTL. |
 | `WUD_API_STARTUP_WAIT_SECONDS` | `0`, `5` in Compose examples | Seconds to retry the initial WUD API health probe during WebUI startup before reporting degraded WUD API discovery. This startup wait is separate from automatic runtime retries. |
+| `WUD_API_AUTH_BEARER_TOKEN_FILE` / `WUD_API_AUTH_BEARER_TOKEN` | unset | Optional bearer token for WUDup's outbound WUD API calls. Prefer the `_FILE` form in containers; direct values are intended for local development. Do not combine bearer and basic auth. |
+| `WUD_API_AUTH_BASIC_USER` + `WUD_API_AUTH_BASIC_PASSWORD_FILE` / `WUD_API_AUTH_BASIC_PASSWORD` | unset | Optional basic auth credentials for WUDup's outbound WUD API calls. The user and one password source must be set together. Prefer the `_FILE` password form in containers. |
+| `WUD_API_HEADERS_FILE` | unset | Optional UTF-8 JSON object of static WUD API request headers, such as `{"X-Api-Key":"example"}`. Header names and values are validated, values are redacted, and an `Authorization` header cannot be combined with bearer or basic auth. |
 | `WUD_PENDING_SOURCE` | `file` | Experimental WebUI/API pending-update source: `file` keeps the callback todo file as the source of truth, `api` derives pending entries from WUD `/api/containers`, and `auto` uses API metadata when usable before falling back to `WUD_OUT_FILE`. Host CLI update commands remain file-based. |
 | `WUD_WEB_HOST` | Host/direct app: `127.0.0.1`; container image: `0.0.0.0` | Host passed to Uvicorn when running `wudup web`. The image default makes published Docker ports reachable; Compose still controls host-side exposure with `WEBUI_HTTP_BIND`. |
 | `WUD_WEB_PORT` | `7417` | Port passed to Uvicorn when running `wudup web`. |

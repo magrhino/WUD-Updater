@@ -169,7 +169,10 @@ def _wud_api_health_diagnostic(
                 WUD_API_STATE_AUTH_REQUIRED,
                 available=True,
                 checked_at=context.checked_at,
-                detail="WUD API requires authentication",
+                detail=_auth_required_detail(
+                    context.settings,
+                    "WUD API requires authentication",
+                ),
                 settings=context.settings,
                 sanitize_detail=context.sanitize_detail,
             )
@@ -375,7 +378,10 @@ def _request_config_payload(
                     WUD_API_STATE_AUTH_REQUIRED,
                     available=True,
                     checked_at=context.checked_at,
-                    detail=f"WUD API {label} requires authentication",
+                    detail=_auth_required_detail(
+                        context.settings,
+                        f"WUD API {label} requires authentication",
+                    ),
                     settings=context.settings,
                     sanitize_detail=context.sanitize_detail,
                 ),
@@ -483,6 +489,12 @@ def _diagnostic_endpoint_status(
         last_checked_at=checked_at,
         detail=sanitize_detail(settings, detail),
     )
+
+
+def _auth_required_detail(settings: WebSettings, fallback: str) -> str:
+    if settings.wud_api_client.configured:
+        return "configured WUD API credentials were rejected"
+    return fallback
 
 
 def _sanitized_wud_config_mapping(

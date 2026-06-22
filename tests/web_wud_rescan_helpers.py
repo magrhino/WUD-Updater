@@ -59,7 +59,7 @@ def container_payload(
 def install_recording_wud_api(monkeypatch, containers: list[dict[str, Any]]):
     calls: list[tuple[str, str]] = []
 
-    def fake_request_json(url: str) -> object:
+    def fake_request_json(url: str, _client_config=None) -> object:
         path = urllib.parse.urlsplit(url).path
         calls.append(("GET", path))
         if path == "/health":
@@ -68,7 +68,7 @@ def install_recording_wud_api(monkeypatch, containers: list[dict[str, Any]]):
             return containers
         raise AssertionError(f"unexpected WUD API URL: {url}")
 
-    def fake_post_json(url: str) -> object:
+    def fake_post_json(url: str, _client_config=None) -> object:
         path = urllib.parse.urlsplit(url).path
         calls.append(("POST", path))
         return {"status": "ok"}

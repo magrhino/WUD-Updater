@@ -63,8 +63,14 @@ def test_settings_rejects_unauthenticated_requests_without_dev_bypass(
 def test_settings_reports_effective_non_secret_configuration(
     tmp_path: Path,
 ) -> None:
+    wud_api_headers_file = tmp_path / "wud-api-headers.json"
+    wud_api_headers_file.write_text(
+        '{"X-Api-Key": "wud-api-header-secret"}',
+        encoding="utf-8",
+    )
     secret_values = {
         "WUD_WEB_TOKEN": "web-token-secret",
+        "WUD_API_AUTH_BEARER_TOKEN": "wud-api-token-secret",
         "GITHUB_TOKEN": "github-token-secret",
         "DISCORD_WEBHOOK": "discord-webhook-secret",
         "ADMIN_WEBHOOK": "admin-webhook-secret",
@@ -86,6 +92,7 @@ def test_settings_reports_effective_non_secret_configuration(
             "WUD_WEB_RESTART_CONTAINER": "wudup",
             "WUD_API_BASE_URL": "http://wud.internal:3000",
             "WUD_API_STARTUP_WAIT_SECONDS": "5",
+            "WUD_API_HEADERS_FILE": str(wud_api_headers_file),
             "WUD_PENDING_SOURCE": "auto",
             **secret_values,
         },
@@ -136,6 +143,20 @@ def test_settings_reports_effective_non_secret_configuration(
         "configured": True,
         "source": "configured",
     }
+    assert webui["WUD_API_AUTH_BASIC_USER"] == {
+        "name": "WUD_API_AUTH_BASIC_USER",
+        "value": "",
+        "default_value": "",
+        "configured": False,
+        "source": "default",
+    }
+    assert webui["WUD_API_HEADERS_FILE"] == {
+        "name": "WUD_API_HEADERS_FILE",
+        "value": str(wud_api_headers_file),
+        "default_value": "",
+        "configured": True,
+        "source": "configured",
+    }
     assert webui["WUD_PENDING_SOURCE"] == {
         "name": "WUD_PENDING_SOURCE",
         "value": "auto",
@@ -148,6 +169,12 @@ def test_settings_reports_effective_non_secret_configuration(
     assert webui["WUD_WEB_SECURE_COOKIES_EFFECTIVE"]["source"] == "request"
     assert webui["WUD_WEB_AUTO_UPDATE_SCHEDULER_ENABLED"]["value"] == "true"
     assert secrets["WUD_WEB_TOKEN"]["configured"] is True
+    assert secrets["WUD_API_AUTH_BEARER_TOKEN"]["configured"] is True
+    assert secrets["WUD_API_AUTH_BEARER_TOKEN_FILE"]["configured"] is False
+    assert "WUD_API_AUTH_BASIC_USER" not in secrets
+    assert secrets["WUD_API_AUTH_BASIC_PASSWORD"]["configured"] is False
+    assert secrets["WUD_API_AUTH_BASIC_PASSWORD_FILE"]["configured"] is False
+    assert "WUD_API_HEADERS_FILE" not in secrets
     assert secrets["GITHUB_TOKEN"]["configured"] is True
     assert secrets["DISCORD_RELEASES_WEBHOOK"]["configured"] is False
     assert secrets["DISCORD_WEBHOOK"]["configured"] is True
@@ -192,7 +219,7 @@ def test_settings_reports_effective_non_secret_configuration(
         "restart_required": False,
         "disabled_reason": "",
     }
-    for value in secret_values.values():
+    for value in (*secret_values.values(), "wud-api-header-secret"):
         assert value not in serialized
 
 

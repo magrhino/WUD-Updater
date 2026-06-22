@@ -216,6 +216,56 @@ def test_doctor_endpoint_returns_structured_redacted_results(
     assert "<redacted>" in serialized
 
 
+def test_doctor_endpoint_suggests_wud_api_auth_configuration(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    _install_wud_api(monkeypatch, health=(401, {"error": "authentication required"}))
+    client = _doctor_client(
+        tmp_path,
+        {"WUD_API_BASE_URL": "https://wud.doctor-auth-missing.test:3000"},
+    )
+
+    response = client.post("/api/v1/doctor", headers=_csrf_headers(client))
+    checks = {check["code"]: check for check in response.json()["checks"]}
+    suggestions = checks["wud-api"]["suggestions"]
+
+    assert response.status_code == 200
+    assert checks["wud-api"]["status"] == "WARN"
+    assert suggestions[0]["label"] == "Configure WUD API credentials"
+    assert "WUD_API_AUTH_BEARER_TOKEN_FILE" in suggestions[0]["description"]
+    assert "WUD_API_AUTH_BASIC_PASSWORD_FILE" in suggestions[0]["description"]
+    assert "WUD_API_HEADERS_FILE" in suggestions[0]["description"]
+    assert "authentication support is added" not in suggestions[0]["description"]
+
+
+def test_doctor_endpoint_suggests_verifying_rejected_wud_api_auth(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    _install_wud_api(monkeypatch, health=(401, {"error": "authentication required"}))
+    client = _doctor_client(
+        tmp_path,
+        {
+            "WUD_API_BASE_URL": "https://wud.doctor-auth-rejected.test:3000",
+            "WUD_API_AUTH_BEARER_TOKEN": "rejected-wud-api-token",
+        },
+    )
+
+    response = client.post("/api/v1/doctor", headers=_csrf_headers(client))
+    body = response.json()
+    checks = {check["code"]: check for check in body["checks"]}
+    suggestions = checks["wud-api"]["suggestions"]
+    serialized = json.dumps(body)
+
+    assert response.status_code == 200
+    assert checks["wud-api"]["detail"] == "configured WUD API credentials were rejected"
+    assert suggestions[0]["label"] == "Verify WUD API credentials"
+    assert "were rejected" in suggestions[0]["description"]
+    assert "WUD_API_HEADERS_FILE" in suggestions[0]["description"]
+    assert "rejected-wud-api-token" not in serialized
+
+
 def test_doctor_endpoint_reports_wud_api_configuration_checks(
     tmp_path: Path,
     monkeypatch,

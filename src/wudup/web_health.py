@@ -415,15 +415,7 @@ def _web_wud_api_doctor_check(settings: WebSettings) -> DoctorDataCheck:
     status = "PASS" if snapshot.status.metadata_available else "WARN"
     if snapshot.status.state == "auth_required":
         detail = snapshot.status.detail or "WUD API metadata requires authentication"
-        suggestions = (
-            DoctorDataSuggestion(
-                label="Keep todo-file fallback",
-                description=(
-                    "WUDup will continue using images.todo until WUD API "
-                    "authentication support is added."
-                ),
-            ),
-        )
+        suggestions = (_wud_api_auth_suggestion(settings),)
     elif snapshot.status.available:
         detail = snapshot.status.detail or "WUD API is reachable"
         suggestions = ()
@@ -446,6 +438,38 @@ def _web_wud_api_doctor_check(settings: WebSettings) -> DoctorDataCheck:
         detail,
         code="wud-api",
         suggestions=suggestions,
+    )
+
+
+def _wud_api_auth_suggestion(settings: WebSettings) -> DoctorDataSuggestion:
+    if settings.wud_api_client.configured:
+        return DoctorDataSuggestion(
+            label="Verify WUD API credentials",
+            description=(
+                "Configured WUD API credentials were rejected. Update "
+                f"{web_wud_api.WUD_API_AUTH_BEARER_TOKEN_FILE_ENV}, "
+                f"{web_wud_api.WUD_API_AUTH_BASIC_PASSWORD_FILE_ENV}, or "
+                f"{web_wud_api.WUD_API_HEADERS_FILE_ENV} to match the proxy "
+                "protecting WUD."
+            ),
+            snippet=(
+                f"{web_wud_api.WUD_API_AUTH_BEARER_TOKEN_FILE_ENV}="
+                "/run/secrets/wud_api_token"
+            ),
+        )
+    return DoctorDataSuggestion(
+        label="Configure WUD API credentials",
+        description=(
+            "Set bearer, basic, or static header credentials for WUDup outbound "
+            f"WUD API calls with {web_wud_api.WUD_API_AUTH_BEARER_TOKEN_FILE_ENV}, "
+            f"{web_wud_api.WUD_API_AUTH_BASIC_PASSWORD_FILE_ENV}, or "
+            f"{web_wud_api.WUD_API_HEADERS_FILE_ENV}. Keep WUD_PENDING_SOURCE=file "
+            "to rely only on the callback todo file."
+        ),
+        snippet=(
+            f"{web_wud_api.WUD_API_AUTH_BEARER_TOKEN_FILE_ENV}="
+            "/run/secrets/wud_api_token"
+        ),
     )
 
 
