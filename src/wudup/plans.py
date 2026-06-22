@@ -66,6 +66,7 @@ from .plan_models import (
     DryRunPlanLine,
     DryRunPlanSkipped,
     DryRunPlanStack,
+    DryRunPlanSource,
     DryRunPlanSummary,
     DryRunPlanTagUpdate,
     DryRunPlanTarget,
@@ -90,6 +91,7 @@ __all__ = [
     "DryRunPlanLine",
     "DryRunPlanSkipped",
     "DryRunPlanStack",
+    "DryRunPlanSource",
     "DryRunPlanSummary",
     "DryRunPlanTagUpdate",
     "DryRunPlanTarget",
@@ -100,6 +102,7 @@ __all__ = [
     "PlanInputError",
     "UnmatchedDiagnostic",
     "build_dry_run_plan",
+    "build_dry_run_plan_from_pending_source",
     "build_unmatched_cleanup",
     "resolve_pending_groups",
 ]
@@ -117,6 +120,10 @@ class _PlanBuilder(_UpdateScopeMixin):
     digest_pin_label_rewrite_approvals: Sequence[DigestPinLabelRewriteApproval] = ()
     host_docker_base: Path | None = None
     command_runner: CommandRunner | None = None
+    source_parsed: ParsedWudFile | None = None
+    source_file: str | None = None
+    source_hash: str | None = None
+    source: DryRunPlanSource | None = None
     known_digest_provenance_by_service: _DigestProvenanceByService = field(
         default_factory=dict,
     )
@@ -142,11 +149,25 @@ class _PlanBuilder(_UpdateScopeMixin):
 
     def build(self) -> DryRunPlan:
         selected = _selected_line_numbers(self.line_numbers)
-        full_parse = _read_wud_file(self.config.wud_out_file)
+        if self.source_parsed is None:
+            full_parse = _read_wud_file(self.config.wud_out_file)
+            source_file = str(self.config.wud_out_file)
+            source_hash = _file_sha256(self.config.wud_out_file)
+            plan_source = DryRunPlanSource(source_hash=source_hash)
+        else:
+            full_parse = self.source_parsed
+            source_file = self.source_file or str(self.config.wud_out_file)
+            source_hash = self.source_hash or ""
+            plan_source = self.source or DryRunPlanSource(source_hash=source_hash)
+            if plan_source.source_hash != source_hash:
+                plan_source = replace(plan_source, source_hash=source_hash)
         _validate_selected_targets(full_parse, selected)
-        parsed = parse_wud_file(self.config.wud_out_file, selected_lines=selected)
+        parsed = (
+            parse_wud_file(self.config.wud_out_file, selected_lines=selected)
+            if self.source_parsed is None
+            else _parsed_for_selected_lines(full_parse, selected)
+        )
         parsed = self._apply_tag_overrides(parsed)
-        wud_file_hash = _file_sha256(self.config.wud_out_file)
 
         issues = [
             DryRunPlanIssue(
@@ -252,12 +273,13 @@ class _PlanBuilder(_UpdateScopeMixin):
             dry_run=True,
             can_apply=False,
             status=status,
-            source_file=str(self.config.wud_out_file),
+            source_file=source_file,
             mode=self.config.update_mode,
             max_wait=self.config.max_wait,
             digest_pin_updates=self.config.digest_pin_updates,
             selected_line_numbers=selected,
             summary=summary,
+            source=plan_source,
             targets=targets,
             stacks=plan_stacks,
             skipped=tuple(skipped),
@@ -275,7 +297,8 @@ class _PlanBuilder(_UpdateScopeMixin):
                     self.digest_pin_label_rewrite_approvals
                 ),
                 host_docker_base=self.host_docker_base,
-                wud_file_hash=wud_file_hash,
+                wud_file_hash=source_hash,
+                source_file=source_file,
             ),
         )
 
@@ -651,6 +674,40 @@ def build_dry_run_plan(
         digest_pin_label_rewrite_approvals=digest_pin_label_rewrite_approvals,
         host_docker_base=host_docker_base,
         command_runner=runner,
+        known_digest_provenance_by_service=known_digest_provenance_by_service or {},
+    ).build()
+
+
+def build_dry_run_plan_from_pending_source(
+    config: UpdaterConfig,
+    parsed: ParsedWudFile,
+    *,
+    source_file: str,
+    source_hash: str,
+    source: DryRunPlanSource,
+    line_numbers: Sequence[int],
+    allow_tag_updates: bool = False,
+    tag_overrides: Sequence[TagOverride] = (),
+    digest_pin_label_rewrite_approvals: Sequence[
+        DigestPinLabelRewriteApproval
+    ] = (),
+    host_docker_base: Path | None = None,
+    environ: Mapping[str, str] | None = None,
+    known_digest_provenance_by_service: _DigestProvenanceByService | None = None,
+) -> DryRunPlan:
+    runner = CommandRunner(env=environ) if environ is not None else CommandRunner()
+    return _PlanBuilder(
+        config=config,
+        line_numbers=line_numbers,
+        allow_tag_updates=allow_tag_updates,
+        tag_overrides=tag_overrides,
+        digest_pin_label_rewrite_approvals=digest_pin_label_rewrite_approvals,
+        host_docker_base=host_docker_base,
+        command_runner=runner,
+        source_parsed=parsed,
+        source_file=source_file,
+        source_hash=source_hash,
+        source=source,
         known_digest_provenance_by_service=known_digest_provenance_by_service or {},
     ).build()
 

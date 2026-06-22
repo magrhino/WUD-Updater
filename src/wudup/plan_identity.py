@@ -30,6 +30,7 @@ def _plan_id(
     digest_pin_label_rewrite_approvals: Sequence[DigestPinLabelRewriteApproval],
     host_docker_base: Path | None,
     wud_file_hash: str,
+    source_file: str | None = None,
 ) -> str:
     plan_payload = asdict(plan)
     plan_payload.pop("plan_id", None)
@@ -67,7 +68,7 @@ def _plan_id(
         "max_wait": config.max_wait,
         "mode": config.update_mode,
         "plan": plan_payload,
-        "source_file": str(config.wud_out_file),
+        "source_file": source_file or str(config.wud_out_file),
         "wud_file_sha256": wud_file_hash,
     }
     canonical = json.dumps(

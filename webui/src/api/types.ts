@@ -90,6 +90,19 @@ export interface WudApiConfigurationDiagnostics {
   registries: WudApiRegistryDiagnostics[];
 }
 
+export type PendingSourceMode = "file" | "api" | "auto";
+export type PendingSourceActive = "file" | "api";
+
+export interface PendingSourceInfo {
+  configured: PendingSourceMode;
+  active: PendingSourceActive;
+  label: string;
+  fresh: boolean;
+  degraded: boolean;
+  fallback_reason: string;
+  detail: string;
+}
+
 export interface PendingItem {
   line_no: number;
   raw: string;
@@ -103,6 +116,8 @@ export interface PendingItem {
   desired_tag: string;
   digest_provenance?: DigestTagProvenance | null;
   wud_metadata?: WudContainerMetadata | null;
+  source: PendingSourceActive;
+  source_id: string;
 }
 
 export interface PendingDiagnostic {
@@ -147,6 +162,7 @@ export interface PendingGrouping {
 
 export interface PendingResponse {
   source_file: string;
+  source: PendingSourceInfo;
   exists: boolean;
   count: number;
   items: PendingItem[];
@@ -360,6 +376,7 @@ export interface ReleaseNoteInfo {
 
 export interface ReleaseNotesResponse {
   source_file: string;
+  source: PendingSourceInfo;
   count: number;
   items: ReleaseNoteInfo[];
   wud_api: WudApiStatus;
@@ -549,6 +566,7 @@ export interface PlanResponse {
   can_apply: boolean;
   status: PlanStatus;
   source_file: string;
+  source: PendingSourceInfo;
   mode: string;
   max_wait: number;
   digest_pin_updates: boolean;
@@ -612,6 +630,7 @@ export interface StatusResponse {
   wud_file: string;
   wud_file_exists: boolean;
   pending_count: number;
+  pending_source: PendingSourceInfo;
   db_path: string;
   db_ready: boolean;
   auth_required: boolean;

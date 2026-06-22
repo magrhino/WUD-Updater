@@ -59,9 +59,11 @@ const {
   pendingLoaded,
   pendingLoadFailed,
   pendingLoading,
+  pendingSourceDegraded,
   pendingSourceDisplay,
   pendingSourceFile,
   pendingSourceLabel,
+  pendingSourceWarning,
   releaseChangelogFor,
   releaseNoteFor,
   riskCues,
@@ -418,6 +420,14 @@ onMounted(() => {
       </div>
       <n-tag size="small" :type="mutationStateType">{{ mutationStateLabel }}</n-tag>
     </div>
+
+    <n-alert
+      v-if="pendingSourceDegraded && pendingSourceWarning"
+      type="warning"
+      role="status"
+    >
+      {{ pendingSourceWarning }}
+    </n-alert>
 
     <CoreUpdateTourPanel
       step="pending_select"

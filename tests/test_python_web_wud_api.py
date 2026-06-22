@@ -354,6 +354,18 @@ def test_wud_api_startup_wait_rejects_invalid_values(
         )
 
 
+def test_pending_source_rejects_invalid_values(tmp_path: Path) -> None:
+    with pytest.raises(WebConfigError) as exc_info:
+        load_web_settings(
+            environ=_web_env(
+                tmp_path,
+                {"WUD_PENDING_SOURCE": "queue"},
+            ),
+        )
+
+    assert str(exc_info.value) == "WUD_PENDING_SOURCE must be one of: api, auto, file"
+
+
 def test_wud_api_snapshot_reports_auth_required_metadata(
     tmp_path: Path,
     monkeypatch,

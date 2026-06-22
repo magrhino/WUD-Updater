@@ -76,6 +76,9 @@ __all__ = (
     "PendingRemovalPlanResponse",
     "PendingRemovalRequest",
     "PendingResponse",
+    "PendingSourceActive",
+    "PendingSourceInfo",
+    "PendingSourceMode",
     "PendingStackGroup",
     "PendingUpdateRecord",
     "PlanAction",
@@ -257,6 +260,7 @@ class WebSettings:
     restart_container: str = ""
     wud_api_base_url: str = ""
     wud_api_startup_wait_seconds: float = 0.0
+    pending_source: PendingSourceMode = "file"
     command_env: Mapping[str, str] | None = None
 
     @property
@@ -369,6 +373,19 @@ class WudContainerMetadata(BaseModel):
     link: str
     error: str
 
+PendingSourceMode = Literal["file", "api", "auto"]
+PendingSourceActive = Literal["file", "api"]
+
+
+class PendingSourceInfo(BaseModel):
+    configured: PendingSourceMode = "file"
+    active: PendingSourceActive = "file"
+    label: str = "Pending file"
+    fresh: bool = True
+    degraded: bool = False
+    fallback_reason: str = ""
+    detail: str = ""
+
 
 class WudApiDiagnosticEndpointStatus(BaseModel):
     state: WudApiState = "unavailable"
@@ -447,6 +464,8 @@ class PendingItem(BaseModel):
     desired_tag: str
     digest_provenance: DigestTagProvenance | None = None
     wud_metadata: WudContainerMetadata | None = None
+    source: PendingSourceActive = "file"
+    source_id: str = ""
 
 
 class PendingDiagnostic(BaseModel):
@@ -485,6 +504,7 @@ class PendingGrouping(BaseModel):
 
 class PendingResponse(BaseModel):
     source_file: str
+    source: PendingSourceInfo = Field(default_factory=PendingSourceInfo)
     exists: bool
     count: int
     items: list[PendingItem] = Field(default_factory=list)
@@ -653,6 +673,7 @@ class ReleaseNoteInfo(BaseModel):
 
 class ReleaseNotesResponse(BaseModel):
     source_file: str
+    source: PendingSourceInfo = Field(default_factory=PendingSourceInfo)
     count: int
     items: list[ReleaseNoteInfo] = Field(default_factory=list)
     wud_api: WudApiStatus = Field(
@@ -675,6 +696,7 @@ class StatusResponse(BaseModel):
     wud_file: str
     wud_file_exists: bool
     pending_count: int
+    pending_source: PendingSourceInfo = Field(default_factory=PendingSourceInfo)
     db_path: str
     db_ready: bool
     auth_required: bool
@@ -1106,6 +1128,7 @@ class PlanResponse(BaseModel):
     can_apply: bool
     status: PlanStatus
     source_file: str
+    source: PendingSourceInfo = Field(default_factory=PendingSourceInfo)
     mode: str
     max_wait: int
     digest_pin_updates: bool

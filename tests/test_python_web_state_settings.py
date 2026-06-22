@@ -86,6 +86,7 @@ def test_settings_reports_effective_non_secret_configuration(
             "WUD_WEB_RESTART_CONTAINER": "wudup",
             "WUD_API_BASE_URL": "http://wud.internal:3000",
             "WUD_API_STARTUP_WAIT_SECONDS": "5",
+            "WUD_PENDING_SOURCE": "auto",
             **secret_values,
         },
     )
@@ -132,6 +133,13 @@ def test_settings_reports_effective_non_secret_configuration(
         "name": "WUD_API_STARTUP_WAIT_SECONDS",
         "value": "5",
         "default_value": "0",
+        "configured": True,
+        "source": "configured",
+    }
+    assert webui["WUD_PENDING_SOURCE"] == {
+        "name": "WUD_PENDING_SOURCE",
+        "value": "auto",
+        "default_value": "file",
         "configured": True,
         "source": "configured",
     }

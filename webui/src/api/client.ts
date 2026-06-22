@@ -12,6 +12,9 @@ export type {
   WudApiWatcherDiagnostics,
   WudApiRegistryDiagnostics,
   WudApiConfigurationDiagnostics,
+  PendingSourceMode,
+  PendingSourceActive,
+  PendingSourceInfo,
   // Pending updates
   PendingItem,
   PendingDiagnostic,

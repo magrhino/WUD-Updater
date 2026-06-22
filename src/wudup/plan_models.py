@@ -4,8 +4,12 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
 
 from .digest_provenance import DigestTagProvenance
+
+if TYPE_CHECKING:
+    from .web_models import PendingSourceActive, PendingSourceMode
 
 
 class PlanInputError(ValueError):
@@ -182,6 +186,18 @@ class DryRunPlanCleanup:
 
 
 @dataclass(frozen=True)
+class DryRunPlanSource:
+    configured: PendingSourceMode = "file"
+    active: PendingSourceActive = "file"
+    label: str = "Pending file"
+    fresh: bool = True
+    degraded: bool = False
+    fallback_reason: str = ""
+    detail: str = ""
+    source_hash: str = ""
+
+
+@dataclass(frozen=True)
 class DryRunPlan:
     plan_id: str
     dry_run: bool
@@ -193,6 +209,7 @@ class DryRunPlan:
     digest_pin_updates: bool
     selected_line_numbers: tuple[int, ...]
     summary: DryRunPlanSummary
+    source: DryRunPlanSource = field(default_factory=DryRunPlanSource)
     targets: tuple[DryRunPlanTarget, ...] = ()
     stacks: tuple[DryRunPlanStack, ...] = ()
     skipped: tuple[DryRunPlanSkipped, ...] = ()

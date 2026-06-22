@@ -64,6 +64,45 @@ def _client(
     return TestClient(create_app(environ=values))
 
 
+def _wud_api_container(
+    *,
+    name: str = "app",
+    image: str = "repo/app",
+    tag: str = "1.0",
+    remote_tag: str = "2.0",
+    remote_digest: str = "",
+    update_kind: str = "tag",
+) -> dict[str, object]:
+    return {
+        "id": f"docker.local.{name}",
+        "name": name,
+        "displayName": name.title(),
+        "status": "running",
+        "watcher": "local",
+        "image": {
+            "name": image,
+            "tag": {"value": tag},
+            "digest": {"value": "sha256:old"},
+        },
+        "result": {
+            "tag": remote_tag,
+            "digest": remote_digest,
+            "link": "https://github.com/acme/app/releases/tag/v2.0",
+        },
+        "updateKind": {
+            "kind": update_kind,
+            "localValue": tag,
+            "remoteValue": remote_tag or remote_digest,
+            "semverDiff": "major",
+        },
+        "labels": {
+            "org.opencontainers.image.source": "https://github.com/acme/app",
+        },
+        "error": {"message": ""},
+        "updateAvailable": True,
+    }
+
+
 def _doctor_client(
     tmp_path: Path,
     env: dict[str, str] | None = None,
@@ -111,7 +150,7 @@ def _install_wud_api(
     monkeypatch,
     *,
     health: WudApiResponse = (200, {"status": "ok"}),
-    containers: WudApiResponse = (200, ()),
+    containers: WudApiResponse | list[dict[str, object]] = (200, ()),
     app: WudApiResponse = (200, {"name": "wud", "version": "5.0.0"}),
     log: WudApiResponse = (200, {"level": "debug"}),
     store: WudApiResponse = (
@@ -144,7 +183,10 @@ def _install_wud_api(
             }
         ],
     ),
+    health_error: Exception | None = None,
 ) -> None:
+    if health_error is not None:
+        health = health_error
     responses = {
         "/health": health,
         "/api/containers": containers,
@@ -165,10 +207,20 @@ def _install_wud_api(
     monkeypatch.setattr(web_wud_api, "_request_json", fake_request_json)
 
 
-def _wud_api_response(url: str, response: WudApiResponse) -> object:
+def _wud_api_response(
+    url: str,
+    response: WudApiResponse | list[dict[str, object]],
+) -> object:
     if isinstance(response, Exception):
         raise response
-    status, payload = response
+    if (
+        isinstance(response, tuple)
+        and len(response) == 2
+        and isinstance(response[0], int)
+    ):
+        status, payload = response
+    else:
+        status, payload = 200, response
     if status >= 400:
         raise urllib.error.HTTPError(url, status, "test WUD API error", {}, None)
     json.dumps(payload)

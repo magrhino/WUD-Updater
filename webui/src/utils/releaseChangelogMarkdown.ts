@@ -149,7 +149,7 @@ function isTagBoundary(value: string | undefined): boolean {
   if (value === undefined) {
     return true;
   }
-  const code = value.charCodeAt(0);
+  const code = value.codePointAt(0) ?? 0;
   return !(
     (code >= 48 && code <= 57) ||
     (code >= 65 && code <= 90) ||

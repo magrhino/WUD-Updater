@@ -13,7 +13,7 @@ from fastapi import HTTPException, Request
 
 from .command import CommandError, CommandRunner
 from .db import DatabaseError, init_db, open_db
-from . import web_wud_api
+from . import web_pending_sources, web_wud_api
 from .docker_cli import ContainerImage, DockerCli
 from .images import (
     image_has_tag,
@@ -41,8 +41,12 @@ from .web_database import (
     ReadOnlyDatabaseMissing,
     connect_readonly_db as _connect_readonly_db,
 )
-from .web_models import ReleaseNoteInfo, ReleaseNotesResponse, WebSettings
-from .web_pending import parse_pending_file
+from .web_models import (
+    ReleaseNoteInfo,
+    ReleaseNotesResponse,
+    WebSettings,
+    WudApiStatus,
+)
 from .wud_file import WudTarget
 
 
@@ -56,6 +60,7 @@ class _ReleaseNotesRequestContext:
     targets: tuple[WudTarget, ...]
     warnings: tuple[str, ...]
     wud_api: Any
+    source: web_pending_sources.PendingSourceResult
     source_resolver: ReleaseNoteSourceResolver
     target_tag_resolver: ReleaseNoteTargetTagResolver
 
@@ -95,6 +100,7 @@ def api_release_notes(request: Request) -> ReleaseNotesResponse:
         items,
         context.warnings,
         wud_api=context.wud_api,
+        source=context.source,
     )
 
 
@@ -128,31 +134,43 @@ def api_refresh_release_notes(request: Request) -> ReleaseNotesResponse:
         items,
         context.warnings,
         wud_api=context.wud_api,
+        source=context.source,
     )
 
 
 def _release_notes_request_context(
     settings: WebSettings,
 ) -> _ReleaseNotesRequestContext | ReleaseNotesResponse:
-    wud_snapshot = web_wud_api.get_snapshot(settings, include_containers=True)
-    exists, parsed = parse_pending_file(settings)
-    if not exists:
+    try:
+        source = web_pending_sources.resolve_pending_source(
+            settings,
+            include_wud_metadata=True,
+        )
+    except OSError as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=_safe_exception_detail(
+                settings,
+                "could not read pending source",
+                exc,
+            ),
+        ) from exc
+    parsed = source.parsed
+    if not parsed.targets:
         return ReleaseNotesResponse(
-            source_file=str(settings.config.wud_out_file),
+            source_file=source.source_file,
+            source=source.response_source(),
             count=0,
             items=[],
-            wud_api=wud_snapshot.status,
-            warnings=list(parsed.warnings),
+            wud_api=_wud_api_status(source),
+            warnings=list(source.warnings),
         )
-    wud_metadata = web_wud_api.metadata_by_target(
-        settings,
-        parsed.targets,
-        snapshot=wud_snapshot,
-    )
+    wud_metadata = dict(source.metadata_by_line or {})
     return _ReleaseNotesRequestContext(
         targets=parsed.targets,
-        warnings=parsed.warnings,
-        wud_api=wud_snapshot.status,
+        warnings=source.warnings,
+        wud_api=_wud_api_status(source),
+        source=source,
         source_resolver=release_note_source_resolver(
             settings,
             wud_metadata=wud_metadata,
@@ -169,6 +187,7 @@ def release_notes_response(
     warnings: Iterable[str],
     *,
     wud_api: Any,
+    source: web_pending_sources.PendingSourceResult,
 ) -> ReleaseNotesResponse:
     redacted_items: list[ReleaseNoteInfo] = []
     for item in items:
@@ -176,11 +195,23 @@ def release_notes_response(
         data["error"] = _redact_sensitive_text(settings, str(data.get("error", "")))
         redacted_items.append(ReleaseNoteInfo.model_validate(data))
     return ReleaseNotesResponse(
-        source_file=str(settings.config.wud_out_file),
+        source_file=source.source_file,
+        source=source.response_source(),
         count=len(items),
         items=redacted_items,
         wud_api=wud_api,
         warnings=[_redact_sensitive_text(settings, warning) for warning in warnings],
+    )
+
+
+def _wud_api_status(source: web_pending_sources.PendingSourceResult) -> WudApiStatus:
+    if source.wud_snapshot is not None:
+        return source.wud_snapshot.status
+    return WudApiStatus(
+        state="unavailable",
+        available=False,
+        metadata_available=False,
+        last_checked_at="",
     )
 
 

@@ -17,8 +17,9 @@ The WebUI container serves the FastAPI backend and packaged Vue SPA from the
 same image. WUD records pending image updates into a shared todo file, and the
 WebUI reads that file to show pending updates and prepare apply plans. When WUD
 shares the Compose app network, the WebUI also probes WUD's internal API for
-display metadata; if that API is unavailable, the todo file remains the source
-of truth.
+display metadata. Experimental WebUI-only `WUD_PENDING_SOURCE=api|auto` modes
+can derive pending entries from that API, but the callback todo file remains the
+default source of truth and the host CLI stays file-based.
 
 ```text
 WUD detects an image update

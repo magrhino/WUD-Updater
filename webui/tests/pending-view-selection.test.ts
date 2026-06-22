@@ -8,6 +8,7 @@ import {
   pendingGrouping,
   pendingItem,
   pendingResponse,
+  pendingSourceInfo,
   planResponse,
   snooze,
 } from "./helpers/fixtures";
@@ -318,6 +319,136 @@ describe("pending view selection actions", () => {
     await removalButton?.trigger("click");
 
     expect(createRemovalPlan).not.toHaveBeenCalled();
+  });
+
+  it("disables selected pending removal for API pending source", async () => {
+    const item = pendingItem({
+      source: "api",
+      source_id: "docker.local.app",
+    });
+    const { pinia, settings, updates } = setupStores(true);
+    updates.pending = {
+      ...pendingResponse([item]),
+      source_file: "WUD API",
+      source: pendingSourceInfo({
+        configured: "api",
+        active: "api",
+        label: "WUD API",
+      }),
+    };
+    mockPendingLifecycle(settings, updates);
+    const createRemovalPlan = vi.spyOn(updates, "createRemovalPlan");
+    const wrapper = mountPendingView(pinia);
+
+    await wrapper
+      .find('input[aria-label="Select stack media"]')
+      .setValue(true);
+    await flushPromises();
+
+    expect(wrapper.text()).toContain(
+      "WUD API entries cannot be removed from the WebUI because this source is read from WUD.",
+    );
+    const removalButton = wrapper
+      .findAll("button")
+      .find((button) => button.text().includes("Remove 1 selected entry"));
+    expect(removalButton?.attributes("disabled")).toBeDefined();
+    await removalButton?.trigger("click");
+
+    expect(createRemovalPlan).not.toHaveBeenCalled();
+  });
+
+  it("disables unmatched cleanup for API pending source", async () => {
+    const item = {
+      ...unmatchedPendingItem(),
+      source: "api" as const,
+      source_id: "docker.local.old",
+    };
+    const { pinia, settings, updates } = setupStores(true);
+    updates.pending = {
+      ...pendingWithUnmatched(item),
+      source_file: "WUD API",
+      source: pendingSourceInfo({
+        configured: "api",
+        active: "api",
+        label: "WUD API",
+      }),
+    };
+    mockPendingLifecycle(settings, updates);
+    vi.spyOn(updates, "createPlan").mockImplementation(async () => {
+      updates.plan = planResponse({
+        can_apply: false,
+        status: "blocked",
+        summary: {
+          target_count: 1,
+          matched_target_count: 0,
+          stack_count: 0,
+          service_count: 0,
+          skipped_count: 1,
+          issue_count: 1,
+        },
+        stacks: [],
+        issues: [
+          {
+            severity: "error",
+            code: "unmatched",
+            message: "No Compose service matched repo/old:latest.",
+            line_no: 1,
+            stack: "",
+            service: "",
+            hint: item.diagnostic?.hint ?? "",
+            details: {},
+          },
+        ],
+        skipped: [
+          {
+            line_no: 1,
+            raw: "repo/old:latest",
+            image: "repo/old:latest",
+            desired_tag: "",
+            reason: "unmatched",
+          },
+        ],
+        cleanup: {
+          cleanup_id: "cleanup-test",
+          can_remove_unmatched: false,
+          items: [
+            {
+              line_no: 1,
+              raw: "repo/old:latest",
+              image: "repo/old:latest",
+              desired_tag: "",
+              digest: "",
+              reason: "unmatched",
+              diagnostic: item.diagnostic,
+            },
+          ],
+        },
+      });
+    });
+    const cleanupPending = vi.spyOn(updates, "cleanupPending");
+    const wrapper = mountPendingView(pinia);
+
+    await wrapper
+      .find('input[aria-label="Select update repo/old:latest"]')
+      .setValue(true);
+    await wrapper
+      .findAll("button")
+      .find((button) => button.text().includes("Preview selected plan"))
+      ?.trigger("click");
+    await flushPromises();
+
+    const dialog = wrapper.find('[role="dialog"]');
+    expect(dialog.text()).toContain("Unmatched pending entries");
+    expect(dialog.text()).toContain(
+      "WUD API entries cannot be removed from the WebUI because this source is read from WUD.",
+    );
+    const cleanupButton = dialog
+      .findAll("button")
+      .find((button) => button.text().includes("Remove 1 unmatched entry"));
+    expect(cleanupButton?.attributes("disabled")).toBeDefined();
+    await cleanupButton?.trigger("click");
+
+    expect(cleanupPending).not.toHaveBeenCalled();
   });
 
   it("confirms selected pending removal before refreshing pending state", async () => {

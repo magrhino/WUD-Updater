@@ -12,7 +12,7 @@ from typing import Any, Protocol
 
 from fastapi import HTTPException, Request
 
-from . import web_database, web_jobs, web_wud_api
+from . import web_database, web_jobs, web_pending_sources, web_wud_api
 from .command import CommandRunner
 from .compose import ComposeCli, ComposeDiscoveryError
 from .config import ConfigError, UpdaterConfig
@@ -87,6 +87,7 @@ def api_pending_cleanup(
     active_error = web_jobs._active_mutation_error(request)
     if active_error:
         raise HTTPException(status_code=409, detail=active_error)
+    _require_file_pending_source(settings, operation="cleanup")
 
     payload_lines = _cleanup_payload_lines(payload)
     wud_lock = web_jobs._acquire_apply_wud_lock(settings)
@@ -175,6 +176,7 @@ def api_pending_removal_plan(
     request: Request,
 ) -> PendingRemovalPlanResponse:
     settings = _settings(request)
+    _require_file_pending_source(settings, operation="removal")
     try:
         parsed = parse_wud_file(settings.config.wud_out_file)
         return pending_removal_plan(settings, payload.line_numbers, parsed=parsed)
@@ -203,6 +205,7 @@ def api_pending_removal(
     active_error = web_jobs._active_mutation_error(request)
     if active_error:
         raise HTTPException(status_code=409, detail=active_error)
+    _require_file_pending_source(settings, operation="removal")
 
     payload_lines = _removal_payload_lines(payload)
     wud_lock = web_jobs._acquire_apply_wud_lock(settings)
@@ -290,23 +293,31 @@ def pending_response(
     include_grouping: bool = True,
     include_wud_metadata: bool = True,
 ) -> PendingResponse:
-    exists, parsed = parse_pending_file(settings)
-    wud_snapshot = (
-        web_wud_api.get_snapshot(settings, include_containers=True)
-        if include_wud_metadata
-        else None
-    )
-    wud_metadata = (
-        web_wud_api.metadata_by_target(settings, parsed.targets, snapshot=wud_snapshot)
-        if wud_snapshot is not None
-        else {}
-    )
+    try:
+        source = web_pending_sources.resolve_pending_source(
+            settings,
+            include_wud_metadata=include_wud_metadata,
+        )
+    except OSError as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=_safe_exception_detail(
+                settings,
+                "could not read pending source",
+                exc,
+            ),
+        ) from exc
+    parsed = source.parsed
+    wud_metadata = dict(source.metadata_by_line or {})
     wud_metadata_by_line = web_wud_api.metadata_response_by_line(wud_metadata)
+    source_ids_by_line = dict(source.source_ids_by_line or {})
     grouping = (
         _pending_grouping_response(
             settings,
             parsed,
             wud_metadata_by_line=wud_metadata_by_line,
+            source=source.active,
+            source_ids_by_line=source_ids_by_line,
         )
         if include_grouping
         else PendingGrouping(status="unavailable")
@@ -326,17 +337,20 @@ def pending_response(
             desired_tag=target.desired_tag,
             digest_provenance=provenance_by_line.get(target.line_no),
             wud_metadata=wud_metadata_by_line.get(target.line_no),
+            source=source.active,
+            source_id=source_ids_by_line.get(target.line_no, ""),
         )
         for target in parsed.targets
     ]
     return PendingResponse(
-        source_file=str(settings.config.wud_out_file),
-        exists=exists,
+        source_file=source.source_file,
+        source=source.response_source(),
+        exists=source.exists,
         count=len(items),
         items=items,
         grouping=grouping,
-        wud_api=_wud_api_status(wud_snapshot),
-        warnings=list(parsed.warnings),
+        wud_api=_wud_api_status(source.wud_snapshot),
+        warnings=list(source.warnings),
     )
 
 
@@ -436,6 +450,26 @@ def parse_pending_file(settings: WebSettings) -> tuple[bool, ParsedWudFile]:
         ) from exc
 
 
+def _require_file_pending_source(settings: WebSettings, *, operation: str) -> None:
+    try:
+        source = web_pending_sources.resolve_pending_source(settings)
+    except OSError as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=_safe_exception_detail(
+                settings,
+                f"could not verify pending {operation} source",
+                exc,
+            ),
+        ) from exc
+    if source.active == "file":
+        return
+    raise HTTPException(
+        status_code=409,
+        detail=f"pending {operation} only supports WUD_OUT_FILE source",
+    )
+
+
 def _effective_config(settings: WebSettings) -> UpdaterConfig:
     if _effective_config_loader is None:
         return settings.config
@@ -457,6 +491,8 @@ def _pending_grouping_response(
     parsed: ParsedWudFile,
     *,
     wud_metadata_by_line: dict[int, Any],
+    source: str,
+    source_ids_by_line: dict[int, str],
 ) -> PendingGrouping:
     grouping = resolve_pending_groups(
         _effective_config(settings),
@@ -479,14 +515,24 @@ def _pending_grouping_response(
                 services=list(group.services),
                 line_numbers=list(group.line_numbers),
                 items=[
-                    _pending_grouped_item(item, wud_metadata_by_line)
+                    _pending_grouped_item(
+                        item,
+                        wud_metadata_by_line,
+                        source=source,
+                        source_ids_by_line=source_ids_by_line,
+                    )
                     for item in group.items
                 ],
             )
             for group in grouping.groups
         ],
         unmatched=[
-            _pending_grouped_item(item, wud_metadata_by_line)
+            _pending_grouped_item(
+                item,
+                wud_metadata_by_line,
+                source=source,
+                source_ids_by_line=source_ids_by_line,
+            )
             for item in grouping.unmatched
         ],
         warnings=list(grouping.warnings),
@@ -496,6 +542,9 @@ def _pending_grouping_response(
 def _pending_grouped_item(
     item: Any,
     wud_metadata_by_line: dict[int, Any],
+    *,
+    source: str,
+    source_ids_by_line: dict[int, str],
 ) -> PendingGroupedItem:
     return PendingGroupedItem(
         line_no=item.line_no,
@@ -524,6 +573,8 @@ def _pending_grouped_item(
             else asdict(item.digest_provenance)
         ),
         wud_metadata=wud_metadata_by_line.get(item.line_no),
+        source=source,
+        source_id=source_ids_by_line.get(item.line_no, ""),
     )
 
 
