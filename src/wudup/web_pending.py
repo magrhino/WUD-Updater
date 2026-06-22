@@ -345,6 +345,7 @@ def pending_response(
     return PendingResponse(
         source_file=source.source_file,
         source=source.response_source(),
+        source_hash=source.source_hash,
         exists=source.exists,
         count=len(items),
         items=items,
@@ -834,6 +835,7 @@ def _insert_pending_cleanup_audit(
             ),
         )
     return run_id
+
 
 def _insert_pending_removal_audit(
     conn: sqlite3.Connection,

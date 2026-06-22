@@ -105,7 +105,7 @@ def test_wud_api_snapshot_reads_update_metadata(tmp_path: Path, monkeypatch) -> 
     )
 
     snapshot = web_wud_api.get_snapshot(
-        _settings(tmp_path, "http://wud.test:3000"),
+        _settings(tmp_path, "https://wud.test:3000"),
         include_containers=True,
         force=True,
     )
@@ -294,7 +294,7 @@ def test_wud_api_snapshot_reports_unreachable_state(
     _install_wud_api(monkeypatch, health=OSError("connection refused"))
 
     snapshot = web_wud_api.get_snapshot(
-        _settings(tmp_path, "http://wud.unreachable.test:3000"),
+        _settings(tmp_path, "https://wud.unreachable.test:3000"),
         include_containers=True,
         force=True,
     )
@@ -376,7 +376,7 @@ def test_wud_api_snapshot_reports_auth_required_metadata(
     )
 
     snapshot = web_wud_api.get_snapshot(
-        _settings(tmp_path, "http://wud.auth.test:3000"),
+        _settings(tmp_path, "https://wud.auth.test:3000"),
         include_containers=True,
         force=True,
     )
@@ -394,7 +394,7 @@ def test_wud_api_snapshot_rejects_invalid_container_payload(
     _install_wud_api(monkeypatch, containers=(200, {"items": []}))
 
     snapshot = web_wud_api.get_snapshot(
-        _settings(tmp_path, "http://wud.invalid.test:3000"),
+        _settings(tmp_path, "https://wud.invalid.test:3000"),
         include_containers=True,
         force=True,
     )
@@ -410,7 +410,7 @@ def test_wud_api_snapshot_reports_degraded_after_ready_cache_expires(
     monkeypatch,
 ) -> None:
     api = _ToggleableWudApi(monkeypatch, reachable=True)
-    settings = _settings(tmp_path, "http://wud.cache-expiry.test:3000")
+    settings = _settings(tmp_path, "https://wud.cache-expiry.test:3000")
 
     ready = web_wud_api.get_snapshot(
         settings,
@@ -439,7 +439,7 @@ def test_wud_api_degraded_snapshot_retries_after_short_interval_and_recovers(
     monkeypatch,
 ) -> None:
     api = _ToggleableWudApi(monkeypatch, reachable=False)
-    settings = _settings(tmp_path, "http://wud.retry.test:3000")
+    settings = _settings(tmp_path, "https://wud.retry.test:3000")
 
     unavailable = web_wud_api.get_snapshot(
         settings,
@@ -477,7 +477,7 @@ def test_web_startup_continues_when_wud_api_is_unavailable(
         tmp_path,
         {
             "WUD_WEB_DEV_NO_AUTH": "true",
-            "WUD_API_BASE_URL": "http://wud.startup.test:3000",
+            "WUD_API_BASE_URL": "https://wud.startup.test:3000",
         },
     )
 
@@ -498,7 +498,7 @@ def test_pending_endpoint_enriches_items_from_wud_metadata(
         tmp_path,
         {
             "WUD_WEB_DEV_NO_AUTH": "true",
-            "WUD_API_BASE_URL": "http://wud.pending.test:3000",
+            "WUD_API_BASE_URL": "https://wud.pending.test:3000",
         },
     )
     wud_file = tmp_path / "state" / "images.todo"
@@ -527,7 +527,7 @@ def test_pending_endpoint_keeps_images_todo_fallback_when_wud_unavailable(
         tmp_path,
         {
             "WUD_WEB_DEV_NO_AUTH": "true",
-            "WUD_API_BASE_URL": "http://wud.fallback.test:3000",
+            "WUD_API_BASE_URL": "https://wud.fallback.test:3000",
         },
     )
     wud_file = tmp_path / "state" / "images.todo"
@@ -552,7 +552,7 @@ def test_pending_endpoint_falls_back_after_wud_api_connection_loss(
         tmp_path,
         {
             "WUD_WEB_DEV_NO_AUTH": "true",
-            "WUD_API_BASE_URL": "http://wud.pending-loss.test:3000",
+            "WUD_API_BASE_URL": "https://wud.pending-loss.test:3000",
         },
     )
     wud_file = tmp_path / "state" / "images.todo"
@@ -640,7 +640,7 @@ def test_release_notes_refresh_uses_wud_source_and_safe_remote_tag(
         tmp_path,
         {
             "WUD_WEB_DEV_NO_AUTH": "true",
-            "WUD_API_BASE_URL": "http://wud.release-notes.test:3000",
+            "WUD_API_BASE_URL": "https://wud.release-notes.test:3000",
         },
     )
     wud_file = tmp_path / "state" / "images.todo"

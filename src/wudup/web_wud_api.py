@@ -104,6 +104,14 @@ class WudApiSnapshot:
     checked_monotonic: float = 0.0
 
 
+@dataclass(frozen=True)
+class WudApiWatchResult:
+    snapshot: WudApiSnapshot
+    watched: bool
+    requested_count: int = 0
+    watched_count: int = 0
+
+
 WudApiConfigurationSnapshot = web_wud_config.WudApiConfigurationSnapshot
 
 
@@ -227,6 +235,28 @@ def metadata_by_target(
         if match is not None:
             result[target.line_no] = match
     return result
+
+
+def watch_all(settings: WebSettings) -> WudApiWatchResult:
+    return _watch_paths(settings, ("/api/containers/watch",))
+
+
+def watch_containers(
+    settings: WebSettings,
+    container_ids: Sequence[str],
+) -> WudApiWatchResult:
+    paths = tuple(
+        f"/api/containers/{urllib.parse.quote(container_id, safe='')}/watch"
+        for container_id in container_ids
+    )
+    if not paths:
+        return WudApiWatchResult(
+            snapshot=get_snapshot(settings, include_containers=True, force=True),
+            watched=False,
+            requested_count=0,
+            watched_count=0,
+        )
+    return _watch_paths(settings, paths)
 
 
 def metadata_response_by_line(
@@ -448,6 +478,125 @@ def _refresh_configuration_diagnostics(
     return snapshot
 
 
+def _watch_paths(
+    settings: WebSettings,
+    paths: Sequence[str],
+) -> WudApiWatchResult:
+    checked_at = _utc_timestamp()
+    checked_monotonic = time.monotonic()
+    base_url = settings.wud_api_base_url or DEFAULT_WUD_API_BASE_URL
+    try:
+        normalized_base_url = _normalize_base_url(base_url)
+    except ValueError as exc:
+        snapshot = _snapshot(
+            WUD_API_STATE_ERROR,
+            available=False,
+            metadata_available=False,
+            checked_at=checked_at,
+            detail=_sanitize_detail(settings, f"invalid WUD API base URL: {exc}"),
+            checked_monotonic=checked_monotonic,
+            metadata_checked=True,
+        )
+        _store_snapshot(base_url, snapshot)
+        return WudApiWatchResult(
+            snapshot=snapshot,
+            watched=False,
+            requested_count=len(paths),
+            watched_count=0,
+        )
+
+    preflight = get_snapshot(settings, include_containers=False, force=True)
+    if preflight.status.state != WUD_API_STATE_READY:
+        return WudApiWatchResult(
+            snapshot=preflight,
+            watched=False,
+            requested_count=len(paths),
+            watched_count=0,
+        )
+
+    watched_count = 0
+    for path in paths:
+        try:
+            _post_json(_join_url(normalized_base_url, path))
+            watched_count += 1
+        except urllib.error.HTTPError as exc:
+            snapshot = _watch_http_error_snapshot(
+                settings,
+                base_url=base_url,
+                code=exc.code,
+                checked_at=_utc_timestamp(),
+                checked_monotonic=time.monotonic(),
+            )
+            return WudApiWatchResult(
+                snapshot=snapshot,
+                watched=False,
+                requested_count=len(paths),
+                watched_count=watched_count,
+            )
+        except (OSError, ValueError) as exc:
+            snapshot = _snapshot(
+                WUD_API_STATE_ERROR,
+                available=True,
+                metadata_available=False,
+                checked_at=_utc_timestamp(),
+                detail=_sanitize_detail(
+                    settings,
+                    f"WUD API watch request failed: {exc}",
+                ),
+                checked_monotonic=time.monotonic(),
+                metadata_checked=True,
+            )
+            _store_snapshot(base_url, snapshot)
+            return WudApiWatchResult(
+                snapshot=snapshot,
+                watched=False,
+                requested_count=len(paths),
+                watched_count=watched_count,
+            )
+
+    return WudApiWatchResult(
+        snapshot=get_snapshot(settings, include_containers=True, force=True),
+        watched=True,
+        requested_count=len(paths),
+        watched_count=watched_count,
+    )
+
+
+def _watch_http_error_snapshot(
+    settings: WebSettings,
+    *,
+    base_url: str,
+    code: int,
+    checked_at: str,
+    checked_monotonic: float,
+) -> WudApiSnapshot:
+    if code in {401, 403}:
+        snapshot = _snapshot(
+            WUD_API_STATE_AUTH_REQUIRED,
+            available=True,
+            metadata_available=False,
+            checked_at=checked_at,
+            detail="WUD API watch request requires authentication",
+            checked_monotonic=checked_monotonic,
+            metadata_checked=True,
+        )
+    else:
+        snapshot = _snapshot(
+            WUD_API_STATE_ERROR,
+            available=True,
+            metadata_available=False,
+            checked_at=checked_at,
+            detail=_sanitize_detail(
+                settings,
+                f"WUD API watch request returned HTTP {code}",
+            ),
+            checked_monotonic=checked_monotonic,
+            metadata_checked=True,
+        )
+    _store_snapshot(base_url, snapshot)
+    return snapshot
+
+
 def _store_configuration_diagnostics(
     base_url: str,
     snapshot: WudApiConfigurationSnapshot,
@@ -487,8 +636,17 @@ def _snapshot(
 
 
 def _request_json(url: str) -> object:
+    return _request_json_with_method(url, method="GET")
+
+
+def _post_json(url: str) -> object:
+    return _request_json_with_method(url, method="POST")
+
+
+def _request_json_with_method(url: str, *, method: str) -> object:
     request = urllib.request.Request(
         url,
+        method=method,
         headers={
             "Accept": "application/json",
             "User-Agent": WUD_API_USER_AGENT,

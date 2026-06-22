@@ -24,6 +24,7 @@ Prefer small modules with one clear reason to change:
 | Web diagnostics support bundle and apply preflight | `web_diagnostics.py` | Preserve support-bundle redaction and apply preflight missing-check aggregation, status codes, failures, and warnings. |
 | Web onboarding checklist and core update tour | `web_onboarding.py` | Preserve auth/CSRF behavior, dismissed-onboarding short-circuiting, SQLite setting keys, and read-only-mode tour persistence. |
 | Web read-only database helpers | `web_database.py` | Preserve read-only SQLite URI handling, schema validation, and database readiness messages. |
+| Web pending reads, cleanup, removal, and WUD rescans | `web_pending.py`, `web_pending_rescan*.py` | Keep WUD rescan non-file-mutating; preserve source hashes, stale selection checks, WUD locks, audit records, and WUD API degradation handling. |
 | Web apply jobs, streams, plan apply | `web_jobs.py` | Preserve one-job-at-a-time, stale-plan rejection, WUD locks, audit, and progress events. |
 | Web auto-update scheduler | `web_scheduler.py` | Keep disabled unless mutations are enabled; preserve reservations and timing behavior. |
 | Web self-update and container restart | `web_self_update.py` | Preserve plan TTL, image/tag validation, restart validation, audit, and redaction. |

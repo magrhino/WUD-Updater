@@ -156,6 +156,7 @@ describe("demo web API", () => {
     const pending = await api.pending();
     expect(pending.count).toBe(7);
     expect(pending.source_file).toBe("demo/out/images.todo");
+    expect(pending.source_hash).toMatch(/^[a-f0-9]{64}$/);
     expect(pending.grouping.groups.map((group) => group.name)).toEqual([
       "data",
       "home",
@@ -657,6 +658,69 @@ describe("demo web API", () => {
     await expect(
       api.removeSelectedPending(plan.removal_id, selected, "csrf"),
     ).rejects.toThrow("removal is stale");
+  });
+
+  it("blocks WUD rescans in static demo mode without changing pending state", async () => {
+    const api = createDemoWebApi();
+    const pending = await api.pending();
+    const line = pending.items[0];
+
+    expect(line).toBeDefined();
+    if (!line) {
+      throw new Error("Expected demo pending fixture to include a pending item");
+    }
+    expect(pending.source_hash).toEqual(expect.any(String));
+    expect(pending.source_hash).not.toBe("");
+    expect(line.line_no).toEqual(expect.any(Number));
+    expect(line.raw).not.toBe("");
+    expect(line.source_id).not.toBe("");
+    expect(line.wud_metadata).toEqual(
+      expect.objectContaining({ id: expect.any(String) }),
+    );
+    expect(line.wud_metadata?.id).not.toBe("");
+    if (!pending.source_hash || !line.wud_metadata?.id) {
+      throw new Error("Expected demo pending fixture to include rescan metadata");
+    }
+    const selected = await api.rescanPending(
+      "selected",
+      [
+        {
+          line_no: line.line_no,
+          raw: line.raw,
+          source_id: line.source_id,
+          source_hash: pending.source_hash,
+          container_id: line.wud_metadata.id,
+        },
+      ],
+      "csrf",
+    );
+    const all = await api.rescanPending("all", [], "csrf");
+
+    expect(selected).toMatchObject({
+      status: "blocked",
+      audit_run_id: 0,
+      scope: "selected",
+      requested_count: 1,
+      watched_count: 0,
+      skipped: [],
+      wud_api: {
+        detail: "Static demo mode cannot trigger WUD rescans.",
+      },
+    });
+    expect(all).toMatchObject({
+      status: "blocked",
+      audit_run_id: 0,
+      scope: "all",
+      requested_count: 0,
+      watched_count: 0,
+      skipped: [],
+      wud_api: {
+        detail: "Static demo mode cannot trigger WUD rescans.",
+      },
+    });
+    expect((await api.pending()).items.map((item) => item.line_no)).toEqual(
+      pending.items.map((item) => item.line_no),
+    );
   });
 
   it("streams apply jobs and updates pending state and run history", async () => {

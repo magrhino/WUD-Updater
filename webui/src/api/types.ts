@@ -163,6 +163,7 @@ export interface PendingGrouping {
 export interface PendingResponse {
   source_file: string;
   source: PendingSourceInfo;
+  source_hash?: string;
   exists: boolean;
   count: number;
   items: PendingItem[];
@@ -186,6 +187,33 @@ export interface PendingCleanupResponse {
   audit_run_id: number;
   removed_count: number;
   removed: PendingCleanupRemovedLine[];
+}
+
+export type PendingRescanScope = "all" | "selected";
+export type PendingRescanStatus = "success" | "partial" | "blocked";
+
+export interface PendingRescanSkippedLine {
+  line_no: number;
+  raw: string;
+  reason: string;
+}
+
+export interface PendingRescanLine {
+  line_no: number;
+  raw: string;
+  source_id: string;
+  source_hash: string;
+  container_id: string;
+}
+
+export interface PendingRescanResponse {
+  status: PendingRescanStatus;
+  audit_run_id: number;
+  scope: PendingRescanScope;
+  requested_count: number;
+  watched_count: number;
+  skipped: PendingRescanSkippedLine[];
+  wud_api: WudApiStatus;
 }
 
 export interface PendingRemovalPlanLine {

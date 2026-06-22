@@ -44,6 +44,7 @@ class PendingSourceResult:
     warnings: tuple[str, ...] = ()
     wud_snapshot: web_wud_api.WudApiSnapshot | None = None
     metadata_by_line: Mapping[int, web_wud_api.WudApiContainer] | None = None
+    container_ids_by_line: Mapping[int, tuple[str, ...]] | None = None
     source_ids_by_line: Mapping[int, str] | None = None
 
     def response_source(self) -> PendingSourceInfo:
@@ -148,6 +149,11 @@ def _file_source(
         warnings=warnings,
         wud_snapshot=snapshot,
         metadata_by_line=metadata_by_line,
+        container_ids_by_line={
+            line_no: (container.id,)
+            for line_no, container in metadata_by_line.items()
+            if container.id
+        },
         source_ids_by_line={
             target.line_no: f"file:{target.line_no}" for target in parsed.targets
         },
@@ -181,6 +187,9 @@ def _api_source(
     metadata_by_line = {
         line_no: line.container for line_no, line in enumerate(lines, start=1)
     }
+    container_ids_by_line = {
+        line_no: line.container_ids for line_no, line in enumerate(lines, start=1)
+    }
     source_ids_by_line = {
         line_no: ",".join(line.source_ids) for line_no, line in enumerate(lines, start=1)
     }
@@ -196,6 +205,7 @@ def _api_source(
         warnings=parsed.warnings,
         wud_snapshot=snapshot,
         metadata_by_line=metadata_by_line,
+        container_ids_by_line=container_ids_by_line,
         source_ids_by_line=source_ids_by_line,
     )
 
@@ -225,6 +235,7 @@ def _empty_api_source(
         warnings=warnings,
         wud_snapshot=snapshot,
         metadata_by_line={},
+        container_ids_by_line={},
         source_ids_by_line={},
     )
 
@@ -233,6 +244,7 @@ def _empty_api_source(
 class _ApiPendingLine:
     raw: str
     container: web_wud_api.WudApiContainer
+    container_ids: tuple[str, ...]
     source_ids: tuple[str, ...]
 
 
@@ -250,13 +262,22 @@ def _api_pending_lines(
             by_raw[raw] = _ApiPendingLine(
                 raw=raw,
                 container=container,
+                container_ids=_container_ids(container),
                 source_ids=(source_id,),
             )
             continue
-        if source_id not in existing.source_ids:
+        source_ids = existing.source_ids
+        if source_id not in source_ids:
+            source_ids = (*source_ids, source_id)
+        container_ids = existing.container_ids
+        for container_id in _container_ids(container):
+            if container_id not in container_ids:
+                container_ids = (*container_ids, container_id)
+        if source_ids != existing.source_ids or container_ids != existing.container_ids:
             by_raw[raw] = replace(
                 existing,
-                source_ids=(*existing.source_ids, source_id),
+                container_ids=container_ids,
+                source_ids=source_ids,
             )
     return tuple(by_raw[raw] for raw in sorted(by_raw))
 
@@ -280,6 +301,10 @@ def _pending_image_with_digest(image: str, digest: str) -> str:
 
 def _container_source_id(container: web_wud_api.WudApiContainer) -> str:
     return container.id or container.name or container.display_name or container.image
+
+
+def _container_ids(container: web_wud_api.WudApiContainer) -> tuple[str, ...]:
+    return (container.id,) if container.id else ()
 
 
 def _container_sort_key(

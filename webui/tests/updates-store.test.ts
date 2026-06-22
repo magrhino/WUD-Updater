@@ -16,7 +16,11 @@ import {
 import {
   applyJobLogResponse,
   applyJobResponse,
+  pendingItem,
   pendingResponse,
+  pendingRescanResponse,
+  wudApiStatus,
+  wudContainerMetadata,
   releaseNoteInfo,
   releaseNotesResponse,
   retagPlanResponse,
@@ -183,6 +187,236 @@ describe("updates store", () => {
     await updates.loadPending();
 
     expect(updates.pendingCleanup).toBeNull();
+  });
+
+  it("rescans pending updates and refreshes dependent state", async () => {
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === "/api/v1/pending/rescan") {
+        return Promise.resolve(jsonResponse(pendingRescanResponse()));
+      }
+      if (url === "/api/v1/pending") {
+        return Promise.resolve(jsonResponse(pendingResponse()));
+      }
+      if (
+        url === "/api/v1/release-notes" ||
+        url === "/api/v1/release-notes/refresh"
+      ) {
+        return Promise.resolve(jsonResponse(releaseNotesResponse()));
+      }
+      if (url === "/api/v1/runs") {
+        return Promise.resolve(jsonResponse([]));
+      }
+      return Promise.resolve(jsonResponse({}));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const auth = useAuthStore();
+    const ensureCsrf = vi
+      .spyOn(auth, "ensureCsrf")
+      .mockResolvedValue("csrf-rescan");
+    useConnectionStore();
+    useSettingsStore();
+    const updates = useUpdatesStore();
+    useRunsStore();
+    updates.pending = pendingResponse([
+      pendingItem({ wud_metadata: wudContainerMetadata() }),
+    ]);
+
+    const response = await updates.rescanPending("selected", [1]);
+
+    expect(ensureCsrf).toHaveBeenCalledTimes(2);
+    expect(response.audit_run_id).toBe(24);
+    expect(updates.pendingRescan?.audit_run_id).toBe(24);
+    expect(updates.pending?.count).toBe(1);
+    const urls = fetchMock.mock.calls.map((call) => call[0]);
+    expect(urls.slice(0, 3)).toEqual([
+      "/api/v1/pending/rescan",
+      "/api/v1/pending",
+      "/api/v1/release-notes",
+    ]);
+    expect(new Set(urls.slice(3))).toEqual(
+      new Set(["/api/v1/release-notes/refresh", "/api/v1/runs"]),
+    );
+    expect(jsonRequestBody(fetchMock.mock.calls[0])).toEqual({
+      confirmation: "rescan_wud",
+      scope: "selected",
+      line_numbers: [1],
+      lines: [
+        {
+          line_no: 1,
+          raw: "repo/app:1.0 sha256=abc",
+          source_id: "file:1",
+          source_hash: "pending-source-hash",
+          container_id: "docker.local.app",
+        },
+      ],
+    });
+    expect(
+      ((fetchMock.mock.calls[0][1] as RequestInit).headers as Headers).get(
+        "x-wud-csrf-token",
+      ),
+    ).toBe("csrf-rescan");
+  });
+
+  it("rescans all pending updates without selected lines", async () => {
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === "/api/v1/pending/rescan") {
+        return Promise.resolve(jsonResponse(pendingRescanResponse()));
+      }
+      if (url === "/api/v1/pending") {
+        return Promise.resolve(jsonResponse(pendingResponse()));
+      }
+      if (
+        url === "/api/v1/release-notes" ||
+        url === "/api/v1/release-notes/refresh"
+      ) {
+        return Promise.resolve(jsonResponse(releaseNotesResponse()));
+      }
+      if (url === "/api/v1/runs") {
+        return Promise.resolve(jsonResponse([]));
+      }
+      return Promise.resolve(jsonResponse({}));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const auth = useAuthStore();
+    vi.spyOn(auth, "ensureCsrf").mockResolvedValue("csrf-rescan-all");
+    useConnectionStore();
+    useSettingsStore();
+    const updates = useUpdatesStore();
+    useRunsStore();
+    updates.pending = pendingResponse([
+      pendingItem({ wud_metadata: wudContainerMetadata() }),
+    ]);
+
+    const response = await updates.rescanPending("all");
+
+    expect(response.scope).toBe("all");
+    expect(updates.pendingRescan?.scope).toBe("all");
+    expect(updates.pending?.count).toBe(1);
+    expect(jsonRequestBody(fetchMock.mock.calls[0])).toEqual({
+      confirmation: "rescan_wud",
+      scope: "all",
+      line_numbers: [],
+      lines: [],
+    });
+    const urls = fetchMock.mock.calls.map((call) => call[0]);
+    expect(urls.slice(0, 3)).toEqual([
+      "/api/v1/pending/rescan",
+      "/api/v1/pending",
+      "/api/v1/release-notes",
+    ]);
+    expect(new Set(urls.slice(3))).toEqual(
+      new Set(["/api/v1/release-notes/refresh", "/api/v1/runs"]),
+    );
+  });
+
+  it("rejects selected pending rescans without selected lines before requesting csrf", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    const auth = useAuthStore();
+    const ensureCsrf = vi.spyOn(auth, "ensureCsrf").mockResolvedValue("csrf");
+    const updates = useUpdatesStore();
+
+    await expect(updates.rescanPending("selected", [])).rejects.toThrow(
+      "Select at least one pending update to rescan.",
+    );
+
+    expect(ensureCsrf).not.toHaveBeenCalled();
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(updates.pendingRescan).toBeNull();
+    expect(updates.error).toBe("Select at least one pending update to rescan.");
+  });
+
+  it("stores blocked pending rescan responses and refreshes dependent state", async () => {
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === "/api/v1/pending/rescan") {
+        return Promise.resolve(
+          jsonResponse(
+            pendingRescanResponse({
+              status: "blocked",
+              scope: "selected",
+              requested_count: 1,
+              watched_count: 0,
+              wud_api: wudApiStatus({
+                state: "auth_required",
+                metadata_available: false,
+              }),
+            }),
+          ),
+        );
+      }
+      if (url === "/api/v1/pending") {
+        return Promise.resolve(jsonResponse(pendingResponse()));
+      }
+      if (
+        url === "/api/v1/release-notes" ||
+        url === "/api/v1/release-notes/refresh"
+      ) {
+        return Promise.resolve(jsonResponse(releaseNotesResponse()));
+      }
+      if (url === "/api/v1/runs") {
+        return Promise.resolve(jsonResponse([]));
+      }
+      return Promise.resolve(jsonResponse({}));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const auth = useAuthStore();
+    vi.spyOn(auth, "ensureCsrf").mockResolvedValue("csrf-rescan-blocked");
+    useConnectionStore();
+    useSettingsStore();
+    const updates = useUpdatesStore();
+    useRunsStore();
+    updates.pending = pendingResponse([
+      pendingItem({ wud_metadata: wudContainerMetadata() }),
+    ]);
+
+    const response = await updates.rescanPending("selected", [1]);
+
+    expect(response.status).toBe("blocked");
+    expect(updates.pendingRescan?.status).toBe("blocked");
+    expect(updates.pending?.count).toBe(1);
+    const urls = fetchMock.mock.calls.map((call) => call[0]);
+    expect(urls.slice(0, 3)).toEqual([
+      "/api/v1/pending/rescan",
+      "/api/v1/pending",
+      "/api/v1/release-notes",
+    ]);
+    expect(new Set(urls.slice(3))).toEqual(
+      new Set(["/api/v1/release-notes/refresh", "/api/v1/runs"]),
+    );
+  });
+
+  it("skips dependent refreshes when pending rescan fails", async () => {
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === "/api/v1/pending/rescan") {
+        return Promise.resolve(jsonResponse({ detail: "WUD rescan failed" }, 503));
+      }
+      return Promise.resolve(jsonResponse({}));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const auth = useAuthStore();
+    vi.spyOn(auth, "ensureCsrf").mockResolvedValue("csrf-rescan-error");
+    useConnectionStore();
+    useSettingsStore();
+    const updates = useUpdatesStore();
+    useRunsStore();
+    updates.pending = pendingResponse([
+      pendingItem({ line_no: 9, source_id: "file:9" }),
+    ]);
+
+    await expect(updates.rescanPending("selected", [9])).rejects.toThrow(
+      "WUD rescan failed",
+    );
+
+    expect(updates.pendingRescan).toBeNull();
+    expect(updates.pending?.items[0]?.line_no).toBe(9);
+    expect(updates.error).toBe("WUD rescan failed");
+    expect(fetchMock.mock.calls.map((call) => call[0])).toEqual([
+      "/api/v1/pending/rescan",
+    ]);
   });
 
   it("loads update targets for management selectors", async () => {

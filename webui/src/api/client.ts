@@ -26,6 +26,11 @@ export type {
   PendingCleanupLine,
   PendingCleanupRemovedLine,
   PendingCleanupResponse,
+  PendingRescanLine,
+  PendingRescanScope,
+  PendingRescanStatus,
+  PendingRescanSkippedLine,
+  PendingRescanResponse,
   PendingRemovalPlanLine,
   PendingRemovalPlanResponse,
   // Update targets
@@ -169,6 +174,9 @@ import type {
   DiagnosticsSupportBundleResponse,
   PendingCleanupLine,
   PendingCleanupResponse,
+  PendingRescanLine,
+  PendingRescanScope,
+  PendingRescanResponse,
   PendingRemovalPlanResponse,
   ReleaseNotesResponse,
   ServicePolicyRecord,
@@ -439,6 +447,21 @@ const pendingApi = {
         removal_id: removalId,
         lines,
         confirmation: "remove_selected",
+      }),
+    }),
+  rescanPending: (
+    scope: PendingRescanScope,
+    lines: PendingRescanLine[],
+    csrfToken: string,
+  ) =>
+    apiRequest<PendingRescanResponse>("/pending/rescan", {
+      method: "POST",
+      headers: { "x-wud-csrf-token": csrfToken },
+      body: JSON.stringify({
+        confirmation: "rescan_wud",
+        scope,
+        line_numbers: lines.map((line) => line.line_no),
+        lines,
       }),
     }),
 };

@@ -111,6 +111,9 @@ EOF
     src/wudup/web_models.py \
     src/wudup/web_onboarding.py \
     src/wudup/web_pending.py \
+    src/wudup/web_pending_rescan.py \
+    src/wudup/web_pending_rescan_audit.py \
+    src/wudup/web_pending_rescan_payload.py \
     src/wudup/web_pending_sources.py \
     src/wudup/web_plans.py \
     src/wudup/web_release_notes.py \
@@ -197,6 +200,8 @@ EOF
     tests/test_python_web_pending_cleanup.py \
     tests/test_python_web_pending_read.py \
     tests/test_python_web_pending_removal.py \
+    tests/test_python_web_pending_rescan_guards.py \
+    tests/test_python_web_pending_rescan_selected.py \
     tests/test_python_web_pending_targets.py \
     tests/test_python_web_plan_digest_pins.py \
     tests/test_python_web_plan_preview.py \
@@ -217,6 +222,7 @@ EOF
     tests/test_python_web_wud_api.py \
     tests/update_from_wud_helpers.py \
     tests/updates_wrapper_helpers.py \
+    tests/web_wud_rescan_helpers.py \
     tests/web_plan_test_helpers.py \
     tests/web_scheduler_test_helpers.py \
     webui/scripts/seed_demo_state.py
