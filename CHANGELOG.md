@@ -4,6 +4,21 @@ All notable changes to WUD-Updater are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com) and versions follow
 [Semantic Versioning](https://semver.org).
 
+## [0.46.0](https://github.com/magrhino/wudup/compare/v0.45.6...v0.46.0) (2026-06-22)
+
+
+### Features
+
+* **api:** add WUD API configuration diagnostics to Doctor ([#386](https://github.com/magrhino/wudup/issues/386)) ([1a62b4a](https://github.com/magrhino/wudup/commit/1a62b4ae298c47ca7d83f59a77280b9a5f9db6af))
+* **web:** Add Authenticated WUD-API Support ([#395](https://github.com/magrhino/wudup/issues/395)) ([0fa4b6a](https://github.com/magrhino/wudup/commit/0fa4b6ac69ea2b445031b9bbdb0034711df1aee7))
+* **webui:** Add pending plan review and WebUI state handling for scheduled updates ([#387](https://github.com/magrhino/wudup/issues/387)) ([f102399](https://github.com/magrhino/wudup/commit/f102399cc9f8921a7e25480381392f31c2ee910c))
+* **webui:** Add pending selection support across WebUI and WUD API ([#388](https://github.com/magrhino/wudup/issues/388)) ([df7d7bb](https://github.com/magrhino/wudup/commit/df7d7bb7f19adac114c9a0e9c9bb1fd353c75800))
+
+
+### Bug Fixes
+
+* **api:** WUD API retry behavior after transient outages ([#384](https://github.com/magrhino/wudup/issues/384)) ([7a776da](https://github.com/magrhino/wudup/commit/7a776da81990101507333410f5af8d341645d8a6))
+
 ## [0.45.6](https://github.com/magrhino/wudup/compare/v0.45.5...v0.45.6) (2026-06-21)
 
 
