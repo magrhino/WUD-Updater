@@ -341,6 +341,28 @@ describe("pending view selection actions", () => {
     expect(rescanPending).not.toHaveBeenCalled();
   });
 
+  it("keeps WUD rescan available while the auth session is unknown", async () => {
+    const { auth, pinia, settings, updates } = setupStores(true);
+    auth.session = null;
+    updates.pending = pendingResponse();
+    mockPendingLifecycle(settings, updates);
+    const rescanPending = vi
+      .spyOn(updates, "rescanPending")
+      .mockResolvedValue(pendingRescanResponse());
+    const wrapper = mountPendingView(pinia);
+
+    const rescanButton = wrapper
+      .findAll("button")
+      .find((button) => button.text().includes("Rescan WUD"));
+    expect(wrapper.text()).not.toContain(
+      "Set WUD_WEB_MUTATIONS_ENABLED=true on the server to rescan WUD.",
+    );
+    expect(rescanButton?.attributes("disabled")).toBeUndefined();
+    await rescanButton?.trigger("click");
+
+    expect(rescanPending).toHaveBeenCalledWith("all");
+  });
+
   it("disables WUD rescan controls when WUD API is degraded", async () => {
     const { pinia, settings, updates } = setupStores(true);
     updates.pending = {

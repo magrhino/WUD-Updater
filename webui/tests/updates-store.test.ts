@@ -311,6 +311,23 @@ describe("updates store", () => {
     );
   });
 
+  it("rejects selected pending rescans without selected lines before requesting csrf", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    const auth = useAuthStore();
+    const ensureCsrf = vi.spyOn(auth, "ensureCsrf").mockResolvedValue("csrf");
+    const updates = useUpdatesStore();
+
+    await expect(updates.rescanPending("selected", [])).rejects.toThrow(
+      "Select at least one pending update to rescan.",
+    );
+
+    expect(ensureCsrf).not.toHaveBeenCalled();
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(updates.pendingRescan).toBeNull();
+    expect(updates.error).toBe("Select at least one pending update to rescan.");
+  });
+
   it("stores blocked pending rescan responses and refreshes dependent state", async () => {
     const fetchMock = vi.fn((input: RequestInfo | URL) => {
       const url = String(input);

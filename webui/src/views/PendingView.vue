@@ -153,7 +153,7 @@ const wudRescanUnavailableMessage = computed(() => {
   if (!updates.pending) {
     return "";
   }
-  if (!auth.session?.mutations_enabled) {
+  if (auth.session?.mutations_enabled === false) {
     return "Read-only mode is active. Set WUD_WEB_MUTATIONS_ENABLED=true on the server to rescan WUD.";
   }
   const status = updates.pending.wud_api;

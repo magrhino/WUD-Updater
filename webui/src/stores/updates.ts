@@ -47,6 +47,8 @@ import { useRunsStore } from "./runs";
 
 export const APPLY_JOB_RECOVERY_MESSAGE =
   "Last known apply job state is unavailable because the WebUI process restarted. Check Runs -> Latest run and the updater log before applying more updates.";
+const PENDING_RESCAN_SELECTION_REQUIRED_MESSAGE =
+  "Select at least one pending update to rescan.";
 
 const APPLY_JOB_STORAGE_KEY = "applyJobId";
 const TERMINAL_APPLY_JOB_STATUSES = new Set<ApplyJobResponse["status"]>([
@@ -518,6 +520,11 @@ export const useUpdatesStore = defineStore("updates", () => {
     scope: PendingRescanScope,
     lineNumbers: number[] = [],
   ): Promise<PendingRescanResponse> {
+    if (scope === "selected" && lineNumbers.length === 0) {
+      pendingRescan.value = null;
+      error.value = PENDING_RESCAN_SELECTION_REQUIRED_MESSAGE;
+      throw new Error(PENDING_RESCAN_SELECTION_REQUIRED_MESSAGE);
+    }
     const auth = useAuthStore();
     const runs = useRunsStore();
     let response: PendingRescanResponse | null = null;
