@@ -220,7 +220,7 @@ def test_wud_api_bearer_auth_applies_to_get_and_post_requests(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
-    token = "wud-api-bearer-secret"
+    bearer_value = "fixture-bearer-value"
     calls: list[tuple[str, str, dict[str, str]]] = []
 
     def request_json(url: str, client_config=None) -> object:
@@ -242,7 +242,7 @@ def test_wud_api_bearer_auth_applies_to_get_and_post_requests(
     settings = _settings(
         tmp_path,
         "https://wud.auth-header.test:3000",
-        {web_wud_api.WUD_API_AUTH_BEARER_TOKEN_ENV: token},
+        {web_wud_api.WUD_API_AUTH_BEARER_TOKEN_ENV: bearer_value},
     )
 
     snapshot = web_wud_api.get_snapshot(settings, include_containers=True, force=True)
@@ -260,7 +260,7 @@ def test_wud_api_bearer_auth_applies_to_get_and_post_requests(
         ("POST", "/api/containers/watch"),
     }
     for _method, _path, headers in calls:
-        assert headers["Authorization"] == f"Bearer {token}"
+        assert headers["Authorization"] == f"Bearer {bearer_value}"
         assert headers["Accept"] == "application/json"
         assert headers["User-Agent"] == web_wud_api.WUD_API_USER_AGENT
 
