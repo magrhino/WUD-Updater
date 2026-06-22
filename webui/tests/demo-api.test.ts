@@ -666,15 +666,30 @@ describe("demo web API", () => {
     const line = pending.items[0];
 
     expect(line).toBeDefined();
+    if (!line) {
+      throw new Error("Expected demo pending fixture to include a pending item");
+    }
+    expect(pending.source_hash).toEqual(expect.any(String));
+    expect(pending.source_hash).not.toBe("");
+    expect(line.line_no).toEqual(expect.any(Number));
+    expect(line.raw).not.toBe("");
+    expect(line.source_id).not.toBe("");
+    expect(line.wud_metadata).toEqual(
+      expect.objectContaining({ id: expect.any(String) }),
+    );
+    expect(line.wud_metadata?.id).not.toBe("");
+    if (!pending.source_hash || !line.wud_metadata?.id) {
+      throw new Error("Expected demo pending fixture to include rescan metadata");
+    }
     const selected = await api.rescanPending(
       "selected",
       [
         {
-          line_no: line?.line_no ?? 0,
-          raw: line?.raw ?? "",
-          source_id: line?.source_id ?? "",
+          line_no: line.line_no,
+          raw: line.raw,
+          source_id: line.source_id,
           source_hash: pending.source_hash,
-          container_id: line?.wud_metadata?.id ?? "",
+          container_id: line.wud_metadata.id,
         },
       ],
       "csrf",
