@@ -512,6 +512,25 @@ describe("webApi", () => {
     ).toBe("csrf");
   });
 
+  it("serializes pending global rescan payload exactly", async () => {
+    const fetchMock = mockFetch({});
+
+    await webApi.rescanPending("all", [], "csrf");
+
+    expect(fetchMock.mock.calls[0][0]).toBe("/api/v1/pending/rescan");
+    expect(jsonRequestBody(fetchMock.mock.calls[0])).toEqual({
+      confirmation: "rescan_wud",
+      scope: "all",
+      line_numbers: [],
+      lines: [],
+    });
+    expect(
+      (requestInit(fetchMock.mock.calls[0]).headers as Headers).get(
+        "x-wud-csrf-token",
+      ),
+    ).toBe("csrf");
+  });
+
   it("opens job streams with browser credentials", () => {
     const constructed: Array<{ url: string; init: EventSourceInit }> = [];
     function MockEventSource(this: EventSource, url: string, init: EventSourceInit) {

@@ -9,7 +9,7 @@ import secrets
 import sqlite3
 from collections.abc import Sequence
 from dataclasses import asdict
-from typing import Any, Protocol
+from typing import Any, Protocol, TypeVar
 
 from fastapi import HTTPException, Request
 
@@ -67,6 +67,14 @@ LOGGER = logging.getLogger(__name__)
 
 class EffectiveConfigLoader(Protocol):
     def __call__(self, settings: WebSettings) -> UpdaterConfig: ...
+
+
+class _PendingPayloadLine(Protocol):
+    line_no: int
+    raw: str
+
+
+_PendingPayloadLineT = TypeVar("_PendingPayloadLineT", bound=_PendingPayloadLine)
 
 
 _effective_config_loader: EffectiveConfigLoader | None = None
@@ -706,8 +714,8 @@ def _pending_rescan_all(settings: WebSettings) -> PendingRescanResponse:
         status=_pending_rescan_status(result, skipped=()),
         audit_run_id=0,
         scope="all",
-        requested_count=0,
-        watched_count=0,
+        requested_count=result.requested_count,
+        watched_count=result.watched_count,
         skipped=[],
         wud_api=result.snapshot.status,
     )
@@ -858,44 +866,22 @@ def _rescan_payload_lines(
             detail="selected rescan lines are required",
         )
 
-    seen: set[int] = set()
-    lines: list[PendingRescanLine] = []
-    for line in payload.lines:
-        if line.line_no in seen:
-            raise HTTPException(
-                status_code=422,
-                detail=f"rescan line {line.line_no} was provided more than once",
-            )
-        if not line.raw:
-            raise HTTPException(
-                status_code=422,
-                detail=f"rescan line {line.line_no} raw value is required",
-            )
-        if not line.source_id:
-            raise HTTPException(
-                status_code=422,
-                detail=f"rescan line {line.line_no} source_id is required",
-            )
-        if not line.source_hash:
-            raise HTTPException(
-                status_code=422,
-                detail=f"rescan line {line.line_no} source_hash is required",
-            )
-        seen.add(line.line_no)
-        lines.append(line)
-
-    selected = tuple(sorted(lines, key=lambda line: line.line_no))
+    selected = tuple(
+        sorted(
+            _pending_payload_lines(
+                payload.lines,
+                operation="rescan",
+                required_fields=("source_id", "source_hash"),
+            ),
+            key=lambda line: line.line_no,
+        )
+    )
     if payload.line_numbers:
-        try:
-            line_numbers = _selected_removal_line_numbers(payload.line_numbers)
-        except PlanInputError as exc:
-            raise HTTPException(status_code=422, detail=str(exc)) from exc
-        selected_line_numbers = tuple(line.line_no for line in selected)
-        if line_numbers != selected_line_numbers:
-            raise HTTPException(
-                status_code=422,
-                detail="line_numbers must match selected rescan lines",
-            )
+        _validate_payload_line_numbers_match(
+            payload.line_numbers,
+            selected_line_numbers=tuple(line.line_no for line in selected),
+            operation="rescan",
+        )
     return selected
 
 
@@ -911,43 +897,60 @@ def _validate_selected_rescan_source(
 def _cleanup_payload_lines(
     payload: PendingCleanupRequest,
 ) -> tuple[PendingCleanupLine, ...]:
-    seen: set[int] = set()
-    lines: list[PendingCleanupLine] = []
-    for line in payload.lines:
-        if line.line_no in seen:
-            raise HTTPException(
-                status_code=422,
-                detail=f"cleanup line {line.line_no} was provided more than once",
-            )
-        if not line.raw:
-            raise HTTPException(
-                status_code=422,
-                detail=f"cleanup line {line.line_no} raw value is required",
-            )
-        seen.add(line.line_no)
-        lines.append(line)
-    return tuple(lines)
+    return _pending_payload_lines(payload.lines, operation="cleanup")
 
 
 def _removal_payload_lines(
     payload: PendingRemovalRequest,
 ) -> tuple[PendingCleanupLine, ...]:
+    return _pending_payload_lines(payload.lines, operation="removal")
+
+
+def _pending_payload_lines(
+    lines: Sequence[_PendingPayloadLineT],
+    *,
+    operation: str,
+    required_fields: Sequence[str] = (),
+) -> tuple[_PendingPayloadLineT, ...]:
     seen: set[int] = set()
-    lines: list[PendingCleanupLine] = []
-    for line in payload.lines:
+    validated: list[_PendingPayloadLineT] = []
+    for line in lines:
         if line.line_no in seen:
             raise HTTPException(
                 status_code=422,
-                detail=f"removal line {line.line_no} was provided more than once",
+                detail=f"{operation} line {line.line_no} was provided more than once",
             )
         if not line.raw:
             raise HTTPException(
                 status_code=422,
-                detail=f"removal line {line.line_no} raw value is required",
+                detail=f"{operation} line {line.line_no} raw value is required",
             )
+        for field in required_fields:
+            if not getattr(line, field):
+                raise HTTPException(
+                    status_code=422,
+                    detail=f"{operation} line {line.line_no} {field} is required",
+                )
         seen.add(line.line_no)
-        lines.append(line)
-    return tuple(lines)
+        validated.append(line)
+    return tuple(validated)
+
+
+def _validate_payload_line_numbers_match(
+    line_numbers: Sequence[int],
+    *,
+    selected_line_numbers: Sequence[int],
+    operation: str,
+) -> None:
+    try:
+        validated_line_numbers = _selected_line_numbers(line_numbers)
+    except PlanInputError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    if validated_line_numbers != tuple(selected_line_numbers):
+        raise HTTPException(
+            status_code=422,
+            detail=f"line_numbers must match selected {operation} lines",
+        )
 
 
 def _validated_cleanup_lines(
@@ -968,6 +971,10 @@ def _validated_cleanup_lines(
 
 
 def _selected_removal_line_numbers(line_numbers: Sequence[int]) -> tuple[int, ...]:
+    return _selected_line_numbers(line_numbers)
+
+
+def _selected_line_numbers(line_numbers: Sequence[int]) -> tuple[int, ...]:
     seen: set[int] = set()
     selected: list[int] = []
     for line_no in line_numbers:
