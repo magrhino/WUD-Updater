@@ -32,6 +32,7 @@ from . import (
     web_models,
     web_onboarding,
     web_pending,
+    web_pending_rescan,
     web_pending_sources,
     web_plans,
     web_release_notes,
@@ -331,7 +332,7 @@ def create_app(
     )
     router.add_api_route(
         "/pending/rescan",
-        web_pending.api_pending_rescan,
+        web_pending_rescan.api_pending_rescan,
         methods=["POST"],
         response_model=web_models.PendingRescanResponse,
     )
