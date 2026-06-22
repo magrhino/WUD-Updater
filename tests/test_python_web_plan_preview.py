@@ -146,7 +146,7 @@ def test_plan_endpoint_uses_api_pending_source_without_wud_file(
         {
             "WUD_WEB_DEV_NO_AUTH": "true",
             "WUD_PENDING_SOURCE": "api",
-            "WUD_API_BASE_URL": "http://wud.plan-api-source.test:3000",
+            "WUD_API_BASE_URL": "https://wud.plan-api-source.test:3000",
             **fake_env,
         },
     )

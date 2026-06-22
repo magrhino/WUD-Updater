@@ -68,7 +68,7 @@ def test_auto_update_scheduler_submits_after_reservation_commit(
         assert row is not None
         assert row["status"] == "reserved"
         kwargs["wud_lock"].close()
-        observed["start_event"] = kwargs["start_event"]
+        observed["start_event"] = kwargs["run_context"].start_event
         return web_scheduler.ApplyJobResponse(
             job_id="job-after-commit",
             status="queued",

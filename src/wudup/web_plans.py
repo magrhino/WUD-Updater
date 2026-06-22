@@ -315,16 +315,18 @@ def submit_apply_job(
         auto_update_schedule_run_updater=(
             web_scheduler._safe_update_auto_update_schedule_runs
         ),
-        metadata_extra={
-            "pending_source": plan.source.active,
-            "pending_source_configured": plan.source.configured,
-            "pending_source_degraded": plan.source.degraded,
-            "pending_source_label": plan.source.label,
-        },
-        pending_source_text=(
-            pending_source.text if pending_source.active == "api" else None
+        run_context=web_jobs.ApplyJobRunContext(
+            metadata_extra={
+                "pending_source": plan.source.active,
+                "pending_source_configured": plan.source.configured,
+                "pending_source_degraded": plan.source.degraded,
+                "pending_source_label": plan.source.label,
+            },
+            pending_source_text=(
+                pending_source.text if pending_source.active == "api" else None
+            ),
+            pending_source_label=pending_source.label,
         ),
-        pending_source_label=pending_source.label,
     )
 
 

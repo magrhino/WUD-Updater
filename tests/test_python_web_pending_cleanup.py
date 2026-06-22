@@ -353,7 +353,7 @@ def test_pending_cleanup_rejects_api_pending_source_without_mutation(
             "WUD_WEB_DEV_NO_AUTH": "true",
             "WUD_WEB_MUTATIONS_ENABLED": "true",
             "WUD_PENDING_SOURCE": "api",
-            "WUD_API_BASE_URL": "http://wud.cleanup-api-source.test:3000",
+            "WUD_API_BASE_URL": "https://wud.cleanup-api-source.test:3000",
         },
     )
     wud_file = tmp_path / "state" / "images.todo"
@@ -380,20 +380,20 @@ def test_pending_cleanup_wraps_source_read_errors_without_mutation(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
-    secret = "cleanup-source-secret"
+    redaction_value = "cleanup-redaction-value"
     client = _client(
         tmp_path,
         {
             "WUD_WEB_DEV_NO_AUTH": "true",
             "WUD_WEB_MUTATIONS_ENABLED": "true",
-            "GITHUB_TOKEN": secret,
+            "GITHUB_TOKEN": redaction_value,
         },
     )
     wud_file = tmp_path / "state" / "images.todo"
     wud_file.write_text("repo/app:latest\n", encoding="utf-8")
 
     def fail_source_read(*_args, **_kwargs):
-        raise OSError(f"open failed for {wud_file} with {secret}")
+        raise OSError(f"open failed for {wud_file} with {redaction_value}")
 
     monkeypatch.setattr(
         pending_module.web_pending_sources,
@@ -414,7 +414,7 @@ def test_pending_cleanup_wraps_source_read_errors_without_mutation(
     assert response.status_code == 500
     detail = response.json()["detail"]
     assert detail.startswith("could not verify pending cleanup source: ")
-    assert secret not in detail
+    assert redaction_value not in detail
     assert str(tmp_path) not in detail
     assert "<redacted>" in detail
     assert "[REDACTED_PATH]" in detail

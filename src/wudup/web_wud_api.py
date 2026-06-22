@@ -26,7 +26,7 @@ from .web_auth import (
     _redact_sensitive_text,
     _redact_unknown_absolute_paths,
 )
-from .web_models import WebSettings, WudApiStatus, WudContainerMetadata
+from .web_models import WebSettings, WudApiState, WudApiStatus, WudContainerMetadata
 from .wud_file import WudTarget
 
 DEFAULT_WUD_API_BASE_URL = "http://wud:3000"
@@ -36,7 +36,15 @@ DEFAULT_WUD_API_STARTUP_WAIT_SECONDS = 0.0
 WUD_API_TIMEOUT_SECONDS = 1.0
 WUD_API_STARTUP_RETRY_INTERVAL_SECONDS = 0.5
 WUD_API_CACHE_TTL_SECONDS = 30.0
+WUD_API_DEGRADED_RETRY_INTERVAL_SECONDS = 5.0
 WUD_API_USER_AGENT = "wudup-webui-wud-api/1.0"
+WUD_API_STATE_READY: WudApiState = "ready"
+WUD_API_STATE_UNAVAILABLE: WudApiState = "unavailable"
+WUD_API_STATE_AUTH_REQUIRED: WudApiState = "auth_required"
+WUD_API_STATE_ERROR: WudApiState = "error"
+WUD_API_DEGRADED_STATES = frozenset(
+    {WUD_API_STATE_UNAVAILABLE, WUD_API_STATE_ERROR}
+)
 
 
 @dataclass(frozen=True)
@@ -124,7 +132,7 @@ def format_startup_wait_seconds(value: float) -> str:
 def startup_probe(settings: WebSettings) -> WudApiSnapshot:
     snapshot = _refresh_snapshot(settings, include_containers=False)
     wait_seconds = max(settings.wud_api_startup_wait_seconds, 0.0)
-    if snapshot.status.state != "unavailable" or wait_seconds <= 0:
+    if snapshot.status.state != WUD_API_STATE_UNAVAILABLE or wait_seconds <= 0:
         return snapshot
 
     deadline = time.monotonic() + wait_seconds
@@ -134,7 +142,7 @@ def startup_probe(settings: WebSettings) -> WudApiSnapshot:
             return snapshot
         time.sleep(min(WUD_API_STARTUP_RETRY_INTERVAL_SECONDS, remaining))
         snapshot = _refresh_snapshot(settings, include_containers=False)
-        if snapshot.status.state != "unavailable":
+        if snapshot.status.state != WUD_API_STATE_UNAVAILABLE:
             return snapshot
 
 
@@ -151,11 +159,17 @@ def get_snapshot(
         if (
             not force
             and cached is not None
-            and now - cached.checked_monotonic < WUD_API_CACHE_TTL_SECONDS
+            and now - cached.checked_monotonic < _snapshot_cache_ttl(cached)
             and (not include_containers or cached.metadata_checked)
         ):
             return cached
     return _refresh_snapshot(settings, include_containers=include_containers)
+
+
+def _snapshot_cache_ttl(snapshot: WudApiSnapshot) -> float:
+    if snapshot.status.state in WUD_API_DEGRADED_STATES:
+        return WUD_API_DEGRADED_RETRY_INTERVAL_SECONDS
+    return WUD_API_CACHE_TTL_SECONDS
 
 
 def metadata_by_target(
@@ -222,12 +236,13 @@ def _refresh_snapshot(
         normalized_base_url = _normalize_base_url(base_url)
     except ValueError as exc:
         snapshot = _snapshot(
-            "error",
+            WUD_API_STATE_ERROR,
             available=False,
             metadata_available=False,
             checked_at=checked_at,
             detail=_sanitize_detail(settings, f"invalid WUD API base URL: {exc}"),
             checked_monotonic=checked_monotonic,
+            metadata_checked=include_containers,
         )
         _store_snapshot(base_url, snapshot)
         return snapshot
@@ -237,16 +252,17 @@ def _refresh_snapshot(
     except urllib.error.HTTPError as exc:
         if exc.code in {401, 403}:
             snapshot = _snapshot(
-                "auth_required",
+                WUD_API_STATE_AUTH_REQUIRED,
                 available=True,
                 metadata_available=False,
                 checked_at=checked_at,
                 detail="WUD API requires authentication",
                 checked_monotonic=checked_monotonic,
+                metadata_checked=include_containers,
             )
         else:
             snapshot = _snapshot(
-                "unavailable",
+                WUD_API_STATE_UNAVAILABLE,
                 available=False,
                 metadata_available=False,
                 checked_at=checked_at,
@@ -255,24 +271,26 @@ def _refresh_snapshot(
                     f"WUD API health check returned HTTP {exc.code}",
                 ),
                 checked_monotonic=checked_monotonic,
+                metadata_checked=include_containers,
             )
         _store_snapshot(base_url, snapshot)
         return snapshot
     except (OSError, ValueError) as exc:
         snapshot = _snapshot(
-            "unavailable",
+            WUD_API_STATE_UNAVAILABLE,
             available=False,
             metadata_available=False,
             checked_at=checked_at,
             detail=_sanitize_detail(settings, f"WUD API is unavailable: {exc}"),
             checked_monotonic=checked_monotonic,
+            metadata_checked=include_containers,
         )
         _store_snapshot(base_url, snapshot)
         return snapshot
 
     if not include_containers:
         snapshot = _snapshot(
-            "ready",
+            WUD_API_STATE_READY,
             available=True,
             metadata_available=False,
             checked_at=checked_at,
@@ -287,7 +305,7 @@ def _refresh_snapshot(
     except urllib.error.HTTPError as exc:
         if exc.code in {401, 403}:
             snapshot = _snapshot(
-                "auth_required",
+                WUD_API_STATE_AUTH_REQUIRED,
                 available=True,
                 metadata_available=False,
                 checked_at=checked_at,
@@ -297,7 +315,7 @@ def _refresh_snapshot(
             )
         else:
             snapshot = _snapshot(
-                "error",
+                WUD_API_STATE_ERROR,
                 available=True,
                 metadata_available=False,
                 checked_at=checked_at,
@@ -312,7 +330,7 @@ def _refresh_snapshot(
         return snapshot
     except (OSError, ValueError) as exc:
         snapshot = _snapshot(
-            "error",
+            WUD_API_STATE_ERROR,
             available=True,
             metadata_available=False,
             checked_at=checked_at,
@@ -328,7 +346,7 @@ def _refresh_snapshot(
 
     if not isinstance(payload, list):
         snapshot = _snapshot(
-            "error",
+            WUD_API_STATE_ERROR,
             available=True,
             metadata_available=False,
             checked_at=checked_at,
@@ -345,7 +363,7 @@ def _refresh_snapshot(
         if item is not None
     )
     snapshot = _snapshot(
-        "ready",
+        WUD_API_STATE_READY,
         available=True,
         metadata_available=True,
         checked_at=checked_at,
@@ -364,7 +382,7 @@ def _store_snapshot(base_url: str, snapshot: WudApiSnapshot) -> None:
 
 
 def _snapshot(
-    state: str,
+    state: WudApiState,
     *,
     available: bool,
     metadata_available: bool,
@@ -376,7 +394,7 @@ def _snapshot(
 ) -> WudApiSnapshot:
     return WudApiSnapshot(
         status=WudApiStatus(
-            state=state,  # type: ignore[arg-type]
+            state=state,
             available=available,
             metadata_available=metadata_available,
             last_checked_at=checked_at,

@@ -60,7 +60,7 @@ def test_release_notes_get_uses_api_pending_source_without_wud_file(
         {
             "WUD_WEB_DEV_NO_AUTH": "true",
             "WUD_PENDING_SOURCE": "api",
-            "WUD_API_BASE_URL": "http://wud.release-api-source.test:3000",
+            "WUD_API_BASE_URL": "https://wud.release-api-source.test:3000",
         },
     )
     db_path = tmp_path / "state" / "wud.sqlite"

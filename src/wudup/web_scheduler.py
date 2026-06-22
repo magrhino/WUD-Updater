@@ -192,23 +192,27 @@ def _auto_update_tick(
                     auto_update_schedule_run_updater=(
                         _safe_update_auto_update_schedule_runs
                     ),
-                    update_mode_override=selection.update_mode,
-                    metadata_extra={
-                        "source": "webui-auto",
-                        "actor_type": "scheduler",
-                        "auto_update_service_keys": list(selection.service_keys),
-                        "auto_update_schedule_keys": list(selection.schedule_keys),
-                        "auto_update_scheduled_for": selection.scheduled_for.isoformat(),
-                        "timezone": settings.config.timezone_name,
-                    },
-                    auto_update_schedule_keys=selection.schedule_keys,
-                    start_event=start_event,
-                    pending_source_text=(
-                        pending_source.text
-                        if pending_source.active == "api"
-                        else None
+                    run_context=web_jobs.ApplyJobRunContext(
+                        update_mode_override=selection.update_mode,
+                        metadata_extra={
+                            "source": "webui-auto",
+                            "actor_type": "scheduler",
+                            "auto_update_service_keys": list(selection.service_keys),
+                            "auto_update_schedule_keys": list(selection.schedule_keys),
+                            "auto_update_scheduled_for": (
+                                selection.scheduled_for.isoformat()
+                            ),
+                            "timezone": settings.config.timezone_name,
+                        },
+                        auto_update_schedule_keys=selection.schedule_keys,
+                        start_event=start_event,
+                        pending_source_text=(
+                            pending_source.text
+                            if pending_source.active == "api"
+                            else None
+                        ),
+                        pending_source_label=pending_source.label,
                     ),
-                    pending_source_label=pending_source.label,
                 )
             except Exception:
                 try:

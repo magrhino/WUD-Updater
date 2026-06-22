@@ -532,7 +532,7 @@ def test_auto_update_scheduler_uses_api_pending_source_without_wud_lock(
             "WUD_WEB_DEV_NO_AUTH": "true",
             "WUD_WEB_MUTATIONS_ENABLED": "true",
             "WUD_PENDING_SOURCE": "api",
-            "WUD_API_BASE_URL": "http://wud.scheduler-api-source.test:3000",
+            "WUD_API_BASE_URL": "https://wud.scheduler-api-source.test:3000",
             "WUD_TIMEZONE": "America/Chicago",
             **fake_env,
         },
@@ -592,6 +592,7 @@ def test_auto_update_scheduler_uses_api_pending_source_without_wud_lock(
     assert response is not None
     assert response.job_id == "api-source-job"
     submit_kwargs = observed["kwargs"]
+    run_context = submit_kwargs["run_context"]
     assert submit_kwargs["wud_lock"] is None
-    assert submit_kwargs["pending_source_text"] == f"repo/app:latest@{remote_digest}\n"
-    assert submit_kwargs["pending_source_label"] == "WUD API"
+    assert run_context.pending_source_text == f"repo/app:latest@{remote_digest}\n"
+    assert run_context.pending_source_label == "WUD API"

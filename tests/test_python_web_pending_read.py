@@ -66,7 +66,7 @@ def test_pending_endpoint_reads_wud_api_source_without_wud_file(
         {
             "WUD_WEB_DEV_NO_AUTH": "true",
             "WUD_PENDING_SOURCE": "api",
-            "WUD_API_BASE_URL": "http://wud.api-source.test:3000",
+            "WUD_API_BASE_URL": "https://wud.api-source.test:3000",
             **fake_env,
         },
     )
@@ -121,7 +121,7 @@ def test_pending_endpoint_preserves_tag_for_wud_api_digest_source(
         {
             "WUD_WEB_DEV_NO_AUTH": "true",
             "WUD_PENDING_SOURCE": "api",
-            "WUD_API_BASE_URL": "http://wud.api-digest-source.test:3000",
+            "WUD_API_BASE_URL": "https://wud.api-digest-source.test:3000",
             **fake_env,
         },
     )
@@ -162,7 +162,7 @@ def test_pending_endpoint_auto_falls_back_to_wud_file_when_api_unavailable(
         {
             "WUD_WEB_DEV_NO_AUTH": "true",
             "WUD_PENDING_SOURCE": "auto",
-            "WUD_API_BASE_URL": "http://wud.unavailable-source.test:3000",
+            "WUD_API_BASE_URL": "https://wud.unavailable-source.test:3000",
         },
     )
     wud_file = tmp_path / "state" / "images.todo"
@@ -197,7 +197,7 @@ def test_pending_endpoint_api_mode_does_not_fallback_to_wud_file(
         {
             "WUD_WEB_DEV_NO_AUTH": "true",
             "WUD_PENDING_SOURCE": "api",
-            "WUD_API_BASE_URL": "http://wud.api-unavailable.test:3000",
+            "WUD_API_BASE_URL": "https://wud.api-unavailable.test:3000",
         },
     )
     wud_file = tmp_path / "state" / "images.todo"

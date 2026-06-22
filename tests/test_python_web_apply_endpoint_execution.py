@@ -303,7 +303,7 @@ def test_apply_endpoint_uses_api_pending_source_without_editing_wud_file(
             "WUD_WEB_DEV_NO_AUTH": "true",
             "WUD_WEB_MUTATIONS_ENABLED": "true",
             "WUD_PENDING_SOURCE": "api",
-            "WUD_API_BASE_URL": "http://wud.apply-api-source.test:3000",
+            "WUD_API_BASE_URL": "https://wud.apply-api-source.test:3000",
             **fake_env,
         },
     )
@@ -372,7 +372,7 @@ def test_apply_endpoint_rejects_stale_api_pending_source_without_editing_file(
             "WUD_WEB_DEV_NO_AUTH": "true",
             "WUD_WEB_MUTATIONS_ENABLED": "true",
             "WUD_PENDING_SOURCE": "api",
-            "WUD_API_BASE_URL": "http://wud.apply-api-stale.test:3000",
+            "WUD_API_BASE_URL": "https://wud.apply-api-stale.test:3000",
             **fake_env,
         },
     )
@@ -421,7 +421,7 @@ def test_apply_endpoint_wraps_api_pending_source_oserror_without_mutation(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
-    secret = "api-apply-secret-token"
+    redaction_value = "api-apply-redaction-value"
     fake_env, fake_root = _fake_docker_env(tmp_path)
     containers = [
         _wud_api_container(tag="latest", remote_tag="", update_kind="digest")
@@ -433,8 +433,8 @@ def test_apply_endpoint_wraps_api_pending_source_oserror_without_mutation(
             "WUD_WEB_DEV_NO_AUTH": "true",
             "WUD_WEB_MUTATIONS_ENABLED": "true",
             "WUD_PENDING_SOURCE": "api",
-            "WUD_API_BASE_URL": "http://wud.apply-api-oserror.test:3000",
-            "WUD_WEB_TOKEN": secret,
+            "WUD_API_BASE_URL": "https://wud.apply-api-oserror.test:3000",
+            "WUD_WEB_TOKEN": redaction_value,
             **fake_env,
         },
     )
@@ -456,7 +456,8 @@ def test_apply_endpoint_wraps_api_pending_source_oserror_without_mutation(
 
     def fail_pending_source_resolution(*_args, **_kwargs):
         raise OSError(
-            f"could not read {tmp_path / 'state' / 'api-secret-path'} with {secret}"
+            f"could not read {tmp_path / 'state' / 'api-redaction-path'} "
+            f"with {redaction_value}"
         )
 
     monkeypatch.setattr(
@@ -478,7 +479,7 @@ def test_apply_endpoint_wraps_api_pending_source_oserror_without_mutation(
     assert apply_response.status_code == 500
     detail = apply_response.json()["detail"]
     assert detail.startswith("could not revalidate plan: ")
-    assert secret not in detail
+    assert redaction_value not in detail
     assert str(tmp_path) not in detail
     assert "<redacted>" in detail
     assert "[REDACTED_PATH]" in detail
