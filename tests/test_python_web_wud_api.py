@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import sqlite3
 import urllib.parse
 from pathlib import Path
 from typing import Any
@@ -8,6 +9,7 @@ from typing import Any
 import pytest
 
 from wudup import web as web_module
+from wudup import web_pending
 from wudup import web_release_notes as release_notes_module
 from wudup import web_wud_api
 from wudup.db import open_db
@@ -97,12 +99,38 @@ def _install_recording_wud_api(monkeypatch, containers: list[dict[str, Any]]):
     return calls
 
 
-def _rescan_payload(scope: str = "all", line_numbers: list[int] | None = None):
+def _rescan_payload(
+    scope: str = "all",
+    line_numbers: list[int] | None = None,
+    lines: list[dict[str, Any]] | None = None,
+):
     return {
         "confirmation": "rescan_wud",
         "scope": scope,
         "line_numbers": [] if line_numbers is None else line_numbers,
+        "lines": [] if lines is None else lines,
     }
+
+
+def _rescan_lines_from_pending(
+    pending_body: dict[str, Any],
+    line_numbers: list[int],
+) -> list[dict[str, Any]]:
+    by_line = {item["line_no"]: item for item in pending_body["items"]}
+    lines: list[dict[str, Any]] = []
+    for line_no in line_numbers:
+        item = by_line[line_no]
+        metadata = item.get("wud_metadata")
+        lines.append(
+            {
+                "line_no": line_no,
+                "raw": item["raw"],
+                "source_id": item["source_id"],
+                "source_hash": pending_body["source_hash"],
+                "container_id": "" if metadata is None else metadata["id"],
+            }
+        )
+    return lines
 
 
 class _ToggleableWudApi:
@@ -241,6 +269,37 @@ def test_pending_global_rescan_calls_wud_watch_refreshes_snapshot_and_audits(
     assert metadata["wud_api"]["state"] == "ready"
 
 
+def test_pending_rescan_does_not_watch_when_audit_start_fails(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    calls = _install_recording_wud_api(monkeypatch, [_container_payload(name="app")])
+
+    def fail_audit(*_args, **_kwargs):
+        raise sqlite3.Error("database is locked")
+
+    monkeypatch.setattr(web_pending, "_insert_pending_rescan_audit_start", fail_audit)
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+            "WUD_API_BASE_URL": "http://wud.rescan-audit-fails.test:3000",
+        },
+    )
+    calls.clear()
+
+    response = client.post(
+        "/api/v1/pending/rescan",
+        json=_rescan_payload(),
+        headers=_csrf_headers(client),
+    )
+
+    assert response.status_code == 500
+    assert response.json()["detail"].startswith("could not record WUD rescan audit")
+    assert calls == []
+
+
 def test_pending_selected_rescan_maps_lines_to_wud_container_ids(
     tmp_path: Path,
     monkeypatch,
@@ -259,11 +318,13 @@ def test_pending_selected_rescan_maps_lines_to_wud_container_ids(
     wud_file = tmp_path / "state" / "images.todo"
     original = "app\nunknown\n"
     wud_file.write_text(original, encoding="utf-8")
+    pending_body = client.get("/api/v1/pending").json()
+    lines = _rescan_lines_from_pending(pending_body, [1, 2])
     calls.clear()
 
     response = client.post(
         "/api/v1/pending/rescan",
-        json=_rescan_payload("selected", [1, 2]),
+        json=_rescan_payload("selected", [1, 2], lines),
         headers=_csrf_headers(client),
     )
 
@@ -279,6 +340,94 @@ def test_pending_selected_rescan_maps_lines_to_wud_container_ids(
     assert ("POST", "/api/containers/docker%2Flocal%20app/watch") in calls
     assert ("POST", "/api/containers/watch") not in calls
     assert wud_file.read_text(encoding="utf-8") == original
+
+
+def test_pending_selected_rescan_rejects_stale_source_without_watch(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    calls = _install_recording_wud_api(monkeypatch, [_container_payload(name="app")])
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+            "WUD_API_BASE_URL": "http://wud.rescan-stale.test:3000",
+        },
+    )
+    wud_file = tmp_path / "state" / "images.todo"
+    wud_file.write_text("app\n", encoding="utf-8")
+    pending_body = client.get("/api/v1/pending").json()
+    lines = _rescan_lines_from_pending(pending_body, [1])
+    wud_file.write_text("other\n", encoding="utf-8")
+    calls.clear()
+
+    response = client.post(
+        "/api/v1/pending/rescan",
+        json=_rescan_payload("selected", [1], lines),
+        headers=_csrf_headers(client),
+    )
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == "selected rescan is stale"
+    assert [call for call in calls if call[0] == "POST"] == []
+
+
+def test_pending_selected_rescan_reports_partial_watch_failure(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    calls = _install_recording_wud_api(
+        monkeypatch,
+        [
+            _container_payload(name="app", image="app"),
+            _container_payload(name="radarr", image="radarr"),
+        ],
+    )
+
+    def post_json(url: str) -> object:
+        path = urllib.parse.urlsplit(url).path
+        calls.append(("POST", path))
+        if path == "/api/containers/docker.local.radarr/watch":
+            raise OSError("timeout")
+        return {"status": "ok"}
+
+    monkeypatch.setattr(web_wud_api, "_post_json", post_json)
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+            "WUD_API_BASE_URL": "http://wud.rescan-partial-watch.test:3000",
+        },
+    )
+    wud_file = tmp_path / "state" / "images.todo"
+    wud_file.write_text("app\nradarr\n", encoding="utf-8")
+    pending_body = client.get("/api/v1/pending").json()
+    lines = _rescan_lines_from_pending(pending_body, [1, 2])
+    calls.clear()
+
+    response = client.post(
+        "/api/v1/pending/rescan",
+        json=_rescan_payload("selected", [1, 2], lines),
+        headers=_csrf_headers(client),
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "partial"
+    assert body["watched_count"] == 1
+    assert ("POST", "/api/containers/docker.local.app/watch") in calls
+    assert ("POST", "/api/containers/docker.local.radarr/watch") in calls
+    with open_db(tmp_path / "state" / "wud.sqlite") as conn:
+        run = conn.execute(
+            "SELECT * FROM update_runs WHERE id = ?",
+            (body["audit_run_id"],),
+        ).fetchone()
+    assert run["status"] == "success"
+    metadata = json.loads(run["metadata_json"])
+    assert metadata["status"] == "partial"
+    assert metadata["watched_count"] == 1
 
 
 def test_pending_selected_rescan_skips_unmapped_lines_without_global_watch(
@@ -297,11 +446,13 @@ def test_pending_selected_rescan_skips_unmapped_lines_without_global_watch(
     wud_file = tmp_path / "state" / "images.todo"
     original = "unknown\n"
     wud_file.write_text(original, encoding="utf-8")
+    pending_body = client.get("/api/v1/pending").json()
+    lines = _rescan_lines_from_pending(pending_body, [1])
     calls.clear()
 
     response = client.post(
         "/api/v1/pending/rescan",
-        json=_rescan_payload("selected", [1]),
+        json=_rescan_payload("selected", [1], lines),
         headers=_csrf_headers(client),
     )
 

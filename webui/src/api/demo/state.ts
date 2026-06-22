@@ -15,6 +15,7 @@ import type {
   PendingCleanupResponse,
   PendingGroupedItem,
   PendingItem,
+  PendingRescanLine,
   PendingRemovalPlanResponse,
   PendingResponse,
   PendingRescanResponse,
@@ -765,13 +766,13 @@ export class DemoApiState {
 
   rescanPending(
     scope: PendingRescanScope,
-    lineNumbers: number[],
+    lines: PendingRescanLine[],
   ): PendingRescanResponse {
     return {
       status: "blocked",
       audit_run_id: 0,
       scope,
-      requested_count: scope === "selected" ? lineNumbers.length : 0,
+      requested_count: scope === "selected" ? lines.length : 0,
       watched_count: 0,
       skipped: [],
       wud_api: {

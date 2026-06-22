@@ -16,8 +16,10 @@ import {
 import {
   applyJobLogResponse,
   applyJobResponse,
+  pendingItem,
   pendingResponse,
   pendingRescanResponse,
+  wudContainerMetadata,
   releaseNoteInfo,
   releaseNotesResponse,
   retagPlanResponse,
@@ -215,6 +217,9 @@ describe("updates store", () => {
     useSettingsStore();
     const updates = useUpdatesStore();
     useRunsStore();
+    updates.pending = pendingResponse([
+      pendingItem({ wud_metadata: wudContainerMetadata() }),
+    ]);
 
     const response = await updates.rescanPending("selected", [1]);
 
@@ -235,6 +240,15 @@ describe("updates store", () => {
       confirmation: "rescan_wud",
       scope: "selected",
       line_numbers: [1],
+      lines: [
+        {
+          line_no: 1,
+          raw: "repo/app:1.0 sha256=abc",
+          source_id: "file:1",
+          source_hash: "pending-source-hash",
+          container_id: "docker.local.app",
+        },
+      ],
     });
     expect(
       ((fetchMock.mock.calls[0][1] as RequestInit).headers as Headers).get(

@@ -975,6 +975,7 @@ export const generatedFixtures = {
         "label": "Pending file"
       },
       "source_file": "<WUD_OUT_FILE>",
+      "source_hash": "bb3e6e58a3184bdf0005e5fa97801df5def609ac25caee5d92c81f2b062752d8",
       "warnings": [],
       "wud_api": {
         "available": true,
@@ -2435,6 +2436,7 @@ export const generatedFixtures = {
       "label": "Pending file"
     },
     "source_file": "demo/out/images.todo",
+    "source_hash": "bb3e6e58a3184bdf0005e5fa97801df5def609ac25caee5d92c81f2b062752d8",
     "warnings": [],
     "wud_api": {
       "available": true,

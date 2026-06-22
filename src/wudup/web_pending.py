@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import secrets
 import sqlite3
 from collections.abc import Sequence
@@ -47,6 +48,7 @@ from .web_models import (
     PendingRemovalPlanRequest,
     PendingRemovalPlanResponse,
     PendingRemovalRequest,
+    PendingRescanLine,
     PendingRescanRequest,
     PendingRescanResponse,
     PendingRescanSkippedLine,
@@ -59,6 +61,8 @@ from .web_models import (
     WudApiStatus,
 )
 from .wud_file import ParsedWudFile, parse_wud_file, remove_lines_before_run
+
+LOGGER = logging.getLogger(__name__)
 
 
 class EffectiveConfigLoader(Protocol):
@@ -186,30 +190,29 @@ def api_pending_rescan(
     if active_error:
         raise HTTPException(status_code=409, detail=active_error)
 
-    if payload.scope == "selected" and not payload.line_numbers:
+    if payload.scope == "selected" and not payload.lines:
         raise HTTPException(
             status_code=422,
-            detail="line_numbers are required for selected rescan",
+            detail="selected rescan lines are required",
         )
 
     wud_lock = web_jobs._acquire_apply_wud_lock(settings)
     try:
         if payload.scope == "all":
-            response = _pending_rescan_all(settings)
             audit_line_numbers: tuple[int, ...] = ()
+            requested_count = 0
+            selected_lines: tuple[PendingRescanLine, ...] = ()
         else:
-            try:
-                selected = _selected_removal_line_numbers(payload.line_numbers)
-            except PlanInputError as exc:
-                raise HTTPException(status_code=422, detail=str(exc)) from exc
-            response = _pending_rescan_selected(settings, selected)
-            audit_line_numbers = tuple(selected)
+            selected_lines = _rescan_payload_lines(payload)
+            audit_line_numbers = tuple(line.line_no for line in selected_lines)
+            requested_count = len(selected_lines)
 
         try:
-            audit_run_id = _insert_pending_rescan_audit(
+            audit_run_id = _insert_pending_rescan_audit_start(
                 settings,
                 request,
-                response=response,
+                scope=payload.scope,
+                requested_count=requested_count,
                 line_numbers=audit_line_numbers,
             )
         except (OSError, sqlite3.Error, DatabaseError) as exc:
@@ -221,6 +224,42 @@ def api_pending_rescan(
                     exc,
                 ),
             ) from exc
+
+        try:
+            if payload.scope == "all":
+                response = _pending_rescan_all(settings)
+            else:
+                response = _pending_rescan_selected(settings, selected_lines)
+        except HTTPException as exc:
+            _safe_update_pending_rescan_audit_error(
+                settings,
+                request,
+                audit_run_id,
+                scope=payload.scope,
+                requested_count=requested_count,
+                line_numbers=audit_line_numbers,
+                error=str(exc.detail),
+            )
+            raise
+        except Exception as exc:
+            _safe_update_pending_rescan_audit_error(
+                settings,
+                request,
+                audit_run_id,
+                scope=payload.scope,
+                requested_count=requested_count,
+                line_numbers=audit_line_numbers,
+                error=_safe_exception_detail(settings, "WUD rescan failed", exc),
+            )
+            raise
+
+        _safe_update_pending_rescan_audit_response(
+            settings,
+            request,
+            audit_run_id,
+            response=response,
+            line_numbers=audit_line_numbers,
+        )
         return response.model_copy(update={"audit_run_id": audit_run_id})
     finally:
         wud_lock.close()
@@ -400,6 +439,7 @@ def pending_response(
     return PendingResponse(
         source_file=source.source_file,
         source=source.response_source(),
+        source_hash=source.source_hash,
         exists=source.exists,
         count=len(items),
         items=items,
@@ -675,7 +715,7 @@ def _pending_rescan_all(settings: WebSettings) -> PendingRescanResponse:
 
 def _pending_rescan_selected(
     settings: WebSettings,
-    selected: Sequence[int],
+    selected: Sequence[PendingRescanLine],
 ) -> PendingRescanResponse:
     try:
         source = web_pending_sources.resolve_pending_source(
@@ -693,6 +733,7 @@ def _pending_rescan_selected(
             ),
         ) from exc
 
+    _validate_selected_rescan_source(source, selected)
     snapshot = source.wud_snapshot or web_wud_api.get_snapshot(
         settings,
         include_containers=True,
@@ -715,22 +756,20 @@ def _pending_rescan_selected(
         source.parsed.targets,
         snapshot=snapshot,
     )
+    source_ids_by_line = dict(source.source_ids_by_line or {})
     skipped: list[PendingRescanSkippedLine] = []
     container_ids: list[str] = []
     seen_container_ids: set[str] = set()
-    for line_no in selected:
+    for line in selected:
+        line_no = line.line_no
         target = targets_by_line.get(line_no)
         if target is None:
-            skipped.append(
-                PendingRescanSkippedLine(
-                    line_no=line_no,
-                    raw="",
-                    reason="not-pending",
-                )
-            )
-            continue
-        container = metadata_by_line.get(line_no)
-        if container is None or not container.id:
+            raise HTTPException(status_code=409, detail="selected rescan is stale")
+        if target.raw != line.raw:
+            raise HTTPException(status_code=409, detail="selected rescan is stale")
+        if source_ids_by_line.get(line_no, "") != line.source_id:
+            raise HTTPException(status_code=409, detail="selected rescan is stale")
+        if not line.container_id:
             skipped.append(
                 PendingRescanSkippedLine(
                     line_no=line_no,
@@ -739,6 +778,9 @@ def _pending_rescan_selected(
                 )
             )
             continue
+        container = metadata_by_line.get(line_no)
+        if container is None or container.id != line.container_id:
+            raise HTTPException(status_code=409, detail="selected rescan is stale")
         if container.id not in seen_container_ids:
             seen_container_ids.add(container.id)
             container_ids.append(container.id)
@@ -760,7 +802,7 @@ def _pending_rescan_selected(
         audit_run_id=0,
         scope="selected",
         requested_count=len(selected),
-        watched_count=len(container_ids) if result.watched else 0,
+        watched_count=result.watched_count,
         skipped=skipped,
         wud_api=result.snapshot.status,
     )
@@ -771,11 +813,76 @@ def _pending_rescan_status(
     *,
     skipped: Sequence[PendingRescanSkippedLine],
 ) -> PendingRescanStatus:
-    if not result.watched or result.snapshot.status.state != "ready":
+    if result.snapshot.status.state != "ready":
+        if result.watched_count > 0:
+            return "partial"
         return "blocked"
+    if not result.watched and result.watched_count == 0:
+        return "blocked"
+    if result.watched_count < result.requested_count:
+        return "partial"
     if skipped:
         return "partial"
     return "success"
+
+
+def _rescan_payload_lines(
+    payload: PendingRescanRequest,
+) -> tuple[PendingRescanLine, ...]:
+    if not payload.lines:
+        raise HTTPException(
+            status_code=422,
+            detail="selected rescan lines are required",
+        )
+
+    seen: set[int] = set()
+    lines: list[PendingRescanLine] = []
+    for line in payload.lines:
+        if line.line_no in seen:
+            raise HTTPException(
+                status_code=422,
+                detail=f"rescan line {line.line_no} was provided more than once",
+            )
+        if not line.raw:
+            raise HTTPException(
+                status_code=422,
+                detail=f"rescan line {line.line_no} raw value is required",
+            )
+        if not line.source_id:
+            raise HTTPException(
+                status_code=422,
+                detail=f"rescan line {line.line_no} source_id is required",
+            )
+        if not line.source_hash:
+            raise HTTPException(
+                status_code=422,
+                detail=f"rescan line {line.line_no} source_hash is required",
+            )
+        seen.add(line.line_no)
+        lines.append(line)
+
+    selected = tuple(sorted(lines, key=lambda line: line.line_no))
+    if payload.line_numbers:
+        try:
+            line_numbers = _selected_removal_line_numbers(payload.line_numbers)
+        except PlanInputError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        selected_line_numbers = tuple(line.line_no for line in selected)
+        if line_numbers != selected_line_numbers:
+            raise HTTPException(
+                status_code=422,
+                detail="line_numbers must match selected rescan lines",
+            )
+    return selected
+
+
+def _validate_selected_rescan_source(
+    source: web_pending_sources.PendingSourceResult,
+    selected: Sequence[PendingRescanLine],
+) -> None:
+    source_hashes = {line.source_hash for line in selected}
+    if len(source_hashes) != 1 or source_hashes != {source.source_hash}:
+        raise HTTPException(status_code=409, detail="selected rescan is stale")
 
 
 def _cleanup_payload_lines(
@@ -1009,26 +1116,24 @@ def _insert_pending_cleanup_audit(
     return run_id
 
 
-def _insert_pending_rescan_audit(
+def _insert_pending_rescan_audit_start(
     settings: WebSettings,
     request: Request,
     *,
-    response: PendingRescanResponse,
+    scope: str,
+    requested_count: int,
     line_numbers: Sequence[int],
 ) -> int:
     now = utc_timestamp()
-    metadata = {
-        "source": "webui",
-        "operation": "rescan_wud",
-        "actor_type": _request_actor_type(settings, request),
-        "scope": response.scope,
-        "status": response.status,
-        "requested_count": response.requested_count,
-        "watched_count": response.watched_count,
-        "line_numbers": list(line_numbers),
-        "skipped": [item.model_dump(mode="json") for item in response.skipped],
-        "wud_api": response.wud_api.model_dump(mode="json"),
-    }
+    metadata = _pending_rescan_audit_metadata(
+        settings,
+        request,
+        scope=scope,
+        status="running",
+        requested_count=requested_count,
+        watched_count=0,
+        line_numbers=line_numbers,
+    )
     with open_db(settings.config.db_path) as conn:
         init_db(conn)
         with _immediate_transaction(conn):
@@ -1044,17 +1149,168 @@ def _insert_pending_rescan_audit(
                     log_file,
                     metadata_json
                 )
-                VALUES (?, ?, ?, 0, 'web-wud-rescan', ?, '', ?)
+                VALUES (?, NULL, 'running', 0, 'web-wud-rescan', ?, '', ?)
                 """,
                 (
                     now,
-                    now,
-                    "failure" if response.status == "blocked" else "success",
                     str(settings.config.wud_out_file),
                     _json_object(metadata),
                 ),
             )
             return int(cursor.lastrowid)
+
+
+def _safe_update_pending_rescan_audit_response(
+    settings: WebSettings,
+    request: Request,
+    run_id: int,
+    *,
+    response: PendingRescanResponse,
+    line_numbers: Sequence[int],
+) -> None:
+    try:
+        _update_pending_rescan_audit_response(
+            settings,
+            request,
+            run_id,
+            response=response,
+            line_numbers=line_numbers,
+        )
+    except (OSError, sqlite3.Error, DatabaseError):
+        LOGGER.exception("failed to update WebUI WUD rescan audit")
+
+
+def _safe_update_pending_rescan_audit_error(
+    settings: WebSettings,
+    request: Request,
+    run_id: int,
+    *,
+    scope: str,
+    requested_count: int,
+    line_numbers: Sequence[int],
+    error: str,
+) -> None:
+    try:
+        _update_pending_rescan_audit_error(
+            settings,
+            request,
+            run_id,
+            scope=scope,
+            requested_count=requested_count,
+            line_numbers=line_numbers,
+            error=error,
+        )
+    except (OSError, sqlite3.Error, DatabaseError):
+        LOGGER.exception("failed to update WebUI WUD rescan audit")
+
+
+def _update_pending_rescan_audit_response(
+    settings: WebSettings,
+    request: Request,
+    run_id: int,
+    *,
+    response: PendingRescanResponse,
+    line_numbers: Sequence[int],
+) -> None:
+    metadata = _pending_rescan_audit_metadata(
+        settings,
+        request,
+        scope=response.scope,
+        status=response.status,
+        requested_count=response.requested_count,
+        watched_count=response.watched_count,
+        line_numbers=line_numbers,
+        skipped=response.skipped,
+        wud_api=response.wud_api,
+    )
+    _update_pending_rescan_audit(
+        settings,
+        run_id,
+        run_status="failure" if response.status == "blocked" else "success",
+        metadata=metadata,
+    )
+
+
+def _update_pending_rescan_audit_error(
+    settings: WebSettings,
+    request: Request,
+    run_id: int,
+    *,
+    scope: str,
+    requested_count: int,
+    line_numbers: Sequence[int],
+    error: str,
+) -> None:
+    metadata = _pending_rescan_audit_metadata(
+        settings,
+        request,
+        scope=scope,
+        status="failure",
+        requested_count=requested_count,
+        watched_count=0,
+        line_numbers=line_numbers,
+        error=error,
+    )
+    _update_pending_rescan_audit(
+        settings,
+        run_id,
+        run_status="failure",
+        metadata=metadata,
+    )
+
+
+def _update_pending_rescan_audit(
+    settings: WebSettings,
+    run_id: int,
+    *,
+    run_status: str,
+    metadata: dict[str, Any],
+) -> None:
+    with open_db(settings.config.db_path) as conn:
+        init_db(conn)
+        with conn:
+            conn.execute(
+                """
+                UPDATE update_runs
+                SET finished_at = ?,
+                    status = ?,
+                    metadata_json = ?
+                WHERE id = ?
+                  AND mode = 'web-wud-rescan'
+                """,
+                (utc_timestamp(), run_status, _json_object(metadata), run_id),
+            )
+
+
+def _pending_rescan_audit_metadata(
+    settings: WebSettings,
+    request: Request,
+    *,
+    scope: str,
+    status: str,
+    requested_count: int,
+    watched_count: int,
+    line_numbers: Sequence[int],
+    skipped: Sequence[PendingRescanSkippedLine] = (),
+    wud_api: WudApiStatus | None = None,
+    error: str = "",
+) -> dict[str, Any]:
+    metadata: dict[str, Any] = {
+        "source": "webui",
+        "operation": "rescan_wud",
+        "actor_type": _request_actor_type(settings, request),
+        "scope": scope,
+        "status": status,
+        "requested_count": requested_count,
+        "watched_count": watched_count,
+        "line_numbers": list(line_numbers),
+        "skipped": [item.model_dump(mode="json") for item in skipped],
+    }
+    if wud_api is not None:
+        metadata["wud_api"] = wud_api.model_dump(mode="json")
+    if error:
+        metadata["error"] = error
+    return metadata
 
 
 def _insert_pending_removal_audit(

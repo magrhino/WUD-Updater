@@ -5,6 +5,7 @@ import {
   apiPrefixFromBasePath,
   normalizeApiPrefix,
   webApi,
+  type PendingRescanLine,
   type SelfUpdatePlanResponse,
   type SelfUpdateResponse,
   type StateOperation,
@@ -36,6 +37,19 @@ function jsonRequestBody(call: unknown[]): unknown {
     throw new TypeError("Expected request body to be a string");
   }
   return JSON.parse(body);
+}
+
+function pendingRescanLine(
+  overrides: Partial<PendingRescanLine> = {},
+): PendingRescanLine {
+  return {
+    line_no: 1,
+    raw: "repo/app:1.0",
+    source_id: "file:1",
+    source_hash: "pending-source-hash",
+    container_id: "docker.local.app",
+    ...overrides,
+  };
 }
 
 function selfUpdateStatus(): SelfUpdateResponse {
@@ -184,7 +198,7 @@ describe("webApi", () => {
       webApi.cleanupPending("cleanup", [{ line_no: 1, raw: "repo/app:1.0" }], "csrf"),
       webApi.createRemovalPlan([1], "csrf"),
       webApi.removeSelectedPending("removal", [{ line_no: 1, raw: "repo/app:1.0" }], "csrf"),
-      webApi.rescanPending("selected", [1], "csrf"),
+      webApi.rescanPending("selected", [pendingRescanLine()], "csrf"),
       webApi.servicePolicies(),
       webApi.snoozes("active"),
       webApi.tagExclusions("active"),
@@ -333,7 +347,7 @@ describe("webApi", () => {
       [{ line_no: 1, raw: "repo/app:1.0" }],
       "csrf-token",
     );
-    await webApi.rescanPending("selected", [1], "csrf-token");
+    await webApi.rescanPending("selected", [pendingRescanLine()], "csrf-token");
     await webApi.stateOperation(operation, "csrf-token");
     await webApi.planSelfUpdate("csrf-token");
     await webApi.applySelfUpdate("csrf-token", selfUpdateStatus());
@@ -464,13 +478,32 @@ describe("webApi", () => {
   it("serializes pending rescan payload exactly", async () => {
     const fetchMock = mockFetch({});
 
-    await webApi.rescanPending("selected", [3], "csrf");
+    await webApi.rescanPending(
+      "selected",
+      [
+        pendingRescanLine({
+          line_no: 3,
+          raw: "repo/app:1.0 tag=1.1",
+          source_id: "file:3",
+        }),
+      ],
+      "csrf",
+    );
 
     expect(fetchMock.mock.calls[0][0]).toBe("/api/v1/pending/rescan");
     expect(jsonRequestBody(fetchMock.mock.calls[0])).toEqual({
       confirmation: "rescan_wud",
       scope: "selected",
       line_numbers: [3],
+      lines: [
+        {
+          line_no: 3,
+          raw: "repo/app:1.0 tag=1.1",
+          source_id: "file:3",
+          source_hash: "pending-source-hash",
+          container_id: "docker.local.app",
+        },
+      ],
     });
     expect(
       (requestInit(fetchMock.mock.calls[0]).headers as Headers).get(

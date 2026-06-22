@@ -10,6 +10,7 @@ import {
   type PendingCleanupLine,
   type PendingCleanupResponse,
   type PendingRemovalPlanResponse,
+  type PendingRescanLine,
   type PendingRescanResponse,
   type PendingRescanScope,
   type PlanResponse,
@@ -527,7 +528,7 @@ export const useUpdatesStore = defineStore("updates", () => {
       pendingRescan.value = null;
       response = await webApi.rescanPending(
         scope,
-        lineNumbers,
+        rescanLinesFor(scope, lineNumbers),
         await auth.ensureCsrf(),
       );
       pendingRescan.value = response;
@@ -679,6 +680,29 @@ export const useUpdatesStore = defineStore("updates", () => {
   function clearRememberedApplyJobId(): void {
     rememberedApplyJobId.value = "";
     removeRememberedApplyJobId();
+  }
+
+  function rescanLinesFor(
+    scope: PendingRescanScope,
+    lineNumbers: number[],
+  ): PendingRescanLine[] {
+    if (scope !== "selected") {
+      return [];
+    }
+    const byLine = new Map(
+      (pending.value?.items ?? []).map((item) => [item.line_no, item]),
+    );
+    const sourceHash = pending.value?.source_hash ?? "";
+    return lineNumbers.map((lineNo) => {
+      const item = byLine.get(lineNo);
+      return {
+        line_no: lineNo,
+        raw: item?.raw ?? "",
+        source_id: item?.source_id ?? "",
+        source_hash: sourceHash,
+        container_id: item?.wud_metadata?.id ?? "",
+      };
+    });
   }
 
   return {

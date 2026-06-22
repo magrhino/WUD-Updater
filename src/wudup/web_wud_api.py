@@ -108,6 +108,8 @@ class WudApiSnapshot:
 class WudApiWatchResult:
     snapshot: WudApiSnapshot
     watched: bool
+    requested_count: int = 0
+    watched_count: int = 0
 
 
 WudApiConfigurationSnapshot = web_wud_config.WudApiConfigurationSnapshot
@@ -251,6 +253,8 @@ def watch_containers(
         return WudApiWatchResult(
             snapshot=get_snapshot(settings, include_containers=True, force=True),
             watched=False,
+            requested_count=0,
+            watched_count=0,
         )
     return _watch_paths(settings, paths)
 
@@ -494,15 +498,27 @@ def _watch_paths(
             metadata_checked=True,
         )
         _store_snapshot(base_url, snapshot)
-        return WudApiWatchResult(snapshot=snapshot, watched=False)
+        return WudApiWatchResult(
+            snapshot=snapshot,
+            watched=False,
+            requested_count=len(paths),
+            watched_count=0,
+        )
 
     preflight = get_snapshot(settings, include_containers=False, force=True)
     if preflight.status.state != WUD_API_STATE_READY:
-        return WudApiWatchResult(snapshot=preflight, watched=False)
+        return WudApiWatchResult(
+            snapshot=preflight,
+            watched=False,
+            requested_count=len(paths),
+            watched_count=0,
+        )
 
+    watched_count = 0
     for path in paths:
         try:
             _post_json(_join_url(normalized_base_url, path))
+            watched_count += 1
         except urllib.error.HTTPError as exc:
             snapshot = _watch_http_error_snapshot(
                 settings,
@@ -511,7 +527,12 @@ def _watch_paths(
                 checked_at=_utc_timestamp(),
                 checked_monotonic=time.monotonic(),
             )
-            return WudApiWatchResult(snapshot=snapshot, watched=False)
+            return WudApiWatchResult(
+                snapshot=snapshot,
+                watched=False,
+                requested_count=len(paths),
+                watched_count=watched_count,
+            )
         except (OSError, ValueError) as exc:
             snapshot = _snapshot(
                 WUD_API_STATE_ERROR,
@@ -526,11 +547,18 @@ def _watch_paths(
                 metadata_checked=True,
             )
             _store_snapshot(base_url, snapshot)
-            return WudApiWatchResult(snapshot=snapshot, watched=False)
+            return WudApiWatchResult(
+                snapshot=snapshot,
+                watched=False,
+                requested_count=len(paths),
+                watched_count=watched_count,
+            )
 
     return WudApiWatchResult(
         snapshot=get_snapshot(settings, include_containers=True, force=True),
         watched=True,
+        requested_count=len(paths),
+        watched_count=watched_count,
     )
 
 

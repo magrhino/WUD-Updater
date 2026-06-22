@@ -163,6 +163,7 @@ export interface PendingGrouping {
 export interface PendingResponse {
   source_file: string;
   source: PendingSourceInfo;
+  source_hash?: string;
   exists: boolean;
   count: number;
   items: PendingItem[];
@@ -195,6 +196,14 @@ export interface PendingRescanSkippedLine {
   line_no: number;
   raw: string;
   reason: string;
+}
+
+export interface PendingRescanLine {
+  line_no: number;
+  raw: string;
+  source_id: string;
+  source_hash: string;
+  container_id: string;
 }
 
 export interface PendingRescanResponse {

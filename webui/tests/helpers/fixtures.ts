@@ -640,6 +640,7 @@ export function pendingResponse(items = [pendingItem()]): PendingResponse {
   return {
     source_file: "/out/images.todo",
     source: pendingSourceInfo(),
+    source_hash: "pending-source-hash",
     exists: true,
     count: items.length,
     items,

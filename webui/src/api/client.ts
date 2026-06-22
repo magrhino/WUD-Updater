@@ -26,6 +26,7 @@ export type {
   PendingCleanupLine,
   PendingCleanupRemovedLine,
   PendingCleanupResponse,
+  PendingRescanLine,
   PendingRescanScope,
   PendingRescanStatus,
   PendingRescanSkippedLine,
@@ -173,6 +174,7 @@ import type {
   DiagnosticsSupportBundleResponse,
   PendingCleanupLine,
   PendingCleanupResponse,
+  PendingRescanLine,
   PendingRescanScope,
   PendingRescanResponse,
   PendingRemovalPlanResponse,
@@ -449,7 +451,7 @@ const pendingApi = {
     }),
   rescanPending: (
     scope: PendingRescanScope,
-    lineNumbers: number[],
+    lines: PendingRescanLine[],
     csrfToken: string,
   ) =>
     apiRequest<PendingRescanResponse>("/pending/rescan", {
@@ -458,7 +460,8 @@ const pendingApi = {
       body: JSON.stringify({
         confirmation: "rescan_wud",
         scope,
-        line_numbers: lineNumbers,
+        line_numbers: lines.map((line) => line.line_no),
+        lines,
       }),
     }),
 };

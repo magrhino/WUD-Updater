@@ -76,6 +76,7 @@ __all__ = (
     "PendingRemovalPlanResponse",
     "PendingRemovalRequest",
     "PendingResponse",
+    "PendingRescanLine",
     "PendingRescanRequest",
     "PendingRescanResponse",
     "PendingRescanScope",
@@ -514,6 +515,7 @@ class PendingGrouping(BaseModel):
 class PendingResponse(BaseModel):
     source_file: str
     source: PendingSourceInfo = Field(default_factory=PendingSourceInfo)
+    source_hash: str = ""
     exists: bool
     count: int
     items: list[PendingItem] = Field(default_factory=list)
@@ -1176,10 +1178,18 @@ class PendingRescanSkippedLine(BaseModel):
     raw: str
     reason: str
 
+class PendingRescanLine(BaseModel):
+    line_no: LineNumber
+    raw: str
+    source_id: str = ""
+    source_hash: str = ""
+    container_id: str = ""
+
 class PendingRescanRequest(BaseModel):
     confirmation: Literal["rescan_wud"]
     scope: PendingRescanScope
     line_numbers: list[LineNumber] = Field(default_factory=list)
+    lines: list[PendingRescanLine] = Field(default_factory=list)
 
 class PendingRescanResponse(BaseModel):
     status: PendingRescanStatus
