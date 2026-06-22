@@ -4,12 +4,14 @@ import json
 import os
 import re
 import time
+import urllib.parse
 from collections.abc import Mapping
 from pathlib import Path
 from typing import Optional
 
 from fastapi.testclient import TestClient
 
+from wudup import web_wud_api
 from wudup.db import (
     open_db,
     init_db,
@@ -54,6 +56,64 @@ def _client(
 ) -> TestClient:
     values = _web_env(tmp_path, env, create_root=create_root)
     return TestClient(create_app(environ=values))
+
+
+def _wud_api_container(
+    *,
+    name: str = "app",
+    image: str = "repo/app",
+    tag: str = "1.0",
+    remote_tag: str = "2.0",
+    remote_digest: str = "",
+    update_kind: str = "tag",
+) -> dict[str, object]:
+    return {
+        "id": f"docker.local.{name}",
+        "name": name,
+        "displayName": name.title(),
+        "status": "running",
+        "watcher": "local",
+        "image": {
+            "name": image,
+            "tag": {"value": tag},
+            "digest": {"value": "sha256:old"},
+        },
+        "result": {
+            "tag": remote_tag,
+            "digest": remote_digest,
+            "link": "https://github.com/acme/app/releases/tag/v2.0",
+        },
+        "updateKind": {
+            "kind": update_kind,
+            "localValue": tag,
+            "remoteValue": remote_tag or remote_digest,
+            "semverDiff": "major",
+        },
+        "labels": {
+            "org.opencontainers.image.source": "https://github.com/acme/app",
+        },
+        "error": {"message": ""},
+        "updateAvailable": True,
+    }
+
+
+def _install_wud_api(
+    monkeypatch,
+    *,
+    containers: list[dict[str, object]],
+    health_error: Exception | None = None,
+) -> None:
+    def fake_request_json(url: str) -> object:
+        path = urllib.parse.urlsplit(url).path
+        if path == "/health":
+            if health_error is not None:
+                raise health_error
+            return {"status": "ok"}
+        if path == "/api/containers":
+            return containers
+        raise AssertionError(f"unexpected WUD API URL: {url}")
+
+    monkeypatch.setattr(web_wud_api, "_request_json", fake_request_json)
 
 
 def _doctor_client(

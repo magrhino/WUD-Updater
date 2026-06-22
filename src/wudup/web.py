@@ -32,6 +32,7 @@ from . import (
     web_models,
     web_onboarding,
     web_pending,
+    web_pending_sources,
     web_plans,
     web_release_notes,
     web_retags,
@@ -521,6 +522,7 @@ def load_web_settings(
         restart_container=_resolve_restart_container(env),
         wud_api_base_url=web_wud_api.configured_base_url(env),
         wud_api_startup_wait_seconds=web_wud_api.configured_startup_wait_seconds(env),
+        pending_source=web_pending_sources.configured_pending_source(env),
         command_env=dict(env),
     )
 
@@ -619,8 +621,9 @@ def api_status(request: Request) -> web_models.StatusResponse:
         ok=db_ready,
         version=__version__,
         wud_file=str(settings.config.wud_out_file),
-        wud_file_exists=pending.exists,
+        wud_file_exists=settings.config.wud_out_file.is_file(),
         pending_count=pending.count,
+        pending_source=pending.source,
         db_path=str(settings.config.db_path),
         db_ready=db_ready,
         auth_required=settings.auth_required,

@@ -1,0 +1,312 @@
+"""Pending-update source selection for WebUI file and WUD API modes."""
+
+from __future__ import annotations
+
+import hashlib
+from collections.abc import Iterable, Mapping
+from dataclasses import dataclass, replace
+from pathlib import Path
+from typing import TYPE_CHECKING, cast
+
+from . import web_wud_api
+from .images import normalize_digest, strip_digest, tag_value_valid
+from .plan_models import DryRunPlanSource
+from .web_auth import WebConfigError
+from .web_models import PendingSourceActive, PendingSourceInfo, PendingSourceMode
+from .wud_file import ParsedWudFile, parse_wud_text
+
+if TYPE_CHECKING:
+    from .web_models import WebSettings
+
+
+PENDING_SOURCE_ENV = "WUD_PENDING_SOURCE"
+DEFAULT_PENDING_SOURCE = "file"
+VALID_PENDING_SOURCES: frozenset[PendingSourceMode] = frozenset(
+    {"file", "api", "auto"}
+)
+API_SOURCE_FILE_LABEL = "WUD API"
+
+
+@dataclass(frozen=True)
+class PendingSourceResult:
+    configured: PendingSourceMode
+    active: PendingSourceActive
+    label: str
+    source_file: str
+    exists: bool
+    parsed: ParsedWudFile
+    text: str
+    source_hash: str
+    fresh: bool = True
+    degraded: bool = False
+    fallback_reason: str = ""
+    detail: str = ""
+    warnings: tuple[str, ...] = ()
+    wud_snapshot: web_wud_api.WudApiSnapshot | None = None
+    metadata_by_line: Mapping[int, web_wud_api.WudApiContainer] | None = None
+    source_ids_by_line: Mapping[int, str] | None = None
+
+    def response_source(self) -> PendingSourceInfo:
+        return PendingSourceInfo(
+            configured=self.configured,
+            active=self.active,
+            label=self.label,
+            fresh=self.fresh,
+            degraded=self.degraded,
+            fallback_reason=self.fallback_reason,
+            detail=self.detail,
+        )
+
+    def plan_source(self) -> DryRunPlanSource:
+        return DryRunPlanSource(
+            configured=self.configured,
+            active=self.active,
+            label=self.label,
+            fresh=self.fresh,
+            degraded=self.degraded,
+            fallback_reason=self.fallback_reason,
+            detail=self.detail,
+            source_hash=self.source_hash,
+        )
+
+
+def configured_pending_source(environ: Mapping[str, str]) -> PendingSourceMode:
+    raw_value = environ.get(PENDING_SOURCE_ENV, "").strip().lower()
+    value = raw_value or DEFAULT_PENDING_SOURCE
+    if value not in VALID_PENDING_SOURCES:
+        allowed = ", ".join(sorted(VALID_PENDING_SOURCES))
+        raise WebConfigError(f"{PENDING_SOURCE_ENV} must be one of: {allowed}")
+    return cast(PendingSourceMode, value)
+
+
+def resolve_pending_source(
+    settings: WebSettings,
+    *,
+    include_wud_metadata: bool = False,
+    force_api: bool = False,
+) -> PendingSourceResult:
+    mode = settings.pending_source
+    if mode == "file":
+        return _file_source(settings, configured=mode, include_wud_metadata=include_wud_metadata)
+
+    api_result = _api_source(settings, configured=mode, force=force_api)
+    if mode == "api" or not api_result.degraded:
+        return api_result
+
+    return _file_source(
+        settings,
+        configured=mode,
+        include_wud_metadata=include_wud_metadata,
+        degraded=True,
+        fallback_reason=api_result.detail or "WUD API pending source is unavailable",
+        detail=api_result.detail,
+        wud_snapshot=api_result.wud_snapshot,
+    )
+
+
+def _file_source(
+    settings: WebSettings,
+    *,
+    configured: PendingSourceMode,
+    include_wud_metadata: bool,
+    degraded: bool = False,
+    fallback_reason: str = "",
+    detail: str = "",
+    wud_snapshot: web_wud_api.WudApiSnapshot | None = None,
+) -> PendingSourceResult:
+    path = settings.config.wud_out_file
+    exists, text, parsed = _read_pending_file(path)
+    snapshot = wud_snapshot
+    metadata_by_line: dict[int, web_wud_api.WudApiContainer] = {}
+    if include_wud_metadata:
+        snapshot = snapshot or web_wud_api.get_snapshot(settings, include_containers=True)
+        if parsed.targets:
+            metadata_by_line = web_wud_api.metadata_by_target(
+                settings,
+                parsed.targets,
+                snapshot=snapshot,
+            )
+    warnings = parsed.warnings
+    if degraded and fallback_reason:
+        warnings = (
+            f"WUD API pending source degraded; using WUD_OUT_FILE: {fallback_reason}",
+            *warnings,
+        )
+    return PendingSourceResult(
+        configured=configured,
+        active="file",
+        label="Pending file",
+        source_file=str(path),
+        exists=exists,
+        parsed=parsed,
+        text=text,
+        source_hash=_sha256(text),
+        fresh=not degraded,
+        degraded=degraded,
+        fallback_reason=fallback_reason,
+        detail=detail,
+        warnings=warnings,
+        wud_snapshot=snapshot,
+        metadata_by_line=metadata_by_line,
+        source_ids_by_line={
+            target.line_no: f"file:{target.line_no}" for target in parsed.targets
+        },
+    )
+
+
+def _api_source(
+    settings: WebSettings,
+    *,
+    configured: PendingSourceMode,
+    force: bool,
+) -> PendingSourceResult:
+    snapshot = web_wud_api.get_snapshot(
+        settings,
+        include_containers=True,
+        force=force,
+    )
+    if not snapshot.status.metadata_available:
+        detail = snapshot.status.detail or "WUD API container metadata is unavailable"
+        return _empty_api_source(
+            configured=configured,
+            snapshot=snapshot,
+            degraded=True,
+            detail=detail,
+            warnings=(f"WUD API pending source degraded: {detail}",),
+        )
+
+    lines = _api_pending_lines(snapshot.containers)
+    text = _pending_text(line.raw for line in lines)
+    parsed = parse_wud_text(text)
+    metadata_by_line = {
+        line_no: line.container for line_no, line in enumerate(lines, start=1)
+    }
+    source_ids_by_line = {
+        line_no: ",".join(line.source_ids) for line_no, line in enumerate(lines, start=1)
+    }
+    return PendingSourceResult(
+        configured=configured,
+        active="api",
+        label=API_SOURCE_FILE_LABEL,
+        source_file=API_SOURCE_FILE_LABEL,
+        exists=True,
+        parsed=parsed,
+        text=text,
+        source_hash=_sha256(text),
+        warnings=parsed.warnings,
+        wud_snapshot=snapshot,
+        metadata_by_line=metadata_by_line,
+        source_ids_by_line=source_ids_by_line,
+    )
+
+
+def _empty_api_source(
+    *,
+    configured: PendingSourceMode,
+    snapshot: web_wud_api.WudApiSnapshot | None,
+    degraded: bool,
+    detail: str,
+    warnings: tuple[str, ...],
+) -> PendingSourceResult:
+    text = ""
+    return PendingSourceResult(
+        configured=configured,
+        active="api",
+        label=API_SOURCE_FILE_LABEL,
+        source_file=API_SOURCE_FILE_LABEL,
+        exists=False,
+        parsed=ParsedWudFile(lines=(), targets=(), warnings=()),
+        text=text,
+        source_hash=_sha256(text),
+        fresh=not degraded,
+        degraded=degraded,
+        fallback_reason="" if configured == "api" else detail,
+        detail=detail,
+        warnings=warnings,
+        wud_snapshot=snapshot,
+        metadata_by_line={},
+        source_ids_by_line={},
+    )
+
+
+@dataclass(frozen=True)
+class _ApiPendingLine:
+    raw: str
+    container: web_wud_api.WudApiContainer
+    source_ids: tuple[str, ...]
+
+
+def _api_pending_lines(
+    containers: tuple[web_wud_api.WudApiContainer, ...],
+) -> tuple[_ApiPendingLine, ...]:
+    by_raw: dict[str, _ApiPendingLine] = {}
+    for container in sorted(containers, key=_container_sort_key):
+        raw = _container_pending_line(container)
+        if not raw:
+            continue
+        source_id = _container_source_id(container)
+        existing = by_raw.get(raw)
+        if existing is None:
+            by_raw[raw] = _ApiPendingLine(
+                raw=raw,
+                container=container,
+                source_ids=(source_id,),
+            )
+            continue
+        if source_id not in existing.source_ids:
+            by_raw[raw] = replace(
+                existing,
+                source_ids=(*existing.source_ids, source_id),
+            )
+    return tuple(by_raw[raw] for raw in sorted(by_raw))
+
+
+def _container_pending_line(container: web_wud_api.WudApiContainer) -> str:
+    image = container.image.strip()
+    if not image:
+        return ""
+    if container.update_kind == "tag" and tag_value_valid(container.remote_tag):
+        return f"{image} tag={container.remote_tag}"
+    if container.remote_digest:
+        return _pending_image_with_digest(image, container.remote_digest)
+    if tag_value_valid(container.remote_tag):
+        return f"{image} tag={container.remote_tag}"
+    return image
+
+
+def _pending_image_with_digest(image: str, digest: str) -> str:
+    return f"{strip_digest(image)}@{normalize_digest(digest)}"
+
+
+def _container_source_id(container: web_wud_api.WudApiContainer) -> str:
+    return container.id or container.name or container.display_name or container.image
+
+
+def _container_sort_key(
+    container: web_wud_api.WudApiContainer,
+) -> tuple[str, str, str, str]:
+    return (
+        _container_pending_line(container),
+        container.id,
+        container.name,
+        container.image,
+    )
+
+
+def _read_pending_file(path: Path) -> tuple[bool, str, ParsedWudFile]:
+    try:
+        text = path.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        return False, "", ParsedWudFile(lines=(), targets=(), warnings=())
+    return True, text, parse_wud_text(text)
+
+
+def _pending_text(lines: Iterable[str]) -> str:
+    values = [str(line) for line in lines]
+    if not values:
+        return ""
+    return "\n".join(values) + "\n"
+
+
+def _sha256(text: str) -> str:
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()

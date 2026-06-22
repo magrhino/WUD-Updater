@@ -416,6 +416,8 @@ export const generatedFixtures = {
                 "services": [
                   "postgres"
                 ],
+                "source": "file",
+                "source_id": "file:4",
                 "target_image": "postgres:16",
                 "wud_metadata": {
                   "display_name": "postgres",
@@ -469,6 +471,8 @@ export const generatedFixtures = {
                 "services": [
                   "home-assistant"
                 ],
+                "source": "file",
+                "source_id": "file:2",
                 "target_image": "ghcr.io/home-assistant/home-assistant:2026.5.3",
                 "wud_metadata": {
                   "display_name": "home-assistant",
@@ -522,6 +526,8 @@ export const generatedFixtures = {
                 "services": [
                   "radarr"
                 ],
+                "source": "file",
+                "source_id": "file:3",
                 "target_image": "lscr.io/linuxserver/radarr:5.22.4",
                 "wud_metadata": {
                   "display_name": "radarr",
@@ -560,6 +566,8 @@ export const generatedFixtures = {
                 "services": [
                   "wudup"
                 ],
+                "source": "file",
+                "source_id": "file:5",
                 "target_image": "ghcr.io/magrhino/wudup:v0.16.1",
                 "wud_metadata": {
                   "display_name": "wudup",
@@ -634,6 +642,8 @@ export const generatedFixtures = {
             "repo": "gethomepage/homepage",
             "resolved_image": "ghcr.io/gethomepage/homepage:v0.9.12",
             "services": [],
+            "source": "file",
+            "source_id": "file:6",
             "target_image": "ghcr.io/gethomepage/homepage:v0.10.9",
             "wud_metadata": null
           },
@@ -678,6 +688,8 @@ export const generatedFixtures = {
             "repo": "vaultwarden/server",
             "resolved_image": "vaultwarden/server:1.31.0",
             "services": [],
+            "source": "file",
+            "source_id": "file:7",
             "target_image": "vaultwarden/server:1.32.0",
             "wud_metadata": null
           },
@@ -722,6 +734,8 @@ export const generatedFixtures = {
             "repo": "containrrr/watchtower",
             "resolved_image": "containrrr/watchtower:1.7.1",
             "services": [],
+            "source": "file",
+            "source_id": "file:8",
             "target_image": "containrrr/watchtower:1.7.2",
             "wud_metadata": null
           }
@@ -741,6 +755,8 @@ export const generatedFixtures = {
           "line_no": 2,
           "raw": "",
           "repo": "home-assistant/home-assistant",
+          "source": "file",
+          "source_id": "file:2",
           "wud_metadata": {
             "display_name": "home-assistant",
             "error": "",
@@ -769,6 +785,8 @@ export const generatedFixtures = {
           "line_no": 3,
           "raw": "",
           "repo": "linuxserver/radarr",
+          "source": "file",
+          "source_id": "file:3",
           "wud_metadata": {
             "display_name": "radarr",
             "error": "",
@@ -805,6 +823,8 @@ export const generatedFixtures = {
           "line_no": 4,
           "raw": "",
           "repo": "postgres",
+          "source": "file",
+          "source_id": "file:4",
           "wud_metadata": {
             "display_name": "postgres",
             "error": "",
@@ -833,6 +853,8 @@ export const generatedFixtures = {
           "line_no": 5,
           "raw": "",
           "repo": "magrhino/wudup",
+          "source": "file",
+          "source_id": "file:5",
           "wud_metadata": {
             "display_name": "wudup",
             "error": "",
@@ -861,6 +883,8 @@ export const generatedFixtures = {
           "line_no": 6,
           "raw": "",
           "repo": "gethomepage/homepage",
+          "source": "file",
+          "source_id": "file:6",
           "wud_metadata": null
         },
         {
@@ -875,6 +899,8 @@ export const generatedFixtures = {
           "line_no": 7,
           "raw": "",
           "repo": "vaultwarden/server",
+          "source": "file",
+          "source_id": "file:7",
           "wud_metadata": null
         },
         {
@@ -889,9 +915,20 @@ export const generatedFixtures = {
           "line_no": 8,
           "raw": "",
           "repo": "containrrr/watchtower",
+          "source": "file",
+          "source_id": "file:8",
           "wud_metadata": null
         }
       ],
+      "source": {
+        "active": "file",
+        "configured": "file",
+        "degraded": false,
+        "detail": "",
+        "fallback_reason": "",
+        "fresh": true,
+        "label": "Pending file"
+      },
       "source_file": "<WUD_OUT_FILE>",
       "warnings": [],
       "wud_api": {
@@ -1133,6 +1170,13 @@ export const generatedFixtures = {
           "name": "WUD_API_STARTUP_WAIT_SECONDS",
           "source": "default",
           "value": "0"
+        },
+        {
+          "configured": false,
+          "default_value": "file",
+          "name": "WUD_PENDING_SOURCE",
+          "source": "default",
+          "value": "file"
         },
         {
           "configured": true,
@@ -1710,6 +1754,8 @@ export const generatedFixtures = {
               "services": [
                 "postgres"
               ],
+              "source": "file",
+              "source_id": "file:4",
               "target_image": "postgres:16",
               "wud_metadata": {
                 "display_name": "postgres",
@@ -1763,6 +1809,8 @@ export const generatedFixtures = {
               "services": [
                 "home-assistant"
               ],
+              "source": "file",
+              "source_id": "file:2",
               "target_image": "ghcr.io/home-assistant/home-assistant:2026.5.3",
               "wud_metadata": {
                 "display_name": "home-assistant",
@@ -1816,6 +1864,8 @@ export const generatedFixtures = {
               "services": [
                 "radarr"
               ],
+              "source": "file",
+              "source_id": "file:3",
               "target_image": "lscr.io/linuxserver/radarr:5.22.4",
               "wud_metadata": {
                 "display_name": "radarr",
@@ -1854,6 +1904,8 @@ export const generatedFixtures = {
               "services": [
                 "wudup"
               ],
+              "source": "file",
+              "source_id": "file:5",
               "target_image": "ghcr.io/magrhino/wudup:v0.16.1",
               "wud_metadata": {
                 "display_name": "wudup",
@@ -1928,6 +1980,8 @@ export const generatedFixtures = {
           "repo": "gethomepage/homepage",
           "resolved_image": "ghcr.io/gethomepage/homepage:v0.9.12",
           "services": [],
+          "source": "file",
+          "source_id": "file:6",
           "target_image": "ghcr.io/gethomepage/homepage:v0.10.9",
           "wud_metadata": null
         },
@@ -1972,6 +2026,8 @@ export const generatedFixtures = {
           "repo": "vaultwarden/server",
           "resolved_image": "vaultwarden/server:1.31.0",
           "services": [],
+          "source": "file",
+          "source_id": "file:7",
           "target_image": "vaultwarden/server:1.32.0",
           "wud_metadata": null
         },
@@ -2016,6 +2072,8 @@ export const generatedFixtures = {
           "repo": "containrrr/watchtower",
           "resolved_image": "containrrr/watchtower:1.7.1",
           "services": [],
+          "source": "file",
+          "source_id": "file:8",
           "target_image": "containrrr/watchtower:1.7.2",
           "wud_metadata": null
         }
@@ -2035,6 +2093,8 @@ export const generatedFixtures = {
         "line_no": 2,
         "raw": "ghcr.io/home-assistant/home-assistant:2026.5.1 tag=2026.5.3",
         "repo": "home-assistant/home-assistant",
+        "source": "file",
+        "source_id": "file:2",
         "wud_metadata": {
           "display_name": "home-assistant",
           "error": "",
@@ -2063,6 +2123,8 @@ export const generatedFixtures = {
         "line_no": 3,
         "raw": "lscr.io/linuxserver/radarr:5.21.1 tag=5.22.4",
         "repo": "linuxserver/radarr",
+        "source": "file",
+        "source_id": "file:3",
         "wud_metadata": {
           "display_name": "radarr",
           "error": "",
@@ -2099,6 +2161,8 @@ export const generatedFixtures = {
         "line_no": 4,
         "raw": "postgres:16@sha256:1111111111111111111111111111111111111111111111111111111111111111",
         "repo": "postgres",
+        "source": "file",
+        "source_id": "file:4",
         "wud_metadata": {
           "display_name": "postgres",
           "error": "",
@@ -2127,6 +2191,8 @@ export const generatedFixtures = {
         "line_no": 5,
         "raw": "ghcr.io/magrhino/wudup:latest tag=v0.16.1",
         "repo": "magrhino/wudup",
+        "source": "file",
+        "source_id": "file:5",
         "wud_metadata": {
           "display_name": "wudup",
           "error": "",
@@ -2155,6 +2221,8 @@ export const generatedFixtures = {
         "line_no": 6,
         "raw": "ghcr.io/gethomepage/homepage:v0.9.12 tag=v0.10.9",
         "repo": "gethomepage/homepage",
+        "source": "file",
+        "source_id": "file:6",
         "wud_metadata": null
       },
       {
@@ -2169,6 +2237,8 @@ export const generatedFixtures = {
         "line_no": 7,
         "raw": "vaultwarden/server:1.31.0 tag=1.32.0",
         "repo": "vaultwarden/server",
+        "source": "file",
+        "source_id": "file:7",
         "wud_metadata": null
       },
       {
@@ -2183,9 +2253,20 @@ export const generatedFixtures = {
         "line_no": 8,
         "raw": "containrrr/watchtower:1.7.1 tag=1.7.2",
         "repo": "containrrr/watchtower",
+        "source": "file",
+        "source_id": "file:8",
         "wud_metadata": null
       }
     ],
+    "source": {
+      "active": "file",
+      "configured": "file",
+      "degraded": false,
+      "detail": "",
+      "fallback_reason": "",
+      "fresh": true,
+      "label": "Pending file"
+    },
     "source_file": "demo/out/images.todo",
     "warnings": [],
     "wud_api": {
@@ -2328,6 +2409,15 @@ export const generatedFixtures = {
             "reason": "tag-updates-disabled"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [],
         "status": "empty",
@@ -2469,6 +2559,15 @@ export const generatedFixtures = {
           2
         ],
         "skipped": [],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -2740,6 +2839,15 @@ export const generatedFixtures = {
             "reason": "tag-updates-disabled"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [],
         "status": "empty",
@@ -2881,6 +2989,15 @@ export const generatedFixtures = {
           3
         ],
         "skipped": [],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -3130,6 +3247,15 @@ export const generatedFixtures = {
           4
         ],
         "skipped": [],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -3354,6 +3480,15 @@ export const generatedFixtures = {
           4
         ],
         "skipped": [],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -3600,6 +3735,15 @@ export const generatedFixtures = {
             "reason": "tag-updates-disabled"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [],
         "status": "empty",
@@ -3741,6 +3885,15 @@ export const generatedFixtures = {
           5
         ],
         "skipped": [],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -4046,6 +4199,15 @@ export const generatedFixtures = {
             "reason": "tag-updates-disabled"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [],
         "status": "empty",
@@ -4258,6 +4420,15 @@ export const generatedFixtures = {
             "reason": "unmatched"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [],
         "status": "blocked",
@@ -4455,6 +4626,15 @@ export const generatedFixtures = {
             "reason": "tag-updates-disabled"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [],
         "status": "empty",
@@ -4667,6 +4847,15 @@ export const generatedFixtures = {
             "reason": "unmatched"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [],
         "status": "blocked",
@@ -4864,6 +5053,15 @@ export const generatedFixtures = {
             "reason": "tag-updates-disabled"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [],
         "status": "empty",
@@ -5076,6 +5274,15 @@ export const generatedFixtures = {
             "reason": "unmatched"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [],
         "status": "blocked",
@@ -5258,6 +5465,15 @@ export const generatedFixtures = {
             "reason": "tag-updates-disabled"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [],
         "status": "empty",
@@ -5417,6 +5633,15 @@ export const generatedFixtures = {
           3
         ],
         "skipped": [],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -5809,6 +6034,15 @@ export const generatedFixtures = {
             "reason": "tag-updates-disabled"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -6052,6 +6286,15 @@ export const generatedFixtures = {
           4
         ],
         "skipped": [],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -6440,6 +6683,15 @@ export const generatedFixtures = {
             "reason": "tag-updates-disabled"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [],
         "status": "empty",
@@ -6599,6 +6851,15 @@ export const generatedFixtures = {
           5
         ],
         "skipped": [],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -7045,6 +7306,15 @@ export const generatedFixtures = {
             "reason": "tag-updates-disabled"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [],
         "status": "empty",
@@ -7271,6 +7541,15 @@ export const generatedFixtures = {
             "reason": "unmatched"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -7610,6 +7889,15 @@ export const generatedFixtures = {
             "reason": "tag-updates-disabled"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [],
         "status": "empty",
@@ -7836,6 +8124,15 @@ export const generatedFixtures = {
             "reason": "unmatched"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -8175,6 +8472,15 @@ export const generatedFixtures = {
             "reason": "tag-updates-disabled"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [],
         "status": "empty",
@@ -8401,6 +8707,15 @@ export const generatedFixtures = {
             "reason": "unmatched"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -8686,6 +9001,15 @@ export const generatedFixtures = {
             "reason": "tag-updates-disabled"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -8929,6 +9253,15 @@ export const generatedFixtures = {
           4
         ],
         "skipped": [],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -9317,6 +9650,15 @@ export const generatedFixtures = {
             "reason": "tag-updates-disabled"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [],
         "status": "empty",
@@ -9475,6 +9817,15 @@ export const generatedFixtures = {
           5
         ],
         "skipped": [],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -9847,6 +10198,15 @@ export const generatedFixtures = {
             "reason": "tag-updates-disabled"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [],
         "status": "empty",
@@ -10073,6 +10433,15 @@ export const generatedFixtures = {
             "reason": "unmatched"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -10412,6 +10781,15 @@ export const generatedFixtures = {
             "reason": "tag-updates-disabled"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [],
         "status": "empty",
@@ -10638,6 +11016,15 @@ export const generatedFixtures = {
             "reason": "unmatched"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -10977,6 +11364,15 @@ export const generatedFixtures = {
             "reason": "tag-updates-disabled"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [],
         "status": "empty",
@@ -11203,6 +11599,15 @@ export const generatedFixtures = {
             "reason": "unmatched"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -11488,6 +11893,15 @@ export const generatedFixtures = {
             "reason": "tag-updates-disabled"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -11731,6 +12145,15 @@ export const generatedFixtures = {
           5
         ],
         "skipped": [],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -12133,6 +12556,15 @@ export const generatedFixtures = {
             "reason": "tag-updates-disabled"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -12443,6 +12875,15 @@ export const generatedFixtures = {
             "reason": "unmatched"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -12738,6 +13179,15 @@ export const generatedFixtures = {
             "reason": "tag-updates-disabled"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -13048,6 +13498,15 @@ export const generatedFixtures = {
             "reason": "unmatched"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -13343,6 +13802,15 @@ export const generatedFixtures = {
             "reason": "tag-updates-disabled"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -13653,6 +14121,15 @@ export const generatedFixtures = {
             "reason": "unmatched"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -13968,6 +14445,15 @@ export const generatedFixtures = {
             "reason": "tag-updates-disabled"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [],
         "status": "empty",
@@ -14194,6 +14680,15 @@ export const generatedFixtures = {
             "reason": "unmatched"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -14533,6 +15028,15 @@ export const generatedFixtures = {
             "reason": "tag-updates-disabled"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [],
         "status": "empty",
@@ -14759,6 +15263,15 @@ export const generatedFixtures = {
             "reason": "unmatched"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -15098,6 +15611,15 @@ export const generatedFixtures = {
             "reason": "tag-updates-disabled"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [],
         "status": "empty",
@@ -15324,6 +15846,15 @@ export const generatedFixtures = {
             "reason": "unmatched"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -15696,6 +16227,15 @@ export const generatedFixtures = {
             "reason": "tag-updates-disabled"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [],
         "status": "empty",
@@ -15990,6 +16530,15 @@ export const generatedFixtures = {
             "reason": "unmatched"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [],
         "status": "blocked",
@@ -16254,6 +16803,15 @@ export const generatedFixtures = {
             "reason": "tag-updates-disabled"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [],
         "status": "empty",
@@ -16548,6 +17106,15 @@ export const generatedFixtures = {
             "reason": "unmatched"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [],
         "status": "blocked",
@@ -16812,6 +17379,15 @@ export const generatedFixtures = {
             "reason": "tag-updates-disabled"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [],
         "status": "empty",
@@ -17106,6 +17682,15 @@ export const generatedFixtures = {
             "reason": "unmatched"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [],
         "status": "blocked",
@@ -17302,6 +17887,15 @@ export const generatedFixtures = {
             "reason": "tag-updates-disabled"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -17563,6 +18157,15 @@ export const generatedFixtures = {
           4
         ],
         "skipped": [],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -18092,6 +18695,15 @@ export const generatedFixtures = {
             "reason": "tag-updates-disabled"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [],
         "status": "empty",
@@ -18268,6 +18880,15 @@ export const generatedFixtures = {
           5
         ],
         "skipped": [],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -18781,6 +19402,15 @@ export const generatedFixtures = {
             "reason": "tag-updates-disabled"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [],
         "status": "empty",
@@ -19025,6 +19655,15 @@ export const generatedFixtures = {
             "reason": "unmatched"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -19505,6 +20144,15 @@ export const generatedFixtures = {
             "reason": "tag-updates-disabled"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [],
         "status": "empty",
@@ -19749,6 +20397,15 @@ export const generatedFixtures = {
             "reason": "unmatched"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -20229,6 +20886,15 @@ export const generatedFixtures = {
             "reason": "tag-updates-disabled"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [],
         "status": "empty",
@@ -20473,6 +21139,15 @@ export const generatedFixtures = {
             "reason": "unmatched"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -20899,6 +21574,15 @@ export const generatedFixtures = {
             "reason": "tag-updates-disabled"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -21160,6 +21844,15 @@ export const generatedFixtures = {
           5
         ],
         "skipped": [],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -21703,6 +22396,15 @@ export const generatedFixtures = {
             "reason": "tag-updates-disabled"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -22031,6 +22733,15 @@ export const generatedFixtures = {
             "reason": "unmatched"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -22467,6 +23178,15 @@ export const generatedFixtures = {
             "reason": "tag-updates-disabled"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -22795,6 +23515,15 @@ export const generatedFixtures = {
             "reason": "unmatched"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -23231,6 +23960,15 @@ export const generatedFixtures = {
             "reason": "tag-updates-disabled"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -23559,6 +24297,15 @@ export const generatedFixtures = {
             "reason": "unmatched"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -24015,6 +24762,15 @@ export const generatedFixtures = {
             "reason": "tag-updates-disabled"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [],
         "status": "empty",
@@ -24259,6 +25015,15 @@ export const generatedFixtures = {
             "reason": "unmatched"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -24739,6 +25504,15 @@ export const generatedFixtures = {
             "reason": "tag-updates-disabled"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [],
         "status": "empty",
@@ -24983,6 +25757,15 @@ export const generatedFixtures = {
             "reason": "unmatched"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -25463,6 +26246,15 @@ export const generatedFixtures = {
             "reason": "tag-updates-disabled"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [],
         "status": "empty",
@@ -25707,6 +26499,15 @@ export const generatedFixtures = {
             "reason": "unmatched"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -26220,6 +27021,15 @@ export const generatedFixtures = {
             "reason": "tag-updates-disabled"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [],
         "status": "empty",
@@ -26528,6 +27338,15 @@ export const generatedFixtures = {
             "reason": "unmatched"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -26934,6 +27753,15 @@ export const generatedFixtures = {
             "reason": "tag-updates-disabled"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [],
         "status": "empty",
@@ -27242,6 +28070,15 @@ export const generatedFixtures = {
             "reason": "unmatched"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -27648,6 +28485,15 @@ export const generatedFixtures = {
             "reason": "tag-updates-disabled"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [],
         "status": "empty",
@@ -27956,6 +28802,15 @@ export const generatedFixtures = {
             "reason": "unmatched"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -28275,6 +29130,15 @@ export const generatedFixtures = {
             "reason": "tag-updates-disabled"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -28535,6 +29399,15 @@ export const generatedFixtures = {
           5
         ],
         "skipped": [],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -29004,6 +29877,15 @@ export const generatedFixtures = {
             "reason": "tag-updates-disabled"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -29332,6 +30214,15 @@ export const generatedFixtures = {
             "reason": "unmatched"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -29768,6 +30659,15 @@ export const generatedFixtures = {
             "reason": "tag-updates-disabled"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -30096,6 +30996,15 @@ export const generatedFixtures = {
             "reason": "unmatched"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -30532,6 +31441,15 @@ export const generatedFixtures = {
             "reason": "tag-updates-disabled"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -30860,6 +31778,15 @@ export const generatedFixtures = {
             "reason": "unmatched"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -31316,6 +32243,15 @@ export const generatedFixtures = {
             "reason": "tag-updates-disabled"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [],
         "status": "empty",
@@ -31559,6 +32495,15 @@ export const generatedFixtures = {
             "reason": "unmatched"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -31965,6 +32910,15 @@ export const generatedFixtures = {
             "reason": "tag-updates-disabled"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [],
         "status": "empty",
@@ -32208,6 +33162,15 @@ export const generatedFixtures = {
             "reason": "unmatched"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -32614,6 +33577,15 @@ export const generatedFixtures = {
             "reason": "tag-updates-disabled"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [],
         "status": "empty",
@@ -32857,6 +33829,15 @@ export const generatedFixtures = {
             "reason": "unmatched"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -33296,6 +34277,15 @@ export const generatedFixtures = {
             "reason": "tag-updates-disabled"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [],
         "status": "empty",
@@ -33604,6 +34594,15 @@ export const generatedFixtures = {
             "reason": "unmatched"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -34010,6 +35009,15 @@ export const generatedFixtures = {
             "reason": "tag-updates-disabled"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [],
         "status": "empty",
@@ -34318,6 +35326,15 @@ export const generatedFixtures = {
             "reason": "unmatched"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -34724,6 +35741,15 @@ export const generatedFixtures = {
             "reason": "tag-updates-disabled"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [],
         "status": "empty",
@@ -35032,6 +36058,15 @@ export const generatedFixtures = {
             "reason": "unmatched"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -35385,6 +36420,15 @@ export const generatedFixtures = {
             "reason": "tag-updates-disabled"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -35713,6 +36757,15 @@ export const generatedFixtures = {
             "reason": "unmatched"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -36149,6 +37202,15 @@ export const generatedFixtures = {
             "reason": "tag-updates-disabled"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -36477,6 +37539,15 @@ export const generatedFixtures = {
             "reason": "unmatched"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -36913,6 +37984,15 @@ export const generatedFixtures = {
             "reason": "tag-updates-disabled"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -37241,6 +38321,15 @@ export const generatedFixtures = {
             "reason": "unmatched"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -37710,6 +38799,15 @@ export const generatedFixtures = {
             "reason": "tag-updates-disabled"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -38102,6 +39200,15 @@ export const generatedFixtures = {
             "reason": "unmatched"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -38464,6 +39571,15 @@ export const generatedFixtures = {
             "reason": "tag-updates-disabled"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -38856,6 +39972,15 @@ export const generatedFixtures = {
             "reason": "unmatched"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -39218,6 +40343,15 @@ export const generatedFixtures = {
             "reason": "tag-updates-disabled"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -39610,6 +40744,15 @@ export const generatedFixtures = {
             "reason": "unmatched"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -39992,6 +41135,15 @@ export const generatedFixtures = {
             "reason": "tag-updates-disabled"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [],
         "status": "empty",
@@ -40300,6 +41452,15 @@ export const generatedFixtures = {
             "reason": "unmatched"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -40706,6 +41867,15 @@ export const generatedFixtures = {
             "reason": "tag-updates-disabled"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [],
         "status": "empty",
@@ -41014,6 +42184,15 @@ export const generatedFixtures = {
             "reason": "unmatched"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -41420,6 +42599,15 @@ export const generatedFixtures = {
             "reason": "tag-updates-disabled"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [],
         "status": "empty",
@@ -41728,6 +42916,15 @@ export const generatedFixtures = {
             "reason": "unmatched"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -42167,6 +43364,15 @@ export const generatedFixtures = {
             "reason": "tag-updates-disabled"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [],
         "status": "empty",
@@ -42543,6 +43749,15 @@ export const generatedFixtures = {
             "reason": "unmatched"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [],
         "status": "blocked",
@@ -42773,6 +43988,15 @@ export const generatedFixtures = {
             "reason": "tag-updates-disabled"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -43051,6 +44275,15 @@ export const generatedFixtures = {
           5
         ],
         "skipped": [],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -43661,6 +44894,15 @@ export const generatedFixtures = {
             "reason": "tag-updates-disabled"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -44007,6 +45249,15 @@ export const generatedFixtures = {
             "reason": "unmatched"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -44584,6 +45835,15 @@ export const generatedFixtures = {
             "reason": "tag-updates-disabled"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -44930,6 +46190,15 @@ export const generatedFixtures = {
             "reason": "unmatched"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -45507,6 +46776,15 @@ export const generatedFixtures = {
             "reason": "tag-updates-disabled"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -45853,6 +47131,15 @@ export const generatedFixtures = {
             "reason": "unmatched"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -46450,6 +47737,15 @@ export const generatedFixtures = {
             "reason": "tag-updates-disabled"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [],
         "status": "empty",
@@ -46711,6 +48007,15 @@ export const generatedFixtures = {
             "reason": "unmatched"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -47258,6 +48563,15 @@ export const generatedFixtures = {
             "reason": "tag-updates-disabled"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [],
         "status": "empty",
@@ -47519,6 +48833,15 @@ export const generatedFixtures = {
             "reason": "unmatched"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -48066,6 +49389,15 @@ export const generatedFixtures = {
             "reason": "tag-updates-disabled"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [],
         "status": "empty",
@@ -48327,6 +49659,15 @@ export const generatedFixtures = {
             "reason": "unmatched"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -48907,6 +50248,15 @@ export const generatedFixtures = {
             "reason": "tag-updates-disabled"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [],
         "status": "empty",
@@ -49233,6 +50583,15 @@ export const generatedFixtures = {
             "reason": "unmatched"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -49780,6 +51139,15 @@ export const generatedFixtures = {
             "reason": "tag-updates-disabled"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [],
         "status": "empty",
@@ -50106,6 +51474,15 @@ export const generatedFixtures = {
             "reason": "unmatched"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -50653,6 +52030,15 @@ export const generatedFixtures = {
             "reason": "tag-updates-disabled"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [],
         "status": "empty",
@@ -50979,6 +52365,15 @@ export const generatedFixtures = {
             "reason": "unmatched"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -51473,6 +52868,15 @@ export const generatedFixtures = {
             "reason": "tag-updates-disabled"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -51819,6 +53223,15 @@ export const generatedFixtures = {
             "reason": "unmatched"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -52396,6 +53809,15 @@ export const generatedFixtures = {
             "reason": "tag-updates-disabled"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -52742,6 +54164,15 @@ export const generatedFixtures = {
             "reason": "unmatched"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -53319,6 +54750,15 @@ export const generatedFixtures = {
             "reason": "tag-updates-disabled"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -53665,6 +55105,15 @@ export const generatedFixtures = {
             "reason": "unmatched"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -54275,6 +55724,15 @@ export const generatedFixtures = {
             "reason": "tag-updates-disabled"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -54685,6 +56143,15 @@ export const generatedFixtures = {
             "reason": "unmatched"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -55188,6 +56655,15 @@ export const generatedFixtures = {
             "reason": "tag-updates-disabled"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -55598,6 +57074,15 @@ export const generatedFixtures = {
             "reason": "unmatched"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -56101,6 +57586,15 @@ export const generatedFixtures = {
             "reason": "tag-updates-disabled"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -56511,6 +58005,15 @@ export const generatedFixtures = {
             "reason": "unmatched"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -57034,6 +58537,15 @@ export const generatedFixtures = {
             "reason": "tag-updates-disabled"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [],
         "status": "empty",
@@ -57360,6 +58872,15 @@ export const generatedFixtures = {
             "reason": "unmatched"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -57907,6 +59428,15 @@ export const generatedFixtures = {
             "reason": "tag-updates-disabled"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [],
         "status": "empty",
@@ -58233,6 +59763,15 @@ export const generatedFixtures = {
             "reason": "unmatched"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -58780,6 +60319,15 @@ export const generatedFixtures = {
             "reason": "tag-updates-disabled"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [],
         "status": "empty",
@@ -59106,6 +60654,15 @@ export const generatedFixtures = {
             "reason": "unmatched"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -59686,6 +61243,15 @@ export const generatedFixtures = {
             "reason": "tag-updates-disabled"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [],
         "status": "empty",
@@ -60076,6 +61642,15 @@ export const generatedFixtures = {
             "reason": "unmatched"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -60463,6 +62038,15 @@ export const generatedFixtures = {
             "reason": "tag-updates-disabled"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -60808,6 +62392,15 @@ export const generatedFixtures = {
             "reason": "unmatched"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -61311,6 +62904,15 @@ export const generatedFixtures = {
             "reason": "tag-updates-disabled"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -61656,6 +63258,15 @@ export const generatedFixtures = {
             "reason": "unmatched"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -62159,6 +63770,15 @@ export const generatedFixtures = {
             "reason": "tag-updates-disabled"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -62504,6 +64124,15 @@ export const generatedFixtures = {
             "reason": "unmatched"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -63040,6 +64669,15 @@ export const generatedFixtures = {
             "reason": "tag-updates-disabled"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -63450,6 +65088,15 @@ export const generatedFixtures = {
             "reason": "unmatched"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -63953,6 +65600,15 @@ export const generatedFixtures = {
             "reason": "tag-updates-disabled"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -64363,6 +66019,15 @@ export const generatedFixtures = {
             "reason": "unmatched"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -64866,6 +66531,15 @@ export const generatedFixtures = {
             "reason": "tag-updates-disabled"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -65276,6 +66950,15 @@ export const generatedFixtures = {
             "reason": "unmatched"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -65799,6 +67482,15 @@ export const generatedFixtures = {
             "reason": "tag-updates-disabled"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [],
         "status": "empty",
@@ -66124,6 +67816,15 @@ export const generatedFixtures = {
             "reason": "unmatched"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -66597,6 +68298,15 @@ export const generatedFixtures = {
             "reason": "tag-updates-disabled"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [],
         "status": "empty",
@@ -66922,6 +68632,15 @@ export const generatedFixtures = {
             "reason": "unmatched"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -67395,6 +69114,15 @@ export const generatedFixtures = {
             "reason": "tag-updates-disabled"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [],
         "status": "empty",
@@ -67720,6 +69448,15 @@ export const generatedFixtures = {
             "reason": "unmatched"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -68226,6 +69963,15 @@ export const generatedFixtures = {
             "reason": "tag-updates-disabled"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [],
         "status": "empty",
@@ -68616,6 +70362,15 @@ export const generatedFixtures = {
             "reason": "unmatched"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -69036,6 +70791,15 @@ export const generatedFixtures = {
             "reason": "tag-updates-disabled"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -69446,6 +71210,15 @@ export const generatedFixtures = {
             "reason": "unmatched"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -69949,6 +71722,15 @@ export const generatedFixtures = {
             "reason": "tag-updates-disabled"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -70359,6 +72141,15 @@ export const generatedFixtures = {
             "reason": "unmatched"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -70862,6 +72653,15 @@ export const generatedFixtures = {
             "reason": "tag-updates-disabled"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -71272,6 +73072,15 @@ export const generatedFixtures = {
             "reason": "unmatched"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -71808,6 +73617,15 @@ export const generatedFixtures = {
             "reason": "tag-updates-disabled"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -72282,6 +74100,15 @@ export const generatedFixtures = {
             "reason": "unmatched"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -72731,6 +74558,15 @@ export const generatedFixtures = {
             "reason": "tag-updates-disabled"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [],
         "status": "empty",
@@ -73121,6 +74957,15 @@ export const generatedFixtures = {
             "reason": "unmatched"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -73527,6 +75372,15 @@ export const generatedFixtures = {
             "reason": "tag-updates-disabled"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -73890,6 +75744,15 @@ export const generatedFixtures = {
             "reason": "unmatched"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -74534,6 +76397,15 @@ export const generatedFixtures = {
             "reason": "tag-updates-disabled"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -74897,6 +76769,15 @@ export const generatedFixtures = {
             "reason": "unmatched"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -75541,6 +77422,15 @@ export const generatedFixtures = {
             "reason": "tag-updates-disabled"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -75904,6 +77794,15 @@ export const generatedFixtures = {
             "reason": "unmatched"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -76581,6 +78480,15 @@ export const generatedFixtures = {
             "reason": "tag-updates-disabled"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -77009,6 +78917,15 @@ export const generatedFixtures = {
             "reason": "unmatched"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -77653,6 +79570,15 @@ export const generatedFixtures = {
             "reason": "tag-updates-disabled"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -78081,6 +80007,15 @@ export const generatedFixtures = {
             "reason": "unmatched"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -78725,6 +80660,15 @@ export const generatedFixtures = {
             "reason": "tag-updates-disabled"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -79153,6 +81097,15 @@ export const generatedFixtures = {
             "reason": "unmatched"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -79817,6 +81770,15 @@ export const generatedFixtures = {
             "reason": "tag-updates-disabled"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [],
         "status": "empty",
@@ -80160,6 +82122,15 @@ export const generatedFixtures = {
             "reason": "unmatched"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -80774,6 +82745,15 @@ export const generatedFixtures = {
             "reason": "tag-updates-disabled"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [],
         "status": "empty",
@@ -81117,6 +83097,15 @@ export const generatedFixtures = {
             "reason": "unmatched"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -81731,6 +83720,15 @@ export const generatedFixtures = {
             "reason": "tag-updates-disabled"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [],
         "status": "empty",
@@ -82074,6 +84072,15 @@ export const generatedFixtures = {
             "reason": "unmatched"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -82721,6 +84728,15 @@ export const generatedFixtures = {
             "reason": "tag-updates-disabled"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [],
         "status": "empty",
@@ -83129,6 +85145,15 @@ export const generatedFixtures = {
             "reason": "unmatched"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -83690,6 +85715,15 @@ export const generatedFixtures = {
             "reason": "tag-updates-disabled"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -84118,6 +86152,15 @@ export const generatedFixtures = {
             "reason": "unmatched"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -84762,6 +86805,15 @@ export const generatedFixtures = {
             "reason": "tag-updates-disabled"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -85190,6 +87242,15 @@ export const generatedFixtures = {
             "reason": "unmatched"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -85834,6 +87895,15 @@ export const generatedFixtures = {
             "reason": "tag-updates-disabled"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -86262,6 +88332,15 @@ export const generatedFixtures = {
             "reason": "unmatched"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -86939,6 +89018,15 @@ export const generatedFixtures = {
             "reason": "tag-updates-disabled"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -87431,6 +89519,15 @@ export const generatedFixtures = {
             "reason": "unmatched"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -88021,6 +90118,15 @@ export const generatedFixtures = {
             "reason": "tag-updates-disabled"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [],
         "status": "empty",
@@ -88429,6 +90535,15 @@ export const generatedFixtures = {
             "reason": "unmatched"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -88990,6 +91105,15 @@ export const generatedFixtures = {
             "reason": "tag-updates-disabled"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -89417,6 +91541,15 @@ export const generatedFixtures = {
             "reason": "unmatched"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -89987,6 +92120,15 @@ export const generatedFixtures = {
             "reason": "tag-updates-disabled"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -90414,6 +92556,15 @@ export const generatedFixtures = {
             "reason": "unmatched"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -90984,6 +93135,15 @@ export const generatedFixtures = {
             "reason": "tag-updates-disabled"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -91411,6 +93571,15 @@ export const generatedFixtures = {
             "reason": "unmatched"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -92014,6 +94183,15 @@ export const generatedFixtures = {
             "reason": "tag-updates-disabled"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -92506,6 +94684,15 @@ export const generatedFixtures = {
             "reason": "unmatched"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -93096,6 +95283,15 @@ export const generatedFixtures = {
             "reason": "tag-updates-disabled"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [],
         "status": "empty",
@@ -93503,6 +95699,15 @@ export const generatedFixtures = {
             "reason": "unmatched"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -94023,6 +96228,15 @@ export const generatedFixtures = {
             "reason": "tag-updates-disabled"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -94515,6 +96729,15 @@ export const generatedFixtures = {
             "reason": "unmatched"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -95071,6 +97294,15 @@ export const generatedFixtures = {
             "reason": "tag-updates-disabled"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -95516,6 +97748,15 @@ export const generatedFixtures = {
             "reason": "unmatched"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -96227,6 +98468,15 @@ export const generatedFixtures = {
             "reason": "tag-updates-disabled"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -96672,6 +98922,15 @@ export const generatedFixtures = {
             "reason": "unmatched"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -97383,6 +99642,15 @@ export const generatedFixtures = {
             "reason": "tag-updates-disabled"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -97828,6 +100096,15 @@ export const generatedFixtures = {
             "reason": "unmatched"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -98572,6 +100849,15 @@ export const generatedFixtures = {
             "reason": "tag-updates-disabled"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -99082,6 +101368,15 @@ export const generatedFixtures = {
             "reason": "unmatched"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -99813,6 +102108,15 @@ export const generatedFixtures = {
             "reason": "tag-updates-disabled"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [],
         "status": "empty",
@@ -100238,6 +102542,15 @@ export const generatedFixtures = {
             "reason": "unmatched"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -100899,6 +103212,15 @@ export const generatedFixtures = {
             "reason": "tag-updates-disabled"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -101409,6 +103731,15 @@ export const generatedFixtures = {
             "reason": "unmatched"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -102120,6 +104451,15 @@ export const generatedFixtures = {
             "reason": "tag-updates-disabled"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -102629,6 +104969,15 @@ export const generatedFixtures = {
             "reason": "unmatched"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -103285,6 +105634,15 @@ export const generatedFixtures = {
             "reason": "tag-updates-disabled"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -103812,6 +106170,15 @@ export const generatedFixtures = {
             "reason": "unmatched"
           }
         ],
+        "source": {
+          "active": "file",
+          "configured": "file",
+          "degraded": false,
+          "detail": "",
+          "fallback_reason": "",
+          "fresh": true,
+          "label": "Pending file"
+        },
         "source_file": "demo/out/images.todo",
         "stacks": [
           {
@@ -104404,6 +106771,15 @@ export const generatedFixtures = {
         "upstream_repo": ""
       }
     ],
+    "source": {
+      "active": "file",
+      "configured": "file",
+      "degraded": false,
+      "detail": "",
+      "fallback_reason": "",
+      "fresh": true,
+      "label": "Pending file"
+    },
     "source_file": "demo/out/images.todo",
     "warnings": [],
     "wud_api": {
@@ -114661,6 +117037,15 @@ export const generatedFixtures = {
           "reason": "unmatched"
         }
       ],
+      "source": {
+        "active": "file",
+        "configured": "file",
+        "degraded": false,
+        "detail": "",
+        "fallback_reason": "",
+        "fresh": true,
+        "label": "Pending file"
+      },
       "source_file": "demo/out/.self-update-plan.todo",
       "stacks": [],
       "status": "blocked",
@@ -114955,6 +117340,13 @@ export const generatedFixtures = {
         "value": "0"
       },
       {
+        "configured": false,
+        "default_value": "file",
+        "name": "WUD_PENDING_SOURCE",
+        "source": "default",
+        "value": "file"
+      },
+      {
         "configured": true,
         "default_value": "false",
         "name": "WUD_WEB_MUTATIONS_ENABLED",
@@ -115072,6 +117464,15 @@ export const generatedFixtures = {
     "mutations_enabled": true,
     "ok": true,
     "pending_count": 7,
+    "pending_source": {
+      "active": "file",
+      "configured": "file",
+      "degraded": false,
+      "detail": "",
+      "fallback_reason": "",
+      "fresh": true,
+      "label": "Pending file"
+    },
     "setup_required": false,
     "static_spa_available": true,
     "timezone": "UTC",

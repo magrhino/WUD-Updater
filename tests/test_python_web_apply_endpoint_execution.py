@@ -1,6 +1,6 @@
 from __future__ import annotations
 from pathlib import Path
-from wudup import web_jobs
+from wudup import web_jobs, web_plans
 from wudup.db import open_db
 from wudup.locks import DirectoryLock, WudLockError, lock_dir_for
 from tests.web_test_helpers import (
@@ -13,6 +13,8 @@ from tests.web_test_helpers import (
     _write_fake_image_after_pull,
     _manifest_index_digest,
     _wait_apply_job,
+    _install_wud_api,
+    _wud_api_container,
 )
 
 from tests.web_plan_test_helpers import _seed_known_digest_provenance
@@ -279,6 +281,212 @@ def test_apply_endpoint_runs_existing_updater_and_records_audit(
     assert not lock_dir_for(wud_file).exists()
 
 
+def test_apply_endpoint_uses_api_pending_source_without_editing_wud_file(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    fake_env, fake_root = _fake_docker_env(tmp_path)
+    _install_wud_api(
+        monkeypatch,
+        containers=[
+            _wud_api_container(
+                tag="latest",
+                remote_tag="",
+                remote_digest="sha256:new",
+                update_kind="digest",
+            )
+        ],
+    )
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+            "WUD_PENDING_SOURCE": "api",
+            "WUD_API_BASE_URL": "https://wud.apply-api-source.test:3000",
+            **fake_env,
+        },
+    )
+    wud_file = tmp_path / "state" / "images.todo"
+    wud_file.write_text("repo/file:latest\n", encoding="utf-8")
+    _make_fake_stack(
+        tmp_path,
+        fake_root,
+        "stack",
+        [
+            ("app", "repo/app:latest", "cid-app"),
+            ("worker", "repo/app:stable", "cid-worker"),
+        ],
+    )
+    _write_fake_image_after_pull(
+        fake_root,
+        "repo/app:latest",
+        "new",
+        "sha256:new",
+    )
+    headers = _csrf_headers(client)
+    plan = client.post(
+        "/api/v1/plans",
+        json={"line_numbers": [1]},
+        headers=headers,
+    ).json()
+
+    apply_response = client.post(
+        "/api/v1/jobs",
+        json={
+            "plan_id": plan["plan_id"],
+            "line_numbers": [1],
+            "confirmation": "apply",
+        },
+        headers=headers,
+    )
+    job = _wait_apply_job(client, apply_response.json()["job_id"])
+
+    assert plan["source"]["active"] == "api"
+    assert plan["targets"][0]["raw"] == "repo/app:latest@sha256:new"
+    assert apply_response.status_code == 202
+    assert job["status"] == "success"
+    assert wud_file.read_text(encoding="utf-8") == "repo/file:latest\n"
+    calls = _fake_docker_calls(fake_root)
+    assert "compose -f docker-compose.yml pull app" in calls
+    assert "compose -f docker-compose.yml up -d --remove-orphans --no-deps app" in calls
+    assert "worker" not in calls
+    detail = client.get(f"/api/v1/runs/{job['run_id']}").json()
+    assert detail["metadata"]["pending_source"] == "api"
+    assert detail["metadata"]["pending_source_configured"] == "api"
+    assert detail["metadata"]["pending_source_label"] == "WUD API"
+
+
+def test_apply_endpoint_rejects_stale_api_pending_source_without_editing_file(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    fake_env, fake_root = _fake_docker_env(tmp_path)
+    containers = [
+        _wud_api_container(tag="latest", remote_tag="", update_kind="digest")
+    ]
+    _install_wud_api(monkeypatch, containers=containers)
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+            "WUD_PENDING_SOURCE": "api",
+            "WUD_API_BASE_URL": "https://wud.apply-api-stale.test:3000",
+            **fake_env,
+        },
+    )
+    wud_file = tmp_path / "state" / "images.todo"
+    wud_file.write_text("repo/file:latest\n", encoding="utf-8")
+    _make_fake_stack(
+        tmp_path,
+        fake_root,
+        "stack",
+        [("app", "repo/app:latest", "cid-app")],
+    )
+    headers = _csrf_headers(client)
+    plan = client.post(
+        "/api/v1/plans",
+        json={"line_numbers": [1]},
+        headers=headers,
+    ).json()
+    containers[:] = [
+        _wud_api_container(
+            tag="latest",
+            remote_tag="",
+            remote_digest=f"sha256:{'a' * 64}",
+            update_kind="digest",
+        )
+    ]
+
+    apply_response = client.post(
+        "/api/v1/jobs",
+        json={
+            "plan_id": plan["plan_id"],
+            "line_numbers": [1],
+            "confirmation": "apply",
+        },
+        headers=headers,
+    )
+
+    assert apply_response.status_code == 409
+    assert apply_response.json()["detail"] == "plan is stale"
+    assert wud_file.read_text(encoding="utf-8") == "repo/file:latest\n"
+    calls = _fake_docker_calls(fake_root)
+    assert " pull " not in calls
+    assert " up -d " not in calls
+
+
+def test_apply_endpoint_wraps_api_pending_source_oserror_without_mutation(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    redaction_value = "api-apply-redaction-value"
+    fake_env, fake_root = _fake_docker_env(tmp_path)
+    containers = [
+        _wud_api_container(tag="latest", remote_tag="", update_kind="digest")
+    ]
+    _install_wud_api(monkeypatch, containers=containers)
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+            "WUD_PENDING_SOURCE": "api",
+            "WUD_API_BASE_URL": "https://wud.apply-api-oserror.test:3000",
+            "WUD_WEB_TOKEN": redaction_value,
+            **fake_env,
+        },
+    )
+    wud_file = tmp_path / "state" / "images.todo"
+    wud_file.write_text("repo/file:latest\n", encoding="utf-8")
+    _make_fake_stack(
+        tmp_path,
+        fake_root,
+        "stack",
+        [("app", "repo/app:latest", "cid-app")],
+    )
+    headers = _csrf_headers(client)
+    plan = client.post(
+        "/api/v1/plans",
+        json={"line_numbers": [1]},
+        headers=headers,
+    ).json()
+    calls_before = _fake_docker_calls(fake_root)
+
+    def fail_pending_source_resolution(*_args, **_kwargs):
+        raise OSError(
+            f"could not read {tmp_path / 'state' / 'api-redaction-path'} "
+            f"with {redaction_value}"
+        )
+
+    monkeypatch.setattr(
+        web_plans.web_pending_sources,
+        "resolve_pending_source",
+        fail_pending_source_resolution,
+    )
+
+    apply_response = client.post(
+        "/api/v1/jobs",
+        json={
+            "plan_id": plan["plan_id"],
+            "line_numbers": [1],
+            "confirmation": "apply",
+        },
+        headers=headers,
+    )
+
+    assert apply_response.status_code == 500
+    detail = apply_response.json()["detail"]
+    assert detail.startswith("could not revalidate plan: ")
+    assert redaction_value not in detail
+    assert str(tmp_path) not in detail
+    assert "<redacted>" in detail
+    assert "[REDACTED_PATH]" in detail
+    assert wud_file.read_text(encoding="utf-8") == "repo/file:latest\n"
+    assert _fake_docker_calls(fake_root) == calls_before
+
+
 def test_apply_endpoint_passes_tag_overrides_to_updater(tmp_path: Path) -> None:
     fake_env, fake_root = _fake_docker_env(tmp_path)
     client = _client(
@@ -456,6 +664,71 @@ def test_apply_endpoint_releases_wud_lock_when_runner_raises(
     calls = _fake_docker_calls(fake_root)
     assert " pull " not in calls
     assert " up -d " not in calls
+
+
+def test_apply_endpoint_releases_wud_lock_when_pending_source_reread_fails(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    fake_env, fake_root = _fake_docker_env(tmp_path)
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+            **fake_env,
+        },
+    )
+    wud_file = tmp_path / "state" / "images.todo"
+    wud_file.write_text("repo/app:latest\n", encoding="utf-8")
+    _make_fake_stack(
+        tmp_path,
+        fake_root,
+        "stack",
+        [("app", "repo/app:latest", "cid-app")],
+    )
+    headers = _csrf_headers(client)
+    plan = client.post(
+        "/api/v1/plans",
+        json={"line_numbers": [1]},
+        headers=headers,
+    ).json()
+    original_resolve = web_plans.web_pending_sources.resolve_pending_source
+    calls = 0
+
+    def fail_second_source_read(*args, **kwargs):
+        nonlocal calls
+        calls += 1
+        if calls == 2:
+            raise OSError("pending source re-read failed")
+        return original_resolve(*args, **kwargs)
+
+    monkeypatch.setattr(
+        web_plans.web_pending_sources,
+        "resolve_pending_source",
+        fail_second_source_read,
+    )
+
+    response = client.post(
+        "/api/v1/jobs",
+        json={
+            "plan_id": plan["plan_id"],
+            "line_numbers": [1],
+            "confirmation": "apply",
+        },
+        headers=headers,
+    )
+
+    assert response.status_code == 500
+    assert response.json()["detail"] == (
+        "could not revalidate plan: pending source re-read failed"
+    )
+    assert calls == 2
+    assert not lock_dir_for(wud_file).exists()
+    assert wud_file.read_text(encoding="utf-8") == "repo/app:latest\n"
+    calls_text = _fake_docker_calls(fake_root)
+    assert " pull " not in calls_text
+    assert " up -d " not in calls_text
 
 
 def test_apply_endpoint_reports_updater_failure_and_preserves_line(

@@ -111,6 +111,7 @@ EOF
     src/wudup/web_models.py \
     src/wudup/web_onboarding.py \
     src/wudup/web_pending.py \
+    src/wudup/web_pending_sources.py \
     src/wudup/web_plans.py \
     src/wudup/web_release_notes.py \
     src/wudup/web_retag_plans.py \

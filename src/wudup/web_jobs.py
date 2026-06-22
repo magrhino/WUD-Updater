@@ -5,9 +5,11 @@ from __future__ import annotations
 import hashlib
 import json
 import secrets
+import tempfile
 import time
 from collections.abc import Iterator, Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor
+from dataclasses import dataclass
 from pathlib import Path
 from threading import Condition, Event, Lock
 from typing import Any, Protocol, cast
@@ -75,6 +77,16 @@ class LogTailReader(Protocol):
     def __call__(self, log_path: Path, max_bytes: int) -> LogTail: ...
 
 
+@dataclass(frozen=True)
+class ApplyJobRunContext:
+    update_mode_override: str | None = None
+    metadata_extra: Mapping[str, Any] | None = None
+    auto_update_schedule_keys: tuple[str, ...] = ()
+    start_event: Event | None = None
+    pending_source_text: str | None = None
+    pending_source_label: str = ""
+
+
 def initialize_apply_job_state(state: Any) -> None:
     state.web_apply_executor = ThreadPoolExecutor(
         max_workers=WEB_APPLY_EXECUTOR_MAX_WORKERS
@@ -119,18 +131,16 @@ def _submit_apply_job_state(
     *,
     allow_tag_updates: bool,
     tag_overrides: tuple[TagOverride, ...],
-    wud_lock: DirectoryLock,
+    wud_lock: DirectoryLock | None,
     effective_config_loader: EffectiveConfigLoader,
     auto_update_schedule_run_updater: AutoUpdateScheduleRunUpdater,
     digest_pin_label_rewrite_approvals: tuple[DigestPinLabelRewriteApproval, ...] = (),
-    update_mode_override: str | None = None,
-    metadata_extra: Mapping[str, Any] | None = None,
-    auto_update_schedule_keys: tuple[str, ...] = (),
-    start_event: Event | None = None,
+    run_context: ApplyJobRunContext | None = None,
 ) -> ApplyJobResponse:
     apply_condition: Condition = state.web_apply_condition
     jobs: dict[str, WebApplyJob] = state.web_apply_jobs
     executor: ThreadPoolExecutor = state.web_apply_executor
+    active_run_context = run_context or ApplyJobRunContext()
     with apply_condition:
         active_error = _active_mutation_error_unlocked(state)
         if active_error:
@@ -159,10 +169,7 @@ def _submit_apply_job_state(
             wud_lock,
             effective_config_loader,
             auto_update_schedule_run_updater,
-            update_mode_override,
-            metadata_extra,
-            auto_update_schedule_keys,
-            start_event,
+            active_run_context,
         )
         return response
 
@@ -336,16 +343,13 @@ def _run_apply_job(
     jobs: dict[str, WebApplyJob],
     apply_condition: Condition,
     job_id: str,
-    wud_lock: DirectoryLock,
+    wud_lock: DirectoryLock | None,
     effective_config_loader: EffectiveConfigLoader,
     auto_update_schedule_run_updater: AutoUpdateScheduleRunUpdater,
-    update_mode_override: str | None = None,
-    metadata_extra: Mapping[str, Any] | None = None,
-    auto_update_schedule_keys: tuple[str, ...] = (),
-    start_event: Event | None = None,
+    run_context: ApplyJobRunContext,
 ) -> None:
-    if start_event is not None:
-        start_event.wait()
+    if run_context.start_event is not None:
+        run_context.start_event.wait()
     _update_apply_job(
         jobs,
         apply_condition,
@@ -354,7 +358,18 @@ def _run_apply_job(
         started_at=utc_timestamp(),
     )
     runner: UpdateFromWudRunner | None = None
+    temp_dir: tempfile.TemporaryDirectory[str] | None = None
     try:
+        wud_file_override: Path | None = None
+        wud_file_label_override: str | None = None
+        if run_context.pending_source_text is not None:
+            temp_dir = tempfile.TemporaryDirectory(prefix="wudup-api-pending-")
+            wud_file_override = Path(temp_dir.name) / "images.todo"
+            wud_file_override.write_text(
+                run_context.pending_source_text,
+                encoding="utf-8",
+            )
+            wud_file_label_override = run_context.pending_source_label or "WUD API"
         options = _apply_options(
             settings,
             line_numbers=line_numbers,
@@ -365,11 +380,14 @@ def _run_apply_job(
             digest_unpin_plan=digest_unpin_plan,
             plan_id=plan_id,
             effective_config_loader=effective_config_loader,
-            update_mode_override=update_mode_override,
-            metadata_extra=metadata_extra,
+            update_mode_override=run_context.update_mode_override,
+            metadata_extra=run_context.metadata_extra,
+            wud_file_override=wud_file_override,
+            wud_file_label_override=wud_file_label_override,
         )
         apply_env = dict(settings.command_env or {})
-        apply_env["WUD_LOCK_HELD_BY_PARENT"] = "1"
+        if wud_lock is not None:
+            apply_env["WUD_LOCK_HELD_BY_PARENT"] = "1"
         runner = UpdateFromWudRunner(
             options,
             environ=apply_env,
@@ -391,7 +409,7 @@ def _run_apply_job(
         job_status: ApplyJobStatus = "success" if status_code == 0 else "failure"
         auto_update_schedule_run_updater(
             settings,
-            auto_update_schedule_keys,
+            run_context.auto_update_schedule_keys,
             status=job_status,
             run_id=runner.audit_run_id,
             error="" if status_code == 0 else f"updater exited with status {status_code}",
@@ -420,7 +438,7 @@ def _run_apply_job(
         )
         auto_update_schedule_run_updater(
             settings,
-            auto_update_schedule_keys,
+            run_context.auto_update_schedule_keys,
             status="failure",
             run_id=run_id,
             error=str(exc),
@@ -436,7 +454,10 @@ def _run_apply_job(
             error=str(exc),
         )
     finally:
-        wud_lock.close()
+        if wud_lock is not None:
+            wud_lock.close()
+        if temp_dir is not None:
+            temp_dir.cleanup()
 
 
 def _update_apply_job(
@@ -498,6 +519,8 @@ def _apply_options(
     digest_unpin_plan: tuple[DigestUnpinUpdate, ...] = (),
     update_mode_override: str | None = None,
     metadata_extra: Mapping[str, Any] | None = None,
+    wud_file_override: Path | None = None,
+    wud_file_label_override: str | None = None,
 ) -> UpdaterOptions:
     line_spec = _line_spec(line_numbers)
     metadata = {
@@ -513,12 +536,14 @@ def _apply_options(
         separators=(",", ":"),
     )
     config = effective_config_loader(settings)
+    wud_file = wud_file_override or config.wud_out_file
+    wud_file_label = wud_file_label_override or str(config.wud_out_file)
     host_docker_base_label = (
         None if settings.host_docker_base is None else str(settings.host_docker_base)
     )
     return UpdaterOptions(
         docker_base=config.docker_base,
-        wud_file=config.wud_out_file,
+        wud_file=wud_file,
         log_dir=config.log_dir,
         mode=update_mode_override or config.update_mode,
         max_wait=config.max_wait,
@@ -537,7 +562,7 @@ def _apply_options(
         docker_base_label=str(config.docker_base),
         host_docker_base=settings.host_docker_base,
         host_docker_base_label=host_docker_base_label,
-        wud_file_label=str(config.wud_out_file),
+        wud_file_label=wud_file_label,
         log_dir_label=str(config.log_dir),
         metadata_json=metadata_json,
     )

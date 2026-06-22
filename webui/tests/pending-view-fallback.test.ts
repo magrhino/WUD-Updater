@@ -30,6 +30,7 @@ import {
   pendingGrouping,
   pendingItem,
   pendingResponse,
+  pendingSourceInfo,
   planResponse,
   releaseNoteInfo,
   releaseNotesResponse,
@@ -413,6 +414,27 @@ describe("pending view fallback and release notes", () => {
       "Stack grouping is unavailable. Showing pending file order.",
     );
     expect(wrapper.find('[role="table"]').exists()).toBe(true);
+  });
+
+  it("shows degraded pending source warning for auto fallback", () => {
+    const { pinia, settings, updates } = setupStores(true);
+    updates.pending = {
+      ...pendingResponse(),
+      source: pendingSourceInfo({
+        configured: "auto",
+        active: "file",
+        fresh: false,
+        degraded: true,
+        fallback_reason: "WUD API is unavailable: connection refused",
+      }),
+    };
+    mockPendingLifecycle(settings, updates);
+    const wrapper = mountPendingView(pinia);
+
+    expect(wrapper.text()).toContain(
+      "WUD API is unavailable: connection refused",
+    );
+    expect(wrapper.find('[role="status"]').exists()).toBe(true);
   });
 
   it("shows safety cues in the mobile pending file order fallback", () => {

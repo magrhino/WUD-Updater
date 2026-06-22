@@ -5,6 +5,9 @@ export type {
   WudApiState,
   WudApiStatus,
   WudContainerMetadata,
+  PendingSourceMode,
+  PendingSourceActive,
+  PendingSourceInfo,
   // Pending updates
   PendingItem,
   PendingDiagnostic,

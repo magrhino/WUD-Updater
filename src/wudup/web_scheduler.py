@@ -14,7 +14,7 @@ from zoneinfo import ZoneInfo
 
 from fastapi import FastAPI
 
-from . import web_database, web_jobs
+from . import web_database, web_jobs, web_pending_sources
 from .config import UpdaterConfig
 from .db import (
     active_dependency_snooze_rows,
@@ -24,7 +24,11 @@ from .db import (
     utc_timestamp,
 )
 from .digest_provenance import DigestTagProvenance
-from .plans import DryRunPlan, build_dry_run_plan, resolve_pending_groups
+from .plans import (
+    DryRunPlan,
+    build_dry_run_plan_from_pending_source,
+    resolve_pending_groups,
+)
 from .web_auth import _immediate_transaction
 from .web_models import (
     ApplyJobResponse,
@@ -35,7 +39,6 @@ from .web_models import (
 )
 from .web_metadata import json_object as _json_object
 from .web_metadata import json_object_or_empty
-from .wud_file import parse_wud_file
 
 AUTO_UPDATE_POLL_SECONDS = 60.0
 AUTO_UPDATE_GRACE_SECONDS = 300
@@ -146,7 +149,12 @@ def _auto_update_tick(
         )
     if candidate is None:
         return None
-    wud_lock = web_jobs._acquire_apply_wud_lock(settings)
+    _selection, _plan, pending_source = candidate
+    wud_lock = (
+        web_jobs._acquire_apply_wud_lock(settings)
+        if pending_source.active == "file"
+        else None
+    )
     lock_transferred = False
     start_event: Event | None = None
     try:
@@ -163,7 +171,12 @@ def _auto_update_tick(
             )
             if candidate is None:
                 return None
-            selection, plan = candidate
+            selection, plan, pending_source = candidate
+            if pending_source.active == "file" and wud_lock is None:
+                return None
+            if pending_source.active != "file" and wud_lock is not None:
+                wud_lock.close()
+                wud_lock = None
             with _immediate_transaction(conn):
                 _reserve_auto_update_schedule_runs(conn, settings, selection)
                 start_event = Event()
@@ -179,17 +192,27 @@ def _auto_update_tick(
                     auto_update_schedule_run_updater=(
                         _safe_update_auto_update_schedule_runs
                     ),
-                    update_mode_override=selection.update_mode,
-                    metadata_extra={
-                        "source": "webui-auto",
-                        "actor_type": "scheduler",
-                        "auto_update_service_keys": list(selection.service_keys),
-                        "auto_update_schedule_keys": list(selection.schedule_keys),
-                        "auto_update_scheduled_for": selection.scheduled_for.isoformat(),
-                        "timezone": settings.config.timezone_name,
-                    },
-                    auto_update_schedule_keys=selection.schedule_keys,
-                    start_event=start_event,
+                    run_context=web_jobs.ApplyJobRunContext(
+                        update_mode_override=selection.update_mode,
+                        metadata_extra={
+                            "source": "webui-auto",
+                            "actor_type": "scheduler",
+                            "auto_update_service_keys": list(selection.service_keys),
+                            "auto_update_schedule_keys": list(selection.schedule_keys),
+                            "auto_update_scheduled_for": (
+                                selection.scheduled_for.isoformat()
+                            ),
+                            "timezone": settings.config.timezone_name,
+                        },
+                        auto_update_schedule_keys=selection.schedule_keys,
+                        start_event=start_event,
+                        pending_source_text=(
+                            pending_source.text
+                            if pending_source.active == "api"
+                            else None
+                        ),
+                        pending_source_label=pending_source.label,
+                    ),
                 )
             except Exception:
                 try:
@@ -218,7 +241,7 @@ def _auto_update_tick(
             start_event.set()
         raise
     finally:
-        if not lock_transferred:
+        if wud_lock is not None and not lock_transferred:
             wud_lock.close()
 
 
@@ -229,7 +252,11 @@ def _auto_update_candidate(
     effective_config_loader: EffectiveConfigLoader,
     now_utc: datetime,
     started_at: datetime,
-) -> tuple[AutoUpdateSelection, DryRunPlan] | None:
+) -> tuple[
+    AutoUpdateSelection,
+    DryRunPlan,
+    web_pending_sources.PendingSourceResult,
+] | None:
     policies = _due_auto_update_policies(
         conn,
         settings,
@@ -238,10 +265,13 @@ def _auto_update_candidate(
     )
     if not policies:
         return None
-    try:
-        parsed = parse_wud_file(settings.config.wud_out_file)
-    except FileNotFoundError:
+    pending_source = web_pending_sources.resolve_pending_source(
+        settings,
+        force_api=True,
+    )
+    if pending_source.active == "file" and not pending_source.exists:
         return None
+    parsed = pending_source.parsed
 
     effective_config = effective_config_loader(settings)
     known_digest_provenance_by_service = (
@@ -277,10 +307,11 @@ def _auto_update_candidate(
         update_mode_override=selection.update_mode,
         base_config=effective_config,
         known_digest_provenance_by_service=known_digest_provenance_by_service,
+        pending_source=pending_source,
     )
     if not _plan_can_auto_apply(plan, settings):
         return None
-    return selection, plan
+    return selection, plan, pending_source
 
 
 def _build_auto_update_plan(
@@ -290,14 +321,19 @@ def _build_auto_update_plan(
     update_mode_override: str | None,
     base_config: UpdaterConfig,
     known_digest_provenance_by_service: Mapping[str, DigestTagProvenance],
+    pending_source: web_pending_sources.PendingSourceResult,
 ) -> DryRunPlan:
     config = (
         base_config
         if update_mode_override is None
         else replace(base_config, update_mode=update_mode_override)
     )
-    return build_dry_run_plan(
+    return build_dry_run_plan_from_pending_source(
         config,
+        pending_source.parsed,
+        source_file=pending_source.source_file,
+        source_hash=pending_source.source_hash,
+        source=pending_source.plan_source(),
         line_numbers=line_numbers,
         allow_tag_updates=False,
         tag_overrides=(),

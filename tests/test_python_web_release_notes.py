@@ -17,6 +17,8 @@ from tests.web_test_helpers import (
     _fake_docker_calls,
     _fake_docker_env,
     _fake_image_state_file,
+    _install_wud_api,
+    _wud_api_container,
 )
 
 
@@ -36,6 +38,46 @@ def test_release_notes_get_returns_placeholders_without_creating_database(
     assert body["items"][0]["line_no"] == 1
     assert body["items"][0]["status"] == "missing"
     assert body["items"][0]["provider"] == "github"
+    assert not db_path.exists()
+
+
+def test_release_notes_get_uses_api_pending_source_without_wud_file(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    _install_wud_api(
+        monkeypatch,
+        containers=[
+            _wud_api_container(
+                image="ghcr.io/acme/app",
+                tag="1.0.0",
+                remote_tag="2.0.0",
+            )
+        ],
+    )
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_PENDING_SOURCE": "api",
+            "WUD_API_BASE_URL": "https://wud.release-api-source.test:3000",
+        },
+    )
+    db_path = tmp_path / "state" / "wud.sqlite"
+
+    response = client.get("/api/v1/release-notes")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["source"]["active"] == "api"
+    assert body["source_file"] == "WUD API"
+    assert body["count"] == 1
+    assert body["items"][0]["line_no"] == 1
+    assert body["items"][0]["status"] == "missing"
+    assert body["items"][0]["provider"] == "github"
+    assert body["items"][0]["upstream_repo"] == "acme/app"
+    assert body["wud_api"]["metadata_available"] is True
+    assert not (tmp_path / "state" / "images.todo").exists()
     assert not db_path.exists()
 
 

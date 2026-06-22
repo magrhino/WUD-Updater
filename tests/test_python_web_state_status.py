@@ -61,5 +61,8 @@ def test_status_counts_pending_without_resolving_groups(tmp_path: Path) -> None:
     assert response.status_code == 200
     body = response.json()
     assert body["pending_count"] == 1
+    assert body["pending_source"]["configured"] == "file"
+    assert body["pending_source"]["active"] == "file"
+    assert body["pending_source"]["label"] == "Pending file"
     assert body["wud_api"]["metadata_available"] is False
     assert _fake_docker_calls(fake_root) == ""

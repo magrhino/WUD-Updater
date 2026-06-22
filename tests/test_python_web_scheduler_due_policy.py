@@ -8,6 +8,7 @@ from types import SimpleNamespace
 
 from wudup import web as web_module
 from wudup import web_scheduler
+from wudup import web_settings
 from wudup.db import init_db, open_db, upsert_known_image
 from wudup.digest_provenance import DigestTagProvenance
 
@@ -16,9 +17,11 @@ from tests.web_test_helpers import (
     _csrf_headers,
     _fake_docker_calls,
     _fake_docker_env,
+    _install_wud_api,
     _make_fake_stack,
     _web_env,
     _wait_apply_job,
+    _wud_api_container,
 )
 
 from tests.web_scheduler_test_helpers import _auto_update_tick
@@ -424,7 +427,7 @@ def test_auto_update_candidate_reuses_effective_config_snapshot(
             ),
         )
 
-    def fake_build_dry_run_plan(config, **kwargs):
+    def fake_build_dry_run_plan(config, _parsed, **kwargs):
         observed["plan_config"] = config
         observed["plan_kwargs"] = kwargs
         return SimpleNamespace(status="ready", skipped=(), issues=())
@@ -434,7 +437,11 @@ def test_auto_update_candidate_reuses_effective_config_snapshot(
         "resolve_pending_groups",
         fake_resolve_pending_groups,
     )
-    monkeypatch.setattr(web_scheduler, "build_dry_run_plan", fake_build_dry_run_plan)
+    monkeypatch.setattr(
+        web_scheduler,
+        "build_dry_run_plan_from_pending_source",
+        fake_build_dry_run_plan,
+    )
     with open_db(settings.config.db_path) as conn:
         init_db(conn)
         upsert_known_image(
@@ -485,8 +492,9 @@ def test_auto_update_candidate_reuses_effective_config_snapshot(
         )
 
     assert candidate is not None
-    selection, plan = candidate
+    selection, plan, pending_source = candidate
     assert plan.status == "ready"
+    assert pending_source.active == "file"
     assert selection.line_numbers == (1,)
     assert len(loaded_settings) == 1
     assert observed["resolve_config"] is first_config
@@ -499,3 +507,92 @@ def test_auto_update_candidate_reuses_effective_config_snapshot(
     assert observed["plan_kwargs"]["line_numbers"] == (1,)
     plan_provenance = observed["plan_kwargs"]["known_digest_provenance_by_service"]
     assert plan_provenance is grouping_provenance
+
+
+def test_auto_update_scheduler_uses_api_pending_source_without_wud_lock(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    fake_env, fake_root = _fake_docker_env(tmp_path)
+    remote_digest = f"sha256:{'c' * 64}"
+    _install_wud_api(
+        monkeypatch,
+        containers=[
+            _wud_api_container(
+                tag="latest",
+                remote_tag="",
+                remote_digest=remote_digest,
+                update_kind="digest",
+            )
+        ],
+    )
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+            "WUD_PENDING_SOURCE": "api",
+            "WUD_API_BASE_URL": "https://wud.scheduler-api-source.test:3000",
+            "WUD_TIMEZONE": "America/Chicago",
+            **fake_env,
+        },
+    )
+    _make_fake_stack(
+        tmp_path,
+        fake_root,
+        "stack",
+        [("app", "repo/app:latest", "cid-app")],
+    )
+    policy = client.post(
+        "/api/v1/state/operations",
+        json={
+            "kind": "upsert_service_policy",
+            "service_key": "stack/app",
+            "update_mode": "live",
+            "auto_update": True,
+            "auto_update_time": "09:30",
+            "auto_update_days": ["sat"],
+        },
+        headers=_csrf_headers(client),
+    )
+    now = datetime(2026, 5, 30, 14, 30, tzinfo=timezone.utc)
+    settings = client.app.state.web_settings
+    with open_db(settings.config.db_path) as conn:
+        candidate = web_scheduler._auto_update_candidate(
+            conn,
+            settings,
+            effective_config_loader=web_settings._effective_config,
+            now_utc=now,
+            started_at=now - timedelta(minutes=30),
+        )
+
+    assert policy.status_code == 200
+    assert candidate is not None
+    _selection, _plan, pending_source = candidate
+    assert pending_source.active == "api"
+
+    observed: dict[str, object] = {}
+
+    def fake_submit_apply_job_state(_state, _settings, plan, **kwargs):
+        observed["kwargs"] = kwargs
+        return web_scheduler.ApplyJobResponse(
+            job_id="api-source-job",
+            status="queued",
+            selected_line_numbers=list(plan.selected_line_numbers),
+        )
+
+    monkeypatch.setattr(
+        web_scheduler.web_jobs,
+        "_submit_apply_job_state",
+        fake_submit_apply_job_state,
+    )
+    client.app.state.web_auto_update_started_at = now - timedelta(minutes=30)
+    response = _auto_update_tick(client, now)
+
+    assert response is not None
+    assert response.job_id == "api-source-job"
+    submit_kwargs = observed["kwargs"]
+    run_context = submit_kwargs["run_context"]
+    assert submit_kwargs["wud_lock"] is None
+    assert run_context.pending_source_text == f"repo/app:latest@{remote_digest}\n"
+    assert run_context.pending_source_label == "WUD API"

@@ -10,7 +10,7 @@ from pathlib import Path
 
 from fastapi import HTTPException, Request
 
-from . import web_wud_api
+from . import web_pending_sources, web_wud_api
 from .config import (
     COMPOSE_IGNORE_PATHS_ENV,
     DEFAULT_COMPOSE_IGNORE_PATHS,
@@ -577,6 +577,12 @@ def _webui_settings_entries(
                 settings,
                 web_wud_api.WUD_API_STARTUP_WAIT_SECONDS_ENV,
             ),
+        ),
+        _settings_entry(
+            web_pending_sources.PENDING_SOURCE_ENV,
+            settings.pending_source,
+            web_pending_sources.DEFAULT_PENDING_SOURCE,
+            _env_configured(settings, web_pending_sources.PENDING_SOURCE_ENV),
         ),
         _settings_entry(
             "WUD_WEB_MUTATIONS_ENABLED",
