@@ -17,6 +17,8 @@ import type {
   PendingItem,
   PendingRemovalPlanResponse,
   PendingResponse,
+  PendingRescanResponse,
+  PendingRescanScope,
   PlanResponse,
   ReleaseNotesResponse,
   RetagChoiceRequest,
@@ -759,6 +761,24 @@ export class DemoApiState {
       statusReason: "removed-selected",
       staleError: "removal is stale",
     });
+  }
+
+  rescanPending(
+    scope: PendingRescanScope,
+    lineNumbers: number[],
+  ): PendingRescanResponse {
+    return {
+      status: "blocked",
+      audit_run_id: 0,
+      scope,
+      requested_count: scope === "selected" ? lineNumbers.length : 0,
+      watched_count: 0,
+      skipped: [],
+      wud_api: {
+        ...clone(fixtures.pending.wud_api),
+        detail: "Static demo mode cannot trigger WUD rescans.",
+      },
+    };
   }
 
   createJob(

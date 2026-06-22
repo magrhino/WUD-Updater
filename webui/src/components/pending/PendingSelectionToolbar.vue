@@ -1,9 +1,11 @@
 <script setup lang="ts">
-import { Check, Play, Trash2, X } from "@lucide/vue";
+import { Check, Play, RefreshCw, Trash2, X } from "@lucide/vue";
 import { NButton, NFlex } from "naive-ui";
 
 defineProps<{
   batchSummaryLabel: string;
+  globalRescanDisabled: boolean;
+  globalRescanDisabledMessage: string;
   groupingReady: boolean;
   hasSelectedTagUpdates: boolean;
   isMobile: boolean;
@@ -16,6 +18,9 @@ defineProps<{
   selectAllLabel: string;
   selectedCount: number;
   selectedHiddenCount: number;
+  selectedRescanDisabled: boolean;
+  selectedRescanDisabledMessage: string;
+  selectedRescanVisible: boolean;
   snoozedCount: number;
   stackCount: number;
   unmatchedReviewCountLabel: string;
@@ -24,6 +29,8 @@ defineProps<{
 
 const emit = defineEmits<{
   clearSelection: [];
+  rescanAll: [];
+  rescanSelected: [];
   selectAll: [];
   startRemoval: [];
   startUpdate: [];
@@ -47,6 +54,9 @@ const emit = defineEmits<{
         </template>
       </span>
       <span v-else class="wrap-anywhere">Pending file order</span>
+      <span v-if="globalRescanDisabledMessage" class="wrap-anywhere">
+        {{ globalRescanDisabledMessage }}
+      </span>
     </div>
     <n-flex
       class="inline-actions pending-actions"
@@ -65,6 +75,19 @@ const emit = defineEmits<{
         </template>
         {{ selectAllLabel }}
       </n-button>
+      <n-button
+        size="small"
+        secondary
+        :disabled="globalRescanDisabled"
+        :loading="loading"
+        :title="globalRescanDisabledMessage"
+        @click="emit('rescanAll')"
+      >
+        <template #icon>
+          <RefreshCw :size="16" />
+        </template>
+        Rescan WUD
+      </n-button>
     </n-flex>
   </div>
 
@@ -78,6 +101,9 @@ const emit = defineEmits<{
         </template>
         <template v-if="removeSelectedDisabledMessage">
           {{ removeSelectedDisabledMessage }}
+        </template>
+        <template v-if="selectedRescanDisabledMessage">
+          {{ selectedRescanDisabledMessage }}
         </template>
         <template v-if="selectedHiddenCount">
           {{ selectedHiddenCount === 1 ? "1 selected update remains selected outside the current search." : `${selectedHiddenCount} selected updates remain selected outside the current search.` }}
@@ -95,6 +121,20 @@ const emit = defineEmits<{
           <X :size="16" />
         </template>
         Clear selection
+      </n-button>
+      <n-button
+        v-if="selectedRescanVisible"
+        size="small"
+        secondary
+        :disabled="selectedRescanDisabled"
+        :loading="loading"
+        :title="selectedRescanDisabledMessage"
+        @click="emit('rescanSelected')"
+      >
+        <template #icon>
+          <RefreshCw :size="16" />
+        </template>
+        Rescan selected
       </n-button>
       <n-button
         type="warning"

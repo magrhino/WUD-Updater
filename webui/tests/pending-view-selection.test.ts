@@ -8,9 +8,12 @@ import {
   pendingGrouping,
   pendingItem,
   pendingResponse,
+  pendingRescanResponse,
   pendingSourceInfo,
   planResponse,
   snooze,
+  wudApiStatus,
+  wudContainerMetadata,
 } from "./helpers/fixtures";
 import {
   mockPendingLifecycle,
@@ -319,6 +322,94 @@ describe("pending view selection actions", () => {
     await removalButton?.trigger("click");
 
     expect(createRemovalPlan).not.toHaveBeenCalled();
+  });
+
+  it("disables WUD rescan controls in read-only mode", async () => {
+    const { pinia, settings, updates } = setupStores(false);
+    updates.pending = pendingResponse();
+    mockPendingLifecycle(settings, updates);
+    const rescanPending = vi.spyOn(updates, "rescanPending");
+    const wrapper = mountPendingView(pinia);
+
+    const rescanButton = wrapper
+      .findAll("button")
+      .find((button) => button.text().includes("Rescan WUD"));
+    expect(rescanButton?.attributes("disabled")).toBeDefined();
+    await rescanButton?.trigger("click");
+
+    expect(wrapper.text()).toContain("Read-only");
+    expect(rescanPending).not.toHaveBeenCalled();
+  });
+
+  it("disables WUD rescan controls when WUD API is degraded", async () => {
+    const { pinia, settings, updates } = setupStores(true);
+    updates.pending = {
+      ...pendingResponse(),
+      wud_api: wudApiStatus({
+        state: "unavailable",
+        available: false,
+        metadata_available: false,
+        detail: "WUD API is unavailable: connection refused",
+      }),
+    };
+    mockPendingLifecycle(settings, updates);
+    const rescanPending = vi.spyOn(updates, "rescanPending");
+    const wrapper = mountPendingView(pinia);
+
+    expect(wrapper.text()).toContain("WUD API is unavailable: connection refused");
+    const rescanButton = wrapper
+      .findAll("button")
+      .find((button) => button.text().includes("Rescan WUD"));
+    expect(rescanButton?.attributes("disabled")).toBeDefined();
+    await rescanButton?.trigger("click");
+
+    expect(rescanPending).not.toHaveBeenCalled();
+  });
+
+  it("disables selected WUD rescan when selected rows lack WUD metadata", async () => {
+    const { pinia, settings, updates } = setupStores(true);
+    updates.pending = pendingResponse();
+    mockPendingLifecycle(settings, updates);
+    const rescanPending = vi.spyOn(updates, "rescanPending");
+    const wrapper = mountPendingView(pinia);
+
+    await wrapper
+      .find('input[aria-label="Select stack media"]')
+      .setValue(true);
+    await flushPromises();
+
+    expect(wrapper.text()).toContain("Selected entries do not have WUD container IDs.");
+    const selectedRescan = wrapper
+      .findAll("button")
+      .find((button) => button.text().includes("Rescan selected"));
+    expect(selectedRescan?.attributes("disabled")).toBeDefined();
+    await selectedRescan?.trigger("click");
+
+    expect(rescanPending).not.toHaveBeenCalled();
+  });
+
+  it("rescans selected WUD metadata rows", async () => {
+    const item = pendingItem({
+      wud_metadata: wudContainerMetadata(),
+    });
+    const { pinia, settings, updates } = setupStores(true);
+    updates.pending = pendingResponse([item]);
+    mockPendingLifecycle(settings, updates);
+    const rescanPending = vi
+      .spyOn(updates, "rescanPending")
+      .mockResolvedValue(pendingRescanResponse({ scope: "selected" }));
+    const wrapper = mountPendingView(pinia);
+
+    await wrapper
+      .find('input[aria-label="Select stack media"]')
+      .setValue(true);
+    await flushPromises();
+    await wrapper
+      .findAll("button")
+      .find((button) => button.text().includes("Rescan selected"))
+      ?.trigger("click");
+
+    expect(rescanPending).toHaveBeenCalledWith("selected", [1]);
   });
 
   it("disables selected pending removal for API pending source", async () => {

@@ -17,6 +17,7 @@ import {
   applyJobLogResponse,
   applyJobResponse,
   pendingResponse,
+  pendingRescanResponse,
   releaseNoteInfo,
   releaseNotesResponse,
   retagPlanResponse,
@@ -183,6 +184,63 @@ describe("updates store", () => {
     await updates.loadPending();
 
     expect(updates.pendingCleanup).toBeNull();
+  });
+
+  it("rescans pending updates and refreshes dependent state", async () => {
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === "/api/v1/pending/rescan") {
+        return Promise.resolve(jsonResponse(pendingRescanResponse()));
+      }
+      if (url === "/api/v1/pending") {
+        return Promise.resolve(jsonResponse(pendingResponse()));
+      }
+      if (
+        url === "/api/v1/release-notes" ||
+        url === "/api/v1/release-notes/refresh"
+      ) {
+        return Promise.resolve(jsonResponse(releaseNotesResponse()));
+      }
+      if (url === "/api/v1/runs") {
+        return Promise.resolve(jsonResponse([]));
+      }
+      return Promise.resolve(jsonResponse({}));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const auth = useAuthStore();
+    const ensureCsrf = vi
+      .spyOn(auth, "ensureCsrf")
+      .mockResolvedValue("csrf-rescan");
+    useConnectionStore();
+    useSettingsStore();
+    const updates = useUpdatesStore();
+    useRunsStore();
+
+    const response = await updates.rescanPending("selected", [1]);
+
+    expect(ensureCsrf).toHaveBeenCalledTimes(2);
+    expect(response.audit_run_id).toBe(24);
+    expect(updates.pendingRescan?.audit_run_id).toBe(24);
+    expect(updates.pending?.count).toBe(1);
+    const urls = fetchMock.mock.calls.map((call) => call[0]);
+    expect(urls.slice(0, 3)).toEqual([
+      "/api/v1/pending/rescan",
+      "/api/v1/pending",
+      "/api/v1/release-notes",
+    ]);
+    expect(new Set(urls.slice(3))).toEqual(
+      new Set(["/api/v1/release-notes/refresh", "/api/v1/runs"]),
+    );
+    expect(jsonRequestBody(fetchMock.mock.calls[0])).toEqual({
+      confirmation: "rescan_wud",
+      scope: "selected",
+      line_numbers: [1],
+    });
+    expect(
+      ((fetchMock.mock.calls[0][1] as RequestInit).headers as Headers).get(
+        "x-wud-csrf-token",
+      ),
+    ).toBe("csrf-rescan");
   });
 
   it("loads update targets for management selectors", async () => {

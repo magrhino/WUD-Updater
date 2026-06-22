@@ -11,6 +11,7 @@ import type {
   PendingGrouping,
   PendingItem,
   PendingResponse,
+  PendingRescanResponse,
   PendingSourceInfo,
   PlanResponse,
   ReleaseNoteInfo,
@@ -645,6 +646,21 @@ export function pendingResponse(items = [pendingItem()]): PendingResponse {
     grouping: pendingGrouping(groupedItems),
     wud_api: wudApiStatus(),
     warnings: [],
+  };
+}
+
+export function pendingRescanResponse(
+  overrides: Partial<PendingRescanResponse> = {},
+): PendingRescanResponse {
+  return {
+    status: "success",
+    audit_run_id: 24,
+    scope: "all",
+    requested_count: 0,
+    watched_count: 0,
+    skipped: [],
+    wud_api: wudApiStatus(),
+    ...overrides,
   };
 }
 

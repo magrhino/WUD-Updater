@@ -188,6 +188,25 @@ export interface PendingCleanupResponse {
   removed: PendingCleanupRemovedLine[];
 }
 
+export type PendingRescanScope = "all" | "selected";
+export type PendingRescanStatus = "success" | "partial" | "blocked";
+
+export interface PendingRescanSkippedLine {
+  line_no: number;
+  raw: string;
+  reason: string;
+}
+
+export interface PendingRescanResponse {
+  status: PendingRescanStatus;
+  audit_run_id: number;
+  scope: PendingRescanScope;
+  requested_count: number;
+  watched_count: number;
+  skipped: PendingRescanSkippedLine[];
+  wud_api: WudApiStatus;
+}
+
 export interface PendingRemovalPlanLine {
   line_no: number;
   raw: string;

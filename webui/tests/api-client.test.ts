@@ -184,6 +184,7 @@ describe("webApi", () => {
       webApi.cleanupPending("cleanup", [{ line_no: 1, raw: "repo/app:1.0" }], "csrf"),
       webApi.createRemovalPlan([1], "csrf"),
       webApi.removeSelectedPending("removal", [{ line_no: 1, raw: "repo/app:1.0" }], "csrf"),
+      webApi.rescanPending("selected", [1], "csrf"),
       webApi.servicePolicies(),
       webApi.snoozes("active"),
       webApi.tagExclusions("active"),
@@ -203,7 +204,7 @@ describe("webApi", () => {
       webApi.runLog(1),
     ]);
 
-    expect(fetchMock).toHaveBeenCalledTimes(41);
+    expect(fetchMock).toHaveBeenCalledTimes(42);
     for (const call of fetchMock.mock.calls) {
       expect(requestInit(call).credentials).toBe("include");
     }
@@ -332,6 +333,7 @@ describe("webApi", () => {
       [{ line_no: 1, raw: "repo/app:1.0" }],
       "csrf-token",
     );
+    await webApi.rescanPending("selected", [1], "csrf-token");
     await webApi.stateOperation(operation, "csrf-token");
     await webApi.planSelfUpdate("csrf-token");
     await webApi.applySelfUpdate("csrf-token", selfUpdateStatus());
@@ -457,6 +459,24 @@ describe("webApi", () => {
       digest_pin_label_rewrite_approvals: [],
       confirmation: "apply",
     });
+  });
+
+  it("serializes pending rescan payload exactly", async () => {
+    const fetchMock = mockFetch({});
+
+    await webApi.rescanPending("selected", [3], "csrf");
+
+    expect(fetchMock.mock.calls[0][0]).toBe("/api/v1/pending/rescan");
+    expect(jsonRequestBody(fetchMock.mock.calls[0])).toEqual({
+      confirmation: "rescan_wud",
+      scope: "selected",
+      line_numbers: [3],
+    });
+    expect(
+      (requestInit(fetchMock.mock.calls[0]).headers as Headers).get(
+        "x-wud-csrf-token",
+      ),
+    ).toBe("csrf");
   });
 
   it("opens job streams with browser credentials", () => {

@@ -10,6 +10,8 @@ import {
   type PendingCleanupLine,
   type PendingCleanupResponse,
   type PendingRemovalPlanResponse,
+  type PendingRescanResponse,
+  type PendingRescanScope,
   type PlanResponse,
   type PendingResponse,
   type ReleaseNoteInfo,
@@ -40,6 +42,7 @@ import {
   releaseChangelogKey,
   type ReleaseChangelogState,
 } from "../utils/releaseChangelog";
+import { useRunsStore } from "./runs";
 
 export const APPLY_JOB_RECOVERY_MESSAGE =
   "Last known apply job state is unavailable because the WebUI process restarted. Check Runs -> Latest run and the updater log before applying more updates.";
@@ -84,6 +87,7 @@ export const useUpdatesStore = defineStore("updates", () => {
   const plan = ref<PlanResponse | null>(null);
   const pendingCleanup = ref<PendingCleanupResponse | null>(null);
   const pendingRemovalPlan = ref<PendingRemovalPlanResponse | null>(null);
+  const pendingRescan = ref<PendingRescanResponse | null>(null);
   const applyJob = ref<ApplyJobResponse | null>(null);
   const applyJobLog = ref<ApplyJobLogResponse | null>(null);
   const rememberedApplyJobId = ref(readRememberedApplyJobId());
@@ -103,6 +107,7 @@ export const useUpdatesStore = defineStore("updates", () => {
     await loadWithState(async () => {
       plan.value = null;
       pendingRemovalPlan.value = null;
+      pendingRescan.value = null;
       if (!options.preserveCleanup) {
         pendingCleanup.value = null;
       }
@@ -508,6 +513,35 @@ export const useUpdatesStore = defineStore("updates", () => {
     return response;
   }
 
+  async function rescanPending(
+    scope: PendingRescanScope,
+    lineNumbers: number[] = [],
+  ): Promise<PendingRescanResponse> {
+    const auth = useAuthStore();
+    const runs = useRunsStore();
+    let response: PendingRescanResponse | null = null;
+    await loadWithState(async () => {
+      plan.value = null;
+      pendingCleanup.value = null;
+      pendingRemovalPlan.value = null;
+      pendingRescan.value = null;
+      response = await webApi.rescanPending(
+        scope,
+        lineNumbers,
+        await auth.ensureCsrf(),
+      );
+      pendingRescan.value = response;
+      pending.value = await webApi.pending();
+    });
+    await loadReleaseNotes().catch(() => undefined);
+    refreshReleaseNotes().catch(() => undefined);
+    await runs.loadRuns().catch(() => undefined);
+    if (response === null) {
+      throw new Error("Pending rescan did not return a response");
+    }
+    return response;
+  }
+
   function clearPlan(): void {
     plan.value = null;
     pendingRemovalPlan.value = null;
@@ -666,6 +700,7 @@ export const useUpdatesStore = defineStore("updates", () => {
     plan,
     pendingCleanup,
     pendingRemovalPlan,
+    pendingRescan,
     applyJob,
     applyJobLog,
     rememberedApplyJobId,
@@ -696,6 +731,7 @@ export const useUpdatesStore = defineStore("updates", () => {
     cleanupPending,
     createRemovalPlan,
     removeSelectedPending,
+    rescanPending,
     clearPlan,
     createJob,
     applyPlan,

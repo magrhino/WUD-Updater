@@ -330,6 +330,17 @@ def create_app(
         response_model=web_models.PendingCleanupResponse,
     )
     router.add_api_route(
+        "/pending/rescan",
+        web_pending.api_pending_rescan,
+        methods=["POST"],
+        response_model=web_models.PendingRescanResponse,
+    )
+    router.add_api_route(
+        "/pending/rescan",
+        api_post_only_method_not_allowed,
+        methods=["GET"],
+    )
+    router.add_api_route(
         "/pending/removal-plan",
         web_pending.api_pending_removal_plan,
         methods=["POST"],

@@ -1,13 +1,16 @@
 from __future__ import annotations
 
+import json
 import urllib.parse
 from pathlib import Path
 from typing import Any
 
 import pytest
 
+from wudup import web as web_module
 from wudup import web_release_notes as release_notes_module
 from wudup import web_wud_api
+from wudup.db import open_db
 from wudup.release_notes import (
     ReleaseNoteInfo as ReleaseNoteData,
     release_note_contexts,
@@ -72,6 +75,36 @@ def _container_payload(
     }
 
 
+def _install_recording_wud_api(monkeypatch, containers: list[dict[str, Any]]):
+    calls: list[tuple[str, str]] = []
+
+    def fake_request_json(url: str) -> object:
+        path = urllib.parse.urlsplit(url).path
+        calls.append(("GET", path))
+        if path == "/health":
+            return {"status": "ok"}
+        if path == "/api/containers":
+            return containers
+        raise AssertionError(f"unexpected WUD API URL: {url}")
+
+    def fake_post_json(url: str) -> object:
+        path = urllib.parse.urlsplit(url).path
+        calls.append(("POST", path))
+        return {"status": "ok"}
+
+    monkeypatch.setattr(web_wud_api, "_request_json", fake_request_json)
+    monkeypatch.setattr(web_wud_api, "_post_json", fake_post_json)
+    return calls
+
+
+def _rescan_payload(scope: str = "all", line_numbers: list[int] | None = None):
+    return {
+        "confirmation": "rescan_wud",
+        "scope": scope,
+        "line_numbers": [] if line_numbers is None else line_numbers,
+    }
+
+
 class _ToggleableWudApi:
     def __init__(self, monkeypatch, *, reachable: bool) -> None:
         self.now = 0.0
@@ -121,6 +154,277 @@ def test_wud_api_snapshot_reads_update_metadata(tmp_path: Path, monkeypatch) -> 
     assert container.remote_digest == "sha256:remote"
     assert container.update_kind == "tag"
     assert container.semver_diff == "minor"
+
+
+def test_pending_rescan_endpoint_enforces_auth_csrf_and_read_only(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(web_wud_api, "_request_json", lambda url: {"status": "ok"})
+    monkeypatch.setattr(web_wud_api, "_post_json", lambda url: {"status": "ok"})
+    payload = _rescan_payload()
+    unauthenticated = _client(tmp_path, {"WUD_WEB_MUTATIONS_ENABLED": "true"})
+    mutating = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+        },
+    )
+    read_only = _client(tmp_path, {"WUD_WEB_DEV_NO_AUTH": "true"})
+
+    auth_response = unauthenticated.post(
+        "/api/v1/pending/rescan",
+        json=payload,
+        headers=_csrf_headers(unauthenticated),
+    )
+    missing_csrf = mutating.post("/api/v1/pending/rescan", json=payload)
+    read_only_response = read_only.post(
+        "/api/v1/pending/rescan",
+        json=payload,
+        headers=_csrf_headers(read_only),
+    )
+
+    assert auth_response.status_code == 403
+    assert auth_response.json()["detail"] == "setup required"
+    assert missing_csrf.status_code == 403
+    assert missing_csrf.json()["detail"] == "origin header is required"
+    assert read_only_response.status_code == 403
+    assert read_only_response.json()["detail"] == "mutations are disabled"
+
+
+def test_pending_global_rescan_calls_wud_watch_refreshes_snapshot_and_audits(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    calls = _install_recording_wud_api(
+        monkeypatch,
+        [_container_payload(name="app")],
+    )
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+            "WUD_API_BASE_URL": "http://wud.rescan-all.test:3000",
+        },
+    )
+    calls.clear()
+
+    response = client.post(
+        "/api/v1/pending/rescan",
+        json=_rescan_payload(),
+        headers=_csrf_headers(client),
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "success"
+    assert body["scope"] == "all"
+    assert body["wud_api"]["metadata_available"] is True
+    assert calls == [
+        ("GET", "/health"),
+        ("POST", "/api/containers/watch"),
+        ("GET", "/health"),
+        ("GET", "/api/containers"),
+    ]
+    with open_db(tmp_path / "state" / "wud.sqlite") as conn:
+        run = conn.execute(
+            "SELECT * FROM update_runs WHERE id = ?",
+            (body["audit_run_id"],),
+        ).fetchone()
+    assert run["mode"] == "web-wud-rescan"
+    assert run["status"] == "success"
+    metadata = json.loads(run["metadata_json"])
+    assert metadata["operation"] == "rescan_wud"
+    assert metadata["scope"] == "all"
+    assert metadata["wud_api"]["state"] == "ready"
+
+
+def test_pending_selected_rescan_maps_lines_to_wud_container_ids(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    app = _container_payload(name="app")
+    app["id"] = "docker/local app"
+    calls = _install_recording_wud_api(monkeypatch, [app])
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+            "WUD_API_BASE_URL": "http://wud.rescan-selected.test:3000",
+        },
+    )
+    wud_file = tmp_path / "state" / "images.todo"
+    original = "app\nunknown\n"
+    wud_file.write_text(original, encoding="utf-8")
+    calls.clear()
+
+    response = client.post(
+        "/api/v1/pending/rescan",
+        json=_rescan_payload("selected", [1, 2]),
+        headers=_csrf_headers(client),
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "partial"
+    assert body["scope"] == "selected"
+    assert body["requested_count"] == 2
+    assert body["watched_count"] == 1
+    assert body["skipped"] == [
+        {"line_no": 2, "raw": "unknown", "reason": "no-wud-container-id"}
+    ]
+    assert ("POST", "/api/containers/docker%2Flocal%20app/watch") in calls
+    assert ("POST", "/api/containers/watch") not in calls
+    assert wud_file.read_text(encoding="utf-8") == original
+
+
+def test_pending_selected_rescan_skips_unmapped_lines_without_global_watch(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    calls = _install_recording_wud_api(monkeypatch, [_container_payload(name="app")])
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+            "WUD_API_BASE_URL": "http://wud.rescan-unmapped.test:3000",
+        },
+    )
+    wud_file = tmp_path / "state" / "images.todo"
+    original = "unknown\n"
+    wud_file.write_text(original, encoding="utf-8")
+    calls.clear()
+
+    response = client.post(
+        "/api/v1/pending/rescan",
+        json=_rescan_payload("selected", [1]),
+        headers=_csrf_headers(client),
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "blocked"
+    assert body["watched_count"] == 0
+    assert body["skipped"] == [
+        {"line_no": 1, "raw": "unknown", "reason": "no-wud-container-id"}
+    ]
+    assert [call for call in calls if call[0] == "POST"] == []
+    assert wud_file.read_text(encoding="utf-8") == original
+
+
+def test_pending_rescan_reports_wud_api_unavailable_without_file_mutation(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    _install_wud_api(monkeypatch, health=OSError("connection refused"))
+    posts: list[str] = []
+    monkeypatch.setattr(
+        web_wud_api,
+        "_post_json",
+        lambda url: posts.append(urllib.parse.urlsplit(url).path),
+    )
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+            "WUD_API_BASE_URL": "http://wud.rescan-unavailable.test:3000",
+        },
+    )
+    wud_file = tmp_path / "state" / "images.todo"
+    original = "repo/app:1.0\n"
+    wud_file.write_text(original, encoding="utf-8")
+
+    response = client.post(
+        "/api/v1/pending/rescan",
+        json=_rescan_payload(),
+        headers=_csrf_headers(client),
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "blocked"
+    assert body["wud_api"]["state"] == "unavailable"
+    assert posts == []
+    assert wud_file.read_text(encoding="utf-8") == original
+    with open_db(tmp_path / "state" / "wud.sqlite") as conn:
+        run = conn.execute(
+            "SELECT * FROM update_runs WHERE id = ?",
+            (body["audit_run_id"],),
+        ).fetchone()
+    assert run["status"] == "failure"
+
+
+def test_pending_rescan_reports_wud_api_auth_required_without_watch(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    _install_wud_api(monkeypatch, health=(401, {"error": "authentication required"}))
+    posts: list[str] = []
+    monkeypatch.setattr(
+        web_wud_api,
+        "_post_json",
+        lambda url: posts.append(urllib.parse.urlsplit(url).path),
+    )
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+            "WUD_API_BASE_URL": "http://wud.rescan-auth.test:3000",
+        },
+    )
+
+    response = client.post(
+        "/api/v1/pending/rescan",
+        json=_rescan_payload(),
+        headers=_csrf_headers(client),
+    )
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "blocked"
+    assert response.json()["wud_api"]["state"] == "auth_required"
+    assert posts == []
+
+
+def test_pending_rescan_rejects_active_apply_job_without_watch(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    posts: list[str] = []
+    monkeypatch.setattr(web_wud_api, "_request_json", lambda url: {"status": "ok"})
+    monkeypatch.setattr(
+        web_wud_api,
+        "_post_json",
+        lambda url: posts.append(urllib.parse.urlsplit(url).path),
+    )
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+            "WUD_API_BASE_URL": "http://wud.rescan-active-job.test:3000",
+        },
+    )
+    client.app.state.web_apply_jobs["job-active"] = web_module.WebApplyJob(
+        id="job-active",
+        status="running",
+        selected_line_numbers=(1,),
+    )
+
+    response = client.post(
+        "/api/v1/pending/rescan",
+        json=_rescan_payload(),
+        headers=_csrf_headers(client),
+    )
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == "an apply job is already running"
+    assert posts == []
 
 
 def test_wud_api_configuration_diagnostics_reads_endpoint_payloads(

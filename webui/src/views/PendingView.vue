@@ -21,6 +21,7 @@ import PendingSearchPanel from "../components/pending/PendingSearchPanel.vue";
 import PendingSelectionToolbar from "../components/pending/PendingSelectionToolbar.vue";
 import PendingStackSelection from "../components/pending/PendingStackSelection.vue";
 import { useDataCardsBreakpoint } from "../responsive";
+import { useAuthStore } from "../stores/auth";
 import { useRunsStore } from "../stores/runs";
 import { useSettingsStore } from "../stores/settings";
 import { useUpdatesStore } from "../stores/updates";
@@ -46,6 +47,7 @@ import { usePendingSearchState } from "./pending/usePendingSearchState";
 import { usePendingSelectionState } from "./pending/usePendingSelectionState";
 
 const updates = useUpdatesStore();
+const auth = useAuthStore();
 const runs = useRunsStore();
 const settings = useSettingsStore();
 const isMobile = useDataCardsBreakpoint();
@@ -147,6 +149,77 @@ const showSetupLink = computed(
 const selectedHasTagUpdates = computed(() =>
   lineNumbersHaveTagUpdates(selectedLineNumbers.value),
 );
+const wudRescanDisabledMessage = computed(() => {
+  if (!updates.pending) {
+    return "";
+  }
+  if (!auth.session?.mutations_enabled) {
+    return "Read-only mode is active. Set WUD_WEB_MUTATIONS_ENABLED=true on the server to rescan WUD.";
+  }
+  const status = updates.pending.wud_api;
+  if (!status) {
+    return "WUD API status is unavailable.";
+  }
+  if (!status.available) {
+    return status.detail || "WUD API is unavailable.";
+  }
+  if (status.state === "auth_required") {
+    return status.detail || "WUD API requires authentication.";
+  }
+  if (status.state !== "ready") {
+    return status.detail || "WUD API is not ready.";
+  }
+  if (!status.metadata_available) {
+    return status.detail || "WUD API metadata is unavailable.";
+  }
+  return "";
+});
+const selectedWudRescanLineNumbers = computed(() => {
+  const byLine = new Map(pendingItems.value.map((item) => [item.line_no, item]));
+  return selectedLineNumbers.value.filter((lineNo) =>
+    Boolean(byLine.get(lineNo)?.wud_metadata?.id),
+  );
+});
+const globalRescanDisabled = computed(
+  () => updates.loading || Boolean(wudRescanDisabledMessage.value),
+);
+const selectedRescanVisible = computed(() => selectedLineNumbers.value.length > 0);
+const selectedRescanDisabledMessage = computed(() => {
+  if (!selectedLineNumbers.value.length) {
+    return "";
+  }
+  if (wudRescanDisabledMessage.value) {
+    return wudRescanDisabledMessage.value;
+  }
+  if (!selectedWudRescanLineNumbers.value.length) {
+    return "Selected entries do not have WUD container IDs.";
+  }
+  return "";
+});
+const selectedRescanDisabled = computed(
+  () => updates.loading || Boolean(selectedRescanDisabledMessage.value),
+);
+const pendingRescanAlertType = computed(() =>
+  updates.pendingRescan?.status === "blocked" ? "warning" : "success",
+);
+const pendingRescanMessage = computed(() => {
+  const rescan = updates.pendingRescan;
+  if (!rescan) {
+    return "";
+  }
+  if (rescan.status === "blocked") {
+    const detail = rescan.wud_api.detail || "WUD API rescan is unavailable.";
+    return `WUD rescan did not run: ${detail}`;
+  }
+  if (rescan.scope === "all") {
+    return "WUD rescan requested.";
+  }
+  const watched = pluralize(rescan.watched_count, "container");
+  if (rescan.status === "partial") {
+    return `WUD rescan requested for ${watched}. ${pluralize(rescan.skipped.length, "selected entry")} skipped.`;
+  }
+  return `WUD rescan requested for ${watched}.`;
+});
 
 const {
   actionCommand,
@@ -322,6 +395,22 @@ function releaseNoteStatus(note: ReleaseNoteInfo | null): string {
   return pendingReleaseNoteStatus(note, updates.releaseNotesLoading);
 }
 
+async function rescanAllPending(): Promise<void> {
+  if (globalRescanDisabled.value) {
+    return;
+  }
+  clearPreflightHandler();
+  await updates.rescanPending("all");
+}
+
+async function rescanSelectedPending(): Promise<void> {
+  if (selectedRescanDisabled.value) {
+    return;
+  }
+  clearPreflightHandler();
+  await updates.rescanPending("selected", selectedLineNumbers.value);
+}
+
 onMounted(() => {
   runInBackground(retryPendingLoad());
   runInBackground(settings.loadPendingSafetyCues());
@@ -342,6 +431,23 @@ onMounted(() => {
     </n-alert>
     <n-alert v-if="updates.releaseNotesError" type="warning">
       Release-note metadata is unavailable: {{ updates.releaseNotesError }}
+    </n-alert>
+    <n-alert v-if="pendingRescanMessage" :type="pendingRescanAlertType">
+      {{ pendingRescanMessage }}
+      <n-flex
+        v-if="updates.pendingRescan?.audit_run_id"
+        inline
+        class="inline-actions recovery-actions"
+        align="center"
+        :size="8"
+      >
+        <RouterLink
+          class="text-link"
+          :to="{ name: 'run-detail', params: { id: updates.pendingRescan.audit_run_id } }"
+        >
+          Details
+        </RouterLink>
+      </n-flex>
     </n-alert>
     <n-alert v-if="pendingCleanupMessage" type="success">
       {{ pendingCleanupMessage }}
@@ -479,6 +585,8 @@ onMounted(() => {
 
     <PendingSelectionToolbar
       :batch-summary-label="batchSummaryLabel"
+      :global-rescan-disabled="globalRescanDisabled"
+      :global-rescan-disabled-message="wudRescanDisabledMessage"
       :grouping-ready="groupingReady"
       :has-selected-tag-updates="selectedHasTagUpdates"
       :is-mobile="isMobile"
@@ -491,11 +599,16 @@ onMounted(() => {
       :select-all-label="visibleSelectAllLabel"
       :selected-count="selectedLineNumbers.length"
       :selected-hidden-count="selectedHiddenCount"
+      :selected-rescan-disabled="selectedRescanDisabled"
+      :selected-rescan-disabled-message="selectedRescanDisabledMessage"
+      :selected-rescan-visible="selectedRescanVisible"
       :snoozed-count="filteredSnoozedItems.length"
       :stack-count="filteredStackGroups.length"
       :unmatched-review-count-label="visibleUnmatchedReviewCountLabel"
       :update-selected-disabled="updateSelectedDisabled"
       @clear-selection="clearSelection"
+      @rescan-all="rescanAllPending"
+      @rescan-selected="rescanSelectedPending"
       @select-all="selectAllVisible"
       @start-removal="startSelectedRemoval"
       @start-update="startSelectedUpdate"

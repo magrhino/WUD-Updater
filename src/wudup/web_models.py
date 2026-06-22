@@ -76,6 +76,11 @@ __all__ = (
     "PendingRemovalPlanResponse",
     "PendingRemovalRequest",
     "PendingResponse",
+    "PendingRescanRequest",
+    "PendingRescanResponse",
+    "PendingRescanScope",
+    "PendingRescanSkippedLine",
+    "PendingRescanStatus",
     "PendingSourceActive",
     "PendingSourceInfo",
     "PendingSourceMode",
@@ -190,6 +195,10 @@ LineNumber = Annotated[int, Field(ge=1)]
 PlanStatus = Literal["ready", "empty", "blocked"]
 
 PendingGroupingStatus = Literal["ready", "unavailable"]
+
+PendingRescanScope = Literal["all", "selected"]
+
+PendingRescanStatus = Literal["success", "partial", "blocked"]
 
 DoctorCheckStatus = Literal["PASS", "WARN", "FAIL"]
 
@@ -1161,6 +1170,25 @@ class PendingCleanupResponse(BaseModel):
     audit_run_id: int
     removed_count: int
     removed: list[PendingCleanupRemovedLine] = Field(default_factory=list)
+
+class PendingRescanSkippedLine(BaseModel):
+    line_no: int
+    raw: str
+    reason: str
+
+class PendingRescanRequest(BaseModel):
+    confirmation: Literal["rescan_wud"]
+    scope: PendingRescanScope
+    line_numbers: list[LineNumber] = Field(default_factory=list)
+
+class PendingRescanResponse(BaseModel):
+    status: PendingRescanStatus
+    audit_run_id: int
+    scope: PendingRescanScope
+    requested_count: int
+    watched_count: int
+    skipped: list[PendingRescanSkippedLine] = Field(default_factory=list)
+    wud_api: WudApiStatus
 
 class PendingRemovalPlanRequest(BaseModel):
     line_numbers: list[LineNumber] = Field(min_length=1)
