@@ -366,6 +366,32 @@ describe("pending view selection actions", () => {
     expect(rescanPending).not.toHaveBeenCalled();
   });
 
+  it("allows global WUD rescan when only WUD metadata is degraded", async () => {
+    const { pinia, settings, updates } = setupStores(true);
+    updates.pending = {
+      ...pendingResponse(),
+      wud_api: wudApiStatus({
+        state: "ready",
+        available: true,
+        metadata_available: false,
+        detail: "WUD API container metadata is unavailable: timeout",
+      }),
+    };
+    mockPendingLifecycle(settings, updates);
+    const rescanPending = vi
+      .spyOn(updates, "rescanPending")
+      .mockResolvedValue(pendingRescanResponse());
+    const wrapper = mountPendingView(pinia);
+
+    const rescanButton = wrapper
+      .findAll("button")
+      .find((button) => button.text().includes("Rescan WUD"));
+    expect(rescanButton?.attributes("disabled")).toBeUndefined();
+    await rescanButton?.trigger("click");
+
+    expect(rescanPending).toHaveBeenCalledWith("all");
+  });
+
   it("disables selected WUD rescan when selected rows lack WUD metadata", async () => {
     const { pinia, settings, updates } = setupStores(true);
     updates.pending = pendingResponse();

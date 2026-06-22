@@ -149,7 +149,7 @@ const showSetupLink = computed(
 const selectedHasTagUpdates = computed(() =>
   lineNumbersHaveTagUpdates(selectedLineNumbers.value),
 );
-const wudRescanDisabledMessage = computed(() => {
+const wudRescanUnavailableMessage = computed(() => {
   if (!updates.pending) {
     return "";
   }
@@ -169,6 +169,13 @@ const wudRescanDisabledMessage = computed(() => {
   if (status.state !== "ready") {
     return status.detail || "WUD API is not ready.";
   }
+  return "";
+});
+const wudMetadataUnavailableMessage = computed(() => {
+  const status = updates.pending?.wud_api;
+  if (!status) {
+    return "WUD API status is unavailable.";
+  }
   if (!status.metadata_available) {
     return status.detail || "WUD API metadata is unavailable.";
   }
@@ -181,15 +188,18 @@ const selectedWudRescanLineNumbers = computed(() => {
   );
 });
 const globalRescanDisabled = computed(
-  () => updates.loading || Boolean(wudRescanDisabledMessage.value),
+  () => updates.loading || Boolean(wudRescanUnavailableMessage.value),
 );
 const selectedRescanVisible = computed(() => selectedLineNumbers.value.length > 0);
 const selectedRescanDisabledMessage = computed(() => {
   if (!selectedLineNumbers.value.length) {
     return "";
   }
-  if (wudRescanDisabledMessage.value) {
-    return wudRescanDisabledMessage.value;
+  if (wudRescanUnavailableMessage.value) {
+    return wudRescanUnavailableMessage.value;
+  }
+  if (wudMetadataUnavailableMessage.value) {
+    return wudMetadataUnavailableMessage.value;
   }
   if (!selectedWudRescanLineNumbers.value.length) {
     return "Selected entries do not have WUD container IDs.";
@@ -586,7 +596,7 @@ onMounted(() => {
     <PendingSelectionToolbar
       :batch-summary-label="batchSummaryLabel"
       :global-rescan-disabled="globalRescanDisabled"
-      :global-rescan-disabled-message="wudRescanDisabledMessage"
+      :global-rescan-disabled-message="wudRescanUnavailableMessage"
       :grouping-ready="groupingReady"
       :has-selected-tag-updates="selectedHasTagUpdates"
       :is-mobile="isMobile"

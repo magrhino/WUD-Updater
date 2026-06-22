@@ -751,10 +751,10 @@ def _pending_rescan_selected(
         )
 
     targets_by_line = {target.line_no: target for target in source.parsed.targets}
-    metadata_by_line = web_wud_api.metadata_by_target(
+    container_ids_by_line = _selected_rescan_container_ids_by_line(
         settings,
-        source.parsed.targets,
-        snapshot=snapshot,
+        source,
+        snapshot,
     )
     source_ids_by_line = dict(source.source_ids_by_line or {})
     skipped: list[PendingRescanSkippedLine] = []
@@ -778,12 +778,13 @@ def _pending_rescan_selected(
                 )
             )
             continue
-        container = metadata_by_line.get(line_no)
-        if container is None or container.id != line.container_id:
+        line_container_ids = container_ids_by_line.get(line_no, ())
+        if line.container_id not in line_container_ids:
             raise HTTPException(status_code=409, detail="selected rescan is stale")
-        if container.id not in seen_container_ids:
-            seen_container_ids.add(container.id)
-            container_ids.append(container.id)
+        for container_id in line_container_ids:
+            if container_id not in seen_container_ids:
+                seen_container_ids.add(container_id)
+                container_ids.append(container_id)
 
     if not container_ids:
         return PendingRescanResponse(
@@ -806,6 +807,28 @@ def _pending_rescan_selected(
         skipped=skipped,
         wud_api=result.snapshot.status,
     )
+
+
+def _selected_rescan_container_ids_by_line(
+    settings: WebSettings,
+    source: web_pending_sources.PendingSourceResult,
+    snapshot: web_wud_api.WudApiSnapshot,
+) -> dict[int, tuple[str, ...]]:
+    if source.container_ids_by_line:
+        return {
+            line_no: tuple(container_id for container_id in container_ids if container_id)
+            for line_no, container_ids in source.container_ids_by_line.items()
+        }
+    metadata_by_line = web_wud_api.metadata_by_target(
+        settings,
+        source.parsed.targets,
+        snapshot=snapshot,
+    )
+    return {
+        line_no: (container.id,)
+        for line_no, container in metadata_by_line.items()
+        if container.id
+    }
 
 
 def _pending_rescan_status(

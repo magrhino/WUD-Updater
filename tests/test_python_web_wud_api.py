@@ -342,6 +342,49 @@ def test_pending_selected_rescan_maps_lines_to_wud_container_ids(
     assert wud_file.read_text(encoding="utf-8") == original
 
 
+def test_pending_selected_rescan_api_source_watches_all_deduped_container_ids(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    calls = _install_recording_wud_api(
+        monkeypatch,
+        [
+            _container_payload(name="app", image="repo/app"),
+            _container_payload(name="worker", image="repo/app"),
+        ],
+    )
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+            "WUD_PENDING_SOURCE": "api",
+            "WUD_API_BASE_URL": "http://wud.rescan-api-deduped.test:3000",
+        },
+    )
+    pending_body = client.get("/api/v1/pending").json()
+    assert pending_body["count"] == 1
+    lines = _rescan_lines_from_pending(pending_body, [1])
+    assert lines[0]["source_id"] == "docker.local.app,docker.local.worker"
+    calls.clear()
+
+    response = client.post(
+        "/api/v1/pending/rescan",
+        json=_rescan_payload("selected", [1], lines),
+        headers=_csrf_headers(client),
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "success"
+    assert body["requested_count"] == 1
+    assert body["watched_count"] == 2
+    assert [path for method, path in calls if method == "POST"] == [
+        "/api/containers/docker.local.app/watch",
+        "/api/containers/docker.local.worker/watch",
+    ]
+
+
 def test_pending_selected_rescan_rejects_stale_source_without_watch(
     tmp_path: Path,
     monkeypatch,
