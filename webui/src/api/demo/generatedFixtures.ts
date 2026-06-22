@@ -1053,19 +1053,11 @@ export const generatedFixtures = {
         },
         {
           "configured": false,
-          "name": "WUD_API_AUTH_BASIC_USER"
-        },
-        {
-          "configured": false,
           "name": "WUD_API_AUTH_BASIC_PASSWORD"
         },
         {
           "configured": false,
           "name": "WUD_API_AUTH_BASIC_PASSWORD_FILE"
-        },
-        {
-          "configured": false,
-          "name": "WUD_API_HEADERS_FILE"
         },
         {
           "configured": false,
@@ -1240,6 +1232,20 @@ export const generatedFixtures = {
           "name": "WUD_API_STARTUP_WAIT_SECONDS",
           "source": "default",
           "value": "0"
+        },
+        {
+          "configured": false,
+          "default_value": "",
+          "name": "WUD_API_AUTH_BASIC_USER",
+          "source": "default",
+          "value": ""
+        },
+        {
+          "configured": false,
+          "default_value": "",
+          "name": "WUD_API_HEADERS_FILE",
+          "source": "default",
+          "value": ""
         },
         {
           "configured": false,
@@ -117368,19 +117374,11 @@ export const generatedFixtures = {
       },
       {
         "configured": false,
-        "name": "WUD_API_AUTH_BASIC_USER"
-      },
-      {
-        "configured": false,
         "name": "WUD_API_AUTH_BASIC_PASSWORD"
       },
       {
         "configured": false,
         "name": "WUD_API_AUTH_BASIC_PASSWORD_FILE"
-      },
-      {
-        "configured": false,
-        "name": "WUD_API_HEADERS_FILE"
       },
       {
         "configured": false,
@@ -117555,6 +117553,20 @@ export const generatedFixtures = {
         "name": "WUD_API_STARTUP_WAIT_SECONDS",
         "source": "default",
         "value": "0"
+      },
+      {
+        "configured": false,
+        "default_value": "",
+        "name": "WUD_API_AUTH_BASIC_USER",
+        "source": "default",
+        "value": ""
+      },
+      {
+        "configured": false,
+        "default_value": "",
+        "name": "WUD_API_HEADERS_FILE",
+        "source": "default",
+        "value": ""
       },
       {
         "configured": false,

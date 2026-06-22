@@ -325,9 +325,12 @@ def test_wud_api_static_json_headers_file_read_error(tmp_path: Path) -> None:
     assert str(excinfo.value) == "WUD_API_HEADERS_FILE could not be read"
 
 
-def test_wud_api_client_config_fingerprint_partitions_without_secret_text(
+def test_wud_api_client_config_fingerprint_is_opaque_without_secret_text(
     tmp_path: Path,
+    monkeypatch,
 ) -> None:
+    tokens = iter(("opaque-one", "opaque-two", "opaque-three"))
+    monkeypatch.setattr(web_wud_api.secrets, "token_hex", lambda _bytes: next(tokens))
     base_url = "https://wud.fingerprint.test:3000"
     first = _settings(
         tmp_path,
@@ -347,9 +350,9 @@ def test_wud_api_client_config_fingerprint_partitions_without_secret_text(
 
     fingerprint = first.wud_api_client.fingerprint
 
-    assert fingerprint
-    assert fingerprint == second.wud_api_client.fingerprint
-    assert fingerprint != third.wud_api_client.fingerprint
+    assert fingerprint == "opaque-one"
+    assert second.wud_api_client.fingerprint == "opaque-two"
+    assert third.wud_api_client.fingerprint == "opaque-three"
     assert "same-token-secret" not in fingerprint
     assert "Bearer" not in fingerprint
 

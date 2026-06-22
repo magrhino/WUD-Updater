@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import base64
-import hmac
 import json
 import math
 import re
@@ -132,7 +131,6 @@ WudApiCacheKey = tuple[str, str]
 _cache_lock = Lock()
 _snapshot_cache: dict[WudApiCacheKey, WudApiSnapshot] = {}
 _configuration_diagnostics_cache: dict[WudApiCacheKey, WudApiConfigurationSnapshot] = {}
-_CLIENT_CONFIG_FINGERPRINT_KEY = secrets.token_bytes(32)
 
 
 def configured_base_url(environ: Mapping[str, str]) -> str:
@@ -318,13 +316,8 @@ def _has_header(headers: Sequence[tuple[str, str]], name: str) -> bool:
 def _client_config_fingerprint(header_items: Sequence[tuple[str, str]]) -> str:
     if not header_items:
         return ""
-    payload = json.dumps(
-        list(header_items),
-        ensure_ascii=False,
-        separators=(",", ":"),
-    ).encode("utf-8")
-    # Keep cache partitioning stable without creating a reusable digest of secrets.
-    return hmac.digest(_CLIENT_CONFIG_FINGERPRINT_KEY, payload, "sha256").hex()
+    # Partition per configured client without deriving a reusable digest from secrets.
+    return secrets.token_hex(16)
 
 
 def startup_probe(settings: WebSettings) -> WudApiSnapshot:
