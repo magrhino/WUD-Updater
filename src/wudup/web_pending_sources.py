@@ -6,13 +6,13 @@ import hashlib
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 from . import web_wud_api
 from .images import normalize_digest, strip_digest, tag_value_valid
 from .plan_models import DryRunPlanSource
 from .web_auth import WebConfigError
-from .web_models import PendingSourceInfo
+from .web_models import PendingSourceActive, PendingSourceInfo, PendingSourceMode
 from .wud_file import ParsedWudFile, parse_wud_text
 
 if TYPE_CHECKING:
@@ -21,14 +21,16 @@ if TYPE_CHECKING:
 
 PENDING_SOURCE_ENV = "WUD_PENDING_SOURCE"
 DEFAULT_PENDING_SOURCE = "file"
-VALID_PENDING_SOURCES = frozenset({"file", "api", "auto"})
+VALID_PENDING_SOURCES: frozenset[PendingSourceMode] = frozenset(
+    {"file", "api", "auto"}
+)
 API_SOURCE_FILE_LABEL = "WUD API"
 
 
 @dataclass(frozen=True)
 class PendingSourceResult:
-    configured: str
-    active: str
+    configured: PendingSourceMode
+    active: PendingSourceActive
     label: str
     source_file: str
     exists: bool
@@ -46,8 +48,8 @@ class PendingSourceResult:
 
     def response_source(self) -> PendingSourceInfo:
         return PendingSourceInfo(
-            configured=self.configured,  # type: ignore[arg-type]
-            active=self.active,  # type: ignore[arg-type]
+            configured=self.configured,
+            active=self.active,
             label=self.label,
             fresh=self.fresh,
             degraded=self.degraded,
@@ -68,13 +70,13 @@ class PendingSourceResult:
         )
 
 
-def configured_pending_source(environ: Mapping[str, str]) -> str:
+def configured_pending_source(environ: Mapping[str, str]) -> PendingSourceMode:
     raw_value = environ.get(PENDING_SOURCE_ENV, "").strip().lower()
     value = raw_value or DEFAULT_PENDING_SOURCE
     if value not in VALID_PENDING_SOURCES:
         allowed = ", ".join(sorted(VALID_PENDING_SOURCES))
         raise WebConfigError(f"{PENDING_SOURCE_ENV} must be one of: {allowed}")
-    return value
+    return cast(PendingSourceMode, value)
 
 
 def resolve_pending_source(
@@ -105,7 +107,7 @@ def resolve_pending_source(
 def _file_source(
     settings: WebSettings,
     *,
-    configured: str,
+    configured: PendingSourceMode,
     include_wud_metadata: bool,
     degraded: bool = False,
     fallback_reason: str = "",
@@ -155,7 +157,7 @@ def _file_source(
 def _api_source(
     settings: WebSettings,
     *,
-    configured: str,
+    configured: PendingSourceMode,
     force: bool,
 ) -> PendingSourceResult:
     snapshot = web_wud_api.get_snapshot(
@@ -200,7 +202,7 @@ def _api_source(
 
 def _empty_api_source(
     *,
-    configured: str,
+    configured: PendingSourceMode,
     snapshot: web_wud_api.WudApiSnapshot | None,
     degraded: bool,
     detail: str,

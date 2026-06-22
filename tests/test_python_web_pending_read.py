@@ -273,7 +273,7 @@ def test_pending_endpoint_sanitizes_wud_file_errors(
     detail = response.json()["detail"]
 
     assert response.status_code == 500
-    assert detail.startswith("could not read WUD file: ")
+    assert detail.startswith("could not read pending source: ")
     assert secret not in detail
     assert str(tmp_path) not in detail
     assert "<redacted>" in detail

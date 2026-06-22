@@ -301,7 +301,11 @@ def pending_response(
     except OSError as exc:
         raise HTTPException(
             status_code=500,
-            detail=_safe_exception_detail(settings, "could not read WUD file", exc),
+            detail=_safe_exception_detail(
+                settings,
+                "could not read pending source",
+                exc,
+            ),
         ) from exc
     parsed = source.parsed
     wud_metadata = dict(source.metadata_by_line or {})
@@ -333,7 +337,7 @@ def pending_response(
             desired_tag=target.desired_tag,
             digest_provenance=provenance_by_line.get(target.line_no),
             wud_metadata=wud_metadata_by_line.get(target.line_no),
-            source=source.active,  # type: ignore[arg-type]
+            source=source.active,
             source_id=source_ids_by_line.get(target.line_no, ""),
         )
         for target in parsed.targets

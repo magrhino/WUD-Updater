@@ -417,6 +417,75 @@ def test_apply_endpoint_rejects_stale_api_pending_source_without_editing_file(
     assert " up -d " not in calls
 
 
+def test_apply_endpoint_wraps_api_pending_source_oserror_without_mutation(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    secret = "api-apply-secret-token"
+    fake_env, fake_root = _fake_docker_env(tmp_path)
+    containers = [
+        _wud_api_container(tag="latest", remote_tag="", update_kind="digest")
+    ]
+    _install_wud_api(monkeypatch, containers=containers)
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+            "WUD_PENDING_SOURCE": "api",
+            "WUD_API_BASE_URL": "http://wud.apply-api-oserror.test:3000",
+            "WUD_WEB_TOKEN": secret,
+            **fake_env,
+        },
+    )
+    wud_file = tmp_path / "state" / "images.todo"
+    wud_file.write_text("repo/file:latest\n", encoding="utf-8")
+    _make_fake_stack(
+        tmp_path,
+        fake_root,
+        "stack",
+        [("app", "repo/app:latest", "cid-app")],
+    )
+    headers = _csrf_headers(client)
+    plan = client.post(
+        "/api/v1/plans",
+        json={"line_numbers": [1]},
+        headers=headers,
+    ).json()
+    calls_before = _fake_docker_calls(fake_root)
+
+    def fail_pending_source_resolution(*_args, **_kwargs):
+        raise OSError(
+            f"could not read {tmp_path / 'state' / 'api-secret-path'} with {secret}"
+        )
+
+    monkeypatch.setattr(
+        web_plans.web_pending_sources,
+        "resolve_pending_source",
+        fail_pending_source_resolution,
+    )
+
+    apply_response = client.post(
+        "/api/v1/jobs",
+        json={
+            "plan_id": plan["plan_id"],
+            "line_numbers": [1],
+            "confirmation": "apply",
+        },
+        headers=headers,
+    )
+
+    assert apply_response.status_code == 500
+    detail = apply_response.json()["detail"]
+    assert detail.startswith("could not revalidate plan: ")
+    assert secret not in detail
+    assert str(tmp_path) not in detail
+    assert "<redacted>" in detail
+    assert "[REDACTED_PATH]" in detail
+    assert wud_file.read_text(encoding="utf-8") == "repo/file:latest\n"
+    assert _fake_docker_calls(fake_root) == calls_before
+
+
 def test_apply_endpoint_passes_tag_overrides_to_updater(tmp_path: Path) -> None:
     fake_env, fake_root = _fake_docker_env(tmp_path)
     client = _client(

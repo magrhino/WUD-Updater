@@ -149,7 +149,11 @@ def _release_notes_request_context(
     except OSError as exc:
         raise HTTPException(
             status_code=500,
-            detail=_safe_exception_detail(settings, "could not read WUD file", exc),
+            detail=_safe_exception_detail(
+                settings,
+                "could not read pending source",
+                exc,
+            ),
         ) from exc
     parsed = source.parsed
     if not parsed.targets:
