@@ -19,6 +19,7 @@ from pathlib import Path
 from threading import Lock
 
 from . import web_wud_config
+from .web_wud_config import _auth_required_detail
 from .images import (
     image_has_tag,
     image_matches_resolved_target,
@@ -867,12 +868,6 @@ def _request_headers(
     if client_config is not None:
         headers.update(dict(client_config.header_items))
     return headers
-
-
-def _auth_required_detail(settings: WebSettings, fallback: str) -> str:
-    if settings.wud_api_client.configured:
-        return "configured WUD API credentials were rejected"
-    return fallback
 
 
 def _normalize_base_url(value: str) -> str:

@@ -143,6 +143,20 @@ def test_settings_reports_effective_non_secret_configuration(
         "configured": True,
         "source": "configured",
     }
+    assert webui["WUD_API_AUTH_BASIC_USER"] == {
+        "name": "WUD_API_AUTH_BASIC_USER",
+        "value": "",
+        "default_value": "",
+        "configured": False,
+        "source": "default",
+    }
+    assert webui["WUD_API_HEADERS_FILE"] == {
+        "name": "WUD_API_HEADERS_FILE",
+        "value": str(wud_api_headers_file),
+        "default_value": "",
+        "configured": True,
+        "source": "configured",
+    }
     assert webui["WUD_PENDING_SOURCE"] == {
         "name": "WUD_PENDING_SOURCE",
         "value": "auto",
@@ -157,10 +171,10 @@ def test_settings_reports_effective_non_secret_configuration(
     assert secrets["WUD_WEB_TOKEN"]["configured"] is True
     assert secrets["WUD_API_AUTH_BEARER_TOKEN"]["configured"] is True
     assert secrets["WUD_API_AUTH_BEARER_TOKEN_FILE"]["configured"] is False
-    assert secrets["WUD_API_AUTH_BASIC_USER"]["configured"] is False
+    assert "WUD_API_AUTH_BASIC_USER" not in secrets
     assert secrets["WUD_API_AUTH_BASIC_PASSWORD"]["configured"] is False
     assert secrets["WUD_API_AUTH_BASIC_PASSWORD_FILE"]["configured"] is False
-    assert secrets["WUD_API_HEADERS_FILE"]["configured"] is True
+    assert "WUD_API_HEADERS_FILE" not in secrets
     assert secrets["GITHUB_TOKEN"]["configured"] is True
     assert secrets["DISCORD_RELEASES_WEBHOOK"]["configured"] is False
     assert secrets["DISCORD_WEBHOOK"]["configured"] is True

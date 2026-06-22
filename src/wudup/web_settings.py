@@ -579,6 +579,18 @@ def _webui_settings_entries(
             ),
         ),
         _settings_entry(
+            web_wud_api.WUD_API_AUTH_BASIC_USER_ENV,
+            env.get(web_wud_api.WUD_API_AUTH_BASIC_USER_ENV, ""),
+            "",
+            _env_configured(settings, web_wud_api.WUD_API_AUTH_BASIC_USER_ENV),
+        ),
+        _settings_entry(
+            web_wud_api.WUD_API_HEADERS_FILE_ENV,
+            env.get(web_wud_api.WUD_API_HEADERS_FILE_ENV, ""),
+            "",
+            _env_configured(settings, web_wud_api.WUD_API_HEADERS_FILE_ENV),
+        ),
+        _settings_entry(
             web_pending_sources.PENDING_SOURCE_ENV,
             settings.pending_source,
             web_pending_sources.DEFAULT_PENDING_SOURCE,

@@ -314,6 +314,17 @@ def test_wud_api_static_json_headers_are_added_to_requests(tmp_path: Path) -> No
     assert "static-header-secret" in settings.wud_api_client.secret_values
 
 
+def test_wud_api_static_json_headers_file_read_error(tmp_path: Path) -> None:
+    env = {
+        web_wud_api.WUD_API_HEADERS_FILE_ENV: str(tmp_path / "missing-headers.json"),
+    }
+
+    with pytest.raises(WebConfigError) as excinfo:
+        _settings(tmp_path, "https://wud.static-headers.test:3000", env)
+
+    assert str(excinfo.value) == "WUD_API_HEADERS_FILE could not be read"
+
+
 def test_wud_api_client_config_fingerprint_partitions_without_secret_text(
     tmp_path: Path,
 ) -> None:
@@ -448,13 +459,32 @@ def test_wud_api_auth_config_rejects_malformed_inputs(tmp_path: Path) -> None:
     empty_file.write_text("\n", encoding="utf-8")
     bad_json_file = tmp_path / "headers-bad-json"
     bad_json_file.write_text("{not json", encoding="utf-8")
+    unreadable_headers = tmp_path / "headers-unreadable"
+    unreadable_headers.mkdir()
+    empty_headers = tmp_path / "headers-empty"
+    empty_headers.write_text("", encoding="utf-8")
     non_object_headers = tmp_path / "headers-list"
     non_object_headers.write_text("[]", encoding="utf-8")
     non_string_headers = tmp_path / "headers-non-string"
     non_string_headers.write_text(json.dumps({"X-Api-Key": 7}), encoding="utf-8")
+    invalid_name_headers = tmp_path / "headers-invalid-name"
+    invalid_name_headers.write_text(
+        json.dumps({"X Invalid Header": "value"}),
+        encoding="utf-8",
+    )
+    duplicate_headers = tmp_path / "headers-duplicate"
+    duplicate_headers.write_text(
+        json.dumps({"X-Api-Key": "one", "x-api-key": "two"}),
+        encoding="utf-8",
+    )
     newline_headers = tmp_path / "headers-newline"
     newline_headers.write_text(
         json.dumps({"X-Api-Key": "bad\nvalue"}),
+        encoding="utf-8",
+    )
+    cr_newline_headers = tmp_path / "headers-cr-newline"
+    cr_newline_headers.write_text(
+        json.dumps({"X-Api-Key": "bad\r\nvalue"}),
         encoding="utf-8",
     )
     auth_headers = tmp_path / "headers-auth"
@@ -502,8 +532,24 @@ def test_wud_api_auth_config_rejects_malformed_inputs(tmp_path: Path) -> None:
             "must contain a JSON object",
         ),
         (
+            {web_wud_api.WUD_API_HEADERS_FILE_ENV: str(unreadable_headers)},
+            "could not be read",
+        ),
+        (
+            {web_wud_api.WUD_API_HEADERS_FILE_ENV: str(empty_headers)},
+            "must contain a JSON object",
+        ),
+        (
             {web_wud_api.WUD_API_HEADERS_FILE_ENV: str(non_object_headers)},
             "must contain a JSON object",
+        ),
+        (
+            {web_wud_api.WUD_API_HEADERS_FILE_ENV: str(invalid_name_headers)},
+            "contains an invalid header",
+        ),
+        (
+            {web_wud_api.WUD_API_HEADERS_FILE_ENV: str(duplicate_headers)},
+            "must not define duplicate headers",
         ),
         (
             {web_wud_api.WUD_API_HEADERS_FILE_ENV: str(non_string_headers)},
@@ -511,6 +557,10 @@ def test_wud_api_auth_config_rejects_malformed_inputs(tmp_path: Path) -> None:
         ),
         (
             {web_wud_api.WUD_API_HEADERS_FILE_ENV: str(newline_headers)},
+            "must not contain newlines",
+        ),
+        (
+            {web_wud_api.WUD_API_HEADERS_FILE_ENV: str(cr_newline_headers)},
             "must not contain newlines",
         ),
         (
