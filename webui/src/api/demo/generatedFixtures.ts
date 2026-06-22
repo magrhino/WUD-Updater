@@ -302,6 +302,51 @@ export const generatedFixtures = {
           "target": ""
         },
         {
+          "category": "wud-api",
+          "code": "wud-api-app",
+          "detail": "wud 5.0.0",
+          "name": "WUD API app configuration",
+          "status": "PASS",
+          "suggestions": [],
+          "target": ""
+        },
+        {
+          "category": "wud-api",
+          "code": "wud-api-log",
+          "detail": "log level debug",
+          "name": "WUD API log configuration",
+          "status": "PASS",
+          "suggestions": [],
+          "target": ""
+        },
+        {
+          "category": "wud-api",
+          "code": "wud-api-store",
+          "detail": "path .store, file wud.json",
+          "name": "WUD API store configuration",
+          "status": "PASS",
+          "suggestions": [],
+          "target": ""
+        },
+        {
+          "category": "wud-api",
+          "code": "wud-api-watchers",
+          "detail": "1 watcher: docker.local (docker/local) (cron 0 * * * *, watch-by-default true)",
+          "name": "WUD API watcher configuration",
+          "status": "PASS",
+          "suggestions": [],
+          "target": ""
+        },
+        {
+          "category": "wud-api",
+          "code": "wud-api-registries",
+          "detail": "1 registry: hub.private (hub/private)",
+          "name": "WUD API registry configuration",
+          "status": "PASS",
+          "suggestions": [],
+          "target": ""
+        },
+        {
           "category": "webui",
           "code": "webui-public-origin",
           "detail": "derived from request as http://testserver",
@@ -1200,6 +1245,83 @@ export const generatedFixtures = {
           "value": "true"
         }
       ]
+    },
+    "wud_api_diagnostics": {
+      "app": {
+        "name": "wud",
+        "status": {
+          "available": true,
+          "detail": "WUD API app configuration available",
+          "last_checked_at": "2026-05-28T12:00:00+00:00",
+          "state": "ready"
+        },
+        "version": "5.0.0"
+      },
+      "health": {
+        "available": true,
+        "detail": "WUD API is reachable",
+        "last_checked_at": "2026-05-28T12:00:00+00:00",
+        "state": "ready"
+      },
+      "log": {
+        "level": "debug",
+        "status": {
+          "available": true,
+          "detail": "WUD API log configuration available",
+          "last_checked_at": "2026-05-28T12:00:00+00:00",
+          "state": "ready"
+        }
+      },
+      "registries": [
+        {
+          "configuration": {
+            "auth": "<redacted>"
+          },
+          "id": "hub.private",
+          "name": "private",
+          "type": "hub"
+        }
+      ],
+      "registries_status": {
+        "available": true,
+        "detail": "WUD API registry configuration available",
+        "last_checked_at": "2026-05-28T12:00:00+00:00",
+        "state": "ready"
+      },
+      "store": {
+        "configuration": {
+          "file": "wud.json",
+          "path": ".store"
+        },
+        "file": "wud.json",
+        "path": ".store",
+        "status": {
+          "available": true,
+          "detail": "WUD API store configuration available",
+          "last_checked_at": "2026-05-28T12:00:00+00:00",
+          "state": "ready"
+        }
+      },
+      "watchers": [
+        {
+          "configuration": {
+            "cron": "0 * * * *",
+            "socket": "[REDACTED_PATH]",
+            "watchbydefault": true
+          },
+          "cron": "0 * * * *",
+          "id": "docker.local",
+          "name": "local",
+          "type": "docker",
+          "watch_by_default": true
+        }
+      ],
+      "watchers_status": {
+        "available": true,
+        "detail": "WUD API watcher configuration available",
+        "last_checked_at": "2026-05-28T12:00:00+00:00",
+        "state": "ready"
+      }
     }
   },
   "doctor": {
@@ -1476,6 +1598,51 @@ export const generatedFixtures = {
         "code": "wud-api",
         "detail": "4 WUD update metadata item(s) available",
         "name": "WUD API discovery",
+        "status": "PASS",
+        "suggestions": [],
+        "target": ""
+      },
+      {
+        "category": "wud-api",
+        "code": "wud-api-app",
+        "detail": "wud 5.0.0",
+        "name": "WUD API app configuration",
+        "status": "PASS",
+        "suggestions": [],
+        "target": ""
+      },
+      {
+        "category": "wud-api",
+        "code": "wud-api-log",
+        "detail": "log level debug",
+        "name": "WUD API log configuration",
+        "status": "PASS",
+        "suggestions": [],
+        "target": ""
+      },
+      {
+        "category": "wud-api",
+        "code": "wud-api-store",
+        "detail": "path .store, file wud.json",
+        "name": "WUD API store configuration",
+        "status": "PASS",
+        "suggestions": [],
+        "target": ""
+      },
+      {
+        "category": "wud-api",
+        "code": "wud-api-watchers",
+        "detail": "1 watcher: docker.local (docker/local) (cron 0 * * * *, watch-by-default true)",
+        "name": "WUD API watcher configuration",
+        "status": "PASS",
+        "suggestions": [],
+        "target": ""
+      },
+      {
+        "category": "wud-api",
+        "code": "wud-api-registries",
+        "detail": "1 registry: hub.private (hub/private)",
+        "name": "WUD API registry configuration",
         "status": "PASS",
         "suggestions": [],
         "target": ""

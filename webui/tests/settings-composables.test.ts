@@ -17,6 +17,7 @@ import {
   doctorResponse,
   pendingResponse,
   settingsResponse,
+  wudApiConfigurationDiagnostics,
 } from "./helpers/fixtures";
 
 const clipboardCopy = vi.hoisted(() => vi.fn());
@@ -33,6 +34,7 @@ function supportBundle(): DiagnosticsSupportBundleResponse {
     wudup_version: "0.24.2",
     settings: settingsResponse(),
     doctor_result: doctorResponse(),
+    wud_api_diagnostics: wudApiConfigurationDiagnostics(),
     pending_summary: pendingResponse(),
     last_run_status: null,
     diagnostics_warnings: [],

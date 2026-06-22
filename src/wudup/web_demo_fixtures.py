@@ -570,12 +570,17 @@ def generate_static_demo_fixtures() -> dict[str, Any]:
 def _preserved_wud_api_snapshot_cache():
     with web_wud_api._cache_lock:
         original_cache = dict(web_wud_api._snapshot_cache)
+        original_diagnostics_cache = dict(web_wud_api._configuration_diagnostics_cache)
     try:
         yield
     finally:
         with web_wud_api._cache_lock:
             web_wud_api._snapshot_cache.clear()
             web_wud_api._snapshot_cache.update(original_cache)
+            web_wud_api._configuration_diagnostics_cache.clear()
+            web_wud_api._configuration_diagnostics_cache.update(
+                original_diagnostics_cache
+            )
 
 
 def render_static_demo_fixtures_ts(data: dict[str, Any]) -> str:
@@ -1295,6 +1300,7 @@ def _demo_context(root: Path) -> SimpleNamespace:
     settings = web_app.load_web_settings(env)
     _configure_backend_callbacks()
     _seed_wud_api_snapshot(settings)
+    _seed_wud_api_configuration_diagnostics(settings)
     state = SimpleNamespace(web_settings=settings)
     web_jobs.initialize_apply_job_state(state)
     request = _demo_request(settings, state)
@@ -1482,6 +1488,88 @@ def _seed_wud_api_snapshot(settings: WebSettings) -> None:
     )
     with web_wud_api._cache_lock:
         web_wud_api._snapshot_cache[base_url] = snapshot
+
+
+def _seed_wud_api_configuration_diagnostics(settings: WebSettings) -> None:
+    base_url = settings.wud_api_base_url or web_wud_api.DEFAULT_WUD_API_BASE_URL
+    diagnostics = web_wud_api.WudApiConfigurationDiagnostics(
+        health=web_wud_api.WudApiDiagnosticEndpointStatus(
+            state="ready",
+            available=True,
+            last_checked_at=DEMO_CREATED_AT,
+            detail="WUD API is reachable",
+        ),
+        app=web_wud_api.WudApiAppDiagnostics(
+            status=web_wud_api.WudApiDiagnosticEndpointStatus(
+                state="ready",
+                available=True,
+                last_checked_at=DEMO_CREATED_AT,
+                detail="WUD API app configuration available",
+            ),
+            name="wud",
+            version="5.0.0",
+        ),
+        log=web_wud_api.WudApiLogDiagnostics(
+            status=web_wud_api.WudApiDiagnosticEndpointStatus(
+                state="ready",
+                available=True,
+                last_checked_at=DEMO_CREATED_AT,
+                detail="WUD API log configuration available",
+            ),
+            level="debug",
+        ),
+        store=web_wud_api.WudApiStoreDiagnostics(
+            status=web_wud_api.WudApiDiagnosticEndpointStatus(
+                state="ready",
+                available=True,
+                last_checked_at=DEMO_CREATED_AT,
+                detail="WUD API store configuration available",
+            ),
+            path=".store",
+            file="wud.json",
+            configuration={"path": ".store", "file": "wud.json"},
+        ),
+        watchers_status=web_wud_api.WudApiDiagnosticEndpointStatus(
+            state="ready",
+            available=True,
+            last_checked_at=DEMO_CREATED_AT,
+            detail="WUD API watcher configuration available",
+        ),
+        watchers=[
+            web_wud_api.WudApiWatcherDiagnostics(
+                id="docker.local",
+                type="docker",
+                name="local",
+                cron="0 * * * *",
+                watch_by_default=True,
+                configuration={
+                    "socket": "[REDACTED_PATH]",
+                    "cron": "0 * * * *",
+                    "watchbydefault": True,
+                },
+            )
+        ],
+        registries_status=web_wud_api.WudApiDiagnosticEndpointStatus(
+            state="ready",
+            available=True,
+            last_checked_at=DEMO_CREATED_AT,
+            detail="WUD API registry configuration available",
+        ),
+        registries=[
+            web_wud_api.WudApiRegistryDiagnostics(
+                id="hub.private",
+                type="hub",
+                name="private",
+                configuration={"auth": "<redacted>"},
+            )
+        ],
+    )
+    snapshot = web_wud_api.WudApiConfigurationSnapshot(
+        diagnostics=diagnostics,
+        checked_monotonic=time.monotonic(),
+    )
+    with web_wud_api._cache_lock:
+        web_wud_api._configuration_diagnostics_cache[base_url] = snapshot
 
 
 def _seed_release_note_cache(settings: WebSettings) -> None:

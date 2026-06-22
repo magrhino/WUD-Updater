@@ -13,6 +13,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from threading import Lock
 
+from . import web_wud_config
 from .images import (
     image_has_tag,
     image_matches_resolved_target,
@@ -26,7 +27,26 @@ from .web_auth import (
     _redact_sensitive_text,
     _redact_unknown_absolute_paths,
 )
-from .web_models import WebSettings, WudApiState, WudApiStatus, WudContainerMetadata
+from .web_models import (
+    WebSettings,
+    WudApiAppDiagnostics as WudApiAppDiagnostics,
+    WudApiConfigurationDiagnostics,
+    WudApiDiagnosticEndpointStatus as WudApiDiagnosticEndpointStatus,
+    WudApiLogDiagnostics as WudApiLogDiagnostics,
+    WudApiRegistryDiagnostics as WudApiRegistryDiagnostics,
+    WudApiState,
+    WudApiStatus,
+    WudApiStoreDiagnostics as WudApiStoreDiagnostics,
+    WudApiWatcherDiagnostics as WudApiWatcherDiagnostics,
+    WudContainerMetadata,
+)
+from .web_wud_states import (
+    WUD_API_DEGRADED_STATES,
+    WUD_API_STATE_AUTH_REQUIRED,
+    WUD_API_STATE_ERROR,
+    WUD_API_STATE_READY,
+    WUD_API_STATE_UNAVAILABLE,
+)
 from .wud_file import WudTarget
 
 DEFAULT_WUD_API_BASE_URL = "http://wud:3000"
@@ -38,13 +58,6 @@ WUD_API_STARTUP_RETRY_INTERVAL_SECONDS = 0.5
 WUD_API_CACHE_TTL_SECONDS = 30.0
 WUD_API_DEGRADED_RETRY_INTERVAL_SECONDS = 5.0
 WUD_API_USER_AGENT = "wudup-webui-wud-api/1.0"
-WUD_API_STATE_READY: WudApiState = "ready"
-WUD_API_STATE_UNAVAILABLE: WudApiState = "unavailable"
-WUD_API_STATE_AUTH_REQUIRED: WudApiState = "auth_required"
-WUD_API_STATE_ERROR: WudApiState = "error"
-WUD_API_DEGRADED_STATES = frozenset(
-    {WUD_API_STATE_UNAVAILABLE, WUD_API_STATE_ERROR}
-)
 
 
 @dataclass(frozen=True)
@@ -91,8 +104,12 @@ class WudApiSnapshot:
     checked_monotonic: float = 0.0
 
 
+WudApiConfigurationSnapshot = web_wud_config.WudApiConfigurationSnapshot
+
+
 _cache_lock = Lock()
 _snapshot_cache: dict[str, WudApiSnapshot] = {}
+_configuration_diagnostics_cache: dict[str, WudApiConfigurationSnapshot] = {}
 
 
 def configured_base_url(environ: Mapping[str, str]) -> str:
@@ -164,6 +181,29 @@ def get_snapshot(
         ):
             return cached
     return _refresh_snapshot(settings, include_containers=include_containers)
+
+
+def get_configuration_diagnostics(
+    settings: WebSettings,
+    *,
+    force: bool = False,
+) -> WudApiConfigurationDiagnostics:
+    base_url = settings.wud_api_base_url or DEFAULT_WUD_API_BASE_URL
+    now = time.monotonic()
+    with _cache_lock:
+        cached = _configuration_diagnostics_cache.get(base_url)
+        if (
+            not force
+            and cached is not None
+            and now - cached.checked_monotonic
+            < web_wud_config.configuration_diagnostics_cache_ttl(
+                cached,
+                cache_ttl=WUD_API_CACHE_TTL_SECONDS,
+                degraded_retry_interval=WUD_API_DEGRADED_RETRY_INTERVAL_SECONDS,
+            )
+        ):
+            return cached.diagnostics
+    return _refresh_configuration_diagnostics(settings).diagnostics
 
 
 def _snapshot_cache_ttl(snapshot: WudApiSnapshot) -> float:
@@ -374,6 +414,46 @@ def _refresh_snapshot(
     )
     _store_snapshot(base_url, snapshot)
     return snapshot
+
+
+def _refresh_configuration_diagnostics(
+    settings: WebSettings,
+) -> WudApiConfigurationSnapshot:
+    checked_at = _utc_timestamp()
+    checked_monotonic = time.monotonic()
+    base_url = settings.wud_api_base_url or DEFAULT_WUD_API_BASE_URL
+    try:
+        normalized_base_url = _normalize_base_url(base_url)
+    except ValueError as exc:
+        snapshot = web_wud_config.configuration_diagnostics_for_base_url_error(
+            settings,
+            error=exc,
+            checked_at=checked_at,
+            checked_monotonic=checked_monotonic,
+            sanitize_detail=_sanitize_detail,
+        )
+        _store_configuration_diagnostics(base_url, snapshot)
+        return snapshot
+
+    snapshot = web_wud_config.refresh_configuration_diagnostics(
+        settings,
+        normalized_base_url=normalized_base_url,
+        checked_at=checked_at,
+        checked_monotonic=checked_monotonic,
+        request_json=_request_json,
+        join_url=_join_url,
+        sanitize_detail=_sanitize_detail,
+    )
+    _store_configuration_diagnostics(base_url, snapshot)
+    return snapshot
+
+
+def _store_configuration_diagnostics(
+    base_url: str,
+    snapshot: WudApiConfigurationSnapshot,
+) -> None:
+    with _cache_lock:
+        _configuration_diagnostics_cache[base_url] = snapshot
 
 
 def _store_snapshot(base_url: str, snapshot: WudApiSnapshot) -> None:

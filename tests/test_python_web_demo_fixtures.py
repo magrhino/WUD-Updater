@@ -230,10 +230,28 @@ class WebDemoFixtureGenerationTests(unittest.TestCase):
             ),
             checked_monotonic=123.0,
         )
+        diagnostics_sentinel = web_wud_api.WudApiConfigurationSnapshot(
+            diagnostics=web_wud_api.WudApiConfigurationDiagnostics(
+                health=web_wud_api.WudApiDiagnosticEndpointStatus(
+                    state="unavailable",
+                    available=False,
+                    last_checked_at="2026-05-30T00:00:00+00:00",
+                    detail="diagnostics sentinel",
+                )
+            ),
+            checked_monotonic=456.0,
+        )
         with web_wud_api._cache_lock:
             original_cache = dict(web_wud_api._snapshot_cache)
+            original_diagnostics_cache = dict(
+                web_wud_api._configuration_diagnostics_cache
+            )
             web_wud_api._snapshot_cache.clear()
-            web_wud_api._snapshot_cache["http://sentinel.example"] = sentinel
+            web_wud_api._configuration_diagnostics_cache.clear()
+            web_wud_api._snapshot_cache["https://sentinel.example"] = sentinel
+            web_wud_api._configuration_diagnostics_cache[
+                "https://sentinel.example"
+            ] = diagnostics_sentinel
         try:
             with mock.patch(
                 "urllib.request.urlopen",
@@ -243,12 +261,20 @@ class WebDemoFixtureGenerationTests(unittest.TestCase):
             with web_wud_api._cache_lock:
                 self.assertEqual(
                     web_wud_api._snapshot_cache,
-                    {"http://sentinel.example": sentinel},
+                    {"https://sentinel.example": sentinel},
+                )
+                self.assertEqual(
+                    web_wud_api._configuration_diagnostics_cache,
+                    {"https://sentinel.example": diagnostics_sentinel},
                 )
         finally:
             with web_wud_api._cache_lock:
                 web_wud_api._snapshot_cache.clear()
                 web_wud_api._snapshot_cache.update(original_cache)
+                web_wud_api._configuration_diagnostics_cache.clear()
+                web_wud_api._configuration_diagnostics_cache.update(
+                    original_diagnostics_cache
+                )
 
     def test_static_spa_available_default_is_fixture_controlled(self) -> None:
         entry = next(

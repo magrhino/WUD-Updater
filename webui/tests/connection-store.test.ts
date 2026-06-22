@@ -34,6 +34,7 @@ import {
   snooze,
   tagExclusion,
   updateTargetsResponse,
+  wudApiConfigurationDiagnostics,
 } from "./helpers/fixtures";
 
 function jsonResponse(body: unknown, status = 200): Response {
@@ -154,6 +155,7 @@ describe("connection store", () => {
       wudup_version: "0.24.2",
       settings: settingsResponse(),
       doctor_result: doctorResponse(),
+      wud_api_diagnostics: wudApiConfigurationDiagnostics(),
       pending_summary: pendingResponse(),
       last_run_status: null,
       diagnostics_warnings: [],

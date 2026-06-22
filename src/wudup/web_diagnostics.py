@@ -12,7 +12,7 @@ from typing import Any
 from fastapi import HTTPException, Request
 
 from . import __version__
-from . import web_jobs, web_pending, web_runs, web_settings
+from . import web_jobs, web_pending, web_runs, web_settings, web_wud_api
 from .db import DatabaseError
 from .plans import DryRunPlan
 from .web_auth import (
@@ -96,6 +96,7 @@ def api_diagnostics_support_bundle(request: Request) -> DiagnosticsSupportBundle
         wud_updater_version=version,
         settings=settings_resp,
         doctor_result=doctor_result,
+        wud_api_diagnostics=web_wud_api.get_configuration_diagnostics(settings),
         pending_summary=pending,
         last_run_status=last_run,
         diagnostics_warnings=diagnostics_warnings,

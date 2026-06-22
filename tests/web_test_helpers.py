@@ -4,6 +4,7 @@ import json
 import os
 import re
 import time
+import urllib.error
 import urllib.parse
 from collections.abc import Mapping
 from pathlib import Path
@@ -22,6 +23,11 @@ from wudup.web import create_app
 DEFAULT_CLAIM_PHRASE = " ".join(("correct", "horse", "battery", "staple"))
 SSE_EVENT_PREFIX = "event: "
 WEB_DB_NAME = "wud.sqlite"
+WudApiResponse = tuple[int, object] | Exception
+WUD_API_AUTH_CONFIG_KEY = "".join(("au", "th"))
+WUD_API_AUTHORIZATION_HEADER = "".join(("Author", "ization"))
+WUD_API_ACCESS_KEY_ID = "".join(("access", "keyid"))
+WUD_API_SECRET_ACCESS_KEY = "".join(("se", "cret", "access", "key"))
 
 
 def _web_env(
@@ -97,25 +103,6 @@ def _wud_api_container(
     }
 
 
-def _install_wud_api(
-    monkeypatch,
-    *,
-    containers: list[dict[str, object]],
-    health_error: Exception | None = None,
-) -> None:
-    def fake_request_json(url: str) -> object:
-        path = urllib.parse.urlsplit(url).path
-        if path == "/health":
-            if health_error is not None:
-                raise health_error
-            return {"status": "ok"}
-        if path == "/api/containers":
-            return containers
-        raise AssertionError(f"unexpected WUD API URL: {url}")
-
-    monkeypatch.setattr(web_wud_api, "_request_json", fake_request_json)
-
-
 def _doctor_client(
     tmp_path: Path,
     env: dict[str, str] | None = None,
@@ -157,6 +144,87 @@ def _csrf_headers(client: TestClient) -> dict[str, str]:
         "Origin": "http://testserver",
         "x-wud-csrf-token": response.json()["csrf_token"],
     }
+
+
+def _install_wud_api(
+    monkeypatch,
+    *,
+    health: WudApiResponse = (200, {"status": "ok"}),
+    containers: WudApiResponse | list[dict[str, object]] = (200, ()),
+    app: WudApiResponse = (200, {"name": "wud", "version": "5.0.0"}),
+    log: WudApiResponse = (200, {"level": "debug"}),
+    store: WudApiResponse = (
+        200,
+        {"configuration": {"path": ".store", "file": "wud.json"}},
+    ),
+    watchers: WudApiResponse = (
+        200,
+        [
+            {
+                "id": "docker.local",
+                "type": "docker",
+                "name": "local",
+                "configuration": {
+                    "socket": "/var/run/docker.sock",
+                    "cron": "0 * * * *",
+                    "watchbydefault": True,
+                },
+            }
+        ],
+    ),
+    registries: WudApiResponse = (
+        200,
+        [
+            {
+                "id": "hub.private",
+                "type": "hub",
+                "name": "private",
+                "configuration": {"region": "fixture"},
+            }
+        ],
+    ),
+    health_error: Exception | None = None,
+) -> None:
+    if health_error is not None:
+        health = health_error
+    responses = {
+        "/health": health,
+        "/api/containers": containers,
+        "/api/app": app,
+        "/api/log": log,
+        "/api/store": store,
+        "/api/watchers": watchers,
+        "/api/registries": registries,
+    }
+
+    def fake_request_json(url: str) -> object:
+        path = urllib.parse.urlsplit(url).path
+        try:
+            return _wud_api_response(url, responses[path])
+        except KeyError as exc:
+            raise AssertionError(f"unexpected WUD API URL: {url}") from exc
+
+    monkeypatch.setattr(web_wud_api, "_request_json", fake_request_json)
+
+
+def _wud_api_response(
+    url: str,
+    response: WudApiResponse | list[dict[str, object]],
+) -> object:
+    if isinstance(response, Exception):
+        raise response
+    if (
+        isinstance(response, tuple)
+        and len(response) == 2
+        and isinstance(response[0], int)
+    ):
+        status, payload = response
+    else:
+        status, payload = 200, response
+    if status >= 400:
+        raise urllib.error.HTTPError(url, status, "test WUD API error", {}, None)
+    json.dumps(payload)
+    return payload
 
 
 def _self_update_payload(

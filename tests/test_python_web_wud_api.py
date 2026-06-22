@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import json
-import urllib.error
 import urllib.parse
 from pathlib import Path
 from typing import Any
@@ -17,10 +15,15 @@ from wudup.release_notes import (
 from wudup.web import load_web_settings
 from wudup.web_auth import WebConfigError
 
-from tests.web_test_helpers import _client, _csrf_headers, _web_env
-
-
-ResponseSpec = tuple[int, object]
+from tests.web_test_helpers import (
+    WUD_API_ACCESS_KEY_ID,
+    WUD_API_AUTHORIZATION_HEADER,
+    WUD_API_SECRET_ACCESS_KEY,
+    _client,
+    _csrf_headers,
+    _install_wud_api,
+    _web_env,
+)
 
 
 def _settings(tmp_path: Path, base_url: str):
@@ -67,33 +70,6 @@ def _container_payload(
         "error": {"message": ""},
         "updateAvailable": update_available,
     }
-
-
-def _install_wud_api(
-    monkeypatch,
-    *,
-    health: ResponseSpec | Exception = (200, {"status": "ok"}),
-    containers: ResponseSpec | Exception = (200, ()),
-) -> None:
-    def fake_request_json(url: str) -> object:
-        path = urllib.parse.urlsplit(url).path
-        if path == "/health":
-            return _wud_response(url, health)
-        if path == "/api/containers":
-            return _wud_response(url, containers)
-        raise AssertionError(f"unexpected WUD API URL: {url}")
-
-    monkeypatch.setattr(web_wud_api, "_request_json", fake_request_json)
-
-
-def _wud_response(url: str, response: ResponseSpec | Exception) -> object:
-    if isinstance(response, Exception):
-        raise response
-    status, payload = response
-    if status >= 400:
-        raise urllib.error.HTTPError(url, status, "test WUD API error", {}, None)
-    json.dumps(payload)
-    return payload
 
 
 class _ToggleableWudApi:
@@ -145,6 +121,170 @@ def test_wud_api_snapshot_reads_update_metadata(tmp_path: Path, monkeypatch) -> 
     assert container.remote_digest == "sha256:remote"
     assert container.update_kind == "tag"
     assert container.semver_diff == "minor"
+
+
+def test_wud_api_configuration_diagnostics_reads_endpoint_payloads(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    _install_wud_api(monkeypatch)
+
+    diagnostics = web_wud_api.get_configuration_diagnostics(
+        _settings(tmp_path, "https://wud.config.test:3000"),
+        force=True,
+    )
+
+    assert diagnostics.health.state == "ready"
+    assert diagnostics.app.status.state == "ready"
+    assert diagnostics.app.name == "wud"
+    assert diagnostics.app.version == "5.0.0"
+    assert diagnostics.log.level == "debug"
+    assert diagnostics.store.path == ".store"
+    assert diagnostics.store.file == "wud.json"
+    assert len(diagnostics.watchers) == 1
+    assert diagnostics.watchers[0].id == "docker.local"
+    assert diagnostics.watchers[0].cron == "0 * * * *"
+    assert diagnostics.watchers[0].watch_by_default is True
+    assert len(diagnostics.registries) == 1
+    assert diagnostics.registries[0].id == "hub.private"
+
+
+def test_wud_api_configuration_diagnostics_redacts_sensitive_config(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    redaction_value = "registry-redaction-value"
+    _install_wud_api(
+        monkeypatch,
+        watchers=(
+            200,
+            [
+                {
+                    "id": "docker.local",
+                    "type": "docker",
+                    "name": "local",
+                    "configuration": {
+                        "socket": "/var/run/docker.sock",
+                        "headers": {WUD_API_AUTHORIZATION_HEADER: redaction_value},
+                        "cron": "0 * * * *",
+                        "watchbydefault": True,
+                    },
+                }
+            ],
+        ),
+        registries=(
+            200,
+            [
+                {
+                    "id": "ecr.private",
+                    "type": "ecr",
+                    "name": "private",
+                    "configuration": {
+                        "region": "eu-west-1",
+                        WUD_API_ACCESS_KEY_ID: "redaction-access-value",
+                        WUD_API_SECRET_ACCESS_KEY: redaction_value,
+                    },
+                }
+            ],
+        ),
+    )
+
+    diagnostics = web_wud_api.get_configuration_diagnostics(
+        _settings(tmp_path, "https://wud.config-redaction.test:3000"),
+        force=True,
+    )
+    serialized = diagnostics.model_dump_json()
+
+    assert redaction_value not in serialized
+    assert "redaction-access-value" not in serialized
+    assert diagnostics.watchers[0].configuration["socket"] == "[REDACTED_PATH]"
+    assert diagnostics.watchers[0].configuration["headers"] == "<redacted>"
+    assert diagnostics.registries[0].configuration["region"] == "eu-west-1"
+    assert diagnostics.registries[0].configuration[WUD_API_ACCESS_KEY_ID] == "<redacted>"
+    assert (
+        diagnostics.registries[0].configuration[WUD_API_SECRET_ACCESS_KEY]
+        == "<redacted>"
+    )
+
+
+def test_wud_api_configuration_diagnostics_reports_unreachable_health(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    _install_wud_api(monkeypatch, health=OSError("connection refused"))
+
+    diagnostics = web_wud_api.get_configuration_diagnostics(
+        _settings(tmp_path, "https://wud.config-unreachable.test:3000"),
+        force=True,
+    )
+
+    assert diagnostics.health.state == "unavailable"
+    assert diagnostics.app.status.state == "unavailable"
+    assert diagnostics.watchers_status.state == "unavailable"
+    assert diagnostics.watchers == []
+    assert diagnostics.registries == []
+
+
+def test_wud_api_configuration_diagnostics_reports_health_auth_required(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    _install_wud_api(monkeypatch, health=(401, {"error": "authentication required"}))
+
+    diagnostics = web_wud_api.get_configuration_diagnostics(
+        _settings(tmp_path, "https://wud.config-auth.test:3000"),
+        force=True,
+    )
+
+    assert diagnostics.health.state == "auth_required"
+    assert diagnostics.health.available is True
+    assert diagnostics.app.status.state == "auth_required"
+    assert diagnostics.registries_status.state == "auth_required"
+
+
+def test_wud_api_configuration_diagnostics_reports_partial_endpoint_failure(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    _install_wud_api(
+        monkeypatch,
+        registries=(401, {"error": "authentication required"}),
+    )
+
+    diagnostics = web_wud_api.get_configuration_diagnostics(
+        _settings(tmp_path, "https://wud.config-partial.test:3000"),
+        force=True,
+    )
+
+    assert diagnostics.app.status.state == "ready"
+    assert diagnostics.watchers_status.state == "ready"
+    assert diagnostics.registries_status.state == "auth_required"
+    assert diagnostics.registries == []
+
+
+def test_wud_api_configuration_diagnostics_rejects_malformed_payloads(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    _install_wud_api(
+        monkeypatch,
+        app=(200, []),
+        log=(200, []),
+        store=(200, {"configuration": []}),
+        watchers=(200, {"items": []}),
+        registries=(200, {"items": []}),
+    )
+
+    diagnostics = web_wud_api.get_configuration_diagnostics(
+        _settings(tmp_path, "https://wud.config-malformed.test:3000"),
+        force=True,
+    )
+
+    assert diagnostics.app.status.state == "error"
+    assert diagnostics.log.status.state == "error"
+    assert diagnostics.store.status.state == "error"
+    assert diagnostics.watchers_status.state == "error"
+    assert diagnostics.registries_status.state == "error"
 
 
 def test_wud_api_snapshot_reports_unreachable_state(
