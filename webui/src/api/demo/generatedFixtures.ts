@@ -1045,6 +1045,30 @@ export const generatedFixtures = {
         },
         {
           "configured": false,
+          "name": "WUD_API_AUTH_BEARER_TOKEN"
+        },
+        {
+          "configured": false,
+          "name": "WUD_API_AUTH_BEARER_TOKEN_FILE"
+        },
+        {
+          "configured": false,
+          "name": "WUD_API_AUTH_BASIC_USER"
+        },
+        {
+          "configured": false,
+          "name": "WUD_API_AUTH_BASIC_PASSWORD"
+        },
+        {
+          "configured": false,
+          "name": "WUD_API_AUTH_BASIC_PASSWORD_FILE"
+        },
+        {
+          "configured": false,
+          "name": "WUD_API_HEADERS_FILE"
+        },
+        {
+          "configured": false,
           "name": "GITHUB_TOKEN"
         },
         {
@@ -117333,6 +117357,30 @@ export const generatedFixtures = {
       {
         "configured": false,
         "name": "WUD_WEB_TOKEN"
+      },
+      {
+        "configured": false,
+        "name": "WUD_API_AUTH_BEARER_TOKEN"
+      },
+      {
+        "configured": false,
+        "name": "WUD_API_AUTH_BEARER_TOKEN_FILE"
+      },
+      {
+        "configured": false,
+        "name": "WUD_API_AUTH_BASIC_USER"
+      },
+      {
+        "configured": false,
+        "name": "WUD_API_AUTH_BASIC_PASSWORD"
+      },
+      {
+        "configured": false,
+        "name": "WUD_API_AUTH_BASIC_PASSWORD_FILE"
+      },
+      {
+        "configured": false,
+        "name": "WUD_API_HEADERS_FILE"
       },
       {
         "configured": false,

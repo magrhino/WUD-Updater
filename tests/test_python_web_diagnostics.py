@@ -42,11 +42,18 @@ def test_diagnostics_support_bundle_returns_semantically_redacted_payload(
     tmp_path: Path,
 ) -> None:
     secret = "github-token-secret"
+    wud_api_header_secret = "wud-api-header-secret"
+    wud_api_headers_file = tmp_path / "wud-api-headers.json"
+    wud_api_headers_file.write_text(
+        json.dumps({"X-Api-Key": wud_api_header_secret}),
+        encoding="utf-8",
+    )
     client = _doctor_client(
         tmp_path,
         {
             "GITHUB_TOKEN": secret,
             "FAKE_DOCKER_INFO_SECRET": secret,
+            "WUD_API_HEADERS_FILE": str(wud_api_headers_file),
         },
     )
     wud_file = tmp_path / "state" / "images.todo"
@@ -58,6 +65,7 @@ def test_diagnostics_support_bundle_returns_semantically_redacted_payload(
             f"wud file {wud_file}\n"
             f"log file {log_file}\n"
             f"secret {secret}\n"
+            f"wud api header {wud_api_header_secret}\n"
         ),
         encoding="utf-8",
     )
@@ -71,6 +79,7 @@ def test_diagnostics_support_bundle_returns_semantically_redacted_payload(
     assert response.status_code == 200
     assert str(tmp_path) not in serialized
     assert secret not in serialized
+    assert wud_api_header_secret not in serialized
     assert "<redacted>" in serialized
     assert "<DOCKER_BASE>/app/compose.yml" in serialized
     assert "<WUD_OUT_FILE>" in serialized

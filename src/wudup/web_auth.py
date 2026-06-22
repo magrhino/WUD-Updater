@@ -59,6 +59,12 @@ RESET_ADMIN_CLAIM_USER_ID_KEY = "reset_admin_claim_user_id"
 DEFAULT_ALLOWED_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
 SENSITIVE_ENV_KEYS = (
     "WUD_WEB_TOKEN",
+    "WUD_API_AUTH_BEARER_TOKEN",
+    "WUD_API_AUTH_BEARER_TOKEN_FILE",
+    "WUD_API_AUTH_BASIC_USER",
+    "WUD_API_AUTH_BASIC_PASSWORD",
+    "WUD_API_AUTH_BASIC_PASSWORD_FILE",
+    "WUD_API_HEADERS_FILE",
     "GITHUB_TOKEN",
     "DISCORD_RELEASES_WEBHOOK",
     "DISCORD_WEBHOOK",
@@ -415,6 +421,7 @@ def _sensitive_redaction_values(
     env = settings.command_env or {}
     values.extend(extra_secrets)
     values.append(settings.auth_token)
+    values.extend(settings.wud_api_client.secret_values)
     values.extend(env.get(key, "") for key in SENSITIVE_ENV_KEYS)
 
     expanded: list[str] = []
