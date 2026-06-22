@@ -40,6 +40,13 @@ from .web_models import (
     WudApiWatcherDiagnostics as WudApiWatcherDiagnostics,
     WudContainerMetadata,
 )
+from .web_wud_states import (
+    WUD_API_DEGRADED_STATES,
+    WUD_API_STATE_AUTH_REQUIRED,
+    WUD_API_STATE_ERROR,
+    WUD_API_STATE_READY,
+    WUD_API_STATE_UNAVAILABLE,
+)
 from .wud_file import WudTarget
 
 DEFAULT_WUD_API_BASE_URL = "http://wud:3000"
@@ -51,13 +58,6 @@ WUD_API_STARTUP_RETRY_INTERVAL_SECONDS = 0.5
 WUD_API_CACHE_TTL_SECONDS = 30.0
 WUD_API_DEGRADED_RETRY_INTERVAL_SECONDS = 5.0
 WUD_API_USER_AGENT = "wudup-webui-wud-api/1.0"
-WUD_API_STATE_READY: WudApiState = "ready"
-WUD_API_STATE_UNAVAILABLE: WudApiState = "unavailable"
-WUD_API_STATE_AUTH_REQUIRED: WudApiState = "auth_required"
-WUD_API_STATE_ERROR: WudApiState = "error"
-WUD_API_DEGRADED_STATES = frozenset(
-    {WUD_API_STATE_UNAVAILABLE, WUD_API_STATE_ERROR}
-)
 
 
 @dataclass(frozen=True)

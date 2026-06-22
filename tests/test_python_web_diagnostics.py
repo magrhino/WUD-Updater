@@ -2,6 +2,9 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any
+
+import pytest
 
 from wudup import web_settings
 from wudup.db import open_db
@@ -11,9 +14,28 @@ from tests.web_test_helpers import (
     WUD_API_AUTHORIZATION_HEADER,
     _client,
     _doctor_client,
-    _install_wud_api_diagnostics,
+    _install_wud_api,
     _insert_run,
 )
+
+
+def _build_support_bundle(
+    tmp_path: Path,
+    *,
+    wud_api_base_url: str = "https://wud.support-config.test:3000",
+) -> tuple[dict[str, Any], set[str], str]:
+    client = _doctor_client(
+        tmp_path,
+        {"WUD_API_BASE_URL": wud_api_base_url},
+    )
+
+    response = client.get("/api/v1/diagnostics/support-bundle")
+    body = response.json()
+    serialized = json.dumps(body)
+    doctor_codes = {check["code"] for check in body["doctor_result"]["checks"]}
+
+    assert response.status_code == 200
+    return body, doctor_codes, serialized
 
 
 def test_diagnostics_support_bundle_returns_semantically_redacted_payload(
@@ -65,7 +87,7 @@ def test_diagnostics_support_bundle_includes_sanitized_wud_api_diagnostics(
     monkeypatch,
 ) -> None:
     redaction_value = "registry-redaction-value"
-    _install_wud_api_diagnostics(
+    _install_wud_api(
         monkeypatch,
         watchers=(
             200,
@@ -98,17 +120,10 @@ def test_diagnostics_support_bundle_includes_sanitized_wud_api_diagnostics(
             ],
         ),
     )
-    client = _doctor_client(
-        tmp_path,
-        {"WUD_API_BASE_URL": "https://wud.support-config.test:3000"},
-    )
 
-    response = client.get("/api/v1/diagnostics/support-bundle")
-    body = response.json()
-    serialized = json.dumps(body)
+    body, _doctor_codes, serialized = _build_support_bundle(tmp_path)
     diagnostics = body["wud_api_diagnostics"]
 
-    assert response.status_code == 200
     assert diagnostics["app"]["name"] == "wud"
     assert diagnostics["watchers"][0]["configuration"]["socket"] == "[REDACTED_PATH]"
     assert diagnostics["watchers"][0]["configuration"]["headers"] == "<redacted>"
@@ -118,6 +133,36 @@ def test_diagnostics_support_bundle_includes_sanitized_wud_api_diagnostics(
         == "<redacted>"
     )
     assert redaction_value not in serialized
+
+
+@pytest.mark.parametrize(
+    ("health", "expected_state", "expected_available"),
+    [
+        ((401, {"error": "authentication required"}), "auth_required", True),
+        (OSError("connection refused"), "unavailable", False),
+    ],
+)
+def test_diagnostics_support_bundle_includes_degraded_wud_api_diagnostics(
+    tmp_path: Path,
+    monkeypatch,
+    health,
+    expected_state: str,
+    expected_available: bool,
+) -> None:
+    _install_wud_api(monkeypatch, health=health)
+
+    body, _doctor_codes, serialized = _build_support_bundle(
+        tmp_path,
+        wud_api_base_url=f"https://wud.support-{expected_state}.test:3000",
+    )
+    diagnostics = body["wud_api_diagnostics"]
+
+    assert diagnostics["health"]["state"] == expected_state
+    assert diagnostics["health"]["available"] is expected_available
+    assert diagnostics["app"]["status"]["state"] == expected_state
+    assert diagnostics["registries_status"]["state"] == expected_state
+    assert isinstance(serialized, str)
+    assert "wud_api_diagnostics" in serialized
 
 
 def test_diagnostics_support_bundle_reuses_resolved_settings(

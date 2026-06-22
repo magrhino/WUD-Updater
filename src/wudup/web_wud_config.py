@@ -7,6 +7,7 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from typing import Any
 
+from .web_auth import _sensitive_mapping_key
 from .web_models import (
     WebSettings,
     WudApiAppDiagnostics,
@@ -18,14 +19,14 @@ from .web_models import (
     WudApiStoreDiagnostics,
     WudApiWatcherDiagnostics,
 )
-
-WUD_API_STATE_READY: WudApiState = "ready"
-WUD_API_STATE_UNAVAILABLE: WudApiState = "unavailable"
-WUD_API_STATE_AUTH_REQUIRED: WudApiState = "auth_required"
-WUD_API_STATE_ERROR: WudApiState = "error"
-WUD_API_DEGRADED_STATES = frozenset(
-    {WUD_API_STATE_UNAVAILABLE, WUD_API_STATE_ERROR}
+from .web_wud_states import (
+    WUD_API_DEGRADED_STATES,
+    WUD_API_STATE_AUTH_REQUIRED,
+    WUD_API_STATE_ERROR,
+    WUD_API_STATE_READY,
+    WUD_API_STATE_UNAVAILABLE,
 )
+
 APP_CONFIGURATION_LABEL = "app configuration"
 LOG_CONFIGURATION_LABEL = "log configuration"
 STORE_CONFIGURATION_LABEL = "store configuration"
@@ -37,20 +38,6 @@ WUD_API_CONFIG_ENDPOINTS = (
     ("store", "/api/store", STORE_CONFIGURATION_LABEL),
     ("watchers", "/api/watchers", WATCHER_CONFIGURATION_LABEL),
     ("registries", "/api/registries", REGISTRY_CONFIGURATION_LABEL),
-)
-WUD_API_SENSITIVE_CONFIG_KEY_PARTS = frozenset(
-    {
-        "auth",
-        "authorization",
-        "credential",
-        "header",
-        "key",
-        "pass",
-        "password",
-        "secret",
-        "token",
-        "webhook",
-    }
 )
 
 RequestJson = Callable[[str], object]
@@ -522,7 +509,7 @@ def _sanitize_wud_configuration_value(
     *,
     key: str = "",
 ) -> Any:
-    if _wud_config_key_is_sensitive(key):
+    if _sensitive_mapping_key(key):
         return "<redacted>"
     if isinstance(value, dict):
         return {
@@ -540,12 +527,6 @@ def _sanitize_wud_configuration_value(
     if isinstance(value, str):
         return context.sanitize_detail(context.settings, value)
     return value
-
-
-def _wud_config_key_is_sensitive(key: str) -> bool:
-    normalized = key.lower().replace("-", "").replace("_", "")
-    return any(part in normalized for part in WUD_API_SENSITIVE_CONFIG_KEY_PARTS)
-
 
 def _config_string(configuration: Mapping[str, object], key: str) -> str:
     value = configuration.get(key)

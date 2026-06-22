@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import json
-import urllib.error
 import urllib.parse
 from pathlib import Path
 from typing import Any
@@ -23,11 +21,9 @@ from tests.web_test_helpers import (
     WUD_API_SECRET_ACCESS_KEY,
     _client,
     _csrf_headers,
+    _install_wud_api,
     _web_env,
 )
-
-
-ResponseSpec = tuple[int, object]
 
 
 def _settings(tmp_path: Path, base_url: str):
@@ -74,75 +70,6 @@ def _container_payload(
         "error": {"message": ""},
         "updateAvailable": update_available,
     }
-
-
-def _install_wud_api(
-    monkeypatch,
-    *,
-    health: ResponseSpec | Exception = (200, {"status": "ok"}),
-    containers: ResponseSpec | Exception = (200, ()),
-    app: ResponseSpec | Exception = (200, {"name": "wud", "version": "5.0.0"}),
-    log: ResponseSpec | Exception = (200, {"level": "debug"}),
-    store: ResponseSpec | Exception = (
-        200,
-        {"configuration": {"path": ".store", "file": "wud.json"}},
-    ),
-    watchers: ResponseSpec | Exception = (
-        200,
-        [
-            {
-                "id": "docker.local",
-                "type": "docker",
-                "name": "local",
-                "configuration": {
-                    "socket": "/var/run/docker.sock",
-                    "cron": "0 * * * *",
-                    "watchbydefault": True,
-                },
-            }
-        ],
-    ),
-    registries: ResponseSpec | Exception = (
-        200,
-        [
-            {
-                "id": "hub.private",
-                "type": "hub",
-                "name": "private",
-                "configuration": {"region": "fixture"},
-            }
-        ],
-    ),
-) -> None:
-    def fake_request_json(url: str) -> object:
-        path = urllib.parse.urlsplit(url).path
-        if path == "/health":
-            return _wud_response(url, health)
-        if path == "/api/containers":
-            return _wud_response(url, containers)
-        if path == "/api/app":
-            return _wud_response(url, app)
-        if path == "/api/log":
-            return _wud_response(url, log)
-        if path == "/api/store":
-            return _wud_response(url, store)
-        if path == "/api/watchers":
-            return _wud_response(url, watchers)
-        if path == "/api/registries":
-            return _wud_response(url, registries)
-        raise AssertionError(f"unexpected WUD API URL: {url}")
-
-    monkeypatch.setattr(web_wud_api, "_request_json", fake_request_json)
-
-
-def _wud_response(url: str, response: ResponseSpec | Exception) -> object:
-    if isinstance(response, Exception):
-        raise response
-    status, payload = response
-    if status >= 400:
-        raise urllib.error.HTTPError(url, status, "test WUD API error", {}, None)
-    json.dumps(payload)
-    return payload
 
 
 class _ToggleableWudApi:

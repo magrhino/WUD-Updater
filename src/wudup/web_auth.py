@@ -64,6 +64,20 @@ SENSITIVE_ENV_KEYS = (
     "DISCORD_WEBHOOK",
     "ADMIN_WEBHOOK",
 )
+SENSITIVE_FIELD_KEY_PARTS = frozenset(
+    {
+        "auth",
+        "authorization",
+        "credential",
+        "header",
+        "key",
+        "pass",
+        "password",
+        "secret",
+        "token",
+        "webhook",
+    }
+)
 PASSWORD_HASHER = PasswordHasher()
 
 
@@ -323,6 +337,11 @@ def _redact_sensitive_text(
     for secret in _sensitive_redaction_values(settings, extra_secrets):
         redacted = redacted.replace(secret, "<redacted>")
     return redacted
+
+
+def _sensitive_mapping_key(key: str) -> bool:
+    normalized = key.lower().replace("-", "").replace("_", "")
+    return any(part in normalized for part in SENSITIVE_FIELD_KEY_PARTS)
 
 
 def _sanitize_support_bundle_value(settings: WebSettings, value: Any) -> Any:

@@ -10,7 +10,7 @@ from tests.web_test_helpers import (
     _client,
     _csrf_headers,
     _doctor_client,
-    _install_wud_api_diagnostics,
+    _install_wud_api,
 )
 
 
@@ -221,7 +221,7 @@ def test_doctor_endpoint_reports_wud_api_configuration_checks(
     monkeypatch,
 ) -> None:
     redaction_value = "registry-redaction-value"
-    _install_wud_api_diagnostics(
+    _install_wud_api(
         monkeypatch,
         registries=(
             200,
@@ -261,7 +261,7 @@ def test_doctor_endpoint_warns_for_wud_api_configuration_failures(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
-    _install_wud_api_diagnostics(
+    _install_wud_api(
         monkeypatch,
         app=(200, []),
         log=(500, {}),

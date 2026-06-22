@@ -107,7 +107,7 @@ def _csrf_headers(client: TestClient) -> dict[str, str]:
     }
 
 
-def _install_wud_api_diagnostics(
+def _install_wud_api(
     monkeypatch,
     *,
     health: WudApiResponse = (200, {"status": "ok"}),

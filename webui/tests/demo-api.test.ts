@@ -128,8 +128,12 @@ describe("demo web API", () => {
     });
     await expect(api.diagnosticsSupportBundle()).resolves.toMatchObject({
       wud_api_diagnostics: {
-        health: expect.objectContaining({ state: "ready" }),
+        health: expect.objectContaining({ state: "ready", available: true }),
         app: expect.objectContaining({ name: "wud", version: "5.0.0" }),
+        registries_status: expect.objectContaining({
+          state: "ready",
+          available: true,
+        }),
         watchers: [
           expect.objectContaining({
             id: "docker.local",

@@ -123,6 +123,7 @@ EOF
     src/wudup/web_startup.py \
     src/wudup/web_state.py \
     src/wudup/web_static.py \
+    src/wudup/web_wud_states.py \
     src/wudup/web_wud_config.py \
     src/wudup/web_wud_api.py \
     src/wudup/web.py \
