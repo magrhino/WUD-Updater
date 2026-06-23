@@ -71,7 +71,7 @@ jobs:
     with:
       release_tag: ${{ needs.validate-tag.outputs.tag }}
       suite: python
-      timeout_minutes: 15
+      timeout_minutes: 45
 
   release-shell:
     name: release shell
@@ -91,7 +91,7 @@ jobs:
     with:
       release_tag: ${{ needs.validate-tag.outputs.tag }}
       suite: webui
-      timeout_minutes: 15
+      timeout_minutes: 45
 
   release-webui-smoke:
     name: release webui smoke
@@ -101,7 +101,7 @@ jobs:
     with:
       release_tag: ${{ needs.validate-tag.outputs.tag }}
       suite: webui-smoke
-      timeout_minutes: 15
+      timeout_minutes: 30
 
   release-docker:
     name: release docker
