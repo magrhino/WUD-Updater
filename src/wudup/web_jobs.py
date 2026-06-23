@@ -359,7 +359,13 @@ def _run_apply_job(
     )
     runner: UpdateFromWudRunner | None = None
     temp_dir: tempfile.TemporaryDirectory[str] | None = None
-    terminal_job_fields: dict[str, object]
+    terminal_job_fields: dict[str, object] = {
+        "status": "failure",
+        "run_id": None,
+        "log_file": "",
+        "error": "apply job did not complete",
+    }
+    cleanup_error: Exception | None = None
     try:
         wud_file_override: Path | None = None
         wud_file_label_override: str | None = None
@@ -448,16 +454,25 @@ def _run_apply_job(
         }
     finally:
         if wud_lock is not None:
-            wud_lock.close()
+            try:
+                wud_lock.close()
+            except Exception as exc:
+                cleanup_error = exc
         if temp_dir is not None:
-            temp_dir.cleanup()
-    _update_apply_job(
-        jobs,
-        apply_condition,
-        job_id,
-        finished_at=utc_timestamp(),
-        **terminal_job_fields,
-    )
+            try:
+                temp_dir.cleanup()
+            except Exception as exc:
+                if cleanup_error is None:
+                    cleanup_error = exc
+        _update_apply_job(
+            jobs,
+            apply_condition,
+            job_id,
+            finished_at=utc_timestamp(),
+            **terminal_job_fields,
+        )
+    if cleanup_error is not None:
+        raise cleanup_error
 
 
 def _update_apply_job(
