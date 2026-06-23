@@ -4,6 +4,14 @@ All notable changes to WUD-Updater are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com) and versions follow
 [Semantic Versioning](https://semver.org).
 
+## [0.46.2](https://github.com/magrhino/wudup/compare/v0.46.1...v0.46.2) (2026-06-23)
+
+
+### Bug Fixes
+
+* apply job finalization after release-please failures ([#401](https://github.com/magrhino/wudup/issues/401)) ([ecce2ea](https://github.com/magrhino/wudup/commit/ecce2ea62882c5babb24adaefcf2898506b21cac))
+* **docker:** Extend Docker E2E coverage for digest pinning and stack recreate mode ([#399](https://github.com/magrhino/wudup/issues/399)) ([902dfbc](https://github.com/magrhino/wudup/commit/902dfbc8f6a383357612ba318591d4861538363a))
+
 ## [0.46.1](https://github.com/magrhino/wudup/compare/v0.46.0...v0.46.1) (2026-06-23)
 
 
