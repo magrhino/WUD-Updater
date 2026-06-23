@@ -242,21 +242,7 @@ jobs:
           set -euo pipefail
 
           image="$REGISTRY/$IMAGE_NAME"
-          sync_tmp="$(mktemp -d)"
-          cleanup(){
-            rm -rf "$sync_tmp"
-          }
-          trap cleanup EXIT
-
-          docker run --rm "$image:$RELEASE_TAG"
-          docker run --rm -e WUDUP_PYTHON=true "$image:$RELEASE_TAG"
-          docker run --rm -v "$sync_tmp:/managed-wud" "$image:$RELEASE_TAG" sync-wud-scripts
-          [[ -x "$sync_tmp/on-update.sh" ]]
-          [[ -x "$sync_tmp/append-updates.sh" ]]
-          [[ -x "$sync_tmp/release-parser.sh" ]]
-          [[ -x "$sync_tmp/github-release-embed.sh" ]]
-          [[ -f "$sync_tmp/upstreams.txt" ]]
-          docker run --rm "$image:$RELEASE_TAG" docker-update-from-wud --help
+          bash tests/smoke-container-image.sh "$image:$RELEASE_TAG"
 
       - name: Publish multi-arch image
         shell: bash

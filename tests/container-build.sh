@@ -26,9 +26,6 @@ COMPOSE_HARDENED="docs/examples/docker-compose.hardened.yml"
 COMPOSE_BUILD="docs/examples/docker-compose.build.yml"
 COMPOSE_TRUENAS="docs/examples/docker-compose.truenas.yml"
 cleanup_image=0
-SYNC_TMP=""
-HEALTH_TMP=""
-HEALTH_CONTAINER=""
 RUN_ID_COMPONENT="$(docker_name_component "${GITHUB_RUN_ID:-local}")"
 if [[ -n "${WUDUP_TEST_IMAGE:-}" ]]; then
   IMAGE="$WUDUP_TEST_IMAGE"
@@ -38,17 +35,8 @@ else
 fi
 
 cleanup(){
-  if [[ -n "$HEALTH_CONTAINER" ]]; then
-    docker rm -f "$HEALTH_CONTAINER" >/dev/null 2>&1 || true
-  fi
   if [[ "$cleanup_image" -eq 1 ]]; then
     docker image rm "$IMAGE" >/dev/null 2>&1 || true
-  fi
-  if [[ -n "$SYNC_TMP" && -d "$SYNC_TMP" ]]; then
-    rm -rf "$SYNC_TMP"
-  fi
-  if [[ -n "$HEALTH_TMP" && -d "$HEALTH_TMP" ]]; then
-    rm -rf "$HEALTH_TMP"
   fi
 }
 trap cleanup EXIT
@@ -148,55 +136,6 @@ assert_image_metadata(){
   assert_duration "healthcheck.start_period" "$health_start_period" "10s" "10000000000"
 }
 
-wait_for_default_web_health(){
-  local status
-
-  for _ in {1..90}; do
-    status="$(
-      docker inspect \
-        -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}missing{{end}}' \
-        "$HEALTH_CONTAINER"
-    )"
-    case "$status" in
-      healthy)
-        return 0
-        ;;
-      unhealthy)
-        printf 'Default WebUI container became unhealthy.\n' >&2
-        docker inspect -f '{{json .State.Health}}' "$HEALTH_CONTAINER" >&2 || true
-        docker logs "$HEALTH_CONTAINER" >&2 || true
-        return 1
-        ;;
-      *)
-        sleep 1
-        ;;
-    esac
-  done
-
-  printf 'Timed out waiting for default WebUI container healthcheck.\n' >&2
-  docker inspect -f '{{json .State.Health}}' "$HEALTH_CONTAINER" >&2 || true
-  docker logs "$HEALTH_CONTAINER" >&2 || true
-  return 1
-}
-
-smoke_default_web_health(){
-  HEALTH_TMP="$(mktemp -d "${TMPDIR:-/tmp}/wud-health-test.XXXXXX")"
-  HEALTH_CONTAINER="wudup-health-${RUN_ID_COMPONENT}-$$"
-  mkdir -p "$HEALTH_TMP/host-docker" "$HEALTH_TMP/out" "$HEALTH_TMP/logs"
-  touch "$HEALTH_TMP/out/images.todo"
-
-  run docker run -d \
-    --name "$HEALTH_CONTAINER" \
-    -v /var/run/docker.sock:/var/run/docker.sock \
-    -v "$HEALTH_TMP/host-docker:/host/docker" \
-    -v "$HEALTH_TMP/out:/out" \
-    -v "$HEALTH_TMP/logs:/logs" \
-    "$IMAGE"
-  run wait_for_default_web_health
-  run docker rm -f "$HEALTH_CONTAINER"
-  HEALTH_CONTAINER=""
-}
-
 need_cmd(){
   local cmd="$1"
 
@@ -217,16 +156,4 @@ run_quiet docker compose -f "$COMPOSE_BUILD" config
 run_quiet docker compose -f "$COMPOSE_TRUENAS" config
 run docker build -t "$IMAGE" .
 run assert_image_metadata
-run docker run --rm "$IMAGE" test -f /app/src/wudup/web_static/index.html
-run smoke_default_web_health
-run docker run --rm "$IMAGE" updates --dry-run
-SYNC_TMP="$(mktemp -d "${TMPDIR:-/tmp}/wud-script-sync-test.XXXXXX")"
-run docker run --rm -v "$SYNC_TMP:/managed-wud" "$IMAGE" sync-wud-scripts
-[[ -x "$SYNC_TMP/on-update.sh" ]]
-[[ -x "$SYNC_TMP/append-updates.sh" ]]
-[[ -x "$SYNC_TMP/release-parser.sh" ]]
-[[ -x "$SYNC_TMP/release-notes-to-discord.sh" ]]
-[[ -x "$SYNC_TMP/github-release-embed.sh" ]]
-[[ -x "$SYNC_TMP/tag-manager.sh" ]]
-[[ -f "$SYNC_TMP/upstreams.txt" ]]
-run docker run --rm "$IMAGE" docker-update-from-wud --help
+run bash tests/smoke-container-image.sh "$IMAGE"

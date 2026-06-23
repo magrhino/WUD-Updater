@@ -254,6 +254,7 @@ EOF
     tests/run-all.sh \
     tests/test-docker-update-from-wud.sh \
     tests/container-build.sh \
+    tests/smoke-container-image.sh \
     tests/e2e-docker-compose.sh \
     tests/test-entrypoint.sh \
     tests/test-github-release-embed.sh \
@@ -284,6 +285,7 @@ EOF
     tests/run-all.sh \
     tests/test-docker-update-from-wud.sh \
     tests/container-build.sh \
+    tests/smoke-container-image.sh \
     tests/e2e-docker-compose.sh \
     tests/test-entrypoint.sh \
     tests/test-github-release-embed.sh \
