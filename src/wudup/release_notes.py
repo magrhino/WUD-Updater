@@ -324,6 +324,22 @@ def github_latest_candidate_from_info(
 ) -> GitHubLatestCandidate | None:
     """Return a Docker-retag candidate from GitHub release-note metadata."""
 
+    if info.provider == "lsio" and info.status in {"ready", "not_found"}:
+        release_link = next(
+            (link for link in info.links if link.kind == "lsio_release"),
+            None,
+        )
+        if release_link is None:
+            return None
+        release_tag = _github_release_link_tag(release_link.url)
+        if not release_tag:
+            return None
+        return GitHubLatestCandidate(
+            release_tag=release_tag,
+            link_label=release_link.label,
+            link_url=release_link.url,
+        )
+
     if info.provider != "github" or info.status != "ready" or not info.release_tag:
         return None
     release_link = next(
@@ -337,6 +353,17 @@ def github_latest_candidate_from_info(
         link_label="" if release_link is None else release_link.label,
         link_url="" if release_link is None else release_link.url,
     )
+
+
+def _github_release_link_tag(url: str) -> str:
+    parsed = urllib.parse.urlsplit(url)
+    if parsed.netloc.lower() != "github.com":
+        return ""
+    marker = "/releases/tag/"
+    if marker not in parsed.path:
+        return ""
+    tag = parsed.path.split(marker, 1)[1].strip("/")
+    return urllib.parse.unquote(tag)
 
 
 def _context(
