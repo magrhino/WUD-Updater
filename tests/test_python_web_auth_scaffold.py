@@ -4,6 +4,7 @@ import logging
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
 from fastapi.testclient import TestClient
 
 from wudup import web_auth as web_auth_module
@@ -202,6 +203,105 @@ def test_host_allowlist_rejects_unknown_hosts(tmp_path: Path) -> None:
     assert response.json()["detail"] == "host is not allowed"
 
 
+def test_parse_trusted_proxies_resolves_hostnames(monkeypatch) -> None:
+    def fake_getaddrinfo(hostname: str, _port, *_args, **_kwargs):
+        assert hostname == "npmplus"
+        return [
+            (
+                web_auth_module.socket.AF_INET,
+                web_auth_module.socket.SOCK_STREAM,
+                0,
+                "",
+                ("172.16.1.35", 0),
+            ),
+            (
+                web_auth_module.socket.AF_INET6,
+                web_auth_module.socket.SOCK_STREAM,
+                0,
+                "",
+                ("fdd0:0:0:1::23", 0, 0, 0),
+            ),
+        ]
+
+    monkeypatch.setattr(web_auth_module.socket, "getaddrinfo", fake_getaddrinfo)
+
+    networks = web_auth_module._parse_trusted_proxies("npmplus")
+
+    assert [str(network) for network in networks] == [
+        "172.16.1.35/32",
+        "fdd0:0:0:1::23/128",
+    ]
+
+
+def test_parse_trusted_proxies_deduplicates_resolved_hostnames(monkeypatch) -> None:
+    def fake_getaddrinfo(hostname: str, _port, *_args, **_kwargs):
+        assert hostname == "npmplus"
+        return [
+            (
+                web_auth_module.socket.AF_INET,
+                web_auth_module.socket.SOCK_STREAM,
+                0,
+                "",
+                ("10.0.0.1", 0),
+            ),
+            (
+                web_auth_module.socket.AF_INET,
+                web_auth_module.socket.SOCK_STREAM,
+                0,
+                "",
+                ("172.16.1.35", 0),
+            ),
+            (
+                web_auth_module.socket.AF_INET,
+                web_auth_module.socket.SOCK_STREAM,
+                0,
+                "",
+                ("172.16.1.35", 0),
+            ),
+        ]
+
+    monkeypatch.setattr(web_auth_module.socket, "getaddrinfo", fake_getaddrinfo)
+
+    networks = web_auth_module._parse_trusted_proxies(
+        "10.0.0.1/32,npmplus,172.16.1.35/32"
+    )
+
+    assert [str(network) for network in networks] == [
+        "10.0.0.1/32",
+        "172.16.1.35/32",
+    ]
+
+
+def test_parse_trusted_proxies_rejects_unresolved_hostname(monkeypatch) -> None:
+    def fake_getaddrinfo(_hostname: str, _port, *_args, **_kwargs):
+        raise web_auth_module.socket.gaierror("not found")
+
+    monkeypatch.setattr(web_auth_module.socket, "getaddrinfo", fake_getaddrinfo)
+
+    with pytest.raises(
+        web_auth_module.WebConfigError,
+        match="WUD_WEB_TRUSTED_PROXIES contains unresolvable hostname: npmplus",
+    ):
+        web_auth_module._parse_trusted_proxies("npmplus")
+
+
+def test_parse_trusted_proxies_rejects_invalid_cidr_hostname(monkeypatch) -> None:
+    def unexpected_getaddrinfo(_hostname: str, _port, *_args, **_kwargs):
+        raise AssertionError("CIDR-like values must not be resolved as hostnames")
+
+    monkeypatch.setattr(
+        web_auth_module.socket,
+        "getaddrinfo",
+        unexpected_getaddrinfo,
+    )
+
+    with pytest.raises(
+        web_auth_module.WebConfigError,
+        match="WUD_WEB_TRUSTED_PROXIES contains invalid address: npmplus/32",
+    ):
+        web_auth_module._parse_trusted_proxies("npmplus/32")
+
+
 def test_forwarded_headers_require_trusted_proxy(tmp_path: Path) -> None:
     env = {
         "WUD_WEB_ALLOWED_HOSTS": "internal.test,wud.example.test",
@@ -258,6 +358,62 @@ def test_forwarded_headers_require_trusted_proxy(tmp_path: Path) -> None:
     assert untrusted_response.status_code == 403
     assert untrusted_response.json()["detail"] == "origin is not allowed"
     assert trusted_response.status_code == 200
+
+
+def test_forwarded_headers_trust_hostname_resolved_proxy(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    def fake_getaddrinfo(hostname: str, _port, *_args, **_kwargs):
+        if hostname != "npmplus":
+            raise web_auth_module.socket.gaierror("not found")
+        return [
+            (
+                web_auth_module.socket.AF_INET,
+                web_auth_module.socket.SOCK_STREAM,
+                0,
+                "",
+                ("10.0.0.1", 0),
+            ),
+        ]
+
+    monkeypatch.setattr(web_auth_module.socket, "getaddrinfo", fake_getaddrinfo)
+    app = create_app(
+        environ=_web_env(
+            tmp_path,
+            {
+                "WUD_WEB_ALLOWED_HOSTS": "internal.test,wud.example.test",
+                "WUD_WEB_TRUSTED_PROXIES": "npmplus",
+            },
+        )
+    )
+    settings = app.state.web_settings
+    trusted_request = SimpleNamespace(
+        client=SimpleNamespace(host="10.0.0.1"),
+        headers={
+            "x-forwarded-for": "198.51.100.10",
+            "x-forwarded-proto": "https",
+            "x-forwarded-host": "wud.example.test",
+        },
+    )
+    untrusted_request = SimpleNamespace(
+        client=SimpleNamespace(host="192.0.2.1"),
+        headers=trusted_request.headers,
+    )
+
+    assert (
+        web_auth_module._trusted_forwarded_origin(trusted_request, settings)
+        == "https://wud.example.test"
+    )
+    assert (
+        web_auth_module._request_client_address(trusted_request, settings)
+        == "198.51.100.10"
+    )
+    assert web_auth_module._trusted_forwarded_origin(untrusted_request, settings) == ""
+    assert (
+        web_auth_module._request_client_address(untrusted_request, settings)
+        == "192.0.2.1"
+    )
 
 
 def test_trusted_forwarded_headers_use_last_proxy_hop(tmp_path: Path) -> None:

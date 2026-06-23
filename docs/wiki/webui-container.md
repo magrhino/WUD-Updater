@@ -88,8 +88,9 @@ WUD_WEB_TRUSTED_PROXIES=127.0.0.1/32
 
 If TLS terminates at a reverse proxy, keep `WUD_WEB_SECURE_COOKIES=auto` unless
 you have a specific local HTTP testing reason to disable secure cookies. Only
-list proxy IPs or CIDRs you control in `WUD_WEB_TRUSTED_PROXIES`; forwarded
-headers from other clients are ignored.
+list proxy IPs, CIDRs, or hostnames you control in `WUD_WEB_TRUSTED_PROXIES`;
+hostnames resolve once at WebUI startup, so restart WUDup after proxy container
+IP changes. Forwarded headers from other clients are ignored.
 
 ## Read-Only And Mutations
 

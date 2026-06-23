@@ -634,7 +634,10 @@ def _resolve_web_values(
 
     allowed_hosts = allowed_hosts.strip()
     if web_exposure == "reverse-proxy" and not trusted_proxies and not non_interactive:
-        trusted_proxies = prompter.text("Trusted proxy IP/CIDR list", "127.0.0.1/32")
+        trusted_proxies = prompter.text(
+            "Trusted proxy IP/CIDR/hostname list",
+            "127.0.0.1/32",
+        )
     return web_bind, public_origin, allowed_hosts, trusted_proxies
 
 

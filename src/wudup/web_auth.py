@@ -6,6 +6,7 @@ import hashlib
 import ipaddress
 import re
 import secrets
+import socket
 import sqlite3
 import sys
 import time
@@ -1579,16 +1580,61 @@ def _parse_trusted_proxies(
     value: str,
 ) -> tuple[ipaddress.IPv4Network | ipaddress.IPv6Network, ...]:
     networks: list[ipaddress.IPv4Network | ipaddress.IPv6Network] = []
+    seen: set[ipaddress.IPv4Network | ipaddress.IPv6Network] = set()
     for item in value.split(","):
         raw = item.strip()
         if not raw:
             continue
         try:
-            networks.append(ipaddress.ip_network(raw, strict=False))
+            network = ipaddress.ip_network(raw, strict=False)
         except ValueError as exc:
-            raise WebConfigError(
-                f"WUD_WEB_TRUSTED_PROXIES contains invalid address: {raw}"
-            ) from exc
+            if "/" in raw:
+                raise WebConfigError(
+                    f"WUD_WEB_TRUSTED_PROXIES contains invalid address: {raw}"
+                ) from exc
+            for network in _resolve_trusted_proxy_hostname(raw):
+                if network not in seen:
+                    networks.append(network)
+                    seen.add(network)
+            continue
+        if network not in seen:
+            networks.append(network)
+            seen.add(network)
+    return tuple(networks)
+
+
+def _resolve_trusted_proxy_hostname(
+    hostname: str,
+) -> tuple[ipaddress.IPv4Network | ipaddress.IPv6Network, ...]:
+    try:
+        results = socket.getaddrinfo(
+            hostname,
+            None,
+            family=socket.AF_UNSPEC,
+            type=socket.SOCK_STREAM,
+        )
+    except socket.gaierror as exc:
+        raise WebConfigError(
+            f"WUD_WEB_TRUSTED_PROXIES contains unresolvable hostname: {hostname}"
+        ) from exc
+
+    networks: list[ipaddress.IPv4Network | ipaddress.IPv6Network] = []
+    for family, _socktype, _proto, _canonname, sockaddr in results:
+        if family not in {socket.AF_INET, socket.AF_INET6}:
+            continue
+        try:
+            address = ipaddress.ip_address(sockaddr[0])
+        except (IndexError, ValueError):
+            continue
+        prefix = 32 if address.version == 4 else 128
+        network = ipaddress.ip_network(f"{address}/{prefix}", strict=False)
+        networks.append(network)
+
+    if not networks:
+        raise WebConfigError(
+            "WUD_WEB_TRUSTED_PROXIES hostname did not resolve to an IP address: "
+            f"{hostname}"
+        )
     return tuple(networks)
 
 
