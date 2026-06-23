@@ -12,11 +12,14 @@ REGISTRY_REF=""
 APP_IMAGE=""
 OLD_LOCAL_IMAGE=""
 NEW_LOCAL_IMAGE=""
+NEW_APP_DIGEST=""
+PUSH_IMAGE_DIGEST=""
 STACK_DIR=""
 COMPOSE_FILE=""
 OUT_VOLUME=""
 LOG_VOLUME=""
 SCRIPTS_DIR=""
+DOCKER_WRAPPER_DIR=""
 
 fail(){
   printf 'not ok - %s\n' "$*" >&2
@@ -142,9 +145,20 @@ volume_central_log_count(){
 }
 
 latest_volume_file_name(){
-  local volume="$1" pattern="$2"
+  local volume="$1" pattern="$2" exclude_pattern="${3:-}"
   docker run --rm -v "$volume:/mnt" "$IMAGE" \
-    bash -lc 'find /mnt -maxdepth 1 -type f -name "$1" -printf "%f\n" | sort | tail -n 1' _ "$pattern"
+    bash -lc '
+find_args=(/mnt -maxdepth 1 -type f -name "$1")
+if [[ -n "$2" ]]; then
+  find_args+=(! -name "$2")
+fi
+find "${find_args[@]}" -printf "%f\n" | sort | tail -n 1
+' _ "$pattern" "$exclude_pattern"
+}
+
+latest_central_log_file_name(){
+  local volume="$1"
+  latest_volume_file_name "$volume" 'update-from-wud-v2-*.log' '*.errors.log'
 }
 
 assert_volume_sqlite_scalar(){
@@ -164,14 +178,19 @@ print("" if row is None else row[0])
 }
 
 container_id(){
-  compose ps -q app
+  service_container_id app
 }
 
-wait_for_container_version(){
-  local expected="$1" attempt cid version status health
+service_container_id(){
+  local service="$1"
+  compose ps -q "$service"
+}
+
+wait_for_service_version(){
+  local service="$1" expected="$2" attempt cid version status health
 
   for attempt in $(seq 1 45); do
-    cid="$(container_id || true)"
+    cid="$(service_container_id "$service" || true)"
     if [[ -n "$cid" ]]; then
       version="$(docker exec "$cid" cat /wud-e2e-version 2>/dev/null || true)"
       status="$(docker inspect -f '{{.State.Status}}' "$cid" 2>/dev/null || true)"
@@ -183,7 +202,12 @@ wait_for_container_version(){
     sleep 1
   done
 
-  fail "container did not reach version $expected"
+  fail "$service container did not reach version $expected"
+}
+
+wait_for_container_version(){
+  local expected="$1"
+  wait_for_service_version app "$expected"
 }
 
 start_registry(){
@@ -196,14 +220,48 @@ start_registry(){
   APP_IMAGE="${REGISTRY_REF}/wud-e2e-app:latest"
 }
 
+image_repo_digest(){
+  local image="$1" repo ref digest
+
+  repo="${image%:*}"
+  digest="$(
+    docker image inspect -f '{{range .RepoDigests}}{{println .}}{{end}}' "$image" |
+      while IFS= read -r ref; do
+        case "$ref" in
+          "$repo@sha256:"*)
+            printf '%s\n' "${ref#*@}"
+            break
+            ;;
+          *)
+            ;;
+        esac
+      done
+  )"
+  printf '%s' "$digest"
+}
+
 push_image(){
-  local image="$1" attempt
+  local image="$1" attempt output digest
+
+  PUSH_IMAGE_DIGEST=""
 
   printf '==> docker push %s\n' "$image"
   for attempt in $(seq 1 30); do
-    if docker push "$image"; then
+    output=""
+    if output="$(docker push "$image" 2>&1)"; then
+      printf '%s\n' "$output"
+      digest="$(
+        printf '%s\n' "$output" |
+          sed -n 's/.*digest: \(sha256:[[:xdigit:]]\{64\}\).*/\1/p' |
+          tail -n 1
+      )"
+      if [[ -z "$digest" ]]; then
+        digest="$(image_repo_digest "$image")"
+      fi
+      PUSH_IMAGE_DIGEST="$digest"
       return 0
     fi
+    printf '%s\n' "$output" >&2
     printf 'docker push attempt %s failed for %s\n' "$attempt" "$image" >&2
     sleep 1
   done
@@ -222,6 +280,37 @@ HEALTHCHECK --interval=1s --timeout=1s --retries=30 CMD test -f /wud-e2e-version
 ENTRYPOINT []
 CMD ["bash", "-lc", "trap 'exit 0' TERM INT; while :; do sleep 1; done"]
 EOF
+}
+
+write_docker_manifest_insecure_wrapper(){
+  DOCKER_WRAPPER_DIR="$TEST_TMP/docker-wrapper"
+  mkdir -p "$DOCKER_WRAPPER_DIR"
+  cat > "$DOCKER_WRAPPER_DIR/docker" <<'EOF'
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+wrapper_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
+docker_path="$(
+  filtered_path=""
+  IFS=:
+  read -r -a path_dirs <<< "$PATH"
+  for path_dir in "${path_dirs[@]}"; do
+    [[ -n "$path_dir" && "$path_dir" != "$wrapper_dir" ]] || continue
+    filtered_path="${filtered_path:+$filtered_path:}$path_dir"
+  done
+  PATH="$filtered_path" command -v docker
+)" || {
+  printf 'Missing real docker command behind e2e wrapper\n' >&2
+  exit 127
+}
+
+if [[ "${1:-}" == "manifest" && "${2:-}" == "inspect" ]]; then
+  exec "$docker_path" manifest inspect --insecure "${@:3}"
+fi
+
+exec "$docker_path" "$@"
+EOF
+  chmod +x "$DOCKER_WRAPPER_DIR/docker"
 }
 
 build_fixture_image(){
@@ -247,6 +336,14 @@ prepare_images(){
   build_fixture_image "$NEW_LOCAL_IMAGE" new
   run docker tag "$NEW_LOCAL_IMAGE" "$APP_IMAGE"
   push_image "$APP_IMAGE"
+  NEW_APP_DIGEST="$PUSH_IMAGE_DIGEST"
+  if [[ -z "$NEW_APP_DIGEST" ]]; then
+    NEW_APP_DIGEST="$(image_repo_digest "$APP_IMAGE")"
+  fi
+  case "$NEW_APP_DIGEST" in
+    sha256:*) ;;
+    *) fail "expected pushed new image digest for $APP_IMAGE, got [${NEW_APP_DIGEST:-<empty>}]" ;;
+  esac
   run docker tag "$OLD_LOCAL_IMAGE" "$APP_IMAGE"
 }
 
@@ -264,6 +361,32 @@ services:
 YAML
 }
 
+write_stack_recreate_compose_file(){
+  mkdir -p "$STACK_DIR"
+  cat > "$COMPOSE_FILE" <<YAML
+services:
+  app:
+    image: ${APP_IMAGE}
+    labels:
+      - WUD-UPDATER-RECREATE-STACK=true
+    healthcheck:
+      test: ["CMD-SHELL", "test -f /wud-e2e-version"]
+      interval: 1s
+      timeout: 1s
+      retries: 30
+  sidecar:
+    image: ${OLD_LOCAL_IMAGE}
+    depends_on:
+      app:
+        condition: service_started
+    healthcheck:
+      test: ["CMD-SHELL", "test -f /wud-e2e-version"]
+      interval: 1s
+      timeout: 1s
+      retries: 30
+YAML
+}
+
 write_preflight_failure_compose_file(){
   mkdir -p "$STACK_DIR/data"
   cat > "$COMPOSE_FILE" <<YAML
@@ -273,6 +396,20 @@ services:
     volumes:
       - ./data:/data
 YAML
+}
+
+reset_basic_stack(){
+  run compose down -v --remove-orphans
+  write_compose_file
+  run docker tag "$OLD_LOCAL_IMAGE" "$APP_IMAGE"
+  run compose up -d
+  wait_for_container_version old
+}
+
+assert_compose_file_contains(){
+  local expected="$1"
+  grep -Fq -- "$expected" "$COMPOSE_FILE" ||
+    fail "expected compose file to contain [$expected]"
 }
 
 run_updater_e2e(){
@@ -306,6 +443,101 @@ run_updater_e2e(){
   docker run --rm -v "$LOG_VOLUME:/mnt" "$IMAGE" test -s /mnt/e2e.sqlite ||
     fail "expected audit database to be created"
   assert_volume_glob_exists "$LOG_VOLUME" 'update-from-wud-v2-*.log'
+}
+
+run_digest_pin_e2e(){
+  local pinned_image
+
+  reset_basic_stack
+  pinned_image="${APP_IMAGE%:*}@${NEW_APP_DIGEST}"
+  write_volume_file "$OUT_VOLUME" images.todo "${APP_IMAGE}@${NEW_APP_DIGEST}"
+
+  run docker run --rm \
+    --network host \
+    -v /var/run/docker.sock:/var/run/docker.sock \
+    -v "$STACK_DIR:$STACK_DIR" \
+    -v "$OUT_VOLUME:/out" \
+    -v "$LOG_VOLUME:/logs" \
+    -v "$DOCKER_WRAPPER_DIR:/e2e-bin:ro" \
+    -e PATH=/e2e-bin:/app/bin:/usr/local/bin:/usr/local/sbin:/usr/sbin:/usr/bin:/sbin:/bin \
+    -e WUDUP_BANNER=false \
+    -e WUD_DB_PATH=/logs/e2e-digest.sqlite \
+    -e WUD_DIGEST_PIN_UPDATES=true \
+    -e OUT_UID="$(id -u)" \
+    -e OUT_GID="$(id -g)" \
+    "$IMAGE" \
+    docker-update-from-wud \
+    --base "$STACK_DIR" \
+    --file /out/images.todo \
+    --log-dir /logs \
+    --mode live \
+    --max-wait 30 \
+    --yes \
+    --no-color
+
+  assert_volume_file_empty "$OUT_VOLUME" images.todo
+  assert_volume_file_owner "$OUT_VOLUME" images.todo "$(id -u):$(id -g)"
+  wait_for_container_version new
+  assert_compose_file_contains "$pinned_image"
+  assert_compose_file_contains "# wudup.resolved-tag=latest"
+  assert_compose_file_contains 'wud.tag.include=^latest$$'
+  docker run --rm -v "$LOG_VOLUME:/mnt" "$IMAGE" test -s /mnt/e2e-digest.sqlite ||
+    fail "expected digest audit database to be created"
+  assert_volume_sqlite_scalar "$LOG_VOLUME" e2e-digest.sqlite \
+    "SELECT status || ':' || status_reason FROM pending_updates ORDER BY line_no LIMIT 1" \
+    resolved:updated
+  assert_volume_sqlite_scalar "$LOG_VOLUME" e2e-digest.sqlite \
+    "SELECT digest_target_digest FROM update_events ORDER BY id DESC LIMIT 1" \
+    "$NEW_APP_DIGEST"
+}
+
+run_stack_recreate_label_e2e(){
+  local log_name log_content
+
+  reset_basic_stack
+  run compose down -v --remove-orphans
+  run docker tag "$OLD_LOCAL_IMAGE" "$APP_IMAGE"
+  write_stack_recreate_compose_file
+  run compose up -d
+  wait_for_container_version old
+  wait_for_service_version sidecar old
+
+  write_volume_file "$OUT_VOLUME" images.todo "$APP_IMAGE"
+  run docker run --rm \
+    -v /var/run/docker.sock:/var/run/docker.sock \
+    -v "$STACK_DIR:$STACK_DIR" \
+    -v "$OUT_VOLUME:/out" \
+    -v "$LOG_VOLUME:/logs" \
+    -e WUDUP_BANNER=false \
+    -e WUD_DB_PATH=/logs/e2e-stack-recreate.sqlite \
+    -e OUT_UID="$(id -u)" \
+    -e OUT_GID="$(id -g)" \
+    "$IMAGE" \
+    docker-update-from-wud \
+    --base "$STACK_DIR" \
+    --file /out/images.todo \
+    --log-dir /logs \
+    --mode stop \
+    --max-wait 30 \
+    --yes \
+    --no-color
+
+  assert_volume_file_empty "$OUT_VOLUME" images.todo
+  assert_volume_file_owner "$OUT_VOLUME" images.todo "$(id -u):$(id -g)"
+  wait_for_container_version new
+  wait_for_service_version sidecar old
+  docker run --rm -v "$LOG_VOLUME:/mnt" "$IMAGE" test -s /mnt/e2e-stack-recreate.sqlite ||
+    fail "expected stack recreate audit database to be created"
+  assert_volume_sqlite_scalar "$LOG_VOLUME" e2e-stack-recreate.sqlite \
+    "SELECT status FROM update_runs ORDER BY id DESC LIMIT 1" \
+    success
+  log_name="$(latest_central_log_file_name "$LOG_VOLUME")"
+  [[ -n "$log_name" ]] || fail "expected latest central log name"
+  log_content="$(volume_file_content "$LOG_VOLUME" "$log_name")"
+  [[ "$log_content" == *"stack-level recreate"* ]] ||
+    fail "stack recreate log missing stack-level recreate message"
+  [[ "$log_content" == *"Bringing stack up"* ]] ||
+    fail "stack recreate log missing stack up message"
 }
 
 run_preflight_failure_e2e(){
@@ -406,6 +638,7 @@ main(){
   LOG_VOLUME="wudup-e2e-logs-${GITHUB_RUN_ID:-local}-$$"
   SCRIPTS_DIR="$TEST_TMP/managed-wud"
   mkdir -p "$SCRIPTS_DIR"
+  write_docker_manifest_insecure_wrapper
 
   if [[ -z "$IMAGE" ]]; then
     IMAGE="wudup:e2e-${GITHUB_RUN_ID:-local}-$$"
@@ -418,6 +651,8 @@ main(){
   start_registry
   prepare_images
   run_updater_e2e
+  run_digest_pin_e2e
+  run_stack_recreate_label_e2e
   run_preflight_failure_e2e
   run_wud_callback_smoke
 }
