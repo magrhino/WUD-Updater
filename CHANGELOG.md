@@ -4,6 +4,13 @@ All notable changes to WUD-Updater are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com) and versions follow
 [Semantic Versioning](https://semver.org).
 
+## [0.46.3](https://github.com/magrhino/wudup/compare/v0.46.2...v0.46.3) (2026-06-23)
+
+
+### Bug Fixes
+
+* **release:** avoid blocking image smoke checks ([#402](https://github.com/magrhino/wudup/issues/402)) ([5ac33e5](https://github.com/magrhino/wudup/commit/5ac33e53d1e66490c95d66590ad2ae5a868d5b0c))
+
 ## [0.46.2](https://github.com/magrhino/wudup/compare/v0.46.1...v0.46.2) (2026-06-23)
 
 
