@@ -300,6 +300,47 @@ def test_parse_trusted_proxies_rejects_unresolved_hostname(monkeypatch) -> None:
         web_auth_module._parse_trusted_proxies("npmplus")
 
 
+def test_parse_trusted_proxies_rejects_hostname_without_usable_ips(
+    monkeypatch,
+) -> None:
+    def fake_getaddrinfo(hostname: str, _port, *_args, **_kwargs):
+        assert hostname == "npmplus"
+        return [
+            (
+                web_auth_module.socket.AF_UNSPEC,
+                web_auth_module.socket.SOCK_STREAM,
+                0,
+                "",
+                ("ignored", 0),
+            ),
+            (
+                web_auth_module.socket.AF_INET,
+                web_auth_module.socket.SOCK_STREAM,
+                0,
+                "",
+                (),
+            ),
+            (
+                web_auth_module.socket.AF_INET6,
+                web_auth_module.socket.SOCK_STREAM,
+                0,
+                "",
+                ("not-an-ip-address", 0, 0, 0),
+            ),
+        ]
+
+    monkeypatch.setattr(web_auth_module.socket, "getaddrinfo", fake_getaddrinfo)
+
+    with pytest.raises(
+        web_auth_module.WebConfigError,
+        match=(
+            "WUD_WEB_TRUSTED_PROXIES hostname did not resolve to an IP address: "
+            "npmplus"
+        ),
+    ):
+        web_auth_module._parse_trusted_proxies("npmplus")
+
+
 def test_parse_trusted_proxies_rejects_invalid_cidr_hostname(monkeypatch) -> None:
     def unexpected_getaddrinfo(_hostname: str, _port, *_args, **_kwargs):
         raise AssertionError("CIDR-like values must not be resolved as hostnames")
