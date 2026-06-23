@@ -431,6 +431,13 @@ def test_forwarded_headers_trust_hostname_resolved_proxy(
                 "",
                 (_DOC_PROXY_V4, 0),
             ),
+            (
+                web_auth_module.socket.AF_INET6,
+                web_auth_module.socket.SOCK_STREAM,
+                0,
+                "",
+                (_DOC_PROXY_V6, 0, 0, 0),
+            ),
         ]
 
     monkeypatch.setattr(web_auth_module.socket, "getaddrinfo", fake_getaddrinfo)
@@ -452,6 +459,10 @@ def test_forwarded_headers_trust_hostname_resolved_proxy(
             "x-forwarded-host": "wud.example.test",
         },
     )
+    trusted_ipv6_request = SimpleNamespace(
+        client=SimpleNamespace(host=_DOC_PROXY_V6),
+        headers=trusted_request.headers,
+    )
     untrusted_request = SimpleNamespace(
         client=SimpleNamespace(host=_DOC_UNTRUSTED_CLIENT_V4),
         headers=trusted_request.headers,
@@ -463,6 +474,14 @@ def test_forwarded_headers_trust_hostname_resolved_proxy(
     )
     assert (
         web_auth_module._request_client_address(trusted_request, settings)
+        == _DOC_FORWARDED_CLIENT_V4
+    )
+    assert (
+        web_auth_module._trusted_forwarded_origin(trusted_ipv6_request, settings)
+        == "https://wud.example.test"
+    )
+    assert (
+        web_auth_module._request_client_address(trusted_ipv6_request, settings)
         == _DOC_FORWARDED_CLIENT_V4
     )
     assert web_auth_module._trusted_forwarded_origin(untrusted_request, settings) == ""
