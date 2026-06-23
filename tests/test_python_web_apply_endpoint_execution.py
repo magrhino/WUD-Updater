@@ -612,6 +612,66 @@ def test_apply_endpoint_holds_wud_lock_for_worker_handoff(
     assert " up -d " not in calls
 
 
+def test_apply_endpoint_marks_job_terminal_when_wud_lock_cleanup_raises(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    fake_env, fake_root = _fake_docker_env(tmp_path)
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+            **fake_env,
+        },
+    )
+    wud_file = tmp_path / "state" / "images.todo"
+    wud_file.write_text("repo/app:latest\n", encoding="utf-8")
+    _make_fake_stack(
+        tmp_path,
+        fake_root,
+        "stack",
+        [("app", "repo/app:latest", "cid-app")],
+    )
+    close_calls = 0
+    original_close = DirectoryLock.close
+
+    def close_then_raise(lock: DirectoryLock) -> None:
+        nonlocal close_calls
+        close_calls += 1
+        original_close(lock)
+        raise RuntimeError("lock cleanup exploded")
+
+    monkeypatch.setattr(DirectoryLock, "close", close_then_raise)
+    monkeypatch.setattr(web_jobs.UpdateFromWudRunner, "run", lambda _runner: 0)
+    headers = _csrf_headers(client)
+    plan = client.post(
+        "/api/v1/plans",
+        json={"line_numbers": [1]},
+        headers=headers,
+    ).json()
+
+    apply_response = client.post(
+        "/api/v1/jobs",
+        json={
+            "plan_id": plan["plan_id"],
+            "line_numbers": [1],
+            "confirmation": "apply",
+        },
+        headers=headers,
+    )
+    job = _wait_apply_job(client, apply_response.json()["job_id"])
+
+    assert apply_response.status_code == 202
+    assert job["status"] == "success"
+    assert job["error"] == ""
+    assert close_calls == 1
+    assert not lock_dir_for(wud_file).exists()
+    calls = _fake_docker_calls(fake_root)
+    assert " pull " not in calls
+    assert " up -d " not in calls
+
+
 def test_apply_endpoint_releases_wud_lock_when_runner_raises(
     tmp_path: Path,
     monkeypatch,

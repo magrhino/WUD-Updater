@@ -359,6 +359,13 @@ def _run_apply_job(
     )
     runner: UpdateFromWudRunner | None = None
     temp_dir: tempfile.TemporaryDirectory[str] | None = None
+    terminal_job_fields: dict[str, object] = {
+        "status": "failure",
+        "run_id": None,
+        "log_file": "",
+        "error": "apply job did not complete",
+    }
+    cleanup_error: Exception | None = None
     try:
         wud_file_override: Path | None = None
         wud_file_label_override: str | None = None
@@ -414,16 +421,12 @@ def _run_apply_job(
             run_id=runner.audit_run_id,
             error="" if status_code == 0 else f"updater exited with status {status_code}",
         )
-        _update_apply_job(
-            jobs,
-            apply_condition,
-            job_id,
-            status=job_status,
-            run_id=runner.audit_run_id,
-            log_file=str(runner.log_file),
-            finished_at=utc_timestamp(),
-            error="" if status_code == 0 else f"updater exited with status {status_code}",
-        )
+        terminal_job_fields = {
+            "status": job_status,
+            "run_id": runner.audit_run_id,
+            "log_file": str(runner.log_file),
+            "error": "" if status_code == 0 else f"updater exited with status {status_code}",
+        }
     except Exception as exc:
         run_id = None if runner is None else runner.audit_run_id
         _append_apply_job_progress(
@@ -443,21 +446,33 @@ def _run_apply_job(
             run_id=run_id,
             error=str(exc),
         )
+        terminal_job_fields = {
+            "status": "failure",
+            "run_id": run_id,
+            "log_file": "" if runner is None else str(runner.log_file),
+            "error": str(exc),
+        }
+    finally:
+        if wud_lock is not None:
+            try:
+                wud_lock.close()
+            except Exception as exc:
+                cleanup_error = exc
+        if temp_dir is not None:
+            try:
+                temp_dir.cleanup()
+            except Exception as exc:
+                if cleanup_error is None:
+                    cleanup_error = exc
         _update_apply_job(
             jobs,
             apply_condition,
             job_id,
-            status="failure",
-            run_id=run_id,
-            log_file="" if runner is None else str(runner.log_file),
             finished_at=utc_timestamp(),
-            error=str(exc),
+            **terminal_job_fields,
         )
-    finally:
-        if wud_lock is not None:
-            wud_lock.close()
-        if temp_dir is not None:
-            temp_dir.cleanup()
+    if cleanup_error is not None:
+        raise cleanup_error
 
 
 def _update_apply_job(
