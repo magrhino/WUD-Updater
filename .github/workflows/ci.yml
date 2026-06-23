@@ -95,6 +95,8 @@ jobs:
         with:
           filters: |
             docker:
+              - '.github/workflows/release.yml'
+              - '.github/workflows/release-validation.yml'
               - 'Dockerfile'
               - '.dockerignore'
               - 'entrypoint.sh'
@@ -104,9 +106,11 @@ jobs:
               - 'wud/*'
               - 'webui/**'
               - 'tests/container-build.sh'
+              - 'tests/smoke-container-image.sh'
               - 'tests/e2e-docker-compose.sh'
               - 'tests/test-entrypoint.sh'
             docker_e2e:
+              - '.github/workflows/release-validation.yml'
               - 'Dockerfile'
               - '.dockerignore'
               - 'entrypoint.sh'

@@ -242,34 +242,7 @@ jobs:
           set -euo pipefail
 
           image="$REGISTRY/$IMAGE_NAME"
-          sync_tmp="$(mktemp -d)"
-          smoke_label="wudup.release-smoke=${GITHUB_RUN_ID:-local}-${GITHUB_RUN_ATTEMPT:-1}"
-          cleanup(){
-            local containers=()
-            mapfile -t containers < <(docker ps -aq --filter "label=$smoke_label" 2>/dev/null || true)
-            if ((${#containers[@]})); then
-              docker rm -f "${containers[@]}" >/dev/null 2>&1 || true
-            fi
-            rm -rf "$sync_tmp"
-          }
-          trap cleanup EXIT
-
-          run_smoke(){
-            local duration="$1"
-            shift
-            timeout "$duration" -- docker run --rm --label "$smoke_label" "$@"
-          }
-
-          run_smoke 90s "$image:$RELEASE_TAG" test -f /app/src/wudup/web_static/index.html
-          run_smoke 180s "$image:$RELEASE_TAG" updates --dry-run
-          run_smoke 180s -e WUDUP_PYTHON=true "$image:$RELEASE_TAG" updates --dry-run
-          run_smoke 90s -v "$sync_tmp:/managed-wud" "$image:$RELEASE_TAG" sync-wud-scripts
-          [[ -x "$sync_tmp/on-update.sh" ]]
-          [[ -x "$sync_tmp/append-updates.sh" ]]
-          [[ -x "$sync_tmp/release-parser.sh" ]]
-          [[ -x "$sync_tmp/github-release-embed.sh" ]]
-          [[ -f "$sync_tmp/upstreams.txt" ]]
-          run_smoke 90s "$image:$RELEASE_TAG" docker-update-from-wud --help
+          bash tests/smoke-container-image.sh "$image:$RELEASE_TAG"
 
       - name: Publish multi-arch image
         shell: bash
