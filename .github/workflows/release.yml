@@ -61,10 +61,10 @@ jobs:
             printf 'minor=%s\n' "$minor"
           } >> "$GITHUB_OUTPUT"
 
-  release-gate:
-    name: release gate
+  release-python:
+    name: release python
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 15
     permissions:
       contents: read
     needs:
@@ -82,12 +82,35 @@ jobs:
           ref: ${{ needs.validate-tag.outputs.tag }}
           persist-credentials: false
 
-      - name: Set up Node.js
-        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+      - name: Set up Python environment
+        uses: ./.github/actions/setup-python-env
+
+      - name: Run Python tests
+        run: tests/run-all.sh --python
+
+  release-shell:
+    name: release shell
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    needs:
+      - validate-tag
+
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
         with:
-          node-version: "22"
-          cache: npm
-          cache-dependency-path: webui/package-lock.json
+          egress-policy: audit
+
+      - name: Check out repository
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          ref: ${{ needs.validate-tag.outputs.tag }}
+          persist-credentials: false
+
+      - name: Set up Python environment
+        uses: ./.github/actions/setup-python-env
 
       - name: Install ShellCheck
         shell: bash
@@ -98,11 +121,90 @@ jobs:
             sudo apt-get install -y shellcheck
           fi
 
-      - name: Set up Python environment
-        uses: ./.github/actions/setup-python-env
+      - name: Run shell tests
+        run: tests/run-all.sh --shell
 
-      - name: Run tests
-        run: tests/run-all.sh
+  release-webui:
+    name: release webui
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    needs:
+      - validate-tag
+
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
+        with:
+          egress-policy: audit
+
+      - name: Check out repository
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          ref: ${{ needs.validate-tag.outputs.tag }}
+          persist-credentials: false
+
+      - name: Set up Node.js environment
+        uses: ./.github/actions/setup-node-env
+        with:
+          install-dependencies: "false"
+
+      - name: Run WebUI checks
+        run: tests/run-all.sh --webui
+
+  release-webui-smoke:
+    name: release webui smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    needs:
+      - validate-tag
+
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
+        with:
+          egress-policy: audit
+
+      - name: Check out repository
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          ref: ${{ needs.validate-tag.outputs.tag }}
+          persist-credentials: false
+
+      - name: Set up Node.js environment
+        uses: ./.github/actions/setup-node-env
+
+      - name: Install Chromium
+        run: npm --prefix webui exec playwright install chromium
+
+      - name: Run WebUI smoke tests
+        run: npm --prefix webui run test:smoke
+
+  release-docker:
+    name: release docker
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    needs:
+      - validate-tag
+    env:
+      WUDUP_TEST_IMAGE: wudup:release-${{ github.run_id }}-${{ github.run_attempt }}
+
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
+        with:
+          egress-policy: audit
+
+      - name: Check out repository
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          ref: ${{ needs.validate-tag.outputs.tag }}
+          persist-credentials: false
 
       - name: Show Docker versions
         shell: bash
@@ -117,15 +219,6 @@ jobs:
       - name: Run Docker end-to-end test
         run: tests/e2e-docker-compose.sh
 
-      - name: Install frontend dependencies
-        run: npm --prefix webui ci
-
-      - name: Install Chromium
-        run: npm --prefix webui exec playwright install chromium
-
-      - name: Run WebUI smoke tests
-        run: npm --prefix webui run test:smoke
-
   publish-image:
     name: publish image
     runs-on: ubuntu-latest
@@ -135,12 +228,20 @@ jobs:
       packages: write
     needs:
       - validate-tag
-      - release-gate
+      - release-python
+      - release-shell
+      - release-webui
+      - release-webui-smoke
+      - release-docker
     if: >-
       ${{
         always() &&
         needs.validate-tag.result == 'success' &&
-        needs.release-gate.result == 'success'
+        needs.release-python.result == 'success' &&
+        needs.release-shell.result == 'success' &&
+        needs.release-webui.result == 'success' &&
+        needs.release-webui-smoke.result == 'success' &&
+        needs.release-docker.result == 'success'
       }}
 
     steps:
@@ -189,7 +290,8 @@ jobs:
           set -euo pipefail
 
           image="$REGISTRY/$IMAGE_NAME"
-          docker build --platform linux/amd64 \
+          docker buildx build \
+            --platform linux/amd64 \
             --label "org.opencontainers.image.source=https://github.com/$GITHUB_REPOSITORY" \
             --label "org.opencontainers.image.revision=$RELEASE_SHA" \
             --label "org.opencontainers.image.version=$RELEASE_TAG" \
@@ -197,6 +299,9 @@ jobs:
             -t "$image:$VERSION" \
             -t "$image:$MINOR_VERSION" \
             -t "$image:latest" \
+            --cache-from type=gha,scope=wudup-release \
+            --cache-to type=gha,scope=wudup-release,mode=max \
+            --load \
             .
 
       - name: Validate amd64 smoke image
@@ -244,6 +349,8 @@ jobs:
             -t "$image:$VERSION" \
             -t "$image:$MINOR_VERSION" \
             -t "$image:latest" \
+            --cache-from type=gha,scope=wudup-release \
+            --cache-to type=gha,scope=wudup-release,mode=max \
             --push \
             .
 

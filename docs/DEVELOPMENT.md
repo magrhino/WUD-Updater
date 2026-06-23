@@ -187,11 +187,11 @@ dispatch the release workflow with an existing stable tag:
 gh workflow run release.yml --ref main -f release_tag=v1.2.3
 ```
 
-The release publisher runs the release validation gate, builds and publishes
-Docker images for Linux amd64 and arm64 to `ghcr.io/magrhino/wudup`,
+The release publisher runs parallel blocking validation jobs, builds and
+publishes Docker images for Linux amd64 and arm64 to `ghcr.io/magrhino/wudup`,
 validates the published multi-arch manifests, and then creates or publishes the
 GitHub Release. The public GitHub Release is published only after the GHCR image
-tags are available. The release gate includes Linux validation, container build
-validation, Docker Compose E2E, and WebUI smoke checks. Image tags are published
-as `vX.Y.Z`, `X.Y.Z`, `X.Y`, and `latest`. Direct pushes of stable `vX.Y.Z` tags
+tags are available. The release gate includes Python, shell, WebUI, WebUI smoke,
+container build, and Docker Compose E2E validation. Image tags are published as
+`vX.Y.Z`, `X.Y.Z`, `X.Y`, and `latest`. Direct pushes of stable `vX.Y.Z` tags
 also run the same publisher as a fallback.
