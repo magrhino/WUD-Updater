@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ipaddress
 import logging
 from pathlib import Path
 from types import SimpleNamespace
@@ -18,6 +19,20 @@ from tests.web_test_helpers import (
     _setup_admin,
     _assert_generic_auth_failed,
 )
+
+
+def _ipv4(octet1: int, octet2: int, octet3: int, octet4: int) -> str:
+    return ".".join(str(octet) for octet in (octet1, octet2, octet3, octet4))
+
+
+# Documentation-only address ranges keep tests independent of host network config.
+_DOC_PROXY_V4 = _ipv4(192, 0, 2, 10)
+_DOC_PROXY_ALT_V4 = _ipv4(192, 0, 2, 35)
+_DOC_PROXY_V6 = str(ipaddress.IPv6Address((0x2001 << 112) | (0x0DB8 << 96) | 0x23))
+_DOC_UNTRUSTED_CLIENT_V4 = _ipv4(192, 0, 2, 1)
+_DOC_FORWARDED_CLIENT_V4 = _ipv4(198, 51, 100, 10)
+_DOC_FORWARDED_CLIENT_ALT_V4 = _ipv4(203, 0, 113, 20)
+
 
 def test_api_rejects_unauthenticated_requests_without_dev_bypass(
     tmp_path: Path,
@@ -212,14 +227,14 @@ def test_parse_trusted_proxies_resolves_hostnames(monkeypatch) -> None:
                 web_auth_module.socket.SOCK_STREAM,
                 0,
                 "",
-                ("172.16.1.35", 0),
+                (_DOC_PROXY_ALT_V4, 0),
             ),
             (
                 web_auth_module.socket.AF_INET6,
                 web_auth_module.socket.SOCK_STREAM,
                 0,
                 "",
-                ("fdd0:0:0:1::23", 0, 0, 0),
+                (_DOC_PROXY_V6, 0, 0, 0),
             ),
         ]
 
@@ -228,8 +243,8 @@ def test_parse_trusted_proxies_resolves_hostnames(monkeypatch) -> None:
     networks = web_auth_module._parse_trusted_proxies("npmplus")
 
     assert [str(network) for network in networks] == [
-        "172.16.1.35/32",
-        "fdd0:0:0:1::23/128",
+        f"{_DOC_PROXY_ALT_V4}/32",
+        f"{_DOC_PROXY_V6}/128",
     ]
 
 
@@ -242,33 +257,33 @@ def test_parse_trusted_proxies_deduplicates_resolved_hostnames(monkeypatch) -> N
                 web_auth_module.socket.SOCK_STREAM,
                 0,
                 "",
-                ("10.0.0.1", 0),
+                (_DOC_PROXY_V4, 0),
             ),
             (
                 web_auth_module.socket.AF_INET,
                 web_auth_module.socket.SOCK_STREAM,
                 0,
                 "",
-                ("172.16.1.35", 0),
+                (_DOC_PROXY_ALT_V4, 0),
             ),
             (
                 web_auth_module.socket.AF_INET,
                 web_auth_module.socket.SOCK_STREAM,
                 0,
                 "",
-                ("172.16.1.35", 0),
+                (_DOC_PROXY_ALT_V4, 0),
             ),
         ]
 
     monkeypatch.setattr(web_auth_module.socket, "getaddrinfo", fake_getaddrinfo)
 
     networks = web_auth_module._parse_trusted_proxies(
-        "10.0.0.1/32,npmplus,172.16.1.35/32"
+        f"{_DOC_PROXY_V4}/32,npmplus,{_DOC_PROXY_ALT_V4}/32"
     )
 
     assert [str(network) for network in networks] == [
-        "10.0.0.1/32",
-        "172.16.1.35/32",
+        f"{_DOC_PROXY_V4}/32",
+        f"{_DOC_PROXY_ALT_V4}/32",
     ]
 
 
@@ -305,7 +320,7 @@ def test_parse_trusted_proxies_rejects_invalid_cidr_hostname(monkeypatch) -> Non
 def test_forwarded_headers_require_trusted_proxy(tmp_path: Path) -> None:
     env = {
         "WUD_WEB_ALLOWED_HOSTS": "internal.test,wud.example.test",
-        "WUD_WEB_TRUSTED_PROXIES": "10.0.0.1/32",
+        "WUD_WEB_TRUSTED_PROXIES": f"{_DOC_PROXY_V4}/32",
         "WUD_WEB_SECURE_COOKIES": "false",
     }
     app = create_app(environ=_web_env(tmp_path, env))
@@ -318,12 +333,12 @@ def test_forwarded_headers_require_trusted_proxy(tmp_path: Path) -> None:
     untrusted = TestClient(
         app,
         base_url="http://internal.test",
-        client=("192.0.2.1", 50000),
+        client=(_DOC_UNTRUSTED_CLIENT_V4, 50000),
     )
     trusted = TestClient(
         app,
         base_url="http://internal.test",
-        client=("10.0.0.1", 50000),
+        client=(_DOC_PROXY_V4, 50000),
     )
     csrf_response = untrusted.get("/api/v1/auth/csrf", headers=headers)
     untrusted_headers = {
@@ -373,7 +388,7 @@ def test_forwarded_headers_trust_hostname_resolved_proxy(
                 web_auth_module.socket.SOCK_STREAM,
                 0,
                 "",
-                ("10.0.0.1", 0),
+                (_DOC_PROXY_V4, 0),
             ),
         ]
 
@@ -389,15 +404,15 @@ def test_forwarded_headers_trust_hostname_resolved_proxy(
     )
     settings = app.state.web_settings
     trusted_request = SimpleNamespace(
-        client=SimpleNamespace(host="10.0.0.1"),
+        client=SimpleNamespace(host=_DOC_PROXY_V4),
         headers={
-            "x-forwarded-for": "198.51.100.10",
+            "x-forwarded-for": _DOC_FORWARDED_CLIENT_V4,
             "x-forwarded-proto": "https",
             "x-forwarded-host": "wud.example.test",
         },
     )
     untrusted_request = SimpleNamespace(
-        client=SimpleNamespace(host="192.0.2.1"),
+        client=SimpleNamespace(host=_DOC_UNTRUSTED_CLIENT_V4),
         headers=trusted_request.headers,
     )
 
@@ -407,12 +422,12 @@ def test_forwarded_headers_trust_hostname_resolved_proxy(
     )
     assert (
         web_auth_module._request_client_address(trusted_request, settings)
-        == "198.51.100.10"
+        == _DOC_FORWARDED_CLIENT_V4
     )
     assert web_auth_module._trusted_forwarded_origin(untrusted_request, settings) == ""
     assert (
         web_auth_module._request_client_address(untrusted_request, settings)
-        == "192.0.2.1"
+        == _DOC_UNTRUSTED_CLIENT_V4
     )
 
 
@@ -422,24 +437,27 @@ def test_trusted_forwarded_headers_use_last_proxy_hop(tmp_path: Path) -> None:
             tmp_path,
             {
                 "WUD_WEB_ALLOWED_HOSTS": "internal.test,wud.example.test",
-                "WUD_WEB_TRUSTED_PROXIES": "10.0.0.1/32",
+                "WUD_WEB_TRUSTED_PROXIES": f"{_DOC_PROXY_V4}/32",
             },
         )
     )
     settings = app.state.web_settings
     forwarded_request = SimpleNamespace(
-        client=SimpleNamespace(host="10.0.0.1"),
+        client=SimpleNamespace(host=_DOC_PROXY_V4),
         headers={
             "forwarded": (
-                "for=198.51.100.10;proto=http;host=evil.test, "
-                "for=203.0.113.20;proto=https;host=wud.example.test"
+                f"for={_DOC_FORWARDED_CLIENT_V4};proto=http;host=evil.test, "
+                f"for={_DOC_FORWARDED_CLIENT_ALT_V4};proto=https;"
+                "host=wud.example.test"
             ),
         },
     )
     x_forwarded_request = SimpleNamespace(
-        client=SimpleNamespace(host="10.0.0.1"),
+        client=SimpleNamespace(host=_DOC_PROXY_V4),
         headers={
-            "x-forwarded-for": "198.51.100.10, 203.0.113.20",
+            "x-forwarded-for": (
+                f"{_DOC_FORWARDED_CLIENT_V4}, {_DOC_FORWARDED_CLIENT_ALT_V4}"
+            ),
             "x-forwarded-proto": "http, https",
             "x-forwarded-host": "evil.test, wud.example.test",
         },
@@ -451,7 +469,7 @@ def test_trusted_forwarded_headers_use_last_proxy_hop(tmp_path: Path) -> None:
     )
     assert (
         web_auth_module._request_client_address(forwarded_request, settings)
-        == "203.0.113.20"
+        == _DOC_FORWARDED_CLIENT_ALT_V4
     )
     assert (
         web_auth_module._trusted_forwarded_origin(x_forwarded_request, settings)
@@ -459,7 +477,7 @@ def test_trusted_forwarded_headers_use_last_proxy_hop(tmp_path: Path) -> None:
     )
     assert (
         web_auth_module._request_client_address(x_forwarded_request, settings)
-        == "203.0.113.20"
+        == _DOC_FORWARDED_CLIENT_ALT_V4
     )
 
 
