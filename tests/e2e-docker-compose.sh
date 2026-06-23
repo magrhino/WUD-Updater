@@ -145,15 +145,20 @@ volume_central_log_count(){
 }
 
 latest_volume_file_name(){
-  local volume="$1" pattern="$2"
+  local volume="$1" pattern="$2" exclude_pattern="${3:-}"
   docker run --rm -v "$volume:/mnt" "$IMAGE" \
-    bash -lc 'find /mnt -maxdepth 1 -type f -name "$1" -printf "%f\n" | sort | tail -n 1' _ "$pattern"
+    bash -lc '
+find_args=(/mnt -maxdepth 1 -type f -name "$1")
+if [[ -n "$2" ]]; then
+  find_args+=(! -name "$2")
+fi
+find "${find_args[@]}" -printf "%f\n" | sort | tail -n 1
+' _ "$pattern" "$exclude_pattern"
 }
 
 latest_central_log_file_name(){
   local volume="$1"
-  docker run --rm -v "$volume:/mnt" "$IMAGE" \
-    bash -lc 'find /mnt -maxdepth 1 -type f -name "update-from-wud-v2-*.log" ! -name "*.errors.log" -printf "%f\n" | sort | tail -n 1'
+  latest_volume_file_name "$volume" 'update-from-wud-v2-*.log' '*.errors.log'
 }
 
 assert_volume_sqlite_scalar(){
@@ -284,11 +289,26 @@ write_docker_manifest_insecure_wrapper(){
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
+wrapper_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
+docker_path="$(
+  filtered_path=""
+  IFS=:
+  read -r -a path_dirs <<< "$PATH"
+  for path_dir in "${path_dirs[@]}"; do
+    [[ -n "$path_dir" && "$path_dir" != "$wrapper_dir" ]] || continue
+    filtered_path="${filtered_path:+$filtered_path:}$path_dir"
+  done
+  PATH="$filtered_path" command -v docker
+)" || {
+  printf 'Missing real docker command behind e2e wrapper\n' >&2
+  exit 127
+}
+
 if [[ "${1:-}" == "manifest" && "${2:-}" == "inspect" ]]; then
-  exec /usr/local/bin/docker manifest inspect --insecure "${@:3}"
+  exec "$docker_path" manifest inspect --insecure "${@:3}"
 fi
 
-exec /usr/local/bin/docker "$@"
+exec "$docker_path" "$@"
 EOF
   chmod +x "$DOCKER_WRAPPER_DIR/docker"
 }
