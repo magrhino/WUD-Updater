@@ -557,7 +557,7 @@ Boolean examples use `true` and `false`; legacy aliases `1`, `0`, `yes`, `no`,
 | `WUD_WEB_ALLOWED_ORIGINS` | same origin only | Comma-separated extra origins accepted by the CSRF/Origin checks for login, logout, and future mutating WebUI routes. |
 | `WUD_WEB_PUBLIC_ORIGIN` | unset | Public `http://` or `https://` origin used for setup links, CSRF origin checks, allowed-host derivation, and secure-cookie auto-detection. Set this for LAN or reverse-proxy exposure. |
 | `WUD_WEB_ALLOWED_HOSTS` | loopback, configured public origin, and bind host | Optional comma-separated hostnames or IPs accepted in the HTTP `Host` header in addition to the public origin. Use this for extra LAN aliases or proxy-facing hostnames. |
-| `WUD_WEB_TRUSTED_PROXIES` | unset | Comma-separated proxy IP/CIDR entries whose `Forwarded` or `X-Forwarded-*` headers are trusted for scheme/host detection. |
+| `WUD_WEB_TRUSTED_PROXIES` | unset | Comma-separated proxy IP/CIDR/hostname entries whose `Forwarded` or `X-Forwarded-*` headers are trusted for scheme/host detection. Hostnames resolve once at WebUI startup. |
 | `WUD_WEB_SECURE_COOKIES` | `auto` | Cookie `Secure` mode: `auto` enables it for effective HTTPS origins, `true` always enables it, and `false` disables it for local HTTP testing. |
 | `WUD_WEB_MUTATIONS_ENABLED` | `false` | Enables browser plan/apply update mutations and Settings container restart when set to `true`. Leave unset or `false` for read-only WebUI deployments. |
 | `WUD_WEB_RESTART_CONTAINER` | Docker `HOSTNAME` inside a container, otherwise unset | Optional Docker container name or ID restarted from Settings. Set this explicitly only when the auto-detected current container target is unavailable or wrong. |
@@ -586,8 +586,10 @@ SQLite database; only hashed secrets are persisted.
 When publishing the WebUI through a reverse proxy, set
 `WUD_WEB_PUBLIC_ORIGIN` to the browser-visible origin. Configure the proxy to
 preserve that `Host` header, or add the proxy-facing host to
-`WUD_WEB_ALLOWED_HOSTS`. List only the proxy addresses in
-`WUD_WEB_TRUSTED_PROXIES`; forwarded headers from other clients are ignored.
+`WUD_WEB_ALLOWED_HOSTS`. List only proxy IPs, CIDRs, or hostnames you control in
+`WUD_WEB_TRUSTED_PROXIES`; hostnames resolve once at WebUI startup, so restart
+WUDup after proxy container IP changes. Forwarded headers from other clients are
+ignored.
 
 Container and installer values:
 

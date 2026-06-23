@@ -136,7 +136,7 @@ Useful WebUI development variables:
 | `WUD_WEB_ALLOWED_ORIGINS` | Extra allowed origins for login, logout, setup, and mutation CSRF/Origin checks. |
 | `WUD_WEB_PUBLIC_ORIGIN` | Browser-visible origin used for setup links, LAN or reverse-proxy exposure, allowed-host derivation, and secure-cookie auto-detection. |
 | `WUD_WEB_ALLOWED_HOSTS` | Optional extra HTTP `Host` names accepted in addition to loopback, the configured public origin, and the bind host. |
-| `WUD_WEB_TRUSTED_PROXIES` | Proxy IP/CIDR entries whose forwarded headers are trusted. |
+| `WUD_WEB_TRUSTED_PROXIES` | Proxy IP/CIDR/hostname entries whose forwarded headers are trusted; hostnames resolve once at WebUI startup. |
 | `WUD_WEB_SECURE_COOKIES` | Cookie Secure mode: `auto`, `true`, or `false`; keep `auto` outside local HTTP tests. |
 | `WUD_API_BASE_URL` | Internal WUD API URL for best-effort WebUI metadata discovery; defaults to `http://wud:3000`. Runtime discovery retries automatically on later WebUI requests after transient WUD API outages. |
 | `WUD_API_STARTUP_WAIT_SECONDS` | Seconds to retry the initial WUD API health probe during WebUI startup; defaults to `0`. This startup wait is separate from automatic runtime retries. |
