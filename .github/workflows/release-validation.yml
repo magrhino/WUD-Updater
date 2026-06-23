@@ -1,0 +1,121 @@
+name: release validation
+
+on:
+  workflow_call:
+    inputs:
+      release_tag:
+        description: Stable release tag to check out.
+        required: true
+        type: string
+      suite:
+        description: Release validation suite to run.
+        required: true
+        type: string
+      timeout_minutes:
+        description: Validation job timeout in minutes.
+        required: false
+        default: 15
+        type: number
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: release ${{ inputs.suite }}
+    runs-on: ubuntu-latest
+    timeout-minutes: ${{ inputs.timeout_minutes }}
+    permissions:
+      contents: read
+    env:
+      WUDUP_TEST_IMAGE: wudup:release-${{ github.run_id }}-${{ github.run_attempt }}
+
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
+        with:
+          egress-policy: audit
+
+      - name: Validate release inputs
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ inputs.release_tag }}
+          SUITE: ${{ inputs.suite }}
+        run: |
+          set -euo pipefail
+
+          if [[ ! "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            printf 'Release tags must match vX.Y.Z, got: %s\n' "$RELEASE_TAG" >&2
+            exit 1
+          fi
+
+          case "$SUITE" in
+            python|shell|webui|webui-smoke|docker)
+              ;;
+            *)
+              printf 'Unknown release validation suite: %s\n' "$SUITE" >&2
+              exit 1
+              ;;
+          esac
+
+      - name: Check out repository
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          ref: ${{ inputs.release_tag }}
+          persist-credentials: false
+
+      - name: Set up Python environment
+        if: ${{ inputs.suite == 'python' || inputs.suite == 'shell' }}
+        uses: ./.github/actions/setup-python-env
+
+      - name: Set up Node.js environment
+        if: ${{ inputs.suite == 'webui' || inputs.suite == 'webui-smoke' }}
+        uses: ./.github/actions/setup-node-env
+        with:
+          install-dependencies: ${{ inputs.suite == 'webui-smoke' && 'true' || 'false' }}
+
+      - name: Run Python tests
+        if: ${{ inputs.suite == 'python' }}
+        run: tests/run-all.sh --python
+
+      - name: Install ShellCheck
+        if: ${{ inputs.suite == 'shell' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! command -v shellcheck >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y shellcheck
+          fi
+
+      - name: Run shell tests
+        if: ${{ inputs.suite == 'shell' }}
+        run: tests/run-all.sh --shell
+
+      - name: Run WebUI checks
+        if: ${{ inputs.suite == 'webui' }}
+        run: tests/run-all.sh --webui
+
+      - name: Install Chromium
+        if: ${{ inputs.suite == 'webui-smoke' }}
+        run: npm --prefix webui exec playwright install chromium
+
+      - name: Run WebUI smoke tests
+        if: ${{ inputs.suite == 'webui-smoke' }}
+        run: npm --prefix webui run test:smoke
+
+      - name: Show Docker versions
+        if: ${{ inputs.suite == 'docker' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker version
+          docker compose version
+
+      - name: Run container build test
+        if: ${{ inputs.suite == 'docker' }}
+        run: tests/container-build.sh
+
+      - name: Run Docker end-to-end test
+        if: ${{ inputs.suite == 'docker' }}
+        run: tests/e2e-docker-compose.sh
