@@ -4,6 +4,13 @@ All notable changes to WUD-Updater are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com) and versions follow
 [Semantic Versioning](https://semver.org).
 
+## [0.46.1](https://github.com/magrhino/wudup/compare/v0.46.0...v0.46.1) (2026-06-23)
+
+
+### Bug Fixes
+
+* **proxy:** Allow hostname entries in trusted proxy configuration ([#396](https://github.com/magrhino/wudup/issues/396)) ([c76774d](https://github.com/magrhino/wudup/commit/c76774d6affe0bb45e215324b877ecb581b092e2))
+
 ## [0.46.0](https://github.com/magrhino/wudup/compare/v0.45.6...v0.46.0) (2026-06-22)
 
 
