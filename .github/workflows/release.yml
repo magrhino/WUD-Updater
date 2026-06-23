@@ -18,6 +18,8 @@ concurrency:
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: magrhino/wudup
+  BUILDX_CACHE_FROM: type=gha,scope=wudup-release
+  BUILDX_CACHE_TO: type=gha,scope=wudup-release,mode=max
 
 permissions:
   contents: read
@@ -63,161 +65,103 @@ jobs:
 
   release-python:
     name: release python
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    permissions:
-      contents: read
     needs:
       - validate-tag
-
-    steps:
-      - name: Harden the runner (Audit all outbound calls)
-        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
-        with:
-          egress-policy: audit
-
-      - name: Check out repository
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
-        with:
-          ref: ${{ needs.validate-tag.outputs.tag }}
-          persist-credentials: false
-
-      - name: Set up Python environment
-        uses: ./.github/actions/setup-python-env
-
-      - name: Run Python tests
-        run: tests/run-all.sh --python
+    uses: ./.github/workflows/release-validation.yml
+    with:
+      release_tag: ${{ needs.validate-tag.outputs.tag }}
+      suite: python
+      timeout_minutes: 15
 
   release-shell:
     name: release shell
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    permissions:
-      contents: read
     needs:
       - validate-tag
-
-    steps:
-      - name: Harden the runner (Audit all outbound calls)
-        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
-        with:
-          egress-policy: audit
-
-      - name: Check out repository
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
-        with:
-          ref: ${{ needs.validate-tag.outputs.tag }}
-          persist-credentials: false
-
-      - name: Set up Python environment
-        uses: ./.github/actions/setup-python-env
-
-      - name: Install ShellCheck
-        shell: bash
-        run: |
-          set -euo pipefail
-          if ! command -v shellcheck >/dev/null 2>&1; then
-            sudo apt-get update
-            sudo apt-get install -y shellcheck
-          fi
-
-      - name: Run shell tests
-        run: tests/run-all.sh --shell
+    uses: ./.github/workflows/release-validation.yml
+    with:
+      release_tag: ${{ needs.validate-tag.outputs.tag }}
+      suite: shell
+      timeout_minutes: 10
 
   release-webui:
     name: release webui
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    permissions:
-      contents: read
     needs:
       - validate-tag
-
-    steps:
-      - name: Harden the runner (Audit all outbound calls)
-        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
-        with:
-          egress-policy: audit
-
-      - name: Check out repository
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
-        with:
-          ref: ${{ needs.validate-tag.outputs.tag }}
-          persist-credentials: false
-
-      - name: Set up Node.js environment
-        uses: ./.github/actions/setup-node-env
-        with:
-          install-dependencies: "false"
-
-      - name: Run WebUI checks
-        run: tests/run-all.sh --webui
+    uses: ./.github/workflows/release-validation.yml
+    with:
+      release_tag: ${{ needs.validate-tag.outputs.tag }}
+      suite: webui
+      timeout_minutes: 15
 
   release-webui-smoke:
     name: release webui smoke
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    permissions:
-      contents: read
     needs:
       - validate-tag
-
-    steps:
-      - name: Harden the runner (Audit all outbound calls)
-        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
-        with:
-          egress-policy: audit
-
-      - name: Check out repository
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
-        with:
-          ref: ${{ needs.validate-tag.outputs.tag }}
-          persist-credentials: false
-
-      - name: Set up Node.js environment
-        uses: ./.github/actions/setup-node-env
-
-      - name: Install Chromium
-        run: npm --prefix webui exec playwright install chromium
-
-      - name: Run WebUI smoke tests
-        run: npm --prefix webui run test:smoke
+    uses: ./.github/workflows/release-validation.yml
+    with:
+      release_tag: ${{ needs.validate-tag.outputs.tag }}
+      suite: webui-smoke
+      timeout_minutes: 15
 
   release-docker:
     name: release docker
-    runs-on: ubuntu-latest
-    timeout-minutes: 60
-    permissions:
-      contents: read
     needs:
       - validate-tag
-    env:
-      WUDUP_TEST_IMAGE: wudup:release-${{ github.run_id }}-${{ github.run_attempt }}
+    uses: ./.github/workflows/release-validation.yml
+    with:
+      release_tag: ${{ needs.validate-tag.outputs.tag }}
+      suite: docker
+      timeout_minutes: 60
 
+  release-validations:
+    name: release validations
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions: {}
+    needs:
+      - release-python
+      - release-shell
+      - release-webui
+      - release-webui-smoke
+      - release-docker
+    if: ${{ always() }}
     steps:
       - name: Harden the runner (Audit all outbound calls)
         uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
         with:
           egress-policy: audit
 
-      - name: Check out repository
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
-        with:
-          ref: ${{ needs.validate-tag.outputs.tag }}
-          persist-credentials: false
-
-      - name: Show Docker versions
+      - name: Check release validation results
         shell: bash
+        env:
+          RELEASE_PYTHON_RESULT: ${{ needs.release-python.result }}
+          RELEASE_SHELL_RESULT: ${{ needs.release-shell.result }}
+          RELEASE_WEBUI_RESULT: ${{ needs.release-webui.result }}
+          RELEASE_WEBUI_SMOKE_RESULT: ${{ needs.release-webui-smoke.result }}
+          RELEASE_DOCKER_RESULT: ${{ needs.release-docker.result }}
         run: |
           set -euo pipefail
-          docker version
-          docker compose version
 
-      - name: Run container build test
-        run: tests/container-build.sh
+          failed=0
+          check_result() {
+            name="$1"
+            result="$2"
+            if [[ "$result" == "success" ]]; then
+              printf '%s succeeded\n' "$name"
+              return
+            fi
 
-      - name: Run Docker end-to-end test
-        run: tests/e2e-docker-compose.sh
+            printf '%s finished with %s\n' "$name" "$result" >&2
+            failed=1
+          }
+
+          check_result release-python "$RELEASE_PYTHON_RESULT"
+          check_result release-shell "$RELEASE_SHELL_RESULT"
+          check_result release-webui "$RELEASE_WEBUI_RESULT"
+          check_result release-webui-smoke "$RELEASE_WEBUI_SMOKE_RESULT"
+          check_result release-docker "$RELEASE_DOCKER_RESULT"
+
+          exit "$failed"
 
   publish-image:
     name: publish image
@@ -228,21 +172,7 @@ jobs:
       packages: write
     needs:
       - validate-tag
-      - release-python
-      - release-shell
-      - release-webui
-      - release-webui-smoke
-      - release-docker
-    if: >-
-      ${{
-        always() &&
-        needs.validate-tag.result == 'success' &&
-        needs.release-python.result == 'success' &&
-        needs.release-shell.result == 'success' &&
-        needs.release-webui.result == 'success' &&
-        needs.release-webui-smoke.result == 'success' &&
-        needs.release-docker.result == 'success'
-      }}
+      - release-validations
 
     steps:
       - name: Harden the runner (Audit all outbound calls)
@@ -299,8 +229,8 @@ jobs:
             -t "$image:$VERSION" \
             -t "$image:$MINOR_VERSION" \
             -t "$image:latest" \
-            --cache-from type=gha,scope=wudup-release \
-            --cache-to type=gha,scope=wudup-release,mode=max \
+            --cache-from "$BUILDX_CACHE_FROM" \
+            --cache-to "$BUILDX_CACHE_TO" \
             --load \
             .
 
@@ -349,8 +279,8 @@ jobs:
             -t "$image:$VERSION" \
             -t "$image:$MINOR_VERSION" \
             -t "$image:latest" \
-            --cache-from type=gha,scope=wudup-release \
-            --cache-to type=gha,scope=wudup-release,mode=max \
+            --cache-from "$BUILDX_CACHE_FROM" \
+            --cache-to "$BUILDX_CACHE_TO" \
             --push \
             .
 
