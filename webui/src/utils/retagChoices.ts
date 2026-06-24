@@ -12,10 +12,11 @@ export function retagTargetTagValue(
   item: RetagTargetItem,
   targetTags: Record<string, string>,
 ): string {
-  return (
-    targetTags[item.service_key] ??
-    (canSwitchToConcrete(item) ? item.proposed_tag : "")
-  );
+  const targetTag = targetTags[item.service_key];
+  if (targetTag?.trim()) {
+    return targetTag;
+  }
+  return canSwitchToConcrete(item) ? item.proposed_tag : "";
 }
 
 export function retagTargetTagValidationError(
@@ -47,6 +48,16 @@ export function canChooseRetagTarget(
   targetTags: Record<string, string>,
 ): boolean {
   return canSwitchToConcrete(item) || hasManualRetagTarget(item, targetTags);
+}
+
+export function canEnableRetagTargetChoice(
+  item: RetagTargetItem,
+  targetTags: Record<string, string>,
+): boolean {
+  return (
+    canChooseRetagTarget(item, targetTags) &&
+    !retagTargetTagValidationError(item, targetTags)
+  );
 }
 
 export function normalizeRetagChoice(

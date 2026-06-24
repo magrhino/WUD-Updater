@@ -1019,6 +1019,28 @@ def test_retag_plan_keep_current_is_empty_noop(tmp_path: Path) -> None:
     _assert_pending_grouping_did_not_mutate(_fake_docker_calls(fixture.fake_root))
 
 
+def test_retag_plan_rejects_keep_current_target_tag(tmp_path: Path) -> None:
+    fixture = _make_retag_fixture(tmp_path)
+
+    response = fixture.client.post(
+        "/api/v1/retag-plans",
+        json={
+            "choices": [
+                {
+                    "service_key": "stack/app",
+                    "choice": "keep-current",
+                    "target_tag": "2.0",
+                }
+            ]
+        },
+        headers=_csrf_headers(fixture.client),
+    )
+
+    assert response.status_code == 422
+    assert "target_tag is only allowed" in str(response.json()["detail"])
+    _assert_pending_grouping_did_not_mutate(_fake_docker_calls(fixture.fake_root))
+
+
 def test_retag_plan_manual_target_allows_non_latest_service(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

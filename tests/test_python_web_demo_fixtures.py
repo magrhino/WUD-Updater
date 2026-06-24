@@ -381,6 +381,24 @@ class WebDemoFixtureGenerationTests(unittest.TestCase):
             web_demo_fixtures._retag_choices_signature(list(reversed(choices))),
         )
 
+    def test_demo_retag_digest_verifier_uses_instance_map(self) -> None:
+        web_demo_fixtures._ensure_web_fixture_imports()
+        original_digest_map = web_demo_fixtures.DEMO_RETAG_DIGESTS_BY_IMAGE
+        try:
+            web_demo_fixtures.DEMO_RETAG_DIGESTS_BY_IMAGE = {
+                "repo/app:1.0": "sha256:" + "1" * 64,
+            }
+            with web_demo_fixtures._demo_retag_digest_resolution():
+                verifier = web_demo_fixtures.web_retags.DigestVerifier()
+                web_demo_fixtures.DEMO_RETAG_DIGESTS_BY_IMAGE = {}
+
+                result = verifier.resolve_tag_digest("repo/app:1.0")
+
+            self.assertTrue(result.ok)
+            self.assertEqual(result.digest, "sha256:" + "1" * 64)
+        finally:
+            web_demo_fixtures.DEMO_RETAG_DIGESTS_BY_IMAGE = original_digest_map
+
     def test_applyable_retag_fixtures_have_readable_logs(self) -> None:
         for case in self.fixtures["retagCases"]:
             if not case["response"]["can_apply"]:

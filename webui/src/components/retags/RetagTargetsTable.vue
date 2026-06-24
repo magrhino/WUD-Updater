@@ -16,6 +16,7 @@ import {
 } from "../../utils/digestProvenance";
 import {
   canChooseRetagTarget,
+  canEnableRetagTargetChoice,
   canSwitchToConcrete,
   emitRetagChoice,
   retagChoice,
@@ -167,8 +168,12 @@ const columns = computed<DataTableColumns<RetagTargetItem>>(() => [
     title: "Choice",
     key: "choices",
     minWidth: 230,
-    render: (row) =>
-      h("div", { class: "retag-choice-cell" }, [
+    render: (row) => {
+      const canChooseTarget = canChooseRetagTarget(row, props.targetTags);
+      const targetError = canChooseTarget
+        ? retagTargetTagValidationError(row, props.targetTags)
+        : "";
+      return h("div", { class: "retag-choice-cell" }, [
         h(
           NRadioGroup,
           {
@@ -189,10 +194,11 @@ const columns = computed<DataTableColumns<RetagTargetItem>>(() => [
                 {
                   value: "switch-to-concrete",
                   disabled:
-                    !canChooseRetagTarget(row, props.targetTags) ||
+                    !canEnableRetagTargetChoice(row, props.targetTags) ||
                     props.mutationDisabled,
-                  title:
-                    canChooseRetagTarget(row, props.targetTags)
+                  title: targetError
+                    ? targetError
+                    : canChooseTarget
                       ? props.mutationNotice
                       : "Enter a target tag before retagging.",
                 },
@@ -208,7 +214,8 @@ const columns = computed<DataTableColumns<RetagTargetItem>>(() => [
               { default: () => "Automatch ready" },
             )
           : null,
-      ]),
+      ]);
+    },
   },
 ]);
 

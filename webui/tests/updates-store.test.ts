@@ -628,6 +628,24 @@ describe("updates store", () => {
     });
   });
 
+  it("clears blank automatch overrides back to the proposed tag", async () => {
+    const fetchMock = mockFetch(retagPreviewJobResponse());
+    const auth = useAuthStore();
+    vi.spyOn(auth, "ensureCsrf").mockResolvedValue("csrf-retag");
+    const updates = useUpdatesStore();
+    updates.retagTargets = retagTargetsResponse();
+
+    updates.setRetagChoice("media/app", "switch-to-concrete");
+    updates.setRetagTargetTag("media/app", "1.2");
+    updates.setRetagTargetTag("media/app", "   ");
+    await updates.createRetagPlan();
+
+    expect(jsonRequestBody(fetchMock.mock.calls[0])).toEqual({
+      choices: [{ service_key: "media/app", choice: "switch-to-concrete" }],
+      github_latest_fallback: false,
+    });
+  });
+
   it("applies a retag plan as a tracked apply job", async () => {
     const fetchMock = mockFetch(applyJobResponse({ job_id: "retag-job" }));
     const auth = useAuthStore();

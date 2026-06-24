@@ -2,9 +2,11 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   canChooseRetagTarget,
+  canEnableRetagTargetChoice,
   emitRetagChoice,
   retagChoice,
   retagTargetTagValidationError,
+  retagTargetTagValue,
 } from "../src/components/retags/retagChoices";
 import { retagTarget } from "./helpers/fixtures";
 
@@ -100,5 +102,30 @@ describe("retag choice helpers", () => {
         [item.service_key]: "a".repeat(129),
       }),
     ).toContain("invalid target tag");
+  });
+
+  it("treats blank automatch edits as no manual override", () => {
+    const item = retagTarget();
+    const targetTags = { [item.service_key]: "   " };
+
+    expect(retagTargetTagValue(item, targetTags)).toBe("1.1");
+    expect(retagTargetTagValidationError(item, targetTags)).toBe("");
+  });
+
+  it("keeps invalid manual targets from enabling retag selection", () => {
+    const item = retagTarget({
+      proposed_tag: "",
+      retag_available: false,
+      retag_reason: "not-latest-tracking",
+      choices: ["keep-current"],
+      digest_provenance: null,
+    });
+    const targetTags = { [item.service_key]: "-bad" };
+
+    expect(canChooseRetagTarget(item, targetTags)).toBe(true);
+    expect(canEnableRetagTargetChoice(item, targetTags)).toBe(false);
+    expect(retagTargetTagValidationError(item, targetTags)).toContain(
+      "invalid target tag",
+    );
   });
 });

@@ -3,6 +3,7 @@ import { normalizeRetagChoice } from "../../utils/retagChoices";
 
 export {
   canChooseRetagTarget,
+  canEnableRetagTargetChoice,
   canSwitchToConcrete,
   retagChoice,
   retagTargetTagValidationError,

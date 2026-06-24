@@ -5,6 +5,7 @@ import type { RetagTargetChoice, RetagTargetItem } from "../../api/client";
 import { displayDigest } from "../../utils/digestProvenance";
 import {
   canChooseRetagTarget,
+  canEnableRetagTargetChoice,
   canSwitchToConcrete,
   emitRetagChoice,
   retagChoice,
@@ -31,6 +32,23 @@ const emit = defineEmits<{
   "choice-update": [item: RetagTargetItem, choice: RetagTargetChoice];
   "target-tag-update": [item: RetagTargetItem, tag: string];
 }>();
+
+function retagTargetChoiceTitle(
+  item: RetagTargetItem,
+  targetTags: Record<string, string>,
+  mutationNotice: string,
+): string {
+  const canChooseTarget = canChooseRetagTarget(item, targetTags);
+  const targetError = canChooseTarget
+    ? retagTargetTagValidationError(item, targetTags)
+    : "";
+  if (targetError) {
+    return targetError;
+  }
+  return canChooseTarget
+    ? mutationNotice
+    : "Enter a target tag before retagging.";
+}
 </script>
 
 <template>
@@ -144,12 +162,8 @@ const emit = defineEmits<{
               <n-radio-button value="keep-current">Keep</n-radio-button>
               <n-radio-button
                 value="switch-to-concrete"
-                :disabled="!canChooseRetagTarget(item, targetTags) || mutationDisabled"
-                :title="
-                  canChooseRetagTarget(item, targetTags)
-                    ? mutationNotice
-                    : 'Enter a target tag before retagging.'
-                "
+                :disabled="!canEnableRetagTargetChoice(item, targetTags) || mutationDisabled"
+                :title="retagTargetChoiceTitle(item, targetTags, mutationNotice)"
               >
                 Retag
               </n-radio-button>

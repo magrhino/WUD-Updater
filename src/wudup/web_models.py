@@ -9,7 +9,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from .config import UpdaterConfig
 
@@ -605,6 +605,14 @@ class RetagChoiceRequest(BaseModel):
     service_key: str = Field(min_length=1, max_length=512)
     choice: Literal["keep-current", "switch-to-concrete"]
     target_tag: str | None = Field(default=None, max_length=128)
+
+    @model_validator(mode="after")
+    def target_tag_requires_switch_choice(self) -> "RetagChoiceRequest":
+        if self.choice == "keep-current" and self.target_tag is not None:
+            raise ValueError(
+                "target_tag is only allowed when choice is switch-to-concrete"
+            )
+        return self
 
 class RetagPlanRequest(BaseModel):
     choices: list[RetagChoiceRequest] = Field(min_length=1)

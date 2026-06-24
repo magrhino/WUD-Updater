@@ -1041,11 +1041,18 @@ def _demo_retag_digest_resolution():
     original_digest_verifier = web_retags.DigestVerifier
 
     class DemoDigestVerifier:
-        def __init__(self, *_args: Any, **_kwargs: Any) -> None:
-            pass
+        def __init__(
+            self,
+            *_args: Any,
+            digest_map: dict[str, str] | None = None,
+            **_kwargs: Any,
+        ) -> None:
+            self._digest_map = dict(
+                DEMO_RETAG_DIGESTS_BY_IMAGE if digest_map is None else digest_map
+            )
 
         def resolve_tag_digest(self, image: str) -> DigestResolveResult:
-            digest = DEMO_RETAG_DIGESTS_BY_IMAGE.get(image, "")
+            digest = self._digest_map.get(image, "")
             return DigestResolveResult(
                 ok=bool(digest),
                 status="resolved" if digest else "unavailable",
