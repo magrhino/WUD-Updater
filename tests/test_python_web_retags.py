@@ -607,6 +607,67 @@ def test_retag_github_latest_fallback_uses_v_stripped_docker_tag(
     _assert_pending_grouping_did_not_mutate(_fake_docker_calls(fake_root))
 
 
+def test_retag_github_latest_fallback_uses_v_prefixed_docker_tag(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fake_env, fake_root = _fake_docker_env(tmp_path)
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+            **fake_env,
+        },
+    )
+    _make_fake_stack(
+        tmp_path,
+        fake_root,
+        "stack",
+        [("app", "ghcr.io/acme/app:latest", "cid-app")],
+    )
+    digest = "sha256:" + "8" * 64
+    _patch_github_latest(
+        monkeypatch,
+        tag="1.2.3",
+        url="https://github.com/acme/app/releases/tag/1.2.3",
+    )
+    _patch_digest_resolution_results(
+        monkeypatch,
+        {
+            "ghcr.io/acme/app:1.2.3": DigestResolveResult(
+                ok=False,
+                status="unavailable",
+                reason="manifest-unavailable",
+            ),
+            "ghcr.io/acme/app:v1.2.3": DigestResolveResult(
+                ok=True,
+                status="resolved",
+                reason="tag-digest-resolved",
+                digest=digest,
+                source="test",
+            ),
+        },
+    )
+
+    response = client.post(
+        "/api/v1/retag-targets/github-latest/refresh",
+        headers=_csrf_headers(client),
+    )
+
+    assert response.status_code == 200
+    item = response.json()["items"][0]
+    assert item["retag_available"] is True
+    assert item["retag_reason"] == "eligible"
+    assert item["proposed_tag"] == "v1.2.3"
+    assert item["final_image"] == f"ghcr.io/acme/app@{digest}"
+    assert "release tag 1.2.3 resolved as Docker tag v1.2.3" in item[
+        "candidate_warning"
+    ]
+    assert item["candidate_link_url"].endswith("/1.2.3")
+    _assert_pending_grouping_did_not_mutate(_fake_docker_calls(fake_root))
+
+
 def test_retag_github_latest_fallback_uses_lsio_release_tag(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
