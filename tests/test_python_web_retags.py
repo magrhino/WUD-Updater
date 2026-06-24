@@ -1429,6 +1429,18 @@ def test_retag_apply_unpauses_before_rollback_when_pause_mode_up_fails(
     assert pause < first_up < unpause < rollback_up
 
 
+def test_patch_digest_resolution_results_asserts_on_unknown_image(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _patch_digest_resolution_results(monkeypatch, {})
+
+    with pytest.raises(
+        AssertionError,
+        match=r"Unexpected digest resolution for 'unknown:tag'",
+    ):
+        web_retags_module.DigestVerifier().resolve_tag_digest("unknown:tag")
+
+
 def _patch_github_latest(
     monkeypatch: pytest.MonkeyPatch,
     *,
@@ -1520,6 +1532,9 @@ def _patch_digest_resolution_results(
             pass
 
         def resolve_tag_digest(self, image: str) -> DigestResolveResult:
+            assert image in results_by_image, (
+                f"Unexpected digest resolution for {image!r}"
+            )
             return results_by_image[image]
 
     monkeypatch.setattr(web_retags_module, "DigestVerifier", FakeDigestVerifier)
