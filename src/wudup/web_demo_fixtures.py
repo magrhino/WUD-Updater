@@ -49,6 +49,7 @@ from wudup.db import (  # noqa: E402
     upsert_tag_exclusion_rule,
 )
 from wudup import command as command_module  # noqa: E402
+from wudup.digest_verifier import DigestResolveResult  # noqa: E402
 from wudup.digest_provenance import DigestTagProvenance  # noqa: E402
 
 
@@ -271,6 +272,14 @@ DEMO_PULL_TARGETS = (
         DEMO_WUDUP_DIGEST,
     ),
 )
+DEMO_MANUAL_RETAG_TARGETS = {
+    "home/home-assistant": "2026.5.3",
+    DEMO_RADARR_SERVICE_KEY: "5.22.4",
+}
+DEMO_RETAG_DIGESTS_BY_IMAGE = {
+    image: digest
+    for image, _image_id, digest in DEMO_PULL_TARGETS
+}
 
 DEMO_SERVICE_POLICIES = (
     {
@@ -905,40 +914,158 @@ def _retag_cases(
     targets = retag_targets.get("items", [])
     service_keys = [str(item["service_key"]) for item in targets]
     cases: list[dict[str, Any]] = []
+    seen: set[tuple[tuple[str, str, str], ...]] = set()
+
+    def append_case(choices: list[RetagChoiceRequest]) -> None:
+        signature = _retag_choices_signature(choices)
+        if signature in seen:
+            return
+        seen.add(signature)
+        key = _retag_case_key(choices)
+        with _demo_retag_digest_resolution():
+            response = _retag_plan_case(settings, f"demo-retag-plan-{key}", choices)
+            case: dict[str, Any] = {
+                "key": key,
+                "request": {"choices": _dump_retag_choices(choices)},
+                "response": response,
+                "preview": _retag_preview_fixture(
+                    f"demo-retag-preview-{key}",
+                    response,
+                ),
+            }
+            if response.get("can_apply"):
+                case["jobTemplate"] = _generate_retag_job_fixture(key, choices)
+        cases.append(case)
+
     for choices_tuple in itertools.product(
         ("keep-current", "switch-to-concrete"),
         repeat=len(service_keys),
     ):
-        choices = [
-            RetagChoiceRequest(service_key=service_key, choice=choice)
-            for service_key, choice in zip(service_keys, choices_tuple, strict=True)
-        ]
-        key = _retag_case_key(choices)
-        response = _retag_plan_case(settings, f"demo-retag-plan-{key}", choices)
-        case: dict[str, Any] = {
-            "key": key,
-            "request": {"choices": _dump(choices)},
-            "response": response,
-            "preview": _retag_preview_fixture(
-                f"demo-retag-preview-{key}",
-                response,
-            ),
-        }
-        if response.get("can_apply"):
-            case["jobTemplate"] = _generate_retag_job_fixture(key, choices)
-        cases.append(case)
+        append_case(
+            [
+                RetagChoiceRequest(service_key=service_key, choice=choice)
+                for service_key, choice in zip(
+                    service_keys,
+                    choices_tuple,
+                    strict=True,
+                )
+            ]
+        )
+
+    switchable_service_keys = [
+        str(item["service_key"])
+        for item in targets
+        if item.get("retag_available")
+    ]
+    manual_service_keys = [
+        service_key
+        for service_key in service_keys
+        if service_key in DEMO_MANUAL_RETAG_TARGETS
+    ]
+    for manual_tuple in itertools.product(
+        (False, True),
+        repeat=len(manual_service_keys),
+    ):
+        if not any(manual_tuple):
+            continue
+        manual_by_service = dict(
+            zip(manual_service_keys, manual_tuple, strict=True)
+        )
+        for switch_tuple in itertools.product(
+            ("keep-current", "switch-to-concrete"),
+            repeat=len(switchable_service_keys),
+        ):
+            switch_by_service = dict(
+                zip(switchable_service_keys, switch_tuple, strict=True)
+            )
+            choices = []
+            for service_key in service_keys:
+                if manual_by_service.get(service_key):
+                    choices.append(
+                        RetagChoiceRequest(
+                            service_key=service_key,
+                            choice="switch-to-concrete",
+                            target_tag=DEMO_MANUAL_RETAG_TARGETS[service_key],
+                        )
+                    )
+                    continue
+                choices.append(
+                    RetagChoiceRequest(
+                        service_key=service_key,
+                        choice=switch_by_service.get(service_key, "keep-current"),
+                    )
+                )
+            append_case(choices)
     return cases
 
 
 def _retag_case_key(choices: list[Any]) -> str:
     selected = [
-        _safe_case_part(choice.service_key)
+        (
+            _safe_case_part(f"{choice.service_key}-{choice.target_tag}")
+            if getattr(choice, "target_tag", None)
+            else _safe_case_part(choice.service_key)
+        )
         for choice in choices
         if choice.choice == "switch-to-concrete"
     ]
     if not selected:
         return "keep-all"
     return "switch-" + "-".join(selected)
+
+
+def _retag_choices_signature(
+    choices: list[RetagChoiceRequest],
+) -> tuple[tuple[str, str, str], ...]:
+    return tuple(
+        sorted(
+            (
+                choice.service_key,
+                choice.choice,
+                (choice.target_tag or "").strip(),
+            )
+            for choice in choices
+        )
+    )
+
+
+def _dump_retag_choices(choices: list[RetagChoiceRequest]) -> list[dict[str, Any]]:
+    return [
+        choice.model_dump(mode="json", exclude_none=True)
+        for choice in choices
+    ]
+
+
+@contextlib.contextmanager
+def _demo_retag_digest_resolution():
+    original_digest_verifier = web_retags.DigestVerifier
+
+    class DemoDigestVerifier:
+        def __init__(
+            self,
+            *_args: Any,
+            digest_map: dict[str, str] | None = None,
+            **_kwargs: Any,
+        ) -> None:
+            self._digest_map = dict(
+                DEMO_RETAG_DIGESTS_BY_IMAGE if digest_map is None else digest_map
+            )
+
+        def resolve_tag_digest(self, image: str) -> DigestResolveResult:
+            digest = self._digest_map.get(image, "")
+            return DigestResolveResult(
+                ok=bool(digest),
+                status="resolved" if digest else "unavailable",
+                reason="tag-digest-resolved" if digest else "manifest-unavailable",
+                digest=digest,
+                source="demo",
+            )
+
+    web_retags.DigestVerifier = DemoDigestVerifier
+    try:
+        yield
+    finally:
+        web_retags.DigestVerifier = original_digest_verifier
 
 
 def _retag_preview_fixture(

@@ -1,17 +1,20 @@
 <script setup lang="ts">
-import { NRadioButton, NRadioGroup, NTag } from "naive-ui";
+import { NInput, NRadioButton, NRadioGroup, NTag } from "naive-ui";
 
 import type { RetagTargetChoice, RetagTargetItem } from "../../api/client";
 import { displayDigest } from "../../utils/digestProvenance";
 import {
+  canChooseRetagTarget,
+  canEnableRetagTargetChoice,
   canSwitchToConcrete,
   emitRetagChoice,
   retagChoice,
+  retagTargetTagValidationError,
+  retagTargetTagValue,
 } from "./retagChoices";
 import {
   candidateLabel,
   composeLocation,
-  reasonDetail,
   reasonLabel,
   reasonTagType,
   trackingLabel,
@@ -20,13 +23,32 @@ import {
 defineProps<{
   rows: RetagTargetItem[];
   choices: Record<string, RetagTargetChoice>;
+  targetTags: Record<string, string>;
   mutationDisabled: boolean;
   mutationNotice: string;
 }>();
 
 const emit = defineEmits<{
   "choice-update": [item: RetagTargetItem, choice: RetagTargetChoice];
+  "target-tag-update": [item: RetagTargetItem, tag: string];
 }>();
+
+function retagTargetChoiceTitle(
+  item: RetagTargetItem,
+  targetTags: Record<string, string>,
+  mutationNotice: string,
+): string {
+  const canChooseTarget = canChooseRetagTarget(item, targetTags);
+  const targetError = canChooseTarget
+    ? retagTargetTagValidationError(item, targetTags)
+    : "";
+  if (targetError) {
+    return targetError;
+  }
+  return canChooseTarget
+    ? mutationNotice
+    : "Enter a target tag before retagging.";
+}
 </script>
 
 <template>
@@ -63,15 +85,16 @@ const emit = defineEmits<{
         <div>
           <dt>Candidate</dt>
           <dd>
+            <span>{{ candidateLabel(item) }}</span>
             <a
               v-if="item.candidate_link_url"
+              class="text-link retag-source-link"
               :href="item.candidate_link_url"
               target="_blank"
               rel="noreferrer"
             >
-              {{ candidateLabel(item) }}
+              {{ item.candidate_link_label || "Open source" }}
             </a>
-            <span v-else>{{ candidateLabel(item) }}</span>
             <span
               v-if="item.candidate_warning"
               class="release-notes-reason"
@@ -87,6 +110,42 @@ const emit = defineEmits<{
           </dd>
         </div>
         <div>
+          <dt>Target tag</dt>
+          <dd class="retag-target-field">
+            <n-input
+              :value="retagTargetTagValue(item, targetTags)"
+              size="small"
+              class="tag-override-input retag-target-input"
+              :placeholder="item.proposed_tag || 'Enter tag'"
+              :disabled="mutationDisabled"
+              :status="
+                retagChoice(item, choices, targetTags) === 'switch-to-concrete' &&
+                retagTargetTagValidationError(item, targetTags)
+                  ? 'error'
+                  : undefined
+              "
+              :title="
+                retagChoice(item, choices, targetTags) === 'switch-to-concrete'
+                  ? retagTargetTagValidationError(item, targetTags) || undefined
+                  : undefined
+              "
+              :input-props="{
+                'aria-label': `Target tag for ${item.service_key}`,
+              }"
+              @update:value="emit('target-tag-update', item, String($event))"
+            />
+            <span
+              v-if="
+                retagChoice(item, choices, targetTags) === 'switch-to-concrete' &&
+                retagTargetTagValidationError(item, targetTags)
+              "
+              class="retag-input-error"
+            >
+              {{ retagTargetTagValidationError(item, targetTags) }}
+            </span>
+          </dd>
+        </div>
+        <div>
           <dt>Location</dt>
           <dd>
             <code class="wrap-anywhere">{{ composeLocation(item) }}</code>
@@ -96,23 +155,27 @@ const emit = defineEmits<{
           <dt>Choice</dt>
           <dd>
             <n-radio-group
-              :value="retagChoice(item, choices)"
+              :value="retagChoice(item, choices, targetTags)"
               size="small"
-              @update:value="emitRetagChoice(emit, item, String($event))"
+              @update:value="emitRetagChoice(emit, item, String($event), targetTags)"
             >
               <n-radio-button value="keep-current">Keep</n-radio-button>
               <n-radio-button
                 value="switch-to-concrete"
-                :disabled="!canSwitchToConcrete(item) || mutationDisabled"
-                :title="
-                  !canSwitchToConcrete(item)
-                    ? reasonDetail(item.retag_reason)
-                    : mutationNotice
-                "
+                :disabled="!canEnableRetagTargetChoice(item, targetTags) || mutationDisabled"
+                :title="retagTargetChoiceTitle(item, targetTags, mutationNotice)"
               >
-                Switch
+                Retag
               </n-radio-button>
             </n-radio-group>
+            <n-tag
+              v-if="canSwitchToConcrete(item)"
+              size="small"
+              type="info"
+              :bordered="false"
+            >
+              Automatch ready
+            </n-tag>
           </dd>
         </div>
       </dl>
@@ -135,5 +198,22 @@ const emit = defineEmits<{
 .retag-card code {
   font-family: var(--font-mono);
   font-size: 0.82rem;
+}
+
+.retag-source-link {
+  width: fit-content;
+  font-size: 0.84rem;
+}
+
+.retag-target-field {
+  align-items: stretch;
+  display: grid;
+  gap: 4px;
+}
+
+.retag-input-error {
+  color: var(--color-warning-fg);
+  font-size: 0.78rem;
+  line-height: 1.35;
 }
 </style>

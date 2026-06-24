@@ -116138,6 +116138,4152 @@ export const generatedFixtures = {
         "status": "blocked",
         "warnings": []
       }
+    },
+    {
+      "jobTemplate": {
+        "log": {
+          "content": "[2026-05-30T20:12:26+00:00] [INFO] [compose-digest-pin] [media] Writing retag Compose metadata.\n[2026-05-30T20:12:28+00:00] [INFO] [compose-digest-pin] [media] Compose retag metadata was written.\n[2026-05-30T20:12:28+00:00] [INFO] [pull] [media] Pulling retagged service image(s).\n[2026-05-30T20:12:28+00:00] [INFO] [pull] [media] Retagged service image(s) pulled.\n[2026-05-30T20:12:28+00:00] [INFO] [recreate] [media] Recreating retagged service container(s).\n[2026-05-30T20:12:28+00:00] [INFO] [recreate] [media] Retagged service container(s) recreated.\n[2026-05-30T20:12:28+00:00] [INFO] [health] [media] Waiting up to 180s for retagged service health.\n[2026-05-30T20:12:28+00:00] [INFO] [health] [media] Retagged service health wait succeeded in 2s.\n[2026-05-30T20:12:28+00:00] [INFO] [completion] Retag changes applied.\n[2026-05-30T20:12:28+00:00] [INFO] Done. See log: demo/logs/demo-retag-switch-media-radarr-5.22.4.log\n",
+          "error": "",
+          "exists": true,
+          "job_id": "demo-retag-job-switch-media-radarr-5.22.4",
+          "log_file": "demo/logs/demo-retag-switch-media-radarr-5.22.4.log",
+          "max_bytes": 65536,
+          "truncated": false
+        },
+        "queued": {
+          "error": "",
+          "finished_at": null,
+          "job_id": "demo-retag-job-switch-media-radarr-5.22.4",
+          "log_file": "",
+          "progress": [],
+          "run_id": null,
+          "selected_line_numbers": [],
+          "started_at": null,
+          "status": "queued"
+        },
+        "removeLineNumbers": [],
+        "run": {
+          "detail": {
+            "dry_run": false,
+            "events": [
+              {
+                "created_at": "2026-05-30T20:12:26+00:00",
+                "digest_provenance": {
+                  "final_image": "lscr.io/linuxserver/radarr@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                  "provenance_confidence": "verified",
+                  "provenance_source": "retag",
+                  "resolved_tag": "5.22.4",
+                  "source_image": "lscr.io/linuxserver/radarr:5.21.1",
+                  "target_digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                  "watch_tag": "5.22.4"
+                },
+                "id": 7,
+                "image": "lscr.io/linuxserver/radarr:5.21.1",
+                "metadata": {
+                  "operation": "retag",
+                  "resolved_tag": "5.22.4",
+                  "service_key": "media/radarr",
+                  "source": "webui",
+                  "watch_tag": "5.22.4"
+                },
+                "new_digest": "",
+                "new_image_id": "",
+                "old_digest": "",
+                "old_image_id": "",
+                "run_id": 7,
+                "service_name": "radarr",
+                "stack_name": "media",
+                "status": "success",
+                "target_image": "lscr.io/linuxserver/radarr@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+              }
+            ],
+            "finished_at": "2026-05-30T20:12:28+00:00",
+            "id": 7,
+            "log_file": "demo/logs/demo-retag-switch-media-radarr-5.22.4.log",
+            "metadata": {
+              "digest_pin_updates": [
+                {
+                  "digest_provenance": {
+                    "final_image": "lscr.io/linuxserver/radarr@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                    "provenance_confidence": "verified",
+                    "provenance_source": "manual",
+                    "resolved_tag": "5.22.4",
+                    "source_image": "lscr.io/linuxserver/radarr:5.21.1",
+                    "target_digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                    "watch_tag": "5.22.4"
+                  },
+                  "final_image": "lscr.io/linuxserver/radarr@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                  "label_key": "wud.tag.include",
+                  "label_rewrites": [],
+                  "label_value": "^5\\.22\\.4$$",
+                  "marker": "wudup.resolved-tag=5.22.4",
+                  "planned_digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                  "resolved_tag": "5.22.4",
+                  "service": "radarr",
+                  "service_key": "media/radarr",
+                  "source_image": "lscr.io/linuxserver/radarr:5.21.1",
+                  "stack": "media",
+                  "watch_tag": "5.22.4"
+                }
+              ],
+              "external_recreate_required": false,
+              "operation": "retag",
+              "plan_id": "demo-retag-job-switch-media-radarr-5.22.4-plan",
+              "services": [
+                "media/radarr"
+              ],
+              "source": "webui",
+              "status": "success"
+            },
+            "mode": "web-retag",
+            "pending_updates": [],
+            "started_at": "2026-05-30T20:12:26+00:00",
+            "status": "success",
+            "verification": {
+              "items": [],
+              "needs_review_count": 0,
+              "status": "verified",
+              "total_count": 0,
+              "verified_count": 0
+            },
+            "wud_file": "demo/out/images.todo"
+          },
+          "log": {
+            "content": "[2026-05-30T20:12:26+00:00] [INFO] [compose-digest-pin] [media] Writing retag Compose metadata.\n[2026-05-30T20:12:28+00:00] [INFO] [compose-digest-pin] [media] Compose retag metadata was written.\n[2026-05-30T20:12:28+00:00] [INFO] [pull] [media] Pulling retagged service image(s).\n[2026-05-30T20:12:28+00:00] [INFO] [pull] [media] Retagged service image(s) pulled.\n[2026-05-30T20:12:28+00:00] [INFO] [recreate] [media] Recreating retagged service container(s).\n[2026-05-30T20:12:28+00:00] [INFO] [recreate] [media] Retagged service container(s) recreated.\n[2026-05-30T20:12:28+00:00] [INFO] [health] [media] Waiting up to 180s for retagged service health.\n[2026-05-30T20:12:28+00:00] [INFO] [health] [media] Retagged service health wait succeeded in 2s.\n[2026-05-30T20:12:28+00:00] [INFO] [completion] Retag changes applied.\n[2026-05-30T20:12:28+00:00] [INFO] Done. See log: demo/logs/demo-retag-switch-media-radarr-5.22.4.log\n",
+            "exists": true,
+            "log_file": "demo/logs/demo-retag-switch-media-radarr-5.22.4.log",
+            "max_bytes": 262144,
+            "run_id": 7,
+            "truncated": false
+          },
+          "summary": {
+            "dry_run": false,
+            "events": [
+              {
+                "created_at": "2026-05-30T20:12:26+00:00",
+                "digest_provenance": {
+                  "final_image": "lscr.io/linuxserver/radarr@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                  "provenance_confidence": "verified",
+                  "provenance_source": "retag",
+                  "resolved_tag": "5.22.4",
+                  "source_image": "lscr.io/linuxserver/radarr:5.21.1",
+                  "target_digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                  "watch_tag": "5.22.4"
+                },
+                "id": 7,
+                "image": "lscr.io/linuxserver/radarr:5.21.1",
+                "metadata": {
+                  "operation": "retag",
+                  "resolved_tag": "5.22.4",
+                  "service_key": "media/radarr",
+                  "source": "webui",
+                  "watch_tag": "5.22.4"
+                },
+                "new_digest": "",
+                "new_image_id": "",
+                "old_digest": "",
+                "old_image_id": "",
+                "run_id": 7,
+                "service_name": "radarr",
+                "stack_name": "media",
+                "status": "success",
+                "target_image": "lscr.io/linuxserver/radarr@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+              }
+            ],
+            "finished_at": "2026-05-30T20:12:28+00:00",
+            "id": 7,
+            "log_file": "demo/logs/demo-retag-switch-media-radarr-5.22.4.log",
+            "metadata": {
+              "digest_pin_updates": [
+                {
+                  "digest_provenance": {
+                    "final_image": "lscr.io/linuxserver/radarr@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                    "provenance_confidence": "verified",
+                    "provenance_source": "manual",
+                    "resolved_tag": "5.22.4",
+                    "source_image": "lscr.io/linuxserver/radarr:5.21.1",
+                    "target_digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                    "watch_tag": "5.22.4"
+                  },
+                  "final_image": "lscr.io/linuxserver/radarr@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                  "label_key": "wud.tag.include",
+                  "label_rewrites": [],
+                  "label_value": "^5\\.22\\.4$$",
+                  "marker": "wudup.resolved-tag=5.22.4",
+                  "planned_digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                  "resolved_tag": "5.22.4",
+                  "service": "radarr",
+                  "service_key": "media/radarr",
+                  "source_image": "lscr.io/linuxserver/radarr:5.21.1",
+                  "stack": "media",
+                  "watch_tag": "5.22.4"
+                }
+              ],
+              "external_recreate_required": false,
+              "operation": "retag",
+              "plan_id": "demo-retag-job-switch-media-radarr-5.22.4-plan",
+              "services": [
+                "media/radarr"
+              ],
+              "source": "webui",
+              "status": "success"
+            },
+            "mode": "web-retag",
+            "started_at": "2026-05-30T20:12:26+00:00",
+            "status": "success",
+            "wud_file": "demo/out/images.todo"
+          }
+        },
+        "terminal": {
+          "error": "",
+          "finished_at": "2026-05-30T20:12:28+00:00",
+          "job_id": "demo-retag-job-switch-media-radarr-5.22.4",
+          "log_file": "demo/logs/demo-retag-switch-media-radarr-5.22.4.log",
+          "progress": [
+            {
+              "created_at": "2026-05-30T20:12:26+00:00",
+              "job_id": "demo-retag-job-switch-media-radarr-5.22.4",
+              "line_numbers": [],
+              "message": "[media] Writing retag Compose metadata.",
+              "phase": "compose-digest-pin",
+              "services": [
+                "radarr"
+              ],
+              "stack": "media",
+              "status": "running"
+            },
+            {
+              "created_at": "2026-05-30T20:12:28+00:00",
+              "job_id": "demo-retag-job-switch-media-radarr-5.22.4",
+              "line_numbers": [],
+              "message": "[media] Compose retag metadata was written.",
+              "phase": "compose-digest-pin",
+              "services": [
+                "radarr"
+              ],
+              "stack": "media",
+              "status": "success"
+            },
+            {
+              "created_at": "2026-05-30T20:12:28+00:00",
+              "job_id": "demo-retag-job-switch-media-radarr-5.22.4",
+              "line_numbers": [],
+              "message": "[media] Pulling retagged service image(s).",
+              "phase": "pull",
+              "services": [
+                "radarr"
+              ],
+              "stack": "media",
+              "status": "running"
+            },
+            {
+              "created_at": "2026-05-30T20:12:28+00:00",
+              "job_id": "demo-retag-job-switch-media-radarr-5.22.4",
+              "line_numbers": [],
+              "message": "[media] Retagged service image(s) pulled.",
+              "phase": "pull",
+              "services": [
+                "radarr"
+              ],
+              "stack": "media",
+              "status": "success"
+            },
+            {
+              "created_at": "2026-05-30T20:12:28+00:00",
+              "job_id": "demo-retag-job-switch-media-radarr-5.22.4",
+              "line_numbers": [],
+              "message": "[media] Recreating retagged service container(s).",
+              "phase": "recreate",
+              "services": [
+                "radarr"
+              ],
+              "stack": "media",
+              "status": "running"
+            },
+            {
+              "created_at": "2026-05-30T20:12:28+00:00",
+              "job_id": "demo-retag-job-switch-media-radarr-5.22.4",
+              "line_numbers": [],
+              "message": "[media] Retagged service container(s) recreated.",
+              "phase": "recreate",
+              "services": [
+                "radarr"
+              ],
+              "stack": "media",
+              "status": "success"
+            },
+            {
+              "created_at": "2026-05-30T20:12:28+00:00",
+              "job_id": "demo-retag-job-switch-media-radarr-5.22.4",
+              "line_numbers": [],
+              "message": "[media] Waiting up to 180s for retagged service health.",
+              "phase": "health",
+              "services": [
+                "radarr"
+              ],
+              "stack": "media",
+              "status": "running"
+            },
+            {
+              "created_at": "2026-05-30T20:12:28+00:00",
+              "job_id": "demo-retag-job-switch-media-radarr-5.22.4",
+              "line_numbers": [],
+              "message": "[media] Retagged service health wait succeeded in 2s.",
+              "phase": "health",
+              "services": [
+                "radarr"
+              ],
+              "stack": "media",
+              "status": "success"
+            },
+            {
+              "created_at": "2026-05-30T20:12:28+00:00",
+              "job_id": "demo-retag-job-switch-media-radarr-5.22.4",
+              "line_numbers": [],
+              "message": "Retag changes applied.",
+              "phase": "completion",
+              "services": [],
+              "stack": "",
+              "status": "success"
+            }
+          ],
+          "run_id": 7,
+          "selected_line_numbers": [],
+          "started_at": "2026-05-30T20:12:26+00:00",
+          "status": "success"
+        }
+      },
+      "key": "switch-media-radarr-5.22.4",
+      "preview": {
+        "complete": {
+          "error": "",
+          "plan": {
+            "can_apply": true,
+            "external_recreate_required": false,
+            "issues": [],
+            "keep_current_count": 3,
+            "plan_id": "demo-retag-plan-switch-media-radarr-5.22.4",
+            "selected_count": 1,
+            "stacks": [
+              {
+                "compose_file": "docker-compose.yml",
+                "digest_pin_updates": [
+                  {
+                    "digest_provenance": {
+                      "final_image": "lscr.io/linuxserver/radarr@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                      "provenance_confidence": "verified",
+                      "provenance_source": "manual",
+                      "resolved_tag": "5.22.4",
+                      "source_image": "lscr.io/linuxserver/radarr:5.21.1",
+                      "target_digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                      "watch_tag": "5.22.4"
+                    },
+                    "final_image": "lscr.io/linuxserver/radarr@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                    "label_key": "wud.tag.include",
+                    "label_rewrites": [],
+                    "label_value": "^5\\.22\\.4$$",
+                    "marker": "wudup.resolved-tag=5.22.4",
+                    "planned_digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                    "resolved_tag": "5.22.4",
+                    "service": "radarr",
+                    "service_key": "media/radarr",
+                    "source_image": "lscr.io/linuxserver/radarr:5.21.1",
+                    "stack": "media",
+                    "watch_tag": "5.22.4"
+                  }
+                ],
+                "directory": "demo/docker/media",
+                "project_directory": "demo/docker/media",
+                "services": [
+                  "radarr"
+                ],
+                "stack": "media"
+              }
+            ],
+            "status": "ready",
+            "warnings": []
+          },
+          "preview_job_id": "demo-retag-preview-switch-media-radarr-5.22.4",
+          "progress": [
+            {
+              "created_at": "2026-05-30T20:12:26+00:00",
+              "job_id": "demo-retag-preview-switch-media-radarr-5.22.4",
+              "line_numbers": [],
+              "message": "Refreshing demo retag candidates.",
+              "phase": "refresh",
+              "services": [],
+              "stack": "",
+              "status": "running"
+            },
+            {
+              "created_at": "2026-05-30T20:12:28+00:00",
+              "job_id": "demo-retag-preview-switch-media-radarr-5.22.4",
+              "line_numbers": [],
+              "message": "Demo retag preview is ready.",
+              "phase": "preview",
+              "services": [],
+              "stack": "",
+              "status": "success"
+            }
+          ],
+          "status": "success",
+          "warnings": []
+        },
+        "queued": {
+          "error": "",
+          "plan": null,
+          "preview_job_id": "demo-retag-preview-switch-media-radarr-5.22.4",
+          "progress": [
+            {
+              "created_at": "2026-05-30T20:12:26+00:00",
+              "job_id": "demo-retag-preview-switch-media-radarr-5.22.4",
+              "line_numbers": [],
+              "message": "Refreshing demo retag candidates.",
+              "phase": "refresh",
+              "services": [],
+              "stack": "",
+              "status": "running"
+            }
+          ],
+          "status": "queued",
+          "warnings": []
+        }
+      },
+      "request": {
+        "choices": [
+          {
+            "choice": "keep-current",
+            "service_key": "data/postgres"
+          },
+          {
+            "choice": "keep-current",
+            "service_key": "home/home-assistant"
+          },
+          {
+            "choice": "switch-to-concrete",
+            "service_key": "media/radarr",
+            "target_tag": "5.22.4"
+          },
+          {
+            "choice": "keep-current",
+            "service_key": "media/wudup"
+          }
+        ]
+      },
+      "response": {
+        "can_apply": true,
+        "external_recreate_required": false,
+        "issues": [],
+        "keep_current_count": 3,
+        "plan_id": "demo-retag-plan-switch-media-radarr-5.22.4",
+        "selected_count": 1,
+        "stacks": [
+          {
+            "compose_file": "docker-compose.yml",
+            "digest_pin_updates": [
+              {
+                "digest_provenance": {
+                  "final_image": "lscr.io/linuxserver/radarr@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                  "provenance_confidence": "verified",
+                  "provenance_source": "manual",
+                  "resolved_tag": "5.22.4",
+                  "source_image": "lscr.io/linuxserver/radarr:5.21.1",
+                  "target_digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                  "watch_tag": "5.22.4"
+                },
+                "final_image": "lscr.io/linuxserver/radarr@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                "label_key": "wud.tag.include",
+                "label_rewrites": [],
+                "label_value": "^5\\.22\\.4$$",
+                "marker": "wudup.resolved-tag=5.22.4",
+                "planned_digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                "resolved_tag": "5.22.4",
+                "service": "radarr",
+                "service_key": "media/radarr",
+                "source_image": "lscr.io/linuxserver/radarr:5.21.1",
+                "stack": "media",
+                "watch_tag": "5.22.4"
+              }
+            ],
+            "directory": "demo/docker/media",
+            "project_directory": "demo/docker/media",
+            "services": [
+              "radarr"
+            ],
+            "stack": "media"
+          }
+        ],
+        "status": "ready",
+        "warnings": []
+      }
+    },
+    {
+      "jobTemplate": {
+        "log": {
+          "content": "[2026-05-30T20:12:26+00:00] [INFO] [compose-digest-pin] [media] Writing retag Compose metadata.\n[2026-05-30T20:12:28+00:00] [INFO] [compose-digest-pin] [media] Compose retag metadata was written.\n[2026-05-30T20:12:28+00:00] [INFO] [pull] [media] Pulling retagged service image(s).\n[2026-05-30T20:12:28+00:00] [INFO] [pull] [media] Retagged service image(s) pulled.\n[2026-05-30T20:12:28+00:00] [INFO] [recreate] [media] Recreating retagged service container(s).\n[2026-05-30T20:12:28+00:00] [INFO] [recreate] [media] Retagged service container(s) recreated.\n[2026-05-30T20:12:28+00:00] [INFO] [health] [media] Waiting up to 180s for retagged service health.\n[2026-05-30T20:12:28+00:00] [INFO] [health] [media] Retagged service health wait succeeded in 2s.\n[2026-05-30T20:12:28+00:00] [INFO] [completion] Retag changes applied.\n[2026-05-30T20:12:28+00:00] [INFO] Done. See log: demo/logs/demo-retag-switch-media-radarr-5.22.4-media-wudup.log\n",
+          "error": "",
+          "exists": true,
+          "job_id": "demo-retag-job-switch-media-radarr-5.22.4-media-wudup",
+          "log_file": "demo/logs/demo-retag-switch-media-radarr-5.22.4-media-wudup.log",
+          "max_bytes": 65536,
+          "truncated": false
+        },
+        "queued": {
+          "error": "",
+          "finished_at": null,
+          "job_id": "demo-retag-job-switch-media-radarr-5.22.4-media-wudup",
+          "log_file": "",
+          "progress": [],
+          "run_id": null,
+          "selected_line_numbers": [],
+          "started_at": null,
+          "status": "queued"
+        },
+        "removeLineNumbers": [],
+        "run": {
+          "detail": {
+            "dry_run": false,
+            "events": [
+              {
+                "created_at": "2026-05-30T20:12:26+00:00",
+                "digest_provenance": {
+                  "final_image": "lscr.io/linuxserver/radarr@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                  "provenance_confidence": "verified",
+                  "provenance_source": "retag",
+                  "resolved_tag": "5.22.4",
+                  "source_image": "lscr.io/linuxserver/radarr:5.21.1",
+                  "target_digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                  "watch_tag": "5.22.4"
+                },
+                "id": 7,
+                "image": "lscr.io/linuxserver/radarr:5.21.1",
+                "metadata": {
+                  "operation": "retag",
+                  "resolved_tag": "5.22.4",
+                  "service_key": "media/radarr",
+                  "source": "webui",
+                  "watch_tag": "5.22.4"
+                },
+                "new_digest": "",
+                "new_image_id": "",
+                "old_digest": "",
+                "old_image_id": "",
+                "run_id": 7,
+                "service_name": "radarr",
+                "stack_name": "media",
+                "status": "success",
+                "target_image": "lscr.io/linuxserver/radarr@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+              },
+              {
+                "created_at": "2026-05-30T20:12:26+00:00",
+                "digest_provenance": {
+                  "final_image": "ghcr.io/magrhino/wudup@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                  "provenance_confidence": "verified",
+                  "provenance_source": "retag",
+                  "resolved_tag": "v0.16.1",
+                  "source_image": "ghcr.io/magrhino/wudup:latest",
+                  "target_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                  "watch_tag": "v0.16.1"
+                },
+                "id": 8,
+                "image": "ghcr.io/magrhino/wudup:latest",
+                "metadata": {
+                  "operation": "retag",
+                  "resolved_tag": "v0.16.1",
+                  "service_key": "media/wudup",
+                  "source": "webui",
+                  "watch_tag": "v0.16.1"
+                },
+                "new_digest": "",
+                "new_image_id": "",
+                "old_digest": "",
+                "old_image_id": "",
+                "run_id": 7,
+                "service_name": "wudup",
+                "stack_name": "media",
+                "status": "success",
+                "target_image": "ghcr.io/magrhino/wudup@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+              }
+            ],
+            "finished_at": "2026-05-30T20:12:28+00:00",
+            "id": 7,
+            "log_file": "demo/logs/demo-retag-switch-media-radarr-5.22.4-media-wudup.log",
+            "metadata": {
+              "digest_pin_updates": [
+                {
+                  "digest_provenance": {
+                    "final_image": "lscr.io/linuxserver/radarr@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                    "provenance_confidence": "verified",
+                    "provenance_source": "manual",
+                    "resolved_tag": "5.22.4",
+                    "source_image": "lscr.io/linuxserver/radarr:5.21.1",
+                    "target_digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                    "watch_tag": "5.22.4"
+                  },
+                  "final_image": "lscr.io/linuxserver/radarr@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                  "label_key": "wud.tag.include",
+                  "label_rewrites": [],
+                  "label_value": "^5\\.22\\.4$$",
+                  "marker": "wudup.resolved-tag=5.22.4",
+                  "planned_digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                  "resolved_tag": "5.22.4",
+                  "service": "radarr",
+                  "service_key": "media/radarr",
+                  "source_image": "lscr.io/linuxserver/radarr:5.21.1",
+                  "stack": "media",
+                  "watch_tag": "5.22.4"
+                },
+                {
+                  "digest_provenance": {
+                    "final_image": "ghcr.io/magrhino/wudup@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                    "provenance_confidence": "verified",
+                    "provenance_source": "demo",
+                    "resolved_tag": "v0.16.1",
+                    "source_image": "ghcr.io/magrhino/wudup:latest",
+                    "target_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                    "watch_tag": "latest"
+                  },
+                  "final_image": "ghcr.io/magrhino/wudup@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                  "label_key": "wud.tag.include",
+                  "label_rewrites": [
+                    {
+                      "approved": false,
+                      "current_label_value": "^latest$",
+                      "label_key": "wud.tag.include",
+                      "planned_tag": "v0.16.1",
+                      "proposed_label_regex": "^v0\\.16\\.1$",
+                      "proposed_label_value": "^v0\\.16\\.1$$",
+                      "reason": "exact-regex-normalized",
+                      "service": "wudup"
+                    }
+                  ],
+                  "label_value": "^v0\\.16\\.1$$",
+                  "marker": "wudup.resolved-tag=v0.16.1",
+                  "planned_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                  "resolved_tag": "v0.16.1",
+                  "service": "wudup",
+                  "service_key": "media/wudup",
+                  "source_image": "ghcr.io/magrhino/wudup:latest",
+                  "stack": "media",
+                  "watch_tag": "v0.16.1"
+                }
+              ],
+              "external_recreate_required": false,
+              "operation": "retag",
+              "plan_id": "demo-retag-job-switch-media-radarr-5.22.4-media-wudup-plan",
+              "services": [
+                "media/radarr",
+                "media/wudup"
+              ],
+              "source": "webui",
+              "status": "success"
+            },
+            "mode": "web-retag",
+            "pending_updates": [],
+            "started_at": "2026-05-30T20:12:26+00:00",
+            "status": "success",
+            "verification": {
+              "items": [],
+              "needs_review_count": 0,
+              "status": "verified",
+              "total_count": 0,
+              "verified_count": 0
+            },
+            "wud_file": "demo/out/images.todo"
+          },
+          "log": {
+            "content": "[2026-05-30T20:12:26+00:00] [INFO] [compose-digest-pin] [media] Writing retag Compose metadata.\n[2026-05-30T20:12:28+00:00] [INFO] [compose-digest-pin] [media] Compose retag metadata was written.\n[2026-05-30T20:12:28+00:00] [INFO] [pull] [media] Pulling retagged service image(s).\n[2026-05-30T20:12:28+00:00] [INFO] [pull] [media] Retagged service image(s) pulled.\n[2026-05-30T20:12:28+00:00] [INFO] [recreate] [media] Recreating retagged service container(s).\n[2026-05-30T20:12:28+00:00] [INFO] [recreate] [media] Retagged service container(s) recreated.\n[2026-05-30T20:12:28+00:00] [INFO] [health] [media] Waiting up to 180s for retagged service health.\n[2026-05-30T20:12:28+00:00] [INFO] [health] [media] Retagged service health wait succeeded in 2s.\n[2026-05-30T20:12:28+00:00] [INFO] [completion] Retag changes applied.\n[2026-05-30T20:12:28+00:00] [INFO] Done. See log: demo/logs/demo-retag-switch-media-radarr-5.22.4-media-wudup.log\n",
+            "exists": true,
+            "log_file": "demo/logs/demo-retag-switch-media-radarr-5.22.4-media-wudup.log",
+            "max_bytes": 262144,
+            "run_id": 7,
+            "truncated": false
+          },
+          "summary": {
+            "dry_run": false,
+            "events": [
+              {
+                "created_at": "2026-05-30T20:12:26+00:00",
+                "digest_provenance": {
+                  "final_image": "lscr.io/linuxserver/radarr@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                  "provenance_confidence": "verified",
+                  "provenance_source": "retag",
+                  "resolved_tag": "5.22.4",
+                  "source_image": "lscr.io/linuxserver/radarr:5.21.1",
+                  "target_digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                  "watch_tag": "5.22.4"
+                },
+                "id": 7,
+                "image": "lscr.io/linuxserver/radarr:5.21.1",
+                "metadata": {
+                  "operation": "retag",
+                  "resolved_tag": "5.22.4",
+                  "service_key": "media/radarr",
+                  "source": "webui",
+                  "watch_tag": "5.22.4"
+                },
+                "new_digest": "",
+                "new_image_id": "",
+                "old_digest": "",
+                "old_image_id": "",
+                "run_id": 7,
+                "service_name": "radarr",
+                "stack_name": "media",
+                "status": "success",
+                "target_image": "lscr.io/linuxserver/radarr@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+              },
+              {
+                "created_at": "2026-05-30T20:12:26+00:00",
+                "digest_provenance": {
+                  "final_image": "ghcr.io/magrhino/wudup@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                  "provenance_confidence": "verified",
+                  "provenance_source": "retag",
+                  "resolved_tag": "v0.16.1",
+                  "source_image": "ghcr.io/magrhino/wudup:latest",
+                  "target_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                  "watch_tag": "v0.16.1"
+                },
+                "id": 8,
+                "image": "ghcr.io/magrhino/wudup:latest",
+                "metadata": {
+                  "operation": "retag",
+                  "resolved_tag": "v0.16.1",
+                  "service_key": "media/wudup",
+                  "source": "webui",
+                  "watch_tag": "v0.16.1"
+                },
+                "new_digest": "",
+                "new_image_id": "",
+                "old_digest": "",
+                "old_image_id": "",
+                "run_id": 7,
+                "service_name": "wudup",
+                "stack_name": "media",
+                "status": "success",
+                "target_image": "ghcr.io/magrhino/wudup@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+              }
+            ],
+            "finished_at": "2026-05-30T20:12:28+00:00",
+            "id": 7,
+            "log_file": "demo/logs/demo-retag-switch-media-radarr-5.22.4-media-wudup.log",
+            "metadata": {
+              "digest_pin_updates": [
+                {
+                  "digest_provenance": {
+                    "final_image": "lscr.io/linuxserver/radarr@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                    "provenance_confidence": "verified",
+                    "provenance_source": "manual",
+                    "resolved_tag": "5.22.4",
+                    "source_image": "lscr.io/linuxserver/radarr:5.21.1",
+                    "target_digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                    "watch_tag": "5.22.4"
+                  },
+                  "final_image": "lscr.io/linuxserver/radarr@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                  "label_key": "wud.tag.include",
+                  "label_rewrites": [],
+                  "label_value": "^5\\.22\\.4$$",
+                  "marker": "wudup.resolved-tag=5.22.4",
+                  "planned_digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                  "resolved_tag": "5.22.4",
+                  "service": "radarr",
+                  "service_key": "media/radarr",
+                  "source_image": "lscr.io/linuxserver/radarr:5.21.1",
+                  "stack": "media",
+                  "watch_tag": "5.22.4"
+                },
+                {
+                  "digest_provenance": {
+                    "final_image": "ghcr.io/magrhino/wudup@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                    "provenance_confidence": "verified",
+                    "provenance_source": "demo",
+                    "resolved_tag": "v0.16.1",
+                    "source_image": "ghcr.io/magrhino/wudup:latest",
+                    "target_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                    "watch_tag": "latest"
+                  },
+                  "final_image": "ghcr.io/magrhino/wudup@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                  "label_key": "wud.tag.include",
+                  "label_rewrites": [
+                    {
+                      "approved": false,
+                      "current_label_value": "^latest$",
+                      "label_key": "wud.tag.include",
+                      "planned_tag": "v0.16.1",
+                      "proposed_label_regex": "^v0\\.16\\.1$",
+                      "proposed_label_value": "^v0\\.16\\.1$$",
+                      "reason": "exact-regex-normalized",
+                      "service": "wudup"
+                    }
+                  ],
+                  "label_value": "^v0\\.16\\.1$$",
+                  "marker": "wudup.resolved-tag=v0.16.1",
+                  "planned_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                  "resolved_tag": "v0.16.1",
+                  "service": "wudup",
+                  "service_key": "media/wudup",
+                  "source_image": "ghcr.io/magrhino/wudup:latest",
+                  "stack": "media",
+                  "watch_tag": "v0.16.1"
+                }
+              ],
+              "external_recreate_required": false,
+              "operation": "retag",
+              "plan_id": "demo-retag-job-switch-media-radarr-5.22.4-media-wudup-plan",
+              "services": [
+                "media/radarr",
+                "media/wudup"
+              ],
+              "source": "webui",
+              "status": "success"
+            },
+            "mode": "web-retag",
+            "started_at": "2026-05-30T20:12:26+00:00",
+            "status": "success",
+            "wud_file": "demo/out/images.todo"
+          }
+        },
+        "terminal": {
+          "error": "",
+          "finished_at": "2026-05-30T20:12:28+00:00",
+          "job_id": "demo-retag-job-switch-media-radarr-5.22.4-media-wudup",
+          "log_file": "demo/logs/demo-retag-switch-media-radarr-5.22.4-media-wudup.log",
+          "progress": [
+            {
+              "created_at": "2026-05-30T20:12:26+00:00",
+              "job_id": "demo-retag-job-switch-media-radarr-5.22.4-media-wudup",
+              "line_numbers": [],
+              "message": "[media] Writing retag Compose metadata.",
+              "phase": "compose-digest-pin",
+              "services": [
+                "radarr",
+                "wudup"
+              ],
+              "stack": "media",
+              "status": "running"
+            },
+            {
+              "created_at": "2026-05-30T20:12:28+00:00",
+              "job_id": "demo-retag-job-switch-media-radarr-5.22.4-media-wudup",
+              "line_numbers": [],
+              "message": "[media] Compose retag metadata was written.",
+              "phase": "compose-digest-pin",
+              "services": [
+                "radarr",
+                "wudup"
+              ],
+              "stack": "media",
+              "status": "success"
+            },
+            {
+              "created_at": "2026-05-30T20:12:28+00:00",
+              "job_id": "demo-retag-job-switch-media-radarr-5.22.4-media-wudup",
+              "line_numbers": [],
+              "message": "[media] Pulling retagged service image(s).",
+              "phase": "pull",
+              "services": [
+                "radarr",
+                "wudup"
+              ],
+              "stack": "media",
+              "status": "running"
+            },
+            {
+              "created_at": "2026-05-30T20:12:28+00:00",
+              "job_id": "demo-retag-job-switch-media-radarr-5.22.4-media-wudup",
+              "line_numbers": [],
+              "message": "[media] Retagged service image(s) pulled.",
+              "phase": "pull",
+              "services": [
+                "radarr",
+                "wudup"
+              ],
+              "stack": "media",
+              "status": "success"
+            },
+            {
+              "created_at": "2026-05-30T20:12:28+00:00",
+              "job_id": "demo-retag-job-switch-media-radarr-5.22.4-media-wudup",
+              "line_numbers": [],
+              "message": "[media] Recreating retagged service container(s).",
+              "phase": "recreate",
+              "services": [
+                "radarr",
+                "wudup"
+              ],
+              "stack": "media",
+              "status": "running"
+            },
+            {
+              "created_at": "2026-05-30T20:12:28+00:00",
+              "job_id": "demo-retag-job-switch-media-radarr-5.22.4-media-wudup",
+              "line_numbers": [],
+              "message": "[media] Retagged service container(s) recreated.",
+              "phase": "recreate",
+              "services": [
+                "radarr",
+                "wudup"
+              ],
+              "stack": "media",
+              "status": "success"
+            },
+            {
+              "created_at": "2026-05-30T20:12:28+00:00",
+              "job_id": "demo-retag-job-switch-media-radarr-5.22.4-media-wudup",
+              "line_numbers": [],
+              "message": "[media] Waiting up to 180s for retagged service health.",
+              "phase": "health",
+              "services": [
+                "radarr",
+                "wudup"
+              ],
+              "stack": "media",
+              "status": "running"
+            },
+            {
+              "created_at": "2026-05-30T20:12:28+00:00",
+              "job_id": "demo-retag-job-switch-media-radarr-5.22.4-media-wudup",
+              "line_numbers": [],
+              "message": "[media] Retagged service health wait succeeded in 2s.",
+              "phase": "health",
+              "services": [
+                "radarr",
+                "wudup"
+              ],
+              "stack": "media",
+              "status": "success"
+            },
+            {
+              "created_at": "2026-05-30T20:12:28+00:00",
+              "job_id": "demo-retag-job-switch-media-radarr-5.22.4-media-wudup",
+              "line_numbers": [],
+              "message": "Retag changes applied.",
+              "phase": "completion",
+              "services": [],
+              "stack": "",
+              "status": "success"
+            }
+          ],
+          "run_id": 7,
+          "selected_line_numbers": [],
+          "started_at": "2026-05-30T20:12:26+00:00",
+          "status": "success"
+        }
+      },
+      "key": "switch-media-radarr-5.22.4-media-wudup",
+      "preview": {
+        "complete": {
+          "error": "",
+          "plan": {
+            "can_apply": true,
+            "external_recreate_required": false,
+            "issues": [],
+            "keep_current_count": 2,
+            "plan_id": "demo-retag-plan-switch-media-radarr-5.22.4-media-wudup",
+            "selected_count": 2,
+            "stacks": [
+              {
+                "compose_file": "docker-compose.yml",
+                "digest_pin_updates": [
+                  {
+                    "digest_provenance": {
+                      "final_image": "lscr.io/linuxserver/radarr@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                      "provenance_confidence": "verified",
+                      "provenance_source": "manual",
+                      "resolved_tag": "5.22.4",
+                      "source_image": "lscr.io/linuxserver/radarr:5.21.1",
+                      "target_digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                      "watch_tag": "5.22.4"
+                    },
+                    "final_image": "lscr.io/linuxserver/radarr@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                    "label_key": "wud.tag.include",
+                    "label_rewrites": [],
+                    "label_value": "^5\\.22\\.4$$",
+                    "marker": "wudup.resolved-tag=5.22.4",
+                    "planned_digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                    "resolved_tag": "5.22.4",
+                    "service": "radarr",
+                    "service_key": "media/radarr",
+                    "source_image": "lscr.io/linuxserver/radarr:5.21.1",
+                    "stack": "media",
+                    "watch_tag": "5.22.4"
+                  },
+                  {
+                    "digest_provenance": {
+                      "final_image": "ghcr.io/magrhino/wudup@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                      "provenance_confidence": "verified",
+                      "provenance_source": "demo",
+                      "resolved_tag": "v0.16.1",
+                      "source_image": "ghcr.io/magrhino/wudup:latest",
+                      "target_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                      "watch_tag": "latest"
+                    },
+                    "final_image": "ghcr.io/magrhino/wudup@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                    "label_key": "wud.tag.include",
+                    "label_rewrites": [
+                      {
+                        "approved": false,
+                        "current_label_value": "^latest$",
+                        "label_key": "wud.tag.include",
+                        "planned_tag": "v0.16.1",
+                        "proposed_label_regex": "^v0\\.16\\.1$",
+                        "proposed_label_value": "^v0\\.16\\.1$$",
+                        "reason": "exact-regex-normalized",
+                        "service": "wudup"
+                      }
+                    ],
+                    "label_value": "^v0\\.16\\.1$$",
+                    "marker": "wudup.resolved-tag=v0.16.1",
+                    "planned_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                    "resolved_tag": "v0.16.1",
+                    "service": "wudup",
+                    "service_key": "media/wudup",
+                    "source_image": "ghcr.io/magrhino/wudup:latest",
+                    "stack": "media",
+                    "watch_tag": "v0.16.1"
+                  }
+                ],
+                "directory": "demo/docker/media",
+                "project_directory": "demo/docker/media",
+                "services": [
+                  "radarr",
+                  "wudup"
+                ],
+                "stack": "media"
+              }
+            ],
+            "status": "ready",
+            "warnings": []
+          },
+          "preview_job_id": "demo-retag-preview-switch-media-radarr-5.22.4-media-wudup",
+          "progress": [
+            {
+              "created_at": "2026-05-30T20:12:26+00:00",
+              "job_id": "demo-retag-preview-switch-media-radarr-5.22.4-media-wudup",
+              "line_numbers": [],
+              "message": "Refreshing demo retag candidates.",
+              "phase": "refresh",
+              "services": [],
+              "stack": "",
+              "status": "running"
+            },
+            {
+              "created_at": "2026-05-30T20:12:28+00:00",
+              "job_id": "demo-retag-preview-switch-media-radarr-5.22.4-media-wudup",
+              "line_numbers": [],
+              "message": "Demo retag preview is ready.",
+              "phase": "preview",
+              "services": [],
+              "stack": "",
+              "status": "success"
+            }
+          ],
+          "status": "success",
+          "warnings": []
+        },
+        "queued": {
+          "error": "",
+          "plan": null,
+          "preview_job_id": "demo-retag-preview-switch-media-radarr-5.22.4-media-wudup",
+          "progress": [
+            {
+              "created_at": "2026-05-30T20:12:26+00:00",
+              "job_id": "demo-retag-preview-switch-media-radarr-5.22.4-media-wudup",
+              "line_numbers": [],
+              "message": "Refreshing demo retag candidates.",
+              "phase": "refresh",
+              "services": [],
+              "stack": "",
+              "status": "running"
+            }
+          ],
+          "status": "queued",
+          "warnings": []
+        }
+      },
+      "request": {
+        "choices": [
+          {
+            "choice": "keep-current",
+            "service_key": "data/postgres"
+          },
+          {
+            "choice": "keep-current",
+            "service_key": "home/home-assistant"
+          },
+          {
+            "choice": "switch-to-concrete",
+            "service_key": "media/radarr",
+            "target_tag": "5.22.4"
+          },
+          {
+            "choice": "switch-to-concrete",
+            "service_key": "media/wudup"
+          }
+        ]
+      },
+      "response": {
+        "can_apply": true,
+        "external_recreate_required": false,
+        "issues": [],
+        "keep_current_count": 2,
+        "plan_id": "demo-retag-plan-switch-media-radarr-5.22.4-media-wudup",
+        "selected_count": 2,
+        "stacks": [
+          {
+            "compose_file": "docker-compose.yml",
+            "digest_pin_updates": [
+              {
+                "digest_provenance": {
+                  "final_image": "lscr.io/linuxserver/radarr@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                  "provenance_confidence": "verified",
+                  "provenance_source": "manual",
+                  "resolved_tag": "5.22.4",
+                  "source_image": "lscr.io/linuxserver/radarr:5.21.1",
+                  "target_digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                  "watch_tag": "5.22.4"
+                },
+                "final_image": "lscr.io/linuxserver/radarr@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                "label_key": "wud.tag.include",
+                "label_rewrites": [],
+                "label_value": "^5\\.22\\.4$$",
+                "marker": "wudup.resolved-tag=5.22.4",
+                "planned_digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                "resolved_tag": "5.22.4",
+                "service": "radarr",
+                "service_key": "media/radarr",
+                "source_image": "lscr.io/linuxserver/radarr:5.21.1",
+                "stack": "media",
+                "watch_tag": "5.22.4"
+              },
+              {
+                "digest_provenance": {
+                  "final_image": "ghcr.io/magrhino/wudup@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                  "provenance_confidence": "verified",
+                  "provenance_source": "demo",
+                  "resolved_tag": "v0.16.1",
+                  "source_image": "ghcr.io/magrhino/wudup:latest",
+                  "target_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                  "watch_tag": "latest"
+                },
+                "final_image": "ghcr.io/magrhino/wudup@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                "label_key": "wud.tag.include",
+                "label_rewrites": [
+                  {
+                    "approved": false,
+                    "current_label_value": "^latest$",
+                    "label_key": "wud.tag.include",
+                    "planned_tag": "v0.16.1",
+                    "proposed_label_regex": "^v0\\.16\\.1$",
+                    "proposed_label_value": "^v0\\.16\\.1$$",
+                    "reason": "exact-regex-normalized",
+                    "service": "wudup"
+                  }
+                ],
+                "label_value": "^v0\\.16\\.1$$",
+                "marker": "wudup.resolved-tag=v0.16.1",
+                "planned_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                "resolved_tag": "v0.16.1",
+                "service": "wudup",
+                "service_key": "media/wudup",
+                "source_image": "ghcr.io/magrhino/wudup:latest",
+                "stack": "media",
+                "watch_tag": "v0.16.1"
+              }
+            ],
+            "directory": "demo/docker/media",
+            "project_directory": "demo/docker/media",
+            "services": [
+              "radarr",
+              "wudup"
+            ],
+            "stack": "media"
+          }
+        ],
+        "status": "ready",
+        "warnings": []
+      }
+    },
+    {
+      "jobTemplate": {
+        "log": {
+          "content": "[2026-05-30T20:12:26+00:00] [INFO] [compose-digest-pin] [home] Writing retag Compose metadata.\n[2026-05-30T20:12:28+00:00] [INFO] [compose-digest-pin] [home] Compose retag metadata was written.\n[2026-05-30T20:12:28+00:00] [INFO] [pull] [home] Pulling retagged service image(s).\n[2026-05-30T20:12:28+00:00] [INFO] [pull] [home] Retagged service image(s) pulled.\n[2026-05-30T20:12:28+00:00] [INFO] [recreate] [home] Recreating retagged service container(s).\n[2026-05-30T20:12:28+00:00] [INFO] [recreate] [home] Retagged service container(s) recreated.\n[2026-05-30T20:12:28+00:00] [INFO] [health] [home] Waiting up to 180s for retagged service health.\n[2026-05-30T20:12:28+00:00] [INFO] [health] [home] Retagged service health wait succeeded in 2s.\n[2026-05-30T20:12:28+00:00] [INFO] [completion] Retag changes applied.\n[2026-05-30T20:12:28+00:00] [INFO] Done. See log: demo/logs/demo-retag-switch-home-home-assistant-2026.5.3.log\n",
+          "error": "",
+          "exists": true,
+          "job_id": "demo-retag-job-switch-home-home-assistant-2026.5.3",
+          "log_file": "demo/logs/demo-retag-switch-home-home-assistant-2026.5.3.log",
+          "max_bytes": 65536,
+          "truncated": false
+        },
+        "queued": {
+          "error": "",
+          "finished_at": null,
+          "job_id": "demo-retag-job-switch-home-home-assistant-2026.5.3",
+          "log_file": "",
+          "progress": [],
+          "run_id": null,
+          "selected_line_numbers": [],
+          "started_at": null,
+          "status": "queued"
+        },
+        "removeLineNumbers": [],
+        "run": {
+          "detail": {
+            "dry_run": false,
+            "events": [
+              {
+                "created_at": "2026-05-30T20:12:26+00:00",
+                "digest_provenance": {
+                  "final_image": "ghcr.io/home-assistant/home-assistant@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                  "provenance_confidence": "verified",
+                  "provenance_source": "retag",
+                  "resolved_tag": "2026.5.3",
+                  "source_image": "ghcr.io/home-assistant/home-assistant:2026.5.1",
+                  "target_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                  "watch_tag": "2026.5.3"
+                },
+                "id": 7,
+                "image": "ghcr.io/home-assistant/home-assistant:2026.5.1",
+                "metadata": {
+                  "operation": "retag",
+                  "resolved_tag": "2026.5.3",
+                  "service_key": "home/home-assistant",
+                  "source": "webui",
+                  "watch_tag": "2026.5.3"
+                },
+                "new_digest": "",
+                "new_image_id": "",
+                "old_digest": "",
+                "old_image_id": "",
+                "run_id": 7,
+                "service_name": "home-assistant",
+                "stack_name": "home",
+                "status": "success",
+                "target_image": "ghcr.io/home-assistant/home-assistant@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+              }
+            ],
+            "finished_at": "2026-05-30T20:12:28+00:00",
+            "id": 7,
+            "log_file": "demo/logs/demo-retag-switch-home-home-assistant-2026.5.3.log",
+            "metadata": {
+              "digest_pin_updates": [
+                {
+                  "digest_provenance": {
+                    "final_image": "ghcr.io/home-assistant/home-assistant@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                    "provenance_confidence": "verified",
+                    "provenance_source": "manual",
+                    "resolved_tag": "2026.5.3",
+                    "source_image": "ghcr.io/home-assistant/home-assistant:2026.5.1",
+                    "target_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                    "watch_tag": "2026.5.3"
+                  },
+                  "final_image": "ghcr.io/home-assistant/home-assistant@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                  "label_key": "wud.tag.include",
+                  "label_rewrites": [],
+                  "label_value": "^2026\\.5\\.3$$",
+                  "marker": "wudup.resolved-tag=2026.5.3",
+                  "planned_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                  "resolved_tag": "2026.5.3",
+                  "service": "home-assistant",
+                  "service_key": "home/home-assistant",
+                  "source_image": "ghcr.io/home-assistant/home-assistant:2026.5.1",
+                  "stack": "home",
+                  "watch_tag": "2026.5.3"
+                }
+              ],
+              "external_recreate_required": false,
+              "operation": "retag",
+              "plan_id": "demo-retag-job-switch-home-home-assistant-2026.5.3-plan",
+              "services": [
+                "home/home-assistant"
+              ],
+              "source": "webui",
+              "status": "success"
+            },
+            "mode": "web-retag",
+            "pending_updates": [],
+            "started_at": "2026-05-30T20:12:26+00:00",
+            "status": "success",
+            "verification": {
+              "items": [],
+              "needs_review_count": 0,
+              "status": "verified",
+              "total_count": 0,
+              "verified_count": 0
+            },
+            "wud_file": "demo/out/images.todo"
+          },
+          "log": {
+            "content": "[2026-05-30T20:12:26+00:00] [INFO] [compose-digest-pin] [home] Writing retag Compose metadata.\n[2026-05-30T20:12:28+00:00] [INFO] [compose-digest-pin] [home] Compose retag metadata was written.\n[2026-05-30T20:12:28+00:00] [INFO] [pull] [home] Pulling retagged service image(s).\n[2026-05-30T20:12:28+00:00] [INFO] [pull] [home] Retagged service image(s) pulled.\n[2026-05-30T20:12:28+00:00] [INFO] [recreate] [home] Recreating retagged service container(s).\n[2026-05-30T20:12:28+00:00] [INFO] [recreate] [home] Retagged service container(s) recreated.\n[2026-05-30T20:12:28+00:00] [INFO] [health] [home] Waiting up to 180s for retagged service health.\n[2026-05-30T20:12:28+00:00] [INFO] [health] [home] Retagged service health wait succeeded in 2s.\n[2026-05-30T20:12:28+00:00] [INFO] [completion] Retag changes applied.\n[2026-05-30T20:12:28+00:00] [INFO] Done. See log: demo/logs/demo-retag-switch-home-home-assistant-2026.5.3.log\n",
+            "exists": true,
+            "log_file": "demo/logs/demo-retag-switch-home-home-assistant-2026.5.3.log",
+            "max_bytes": 262144,
+            "run_id": 7,
+            "truncated": false
+          },
+          "summary": {
+            "dry_run": false,
+            "events": [
+              {
+                "created_at": "2026-05-30T20:12:26+00:00",
+                "digest_provenance": {
+                  "final_image": "ghcr.io/home-assistant/home-assistant@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                  "provenance_confidence": "verified",
+                  "provenance_source": "retag",
+                  "resolved_tag": "2026.5.3",
+                  "source_image": "ghcr.io/home-assistant/home-assistant:2026.5.1",
+                  "target_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                  "watch_tag": "2026.5.3"
+                },
+                "id": 7,
+                "image": "ghcr.io/home-assistant/home-assistant:2026.5.1",
+                "metadata": {
+                  "operation": "retag",
+                  "resolved_tag": "2026.5.3",
+                  "service_key": "home/home-assistant",
+                  "source": "webui",
+                  "watch_tag": "2026.5.3"
+                },
+                "new_digest": "",
+                "new_image_id": "",
+                "old_digest": "",
+                "old_image_id": "",
+                "run_id": 7,
+                "service_name": "home-assistant",
+                "stack_name": "home",
+                "status": "success",
+                "target_image": "ghcr.io/home-assistant/home-assistant@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+              }
+            ],
+            "finished_at": "2026-05-30T20:12:28+00:00",
+            "id": 7,
+            "log_file": "demo/logs/demo-retag-switch-home-home-assistant-2026.5.3.log",
+            "metadata": {
+              "digest_pin_updates": [
+                {
+                  "digest_provenance": {
+                    "final_image": "ghcr.io/home-assistant/home-assistant@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                    "provenance_confidence": "verified",
+                    "provenance_source": "manual",
+                    "resolved_tag": "2026.5.3",
+                    "source_image": "ghcr.io/home-assistant/home-assistant:2026.5.1",
+                    "target_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                    "watch_tag": "2026.5.3"
+                  },
+                  "final_image": "ghcr.io/home-assistant/home-assistant@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                  "label_key": "wud.tag.include",
+                  "label_rewrites": [],
+                  "label_value": "^2026\\.5\\.3$$",
+                  "marker": "wudup.resolved-tag=2026.5.3",
+                  "planned_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                  "resolved_tag": "2026.5.3",
+                  "service": "home-assistant",
+                  "service_key": "home/home-assistant",
+                  "source_image": "ghcr.io/home-assistant/home-assistant:2026.5.1",
+                  "stack": "home",
+                  "watch_tag": "2026.5.3"
+                }
+              ],
+              "external_recreate_required": false,
+              "operation": "retag",
+              "plan_id": "demo-retag-job-switch-home-home-assistant-2026.5.3-plan",
+              "services": [
+                "home/home-assistant"
+              ],
+              "source": "webui",
+              "status": "success"
+            },
+            "mode": "web-retag",
+            "started_at": "2026-05-30T20:12:26+00:00",
+            "status": "success",
+            "wud_file": "demo/out/images.todo"
+          }
+        },
+        "terminal": {
+          "error": "",
+          "finished_at": "2026-05-30T20:12:28+00:00",
+          "job_id": "demo-retag-job-switch-home-home-assistant-2026.5.3",
+          "log_file": "demo/logs/demo-retag-switch-home-home-assistant-2026.5.3.log",
+          "progress": [
+            {
+              "created_at": "2026-05-30T20:12:26+00:00",
+              "job_id": "demo-retag-job-switch-home-home-assistant-2026.5.3",
+              "line_numbers": [],
+              "message": "[home] Writing retag Compose metadata.",
+              "phase": "compose-digest-pin",
+              "services": [
+                "home-assistant"
+              ],
+              "stack": "home",
+              "status": "running"
+            },
+            {
+              "created_at": "2026-05-30T20:12:28+00:00",
+              "job_id": "demo-retag-job-switch-home-home-assistant-2026.5.3",
+              "line_numbers": [],
+              "message": "[home] Compose retag metadata was written.",
+              "phase": "compose-digest-pin",
+              "services": [
+                "home-assistant"
+              ],
+              "stack": "home",
+              "status": "success"
+            },
+            {
+              "created_at": "2026-05-30T20:12:28+00:00",
+              "job_id": "demo-retag-job-switch-home-home-assistant-2026.5.3",
+              "line_numbers": [],
+              "message": "[home] Pulling retagged service image(s).",
+              "phase": "pull",
+              "services": [
+                "home-assistant"
+              ],
+              "stack": "home",
+              "status": "running"
+            },
+            {
+              "created_at": "2026-05-30T20:12:28+00:00",
+              "job_id": "demo-retag-job-switch-home-home-assistant-2026.5.3",
+              "line_numbers": [],
+              "message": "[home] Retagged service image(s) pulled.",
+              "phase": "pull",
+              "services": [
+                "home-assistant"
+              ],
+              "stack": "home",
+              "status": "success"
+            },
+            {
+              "created_at": "2026-05-30T20:12:28+00:00",
+              "job_id": "demo-retag-job-switch-home-home-assistant-2026.5.3",
+              "line_numbers": [],
+              "message": "[home] Recreating retagged service container(s).",
+              "phase": "recreate",
+              "services": [
+                "home-assistant"
+              ],
+              "stack": "home",
+              "status": "running"
+            },
+            {
+              "created_at": "2026-05-30T20:12:28+00:00",
+              "job_id": "demo-retag-job-switch-home-home-assistant-2026.5.3",
+              "line_numbers": [],
+              "message": "[home] Retagged service container(s) recreated.",
+              "phase": "recreate",
+              "services": [
+                "home-assistant"
+              ],
+              "stack": "home",
+              "status": "success"
+            },
+            {
+              "created_at": "2026-05-30T20:12:28+00:00",
+              "job_id": "demo-retag-job-switch-home-home-assistant-2026.5.3",
+              "line_numbers": [],
+              "message": "[home] Waiting up to 180s for retagged service health.",
+              "phase": "health",
+              "services": [
+                "home-assistant"
+              ],
+              "stack": "home",
+              "status": "running"
+            },
+            {
+              "created_at": "2026-05-30T20:12:28+00:00",
+              "job_id": "demo-retag-job-switch-home-home-assistant-2026.5.3",
+              "line_numbers": [],
+              "message": "[home] Retagged service health wait succeeded in 2s.",
+              "phase": "health",
+              "services": [
+                "home-assistant"
+              ],
+              "stack": "home",
+              "status": "success"
+            },
+            {
+              "created_at": "2026-05-30T20:12:28+00:00",
+              "job_id": "demo-retag-job-switch-home-home-assistant-2026.5.3",
+              "line_numbers": [],
+              "message": "Retag changes applied.",
+              "phase": "completion",
+              "services": [],
+              "stack": "",
+              "status": "success"
+            }
+          ],
+          "run_id": 7,
+          "selected_line_numbers": [],
+          "started_at": "2026-05-30T20:12:26+00:00",
+          "status": "success"
+        }
+      },
+      "key": "switch-home-home-assistant-2026.5.3",
+      "preview": {
+        "complete": {
+          "error": "",
+          "plan": {
+            "can_apply": true,
+            "external_recreate_required": false,
+            "issues": [],
+            "keep_current_count": 3,
+            "plan_id": "demo-retag-plan-switch-home-home-assistant-2026.5.3",
+            "selected_count": 1,
+            "stacks": [
+              {
+                "compose_file": "docker-compose.yml",
+                "digest_pin_updates": [
+                  {
+                    "digest_provenance": {
+                      "final_image": "ghcr.io/home-assistant/home-assistant@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                      "provenance_confidence": "verified",
+                      "provenance_source": "manual",
+                      "resolved_tag": "2026.5.3",
+                      "source_image": "ghcr.io/home-assistant/home-assistant:2026.5.1",
+                      "target_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                      "watch_tag": "2026.5.3"
+                    },
+                    "final_image": "ghcr.io/home-assistant/home-assistant@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                    "label_key": "wud.tag.include",
+                    "label_rewrites": [],
+                    "label_value": "^2026\\.5\\.3$$",
+                    "marker": "wudup.resolved-tag=2026.5.3",
+                    "planned_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                    "resolved_tag": "2026.5.3",
+                    "service": "home-assistant",
+                    "service_key": "home/home-assistant",
+                    "source_image": "ghcr.io/home-assistant/home-assistant:2026.5.1",
+                    "stack": "home",
+                    "watch_tag": "2026.5.3"
+                  }
+                ],
+                "directory": "demo/docker/home",
+                "project_directory": "demo/docker/home",
+                "services": [
+                  "home-assistant"
+                ],
+                "stack": "home"
+              }
+            ],
+            "status": "ready",
+            "warnings": []
+          },
+          "preview_job_id": "demo-retag-preview-switch-home-home-assistant-2026.5.3",
+          "progress": [
+            {
+              "created_at": "2026-05-30T20:12:26+00:00",
+              "job_id": "demo-retag-preview-switch-home-home-assistant-2026.5.3",
+              "line_numbers": [],
+              "message": "Refreshing demo retag candidates.",
+              "phase": "refresh",
+              "services": [],
+              "stack": "",
+              "status": "running"
+            },
+            {
+              "created_at": "2026-05-30T20:12:28+00:00",
+              "job_id": "demo-retag-preview-switch-home-home-assistant-2026.5.3",
+              "line_numbers": [],
+              "message": "Demo retag preview is ready.",
+              "phase": "preview",
+              "services": [],
+              "stack": "",
+              "status": "success"
+            }
+          ],
+          "status": "success",
+          "warnings": []
+        },
+        "queued": {
+          "error": "",
+          "plan": null,
+          "preview_job_id": "demo-retag-preview-switch-home-home-assistant-2026.5.3",
+          "progress": [
+            {
+              "created_at": "2026-05-30T20:12:26+00:00",
+              "job_id": "demo-retag-preview-switch-home-home-assistant-2026.5.3",
+              "line_numbers": [],
+              "message": "Refreshing demo retag candidates.",
+              "phase": "refresh",
+              "services": [],
+              "stack": "",
+              "status": "running"
+            }
+          ],
+          "status": "queued",
+          "warnings": []
+        }
+      },
+      "request": {
+        "choices": [
+          {
+            "choice": "keep-current",
+            "service_key": "data/postgres"
+          },
+          {
+            "choice": "switch-to-concrete",
+            "service_key": "home/home-assistant",
+            "target_tag": "2026.5.3"
+          },
+          {
+            "choice": "keep-current",
+            "service_key": "media/radarr"
+          },
+          {
+            "choice": "keep-current",
+            "service_key": "media/wudup"
+          }
+        ]
+      },
+      "response": {
+        "can_apply": true,
+        "external_recreate_required": false,
+        "issues": [],
+        "keep_current_count": 3,
+        "plan_id": "demo-retag-plan-switch-home-home-assistant-2026.5.3",
+        "selected_count": 1,
+        "stacks": [
+          {
+            "compose_file": "docker-compose.yml",
+            "digest_pin_updates": [
+              {
+                "digest_provenance": {
+                  "final_image": "ghcr.io/home-assistant/home-assistant@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                  "provenance_confidence": "verified",
+                  "provenance_source": "manual",
+                  "resolved_tag": "2026.5.3",
+                  "source_image": "ghcr.io/home-assistant/home-assistant:2026.5.1",
+                  "target_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                  "watch_tag": "2026.5.3"
+                },
+                "final_image": "ghcr.io/home-assistant/home-assistant@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "label_key": "wud.tag.include",
+                "label_rewrites": [],
+                "label_value": "^2026\\.5\\.3$$",
+                "marker": "wudup.resolved-tag=2026.5.3",
+                "planned_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "resolved_tag": "2026.5.3",
+                "service": "home-assistant",
+                "service_key": "home/home-assistant",
+                "source_image": "ghcr.io/home-assistant/home-assistant:2026.5.1",
+                "stack": "home",
+                "watch_tag": "2026.5.3"
+              }
+            ],
+            "directory": "demo/docker/home",
+            "project_directory": "demo/docker/home",
+            "services": [
+              "home-assistant"
+            ],
+            "stack": "home"
+          }
+        ],
+        "status": "ready",
+        "warnings": []
+      }
+    },
+    {
+      "jobTemplate": {
+        "log": {
+          "content": "[2026-05-30T20:12:26+00:00] [INFO] [compose-digest-pin] [home] Writing retag Compose metadata.\n[2026-05-30T20:12:28+00:00] [INFO] [compose-digest-pin] [home] Compose retag metadata was written.\n[2026-05-30T20:12:28+00:00] [INFO] [pull] [home] Pulling retagged service image(s).\n[2026-05-30T20:12:28+00:00] [INFO] [pull] [home] Retagged service image(s) pulled.\n[2026-05-30T20:12:28+00:00] [INFO] [recreate] [home] Recreating retagged service container(s).\n[2026-05-30T20:12:28+00:00] [INFO] [recreate] [home] Retagged service container(s) recreated.\n[2026-05-30T20:12:28+00:00] [INFO] [health] [home] Waiting up to 180s for retagged service health.\n[2026-05-30T20:12:28+00:00] [INFO] [health] [home] Retagged service health wait succeeded in 2s.\n[2026-05-30T20:12:28+00:00] [INFO] [compose-digest-pin] [media] Writing retag Compose metadata.\n[2026-05-30T20:12:28+00:00] [INFO] [compose-digest-pin] [media] Compose retag metadata was written.\n[2026-05-30T20:12:28+00:00] [INFO] [pull] [media] Pulling retagged service image(s).\n[2026-05-30T20:12:28+00:00] [INFO] [pull] [media] Retagged service image(s) pulled.\n[2026-05-30T20:12:28+00:00] [INFO] [recreate] [media] Recreating retagged service container(s).\n[2026-05-30T20:12:28+00:00] [INFO] [recreate] [media] Retagged service container(s) recreated.\n[2026-05-30T20:12:28+00:00] [INFO] [health] [media] Waiting up to 180s for retagged service health.\n[2026-05-30T20:12:28+00:00] [INFO] [health] [media] Retagged service health wait succeeded in 2s.\n[2026-05-30T20:12:28+00:00] [INFO] [completion] Retag changes applied.\n[2026-05-30T20:12:28+00:00] [INFO] Done. See log: demo/logs/demo-retag-switch-home-home-assistant-2026.5.3-media-wudup.log\n",
+          "error": "",
+          "exists": true,
+          "job_id": "demo-retag-job-switch-home-home-assistant-2026.5.3-media-wudup",
+          "log_file": "demo/logs/demo-retag-switch-home-home-assistant-2026.5.3-media-wudup.log",
+          "max_bytes": 65536,
+          "truncated": false
+        },
+        "queued": {
+          "error": "",
+          "finished_at": null,
+          "job_id": "demo-retag-job-switch-home-home-assistant-2026.5.3-media-wudup",
+          "log_file": "",
+          "progress": [],
+          "run_id": null,
+          "selected_line_numbers": [],
+          "started_at": null,
+          "status": "queued"
+        },
+        "removeLineNumbers": [],
+        "run": {
+          "detail": {
+            "dry_run": false,
+            "events": [
+              {
+                "created_at": "2026-05-30T20:12:26+00:00",
+                "digest_provenance": {
+                  "final_image": "ghcr.io/home-assistant/home-assistant@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                  "provenance_confidence": "verified",
+                  "provenance_source": "retag",
+                  "resolved_tag": "2026.5.3",
+                  "source_image": "ghcr.io/home-assistant/home-assistant:2026.5.1",
+                  "target_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                  "watch_tag": "2026.5.3"
+                },
+                "id": 7,
+                "image": "ghcr.io/home-assistant/home-assistant:2026.5.1",
+                "metadata": {
+                  "operation": "retag",
+                  "resolved_tag": "2026.5.3",
+                  "service_key": "home/home-assistant",
+                  "source": "webui",
+                  "watch_tag": "2026.5.3"
+                },
+                "new_digest": "",
+                "new_image_id": "",
+                "old_digest": "",
+                "old_image_id": "",
+                "run_id": 7,
+                "service_name": "home-assistant",
+                "stack_name": "home",
+                "status": "success",
+                "target_image": "ghcr.io/home-assistant/home-assistant@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+              },
+              {
+                "created_at": "2026-05-30T20:12:26+00:00",
+                "digest_provenance": {
+                  "final_image": "ghcr.io/magrhino/wudup@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                  "provenance_confidence": "verified",
+                  "provenance_source": "retag",
+                  "resolved_tag": "v0.16.1",
+                  "source_image": "ghcr.io/magrhino/wudup:latest",
+                  "target_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                  "watch_tag": "v0.16.1"
+                },
+                "id": 8,
+                "image": "ghcr.io/magrhino/wudup:latest",
+                "metadata": {
+                  "operation": "retag",
+                  "resolved_tag": "v0.16.1",
+                  "service_key": "media/wudup",
+                  "source": "webui",
+                  "watch_tag": "v0.16.1"
+                },
+                "new_digest": "",
+                "new_image_id": "",
+                "old_digest": "",
+                "old_image_id": "",
+                "run_id": 7,
+                "service_name": "wudup",
+                "stack_name": "media",
+                "status": "success",
+                "target_image": "ghcr.io/magrhino/wudup@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+              }
+            ],
+            "finished_at": "2026-05-30T20:12:28+00:00",
+            "id": 7,
+            "log_file": "demo/logs/demo-retag-switch-home-home-assistant-2026.5.3-media-wudup.log",
+            "metadata": {
+              "digest_pin_updates": [
+                {
+                  "digest_provenance": {
+                    "final_image": "ghcr.io/home-assistant/home-assistant@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                    "provenance_confidence": "verified",
+                    "provenance_source": "manual",
+                    "resolved_tag": "2026.5.3",
+                    "source_image": "ghcr.io/home-assistant/home-assistant:2026.5.1",
+                    "target_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                    "watch_tag": "2026.5.3"
+                  },
+                  "final_image": "ghcr.io/home-assistant/home-assistant@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                  "label_key": "wud.tag.include",
+                  "label_rewrites": [],
+                  "label_value": "^2026\\.5\\.3$$",
+                  "marker": "wudup.resolved-tag=2026.5.3",
+                  "planned_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                  "resolved_tag": "2026.5.3",
+                  "service": "home-assistant",
+                  "service_key": "home/home-assistant",
+                  "source_image": "ghcr.io/home-assistant/home-assistant:2026.5.1",
+                  "stack": "home",
+                  "watch_tag": "2026.5.3"
+                },
+                {
+                  "digest_provenance": {
+                    "final_image": "ghcr.io/magrhino/wudup@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                    "provenance_confidence": "verified",
+                    "provenance_source": "demo",
+                    "resolved_tag": "v0.16.1",
+                    "source_image": "ghcr.io/magrhino/wudup:latest",
+                    "target_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                    "watch_tag": "latest"
+                  },
+                  "final_image": "ghcr.io/magrhino/wudup@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                  "label_key": "wud.tag.include",
+                  "label_rewrites": [
+                    {
+                      "approved": false,
+                      "current_label_value": "^latest$",
+                      "label_key": "wud.tag.include",
+                      "planned_tag": "v0.16.1",
+                      "proposed_label_regex": "^v0\\.16\\.1$",
+                      "proposed_label_value": "^v0\\.16\\.1$$",
+                      "reason": "exact-regex-normalized",
+                      "service": "wudup"
+                    }
+                  ],
+                  "label_value": "^v0\\.16\\.1$$",
+                  "marker": "wudup.resolved-tag=v0.16.1",
+                  "planned_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                  "resolved_tag": "v0.16.1",
+                  "service": "wudup",
+                  "service_key": "media/wudup",
+                  "source_image": "ghcr.io/magrhino/wudup:latest",
+                  "stack": "media",
+                  "watch_tag": "v0.16.1"
+                }
+              ],
+              "external_recreate_required": false,
+              "operation": "retag",
+              "plan_id": "demo-retag-job-switch-home-home-assistant-2026.5.3-media-wudup-plan",
+              "services": [
+                "home/home-assistant",
+                "media/wudup"
+              ],
+              "source": "webui",
+              "status": "success"
+            },
+            "mode": "web-retag",
+            "pending_updates": [],
+            "started_at": "2026-05-30T20:12:26+00:00",
+            "status": "success",
+            "verification": {
+              "items": [],
+              "needs_review_count": 0,
+              "status": "verified",
+              "total_count": 0,
+              "verified_count": 0
+            },
+            "wud_file": "demo/out/images.todo"
+          },
+          "log": {
+            "content": "[2026-05-30T20:12:26+00:00] [INFO] [compose-digest-pin] [home] Writing retag Compose metadata.\n[2026-05-30T20:12:28+00:00] [INFO] [compose-digest-pin] [home] Compose retag metadata was written.\n[2026-05-30T20:12:28+00:00] [INFO] [pull] [home] Pulling retagged service image(s).\n[2026-05-30T20:12:28+00:00] [INFO] [pull] [home] Retagged service image(s) pulled.\n[2026-05-30T20:12:28+00:00] [INFO] [recreate] [home] Recreating retagged service container(s).\n[2026-05-30T20:12:28+00:00] [INFO] [recreate] [home] Retagged service container(s) recreated.\n[2026-05-30T20:12:28+00:00] [INFO] [health] [home] Waiting up to 180s for retagged service health.\n[2026-05-30T20:12:28+00:00] [INFO] [health] [home] Retagged service health wait succeeded in 2s.\n[2026-05-30T20:12:28+00:00] [INFO] [compose-digest-pin] [media] Writing retag Compose metadata.\n[2026-05-30T20:12:28+00:00] [INFO] [compose-digest-pin] [media] Compose retag metadata was written.\n[2026-05-30T20:12:28+00:00] [INFO] [pull] [media] Pulling retagged service image(s).\n[2026-05-30T20:12:28+00:00] [INFO] [pull] [media] Retagged service image(s) pulled.\n[2026-05-30T20:12:28+00:00] [INFO] [recreate] [media] Recreating retagged service container(s).\n[2026-05-30T20:12:28+00:00] [INFO] [recreate] [media] Retagged service container(s) recreated.\n[2026-05-30T20:12:28+00:00] [INFO] [health] [media] Waiting up to 180s for retagged service health.\n[2026-05-30T20:12:28+00:00] [INFO] [health] [media] Retagged service health wait succeeded in 2s.\n[2026-05-30T20:12:28+00:00] [INFO] [completion] Retag changes applied.\n[2026-05-30T20:12:28+00:00] [INFO] Done. See log: demo/logs/demo-retag-switch-home-home-assistant-2026.5.3-media-wudup.log\n",
+            "exists": true,
+            "log_file": "demo/logs/demo-retag-switch-home-home-assistant-2026.5.3-media-wudup.log",
+            "max_bytes": 262144,
+            "run_id": 7,
+            "truncated": false
+          },
+          "summary": {
+            "dry_run": false,
+            "events": [
+              {
+                "created_at": "2026-05-30T20:12:26+00:00",
+                "digest_provenance": {
+                  "final_image": "ghcr.io/home-assistant/home-assistant@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                  "provenance_confidence": "verified",
+                  "provenance_source": "retag",
+                  "resolved_tag": "2026.5.3",
+                  "source_image": "ghcr.io/home-assistant/home-assistant:2026.5.1",
+                  "target_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                  "watch_tag": "2026.5.3"
+                },
+                "id": 7,
+                "image": "ghcr.io/home-assistant/home-assistant:2026.5.1",
+                "metadata": {
+                  "operation": "retag",
+                  "resolved_tag": "2026.5.3",
+                  "service_key": "home/home-assistant",
+                  "source": "webui",
+                  "watch_tag": "2026.5.3"
+                },
+                "new_digest": "",
+                "new_image_id": "",
+                "old_digest": "",
+                "old_image_id": "",
+                "run_id": 7,
+                "service_name": "home-assistant",
+                "stack_name": "home",
+                "status": "success",
+                "target_image": "ghcr.io/home-assistant/home-assistant@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+              },
+              {
+                "created_at": "2026-05-30T20:12:26+00:00",
+                "digest_provenance": {
+                  "final_image": "ghcr.io/magrhino/wudup@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                  "provenance_confidence": "verified",
+                  "provenance_source": "retag",
+                  "resolved_tag": "v0.16.1",
+                  "source_image": "ghcr.io/magrhino/wudup:latest",
+                  "target_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                  "watch_tag": "v0.16.1"
+                },
+                "id": 8,
+                "image": "ghcr.io/magrhino/wudup:latest",
+                "metadata": {
+                  "operation": "retag",
+                  "resolved_tag": "v0.16.1",
+                  "service_key": "media/wudup",
+                  "source": "webui",
+                  "watch_tag": "v0.16.1"
+                },
+                "new_digest": "",
+                "new_image_id": "",
+                "old_digest": "",
+                "old_image_id": "",
+                "run_id": 7,
+                "service_name": "wudup",
+                "stack_name": "media",
+                "status": "success",
+                "target_image": "ghcr.io/magrhino/wudup@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+              }
+            ],
+            "finished_at": "2026-05-30T20:12:28+00:00",
+            "id": 7,
+            "log_file": "demo/logs/demo-retag-switch-home-home-assistant-2026.5.3-media-wudup.log",
+            "metadata": {
+              "digest_pin_updates": [
+                {
+                  "digest_provenance": {
+                    "final_image": "ghcr.io/home-assistant/home-assistant@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                    "provenance_confidence": "verified",
+                    "provenance_source": "manual",
+                    "resolved_tag": "2026.5.3",
+                    "source_image": "ghcr.io/home-assistant/home-assistant:2026.5.1",
+                    "target_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                    "watch_tag": "2026.5.3"
+                  },
+                  "final_image": "ghcr.io/home-assistant/home-assistant@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                  "label_key": "wud.tag.include",
+                  "label_rewrites": [],
+                  "label_value": "^2026\\.5\\.3$$",
+                  "marker": "wudup.resolved-tag=2026.5.3",
+                  "planned_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                  "resolved_tag": "2026.5.3",
+                  "service": "home-assistant",
+                  "service_key": "home/home-assistant",
+                  "source_image": "ghcr.io/home-assistant/home-assistant:2026.5.1",
+                  "stack": "home",
+                  "watch_tag": "2026.5.3"
+                },
+                {
+                  "digest_provenance": {
+                    "final_image": "ghcr.io/magrhino/wudup@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                    "provenance_confidence": "verified",
+                    "provenance_source": "demo",
+                    "resolved_tag": "v0.16.1",
+                    "source_image": "ghcr.io/magrhino/wudup:latest",
+                    "target_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                    "watch_tag": "latest"
+                  },
+                  "final_image": "ghcr.io/magrhino/wudup@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                  "label_key": "wud.tag.include",
+                  "label_rewrites": [
+                    {
+                      "approved": false,
+                      "current_label_value": "^latest$",
+                      "label_key": "wud.tag.include",
+                      "planned_tag": "v0.16.1",
+                      "proposed_label_regex": "^v0\\.16\\.1$",
+                      "proposed_label_value": "^v0\\.16\\.1$$",
+                      "reason": "exact-regex-normalized",
+                      "service": "wudup"
+                    }
+                  ],
+                  "label_value": "^v0\\.16\\.1$$",
+                  "marker": "wudup.resolved-tag=v0.16.1",
+                  "planned_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                  "resolved_tag": "v0.16.1",
+                  "service": "wudup",
+                  "service_key": "media/wudup",
+                  "source_image": "ghcr.io/magrhino/wudup:latest",
+                  "stack": "media",
+                  "watch_tag": "v0.16.1"
+                }
+              ],
+              "external_recreate_required": false,
+              "operation": "retag",
+              "plan_id": "demo-retag-job-switch-home-home-assistant-2026.5.3-media-wudup-plan",
+              "services": [
+                "home/home-assistant",
+                "media/wudup"
+              ],
+              "source": "webui",
+              "status": "success"
+            },
+            "mode": "web-retag",
+            "started_at": "2026-05-30T20:12:26+00:00",
+            "status": "success",
+            "wud_file": "demo/out/images.todo"
+          }
+        },
+        "terminal": {
+          "error": "",
+          "finished_at": "2026-05-30T20:12:28+00:00",
+          "job_id": "demo-retag-job-switch-home-home-assistant-2026.5.3-media-wudup",
+          "log_file": "demo/logs/demo-retag-switch-home-home-assistant-2026.5.3-media-wudup.log",
+          "progress": [
+            {
+              "created_at": "2026-05-30T20:12:26+00:00",
+              "job_id": "demo-retag-job-switch-home-home-assistant-2026.5.3-media-wudup",
+              "line_numbers": [],
+              "message": "[home] Writing retag Compose metadata.",
+              "phase": "compose-digest-pin",
+              "services": [
+                "home-assistant"
+              ],
+              "stack": "home",
+              "status": "running"
+            },
+            {
+              "created_at": "2026-05-30T20:12:28+00:00",
+              "job_id": "demo-retag-job-switch-home-home-assistant-2026.5.3-media-wudup",
+              "line_numbers": [],
+              "message": "[home] Compose retag metadata was written.",
+              "phase": "compose-digest-pin",
+              "services": [
+                "home-assistant"
+              ],
+              "stack": "home",
+              "status": "success"
+            },
+            {
+              "created_at": "2026-05-30T20:12:28+00:00",
+              "job_id": "demo-retag-job-switch-home-home-assistant-2026.5.3-media-wudup",
+              "line_numbers": [],
+              "message": "[home] Pulling retagged service image(s).",
+              "phase": "pull",
+              "services": [
+                "home-assistant"
+              ],
+              "stack": "home",
+              "status": "running"
+            },
+            {
+              "created_at": "2026-05-30T20:12:28+00:00",
+              "job_id": "demo-retag-job-switch-home-home-assistant-2026.5.3-media-wudup",
+              "line_numbers": [],
+              "message": "[home] Retagged service image(s) pulled.",
+              "phase": "pull",
+              "services": [
+                "home-assistant"
+              ],
+              "stack": "home",
+              "status": "success"
+            },
+            {
+              "created_at": "2026-05-30T20:12:28+00:00",
+              "job_id": "demo-retag-job-switch-home-home-assistant-2026.5.3-media-wudup",
+              "line_numbers": [],
+              "message": "[home] Recreating retagged service container(s).",
+              "phase": "recreate",
+              "services": [
+                "home-assistant"
+              ],
+              "stack": "home",
+              "status": "running"
+            },
+            {
+              "created_at": "2026-05-30T20:12:28+00:00",
+              "job_id": "demo-retag-job-switch-home-home-assistant-2026.5.3-media-wudup",
+              "line_numbers": [],
+              "message": "[home] Retagged service container(s) recreated.",
+              "phase": "recreate",
+              "services": [
+                "home-assistant"
+              ],
+              "stack": "home",
+              "status": "success"
+            },
+            {
+              "created_at": "2026-05-30T20:12:28+00:00",
+              "job_id": "demo-retag-job-switch-home-home-assistant-2026.5.3-media-wudup",
+              "line_numbers": [],
+              "message": "[home] Waiting up to 180s for retagged service health.",
+              "phase": "health",
+              "services": [
+                "home-assistant"
+              ],
+              "stack": "home",
+              "status": "running"
+            },
+            {
+              "created_at": "2026-05-30T20:12:28+00:00",
+              "job_id": "demo-retag-job-switch-home-home-assistant-2026.5.3-media-wudup",
+              "line_numbers": [],
+              "message": "[home] Retagged service health wait succeeded in 2s.",
+              "phase": "health",
+              "services": [
+                "home-assistant"
+              ],
+              "stack": "home",
+              "status": "success"
+            },
+            {
+              "created_at": "2026-05-30T20:12:28+00:00",
+              "job_id": "demo-retag-job-switch-home-home-assistant-2026.5.3-media-wudup",
+              "line_numbers": [],
+              "message": "[media] Writing retag Compose metadata.",
+              "phase": "compose-digest-pin",
+              "services": [
+                "wudup"
+              ],
+              "stack": "media",
+              "status": "running"
+            },
+            {
+              "created_at": "2026-05-30T20:12:28+00:00",
+              "job_id": "demo-retag-job-switch-home-home-assistant-2026.5.3-media-wudup",
+              "line_numbers": [],
+              "message": "[media] Compose retag metadata was written.",
+              "phase": "compose-digest-pin",
+              "services": [
+                "wudup"
+              ],
+              "stack": "media",
+              "status": "success"
+            },
+            {
+              "created_at": "2026-05-30T20:12:28+00:00",
+              "job_id": "demo-retag-job-switch-home-home-assistant-2026.5.3-media-wudup",
+              "line_numbers": [],
+              "message": "[media] Pulling retagged service image(s).",
+              "phase": "pull",
+              "services": [
+                "wudup"
+              ],
+              "stack": "media",
+              "status": "running"
+            },
+            {
+              "created_at": "2026-05-30T20:12:28+00:00",
+              "job_id": "demo-retag-job-switch-home-home-assistant-2026.5.3-media-wudup",
+              "line_numbers": [],
+              "message": "[media] Retagged service image(s) pulled.",
+              "phase": "pull",
+              "services": [
+                "wudup"
+              ],
+              "stack": "media",
+              "status": "success"
+            },
+            {
+              "created_at": "2026-05-30T20:12:28+00:00",
+              "job_id": "demo-retag-job-switch-home-home-assistant-2026.5.3-media-wudup",
+              "line_numbers": [],
+              "message": "[media] Recreating retagged service container(s).",
+              "phase": "recreate",
+              "services": [
+                "wudup"
+              ],
+              "stack": "media",
+              "status": "running"
+            },
+            {
+              "created_at": "2026-05-30T20:12:28+00:00",
+              "job_id": "demo-retag-job-switch-home-home-assistant-2026.5.3-media-wudup",
+              "line_numbers": [],
+              "message": "[media] Retagged service container(s) recreated.",
+              "phase": "recreate",
+              "services": [
+                "wudup"
+              ],
+              "stack": "media",
+              "status": "success"
+            },
+            {
+              "created_at": "2026-05-30T20:12:28+00:00",
+              "job_id": "demo-retag-job-switch-home-home-assistant-2026.5.3-media-wudup",
+              "line_numbers": [],
+              "message": "[media] Waiting up to 180s for retagged service health.",
+              "phase": "health",
+              "services": [
+                "wudup"
+              ],
+              "stack": "media",
+              "status": "running"
+            },
+            {
+              "created_at": "2026-05-30T20:12:28+00:00",
+              "job_id": "demo-retag-job-switch-home-home-assistant-2026.5.3-media-wudup",
+              "line_numbers": [],
+              "message": "[media] Retagged service health wait succeeded in 2s.",
+              "phase": "health",
+              "services": [
+                "wudup"
+              ],
+              "stack": "media",
+              "status": "success"
+            },
+            {
+              "created_at": "2026-05-30T20:12:28+00:00",
+              "job_id": "demo-retag-job-switch-home-home-assistant-2026.5.3-media-wudup",
+              "line_numbers": [],
+              "message": "Retag changes applied.",
+              "phase": "completion",
+              "services": [],
+              "stack": "",
+              "status": "success"
+            }
+          ],
+          "run_id": 7,
+          "selected_line_numbers": [],
+          "started_at": "2026-05-30T20:12:26+00:00",
+          "status": "success"
+        }
+      },
+      "key": "switch-home-home-assistant-2026.5.3-media-wudup",
+      "preview": {
+        "complete": {
+          "error": "",
+          "plan": {
+            "can_apply": true,
+            "external_recreate_required": false,
+            "issues": [],
+            "keep_current_count": 2,
+            "plan_id": "demo-retag-plan-switch-home-home-assistant-2026.5.3-media-wudup",
+            "selected_count": 2,
+            "stacks": [
+              {
+                "compose_file": "docker-compose.yml",
+                "digest_pin_updates": [
+                  {
+                    "digest_provenance": {
+                      "final_image": "ghcr.io/home-assistant/home-assistant@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                      "provenance_confidence": "verified",
+                      "provenance_source": "manual",
+                      "resolved_tag": "2026.5.3",
+                      "source_image": "ghcr.io/home-assistant/home-assistant:2026.5.1",
+                      "target_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                      "watch_tag": "2026.5.3"
+                    },
+                    "final_image": "ghcr.io/home-assistant/home-assistant@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                    "label_key": "wud.tag.include",
+                    "label_rewrites": [],
+                    "label_value": "^2026\\.5\\.3$$",
+                    "marker": "wudup.resolved-tag=2026.5.3",
+                    "planned_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                    "resolved_tag": "2026.5.3",
+                    "service": "home-assistant",
+                    "service_key": "home/home-assistant",
+                    "source_image": "ghcr.io/home-assistant/home-assistant:2026.5.1",
+                    "stack": "home",
+                    "watch_tag": "2026.5.3"
+                  }
+                ],
+                "directory": "demo/docker/home",
+                "project_directory": "demo/docker/home",
+                "services": [
+                  "home-assistant"
+                ],
+                "stack": "home"
+              },
+              {
+                "compose_file": "docker-compose.yml",
+                "digest_pin_updates": [
+                  {
+                    "digest_provenance": {
+                      "final_image": "ghcr.io/magrhino/wudup@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                      "provenance_confidence": "verified",
+                      "provenance_source": "demo",
+                      "resolved_tag": "v0.16.1",
+                      "source_image": "ghcr.io/magrhino/wudup:latest",
+                      "target_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                      "watch_tag": "latest"
+                    },
+                    "final_image": "ghcr.io/magrhino/wudup@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                    "label_key": "wud.tag.include",
+                    "label_rewrites": [
+                      {
+                        "approved": false,
+                        "current_label_value": "^latest$",
+                        "label_key": "wud.tag.include",
+                        "planned_tag": "v0.16.1",
+                        "proposed_label_regex": "^v0\\.16\\.1$",
+                        "proposed_label_value": "^v0\\.16\\.1$$",
+                        "reason": "exact-regex-normalized",
+                        "service": "wudup"
+                      }
+                    ],
+                    "label_value": "^v0\\.16\\.1$$",
+                    "marker": "wudup.resolved-tag=v0.16.1",
+                    "planned_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                    "resolved_tag": "v0.16.1",
+                    "service": "wudup",
+                    "service_key": "media/wudup",
+                    "source_image": "ghcr.io/magrhino/wudup:latest",
+                    "stack": "media",
+                    "watch_tag": "v0.16.1"
+                  }
+                ],
+                "directory": "demo/docker/media",
+                "project_directory": "demo/docker/media",
+                "services": [
+                  "wudup"
+                ],
+                "stack": "media"
+              }
+            ],
+            "status": "ready",
+            "warnings": []
+          },
+          "preview_job_id": "demo-retag-preview-switch-home-home-assistant-2026.5.3-media-wudup",
+          "progress": [
+            {
+              "created_at": "2026-05-30T20:12:26+00:00",
+              "job_id": "demo-retag-preview-switch-home-home-assistant-2026.5.3-media-wudup",
+              "line_numbers": [],
+              "message": "Refreshing demo retag candidates.",
+              "phase": "refresh",
+              "services": [],
+              "stack": "",
+              "status": "running"
+            },
+            {
+              "created_at": "2026-05-30T20:12:28+00:00",
+              "job_id": "demo-retag-preview-switch-home-home-assistant-2026.5.3-media-wudup",
+              "line_numbers": [],
+              "message": "Demo retag preview is ready.",
+              "phase": "preview",
+              "services": [],
+              "stack": "",
+              "status": "success"
+            }
+          ],
+          "status": "success",
+          "warnings": []
+        },
+        "queued": {
+          "error": "",
+          "plan": null,
+          "preview_job_id": "demo-retag-preview-switch-home-home-assistant-2026.5.3-media-wudup",
+          "progress": [
+            {
+              "created_at": "2026-05-30T20:12:26+00:00",
+              "job_id": "demo-retag-preview-switch-home-home-assistant-2026.5.3-media-wudup",
+              "line_numbers": [],
+              "message": "Refreshing demo retag candidates.",
+              "phase": "refresh",
+              "services": [],
+              "stack": "",
+              "status": "running"
+            }
+          ],
+          "status": "queued",
+          "warnings": []
+        }
+      },
+      "request": {
+        "choices": [
+          {
+            "choice": "keep-current",
+            "service_key": "data/postgres"
+          },
+          {
+            "choice": "switch-to-concrete",
+            "service_key": "home/home-assistant",
+            "target_tag": "2026.5.3"
+          },
+          {
+            "choice": "keep-current",
+            "service_key": "media/radarr"
+          },
+          {
+            "choice": "switch-to-concrete",
+            "service_key": "media/wudup"
+          }
+        ]
+      },
+      "response": {
+        "can_apply": true,
+        "external_recreate_required": false,
+        "issues": [],
+        "keep_current_count": 2,
+        "plan_id": "demo-retag-plan-switch-home-home-assistant-2026.5.3-media-wudup",
+        "selected_count": 2,
+        "stacks": [
+          {
+            "compose_file": "docker-compose.yml",
+            "digest_pin_updates": [
+              {
+                "digest_provenance": {
+                  "final_image": "ghcr.io/home-assistant/home-assistant@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                  "provenance_confidence": "verified",
+                  "provenance_source": "manual",
+                  "resolved_tag": "2026.5.3",
+                  "source_image": "ghcr.io/home-assistant/home-assistant:2026.5.1",
+                  "target_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                  "watch_tag": "2026.5.3"
+                },
+                "final_image": "ghcr.io/home-assistant/home-assistant@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "label_key": "wud.tag.include",
+                "label_rewrites": [],
+                "label_value": "^2026\\.5\\.3$$",
+                "marker": "wudup.resolved-tag=2026.5.3",
+                "planned_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "resolved_tag": "2026.5.3",
+                "service": "home-assistant",
+                "service_key": "home/home-assistant",
+                "source_image": "ghcr.io/home-assistant/home-assistant:2026.5.1",
+                "stack": "home",
+                "watch_tag": "2026.5.3"
+              }
+            ],
+            "directory": "demo/docker/home",
+            "project_directory": "demo/docker/home",
+            "services": [
+              "home-assistant"
+            ],
+            "stack": "home"
+          },
+          {
+            "compose_file": "docker-compose.yml",
+            "digest_pin_updates": [
+              {
+                "digest_provenance": {
+                  "final_image": "ghcr.io/magrhino/wudup@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                  "provenance_confidence": "verified",
+                  "provenance_source": "demo",
+                  "resolved_tag": "v0.16.1",
+                  "source_image": "ghcr.io/magrhino/wudup:latest",
+                  "target_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                  "watch_tag": "latest"
+                },
+                "final_image": "ghcr.io/magrhino/wudup@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                "label_key": "wud.tag.include",
+                "label_rewrites": [
+                  {
+                    "approved": false,
+                    "current_label_value": "^latest$",
+                    "label_key": "wud.tag.include",
+                    "planned_tag": "v0.16.1",
+                    "proposed_label_regex": "^v0\\.16\\.1$",
+                    "proposed_label_value": "^v0\\.16\\.1$$",
+                    "reason": "exact-regex-normalized",
+                    "service": "wudup"
+                  }
+                ],
+                "label_value": "^v0\\.16\\.1$$",
+                "marker": "wudup.resolved-tag=v0.16.1",
+                "planned_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                "resolved_tag": "v0.16.1",
+                "service": "wudup",
+                "service_key": "media/wudup",
+                "source_image": "ghcr.io/magrhino/wudup:latest",
+                "stack": "media",
+                "watch_tag": "v0.16.1"
+              }
+            ],
+            "directory": "demo/docker/media",
+            "project_directory": "demo/docker/media",
+            "services": [
+              "wudup"
+            ],
+            "stack": "media"
+          }
+        ],
+        "status": "ready",
+        "warnings": []
+      }
+    },
+    {
+      "jobTemplate": {
+        "log": {
+          "content": "[2026-05-30T20:12:26+00:00] [INFO] [compose-digest-pin] [home] Writing retag Compose metadata.\n[2026-05-30T20:12:28+00:00] [INFO] [compose-digest-pin] [home] Compose retag metadata was written.\n[2026-05-30T20:12:28+00:00] [INFO] [pull] [home] Pulling retagged service image(s).\n[2026-05-30T20:12:28+00:00] [INFO] [pull] [home] Retagged service image(s) pulled.\n[2026-05-30T20:12:28+00:00] [INFO] [recreate] [home] Recreating retagged service container(s).\n[2026-05-30T20:12:28+00:00] [INFO] [recreate] [home] Retagged service container(s) recreated.\n[2026-05-30T20:12:28+00:00] [INFO] [health] [home] Waiting up to 180s for retagged service health.\n[2026-05-30T20:12:28+00:00] [INFO] [health] [home] Retagged service health wait succeeded in 2s.\n[2026-05-30T20:12:28+00:00] [INFO] [compose-digest-pin] [media] Writing retag Compose metadata.\n[2026-05-30T20:12:28+00:00] [INFO] [compose-digest-pin] [media] Compose retag metadata was written.\n[2026-05-30T20:12:28+00:00] [INFO] [pull] [media] Pulling retagged service image(s).\n[2026-05-30T20:12:28+00:00] [INFO] [pull] [media] Retagged service image(s) pulled.\n[2026-05-30T20:12:28+00:00] [INFO] [recreate] [media] Recreating retagged service container(s).\n[2026-05-30T20:12:28+00:00] [INFO] [recreate] [media] Retagged service container(s) recreated.\n[2026-05-30T20:12:28+00:00] [INFO] [health] [media] Waiting up to 180s for retagged service health.\n[2026-05-30T20:12:28+00:00] [INFO] [health] [media] Retagged service health wait succeeded in 2s.\n[2026-05-30T20:12:28+00:00] [INFO] [completion] Retag changes applied.\n[2026-05-30T20:12:28+00:00] [INFO] Done. See log: demo/logs/demo-retag-switch-home-home-assistant-2026.5.3-media-radarr-5.22.4.log\n",
+          "error": "",
+          "exists": true,
+          "job_id": "demo-retag-job-switch-home-home-assistant-2026.5.3-media-radarr-5.22.4",
+          "log_file": "demo/logs/demo-retag-switch-home-home-assistant-2026.5.3-media-radarr-5.22.4.log",
+          "max_bytes": 65536,
+          "truncated": false
+        },
+        "queued": {
+          "error": "",
+          "finished_at": null,
+          "job_id": "demo-retag-job-switch-home-home-assistant-2026.5.3-media-radarr-5.22.4",
+          "log_file": "",
+          "progress": [],
+          "run_id": null,
+          "selected_line_numbers": [],
+          "started_at": null,
+          "status": "queued"
+        },
+        "removeLineNumbers": [],
+        "run": {
+          "detail": {
+            "dry_run": false,
+            "events": [
+              {
+                "created_at": "2026-05-30T20:12:26+00:00",
+                "digest_provenance": {
+                  "final_image": "ghcr.io/home-assistant/home-assistant@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                  "provenance_confidence": "verified",
+                  "provenance_source": "retag",
+                  "resolved_tag": "2026.5.3",
+                  "source_image": "ghcr.io/home-assistant/home-assistant:2026.5.1",
+                  "target_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                  "watch_tag": "2026.5.3"
+                },
+                "id": 7,
+                "image": "ghcr.io/home-assistant/home-assistant:2026.5.1",
+                "metadata": {
+                  "operation": "retag",
+                  "resolved_tag": "2026.5.3",
+                  "service_key": "home/home-assistant",
+                  "source": "webui",
+                  "watch_tag": "2026.5.3"
+                },
+                "new_digest": "",
+                "new_image_id": "",
+                "old_digest": "",
+                "old_image_id": "",
+                "run_id": 7,
+                "service_name": "home-assistant",
+                "stack_name": "home",
+                "status": "success",
+                "target_image": "ghcr.io/home-assistant/home-assistant@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+              },
+              {
+                "created_at": "2026-05-30T20:12:26+00:00",
+                "digest_provenance": {
+                  "final_image": "lscr.io/linuxserver/radarr@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                  "provenance_confidence": "verified",
+                  "provenance_source": "retag",
+                  "resolved_tag": "5.22.4",
+                  "source_image": "lscr.io/linuxserver/radarr:5.21.1",
+                  "target_digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                  "watch_tag": "5.22.4"
+                },
+                "id": 8,
+                "image": "lscr.io/linuxserver/radarr:5.21.1",
+                "metadata": {
+                  "operation": "retag",
+                  "resolved_tag": "5.22.4",
+                  "service_key": "media/radarr",
+                  "source": "webui",
+                  "watch_tag": "5.22.4"
+                },
+                "new_digest": "",
+                "new_image_id": "",
+                "old_digest": "",
+                "old_image_id": "",
+                "run_id": 7,
+                "service_name": "radarr",
+                "stack_name": "media",
+                "status": "success",
+                "target_image": "lscr.io/linuxserver/radarr@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+              }
+            ],
+            "finished_at": "2026-05-30T20:12:28+00:00",
+            "id": 7,
+            "log_file": "demo/logs/demo-retag-switch-home-home-assistant-2026.5.3-media-radarr-5.22.4.log",
+            "metadata": {
+              "digest_pin_updates": [
+                {
+                  "digest_provenance": {
+                    "final_image": "ghcr.io/home-assistant/home-assistant@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                    "provenance_confidence": "verified",
+                    "provenance_source": "manual",
+                    "resolved_tag": "2026.5.3",
+                    "source_image": "ghcr.io/home-assistant/home-assistant:2026.5.1",
+                    "target_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                    "watch_tag": "2026.5.3"
+                  },
+                  "final_image": "ghcr.io/home-assistant/home-assistant@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                  "label_key": "wud.tag.include",
+                  "label_rewrites": [],
+                  "label_value": "^2026\\.5\\.3$$",
+                  "marker": "wudup.resolved-tag=2026.5.3",
+                  "planned_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                  "resolved_tag": "2026.5.3",
+                  "service": "home-assistant",
+                  "service_key": "home/home-assistant",
+                  "source_image": "ghcr.io/home-assistant/home-assistant:2026.5.1",
+                  "stack": "home",
+                  "watch_tag": "2026.5.3"
+                },
+                {
+                  "digest_provenance": {
+                    "final_image": "lscr.io/linuxserver/radarr@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                    "provenance_confidence": "verified",
+                    "provenance_source": "manual",
+                    "resolved_tag": "5.22.4",
+                    "source_image": "lscr.io/linuxserver/radarr:5.21.1",
+                    "target_digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                    "watch_tag": "5.22.4"
+                  },
+                  "final_image": "lscr.io/linuxserver/radarr@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                  "label_key": "wud.tag.include",
+                  "label_rewrites": [],
+                  "label_value": "^5\\.22\\.4$$",
+                  "marker": "wudup.resolved-tag=5.22.4",
+                  "planned_digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                  "resolved_tag": "5.22.4",
+                  "service": "radarr",
+                  "service_key": "media/radarr",
+                  "source_image": "lscr.io/linuxserver/radarr:5.21.1",
+                  "stack": "media",
+                  "watch_tag": "5.22.4"
+                }
+              ],
+              "external_recreate_required": false,
+              "operation": "retag",
+              "plan_id": "demo-retag-job-switch-home-home-assistant-2026.5.3-media-radarr-5.22.4-plan",
+              "services": [
+                "home/home-assistant",
+                "media/radarr"
+              ],
+              "source": "webui",
+              "status": "success"
+            },
+            "mode": "web-retag",
+            "pending_updates": [],
+            "started_at": "2026-05-30T20:12:26+00:00",
+            "status": "success",
+            "verification": {
+              "items": [],
+              "needs_review_count": 0,
+              "status": "verified",
+              "total_count": 0,
+              "verified_count": 0
+            },
+            "wud_file": "demo/out/images.todo"
+          },
+          "log": {
+            "content": "[2026-05-30T20:12:26+00:00] [INFO] [compose-digest-pin] [home] Writing retag Compose metadata.\n[2026-05-30T20:12:28+00:00] [INFO] [compose-digest-pin] [home] Compose retag metadata was written.\n[2026-05-30T20:12:28+00:00] [INFO] [pull] [home] Pulling retagged service image(s).\n[2026-05-30T20:12:28+00:00] [INFO] [pull] [home] Retagged service image(s) pulled.\n[2026-05-30T20:12:28+00:00] [INFO] [recreate] [home] Recreating retagged service container(s).\n[2026-05-30T20:12:28+00:00] [INFO] [recreate] [home] Retagged service container(s) recreated.\n[2026-05-30T20:12:28+00:00] [INFO] [health] [home] Waiting up to 180s for retagged service health.\n[2026-05-30T20:12:28+00:00] [INFO] [health] [home] Retagged service health wait succeeded in 2s.\n[2026-05-30T20:12:28+00:00] [INFO] [compose-digest-pin] [media] Writing retag Compose metadata.\n[2026-05-30T20:12:28+00:00] [INFO] [compose-digest-pin] [media] Compose retag metadata was written.\n[2026-05-30T20:12:28+00:00] [INFO] [pull] [media] Pulling retagged service image(s).\n[2026-05-30T20:12:28+00:00] [INFO] [pull] [media] Retagged service image(s) pulled.\n[2026-05-30T20:12:28+00:00] [INFO] [recreate] [media] Recreating retagged service container(s).\n[2026-05-30T20:12:28+00:00] [INFO] [recreate] [media] Retagged service container(s) recreated.\n[2026-05-30T20:12:28+00:00] [INFO] [health] [media] Waiting up to 180s for retagged service health.\n[2026-05-30T20:12:28+00:00] [INFO] [health] [media] Retagged service health wait succeeded in 2s.\n[2026-05-30T20:12:28+00:00] [INFO] [completion] Retag changes applied.\n[2026-05-30T20:12:28+00:00] [INFO] Done. See log: demo/logs/demo-retag-switch-home-home-assistant-2026.5.3-media-radarr-5.22.4.log\n",
+            "exists": true,
+            "log_file": "demo/logs/demo-retag-switch-home-home-assistant-2026.5.3-media-radarr-5.22.4.log",
+            "max_bytes": 262144,
+            "run_id": 7,
+            "truncated": false
+          },
+          "summary": {
+            "dry_run": false,
+            "events": [
+              {
+                "created_at": "2026-05-30T20:12:26+00:00",
+                "digest_provenance": {
+                  "final_image": "ghcr.io/home-assistant/home-assistant@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                  "provenance_confidence": "verified",
+                  "provenance_source": "retag",
+                  "resolved_tag": "2026.5.3",
+                  "source_image": "ghcr.io/home-assistant/home-assistant:2026.5.1",
+                  "target_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                  "watch_tag": "2026.5.3"
+                },
+                "id": 7,
+                "image": "ghcr.io/home-assistant/home-assistant:2026.5.1",
+                "metadata": {
+                  "operation": "retag",
+                  "resolved_tag": "2026.5.3",
+                  "service_key": "home/home-assistant",
+                  "source": "webui",
+                  "watch_tag": "2026.5.3"
+                },
+                "new_digest": "",
+                "new_image_id": "",
+                "old_digest": "",
+                "old_image_id": "",
+                "run_id": 7,
+                "service_name": "home-assistant",
+                "stack_name": "home",
+                "status": "success",
+                "target_image": "ghcr.io/home-assistant/home-assistant@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+              },
+              {
+                "created_at": "2026-05-30T20:12:26+00:00",
+                "digest_provenance": {
+                  "final_image": "lscr.io/linuxserver/radarr@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                  "provenance_confidence": "verified",
+                  "provenance_source": "retag",
+                  "resolved_tag": "5.22.4",
+                  "source_image": "lscr.io/linuxserver/radarr:5.21.1",
+                  "target_digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                  "watch_tag": "5.22.4"
+                },
+                "id": 8,
+                "image": "lscr.io/linuxserver/radarr:5.21.1",
+                "metadata": {
+                  "operation": "retag",
+                  "resolved_tag": "5.22.4",
+                  "service_key": "media/radarr",
+                  "source": "webui",
+                  "watch_tag": "5.22.4"
+                },
+                "new_digest": "",
+                "new_image_id": "",
+                "old_digest": "",
+                "old_image_id": "",
+                "run_id": 7,
+                "service_name": "radarr",
+                "stack_name": "media",
+                "status": "success",
+                "target_image": "lscr.io/linuxserver/radarr@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+              }
+            ],
+            "finished_at": "2026-05-30T20:12:28+00:00",
+            "id": 7,
+            "log_file": "demo/logs/demo-retag-switch-home-home-assistant-2026.5.3-media-radarr-5.22.4.log",
+            "metadata": {
+              "digest_pin_updates": [
+                {
+                  "digest_provenance": {
+                    "final_image": "ghcr.io/home-assistant/home-assistant@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                    "provenance_confidence": "verified",
+                    "provenance_source": "manual",
+                    "resolved_tag": "2026.5.3",
+                    "source_image": "ghcr.io/home-assistant/home-assistant:2026.5.1",
+                    "target_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                    "watch_tag": "2026.5.3"
+                  },
+                  "final_image": "ghcr.io/home-assistant/home-assistant@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                  "label_key": "wud.tag.include",
+                  "label_rewrites": [],
+                  "label_value": "^2026\\.5\\.3$$",
+                  "marker": "wudup.resolved-tag=2026.5.3",
+                  "planned_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                  "resolved_tag": "2026.5.3",
+                  "service": "home-assistant",
+                  "service_key": "home/home-assistant",
+                  "source_image": "ghcr.io/home-assistant/home-assistant:2026.5.1",
+                  "stack": "home",
+                  "watch_tag": "2026.5.3"
+                },
+                {
+                  "digest_provenance": {
+                    "final_image": "lscr.io/linuxserver/radarr@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                    "provenance_confidence": "verified",
+                    "provenance_source": "manual",
+                    "resolved_tag": "5.22.4",
+                    "source_image": "lscr.io/linuxserver/radarr:5.21.1",
+                    "target_digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                    "watch_tag": "5.22.4"
+                  },
+                  "final_image": "lscr.io/linuxserver/radarr@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                  "label_key": "wud.tag.include",
+                  "label_rewrites": [],
+                  "label_value": "^5\\.22\\.4$$",
+                  "marker": "wudup.resolved-tag=5.22.4",
+                  "planned_digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                  "resolved_tag": "5.22.4",
+                  "service": "radarr",
+                  "service_key": "media/radarr",
+                  "source_image": "lscr.io/linuxserver/radarr:5.21.1",
+                  "stack": "media",
+                  "watch_tag": "5.22.4"
+                }
+              ],
+              "external_recreate_required": false,
+              "operation": "retag",
+              "plan_id": "demo-retag-job-switch-home-home-assistant-2026.5.3-media-radarr-5.22.4-plan",
+              "services": [
+                "home/home-assistant",
+                "media/radarr"
+              ],
+              "source": "webui",
+              "status": "success"
+            },
+            "mode": "web-retag",
+            "started_at": "2026-05-30T20:12:26+00:00",
+            "status": "success",
+            "wud_file": "demo/out/images.todo"
+          }
+        },
+        "terminal": {
+          "error": "",
+          "finished_at": "2026-05-30T20:12:28+00:00",
+          "job_id": "demo-retag-job-switch-home-home-assistant-2026.5.3-media-radarr-5.22.4",
+          "log_file": "demo/logs/demo-retag-switch-home-home-assistant-2026.5.3-media-radarr-5.22.4.log",
+          "progress": [
+            {
+              "created_at": "2026-05-30T20:12:26+00:00",
+              "job_id": "demo-retag-job-switch-home-home-assistant-2026.5.3-media-radarr-5.22.4",
+              "line_numbers": [],
+              "message": "[home] Writing retag Compose metadata.",
+              "phase": "compose-digest-pin",
+              "services": [
+                "home-assistant"
+              ],
+              "stack": "home",
+              "status": "running"
+            },
+            {
+              "created_at": "2026-05-30T20:12:28+00:00",
+              "job_id": "demo-retag-job-switch-home-home-assistant-2026.5.3-media-radarr-5.22.4",
+              "line_numbers": [],
+              "message": "[home] Compose retag metadata was written.",
+              "phase": "compose-digest-pin",
+              "services": [
+                "home-assistant"
+              ],
+              "stack": "home",
+              "status": "success"
+            },
+            {
+              "created_at": "2026-05-30T20:12:28+00:00",
+              "job_id": "demo-retag-job-switch-home-home-assistant-2026.5.3-media-radarr-5.22.4",
+              "line_numbers": [],
+              "message": "[home] Pulling retagged service image(s).",
+              "phase": "pull",
+              "services": [
+                "home-assistant"
+              ],
+              "stack": "home",
+              "status": "running"
+            },
+            {
+              "created_at": "2026-05-30T20:12:28+00:00",
+              "job_id": "demo-retag-job-switch-home-home-assistant-2026.5.3-media-radarr-5.22.4",
+              "line_numbers": [],
+              "message": "[home] Retagged service image(s) pulled.",
+              "phase": "pull",
+              "services": [
+                "home-assistant"
+              ],
+              "stack": "home",
+              "status": "success"
+            },
+            {
+              "created_at": "2026-05-30T20:12:28+00:00",
+              "job_id": "demo-retag-job-switch-home-home-assistant-2026.5.3-media-radarr-5.22.4",
+              "line_numbers": [],
+              "message": "[home] Recreating retagged service container(s).",
+              "phase": "recreate",
+              "services": [
+                "home-assistant"
+              ],
+              "stack": "home",
+              "status": "running"
+            },
+            {
+              "created_at": "2026-05-30T20:12:28+00:00",
+              "job_id": "demo-retag-job-switch-home-home-assistant-2026.5.3-media-radarr-5.22.4",
+              "line_numbers": [],
+              "message": "[home] Retagged service container(s) recreated.",
+              "phase": "recreate",
+              "services": [
+                "home-assistant"
+              ],
+              "stack": "home",
+              "status": "success"
+            },
+            {
+              "created_at": "2026-05-30T20:12:28+00:00",
+              "job_id": "demo-retag-job-switch-home-home-assistant-2026.5.3-media-radarr-5.22.4",
+              "line_numbers": [],
+              "message": "[home] Waiting up to 180s for retagged service health.",
+              "phase": "health",
+              "services": [
+                "home-assistant"
+              ],
+              "stack": "home",
+              "status": "running"
+            },
+            {
+              "created_at": "2026-05-30T20:12:28+00:00",
+              "job_id": "demo-retag-job-switch-home-home-assistant-2026.5.3-media-radarr-5.22.4",
+              "line_numbers": [],
+              "message": "[home] Retagged service health wait succeeded in 2s.",
+              "phase": "health",
+              "services": [
+                "home-assistant"
+              ],
+              "stack": "home",
+              "status": "success"
+            },
+            {
+              "created_at": "2026-05-30T20:12:28+00:00",
+              "job_id": "demo-retag-job-switch-home-home-assistant-2026.5.3-media-radarr-5.22.4",
+              "line_numbers": [],
+              "message": "[media] Writing retag Compose metadata.",
+              "phase": "compose-digest-pin",
+              "services": [
+                "radarr"
+              ],
+              "stack": "media",
+              "status": "running"
+            },
+            {
+              "created_at": "2026-05-30T20:12:28+00:00",
+              "job_id": "demo-retag-job-switch-home-home-assistant-2026.5.3-media-radarr-5.22.4",
+              "line_numbers": [],
+              "message": "[media] Compose retag metadata was written.",
+              "phase": "compose-digest-pin",
+              "services": [
+                "radarr"
+              ],
+              "stack": "media",
+              "status": "success"
+            },
+            {
+              "created_at": "2026-05-30T20:12:28+00:00",
+              "job_id": "demo-retag-job-switch-home-home-assistant-2026.5.3-media-radarr-5.22.4",
+              "line_numbers": [],
+              "message": "[media] Pulling retagged service image(s).",
+              "phase": "pull",
+              "services": [
+                "radarr"
+              ],
+              "stack": "media",
+              "status": "running"
+            },
+            {
+              "created_at": "2026-05-30T20:12:28+00:00",
+              "job_id": "demo-retag-job-switch-home-home-assistant-2026.5.3-media-radarr-5.22.4",
+              "line_numbers": [],
+              "message": "[media] Retagged service image(s) pulled.",
+              "phase": "pull",
+              "services": [
+                "radarr"
+              ],
+              "stack": "media",
+              "status": "success"
+            },
+            {
+              "created_at": "2026-05-30T20:12:28+00:00",
+              "job_id": "demo-retag-job-switch-home-home-assistant-2026.5.3-media-radarr-5.22.4",
+              "line_numbers": [],
+              "message": "[media] Recreating retagged service container(s).",
+              "phase": "recreate",
+              "services": [
+                "radarr"
+              ],
+              "stack": "media",
+              "status": "running"
+            },
+            {
+              "created_at": "2026-05-30T20:12:28+00:00",
+              "job_id": "demo-retag-job-switch-home-home-assistant-2026.5.3-media-radarr-5.22.4",
+              "line_numbers": [],
+              "message": "[media] Retagged service container(s) recreated.",
+              "phase": "recreate",
+              "services": [
+                "radarr"
+              ],
+              "stack": "media",
+              "status": "success"
+            },
+            {
+              "created_at": "2026-05-30T20:12:28+00:00",
+              "job_id": "demo-retag-job-switch-home-home-assistant-2026.5.3-media-radarr-5.22.4",
+              "line_numbers": [],
+              "message": "[media] Waiting up to 180s for retagged service health.",
+              "phase": "health",
+              "services": [
+                "radarr"
+              ],
+              "stack": "media",
+              "status": "running"
+            },
+            {
+              "created_at": "2026-05-30T20:12:28+00:00",
+              "job_id": "demo-retag-job-switch-home-home-assistant-2026.5.3-media-radarr-5.22.4",
+              "line_numbers": [],
+              "message": "[media] Retagged service health wait succeeded in 2s.",
+              "phase": "health",
+              "services": [
+                "radarr"
+              ],
+              "stack": "media",
+              "status": "success"
+            },
+            {
+              "created_at": "2026-05-30T20:12:28+00:00",
+              "job_id": "demo-retag-job-switch-home-home-assistant-2026.5.3-media-radarr-5.22.4",
+              "line_numbers": [],
+              "message": "Retag changes applied.",
+              "phase": "completion",
+              "services": [],
+              "stack": "",
+              "status": "success"
+            }
+          ],
+          "run_id": 7,
+          "selected_line_numbers": [],
+          "started_at": "2026-05-30T20:12:26+00:00",
+          "status": "success"
+        }
+      },
+      "key": "switch-home-home-assistant-2026.5.3-media-radarr-5.22.4",
+      "preview": {
+        "complete": {
+          "error": "",
+          "plan": {
+            "can_apply": true,
+            "external_recreate_required": false,
+            "issues": [],
+            "keep_current_count": 2,
+            "plan_id": "demo-retag-plan-switch-home-home-assistant-2026.5.3-media-radarr-5.22.4",
+            "selected_count": 2,
+            "stacks": [
+              {
+                "compose_file": "docker-compose.yml",
+                "digest_pin_updates": [
+                  {
+                    "digest_provenance": {
+                      "final_image": "ghcr.io/home-assistant/home-assistant@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                      "provenance_confidence": "verified",
+                      "provenance_source": "manual",
+                      "resolved_tag": "2026.5.3",
+                      "source_image": "ghcr.io/home-assistant/home-assistant:2026.5.1",
+                      "target_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                      "watch_tag": "2026.5.3"
+                    },
+                    "final_image": "ghcr.io/home-assistant/home-assistant@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                    "label_key": "wud.tag.include",
+                    "label_rewrites": [],
+                    "label_value": "^2026\\.5\\.3$$",
+                    "marker": "wudup.resolved-tag=2026.5.3",
+                    "planned_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                    "resolved_tag": "2026.5.3",
+                    "service": "home-assistant",
+                    "service_key": "home/home-assistant",
+                    "source_image": "ghcr.io/home-assistant/home-assistant:2026.5.1",
+                    "stack": "home",
+                    "watch_tag": "2026.5.3"
+                  }
+                ],
+                "directory": "demo/docker/home",
+                "project_directory": "demo/docker/home",
+                "services": [
+                  "home-assistant"
+                ],
+                "stack": "home"
+              },
+              {
+                "compose_file": "docker-compose.yml",
+                "digest_pin_updates": [
+                  {
+                    "digest_provenance": {
+                      "final_image": "lscr.io/linuxserver/radarr@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                      "provenance_confidence": "verified",
+                      "provenance_source": "manual",
+                      "resolved_tag": "5.22.4",
+                      "source_image": "lscr.io/linuxserver/radarr:5.21.1",
+                      "target_digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                      "watch_tag": "5.22.4"
+                    },
+                    "final_image": "lscr.io/linuxserver/radarr@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                    "label_key": "wud.tag.include",
+                    "label_rewrites": [],
+                    "label_value": "^5\\.22\\.4$$",
+                    "marker": "wudup.resolved-tag=5.22.4",
+                    "planned_digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                    "resolved_tag": "5.22.4",
+                    "service": "radarr",
+                    "service_key": "media/radarr",
+                    "source_image": "lscr.io/linuxserver/radarr:5.21.1",
+                    "stack": "media",
+                    "watch_tag": "5.22.4"
+                  }
+                ],
+                "directory": "demo/docker/media",
+                "project_directory": "demo/docker/media",
+                "services": [
+                  "radarr"
+                ],
+                "stack": "media"
+              }
+            ],
+            "status": "ready",
+            "warnings": []
+          },
+          "preview_job_id": "demo-retag-preview-switch-home-home-assistant-2026.5.3-media-radarr-5.22.4",
+          "progress": [
+            {
+              "created_at": "2026-05-30T20:12:26+00:00",
+              "job_id": "demo-retag-preview-switch-home-home-assistant-2026.5.3-media-radarr-5.22.4",
+              "line_numbers": [],
+              "message": "Refreshing demo retag candidates.",
+              "phase": "refresh",
+              "services": [],
+              "stack": "",
+              "status": "running"
+            },
+            {
+              "created_at": "2026-05-30T20:12:28+00:00",
+              "job_id": "demo-retag-preview-switch-home-home-assistant-2026.5.3-media-radarr-5.22.4",
+              "line_numbers": [],
+              "message": "Demo retag preview is ready.",
+              "phase": "preview",
+              "services": [],
+              "stack": "",
+              "status": "success"
+            }
+          ],
+          "status": "success",
+          "warnings": []
+        },
+        "queued": {
+          "error": "",
+          "plan": null,
+          "preview_job_id": "demo-retag-preview-switch-home-home-assistant-2026.5.3-media-radarr-5.22.4",
+          "progress": [
+            {
+              "created_at": "2026-05-30T20:12:26+00:00",
+              "job_id": "demo-retag-preview-switch-home-home-assistant-2026.5.3-media-radarr-5.22.4",
+              "line_numbers": [],
+              "message": "Refreshing demo retag candidates.",
+              "phase": "refresh",
+              "services": [],
+              "stack": "",
+              "status": "running"
+            }
+          ],
+          "status": "queued",
+          "warnings": []
+        }
+      },
+      "request": {
+        "choices": [
+          {
+            "choice": "keep-current",
+            "service_key": "data/postgres"
+          },
+          {
+            "choice": "switch-to-concrete",
+            "service_key": "home/home-assistant",
+            "target_tag": "2026.5.3"
+          },
+          {
+            "choice": "switch-to-concrete",
+            "service_key": "media/radarr",
+            "target_tag": "5.22.4"
+          },
+          {
+            "choice": "keep-current",
+            "service_key": "media/wudup"
+          }
+        ]
+      },
+      "response": {
+        "can_apply": true,
+        "external_recreate_required": false,
+        "issues": [],
+        "keep_current_count": 2,
+        "plan_id": "demo-retag-plan-switch-home-home-assistant-2026.5.3-media-radarr-5.22.4",
+        "selected_count": 2,
+        "stacks": [
+          {
+            "compose_file": "docker-compose.yml",
+            "digest_pin_updates": [
+              {
+                "digest_provenance": {
+                  "final_image": "ghcr.io/home-assistant/home-assistant@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                  "provenance_confidence": "verified",
+                  "provenance_source": "manual",
+                  "resolved_tag": "2026.5.3",
+                  "source_image": "ghcr.io/home-assistant/home-assistant:2026.5.1",
+                  "target_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                  "watch_tag": "2026.5.3"
+                },
+                "final_image": "ghcr.io/home-assistant/home-assistant@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "label_key": "wud.tag.include",
+                "label_rewrites": [],
+                "label_value": "^2026\\.5\\.3$$",
+                "marker": "wudup.resolved-tag=2026.5.3",
+                "planned_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "resolved_tag": "2026.5.3",
+                "service": "home-assistant",
+                "service_key": "home/home-assistant",
+                "source_image": "ghcr.io/home-assistant/home-assistant:2026.5.1",
+                "stack": "home",
+                "watch_tag": "2026.5.3"
+              }
+            ],
+            "directory": "demo/docker/home",
+            "project_directory": "demo/docker/home",
+            "services": [
+              "home-assistant"
+            ],
+            "stack": "home"
+          },
+          {
+            "compose_file": "docker-compose.yml",
+            "digest_pin_updates": [
+              {
+                "digest_provenance": {
+                  "final_image": "lscr.io/linuxserver/radarr@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                  "provenance_confidence": "verified",
+                  "provenance_source": "manual",
+                  "resolved_tag": "5.22.4",
+                  "source_image": "lscr.io/linuxserver/radarr:5.21.1",
+                  "target_digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                  "watch_tag": "5.22.4"
+                },
+                "final_image": "lscr.io/linuxserver/radarr@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                "label_key": "wud.tag.include",
+                "label_rewrites": [],
+                "label_value": "^5\\.22\\.4$$",
+                "marker": "wudup.resolved-tag=5.22.4",
+                "planned_digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                "resolved_tag": "5.22.4",
+                "service": "radarr",
+                "service_key": "media/radarr",
+                "source_image": "lscr.io/linuxserver/radarr:5.21.1",
+                "stack": "media",
+                "watch_tag": "5.22.4"
+              }
+            ],
+            "directory": "demo/docker/media",
+            "project_directory": "demo/docker/media",
+            "services": [
+              "radarr"
+            ],
+            "stack": "media"
+          }
+        ],
+        "status": "ready",
+        "warnings": []
+      }
+    },
+    {
+      "jobTemplate": {
+        "log": {
+          "content": "[2026-05-30T20:12:26+00:00] [INFO] [compose-digest-pin] [home] Writing retag Compose metadata.\n[2026-05-30T20:12:28+00:00] [INFO] [compose-digest-pin] [home] Compose retag metadata was written.\n[2026-05-30T20:12:28+00:00] [INFO] [pull] [home] Pulling retagged service image(s).\n[2026-05-30T20:12:28+00:00] [INFO] [pull] [home] Retagged service image(s) pulled.\n[2026-05-30T20:12:28+00:00] [INFO] [recreate] [home] Recreating retagged service container(s).\n[2026-05-30T20:12:28+00:00] [INFO] [recreate] [home] Retagged service container(s) recreated.\n[2026-05-30T20:12:28+00:00] [INFO] [health] [home] Waiting up to 180s for retagged service health.\n[2026-05-30T20:12:28+00:00] [INFO] [health] [home] Retagged service health wait succeeded in 2s.\n[2026-05-30T20:12:28+00:00] [INFO] [compose-digest-pin] [media] Writing retag Compose metadata.\n[2026-05-30T20:12:28+00:00] [INFO] [compose-digest-pin] [media] Compose retag metadata was written.\n[2026-05-30T20:12:28+00:00] [INFO] [pull] [media] Pulling retagged service image(s).\n[2026-05-30T20:12:28+00:00] [INFO] [pull] [media] Retagged service image(s) pulled.\n[2026-05-30T20:12:28+00:00] [INFO] [recreate] [media] Recreating retagged service container(s).\n[2026-05-30T20:12:28+00:00] [INFO] [recreate] [media] Retagged service container(s) recreated.\n[2026-05-30T20:12:28+00:00] [INFO] [health] [media] Waiting up to 180s for retagged service health.\n[2026-05-30T20:12:28+00:00] [INFO] [health] [media] Retagged service health wait succeeded in 2s.\n[2026-05-30T20:12:28+00:00] [INFO] [completion] Retag changes applied.\n[2026-05-30T20:12:28+00:00] [INFO] Done. See log: demo/logs/demo-retag-switch-home-home-assistant-2026.5.3-media-radarr-5.22.4-media-wudup.log\n",
+          "error": "",
+          "exists": true,
+          "job_id": "demo-retag-job-switch-home-home-assistant-2026.5.3-media-radarr-5.22.4-media-wudup",
+          "log_file": "demo/logs/demo-retag-switch-home-home-assistant-2026.5.3-media-radarr-5.22.4-media-wudup.log",
+          "max_bytes": 65536,
+          "truncated": false
+        },
+        "queued": {
+          "error": "",
+          "finished_at": null,
+          "job_id": "demo-retag-job-switch-home-home-assistant-2026.5.3-media-radarr-5.22.4-media-wudup",
+          "log_file": "",
+          "progress": [],
+          "run_id": null,
+          "selected_line_numbers": [],
+          "started_at": null,
+          "status": "queued"
+        },
+        "removeLineNumbers": [],
+        "run": {
+          "detail": {
+            "dry_run": false,
+            "events": [
+              {
+                "created_at": "2026-05-30T20:12:26+00:00",
+                "digest_provenance": {
+                  "final_image": "ghcr.io/home-assistant/home-assistant@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                  "provenance_confidence": "verified",
+                  "provenance_source": "retag",
+                  "resolved_tag": "2026.5.3",
+                  "source_image": "ghcr.io/home-assistant/home-assistant:2026.5.1",
+                  "target_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                  "watch_tag": "2026.5.3"
+                },
+                "id": 7,
+                "image": "ghcr.io/home-assistant/home-assistant:2026.5.1",
+                "metadata": {
+                  "operation": "retag",
+                  "resolved_tag": "2026.5.3",
+                  "service_key": "home/home-assistant",
+                  "source": "webui",
+                  "watch_tag": "2026.5.3"
+                },
+                "new_digest": "",
+                "new_image_id": "",
+                "old_digest": "",
+                "old_image_id": "",
+                "run_id": 7,
+                "service_name": "home-assistant",
+                "stack_name": "home",
+                "status": "success",
+                "target_image": "ghcr.io/home-assistant/home-assistant@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+              },
+              {
+                "created_at": "2026-05-30T20:12:26+00:00",
+                "digest_provenance": {
+                  "final_image": "lscr.io/linuxserver/radarr@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                  "provenance_confidence": "verified",
+                  "provenance_source": "retag",
+                  "resolved_tag": "5.22.4",
+                  "source_image": "lscr.io/linuxserver/radarr:5.21.1",
+                  "target_digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                  "watch_tag": "5.22.4"
+                },
+                "id": 8,
+                "image": "lscr.io/linuxserver/radarr:5.21.1",
+                "metadata": {
+                  "operation": "retag",
+                  "resolved_tag": "5.22.4",
+                  "service_key": "media/radarr",
+                  "source": "webui",
+                  "watch_tag": "5.22.4"
+                },
+                "new_digest": "",
+                "new_image_id": "",
+                "old_digest": "",
+                "old_image_id": "",
+                "run_id": 7,
+                "service_name": "radarr",
+                "stack_name": "media",
+                "status": "success",
+                "target_image": "lscr.io/linuxserver/radarr@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+              },
+              {
+                "created_at": "2026-05-30T20:12:26+00:00",
+                "digest_provenance": {
+                  "final_image": "ghcr.io/magrhino/wudup@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                  "provenance_confidence": "verified",
+                  "provenance_source": "retag",
+                  "resolved_tag": "v0.16.1",
+                  "source_image": "ghcr.io/magrhino/wudup:latest",
+                  "target_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                  "watch_tag": "v0.16.1"
+                },
+                "id": 9,
+                "image": "ghcr.io/magrhino/wudup:latest",
+                "metadata": {
+                  "operation": "retag",
+                  "resolved_tag": "v0.16.1",
+                  "service_key": "media/wudup",
+                  "source": "webui",
+                  "watch_tag": "v0.16.1"
+                },
+                "new_digest": "",
+                "new_image_id": "",
+                "old_digest": "",
+                "old_image_id": "",
+                "run_id": 7,
+                "service_name": "wudup",
+                "stack_name": "media",
+                "status": "success",
+                "target_image": "ghcr.io/magrhino/wudup@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+              }
+            ],
+            "finished_at": "2026-05-30T20:12:28+00:00",
+            "id": 7,
+            "log_file": "demo/logs/demo-retag-switch-home-home-assistant-2026.5.3-media-radarr-5.22.4-media-wudup.log",
+            "metadata": {
+              "digest_pin_updates": [
+                {
+                  "digest_provenance": {
+                    "final_image": "ghcr.io/home-assistant/home-assistant@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                    "provenance_confidence": "verified",
+                    "provenance_source": "manual",
+                    "resolved_tag": "2026.5.3",
+                    "source_image": "ghcr.io/home-assistant/home-assistant:2026.5.1",
+                    "target_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                    "watch_tag": "2026.5.3"
+                  },
+                  "final_image": "ghcr.io/home-assistant/home-assistant@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                  "label_key": "wud.tag.include",
+                  "label_rewrites": [],
+                  "label_value": "^2026\\.5\\.3$$",
+                  "marker": "wudup.resolved-tag=2026.5.3",
+                  "planned_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                  "resolved_tag": "2026.5.3",
+                  "service": "home-assistant",
+                  "service_key": "home/home-assistant",
+                  "source_image": "ghcr.io/home-assistant/home-assistant:2026.5.1",
+                  "stack": "home",
+                  "watch_tag": "2026.5.3"
+                },
+                {
+                  "digest_provenance": {
+                    "final_image": "lscr.io/linuxserver/radarr@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                    "provenance_confidence": "verified",
+                    "provenance_source": "manual",
+                    "resolved_tag": "5.22.4",
+                    "source_image": "lscr.io/linuxserver/radarr:5.21.1",
+                    "target_digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                    "watch_tag": "5.22.4"
+                  },
+                  "final_image": "lscr.io/linuxserver/radarr@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                  "label_key": "wud.tag.include",
+                  "label_rewrites": [],
+                  "label_value": "^5\\.22\\.4$$",
+                  "marker": "wudup.resolved-tag=5.22.4",
+                  "planned_digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                  "resolved_tag": "5.22.4",
+                  "service": "radarr",
+                  "service_key": "media/radarr",
+                  "source_image": "lscr.io/linuxserver/radarr:5.21.1",
+                  "stack": "media",
+                  "watch_tag": "5.22.4"
+                },
+                {
+                  "digest_provenance": {
+                    "final_image": "ghcr.io/magrhino/wudup@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                    "provenance_confidence": "verified",
+                    "provenance_source": "demo",
+                    "resolved_tag": "v0.16.1",
+                    "source_image": "ghcr.io/magrhino/wudup:latest",
+                    "target_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                    "watch_tag": "latest"
+                  },
+                  "final_image": "ghcr.io/magrhino/wudup@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                  "label_key": "wud.tag.include",
+                  "label_rewrites": [
+                    {
+                      "approved": false,
+                      "current_label_value": "^latest$",
+                      "label_key": "wud.tag.include",
+                      "planned_tag": "v0.16.1",
+                      "proposed_label_regex": "^v0\\.16\\.1$",
+                      "proposed_label_value": "^v0\\.16\\.1$$",
+                      "reason": "exact-regex-normalized",
+                      "service": "wudup"
+                    }
+                  ],
+                  "label_value": "^v0\\.16\\.1$$",
+                  "marker": "wudup.resolved-tag=v0.16.1",
+                  "planned_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                  "resolved_tag": "v0.16.1",
+                  "service": "wudup",
+                  "service_key": "media/wudup",
+                  "source_image": "ghcr.io/magrhino/wudup:latest",
+                  "stack": "media",
+                  "watch_tag": "v0.16.1"
+                }
+              ],
+              "external_recreate_required": false,
+              "operation": "retag",
+              "plan_id": "demo-retag-job-switch-home-home-assistant-2026.5.3-media-radarr-5.22.4-media-wudup-plan",
+              "services": [
+                "home/home-assistant",
+                "media/radarr",
+                "media/wudup"
+              ],
+              "source": "webui",
+              "status": "success"
+            },
+            "mode": "web-retag",
+            "pending_updates": [],
+            "started_at": "2026-05-30T20:12:26+00:00",
+            "status": "success",
+            "verification": {
+              "items": [],
+              "needs_review_count": 0,
+              "status": "verified",
+              "total_count": 0,
+              "verified_count": 0
+            },
+            "wud_file": "demo/out/images.todo"
+          },
+          "log": {
+            "content": "[2026-05-30T20:12:26+00:00] [INFO] [compose-digest-pin] [home] Writing retag Compose metadata.\n[2026-05-30T20:12:28+00:00] [INFO] [compose-digest-pin] [home] Compose retag metadata was written.\n[2026-05-30T20:12:28+00:00] [INFO] [pull] [home] Pulling retagged service image(s).\n[2026-05-30T20:12:28+00:00] [INFO] [pull] [home] Retagged service image(s) pulled.\n[2026-05-30T20:12:28+00:00] [INFO] [recreate] [home] Recreating retagged service container(s).\n[2026-05-30T20:12:28+00:00] [INFO] [recreate] [home] Retagged service container(s) recreated.\n[2026-05-30T20:12:28+00:00] [INFO] [health] [home] Waiting up to 180s for retagged service health.\n[2026-05-30T20:12:28+00:00] [INFO] [health] [home] Retagged service health wait succeeded in 2s.\n[2026-05-30T20:12:28+00:00] [INFO] [compose-digest-pin] [media] Writing retag Compose metadata.\n[2026-05-30T20:12:28+00:00] [INFO] [compose-digest-pin] [media] Compose retag metadata was written.\n[2026-05-30T20:12:28+00:00] [INFO] [pull] [media] Pulling retagged service image(s).\n[2026-05-30T20:12:28+00:00] [INFO] [pull] [media] Retagged service image(s) pulled.\n[2026-05-30T20:12:28+00:00] [INFO] [recreate] [media] Recreating retagged service container(s).\n[2026-05-30T20:12:28+00:00] [INFO] [recreate] [media] Retagged service container(s) recreated.\n[2026-05-30T20:12:28+00:00] [INFO] [health] [media] Waiting up to 180s for retagged service health.\n[2026-05-30T20:12:28+00:00] [INFO] [health] [media] Retagged service health wait succeeded in 2s.\n[2026-05-30T20:12:28+00:00] [INFO] [completion] Retag changes applied.\n[2026-05-30T20:12:28+00:00] [INFO] Done. See log: demo/logs/demo-retag-switch-home-home-assistant-2026.5.3-media-radarr-5.22.4-media-wudup.log\n",
+            "exists": true,
+            "log_file": "demo/logs/demo-retag-switch-home-home-assistant-2026.5.3-media-radarr-5.22.4-media-wudup.log",
+            "max_bytes": 262144,
+            "run_id": 7,
+            "truncated": false
+          },
+          "summary": {
+            "dry_run": false,
+            "events": [
+              {
+                "created_at": "2026-05-30T20:12:26+00:00",
+                "digest_provenance": {
+                  "final_image": "ghcr.io/home-assistant/home-assistant@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                  "provenance_confidence": "verified",
+                  "provenance_source": "retag",
+                  "resolved_tag": "2026.5.3",
+                  "source_image": "ghcr.io/home-assistant/home-assistant:2026.5.1",
+                  "target_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                  "watch_tag": "2026.5.3"
+                },
+                "id": 7,
+                "image": "ghcr.io/home-assistant/home-assistant:2026.5.1",
+                "metadata": {
+                  "operation": "retag",
+                  "resolved_tag": "2026.5.3",
+                  "service_key": "home/home-assistant",
+                  "source": "webui",
+                  "watch_tag": "2026.5.3"
+                },
+                "new_digest": "",
+                "new_image_id": "",
+                "old_digest": "",
+                "old_image_id": "",
+                "run_id": 7,
+                "service_name": "home-assistant",
+                "stack_name": "home",
+                "status": "success",
+                "target_image": "ghcr.io/home-assistant/home-assistant@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+              },
+              {
+                "created_at": "2026-05-30T20:12:26+00:00",
+                "digest_provenance": {
+                  "final_image": "lscr.io/linuxserver/radarr@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                  "provenance_confidence": "verified",
+                  "provenance_source": "retag",
+                  "resolved_tag": "5.22.4",
+                  "source_image": "lscr.io/linuxserver/radarr:5.21.1",
+                  "target_digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                  "watch_tag": "5.22.4"
+                },
+                "id": 8,
+                "image": "lscr.io/linuxserver/radarr:5.21.1",
+                "metadata": {
+                  "operation": "retag",
+                  "resolved_tag": "5.22.4",
+                  "service_key": "media/radarr",
+                  "source": "webui",
+                  "watch_tag": "5.22.4"
+                },
+                "new_digest": "",
+                "new_image_id": "",
+                "old_digest": "",
+                "old_image_id": "",
+                "run_id": 7,
+                "service_name": "radarr",
+                "stack_name": "media",
+                "status": "success",
+                "target_image": "lscr.io/linuxserver/radarr@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+              },
+              {
+                "created_at": "2026-05-30T20:12:26+00:00",
+                "digest_provenance": {
+                  "final_image": "ghcr.io/magrhino/wudup@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                  "provenance_confidence": "verified",
+                  "provenance_source": "retag",
+                  "resolved_tag": "v0.16.1",
+                  "source_image": "ghcr.io/magrhino/wudup:latest",
+                  "target_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                  "watch_tag": "v0.16.1"
+                },
+                "id": 9,
+                "image": "ghcr.io/magrhino/wudup:latest",
+                "metadata": {
+                  "operation": "retag",
+                  "resolved_tag": "v0.16.1",
+                  "service_key": "media/wudup",
+                  "source": "webui",
+                  "watch_tag": "v0.16.1"
+                },
+                "new_digest": "",
+                "new_image_id": "",
+                "old_digest": "",
+                "old_image_id": "",
+                "run_id": 7,
+                "service_name": "wudup",
+                "stack_name": "media",
+                "status": "success",
+                "target_image": "ghcr.io/magrhino/wudup@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+              }
+            ],
+            "finished_at": "2026-05-30T20:12:28+00:00",
+            "id": 7,
+            "log_file": "demo/logs/demo-retag-switch-home-home-assistant-2026.5.3-media-radarr-5.22.4-media-wudup.log",
+            "metadata": {
+              "digest_pin_updates": [
+                {
+                  "digest_provenance": {
+                    "final_image": "ghcr.io/home-assistant/home-assistant@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                    "provenance_confidence": "verified",
+                    "provenance_source": "manual",
+                    "resolved_tag": "2026.5.3",
+                    "source_image": "ghcr.io/home-assistant/home-assistant:2026.5.1",
+                    "target_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                    "watch_tag": "2026.5.3"
+                  },
+                  "final_image": "ghcr.io/home-assistant/home-assistant@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                  "label_key": "wud.tag.include",
+                  "label_rewrites": [],
+                  "label_value": "^2026\\.5\\.3$$",
+                  "marker": "wudup.resolved-tag=2026.5.3",
+                  "planned_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                  "resolved_tag": "2026.5.3",
+                  "service": "home-assistant",
+                  "service_key": "home/home-assistant",
+                  "source_image": "ghcr.io/home-assistant/home-assistant:2026.5.1",
+                  "stack": "home",
+                  "watch_tag": "2026.5.3"
+                },
+                {
+                  "digest_provenance": {
+                    "final_image": "lscr.io/linuxserver/radarr@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                    "provenance_confidence": "verified",
+                    "provenance_source": "manual",
+                    "resolved_tag": "5.22.4",
+                    "source_image": "lscr.io/linuxserver/radarr:5.21.1",
+                    "target_digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                    "watch_tag": "5.22.4"
+                  },
+                  "final_image": "lscr.io/linuxserver/radarr@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                  "label_key": "wud.tag.include",
+                  "label_rewrites": [],
+                  "label_value": "^5\\.22\\.4$$",
+                  "marker": "wudup.resolved-tag=5.22.4",
+                  "planned_digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                  "resolved_tag": "5.22.4",
+                  "service": "radarr",
+                  "service_key": "media/radarr",
+                  "source_image": "lscr.io/linuxserver/radarr:5.21.1",
+                  "stack": "media",
+                  "watch_tag": "5.22.4"
+                },
+                {
+                  "digest_provenance": {
+                    "final_image": "ghcr.io/magrhino/wudup@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                    "provenance_confidence": "verified",
+                    "provenance_source": "demo",
+                    "resolved_tag": "v0.16.1",
+                    "source_image": "ghcr.io/magrhino/wudup:latest",
+                    "target_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                    "watch_tag": "latest"
+                  },
+                  "final_image": "ghcr.io/magrhino/wudup@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                  "label_key": "wud.tag.include",
+                  "label_rewrites": [
+                    {
+                      "approved": false,
+                      "current_label_value": "^latest$",
+                      "label_key": "wud.tag.include",
+                      "planned_tag": "v0.16.1",
+                      "proposed_label_regex": "^v0\\.16\\.1$",
+                      "proposed_label_value": "^v0\\.16\\.1$$",
+                      "reason": "exact-regex-normalized",
+                      "service": "wudup"
+                    }
+                  ],
+                  "label_value": "^v0\\.16\\.1$$",
+                  "marker": "wudup.resolved-tag=v0.16.1",
+                  "planned_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                  "resolved_tag": "v0.16.1",
+                  "service": "wudup",
+                  "service_key": "media/wudup",
+                  "source_image": "ghcr.io/magrhino/wudup:latest",
+                  "stack": "media",
+                  "watch_tag": "v0.16.1"
+                }
+              ],
+              "external_recreate_required": false,
+              "operation": "retag",
+              "plan_id": "demo-retag-job-switch-home-home-assistant-2026.5.3-media-radarr-5.22.4-media-wudup-plan",
+              "services": [
+                "home/home-assistant",
+                "media/radarr",
+                "media/wudup"
+              ],
+              "source": "webui",
+              "status": "success"
+            },
+            "mode": "web-retag",
+            "started_at": "2026-05-30T20:12:26+00:00",
+            "status": "success",
+            "wud_file": "demo/out/images.todo"
+          }
+        },
+        "terminal": {
+          "error": "",
+          "finished_at": "2026-05-30T20:12:28+00:00",
+          "job_id": "demo-retag-job-switch-home-home-assistant-2026.5.3-media-radarr-5.22.4-media-wudup",
+          "log_file": "demo/logs/demo-retag-switch-home-home-assistant-2026.5.3-media-radarr-5.22.4-media-wudup.log",
+          "progress": [
+            {
+              "created_at": "2026-05-30T20:12:26+00:00",
+              "job_id": "demo-retag-job-switch-home-home-assistant-2026.5.3-media-radarr-5.22.4-media-wudup",
+              "line_numbers": [],
+              "message": "[home] Writing retag Compose metadata.",
+              "phase": "compose-digest-pin",
+              "services": [
+                "home-assistant"
+              ],
+              "stack": "home",
+              "status": "running"
+            },
+            {
+              "created_at": "2026-05-30T20:12:28+00:00",
+              "job_id": "demo-retag-job-switch-home-home-assistant-2026.5.3-media-radarr-5.22.4-media-wudup",
+              "line_numbers": [],
+              "message": "[home] Compose retag metadata was written.",
+              "phase": "compose-digest-pin",
+              "services": [
+                "home-assistant"
+              ],
+              "stack": "home",
+              "status": "success"
+            },
+            {
+              "created_at": "2026-05-30T20:12:28+00:00",
+              "job_id": "demo-retag-job-switch-home-home-assistant-2026.5.3-media-radarr-5.22.4-media-wudup",
+              "line_numbers": [],
+              "message": "[home] Pulling retagged service image(s).",
+              "phase": "pull",
+              "services": [
+                "home-assistant"
+              ],
+              "stack": "home",
+              "status": "running"
+            },
+            {
+              "created_at": "2026-05-30T20:12:28+00:00",
+              "job_id": "demo-retag-job-switch-home-home-assistant-2026.5.3-media-radarr-5.22.4-media-wudup",
+              "line_numbers": [],
+              "message": "[home] Retagged service image(s) pulled.",
+              "phase": "pull",
+              "services": [
+                "home-assistant"
+              ],
+              "stack": "home",
+              "status": "success"
+            },
+            {
+              "created_at": "2026-05-30T20:12:28+00:00",
+              "job_id": "demo-retag-job-switch-home-home-assistant-2026.5.3-media-radarr-5.22.4-media-wudup",
+              "line_numbers": [],
+              "message": "[home] Recreating retagged service container(s).",
+              "phase": "recreate",
+              "services": [
+                "home-assistant"
+              ],
+              "stack": "home",
+              "status": "running"
+            },
+            {
+              "created_at": "2026-05-30T20:12:28+00:00",
+              "job_id": "demo-retag-job-switch-home-home-assistant-2026.5.3-media-radarr-5.22.4-media-wudup",
+              "line_numbers": [],
+              "message": "[home] Retagged service container(s) recreated.",
+              "phase": "recreate",
+              "services": [
+                "home-assistant"
+              ],
+              "stack": "home",
+              "status": "success"
+            },
+            {
+              "created_at": "2026-05-30T20:12:28+00:00",
+              "job_id": "demo-retag-job-switch-home-home-assistant-2026.5.3-media-radarr-5.22.4-media-wudup",
+              "line_numbers": [],
+              "message": "[home] Waiting up to 180s for retagged service health.",
+              "phase": "health",
+              "services": [
+                "home-assistant"
+              ],
+              "stack": "home",
+              "status": "running"
+            },
+            {
+              "created_at": "2026-05-30T20:12:28+00:00",
+              "job_id": "demo-retag-job-switch-home-home-assistant-2026.5.3-media-radarr-5.22.4-media-wudup",
+              "line_numbers": [],
+              "message": "[home] Retagged service health wait succeeded in 2s.",
+              "phase": "health",
+              "services": [
+                "home-assistant"
+              ],
+              "stack": "home",
+              "status": "success"
+            },
+            {
+              "created_at": "2026-05-30T20:12:28+00:00",
+              "job_id": "demo-retag-job-switch-home-home-assistant-2026.5.3-media-radarr-5.22.4-media-wudup",
+              "line_numbers": [],
+              "message": "[media] Writing retag Compose metadata.",
+              "phase": "compose-digest-pin",
+              "services": [
+                "radarr",
+                "wudup"
+              ],
+              "stack": "media",
+              "status": "running"
+            },
+            {
+              "created_at": "2026-05-30T20:12:28+00:00",
+              "job_id": "demo-retag-job-switch-home-home-assistant-2026.5.3-media-radarr-5.22.4-media-wudup",
+              "line_numbers": [],
+              "message": "[media] Compose retag metadata was written.",
+              "phase": "compose-digest-pin",
+              "services": [
+                "radarr",
+                "wudup"
+              ],
+              "stack": "media",
+              "status": "success"
+            },
+            {
+              "created_at": "2026-05-30T20:12:28+00:00",
+              "job_id": "demo-retag-job-switch-home-home-assistant-2026.5.3-media-radarr-5.22.4-media-wudup",
+              "line_numbers": [],
+              "message": "[media] Pulling retagged service image(s).",
+              "phase": "pull",
+              "services": [
+                "radarr",
+                "wudup"
+              ],
+              "stack": "media",
+              "status": "running"
+            },
+            {
+              "created_at": "2026-05-30T20:12:28+00:00",
+              "job_id": "demo-retag-job-switch-home-home-assistant-2026.5.3-media-radarr-5.22.4-media-wudup",
+              "line_numbers": [],
+              "message": "[media] Retagged service image(s) pulled.",
+              "phase": "pull",
+              "services": [
+                "radarr",
+                "wudup"
+              ],
+              "stack": "media",
+              "status": "success"
+            },
+            {
+              "created_at": "2026-05-30T20:12:28+00:00",
+              "job_id": "demo-retag-job-switch-home-home-assistant-2026.5.3-media-radarr-5.22.4-media-wudup",
+              "line_numbers": [],
+              "message": "[media] Recreating retagged service container(s).",
+              "phase": "recreate",
+              "services": [
+                "radarr",
+                "wudup"
+              ],
+              "stack": "media",
+              "status": "running"
+            },
+            {
+              "created_at": "2026-05-30T20:12:28+00:00",
+              "job_id": "demo-retag-job-switch-home-home-assistant-2026.5.3-media-radarr-5.22.4-media-wudup",
+              "line_numbers": [],
+              "message": "[media] Retagged service container(s) recreated.",
+              "phase": "recreate",
+              "services": [
+                "radarr",
+                "wudup"
+              ],
+              "stack": "media",
+              "status": "success"
+            },
+            {
+              "created_at": "2026-05-30T20:12:28+00:00",
+              "job_id": "demo-retag-job-switch-home-home-assistant-2026.5.3-media-radarr-5.22.4-media-wudup",
+              "line_numbers": [],
+              "message": "[media] Waiting up to 180s for retagged service health.",
+              "phase": "health",
+              "services": [
+                "radarr",
+                "wudup"
+              ],
+              "stack": "media",
+              "status": "running"
+            },
+            {
+              "created_at": "2026-05-30T20:12:28+00:00",
+              "job_id": "demo-retag-job-switch-home-home-assistant-2026.5.3-media-radarr-5.22.4-media-wudup",
+              "line_numbers": [],
+              "message": "[media] Retagged service health wait succeeded in 2s.",
+              "phase": "health",
+              "services": [
+                "radarr",
+                "wudup"
+              ],
+              "stack": "media",
+              "status": "success"
+            },
+            {
+              "created_at": "2026-05-30T20:12:28+00:00",
+              "job_id": "demo-retag-job-switch-home-home-assistant-2026.5.3-media-radarr-5.22.4-media-wudup",
+              "line_numbers": [],
+              "message": "Retag changes applied.",
+              "phase": "completion",
+              "services": [],
+              "stack": "",
+              "status": "success"
+            }
+          ],
+          "run_id": 7,
+          "selected_line_numbers": [],
+          "started_at": "2026-05-30T20:12:26+00:00",
+          "status": "success"
+        }
+      },
+      "key": "switch-home-home-assistant-2026.5.3-media-radarr-5.22.4-media-wudup",
+      "preview": {
+        "complete": {
+          "error": "",
+          "plan": {
+            "can_apply": true,
+            "external_recreate_required": false,
+            "issues": [],
+            "keep_current_count": 1,
+            "plan_id": "demo-retag-plan-switch-home-home-assistant-2026.5.3-media-radarr-5.22.4-media-wudup",
+            "selected_count": 3,
+            "stacks": [
+              {
+                "compose_file": "docker-compose.yml",
+                "digest_pin_updates": [
+                  {
+                    "digest_provenance": {
+                      "final_image": "ghcr.io/home-assistant/home-assistant@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                      "provenance_confidence": "verified",
+                      "provenance_source": "manual",
+                      "resolved_tag": "2026.5.3",
+                      "source_image": "ghcr.io/home-assistant/home-assistant:2026.5.1",
+                      "target_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                      "watch_tag": "2026.5.3"
+                    },
+                    "final_image": "ghcr.io/home-assistant/home-assistant@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                    "label_key": "wud.tag.include",
+                    "label_rewrites": [],
+                    "label_value": "^2026\\.5\\.3$$",
+                    "marker": "wudup.resolved-tag=2026.5.3",
+                    "planned_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                    "resolved_tag": "2026.5.3",
+                    "service": "home-assistant",
+                    "service_key": "home/home-assistant",
+                    "source_image": "ghcr.io/home-assistant/home-assistant:2026.5.1",
+                    "stack": "home",
+                    "watch_tag": "2026.5.3"
+                  }
+                ],
+                "directory": "demo/docker/home",
+                "project_directory": "demo/docker/home",
+                "services": [
+                  "home-assistant"
+                ],
+                "stack": "home"
+              },
+              {
+                "compose_file": "docker-compose.yml",
+                "digest_pin_updates": [
+                  {
+                    "digest_provenance": {
+                      "final_image": "lscr.io/linuxserver/radarr@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                      "provenance_confidence": "verified",
+                      "provenance_source": "manual",
+                      "resolved_tag": "5.22.4",
+                      "source_image": "lscr.io/linuxserver/radarr:5.21.1",
+                      "target_digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                      "watch_tag": "5.22.4"
+                    },
+                    "final_image": "lscr.io/linuxserver/radarr@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                    "label_key": "wud.tag.include",
+                    "label_rewrites": [],
+                    "label_value": "^5\\.22\\.4$$",
+                    "marker": "wudup.resolved-tag=5.22.4",
+                    "planned_digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                    "resolved_tag": "5.22.4",
+                    "service": "radarr",
+                    "service_key": "media/radarr",
+                    "source_image": "lscr.io/linuxserver/radarr:5.21.1",
+                    "stack": "media",
+                    "watch_tag": "5.22.4"
+                  },
+                  {
+                    "digest_provenance": {
+                      "final_image": "ghcr.io/magrhino/wudup@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                      "provenance_confidence": "verified",
+                      "provenance_source": "demo",
+                      "resolved_tag": "v0.16.1",
+                      "source_image": "ghcr.io/magrhino/wudup:latest",
+                      "target_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                      "watch_tag": "latest"
+                    },
+                    "final_image": "ghcr.io/magrhino/wudup@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                    "label_key": "wud.tag.include",
+                    "label_rewrites": [
+                      {
+                        "approved": false,
+                        "current_label_value": "^latest$",
+                        "label_key": "wud.tag.include",
+                        "planned_tag": "v0.16.1",
+                        "proposed_label_regex": "^v0\\.16\\.1$",
+                        "proposed_label_value": "^v0\\.16\\.1$$",
+                        "reason": "exact-regex-normalized",
+                        "service": "wudup"
+                      }
+                    ],
+                    "label_value": "^v0\\.16\\.1$$",
+                    "marker": "wudup.resolved-tag=v0.16.1",
+                    "planned_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                    "resolved_tag": "v0.16.1",
+                    "service": "wudup",
+                    "service_key": "media/wudup",
+                    "source_image": "ghcr.io/magrhino/wudup:latest",
+                    "stack": "media",
+                    "watch_tag": "v0.16.1"
+                  }
+                ],
+                "directory": "demo/docker/media",
+                "project_directory": "demo/docker/media",
+                "services": [
+                  "radarr",
+                  "wudup"
+                ],
+                "stack": "media"
+              }
+            ],
+            "status": "ready",
+            "warnings": []
+          },
+          "preview_job_id": "demo-retag-preview-switch-home-home-assistant-2026.5.3-media-radarr-5.22.4-media-wudup",
+          "progress": [
+            {
+              "created_at": "2026-05-30T20:12:26+00:00",
+              "job_id": "demo-retag-preview-switch-home-home-assistant-2026.5.3-media-radarr-5.22.4-media-wudup",
+              "line_numbers": [],
+              "message": "Refreshing demo retag candidates.",
+              "phase": "refresh",
+              "services": [],
+              "stack": "",
+              "status": "running"
+            },
+            {
+              "created_at": "2026-05-30T20:12:28+00:00",
+              "job_id": "demo-retag-preview-switch-home-home-assistant-2026.5.3-media-radarr-5.22.4-media-wudup",
+              "line_numbers": [],
+              "message": "Demo retag preview is ready.",
+              "phase": "preview",
+              "services": [],
+              "stack": "",
+              "status": "success"
+            }
+          ],
+          "status": "success",
+          "warnings": []
+        },
+        "queued": {
+          "error": "",
+          "plan": null,
+          "preview_job_id": "demo-retag-preview-switch-home-home-assistant-2026.5.3-media-radarr-5.22.4-media-wudup",
+          "progress": [
+            {
+              "created_at": "2026-05-30T20:12:26+00:00",
+              "job_id": "demo-retag-preview-switch-home-home-assistant-2026.5.3-media-radarr-5.22.4-media-wudup",
+              "line_numbers": [],
+              "message": "Refreshing demo retag candidates.",
+              "phase": "refresh",
+              "services": [],
+              "stack": "",
+              "status": "running"
+            }
+          ],
+          "status": "queued",
+          "warnings": []
+        }
+      },
+      "request": {
+        "choices": [
+          {
+            "choice": "keep-current",
+            "service_key": "data/postgres"
+          },
+          {
+            "choice": "switch-to-concrete",
+            "service_key": "home/home-assistant",
+            "target_tag": "2026.5.3"
+          },
+          {
+            "choice": "switch-to-concrete",
+            "service_key": "media/radarr",
+            "target_tag": "5.22.4"
+          },
+          {
+            "choice": "switch-to-concrete",
+            "service_key": "media/wudup"
+          }
+        ]
+      },
+      "response": {
+        "can_apply": true,
+        "external_recreate_required": false,
+        "issues": [],
+        "keep_current_count": 1,
+        "plan_id": "demo-retag-plan-switch-home-home-assistant-2026.5.3-media-radarr-5.22.4-media-wudup",
+        "selected_count": 3,
+        "stacks": [
+          {
+            "compose_file": "docker-compose.yml",
+            "digest_pin_updates": [
+              {
+                "digest_provenance": {
+                  "final_image": "ghcr.io/home-assistant/home-assistant@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                  "provenance_confidence": "verified",
+                  "provenance_source": "manual",
+                  "resolved_tag": "2026.5.3",
+                  "source_image": "ghcr.io/home-assistant/home-assistant:2026.5.1",
+                  "target_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                  "watch_tag": "2026.5.3"
+                },
+                "final_image": "ghcr.io/home-assistant/home-assistant@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "label_key": "wud.tag.include",
+                "label_rewrites": [],
+                "label_value": "^2026\\.5\\.3$$",
+                "marker": "wudup.resolved-tag=2026.5.3",
+                "planned_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "resolved_tag": "2026.5.3",
+                "service": "home-assistant",
+                "service_key": "home/home-assistant",
+                "source_image": "ghcr.io/home-assistant/home-assistant:2026.5.1",
+                "stack": "home",
+                "watch_tag": "2026.5.3"
+              }
+            ],
+            "directory": "demo/docker/home",
+            "project_directory": "demo/docker/home",
+            "services": [
+              "home-assistant"
+            ],
+            "stack": "home"
+          },
+          {
+            "compose_file": "docker-compose.yml",
+            "digest_pin_updates": [
+              {
+                "digest_provenance": {
+                  "final_image": "lscr.io/linuxserver/radarr@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                  "provenance_confidence": "verified",
+                  "provenance_source": "manual",
+                  "resolved_tag": "5.22.4",
+                  "source_image": "lscr.io/linuxserver/radarr:5.21.1",
+                  "target_digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                  "watch_tag": "5.22.4"
+                },
+                "final_image": "lscr.io/linuxserver/radarr@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                "label_key": "wud.tag.include",
+                "label_rewrites": [],
+                "label_value": "^5\\.22\\.4$$",
+                "marker": "wudup.resolved-tag=5.22.4",
+                "planned_digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                "resolved_tag": "5.22.4",
+                "service": "radarr",
+                "service_key": "media/radarr",
+                "source_image": "lscr.io/linuxserver/radarr:5.21.1",
+                "stack": "media",
+                "watch_tag": "5.22.4"
+              },
+              {
+                "digest_provenance": {
+                  "final_image": "ghcr.io/magrhino/wudup@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                  "provenance_confidence": "verified",
+                  "provenance_source": "demo",
+                  "resolved_tag": "v0.16.1",
+                  "source_image": "ghcr.io/magrhino/wudup:latest",
+                  "target_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                  "watch_tag": "latest"
+                },
+                "final_image": "ghcr.io/magrhino/wudup@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                "label_key": "wud.tag.include",
+                "label_rewrites": [
+                  {
+                    "approved": false,
+                    "current_label_value": "^latest$",
+                    "label_key": "wud.tag.include",
+                    "planned_tag": "v0.16.1",
+                    "proposed_label_regex": "^v0\\.16\\.1$",
+                    "proposed_label_value": "^v0\\.16\\.1$$",
+                    "reason": "exact-regex-normalized",
+                    "service": "wudup"
+                  }
+                ],
+                "label_value": "^v0\\.16\\.1$$",
+                "marker": "wudup.resolved-tag=v0.16.1",
+                "planned_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                "resolved_tag": "v0.16.1",
+                "service": "wudup",
+                "service_key": "media/wudup",
+                "source_image": "ghcr.io/magrhino/wudup:latest",
+                "stack": "media",
+                "watch_tag": "v0.16.1"
+              }
+            ],
+            "directory": "demo/docker/media",
+            "project_directory": "demo/docker/media",
+            "services": [
+              "radarr",
+              "wudup"
+            ],
+            "stack": "media"
+          }
+        ],
+        "status": "ready",
+        "warnings": []
+      }
     }
   ],
   "retagTargets": {
@@ -116171,8 +120317,8 @@ export const generatedFixtures = {
         "tracking_tag_source": "image"
       },
       {
-        "candidate_link_label": "",
-        "candidate_link_url": "",
+        "candidate_link_label": "GitHub tags",
+        "candidate_link_url": "https://github.com/home-assistant/home-assistant/tags",
         "candidate_source": "",
         "candidate_warning": "",
         "choices": [
@@ -116225,8 +120371,8 @@ export const generatedFixtures = {
         "tracking_tag_source": "image"
       },
       {
-        "candidate_link_label": "",
-        "candidate_link_url": "",
+        "candidate_link_label": "GitHub tags",
+        "candidate_link_url": "https://github.com/magrhino/wudup/tags",
         "candidate_source": "provenance",
         "candidate_warning": "",
         "choices": [

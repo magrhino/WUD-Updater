@@ -134,7 +134,7 @@ test("static demo renders retag review fixtures", async ({ page }) => {
     .filter({ hasText: "home/home-assistant" });
   await expect(blockedServiceRow.getByText("Concrete tracking")).toBeVisible();
   await expect(
-    blockedServiceRow.getByRole("radio", { name: "Switch" }),
+    blockedServiceRow.getByRole("radio", { name: "Retag" }),
   ).toBeDisabled();
 });
 

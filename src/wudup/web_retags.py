@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import secrets
 import shutil
 import sqlite3
@@ -43,6 +44,7 @@ from .docker_cli import DockerCli
 from .images import (
     image_has_tag,
     image_key,
+    image_repo_ref,
     image_tag,
     image_with_digest,
     image_with_tag,
@@ -110,6 +112,12 @@ _REGEX_SPECIAL_CHARS = "\\^$.*+?()[]{}|"
 RETAG_PREVIEW_EXECUTOR_MAX_WORKERS = 1
 RETAG_PREVIEW_JOB_LIMIT = 20
 RETAG_PREVIEW_ACTIVE_STATUSES = frozenset({"queued", "running"})
+_GHCR_GITHUB_REPO_RE = re.compile(
+    r"^ghcr[.]io/"
+    r"(?P<owner>[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?)/"
+    r"(?P<repo>[A-Za-z0-9._-]{1,100})$",
+    re.ASCII,
+)
 
 
 @dataclass(frozen=True)
@@ -573,9 +581,9 @@ def build_retag_plan(
         )
 
     keep_current_count = sum(
-        1 for choice in choices.values() if choice == KEEP_CURRENT_CHOICE
+        1 for choice in choices.values() if choice.choice == KEEP_CURRENT_CHOICE
     )
-    selected, issues = _selected_retag_plan_updates(choices, records_by_key)
+    selected, issues = _selected_retag_plan_updates(settings, choices, records_by_key)
 
     selected, preview_issues = _preview_retag_updates(settings, selected)
     issues.extend(preview_issues)
@@ -597,17 +605,20 @@ def build_retag_plan(
 
 
 def _selected_retag_plan_updates(
-    choices: Mapping[str, str],
+    settings: WebSettings,
+    choices: Mapping[str, RetagChoiceRequest],
     records_by_key: Mapping[str, _RetagTargetRecord],
 ) -> tuple[list[_RetagPlanUpdate], list[RetagPlanIssue]]:
     selected: list[_RetagPlanUpdate] = []
     issues: list[RetagPlanIssue] = []
     for service_key, choice in sorted(choices.items()):
-        if choice == KEEP_CURRENT_CHOICE:
+        if choice.choice == KEEP_CURRENT_CHOICE:
             continue
         update, issue = _retag_plan_update_for_choice(
+            settings,
             service_key,
             records_by_key[service_key],
+            target_tag=choice.target_tag,
         )
         if issue is not None:
             issues.append(issue)
@@ -618,11 +629,29 @@ def _selected_retag_plan_updates(
 
 
 def _retag_plan_update_for_choice(
+    settings: WebSettings,
     service_key: str,
     record: _RetagTargetRecord,
+    *,
+    target_tag: str | None = None,
 ) -> tuple[_RetagPlanUpdate | None, RetagPlanIssue | None]:
     item = record.item
     provenance = record.provenance
+    if target_tag is not None:
+        manual_tag = target_tag.strip()
+        if not manual_tag:
+            return None, _manual_retag_issue(
+                item,
+                code="retag-manual-empty-tag",
+                message=f"{service_key} manual retag target cannot be empty.",
+                hint="Enter a concrete Docker tag from the release or repository page.",
+            )
+        return _manual_retag_plan_update_for_choice(
+            settings,
+            service_key,
+            record,
+            target_tag=manual_tag,
+        )
     if not item.retag_available or provenance is None:
         return None, RetagPlanIssue(
             severity="error",
@@ -661,6 +690,99 @@ def _retag_plan_update_for_choice(
             provenance=provenance,
         ),
         None,
+    )
+
+
+def _manual_retag_plan_update_for_choice(
+    settings: WebSettings,
+    service_key: str,
+    record: _RetagTargetRecord,
+    *,
+    target_tag: str,
+) -> tuple[_RetagPlanUpdate | None, RetagPlanIssue | None]:
+    item = record.item
+    if target_tag == "latest":
+        return None, _manual_retag_issue(
+            item,
+            code="retag-manual-latest-tag",
+            message=f"{service_key} manual retag target cannot be latest.",
+            hint="Enter a concrete Docker tag from the release or repository page.",
+        )
+    if not tag_value_valid(target_tag):
+        return None, _manual_retag_issue(
+            item,
+            code="retag-manual-invalid-tag",
+            message=f"{service_key} manual retag target is not a valid Docker tag.",
+            hint="Use a Docker tag value such as 1.2.3, v1.2.3, or 2026.6.0.",
+        )
+    target_image = image_with_tag(record.service_image.image, target_tag)
+    try:
+        result = DigestVerifier(
+            DockerCli(runner=_command_runner(settings)),
+        ).resolve_tag_digest(target_image)
+    except Exception as exc:
+        return None, _manual_retag_issue(
+            item,
+            code="retag-manual-digest-error",
+            message=_safe_exception_detail(
+                settings,
+                f"Could not resolve manual retag target for {service_key}",
+                exc,
+            ),
+            hint="Confirm the tag exists for the image repository, then preview again.",
+        )
+    if not result.ok or not result.digest:
+        reason = result.reason or result.status or "digest resolution failed"
+        return None, _manual_retag_issue(
+            item,
+            code="retag-manual-digest-unavailable",
+            message=(
+                f"Could not resolve manual retag target {target_image}: {reason}"
+            ),
+            hint="Confirm the tag exists for the image repository, then preview again.",
+        )
+    digest = result.digest
+    provenance = DigestTagProvenance(
+        source_image=record.service_image.image,
+        resolved_tag=target_tag,
+        watch_tag=target_tag,
+        target_digest=digest,
+        final_image=image_with_digest(record.service_image.image, digest),
+        provenance_source="manual",
+        provenance_confidence="verified",
+    )
+    update = digest_pin_update_from_values(
+        old_image=item.image,
+        resolved_tag=target_tag,
+        planned_digest=digest,
+        services=(item.service,),
+    )
+    return (
+        _RetagPlanUpdate(
+            service_key=service_key,
+            stack=record.stack,
+            update=update,
+            provenance=provenance,
+        ),
+        None,
+    )
+
+
+def _manual_retag_issue(
+    item: RetagTargetItem,
+    *,
+    code: str,
+    message: str,
+    hint: str,
+) -> RetagPlanIssue:
+    return RetagPlanIssue(
+        severity="error",
+        code=code,
+        message=message,
+        service_key=item.service_key,
+        stack=item.stack,
+        service=item.service,
+        hint=hint,
     )
 
 
@@ -1010,14 +1132,14 @@ def _retag_target_record(
 
 def _validated_choice_map(
     choices: Sequence[RetagChoiceRequest],
-) -> dict[str, str]:
-    values: dict[str, str] = {}
+) -> dict[str, RetagChoiceRequest]:
+    values: dict[str, RetagChoiceRequest] = {}
     duplicates: list[str] = []
     for item in choices:
         if item.service_key in values:
             duplicates.append(item.service_key)
             continue
-        values[item.service_key] = item.choice
+        values[item.service_key] = item
     if duplicates:
         duplicate_list = ", ".join(sorted(set(duplicates)))
         raise HTTPException(
@@ -1872,6 +1994,10 @@ def _retag_target_item(
     ):
         candidate_source = "github-latest"
         candidate_warning = GITHUB_LATEST_MISSING_CACHE_WARNING
+    if not candidate_link_url:
+        candidate_link_label, candidate_link_url = _inferred_candidate_link(
+            service_image.image
+        )
     return RetagTargetItem(
         service_key=service_key,
         stack=stack,
@@ -1899,6 +2025,17 @@ def _retag_target_item(
             None if provenance is None else asdict(provenance)
         ),
     )
+
+
+def _inferred_candidate_link(image: str) -> tuple[str, str]:
+    repo_ref = image_repo_ref(image)
+    match = _GHCR_GITHUB_REPO_RE.fullmatch(repo_ref)
+    if match:
+        owner = match.group("owner")
+        repo = match.group("repo")
+        if repo not in {".", ".."}:
+            return "GitHub tags", f"https://github.com/{owner}/{repo}/tags"
+    return "", ""
 
 
 def _tracking_tag(

@@ -436,6 +436,7 @@ describe("updates store", () => {
     await updates.loadRetagTargets();
 
     expect(updates.retagTargets?.items[0]?.service_key).toBe("media/app");
+    expect(updates.retagTargetTags["media/app"]).toBe("1.1");
     expect(fetchMock.mock.calls[0][0]).toBe("/api/v1/retag-targets");
   });
 
@@ -547,6 +548,7 @@ describe("updates store", () => {
     const updates = useUpdatesStore();
     updates.retagTargets = retagTargetsResponse([
       retagTarget({
+        proposed_tag: "",
         retag_available: false,
         retag_reason: "missing-provenance",
         choices: ["keep-current"],
@@ -562,6 +564,84 @@ describe("updates store", () => {
 
     expect(jsonRequestBody(fetchMock.mock.calls[0])).toEqual({
       choices: [{ service_key: "media/app", choice: "keep-current" }],
+      github_latest_fallback: false,
+    });
+  });
+
+  it("sends manual retag target tags for fallback rows", async () => {
+    const fetchMock = mockFetch(retagPreviewJobResponse());
+    const auth = useAuthStore();
+    vi.spyOn(auth, "ensureCsrf").mockResolvedValue("csrf-retag");
+    const updates = useUpdatesStore();
+    updates.retagTargets = retagTargetsResponse([
+      retagTarget({
+        service_key: "media/radarr",
+        service: "radarr",
+        image: "repo/radarr:5.21.1",
+        image_repo: "repo/radarr",
+        current_tag: "5.21.1",
+        tracking_tag: "5.21.1",
+        tracking_tag_source: "image",
+        proposed_tag: "",
+        final_image: "",
+        retag_available: false,
+        retag_reason: "not-latest-tracking",
+        choices: ["keep-current"],
+        digest_provenance: null,
+      }),
+    ]);
+
+    updates.setRetagTargetTag("media/radarr", "5.22.4");
+    await updates.createRetagPlan();
+
+    expect(jsonRequestBody(fetchMock.mock.calls[0])).toEqual({
+      choices: [
+        {
+          service_key: "media/radarr",
+          choice: "switch-to-concrete",
+          target_tag: "5.22.4",
+        },
+      ],
+      github_latest_fallback: false,
+    });
+  });
+
+  it("uses edited automatch target tags as manual overrides", async () => {
+    const fetchMock = mockFetch(retagPreviewJobResponse());
+    const auth = useAuthStore();
+    vi.spyOn(auth, "ensureCsrf").mockResolvedValue("csrf-retag");
+    const updates = useUpdatesStore();
+    updates.retagTargets = retagTargetsResponse();
+
+    updates.setRetagTargetTag("media/app", "1.2");
+    await updates.createRetagPlan();
+
+    expect(jsonRequestBody(fetchMock.mock.calls[0])).toEqual({
+      choices: [
+        {
+          service_key: "media/app",
+          choice: "switch-to-concrete",
+          target_tag: "1.2",
+        },
+      ],
+      github_latest_fallback: false,
+    });
+  });
+
+  it("clears blank automatch overrides back to the proposed tag", async () => {
+    const fetchMock = mockFetch(retagPreviewJobResponse());
+    const auth = useAuthStore();
+    vi.spyOn(auth, "ensureCsrf").mockResolvedValue("csrf-retag");
+    const updates = useUpdatesStore();
+    updates.retagTargets = retagTargetsResponse();
+
+    updates.setRetagChoice("media/app", "switch-to-concrete");
+    updates.setRetagTargetTag("media/app", "1.2");
+    updates.setRetagTargetTag("media/app", "   ");
+    await updates.createRetagPlan();
+
+    expect(jsonRequestBody(fetchMock.mock.calls[0])).toEqual({
+      choices: [{ service_key: "media/app", choice: "switch-to-concrete" }],
       github_latest_fallback: false,
     });
   });

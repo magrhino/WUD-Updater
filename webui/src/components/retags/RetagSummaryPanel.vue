@@ -12,6 +12,7 @@ defineProps<{
   applyJobActive: boolean;
   hasRetagPlan: boolean;
   mutationNotice: string;
+  validationError: string;
 }>();
 
 defineEmits<{
@@ -47,6 +48,7 @@ defineEmits<{
           Apply selected retags
         </n-button>
         <span v-if="mutationNotice">{{ mutationNotice }}</span>
+        <span v-else-if="validationError">{{ validationError }}</span>
       </div>
     </div>
 

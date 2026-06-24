@@ -229,6 +229,67 @@ def test_retag_targets_endpoint_includes_service_without_pending_line(
     _assert_pending_grouping_did_not_mutate(_fake_docker_calls(fake_root))
 
 
+@pytest.mark.parametrize(
+    "image",
+    [
+        "ghcr.io/acme/app:1.0",
+        "ghcr.io/acme/app@sha256:" + "a" * 64,
+    ],
+)
+def test_retag_targets_endpoint_infers_safe_github_tags_link(
+    tmp_path: Path,
+    image: str,
+) -> None:
+    fake_env, fake_root = _fake_docker_env(tmp_path)
+    client = _client(tmp_path, {"WUD_WEB_DEV_NO_AUTH": "true", **fake_env})
+    _make_fake_stack(
+        tmp_path,
+        fake_root,
+        "stack",
+        [("app", image, "cid-app")],
+    )
+
+    response = client.get("/api/v1/retag-targets")
+
+    assert response.status_code == 200
+    item = response.json()["items"][0]
+    assert item["candidate_link_label"] == "GitHub tags"
+    assert item["candidate_link_url"] == "https://github.com/acme/app/tags"
+    _assert_pending_grouping_did_not_mutate(_fake_docker_calls(fake_root))
+
+
+@pytest.mark.parametrize(
+    "image",
+    [
+        "docker.io/acme/app:1.0",
+        "ghcr.io/acme/app?tab=tags:1.0",
+        "ghcr.io/acme/..:1.0",
+        "ghcr.io/acme/nested/app:1.0",
+        "registry.example/ghcr.io/acme/app:1.0",
+    ],
+)
+def test_retag_targets_endpoint_skips_unsafe_github_tags_link(
+    tmp_path: Path,
+    image: str,
+) -> None:
+    fake_env, fake_root = _fake_docker_env(tmp_path)
+    client = _client(tmp_path, {"WUD_WEB_DEV_NO_AUTH": "true", **fake_env})
+    _make_fake_stack(
+        tmp_path,
+        fake_root,
+        "stack",
+        [("app", image, "cid-app")],
+    )
+
+    response = client.get("/api/v1/retag-targets")
+
+    assert response.status_code == 200
+    item = response.json()["items"][0]
+    assert item["candidate_link_label"] == ""
+    assert item["candidate_link_url"] == ""
+    _assert_pending_grouping_did_not_mutate(_fake_docker_calls(fake_root))
+
+
 def test_retag_github_latest_fallback_refresh_enables_cached_candidate(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -956,6 +1017,233 @@ def test_retag_plan_keep_current_is_empty_noop(tmp_path: Path) -> None:
     assert body["selected_count"] == 0
     assert body["keep_current_count"] == 1
     _assert_pending_grouping_did_not_mutate(_fake_docker_calls(fixture.fake_root))
+
+
+def test_retag_plan_rejects_keep_current_target_tag(tmp_path: Path) -> None:
+    fixture = _make_retag_fixture(tmp_path)
+
+    response = fixture.client.post(
+        "/api/v1/retag-plans",
+        json={
+            "choices": [
+                {
+                    "service_key": "stack/app",
+                    "choice": "keep-current",
+                    "target_tag": "2.0",
+                }
+            ]
+        },
+        headers=_csrf_headers(fixture.client),
+    )
+
+    assert response.status_code == 422
+    assert "target_tag is only allowed" in str(response.json()["detail"])
+    _assert_pending_grouping_did_not_mutate(_fake_docker_calls(fixture.fake_root))
+
+
+def test_retag_plan_manual_target_allows_non_latest_service(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fake_env, fake_root = _fake_docker_env(tmp_path)
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+            **fake_env,
+        },
+    )
+    _make_fake_stack(
+        tmp_path,
+        fake_root,
+        "stack",
+        [("app", "repo/app:1.0", "cid-app")],
+    )
+    digest = "sha256:" + "3" * 64
+    _patch_digest_resolution(
+        monkeypatch,
+        expected_image="repo/app:3.0",
+        digest=digest,
+    )
+
+    response = client.post(
+        "/api/v1/retag-plans",
+        json={
+            "choices": [
+                {
+                    "service_key": "stack/app",
+                    "choice": "switch-to-concrete",
+                    "target_tag": "3.0",
+                }
+            ]
+        },
+        headers=_csrf_headers(client),
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "ready"
+    assert body["can_apply"] is True
+    update = body["stacks"][0]["digest_pin_updates"][0]
+    assert update["service_key"] == "stack/app"
+    assert update["source_image"] == "repo/app:1.0"
+    assert update["resolved_tag"] == "3.0"
+    assert update["planned_digest"] == digest
+    assert update["final_image"] == f"repo/app@{digest}"
+    assert update["label_value"] == "^3\\.0$$"
+    assert update["digest_provenance"]["provenance_source"] == "manual"
+    _assert_pending_grouping_did_not_mutate(_fake_docker_calls(fake_root))
+
+
+def test_retag_plan_manual_target_overrides_automatch_candidate(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fixture = _make_retag_fixture(tmp_path)
+    headers = _csrf_headers(fixture.client)
+    auto_plan = _create_retag_plan(fixture.client, headers)
+    digest = "sha256:" + "4" * 64
+    manual_choice = {
+        "service_key": "stack/app",
+        "choice": "switch-to-concrete",
+        "target_tag": "3.0",
+    }
+    _patch_digest_resolution(
+        monkeypatch,
+        expected_image="repo/app:3.0",
+        digest=digest,
+    )
+
+    manual_plan = _create_retag_plan(
+        fixture.client,
+        headers,
+        choices=[manual_choice],
+    )
+
+    assert manual_plan["plan_id"] != auto_plan["plan_id"]
+    update = manual_plan["stacks"][0]["digest_pin_updates"][0]
+    assert update["resolved_tag"] == "3.0"
+    assert update["planned_digest"] == digest
+    assert update["digest_provenance"]["resolved_tag"] == "3.0"
+    assert update["digest_provenance"]["provenance_source"] == "manual"
+
+
+@pytest.mark.parametrize(
+    ("target_tag", "issue_code"),
+    [
+        ("", "retag-manual-empty-tag"),
+        ("latest", "retag-manual-latest-tag"),
+        ("-bad", "retag-manual-invalid-tag"),
+    ],
+)
+def test_retag_plan_blocks_invalid_manual_targets(
+    tmp_path: Path,
+    target_tag: str,
+    issue_code: str,
+) -> None:
+    fixture = _make_retag_fixture(tmp_path)
+    response = fixture.client.post(
+        "/api/v1/retag-plans",
+        json={
+            "choices": [
+                {
+                    "service_key": "stack/app",
+                    "choice": "switch-to-concrete",
+                    "target_tag": target_tag,
+                }
+            ]
+        },
+        headers=_csrf_headers(fixture.client),
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "blocked"
+    assert body["can_apply"] is False
+    assert body["issues"][0]["code"] == issue_code
+
+
+def test_retag_plan_blocks_manual_digest_resolution_failures(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fixture = _make_retag_fixture(tmp_path)
+    _patch_digest_resolution_results(
+        monkeypatch,
+        {
+            "repo/app:9.9": DigestResolveResult(
+                ok=False,
+                status="unavailable",
+                reason="manifest-unavailable",
+            )
+        },
+    )
+
+    response = fixture.client.post(
+        "/api/v1/retag-plans",
+        json={
+            "choices": [
+                {
+                    "service_key": "stack/app",
+                    "choice": "switch-to-concrete",
+                    "target_tag": "9.9",
+                }
+            ]
+        },
+        headers=_csrf_headers(fixture.client),
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "blocked"
+    assert body["issues"][0]["code"] == "retag-manual-digest-unavailable"
+    assert "repo/app:9.9" in body["issues"][0]["message"]
+
+
+def test_retag_apply_rejects_stale_manual_target_change(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fixture = _make_retag_fixture(
+        tmp_path,
+        env={
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+        },
+    )
+    headers = _csrf_headers(fixture.client)
+    _patch_digest_resolution_map(
+        monkeypatch,
+        {
+            "repo/app:3.0": "sha256:" + "3" * 64,
+            "repo/app:4.0": "sha256:" + "4" * 64,
+        },
+    )
+    plan_choice = {
+        "service_key": "stack/app",
+        "choice": "switch-to-concrete",
+        "target_tag": "3.0",
+    }
+    plan = _create_retag_plan(fixture.client, headers, choices=[plan_choice])
+
+    response = fixture.client.post(
+        "/api/v1/retag-plans/apply",
+        json={
+            "plan_id": plan["plan_id"],
+            "choices": [
+                {
+                    "service_key": "stack/app",
+                    "choice": "switch-to-concrete",
+                    "target_tag": "4.0",
+                }
+            ],
+            "confirmation": "apply-retags",
+        },
+        headers=headers,
+    )
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == "retag plan is stale"
 
 
 def test_retag_plan_sanitizes_compose_preview_errors(

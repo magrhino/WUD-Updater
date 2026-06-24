@@ -9,11 +9,13 @@ import { naiveStubs } from "./helpers/mount";
 function mountMobileList({
   rows,
   choices = {},
+  targetTags = {},
   mutationDisabled = false,
   mutationNotice = "",
 }: {
   rows: RetagTargetItem[];
   choices?: Record<string, RetagTargetChoice>;
+  targetTags?: Record<string, string>;
   mutationDisabled?: boolean;
   mutationNotice?: string;
 }) {
@@ -21,6 +23,7 @@ function mountMobileList({
     props: {
       rows,
       choices,
+      targetTags,
       mutationDisabled,
       mutationNotice,
     },
@@ -45,6 +48,7 @@ describe("RetagTargetsMobileList", () => {
     expect(wrapper.text()).toContain("repo/app:latest");
     expect(wrapper.text()).toContain("latest (label)");
     expect(wrapper.text()).toContain("latest -> 1.1");
+    expect(wrapper.text()).toContain("GitHub release");
     expect(wrapper.text()).toContain(
       "GitHub latest fallback will update latest tracking to 1.1.",
     );
@@ -62,6 +66,10 @@ describe("RetagTargetsMobileList", () => {
       'input[value="switch-to-concrete"]',
     );
     expect(switchInput.attributes("disabled")).toBeUndefined();
+    expect(
+      wrapper.find<HTMLInputElement>('input[aria-label="Target tag for media/app"]')
+        .element.value,
+    ).toBe("1.1");
 
     await switchInput.setValue();
 
@@ -107,8 +115,76 @@ describe("RetagTargetsMobileList", () => {
     );
     expect(switchInputs[1].attributes("disabled")).toBeDefined();
     expect(switchInputs[1].attributes("title")).toBe(
-      "No stored digest provenance is available for this service.",
+      "Enter a target tag before retagging.",
     );
     expect(wrapper.emitted("choice-update")).toBeUndefined();
+  });
+
+  it("enables manual fallback rows after a target tag is supplied", async () => {
+    const item = retagTarget({
+      service_key: "media/radarr",
+      service: "radarr",
+      image: "repo/radarr:5.21.1",
+      image_repo: "repo/radarr",
+      current_tag: "5.21.1",
+      tracking_tag: "5.21.1",
+      tracking_tag_source: "image",
+      proposed_tag: "",
+      final_image: "",
+      retag_available: false,
+      retag_reason: "not-latest-tracking",
+      choices: ["keep-current"],
+      digest_provenance: null,
+    });
+    const wrapper = mountMobileList({
+      rows: [item],
+      targetTags: { "media/radarr": "5.22.4" },
+    });
+
+    const targetInput = wrapper.find<HTMLInputElement>(
+      'input[aria-label="Target tag for media/radarr"]',
+    );
+    expect(targetInput.element.value).toBe("5.22.4");
+    await targetInput.setValue("5.22.5");
+    expect(wrapper.emitted("target-tag-update")).toEqual([[item, "5.22.5"]]);
+
+    const switchInput = wrapper.find<HTMLInputElement>(
+      'input[value="switch-to-concrete"]',
+    );
+    expect(switchInput.attributes("disabled")).toBeUndefined();
+    await switchInput.setValue();
+    expect(wrapper.emitted("choice-update")).toEqual([
+      [item, "switch-to-concrete"],
+    ]);
+  });
+
+  it("disables retag selection when a manual target tag is invalid", () => {
+    const item = retagTarget({
+      service_key: "media/radarr",
+      service: "radarr",
+      image: "repo/radarr:5.21.1",
+      image_repo: "repo/radarr",
+      current_tag: "5.21.1",
+      tracking_tag: "5.21.1",
+      tracking_tag_source: "image",
+      proposed_tag: "",
+      final_image: "",
+      retag_available: false,
+      retag_reason: "not-latest-tracking",
+      choices: ["keep-current"],
+      digest_provenance: null,
+    });
+    const wrapper = mountMobileList({
+      rows: [item],
+      choices: { [item.service_key]: "switch-to-concrete" },
+      targetTags: { [item.service_key]: "-bad" },
+    });
+
+    const switchInput = wrapper.find<HTMLInputElement>(
+      'input[value="switch-to-concrete"]',
+    );
+    expect(switchInput.attributes("disabled")).toBeDefined();
+    expect(switchInput.attributes("title")).toContain("invalid target tag");
+    expect(wrapper.text()).toContain("media/radarr has an invalid target tag");
   });
 });

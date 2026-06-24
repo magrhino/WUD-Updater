@@ -2,6 +2,7 @@
 import { computed, h } from "vue";
 import {
   NDataTable,
+  NInput,
   NRadioButton,
   NRadioGroup,
   NTag,
@@ -14,14 +15,17 @@ import {
   displayDigest,
 } from "../../utils/digestProvenance";
 import {
+  canChooseRetagTarget,
+  canEnableRetagTargetChoice,
   canSwitchToConcrete,
   emitRetagChoice,
   retagChoice,
+  retagTargetTagValidationError,
+  retagTargetTagValue,
 } from "./retagChoices";
 import {
   candidateLabel,
   currentTagLabel,
-  reasonDetail,
   reasonLabel,
   reasonTagType,
   trackingLabel,
@@ -33,12 +37,14 @@ const props = defineProps<{
   rows: RetagTargetItem[];
   loading: boolean;
   choices: Record<string, RetagTargetChoice>;
+  targetTags: Record<string, string>;
   mutationDisabled: boolean;
   mutationNotice: string;
 }>();
 
 const emit = defineEmits<{
   "choice-update": [item: RetagTargetItem, choice: RetagTargetChoice];
+  "target-tag-update": [item: RetagTargetItem, tag: string];
 }>();
 
 const columns = computed<DataTableColumns<RetagTargetItem>>(() => [
@@ -88,17 +94,19 @@ const columns = computed<DataTableColumns<RetagTargetItem>>(() => [
           { size: "small", type: reasonTagType(row), bordered: false },
           { default: () => reasonLabel(row.retag_reason) },
         ),
+        h("span", candidateText),
         row.candidate_link_url
           ? h(
               "a",
               {
+                class: "text-link retag-source-link",
                 href: row.candidate_link_url,
                 target: "_blank",
                 rel: "noreferrer",
               },
-              candidateText,
+              row.candidate_link_label || "Open source",
             )
-          : h("span", candidateText),
+          : null,
         row.candidate_warning
           ? h("span", { class: "release-notes-reason" }, row.candidate_warning)
           : null,
@@ -109,6 +117,34 @@ const columns = computed<DataTableColumns<RetagTargetItem>>(() => [
               displayDigest(row.final_image),
             )
           : null,
+      ]);
+    },
+  },
+  {
+    title: "Target tag",
+    key: "target_tag",
+    minWidth: 180,
+    render: (row) => {
+      const error =
+        retagChoice(row, props.choices, props.targetTags) === "switch-to-concrete"
+          ? retagTargetTagValidationError(row, props.targetTags)
+          : "";
+      return h("div", { class: "retag-table-cell retag-target-tag-cell" }, [
+        h(NInput, {
+          value: retagTargetTagValue(row, props.targetTags),
+          size: "small",
+          class: "tag-override-input retag-target-input",
+          placeholder: row.proposed_tag || "Enter tag",
+          disabled: props.mutationDisabled,
+          status: error ? "error" : undefined,
+          title: error || undefined,
+          inputProps: {
+            "aria-label": `Target tag for ${row.service_key}`,
+          },
+          onUpdateValue: (value: string) =>
+            emit("target-tag-update", row, value),
+        }),
+        error ? h("span", { class: "retag-input-error" }, error) : null,
       ]);
     },
   },
@@ -132,14 +168,19 @@ const columns = computed<DataTableColumns<RetagTargetItem>>(() => [
     title: "Choice",
     key: "choices",
     minWidth: 230,
-    render: (row) =>
-      h("div", { class: "retag-choice-cell" }, [
+    render: (row) => {
+      const canChooseTarget = canChooseRetagTarget(row, props.targetTags);
+      const targetError = canChooseTarget
+        ? retagTargetTagValidationError(row, props.targetTags)
+        : "";
+      return h("div", { class: "retag-choice-cell" }, [
         h(
           NRadioGroup,
           {
-            value: retagChoice(row, props.choices),
+            value: retagChoice(row, props.choices, props.targetTags),
             size: "small",
-            onUpdateValue: (value: string) => emitRetagChoice(emit, row, value),
+            onUpdateValue: (value: string) =>
+              emitRetagChoice(emit, row, value, props.targetTags),
           },
           {
             default: () => [
@@ -153,13 +194,15 @@ const columns = computed<DataTableColumns<RetagTargetItem>>(() => [
                 {
                   value: "switch-to-concrete",
                   disabled:
-                    !canSwitchToConcrete(row) || props.mutationDisabled,
-                  title:
-                    canSwitchToConcrete(row)
+                    !canEnableRetagTargetChoice(row, props.targetTags) ||
+                    props.mutationDisabled,
+                  title: targetError
+                    ? targetError
+                    : canChooseTarget
                       ? props.mutationNotice
-                      : reasonDetail(row.retag_reason),
+                      : "Enter a target tag before retagging.",
                 },
-                { default: () => "Switch" },
+                { default: () => "Retag" },
               ),
             ],
           },
@@ -168,10 +211,11 @@ const columns = computed<DataTableColumns<RetagTargetItem>>(() => [
           ? h(
               NTag,
               { size: "small", type: "info", bordered: false },
-              { default: () => "Candidate ready" },
+              { default: () => "Automatch ready" },
             )
           : null,
-      ]),
+      ]);
+    },
   },
 ]);
 
@@ -191,3 +235,20 @@ function rowKey(row: RetagTargetItem): string {
     class="data-surface"
   />
 </template>
+
+<style scoped>
+.retag-source-link {
+  width: fit-content;
+  font-size: 0.84rem;
+}
+
+.retag-target-tag-cell {
+  align-items: stretch;
+}
+
+.retag-input-error {
+  color: var(--color-warning-fg);
+  font-size: 0.78rem;
+  line-height: 1.35;
+}
+</style>

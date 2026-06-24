@@ -325,6 +325,35 @@ describe("demo web API", () => {
     await expect(
       api.applyRetagPlan(`${retagPlan.plan_id}-stale`, retagChoices, "csrf"),
     ).rejects.toThrow("Demo retag plan is stale.");
+    const manualRetagPlan = await api.createRetagPlan(
+      [
+        {
+          service_key: "home/home-assistant",
+          choice: "switch-to-concrete",
+          target_tag: "2026.5.3",
+        },
+      ],
+      "csrf",
+    );
+    expect(manualRetagPlan).toMatchObject({
+      status: "ready",
+      can_apply: true,
+      selected_count: 1,
+      stacks: [
+        expect.objectContaining({
+          stack: "home",
+          services: ["home-assistant"],
+          digest_pin_updates: [
+            expect.objectContaining({
+              service_key: "home/home-assistant",
+              resolved_tag: "2026.5.3",
+              planned_digest:
+                "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            }),
+          ],
+        }),
+      ],
+    });
 
     const runs = await api.runs();
     const seededRun = runs.find((run) => run.id === 1);
