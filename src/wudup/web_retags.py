@@ -920,7 +920,7 @@ def _retag_candidate_tags(release_tag: str) -> tuple[str, ...]:
     candidates = [release_tag]
     if len(release_tag) > 1 and release_tag[0] == "v" and release_tag[1].isdigit():
         candidates.append(release_tag[1:])
-    elif release_tag[:1].isdigit():
+    elif release_tag and release_tag[0].isdigit():
         candidates.append(f"v{release_tag}")
     return tuple(dict.fromkeys(candidate for candidate in candidates if candidate))
 
