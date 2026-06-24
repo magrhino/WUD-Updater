@@ -855,7 +855,9 @@ def _fallback_from_release_info(
         return _RetagGitHubLatestFallback(
             warning=_github_latest_info_warning(info),
         )
-    if not tag_value_valid(candidate.release_tag):
+    tag_candidates = _retag_candidate_tags(candidate.release_tag)
+    valid_tag_candidates = tuple(tag for tag in tag_candidates if tag_value_valid(tag))
+    if not valid_tag_candidates:
         return _RetagGitHubLatestFallback(
             proposed_tag=candidate.release_tag,
             warning=(
@@ -865,50 +867,72 @@ def _fallback_from_release_info(
             link_label=candidate.link_label,
             link_url=candidate.link_url,
         )
-    resolved_image = image_with_tag(service_image.image, candidate.release_tag)
-    digest_result = DigestVerifier(
+    verifier = DigestVerifier(
         DockerCli(runner=_command_runner(settings)),
-    ).resolve_tag_digest(resolved_image)
-    if not digest_result.ok or not digest_result.digest:
+    )
+    failed: list[str] = []
+    for proposed_tag in valid_tag_candidates:
+        resolved_image = image_with_tag(service_image.image, proposed_tag)
+        digest_result = verifier.resolve_tag_digest(resolved_image)
+        if digest_result.ok and digest_result.digest:
+            digest = digest_result.digest
+            warning = (
+                "GitHub latest fallback will update latest tracking to "
+                f"{proposed_tag}."
+            )
+            if proposed_tag != candidate.release_tag:
+                warning = (
+                    f"GitHub latest release tag {candidate.release_tag} resolved "
+                    f"as Docker tag {proposed_tag}. "
+                    "GitHub latest fallback will update latest tracking to "
+                    f"{proposed_tag}."
+                )
+            return _RetagGitHubLatestFallback(
+                provenance=DigestTagProvenance(
+                    source_image=service_image.image,
+                    resolved_tag=proposed_tag,
+                    watch_tag="latest",
+                    target_digest=digest,
+                    final_image=image_with_digest(service_image.image, digest),
+                    provenance_source="github-latest",
+                    provenance_confidence="recovered",
+                ),
+                proposed_tag=proposed_tag,
+                warning=warning,
+                link_label=candidate.link_label,
+                link_url=candidate.link_url,
+            )
         reason = digest_result.reason or digest_result.status
-        return _RetagGitHubLatestFallback(
-            proposed_tag=candidate.release_tag,
-            warning=(
-                f"GitHub latest release tag {candidate.release_tag} was found, "
-                f"but {resolved_image} digest could not be resolved: {reason}."
-            ),
-            link_label=candidate.link_label,
-            link_url=candidate.link_url,
-        )
-    digest = digest_result.digest
+        failed.append(f"{proposed_tag}: {reason}")
     return _RetagGitHubLatestFallback(
-        provenance=DigestTagProvenance(
-            source_image=service_image.image,
-            resolved_tag=candidate.release_tag,
-            watch_tag="latest",
-            target_digest=digest,
-            final_image=image_with_digest(service_image.image, digest),
-            provenance_source="github-latest",
-            provenance_confidence="recovered",
-        ),
         proposed_tag=candidate.release_tag,
         warning=(
-            "GitHub latest fallback will update latest tracking to "
-            f"{candidate.release_tag}."
+            f"GitHub latest release tag {candidate.release_tag} was found, "
+            "but no Docker tag candidate digest could be resolved: "
+            f"{'; '.join(failed)}."
         ),
         link_label=candidate.link_label,
         link_url=candidate.link_url,
     )
 
 
+def _retag_candidate_tags(release_tag: str) -> tuple[str, ...]:
+    candidates = [release_tag]
+    if len(release_tag) > 1 and release_tag[0] == "v" and release_tag[1].isdigit():
+        candidates.append(release_tag[1:])
+    elif release_tag and release_tag[0].isdigit():
+        candidates.append(f"v{release_tag}")
+    return tuple(dict.fromkeys(candidate for candidate in candidates if candidate))
+
+
 def _github_latest_info_warning(info: ReleaseNoteInfo) -> str:
     provider = str(getattr(info, "provider", ""))
     status = str(getattr(info, "status", ""))
     error = str(getattr(info, "error", ""))
-    if provider == "lsio":
-        return "GitHub latest fallback does not support LSIO upstream retag candidates."
     if status == "missing":
         return GITHUB_LATEST_MISSING_CACHE_WARNING
+    if provider == "lsio":
+        return "LSIO latest release metadata did not include a Docker tag candidate."
     if status == "unsupported":
         return error or "No supported GitHub release source was found."
     if status == "not_found":

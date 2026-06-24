@@ -546,7 +546,129 @@ def test_retag_apply_rejects_plan_when_fallback_flag_changes(
     assert stale.json()["detail"] == "retag plan is stale"
 
 
-def test_retag_github_latest_fallback_does_not_use_lsio_upstream_tag(
+def test_retag_github_latest_fallback_uses_v_stripped_docker_tag(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fake_env, fake_root = _fake_docker_env(tmp_path)
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+            **fake_env,
+        },
+    )
+    _make_fake_stack(
+        tmp_path,
+        fake_root,
+        "stack",
+        [("app", "ghcr.io/acme/app:latest", "cid-app")],
+    )
+    digest = "sha256:" + "9" * 64
+    _patch_github_latest(
+        monkeypatch,
+        tag="v1.2.3",
+        url="https://github.com/acme/app/releases/tag/v1.2.3",
+    )
+    _patch_digest_resolution_results(
+        monkeypatch,
+        {
+            "ghcr.io/acme/app:v1.2.3": DigestResolveResult(
+                ok=False,
+                status="unavailable",
+                reason="manifest-unavailable",
+            ),
+            "ghcr.io/acme/app:1.2.3": DigestResolveResult(
+                ok=True,
+                status="resolved",
+                reason="tag-digest-resolved",
+                digest=digest,
+                source="test",
+            ),
+        },
+    )
+
+    response = client.post(
+        "/api/v1/retag-targets/github-latest/refresh",
+        headers=_csrf_headers(client),
+    )
+
+    assert response.status_code == 200
+    item = response.json()["items"][0]
+    assert item["retag_available"] is True
+    assert item["retag_reason"] == "eligible"
+    assert item["proposed_tag"] == "1.2.3"
+    assert item["final_image"] == f"ghcr.io/acme/app@{digest}"
+    assert "release tag v1.2.3 resolved as Docker tag 1.2.3" in item[
+        "candidate_warning"
+    ]
+    assert item["candidate_link_url"].endswith("/v1.2.3")
+    _assert_pending_grouping_did_not_mutate(_fake_docker_calls(fake_root))
+
+
+def test_retag_github_latest_fallback_uses_v_prefixed_docker_tag(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fake_env, fake_root = _fake_docker_env(tmp_path)
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+            **fake_env,
+        },
+    )
+    _make_fake_stack(
+        tmp_path,
+        fake_root,
+        "stack",
+        [("app", "ghcr.io/acme/app:latest", "cid-app")],
+    )
+    digest = "sha256:" + "8" * 64
+    _patch_github_latest(
+        monkeypatch,
+        tag="1.2.3",
+        url="https://github.com/acme/app/releases/tag/1.2.3",
+    )
+    _patch_digest_resolution_results(
+        monkeypatch,
+        {
+            "ghcr.io/acme/app:1.2.3": DigestResolveResult(
+                ok=False,
+                status="unavailable",
+                reason="manifest-unavailable",
+            ),
+            "ghcr.io/acme/app:v1.2.3": DigestResolveResult(
+                ok=True,
+                status="resolved",
+                reason="tag-digest-resolved",
+                digest=digest,
+                source="test",
+            ),
+        },
+    )
+
+    response = client.post(
+        "/api/v1/retag-targets/github-latest/refresh",
+        headers=_csrf_headers(client),
+    )
+
+    assert response.status_code == 200
+    item = response.json()["items"][0]
+    assert item["retag_available"] is True
+    assert item["retag_reason"] == "eligible"
+    assert item["proposed_tag"] == "v1.2.3"
+    assert item["final_image"] == f"ghcr.io/acme/app@{digest}"
+    assert "release tag 1.2.3 resolved as Docker tag v1.2.3" in item[
+        "candidate_warning"
+    ]
+    assert item["candidate_link_url"].endswith("/1.2.3")
+    _assert_pending_grouping_did_not_mutate(_fake_docker_calls(fake_root))
+
+
+def test_retag_github_latest_fallback_uses_lsio_release_tag(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -569,7 +691,71 @@ def test_retag_github_latest_fallback_does_not_use_lsio_upstream_tag(
         tmp_path,
         fake_root,
         "stack",
-        [("radarr", "lscr.io/linuxserver/radarr:latest", "cid-radarr")],
+        [("radarr", "ghcr.io/linuxserver/radarr:latest", "cid-radarr")],
+    )
+    digest = "sha256:" + "a" * 64
+    _patch_digest_resolution(
+        monkeypatch,
+        expected_image="ghcr.io/linuxserver/radarr:5.1.0-ls1",
+        digest=digest,
+    )
+    _patch_github_latest(
+        monkeypatch,
+        tag="5.1.0-ls1",
+        url="https://github.com/linuxserver/docker-radarr/releases/tag/5.1.0-ls1",
+        extra={
+            "https://api.github.com/repos/Radarr/Radarr/releases/tags/v5.1.0": {
+                "tag_name": "v5.1.0",
+                "name": "v5.1.0",
+                "html_url": "https://github.com/Radarr/Radarr/releases/tag/v5.1.0",
+                "body": "Routine update",
+                "published_at": "2026-01-02T00:00:00Z",
+            }
+        },
+    )
+
+    response = client.post(
+        "/api/v1/retag-targets/github-latest/refresh",
+        headers=_csrf_headers(client),
+    )
+
+    assert response.status_code == 200
+    item = response.json()["items"][0]
+    assert item["retag_available"] is True
+    assert item["retag_reason"] == "eligible"
+    assert item["proposed_tag"] == "5.1.0-ls1"
+    assert item["final_image"] == f"ghcr.io/linuxserver/radarr@{digest}"
+    assert "will update latest tracking to 5.1.0-ls1" in item["candidate_warning"]
+    assert item["candidate_link_label"] == "LSIO release"
+    assert item["candidate_link_url"].endswith("/5.1.0-ls1")
+    assert item["digest_provenance"]["provenance_source"] == "github-latest"
+    _assert_pending_grouping_did_not_mutate(_fake_docker_calls(fake_root))
+
+
+def test_retag_github_latest_fallback_does_not_guess_lsio_upstream_tag(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    upstream_map = tmp_path / "upstreams.txt"
+    upstream_map.write_text(
+        "linuxserver/docker-radarr: Radarr/Radarr\n",
+        encoding="utf-8",
+    )
+    fake_env, fake_root = _fake_docker_env(tmp_path)
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+            "UPSTREAM_MAP": str(upstream_map),
+            **fake_env,
+        },
+    )
+    _make_fake_stack(
+        tmp_path,
+        fake_root,
+        "stack",
+        [("radarr", "ghcr.io/linuxserver/radarr:latest", "cid-radarr")],
     )
 
     class FailDigestVerifier:
@@ -578,7 +764,13 @@ def test_retag_github_latest_fallback_does_not_use_lsio_upstream_tag(
             pass
 
         def resolve_tag_digest(self, image: str) -> DigestResolveResult:
-            raise AssertionError(f"LSIO fallback should not resolve {image}")
+            if image == "ghcr.io/linuxserver/radarr:v5.1.0":
+                raise AssertionError("LSIO fallback should not use upstream tag")
+            return DigestResolveResult(
+                ok=False,
+                status="unavailable",
+                reason="manifest-unavailable",
+            )
 
     monkeypatch.setattr(web_retags_module, "DigestVerifier", FailDigestVerifier)
     _patch_github_latest(
@@ -605,7 +797,7 @@ def test_retag_github_latest_fallback_does_not_use_lsio_upstream_tag(
     item = response.json()["items"][0]
     assert item["retag_available"] is False
     assert item["retag_reason"] == "missing-provenance"
-    assert "does not support LSIO" in item["candidate_warning"]
+    assert "5.1.0-ls1: manifest-unavailable" in item["candidate_warning"]
     assert item["choices"] == ["keep-current"]
 
 
@@ -1237,6 +1429,18 @@ def test_retag_apply_unpauses_before_rollback_when_pause_mode_up_fails(
     assert pause < first_up < unpause < rollback_up
 
 
+def test_patch_digest_resolution_results_asserts_on_unknown_image(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _patch_digest_resolution_results(monkeypatch, {})
+
+    with pytest.raises(
+        AssertionError,
+        match=r"Unexpected digest resolution for 'unknown:tag'",
+    ):
+        web_retags_module.DigestVerifier().resolve_tag_digest("unknown:tag")
+
+
 def _patch_github_latest(
     monkeypatch: pytest.MonkeyPatch,
     *,
@@ -1314,6 +1518,24 @@ def _patch_digest_resolution_map(
                 digest=digests_by_image[image],
                 source="test",
             )
+
+    monkeypatch.setattr(web_retags_module, "DigestVerifier", FakeDigestVerifier)
+
+
+def _patch_digest_resolution_results(
+    monkeypatch: pytest.MonkeyPatch,
+    results_by_image: dict[str, DigestResolveResult],
+) -> None:
+    class FakeDigestVerifier:
+        def __init__(self, *_args: object, **_kwargs: object) -> None:
+            # Test double accepts production constructor arguments but needs no setup.
+            pass
+
+        def resolve_tag_digest(self, image: str) -> DigestResolveResult:
+            assert image in results_by_image, (
+                f"Unexpected digest resolution for {image!r}"
+            )
+            return results_by_image[image]
 
     monkeypatch.setattr(web_retags_module, "DigestVerifier", FakeDigestVerifier)
 

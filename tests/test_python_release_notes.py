@@ -13,7 +13,11 @@ except ModuleNotFoundError:
 from wudup.db import SCHEMA_VERSION, init_db, open_db
 from wudup.release_notes import (
     GitHubClient,
+    ReleaseNoteInfo,
+    ReleaseNoteLink,
+    _github_release_link_tag,
     detect_breaking,
+    github_latest_candidate_from_info,
     release_note_contexts,
     refresh_release_notes,
 )
@@ -260,6 +264,71 @@ class ReleaseNotesTests(unittest.TestCase):
             [(link.label, link.kind) for link in items[0].links],
             [("LSIO release", "lsio_release"), ("Upstream release", "github_release")],
         )
+
+    def test_github_latest_candidate_from_lsio_info_requires_release_link(self) -> None:
+        for status in ("ready", "not_found"):
+            with self.subTest(status=status):
+                info = ReleaseNoteInfo(
+                    line_no=1,
+                    status=status,
+                    provider="lsio",
+                    image_repo="linuxserver/some-image",
+                    upstream_repo="Some/Image",
+                )
+
+                candidate = github_latest_candidate_from_info(info)
+
+                self.assertIsNone(candidate)
+
+    def test_github_latest_candidate_from_lsio_info_ignores_malformed_links(
+        self,
+    ) -> None:
+        for url in (
+            "https://github.com/linuxserver/some-image/releases",
+            "https://github.com/linuxserver/some-image/tags",
+            "https://github.com/linuxserver/some-image/releases/tag/",
+            "https://github.com/linuxserver/some-image/releases/tag",
+            "https://example.com/linuxserver/some-image/releases/tag/v1.2.3",
+        ):
+            with self.subTest(url=url):
+                info = ReleaseNoteInfo(
+                    line_no=1,
+                    status="ready",
+                    provider="lsio",
+                    image_repo="linuxserver/some-image",
+                    upstream_repo="Some/Image",
+                    links=[ReleaseNoteLink("LSIO release", url, "lsio_release")],
+                )
+
+                candidate = github_latest_candidate_from_info(info)
+
+                self.assertIsNone(candidate)
+
+    def test_github_release_link_tag_extracts_valid_tags(self) -> None:
+        cases = {
+            "https://github.com/linuxserver/some-image/releases/tag/v1.2.3": (
+                "v1.2.3"
+            ),
+            "https://github.com/linuxserver/some-image/releases/tag/1.2.3": "1.2.3",
+            "https://github.com/linuxserver/some-image/releases/tag/v1.2.3?foo=bar#baz": (
+                "v1.2.3"
+            ),
+        }
+        for url, expected in cases.items():
+            with self.subTest(url=url):
+                self.assertEqual(_github_release_link_tag(url), expected)
+
+    def test_github_release_link_tag_rejects_incomplete_urls(self) -> None:
+        for url in (
+            "",
+            "not-a-url",
+            "https://github.com/linuxserver/some-image",
+            "https://github.com/linuxserver/some-image/releases",
+            "https://github.com/linuxserver/some-image/releases/tag/",
+            "https://example.com/linuxserver/some-image/releases/tag/v1.2.3",
+        ):
+            with self.subTest(url=url):
+                self.assertEqual(_github_release_link_tag(url), "")
 
     def test_lsio_remote_changes_accept_markdown_header_and_punctuation(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
