@@ -4,6 +4,13 @@ All notable changes to WUD-Updater are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com) and versions follow
 [Semantic Versioning](https://semver.org).
 
+## [0.46.4](https://github.com/magrhino/wudup/compare/v0.46.3...v0.46.4) (2026-06-24)
+
+
+### Bug Fixes
+
+* **webui:** Expand GitHub latest retag fallback to use LSIO release tags ([#404](https://github.com/magrhino/wudup/issues/404)) ([f93a1ee](https://github.com/magrhino/wudup/commit/f93a1eed8dc994e336d9160f3dbfadc40207704d))
+
 ## [0.46.3](https://github.com/magrhino/wudup/compare/v0.46.2...v0.46.3) (2026-06-23)
 
 
