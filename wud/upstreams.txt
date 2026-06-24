@@ -1,6 +1,7 @@
 # /wud/upstreams.txt
 # Format: linuxserver/docker-<image>: <Owner>/<Repo>
-# Last updated: 2026-06-23
+# Keep entries sorted by the linuxserver/docker-* key.
+# Last updated: 2026-06-24
 
 linuxserver/docker-airsonic-advanced: kagemomiji/airsonic-advanced
 linuxserver/docker-altus: amanharwara/altus
@@ -13,6 +14,7 @@ linuxserver/docker-calibre-web: janeczku/calibre-web
 linuxserver/docker-changedetection.io: dgtlmoon/changedetection.io
 linuxserver/docker-code-server: coder/code-server
 linuxserver/docker-ddclient: ddclient/ddclient
+# Release metadata points at Emby's release mirror rather than a main source repo.
 linuxserver/docker-emby: MediaBrowser/Emby.Releases
 linuxserver/docker-fail2ban: fail2ban/fail2ban
 linuxserver/docker-flexget: flexget/flexget
@@ -20,12 +22,14 @@ linuxserver/docker-freecad: FreeCAD/FreeCAD
 linuxserver/docker-freshrss: FreshRSS/FreshRSS
 linuxserver/docker-gitqlient: francescmaestre/GitQlient
 linuxserver/docker-grocy: grocy/grocy
+# LSIO metadata uses this upstream owner spelling.
 linuxserver/docker-habridge: bwssytems/ha-bridge
 linuxserver/docker-healthchecks: healthchecks/healthchecks
 linuxserver/docker-hedgedoc: hedgedoc/hedgedoc
 linuxserver/docker-homeassistant: home-assistant/core
 linuxserver/docker-jackett: Jackett/Jackett
 linuxserver/docker-jellyfin: jellyfin/jellyfin
+# Kasm release links resolve through the install-wizard repo.
 linuxserver/docker-kasm: kasmtech/kasm-install-wizard
 linuxserver/docker-kavita: kareadita/kavita
 linuxserver/docker-kimai: kimai/kimai
@@ -39,6 +43,7 @@ linuxserver/docker-medusa: pymedusa/Medusa
 linuxserver/docker-mstream: IrosTheBeggar/mStream
 linuxserver/docker-mylar3: MylarComics/mylar3
 linuxserver/docker-netbox: netbox-community/netbox
+# Nextcloud server releases live under nextcloud/server.
 linuxserver/docker-nextcloud: nextcloud/server
 linuxserver/docker-nzbget: nzbgetcom/nzbget
 linuxserver/docker-nzbhydra2: theotherp/nzbhydra2
@@ -65,7 +70,9 @@ linuxserver/docker-tautulli: Tautulli/Tautulli
 linuxserver/docker-thelounge: thelounge/thelounge
 linuxserver/docker-tvheadend: tvheadend/tvheadend
 linuxserver/docker-vscodium: VSCodium/vscodium
+# The web image follows the same upstream release stream as VSCodium.
 linuxserver/docker-vscodium-web: VSCodium/vscodium
+# Wiki.js releases are published from Requarks/wiki.
 linuxserver/docker-wikijs: Requarks/wiki
 linuxserver/docker-xbackbone: SergiX44/XBackBone
 linuxserver/docker-your_spotify: Yooooomi/your_spotify

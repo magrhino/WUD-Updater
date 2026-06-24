@@ -261,6 +261,7 @@ EOF
     tests/test-release-parser.sh \
     tests/test-release-notes-to-discord.sh \
     tests/test-tag-manager.sh \
+    tests/test-upstreams-map.sh \
     tests/test-wud-append-updates.sh \
     tests/test-install.sh \
     tests/test-updates-wrapper.sh \
@@ -292,6 +293,7 @@ EOF
     tests/test-release-parser.sh \
     tests/test-release-notes-to-discord.sh \
     tests/test-tag-manager.sh \
+    tests/test-upstreams-map.sh \
     tests/test-wud-append-updates.sh \
     tests/test-install.sh \
     tests/test-updates-wrapper.sh \
