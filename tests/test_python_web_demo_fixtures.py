@@ -363,6 +363,24 @@ class WebDemoFixtureGenerationTests(unittest.TestCase):
             if case["response"]["can_apply"]:
                 self.assertIn("jobTemplate", case)
 
+    def test_retag_choice_signature_ignores_request_order(self) -> None:
+        choices = [
+            web_demo_fixtures.RetagChoiceRequest(
+                service_key="media/wudup",
+                choice="switch-to-concrete",
+            ),
+            web_demo_fixtures.RetagChoiceRequest(
+                service_key="home/home-assistant",
+                choice="switch-to-concrete",
+                target_tag="2026.5.3",
+            ),
+        ]
+
+        self.assertEqual(
+            web_demo_fixtures._retag_choices_signature(choices),
+            web_demo_fixtures._retag_choices_signature(list(reversed(choices))),
+        )
+
     def test_applyable_retag_fixtures_have_readable_logs(self) -> None:
         for case in self.fixtures["retagCases"]:
             if not case["response"]["can_apply"]:

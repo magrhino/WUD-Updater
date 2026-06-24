@@ -1,6 +1,7 @@
 import type { RetagTargetChoice, RetagTargetItem } from "../api/client";
 
 const DEFAULT_RETAG_CHOICE: RetagTargetChoice = "keep-current";
+// Keep this aligned with src/wudup/images.py tag_value_valid.
 const tagValuePattern = /^\w[\w.-]{0,127}$/;
 
 export function canSwitchToConcrete(item: RetagTargetItem): boolean {

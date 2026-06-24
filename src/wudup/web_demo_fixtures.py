@@ -1018,12 +1018,14 @@ def _retag_choices_signature(
     choices: list[RetagChoiceRequest],
 ) -> tuple[tuple[str, str, str], ...]:
     return tuple(
-        (
-            choice.service_key,
-            choice.choice,
-            (choice.target_tag or "").strip(),
+        sorted(
+            (
+                choice.service_key,
+                choice.choice,
+                (choice.target_tag or "").strip(),
+            )
+            for choice in choices
         )
-        for choice in choices
     )
 
 

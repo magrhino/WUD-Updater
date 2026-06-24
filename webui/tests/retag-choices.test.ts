@@ -76,11 +76,29 @@ describe("retag choice helpers", () => {
   it("reports invalid manual fallback tags", () => {
     const item = retagTarget({ proposed_tag: "" });
 
+    expect(
+      retagTargetTagValidationError(item, {
+        [item.service_key]: "v1.2_3-alpha",
+      }),
+    ).toBe("");
+    expect(
+      retagTargetTagValidationError(item, {
+        [item.service_key]: "a".repeat(128),
+      }),
+    ).toBe("");
     expect(retagTargetTagValidationError(item, { [item.service_key]: "" }))
       .toContain("needs a target tag");
     expect(retagTargetTagValidationError(item, { [item.service_key]: "latest" }))
       .toContain("not latest");
     expect(retagTargetTagValidationError(item, { [item.service_key]: "-bad" }))
       .toContain("invalid target tag");
+    expect(
+      retagTargetTagValidationError(item, { [item.service_key]: "bad:value" }),
+    ).toContain("invalid target tag");
+    expect(
+      retagTargetTagValidationError(item, {
+        [item.service_key]: "a".repeat(129),
+      }),
+    ).toContain("invalid target tag");
   });
 });

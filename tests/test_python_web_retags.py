@@ -229,8 +229,16 @@ def test_retag_targets_endpoint_includes_service_without_pending_line(
     _assert_pending_grouping_did_not_mutate(_fake_docker_calls(fake_root))
 
 
+@pytest.mark.parametrize(
+    "image",
+    [
+        "ghcr.io/acme/app:1.0",
+        "ghcr.io/acme/app@sha256:" + "a" * 64,
+    ],
+)
 def test_retag_targets_endpoint_infers_safe_github_tags_link(
     tmp_path: Path,
+    image: str,
 ) -> None:
     fake_env, fake_root = _fake_docker_env(tmp_path)
     client = _client(tmp_path, {"WUD_WEB_DEV_NO_AUTH": "true", **fake_env})
@@ -238,7 +246,7 @@ def test_retag_targets_endpoint_infers_safe_github_tags_link(
         tmp_path,
         fake_root,
         "stack",
-        [("app", "ghcr.io/acme/app:1.0", "cid-app")],
+        [("app", image, "cid-app")],
     )
 
     response = client.get("/api/v1/retag-targets")
@@ -253,6 +261,7 @@ def test_retag_targets_endpoint_infers_safe_github_tags_link(
 @pytest.mark.parametrize(
     "image",
     [
+        "docker.io/acme/app:1.0",
         "ghcr.io/acme/app?tab=tags:1.0",
         "ghcr.io/acme/..:1.0",
         "ghcr.io/acme/nested/app:1.0",
