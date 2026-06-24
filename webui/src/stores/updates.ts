@@ -36,6 +36,7 @@ import { errorMessage, runWithStoreState } from "./storeState";
 import {
   normalizeRetagChoice,
   retagChoice as selectedRetagChoice,
+  retagTargetTagValue,
 } from "../utils/retagChoices";
 import {
   fetchReleaseChangelog,
@@ -66,6 +67,7 @@ export const useUpdatesStore = defineStore("updates", () => {
   const updateTargets = ref<UpdateTargetsResponse | null>(null);
   const retagTargets = ref<RetagTargetsResponse | null>(null);
   const retagChoices = ref<Record<string, RetagTargetChoice>>({});
+  const retagTargetTags = ref<Record<string, string>>({});
   const retagPlan = ref<RetagPlanResponse | null>(null);
   const retagGithubLatestFallback = ref(false);
   let retagPreviewStart: (() => Promise<RetagPreviewJobResponse>) | null = null;
@@ -163,10 +165,17 @@ export const useUpdatesStore = defineStore("updates", () => {
   }
 
   function resetRetagChoices(): void {
+    const items = retagTargets.value?.items ?? [];
     retagChoices.value = Object.fromEntries(
-      (retagTargets.value?.items ?? []).map((item) => [
+      items.map((item) => [
         item.service_key,
         "keep-current" satisfies RetagTargetChoice,
+      ]),
+    );
+    retagTargetTags.value = Object.fromEntries(
+      items.map((item) => [
+        item.service_key,
+        item.retag_available ? item.proposed_tag : "",
       ]),
     );
   }
@@ -180,8 +189,28 @@ export const useUpdatesStore = defineStore("updates", () => {
     );
     retagChoices.value = {
       ...retagChoices.value,
-      [serviceKey]: item ? normalizeRetagChoice(item, choice) : choice,
+      [serviceKey]: item
+        ? normalizeRetagChoice(item, choice, retagTargetTags.value)
+        : choice,
     };
+    retagPlan.value = null;
+    retagPreviewPoller.reset();
+  }
+
+  function setRetagTargetTag(serviceKey: string, tag: string): void {
+    const item = retagTargets.value?.items.find(
+      (target) => target.service_key === serviceKey,
+    );
+    retagTargetTags.value = {
+      ...retagTargetTags.value,
+      [serviceKey]: tag,
+    };
+    if (item && tag.trim()) {
+      retagChoices.value = {
+        ...retagChoices.value,
+        [serviceKey]: "switch-to-concrete",
+      };
+    }
     retagPlan.value = null;
     retagPreviewPoller.reset();
   }
@@ -189,10 +218,24 @@ export const useUpdatesStore = defineStore("updates", () => {
   function retagChoiceRequests(): RetagChoiceRequest[] {
     const items = retagTargets.value?.items ?? [];
     return items
-      .map((item) => ({
-        service_key: item.service_key,
-        choice: selectedRetagChoice(item, retagChoices.value),
-      }))
+      .map((item) => {
+        const choice = selectedRetagChoice(
+          item,
+          retagChoices.value,
+          retagTargetTags.value,
+        );
+        const request: RetagChoiceRequest = {
+          service_key: item.service_key,
+          choice,
+        };
+        if (choice === "switch-to-concrete") {
+          const tag = retagTargetTagValue(item, retagTargetTags.value).trim();
+          if (tag && (!item.retag_available || tag !== item.proposed_tag)) {
+            request.target_tag = tag;
+          }
+        }
+        return request;
+      })
       .sort((left, right) => left.service_key.localeCompare(right.service_key));
   }
 
@@ -717,6 +760,7 @@ export const useUpdatesStore = defineStore("updates", () => {
     updateTargets,
     retagTargets,
     retagChoices,
+    retagTargetTags,
     retagPlan,
     retagPreviewJob: retagPreviewPoller.job,
     retagPreviewPolling: retagPreviewPoller.polling,
@@ -747,6 +791,7 @@ export const useUpdatesStore = defineStore("updates", () => {
     refreshRetagGithubLatest,
     resetRetagChoices,
     setRetagChoice,
+    setRetagTargetTag,
     retagChoiceRequests,
     createRetagPlan,
     applyRetagPlan,

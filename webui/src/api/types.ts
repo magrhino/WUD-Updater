@@ -302,6 +302,7 @@ export type RetagPlanStatus = "ready" | "empty" | "blocked" | "unavailable";
 export interface RetagChoiceRequest {
   service_key: string;
   choice: RetagTargetChoice;
+  target_tag?: string;
 }
 
 export interface RetagPlanOptions {

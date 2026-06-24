@@ -116,7 +116,8 @@ function sameRetagChoices(
   return left.every(
     (choice, index) =>
       choice.service_key === right[index]?.service_key &&
-      choice.choice === right[index]?.choice,
+      choice.choice === right[index]?.choice &&
+      (choice.target_tag ?? "") === (right[index]?.target_tag ?? ""),
   );
 }
 
@@ -1477,10 +1478,19 @@ export class DemoApiState {
         throw new Error(STATIC_FIXTURE_ERROR);
       }
     }
-    return fixtures.retagTargets.items.map((item) => ({
-      service_key: item.service_key,
-      choice: firstByService.get(item.service_key)?.choice ?? "keep-current",
-    }));
+    return fixtures.retagTargets.items.map((item) => {
+      const requested = firstByService.get(item.service_key);
+      const choice = requested?.choice ?? "keep-current";
+      const targetTag = requested?.target_tag?.trim() ?? "";
+      const normalized: RetagChoiceRequest = {
+        service_key: item.service_key,
+        choice,
+      };
+      if (choice === "switch-to-concrete" && targetTag) {
+        normalized.target_tag = targetTag;
+      }
+      return normalized;
+    });
   }
 
   private requireActiveLines(lineNumbers: number[]): void {

@@ -246,7 +246,11 @@ describe("webApi", () => {
   it("serializes retag preview and apply payloads exactly", async () => {
     const fetchMock = mockFetch({});
     const choices = [
-      { service_key: "media/app", choice: "switch-to-concrete" as const },
+      {
+        service_key: "media/app",
+        choice: "switch-to-concrete" as const,
+        target_tag: "1.2.3",
+      },
       { service_key: "media/radarr", choice: "keep-current" as const },
     ];
 

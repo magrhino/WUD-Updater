@@ -43,7 +43,7 @@ def retag_update_service(item: RetagPlanUpdate) -> str:
 
 def retag_plan_status(
     selected: Sequence[RetagPlanUpdate],
-    choices: Mapping[str, str],
+    choices: Mapping[str, object],
     issues: Sequence[RetagPlanIssue],
 ) -> str:
     if issues:

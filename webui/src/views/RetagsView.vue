@@ -19,7 +19,10 @@ import RetagTargetsTable from "../components/retags/RetagTargetsTable.vue";
 import { useDataCardsBreakpoint } from "../responsive";
 import { useAuthStore } from "../stores/auth";
 import { useUpdatesStore } from "../stores/updates";
-import { retagChoice as selectedRetagChoice } from "../utils/retagChoices";
+import {
+  retagChoice as selectedRetagChoice,
+  retagTargetTagValidationError,
+} from "../utils/retagChoices";
 import {
   digestPinSummary,
   labelRewriteSummary,
@@ -137,6 +140,18 @@ const selectedSwitchCount = computed(
       (item) => retagChoice(item) === "switch-to-concrete",
     ).length,
 );
+const retagTargetTagError = computed(() => {
+  for (const item of rows.value) {
+    if (retagChoice(item) !== "switch-to-concrete") {
+      continue;
+    }
+    const error = retagTargetTagValidationError(item, updates.retagTargetTags);
+    if (error) {
+      return error;
+    }
+  }
+  return "";
+});
 const unavailable = computed(() => updates.retagTargets?.status === "unavailable");
 const loaded = computed(() => updates.retagTargets !== null);
 const mutationsEnabled = computed(() => auth.session?.mutations_enabled === true);
@@ -155,6 +170,7 @@ const previewDisabled = computed(
     updates.loading ||
     applyJobActive.value ||
     unavailable.value ||
+    Boolean(retagTargetTagError.value) ||
     rows.value.length === 0,
 );
 const applyDisabled = computed(
@@ -162,6 +178,7 @@ const applyDisabled = computed(
     updates.loading ||
     applyJobActive.value ||
     retagMutationDisabled.value ||
+    Boolean(retagTargetTagError.value) ||
     updates.retagPlan?.can_apply !== true,
 );
 const retagPlanStacks = computed(() => updates.retagPlan?.stacks ?? []);
@@ -205,7 +222,11 @@ const filteredRows = computed(() => {
 });
 
 function retagChoice(item: RetagTargetItem): RetagTargetChoice {
-  return selectedRetagChoice(item, updates.retagChoices);
+  return selectedRetagChoice(
+    item,
+    updates.retagChoices,
+    updates.retagTargetTags,
+  );
 }
 
 function onRetagChoiceUpdate(
@@ -215,7 +236,14 @@ function onRetagChoiceUpdate(
   updates.setRetagChoice(item.service_key, choice);
 }
 
+function onRetagTargetTagUpdate(item: RetagTargetItem, tag: string): void {
+  updates.setRetagTargetTag(item.service_key, tag);
+}
+
 async function previewRetagChanges(): Promise<void> {
+  if (previewDisabled.value) {
+    return;
+  }
   showRetagPreviewModal.value = true;
   await updates.createRetagPlan().catch(() => undefined);
 }
@@ -378,6 +406,7 @@ onMounted(() => {
       :apply-job-active="applyJobActive"
       :has-retag-plan="updates.retagPlan !== null"
       :mutation-notice="retagMutationNotice"
+      :validation-error="retagTargetTagError"
       @preview="previewRetagChanges"
       @apply="openRetagApplyConfirm"
     />
@@ -412,6 +441,14 @@ onMounted(() => {
         </label>
       </div>
     </section>
+
+    <n-alert
+      v-if="retagTargetTagError"
+      type="warning"
+      :show-icon="false"
+    >
+      {{ retagTargetTagError }}
+    </n-alert>
 
     <output
       v-if="initialLoading"
@@ -469,18 +506,22 @@ onMounted(() => {
         :rows="filteredRows"
         :loading="updates.loading"
         :choices="updates.retagChoices"
+        :target-tags="updates.retagTargetTags"
         :mutation-disabled="retagMutationDisabled"
         :mutation-notice="retagMutationNotice"
         @choice-update="onRetagChoiceUpdate"
+        @target-tag-update="onRetagTargetTagUpdate"
       />
 
       <RetagTargetsMobileList
         v-else
         :rows="filteredRows"
         :choices="updates.retagChoices"
+        :target-tags="updates.retagTargetTags"
         :mutation-disabled="retagMutationDisabled"
         :mutation-notice="retagMutationNotice"
         @choice-update="onRetagChoiceUpdate"
+        @target-tag-update="onRetagTargetTagUpdate"
       />
     </template>
   </section>

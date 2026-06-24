@@ -77,7 +77,8 @@ describe("RetagsView", () => {
     expect(text).toContain("compose warning");
     expect(text).toContain("media/app");
     expect(text).toContain("Retag available");
-    expect(text).toContain("Candidate ready");
+    expect(text).toContain("Automatch ready");
+    expect(text).toContain("GitHub release");
     expect(text).toContain("Use GitHub latest fallback");
     expect(text).toContain("GitHub latest fallback will update latest tracking to 1.1.");
     expect(text).toContain("media/radarr");
@@ -142,6 +143,71 @@ describe("RetagsView", () => {
       .findAll("button")
       .find((button) => button.text().includes("Apply selected retags"));
     expect(applyButton?.attributes("disabled")).toBeDefined();
+  });
+
+  it("lets fallback rows retag with a manually entered target tag", async () => {
+    const pinia = createPinia();
+    setActivePinia(pinia);
+    const auth = useAuthStore();
+    auth.session = authSession({ mutations_enabled: true });
+    const updates = useUpdatesStore();
+    updates.retagTargets = retagTargetsResponse([
+      retagTarget({
+        service_key: "media/radarr",
+        service: "radarr",
+        image: "repo/radarr:5.21.1",
+        image_repo: "repo/radarr",
+        current_tag: "5.21.1",
+        tracking_tag: "5.21.1",
+        tracking_tag_source: "image",
+        proposed_tag: "",
+        final_image: "",
+        retag_available: false,
+        retag_reason: "not-latest-tracking",
+        choices: ["keep-current"],
+        digest_provenance: null,
+      }),
+    ]);
+    vi.spyOn(updates, "loadRetagTargets").mockResolvedValue();
+    const createRetagPlan = vi.spyOn(updates, "createRetagPlan").mockResolvedValue(
+      retagPlanResponse(),
+    );
+
+    const wrapper = mountWithApp(RetagsView, { pinia });
+    await flushPromises();
+
+    const targetInput = wrapper.find<HTMLInputElement>(
+      'input[aria-label="Target tag for media/radarr"]',
+    );
+    expect(targetInput.element.value).toBe("");
+    await targetInput.setValue("5.22.4");
+    await flushPromises();
+
+    expect(updates.retagChoices["media/radarr"]).toBe("switch-to-concrete");
+    expect(updates.retagChoiceRequests()).toEqual([
+      {
+        service_key: "media/radarr",
+        choice: "switch-to-concrete",
+        target_tag: "5.22.4",
+      },
+    ]);
+
+    await wrapper
+      .findAll("button")
+      .find((button) => button.text().includes("Preview retag changes"))
+      ?.trigger("click");
+    await flushPromises();
+    expect(createRetagPlan).toHaveBeenCalledTimes(1);
+
+    await targetInput.setValue("-bad");
+    await flushPromises();
+    expect(wrapper.text()).toContain("media/radarr has an invalid target tag");
+    expect(
+      wrapper
+        .findAll("button")
+        .find((button) => button.text().includes("Preview retag changes"))
+        ?.attributes("disabled"),
+    ).toBeDefined();
   });
 
   it("disables switch and apply controls in read-only mode", async () => {

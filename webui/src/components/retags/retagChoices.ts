@@ -2,8 +2,11 @@ import type { RetagTargetChoice, RetagTargetItem } from "../../api/client";
 import { normalizeRetagChoice } from "../../utils/retagChoices";
 
 export {
+  canChooseRetagTarget,
   canSwitchToConcrete,
   retagChoice,
+  retagTargetTagValidationError,
+  retagTargetTagValue,
 } from "../../utils/retagChoices";
 
 export type RetagChoiceEmitter = (
@@ -16,8 +19,9 @@ export function emitRetagChoice(
   emit: RetagChoiceEmitter,
   item: RetagTargetItem,
   choice: string,
+  targetTags: Record<string, string> = {},
 ): void {
-  const eligibleChoice = normalizeRetagChoice(item, choice);
+  const eligibleChoice = normalizeRetagChoice(item, choice, targetTags);
   if (eligibleChoice !== choice) {
     return;
   }

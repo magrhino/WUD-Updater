@@ -604,6 +604,7 @@ class RetagTargetsResponse(BaseModel):
 class RetagChoiceRequest(BaseModel):
     service_key: str = Field(min_length=1, max_length=512)
     choice: Literal["keep-current", "switch-to-concrete"]
+    target_tag: str | None = Field(default=None, max_length=128)
 
 class RetagPlanRequest(BaseModel):
     choices: list[RetagChoiceRequest] = Field(min_length=1)
