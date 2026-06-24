@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import secrets
 import shutil
 import sqlite3
@@ -111,6 +112,12 @@ _REGEX_SPECIAL_CHARS = "\\^$.*+?()[]{}|"
 RETAG_PREVIEW_EXECUTOR_MAX_WORKERS = 1
 RETAG_PREVIEW_JOB_LIMIT = 20
 RETAG_PREVIEW_ACTIVE_STATUSES = frozenset({"queued", "running"})
+_GHCR_GITHUB_REPO_RE = re.compile(
+    r"^ghcr[.]io/"
+    r"(?P<owner>[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?)/"
+    r"(?P<repo>[A-Za-z0-9._-]{1,100})$",
+    re.ASCII,
+)
 
 
 @dataclass(frozen=True)
@@ -2022,10 +2029,12 @@ def _retag_target_item(
 
 def _inferred_candidate_link(image: str) -> tuple[str, str]:
     repo_ref = image_repo_ref(image)
-    if repo_ref.startswith("ghcr.io/"):
-        parts = repo_ref.split("/")
-        if len(parts) == 3 and parts[1] and parts[2]:
-            return "GitHub tags", f"https://github.com/{parts[1]}/{parts[2]}/tags"
+    match = _GHCR_GITHUB_REPO_RE.fullmatch(repo_ref)
+    if match:
+        owner = match.group("owner")
+        repo = match.group("repo")
+        if repo not in {".", ".."}:
+            return "GitHub tags", f"https://github.com/{owner}/{repo}/tags"
     return "", ""
 
 

@@ -250,6 +250,37 @@ def test_retag_targets_endpoint_infers_safe_github_tags_link(
     _assert_pending_grouping_did_not_mutate(_fake_docker_calls(fake_root))
 
 
+@pytest.mark.parametrize(
+    "image",
+    [
+        "ghcr.io/acme/app?tab=tags:1.0",
+        "ghcr.io/acme/..:1.0",
+        "ghcr.io/acme/nested/app:1.0",
+        "registry.example/ghcr.io/acme/app:1.0",
+    ],
+)
+def test_retag_targets_endpoint_skips_unsafe_github_tags_link(
+    tmp_path: Path,
+    image: str,
+) -> None:
+    fake_env, fake_root = _fake_docker_env(tmp_path)
+    client = _client(tmp_path, {"WUD_WEB_DEV_NO_AUTH": "true", **fake_env})
+    _make_fake_stack(
+        tmp_path,
+        fake_root,
+        "stack",
+        [("app", image, "cid-app")],
+    )
+
+    response = client.get("/api/v1/retag-targets")
+
+    assert response.status_code == 200
+    item = response.json()["items"][0]
+    assert item["candidate_link_label"] == ""
+    assert item["candidate_link_url"] == ""
+    _assert_pending_grouping_did_not_mutate(_fake_docker_calls(fake_root))
+
+
 def test_retag_github_latest_fallback_refresh_enables_cached_candidate(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
