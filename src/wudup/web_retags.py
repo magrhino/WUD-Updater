@@ -11,7 +11,7 @@ from collections import Counter
 from collections.abc import Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import closing
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from threading import Condition, Lock
 from typing import Any
@@ -157,6 +157,22 @@ class _RetagPreviewJob:
     warnings: tuple[str, ...] = ()
     error: str = ""
     progress: tuple[ApplyJobProgressEvent, ...] = ()
+
+
+@dataclass(frozen=True)
+class _RetagChoiceLookup:
+    records_by_target_id: Mapping[str, _RetagTargetRecord]
+    unique_target_id_by_service: Mapping[str, str]
+    duplicate_service_keys: frozenset[str]
+
+
+@dataclass
+class _RetagChoiceValidationFailures:
+    duplicates: list[str] = field(default_factory=list)
+    unknown_services: list[str] = field(default_factory=list)
+    unknown_targets: list[str] = field(default_factory=list)
+    target_id_required: list[str] = field(default_factory=list)
+    mismatches: list[str] = field(default_factory=list)
 
 
 class _RetagApplyFailed(RuntimeError):
@@ -1250,50 +1266,85 @@ def _validated_choice_map(
     choices: Sequence[RetagChoiceRequest],
     records: Sequence[_RetagTargetRecord],
 ) -> dict[str, RetagChoiceRequest]:
-    records_by_target_id = {record.item.target_id: record for record in records}
-    service_counts = Counter(record.item.service_key for record in records)
-    unique_target_id_by_service = {
-        record.item.service_key: record.item.target_id
-        for record in records
-        if service_counts[record.item.service_key] == 1
-    }
-    duplicate_service_keys = {
-        service_key for service_key, count in service_counts.items() if count > 1
-    }
+    lookup = _retag_choice_lookup(records)
+    failures = _RetagChoiceValidationFailures()
     values: dict[str, RetagChoiceRequest] = {}
-    duplicates: list[str] = []
-    unknown_services: list[str] = []
-    unknown_targets: list[str] = []
-    target_id_required: list[str] = []
-    mismatches: list[str] = []
     for item in choices:
-        target_id = item.target_id or ""
-        if target_id:
-            record = records_by_target_id.get(target_id)
-            if record is None:
-                unknown_targets.append(target_id)
-                continue
-            if record.item.service_key != item.service_key:
-                mismatches.append(f"{item.service_key} ({target_id})")
-                continue
-            choice_key = target_id
-            duplicate_label = f"{record.item.service_key} ({target_id})"
-        elif item.service_key in duplicate_service_keys:
-            target_id_required.append(item.service_key)
+        identity = _retag_choice_identity(item, lookup, failures)
+        if identity is None:
             continue
-        else:
-            choice_key = unique_target_id_by_service.get(item.service_key)
-            if choice_key is None:
-                unknown_services.append(item.service_key)
-                continue
-            duplicate_label = item.service_key
-
+        choice_key, duplicate_label = identity
         if choice_key in values:
-            duplicates.append(duplicate_label)
+            failures.duplicates.append(duplicate_label)
             continue
         values[choice_key] = item
-    if target_id_required:
-        duplicate_list = ", ".join(sorted(set(target_id_required)))
+    _raise_retag_choice_validation_errors(failures)
+    return values
+
+
+def _retag_choice_lookup(records: Sequence[_RetagTargetRecord]) -> _RetagChoiceLookup:
+    records_by_target_id = {record.item.target_id: record for record in records}
+    service_counts = Counter(record.item.service_key for record in records)
+    return _RetagChoiceLookup(
+        records_by_target_id=records_by_target_id,
+        unique_target_id_by_service={
+            record.item.service_key: record.item.target_id
+            for record in records
+            if service_counts[record.item.service_key] == 1
+        },
+        duplicate_service_keys=frozenset(
+            service_key for service_key, count in service_counts.items() if count > 1
+        ),
+    )
+
+
+def _retag_choice_identity(
+    item: RetagChoiceRequest,
+    lookup: _RetagChoiceLookup,
+    failures: _RetagChoiceValidationFailures,
+) -> tuple[str, str] | None:
+    target_id = item.target_id or ""
+    if target_id:
+        return _retag_choice_identity_from_target_id(item, target_id, lookup, failures)
+    return _retag_choice_identity_from_service_key(item, lookup, failures)
+
+
+def _retag_choice_identity_from_target_id(
+    item: RetagChoiceRequest,
+    target_id: str,
+    lookup: _RetagChoiceLookup,
+    failures: _RetagChoiceValidationFailures,
+) -> tuple[str, str] | None:
+    record = lookup.records_by_target_id.get(target_id)
+    if record is None:
+        failures.unknown_targets.append(target_id)
+        return None
+    if record.item.service_key != item.service_key:
+        failures.mismatches.append(f"{item.service_key} ({target_id})")
+        return None
+    return target_id, f"{record.item.service_key} ({target_id})"
+
+
+def _retag_choice_identity_from_service_key(
+    item: RetagChoiceRequest,
+    lookup: _RetagChoiceLookup,
+    failures: _RetagChoiceValidationFailures,
+) -> tuple[str, str] | None:
+    if item.service_key in lookup.duplicate_service_keys:
+        failures.target_id_required.append(item.service_key)
+        return None
+    choice_key = lookup.unique_target_id_by_service.get(item.service_key)
+    if choice_key is None:
+        failures.unknown_services.append(item.service_key)
+        return None
+    return choice_key, item.service_key
+
+
+def _raise_retag_choice_validation_errors(
+    failures: _RetagChoiceValidationFailures,
+) -> None:
+    if failures.target_id_required:
+        duplicate_list = ", ".join(sorted(set(failures.target_id_required)))
         raise HTTPException(
             status_code=422,
             detail=(
@@ -1301,31 +1352,30 @@ def _validated_choice_map(
                 f"{duplicate_list}"
             ),
         )
-    if unknown_services:
-        values_list = ", ".join(sorted(set(unknown_services)))
+    if failures.unknown_services:
+        values_list = ", ".join(sorted(set(failures.unknown_services)))
         raise HTTPException(
             status_code=422,
             detail=f"retag choices reference unknown service(s): {values_list}",
         )
-    if unknown_targets:
-        values_list = ", ".join(sorted(set(unknown_targets)))
+    if failures.unknown_targets:
+        values_list = ", ".join(sorted(set(failures.unknown_targets)))
         raise HTTPException(
             status_code=422,
             detail=f"retag choices reference unknown target(s): {values_list}",
         )
-    if mismatches:
-        values_list = ", ".join(sorted(set(mismatches)))
+    if failures.mismatches:
+        values_list = ", ".join(sorted(set(failures.mismatches)))
         raise HTTPException(
             status_code=422,
             detail=f"retag choice target_id does not match service_key: {values_list}",
         )
-    if duplicates:
-        duplicate_list = ", ".join(sorted(set(duplicates)))
+    if failures.duplicates:
+        duplicate_list = ", ".join(sorted(set(failures.duplicates)))
         raise HTTPException(
             status_code=422,
             detail=f"retag choices contain duplicate target(s): {duplicate_list}",
         )
-    return values
 
 
 def _preview_retag_updates(
