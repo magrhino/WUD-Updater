@@ -54,9 +54,8 @@ Repo-local routing/context only for WUDup. Global instructions control default b
 
 ## Issue Creation
 
-- When creating GitHub issues, use the templates under `.github/ISSUE_TEMPLATE/` and choose the closest matching template before drafting issue content.
-- Keep issue bodies aligned with the selected template fields; do not replace them with freeform summaries unless no template applies.
-- Do not include secrets, private URLs, local absolute paths, usernames, hostnames, or other machine-specific details in issue content.
+- When creating GitHub issues, start from the matching template under `.github/ISSUE_TEMPLATE/`.
+- Categorize issues with the template's existing labels/tags such as `bug`, `enhancement`, and `needs-triage`; only add other existing repo labels when they clearly apply.
 
 ## Repo Commands
 
