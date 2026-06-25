@@ -5,7 +5,6 @@ from __future__ import annotations
 import argparse
 import contextlib
 import copy
-import hashlib
 import io
 import itertools
 import json
@@ -52,6 +51,7 @@ from wudup.db import (  # noqa: E402
 from wudup import command as command_module  # noqa: E402
 from wudup.digest_verifier import DigestResolveResult  # noqa: E402
 from wudup.digest_provenance import DigestTagProvenance  # noqa: E402
+from wudup.web_retag_identity import retag_target_id  # noqa: E402
 
 
 _WEB_FIXTURE_IMPORTS_READY = False
@@ -1860,15 +1860,13 @@ def _normalize_demo_retag_target_ids(value: Any) -> Any:
 
 
 def _demo_retag_target_id(item: dict[str, Any]) -> str:
-    fields = (
+    return retag_target_id(
         item.get("directory", ""),
         item.get("compose_file", ""),
         item.get("project_directory", ""),
         item.get("stack", ""),
         item.get("service", ""),
     )
-    raw = "\0".join(str(field) for field in fields)
-    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 
 def _collect_demo_retag_target_id_replacements(

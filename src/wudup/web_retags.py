@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
 import re
 import secrets
 import shutil
@@ -88,6 +87,7 @@ from .web_models import (
     WebSettings,
 )
 from .web_release_notes import release_note_source_resolver
+from .web_retag_identity import retag_target_id as _retag_target_id_from_values
 from .web_metadata import json_object as _json_object
 from .web_retag_plans import (
     RetagPlanBuild as _RetagPlanBuild,
@@ -1168,16 +1168,13 @@ def _retag_service_counts(stacks: Sequence[ComposeStack]) -> Counter[str]:
 
 
 def _retag_target_id(stack: ComposeStack, service_image: ServiceImage) -> str:
-    raw = "\0".join(
-        (
-            str(stack.directory),
-            stack.file,
-            "" if stack.project_directory is None else str(stack.project_directory),
-            stack.name,
-            service_image.service,
-        )
+    return _retag_target_id_from_values(
+        stack.directory,
+        stack.file,
+        "" if stack.project_directory is None else stack.project_directory,
+        stack.name,
+        service_image.service,
     )
-    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 
 def _known_state_for_retag_target(
