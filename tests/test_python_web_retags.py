@@ -366,6 +366,100 @@ def test_retag_plan_accepts_duplicate_service_keys_with_target_ids(
     } == {"duplicate service_key"}
 
 
+def test_retag_plan_rejects_unknown_target_id(tmp_path: Path) -> None:
+    fixture = _make_retag_fixture(
+        tmp_path,
+        env={
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+            "WUD_UPDATE_MODE": "live",
+            "WUD_MAX_WAIT": "0",
+        },
+    )
+    client = fixture.client
+    targets_response = client.get("/api/v1/retag-targets")
+    headers = _csrf_headers(client)
+
+    assert targets_response.status_code == 200
+    item = targets_response.json()["items"][0]
+
+    response = client.post(
+        "/api/v1/retag-plans",
+        json={
+            "choices": [
+                {
+                    "service_key": item["service_key"],
+                    "target_id": "non-existent-target-id",
+                    "choice": "keep-current",
+                }
+            ]
+        },
+        headers=headers,
+    )
+
+    assert response.status_code == 422
+    assert (
+        response.json()["detail"]
+        == "retag choices reference unknown target(s): non-existent-target-id"
+    )
+    _assert_pending_grouping_did_not_mutate(_fake_docker_calls(fixture.fake_root))
+
+
+def test_retag_plan_rejects_mismatched_service_key_and_target_id(
+    tmp_path: Path,
+) -> None:
+    fake_env, fake_root = _fake_docker_env(tmp_path)
+    client = _client(
+        tmp_path,
+        {
+            "WUD_WEB_DEV_NO_AUTH": "true",
+            "WUD_WEB_MUTATIONS_ENABLED": "true",
+            "WUD_UPDATE_MODE": "live",
+            "WUD_MAX_WAIT": "0",
+            **fake_env,
+        },
+    )
+    _make_fake_stack(
+        tmp_path,
+        fake_root,
+        "stack",
+        [
+            ("app", "repo/app:latest", "cid-app"),
+            ("worker", "repo/worker:latest", "cid-worker"),
+        ],
+    )
+    targets_response = client.get("/api/v1/retag-targets")
+    headers = _csrf_headers(client)
+
+    assert targets_response.status_code == 200
+    items_by_service_key = {
+        item["service_key"]: item for item in targets_response.json()["items"]
+    }
+    first = items_by_service_key["stack/app"]
+    second = items_by_service_key["stack/worker"]
+
+    response = client.post(
+        "/api/v1/retag-plans",
+        json={
+            "choices": [
+                {
+                    "service_key": first["service_key"],
+                    "target_id": second["target_id"],
+                    "choice": "keep-current",
+                }
+            ]
+        },
+        headers=headers,
+    )
+
+    assert response.status_code == 422
+    assert (
+        response.json()["detail"]
+        == "retag choice target_id does not match service_key: "
+        f"{first['service_key']} ({second['target_id']})"
+    )
+    _assert_pending_grouping_did_not_mutate(_fake_docker_calls(fake_root))
+
+
 @pytest.mark.parametrize(
     "image",
     [
