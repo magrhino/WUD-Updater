@@ -125,8 +125,8 @@ function closeModal(): void {
         </div>
         <div v-if="retagPlanUpdates.length" class="compact-list">
           <div
-            v-for="{ stack, update } in retagPlanUpdates"
-            :key="`confirm-${update.service_key}`"
+            v-for="({ stack, update }, index) in retagPlanUpdates"
+            :key="`confirm-${stack.directory}-${stack.compose_file}-${stack.project_directory}-${update.service_key}-${index}`"
             class="list-row plan-line-row"
           >
             <span>{{ stack.stack }}</span>

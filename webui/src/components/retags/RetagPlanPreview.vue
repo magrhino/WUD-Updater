@@ -59,7 +59,7 @@ defineProps<{
     <div v-if="plan.stacks.length" class="retag-plan-stacks">
       <div
         v-for="stack in plan.stacks"
-        :key="`${stack.stack}-${stack.compose_file}`"
+        :key="`${stack.stack}-${stack.directory}-${stack.compose_file}-${stack.project_directory}`"
         class="retag-plan-stack"
       >
         <div class="retag-plan-stack-heading">
@@ -68,8 +68,8 @@ defineProps<{
         </div>
         <ul class="retag-plan-update-list">
           <li
-            v-for="update in stack.digest_pin_updates"
-            :key="update.service_key"
+            v-for="(update, index) in stack.digest_pin_updates"
+            :key="`${stack.directory}-${stack.compose_file}-${stack.project_directory}-${update.service_key}-${index}`"
           >
             <div>
               <strong>{{ update.service_key }}</strong>
